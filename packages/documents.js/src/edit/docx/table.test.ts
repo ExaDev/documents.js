@@ -1,12 +1,12 @@
-import type { XmlNode } from 'ooxml.js';
-import { decodePackage, encodePackage } from 'ooxml.js';
-import { describe, expect, it } from 'vitest';
-import { readDocxContent } from '../../ooxml/docx/read';
-import { createDocx } from './editor';
-import { buildTable, DocxTable } from './table';
+import type { XmlNode } from "ooxml.js";
+import { decodePackage, encodePackage } from "ooxml.js";
+import { describe, expect, it } from "vitest";
+import { readDocxContent } from "../../ooxml/docx/read";
+import { createDocx } from "./editor";
+import { buildTable, DocxTable } from "./table";
 
-describe('buildTable', () => {
-  it('builds a grid with the requested row/column count', () => {
+describe("buildTable", () => {
+  it("builds a grid with the requested row/column count", () => {
     const tableElement = buildTable({ rows: 2, columns: 3 });
     const container: XmlNode[] = [tableElement];
     const table = new DocxTable(container, tableElement);
@@ -15,37 +15,43 @@ describe('buildTable', () => {
     expect(table.rows()[1]?.cells()).toHaveLength(3);
   });
 
-  it('uses explicit column widths when given', () => {
-    const tableElement = buildTable({ rows: 1, columns: 2, columnWidthsTwips: [3000, 6000] });
-    const tblGrid = tableElement.children.find((c) => c.type === 'element' && c.tag === 'w:tblGrid');
-    if (tblGrid?.type !== 'element') {
-      throw new Error('expected w:tblGrid');
+  it("uses explicit column widths when given", () => {
+    const tableElement = buildTable({
+      rows: 1,
+      columns: 2,
+      columnWidthsTwips: [3000, 6000],
+    });
+    const tblGrid = tableElement.children.find(
+      (c) => c.type === "element" && c.tag === "w:tblGrid",
+    );
+    if (tblGrid?.type !== "element") {
+      throw new Error("expected w:tblGrid");
     }
     const widths = tblGrid.children
-      .filter((c) => c.type === 'element')
-      .map((c) => c.attributes.find((a) => a.name === 'w:w')?.value);
-    expect(widths).toEqual(['3000', '6000']);
+      .filter((c) => c.type === "element")
+      .map((c) => c.attributes.find((a) => a.name === "w:w")?.value);
+    expect(widths).toEqual(["3000", "6000"]);
   });
 });
 
-describe('DocxTable cell access and mutation', () => {
-  it('cell(row, col) returns the right cell, and its text can be set via appendParagraph', () => {
+describe("DocxTable cell access and mutation", () => {
+  it("cell(row, col) returns the right cell, and its text can be set via appendParagraph", () => {
     const tableElement = buildTable({ rows: 2, columns: 2 });
     const table = new DocxTable([tableElement], tableElement);
     const cell = table.cell(1, 1);
-    cell.appendParagraph({ text: 'B2' });
-    expect(table.cell(1, 1).text).toContain('B2');
-    expect(table.cell(0, 0).text).toBe(''); // untouched cells start with one empty paragraph
+    cell.appendParagraph({ text: "B2" });
+    expect(table.cell(1, 1).text).toContain("B2");
+    expect(table.cell(0, 0).text).toBe(""); // untouched cells start with one empty paragraph
   });
 
-  it('throws for an out-of-range row or column', () => {
+  it("throws for an out-of-range row or column", () => {
     const tableElement = buildTable({ rows: 1, columns: 1 });
     const table = new DocxTable([tableElement], tableElement);
     expect(() => table.cell(5, 0)).toThrow();
     expect(() => table.cell(0, 5)).toThrow();
   });
 
-  it('appendRow adds a row with the given column count', () => {
+  it("appendRow adds a row with the given column count", () => {
     const tableElement = buildTable({ rows: 1, columns: 2 });
     const table = new DocxTable([tableElement], tableElement);
     table.appendRow(2);
@@ -53,7 +59,7 @@ describe('DocxTable cell access and mutation', () => {
     expect(table.rows()[1]?.cells()).toHaveLength(2);
   });
 
-  it('colSpan writes and reads w:tcPr/w:gridSpan, and clearing it removes the element', () => {
+  it("colSpan writes and reads w:tcPr/w:gridSpan, and clearing it removes the element", () => {
     const tableElement = buildTable({ rows: 1, columns: 2 });
     const table = new DocxTable([tableElement], tableElement);
     const cell = table.cell(0, 0);
@@ -64,35 +70,46 @@ describe('DocxTable cell access and mutation', () => {
     expect(cell.colSpan).toBeUndefined();
   });
 
-  it('verticalMerge writes and reads w:tcPr/w:vMerge, distinguishing restart from continue', () => {
+  it("verticalMerge writes and reads w:tcPr/w:vMerge, distinguishing restart from continue", () => {
     const tableElement = buildTable({ rows: 1, columns: 1 });
     const table = new DocxTable([tableElement], tableElement);
     const cell = table.cell(0, 0);
     expect(cell.verticalMerge).toBeUndefined();
-    cell.verticalMerge = 'restart';
-    expect(cell.verticalMerge).toBe('restart');
-    cell.verticalMerge = 'continue';
-    expect(cell.verticalMerge).toBe('continue');
+    cell.verticalMerge = "restart";
+    expect(cell.verticalMerge).toBe("restart");
+    cell.verticalMerge = "continue";
+    expect(cell.verticalMerge).toBe("continue");
     cell.verticalMerge = undefined;
     expect(cell.verticalMerge).toBeUndefined();
   });
 
-  it('colSpan and verticalMerge coexist on the same cell in schema order (w:gridSpan before w:vMerge)', () => {
+  it("colSpan and verticalMerge coexist on the same cell in schema order (w:gridSpan before w:vMerge)", () => {
     const tableElement = buildTable({ rows: 1, columns: 1 });
     const table = new DocxTable([tableElement], tableElement);
     const cell = table.cell(0, 0);
     cell.colSpan = 2;
-    cell.verticalMerge = 'restart';
+    cell.verticalMerge = "restart";
     expect(cell.colSpan).toBe(2);
-    expect(cell.verticalMerge).toBe('restart');
-    const tc = tableElement.children.find((c) => c.type === 'element' && c.tag === 'w:tr');
-    const row = tc?.type === 'element' ? tc.children.find((c) => c.type === 'element' && c.tag === 'w:tc') : undefined;
-    const tcPr = row?.type === 'element' ? row.children.find((c) => c.type === 'element' && c.tag === 'w:tcPr') : undefined;
-    const childTags = tcPr?.type === 'element' ? tcPr.children.filter((c) => c.type === 'element').map((c) => c.tag) : [];
-    expect(childTags).toEqual(['w:gridSpan', 'w:vMerge']);
+    expect(cell.verticalMerge).toBe("restart");
+    const tc = tableElement.children.find(
+      (c) => c.type === "element" && c.tag === "w:tr",
+    );
+    const row =
+      tc?.type === "element"
+        ? tc.children.find((c) => c.type === "element" && c.tag === "w:tc")
+        : undefined;
+    const tcPr =
+      row?.type === "element"
+        ? row.children.find((c) => c.type === "element" && c.tag === "w:tcPr")
+        : undefined;
+    const childTags =
+      tcPr?.type === "element"
+        ? tcPr.children.filter((c) => c.type === "element").map((c) => c.tag)
+        : [];
+    expect(childTags).toEqual(["w:gridSpan", "w:vMerge"]);
   });
 
-  it('remove() removes the table and throws on further use', () => {
+  it("remove() removes the table and throws on further use", () => {
     const tableElement = buildTable({ rows: 1, columns: 1 });
     const container: XmlNode[] = [tableElement];
     const table = new DocxTable(container, tableElement);
@@ -101,103 +118,123 @@ describe('DocxTable cell access and mutation', () => {
     expect(() => table.rows()).toThrow(/removed/);
   });
 
-  it('vertical merge already works with zero new code -- the existing verticalMerge setter alone round-trips correctly', () => {
+  it("vertical merge already works with zero new code -- the existing verticalMerge setter alone round-trips correctly", () => {
     const editor = createDocx();
     const table = editor.body.appendTable({ rows: 2, columns: 1 });
-    table.cell(0, 0).verticalMerge = 'restart';
-    table.cell(0, 0).appendParagraph({ text: 'top' });
-    table.cell(1, 0).verticalMerge = 'continue';
+    table.cell(0, 0).verticalMerge = "restart";
+    table.cell(0, 0).appendParagraph({ text: "top" });
+    table.cell(1, 0).verticalMerge = "continue";
 
     const pkg = decodePackage(encodePackage(editor.toPackage()));
     const content = readDocxContent(pkg);
-    if (content.kind !== 'wordprocessing') {
-      throw new Error('expected wordprocessing content');
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
     }
-    const roundTrippedTable = content.sections[0]?.blocks.find((b) => b.kind === 'table');
-    if (roundTrippedTable?.kind !== 'table') {
-      throw new Error('expected a table block');
+    const roundTrippedTable = content.sections[0]?.blocks.find(
+      (b) => b.kind === "table",
+    );
+    if (roundTrippedTable?.kind !== "table") {
+      throw new Error("expected a table block");
     }
     expect(roundTrippedTable.rows[0]?.cells).toHaveLength(1);
     expect(roundTrippedTable.rows[1]?.cells).toHaveLength(1);
   });
 });
 
-describe('DocxTableRow.mergeCellsHorizontally', () => {
-  it('merges colSpan columns into one cell, removing the consumed w:tc elements and leaving w:tblGrid untouched', () => {
+describe("DocxTableRow.mergeCellsHorizontally", () => {
+  it("merges colSpan columns into one cell, removing the consumed w:tc elements and leaving w:tblGrid untouched", () => {
     const tableElement = buildTable({ rows: 1, columns: 4 });
     const table = new DocxTable([tableElement], tableElement);
-    table.cell(0, 2).appendParagraph({ text: 'consumed content' });
+    table.cell(0, 2).appendParagraph({ text: "consumed content" });
 
     const anchor = table.rows()[0]!.mergeCellsHorizontally(1, 2);
-    anchor.appendParagraph({ text: 'anchor content' });
+    anchor.appendParagraph({ text: "anchor content" });
 
     expect(table.rows()[0]!.cells()).toHaveLength(3);
     expect(table.cell(0, 1).colSpan).toBe(2);
-    expect(table.cell(0, 1).text).toContain('anchor content');
+    expect(table.cell(0, 1).text).toContain("anchor content");
     // the consumed cell's own pre-merge content ("consumed content") is nowhere in the surviving row
-    expect(table.rows()[0]!.cells().some((c) => c.text.includes('consumed content'))).toBe(false);
+    expect(
+      table
+        .rows()[0]!
+        .cells()
+        .some((c) => c.text.includes("consumed content")),
+    ).toBe(false);
 
-    const tblGrid = tableElement.children.find((c) => c.type === 'element' && c.tag === 'w:tblGrid');
-    const gridColumns = tblGrid?.type === 'element' ? tblGrid.children.filter((c) => c.type === 'element') : [];
+    const tblGrid = tableElement.children.find(
+      (c) => c.type === "element" && c.tag === "w:tblGrid",
+    );
+    const gridColumns =
+      tblGrid?.type === "element"
+        ? tblGrid.children.filter((c) => c.type === "element")
+        : [];
     expect(gridColumns).toHaveLength(4);
   });
 
-  it('silently discards a consumed cell that already had real text, with no error', () => {
+  it("silently discards a consumed cell that already had real text, with no error", () => {
     const tableElement = buildTable({ rows: 1, columns: 3 });
     const table = new DocxTable([tableElement], tableElement);
-    table.cell(0, 0).appendParagraph({ text: 'anchor' });
-    table.cell(0, 1).appendParagraph({ text: 'about to be discarded' });
+    table.cell(0, 0).appendParagraph({ text: "anchor" });
+    table.cell(0, 1).appendParagraph({ text: "about to be discarded" });
 
     expect(() => table.rows()[0]!.mergeCellsHorizontally(0, 2)).not.toThrow();
     expect(table.rows()[0]!.cells()).toHaveLength(2);
   });
 
-  it('throws for an out-of-range startColumnIndex or a colSpan exceeding the row width', () => {
+  it("throws for an out-of-range startColumnIndex or a colSpan exceeding the row width", () => {
     const tableElement = buildTable({ rows: 1, columns: 2 });
     const table = new DocxTable([tableElement], tableElement);
-    expect(() => table.rows()[0]!.mergeCellsHorizontally(5, 1)).toThrow(/does not exist/);
-    expect(() => table.rows()[0]!.mergeCellsHorizontally(0, 5)).toThrow(/exceeds/);
-    expect(() => table.rows()[0]!.mergeCellsHorizontally(0, 0)).toThrow(/positive integer/);
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(5, 1)).toThrow(
+      /does not exist/,
+    );
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(0, 5)).toThrow(
+      /exceeds/,
+    );
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(0, 0)).toThrow(
+      /positive integer/,
+    );
   });
 
-  it('a merged table survives a real docx read/build round trip with the right colSpan', () => {
+  it("a merged table survives a real docx read/build round trip with the right colSpan", () => {
     const editor = createDocx();
     const table = editor.body.appendTable({ rows: 1, columns: 4 });
     const anchor = table.rows()[0]!.mergeCellsHorizontally(1, 2);
-    anchor.appendParagraph({ text: 'merged' });
+    anchor.appendParagraph({ text: "merged" });
 
     const pkg = decodePackage(encodePackage(editor.toPackage()));
     const content = readDocxContent(pkg);
-    if (content.kind !== 'wordprocessing') {
-      throw new Error('expected wordprocessing content');
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
     }
-    const roundTrippedTable = content.sections[0]?.blocks.find((b) => b.kind === 'table');
-    if (roundTrippedTable?.kind !== 'table') {
-      throw new Error('expected a table block');
+    const roundTrippedTable = content.sections[0]?.blocks.find(
+      (b) => b.kind === "table",
+    );
+    if (roundTrippedTable?.kind !== "table") {
+      throw new Error("expected a table block");
     }
     expect(roundTrippedTable.rows[0]?.cells).toHaveLength(3);
     expect(roundTrippedTable.rows[0]?.cells[1]?.colSpan).toBe(2);
   });
 });
 
-describe('DocxTable.mergeCells', () => {
-  it('merges a rowSpan x colSpan rectangle via mergeCellsHorizontally plus verticalMerge', () => {
+describe("DocxTable.mergeCells", () => {
+  it("merges a rowSpan x colSpan rectangle via mergeCellsHorizontally plus verticalMerge", () => {
     const tableElement = buildTable({ rows: 3, columns: 3 });
     const table = new DocxTable([tableElement], tableElement);
     const anchor = table.mergeCells(0, 1, 2, 2);
-    anchor.appendParagraph({ text: 'block' });
+    anchor.appendParagraph({ text: "block" });
 
     expect(table.cell(0, 1).colSpan).toBe(2);
-    expect(table.cell(0, 1).verticalMerge).toBe('restart');
+    expect(table.cell(0, 1).verticalMerge).toBe("restart");
     expect(table.rows()[0]!.cells()).toHaveLength(2);
     expect(table.cell(1, 1).colSpan).toBe(2);
-    expect(table.cell(1, 1).verticalMerge).toBe('continue');
+    expect(table.cell(1, 1).verticalMerge).toBe("continue");
     expect(table.rows()[1]!.cells()).toHaveLength(2);
     // the untouched third row keeps all three original columns
     expect(table.rows()[2]!.cells()).toHaveLength(3);
   });
 
-  it('throws for an out-of-range startRow or a rowSpan exceeding the table height', () => {
+  it("throws for an out-of-range startRow or a rowSpan exceeding the table height", () => {
     const tableElement = buildTable({ rows: 2, columns: 2 });
     const table = new DocxTable([tableElement], tableElement);
     expect(() => table.mergeCells(5, 0, 1, 1)).toThrow(/does not exist/);

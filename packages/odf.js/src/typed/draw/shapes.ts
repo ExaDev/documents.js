@@ -1,21 +1,48 @@
-import type { Box, Color, ContentBlock, ContentImageBlock, ContentShape, ContentStroke, ContentStrokeStyle, ContentVector } from 'document-schema.js';
-import type { XmlElement, XmlNode } from '../../model/node';
-import type { Package } from '../../model/package';
-import { attrValue, childrenWithTag, elementsWithTag } from '../../xml/query';
-import { base64ToBytes } from '../../util/base64';
-import { sniffImageFormat } from '../../image/sniff';
-import { resolveStyleElementChain } from '../shared/cascade';
-import { parseOdfColor } from '../shared/color';
-import { parseLinePoints } from '../shared/geometry';
-import { decodeOdfText } from '../shared/text';
-import { mintOdfListNumId, readOdfListParagraphs, type OdfListIdState } from '../shared/list';
-import { odfResidue } from '../shared/constructs';
-import { readOdfParagraph } from '../shared/paragraph';
-import { readOdfTable } from '../shared/table';
-import { parseOdfLength } from '../shared/units';
-import { buildOdfSubpaths, parseOdfPathData, parseOdfPointsList, parseOdfViewBox, rawSubpathFromPoints } from '../shared/path';
-import type { OdfShapeGeometry, OdfTransformFunction } from '../shared/transform';
-import { applyOdfTransform, composeOdfGroupTransform, parseOdfTransform, resolveOdfShapeGeometry } from '../shared/transform';
+import type {
+  Box,
+  Color,
+  ContentBlock,
+  ContentImageBlock,
+  ContentShape,
+  ContentStroke,
+  ContentStrokeStyle,
+  ContentVector,
+} from "document-schema.js";
+import type { XmlElement, XmlNode } from "../../model/node";
+import type { Package } from "../../model/package";
+import { attrValue, childrenWithTag, elementsWithTag } from "../../xml/query";
+import { base64ToBytes } from "../../util/base64";
+import { sniffImageFormat } from "../../image/sniff";
+import { resolveStyleElementChain } from "../shared/cascade";
+import { parseOdfColor } from "../shared/color";
+import { parseLinePoints } from "../shared/geometry";
+import { decodeOdfText } from "../shared/text";
+import {
+  mintOdfListNumId,
+  readOdfListParagraphs,
+  type OdfListIdState,
+} from "../shared/list";
+import { odfResidue } from "../shared/constructs";
+import { readOdfParagraph } from "../shared/paragraph";
+import { readOdfTable } from "../shared/table";
+import { parseOdfLength } from "../shared/units";
+import {
+  buildOdfSubpaths,
+  parseOdfPathData,
+  parseOdfPointsList,
+  parseOdfViewBox,
+  rawSubpathFromPoints,
+} from "../shared/path";
+import type {
+  OdfShapeGeometry,
+  OdfTransformFunction,
+} from "../shared/transform";
+import {
+  applyOdfTransform,
+  composeOdfGroupTransform,
+  parseOdfTransform,
+  resolveOdfShapeGeometry,
+} from "../shared/transform";
 
 // The shape vocabulary shared between odp (draw:frame/draw:g -- a positioned container for text/image/table content, and group flattening) and odg (this file's own later extension: the vector-primitive kinds a drawing needs that a presentation typically doesn't -- draw:rect/draw:ellipse/draw:circle/draw:line/draw:path/draw:polygon/draw:polyline/draw:custom-shape). A vector-primitive draw: element that is NOT wrapped in a draw:frame (a plain draw:rect/draw:ellipse/draw:custom-shape sitting directly under a draw:page or draw:g -- valid, real ODF, both Impress and Draw allow it) was a deliberate, documented scope boundary for odp's own walkDrawShapes (below, UNCHANGED by this extension -- odp's own ContentSlide has no `vectors` array to put one in), exactly mirroring how ooxml.js's own pptx shape-tree walker skips p:cxnSp connector shapes for the same "no vector-primitive recovery in THAT reader" reason. readDrawPageContent (this file's own odg-facing addition, further down) is the one that DOES walk vector primitives, for a ContentDrawPageSchema target that has somewhere to put them.
 
@@ -26,28 +53,39 @@ interface FrameInsets {
   readonly insetBottomPt: number;
 }
 
-const ZERO_INSETS: FrameInsets = { insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0 };
+const ZERO_INSETS: FrameInsets = {
+  insetLeftPt: 0,
+  insetTopPt: 0,
+  insetRightPt: 0,
+  insetBottomPt: 0,
+};
 
-function readPaddingPt(props: XmlElement, attrName: string): number | undefined {
+function readPaddingPt(
+  props: XmlElement,
+  attrName: string,
+): number | undefined {
   const value = attrValue(props, attrName);
   return value === undefined ? undefined : parseOdfLength(value);
 }
 
 // A draw:frame's own text insets come from its graphic-family style's style:graphic-properties/fo:padding-* (verified against real LibreOffice output: e.g. the built-in "standard" graphic style sets fo:padding-top="0.125cm" fo:padding-bottom="0.125cm" fo:padding-left="0.25cm" fo:padding-right="0.25cm") -- a dimensional/decorative property style/properties.ts deliberately does not model (see that module's own top-of-file note), so this reads style:graphic-properties directly. Unlike table.ts's own single-level findStyleElement lookups, this WALKS the full style:parent-style-name chain (via cascade.ts's resolveStyleElementChain, root-first) because real LibreOffice output routinely inherits padding from a parent style (a shape's own automatic style commonly sets only its own min-height/min-width directly, leaving fo:padding-* to be inherited from its style:parent-style-name="standard" chain) rather than repeating the full declaration on every shape's own automatic style.
 function readFrameInsets(frame: XmlElement, pkg: Package): FrameInsets {
-  const styleName = attrValue(frame, 'draw:style-name');
-  const { elements } = resolveStyleElementChain(styleName, 'graphic', pkg);
+  const styleName = attrValue(frame, "draw:style-name");
+  const { elements } = resolveStyleElementChain(styleName, "graphic", pkg);
   let insets = ZERO_INSETS;
   for (const element of elements) {
-    const props = childrenWithTag(element, 'style:graphic-properties')[0];
+    const props = childrenWithTag(element, "style:graphic-properties")[0];
     if (props === undefined) {
       continue;
     }
     insets = {
-      insetLeftPt: readPaddingPt(props, 'fo:padding-left') ?? insets.insetLeftPt,
-      insetTopPt: readPaddingPt(props, 'fo:padding-top') ?? insets.insetTopPt,
-      insetRightPt: readPaddingPt(props, 'fo:padding-right') ?? insets.insetRightPt,
-      insetBottomPt: readPaddingPt(props, 'fo:padding-bottom') ?? insets.insetBottomPt,
+      insetLeftPt:
+        readPaddingPt(props, "fo:padding-left") ?? insets.insetLeftPt,
+      insetTopPt: readPaddingPt(props, "fo:padding-top") ?? insets.insetTopPt,
+      insetRightPt:
+        readPaddingPt(props, "fo:padding-right") ?? insets.insetRightPt,
+      insetBottomPt:
+        readPaddingPt(props, "fo:padding-bottom") ?? insets.insetBottomPt,
     };
   }
   return insets;
@@ -55,21 +93,29 @@ function readFrameInsets(frame: XmlElement, pkg: Package): FrameInsets {
 
 // A draw:frame's own alternative text: svg:title (ODF's short title) preferred, svg:desc (its long description) used when a frame carries only the latter -- both are plain-text DIRECT CHILD ELEMENTS of draw:frame itself, not attributes, confirmed against real LibreOffice 26.2 output (a Calc image whose UNO Title/Description properties were both set round-trips as `<svg:title>...</svg:title><svg:desc>...</svg:desc>` siblings of the frame's own draw:image). ContentImageBlockSchema models exactly one altText string, so the two are collapsed with title first: LibreOffice's own HTML export writes svg:title into `alt=`, making it the closer match, and a frame carrying only a description still has genuine alternative text worth surfacing rather than dropping. Decoded via text.ts's own decodeOdfText (not a bare text-node concatenation) for the same reason every other ODF text getter in this package uses it -- a title/description containing a run of literal spaces or a tab is stored as text:s/text:tab elements.
 function readFrameAltText(frame: XmlElement): string | undefined {
-  const title = childrenWithTag(frame, 'svg:title')[0];
+  const title = childrenWithTag(frame, "svg:title")[0];
   const decodedTitle = title === undefined ? undefined : decodeOdfText(title);
   if (decodedTitle !== undefined && decodedTitle.length > 0) {
     return decodedTitle;
   }
-  const description = childrenWithTag(frame, 'svg:desc')[0];
-  const decodedDescription = description === undefined ? undefined : decodeOdfText(description);
-  return decodedDescription !== undefined && decodedDescription.length > 0 ? decodedDescription : undefined;
+  const description = childrenWithTag(frame, "svg:desc")[0];
+  const decodedDescription =
+    description === undefined ? undefined : decodeOdfText(description);
+  return decodedDescription !== undefined && decodedDescription.length > 0
+    ? decodedDescription
+    : undefined;
 }
 
 // draw:image is a direct child of draw:frame, referencing its media part by a plain package path via xlink:href -- ODF has no relationships mechanism (see this package's own top-level README), so this IS the reference, not an indirection to resolve. Real saved .odp packages always use xlink:href against a real Pictures/ part (confirmed against a real LibreOffice-produced .odp); the flat-XML office:binary-data inline form is specific to the .fodp/.fods/.fodt single-file variants this reader (operating on a decoded zip-of-XML Package) never encounters, so it is not handled here. The frame is passed alongside its own draw:image purely for alt text, which lives on the FRAME (see readFrameAltText above), never on the image element.
-export function readDrawImageBlock(image: XmlElement, frame: XmlElement, frameBox: Box, pkg: Package): ContentImageBlock | undefined {
-  const href = attrValue(image, 'xlink:href');
+export function readDrawImageBlock(
+  image: XmlElement,
+  frame: XmlElement,
+  frameBox: Box,
+  pkg: Package,
+): ContentImageBlock | undefined {
+  const href = attrValue(image, "xlink:href");
   const part = href === undefined ? undefined : pkg.parts[href];
-  if (part?.kind !== 'binary') {
+  if (part?.kind !== "binary") {
     return undefined;
   }
   const bytes = base64ToBytes(part.base64);
@@ -78,7 +124,13 @@ export function readDrawImageBlock(image: XmlElement, frame: XmlElement, frameBo
     return undefined;
   }
   // The image renders at the FRAME's own resolved size, not the source image's native pixel dimensions -- matching ooxml.js's own readPicShape convention.
-  const block: ContentImageBlock = { kind: 'image', format, base64: part.base64, widthPt: frameBox.widthPt, heightPt: frameBox.heightPt };
+  const block: ContentImageBlock = {
+    kind: "image",
+    format,
+    base64: part.base64,
+    widthPt: frameBox.widthPt,
+    heightPt: frameBox.heightPt,
+  };
   const altText = readFrameAltText(frame);
   if (altText !== undefined) {
     block.altText = altText;
@@ -89,29 +141,38 @@ export function readDrawImageBlock(image: XmlElement, frame: XmlElement, frameBo
 // A draw:frame's content is exactly one of table:table, draw:text-box, or draw:image (verified against real LibreOffice output) -- table:table is checked FIRST because a real saved presentation table frame also carries a sibling draw:image (an .svm fallback preview LibreOffice writes for consumers that can't render a real table), which must not be mistaken for the frame's own image content.
 //
 // ODP LIST MEMBERSHIP -- minted numId, not the numId-less { level } shape: document-schema.js 3.3.0 made ContentListMembership.numId optional precisely so a reader whose source carries NO list identity could emit the honest minimal { level } (ooxml.js's pptx reader, whose a:pPr/@lvl is a bare depth attribute on the paragraph with no list element behind it -- a fabricated numId there would be a lie in the data). A slide text box is not that case: draw:text-box's own content model is exactly (text:p | text:list)*, and its text:list elements are the IDENTICAL structural containers the odt reader walks in office:text -- a slide can carry two of them (two bullet bodies in one text box, or one list in each of two frames), and a consumer grouping list paragraphs apart (rendering separate <ul>/<ol> elements, nesting an outline per list) must be able to tell them apart. The deciding criterion is exactly that: whether the source carries genuine list identity a consumer needs for grouping separate lists apart. ODP's text:list elements pass it, so this reader mints a per-encounter numId through the SAME shared machinery (typed/shared/list.ts: mintOdfListNumId/readOdfListParagraphs, including the ordered:/bullet: kind prefix) the odt reader uses -- emitting { level } alone would discard a real, source-grounded fact, not avoid a fabrication.
-function readDrawFrameContent(frame: XmlElement, frameBox: Box, pkg: Package, listIdState: OdfListIdState): ContentBlock[] {
-  const table = childrenWithTag(frame, 'table:table')[0];
+function readDrawFrameContent(
+  frame: XmlElement,
+  frameBox: Box,
+  pkg: Package,
+  listIdState: OdfListIdState,
+): ContentBlock[] {
+  const table = childrenWithTag(frame, "table:table")[0];
   if (table !== undefined) {
     return [readOdfTable(table, pkg)];
   }
-  const textBox = childrenWithTag(frame, 'draw:text-box')[0];
+  const textBox = childrenWithTag(frame, "draw:text-box")[0];
   if (textBox !== undefined) {
     // A direct-children walk (not the deep elementsWithTag search this branch used before list membership existed) covers draw:text-box's whole (text:p | text:list)* content model: a text:p reads as a plain paragraph with NO list membership, and a text:list reads through the shared walker, which attaches numId/level membership to every paragraph it finds at its actual text:list-in-text:list-item nesting depth -- document order across both child kinds is preserved, matching the flattened order the old deep search produced.
     const blocks: ContentBlock[] = [];
     for (const child of textBox.children) {
-      if (child.type !== 'element') {
+      if (child.type !== "element") {
         continue;
       }
-      if (child.tag === 'text:p') {
+      if (child.tag === "text:p") {
         blocks.push(readOdfParagraph(child, pkg));
-      } else if (child.tag === 'text:list') {
+      } else if (child.tag === "text:list") {
         const numId = mintOdfListNumId(pkg, child, listIdState);
-        blocks.push(...readOdfListParagraphs(child, { numId, level: 0 }, (element) => readOdfParagraph(element, pkg)));
+        blocks.push(
+          ...readOdfListParagraphs(child, { numId, level: 0 }, (element) =>
+            readOdfParagraph(element, pkg),
+          ),
+        );
       }
     }
     return blocks;
   }
-  const image = childrenWithTag(frame, 'draw:image')[0];
+  const image = childrenWithTag(frame, "draw:image")[0];
   if (image !== undefined) {
     const block = readDrawImageBlock(image, frame, frameBox, pkg);
     return block === undefined ? [] : [block];
@@ -120,14 +181,22 @@ function readDrawFrameContent(frame: XmlElement, frameBox: Box, pkg: Package, li
 }
 
 // Reads one draw:frame into a ContentShape, in the coordinate space `groupFunctions` maps FROM (its own immediate parent's local space) TO the page: composeOdfGroupTransform is the identity when groupFunctions is empty (the overwhelmingly common case -- a frame with no enclosing draw:g), so this is cheap for the non-grouped case. Returns undefined for a frame with no resolvable geometry of its own -- see transform.ts's resolveOdfShapeGeometry for the documented "inherited positioning" scope boundary this defers to. `flowPositioning` admits the one geometry shape that boundary excludes on purpose for page-space readers but that TEXT FLOW genuinely has: an as-char anchored frame in odt text carries svg:width/svg:height and NO svg:x/svg:y, because its position is the character flow itself -- such a frame reads at the origin of its own box (the same "0/0 is the honest spelling of positioned-by-flow" convention ooxml.js's docx reader applies to inline flow objects), never a dropped frame. `listIdState` mints a text-box list's numId identity (see readDrawFrameContent's own ODP LIST MEMBERSHIP note) and defaults to a fresh counter so every pre-existing call site (ods's anchored-drawing reader, this file's own tests) keeps working unchanged -- a caller walking a WHOLE presentation (odp) threads one document-wide state so identities stay unique across every slide.
-export function readDrawFrame(frame: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package, listIdState: OdfListIdState = { next: 1 }, flowPositioning = false): ContentShape | undefined {
-  const ownGeometry = resolveOdfShapeGeometry(frame) ?? (flowPositioning ? flowFrameGeometry(frame) : undefined);
+export function readDrawFrame(
+  frame: XmlElement,
+  groupFunctions: readonly OdfTransformFunction[],
+  pkg: Package,
+  listIdState: OdfListIdState = { next: 1 },
+  flowPositioning = false,
+): ContentShape | undefined {
+  const ownGeometry =
+    resolveOdfShapeGeometry(frame) ??
+    (flowPositioning ? flowFrameGeometry(frame) : undefined);
   if (ownGeometry === undefined) {
     return undefined;
   }
   const geometry = composeOdfGroupTransform(groupFunctions, ownGeometry);
   return {
-    name: attrValue(frame, 'draw:name'),
+    name: attrValue(frame, "draw:name"),
     frame: geometry.frame,
     rotationDeg: geometry.rotationDeg,
     ...readFrameInsets(frame, pkg),
@@ -137,8 +206,8 @@ export function readDrawFrame(frame: XmlElement, groupFunctions: readonly OdfTra
 
 // The flow-positioning fallback: a frame with parseable svg:width/svg:height and no svg:x/svg:y (or draw:transform) reads as a box at the origin of its own size.
 function flowFrameGeometry(frame: XmlElement): OdfShapeGeometry | undefined {
-  const widthValue = attrValue(frame, 'svg:width');
-  const heightValue = attrValue(frame, 'svg:height');
+  const widthValue = attrValue(frame, "svg:width");
+  const heightValue = attrValue(frame, "svg:height");
   if (widthValue === undefined || heightValue === undefined) {
     return undefined;
   }
@@ -147,12 +216,17 @@ function flowFrameGeometry(frame: XmlElement): OdfShapeGeometry | undefined {
   if (widthPt === undefined || heightPt === undefined) {
     return undefined;
   }
-  return { frame: { xPt: 0, yPt: 0, widthPt, heightPt }, rotationDeg: undefined };
+  return {
+    frame: { xPt: 0, yPt: 0, widthPt, heightPt },
+    rotationDeg: undefined,
+  };
 }
 
 // Shared by both walkDrawShapes (odp) and walkDrawPageContent (odg, further down this file) -- "read an element's own draw:transform into a function list" is identical for both, so this stays a single private helper reused within this module rather than being duplicated per walker.
-function readOwnTransformFunctions(element: XmlElement): OdfTransformFunction[] {
-  const value = attrValue(element, 'draw:transform');
+function readOwnTransformFunctions(
+  element: XmlElement,
+): OdfTransformFunction[] {
+  const value = attrValue(element, "draw:transform");
   return value === undefined ? [] : parseOdfTransform(value);
 }
 
@@ -161,20 +235,30 @@ function readOwnTransformFunctions(element: XmlElement): OdfTransformFunction[] 
 // `indexState` reuses the EXACT SAME paintOrderKey/DocumentIndexState machinery walkDrawPageContent (odg, further down this file) uses -- ContentShapeSchema carries the identical optional `paintOrder` field ContentSlideSchema's own shapes already declare, so a presentation shape gets the same real, spec-aware (draw:z-index-honouring, falling back to document-encounter order) paint-order value an odg drawing's shapes get, even though odp's own output array is never reordered by it (matching this walker's own pre-existing document-order-only behaviour -- only the STAMPED VALUE is new, not a new sort). Defaults to a fresh counter so every existing external call site (a single top-level call per slide, with no indexState argument) keeps working unchanged; recursion into a nested draw:g threads the SAME state onward so the counter stays monotonic across the whole slide, matching walkDrawPageContent's own threading discipline exactly.
 //
 // `listIdState` threads the text-box list numId counter (see readDrawFrameContent's own ODP LIST MEMBERSHIP note) through every frame of the walk, with the same fresh-counter default and the same recursive threading discipline as indexState -- odp passes one document-wide state (see readOdpContent) so a list's identity is unique across the whole presentation, never reset per slide or per group.
-export function walkDrawShapes(children: readonly XmlNode[], groupFunctions: readonly OdfTransformFunction[], pkg: Package, out: ContentShape[], indexState: DocumentIndexState = { next: 0 }, listIdState: OdfListIdState = { next: 1 }): void {
+export function walkDrawShapes(
+  children: readonly XmlNode[],
+  groupFunctions: readonly OdfTransformFunction[],
+  pkg: Package,
+  out: ContentShape[],
+  indexState: DocumentIndexState = { next: 0 },
+  listIdState: OdfListIdState = { next: 1 },
+): void {
   for (const node of children) {
-    if (node.type !== 'element') {
+    if (node.type !== "element") {
       continue;
     }
-    if (node.tag === 'draw:frame') {
+    if (node.tag === "draw:frame") {
       const zIndex = paintOrderKey(node, indexState);
       const shape = readDrawFrame(node, groupFunctions, pkg, listIdState);
       if (shape !== undefined) {
         out.push({ ...shape, paintOrder: zIndex });
       }
-    } else if (node.tag === 'draw:g') {
+    } else if (node.tag === "draw:g") {
       const ownFunctions = readOwnTransformFunctions(node);
-      const nested = ownFunctions.length === 0 ? groupFunctions : [...ownFunctions, ...groupFunctions];
+      const nested =
+        ownFunctions.length === 0
+          ? groupFunctions
+          : [...ownFunctions, ...groupFunctions];
       walkDrawShapes(node.children, nested, pkg, out, indexState, listIdState);
     }
   }
@@ -196,58 +280,88 @@ export function walkDrawShapes(children: readonly XmlNode[], groupFunctions: rea
 //   only the solid/dashed distinction itself is (see STROKE STYLE above).
 // - transparency/opacity (draw:opacity, svg:stroke-opacity) is not read at all; every fill/stroke is treated as
 //   fully opaque, matching Color's own plain-RGB shape (no alpha channel).
-type OdfFillRule = 'nonzero' | 'evenodd';
+type OdfFillRule = "nonzero" | "evenodd";
 
-function readOdfFillAndStroke(element: XmlElement, pkg: Package): { fill: Color | undefined; fillRule: OdfFillRule | undefined; stroke: ContentStroke | undefined } {
-  const styleName = attrValue(element, 'draw:style-name');
-  const { elements } = resolveStyleElementChain(styleName, 'graphic', pkg);
+function readOdfFillAndStroke(
+  element: XmlElement,
+  pkg: Package,
+): {
+  fill: Color | undefined;
+  fillRule: OdfFillRule | undefined;
+  stroke: ContentStroke | undefined;
+} {
+  const styleName = attrValue(element, "draw:style-name");
+  const { elements } = resolveStyleElementChain(styleName, "graphic", pkg);
   let fill: Color | undefined;
   let fillRule: OdfFillRule | undefined;
   let stroke: ContentStroke | undefined;
   let strokeStyle: ContentStrokeStyle | undefined;
   for (const styleElement of elements) {
-    const props = childrenWithTag(styleElement, 'style:graphic-properties')[0];
+    const props = childrenWithTag(styleElement, "style:graphic-properties")[0];
     if (props === undefined) {
       continue;
     }
-    const fillMode = attrValue(props, 'draw:fill');
-    if (fillMode === 'none') {
+    const fillMode = attrValue(props, "draw:fill");
+    if (fillMode === "none") {
       fill = undefined;
     } else {
-      const fillColorValue = attrValue(props, 'draw:fill-color');
-      const parsedFill = fillColorValue === undefined ? undefined : parseOdfColor(fillColorValue);
+      const fillColorValue = attrValue(props, "draw:fill-color");
+      const parsedFill =
+        fillColorValue === undefined
+          ? undefined
+          : parseOdfColor(fillColorValue);
       if (parsedFill !== undefined) {
         fill = parsedFill;
       }
     }
-    const fillRuleValue = attrValue(props, 'svg:fill-rule');
-    if (fillRuleValue === 'nonzero' || fillRuleValue === 'evenodd') {
+    const fillRuleValue = attrValue(props, "svg:fill-rule");
+    if (fillRuleValue === "nonzero" || fillRuleValue === "evenodd") {
       fillRule = fillRuleValue;
     }
-    const strokeMode = attrValue(props, 'draw:stroke');
-    if (strokeMode === 'none') {
+    const strokeMode = attrValue(props, "draw:stroke");
+    if (strokeMode === "none") {
       stroke = undefined;
       strokeStyle = undefined;
     } else {
-      if (strokeMode === 'dash') {
-        strokeStyle = 'dashed';
-      } else if (strokeMode === 'solid') {
-        strokeStyle = 'solid';
+      if (strokeMode === "dash") {
+        strokeStyle = "dashed";
+      } else if (strokeMode === "solid") {
+        strokeStyle = "solid";
       }
-      const strokeColorValue = attrValue(props, 'svg:stroke-color');
-      const strokeWidthValue = attrValue(props, 'svg:stroke-width');
-      const strokeColor = strokeColorValue === undefined ? undefined : parseOdfColor(strokeColorValue);
-      const strokeWidthPt = strokeWidthValue === undefined ? undefined : parseOdfLength(strokeWidthValue);
-      if (strokeColor !== undefined && strokeWidthPt !== undefined && strokeWidthPt > 0) {
+      const strokeColorValue = attrValue(props, "svg:stroke-color");
+      const strokeWidthValue = attrValue(props, "svg:stroke-width");
+      const strokeColor =
+        strokeColorValue === undefined
+          ? undefined
+          : parseOdfColor(strokeColorValue);
+      const strokeWidthPt =
+        strokeWidthValue === undefined
+          ? undefined
+          : parseOdfLength(strokeWidthValue);
+      if (
+        strokeColor !== undefined &&
+        strokeWidthPt !== undefined &&
+        strokeWidthPt > 0
+      ) {
         stroke = { color: strokeColor, widthPt: strokeWidthPt };
       }
     }
   }
-  return { fill, fillRule, stroke: stroke === undefined || strokeStyle === undefined ? stroke : { ...stroke, style: strokeStyle } };
+  return {
+    fill,
+    fillRule,
+    stroke:
+      stroke === undefined || strokeStyle === undefined
+        ? stroke
+        : { ...stroke, style: strokeStyle },
+  };
 }
 
 // Resolves a vector primitive's own geometry -- frame (svg:x/y/width/height) AND rotationDeg (draw:transform's rotate()+translate()) -- reusing the EXACT SAME transform machinery (resolveOdfShapeGeometry, composeOdfGroupTransform) readDrawFrame above already uses for a draw:frame, composed with any enclosing draw:g's own transform. Nothing about ContentVectorSchema's own rect/ellipse/path variants makes this a smaller problem than the ContentShape case: each already carries a rotationDeg field of its own, so there is no separate rotation-resolution logic to write -- this is a direct extension of what already resolves rotation correctly, not a reimplementation.
-function resolveVectorGeometry(element: XmlElement, groupFunctions: readonly OdfTransformFunction[]): OdfShapeGeometry | undefined {
+function resolveVectorGeometry(
+  element: XmlElement,
+  groupFunctions: readonly OdfTransformFunction[],
+): OdfShapeGeometry | undefined {
   const geometry = resolveOdfShapeGeometry(element);
   if (geometry === undefined) {
     return undefined;
@@ -255,61 +369,100 @@ function resolveVectorGeometry(element: XmlElement, groupFunctions: readonly Odf
   return composeOdfGroupTransform(groupFunctions, geometry);
 }
 
-function readDrawRectVector(element: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentVector | undefined {
+function readDrawRectVector(
+  element: XmlElement,
+  groupFunctions: readonly OdfTransformFunction[],
+  pkg: Package,
+): ContentVector | undefined {
   const geometry = resolveVectorGeometry(element, groupFunctions);
   if (geometry === undefined) {
     return undefined;
   }
   const { fill, stroke } = readOdfFillAndStroke(element, pkg);
-  return { kind: 'rect', frame: geometry.frame, rotationDeg: geometry.rotationDeg, fill, stroke };
+  return {
+    kind: "rect",
+    frame: geometry.frame,
+    rotationDeg: geometry.rotationDeg,
+    fill,
+    stroke,
+  };
 }
 
 // draw:ellipse and draw:circle share an identical attribute shape (svg:x/y/width/height) -- confirmed against real LibreOffice output: an ellipse whose width and height happen to be EQUAL is written as draw:circle instead of draw:ellipse (a real, distinct ODF element the OASIS schema defines specifically for this case), with no attribute-shape difference otherwise. Both map to ContentVectorSchema's single 'ellipse' variant.
-function readDrawEllipseVector(element: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentVector | undefined {
+function readDrawEllipseVector(
+  element: XmlElement,
+  groupFunctions: readonly OdfTransformFunction[],
+  pkg: Package,
+): ContentVector | undefined {
   const geometry = resolveVectorGeometry(element, groupFunctions);
   if (geometry === undefined) {
     return undefined;
   }
   const { fill, stroke } = readOdfFillAndStroke(element, pkg);
-  return { kind: 'ellipse', frame: geometry.frame, rotationDeg: geometry.rotationDeg, fill, stroke };
+  return {
+    kind: "ellipse",
+    frame: geometry.frame,
+    rotationDeg: geometry.rotationDeg,
+    fill,
+    stroke,
+  };
 }
 
 // draw:line carries no svg:x/y/width/height box at all -- see geometry.ts's own parseLinePoints note. Its two endpoints are transformed through any enclosing draw:g's own function list directly (no center-pivot geometry needed the way a box has: applyOdfTransform maps each raw point through rotate()/translate() on its own, which is exactly right for a two-point line with no orientation ambiguity). ContentVectorSchema's 'line' variant requires a stroke (an invisible line has nothing to paint) -- this reader returns undefined rather than fabricating a default stroke when the source line genuinely has none.
-function readDrawLineVector(element: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentVector | undefined {
+function readDrawLineVector(
+  element: XmlElement,
+  groupFunctions: readonly OdfTransformFunction[],
+  pkg: Package,
+): ContentVector | undefined {
   const raw = parseLinePoints(element);
   if (raw === undefined) {
     return undefined;
   }
-  const from = groupFunctions.length === 0 ? raw.from : applyOdfTransform(groupFunctions, raw.from);
-  const to = groupFunctions.length === 0 ? raw.to : applyOdfTransform(groupFunctions, raw.to);
+  const from =
+    groupFunctions.length === 0
+      ? raw.from
+      : applyOdfTransform(groupFunctions, raw.from);
+  const to =
+    groupFunctions.length === 0
+      ? raw.to
+      : applyOdfTransform(groupFunctions, raw.to);
   const { stroke } = readOdfFillAndStroke(element, pkg);
   if (stroke === undefined) {
     return undefined;
   }
-  return { kind: 'line', from, to, stroke };
+  return { kind: "line", from, to, stroke };
 }
 
 // draw:path (svg:d, a real curve) and draw:polygon/draw:polyline (draw:points, straight lines only) are deliberately handled together: both express their raw geometry in the SAME svg:viewBox-scaled local coordinate system, and both produce ContentVectorSchema's single 'path' variant (which has no separate "polygon"/"polyline" kind) -- see typed/shared/path.ts's own top-of-file note for the verified grammar difference between the two attributes themselves. Without a resolvable svg:viewBox there is no way to scale either grammar's raw numbers into the frame's own point space, so a missing/malformed viewBox is "no resolvable geometry" (undefined), exactly like a missing box elsewhere in this module.
-function readDrawPathVector(element: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentVector | undefined {
+function readDrawPathVector(
+  element: XmlElement,
+  groupFunctions: readonly OdfTransformFunction[],
+  pkg: Package,
+): ContentVector | undefined {
   const geometry = resolveVectorGeometry(element, groupFunctions);
   if (geometry === undefined) {
     return undefined;
   }
   const frame = geometry.frame;
-  const viewBoxValue = attrValue(element, 'svg:viewBox');
-  const viewBox = viewBoxValue === undefined ? undefined : parseOdfViewBox(viewBoxValue);
+  const viewBoxValue = attrValue(element, "svg:viewBox");
+  const viewBox =
+    viewBoxValue === undefined ? undefined : parseOdfViewBox(viewBoxValue);
   if (viewBox === undefined) {
     return undefined;
   }
 
   let rawSubpaths;
-  if (element.tag === 'draw:path') {
-    const d = attrValue(element, 'svg:d');
+  if (element.tag === "draw:path") {
+    const d = attrValue(element, "svg:d");
     rawSubpaths = d === undefined ? [] : parseOdfPathData(d);
   } else {
-    const pointsValue = attrValue(element, 'draw:points');
-    const points = pointsValue === undefined ? [] : parseOdfPointsList(pointsValue);
-    const subpath = rawSubpathFromPoints(points, element.tag === 'draw:polygon');
+    const pointsValue = attrValue(element, "draw:points");
+    const points =
+      pointsValue === undefined ? [] : parseOdfPointsList(pointsValue);
+    const subpath = rawSubpathFromPoints(
+      points,
+      element.tag === "draw:polygon",
+    );
     rawSubpaths = subpath === undefined ? [] : [subpath];
   }
   if (rawSubpaths.length === 0) {
@@ -318,15 +471,34 @@ function readDrawPathVector(element: XmlElement, groupFunctions: readonly OdfTra
 
   const subpaths = buildOdfSubpaths(rawSubpaths, viewBox, frame);
   const { fill, fillRule, stroke } = readOdfFillAndStroke(element, pkg);
-  return { kind: 'path', frame, rotationDeg: geometry.rotationDeg, subpaths, fill, fillRule, stroke };
+  return {
+    kind: "path",
+    frame,
+    rotationDeg: geometry.rotationDeg,
+    subpaths,
+    fill,
+    fillRule,
+    stroke,
+  };
 }
 
 // A small, deliberately narrow subset of draw:custom-shape presets, identified by draw:enhanced-geometry's own draw:type attribute -- verified against real LibreOffice 26.2 output (the same macro-built fixtures as typed/shared/path.ts's own top-of-file note; LibreOffice's "Basic Shapes" gallery rectangle/rounded rectangle/ellipse each round-trip with draw:type="rectangle"/"round-rectangle"/"ellipse" respectively). Their OWN draw:enhanced-path (a "M ?f7 0 X 0 ?f8 L ..." formula-driven mini-language with ?fN/$N expression references and ODF-specific commands like X/Y/U that are NOT part of plain SVG at all) is deliberately never parsed -- evaluating draw:enhanced-geometry's formula language is explicitly out of scope for this reader (a v1.5+ gap, tracked, not attempted here) -- instead, each recognised preset maps to the CLOSEST ContentVector approximation built from the shape's own frame alone: 'ellipse' maps to the ellipse variant; 'rectangle' AND 'round-rectangle' both map to the plain rect variant (ContentVectorSchema has no rounded-corner concept at all, so a rounded rectangle reads with sharp corners -- a documented, bounded approximation, not a silent one).
-const RECOGNIZED_CUSTOM_SHAPE_PRESETS: ReadonlySet<string> = new Set(['rectangle', 'round-rectangle', 'ellipse']);
+const RECOGNIZED_CUSTOM_SHAPE_PRESETS: ReadonlySet<string> = new Set([
+  "rectangle",
+  "round-rectangle",
+  "ellipse",
+]);
 
-function readCustomShapeVector(element: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentVector | undefined {
-  const geometryElement = childrenWithTag(element, 'draw:enhanced-geometry')[0];
-  const type = geometryElement === undefined ? undefined : attrValue(geometryElement, 'draw:type');
+function readCustomShapeVector(
+  element: XmlElement,
+  groupFunctions: readonly OdfTransformFunction[],
+  pkg: Package,
+): ContentVector | undefined {
+  const geometryElement = childrenWithTag(element, "draw:enhanced-geometry")[0];
+  const type =
+    geometryElement === undefined
+      ? undefined
+      : attrValue(geometryElement, "draw:type");
   if (type === undefined || !RECOGNIZED_CUSTOM_SHAPE_PRESETS.has(type)) {
     return undefined;
   }
@@ -335,13 +507,27 @@ function readCustomShapeVector(element: XmlElement, groupFunctions: readonly Odf
     return undefined;
   }
   const { fill, stroke } = readOdfFillAndStroke(element, pkg);
-  return { kind: type === 'ellipse' ? 'ellipse' : 'rect', frame: geometry.frame, rotationDeg: geometry.rotationDeg, fill, stroke };
+  return {
+    kind: type === "ellipse" ? "ellipse" : "rect",
+    frame: geometry.frame,
+    rotationDeg: geometry.rotationDeg,
+    fill,
+    stroke,
+  };
 }
 
 // The fallback for an UNRECOGNISED draw:custom-shape preset (or one with no draw:enhanced-geometry/draw:type at all): produce text-only content -- a plain ContentShape carrying whatever real text:p runs the shape has, read through the same readOdfParagraph call readDrawFrameContent's own draw:text-box case uses (though without its list-membership walk -- an odg path, where a text:list's own text:p children are still FOUND by this deep search and read as plain paragraphs) -- rather than a vector primitive this reader cannot correctly derive without evaluating draw:enhanced-path's own formula language (see RECOGNIZED_CUSTOM_SHAPE_PRESETS' own note). The whole draw:enhanced-geometry element quarantines in the salvaged shape's residue, so the preset definition survives beside its approximation and a same-format writer can restore it. A custom-shape's text:p children sit DIRECTLY under draw:custom-shape itself (confirmed against real LibreOffice output -- unlike draw:frame's own draw:text-box wrapper), so elementsWithTag is used here as a deep search that also finds a text:list's own text:p children should a custom shape carry one, reading them as plain paragraphs. An unrecognised preset with NO real text content at all (every run empty, matching this reader's own hand-built fixtures, which never populate a placeholder shape's own text) has nothing worth preserving and is skipped entirely, residue with it (the row quarantines the geometry "beside whatever generic shape it degrades to" -- no degraded shape, nothing to hang it on). The residue format is 'odg': this salvage path is reached only through walkDrawPageContent, the odg-facing walk.
-function readCustomShapeAsTextShape(element: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentShape | undefined {
-  const paragraphs = elementsWithTag(element.children, 'text:p').map((p) => readOdfParagraph(p, pkg));
-  const hasText = paragraphs.some((paragraph) => paragraph.runs.some((run) => run.text.length > 0));
+function readCustomShapeAsTextShape(
+  element: XmlElement,
+  groupFunctions: readonly OdfTransformFunction[],
+  pkg: Package,
+): ContentShape | undefined {
+  const paragraphs = elementsWithTag(element.children, "text:p").map((p) =>
+    readOdfParagraph(p, pkg),
+  );
+  const hasText = paragraphs.some((paragraph) =>
+    paragraph.runs.some((run) => run.text.length > 0),
+  );
   if (!hasText) {
     return undefined;
   }
@@ -350,14 +536,19 @@ function readCustomShapeAsTextShape(element: XmlElement, groupFunctions: readonl
     return undefined;
   }
   const geometry = composeOdfGroupTransform(groupFunctions, ownGeometry);
-  const enhancedGeometry = childrenWithTag(element, 'draw:enhanced-geometry')[0];
+  const enhancedGeometry = childrenWithTag(
+    element,
+    "draw:enhanced-geometry",
+  )[0];
   return {
-    name: attrValue(element, 'draw:name'),
+    name: attrValue(element, "draw:name"),
     frame: geometry.frame,
     rotationDeg: geometry.rotationDeg,
     ...readFrameInsets(element, pkg),
     blocks: paragraphs,
-    ...(enhancedGeometry !== undefined ? { source: odfResidue('odg', enhancedGeometry) } : {}),
+    ...(enhancedGeometry !== undefined
+      ? { source: odfResidue("odg", enhancedGeometry) }
+      : {}),
   };
 }
 
@@ -374,7 +565,7 @@ function nextDocumentIndex(state: DocumentIndexState): number {
 
 function paintOrderKey(element: XmlElement, state: DocumentIndexState): number {
   const documentIndex = nextDocumentIndex(state);
-  const raw = attrValue(element, 'draw:z-index');
+  const raw = attrValue(element, "draw:z-index");
   if (raw === undefined) {
     return documentIndex;
   }
@@ -405,44 +596,58 @@ function walkDrawPageContent(
   vectorsOut: PaintOrdered<ContentVector>[],
 ): void {
   for (const node of children) {
-    if (node.type !== 'element') {
+    if (node.type !== "element") {
       continue;
     }
-    if (node.tag === 'draw:frame') {
+    if (node.tag === "draw:frame") {
       const zIndex = paintOrderKey(node, indexState);
       const shape = readDrawFrame(node, groupFunctions, pkg);
       if (shape !== undefined) {
         shapesOut.push({ value: { ...shape, paintOrder: zIndex }, zIndex });
       }
-    } else if (node.tag === 'draw:g') {
+    } else if (node.tag === "draw:g") {
       const ownFunctions = readOwnTransformFunctions(node);
-      const nested = ownFunctions.length === 0 ? groupFunctions : [...ownFunctions, ...groupFunctions];
-      walkDrawPageContent(node.children, nested, pkg, indexState, shapesOut, vectorsOut);
-    } else if (node.tag === 'draw:rect') {
+      const nested =
+        ownFunctions.length === 0
+          ? groupFunctions
+          : [...ownFunctions, ...groupFunctions];
+      walkDrawPageContent(
+        node.children,
+        nested,
+        pkg,
+        indexState,
+        shapesOut,
+        vectorsOut,
+      );
+    } else if (node.tag === "draw:rect") {
       const zIndex = paintOrderKey(node, indexState);
       const vector = readDrawRectVector(node, groupFunctions, pkg);
       if (vector !== undefined) {
         vectorsOut.push({ value: { ...vector, paintOrder: zIndex }, zIndex });
       }
-    } else if (node.tag === 'draw:ellipse' || node.tag === 'draw:circle') {
+    } else if (node.tag === "draw:ellipse" || node.tag === "draw:circle") {
       const zIndex = paintOrderKey(node, indexState);
       const vector = readDrawEllipseVector(node, groupFunctions, pkg);
       if (vector !== undefined) {
         vectorsOut.push({ value: { ...vector, paintOrder: zIndex }, zIndex });
       }
-    } else if (node.tag === 'draw:line') {
+    } else if (node.tag === "draw:line") {
       const zIndex = paintOrderKey(node, indexState);
       const vector = readDrawLineVector(node, groupFunctions, pkg);
       if (vector !== undefined) {
         vectorsOut.push({ value: { ...vector, paintOrder: zIndex }, zIndex });
       }
-    } else if (node.tag === 'draw:path' || node.tag === 'draw:polygon' || node.tag === 'draw:polyline') {
+    } else if (
+      node.tag === "draw:path" ||
+      node.tag === "draw:polygon" ||
+      node.tag === "draw:polyline"
+    ) {
       const zIndex = paintOrderKey(node, indexState);
       const vector = readDrawPathVector(node, groupFunctions, pkg);
       if (vector !== undefined) {
         vectorsOut.push({ value: { ...vector, paintOrder: zIndex }, zIndex });
       }
-    } else if (node.tag === 'draw:custom-shape') {
+    } else if (node.tag === "draw:custom-shape") {
       const zIndex = paintOrderKey(node, indexState);
       const vector = readCustomShapeVector(node, groupFunctions, pkg);
       if (vector !== undefined) {
@@ -463,7 +668,10 @@ export interface DrawPageContent {
 }
 
 // The odg-facing entry point: resolves a draw:page's own children (typically office:drawing's draw:page, but equally valid for a presentation draw:page that happens to contain vector primitives directly -- draw:page's own content model does not differ between office:drawing and office:presentation, see readOdgContent's own top-of-file note) into paint-ordered shapes/vectors, ready to place directly into a ContentDrawPageSchema value.
-export function readDrawPageContent(children: readonly XmlNode[], pkg: Package): DrawPageContent {
+export function readDrawPageContent(
+  children: readonly XmlNode[],
+  pkg: Package,
+): DrawPageContent {
   const shapesOut: PaintOrdered<ContentShape>[] = [];
   const vectorsOut: PaintOrdered<ContentVector>[] = [];
   walkDrawPageContent(children, [], pkg, { next: 0 }, shapesOut, vectorsOut);

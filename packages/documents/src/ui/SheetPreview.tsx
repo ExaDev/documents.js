@@ -1,12 +1,24 @@
-import { Badge, Group, LoadingOverlay, Paper, SegmentedControl, Stack, Text } from '@mantine/core';
-import { assignInlineVars } from '@vanilla-extract/dynamic';
-import { columnIndexToLetters } from 'documents.js';
-import type { ContentDocument, ContentSheet, ContentSheetCell } from 'documents.js';
-import type { ReactNode } from 'react';
-import { useState } from 'react';
+import {
+  Badge,
+  Group,
+  LoadingOverlay,
+  Paper,
+  SegmentedControl,
+  Stack,
+  Text,
+} from "@mantine/core";
+import { assignInlineVars } from "@vanilla-extract/dynamic";
+import { columnIndexToLetters } from "documents.js";
+import type {
+  ContentDocument,
+  ContentSheet,
+  ContentSheetCell,
+} from "documents.js";
+import type { ReactNode } from "react";
+import { useState } from "react";
 
-import { flexColumn, previewFrame } from './previewPanel.css';
-import * as styles from './SheetPreview.css';
+import { flexColumn, previewFrame } from "./previewPanel.css";
+import * as styles from "./SheetPreview.css";
 
 export interface SheetPreviewProps {
   label: string;
@@ -17,11 +29,20 @@ export interface SheetPreviewProps {
 }
 
 // Renders a spreadsheet-sourced ContentDocument as a real data grid instead of round-tripping it through the PDF pipeline (xlsxToPdf/odsToPdf) the way PdfPreview does -- that applies the *print* layout (page breaks, margins, repeat rows), useful for "what prints" but not for browsing the data itself (see ExaDev/documents#2). Unlike markdown, ContentSheet has no private-convention problem to normalize -- every field consumed here is already part of document-schema.js's own public schema.
-export function SheetPreview({ label, format, content, loading, error }: SheetPreviewProps) {
-  const sheets = content?.kind === 'spreadsheet' ? content.sheets : undefined;
+export function SheetPreview({
+  label,
+  format,
+  content,
+  loading,
+  error,
+}: SheetPreviewProps) {
+  const sheets = content?.kind === "spreadsheet" ? content.sheets : undefined;
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
   // Clamped rather than reset via an effect -- if `content` changes to a sheet count smaller than the previously-selected index, this falls back to the last real sheet instead of an effect racing the render.
-  const clampedIndex = sheets !== undefined && sheets.length > 0 ? Math.min(activeSheetIndex, sheets.length - 1) : 0;
+  const clampedIndex =
+    sheets !== undefined && sheets.length > 0
+      ? Math.min(activeSheetIndex, sheets.length - 1)
+      : 0;
   const activeSheet = sheets?.[clampedIndex];
 
   return (
@@ -34,7 +55,11 @@ export function SheetPreview({ label, format, content, loading, error }: SheetPr
           {format}
         </Badge>
       </Group>
-      <Paper withBorder pos="relative" className={previewFrame({ scroll: true })}>
+      <Paper
+        withBorder
+        pos="relative"
+        className={previewFrame({ scroll: true })}
+      >
         <LoadingOverlay visible={loading === true} />
         {error !== undefined ? (
           <Group h="100%" justify="center">
@@ -54,8 +79,13 @@ export function SheetPreview({ label, format, content, loading, error }: SheetPr
               <SegmentedControl
                 size="xs"
                 value={String(clampedIndex)}
-                onChange={(value) => { setActiveSheetIndex(Number(value)); }}
-                data={sheets.map((sheet, index) => ({ value: String(index), label: sheet.name }))}
+                onChange={(value) => {
+                  setActiveSheetIndex(Number(value));
+                }}
+                data={sheets.map((sheet, index) => ({
+                  value: String(index),
+                  label: sheet.name,
+                }))}
                 className={styles.segmentedControl}
               />
             )}
@@ -72,8 +102,12 @@ function renderSheetTable(sheet: ContentSheet): ReactNode {
   for (const cell of sheet.cells) {
     cellMap.set(`${cell.row}:${cell.column}`, cell);
   }
-  const rows = [...sheet.rows].filter((row) => row.hidden !== true).sort((a, b) => a.index - b.index);
-  const columns = [...sheet.columns].filter((column) => column.hidden !== true).sort((a, b) => a.index - b.index);
+  const rows = [...sheet.rows]
+    .filter((row) => row.hidden !== true)
+    .sort((a, b) => a.index - b.index);
+  const columns = [...sheet.columns]
+    .filter((column) => column.hidden !== true)
+    .sort((a, b) => a.index - b.index);
 
   if (rows.length === 0 || columns.length === 0) {
     return (
@@ -102,8 +136,14 @@ function renderSheetTable(sheet: ContentSheet): ReactNode {
             {columns.map((column) => {
               const cell = cellMap.get(`${row.index}:${column.index}`);
               return (
-                <td key={column.index} colSpan={cell?.colSpan} rowSpan={cell?.rowSpan} className={cellClassName(cell)} style={cellBackgroundStyle(cell)}>
-                  {cell?.displayText ?? ''}
+                <td
+                  key={column.index}
+                  colSpan={cell?.colSpan}
+                  rowSpan={cell?.rowSpan}
+                  className={cellClassName(cell)}
+                  style={cellBackgroundStyle(cell)}
+                >
+                  {cell?.displayText ?? ""}
                 </td>
               );
             })}
@@ -116,16 +156,24 @@ function renderSheetTable(sheet: ContentSheet): ReactNode {
 
 function cellClassName(cell: ContentSheetCell | undefined): string {
   const kind = cell?.value.kind;
-  const defaultAlign = kind === 'number' || kind === 'percentage' || kind === 'currency' ? 'right' : kind === 'boolean' ? 'center' : 'left';
+  const defaultAlign =
+    kind === "number" || kind === "percentage" || kind === "currency"
+      ? "right"
+      : kind === "boolean"
+        ? "center"
+        : "left";
   return styles.cell({
     align: cell?.alignment ?? defaultAlign,
-    verticalAlign: cell?.verticalAlignment ?? 'bottom',
-    error: kind === 'error',
+    verticalAlign: cell?.verticalAlignment ?? "bottom",
+    error: kind === "error",
   });
 }
 
 function cellBackgroundStyle(cell: ContentSheetCell | undefined) {
   return assignInlineVars({
-    [styles.cellBackgroundVar]: cell?.background !== undefined ? `rgb(${cell.background.r * 255} ${cell.background.g * 255} ${cell.background.b * 255})` : undefined,
+    [styles.cellBackgroundVar]:
+      cell?.background !== undefined
+        ? `rgb(${cell.background.r * 255} ${cell.background.g * 255} ${cell.background.b * 255})`
+        : undefined,
   });
 }

@@ -7,11 +7,14 @@
 // Closes at the FIRST literal '\)' -- no nested-\(-awareness and no escape handling inside the span, matching src/inline/inline.ts's own code-span precedent (a code span closes at the first backtick run of the matching length, with nothing inside it re-interpreted). An unmatched \( (no \) anywhere in the remaining text) is not math at all; the caller falls back to today's ordinary backslash-escape reading of a lone \(.
 //
 // Returns the FULL matched span, delimiters included (e.g. '\(x^2\)') -- the caller strips the two-character \( / \) delimiters off to build MarkdownMathInlineNode's own literal (inner content only, matching MarkdownCodeSpanNode's convention), while using the full span's own length to advance the scan position past it.
-export function matchMathInlineSpan(text: string, index: number): string | undefined {
-  if (text.charAt(index) !== '\\' || text.charAt(index + 1) !== '(') {
+export function matchMathInlineSpan(
+  text: string,
+  index: number,
+): string | undefined {
+  if (text.charAt(index) !== "\\" || text.charAt(index + 1) !== "(") {
     return undefined;
   }
-  const closeIndex = text.indexOf('\\)', index + 2);
+  const closeIndex = text.indexOf("\\)", index + 2);
   if (closeIndex === -1) {
     return undefined;
   }

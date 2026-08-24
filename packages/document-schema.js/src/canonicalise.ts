@@ -5,14 +5,15 @@ export function canonicalise(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalise);
   if (isRecord(value)) {
     const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(value).sort()) sorted[key] = canonicalise(value[key]);
+    for (const key of Object.keys(value).sort())
+      sorted[key] = canonicalise(value[key]);
     return sorted;
   }
   return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // Tuple identity per the promotion plan's minting rules ("tuple identity reuses stableContentHash's canonicalise-then-stringify recipe -- no second recipe"): the canonical string IS the key, so equal-valued tuples built in different key orders land on one map slot and the tie-break ordering compares the same bytes the identity does. JSON.stringify drops undefined-valued properties, so an optional field left absent and one explicitly assigned undefined collapse to the same key -- both spellings mean "field absent" in the content schemas.

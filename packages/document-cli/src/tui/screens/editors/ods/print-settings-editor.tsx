@@ -1,15 +1,24 @@
-import type { ContentSheetPrintSettings } from 'documents.js';
-import { Box, Text } from 'ink';
-import { useState, type ReactElement } from 'react';
-import { ListView } from '../../../components/list-view.js';
-import { TextField } from '../../../components/text-field.js';
-import { useNavigationInput } from '../../../keybindings/use-navigation-input.js';
-import { useAppDispatch, useAppState } from '../../../state/context.js';
-import { anyOverlayOpen, currentScreen } from '../../../state/types.js';
-import { odsDocument } from './shared.js';
+import type { ContentSheetPrintSettings } from "documents.js";
+import { Box, Text } from "ink";
+import { useState, type ReactElement } from "react";
+import { ListView } from "../../../components/list-view.js";
+import { TextField } from "../../../components/text-field.js";
+import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
+import { useAppDispatch, useAppState } from "../../../state/context.js";
+import { anyOverlayOpen, currentScreen } from "../../../state/types.js";
+import { odsDocument } from "./shared.js";
 
 // The five fields `ContentSheetPrintSettingsSchema` always carries (pageSize, margins, gridlines, headers, pageOrder) -- printRange/scale/fitToPages/repeatRows/repeatColumns/manualBreaks are all optional and, per documents.js's own README, neither `OdsSheet.printSettings`'s getter nor `buildOdsPackage` reads or writes them yet, so there is nothing meaningful for this form to show or set for those.
-type FieldKey = 'pageWidthPt' | 'pageHeightPt' | 'marginTopPt' | 'marginRightPt' | 'marginBottomPt' | 'marginLeftPt' | 'gridlines' | 'headers' | 'pageOrder';
+type FieldKey =
+  | "pageWidthPt"
+  | "pageHeightPt"
+  | "marginTopPt"
+  | "marginRightPt"
+  | "marginBottomPt"
+  | "marginLeftPt"
+  | "gridlines"
+  | "headers"
+  | "pageOrder";
 
 interface FieldRow {
   readonly key: FieldKey;
@@ -17,59 +26,79 @@ interface FieldRow {
 }
 
 const FIELD_ROWS: readonly FieldRow[] = [
-  { key: 'pageWidthPt', label: 'Page width (pt)' },
-  { key: 'pageHeightPt', label: 'Page height (pt)' },
-  { key: 'marginTopPt', label: 'Margin top (pt)' },
-  { key: 'marginRightPt', label: 'Margin right (pt)' },
-  { key: 'marginBottomPt', label: 'Margin bottom (pt)' },
-  { key: 'marginLeftPt', label: 'Margin left (pt)' },
-  { key: 'gridlines', label: 'Gridlines' },
-  { key: 'headers', label: 'Headers' },
-  { key: 'pageOrder', label: 'Page order' },
+  { key: "pageWidthPt", label: "Page width (pt)" },
+  { key: "pageHeightPt", label: "Page height (pt)" },
+  { key: "marginTopPt", label: "Margin top (pt)" },
+  { key: "marginRightPt", label: "Margin right (pt)" },
+  { key: "marginBottomPt", label: "Margin bottom (pt)" },
+  { key: "marginLeftPt", label: "Margin left (pt)" },
+  { key: "gridlines", label: "Gridlines" },
+  { key: "headers", label: "Headers" },
+  { key: "pageOrder", label: "Page order" },
 ];
 
-const NUMERIC_FIELD_KEYS: ReadonlySet<FieldKey> = new Set(['pageWidthPt', 'pageHeightPt', 'marginTopPt', 'marginRightPt', 'marginBottomPt', 'marginLeftPt']);
+const NUMERIC_FIELD_KEYS: ReadonlySet<FieldKey> = new Set([
+  "pageWidthPt",
+  "pageHeightPt",
+  "marginTopPt",
+  "marginRightPt",
+  "marginBottomPt",
+  "marginLeftPt",
+]);
 
 // Wide enough for the longest label above ("Margin bottom (pt)") plus a space.
 const LABEL_COLUMN_WIDTH = 20;
 
-function fieldValueText(settings: ContentSheetPrintSettings, key: FieldKey): string {
+function fieldValueText(
+  settings: ContentSheetPrintSettings,
+  key: FieldKey,
+): string {
   switch (key) {
-    case 'pageWidthPt':
+    case "pageWidthPt":
       return String(settings.pageSize.widthPt);
-    case 'pageHeightPt':
+    case "pageHeightPt":
       return String(settings.pageSize.heightPt);
-    case 'marginTopPt':
+    case "marginTopPt":
       return String(settings.margins.topPt);
-    case 'marginRightPt':
+    case "marginRightPt":
       return String(settings.margins.rightPt);
-    case 'marginBottomPt':
+    case "marginBottomPt":
       return String(settings.margins.bottomPt);
-    case 'marginLeftPt':
+    case "marginLeftPt":
       return String(settings.margins.leftPt);
-    case 'gridlines':
-      return settings.gridlines ? 'on' : 'off';
-    case 'headers':
-      return settings.headers ? 'on' : 'off';
-    case 'pageOrder':
+    case "gridlines":
+      return settings.gridlines ? "on" : "off";
+    case "headers":
+      return settings.headers ? "on" : "off";
+    case "pageOrder":
       return settings.pageOrder;
   }
 }
 
 // Only ever called for a key in NUMERIC_FIELD_KEYS -- every call site checks that set first, so a boolean/enum key reaching the default branch is a genuine caller bug, not a case worth handling quietly.
-function withNumericField(settings: ContentSheetPrintSettings, key: FieldKey, value: number): ContentSheetPrintSettings {
+function withNumericField(
+  settings: ContentSheetPrintSettings,
+  key: FieldKey,
+  value: number,
+): ContentSheetPrintSettings {
   switch (key) {
-    case 'pageWidthPt':
-      return { ...settings, pageSize: { ...settings.pageSize, widthPt: value } };
-    case 'pageHeightPt':
-      return { ...settings, pageSize: { ...settings.pageSize, heightPt: value } };
-    case 'marginTopPt':
+    case "pageWidthPt":
+      return {
+        ...settings,
+        pageSize: { ...settings.pageSize, widthPt: value },
+      };
+    case "pageHeightPt":
+      return {
+        ...settings,
+        pageSize: { ...settings.pageSize, heightPt: value },
+      };
+    case "marginTopPt":
       return { ...settings, margins: { ...settings.margins, topPt: value } };
-    case 'marginRightPt':
+    case "marginRightPt":
       return { ...settings, margins: { ...settings.margins, rightPt: value } };
-    case 'marginBottomPt':
+    case "marginBottomPt":
       return { ...settings, margins: { ...settings.margins, bottomPt: value } };
-    case 'marginLeftPt':
+    case "marginLeftPt":
       return { ...settings, margins: { ...settings.margins, leftPt: value } };
     default:
       throw new Error(`${key} does not take a numeric value`);
@@ -77,14 +106,23 @@ function withNumericField(settings: ContentSheetPrintSettings, key: FieldKey, va
 }
 
 // Only ever called for a key outside NUMERIC_FIELD_KEYS -- the mirror image of withNumericField above.
-function toggledSettings(settings: ContentSheetPrintSettings, key: FieldKey): ContentSheetPrintSettings {
+function toggledSettings(
+  settings: ContentSheetPrintSettings,
+  key: FieldKey,
+): ContentSheetPrintSettings {
   switch (key) {
-    case 'gridlines':
+    case "gridlines":
       return { ...settings, gridlines: !settings.gridlines };
-    case 'headers':
+    case "headers":
       return { ...settings, headers: !settings.headers };
-    case 'pageOrder':
-      return { ...settings, pageOrder: settings.pageOrder === 'downThenOver' ? 'overThenDown' : 'downThenOver' };
+    case "pageOrder":
+      return {
+        ...settings,
+        pageOrder:
+          settings.pageOrder === "downThenOver"
+            ? "overThenDown"
+            : "downThenOver",
+      };
     default:
       throw new Error(`${key} is not a toggleable field`);
   }
@@ -96,19 +134,27 @@ export function OdsPrintSettingsEditorScreen(): ReactElement {
   const dispatch = useAppDispatch();
   const doc = odsDocument(state);
   const screen = currentScreen(state);
-  if (screen.kind !== 'printSettingsEditor') {
-    throw new Error('OdsPrintSettingsEditorScreen was rendered while the current screen was not a printSettingsEditor screen.');
+  if (screen.kind !== "printSettingsEditor") {
+    throw new Error(
+      "OdsPrintSettingsEditorScreen was rendered while the current screen was not a printSettingsEditor screen.",
+    );
   }
   const { sheetIndex } = screen;
 
-  const [editingField, setEditingField] = useState<FieldKey | undefined>(undefined);
-  const [draftText, setDraftText] = useState('');
+  const [editingField, setEditingField] = useState<FieldKey | undefined>(
+    undefined,
+  );
+  const [draftText, setDraftText] = useState("");
 
   const sheet = doc.editor.sheets()[sheetIndex];
   const settings = sheet?.printSettings;
 
   const commit = (next: ContentSheetPrintSettings): void => {
-    dispatch({ type: 'SET_SHEET_PRINT_SETTINGS', sheetIndex, printSettings: next });
+    dispatch({
+      type: "SET_SHEET_PRINT_SETTINGS",
+      sheetIndex,
+      printSettings: next,
+    });
   };
 
   const { selectedIndex } = useNavigationInput({
@@ -129,7 +175,7 @@ export function OdsPrintSettingsEditorScreen(): ReactElement {
       commit(toggledSettings(settings, row.key));
     },
     onBack: () => {
-      dispatch({ type: 'POP_SCREEN' });
+      dispatch({ type: "POP_SCREEN" });
     },
     isActive: !anyOverlayOpen(state) && editingField === undefined,
   });
@@ -151,7 +197,10 @@ export function OdsPrintSettingsEditorScreen(): ReactElement {
         renderItem={(row, isSelected) => (
           <Box>
             <Box width={LABEL_COLUMN_WIDTH}>
-              <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>
+              <Text
+                color={isSelected ? "cyan" : undefined}
+                inverse={isSelected}
+              >
                 {row.label}
               </Text>
             </Box>
@@ -163,7 +212,11 @@ export function OdsPrintSettingsEditorScreen(): ReactElement {
                 onSubmit={(value) => {
                   const parsed = Number(value);
                   if (!Number.isFinite(parsed)) {
-                    dispatch({ type: 'SET_STATUS', severity: 'warning', text: `"${value}" is not a valid number` });
+                    dispatch({
+                      type: "SET_STATUS",
+                      severity: "warning",
+                      text: `"${value}" is not a valid number`,
+                    });
                     return;
                   }
                   commit(withNumericField(settings, row.key, parsed));

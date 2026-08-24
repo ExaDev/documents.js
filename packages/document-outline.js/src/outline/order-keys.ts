@@ -25,7 +25,7 @@ function digitValue(char: string): number {
 export class OrderKeyBudgetExhaustedError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'OrderKeyBudgetExhaustedError';
+    this.name = "OrderKeyBudgetExhaustedError";
   }
 }
 
@@ -34,9 +34,11 @@ export function orderKeyForIndex(index: number): string {
   const scaled = index * ORDER_KEY_GAP;
   const encoded = toBase36(scaled);
   if (encoded.length > ORDER_KEY_WIDTH) {
-    throw new Error(`orderKeyForIndex: index ${index} does not fit in ${ORDER_KEY_WIDTH} base-36 digits`);
+    throw new Error(
+      `orderKeyForIndex: index ${index} does not fit in ${ORDER_KEY_WIDTH} base-36 digits`,
+    );
   }
-  return encoded.padStart(ORDER_KEY_WIDTH, '0');
+  return encoded.padStart(ORDER_KEY_WIDTH, "0");
 }
 
 // The rebalance operation: a fresh, evenly spaced key list for `count` siblings, exactly `[orderKeyForIndex(0), ..., orderKeyForIndex(count - 1)]`. Reaching for this is the intended response to `orderKeyBetween` running out of room between two neighbours -- re-mint the whole sibling list rather than bisecting forever.
@@ -47,17 +49,22 @@ export function renumberedOrderKeys(count: number): string[] {
 // Standard bounded-precision LexoRank/fractional-indexing midpoint bisection over base-36 digit strings, treating a shorter string as right-padded with implicit '0' digits (a shorter key already sorts before a longer one that shares its prefix, exactly as an implicit trailing zero would). Walks both strings digit by digit: while digits agree, the shared prefix carries over verbatim. At the first differing position, `low`'s digit is always the smaller of the two (a shared-prefix invariant of `low < high`), so a gap of 2 or more between the digits has an integer midpoint strictly between them and the walk is done in one step. A gap of exactly 1 (truly adjacent digits, e.g. '3' and '4') has no room at this precision: the digit is fixed to `low`'s value, and from that position on `high` is no longer consulted at all -- any string sharing that prefix is already guaranteed to sort below the original `high`, because `high`'s own digit there was one greater -- so the walk descends one digit deeper comparing only against the implicit top of the base (`BASE`, one past the highest real digit, standing in for "unbounded"). This is exactly "extend one more digit of precision and recurse against the widest possible upper bound." Capped at ORDER_KEY_MAX_LENGTH total digits: once producing a strictly-between key would need to exceed that length, the interval is genuinely exhausted and the loud refusal is the documented rebalance signal, not a silent duplicate or an unbounded string.
 export function orderKeyBetween(low: string, high: string): string {
   if (!(low < high)) {
-    throw new Error('orderKeyBetween: low must sort strictly before high');
+    throw new Error("orderKeyBetween: low must sort strictly before high");
   }
-  let prefix = '';
+  let prefix = "";
   let position = 0;
   let highExhausted = false;
   for (;;) {
     if (prefix.length >= ORDER_KEY_MAX_LENGTH) {
-      throw new OrderKeyBudgetExhaustedError('orderKeyBetween: no room left between these keys; rebalance with renumberedOrderKeys');
+      throw new OrderKeyBudgetExhaustedError(
+        "orderKeyBetween: no room left between these keys; rebalance with renumberedOrderKeys",
+      );
     }
     const lowDigit = position < low.length ? digitValue(low[position]!) : 0;
-    const highDigit = !highExhausted && position < high.length ? digitValue(high[position]!) : BASE;
+    const highDigit =
+      !highExhausted && position < high.length
+        ? digitValue(high[position]!)
+        : BASE;
     if (lowDigit === highDigit) {
       prefix += toBase36(lowDigit);
       position += 1;
@@ -79,15 +86,20 @@ const MID_DIGIT = toBase36(Math.floor(BASE / 2));
 
 // Mints the shortest key strictly greater than `high` -- the append-a-sibling-at-the-end operation, for a max key bisection has already drifted away from orderKeyForIndex(n-1) so that "the next index-minted key" no longer sorts after it. Walks high's digits left to right and returns at the FIRST digit with room, stepping it up by half the remaining headroom (max(1, ceil((BASE - 1 - digit) / 2))): taking half the room rather than the minimal +1 leaves the other half for later appends on the same side, so the walk converges geometrically instead of a digit at a time. A high whose every digit is 'z' has no room anywhere, so the walk appends the mid digit; the result is shortest because returning at the first roomy digit truncates there, and still strictly greater than high because the stepped digit already exceeds high's own at that position, whatever follows it.
 export function orderKeyAfter(high: string): string {
-  let prefix = '';
+  let prefix = "";
   for (let position = 0; ; position += 1) {
     if (prefix.length >= ORDER_KEY_MAX_LENGTH) {
-      throw new OrderKeyBudgetExhaustedError('orderKeyAfter: no key sorts above this one within the width cap; rebalance with renumberedOrderKeys');
+      throw new OrderKeyBudgetExhaustedError(
+        "orderKeyAfter: no key sorts above this one within the width cap; rebalance with renumberedOrderKeys",
+      );
     }
     if (position === high.length) return prefix + MID_DIGIT;
     const digit = digitValue(high[position]!);
     if (digit < BASE - 1) {
-      return prefix + toBase36(digit + Math.max(1, Math.ceil((BASE - 1 - digit) / 2)));
+      return (
+        prefix +
+        toBase36(digit + Math.max(1, Math.ceil((BASE - 1 - digit) / 2)))
+      );
     }
     prefix += high[position]!;
   }
@@ -95,13 +107,17 @@ export function orderKeyAfter(high: string): string {
 
 // Mints the shortest key strictly less than `low`, the front-insert mirror of orderKeyAfter: the first digit with room steps DOWN by half its own value (max(1, ceil(digit / 2))), leaving the other half below the result for later front inserts. A low that is all '0' digits to its end has NO key before it in this scheme, and the refusal is the honest one: the module's implicit right-padding by '0' reads every all-zero string of any length as the same floor key, orderKeyForIndex(0)'s '00000000', so a "shorter all-zero key" that plain string comparison would sort below the floor is the floor itself -- the caller rebalances the whole sibling list with renumberedOrderKeys instead.
 export function orderKeyBefore(low: string): string {
-  let prefix = '';
+  let prefix = "";
   for (let position = 0; ; position += 1) {
     if (position === low.length) {
-      throw new OrderKeyBudgetExhaustedError('orderKeyBefore: an all-zero key is the floor of the key space; rebalance with renumberedOrderKeys');
+      throw new OrderKeyBudgetExhaustedError(
+        "orderKeyBefore: an all-zero key is the floor of the key space; rebalance with renumberedOrderKeys",
+      );
     }
     if (prefix.length >= ORDER_KEY_MAX_LENGTH) {
-      throw new OrderKeyBudgetExhaustedError('orderKeyBefore: no key sorts below this one within the width cap; rebalance with renumberedOrderKeys');
+      throw new OrderKeyBudgetExhaustedError(
+        "orderKeyBefore: no key sorts below this one within the width cap; rebalance with renumberedOrderKeys",
+      );
     }
     const digit = digitValue(low[position]!);
     if (digit > 0) {

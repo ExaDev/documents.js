@@ -1,7 +1,7 @@
-import type { ContentVector } from 'document-schema.js';
-import type { XmlElement } from 'ooxml.js';
-import { childrenWithTag } from 'ooxml.js';
-import { readDrawingMlVector as readDrawingMlVectorOrUndefined } from '../edit/drawingml/vector';
+import type { ContentVector } from "document-schema.js";
+import type { XmlElement } from "ooxml.js";
+import { childrenWithTag } from "ooxml.js";
+import { readDrawingMlVector as readDrawingMlVectorOrUndefined } from "../edit/drawingml/vector";
 
 // A thin, throwing wrapper over the real production reader (src/edit/drawingml/vector.ts's own readDrawingMlVector) -- the read-side inverse of that module's own writer, for tests that need to prove a rect/ellipse/line/path survived buildDocxPackage/buildPptxPackage as real, correctly-valued markup rather than merely as a string that looks about right.
 //
@@ -19,16 +19,22 @@ function readDrawingMlVector(spPr: XmlElement): ContentVector {
 // Every vector-carrying shape under `root`, in document order -- which is paint order in both a w:body and a p:spTree. `spPrTag` selects the format: 'wps:spPr' for a docx w:drawing/wp:anchor shape, 'p:spPr' for a pptx p:sp.
 //
 // An explicit a:ln child is what distinguishes a vector shape from the other shapes a package can hold. src/edit/drawingml/vector.ts always writes one (a:noFill inside it when the vector has no stroke); this package's own text-box and picture writers -- which do write an a:prstGeom prst="rect" of their own, so geometry alone is not a discriminator -- never do, leaving the outline to be inherited. A document mixing in shapes from some other producer that DOES write an a:ln would need a narrower test, which is exactly the sort of assumption a test-support oracle over known-shaped input is entitled to make.
-export function collectDrawingMlVectors(root: XmlElement, spPrTag: 'wps:spPr' | 'p:spPr'): ContentVector[] {
+export function collectDrawingMlVectors(
+  root: XmlElement,
+  spPrTag: "wps:spPr" | "p:spPr",
+): ContentVector[] {
   const out: ContentVector[] = [];
   const visit = (element: XmlElement): void => {
-    if (element.tag === spPrTag && childrenWithTag(element, 'a:ln').length > 0) {
+    if (
+      element.tag === spPrTag &&
+      childrenWithTag(element, "a:ln").length > 0
+    ) {
       // Stamped from the walk position, exactly as odf.js's own readDrawPageContent stamps an ODF page's vectors: document order IS paint order here, and recording it is what lets a test compare a DrawingML-recovered vector against an ODF-recovered one on identical terms.
       out.push({ ...readDrawingMlVector(element), paintOrder: out.length });
       return;
     }
     for (const child of element.children) {
-      if (child.type === 'element') {
+      if (child.type === "element") {
         visit(child);
       }
     }

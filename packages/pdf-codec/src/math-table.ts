@@ -1,6 +1,6 @@
-import { parseCoverage } from './ot-layout-common';
-import type { SfntFont } from './sfnt';
-import { i16, sfntTableBytes, u16 } from './sfnt';
+import { parseCoverage } from "./ot-layout-common";
+import type { SfntFont } from "./sfnt";
+import { i16, sfntTableBytes, u16 } from "./sfnt";
 
 // Parses the OpenType 'MATH' table (Microsoft's own spec: https://learn.microsoft.com/en-us/typography/opentype/spec/math) -- the MathConstants subtable in full (every named field, even the handful this package's own MathFontMetrics interface doesn't currently expose, since reading them all costs nothing extra once the table is being walked), the MathGlyphInfo subtable's two per-glyph maps this package needs (MathItalicsCorrectionInfo and MathTopAccentAttachment), and the MathVariants subtable in full: both per-axis glyph-construction lists (the pre-built larger-variant sequences) and their GlyphAssembly part recipes. Table offsets below were derived from and cross-checked against the actual vendored STIXTwoMath-Regular.otf's own bytes while building this module, not transcribed from the spec alone.
 
@@ -71,51 +71,95 @@ const MATH_VALUE_RECORD_INDEX = {
 const MATH_VALUE_RECORDS_START = 8; // byte offset from the MathConstants subtable's own start, after ScriptPercentScaleDown/ScriptScriptPercentScaleDown/DelimitedSubFormulaMinHeight/DisplayOperatorMinHeight
 const MATH_VALUE_RECORD_SIZE = 4;
 const MATH_VALUE_RECORD_COUNT = 51;
-const RADICAL_DEGREE_BOTTOM_RAISE_PERCENT_OFFSET = MATH_VALUE_RECORDS_START + MATH_VALUE_RECORD_COUNT * MATH_VALUE_RECORD_SIZE;
+const RADICAL_DEGREE_BOTTOM_RAISE_PERCENT_OFFSET =
+  MATH_VALUE_RECORDS_START + MATH_VALUE_RECORD_COUNT * MATH_VALUE_RECORD_SIZE;
 
-function mathValueRecord(bytes: Uint8Array<ArrayBuffer>, constantsOffset: number, index: number): number {
-  return i16(bytes, constantsOffset + MATH_VALUE_RECORDS_START + index * MATH_VALUE_RECORD_SIZE);
+function mathValueRecord(
+  bytes: Uint8Array<ArrayBuffer>,
+  constantsOffset: number,
+  index: number,
+): number {
+  return i16(
+    bytes,
+    constantsOffset + MATH_VALUE_RECORDS_START + index * MATH_VALUE_RECORD_SIZE,
+  );
 }
 
-function parseMathConstants(bytes: Uint8Array<ArrayBuffer>, mathTableOffset: number): MathConstants {
+function parseMathConstants(
+  bytes: Uint8Array<ArrayBuffer>,
+  mathTableOffset: number,
+): MathConstants {
   const constantsOffset = mathTableOffset + u16(bytes, mathTableOffset + 4);
-  const field = (index: number): number => mathValueRecord(bytes, constantsOffset, index);
+  const field = (index: number): number =>
+    mathValueRecord(bytes, constantsOffset, index);
   return {
     scriptPercentScaleDown: i16(bytes, constantsOffset + 0) / 100,
     scriptScriptPercentScaleDown: i16(bytes, constantsOffset + 2) / 100,
     axisHeight: field(MATH_VALUE_RECORD_INDEX.axisHeight),
     subscriptShiftDown: field(MATH_VALUE_RECORD_INDEX.subscriptShiftDown),
-    subscriptBaselineDropMin: field(MATH_VALUE_RECORD_INDEX.subscriptBaselineDropMin),
+    subscriptBaselineDropMin: field(
+      MATH_VALUE_RECORD_INDEX.subscriptBaselineDropMin,
+    ),
     superscriptShiftUp: field(MATH_VALUE_RECORD_INDEX.superscriptShiftUp),
-    superscriptShiftUpCramped: field(MATH_VALUE_RECORD_INDEX.superscriptShiftUpCramped),
-    superscriptBaselineDropMax: field(MATH_VALUE_RECORD_INDEX.superscriptBaselineDropMax),
+    superscriptShiftUpCramped: field(
+      MATH_VALUE_RECORD_INDEX.superscriptShiftUpCramped,
+    ),
+    superscriptBaselineDropMax: field(
+      MATH_VALUE_RECORD_INDEX.superscriptBaselineDropMax,
+    ),
     subSuperscriptGapMin: field(MATH_VALUE_RECORD_INDEX.subSuperscriptGapMin),
     spaceAfterScript: field(MATH_VALUE_RECORD_INDEX.spaceAfterScript),
     upperLimitGapMin: field(MATH_VALUE_RECORD_INDEX.upperLimitGapMin),
-    upperLimitBaselineRiseMin: field(MATH_VALUE_RECORD_INDEX.upperLimitBaselineRiseMin),
+    upperLimitBaselineRiseMin: field(
+      MATH_VALUE_RECORD_INDEX.upperLimitBaselineRiseMin,
+    ),
     lowerLimitGapMin: field(MATH_VALUE_RECORD_INDEX.lowerLimitGapMin),
-    lowerLimitBaselineDropMin: field(MATH_VALUE_RECORD_INDEX.lowerLimitBaselineDropMin),
+    lowerLimitBaselineDropMin: field(
+      MATH_VALUE_RECORD_INDEX.lowerLimitBaselineDropMin,
+    ),
     stackTopShiftUp: field(MATH_VALUE_RECORD_INDEX.stackTopShiftUp),
     stackBottomShiftDown: field(MATH_VALUE_RECORD_INDEX.stackBottomShiftDown),
     stackGapMin: field(MATH_VALUE_RECORD_INDEX.stackGapMin),
-    fractionNumeratorShiftUp: field(MATH_VALUE_RECORD_INDEX.fractionNumeratorShiftUp),
-    fractionNumeratorDisplayStyleShiftUp: field(MATH_VALUE_RECORD_INDEX.fractionNumeratorDisplayStyleShiftUp),
-    fractionDenominatorShiftDown: field(MATH_VALUE_RECORD_INDEX.fractionDenominatorShiftDown),
-    fractionDenominatorDisplayStyleShiftDown: field(MATH_VALUE_RECORD_INDEX.fractionDenominatorDisplayStyleShiftDown),
-    fractionNumeratorGapMin: field(MATH_VALUE_RECORD_INDEX.fractionNumeratorGapMin),
+    fractionNumeratorShiftUp: field(
+      MATH_VALUE_RECORD_INDEX.fractionNumeratorShiftUp,
+    ),
+    fractionNumeratorDisplayStyleShiftUp: field(
+      MATH_VALUE_RECORD_INDEX.fractionNumeratorDisplayStyleShiftUp,
+    ),
+    fractionDenominatorShiftDown: field(
+      MATH_VALUE_RECORD_INDEX.fractionDenominatorShiftDown,
+    ),
+    fractionDenominatorDisplayStyleShiftDown: field(
+      MATH_VALUE_RECORD_INDEX.fractionDenominatorDisplayStyleShiftDown,
+    ),
+    fractionNumeratorGapMin: field(
+      MATH_VALUE_RECORD_INDEX.fractionNumeratorGapMin,
+    ),
     fractionRuleThickness: field(MATH_VALUE_RECORD_INDEX.fractionRuleThickness),
-    fractionDenominatorGapMin: field(MATH_VALUE_RECORD_INDEX.fractionDenominatorGapMin),
+    fractionDenominatorGapMin: field(
+      MATH_VALUE_RECORD_INDEX.fractionDenominatorGapMin,
+    ),
     radicalVerticalGap: field(MATH_VALUE_RECORD_INDEX.radicalVerticalGap),
     radicalRuleThickness: field(MATH_VALUE_RECORD_INDEX.radicalRuleThickness),
     radicalExtraAscender: field(MATH_VALUE_RECORD_INDEX.radicalExtraAscender),
-    radicalKernBeforeDegree: field(MATH_VALUE_RECORD_INDEX.radicalKernBeforeDegree),
-    radicalKernAfterDegree: field(MATH_VALUE_RECORD_INDEX.radicalKernAfterDegree),
-    radicalDegreeBottomRaisePercent: i16(bytes, constantsOffset + RADICAL_DEGREE_BOTTOM_RAISE_PERCENT_OFFSET),
+    radicalKernBeforeDegree: field(
+      MATH_VALUE_RECORD_INDEX.radicalKernBeforeDegree,
+    ),
+    radicalKernAfterDegree: field(
+      MATH_VALUE_RECORD_INDEX.radicalKernAfterDegree,
+    ),
+    radicalDegreeBottomRaisePercent: i16(
+      bytes,
+      constantsOffset + RADICAL_DEGREE_BOTTOM_RAISE_PERCENT_OFFSET,
+    ),
   };
 }
 
 // A MathItalicsCorrectionInfo or MathTopAccentAttachment table (both share the identical shape: Offset16 Coverage, uint16 count, MathValueRecord[count]) resolved to a glyph ID -> design-unit value lookup. The Coverage table it indexes through is the shared OpenType Common Table Formats one (ot-layout-common.ts), the same structure gpos-table.ts resolves its own kerning subtables through; an unreadable Coverage costs this one subtable its values rather than the whole MATH table.
-function parseGlyphValueTable(bytes: Uint8Array<ArrayBuffer>, tableOffset: number): ReadonlyMap<number, number> {
+function parseGlyphValueTable(
+  bytes: Uint8Array<ArrayBuffer>,
+  tableOffset: number,
+): ReadonlyMap<number, number> {
   const coverage = parseCoverage(bytes, tableOffset + u16(bytes, tableOffset));
   const values = new Map<number, number>();
   if (coverage === undefined) {
@@ -132,13 +176,22 @@ export interface MathGlyphInfo {
   readonly topAccentAttachment: ReadonlyMap<number, number>; // glyph ID -> design units, x position from the glyph's own left origin
 }
 
-function parseMathGlyphInfo(bytes: Uint8Array<ArrayBuffer>, mathTableOffset: number): MathGlyphInfo {
+function parseMathGlyphInfo(
+  bytes: Uint8Array<ArrayBuffer>,
+  mathTableOffset: number,
+): MathGlyphInfo {
   const glyphInfoOffset = mathTableOffset + u16(bytes, mathTableOffset + 6);
   const italicsInfoOffset = u16(bytes, glyphInfoOffset + 0);
   const topAccentOffset = u16(bytes, glyphInfoOffset + 2);
   return {
-    italicsCorrection: italicsInfoOffset === 0 ? new Map() : parseGlyphValueTable(bytes, glyphInfoOffset + italicsInfoOffset),
-    topAccentAttachment: topAccentOffset === 0 ? new Map() : parseGlyphValueTable(bytes, glyphInfoOffset + topAccentOffset),
+    italicsCorrection:
+      italicsInfoOffset === 0
+        ? new Map()
+        : parseGlyphValueTable(bytes, glyphInfoOffset + italicsInfoOffset),
+    topAccentAttachment:
+      topAccentOffset === 0
+        ? new Map()
+        : parseGlyphValueTable(bytes, glyphInfoOffset + topAccentOffset),
   };
 }
 
@@ -181,35 +234,61 @@ const GLYPH_PART_RECORD_SIZE = 10; // uint16 glyphID + three UFWORDs + uint16 pa
 const GLYPH_PART_FLAG_EXTENDER = 0x0001;
 const MATH_VARIANTS_HEADER_SIZE = 10; // uint16 minConnectorOverlap + two Offset16 coverages + two uint16 counts, before the two Offset16 construction arrays
 
-function parseGlyphAssembly(bytes: Uint8Array<ArrayBuffer>, assemblyOffset: number): MathGlyphAssembly {
+function parseGlyphAssembly(
+  bytes: Uint8Array<ArrayBuffer>,
+  assemblyOffset: number,
+): MathGlyphAssembly {
   const partCount = u16(bytes, assemblyOffset + MATH_VALUE_RECORD_SIZE);
   const parts: MathGlyphPart[] = [];
   for (let i = 0; i < partCount; i++) {
-    const recordOffset = assemblyOffset + MATH_VALUE_RECORD_SIZE + 2 + i * GLYPH_PART_RECORD_SIZE;
+    const recordOffset =
+      assemblyOffset + MATH_VALUE_RECORD_SIZE + 2 + i * GLYPH_PART_RECORD_SIZE;
     parts.push({
       glyphId: u16(bytes, recordOffset),
       startConnectorLength: u16(bytes, recordOffset + 2),
       endConnectorLength: u16(bytes, recordOffset + 4),
       fullAdvance: u16(bytes, recordOffset + 6),
-      isExtender: (u16(bytes, recordOffset + 8) & GLYPH_PART_FLAG_EXTENDER) !== 0,
+      isExtender:
+        (u16(bytes, recordOffset + 8) & GLYPH_PART_FLAG_EXTENDER) !== 0,
     });
   }
   return { italicsCorrection: i16(bytes, assemblyOffset), parts };
 }
 
-function parseGlyphConstruction(bytes: Uint8Array<ArrayBuffer>, constructionOffset: number): MathGlyphConstruction {
+function parseGlyphConstruction(
+  bytes: Uint8Array<ArrayBuffer>,
+  constructionOffset: number,
+): MathGlyphConstruction {
   const assemblyOffset = u16(bytes, constructionOffset);
   const variantCount = u16(bytes, constructionOffset + 2);
   const variants: MathGlyphVariant[] = [];
   for (let i = 0; i < variantCount; i++) {
-    const recordOffset = constructionOffset + 4 + i * MATH_GLYPH_VARIANT_RECORD_SIZE;
-    variants.push({ glyphId: u16(bytes, recordOffset), advanceMeasurement: u16(bytes, recordOffset + 2) });
+    const recordOffset =
+      constructionOffset + 4 + i * MATH_GLYPH_VARIANT_RECORD_SIZE;
+    variants.push({
+      glyphId: u16(bytes, recordOffset),
+      advanceMeasurement: u16(bytes, recordOffset + 2),
+    });
   }
-  return assemblyOffset === 0 ? { variants } : { variants, assembly: parseGlyphAssembly(bytes, constructionOffset + assemblyOffset) };
+  return assemblyOffset === 0
+    ? { variants }
+    : {
+        variants,
+        assembly: parseGlyphAssembly(
+          bytes,
+          constructionOffset + assemblyOffset,
+        ),
+      };
 }
 
 // One axis's coverage table plus its own parallel MathGlyphConstruction offset array, resolved to a base-glyph-ID -> construction lookup. `constructionArrayOffset` is where that axis's Offset16 array starts (the vertical array first, immediately after the MathVariants header; the horizontal array immediately after it), and each entry in it is measured from the MathVariants table's own start.
-function parseConstructionsForAxis(bytes: Uint8Array<ArrayBuffer>, variantsOffset: number, coverageOffset: number, count: number, constructionArrayOffset: number): ReadonlyMap<number, MathGlyphConstruction> {
+function parseConstructionsForAxis(
+  bytes: Uint8Array<ArrayBuffer>,
+  variantsOffset: number,
+  coverageOffset: number,
+  count: number,
+  constructionArrayOffset: number,
+): ReadonlyMap<number, MathGlyphConstruction> {
   const constructions = new Map<number, MathGlyphConstruction>();
   if (coverageOffset === 0) {
     return constructions;
@@ -222,15 +301,29 @@ function parseConstructionsForAxis(bytes: Uint8Array<ArrayBuffer>, variantsOffse
     if (coverageIndex >= count) {
       continue; // a coverage table listing more glyphs than the construction array has entries: skip the unbacked tail rather than reading past it
     }
-    constructions.set(glyphId, parseGlyphConstruction(bytes, variantsOffset + u16(bytes, constructionArrayOffset + coverageIndex * 2)));
+    constructions.set(
+      glyphId,
+      parseGlyphConstruction(
+        bytes,
+        variantsOffset +
+          u16(bytes, constructionArrayOffset + coverageIndex * 2),
+      ),
+    );
   }
   return constructions;
 }
 
-function parseMathVariants(bytes: Uint8Array<ArrayBuffer>, mathTableOffset: number): MathVariants {
+function parseMathVariants(
+  bytes: Uint8Array<ArrayBuffer>,
+  mathTableOffset: number,
+): MathVariants {
   const variantsTableOffset = u16(bytes, mathTableOffset + 8);
   if (variantsTableOffset === 0) {
-    return { minConnectorOverlap: 0, vertical: new Map(), horizontal: new Map() };
+    return {
+      minConnectorOverlap: 0,
+      vertical: new Map(),
+      horizontal: new Map(),
+    };
   }
   const variantsOffset = mathTableOffset + variantsTableOffset;
   const verticalCoverageOffset = u16(bytes, variantsOffset + 2);
@@ -241,8 +334,20 @@ function parseMathVariants(bytes: Uint8Array<ArrayBuffer>, mathTableOffset: numb
   const horizontalArrayOffset = verticalArrayOffset + verticalCount * 2;
   return {
     minConnectorOverlap: u16(bytes, variantsOffset),
-    vertical: parseConstructionsForAxis(bytes, variantsOffset, verticalCoverageOffset, verticalCount, verticalArrayOffset),
-    horizontal: parseConstructionsForAxis(bytes, variantsOffset, horizontalCoverageOffset, horizontalCount, horizontalArrayOffset),
+    vertical: parseConstructionsForAxis(
+      bytes,
+      variantsOffset,
+      verticalCoverageOffset,
+      verticalCount,
+      verticalArrayOffset,
+    ),
+    horizontal: parseConstructionsForAxis(
+      bytes,
+      variantsOffset,
+      horizontalCoverageOffset,
+      horizontalCount,
+      horizontalArrayOffset,
+    ),
   };
 }
 
@@ -253,9 +358,9 @@ export interface MathTable {
 }
 
 export function parseMathTable(font: SfntFont): MathTable {
-  const mathBytes = sfntTableBytes(font, 'MATH');
+  const mathBytes = sfntTableBytes(font, "MATH");
   if (mathBytes === undefined) {
-    throw new Error('math font has no MATH table');
+    throw new Error("math font has no MATH table");
   }
   return {
     constants: parseMathConstants(mathBytes, 0),

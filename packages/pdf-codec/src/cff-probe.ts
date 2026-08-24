@@ -1,5 +1,5 @@
-import { CFF_DICT_OP_ROS, parseCffDict, readCffIndex } from './cff';
-import { hasBytes, u8 } from './sfnt';
+import { CFF_DICT_OP_ROS, parseCffDict, readCffIndex } from "./cff";
+import { hasBytes, u8 } from "./sfnt";
 
 // A deliberately shallow reader for a CFF (Compact Font Format 1.0) font program: its header, its Name INDEX, and just enough of its Top DICT to answer one question -- is this font CID-keyed?
 //
@@ -26,7 +26,7 @@ export interface CffProbeResult {
 
 // CFF names are ASCII (spec section 7: "the character set is restricted to printable ASCII"), so a per-byte decode is exact rather than an approximation.
 function decodeAscii(bytes: Uint8Array<ArrayBuffer>): string {
-  let text = '';
+  let text = "";
   for (const byte of bytes) {
     text += String.fromCharCode(byte);
   }
@@ -34,7 +34,9 @@ function decodeAscii(bytes: Uint8Array<ArrayBuffer>): string {
 }
 
 // Probes a bare CFF font program. Returns `undefined` for anything this cannot read confidently -- a truncated header, a major version other than 1 (CFF2 has an incompatible header and no Name INDEX at all, and is not a legal PDF /FontFile3 program either), an unreadable Name INDEX or Top DICT INDEX, an empty FontSet, or a malformed Top DICT. The embedding path treats `undefined` and `cidKeyed: true` identically: refuse this font program, substitute a face this package can embed correctly.
-export function probeCff(bytes: Uint8Array<ArrayBuffer>): CffProbeResult | undefined {
+export function probeCff(
+  bytes: Uint8Array<ArrayBuffer>,
+): CffProbeResult | undefined {
   if (!hasBytes(bytes, 0, CFF_HEADER_SIZE)) {
     return undefined;
   }
@@ -64,5 +66,10 @@ export function probeCff(bytes: Uint8Array<ArrayBuffer>): CffProbeResult | undef
     return undefined;
   }
 
-  return { majorVersion, minorVersion, name: decodeAscii(nameBytes), cidKeyed: topDict.has(CFF_DICT_OP_ROS) };
+  return {
+    majorVersion,
+    minorVersion,
+    name: decodeAscii(nameBytes),
+    cidKeyed: topDict.has(CFF_DICT_OP_ROS),
+  };
 }

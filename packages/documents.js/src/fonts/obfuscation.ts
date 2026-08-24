@@ -1,7 +1,7 @@
 // ECMA-376 Part 4, 2.8.1 (Font Embedding / "obfuscated" font parts). A docx never stores an embedded font as a plain .ttf/.otf: the part is a .odttf whose FIRST 32 BYTES are XORed against a 16-byte key derived from the w:fontKey GUID carried on the same w:embedRegular/w:embedBold/w:embedItalic/w:embedBoldItalic element, with every byte from index 32 onwards stored verbatim. The transformation is its own inverse (XOR), so the same code deobfuscates on read and would obfuscate on write.
 //
 // pptx is the same file format for the part itself but, in practice, NOT the same convention for the bytes: p:embeddedFont's own p:regular/p:bold/p:italic/p:boldItalic carry only an r:id and no font-key attribute at all, and the referenced .fntdata part is stored unobfuscated. Rather than branching on the source format at the call site -- which would make a docx with a clear part, or a pptx that did obfuscate, an unreadable file for no good reason -- deobfuscateEmbeddedFont sniffs the leading sfnt signature FIRST and only deobfuscates when the bytes are not already a recognisable font. One function, both formats, decided by what the bytes actually are.
-import { parseSfnt } from 'pdf-codec/sfnt';
+import { parseSfnt } from "pdf-codec/sfnt";
 
 // The 16 hexadecimal-digit pairs of a GUID, once its braces and hyphens are stripped.
 const FONT_KEY_HEX_LENGTH = 32;
@@ -16,22 +16,26 @@ const HEX_PAIR_PATTERN = /^[0-9A-Fa-f]{2}$/;
 export class FontDeobfuscationError extends Error {
   constructor(detail: string) {
     super(`deobfuscateEmbeddedFont: ${detail}`);
-    this.name = 'FontDeobfuscationError';
+    this.name = "FontDeobfuscationError";
   }
 }
 
 // The 16-byte XOR key for a w:fontKey GUID. The non-obvious part of 2.8.1, and the reason this is a named, separately-tested function rather than three lines inlined below: the key is NOT the GUID's bytes in written order, nor its little-endian in-memory Windows GUID layout -- it is the 32 hex digits read as byte pairs in REVERSE order, so key[0] is the LAST hex pair of the GUID string and key[15] the first. Verified against ECMA-376's own worked example: {001B70DC-AA60-4AD5-90EC-18A0948E1EAE} yields AE 1E 8E 94 A0 18 EC 90 D5 4A 60 AA DC 70 1B 00 (see obfuscation.test.ts).
 export function deriveFontKey(fontKey: string): Uint8Array<ArrayBuffer> {
-  const hex = fontKey.replace(/[{}-]/g, '');
+  const hex = fontKey.replace(/[{}-]/g, "");
   if (hex.length !== FONT_KEY_HEX_LENGTH) {
-    throw new FontDeobfuscationError(`w:fontKey ${JSON.stringify(fontKey)} has ${String(hex.length)} hex digit(s) after stripping braces and hyphens, expected ${String(FONT_KEY_HEX_LENGTH)}`);
+    throw new FontDeobfuscationError(
+      `w:fontKey ${JSON.stringify(fontKey)} has ${String(hex.length)} hex digit(s) after stripping braces and hyphens, expected ${String(FONT_KEY_HEX_LENGTH)}`,
+    );
   }
   const key = new Uint8Array(FONT_KEY_BYTE_LENGTH);
   for (let i = 0; i < FONT_KEY_BYTE_LENGTH; i++) {
     const start = FONT_KEY_HEX_LENGTH - 2 - i * 2;
     const pair = hex.slice(start, start + 2);
     if (!HEX_PAIR_PATTERN.test(pair)) {
-      throw new FontDeobfuscationError(`w:fontKey ${JSON.stringify(fontKey)} contains the non-hexadecimal pair ${JSON.stringify(pair)}`);
+      throw new FontDeobfuscationError(
+        `w:fontKey ${JSON.stringify(fontKey)} contains the non-hexadecimal pair ${JSON.stringify(pair)}`,
+      );
     }
     key[i] = Number.parseInt(pair, 16);
   }
@@ -48,15 +52,22 @@ export function looksLikeSfnt(bytes: Uint8Array<ArrayBuffer>): boolean {
 // Recovers the real font bytes from an embedded font part. Sniff-first: bytes that already parse as an sfnt are returned unchanged (pptx's own .fntdata parts, and any docx producer that stored a clear part), otherwise the 32-byte obfuscated prefix is XORed back with `fontKey`'s derived key.
 //
 // Throws rather than degrading, in both failure directions: a part that is neither a recognisable font nor accompanied by a font key cannot be read at all, and a part that still does not parse AFTER deobfuscation means the key and the bytes genuinely do not belong together. Both are defects in the source package, and silently handing back 32 bytes of noise followed by real font data would produce a font that loads, measures wrong, and renders garbage -- strictly worse than a visible failure.
-export function deobfuscateEmbeddedFont(bytes: Uint8Array<ArrayBuffer>, fontKey: string | undefined): Uint8Array<ArrayBuffer> {
+export function deobfuscateEmbeddedFont(
+  bytes: Uint8Array<ArrayBuffer>,
+  fontKey: string | undefined,
+): Uint8Array<ArrayBuffer> {
   if (looksLikeSfnt(bytes)) {
     return bytes;
   }
   if (fontKey === undefined) {
-    throw new FontDeobfuscationError('the part does not begin with an sfnt signature and carries no font key to deobfuscate it with');
+    throw new FontDeobfuscationError(
+      "the part does not begin with an sfnt signature and carries no font key to deobfuscate it with",
+    );
   }
   if (bytes.length < OBFUSCATED_PREFIX_LENGTH) {
-    throw new FontDeobfuscationError(`an obfuscated part must be at least ${String(OBFUSCATED_PREFIX_LENGTH)} bytes long, got ${String(bytes.length)}`);
+    throw new FontDeobfuscationError(
+      `an obfuscated part must be at least ${String(OBFUSCATED_PREFIX_LENGTH)} bytes long, got ${String(bytes.length)}`,
+    );
   }
   const key = deriveFontKey(fontKey);
   const clear = new Uint8Array(bytes.length);
@@ -65,12 +76,16 @@ export function deobfuscateEmbeddedFont(bytes: Uint8Array<ArrayBuffer>, fontKey:
     const keyByte = key[i % FONT_KEY_BYTE_LENGTH];
     const cipherByte = clear[i];
     if (keyByte === undefined || cipherByte === undefined) {
-      throw new FontDeobfuscationError(`byte ${String(i)} of the obfuscated prefix is out of range`);
+      throw new FontDeobfuscationError(
+        `byte ${String(i)} of the obfuscated prefix is out of range`,
+      );
     }
     clear[i] = cipherByte ^ keyByte;
   }
   if (!looksLikeSfnt(clear)) {
-    throw new FontDeobfuscationError(`deobfuscating with font key ${JSON.stringify(fontKey)} did not produce a recognisable sfnt font`);
+    throw new FontDeobfuscationError(
+      `deobfuscating with font key ${JSON.stringify(fontKey)} did not produce a recognisable sfnt font`,
+    );
   }
   return clear;
 }

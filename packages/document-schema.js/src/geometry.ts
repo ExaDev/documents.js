@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 // Geometry primitives shared by every content/layout schema (ContentSection's page, ContentShape's frame, LayoutPage's dimensions). Ported from ooxml.js's typed/shared/geometry.ts and documents.js's src/model/geometry.ts (identical shape in both). flipY is NOT here: it bridges OOXML/ODF's top-left/y-down space into PDF's bottom-left/y-up space, a PDF-rendering concern specific to documents.js, not a content-model shape.
 

@@ -1,10 +1,18 @@
-import type { Comment, ContentBlock, DocxExtras, Footnote, HeaderFooterPart, NumberingDefinitions, NumberingLevel } from 'documents.js';
+import type {
+  Comment,
+  ContentBlock,
+  DocxExtras,
+  Footnote,
+  HeaderFooterPart,
+  NumberingDefinitions,
+  NumberingLevel,
+} from "documents.js";
 
 // The one place a docx's own comments/footnotes/headers/footers/numbering definitions turn into text, shared by the `docx-extras` command and the TUI's own `docxExtras` screen -- the same relationship `odb-structure.ts` has to `odb-forms`/`odb-reports` and to the TUI's own form/report detail screens, and for the same reason: the CLI renders these lines joined by newlines while the TUI renders one per `ListView` row, so a flat `readonly string[]` of already-indented lines is the shape that genuinely serves both without either owning the other's rendering.
 //
 // This module never touches a package, a file, or documents.js's readers -- it is a pure function of the `DocxExtras` value `readDocxExtras` hands back, which is what lets both layers' tests assert against real fixture-derived structure with no I/O of their own.
 
-const INDENT = '  ';
+const INDENT = "  ";
 
 function indent(depth: number): string {
   return INDENT.repeat(depth);
@@ -12,12 +20,12 @@ function indent(depth: number): string {
 
 // Neither `Comment` nor `Footnote` (ooxml.js, re-exported by documents.js) carries an id field of its own, so both are addressed by their 1-based position in the array `readDocxExtras` returned -- the position a reader would count off while looking at the list, not any XML-internal `w:id`.
 function commentLine(comment: Comment, position: number): string {
-  const author = comment.author ?? '(no author)';
+  const author = comment.author ?? "(no author)";
   return `${indent(1)}[${position}] ${author}: ${comment.text}`;
 }
 
 function footnoteLine(footnote: Footnote, position: number): string {
-  const typeSuffix = footnote.type === undefined ? '' : ` (${footnote.type})`;
+  const typeSuffix = footnote.type === undefined ? "" : ` (${footnote.type})`;
   return `${indent(1)}[${position}]${typeSuffix} ${footnote.text}`;
 }
 
@@ -25,23 +33,29 @@ function commentsSection(comments: readonly Comment[]): readonly string[] {
   if (comments.length === 0) {
     return [];
   }
-  return ['comments', ...comments.map((comment, index) => commentLine(comment, index + 1))];
+  return [
+    "comments",
+    ...comments.map((comment, index) => commentLine(comment, index + 1)),
+  ];
 }
 
 function footnotesSection(footnotes: readonly Footnote[]): readonly string[] {
   if (footnotes.length === 0) {
     return [];
   }
-  return ['footnotes', ...footnotes.map((footnote, index) => footnoteLine(footnote, index + 1))];
+  return [
+    "footnotes",
+    ...footnotes.map((footnote, index) => footnoteLine(footnote, index + 1)),
+  ];
 }
 
 // One part's own text: every paragraph's run text concatenated with no separator, recursing into table cells. Run text is ooxml.js's readRunText fold of the run's XML children (w:t and w:delText alike, w:tab as '\t', w:br/w:cr as '\n'), so tabs and line breaks survive as literal characters and tracked-deletion text is included, while content with no block-flow spelling -- a header textbox's text -- contributes nothing.
 function partText(blocks: readonly ContentBlock[]): string {
-  let text = '';
+  let text = "";
   for (const block of blocks) {
-    if (block.kind === 'paragraph') {
-      text += block.runs.map((run) => run.text).join('');
-    } else if (block.kind === 'table') {
+    if (block.kind === "paragraph") {
+      text += block.runs.map((run) => run.text).join("");
+    } else if (block.kind === "table") {
       for (const row of block.rows) {
         for (const cell of row.cells) {
           text += partText(cell.blocks);
@@ -53,15 +67,24 @@ function partText(blocks: readonly ContentBlock[]): string {
 }
 
 // Headers and footers share the identical shape once read (each part its own block flow, listed in package-key order) -- one function renders either kind, labelled by the caller; filtering by kind upstream preserves that order within a kind.
-function headerOrFooterSection(label: string, parts: readonly HeaderFooterPart[]): readonly string[] {
+function headerOrFooterSection(
+  label: string,
+  parts: readonly HeaderFooterPart[],
+): readonly string[] {
   if (parts.length === 0) {
     return [];
   }
-  return [label, ...parts.map((part, index) => `${indent(1)}[${index + 1}] ${partText(part.blocks)}`)];
+  return [
+    label,
+    ...parts.map(
+      (part, index) => `${indent(1)}[${index + 1}] ${partText(part.blocks)}`,
+    ),
+  ];
 }
 
 function numberingLevelLine(ilvl: string, level: NumberingLevel): string {
-  const restartSuffix = level.restart === undefined ? '' : `, restarts at level ${level.restart}`;
+  const restartSuffix =
+    level.restart === undefined ? "" : `, restarts at level ${level.restart}`;
   return `${indent(2)}level ${ilvl}: ${level.format} ${JSON.stringify(level.text)} starting at ${level.startAt}${restartSuffix}`;
 }
 
@@ -71,14 +94,16 @@ function numberingSection(numbering: NumberingDefinitions): readonly string[] {
   if (numIds.length === 0) {
     return [];
   }
-  const lines: string[] = ['numbering'];
+  const lines: string[] = ["numbering"];
   for (const numId of numIds) {
     const definition = numbering[numId];
     if (definition === undefined) {
       continue;
     }
     lines.push(`${indent(1)}numId ${numId}`);
-    const ilvls = Object.keys(definition.levels).sort((a, b) => Number(a) - Number(b));
+    const ilvls = Object.keys(definition.levels).sort(
+      (a, b) => Number(a) - Number(b),
+    );
     for (const ilvl of ilvls) {
       const level = definition.levels[ilvl];
       if (level === undefined) {
@@ -94,14 +119,24 @@ export function formatDocxExtrasLines(extras: DocxExtras): readonly string[] {
   const sections: readonly (readonly string[])[] = [
     commentsSection(extras.comments),
     footnotesSection(extras.footnotes),
-    headerOrFooterSection('headers', extras.headerFooterParts.filter((part) => part.kind === 'header')),
-    headerOrFooterSection('footers', extras.headerFooterParts.filter((part) => part.kind === 'footer')),
+    headerOrFooterSection(
+      "headers",
+      extras.headerFooterParts.filter((part) => part.kind === "header"),
+    ),
+    headerOrFooterSection(
+      "footers",
+      extras.headerFooterParts.filter((part) => part.kind === "footer"),
+    ),
     numberingSection(extras.numbering),
   ];
   const nonEmptySections = sections.filter((section) => section.length > 0);
   if (nonEmptySections.length === 0) {
-    return ['This document carries no comments, footnotes, headers, footers, or numbering definitions.'];
+    return [
+      "This document carries no comments, footnotes, headers, footers, or numbering definitions.",
+    ];
   }
   // A blank line between sections, never before the first one -- readable as a CLI report and as a flat ListView row list alike (a blank row renders as an empty line either way).
-  return nonEmptySections.flatMap((section, index) => (index === 0 ? section : ['', ...section]));
+  return nonEmptySections.flatMap((section, index) =>
+    index === 0 ? section : ["", ...section],
+  );
 }

@@ -16,12 +16,14 @@ const APP14 = 0xee;
 const SOF_MARKERS = new Set([0xc0, 0xc1, 0xc2, 0xc9, 0xca]);
 const PROGRESSIVE_SOF_MARKERS = new Set([0xc2, 0xca]);
 // Markers with no following length/payload: TEM, SOI, EOI, and the eight restart markers.
-const NO_PAYLOAD_MARKERS = new Set([0x01, 0xd8, 0xd9, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7]);
+const NO_PAYLOAD_MARKERS = new Set([
+  0x01, 0xd8, 0xd9, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7,
+]);
 
 function requireByte(bytes: Uint8Array<ArrayBuffer>, index: number): number {
   const value = bytes[index];
   if (value === undefined) {
-    throw new Error('unexpected end of JPEG data');
+    throw new Error("unexpected end of JPEG data");
   }
   return value;
 }
@@ -33,7 +35,7 @@ function readUint16BE(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
 // Scans a JPEG file's marker segments for its SOF (start-of-frame) segment, recovering dimensions, component count and progressive-ness without decoding any entropy-coded scan data. Throws if the bytes don't start with SOI or no SOF marker is found before EOI/truncation.
 export function readJpegInfo(bytes: Uint8Array<ArrayBuffer>): JpegInfo {
   if (requireByte(bytes, 0) !== 0xff || requireByte(bytes, 1) !== SOI) {
-    throw new Error('not a valid JPEG file: missing SOI marker');
+    throw new Error("not a valid JPEG file: missing SOI marker");
   }
 
   let offset = 2;
@@ -86,5 +88,5 @@ export function readJpegInfo(bytes: Uint8Array<ArrayBuffer>): JpegInfo {
     offset += segmentLength;
   }
 
-  throw new Error('no SOF marker found in JPEG file');
+  throw new Error("no SOF marker found in JPEG file");
 }

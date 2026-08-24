@@ -1,28 +1,36 @@
-import type { Alignment, Color, ContentBorder, ContentCellBorders, ContentStrokeStyle } from 'document-schema.js';
-import { colorToRgbHex, rgbHexToColor } from 'document-schema.js';
-import type { Package } from '../../model/package';
-import type { XmlElement } from '../../model/node';
-import type { CellNumberFormat } from './number-format';
-import { attr, childrenWithTag, decodeEntities, rootElement } from '../util';
-import { BUILTIN_NUMBER_FORMATS } from './number-format';
+import type {
+  Alignment,
+  Color,
+  ContentBorder,
+  ContentCellBorders,
+  ContentStrokeStyle,
+} from "document-schema.js";
+import { colorToRgbHex, rgbHexToColor } from "document-schema.js";
+import type { Package } from "../../model/package";
+import type { XmlElement } from "../../model/node";
+import type { CellNumberFormat } from "./number-format";
+import { attr, childrenWithTag, decodeEntities, rootElement } from "../util";
+import { BUILTIN_NUMBER_FORMATS } from "./number-format";
 
 // Resolves xl/styles.xml for typed/xlsx/content.ts (read) and typed/xlsx/build.ts (write). The read side produces one entry per <cellXfs><xf> -- the array index IS the value of a cell's own s attribute -- carrying everything ContentSheetCellSchema models that lives in a cell format: the number-format CODE STRING (resolved through <numFmts>, classified by typed/xlsx/number-format.ts upstream), and the cell DECORATION (background fill, per-edge borders, horizontal/vertical alignment) added in this same widening that gave ContentSheetCell its background/borders/alignment/verticalAlignment fields. The write side is the same relationship in reverse: CellFormatTable interns the (number format, decoration) tuples a written workbook needs, ready to serialize as <numFmts>/<fills>/<borders>/<cellXfs>.
 
-const STYLES_PATH = 'xl/styles.xml';
+const STYLES_PATH = "xl/styles.xml";
 
 // numFmtId 0, 'General' -- CT_Xf/@numFmtId's own schema default, so an <xf> with no numFmtId attribute at all is General, not "unformatted". Shared by both directions: what the reader falls back to for an undeclared id, and what the writer's own default cell format carries.
 export const GENERAL_NUM_FMT_ID = 0;
 
 // numFmtId -> format code, built in exactly two feeds: ECMA-376's own built-in table first, then the file's own <numFmts> overlaid UNCONDITIONALLY. The overlay is unconditional rather than fill-the-gaps because a producer-declared code always wins over an implied one -- confirmed necessary against real LibreOffice output, whose kitchen-sink export declares id 164 as "General" and then points its plain numeric cells at it; a fill-the-gaps overlay would still be correct there, but nothing in the format stops a producer redeclaring an id inside the built-in range, and the spec's own table is the FALLBACK for ids a file leaves undeclared, not an authority over ids it declares.
-function readNumberFormatCodesById(styleSheet: XmlElement): Map<number, string> {
+function readNumberFormatCodesById(
+  styleSheet: XmlElement,
+): Map<number, string> {
   const codes = new Map<number, string>(BUILTIN_NUMBER_FORMATS);
-  const numFmtsEl = childrenWithTag(styleSheet, 'numFmts')[0];
+  const numFmtsEl = childrenWithTag(styleSheet, "numFmts")[0];
   if (numFmtsEl === undefined) {
     return codes;
   }
-  for (const numFmt of childrenWithTag(numFmtsEl, 'numFmt')) {
-    const idRaw = attr(numFmt, 'numFmtId');
-    const formatCode = attr(numFmt, 'formatCode');
+  for (const numFmt of childrenWithTag(numFmtsEl, "numFmt")) {
+    const idRaw = attr(numFmt, "numFmtId");
+    const formatCode = attr(numFmt, "formatCode");
     if (idRaw === undefined || formatCode === undefined) {
       continue;
     }
@@ -43,40 +51,54 @@ export interface CellStyleEntry {
   background?: Color;
   borders?: ContentCellBorders;
   alignment?: Alignment;
-  verticalAlignment?: 'top' | 'middle' | 'bottom';
+  verticalAlignment?: "top" | "middle" | "bottom";
 }
 
 // xlsx's border style attribute (CT_BorderStyle, ECMA-376 Part 1 SS18.18.3) conflates a stroke's PATTERN (solid/dashed/dotted/double) with its WEIGHT (hair/thin/medium/thick), unlike ODF's separate fo:border "<length> <style> <color>" shorthand or ContentBorderSchema's own widthPt+style pair. Excel's own documented convention renders each named weight at a fixed pixel count at 96 DPI (1px = 0.75pt): hair is sub-pixel (rendered thinner than thin), thin is 1px, medium is 2px, thick is 3px. These derived point widths are the honest inverse of that convention -- named constants with a stated derivation, not arbitrary numbers.
-const BORDER_WIDTH_PT = { hair: 0.5, thin: 0.75, medium: 1.5, thick: 2.25 } as const;
+const BORDER_WIDTH_PT = {
+  hair: 0.5,
+  thin: 0.75,
+  medium: 1.5,
+  thick: 2.25,
+} as const;
 type BorderWeight = keyof typeof BORDER_WIDTH_PT;
 
 // Each xlsx border-style token resolves to one weight (for widthPt) and one ContentStrokeStyle pattern. The dash-family tokens (dashDot/dashDotDot and their medium/slant variants) have no ContentStrokeStyle member that distinguishes them from a plain dashed line, so they collapse to 'dashed' rather than being dropped -- the closest faithful mapping, preserving "this edge is dashed" instead of degrading to solid. 'none' is handled by the caller (it means the edge carries no border at all) and has no entry here.
-const XLSX_BORDER_STYLE: Readonly<Record<string, { weight: BorderWeight; pattern: ContentStrokeStyle }>> = {
-  thin: { weight: 'thin', pattern: 'solid' },
-  medium: { weight: 'medium', pattern: 'solid' },
-  thick: { weight: 'thick', pattern: 'solid' },
-  hair: { weight: 'hair', pattern: 'solid' },
-  dashed: { weight: 'thin', pattern: 'dashed' },
-  dotted: { weight: 'thin', pattern: 'dotted' },
-  double: { weight: 'thin', pattern: 'double' },
-  mediumDashed: { weight: 'medium', pattern: 'dashed' },
-  dashDot: { weight: 'thin', pattern: 'dashed' },
-  mediumDashDot: { weight: 'medium', pattern: 'dashed' },
-  dashDotDot: { weight: 'thin', pattern: 'dashed' },
-  mediumDashDotDot: { weight: 'medium', pattern: 'dashed' },
-  slantDashDot: { weight: 'medium', pattern: 'dashed' },
+const XLSX_BORDER_STYLE: Readonly<
+  Record<string, { weight: BorderWeight; pattern: ContentStrokeStyle }>
+> = {
+  thin: { weight: "thin", pattern: "solid" },
+  medium: { weight: "medium", pattern: "solid" },
+  thick: { weight: "thick", pattern: "solid" },
+  hair: { weight: "hair", pattern: "solid" },
+  dashed: { weight: "thin", pattern: "dashed" },
+  dotted: { weight: "thin", pattern: "dotted" },
+  double: { weight: "thin", pattern: "double" },
+  mediumDashed: { weight: "medium", pattern: "dashed" },
+  dashDot: { weight: "thin", pattern: "dashed" },
+  mediumDashDot: { weight: "medium", pattern: "dashed" },
+  dashDotDot: { weight: "thin", pattern: "dashed" },
+  mediumDashDotDot: { weight: "medium", pattern: "dashed" },
+  slantDashDot: { weight: "medium", pattern: "dashed" },
 };
 
 // The width-bucket midpoints between the four named weights -- (hair+thin)/2, (thin+medium)/2, (medium+thick)/2 -- so a ContentBorder with a widthPt that came from this same table round-trips back to the same named weight. A width exactly on a midpoint falls into the heavier bucket, which is the same tie-break Excel's own rendering implies.
-const BORDER_WEIGHT_UPPER_PT = { hair: 0.625, thin: 1.125, medium: 1.875 } as const;
+const BORDER_WEIGHT_UPPER_PT = {
+  hair: 0.625,
+  thin: 1.125,
+  medium: 1.875,
+} as const;
 
 // A <color> child of a <border> edge or a <patternFill>'s <fgColor>/<bgColor>: only the rgb attribute is mapped (8 hex digits "AARRGGBB" with a leading alpha prefix, or 6 "RRGGBB" -- the last 6 digits are the real RGB in both forms). theme/indexed/tint/auto carry real colours this reader deliberately does not resolve: theme and indexed require a separate workbook-theme/table resolution this package does not model, and silently substituting black or any other fixed colour would misreport them, so the edge/fill reads as carrying no colour instead.
-function readColorRgb(container: XmlElement, colorTag: string): Color | undefined {
+function readColorRgb(
+  container: XmlElement,
+  colorTag: string,
+): Color | undefined {
   const colorEl = childrenWithTag(container, colorTag)[0];
   if (colorEl === undefined) {
     return undefined;
   }
-  const raw = attr(colorEl, 'rgb');
+  const raw = attr(colorEl, "rgb");
   if (raw === undefined) {
     return undefined;
   }
@@ -94,57 +116,75 @@ function readColorRgb(container: XmlElement, colorTag: string): Color | undefine
 
 // One <fill> -> a solid-fill background colour, or undefined for the non-solid patterns (none/gray125/darkDown/...) that do not produce a single ContentSheetCell.background value. For patternType="solid" the cell's visible background is the pattern's FOREGROUND colour (<fgColor>) per OOXML's solid-pattern semantics -- the whole cell is painted with the pattern's fg colour -- with <bgColor> as a fallback only when a producer left fgColor unset. This is the documented Excel/LibreOffice convention and what every real file's solid fill carries; reading bgColor first (the literal pattern-background) would return the wrong colour for the common case.
 function readFillBackground(fill: XmlElement): Color | undefined {
-  const patternFill = childrenWithTag(fill, 'patternFill')[0];
-  if (patternFill === undefined || attr(patternFill, 'patternType') !== 'solid') {
+  const patternFill = childrenWithTag(fill, "patternFill")[0];
+  if (
+    patternFill === undefined ||
+    attr(patternFill, "patternType") !== "solid"
+  ) {
     return undefined;
   }
-  return readColorRgb(patternFill, 'fgColor') ?? readColorRgb(patternFill, 'bgColor');
+  return (
+    readColorRgb(patternFill, "fgColor") ?? readColorRgb(patternFill, "bgColor")
+  );
 }
 
 function readFills(styleSheet: XmlElement): readonly (Color | undefined)[] {
-  const fillsEl = childrenWithTag(styleSheet, 'fills')[0];
+  const fillsEl = childrenWithTag(styleSheet, "fills")[0];
   if (fillsEl === undefined) {
     return [];
   }
-  return childrenWithTag(fillsEl, 'fill').map(readFillBackground);
+  return childrenWithTag(fillsEl, "fill").map(readFillBackground);
 }
 
 // One <border> edge -> a ContentBorder, or undefined when the edge has no style, style="none", or no resolvable colour. An absent style attribute means the edge genuinely carries no border (distinct from an absent <left> element, which means "say nothing about this edge" -- but a present <left/> with no style and no colour is how real producers spell "no left border", so both shapes collapse to undefined here, matching how readCellStyleDecoration in odf.js treats an explicit "none" token).
-function readBorderEdge(border: XmlElement, edge: 'left' | 'right' | 'top' | 'bottom'): ContentBorder | undefined {
+function readBorderEdge(
+  border: XmlElement,
+  edge: "left" | "right" | "top" | "bottom",
+): ContentBorder | undefined {
   const edgeEl = childrenWithTag(border, edge)[0];
   if (edgeEl === undefined) {
     return undefined;
   }
-  const styleToken = attr(edgeEl, 'style');
-  if (styleToken === undefined || styleToken === 'none') {
+  const styleToken = attr(edgeEl, "style");
+  if (styleToken === undefined || styleToken === "none") {
     return undefined;
   }
   const resolved = XLSX_BORDER_STYLE[styleToken];
   if (resolved === undefined) {
     return undefined;
   }
-  const color = readColorRgb(edgeEl, 'color');
+  const color = readColorRgb(edgeEl, "color");
   if (color === undefined) {
     return undefined;
   }
-  const result: ContentBorder = { color, widthPt: BORDER_WIDTH_PT[resolved.weight] };
-  if (resolved.pattern !== 'solid') {
+  const result: ContentBorder = {
+    color,
+    widthPt: BORDER_WIDTH_PT[resolved.weight],
+  };
+  if (resolved.pattern !== "solid") {
     result.style = resolved.pattern;
   }
   return result;
 }
 
-function readBorders(styleSheet: XmlElement): readonly (ContentCellBorders | undefined)[] {
-  const bordersEl = childrenWithTag(styleSheet, 'borders')[0];
+function readBorders(
+  styleSheet: XmlElement,
+): readonly (ContentCellBorders | undefined)[] {
+  const bordersEl = childrenWithTag(styleSheet, "borders")[0];
   if (bordersEl === undefined) {
     return [];
   }
-  return childrenWithTag(bordersEl, 'border').map((border) => {
-    const left = readBorderEdge(border, 'left');
-    const right = readBorderEdge(border, 'right');
-    const top = readBorderEdge(border, 'top');
-    const bottom = readBorderEdge(border, 'bottom');
-    if (left === undefined && right === undefined && top === undefined && bottom === undefined) {
+  return childrenWithTag(bordersEl, "border").map((border) => {
+    const left = readBorderEdge(border, "left");
+    const right = readBorderEdge(border, "right");
+    const top = readBorderEdge(border, "top");
+    const bottom = readBorderEdge(border, "bottom");
+    if (
+      left === undefined &&
+      right === undefined &&
+      top === undefined &&
+      bottom === undefined
+    ) {
       return undefined;
     }
     const result: ContentCellBorders = {};
@@ -166,31 +206,44 @@ function readBorders(styleSheet: XmlElement): readonly (ContentCellBorders | und
 
 // horizontal="general" is xlsx's own "use the value-kind default" (numeric right, text left) -- the IDENTICAL semantics to ContentSheetCell.alignment being absent -- so it is left unread rather than mapped to a literal Alignment member that would override the default it is meant to request. start/end/distributed/fill have no Alignment member (the schema is left/center/right/justify), so they are left unread too, matching odf.js's readCellStyleDecoration policy of not guessing a value the schema has no member for. Only the four direct members survive.
 function readHorizontalAlignment(alignment: XmlElement): Alignment | undefined {
-  const value = attr(alignment, 'horizontal');
-  if (value === 'left' || value === 'center' || value === 'right' || value === 'justify') {
+  const value = attr(alignment, "horizontal");
+  if (
+    value === "left" ||
+    value === "center" ||
+    value === "right" ||
+    value === "justify"
+  ) {
     return value;
   }
   return undefined;
 }
 
 // vertical="center" maps to ContentSheetCell's own 'middle' member (the schema uses middle, not center). "bottom" is the documented default and is left unread (absent means 'bottom'); "top" survives; "justify"/"distributed"/"centerContinuous" have no member and are left unread.
-function readVerticalAlignment(alignment: XmlElement): 'top' | 'middle' | 'bottom' | undefined {
-  const value = attr(alignment, 'vertical');
-  if (value === 'top') {
-    return 'top';
+function readVerticalAlignment(
+  alignment: XmlElement,
+): "top" | "middle" | "bottom" | undefined {
+  const value = attr(alignment, "vertical");
+  if (value === "top") {
+    return "top";
   }
-  if (value === 'center') {
-    return 'middle';
+  if (value === "center") {
+    return "middle";
   }
   return undefined;
 }
 
-function readAlignment(xf: XmlElement): { alignment?: Alignment; verticalAlignment?: 'top' | 'middle' | 'bottom' } {
-  const alignment = childrenWithTag(xf, 'alignment')[0];
+function readAlignment(xf: XmlElement): {
+  alignment?: Alignment;
+  verticalAlignment?: "top" | "middle" | "bottom";
+} {
+  const alignment = childrenWithTag(xf, "alignment")[0];
   if (alignment === undefined) {
     return {};
   }
-  return { alignment: readHorizontalAlignment(alignment), verticalAlignment: readVerticalAlignment(alignment) };
+  return {
+    alignment: readHorizontalAlignment(alignment),
+    verticalAlignment: readVerticalAlignment(alignment),
+  };
 }
 
 // One entry per <cellXfs><xf>, in document order, so the array index IS the value of a cell's own s attribute. numberFormatCode is read directly off the cellXf's numFmtId (not chased through xfId into <cellStyleXfs>: real producers write the resolved numFmtId onto the cellXf itself -- see the note on readCellFormatCodes below -- and the same holds for fillId/borderId/alignment, which this reader also reads off the cellXf directly). fillId/borderId resolve through the <fills>/<borders> tables; alignment is the inline <alignment> child. A cell whose xf carries applyAlignment="0" still reads its inline alignment here, matching the numFmtId policy and real producer output.
@@ -199,16 +252,19 @@ export function readCellStyles(pkg: Package): readonly CellStyleEntry[] {
   if (styleSheet === undefined) {
     return [];
   }
-  const cellXfsEl = childrenWithTag(styleSheet, 'cellXfs')[0];
+  const cellXfsEl = childrenWithTag(styleSheet, "cellXfs")[0];
   if (cellXfsEl === undefined) {
     return [];
   }
   const codes = readNumberFormatCodesById(styleSheet);
   const fills = readFills(styleSheet);
   const borders = readBorders(styleSheet);
-  return childrenWithTag(cellXfsEl, 'xf').map((xf) => {
-    const numFmtRaw = attr(xf, 'numFmtId');
-    const numFmtId = numFmtRaw === undefined ? GENERAL_NUM_FMT_ID : Number.parseInt(numFmtRaw, 10);
+  return childrenWithTag(cellXfsEl, "xf").map((xf) => {
+    const numFmtRaw = attr(xf, "numFmtId");
+    const numFmtId =
+      numFmtRaw === undefined
+        ? GENERAL_NUM_FMT_ID
+        : Number.parseInt(numFmtRaw, 10);
     const entry: CellStyleEntry = {};
     if (Number.isInteger(numFmtId)) {
       const code = codes.get(numFmtId);
@@ -216,11 +272,11 @@ export function readCellStyles(pkg: Package): readonly CellStyleEntry[] {
         entry.numberFormatCode = code;
       }
     }
-    const fillId = parseChildIndex(attr(xf, 'fillId'));
+    const fillId = parseChildIndex(attr(xf, "fillId"));
     if (fillId !== undefined) {
       entry.background = fills[fillId];
     }
-    const borderId = parseChildIndex(attr(xf, 'borderId'));
+    const borderId = parseChildIndex(attr(xf, "borderId"));
     if (borderId !== undefined) {
       entry.borders = borders[borderId];
     }
@@ -245,7 +301,9 @@ function parseChildIndex(value: string | undefined): number | undefined {
 }
 
 // The number-format-code-only projection of readCellStyles, kept for callers (and tests) that consumed the original per-cellXfs numFmt-code array. Each entry's numberFormatCode is the code string that cell's value is displayed through; everything else a styleSheet carries -- fonts, fills, borders, alignment, protection -- was outside this function's original return shape, and widening it now would break those callers, so readCellStyles is the richer entry point and this is its numFmt-only view.
-export function readCellFormatCodes(pkg: Package): readonly (string | undefined)[] {
+export function readCellFormatCodes(
+  pkg: Package,
+): readonly (string | undefined)[] {
   return readCellStyles(pkg).map((entry) => entry.numberFormatCode);
 }
 
@@ -274,7 +332,9 @@ const FIRST_REAL_BORDER_INDEX = 1;
 
 // A built-in id and a custom code can never collide as keys, since one signature space is numeric ids and the other is format-code text.
 function signatureOfNumberFormat(format: CellNumberFormat): string {
-  return format.kind === 'builtin' ? `builtin:${format.id}` : `custom:${format.code}`;
+  return format.kind === "builtin"
+    ? `builtin:${format.id}`
+    : `custom:${format.code}`;
 }
 
 // The four decoration fields a cell format can carry alongside its number format, mirroring CellStyleEntry's own shape. Each is optional and independently interned; a cell carrying none of them passes an empty object and shares the default xf with every other undecorated cell.
@@ -282,23 +342,23 @@ export interface CellFormatDecoration {
   background?: Color;
   borders?: ContentCellBorders;
   alignment?: Alignment;
-  verticalAlignment?: 'top' | 'middle' | 'bottom';
+  verticalAlignment?: "top" | "middle" | "bottom";
 }
 
 const EMPTY_DECORATION: CellFormatDecoration = {};
 
 // A deterministic signature for a decoration, so two cells carrying identical decoration share one xf entry. widthPt is encoded with enough precision to round-trip the named-weight widths above (0.5/0.75/1.5/2.25) without floating-point drift producing spurious distinct entries.
 function signatureOfDecoration(decoration: CellFormatDecoration): string {
-  let sig = '';
+  let sig = "";
   if (decoration.background !== undefined) {
     sig += `|bg:${colorToRgbHex(decoration.background)}`;
   }
   const borders = decoration.borders;
   if (borders !== undefined) {
-    for (const edge of ['left', 'right', 'top', 'bottom'] as const) {
+    for (const edge of ["left", "right", "top", "bottom"] as const) {
       const border = borders[edge];
       if (border !== undefined) {
-        sig += `|${edge}:${border.style ?? 'solid'}:${colorToRgbHex(border.color)}:${border.widthPt.toFixed(4)}`;
+        sig += `|${edge}:${border.style ?? "solid"}:${colorToRgbHex(border.color)}:${border.widthPt.toFixed(4)}`;
       }
     }
   }
@@ -314,36 +374,43 @@ function signatureOfDecoration(decoration: CellFormatDecoration): string {
 function borderToXlsxStyle(border: ContentBorder): string {
   // The inverse of XLSX_BORDER_STYLE above: pick the xlsx style token that carries this border's pattern at the closest named weight. 'double'/'dotted'/'dashed' patterns always have a direct token; a solid border is bucketed back to hair/thin/medium/thick from its widthPt via the same midpoint boundaries the reader derives weights from.
   switch (border.style) {
-    case 'double':
-      return 'double';
-    case 'dotted':
-      return 'dotted';
-    case 'dashed':
-      return border.widthPt >= BORDER_WEIGHT_UPPER_PT.thin ? 'mediumDashed' : 'dashed';
-    case 'solid':
+    case "double":
+      return "double";
+    case "dotted":
+      return "dotted";
+    case "dashed":
+      return border.widthPt >= BORDER_WEIGHT_UPPER_PT.thin
+        ? "mediumDashed"
+        : "dashed";
+    case "solid":
     case undefined:
       if (border.widthPt < BORDER_WEIGHT_UPPER_PT.hair) {
-        return 'hair';
+        return "hair";
       }
       if (border.widthPt < BORDER_WEIGHT_UPPER_PT.thin) {
-        return 'thin';
+        return "thin";
       }
       if (border.widthPt < BORDER_WEIGHT_UPPER_PT.medium) {
-        return 'medium';
+        return "medium";
       }
-      return 'thick';
+      return "thick";
   }
 }
 
 // One declared <fill> as the writer must emit it: the two reserved entries (none/gray125) carry no colour, and a real solid fill carries its colour plus the indexed="64" bgColor that is Excel's own convention for "no separate background" on a solid pattern.
 export interface DeclaredFill {
-  patternType: 'none' | 'gray125' | 'solid';
+  patternType: "none" | "gray125" | "solid";
   rgb?: string;
 }
 
 // One declared <border> as the writer must emit it: each present edge carries its xlsx style token and colour; absent edges emit an empty <edge/> element, matching the empty-border reserved entry's shape (every edge is always present as an element, just empty when there is no border).
 export interface DeclaredBorder {
-  edges: { left?: { style: string; rgb: string }; right?: { style: string; rgb: string }; top?: { style: string; rgb: string }; bottom?: { style: string; rgb: string } };
+  edges: {
+    left?: { style: string; rgb: string };
+    right?: { style: string; rgb: string };
+    top?: { style: string; rgb: string };
+    bottom?: { style: string; rgb: string };
+  };
 }
 
 // One resolved <cellXfs><xf> record: the numFmtId, fillId, borderId, and inline alignment the writer emits for that index, plus whether applyAlignment should be set. fontId/xfId are fixed (this writer interns no fonts and bases every cellXf on cellStyleXfs entry 0); numFmtId/fillId/borderId come straight from the three interning tables this class also drives.
@@ -351,39 +418,69 @@ export interface CellFormatRecord {
   numFmtId: number;
   fillId: number;
   borderId: number;
-  alignment?: { horizontal?: Alignment; vertical?: 'top' | 'middle' | 'bottom' };
+  alignment?: {
+    horizontal?: Alignment;
+    vertical?: "top" | "middle" | "bottom";
+  };
 }
 
 // The write-side counterpart to readCellStyles above, and a direct mirror of shared-strings.ts's own SharedStringTable: typed/xlsx/build.ts fills it on demand while it walks cells, and it hands back a stable index each time -- the value of that cell's own `s` attribute, an index into <cellXfs>. What is deduplicated is the cell FORMAT as a whole: two cells wanting the same number format AND the same decoration share one xf entry, and two cells wanting the same custom CODE share one <numFmt> declaration too, exactly as a real producer's own output does. Fonts are single-entry throughout (one <font> in <fonts>), so a font never contributes to the interning key -- only number format and decoration distinguish one xf from another in what this writer produces.
 export class CellFormatTable {
   private readonly indexBySignature = new Map<string, number>([
-    [signatureOfNumberFormat({ kind: 'builtin', id: GENERAL_NUM_FMT_ID }) + signatureOfDecoration(EMPTY_DECORATION), DEFAULT_CELL_FORMAT_INDEX],
+    [
+      signatureOfNumberFormat({ kind: "builtin", id: GENERAL_NUM_FMT_ID }) +
+        signatureOfDecoration(EMPTY_DECORATION),
+      DEFAULT_CELL_FORMAT_INDEX,
+    ],
   ]);
   private readonly records: CellFormatRecord[] = [
-    { numFmtId: GENERAL_NUM_FMT_ID, fillId: NONE_FILL_INDEX, borderId: EMPTY_BORDER_INDEX },
+    {
+      numFmtId: GENERAL_NUM_FMT_ID,
+      fillId: NONE_FILL_INDEX,
+      borderId: EMPTY_BORDER_INDEX,
+    },
   ];
   private readonly declared: DeclaredNumberFormat[] = [];
   private readonly fillIndexByRgb = new Map<string, number>();
   private readonly fills: DeclaredFill[] = [
-    { patternType: 'none' },
-    { patternType: 'gray125' },
+    { patternType: "none" },
+    { patternType: "gray125" },
   ];
   private readonly borderIndexBySignature = new Map<string, number>();
   private readonly borders: DeclaredBorder[] = [{ edges: {} }];
 
   // Returns the (possibly newly assigned) cellXfs index that displays a value through `format` with `decoration` applied. A call with no decoration (the default) behaves exactly as this method did before decoration existed -- the default xf at index 0 for General, and one xf per distinct number format beyond that -- so existing callers and tests are unaffected.
-  intern(format: CellNumberFormat, decoration: CellFormatDecoration = EMPTY_DECORATION): number {
-    const signature = signatureOfNumberFormat(format) + signatureOfDecoration(decoration);
+  intern(
+    format: CellNumberFormat,
+    decoration: CellFormatDecoration = EMPTY_DECORATION,
+  ): number {
+    const signature =
+      signatureOfNumberFormat(format) + signatureOfDecoration(decoration);
     const existing = this.indexBySignature.get(signature);
     if (existing !== undefined) {
       return existing;
     }
-    const numFmtId = format.kind === 'builtin' ? format.id : this.declareNumberFormat(format.code);
-    const fillId = decoration.background === undefined ? NONE_FILL_INDEX : this.internFill(decoration.background);
-    const borderId = decoration.borders === undefined ? EMPTY_BORDER_INDEX : this.internBorder(decoration.borders);
+    const numFmtId =
+      format.kind === "builtin"
+        ? format.id
+        : this.declareNumberFormat(format.code);
+    const fillId =
+      decoration.background === undefined
+        ? NONE_FILL_INDEX
+        : this.internFill(decoration.background);
+    const borderId =
+      decoration.borders === undefined
+        ? EMPTY_BORDER_INDEX
+        : this.internBorder(decoration.borders);
     const record: CellFormatRecord = { numFmtId, fillId, borderId };
-    if (decoration.alignment !== undefined || decoration.verticalAlignment !== undefined) {
-      record.alignment = { horizontal: decoration.alignment, vertical: decoration.verticalAlignment };
+    if (
+      decoration.alignment !== undefined ||
+      decoration.verticalAlignment !== undefined
+    ) {
+      record.alignment = {
+        horizontal: decoration.alignment,
+        vertical: decoration.verticalAlignment,
+      };
     }
     const index = this.records.length;
     this.records.push(record);
@@ -429,15 +526,15 @@ export class CellFormatTable {
       return existing;
     }
     const index = this.fills.length;
-    this.fills.push({ patternType: 'solid', rgb });
+    this.fills.push({ patternType: "solid", rgb });
     this.fillIndexByRgb.set(rgb, index);
     return index;
   }
 
   private internBorder(borders: ContentCellBorders): number {
-    const edges: DeclaredBorder['edges'] = {};
-    let signature = '';
-    for (const edge of ['left', 'right', 'top', 'bottom'] as const) {
+    const edges: DeclaredBorder["edges"] = {};
+    let signature = "";
+    for (const edge of ["left", "right", "top", "bottom"] as const) {
       const border = borders[edge];
       if (border !== undefined) {
         const style = borderToXlsxStyle(border);
@@ -458,5 +555,12 @@ export class CellFormatTable {
 }
 
 // Exposed for build.ts so the writer emits the same reserved indices this table seeds: the none/gray125 fills precede any real solid fill, and the empty border precedes any real border. Each is the array index a cellFormatRecord's fillId/borderId refers to.
-export const RESERVED_FILL_INDICES = { none: NONE_FILL_INDEX, gray125: GRAY125_FILL_INDEX, firstReal: FIRST_REAL_FILL_INDEX } as const;
-export const RESERVED_BORDER_INDICES = { empty: EMPTY_BORDER_INDEX, firstReal: FIRST_REAL_BORDER_INDEX } as const;
+export const RESERVED_FILL_INDICES = {
+  none: NONE_FILL_INDEX,
+  gray125: GRAY125_FILL_INDEX,
+  firstReal: FIRST_REAL_FILL_INDEX,
+} as const;
+export const RESERVED_BORDER_INDICES = {
+  empty: EMPTY_BORDER_INDEX,
+  firstReal: FIRST_REAL_BORDER_INDEX,
+} as const;

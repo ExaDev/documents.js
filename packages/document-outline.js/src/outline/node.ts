@@ -1,5 +1,5 @@
-import { z } from 'zod';
-import { isTreeLeaf, type TreeLeaf } from 'document-schema.js';
+import { z } from "zod";
+import { isTreeLeaf, type TreeLeaf } from "document-schema.js";
 
 // Every payload that can sit at an outline leaf position, across all five document kinds. Since document-schema.js 4.0.0 this is exactly that package's own TreeLeaf union (ExaDev/document-schema.js#20 promoted DocumentTree to the tree form and moved the node vocabulary into the schema) -- aliased here rather than re-declared, because two hand copies of one union would drift the first time a payload type changed. The outline projects over these payloads for its TOC view while consumers walk them as structure.
 export type OutlineLeaf = TreeLeaf;
@@ -26,10 +26,16 @@ export function isOutlineChild(value: unknown): value is OutlineChild {
 
 // Recursive structural guard, hand-written for the same reason document-schema.js hand-writes isContentBlock: z.lazy() collapses the static type of a recursive schema to `unknown` under the pinned zod 4, so OutlineNodeSchema is a z.custom over this guard instead. Discrimination rule: a record with a string `text`, a number `level`, and an array `children` (every element itself a valid child) is a group; anything else must validate as a leaf. No leaf schema has a top-level `text`, `level`, or `children` field, so the two classes cannot be confused in either direction.
 export function isOutlineNode(value: unknown): value is OutlineNode {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  if (!('text' in value) || typeof value.text !== 'string') return false;
-  if (!('level' in value) || typeof value.level !== 'number' || !Number.isFinite(value.level)) return false;
-  if (!('children' in value) || !Array.isArray(value.children)) return false;
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return false;
+  if (!("text" in value) || typeof value.text !== "string") return false;
+  if (
+    !("level" in value) ||
+    typeof value.level !== "number" ||
+    !Number.isFinite(value.level)
+  )
+    return false;
+  if (!("children" in value) || !Array.isArray(value.children)) return false;
   return value.children.every(isOutlineChild);
 }
 

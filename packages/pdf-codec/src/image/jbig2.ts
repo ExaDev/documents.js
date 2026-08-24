@@ -1,12 +1,31 @@
-import { decodeCcittFax } from './ccitt';
-import { MqDecoder, createArithContexts } from './jbig2-arith';
-import type { Jbig2Bitmap, Jbig2CombinationOperator } from './jbig2-bitmap';
-import { combineBitmap, combinationOperatorFromCode, createBitmap, getPixel, packBitmapRows, unpackBitmapRows } from './jbig2-bitmap';
-import type { Jbig2AtPixel } from './jbig2-generic';
-import { Jbig2ParseError, Jbig2UnsupportedError } from './jbig2-errors';
-import { GENERIC_CONTEXT_BITS, NOMINAL_REFINEMENT_AT, REFINEMENT_CONTEXT_BITS, decodeGenericRegion, decodeRefinementRegion } from './jbig2-generic';
-import type { TextRegionParams } from './jbig2-text';
-import { createTextArithContexts, decodeSymbolDictionary, decodeTextRegion, referenceCornerFromCode, symbolCodeLength } from './jbig2-text';
+import { decodeCcittFax } from "./ccitt";
+import { MqDecoder, createArithContexts } from "./jbig2-arith";
+import type { Jbig2Bitmap, Jbig2CombinationOperator } from "./jbig2-bitmap";
+import {
+  combineBitmap,
+  combinationOperatorFromCode,
+  createBitmap,
+  getPixel,
+  packBitmapRows,
+  unpackBitmapRows,
+} from "./jbig2-bitmap";
+import type { Jbig2AtPixel } from "./jbig2-generic";
+import { Jbig2ParseError, Jbig2UnsupportedError } from "./jbig2-errors";
+import {
+  GENERIC_CONTEXT_BITS,
+  NOMINAL_REFINEMENT_AT,
+  REFINEMENT_CONTEXT_BITS,
+  decodeGenericRegion,
+  decodeRefinementRegion,
+} from "./jbig2-generic";
+import type { TextRegionParams } from "./jbig2-text";
+import {
+  createTextArithContexts,
+  decodeSymbolDictionary,
+  decodeTextRegion,
+  referenceCornerFromCode,
+  symbolCodeLength,
+} from "./jbig2-text";
 
 // A hand-written JBIG2 decoder (ITU-T T.88), reading the "embedded stream" organisation a PDF /JBIG2Decode filter carries: a bare sequence of segments for one page, with no file header and no page-count preamble. This module owns the segment framing of T.88 clause 7 and the page composition of 6.2.2; the decoding procedures themselves live in jbig2-arith.ts (the MQ coder and the integer/symbol-ID procedures of Annexes A and E), jbig2-generic.ts (generic and refinement regions, 6.2 and 6.3), and jbig2-text.ts (symbol dictionaries and text regions, 6.5 and 6.4).
 //
@@ -69,7 +88,9 @@ class ByteCursor {
   uint8(): number {
     const value = this.data[this.position];
     if (value === undefined) {
-      throw new Jbig2ParseError('JBIG2 stream ended in the middle of a segment header');
+      throw new Jbig2ParseError(
+        "JBIG2 stream ended in the middle of a segment header",
+      );
     }
     this.position++;
     return value;
@@ -80,7 +101,13 @@ class ByteCursor {
   }
 
   uint32(): number {
-    return ((this.uint8() << 24) | (this.uint8() << 16) | (this.uint8() << 8) | this.uint8()) >>> 0;
+    return (
+      ((this.uint8() << 24) |
+        (this.uint8() << 16) |
+        (this.uint8() << 8) |
+        this.uint8()) >>>
+      0
+    );
   }
 
   int8(): number {
@@ -89,7 +116,10 @@ class ByteCursor {
   }
 }
 
-function readSegmentHeader(cursor: ByteCursor, dataLength: number): SegmentHeader {
+function readSegmentHeader(
+  cursor: ByteCursor,
+  dataLength: number,
+): SegmentHeader {
   const number = cursor.uint32();
   const flags = cursor.uint8();
   const type = flags & 0x3f;
@@ -108,18 +138,30 @@ function readSegmentHeader(cursor: ByteCursor, dataLength: number): SegmentHeade
   const referredSize = number <= 256 ? 1 : number <= 65536 ? 2 : 4;
   const referredTo: number[] = [];
   for (let i = 0; i < referredCount; i++) {
-    referredTo.push(referredSize === 1 ? cursor.uint8() : referredSize === 2 ? cursor.uint16() : cursor.uint32());
+    referredTo.push(
+      referredSize === 1
+        ? cursor.uint8()
+        : referredSize === 2
+          ? cursor.uint16()
+          : cursor.uint32(),
+    );
   }
 
-  const pageAssociation = pageAssociationIsLong ? cursor.uint32() : cursor.uint8();
+  const pageAssociation = pageAssociationIsLong
+    ? cursor.uint32()
+    : cursor.uint8();
   const declaredLength = cursor.uint32();
   if (declaredLength === UNKNOWN_DATA_LENGTH) {
-    throw new Jbig2UnsupportedError('JBIG2 segment declares an unknown data length (T.88 7.2.7), which this decoder does not scan for a terminator');
+    throw new Jbig2UnsupportedError(
+      "JBIG2 segment declares an unknown data length (T.88 7.2.7), which this decoder does not scan for a terminator",
+    );
   }
   const dataStart = cursor.position;
   const dataEnd = dataStart + declaredLength;
   if (dataEnd > dataLength) {
-    throw new Jbig2ParseError(`JBIG2 segment ${String(number)} declares ${String(declaredLength)} bytes of data but only ${String(dataLength - dataStart)} remain`);
+    throw new Jbig2ParseError(
+      `JBIG2 segment ${String(number)} declares ${String(declaredLength)} bytes of data but only ${String(dataLength - dataStart)} remain`,
+    );
   }
   return { number, type, referredTo, pageAssociation, dataStart, dataEnd };
 }
@@ -141,7 +183,9 @@ function readRegionInfo(cursor: ByteCursor): RegionInfo {
   const flags = cursor.uint8();
   const combinationOperator = combinationOperatorFromCode(flags & 0x07);
   if (combinationOperator === undefined) {
-    throw new Jbig2ParseError(`JBIG2 region declares external combination operator ${String(flags & 0x07)}, outside the 0-4 range T.88 Table 12 defines`);
+    throw new Jbig2ParseError(
+      `JBIG2 region declares external combination operator ${String(flags & 0x07)}, outside the 0-4 range T.88 Table 12 defines`,
+    );
   }
   return { width, height, x, y, combinationOperator };
 }
@@ -195,14 +239,20 @@ class Jbig2Decoder {
     }
   }
 
-  private handleSegment(header: SegmentHeader, data: Uint8Array<ArrayBuffer>): void {
+  private handleSegment(
+    header: SegmentHeader,
+    data: Uint8Array<ArrayBuffer>,
+  ): void {
     const cursor = new ByteCursor(data, header.dataStart);
     switch (header.type) {
       case SEGMENT_PAGE_INFORMATION:
         this.readPageInformation(cursor);
         return;
       case SEGMENT_SYMBOL_DICTIONARY:
-        this.exportedSymbols.set(header.number, this.readSymbolDictionary(header, cursor));
+        this.exportedSymbols.set(
+          header.number,
+          this.readSymbolDictionary(header, cursor),
+        );
         return;
       case SEGMENT_IMMEDIATE_GENERIC_REGION:
       case SEGMENT_IMMEDIATE_LOSSLESS_GENERIC_REGION:
@@ -226,15 +276,23 @@ class Jbig2Decoder {
       case SEGMENT_INTERMEDIATE_TEXT_REGION:
       case SEGMENT_INTERMEDIATE_REFINEMENT_REGION:
       case SEGMENT_INTERMEDIATE_HALFTONE_REGION:
-        throw new Jbig2UnsupportedError(`JBIG2 segment ${String(header.number)} is an intermediate region (type ${String(header.type)}), which is retained in an auxiliary buffer rather than composed onto the page; auxiliary buffers are not implemented`);
+        throw new Jbig2UnsupportedError(
+          `JBIG2 segment ${String(header.number)} is an intermediate region (type ${String(header.type)}), which is retained in an auxiliary buffer rather than composed onto the page; auxiliary buffers are not implemented`,
+        );
       case SEGMENT_PATTERN_DICTIONARY:
       case SEGMENT_IMMEDIATE_HALFTONE_REGION:
       case SEGMENT_IMMEDIATE_LOSSLESS_HALFTONE_REGION:
-        throw new Jbig2UnsupportedError(`JBIG2 segment ${String(header.number)} is a halftone region or pattern dictionary (type ${String(header.type)}), which is not implemented`);
+        throw new Jbig2UnsupportedError(
+          `JBIG2 segment ${String(header.number)} is a halftone region or pattern dictionary (type ${String(header.type)}), which is not implemented`,
+        );
       case SEGMENT_TABLES:
-        throw new Jbig2UnsupportedError(`JBIG2 segment ${String(header.number)} is a custom Huffman table, which only the Huffman-coded region forms use; those are not implemented`);
+        throw new Jbig2UnsupportedError(
+          `JBIG2 segment ${String(header.number)} is a custom Huffman table, which only the Huffman-coded region forms use; those are not implemented`,
+        );
       default:
-        throw new Jbig2UnsupportedError(`JBIG2 segment ${String(header.number)} has unrecognised type ${String(header.type)}`);
+        throw new Jbig2UnsupportedError(
+          `JBIG2 segment ${String(header.number)} has unrecognised type ${String(header.type)}`,
+        );
     }
   }
 
@@ -248,15 +306,24 @@ class Jbig2Decoder {
     cursor.uint16(); // Striping information: the maximum stripe size, which only matters when composing a page from end-of-stripe segments.
 
     const width = this.options.width ?? declaredWidth;
-    const declaredOrHintedHeight = declaredHeight === UNKNOWN_PAGE_HEIGHT ? this.options.height : (this.options.height ?? declaredHeight);
+    const declaredOrHintedHeight =
+      declaredHeight === UNKNOWN_PAGE_HEIGHT
+        ? this.options.height
+        : (this.options.height ?? declaredHeight);
     if (declaredOrHintedHeight === undefined) {
-      throw new Jbig2UnsupportedError('JBIG2 page information declares an unknown height and the caller supplied none; a striped page with no known height is not resolvable from the page segments alone');
+      throw new Jbig2UnsupportedError(
+        "JBIG2 page information declares an unknown height and the caller supplied none; a striped page with no known height is not resolvable from the page segments alone",
+      );
     }
 
     const defaultPixel = (flags >> 2) & 1;
-    const defaultCombinationOperator = combinationOperatorFromCode((flags >> 3) & 0x03);
+    const defaultCombinationOperator = combinationOperatorFromCode(
+      (flags >> 3) & 0x03,
+    );
     if (defaultCombinationOperator === undefined) {
-      throw new Jbig2ParseError('JBIG2 page information declares an unrecognised default combination operator');
+      throw new Jbig2ParseError(
+        "JBIG2 page information declares an unrecognised default combination operator",
+      );
     }
     this.page = {
       bitmap: createBitmap(width, declaredOrHintedHeight, defaultPixel),
@@ -267,14 +334,24 @@ class Jbig2Decoder {
 
   private requirePage(): PageState {
     if (this.page === undefined) {
-      throw new Jbig2ParseError('JBIG2 stream composed a region before any page information segment declared the page');
+      throw new Jbig2ParseError(
+        "JBIG2 stream composed a region before any page information segment declared the page",
+      );
     }
     return this.page;
   }
 
   private compose(region: RegionInfo, bitmap: Jbig2Bitmap): void {
     const page = this.requirePage();
-    combineBitmap(page.bitmap, bitmap, region.x, region.y, page.combinationOperatorOverridden ? region.combinationOperator : page.defaultCombinationOperator);
+    combineBitmap(
+      page.bitmap,
+      bitmap,
+      region.x,
+      region.y,
+      page.combinationOperatorOverridden
+        ? region.combinationOperator
+        : page.defaultCombinationOperator,
+    );
   }
 
   // T.88 7.4.6: an immediate generic region segment.
@@ -285,21 +362,43 @@ class Jbig2Decoder {
     const template = (flags >> 1) & 0x03;
     const tpgdon = (flags & 0x08) !== 0;
     if ((flags & 0x10) !== 0) {
-      throw new Jbig2UnsupportedError('JBIG2 generic region sets EXTTEMPLATE, the twelve-adaptive-pixel template of T.88 Amendment 2, which is not implemented');
+      throw new Jbig2UnsupportedError(
+        "JBIG2 generic region sets EXTTEMPLATE, the twelve-adaptive-pixel template of T.88 Amendment 2, which is not implemented",
+      );
     }
     const at = mmr ? [] : readAtPixels(cursor, template === 0 ? 4 : 1);
     const payload = cursor.position;
 
     if (mmr) {
       // T.88 6.2.6: an MMR-coded generic region is exactly a T.6 (Group 4) bitstream, which src/image/ccitt.ts already decodes -- with black in the 1 bits, matching JBIG2's own polarity.
-      const fax = decodeCcittFax(cursor.data.subarray(payload, dataEnd), { k: -1, columns: region.width, rows: region.height, blackIs1: true, onWarning: (message) => { this.warn(message); } });
-      this.compose(region, unpackBitmapRows(fax.bytes, region.width, region.height));
+      const fax = decodeCcittFax(cursor.data.subarray(payload, dataEnd), {
+        k: -1,
+        columns: region.width,
+        rows: region.height,
+        blackIs1: true,
+        onWarning: (message) => {
+          this.warn(message);
+        },
+      });
+      this.compose(
+        region,
+        unpackBitmapRows(fax.bytes, region.width, region.height),
+      );
       return;
     }
 
     const mq = new MqDecoder(cursor.data, payload, dataEnd);
     const contexts = createArithContexts(GENERIC_CONTEXT_BITS[template] ?? 16);
-    this.compose(region, decodeGenericRegion(region.width, region.height, { template, tpgdon, at }, mq, contexts));
+    this.compose(
+      region,
+      decodeGenericRegion(
+        region.width,
+        region.height,
+        { template, tpgdon, at },
+        mq,
+        contexts,
+      ),
+    );
   }
 
   // T.88 7.4.7: an immediate refinement region segment, refining whatever the page already holds at that location.
@@ -308,46 +407,93 @@ class Jbig2Decoder {
     const flags = cursor.uint8();
     const template = flags & 0x01;
     const tpgron = (flags & 0x02) !== 0;
-    const at = template === 0 ? readAtPixels(cursor, 2) : [...NOMINAL_REFINEMENT_AT];
+    const at =
+      template === 0 ? readAtPixels(cursor, 2) : [...NOMINAL_REFINEMENT_AT];
     const page = this.requirePage();
 
     // With no intermediate buffers in play, T.88 7.4.7.2 makes the reference the page region the refinement covers.
     const reference = createBitmap(region.width, region.height);
     for (let y = 0; y < region.height; y++) {
       for (let x = 0; x < region.width; x++) {
-        reference.data[y * region.width + x] = getPixel(page.bitmap, region.x + x, region.y + y);
+        reference.data[y * region.width + x] = getPixel(
+          page.bitmap,
+          region.x + x,
+          region.y + y,
+        );
       }
     }
 
     const mq = new MqDecoder(cursor.data, cursor.position, dataEnd);
-    const contexts = createArithContexts(REFINEMENT_CONTEXT_BITS[template] ?? 13);
-    const refined = decodeRefinementRegion(region.width, region.height, { template, tpgron, at, reference, dx: 0, dy: 0 }, mq, contexts);
+    const contexts = createArithContexts(
+      REFINEMENT_CONTEXT_BITS[template] ?? 13,
+    );
+    const refined = decodeRefinementRegion(
+      region.width,
+      region.height,
+      { template, tpgron, at, reference, dx: 0, dy: 0 },
+      mq,
+      contexts,
+    );
     // Composed with the region's OWN declared operator rather than through compose() above, which would let the page's "combination operator may be overridden" flag substitute the page default. A refinement whose reference is the page it is being drawn back onto only makes sense under REPLACE -- under OR it could add black pixels but never correct one back to white, which is most of what refining a lossy region is for -- and T.88 7.4.7.6 requires REPLACE for exactly that case.
-    combineBitmap(page.bitmap, refined, region.x, region.y, region.combinationOperator);
+    combineBitmap(
+      page.bitmap,
+      refined,
+      region.x,
+      region.y,
+      region.combinationOperator,
+    );
   }
 
   // T.88 7.4.3: a symbol dictionary segment. Its exported symbols are what every text region segment referring to it draws from.
-  private readSymbolDictionary(header: SegmentHeader, cursor: ByteCursor): readonly Jbig2Bitmap[] {
+  private readSymbolDictionary(
+    header: SegmentHeader,
+    cursor: ByteCursor,
+  ): readonly Jbig2Bitmap[] {
     const flags = cursor.uint16();
     if ((flags & 0x01) !== 0) {
-      throw new Jbig2UnsupportedError('JBIG2 symbol dictionary is Huffman-coded (SDHUFF = 1); only the arithmetic form is implemented');
+      throw new Jbig2UnsupportedError(
+        "JBIG2 symbol dictionary is Huffman-coded (SDHUFF = 1); only the arithmetic form is implemented",
+      );
     }
     if ((flags & 0x0100) !== 0 || (flags & 0x0200) !== 0) {
-      throw new Jbig2UnsupportedError('JBIG2 symbol dictionary uses or retains a shared bitmap coding context (T.88 7.4.3.1.1 bits 8-9), which is not implemented');
+      throw new Jbig2UnsupportedError(
+        "JBIG2 symbol dictionary uses or retains a shared bitmap coding context (T.88 7.4.3.1.1 bits 8-9), which is not implemented",
+      );
     }
     const refinementAggregate = (flags & 0x02) !== 0;
     const template = (flags >> 10) & 0x03;
     const refinementTemplate = (flags >> 12) & 0x01;
     const at = readAtPixels(cursor, template === 0 ? 4 : 1);
-    const refinementAt = refinementAggregate && refinementTemplate === 0 ? readAtPixels(cursor, 2) : [...NOMINAL_REFINEMENT_AT];
+    const refinementAt =
+      refinementAggregate && refinementTemplate === 0
+        ? readAtPixels(cursor, 2)
+        : [...NOMINAL_REFINEMENT_AT];
     const exportedSymbolCount = cursor.uint32();
     const newSymbolCount = cursor.uint32();
 
     const inputSymbols = this.gatherSymbols(header.referredTo);
     const symbolIdBits = symbolCodeLength(inputSymbols.length + newSymbolCount);
     const mq = new MqDecoder(cursor.data, cursor.position, header.dataEnd);
-    const contexts = createTextArithContexts(template, refinementTemplate, symbolIdBits);
-    return decodeSymbolDictionary({ template, at, refinementAggregate, refinementTemplate, refinementAt, newSymbolCount, exportedSymbolCount, inputSymbols }, mq, contexts, symbolIdBits);
+    const contexts = createTextArithContexts(
+      template,
+      refinementTemplate,
+      symbolIdBits,
+    );
+    return decodeSymbolDictionary(
+      {
+        template,
+        at,
+        refinementAggregate,
+        refinementTemplate,
+        refinementAt,
+        newSymbolCount,
+        exportedSymbolCount,
+        inputSymbols,
+      },
+      mq,
+      contexts,
+      symbolIdBits,
+    );
   }
 
   // T.88 7.4.4: a text region segment.
@@ -355,33 +501,50 @@ class Jbig2Decoder {
     const region = readRegionInfo(cursor);
     const flags = cursor.uint16();
     if ((flags & 0x01) !== 0) {
-      throw new Jbig2UnsupportedError('JBIG2 text region is Huffman-coded (SBHUFF = 1); only the arithmetic form is implemented');
+      throw new Jbig2UnsupportedError(
+        "JBIG2 text region is Huffman-coded (SBHUFF = 1); only the arithmetic form is implemented",
+      );
     }
     const refine = (flags & 0x02) !== 0;
     const stripSize = 1 << ((flags >> 2) & 0x03);
     const referenceCorner = referenceCornerFromCode((flags >> 4) & 0x03);
     if (referenceCorner === undefined) {
-      throw new Jbig2ParseError('JBIG2 text region declares an unrecognised REFCORNER');
+      throw new Jbig2ParseError(
+        "JBIG2 text region declares an unrecognised REFCORNER",
+      );
     }
     const transposed = (flags & 0x40) !== 0;
-    const combinationOperator = combinationOperatorFromCode((flags >> 7) & 0x03);
+    const combinationOperator = combinationOperatorFromCode(
+      (flags >> 7) & 0x03,
+    );
     if (combinationOperator === undefined) {
-      throw new Jbig2ParseError('JBIG2 text region declares an unrecognised SBCOMBOP');
+      throw new Jbig2ParseError(
+        "JBIG2 text region declares an unrecognised SBCOMBOP",
+      );
     }
     const defaultPixel = (flags >> 9) & 0x01;
     // SBDSOFFSET is a signed five-bit field at bits 10-14 (T.88 7.4.4.1.1), sign-extended here by shifting it to the top of a 32-bit word and back.
     const dsOffset = ((flags << 17) >> 27) | 0;
     const refinementTemplate = (flags >> 15) & 0x01;
-    const refinementAt = refine && refinementTemplate === 0 ? readAtPixels(cursor, 2) : [...NOMINAL_REFINEMENT_AT];
+    const refinementAt =
+      refine && refinementTemplate === 0
+        ? readAtPixels(cursor, 2)
+        : [...NOMINAL_REFINEMENT_AT];
     const instanceCount = cursor.uint32();
 
     const symbols = this.gatherSymbols(header.referredTo);
     if (symbols.length === 0) {
-      throw new Jbig2ParseError('JBIG2 text region refers to no symbol dictionary, so it has no symbols to place');
+      throw new Jbig2ParseError(
+        "JBIG2 text region refers to no symbol dictionary, so it has no symbols to place",
+      );
     }
     const symbolIdBits = symbolCodeLength(symbols.length);
     const mq = new MqDecoder(cursor.data, cursor.position, header.dataEnd);
-    const contexts = createTextArithContexts(0, refinementTemplate, symbolIdBits);
+    const contexts = createTextArithContexts(
+      0,
+      refinementTemplate,
+      symbolIdBits,
+    );
     const params: TextRegionParams = {
       width: region.width,
       height: region.height,
@@ -419,7 +582,10 @@ class Jbig2Decoder {
   }
 }
 
-export function decodeJbig2Embedded(data: Uint8Array<ArrayBuffer>, options: Jbig2DecodeOptions = {}): Jbig2Image {
+export function decodeJbig2Embedded(
+  data: Uint8Array<ArrayBuffer>,
+  options: Jbig2DecodeOptions = {},
+): Jbig2Image {
   const decoder = new Jbig2Decoder(options);
   if (options.globals !== undefined) {
     decoder.run(options.globals);

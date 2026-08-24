@@ -1,7 +1,7 @@
-import { style } from '@vanilla-extract/css';
+import { style } from "@vanilla-extract/css";
 
 export const formulaContainer = style({
   padding: 24,
-  overflowX: 'auto',
-  fontSize: '1.25em',
+  overflowX: "auto",
+  fontSize: "1.25em",
 });

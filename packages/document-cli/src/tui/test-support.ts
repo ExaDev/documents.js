@@ -3,7 +3,11 @@
 const POLL_INTERVAL_MS = 10;
 const DEFAULT_TIMEOUT_MS = 2000;
 
-export async function waitForFrame(getFrame: () => string | undefined, predicate: (frame: string) => boolean, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<string> {
+export async function waitForFrame(
+  getFrame: () => string | undefined,
+  predicate: (frame: string) => boolean,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<string> {
   const start = Date.now();
   for (;;) {
     const frame = getFrame();
@@ -11,7 +15,9 @@ export async function waitForFrame(getFrame: () => string | undefined, predicate
       return frame;
     }
     if (Date.now() - start > timeoutMs) {
-      throw new Error(`Timed out after ${timeoutMs}ms waiting for a frame matching the predicate. Last frame:\n${frame ?? '(no frame rendered yet)'}`);
+      throw new Error(
+        `Timed out after ${timeoutMs}ms waiting for a frame matching the predicate. Last frame:\n${frame ?? "(no frame rendered yet)"}`,
+      );
     }
     await new Promise((resolve) => {
       setTimeout(resolve, POLL_INTERVAL_MS);

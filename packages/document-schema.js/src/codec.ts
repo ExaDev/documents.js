@@ -1,4 +1,4 @@
-import type { ContentDocument } from './content';
+import type { ContentDocument } from "./content";
 
 // This contract describes what an individual format's own codec naturally provides -- not what DocumentTree requires. A codec's read() never returns a DocumentTree directly; the package is the *assembled* tree produced by decomposing the flat ContentDocument a reader returns (src/package.ts's three laws). Nothing here constructs a DocumentTree; that composition happens one level up, in whatever code owns both a ContentCodec and a layout engine for the same format.
 

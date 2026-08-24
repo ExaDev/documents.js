@@ -1,14 +1,24 @@
-import { z } from 'zod';
-import { ColorSchema } from './color';
-import type { Color } from './color';
-import { ConstructDescriptorSchema } from './construct';
-import { BoxSchema, LayoutFrameSchema, MarginsSchema, PageSizeSchema } from './geometry';
-import type { Box, LayoutFrame } from './geometry';
-import { MathExpressionSchema, MathPresentationSchema, MathProvenanceSchema, SymbolTableSchema } from './math';
-import { MathMlNodeSchema } from './mathml';
-import { LayoutMetadataSchema } from './metadata';
-import { SourceResidueSchema, type SourceResidue } from './source';
-import { AlignmentSchema } from './style';
+import { z } from "zod";
+import { ColorSchema } from "./color";
+import type { Color } from "./color";
+import { ConstructDescriptorSchema } from "./construct";
+import {
+  BoxSchema,
+  LayoutFrameSchema,
+  MarginsSchema,
+  PageSizeSchema,
+} from "./geometry";
+import type { Box, LayoutFrame } from "./geometry";
+import {
+  MathExpressionSchema,
+  MathPresentationSchema,
+  MathProvenanceSchema,
+  SymbolTableSchema,
+} from "./math";
+import { MathMlNodeSchema } from "./mathml";
+import { LayoutMetadataSchema } from "./metadata";
+import { SourceResidueSchema, type SourceResidue } from "./source";
+import { AlignmentSchema } from "./style";
 
 // The shared block model underlying a wordprocessing document's sections and a presentation document's slides. Ported from ooxml.js's src/typed/shared/content.ts (itself ported from documents.js's src/model/content.ts) -- the canonical home now; ooxml.js and documents.js both import this instead of maintaining their own copy. The ContentDocument envelope below (kind + wordprocessing/presentation/spreadsheet/drawing/formula variants) is this package's own addition on top of that shared vocabulary, matching documents.js's existing model/content.ts shape, since a caller needs a single top-level value to carry through a conversion pipeline.
 
@@ -52,7 +62,7 @@ export const RunConstructExtentSchema = z.object({
 export type RunConstructExtent = z.infer<typeof RunConstructExtentSchema>;
 
 export const ContentParagraphSchema = z.object({
-  kind: z.literal('paragraph'),
+  kind: z.literal("paragraph"),
   runs: z.array(ContentRunSchema),
   constructs: z.array(RunConstructExtentSchema).optional(), // the run-scoped constructs this paragraph carries (RunConstructExtent above) -- absent when it carries none, which is the overwhelming common case. Scope split, stated once: a construct bracketing whole BLOCKS is the constructStart/constructEnd marker pair below, never this field; a construct covering a sub-sequence of this paragraph's runs is this field, never a marker pair. One occurrence, one scope, one encoding.
   styleId: z.string().optional(), // w:pStyle/@w:val, e.g. 'Heading1' -- round-trip-only: a producer's own style name, meaningful only to a consumer that already knows that producer's naming convention
@@ -80,8 +90,8 @@ export function clampHeadingLevel(level: number): number {
 }
 
 export const ContentImageBlockSchema = z.object({
-  kind: z.literal('image'),
-  format: z.enum(['png', 'jpeg']),
+  kind: z.literal("image"),
+  format: z.enum(["png", "jpeg"]),
   base64: z.string(),
   widthPt: z.number().positive(),
   heightPt: z.number().positive(),
@@ -93,7 +103,7 @@ export const ContentImageBlockSchema = z.object({
 export type ContentImageBlock = z.infer<typeof ContentImageBlockSchema>;
 
 export const ContentPageBreakSchema = z.object({
-  kind: z.literal('pageBreak'),
+  kind: z.literal("pageBreak"),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // where this page break actually landed, once a layout pass has fused one in -- see FusedNode above
@@ -114,14 +124,14 @@ export type ContentPageBreak = z.infer<typeof ContentPageBreakSchema>;
 //
 // WHY NO style, sourcePath, frames, OR source: a marker is a boundary, not content -- it renders nothing, occupies no space, and has no position -- so `frames` and `sourcePath`, which every real block leaf carries, would name facts a boundary does not have. A `style` ref would be worse: refs are a tree-only, table-compression concept (the flat form is always fully materialised, ExaDev/document-schema.js#21), and a construct group's own style ref never resolves onto the construct itself -- a construct group is a wrapper with no anchor of its own, so its ref only extends the chain passed to its children, which are ordinary blocks and paragraphs already carrying their own fully-resolved direct properties by the time they reach a marker. And the construct's own residue (src/source.ts) is not a marker field: it rides inside the descriptor the open marker embeds, the same `source` field that descriptor carries as a node in the tree -- so nothing sits on either marker beyond the descriptor the open marker names.
 export const ContentConstructStartSchema = z.object({
-  kind: z.literal('constructStart'),
+  kind: z.literal("constructStart"),
   descriptor: ConstructDescriptorSchema, // the construct this marker opens -- the identical payload a construct group carries as its `node`, so promoting a pair into a group moves this value across untouched
 });
 export type ContentConstructStart = z.infer<typeof ContentConstructStartSchema>;
 
 // The close half of the pair: its kind is its entire payload, for the reasons stated above. Which construct it closes is a fact about the sequence it sits in, never a fact stored on the marker.
 export const ContentConstructEndSchema = z.object({
-  kind: z.literal('constructEnd'),
+  kind: z.literal("constructEnd"),
 });
 export type ContentConstructEnd = z.infer<typeof ContentConstructEndSchema>;
 
@@ -144,7 +154,7 @@ export interface ContentTableRow {
 }
 
 export interface ContentTable {
-  kind: 'table';
+  kind: "table";
   rows: ContentTableRow[];
   columnWidthsPt: number[];
   sourcePath?: string; // deterministic, document-order-derived path assigned by the format reader
@@ -153,7 +163,13 @@ export interface ContentTable {
 }
 
 // ContentEmbeddedObject is mutually recursive with ContentDocument (an embedded object carries a whole ContentDocument, which can itself contain another embedded object -- e.g. a formula embedded inside a drawing embedded inside a spreadsheet) -- hand-written, mirroring ContentTable/ContentBlock's own recursive-guard-plus-z.custom pattern immediately below, since z.lazy() collapses to `unknown` for recursive children in this pinned Zod version. Every objectKind except 'chart' names an embedded whole sub-document of the identically-named ContentDocument kind, 'formula' included now that ContentDocument has a real 'formula' variant of its own (below) -- so an embedded equation carries genuine MathML rather than, as before, a wordprocessing document standing in for one. 'chart' is the deliberate exception (ExaDev/documents.js#719): a chart is not a document kind and may never gain a lossless ContentDocument variant, so it names a chart graphic frame's cached series/category model and its document holds whatever data projection the producing codec could express -- ooxml.js carries an xlsx or pptx chart part's cached table as a small spreadsheet ContentDocument (one sheet whose cells are that table, the honest document-granularity spelling of tabular data), while odf.js reads the chart's own local data cache onto a frame-sized drawing page -- with the chart's own serialised specifics riding the object's residue channel. That is the objectKind/document pairing being a convention rather than a constraint, doing real work: 'chart' says what the frame held (so a consumer can tell a chart from an embedded workbook), document.kind says how the payload is shaped, and neither lies about the other. A 'formula' object is expected to be short enough that a layout engine can reasonably lay it out and render it; the others are expected to round-trip through this model losslessly without ever being laid out or rendered. This package holds schemas only, so no rendering/layout logic lives here regardless of objectKind.
-export type ContentEmbeddedObjectKind = 'formula' | 'wordprocessing' | 'presentation' | 'spreadsheet' | 'drawing' | 'chart';
+export type ContentEmbeddedObjectKind =
+  | "formula"
+  | "wordprocessing"
+  | "presentation"
+  | "spreadsheet"
+  | "drawing"
+  | "chart";
 
 export interface ContentEmbeddedObject {
   objectKind: ContentEmbeddedObjectKind;
@@ -169,7 +185,7 @@ export interface ContentEmbeddedObject {
 
 // The block-level anchoring point for an embedded object inside a wordprocessing section's or a presentation/drawing shape's own block flow -- reuses ContentEmbeddedObject's fields directly (frame included) rather than nesting a separate `embeddedObject: ContentEmbeddedObject` field, since ContentEmbeddedObject already carries its own frame and duplicating it would just be two copies of the same position.
 export interface ContentEmbeddedObjectBlock extends ContentEmbeddedObject {
-  kind: 'embeddedObject';
+  kind: "embeddedObject";
   sourcePath?: string; // deterministic, document-order-derived path assigned by the format reader
   frames?: LayoutFrame[]; // this embedded object's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 }
@@ -185,15 +201,19 @@ export type ContentBlock =
   | ContentConstructEnd;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isContentRun(value: unknown): value is ContentRun {
-  return isRecord(value) && typeof value.text === 'string';
+  return isRecord(value) && typeof value.text === "string";
 }
 
 function isContentTableCell(value: unknown): value is ContentTableCell {
-  return isRecord(value) && Array.isArray(value.blocks) && value.blocks.every(isContentBlock);
+  return (
+    isRecord(value) &&
+    Array.isArray(value.blocks) &&
+    value.blocks.every(isContentBlock)
+  );
 }
 
 function isContentTableRow(value: unknown): value is ContentTableRow {
@@ -201,61 +221,84 @@ function isContentTableRow(value: unknown): value is ContentTableRow {
     isRecord(value) &&
     Array.isArray(value.cells) &&
     value.cells.every(isContentTableCell) &&
-    (value.heightPt === undefined || typeof value.heightPt === 'number')
+    (value.heightPt === undefined || typeof value.heightPt === "number")
   );
 }
 
-function isContentEmbeddedObjectKind(value: unknown): value is ContentEmbeddedObjectKind {
+function isContentEmbeddedObjectKind(
+  value: unknown,
+): value is ContentEmbeddedObjectKind {
   return (
-    value === 'formula' ||
-    value === 'wordprocessing' ||
-    value === 'presentation' ||
-    value === 'spreadsheet' ||
-    value === 'drawing' ||
-    value === 'chart'
+    value === "formula" ||
+    value === "wordprocessing" ||
+    value === "presentation" ||
+    value === "spreadsheet" ||
+    value === "drawing" ||
+    value === "chart"
   );
 }
 
 // Delegates document validation to ContentDocumentSchema itself (defined further down this file) instead of hand-rolling a second, parallel structural guard for every ContentDocument variant -- ContentDocumentSchema is a plain Zod discriminated union of ordinary object schemas, not a self-referential z.lazy schema, so one already-built schema value validating another already-built schema value at runtime carries none of the "collapses to unknown" risk that motivates the z.custom pattern in the first place; that risk is specific to Zod's own static type inference over a self-referential schema *definition*. ContentDocumentSchema is referenced here only inside this function's body (a closure), and by the time this function is ever called the whole module -- including ContentDocumentSchema's own const assignment later in this file -- has already finished evaluating.
-function isContentEmbeddedObject(value: unknown): value is ContentEmbeddedObject {
+function isContentEmbeddedObject(
+  value: unknown,
+): value is ContentEmbeddedObject {
   return (
     isRecord(value) &&
     isContentEmbeddedObjectKind(value.objectKind) &&
     BoxSchema.safeParse(value.frame).success &&
     ContentDocumentSchema.safeParse(value.document).success &&
     (value.anchorRow === undefined ||
-      (typeof value.anchorRow === 'number' && Number.isInteger(value.anchorRow) && value.anchorRow >= 0)) &&
+      (typeof value.anchorRow === "number" &&
+        Number.isInteger(value.anchorRow) &&
+        value.anchorRow >= 0)) &&
     (value.anchorColumn === undefined ||
-      (typeof value.anchorColumn === 'number' && Number.isInteger(value.anchorColumn) && value.anchorColumn >= 0)) &&
-    (value.offsetXPt === undefined || typeof value.offsetXPt === 'number') &&
-    (value.offsetYPt === undefined || typeof value.offsetYPt === 'number')
+      (typeof value.anchorColumn === "number" &&
+        Number.isInteger(value.anchorColumn) &&
+        value.anchorColumn >= 0)) &&
+    (value.offsetXPt === undefined || typeof value.offsetXPt === "number") &&
+    (value.offsetYPt === undefined || typeof value.offsetYPt === "number")
   );
 }
 
-function isContentEmbeddedObjectBlock(value: unknown): value is ContentEmbeddedObjectBlock {
-  return isRecord(value) && value.kind === 'embeddedObject' && isContentEmbeddedObject(value);
+function isContentEmbeddedObjectBlock(
+  value: unknown,
+): value is ContentEmbeddedObjectBlock {
+  return (
+    isRecord(value) &&
+    value.kind === "embeddedObject" &&
+    isContentEmbeddedObject(value)
+  );
 }
 
 // The two marker guards, exported for the consumers that have to recognise a boundary without parsing the whole block: the package tree's leaf predicates, which reject them (src/package-node.ts), and findConstructMarkerImbalance below, which walks a block list looking for exactly these two kinds.
-export function isContentConstructStart(value: unknown): value is ContentConstructStart {
+export function isContentConstructStart(
+  value: unknown,
+): value is ContentConstructStart {
   return (
-    isRecord(value) && value.kind === 'constructStart' && ConstructDescriptorSchema.safeParse(value.descriptor).success
+    isRecord(value) &&
+    value.kind === "constructStart" &&
+    ConstructDescriptorSchema.safeParse(value.descriptor).success
   );
 }
 
-export function isContentConstructEnd(value: unknown): value is ContentConstructEnd {
-  return isRecord(value) && value.kind === 'constructEnd';
+export function isContentConstructEnd(
+  value: unknown,
+): value is ContentConstructEnd {
+  return isRecord(value) && value.kind === "constructEnd";
 }
 
 // The run-extent guard, exported beside the marker guards for the same consumers: the block guard's paragraph arm (immediately below), which must recognise a well-formed constructs array without parsing the whole paragraph, and any codec or reader that has to recognise a run-level extent without a full parse. It validates the entry's own shape -- a record carrying a descriptor the construct vocabulary accepts and two non-negative integer bounds -- and deliberately NOT the range's validity against a paragraph's runs: that cross-object fact is findRunConstructFault's to state, exactly as bracket balance is findConstructMarkerImbalance's.
-export function isRunConstructExtent(value: unknown): value is RunConstructExtent {
+export function isRunConstructExtent(
+  value: unknown,
+): value is RunConstructExtent {
   if (!isRecord(value)) return false;
-  if (!ConstructDescriptorSchema.safeParse(value.descriptor).success) return false;
+  if (!ConstructDescriptorSchema.safeParse(value.descriptor).success)
+    return false;
   return isValidRunBound(value.startRun) && isValidRunBound(value.endRun);
 }
 
 function isValidRunBound(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 // Recursive structural guard. Used via z.custom so table cells (and now embedded-object documents) validate without a recursive Zod schema (which collapses to `unknown` under z.lazy in this Zod version).
@@ -264,39 +307,41 @@ export function isContentBlock(value: unknown): value is ContentBlock {
     return false;
   }
   const kind = value.kind;
-  if (kind === 'paragraph') {
+  if (kind === "paragraph") {
     return (
       Array.isArray(value.runs) &&
       value.runs.every(isContentRun) &&
-      (value.constructs === undefined || (Array.isArray(value.constructs) && value.constructs.every(isRunConstructExtent)))
+      (value.constructs === undefined ||
+        (Array.isArray(value.constructs) &&
+          value.constructs.every(isRunConstructExtent)))
     );
   }
-  if (kind === 'image') {
+  if (kind === "image") {
     return (
-      (value.format === 'png' || value.format === 'jpeg') &&
-      typeof value.base64 === 'string' &&
-      typeof value.widthPt === 'number' &&
-      typeof value.heightPt === 'number'
+      (value.format === "png" || value.format === "jpeg") &&
+      typeof value.base64 === "string" &&
+      typeof value.widthPt === "number" &&
+      typeof value.heightPt === "number"
     );
   }
-  if (kind === 'pageBreak') {
+  if (kind === "pageBreak") {
     return true;
   }
-  if (kind === 'table') {
+  if (kind === "table") {
     return (
       Array.isArray(value.rows) &&
       value.rows.every(isContentTableRow) &&
       Array.isArray(value.columnWidthsPt) &&
-      value.columnWidthsPt.every((w) => typeof w === 'number')
+      value.columnWidthsPt.every((w) => typeof w === "number")
     );
   }
-  if (kind === 'embeddedObject') {
+  if (kind === "embeddedObject") {
     return isContentEmbeddedObject(value);
   }
-  if (kind === 'constructStart') {
+  if (kind === "constructStart") {
     return isContentConstructStart(value);
   }
-  if (kind === 'constructEnd') {
+  if (kind === "constructEnd") {
     return true;
   }
   return false;
@@ -305,56 +350,71 @@ export function isContentBlock(value: unknown): value is ContentBlock {
 export const ContentBlockSchema = z.custom<ContentBlock>(isContentBlock);
 
 // Standalone schema for an embedded object on its own, independent of the block-level wrapper below -- this is what ContentSheetSchema.embeddedObjects (a sheet has no block-flow concept to anchor into) validates each entry against.
-export const ContentEmbeddedObjectSchema = z.custom<ContentEmbeddedObject>(isContentEmbeddedObject);
+export const ContentEmbeddedObjectSchema = z.custom<ContentEmbeddedObject>(
+  isContentEmbeddedObject,
+);
 
 // Standalone schema for the ContentBlock 'embeddedObject' variant, matching the sibling per-kind block schemas above (ContentParagraphSchema, ContentImageBlockSchema, ContentPageBreakSchema) even though ContentBlockSchema itself validates every kind, embeddedObject included, through the single custom guard above.
-export const ContentEmbeddedObjectBlockSchema = z.custom<ContentEmbeddedObjectBlock>(isContentEmbeddedObjectBlock);
+export const ContentEmbeddedObjectBlockSchema =
+  z.custom<ContentEmbeddedObjectBlock>(isContentEmbeddedObjectBlock);
 
 // Where a block list's construct markers stop balancing: an `unmatchedEnd` is a close with no construct open at that point, an `unclosedStart` is an open still standing when the list ended. `index` is the offending block's own position in the list -- the close itself for the first, and for the second the OUTERMOST still-open start, since that is where the unbalanced region begins rather than where the walk happened to notice it.
 export type ConstructMarkerImbalance =
-  | { kind: 'unmatchedEnd'; index: number }
-  | { kind: 'unclosedStart'; index: number };
+  | { kind: "unmatchedEnd"; index: number }
+  | { kind: "unclosedStart"; index: number };
 
 // The one shared definition of the bracket-matching contract's balance check (see the marker schemas above for the contract itself): returns the first place a block list's markers fail to match, or undefined when they balance. It lives here rather than in each consumer because at least three of them must agree exactly -- every codec that emits a pair, and this package's own decompose (src/decompose.ts), which promotes each matched pair into a construct group and so must reject a list it cannot promote instead of silently repairing one -- and because no schema can express it: balance is a property of a block list's sequence, not of any block in it, so ContentBlockSchema validating every member says nothing about whether the members pair up.
 //
 // Deliberately non-recursive. Each block list is its own bracket scope (a table cell's list matches independently of the list containing the table), so a caller walking nested lists calls this once per list -- which is exactly the walk decompose already performs -- rather than this helper duplicating that walk with its own idea of where the nested lists are.
-export function findConstructMarkerImbalance(blocks: readonly ContentBlock[]): ConstructMarkerImbalance | undefined {
+export function findConstructMarkerImbalance(
+  blocks: readonly ContentBlock[],
+): ConstructMarkerImbalance | undefined {
   const openStartIndices: number[] = [];
   for (const [index, block] of blocks.entries()) {
     if (isContentConstructStart(block)) {
       openStartIndices.push(index);
-    } else if (isContentConstructEnd(block) && openStartIndices.pop() === undefined) {
-      return { kind: 'unmatchedEnd', index };
+    } else if (
+      isContentConstructEnd(block) &&
+      openStartIndices.pop() === undefined
+    ) {
+      return { kind: "unmatchedEnd", index };
     }
   }
   const outermostUnclosed = openStartIndices[0];
   if (outermostUnclosed !== undefined) {
-    return { kind: 'unclosedStart', index: outermostUnclosed };
+    return { kind: "unclosedStart", index: outermostUnclosed };
   }
   return undefined;
 }
 
 // Where a paragraph's run-level construct extents stop naming real runs: an `invertedRange` is an extent whose end precedes its start, a `beyondRuns` one whose bounds reach outside 0..runs.length (a negative bound included -- the schema's non-negative integers already refuse it at parse time, but this helper's contract is stated over runtime values, not only parsed ones). `index` is the offending entry's own position in the paragraph's constructs array. The run-level twin of findConstructMarkerImbalance above, existing for the same reason: a codec emitting run extents, and any consumer walking them, must agree on exactly one definition of a well-formed extent, and no schema can express it -- the range bound is the paragraph's own runs.length, a cross-object fact no single node's schema states. Deliberately silent on crossing extents: two entries whose ranges overlap are well-formed data (see RunConstructExtentSchema), not a fault, because ranges impose no nesting the way a bracket sequence must.
 export type RunConstructFault =
-  | { kind: 'invertedRange'; index: number }
-  | { kind: 'beyondRuns'; index: number };
+  | { kind: "invertedRange"; index: number }
+  | { kind: "beyondRuns"; index: number };
 
-export function findRunConstructFault(paragraph: ContentParagraph): RunConstructFault | undefined {
+export function findRunConstructFault(
+  paragraph: ContentParagraph,
+): RunConstructFault | undefined {
   const constructs = paragraph.constructs;
   if (constructs === undefined) return undefined;
   for (const [index, extent] of constructs.entries()) {
     if (extent.startRun > extent.endRun) {
-      return { kind: 'invertedRange', index };
+      return { kind: "invertedRange", index };
     }
     if (extent.startRun < 0 || extent.endRun > paragraph.runs.length) {
-      return { kind: 'beyondRuns', index };
+      return { kind: "beyondRuns", index };
     }
   }
   return undefined;
 }
 
 // Shared stroke/border style vocabulary -- reused by ContentStrokeSchema (drawing vector primitives, defined further down alongside them) and by ContentTableCellSchema/ContentSheetCellSchema's own per-side border fields immediately below, so a border always carries the same solid/dashed/dotted/double vocabulary regardless of which content leaf it decorates. Absent means 'solid' wherever this is optional.
-export const ContentStrokeStyleSchema = z.enum(['solid', 'dashed', 'dotted', 'double']);
+export const ContentStrokeStyleSchema = z.enum([
+  "solid",
+  "dashed",
+  "dotted",
+  "double",
+]);
 export type ContentStrokeStyle = z.infer<typeof ContentStrokeStyleSchema>;
 
 // A single border edge -- distinct from ContentStrokeSchema only in that a border is always exactly one side of a rectangular cell, never a freestanding line/path stroke; both share the same colour/width/style vocabulary.
@@ -391,7 +451,7 @@ export const ContentTableRowSchema = z.object({
 });
 
 export const ContentTableSchema = z.object({
-  kind: z.literal('table'),
+  kind: z.literal("table"),
   rows: z.array(ContentTableRowSchema),
   columnWidthsPt: z.array(z.number().positive()),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
@@ -405,7 +465,9 @@ export const ContentSectionSchema = z.object({
   margins: MarginsSchema,
   blocks: z.array(ContentBlockSchema),
   // How this section begins relative to the one before it, in the producer's own four-word vocabulary (docx w:sectPr/w:type's nextPage/continuous/evenPage/oddPage; an ODF page style's break-before rule narrows onto the same members). Absent means the format's own default break -- nextPage in WordprocessingML -- rather than a stored default: an absent key and a key restating the default are one fact, and only the spelled members carry information.
-  breakType: z.enum(['nextPage', 'continuous', 'evenPage', 'oddPage']).optional(),
+  breakType: z
+    .enum(["nextPage", "continuous", "evenPage", "oddPage"])
+    .optional(),
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's section descriptor automatically (omit+extend, src/package-node.ts)
 });
 export type ContentSection = z.infer<typeof ContentSectionSchema>;
@@ -446,17 +508,30 @@ export type DecimalString = z.infer<typeof DecimalStringSchema>;
 // A cell's own computed/typed value, one variant per ODF office:value-type, plus a 'dateTime' variant ODF has no separate type for (see below). formula and displayText live on ContentSheetCellSchema itself, not per-variant here, since a formula can produce any of these value kinds and displayText is a per-cell rendering concern, not part of the value's own type. exactValue is an additive-optional sidecar on the number/percentage/currency variants only (the ones a real spreadsheet stores as an arbitrary-precision decimal underneath): value always remains the nearest IEEE-754 double approximation, present and populated exactly as before; exactValue, when present, is the authoritative exact decimal representation, and a producer should only set it when `String(Number(exactValue))` would not round-trip back to `exactValue` exactly -- so it is absent for the overwhelming majority of real cells (anything a double already represents exactly) and adds zero bytes to ordinary documents.
 //
 // -- Canonical date/time wire spelling -- The three temporal variants below each carry their value as a string, and that string has exactly one permitted spelling, stated here once and binding on every producer (odf.js, ooxml.js, and documents.js's own hsqldb/firebird decoders alike): 'date' is an ISO 8601 calendar date, `YYYY-MM-DD`; 'time' is a plain ISO 8601 wall-clock time of day, `HH:MM:SS` (24-hour, zero-padded, seconds always present, no date part, no timezone designator, and NOT ODF's own `PTnHnMnS` duration spelling, which a producer reading `office:time-value` must convert from); 'dateTime' is an ISO 8601 combined date and time, `YYYY-MM-DDTHH:MM:SS`, with a `.sss` fractional-seconds part and/or a `Z`/`+HH:MM` offset appended only when the source genuinely carried one. Anything else -- a locale-formatted rendering, a serial number, a bare `HH:MM` -- belongs in the cell's own displayText, never in `value`. This is a wire-format contract, not a validated one: the schemas below are plain z.string(), since a regex here would reject a real value a producer has not yet been updated to normalise, turning a fidelity bug into a hard parse failure. Producers converge on this spelling in their own later releases; this comment is the definition they converge on.
-export const ContentCellValueSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('number'), value: z.number(), exactValue: DecimalStringSchema.optional() }),
-  z.object({ kind: z.literal('percentage'), value: z.number(), exactValue: DecimalStringSchema.optional() }), // the underlying numeric value, e.g. 0.5 for a cell displaying "50%"
-  z.object({ kind: z.literal('currency'), value: z.number(), currency: z.string().optional(), exactValue: DecimalStringSchema.optional() }), // currency is the ISO 4217 code (e.g. 'USD'), mirroring ODF's office:currency
-  z.object({ kind: z.literal('boolean'), value: z.boolean() }),
-  z.object({ kind: z.literal('date'), value: z.string() }), // ISO 8601 calendar date, YYYY-MM-DD, e.g. '2026-07-30' -- a date with no time-of-day component; use 'dateTime' when the source carries both
-  z.object({ kind: z.literal('time'), value: z.string() }), // ISO 8601 wall-clock time of day, HH:MM:SS, e.g. '13:30:00' -- never ODF's PTnHnMnS duration spelling
-  z.object({ kind: z.literal('dateTime'), value: z.string() }), // ISO 8601 combined date and time, YYYY-MM-DDTHH:MM:SS, e.g. '2026-07-30T13:30:00' -- a genuine single date+time value (an HSQLDB/Firebird TIMESTAMP column, or xlsx's one t="d" cell type, which covers date and date+time alike), distinct from 'date' rather than collapsed onto it
-  z.object({ kind: z.literal('string'), value: z.string() }),
-  z.object({ kind: z.literal('error'), value: z.string() }), // the producer's own error text, e.g. '#DIV/0!'
-  z.object({ kind: z.literal('empty') }), // a cell that is present (formatted, merged, etc.) but carries no value
+export const ContentCellValueSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("number"),
+    value: z.number(),
+    exactValue: DecimalStringSchema.optional(),
+  }),
+  z.object({
+    kind: z.literal("percentage"),
+    value: z.number(),
+    exactValue: DecimalStringSchema.optional(),
+  }), // the underlying numeric value, e.g. 0.5 for a cell displaying "50%"
+  z.object({
+    kind: z.literal("currency"),
+    value: z.number(),
+    currency: z.string().optional(),
+    exactValue: DecimalStringSchema.optional(),
+  }), // currency is the ISO 4217 code (e.g. 'USD'), mirroring ODF's office:currency
+  z.object({ kind: z.literal("boolean"), value: z.boolean() }),
+  z.object({ kind: z.literal("date"), value: z.string() }), // ISO 8601 calendar date, YYYY-MM-DD, e.g. '2026-07-30' -- a date with no time-of-day component; use 'dateTime' when the source carries both
+  z.object({ kind: z.literal("time"), value: z.string() }), // ISO 8601 wall-clock time of day, HH:MM:SS, e.g. '13:30:00' -- never ODF's PTnHnMnS duration spelling
+  z.object({ kind: z.literal("dateTime"), value: z.string() }), // ISO 8601 combined date and time, YYYY-MM-DDTHH:MM:SS, e.g. '2026-07-30T13:30:00' -- a genuine single date+time value (an HSQLDB/Firebird TIMESTAMP column, or xlsx's one t="d" cell type, which covers date and date+time alike), distinct from 'date' rather than collapsed onto it
+  z.object({ kind: z.literal("string"), value: z.string() }),
+  z.object({ kind: z.literal("error"), value: z.string() }), // the producer's own error text, e.g. '#DIV/0!'
+  z.object({ kind: z.literal("empty") }), // a cell that is present (formatted, merged, etc.) but carries no value
 ]);
 export type ContentCellValue = z.infer<typeof ContentCellValueSchema>;
 
@@ -465,9 +540,13 @@ export const ContentSheetCellCommentSchema = z.object({
   text: z.string(),
   author: z.string().optional(),
   createdAt: z.string().optional(),
-  replies: z.array(z.object({ text: z.string(), author: z.string().optional() })).optional(),
+  replies: z
+    .array(z.object({ text: z.string(), author: z.string().optional() }))
+    .optional(),
 });
-export type ContentSheetCellComment = z.infer<typeof ContentSheetCellCommentSchema>;
+export type ContentSheetCellComment = z.infer<
+  typeof ContentSheetCellCommentSchema
+>;
 
 // row/column are the cell's own position, not implied by array index -- ContentSheetSchema.cells is sparse, since real sheets are sparse. displayText is the producer's own rendered string for `value` (its number-format/locale/currency-symbol applied already) and is required on every cell that exists in this array, since a cell with nothing to display simply isn't included; it is what makes spreadsheet-to-PDF rendering tractable without this package reimplementing a number-format/locale engine. formula, if present, is carried verbatim in whatever syntax the source format used. colSpan/rowSpan are set on the anchor cell only, matching how ContentTableCell already handles merged cells. alignment is an override of the existing value-kind default (numeric right, boolean/error centre, string left); absent means that default still applies. verticalAlignment has no value-kind default to fall back to, so its own absence means 'bottom' outright, matching a real spreadsheet's own typical default. comment, when present, is the cell's annotation (ContentSheetCellCommentSchema above) and never affects rendering -- it is carried for fidelity, so inspecting or round-tripping a document does not silently drop what the author pinned to that cell.
 export const ContentSheetCellSchema = z.object({
@@ -482,7 +561,7 @@ export const ContentSheetCellSchema = z.object({
   background: ColorSchema.optional(),
   borders: ContentCellBordersSchema.optional(),
   alignment: AlignmentSchema.optional(), // override; absent means the existing value-kind default
-  verticalAlignment: z.enum(['top', 'middle', 'bottom']).optional(), // absent means 'bottom'
+  verticalAlignment: z.enum(["top", "middle", "bottom"]).optional(), // absent means 'bottom'
   comment: ContentSheetCellCommentSchema.optional(), // a cell-anchored annotation -- a legacy note or a threaded comment; see ContentSheetCellCommentSchema above
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
@@ -511,30 +590,44 @@ export const ContentSheetPrintRangeSchema = z.object({
   endRow: z.number().int().nonnegative(),
   endColumn: z.number().int().nonnegative(),
 });
-export type ContentSheetPrintRange = z.infer<typeof ContentSheetPrintRangeSchema>;
+export type ContentSheetPrintRange = z.infer<
+  typeof ContentSheetPrintRangeSchema
+>;
 
 export const ContentSheetRepeatRangeSchema = z.object({
   start: z.number().int().nonnegative(),
   end: z.number().int().nonnegative(),
 });
-export type ContentSheetRepeatRange = z.infer<typeof ContentSheetRepeatRangeSchema>;
+export type ContentSheetRepeatRange = z.infer<
+  typeof ContentSheetRepeatRangeSchema
+>;
 
 export const ContentSheetPrintSettingsSchema = z.object({
   pageSize: PageSizeSchema,
   margins: MarginsSchema,
   printRange: ContentSheetPrintRangeSchema.optional(), // absent means "print the whole used range"
   scalePercent: z.number().positive().optional(), // print scale as a percentage: 100 means actual size, 50 means half size. Named for its unit rather than the bare `scale` it replaced, which left percentage-vs-fraction to the source format's own convention and so made 1 ambiguous between "1% of actual size" and "actual size".
-  fitToPages: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).optional(),
+  fitToPages: z
+    .object({
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+    })
+    .optional(),
   repeatRows: ContentSheetRepeatRangeSchema.optional(), // rows repeated as a header band on every printed page
   repeatColumns: ContentSheetRepeatRangeSchema.optional(), // columns repeated as a header band on every printed page
   gridlines: z.boolean(),
   headers: z.boolean(), // row/column header display (the "A, B, C" / "1, 2, 3" chrome, not a repeated print header band)
-  pageOrder: z.enum(['downThenOver', 'overThenDown']),
+  pageOrder: z.enum(["downThenOver", "overThenDown"]),
   manualBreaks: z
-    .object({ rows: z.array(z.number().int().nonnegative()), columns: z.array(z.number().int().nonnegative()) })
+    .object({
+      rows: z.array(z.number().int().nonnegative()),
+      columns: z.array(z.number().int().nonnegative()),
+    })
     .optional(),
 });
-export type ContentSheetPrintSettings = z.infer<typeof ContentSheetPrintSettingsSchema>;
+export type ContentSheetPrintSettings = z.infer<
+  typeof ContentSheetPrintSettingsSchema
+>;
 
 // A spreadsheet-anchored image: cell-relative placement (an xlsx/ods "anchor cell + pixel offset" style position) on top of ContentImageBlockSchema's own existing fields, rather than a second, independent image shape.
 export const ContentSheetImageSchema = ContentImageBlockSchema.extend({
@@ -574,10 +667,10 @@ export const ContentPathPointSchema = z.object({
 export type ContentPathPoint = z.infer<typeof ContentPathPointSchema>;
 
 // A path segment in the enclosing ContentVector 'path' shape's own local coordinate space -- not page-absolute. This is the content-side counterpart to a future LayoutPath on the layout side (not built yet, separate later work).
-export const ContentPathSegmentSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('line'), to: ContentPathPointSchema }),
+export const ContentPathSegmentSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("line"), to: ContentPathPointSchema }),
   z.object({
-    kind: z.literal('cubic'),
+    kind: z.literal("cubic"),
     control1: ContentPathPointSchema,
     control2: ContentPathPointSchema,
     to: ContentPathPointSchema,
@@ -593,9 +686,9 @@ export const ContentSubpathSchema = z.object({
 export type ContentSubpath = z.infer<typeof ContentSubpathSchema>;
 
 // rotationDeg is deliberately not added to the 'line' variant: a line's rotation is already fully expressible via its own two endpoints, so a separate rotation field there would create two ways to say one thing with no defined pivot for it to rotate about. Where present, rotationDeg matches ContentShapeSchema's own documented semantics exactly: clockwise-on-screen degrees about the frame's own centre, undefined rather than 0 for an unrotated vector. paintOrder is the same shared, cross-array z-ordering hint ContentShapeSchema carries -- see that schema's own comment.
-export const ContentVectorSchema = z.discriminatedUnion('kind', [
+export const ContentVectorSchema = z.discriminatedUnion("kind", [
   z.object({
-    kind: z.literal('rect'),
+    kind: z.literal("rect"),
     frame: BoxSchema,
     rotationDeg: z.number().optional(),
     fill: ColorSchema.optional(),
@@ -606,7 +699,7 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     frames: z.array(LayoutFrameSchema).optional(), // this vector's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
   }),
   z.object({
-    kind: z.literal('ellipse'),
+    kind: z.literal("ellipse"),
     frame: BoxSchema,
     rotationDeg: z.number().optional(),
     fill: ColorSchema.optional(),
@@ -617,7 +710,7 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     frames: z.array(LayoutFrameSchema).optional(),
   }),
   z.object({
-    kind: z.literal('line'),
+    kind: z.literal("line"),
     from: ContentPathPointSchema,
     to: ContentPathPointSchema,
     stroke: ContentStrokeSchema,
@@ -627,12 +720,12 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     frames: z.array(LayoutFrameSchema).optional(),
   }),
   z.object({
-    kind: z.literal('path'),
+    kind: z.literal("path"),
     frame: BoxSchema, // page-space placement and the size of the path's own local coordinate space, distinct from the subpaths' local-space points below
     rotationDeg: z.number().optional(),
     subpaths: z.array(ContentSubpathSchema),
     fill: ColorSchema.optional(),
-    fillRule: z.enum(['nonzero', 'evenodd']).optional(),
+    fillRule: z.enum(["nonzero", "evenodd"]).optional(),
     stroke: ContentStrokeSchema.optional(),
     paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
@@ -677,33 +770,33 @@ export const contentDocumentSharedFields = {
   symbolTable: SymbolTableSchema.optional(),
 };
 
-export const ContentDocumentSchema = z.discriminatedUnion('kind', [
+export const ContentDocumentSchema = z.discriminatedUnion("kind", [
   z.object({
-    kind: z.literal('wordprocessing'),
+    kind: z.literal("wordprocessing"),
     metadata: LayoutMetadataSchema,
     ...contentDocumentSharedFields,
     sections: z.array(ContentSectionSchema),
   }),
   z.object({
-    kind: z.literal('presentation'),
+    kind: z.literal("presentation"),
     metadata: LayoutMetadataSchema,
     ...contentDocumentSharedFields,
     slides: z.array(ContentSlideSchema),
   }),
   z.object({
-    kind: z.literal('spreadsheet'),
+    kind: z.literal("spreadsheet"),
     metadata: LayoutMetadataSchema,
     ...contentDocumentSharedFields,
     sheets: z.array(ContentSheetSchema),
   }),
   z.object({
-    kind: z.literal('drawing'),
+    kind: z.literal("drawing"),
     metadata: LayoutMetadataSchema,
     ...contentDocumentSharedFields,
     pages: z.array(ContentDrawPageSchema),
   }),
   z.object({
-    kind: z.literal('formula'),
+    kind: z.literal("formula"),
     metadata: LayoutMetadataSchema,
     ...contentDocumentSharedFields,
     formula: ContentFormulaSchema,

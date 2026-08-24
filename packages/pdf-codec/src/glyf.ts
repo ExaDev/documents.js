@@ -1,7 +1,7 @@
-import type { GlyphInkBounds } from './glyph-bounds';
-import { unionGlyphInkBounds } from './glyph-bounds';
-import type { SfntFont } from './sfnt';
-import { f2dot14, hasBytes, i16, sfntTableBytes, u16, u32, u8 } from './sfnt';
+import type { GlyphInkBounds } from "./glyph-bounds";
+import { unionGlyphInkBounds } from "./glyph-bounds";
+import type { SfntFont } from "./sfnt";
+import { f2dot14, hasBytes, i16, sfntTableBytes, u16, u32, u8 } from "./sfnt";
 
 // The 'loca' and 'glyf' tables of a TrueType-outline font (ISO/IEC 14496-22 clauses 5.3.2 and 5.3.3): the glyph-offset index, each glyph's own header, and the component records of a composite glyph.
 //
@@ -36,7 +36,9 @@ export interface GlyfTable {
   // `undefined` for a glyph with no outline at all, since such a glyph has no header to read, as well as for an unreadable one.
   glyphHeader(glyphId: number): GlyphHeader | undefined;
   // The component records of a composite glyph, or `undefined` where the glyph is simple, empty, unreadable, or has a truncated component list. Never a partial list: a subsetter acting on half a composite's components would emit a visibly broken glyph, so an incomplete walk reports that it failed rather than what it managed.
-  compositeComponents(glyphId: number): readonly CompositeComponent[] | undefined;
+  compositeComponents(
+    glyphId: number,
+  ): readonly CompositeComponent[] | undefined;
   // This glyph's own tight ink bounding box in design units, or `undefined` for a glyph that draws nothing (a space), one that is unreadable, or a composite this walk declines to measure (see resolveInkBounds below). For a simple glyph this is the box the font itself declares in the glyph's own header -- there is no cheaper or more authoritative source, and re-deriving it from the point arrays would be recomputing what the format already states. For a composite it is the union of each component's own box under that component's own placement, since a composite's declared header box is derived data that real font tools have been known to leave stale.
   glyphInkBounds(glyphId: number): GlyphInkBounds | undefined;
 }
@@ -52,19 +54,29 @@ const LOCA_LONG_ENTRY_SIZE = 4;
 const LOCA_SHORT_OFFSET_SCALE = 2;
 
 // The 'loca' index: numGlyphs + 1 byte offsets into 'glyf', where glyph N occupies [offsets[N], offsets[N + 1]). Returned as the raw offset array rather than a lookup, since a subsetter rebuilding 'loca' needs the array itself.
-export function parseLoca(font: SfntFont, options: GlyfOptions): readonly number[] | undefined {
-  const bytes = sfntTableBytes(font, 'loca');
+export function parseLoca(
+  font: SfntFont,
+  options: GlyfOptions,
+): readonly number[] | undefined {
+  const bytes = sfntTableBytes(font, "loca");
   if (bytes === undefined) {
     return undefined;
   }
   const entryCount = options.numGlyphs + 1;
-  const entrySize = options.indexToLocFormat === 0 ? LOCA_SHORT_ENTRY_SIZE : LOCA_LONG_ENTRY_SIZE;
+  const entrySize =
+    options.indexToLocFormat === 0
+      ? LOCA_SHORT_ENTRY_SIZE
+      : LOCA_LONG_ENTRY_SIZE;
   if (!hasBytes(bytes, 0, entryCount * entrySize)) {
     return undefined;
   }
   const offsets: number[] = [];
   for (let i = 0; i < entryCount; i++) {
-    offsets.push(options.indexToLocFormat === 0 ? u16(bytes, i * LOCA_SHORT_ENTRY_SIZE) * LOCA_SHORT_OFFSET_SCALE : u32(bytes, i * LOCA_LONG_ENTRY_SIZE));
+    offsets.push(
+      options.indexToLocFormat === 0
+        ? u16(bytes, i * LOCA_SHORT_ENTRY_SIZE) * LOCA_SHORT_OFFSET_SCALE
+        : u32(bytes, i * LOCA_LONG_ENTRY_SIZE),
+    );
   }
   return offsets;
 }
@@ -91,7 +103,9 @@ function signedByte(value: number): number {
   return value >= 0x80 ? value - 0x100 : value;
 }
 
-function readComponents(glyph: Uint8Array<ArrayBuffer>): readonly CompositeComponent[] | undefined {
+function readComponents(
+  glyph: Uint8Array<ArrayBuffer>,
+): readonly CompositeComponent[] | undefined {
   const components: CompositeComponent[] = [];
   let offset = GLYPH_HEADER_SIZE;
   for (;;) {
@@ -113,10 +127,16 @@ function readComponents(glyph: Uint8Array<ArrayBuffer>): readonly CompositeCompo
     if (argsAreWords) {
       // Word-sized arguments are signed offsets when they are x/y values and unsigned point indices when they are not.
       argument1 = argsAreXyValues ? i16(glyph, offset) : u16(glyph, offset);
-      argument2 = argsAreXyValues ? i16(glyph, offset + 2) : u16(glyph, offset + 2);
+      argument2 = argsAreXyValues
+        ? i16(glyph, offset + 2)
+        : u16(glyph, offset + 2);
     } else {
-      argument1 = argsAreXyValues ? signedByte(u8(glyph, offset)) : u8(glyph, offset);
-      argument2 = argsAreXyValues ? signedByte(u8(glyph, offset + 1)) : u8(glyph, offset + 1);
+      argument1 = argsAreXyValues
+        ? signedByte(u8(glyph, offset))
+        : u8(glyph, offset);
+      argument2 = argsAreXyValues
+        ? signedByte(u8(glyph, offset + 1))
+        : u8(glyph, offset + 1);
     }
     offset += argsSize;
 
@@ -138,11 +158,23 @@ function readComponents(glyph: Uint8Array<ArrayBuffer>): readonly CompositeCompo
       if (!hasBytes(glyph, offset, 8)) {
         return undefined;
       }
-      transform = [f2dot14(glyph, offset), f2dot14(glyph, offset + 2), f2dot14(glyph, offset + 4), f2dot14(glyph, offset + 6)];
+      transform = [
+        f2dot14(glyph, offset),
+        f2dot14(glyph, offset + 2),
+        f2dot14(glyph, offset + 4),
+        f2dot14(glyph, offset + 6),
+      ];
       offset += 8;
     }
 
-    components.push({ flags, glyphIndex, argument1, argument2, argsAreXyValues, transform });
+    components.push({
+      flags,
+      glyphIndex,
+      argument1,
+      argument2,
+      argsAreXyValues,
+      transform,
+    });
 
     if ((flags & MORE_COMPONENTS) === 0) {
       return components;
@@ -152,7 +184,10 @@ function readComponents(glyph: Uint8Array<ArrayBuffer>): readonly CompositeCompo
 }
 
 // A component's own box, placed into its parent composite's coordinate space: the 2x2 transform applied to all four corners (a rotating or skewing transform turns the box's own corners into a different box, so transforming only the min/max pair would be wrong), then the placement offset added.
-function placeComponentBounds(bounds: GlyphInkBounds, component: CompositeComponent): GlyphInkBounds {
+function placeComponentBounds(
+  bounds: GlyphInkBounds,
+  component: CompositeComponent,
+): GlyphInkBounds {
   const [a, b, c, d] = component.transform ?? [1, 0, 0, 1];
   const corners: readonly (readonly [number, number])[] = [
     [bounds.xMin, bounds.yMin],
@@ -164,22 +199,40 @@ function placeComponentBounds(bounds: GlyphInkBounds, component: CompositeCompon
   const ys = corners.map(([x, y]) => b * x + d * y);
 
   // The offset is normally in the composite's own space and is added as-is; SCALED_COMPONENT_OFFSET (and only it, since UNSCALED_COMPONENT_OFFSET wins where a font contradicts itself by setting both) puts the offset in the COMPONENT's space instead, so it goes through the same transform the outline did.
-  const scaledOffset = (component.flags & SCALED_COMPONENT_OFFSET) !== 0 && (component.flags & UNSCALED_COMPONENT_OFFSET) === 0;
-  const dx = scaledOffset ? a * component.argument1 + c * component.argument2 : component.argument1;
-  const dy = scaledOffset ? b * component.argument1 + d * component.argument2 : component.argument2;
+  const scaledOffset =
+    (component.flags & SCALED_COMPONENT_OFFSET) !== 0 &&
+    (component.flags & UNSCALED_COMPONENT_OFFSET) === 0;
+  const dx = scaledOffset
+    ? a * component.argument1 + c * component.argument2
+    : component.argument1;
+  const dy = scaledOffset
+    ? b * component.argument1 + d * component.argument2
+    : component.argument2;
 
-  return { xMin: Math.min(...xs) + dx, yMin: Math.min(...ys) + dy, xMax: Math.max(...xs) + dx, yMax: Math.max(...ys) + dy };
+  return {
+    xMin: Math.min(...xs) + dx,
+    yMin: Math.min(...ys) + dy,
+    xMax: Math.max(...xs) + dx,
+    yMax: Math.max(...ys) + dy,
+  };
 }
 
-export function parseGlyf(font: SfntFont, options: GlyfOptions): GlyfTable | undefined {
-  const glyfBytes = sfntTableBytes(font, 'glyf');
+export function parseGlyf(
+  font: SfntFont,
+  options: GlyfOptions,
+): GlyfTable | undefined {
+  const glyfBytes = sfntTableBytes(font, "glyf");
   const loca = parseLoca(font, options);
   if (glyfBytes === undefined || loca === undefined) {
     return undefined;
   }
 
   const glyphBytes = (glyphId: number): Uint8Array<ArrayBuffer> | undefined => {
-    if (!Number.isInteger(glyphId) || glyphId < 0 || glyphId >= options.numGlyphs) {
+    if (
+      !Number.isInteger(glyphId) ||
+      glyphId < 0 ||
+      glyphId >= options.numGlyphs
+    ) {
       return undefined;
     }
     const start = loca[glyphId]!;
@@ -204,7 +257,9 @@ export function parseGlyf(font: SfntFont, options: GlyfOptions): GlyfTable | und
     };
   };
 
-  const compositeComponents = (glyphId: number): readonly CompositeComponent[] | undefined => {
+  const compositeComponents = (
+    glyphId: number,
+  ): readonly CompositeComponent[] | undefined => {
     const header = glyphHeader(glyphId);
     if (header === undefined || header.numberOfContours >= 0) {
       return undefined;
@@ -214,13 +269,21 @@ export function parseGlyf(font: SfntFont, options: GlyfOptions): GlyfTable | und
   };
 
   // A composite is measured from its components rather than from its own declared header box, and returns `undefined` -- rather than a box missing a piece -- for any component it cannot place: an unreadable component glyph, one nested past MAX_COMPOSITE_DEPTH, or one positioned by POINT MATCHING (argsAreXyValues false), where the two arguments are point indices into the parent's and component's own outlines. Resolving a point match needs the coordinate arrays this module deliberately does not decode, and guessing an offset of zero for one would silently stack a mark on top of its base letter.
-  const resolveInkBounds = (glyphId: number, depth: number): GlyphInkBounds | undefined => {
+  const resolveInkBounds = (
+    glyphId: number,
+    depth: number,
+  ): GlyphInkBounds | undefined => {
     const header = glyphHeader(glyphId);
     if (header === undefined) {
       return undefined; // an empty glyph (a space) or an unreadable one: no outline, so no ink box
     }
     if (header.numberOfContours >= 0) {
-      return { xMin: header.xMin, yMin: header.yMin, xMax: header.xMax, yMax: header.yMax };
+      return {
+        xMin: header.xMin,
+        yMin: header.yMin,
+        xMax: header.xMax,
+        yMax: header.yMax,
+      };
     }
     if (depth >= MAX_COMPOSITE_DEPTH) {
       return undefined;
@@ -246,7 +309,8 @@ export function parseGlyf(font: SfntFont, options: GlyfOptions): GlyfTable | und
         return undefined; // a nested composite this walk declined (depth limit, point matching): the union would be missing a real piece of the glyph
       }
       const placed = placeComponentBounds(componentBounds, component);
-      bounds = bounds === undefined ? placed : unionGlyphInkBounds(bounds, placed);
+      bounds =
+        bounds === undefined ? placed : unionGlyphInkBounds(bounds, placed);
     }
     return bounds;
   };

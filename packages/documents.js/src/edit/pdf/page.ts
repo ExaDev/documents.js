@@ -1,4 +1,4 @@
-import type { LayoutImageAsset, LayoutPage } from 'pdf-codec';
+import type { LayoutImageAsset, LayoutPage } from "pdf-codec";
 import type {
   PdfEllipseInit,
   PdfImageInit,
@@ -8,7 +8,7 @@ import type {
   PdfPathInit,
   PdfRectInit,
   PdfTextInit,
-} from './item';
+} from "./item";
 import {
   buildEllipseItem,
   buildImageItem,
@@ -25,8 +25,8 @@ import {
   PdfRectItem,
   PdfTextItem,
   wrapItem,
-} from './item';
-import { spliceOut } from './util';
+} from "./item";
+import { spliceOut } from "./util";
 
 // A page's own initial size/notes, used by both PdfEditor.createPdf's own default page and appendPage/insertPageAt below -- widthPt/heightPt default to US Letter (matching pdf-codec's own readPdf fallback for a page with no resolvable /MediaBox at all) when omitted, rather than throwing or defaulting to zero.
 export interface PageInit {
@@ -57,7 +57,11 @@ export class PdfPage {
   private readonly images: Record<string, LayoutImageAsset>;
   private removed = false;
 
-  constructor(container: LayoutPage[], node: LayoutPage, images: Record<string, LayoutImageAsset>) {
+  constructor(
+    container: LayoutPage[],
+    node: LayoutPage,
+    images: Record<string, LayoutImageAsset>,
+  ) {
     this.container = container;
     this.node = node;
     this.images = images;
@@ -65,7 +69,9 @@ export class PdfPage {
 
   private live(): LayoutPage {
     if (this.removed) {
-      throw new Error('this PdfPage has been removed from its document and can no longer be used');
+      throw new Error(
+        "this PdfPage has been removed from its document and can no longer be used",
+      );
     }
     return this.node;
   }
@@ -112,31 +118,45 @@ export class PdfPage {
   }
 
   textItems(): PdfTextItem[] {
-    return this.items().filter((item): item is PdfTextItem => item.kind === 'text');
+    return this.items().filter(
+      (item): item is PdfTextItem => item.kind === "text",
+    );
   }
 
   imageItems(): PdfImageItem[] {
-    return this.items().filter((item): item is PdfImageItem => item.kind === 'image');
+    return this.items().filter(
+      (item): item is PdfImageItem => item.kind === "image",
+    );
   }
 
   rectItems(): PdfRectItem[] {
-    return this.items().filter((item): item is PdfRectItem => item.kind === 'rect');
+    return this.items().filter(
+      (item): item is PdfRectItem => item.kind === "rect",
+    );
   }
 
   ellipseItems(): PdfEllipseItem[] {
-    return this.items().filter((item): item is PdfEllipseItem => item.kind === 'ellipse');
+    return this.items().filter(
+      (item): item is PdfEllipseItem => item.kind === "ellipse",
+    );
   }
 
   lineItems(): PdfLineItem[] {
-    return this.items().filter((item): item is PdfLineItem => item.kind === 'line');
+    return this.items().filter(
+      (item): item is PdfLineItem => item.kind === "line",
+    );
   }
 
   pathItems(): PdfPathItem[] {
-    return this.items().filter((item): item is PdfPathItem => item.kind === 'path');
+    return this.items().filter(
+      (item): item is PdfPathItem => item.kind === "path",
+    );
   }
 
   linkItems(): PdfLinkItem[] {
-    return this.items().filter((item): item is PdfLinkItem => item.kind === 'link');
+    return this.items().filter(
+      (item): item is PdfLinkItem => item.kind === "link",
+    );
   }
 
   // Clamps to the current item count on both ends -- a negative index inserts at the start, an index at or past the current length appends at the end, exactly like DocxBody.insertParagraphAt's own out-of-range handling (src/edit/docx/editor.ts). `index` is an absolute position in paint order across every kind (there is no per-kind sub-sequence the way docx's own paragraph/table indices are, since a page's own items are already one single ordered array, not several element tags mixed into one parent).

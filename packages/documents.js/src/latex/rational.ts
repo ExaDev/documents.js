@@ -13,10 +13,13 @@ function gcd(a: bigint, b: bigint): bigint {
 }
 
 // A decimal literal (digits with at most one point) as a lowest-terms rational: '3.14' -> 157/50, '42' -> 42/1. Undefined for a malformed literal (two points, empty digits), which the lowering degrades visibly rather than repair.
-export function decimalToRational(literal: string): { numerator: string; denominator: string } | undefined {
-  const point = literal.indexOf('.');
-  const digits = point === -1 ? literal : literal.slice(0, point) + literal.slice(point + 1);
-  if (!/^\d+$/.test(digits) || literal.includes('.', point + 1)) {
+export function decimalToRational(
+  literal: string,
+): { numerator: string; denominator: string } | undefined {
+  const point = literal.indexOf(".");
+  const digits =
+    point === -1 ? literal : literal.slice(0, point) + literal.slice(point + 1);
+  if (!/^\d+$/.test(digits) || literal.includes(".", point + 1)) {
     return undefined;
   }
   const denominatorPower = point === -1 ? 0 : literal.length - point - 1;
@@ -26,7 +29,13 @@ export function decimalToRational(literal: string): { numerator: string; denomin
 }
 
 // Reduce numerator/denominator to lowest terms as the schema's canonical producer convention, so string equality between two reduced forms is value equality.
-export function reduceRational(numerator: bigint, denominator: bigint): { numerator: string; denominator: string } {
+export function reduceRational(
+  numerator: bigint,
+  denominator: bigint,
+): { numerator: string; denominator: string } {
   const divisor = gcd(numerator, denominator);
-  return { numerator: String(numerator / divisor), denominator: String(denominator / divisor) };
+  return {
+    numerator: String(numerator / divisor),
+    denominator: String(denominator / divisor),
+  };
 }

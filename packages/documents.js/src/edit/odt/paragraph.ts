@@ -1,15 +1,15 @@
-import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { attr } from 'ooxml.js';
-import { removeAttr, removeChild, setAttr } from '../../xml/edit';
-import { el } from '../../xml/fragment';
-import { decodeOdfText } from '../../xml/odf-text';
-import type { Box } from 'document-schema.js';
-import type { Alignment } from 'document-schema.js';
-import type { ImageInit } from './image';
-import { insertImageFrameMedia } from './image';
-import { applyStyleChange, readCurrentStyleProperties } from './props';
-import type { RunInit } from './run';
-import { buildRun, OdtRun } from './run';
+import type { Package, XmlElement, XmlNode } from "odf.js";
+import { attr } from "ooxml.js";
+import { removeAttr, removeChild, setAttr } from "../../xml/edit";
+import { el } from "../../xml/fragment";
+import { decodeOdfText } from "../../xml/odf-text";
+import type { Box } from "document-schema.js";
+import type { Alignment } from "document-schema.js";
+import type { ImageInit } from "./image";
+import { insertImageFrameMedia } from "./image";
+import { applyStyleChange, readCurrentStyleProperties } from "./props";
+import type { RunInit } from "./run";
+import { buildRun, OdtRun } from "./run";
 
 export interface ParagraphInit {
   readonly text?: string;
@@ -38,7 +38,9 @@ export class OdtParagraph {
 
   private live(): XmlElement {
     if (this.removed) {
-      throw new Error('this OdtParagraph has been removed from its body and can no longer be used');
+      throw new Error(
+        "this OdtParagraph has been removed from its body and can no longer be used",
+      );
     }
     return this.node;
   }
@@ -52,7 +54,7 @@ export class OdtParagraph {
     const node = this.live();
     const out: OdtRun[] = [];
     for (const child of node.children) {
-      if (child.type === 'element' && child.tag === 'text:span') {
+      if (child.type === "element" && child.tag === "text:span") {
         out.push(new OdtRun(node.children, child, this.pkg));
       }
     }
@@ -71,15 +73,19 @@ export class OdtParagraph {
     const node = this.live();
     const lastChildIndex = node.children.length - 1;
     const lastChild = node.children[lastChildIndex];
-    if (lastChild?.type !== 'element' || lastChild.tag !== 'text:span') {
+    if (lastChild?.type !== "element" || lastChild.tag !== "text:span") {
       return;
     }
-    node.children[lastChildIndex] = el('text:a', { 'xlink:href': url, 'xlink:type': 'simple' }, [lastChild]);
+    node.children[lastChildIndex] = el(
+      "text:a",
+      { "xlink:href": url, "xlink:type": "simple" },
+      [lastChild],
+    );
   }
 
   // A tab character inside a text node is not the same as a real tab-stop advance -- ODF represents one as its own text:tab element (see src/xml/odf-text.ts's encodeOdfText), never as a literal tab byte in text-node content.
   appendTab(): void {
-    this.live().children.push(el('text:tab'));
+    this.live().children.push(el("text:tab"));
   }
 
   insertRunAt(index: number, init?: RunInit): OdtRun {
@@ -87,37 +93,40 @@ export class OdtParagraph {
     const span = buildRun(this.pkg, init);
     const spanIndices: number[] = [];
     node.children.forEach((child, i) => {
-      if (child.type === 'element' && child.tag === 'text:span') {
+      if (child.type === "element" && child.tag === "text:span") {
         spanIndices.push(i);
       }
     });
-    const insertAt = index < spanIndices.length ? (spanIndices[index] ?? node.children.length) : node.children.length;
+    const insertAt =
+      index < spanIndices.length
+        ? (spanIndices[index] ?? node.children.length)
+        : node.children.length;
     node.children.splice(insertAt, 0, span);
     return new OdtRun(node.children, span, this.pkg);
   }
 
   // A direct pointer at an existing NAMED style (e.g. "Heading_20_1", a style defined in office:styles rather than minted into office:automatic-styles) -- mirrors DocxParagraph's own styleId setter (src/edit/docx/paragraph.ts), which similarly writes w:pStyle directly rather than going through a cascade-aware helper. Unlike alignment/spacing below, this bypasses applyStyleChange entirely: it repoints text:style-name at a caller-supplied name outright, rather than merging a property change into whatever style is already referenced. Pointing this at a name that resolves to nothing (e.g. a raw docx-style styleId carried over from a cross-format ContentDocument) is not an error -- odf.js's own resolveStyle tolerates an unresolvable style name by contributing no properties, leaving the paragraph valid but unstyled, exactly as ODF itself does.
   get styleId(): string | undefined {
-    return attr(this.live(), 'text:style-name');
+    return attr(this.live(), "text:style-name");
   }
 
   set styleId(value: string | undefined) {
     const node = this.live();
     if (value === undefined) {
-      removeAttr(node, 'text:style-name');
+      removeAttr(node, "text:style-name");
       return;
     }
-    setAttr(node, 'text:style-name', value);
+    setAttr(node, "text:style-name", value);
   }
 
   // The ODF heading identity, one element-state fact: a paragraph carrying it is a real text:h element with text:outline-level (the depth signal ODF's own outline and navigation read) and text:style-name pointed at the ODF heading-style spelling "Heading_20_N" (_20_ is ODF's escape for the space in "Heading N"; the levels this family gives a visual convention are defined in the scaffold's office:styles -- src/edit/odt/scaffold.ts). This is the write-side inverse of odf.js's own readParagraphOrHeading (typed/shared/paragraph.ts), which derives BOTH the synthetic "Heading{N}" styleId and the canonical headingLevel from the one text:h element -- here the one setter writes both spellings of the same depth, so they can never disagree the way a verbatim cross-format styleId copy does. Promoting an element that already carries a style-name (e.g. a producer's unresolvable "Heading2") repoints it at the resolvable spelling; there is deliberately no way to carry a custom style name AND a heading level, because ODF's single text:style-name slot makes the heading's own style the only resolvable choice. Setting undefined demotes the element back to a plain text:p, removing the outline level and the style-name promote wrote -- the exact inverse, restoring the unstyled paragraph promote found.
   get headingLevel(): number | undefined {
     const node = this.live();
-    if (node.tag !== 'text:h') {
+    if (node.tag !== "text:h") {
       return undefined;
     }
     // text:outline-level's ODF schema default when the attribute is absent is 1 (OASIS ODF 1.2 part 1) -- the identical default odf.js's own readOutlineLevel applies reading one back, and the identical degrade for a non-positive or unparseable value.
-    const raw = attr(node, 'text:outline-level');
+    const raw = attr(node, "text:outline-level");
     if (raw === undefined) {
       return 1;
     }
@@ -128,69 +137,90 @@ export class OdtParagraph {
   set headingLevel(value: number | undefined) {
     const node = this.live();
     if (value === undefined) {
-      node.tag = 'text:p';
-      removeAttr(node, 'text:outline-level');
-      removeAttr(node, 'text:style-name');
+      node.tag = "text:p";
+      removeAttr(node, "text:outline-level");
+      removeAttr(node, "text:style-name");
       return;
     }
-    node.tag = 'text:h';
-    setAttr(node, 'text:outline-level', String(value));
-    setAttr(node, 'text:style-name', headingStyleName(value));
+    node.tag = "text:h";
+    setAttr(node, "text:outline-level", String(value));
+    setAttr(node, "text:style-name", headingStyleName(value));
   }
 
   get alignment(): Alignment | undefined {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'paragraph').alignment;
+    return readCurrentStyleProperties(this.pkg, this.live(), "paragraph")
+      .alignment;
   }
 
   set alignment(value: Alignment | undefined) {
-    applyStyleChange(this.pkg, this.live(), 'paragraph', { alignment: value });
+    applyStyleChange(this.pkg, this.live(), "paragraph", { alignment: value });
   }
 
   // The five paragraph-decoration fields odf.js's own StyleProperties already models (spacingBeforePt/spacingAfterPt/lineSpacing/indentLeftPt/indentFirstLinePt) -- each is a one-liner through applyStyleChange, exactly like alignment above, since odf.js's parseParagraphProperties reads them and paragraphPropertiesToAttributes writes them with no odf.js change needed. lineSpacing is a multiplier (1.0 = single), the same convention ContentParagraph.lineSpacing and the docx w:line reader/writer use.
   get spacingBeforePt(): number | undefined {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'paragraph').spacingBeforePt;
+    return readCurrentStyleProperties(this.pkg, this.live(), "paragraph")
+      .spacingBeforePt;
   }
 
   set spacingBeforePt(value: number | undefined) {
-    applyStyleChange(this.pkg, this.live(), 'paragraph', { spacingBeforePt: value });
+    applyStyleChange(this.pkg, this.live(), "paragraph", {
+      spacingBeforePt: value,
+    });
   }
 
   get spacingAfterPt(): number | undefined {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'paragraph').spacingAfterPt;
+    return readCurrentStyleProperties(this.pkg, this.live(), "paragraph")
+      .spacingAfterPt;
   }
 
   set spacingAfterPt(value: number | undefined) {
-    applyStyleChange(this.pkg, this.live(), 'paragraph', { spacingAfterPt: value });
+    applyStyleChange(this.pkg, this.live(), "paragraph", {
+      spacingAfterPt: value,
+    });
   }
 
   get lineSpacing(): number | undefined {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'paragraph').lineSpacing;
+    return readCurrentStyleProperties(this.pkg, this.live(), "paragraph")
+      .lineSpacing;
   }
 
   set lineSpacing(value: number | undefined) {
-    applyStyleChange(this.pkg, this.live(), 'paragraph', { lineSpacing: value });
+    applyStyleChange(this.pkg, this.live(), "paragraph", {
+      lineSpacing: value,
+    });
   }
 
   get indentLeftPt(): number | undefined {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'paragraph').indentLeftPt;
+    return readCurrentStyleProperties(this.pkg, this.live(), "paragraph")
+      .indentLeftPt;
   }
 
   set indentLeftPt(value: number | undefined) {
-    applyStyleChange(this.pkg, this.live(), 'paragraph', { indentLeftPt: value });
+    applyStyleChange(this.pkg, this.live(), "paragraph", {
+      indentLeftPt: value,
+    });
   }
 
   get indentFirstLinePt(): number | undefined {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'paragraph').indentFirstLinePt;
+    return readCurrentStyleProperties(this.pkg, this.live(), "paragraph")
+      .indentFirstLinePt;
   }
 
   set indentFirstLinePt(value: number | undefined) {
-    applyStyleChange(this.pkg, this.live(), 'paragraph', { indentFirstLinePt: value });
+    applyStyleChange(this.pkg, this.live(), "paragraph", {
+      indentFirstLinePt: value,
+    });
   }
 
   // Appends a new inline image, anchored as-char at the end of this paragraph's own content -- the odt counterpart to DocxParagraph.insertImageAfter, but simpler: unlike a docx paragraph (which needs a document-root reference to allocate a document-unique wp:docPr id), an OdtParagraph already carries this.pkg unconditionally, including inside a table cell (OdtTableCell.appendParagraph passes it through too), so this works there with zero extra plumbing -- a genuine odt advantage over docx's own documented table-cell limitation.
   insertImageAfter(image: ImageInit): void {
     const node = this.live();
-    const frame: Box = { xPt: 0, yPt: 0, widthPt: image.widthPt, heightPt: image.heightPt };
+    const frame: Box = {
+      xPt: 0,
+      yPt: 0,
+      widthPt: image.widthPt,
+      heightPt: image.heightPt,
+    };
     node.children.push(insertImageFrameMedia(this.pkg, frame, image));
   }
 
@@ -201,8 +231,11 @@ export class OdtParagraph {
 }
 
 // Builds a fresh text:p (promoted to a text:h by the headingLevel setter when init carries one) from scratch (not a live view -- for constructing new paragraphs to append or insert, whose properties are then read back through OdtParagraph once inserted into the tree). Mirrors run.ts's buildRun: applies init's properties by constructing a throwaway OdtParagraph over the new node and driving it through the exact same setters every later mutation uses. A headingLevel subsumes an init styleId rather than sitting alongside it: the headingLevel setter writes the ODF-resolvable Heading_20_N spelling of the same depth, and a producer's verbatim "Heading{N}" spelling (the synthetic cross-format shape, never a style an odt defines) would only overwrite it.
-export function buildParagraph(pkg: Package, init: ParagraphInit = {}): XmlElement {
-  const node = el('text:p');
+export function buildParagraph(
+  pkg: Package,
+  init: ParagraphInit = {},
+): XmlElement {
+  const node = el("text:p");
   const paragraph = new OdtParagraph([], node, pkg);
   if (init.headingLevel !== undefined) {
     paragraph.headingLevel = init.headingLevel;

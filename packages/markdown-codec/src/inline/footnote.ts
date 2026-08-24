@@ -17,7 +17,10 @@ export interface FootnoteLabelMatch {
 }
 
 // Matches `[^label]` starting at `start` (which must be the `[`), or undefined when what follows is not a footnote label at all.
-export function matchFootnoteLabel(text: string, start: number): FootnoteLabelMatch | undefined {
+export function matchFootnoteLabel(
+  text: string,
+  start: number,
+): FootnoteLabelMatch | undefined {
   FOOTNOTE_LABEL_PATTERN.lastIndex = start;
   const match = FOOTNOTE_LABEL_PATTERN.exec(text);
   if (match === null) {
@@ -37,9 +40,11 @@ export interface FootnoteDefinitionMatch {
 }
 
 // Matches a footnote DEFINITION's own opening marker (`[^label]:`) at the very start of `lineText`, which the block phase hands in already positioned at the line's first non-space character.
-export function matchFootnoteDefinitionMarker(lineText: string): FootnoteDefinitionMatch | undefined {
+export function matchFootnoteDefinitionMarker(
+  lineText: string,
+): FootnoteDefinitionMatch | undefined {
   const match = matchFootnoteLabel(lineText, 0);
-  if (match === undefined || lineText.charAt(match.end) !== ':') {
+  if (match === undefined || lineText.charAt(match.end) !== ":") {
     return undefined;
   }
   return { label: match.label, markerLength: match.end + 1 };

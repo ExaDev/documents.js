@@ -1,6 +1,6 @@
-import { render } from 'ink-testing-library';
-import { describe, expect, it, vi } from 'vitest';
-import { OdgHarness } from './test-support.js';
+import { render } from "ink-testing-library";
+import { describe, expect, it, vi } from "vitest";
+import { OdgHarness } from "./test-support.js";
 
 const EFFECT_SETTLE_MS = 50;
 
@@ -11,35 +11,35 @@ async function settle(): Promise<void> {
   });
 }
 
-describe('OdgPageListScreen', () => {
+describe("OdgPageListScreen", () => {
   it('lists the drawing pages and adds one on "a"', async () => {
     const { lastFrame, stdin } = render(<OdgHarness />);
     await vi.waitFor(() => {
-      expect(lastFrame()).toContain('Drawing pages');
+      expect(lastFrame()).toContain("Drawing pages");
     });
     await settle();
 
-    stdin.write('a');
+    stdin.write("a");
     await vi.waitFor(() => {
-      expect(lastFrame()).toContain('Page 1');
+      expect(lastFrame()).toContain("Page 1");
     });
   });
 
-  it('pushes pageDetail for the selected page on Enter', async () => {
+  it("pushes pageDetail for the selected page on Enter", async () => {
     const { lastFrame, stdin } = render(<OdgHarness />);
     await vi.waitFor(() => {
-      expect(lastFrame()).toContain('top:pageList');
+      expect(lastFrame()).toContain("top:pageList");
     });
     await settle();
 
-    stdin.write('a');
+    stdin.write("a");
     await vi.waitFor(() => {
-      expect(lastFrame()).toContain('Page 1');
+      expect(lastFrame()).toContain("Page 1");
     });
 
-    stdin.write('\r');
+    stdin.write("\r");
     await vi.waitFor(() => {
-      expect(lastFrame()).toContain('top:pageDetail');
+      expect(lastFrame()).toContain("top:pageDetail");
     });
   });
 });

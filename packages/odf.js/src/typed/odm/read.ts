@@ -1,6 +1,6 @@
-import type { XmlElement, XmlNode } from '../../model/node';
-import type { Package } from '../../model/package';
-import { attrValue, findChildElement, rootElement } from '../../xml/query';
+import type { XmlElement, XmlNode } from "../../model/node";
+import type { Package } from "../../model/package";
+import { attrValue, findChildElement, rootElement } from "../../xml/query";
 
 // Package -> OdmDocument: a reader for ODF MASTER documents (.odm, application/vnd.oasis.opendocument.text-master), each of whose "chapters" is a top-level text:section carrying a text:section-source child -- an EXTERNAL FILE REFERENCE (xlink:href pointing at a sibling .odt on disk), not an embedded package sub-document the way odf.js's other composite-document handling (manifest.ts's subdocumentDirectories) treats an embedded OLE object's own "<dir>/content.xml". This was a real correction made during this reader's own design phase, before any real file had been inspected -- see this module's own note below on what inspecting a genuine LibreOffice-produced .odm actually showed.
 //
@@ -24,39 +24,50 @@ export interface OdmDocument {
   sections: readonly OdmSection[];
 }
 
-const CONTENT_PART = 'content.xml';
+const CONTENT_PART = "content.xml";
 
 // One top-level text:section -> OdmSection, or undefined if this section is not a master-document chapter reference at all (no text:section-source child) or is missing a required attribute (see this module's own top-of-file SCOPE note).
 function readSection(element: XmlElement): OdmSection | undefined {
-  const sourceElement = findChildElement(element.children, 'text:section-source');
+  const sourceElement = findChildElement(
+    element.children,
+    "text:section-source",
+  );
   if (sourceElement === undefined) {
     return undefined;
   }
-  const name = attrValue(element, 'text:name');
-  const href = attrValue(sourceElement, 'xlink:href');
+  const name = attrValue(element, "text:name");
+  const href = attrValue(sourceElement, "xlink:href");
   if (name === undefined || href === undefined) {
     return undefined;
   }
-  const filterName = attrValue(sourceElement, 'text:filter-name');
+  const filterName = attrValue(sourceElement, "text:filter-name");
   return filterName === undefined ? { name, href } : { name, href, filterName };
 }
 
 // Package -> OdmDocument. Throws only when content.xml itself, or its own office:body/office:text element, is missing -- a genuinely unusable package, mirroring every other odf.js typed reader's own "missing required structural element" throw convention (see e.g. readOdtContent).
 export function readOdm(pkg: Package): OdmDocument {
   const contentPart = pkg.parts[CONTENT_PART];
-  if (contentPart?.kind !== 'xml') {
+  if (contentPart?.kind !== "xml") {
     throw new Error(`readOdm: package has no ${CONTENT_PART} part`);
   }
   const contentRoot = rootElement(contentPart.nodes);
-  const body = contentRoot === undefined ? undefined : findChildElement(contentRoot.children, 'office:body');
-  const textElement = body === undefined ? undefined : findChildElement(body.children, 'office:text');
+  const body =
+    contentRoot === undefined
+      ? undefined
+      : findChildElement(contentRoot.children, "office:body");
+  const textElement =
+    body === undefined
+      ? undefined
+      : findChildElement(body.children, "office:text");
   if (textElement === undefined) {
-    throw new Error(`readOdm: ${CONTENT_PART} has no office:body/office:text element`);
+    throw new Error(
+      `readOdm: ${CONTENT_PART} has no office:body/office:text element`,
+    );
   }
 
   const sections: OdmSection[] = [];
   for (const node of textElement.children) {
-    if (node.type !== 'element' || node.tag !== 'text:section') {
+    if (node.type !== "element" || node.tag !== "text:section") {
       continue;
     }
     const section = readSection(node);

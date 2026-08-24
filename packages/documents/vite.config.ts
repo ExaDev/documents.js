@@ -1,26 +1,29 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync } from "node:child_process";
 
-import { tanstackRouter } from '@tanstack/router-plugin/vite';
-import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
-import react from '@vitejs/plugin-react';
-import { VitePWA } from 'vite-plugin-pwa';
-import { defineConfig } from 'vitest/config';
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
+import { vanillaExtractPlugin } from "@vanilla-extract/vite-plugin";
+import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
+import { defineConfig } from "vitest/config";
 
-import { BACKGROUND_COLOR, BRAND_COLOR } from './src/design-tokens';
-import { name as packageName } from './package.json' with { type: 'json' };
+import { BACKGROUND_COLOR, BRAND_COLOR } from "./src/design-tokens";
+import { name as packageName } from "./package.json" with { type: "json" };
 
 // GitHub Pages serves this repo at /documents/ (exadev.github.io is already the org's own Pages root, so this app can never live at the bare domain). Local dev stays at '/'.
-const base = process.env.CI ? '/documents/' : '/';
+const base = process.env.CI ? "/documents/" : "/";
 
 // The sidebar's version link needs the real commit this build was produced from, and whether it happens to be an exact release tag -- read here rather than dry-running semantic-release, because CI's own job graph already guarantees the answer is sitting on disk by build time: the deploy job's checkout runs strictly after the release job (`needs: [..., release]`), re-fetching `ref: main` fresh, so if semantic-release just cut a release its version-bump commit and tag are already the checked-out HEAD. A dry run would only ever predict what real git state already states outright.
 function execGit(args: string[]): string {
-  return execFileSync('git', args, { encoding: 'utf-8' }).trim();
+  return execFileSync("git", args, { encoding: "utf-8" }).trim();
 }
 
 function tryExecGit(args: string[]): string | undefined {
   try {
     // 'no tag at HEAD' is an expected outcome for most commits, not a real failure -- stderr is piped rather than inherited so git's own "fatal: no tag exactly matches" doesn't scroll through every dev/build run.
-    return execFileSync('git', args, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execFileSync("git", args, {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
   } catch {
     return undefined;
   }
@@ -29,47 +32,72 @@ function tryExecGit(args: string[]): string | undefined {
 // Handles both the HTTPS form GitHub Actions' checkout uses (optionally with embedded credentials) and the SSH form a local clone might use -- the regex searches rather than anchors from the start, so a credentials prefix before "github.com" doesn't break the match. The repo group is deliberately non-greedy over "anything" rather than "anything but a dot": a repo name is free to contain dots of its own (this workspace's own origin, ExaDev/documents.js, is exactly such a name), and the non-greedy quantifier already stops at the shortest match that still lets the optional ".git" suffix and end-of-string anchor succeed, so a real ".git" suffix is still stripped correctly either way.
 function parseGitHubRepoUrl(remoteUrl: string): string {
   const match = /github\.com[:/]([^/]+)\/(.+?)(?:\.git)?$/.exec(remoteUrl);
-  if (match === null) throw new Error(`Could not parse a GitHub owner/repo from origin remote URL: ${remoteUrl}`);
+  if (match === null)
+    throw new Error(
+      `Could not parse a GitHub owner/repo from origin remote URL: ${remoteUrl}`,
+    );
   const [, owner, repo] = match;
   return `https://github.com/${owner}/${repo}`;
 }
 
-const commitSha = execGit(['rev-parse', 'HEAD']);
+const commitSha = execGit(["rev-parse", "HEAD"]);
 // @exadev/semantic-release-workspace's tagFormat is '${pkg.name}@${version}' (see release-workspace.config.json and the orchestrator's own release.ts), not semantic-release's bare 'v${version}' default -- validated here so an unrelated tag some clone happens to have checked out, or a sibling package's release tag reachable from this same commit, can't be mistaken for this package's own release.
-const exactTag = tryExecGit(['describe', '--tags', '--exact-match', 'HEAD']);
-const releaseTagPattern = new RegExp(`^${packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}@\\d+\\.\\d+\\.\\d+$`);
-const releaseTag = exactTag !== undefined && releaseTagPattern.test(exactTag) ? exactTag : null;
-const repoUrl = parseGitHubRepoUrl(execGit(['remote', 'get-url', 'origin']));
+const exactTag = tryExecGit(["describe", "--tags", "--exact-match", "HEAD"]);
+const releaseTagPattern = new RegExp(
+  `^${packageName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}@\\d+\\.\\d+\\.\\d+$`,
+);
+const releaseTag =
+  exactTag !== undefined && releaseTagPattern.test(exactTag) ? exactTag : null;
+const repoUrl = parseGitHubRepoUrl(execGit(["remote", "get-url", "origin"]));
 // %ct is the committer date as Unix seconds -- for a release commit this is effectively its release time (semantic-release commits, tags, and publishes the release in the same CI step), and for an ordinary commit it's simply when that commit was made. Multiplied to milliseconds for direct use with Date.now()-based relative time.
-const commitTimestampMs = Number(execGit(['show', '-s', '--format=%ct', 'HEAD'])) * 1000;
+const commitTimestampMs =
+  Number(execGit(["show", "-s", "--format=%ct", "HEAD"])) * 1000;
 
 // documents.worker-*.js is ~3.7MB (by far the largest built asset) and is only ever constructed lazily inside getRpcClient() when a tool actually runs a job, never at page load. Workbox's default 2MiB precache size cutover would either silently exclude it or, if raised, block PWA install on downloading a chunk most users don't need on first paint -- excluded from the precache glob and instead cached at runtime on first use via a CacheFirst rule, which is safe because the filename is content-hashed by Vite's build (a new build is a new URL, so there is no staleness risk to revalidate against).
 const pwa = VitePWA({
-  registerType: 'autoUpdate',
+  registerType: "autoUpdate",
   manifest: {
-    name: 'documents',
-    short_name: 'documents',
+    name: "documents",
+    short_name: "documents",
     description:
-      'Convert and edit docx, pptx, xlsx, odt, odp, ods, odg, pdf, and markdown documents entirely in your browser.',
+      "Convert and edit docx, pptx, xlsx, odt, odp, ods, odg, pdf, and markdown documents entirely in your browser.",
     theme_color: BRAND_COLOR,
     background_color: BACKGROUND_COLOR,
-    display: 'standalone',
-    scope: './',
-    start_url: './',
+    display: "standalone",
+    scope: "./",
+    start_url: "./",
     icons: [
-      { src: 'icons/icon-192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'any' },
-      { src: 'icons/icon-512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
-      { src: 'icons/maskable-512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' },
+      {
+        src: "icons/icon-192.svg",
+        sizes: "192x192",
+        type: "image/svg+xml",
+        purpose: "any",
+      },
+      {
+        src: "icons/icon-512.svg",
+        sizes: "512x512",
+        type: "image/svg+xml",
+        purpose: "any",
+      },
+      {
+        src: "icons/maskable-512.svg",
+        sizes: "512x512",
+        type: "image/svg+xml",
+        purpose: "maskable",
+      },
     ],
   },
   workbox: {
-    globPatterns: ['**/*.{js,css,html,svg,woff2}'],
-    globIgnores: ['**/documents.worker-*.js'],
+    globPatterns: ["**/*.{js,css,html,svg,woff2}"],
+    globIgnores: ["**/documents.worker-*.js"],
     runtimeCaching: [
       {
         urlPattern: /documents\.worker-.*\.js$/,
-        handler: 'CacheFirst',
-        options: { cacheName: 'documents-worker', expiration: { maxEntries: 2, purgeOnQuotaError: true } },
+        handler: "CacheFirst",
+        options: {
+          cacheName: "documents-worker",
+          expiration: { maxEntries: 2, purgeOnQuotaError: true },
+        },
       },
     ],
   },
@@ -85,22 +113,28 @@ export default defineConfig({
   },
   plugins: [
     // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports.
-    tanstackRouter({ target: 'react', autoCodeSplitting: true }),
+    tanstackRouter({ target: "react", autoCodeSplitting: true }),
     react(),
     vanillaExtractPlugin(),
     pwa,
   ],
   build: {
-    target: 'es2022',
+    target: "es2022",
     sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined;
-          if (id.includes('@mantine')) return 'vendor-mantine';
-          if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'vendor-react';
-          if (id.includes('/dexie') || id.includes('/zod/')) return 'vendor-data';
-          if (id.includes('@tanstack')) return 'vendor-tanstack';
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("@mantine")) return "vendor-mantine";
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("/scheduler/")
+          )
+            return "vendor-react";
+          if (id.includes("/dexie") || id.includes("/zod/"))
+            return "vendor-data";
+          if (id.includes("@tanstack")) return "vendor-tanstack";
           return undefined;
         },
       },
@@ -109,19 +143,26 @@ export default defineConfig({
   test: {
     passWithNoTests: false,
     coverage: {
-      provider: 'v8',
-      reporter: ['text', 'lcov', 'json-summary'],
-      reportsDirectory: 'coverage',
-      include: ['src/**/*.ts', 'src/**/*.tsx'],
-      exclude: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/test/**', 'src/main.tsx', 'src/**/*.css.ts', 'src/routeTree.gen.ts'],
+      provider: "v8",
+      reporter: ["text", "lcov", "json-summary"],
+      reportsDirectory: "coverage",
+      include: ["src/**/*.ts", "src/**/*.tsx"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/**/*.test.tsx",
+        "src/test/**",
+        "src/main.tsx",
+        "src/**/*.css.ts",
+        "src/routeTree.gen.ts",
+      ],
     },
     projects: [
       {
         extends: true,
         test: {
-          name: 'unit',
-          environment: 'jsdom',
-          include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+          name: "unit",
+          environment: "jsdom",
+          include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
         },
       },
     ],

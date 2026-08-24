@@ -1,4 +1,4 @@
-import { base64ToBytes } from '../util/base64';
+import { base64ToBytes } from "../util/base64";
 
 // Real JBIG2 embedded streams -- the exact byte sequence a PDF /JBIG2Decode filter carries -- produced by jbig2enc 0.32 (Adam Langley's encoder, the one behind essentially every JBIG2 image in a real PDF), by libtiff 4.7.2 for the MMR-coded region, and, for the two generic-region templates jbig2enc never emits, by a hand-written T.88 Annex E arithmetic encoder in scripts/generate-jbig2-fixtures.mjs. Embedded as base64 so the suite needs no filesystem access.
 //
@@ -29,7 +29,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, nominal AT pixels",
     width: 16,
     height: 8,
-    stream: "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAQAAAAAAASYAAQAAACYAAAAQAAAACAAAAAAAAAAAAAAD//3/Av7+/uRsSQG/n/1FDn//rA==",
+    stream:
+      "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAQAAAAAAASYAAQAAACYAAAAQAAAACAAAAAAAAAAAAAAD//3/Av7+/uRsSQG/n/1FDn//rA==",
     expected: [
       "##..##..##..##..",
       "##..##..##..##..",
@@ -47,7 +48,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, TPGDON set",
     width: 16,
     height: 8,
-    stream: "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAQAAAAAAASYAAQAAACIAAAAQAAAACAAAAAAAAAAAAAgD//3/Av7+/iLKum+GP/+s",
+    stream:
+      "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAQAAAAAAASYAAQAAACIAAAAQAAAACAAAAAAAAAAAAAgD//3/Av7+/iLKum+GP/+s",
     expected: [
       "##..##..##..##..",
       "##..##..##..##..",
@@ -65,7 +67,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 1, TPGDON set",
     width: 16,
     height: 8,
-    stream: "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAAAAAAAAASYAAQAAABsAAAAQAAAACAAAAAAAAAAAAAoD/yVqziuD/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAAAAAAAAASYAAQAAABsAAAAQAAAACAAAAAAAAAAAAAoD/yVqziuD/6w=",
     expected: [
       "##..##..##..##..",
       "##..##..##..##..",
@@ -83,7 +86,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 2, TPGDON set",
     width: 16,
     height: 8,
-    stream: "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAAAAAAAAASYAAQAAABsAAAAQAAAACAAAAAAAAAAAAAwC/yqasMUP/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAAAAAAAAASYAAQAAABsAAAAQAAAACAAAAAAAAAAAAAwC/yqasMUP/6w=",
     expected: [
       "##..##..##..##..",
       "##..##..##..##..",
@@ -101,7 +105,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 3, TPGDON set",
     width: 16,
     height: 8,
-    stream: "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAAAAAAAAASYAAQAAABsAAAAQAAAACAAAAAAAAAAAAA4C/yLKuteH/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAAAAAAAAASYAAQAAABsAAAAQAAAACAAAAAAAAAAAAA4C/yLKuteH/6w=",
     expected: [
       "##..##..##..##..",
       "##..##..##..##..",
@@ -116,10 +121,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "checker-template0-at",
-    description: "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
+    description:
+      "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
     width: 16,
     height: 8,
-    stream: "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAAAAAAAAASYAAQAAACIAAAAQAAAACAAAAAAAAAAAAAj+/wH+BP39/SLKutWDw/+s",
+    stream:
+      "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAAAAAAAAASYAAQAAACIAAAAQAAAACAAAAAAAAAAAAAj+/wH+BP39/SLKutWDw/+s",
     expected: [
       "##..##..##..##..",
       "##..##..##..##..",
@@ -134,10 +141,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "checker-mmr",
-    description: "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
+    description:
+      "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
     width: 16,
     height: 8,
-    stream: "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAAAAAAAAASYAAQAAADAAAAAQAAAACAAAAAAAAAAAAAEmuXy+X//DCCCCCC/4QQQQQQQX/hhBBBBBf8AEAEA=",
+    stream:
+      "AAAAADAAAQAAABMAAAAQAAAACAAAAAAAAAAAAAAAAAAAASYAAQAAADAAAAAQAAAACAAAAAAAAAAAAAEmuXy+X//DCCCCCC/4QQQQQQQX/hhBBBBBf8AEAEA=",
     expected: [
       "##..##..##..##..",
       "##..##..##..##..",
@@ -155,7 +164,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, nominal AT pixels",
     width: 24,
     height: 12,
-    stream: "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAQAAAAAAASYAAQAAACoAAAAYAAAADAAAAAAAAAAAAAAD//3/Av7+/uonidoUZB4QvW/z78aD/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAQAAAAAAASYAAQAAACoAAAAYAAAADAAAAAAAAAAAAAAD//3/Av7+/uonidoUZB4QvW/z78aD/6w=",
     expected: [
       "##..................#...",
       ".##................#....",
@@ -177,7 +187,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, TPGDON set",
     width: 24,
     height: 12,
-    stream: "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAQAAAAAAASYAAQAAACsAAAAYAAAADAAAAAAAAAAAAAgD//3/Av7+/iilTHwhOhMJ/3//X7S6X/+s",
+    stream:
+      "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAQAAAAAAASYAAQAAACsAAAAYAAAADAAAAAAAAAAAAAgD//3/Av7+/iilTHwhOhMJ/3//X7S6X/+s",
     expected: [
       "##..................#...",
       ".##................#....",
@@ -199,7 +210,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 1, TPGDON set",
     width: 24,
     height: 12,
-    stream: "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAAAAAAAAASYAAQAAACMAAAAYAAAADAAAAAAAAAAAAAoD/yZKe4mk1e5NKPQA0Yv/rA==",
+    stream:
+      "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAAAAAAAAASYAAQAAACMAAAAYAAAADAAAAAAAAAAAAAoD/yZKe4mk1e5NKPQA0Yv/rA==",
     expected: [
       "##..................#...",
       ".##................#....",
@@ -221,7 +233,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 2, TPGDON set",
     width: 24,
     height: 12,
-    stream: "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAAAAAAAAASYAAQAAACIAAAAYAAAADAAAAAAAAAAAAAwC/yGU0fSLvYf+xKa6N/+s",
+    stream:
+      "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAAAAAAAAASYAAQAAACIAAAAYAAAADAAAAAAAAAAAAAwC/yGU0fSLvYf+xKa6N/+s",
     expected: [
       "##..................#...",
       ".##................#....",
@@ -243,7 +256,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 3, TPGDON set",
     width: 24,
     height: 12,
-    stream: "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAAAAAAAAASYAAQAAACMAAAAYAAAADAAAAAAAAAAAAA4C/yilTHunO3//f/DH3Af/rA==",
+    stream:
+      "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAAAAAAAAASYAAQAAACMAAAAYAAAADAAAAAAAAAAAAA4C/yilTHunO3//f/DH3Af/rA==",
     expected: [
       "##..................#...",
       ".##................#....",
@@ -262,10 +276,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "diagonal-template0-at",
-    description: "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
+    description:
+      "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
     width: 24,
     height: 12,
-    stream: "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAAAAAAAAASYAAQAAACoAAAAYAAAADAAAAAAAAAAAAAj+/wH+BP39/SilTHtIqrPFOguYBR+X/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAAAAAAAAASYAAQAAACoAAAAYAAAADAAAAAAAAAAAAAj+/wH+BP39/SilTHtIqrPFOguYBR+X/6w=",
     expected: [
       "##..................#...",
       ".##................#....",
@@ -284,10 +300,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "diagonal-mmr",
-    description: "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
+    description:
+      "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
     width: 24,
     height: 12,
-    stream: "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAAAAAAAAASYAAQAAACoAAAAYAAAADAAAAAAAAAAAAAEmuU6tpW0raVtK2lbStpW0rDvQRH4AIAI=",
+    stream:
+      "AAAAADAAAQAAABMAAAAYAAAADAAAAAAAAAAAAAAAAAAAASYAAQAAACoAAAAYAAAADAAAAAAAAAAAAAEmuU6tpW0raVtK2lbStpW0rDvQRH4AIAI=",
     expected: [
       "##..................#...",
       ".##................#....",
@@ -309,7 +327,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, nominal AT pixels",
     width: 32,
     height: 16,
-    stream: "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAQAAAAAAASYAAQAAADEAAAAgAAAAEAAAAAAAAAAAAAAD//3/Av7+/v9jD3QRyGPcKVSVgg0rWF9MSoq8lf+s",
+    stream:
+      "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAQAAAAAAASYAAQAAADEAAAAgAAAAEAAAAAAAAAAAAAAD//3/Av7+/v9jD3QRyGPcKVSVgg0rWF9MSoq8lf+s",
     expected: [
       "################################",
       "#..............................#",
@@ -335,7 +354,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, TPGDON set",
     width: 32,
     height: 16,
-    stream: "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAQAAAAAAASYAAQAAACcAAAAgAAAAEAAAAAAAAAAAAAgD//3/Av7+/gVU8H02cv47O/r+/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAQAAAAAAASYAAQAAACcAAAAgAAAAEAAAAAAAAAAAAAgD//3/Av7+/gVU8H02cv47O/r+/6w=",
     expected: [
       "################################",
       "#..............................#",
@@ -361,7 +381,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 1, TPGDON set",
     width: 32,
     height: 16,
-    stream: "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAAAAAAAAASYAAQAAACEAAAAgAAAAEAAAAAAAAAAAAAoD/wq0ERD2WSQHLZ+//6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAAAAAAAAASYAAQAAACEAAAAgAAAAEAAAAAAAAAAAAAoD/wq0ERD2WSQHLZ+//6w=",
     expected: [
       "################################",
       "#..............................#",
@@ -387,7 +408,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 2, TPGDON set",
     width: 32,
     height: 16,
-    stream: "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAAAAAAAAASYAAQAAACAAAAAgAAAAEAAAAAAAAAAAAAwC/xV+yY3eVhcQde7/rA==",
+    stream:
+      "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAAAAAAAAASYAAQAAACAAAAAgAAAAEAAAAAAAAAAAAAwC/xV+yY3eVhcQde7/rA==",
     expected: [
       "################################",
       "#..............................#",
@@ -413,7 +435,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 3, TPGDON set",
     width: 32,
     height: 16,
-    stream: "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAAAAAAAAASYAAQAAACEAAAAgAAAAEAAAAAAAAAAAAA4C/wVUyA02crLtzDTP/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAAAAAAAAASYAAQAAACEAAAAgAAAAEAAAAAAAAAAAAA4C/wVUyA02crLtzDTP/6w=",
     expected: [
       "################################",
       "#..............................#",
@@ -436,10 +459,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "box-template0-at",
-    description: "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
+    description:
+      "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
     width: 32,
     height: 16,
-    stream: "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAAAAAAAAASYAAQAAACgAAAAgAAAAEAAAAAAAAAAAAAj+/wH+BP39/QVUyA02cvC3d/yAn/+s",
+    stream:
+      "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAAAAAAAAASYAAQAAACgAAAAgAAAAEAAAAAAAAAAAAAj+/wH+BP39/QVUyA02cvC3d/yAn/+s",
     expected: [
       "################################",
       "#..............................#",
@@ -462,10 +487,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "box-mmr",
-    description: "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
+    description:
+      "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
     width: 32,
     height: 16,
-    stream: "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAAAAAAAAASYAAQAAACUAAAAgAAAAEAAAAAAAAAAAAAEmoNUoD//58E////8f//4wAQAQ",
+    stream:
+      "AAAAADAAAQAAABMAAAAgAAAAEAAAAAAAAAAAAAAAAAAAASYAAQAAACUAAAAgAAAAEAAAAAAAAAAAAAEmoNUoD//58E////8f//4wAQAQ",
     expected: [
       "################################",
       "#..............................#",
@@ -491,7 +518,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, nominal AT pixels",
     width: 64,
     height: 6,
-    stream: "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAQAAAAAAASYAAQAAACoAAABAAAAABgAAAAAAAAAAAAAD//3/Av7+/tJLkHR9s7p96oezY31T/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAQAAAAAAASYAAQAAACoAAABAAAAABgAAAAAAAAAAAAAD//3/Av7+/tJLkHR9s7p96oezY31T/6w=",
     expected: [
       "#................#................#................#............",
       ".#................#................#................#...........",
@@ -507,7 +535,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, TPGDON set",
     width: 64,
     height: 6,
-    stream: "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAQAAAAAAASYAAQAAACsAAABAAAAABgAAAAAAAAAAAAgD//3/Av7+/lFKEHSFQEFASbfsF1fYv/+s",
+    stream:
+      "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAQAAAAAAASYAAQAAACsAAABAAAAABgAAAAAAAAAAAAgD//3/Av7+/lFKEHSFQEFASbfsF1fYv/+s",
     expected: [
       "#................#................#................#............",
       ".#................#................#................#...........",
@@ -523,7 +552,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 1, TPGDON set",
     width: 64,
     height: 6,
-    stream: "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAAAAAAAAASYAAQAAACMAAABAAAAABgAAAAAAAAAAAAoD/0yUAVA6ggEtbtnK1p//rA==",
+    stream:
+      "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAAAAAAAAASYAAQAAACMAAABAAAAABgAAAAAAAAAAAAoD/0yUAVA6ggEtbtnK1p//rA==",
     expected: [
       "#................#................#................#............",
       ".#................#................#................#...........",
@@ -539,7 +569,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 2, TPGDON set",
     width: 64,
     height: 6,
-    stream: "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAAAAAAAAASYAAQAAACMAAABAAAAABgAAAAAAAAAAAAwC/0MowiK95HaMRvQfIp//rA==",
+    stream:
+      "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAAAAAAAAASYAAQAAACMAAABAAAAABgAAAAAAAAAAAAwC/0MowiK95HaMRvQfIp//rA==",
     expected: [
       "#................#................#................#............",
       ".#................#................#................#...........",
@@ -555,7 +586,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 3, TPGDON set",
     width: 64,
     height: 6,
-    stream: "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAAAAAAAAASYAAQAAACMAAABAAAAABgAAAAAAAAAAAA4C/1FKEHSFQ/RusZXB8E//rA==",
+    stream:
+      "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAAAAAAAAASYAAQAAACMAAABAAAAABgAAAAAAAAAAAA4C/1FKEHSFQ/RusZXB8E//rA==",
     expected: [
       "#................#................#................#............",
       ".#................#................#................#...........",
@@ -568,10 +600,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "sparse-template0-at",
-    description: "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
+    description:
+      "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
     width: 64,
     height: 6,
-    stream: "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAAAAAAAAASYAAQAAACkAAABAAAAABgAAAAAAAAAAAAj+/wH+BP39/VFKEHSFMZi/6ID26t3/rA==",
+    stream:
+      "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAAAAAAAAASYAAQAAACkAAABAAAAABgAAAAAAAAAAAAj+/wH+BP39/VFKEHSFMZi/6ID26t3/rA==",
     expected: [
       "#................#................#................#............",
       ".#................#................#................#...........",
@@ -584,10 +618,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "sparse-mmr",
-    description: "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
+    description:
+      "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
     width: 64,
     height: 6,
-    stream: "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAAAAAAAAASYAAQAAAD0AAABAAAAABgAAAAAAAAAAAAEmqNSNSNSsqoqoqopDKqKqKqKOEEIQQhBCEENlVFVFVFIZVRVRVRRwAQAQ",
+    stream:
+      "AAAAADAAAQAAABMAAABAAAAABgAAAAAAAAAAAAAAAAAAASYAAQAAAD0AAABAAAAABgAAAAAAAAAAAAEmqNSNSNSsqoqoqopDKqKqKqKOEEIQQhBCEENlVFVFVFIZVRVRVRRwAQAQ",
     expected: [
       "#................#................#................#............",
       ".#................#................#................#...........",
@@ -603,7 +639,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, nominal AT pixels",
     width: 13,
     height: 7,
-    stream: "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAQAAAAAAASYAAQAAACcAAAANAAAABwAAAAAAAAAAAAAD//3/Av7+/v8fld0gexdiq2t//6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAQAAAAAAASYAAQAAACcAAAANAAAABwAAAAAAAAAAAAAD//3/Av7+/v8fld0gexdiq2t//6w=",
     expected: [
       "#############",
       "##...##...##.",
@@ -620,7 +657,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, TPGDON set",
     width: 13,
     height: 7,
-    stream: "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAQAAAAAAASYAAQAAACcAAAANAAAABwAAAAAAAAAAAAgD//3/Av7+/gU3ee7Hgk8lZCx//6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAQAAAAAAASYAAQAAACcAAAANAAAABwAAAAAAAAAAAAgD//3/Av7+/gU3ee7Hgk8lZCx//6w=",
     expected: [
       "#############",
       "##...##...##.",
@@ -637,7 +675,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 1, TPGDON set",
     width: 13,
     height: 7,
-    stream: "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAAAAAAAAASYAAQAAACAAAAANAAAABwAAAAAAAAAAAAoD/wqZ192PJJlsjGT/rA==",
+    stream:
+      "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAAAAAAAAASYAAQAAACAAAAANAAAABwAAAAAAAAAAAAoD/wqZ192PJJlsjGT/rA==",
     expected: [
       "#############",
       "##...##...##.",
@@ -654,7 +693,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 2, TPGDON set",
     width: 13,
     height: 7,
-    stream: "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAAAAAAAAASYAAQAAACAAAAANAAAABwAAAAAAAAAAAAwC/xRBO880wdnIOD//rA==",
+    stream:
+      "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAAAAAAAAASYAAQAAACAAAAANAAAABwAAAAAAAAAAAAwC/xRBO880wdnIOD//rA==",
     expected: [
       "#############",
       "##...##...##.",
@@ -671,7 +711,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 3, TPGDON set",
     width: 13,
     height: 7,
-    stream: "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAAAAAAAAASYAAQAAAB8AAAANAAAABwAAAAAAAAAAAA4C/wU4CHmhPF3cz/+s",
+    stream:
+      "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAAAAAAAAASYAAQAAAB8AAAANAAAABwAAAAAAAAAAAA4C/wU4CHmhPF3cz/+s",
     expected: [
       "#############",
       "##...##...##.",
@@ -685,10 +726,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "oddwidth-template0-at",
-    description: "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
+    description:
+      "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
     width: 13,
     height: 7,
-    stream: "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAAAAAAAAASYAAQAAACYAAAANAAAABwAAAAAAAAAAAAj+/wH+BP39/QU32XqcRpFKTu//rA==",
+    stream:
+      "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAAAAAAAAASYAAQAAACYAAAANAAAABwAAAAAAAAAAAAj+/wH+BP39/QU32XqcRpFKTu//rA==",
     expected: [
       "#############",
       "##...##...##.",
@@ -702,10 +745,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "oddwidth-mmr",
-    description: "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
+    description:
+      "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
     width: 13,
     height: 7,
-    stream: "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAAAAAAAAASYAAQAAACoAAAANAAAABwAAAAAAAAAAAAEmoJPB4WggVBAq6Wlrioq4iHPB4UAEAEA=",
+    stream:
+      "AAAAADAAAQAAABMAAAANAAAABwAAAAAAAAAAAAAAAAAAASYAAQAAACoAAAANAAAABwAAAAAAAAAAAAEmoJPB4WggVBAq6Wlrioq4iHPB4UAEAEA=",
     expected: [
       "#############",
       "##...##...##.",
@@ -722,7 +767,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, nominal AT pixels",
     width: 40,
     height: 24,
-    stream: "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAQAAAAAAASYAAQAAAC8AAAAoAAAAGAAAAAAAAAAAAAAD//3/Av7+/v9tLMk9O9UgSIdyhjUzOe/L2c//rA==",
+    stream:
+      "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAQAAAAAAASYAAQAAAC8AAAAoAAAAGAAAAAAAAAAAAAAD//3/Av7+/v9tLMk9O9UgSIdyhjUzOe/L2c//rA==",
     expected: [
       "########################################",
       "........................................",
@@ -756,7 +802,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, TPGDON set",
     width: 40,
     height: 24,
-    stream: "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAQAAAAAAASYAAQAAAC0AAAAoAAAAGAAAAAAAAAAAAAgD//3/Av7+/gVSRheekn3MJ4gfckwRKY47/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAQAAAAAAASYAAQAAAC0AAAAoAAAAGAAAAAAAAAAAAAgD//3/Av7+/gVSRheekn3MJ4gfckwRKY47/6w=",
     expected: [
       "########################################",
       "........................................",
@@ -790,7 +837,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 1, TPGDON set",
     width: 40,
     height: 24,
-    stream: "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAASYAAQAAACUAAAAoAAAAGAAAAAAAAAAAAAoD/wquzkP+PlFbz5IKfcGNN/+s",
+    stream:
+      "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAASYAAQAAACUAAAAoAAAAGAAAAAAAAAAAAAoD/wquzkP+PlFbz5IKfcGNN/+s",
     expected: [
       "########################################",
       "........................................",
@@ -824,7 +872,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 2, TPGDON set",
     width: 40,
     height: 24,
-    stream: "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAASYAAQAAACMAAAAoAAAAGAAAAAAAAAAAAAwC/xV9G5/L00Lif9YV60D/rA==",
+    stream:
+      "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAASYAAQAAACMAAAAoAAAAGAAAAAAAAAAAAAwC/xV9G5/L00Lif9YV60D/rA==",
     expected: [
       "########################################",
       "........................................",
@@ -858,7 +907,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 3, TPGDON set",
     width: 40,
     height: 24,
-    stream: "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAASYAAQAAACYAAAAoAAAAGAAAAAAAAAAAAA4C/wVSJwnAOEswpB5COH/jjL//rA==",
+    stream:
+      "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAASYAAQAAACYAAAAoAAAAGAAAAAAAAAAAAA4C/wVSJwnAOEswpB5COH/jjL//rA==",
     expected: [
       "########################################",
       "........................................",
@@ -889,10 +939,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "stripes-template0-at",
-    description: "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
+    description:
+      "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
     width: 40,
     height: 24,
-    stream: "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAASYAAQAAAC4AAAAoAAAAGAAAAAAAAAAAAAj+/wH+BP39/QVRVfytvK0aMKhdNVMz7bG03/+s",
+    stream:
+      "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAASYAAQAAAC4AAAAoAAAAGAAAAAAAAAAAAAj+/wH+BP39/QVRVfytvK0aMKhdNVMz7bG03/+s",
     expected: [
       "########################################",
       "........................................",
@@ -923,10 +975,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "stripes-mmr",
-    description: "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
+    description:
+      "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
     width: 40,
     height: 24,
-    stream: "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAASYAAQAAAEMAAAAoAAAAGAAAAAAAAAAAAAEmoNhKQ3k1BsJSG8moNhKQ3k1BsKAz+TUGwoDP5NQbCUhvJqDYSkN5NQbCUhvABABA",
+    stream:
+      "AAAAADAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAASYAAQAAAEMAAAAoAAAAGAAAAAAAAAAAAAEmoNhKQ3k1BsJSG8moNhKQ3k1BsKAz+TUGwoDP5NQbCUhvJqDYSkN5NQbCUhvABABA",
     expected: [
       "########################################",
       "........................................",
@@ -960,7 +1014,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, nominal AT pixels",
     width: 200,
     height: 5,
-    stream: "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAQAAAAAAASYAAQAAAD0AAADIAAAABQAAAAAAAAAAAAAD//3/Av7+/v5p6MPMwm1Qo5JfT4887uw20jrSjYTL++24L+//AVr/X/+s",
+    stream:
+      "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAQAAAAAAASYAAQAAAD0AAADIAAAABQAAAAAAAAAAAAAD//3/Av7+/v5p6MPMwm1Qo5JfT4887uw20jrSjYTL++24L+//AVr/X/+s",
     expected: [
       "#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######....",
       "..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######...........",
@@ -975,7 +1030,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, TPGDON set",
     width: 200,
     height: 5,
-    stream: "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAQAAAAAAASYAAQAAAD0AAADIAAAABQAAAAAAAAAAAAgD//3/Av7+/gJN7YeZhNqhRyS+nx55zOQ20jrSjYTL/CG5L+//GVv/f/+s",
+    stream:
+      "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAQAAAAAAASYAAQAAAD0AAADIAAAABQAAAAAAAAAAAAgD//3/Av7+/gJN7YeZhNqhRyS+nx55zOQ20jrSjYTL/CG5L+//GVv/f/+s",
     expected: [
       "#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######....",
       "..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######...........",
@@ -990,7 +1046,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 1, TPGDON set",
     width: 200,
     height: 5,
-    stream: "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAAAAAAAAASYAAQAAADYAAADIAAAABQAAAAAAAAAAAAoD/wVGZsMoeGFhvI2ElRByLjttxPRQfi27HHFoh89+8cwx/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAAAAAAAAASYAAQAAADYAAADIAAAABQAAAAAAAAAAAAoD/wVGZsMoeGFhvI2ElRByLjttxPRQfi27HHFoh89+8cwx/6w=",
     expected: [
       "#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######....",
       "..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######...........",
@@ -1005,7 +1062,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 2, TPGDON set",
     width: 200,
     height: 5,
-    stream: "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAAAAAAAAASYAAQAAADUAAADIAAAABQAAAAAAAAAAAAwC/wvBdKLJqMt+cDJJiRLZ8zCqq4Y8QXSgC5Bcf0A8/3//rA==",
+    stream:
+      "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAAAAAAAAASYAAQAAADUAAADIAAAABQAAAAAAAAAAAAwC/wvBdKLJqMt+cDJJiRLZ8zCqq4Y8QXSgC5Bcf0A8/3//rA==",
     expected: [
       "#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######....",
       "..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######...........",
@@ -1020,7 +1078,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 3, TPGDON set",
     width: 200,
     height: 5,
-    stream: "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAAAAAAAAASYAAQAAAEIAAADIAAAABQAAAAAAAAAAAA4C/wJN7YeZhNqhRyS+nx55y8gOlO3Vv7DC4TxgU38R7AWS/17as2Ckt8FpKGR//6w=",
+    stream:
+      "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAAAAAAAAASYAAQAAAEIAAADIAAAABQAAAAAAAAAAAA4C/wJN7YeZhNqhRyS+nx55y8gOlO3Vv7DC4TxgU38R7AWS/17as2Ckt8FpKGR//6w=",
     expected: [
       "#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######....",
       "..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######...........",
@@ -1032,10 +1091,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "wide-template0-at",
-    description: "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
+    description:
+      "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
     width: 200,
     height: 5,
-    stream: "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAAAAAAAAASYAAQAAAEAAAADIAAAABQAAAAAAAAAAAAj+/wH+BP39/QJN7YeZhNqhRyS+nx55yztCT+U2mVBcXAvmcf9ILhJP/3//f/+s",
+    stream:
+      "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAAAAAAAAASYAAQAAAEAAAADIAAAABQAAAAAAAAAAAAj+/wH+BP39/QJN7YeZhNqhRyS+nx55yztCT+U2mVBcXAvmcf9ILhJP/3//f/+s",
     expected: [
       "#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######....",
       "..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######...........",
@@ -1047,10 +1108,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "wide-mmr",
-    description: "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
+    description:
+      "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
     width: 200,
     height: 5,
-    stream: "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAAAAAAAAASYAAQAAAGoAAADIAAAABQAAAAAAAAAAAAEmozoM6DOgzoM6DOgzoM6DOg4nxnQZ0GdBnQZ0GdBnQZ0HPjOgzoM6DOgzoM6DOgzoM6MmozoM6DOgzoM6DOgzoM6DOg4nxnQZ0GdBnQZ0GdBnQZ0HABAB",
+    stream:
+      "AAAAADAAAQAAABMAAADIAAAABQAAAAAAAAAAAAAAAAAAASYAAQAAAGoAAADIAAAABQAAAAAAAAAAAAEmozoM6DOgzoM6DOgzoM6DOg4nxnQZ0GdBnQZ0GdBnQZ0HPjOgzoM6DOgzoM6DOgzoM6MmozoM6DOgzoM6DOgzoM6DOg4nxnQZ0GdBnQZ0GdBnQZ0HABAB",
     expected: [
       "#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######....",
       "..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######..............#######...........",
@@ -1065,7 +1128,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, nominal AT pixels",
     width: 96,
     height: 26,
-    stream: "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAQAAAAAAASYAAQAAAE8AAABgAAAAGgAAAAAAAAAAAAAD//3/Av7+/qibGHcW3L8jtl7vXrW0hMKEBH559esP4IAAdXBYoEkvLHzQ/2tEPMhF2IJDUVZzFZEbe/+s",
+    stream:
+      "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAQAAAAAAASYAAQAAAE8AAABgAAAAGgAAAAAAAAAAAAAD//3/Av7+/qibGHcW3L8jtl7vXrW0hMKEBH559esP4IAAdXBYoEkvLHzQ/2tEPMhF2IJDUVZzFZEbe/+s",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1101,7 +1165,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "jbig2enc generic region, GBTEMPLATE 0, TPGDON set",
     width: 96,
     height: 26,
-    stream: "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAQAAAAAAASYAAQAAADwAAABgAAAAGgAAAAAAAAAAAAgD//3/Av7+/qiDK3Fg3gfJJcgH4jc8Hy1M5tJXygjIljHWCEb6pDYf/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAQAAAAAAASYAAQAAADwAAABgAAAAGgAAAAAAAAAAAAgD//3/Av7+/qiDK3Fg3gfJJcgH4jc8Hy1M5tJXygjIljHWCEb6pDYf/6w=",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1137,7 +1202,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 1, TPGDON set",
     width: 96,
     height: 26,
-    stream: "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAASYAAQAAADYAAABgAAAAGgAAAAAAAAAAAAoD/6iDG5XgyiLgdiWU61Xa/2J4pYWXlufSR2f69Y4q+CGf/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAASYAAQAAADYAAABgAAAAGgAAAAAAAAAAAAoD/6iDG5XgyiLgdiWU61Xa/2J4pYWXlufSR2f69Y4q+CGf/6w=",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1173,7 +1239,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 2, TPGDON set",
     width: 96,
     height: 26,
-    stream: "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAASYAAQAAADMAAABgAAAAGgAAAAAAAAAAAAwC/6iDJbN5z0ibnMgisrO6VbntAYQT7j4DBWC6+29//6w=",
+    stream:
+      "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAASYAAQAAADMAAABgAAAAGgAAAAAAAAAAAAwC/6iDJbN5z0ibnMgisrO6VbntAYQT7j4DBWC6+29//6w=",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1209,7 +1276,8 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
     description: "hand-encoded generic region, GBTEMPLATE 3, TPGDON set",
     width: 96,
     height: 26,
-    stream: "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAASYAAQAAADUAAABgAAAAGgAAAAAAAAAAAA4C/6iDK3Fg3gfJJcgHnPceGdmMysey5Rnlz472tMBIDYT/rA==",
+    stream:
+      "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAASYAAQAAADUAAABgAAAAGgAAAAAAAAAAAA4C/6iDK3Fg3gfJJcgHnPceGdmMysey5Rnlz472tMBIDYT/rA==",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1242,10 +1310,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "text-template0-at",
-    description: "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
+    description:
+      "hand-encoded generic region, GBTEMPLATE 0 with non-nominal AT pixels, TPGDON set",
     width: 96,
     height: 26,
-    stream: "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAASYAAQAAADwAAABgAAAAGgAAAAAAAAAAAAj+/wH+BP39/aiDK3Fg3gfJJcffd3GAPNKs9nV6Jhy8BwTWpU8pZFgd/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAASYAAQAAADwAAABgAAAAGgAAAAAAAAAAAAj+/wH+BP39/aiDK3Fg3gfJJcffd3GAPNKs9nV6Jhy8BwTWpU8pZFgd/6w=",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1278,10 +1348,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "text-mmr",
-    description: "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
+    description:
+      "generic region with MMR = 1, payload coded by libtiff as ITU-T T.6 Group 4",
     width: 96,
     height: 26,
-    stream: "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAASYAAQAAAD8AAABgAAAAGgAAAAAAAAAAAAHl2TsnAgnZO//////81v//////j4////ln8s///////JwI//////xERHgAgAg=",
+    stream:
+      "AAAAADAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAASYAAQAAAD8AAABgAAAAGgAAAAAAAAAAAAHl2TsnAgnZO//////81v//////j4////ln8s///////JwI//////xERHgAgAg=",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1314,11 +1386,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "stripes-symbols",
-    description: "jbig2enc symbol mode: an arithmetic symbol dictionary in a globals stream plus a text region in the page stream",
+    description:
+      "jbig2enc symbol mode: an arithmetic symbol dictionary in a globals stream plus a text region in the page stream",
     width: 40,
     height: 24,
-    globals: "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
-    stream: "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAAAAAAAapW0GPnDH/rA==",
+    globals:
+      "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
+    stream:
+      "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAAAAAAAapW0GPnDH/rA==",
     expected: [
       "########################################",
       "........................................",
@@ -1349,11 +1424,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "stripes-symbols-topleft",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPLEFT",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPLEFT",
     width: 40,
     height: 24,
-    globals: "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
-    stream: "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAEAAAAAapW0GPnDH/rA==",
+    globals:
+      "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
+    stream:
+      "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAEAAAAAapW0GPnDH/rA==",
     expected: [
       "########################################",
       "........................................",
@@ -1384,11 +1462,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "stripes-symbols-bottomright",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to BOTTOMRIGHT",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to BOTTOMRIGHT",
     width: 40,
     height: 24,
-    globals: "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
-    stream: "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAIAAAAAapW0GPnDH/rA==",
+    globals:
+      "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
+    stream:
+      "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAIAAAAAapW0GPnDH/rA==",
     expected: [
       "########################################",
       "........................................",
@@ -1419,11 +1500,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "stripes-symbols-topright",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPRIGHT",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPRIGHT",
     width: 40,
     height: 24,
-    globals: "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
-    stream: "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAMAAAAAapW0GPnDH/rA==",
+    globals:
+      "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
+    stream:
+      "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAMAAAAAapW0GPnDH/rA==",
     expected: [
       "########################################",
       "........................................",
@@ -1454,11 +1538,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "stripes-symbols-bottomleft-transposed",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to BOTTOMLEFT, transposed",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to BOTTOMLEFT, transposed",
     width: 40,
     height: 24,
-    globals: "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
-    stream: "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAQAAAAAapW0GPnDH/rA==",
+    globals:
+      "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
+    stream:
+      "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAQAAAAAapW0GPnDH/rA==",
     expected: [
       "########################################",
       "..........................##############",
@@ -1489,11 +1576,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "stripes-symbols-topleft-transposed",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPLEFT, transposed",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPLEFT, transposed",
     width: 40,
     height: 24,
-    globals: "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
-    stream: "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAUAAAAAapW0GPnDH/rA==",
+    globals:
+      "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
+    stream:
+      "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAUAAAAAapW0GPnDH/rA==",
     expected: [
       "########################################",
       "..........................##############",
@@ -1524,11 +1614,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "stripes-symbols-topright-transposed",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPRIGHT, transposed",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPRIGHT, transposed",
     width: 40,
     height: 24,
-    globals: "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
-    stream: "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAcAAAAAapW0GPnDH/rA==",
+    globals:
+      "AAAAAAABAAAAACgAAAP//f8C/v7+AAAAAgAAAAKOAO4di5HtOK7nFgEdQb6/ZNr/f/+s",
+    stream:
+      "AAAAATAAAQAAABMAAAAoAAAAGAAAAAAAAAAAAAAAAAAAAgYiAAEAAAAfAAAAKAAAABgAAAAAAAAAAAAAcAAAAAapW0GPnDH/rA==",
     expected: [
       "######################..................",
       "######..................................",
@@ -1559,11 +1652,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "text-symbols",
-    description: "jbig2enc symbol mode: an arithmetic symbol dictionary in a globals stream plus a text region in the page stream",
+    description:
+      "jbig2enc symbol mode: an arithmetic symbol dictionary in a globals stream plus a text region in the page stream",
     width: 96,
     height: 26,
-    globals: "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
-    stream: "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAAAAAAAOeVCdC1/+s",
+    globals:
+      "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
+    stream:
+      "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAAAAAAAOeVCdC1/+s",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1596,11 +1692,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "text-symbols-topleft",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPLEFT",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPLEFT",
     width: 96,
     height: 26,
-    globals: "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
-    stream: "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAEAAAAAOeVCdC1/+s",
+    globals:
+      "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
+    stream:
+      "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAEAAAAAOeVCdC1/+s",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1633,11 +1732,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "text-symbols-bottomright",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to BOTTOMRIGHT",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to BOTTOMRIGHT",
     width: 96,
     height: 26,
-    globals: "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
-    stream: "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAIAAAAAOeVCdC1/+s",
+    globals:
+      "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
+    stream:
+      "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAIAAAAAOeVCdC1/+s",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1670,11 +1772,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "text-symbols-topright",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPRIGHT",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPRIGHT",
     width: 96,
     height: 26,
-    globals: "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
-    stream: "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAMAAAAAOeVCdC1/+s",
+    globals:
+      "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
+    stream:
+      "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAMAAAAAOeVCdC1/+s",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1707,11 +1812,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "text-symbols-bottomleft-transposed",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to BOTTOMLEFT, transposed",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to BOTTOMLEFT, transposed",
     width: 96,
     height: 26,
-    globals: "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
-    stream: "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAQAAAAAOeVCdC1/+s",
+    globals:
+      "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
+    stream:
+      "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAQAAAAAOeVCdC1/+s",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1744,11 +1852,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "text-symbols-topleft-transposed",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPLEFT, transposed",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPLEFT, transposed",
     width: 96,
     height: 26,
-    globals: "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
-    stream: "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAUAAAAAOeVCdC1/+s",
+    globals:
+      "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
+    stream:
+      "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAUAAAAAOeVCdC1/+s",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1781,11 +1892,14 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "text-symbols-topright-transposed",
-    description: "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPRIGHT, transposed",
+    description:
+      "jbig2enc symbol mode with the text region's own REFCORNER/TRANSPOSED rewritten to TOPRIGHT, transposed",
     width: 96,
     height: 26,
-    globals: "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
-    stream: "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAcAAAAAOeVCdC1/+s",
+    globals:
+      "AAAAAAABAAAAADgAAAP//f8C/v7+AAAAAgAAAAIq4PXJxXvaQyH/coW1VBJpVwYo+IDQmv5Yxcm8k/9kKHogxr//rA==",
+    stream:
+      "AAAAATAAAQAAABMAAABgAAAAGgAAAAAAAAAAAAAAAAAAAgYiAAEAAAAeAAAAYAAAABoAAAAAAAAAAAAAcAAAAAOeVCdC1/+s",
     expected: [
       "................................................................................................",
       "................................................................................................",
@@ -1818,11 +1932,13 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "hand-strips",
-    description: "hand-encoded symbol dictionary and text region, SBSTRIPS 1, REFCORNER TOPLEFT",
+    description:
+      "hand-encoded symbol dictionary and text region, SBSTRIPS 1, REFCORNER TOPLEFT",
     width: 60,
     height: 30,
     globals: "AAAAAAAAAAAAACIAAAP//f8C/v7+AAAAAwAAAANVT8A2lQs4NQqfFqM+8/+s",
-    stream: "AAAAATAAAQAAABMAAAA8AAAAHgAAAAAAAAAAAAAAAAAAAgYgAAEAAAAmAAAAPAAAAB4AAAAAAAAAAAAAEAAAAAeimEpHtRBFxk9B7tpf/6w=",
+    stream:
+      "AAAAATAAAQAAABMAAAA8AAAAHgAAAAAAAAAAAAAAAAAAAgYgAAEAAAAmAAAAPAAAAB4AAAAAAAAAAAAAEAAAAAeimEpHtRBFxk9B7tpf/6w=",
     expected: [
       "............................................................",
       "............................................................",
@@ -1859,11 +1975,13 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "hand-multistrip",
-    description: "hand-encoded text region with SBSTRIPS 4, so each instance also codes its own CURT offset within the strip",
+    description:
+      "hand-encoded text region with SBSTRIPS 4, so each instance also codes its own CURT offset within the strip",
     width: 60,
     height: 30,
     globals: "AAAAAAAAAAAAACIAAAP//f8C/v7+AAAAAwAAAANVT8A2lQs4NQqfFqM+8/+s",
-    stream: "AAAAATAAAQAAABMAAAA8AAAAHgAAAAAAAAAAAAAAAAAAAgYgAAEAAAAkAAAAPAAAAB4AAAAAAAAAAAAAGAAAAAeouvxOi6u/uz/zE/+s",
+    stream:
+      "AAAAATAAAQAAABMAAAA8AAAAHgAAAAAAAAAAAAAAAAAAAgYgAAEAAAAkAAAAPAAAAB4AAAAAAAAAAAAAGAAAAAeouvxOi6u/uz/zE/+s",
     expected: [
       "............................................................",
       "............................................................",
@@ -1900,11 +2018,13 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "hand-dsoffset",
-    description: "hand-encoded text region with a negative SBDSOFFSET applied to every inter-symbol gap",
+    description:
+      "hand-encoded text region with a negative SBDSOFFSET applied to every inter-symbol gap",
     width: 60,
     height: 30,
     globals: "AAAAAAAAAAAAACIAAAP//f8C/v7+AAAAAwAAAANVT8A2lQs4NQqfFqM+8/+s",
-    stream: "AAAAATAAAQAAABMAAAA8AAAAHgAAAAAAAAAAAAAAAAAAAgYgAAEAAAAmAAAAPAAAAB4AAAAAAAAAAAB0AAAAAAeimAmmtLBFxk9Bbdjf/6w=",
+    stream:
+      "AAAAATAAAQAAABMAAAA8AAAAHgAAAAAAAAAAAAAAAAAAAgYgAAEAAAAmAAAAPAAAAB4AAAAAAAAAAAB0AAAAAAeimAmmtLBFxk9Bbdjf/6w=",
     expected: [
       "..#..#.....##........#..#.......#..#........................",
       "..#..#....####......#....#......#..#........................",
@@ -1941,11 +2061,13 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "hand-refine",
-    description: "hand-encoded text region with SBREFINE set and one instance coded as a refinement of its dictionary symbol",
+    description:
+      "hand-encoded text region with SBREFINE set and one instance coded as a refinement of its dictionary symbol",
     width: 60,
     height: 30,
     globals: "AAAAAAAAAAAAACIAAAP//f8C/v7+AAAAAwAAAANVT8A2lQs4NQqfFqM+8/+s",
-    stream: "AAAAATAAAQAAABMAAAA8AAAAHgAAAAAAAAAAAAAAAAAAAgYgAAEAAAAwAAAAPAAAAB4AAAAAAAAAAAAAEv////8AAAAHopu8QmOTiPmKmAApzagqy2YQP/+s",
+    stream:
+      "AAAAATAAAQAAABMAAAA8AAAAHgAAAAAAAAAAAAAAAAAAAgYgAAEAAAAwAAAAPAAAAB4AAAAAAAAAAAAAEv////8AAAAHopu8QmOTiPmKmAApzagqy2YQP/+s",
     expected: [
       "............................................................",
       "............................................................",
@@ -1982,10 +2104,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "composed-regions",
-    description: "two generic regions on one page at different offsets, the second combined with XOR where they overlap",
+    description:
+      "two generic regions on one page at different offsets, the second combined with XOR where they overlap",
     width: 48,
     height: 32,
-    stream: "AAAAADAAAQAAABMAAAAwAAAAIAAAAAAAAAAAQAAAAAAAASYAAQAAACsAAAAQAAAADAAAAAQAAAADAAAD//3/Av7+/v9c26jNN6uNp+x6plNuP/+sAAAAAiYAAQAAACsAAAAQAAAADAAAAAwAAAAJAgAD//3/Av7+/v9c26jNN6uNp+x6plNuP/+s",
+    stream:
+      "AAAAADAAAQAAABMAAAAwAAAAIAAAAAAAAAAAQAAAAAAAASYAAQAAACsAAAAQAAAADAAAAAQAAAADAAAD//3/Av7+/v9c26jNN6uNp+x6plNuP/+sAAAAAiYAAQAAACsAAAAQAAAADAAAAAwAAAAJAgAD//3/Av7+/v9c26jNN6uNp+x6plNuP/+s",
     expected: [
       "................................................",
       "................................................",
@@ -2024,10 +2148,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "refinement-region",
-    description: "a standalone refinement region rewriting what a generic region already painted on the page",
+    description:
+      "a standalone refinement region rewriting what a generic region already painted on the page",
     width: 24,
     height: 16,
-    stream: "AAAAADAAAQAAABMAAAAYAAAAEAAAAAAAAAAAQAAAAAAAASYAAQAAACgAAAAYAAAAEAAAAAAAAAAAAAAD//3/Av7+/unRTQcEAlyRfJ7/f/+sAAAAAioAAQAAACwAAAAYAAAAEAAAAAAAAAAABAD/////yAitiB3Pc/nMYh+7j8lrIWpNxvf/rA==",
+    stream:
+      "AAAAADAAAQAAABMAAAAYAAAAEAAAAAAAAAAAQAAAAAAAASYAAQAAACgAAAAYAAAAEAAAAAAAAAAAAAAD//3/Av7+/unRTQcEAlyRfJ7/f/+sAAAAAioAAQAAACwAAAAYAAAAEAAAAAAAAAAABAD/////yAitiB3Pc/nMYh+7j8lrIWpNxvf/rA==",
     expected: [
       "#..#.#.#..#.#.#..#.#.#..",
       "#.#..#.#.#..#.#.#..#.#.#",
@@ -2050,10 +2176,12 @@ export const JBIG2_FIXTURES: readonly Jbig2Fixture[] = [
   },
   {
     name: "refinement-region-template1",
-    description: "a standalone refinement region using GRTEMPLATE 1, which carries no adaptive pixels",
+    description:
+      "a standalone refinement region using GRTEMPLATE 1, which carries no adaptive pixels",
     width: 24,
     height: 16,
-    stream: "AAAAADAAAQAAABMAAAAYAAAAEAAAAAAAAAAAQAAAAAAAASYAAQAAACgAAAAYAAAAEAAAAAAAAAAAAAAD//3/Av7+/unRTQcEAlyRfJ7/f/+sAAAAAioAAQAAACcAAAAYAAAAEAAAAAAAAAAABAHrkv+Adm/M/NT4mQalXoEjjI7L/6w=",
+    stream:
+      "AAAAADAAAQAAABMAAAAYAAAAEAAAAAAAAAAAQAAAAAAAASYAAQAAACgAAAAYAAAAEAAAAAAAAAAAAAAD//3/Av7+/unRTQcEAlyRfJ7/f/+sAAAAAioAAQAAACcAAAAYAAAAEAAAAAAAAAAABAHrkv+Adm/M/NT4mQalXoEjjI7L/6w=",
     expected: [
       "##...##..#..#..##...##..",
       "#...##.....#..##...##...",

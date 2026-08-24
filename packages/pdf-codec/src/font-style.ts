@@ -17,28 +17,41 @@ export interface FontNameStyle {
 const SUBSET_TAG_PATTERN = /^[A-Z]{6}\+/;
 
 // Longer, more specific suffixes are listed before the shorter suffixes they contain (BoldItalic before Bold), though the end-anchored regexes below make the order not strictly load-bearing -- "-Bold$" cannot match a string ending in "-BoldItalic".
-const KNOWN_STYLE_SUFFIXES = ['BoldItalic', 'BoldOblique', 'Bold', 'Italic', 'Oblique', 'Regular'];
+const KNOWN_STYLE_SUFFIXES = [
+  "BoldItalic",
+  "BoldOblique",
+  "Bold",
+  "Italic",
+  "Oblique",
+  "Regular",
+];
 
 function stripStyleSuffix(name: string): string {
   for (const suffix of KNOWN_STYLE_SUFFIXES) {
-    const commaPattern = new RegExp(`,${suffix}$`, 'i');
-    const hyphenPattern = new RegExp(`-${suffix}$`, 'i');
+    const commaPattern = new RegExp(`,${suffix}$`, "i");
+    const hyphenPattern = new RegExp(`-${suffix}$`, "i");
     if (commaPattern.test(name)) {
-      return name.replace(commaPattern, '');
+      return name.replace(commaPattern, "");
     }
     if (hyphenPattern.test(name)) {
-      return name.replace(hyphenPattern, '');
+      return name.replace(hyphenPattern, "");
     }
   }
   return name;
 }
 
-export function styleFromBaseFontName(baseFont: string, flags?: FontStyleFlags): FontNameStyle {
-  const withoutSubset = baseFont.replace(SUBSET_TAG_PATTERN, '');
+export function styleFromBaseFontName(
+  baseFont: string,
+  flags?: FontStyleFlags,
+): FontNameStyle {
+  const withoutSubset = baseFont.replace(SUBSET_TAG_PATTERN, "");
   const lower = withoutSubset.toLowerCase();
-  const nameBold = lower.includes('bold');
+  const nameBold = lower.includes("bold");
   const nameItalic = /italic|oblique/.test(lower);
   const bold = nameBold || (flags?.forceBold ?? false);
-  const italic = nameItalic || (flags?.italicFlag ?? false) || (flags?.italicAngle !== undefined && flags.italicAngle !== 0);
+  const italic =
+    nameItalic ||
+    (flags?.italicFlag ?? false) ||
+    (flags?.italicAngle !== undefined && flags.italicAngle !== 0);
   return { baseFamily: stripStyleSuffix(withoutSubset), bold, italic };
 }

@@ -1,4 +1,4 @@
-import { concatBytes } from '../bytes/writer';
+import { concatBytes } from "../bytes/writer";
 
 // A hand-written CCITT Group 3/Group 4 fax decoder (ITU-T T.4 one-dimensional Modified Huffman and two-dimensional Modified READ coding; ITU-T T.6 Modified Modified READ, i.e. pure 2D with no EOLs), producing a packed 1-bit-per-pixel bitmap. This module has zero PDF knowledge, exactly like its src/image/ siblings: PDF's own /CCITTFaxDecode parameter dictionary is read in src/filters.ts and handed here as plain options, and TIFF's Group3Options/Group4Options describe the identical bitstreams.
 //
@@ -6,211 +6,211 @@ import { concatBytes } from '../bytes/writer';
 
 const WHITE_TERMINATING_AND_MAKEUP: readonly (readonly [string, number])[] = [
   // Terminating codes, run lengths 0-63 (T.4 Table 2).
-  ['00110101', 0],
-  ['000111', 1],
-  ['0111', 2],
-  ['1000', 3],
-  ['1011', 4],
-  ['1100', 5],
-  ['1110', 6],
-  ['1111', 7],
-  ['10011', 8],
-  ['10100', 9],
-  ['00111', 10],
-  ['01000', 11],
-  ['001000', 12],
-  ['000011', 13],
-  ['110100', 14],
-  ['110101', 15],
-  ['101010', 16],
-  ['101011', 17],
-  ['0100111', 18],
-  ['0001100', 19],
-  ['0001000', 20],
-  ['0010111', 21],
-  ['0000011', 22],
-  ['0000100', 23],
-  ['0101000', 24],
-  ['0101011', 25],
-  ['0010011', 26],
-  ['0100100', 27],
-  ['0011000', 28],
-  ['00000010', 29],
-  ['00000011', 30],
-  ['00011010', 31],
-  ['00011011', 32],
-  ['00010010', 33],
-  ['00010011', 34],
-  ['00010100', 35],
-  ['00010101', 36],
-  ['00010110', 37],
-  ['00010111', 38],
-  ['00101000', 39],
-  ['00101001', 40],
-  ['00101010', 41],
-  ['00101011', 42],
-  ['00101100', 43],
-  ['00101101', 44],
-  ['00000100', 45],
-  ['00000101', 46],
-  ['00001010', 47],
-  ['00001011', 48],
-  ['01010010', 49],
-  ['01010011', 50],
-  ['01010100', 51],
-  ['01010101', 52],
-  ['00100100', 53],
-  ['00100101', 54],
-  ['01011000', 55],
-  ['01011001', 56],
-  ['01011010', 57],
-  ['01011011', 58],
-  ['01001010', 59],
-  ['01001011', 60],
-  ['00110010', 61],
-  ['00110011', 62],
-  ['00110100', 63],
+  ["00110101", 0],
+  ["000111", 1],
+  ["0111", 2],
+  ["1000", 3],
+  ["1011", 4],
+  ["1100", 5],
+  ["1110", 6],
+  ["1111", 7],
+  ["10011", 8],
+  ["10100", 9],
+  ["00111", 10],
+  ["01000", 11],
+  ["001000", 12],
+  ["000011", 13],
+  ["110100", 14],
+  ["110101", 15],
+  ["101010", 16],
+  ["101011", 17],
+  ["0100111", 18],
+  ["0001100", 19],
+  ["0001000", 20],
+  ["0010111", 21],
+  ["0000011", 22],
+  ["0000100", 23],
+  ["0101000", 24],
+  ["0101011", 25],
+  ["0010011", 26],
+  ["0100100", 27],
+  ["0011000", 28],
+  ["00000010", 29],
+  ["00000011", 30],
+  ["00011010", 31],
+  ["00011011", 32],
+  ["00010010", 33],
+  ["00010011", 34],
+  ["00010100", 35],
+  ["00010101", 36],
+  ["00010110", 37],
+  ["00010111", 38],
+  ["00101000", 39],
+  ["00101001", 40],
+  ["00101010", 41],
+  ["00101011", 42],
+  ["00101100", 43],
+  ["00101101", 44],
+  ["00000100", 45],
+  ["00000101", 46],
+  ["00001010", 47],
+  ["00001011", 48],
+  ["01010010", 49],
+  ["01010011", 50],
+  ["01010100", 51],
+  ["01010101", 52],
+  ["00100100", 53],
+  ["00100101", 54],
+  ["01011000", 55],
+  ["01011001", 56],
+  ["01011010", 57],
+  ["01011011", 58],
+  ["01001010", 59],
+  ["01001011", 60],
+  ["00110010", 61],
+  ["00110011", 62],
+  ["00110100", 63],
   // Make-up codes, run lengths 64-1728 (T.4 Table 3).
-  ['11011', 64],
-  ['10010', 128],
-  ['010111', 192],
-  ['0110111', 256],
-  ['00110110', 320],
-  ['00110111', 384],
-  ['01100100', 448],
-  ['01100101', 512],
-  ['01101000', 576],
-  ['01100111', 640],
-  ['011001100', 704],
-  ['011001101', 768],
-  ['011010010', 832],
-  ['011010011', 896],
-  ['011010100', 960],
-  ['011010101', 1024],
-  ['011010110', 1088],
-  ['011010111', 1152],
-  ['011011000', 1216],
-  ['011011001', 1280],
-  ['011011010', 1344],
-  ['011011011', 1408],
-  ['010011000', 1472],
-  ['010011001', 1536],
-  ['010011010', 1600],
-  ['011000', 1664],
-  ['010011011', 1728],
+  ["11011", 64],
+  ["10010", 128],
+  ["010111", 192],
+  ["0110111", 256],
+  ["00110110", 320],
+  ["00110111", 384],
+  ["01100100", 448],
+  ["01100101", 512],
+  ["01101000", 576],
+  ["01100111", 640],
+  ["011001100", 704],
+  ["011001101", 768],
+  ["011010010", 832],
+  ["011010011", 896],
+  ["011010100", 960],
+  ["011010101", 1024],
+  ["011010110", 1088],
+  ["011010111", 1152],
+  ["011011000", 1216],
+  ["011011001", 1280],
+  ["011011010", 1344],
+  ["011011011", 1408],
+  ["010011000", 1472],
+  ["010011001", 1536],
+  ["010011010", 1600],
+  ["011000", 1664],
+  ["010011011", 1728],
 ];
 
 const BLACK_TERMINATING_AND_MAKEUP: readonly (readonly [string, number])[] = [
   // Terminating codes, run lengths 0-63 (T.4 Table 2).
-  ['0000110111', 0],
-  ['010', 1],
-  ['11', 2],
-  ['10', 3],
-  ['011', 4],
-  ['0011', 5],
-  ['0010', 6],
-  ['00011', 7],
-  ['000101', 8],
-  ['000100', 9],
-  ['0000100', 10],
-  ['0000101', 11],
-  ['0000111', 12],
-  ['00000100', 13],
-  ['00000111', 14],
-  ['000011000', 15],
-  ['0000010111', 16],
-  ['0000011000', 17],
-  ['0000001000', 18],
-  ['00001100111', 19],
-  ['00001101000', 20],
-  ['00001101100', 21],
-  ['00000110111', 22],
-  ['00000101000', 23],
-  ['00000010111', 24],
-  ['00000011000', 25],
-  ['000011001010', 26],
-  ['000011001011', 27],
-  ['000011001100', 28],
-  ['000011001101', 29],
-  ['000001101000', 30],
-  ['000001101001', 31],
-  ['000001101010', 32],
-  ['000001101011', 33],
-  ['000011010010', 34],
-  ['000011010011', 35],
-  ['000011010100', 36],
-  ['000011010101', 37],
-  ['000011010110', 38],
-  ['000011010111', 39],
-  ['000001101100', 40],
-  ['000001101101', 41],
-  ['000011011010', 42],
-  ['000011011011', 43],
-  ['000001010100', 44],
-  ['000001010101', 45],
-  ['000001010110', 46],
-  ['000001010111', 47],
-  ['000001100100', 48],
-  ['000001100101', 49],
-  ['000001010010', 50],
-  ['000001010011', 51],
-  ['000000100100', 52],
-  ['000000110111', 53],
-  ['000000111000', 54],
-  ['000000100111', 55],
-  ['000000101000', 56],
-  ['000001011000', 57],
-  ['000001011001', 58],
-  ['000000101011', 59],
-  ['000000101100', 60],
-  ['000001011010', 61],
-  ['000001100110', 62],
-  ['000001100111', 63],
+  ["0000110111", 0],
+  ["010", 1],
+  ["11", 2],
+  ["10", 3],
+  ["011", 4],
+  ["0011", 5],
+  ["0010", 6],
+  ["00011", 7],
+  ["000101", 8],
+  ["000100", 9],
+  ["0000100", 10],
+  ["0000101", 11],
+  ["0000111", 12],
+  ["00000100", 13],
+  ["00000111", 14],
+  ["000011000", 15],
+  ["0000010111", 16],
+  ["0000011000", 17],
+  ["0000001000", 18],
+  ["00001100111", 19],
+  ["00001101000", 20],
+  ["00001101100", 21],
+  ["00000110111", 22],
+  ["00000101000", 23],
+  ["00000010111", 24],
+  ["00000011000", 25],
+  ["000011001010", 26],
+  ["000011001011", 27],
+  ["000011001100", 28],
+  ["000011001101", 29],
+  ["000001101000", 30],
+  ["000001101001", 31],
+  ["000001101010", 32],
+  ["000001101011", 33],
+  ["000011010010", 34],
+  ["000011010011", 35],
+  ["000011010100", 36],
+  ["000011010101", 37],
+  ["000011010110", 38],
+  ["000011010111", 39],
+  ["000001101100", 40],
+  ["000001101101", 41],
+  ["000011011010", 42],
+  ["000011011011", 43],
+  ["000001010100", 44],
+  ["000001010101", 45],
+  ["000001010110", 46],
+  ["000001010111", 47],
+  ["000001100100", 48],
+  ["000001100101", 49],
+  ["000001010010", 50],
+  ["000001010011", 51],
+  ["000000100100", 52],
+  ["000000110111", 53],
+  ["000000111000", 54],
+  ["000000100111", 55],
+  ["000000101000", 56],
+  ["000001011000", 57],
+  ["000001011001", 58],
+  ["000000101011", 59],
+  ["000000101100", 60],
+  ["000001011010", 61],
+  ["000001100110", 62],
+  ["000001100111", 63],
   // Make-up codes, run lengths 64-1728 (T.4 Table 3).
-  ['0000001111', 64],
-  ['000011001000', 128],
-  ['000011001001', 192],
-  ['000001011011', 256],
-  ['000000110011', 320],
-  ['000000110100', 384],
-  ['000000110101', 448],
-  ['0000001101100', 512],
-  ['0000001101101', 576],
-  ['0000001001010', 640],
-  ['0000001001011', 704],
-  ['0000001001100', 768],
-  ['0000001001101', 832],
-  ['0000001110010', 896],
-  ['0000001110011', 960],
-  ['0000001110100', 1024],
-  ['0000001110101', 1088],
-  ['0000001110110', 1152],
-  ['0000001110111', 1216],
-  ['0000001010010', 1280],
-  ['0000001010011', 1344],
-  ['0000001010100', 1408],
-  ['0000001010101', 1472],
-  ['0000001011010', 1536],
-  ['0000001011011', 1600],
-  ['0000001100100', 1664],
-  ['0000001100101', 1728],
+  ["0000001111", 64],
+  ["000011001000", 128],
+  ["000011001001", 192],
+  ["000001011011", 256],
+  ["000000110011", 320],
+  ["000000110100", 384],
+  ["000000110101", 448],
+  ["0000001101100", 512],
+  ["0000001101101", 576],
+  ["0000001001010", 640],
+  ["0000001001011", 704],
+  ["0000001001100", 768],
+  ["0000001001101", 832],
+  ["0000001110010", 896],
+  ["0000001110011", 960],
+  ["0000001110100", 1024],
+  ["0000001110101", 1088],
+  ["0000001110110", 1152],
+  ["0000001110111", 1216],
+  ["0000001010010", 1280],
+  ["0000001010011", 1344],
+  ["0000001010100", 1408],
+  ["0000001010101", 1472],
+  ["0000001011010", 1536],
+  ["0000001011011", 1600],
+  ["0000001100100", 1664],
+  ["0000001100101", 1728],
 ];
 
 // Extended make-up codes, run lengths 1792-2560, identical for white and black runs (T.4 Table 4).
 const EXTENDED_MAKEUP: readonly (readonly [string, number])[] = [
-  ['00000001000', 1792],
-  ['00000001100', 1856],
-  ['00000001101', 1920],
-  ['000000010010', 1984],
-  ['000000010011', 2048],
-  ['000000010100', 2112],
-  ['000000010101', 2176],
-  ['000000010110', 2240],
-  ['000000010111', 2304],
-  ['000000011100', 2368],
-  ['000000011101', 2432],
-  ['000000011110', 2496],
-  ['000000011111', 2560],
+  ["00000001000", 1792],
+  ["00000001100", 1856],
+  ["00000001101", 1920],
+  ["000000010010", 1984],
+  ["000000010011", 2048],
+  ["000000010100", 2112],
+  ["000000010101", 2176],
+  ["000000010110", 2240],
+  ["000000010111", 2304],
+  ["000000011100", 2368],
+  ["000000011101", 2432],
+  ["000000011110", 2496],
+  ["000000011111", 2560],
 ];
 
 // A run length below this is a terminating code, which ends the run; anything at or above it is a make-up code, which must be followed by further codes until a terminating one arrives.
@@ -220,7 +220,7 @@ const TERMINATING_RUN_LIMIT = 64;
 const MAX_RUN_CODE_BITS = 14;
 
 // The two-dimensional mode codes (T.4 4.2.1.3.1, reused unchanged by T.6). Vertical modes carry the signed offset of a1 from b1.
-type ModeKind = 'pass' | 'horizontal' | 'vertical' | 'extension';
+type ModeKind = "pass" | "horizontal" | "vertical" | "extension";
 
 interface ModeCode {
   readonly kind: ModeKind;
@@ -228,16 +228,16 @@ interface ModeCode {
 }
 
 const MODE_CODES: readonly (readonly [string, ModeCode])[] = [
-  ['1', { kind: 'vertical', delta: 0 }],
-  ['011', { kind: 'vertical', delta: 1 }],
-  ['010', { kind: 'vertical', delta: -1 }],
-  ['001', { kind: 'horizontal', delta: 0 }],
-  ['0001', { kind: 'pass', delta: 0 }],
-  ['000011', { kind: 'vertical', delta: 2 }],
-  ['000010', { kind: 'vertical', delta: -2 }],
-  ['0000011', { kind: 'vertical', delta: 3 }],
-  ['0000010', { kind: 'vertical', delta: -3 }],
-  ['0000001', { kind: 'extension', delta: 0 }],
+  ["1", { kind: "vertical", delta: 0 }],
+  ["011", { kind: "vertical", delta: 1 }],
+  ["010", { kind: "vertical", delta: -1 }],
+  ["001", { kind: "horizontal", delta: 0 }],
+  ["0001", { kind: "pass", delta: 0 }],
+  ["000011", { kind: "vertical", delta: 2 }],
+  ["000010", { kind: "vertical", delta: -2 }],
+  ["0000011", { kind: "vertical", delta: 3 }],
+  ["0000010", { kind: "vertical", delta: -3 }],
+  ["0000001", { kind: "extension", delta: 0 }],
 ];
 
 const MAX_MODE_CODE_BITS = 7;
@@ -252,7 +252,9 @@ function codeKey(bitLength: number, code: number): number {
   return bitLength * 2 ** 16 + code;
 }
 
-function buildCodeTable(...groups: readonly (readonly (readonly [string, number])[])[]): ReadonlyMap<number, number> {
+function buildCodeTable(
+  ...groups: readonly (readonly (readonly [string, number])[])[]
+): ReadonlyMap<number, number> {
   const table = new Map<number, number>();
   for (const group of groups) {
     for (const [bits, run] of group) {
@@ -262,10 +264,21 @@ function buildCodeTable(...groups: readonly (readonly (readonly [string, number]
   return table;
 }
 
-const WHITE_CODE_TABLE = buildCodeTable(WHITE_TERMINATING_AND_MAKEUP, EXTENDED_MAKEUP);
-const BLACK_CODE_TABLE = buildCodeTable(BLACK_TERMINATING_AND_MAKEUP, EXTENDED_MAKEUP);
+const WHITE_CODE_TABLE = buildCodeTable(
+  WHITE_TERMINATING_AND_MAKEUP,
+  EXTENDED_MAKEUP,
+);
+const BLACK_CODE_TABLE = buildCodeTable(
+  BLACK_TERMINATING_AND_MAKEUP,
+  EXTENDED_MAKEUP,
+);
 
-const MODE_CODE_TABLE: ReadonlyMap<number, ModeCode> = new Map(MODE_CODES.map(([bits, mode]) => [codeKey(bits.length, Number.parseInt(bits, 2)), mode]));
+const MODE_CODE_TABLE: ReadonlyMap<number, ModeCode> = new Map(
+  MODE_CODES.map(([bits, mode]) => [
+    codeKey(bits.length, Number.parseInt(bits, 2)),
+    mode,
+  ]),
+);
 
 // --- The bit reader: MSB-first within each byte, the order every T.4/T.6 code is written in. ---
 
@@ -320,7 +333,10 @@ class CcittBitReader {
 // --- Code decoding. ---
 
 // One white or black code: a run length, or undefined for an unrecognised code or exhausted data.
-function readSingleRunCode(reader: CcittBitReader, table: ReadonlyMap<number, number>): number | undefined {
+function readSingleRunCode(
+  reader: CcittBitReader,
+  table: ReadonlyMap<number, number>,
+): number | undefined {
   let code = 0;
   for (let bitLength = 1; bitLength <= MAX_RUN_CODE_BITS; bitLength++) {
     const bit = reader.readBit();
@@ -337,7 +353,10 @@ function readSingleRunCode(reader: CcittBitReader, table: ReadonlyMap<number, nu
 }
 
 // A complete run: zero or more make-up codes followed by exactly one terminating code.
-function readRunLength(reader: CcittBitReader, black: boolean): number | undefined {
+function readRunLength(
+  reader: CcittBitReader,
+  black: boolean,
+): number | undefined {
   const table = black ? BLACK_CODE_TABLE : WHITE_CODE_TABLE;
   let total = 0;
   for (;;) {
@@ -352,7 +371,10 @@ function readRunLength(reader: CcittBitReader, black: boolean): number | undefin
   }
 }
 
-type ModeResult = ModeCode | { readonly kind: 'eol-prefix'; readonly delta: 0 } | { readonly kind: 'invalid'; readonly delta: 0 };
+type ModeResult =
+  | ModeCode
+  | { readonly kind: "eol-prefix"; readonly delta: 0 }
+  | { readonly kind: "invalid"; readonly delta: 0 };
 
 // Reads one two-dimensional mode code. A run of seven 0 bits is not a mode code at all but the start of an EOL/EOFB, which the caller handles from the rewound position.
 function readModeCode(reader: CcittBitReader): ModeResult {
@@ -360,7 +382,7 @@ function readModeCode(reader: CcittBitReader): ModeResult {
   for (let bitLength = 1; bitLength <= MAX_MODE_CODE_BITS; bitLength++) {
     const bit = reader.readBit();
     if (bit < 0) {
-      return { kind: 'invalid', delta: 0 };
+      return { kind: "invalid", delta: 0 };
     }
     code = (code << 1) | bit;
     const mode = MODE_CODE_TABLE.get(codeKey(bitLength, code));
@@ -368,7 +390,9 @@ function readModeCode(reader: CcittBitReader): ModeResult {
       return mode;
     }
   }
-  return code === 0 ? { kind: 'eol-prefix', delta: 0 } : { kind: 'invalid', delta: 0 };
+  return code === 0
+    ? { kind: "eol-prefix", delta: 0 }
+    : { kind: "invalid", delta: 0 };
 }
 
 // Consumes an EOL (with any leading zero fill) if one sits at the current position, leaving the reader untouched otherwise.
@@ -402,7 +426,11 @@ function tryReadEol(reader: CcittBitReader): boolean {
 // A decoded row is its list of changing element positions: transitions[0] is where the row turns from white to black, transitions[1] back to white, and so on. Every row starts white, so the colour after transition index i is black for even i and white for odd i.
 
 // b1, per T.4 4.2.1.3.1: the first changing element on the reference line to the right of a0 and of opposite colour to a0's own colour. Returned as an index so the caller can take b2 as the element straight after it.
-function findB1Index(reference: readonly number[], a0: number, color: number): number {
+function findB1Index(
+  reference: readonly number[],
+  a0: number,
+  color: number,
+): number {
   let index = 0;
   while (index < reference.length && reference[index]! <= a0) {
     index++;
@@ -413,12 +441,19 @@ function findB1Index(reference: readonly number[], a0: number, color: number): n
   return index;
 }
 
-function elementAt(reference: readonly number[], index: number, columns: number): number {
+function elementAt(
+  reference: readonly number[],
+  index: number,
+  columns: number,
+): number {
   return index < reference.length ? reference[index]! : columns;
 }
 
 // One-dimensional (Modified Huffman) row: alternating white and black runs, starting white.
-function decode1dRow(reader: CcittBitReader, columns: number): number[] | undefined {
+function decode1dRow(
+  reader: CcittBitReader,
+  columns: number,
+): number[] | undefined {
   const transitions: number[] = [];
   let position = 0;
   let black = false;
@@ -435,7 +470,11 @@ function decode1dRow(reader: CcittBitReader, columns: number): number[] | undefi
 }
 
 // Two-dimensional (Modified READ) row, coded against the row above it.
-function decode2dRow(reader: CcittBitReader, reference: readonly number[], columns: number): number[] | undefined {
+function decode2dRow(
+  reader: CcittBitReader,
+  reference: readonly number[],
+  columns: number,
+): number[] | undefined {
   const transitions: number[] = [];
   let a0 = -1; // the imaginary white changing element just before the first pixel (T.4 4.2.1.3.1)
   let color = 0; // 0 = white, 1 = black
@@ -446,21 +485,21 @@ function decode2dRow(reader: CcittBitReader, reference: readonly number[], colum
       return undefined;
     }
     const mode = readModeCode(reader);
-    if (mode.kind === 'invalid' || mode.kind === 'extension') {
+    if (mode.kind === "invalid" || mode.kind === "extension") {
       return undefined;
     }
-    if (mode.kind === 'eol-prefix') {
+    if (mode.kind === "eol-prefix") {
       return undefined;
     }
     const b1Index = findB1Index(reference, a0, color);
     const b1 = elementAt(reference, b1Index, columns);
     const b2 = elementAt(reference, b1Index + 1, columns);
-    if (mode.kind === 'pass') {
+    if (mode.kind === "pass") {
       // The run of `color` extends past b2: no changing element is recorded and the colour does not flip.
       a0 = b2;
       continue;
     }
-    if (mode.kind === 'horizontal') {
+    if (mode.kind === "horizontal") {
       const start = a0 < 0 ? 0 : a0;
       const firstRun = readRunLength(reader, color === 1);
       if (firstRun === undefined) {
@@ -486,7 +525,12 @@ function decode2dRow(reader: CcittBitReader, reference: readonly number[], colum
 
 // --- Rendering. ---
 
-function setBitRun(row: Uint8Array<ArrayBuffer>, from: number, to: number, bit: number): void {
+function setBitRun(
+  row: Uint8Array<ArrayBuffer>,
+  from: number,
+  to: number,
+  bit: number,
+): void {
   for (let x = from; x < to; x++) {
     const index = x >> 3;
     const mask = 0x80 >> (x & 7);
@@ -499,7 +543,11 @@ function setBitRun(row: Uint8Array<ArrayBuffer>, from: number, to: number, bit: 
 }
 
 // Both row decoders above only stop once a0 has reached `columns`, and every mode that can take it there (vertical, horizontal, and the 1D run loop) records a changing element at the clamped position -- so a row's own last transition is always `columns` itself, and there is never a trailing run left to paint past the final one.
-function renderRow(transitions: readonly number[], columns: number, blackBit: number): Uint8Array<ArrayBuffer> {
+function renderRow(
+  transitions: readonly number[],
+  columns: number,
+  blackBit: number,
+): Uint8Array<ArrayBuffer> {
   const row = new Uint8Array(Math.ceil(columns / 8));
   if (blackBit === 0) {
     row.fill(0xff); // white is the 1 bit, so start the row (padding bits included) white
@@ -540,7 +588,10 @@ export interface CcittFaxImage {
 
 const DEFAULT_COLUMNS = 1728; // ISO 32000-1 Table 11, and the standard fax scan line width T.4 is written around
 
-export function decodeCcittFax(data: Uint8Array<ArrayBuffer>, options: CcittFaxOptions = {}): CcittFaxImage {
+export function decodeCcittFax(
+  data: Uint8Array<ArrayBuffer>,
+  options: CcittFaxOptions = {},
+): CcittFaxImage {
   const columns = options.columns ?? DEFAULT_COLUMNS;
   const requestedRows = options.rows ?? 0;
   const k = options.k ?? 0;
@@ -576,10 +627,14 @@ export function decodeCcittFax(data: Uint8Array<ArrayBuffer>, options: CcittFaxO
     if (reader.atZeroPadding) {
       break;
     }
-    const transitions = nextRowIs1d ? decode1dRow(reader, columns) : decode2dRow(reader, reference, columns);
+    const transitions = nextRowIs1d
+      ? decode1dRow(reader, columns)
+      : decode2dRow(reader, reference, columns);
     if (transitions === undefined) {
       if (warn !== undefined) {
-        warn(`CCITT fax data became undecodable at row ${String(rows.length)}; keeping the ${String(rows.length)} row(s) recovered so far`);
+        warn(
+          `CCITT fax data became undecodable at row ${String(rows.length)}; keeping the ${String(rows.length)} row(s) recovered so far`,
+        );
       }
       break;
     }
@@ -589,7 +644,9 @@ export function decodeCcittFax(data: Uint8Array<ArrayBuffer>, options: CcittFaxO
 
   if (requestedRows > 0 && rows.length < requestedRows) {
     if (warn !== undefined && rows.length > 0) {
-      warn(`CCITT fax data ended after ${String(rows.length)} of ${String(requestedRows)} declared rows; padding the remainder white`);
+      warn(
+        `CCITT fax data ended after ${String(rows.length)} of ${String(requestedRows)} declared rows; padding the remainder white`,
+      );
     }
     const bytesPerRow = Math.ceil(columns / 8);
     while (rows.length < requestedRows) {

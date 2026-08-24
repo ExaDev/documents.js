@@ -10,19 +10,34 @@
 //
 // The link-reference-definition table is an INPUT, never built here. Definitions are document-global and forward-visible -- `[foo]` in the first paragraph resolves against a `[foo]: /url` on the document's last line -- so the whole document's definitions must already be known before any block's inlines are parsed. The block phase owns that scan and hands the finished table down; discovering definitions per-block during inline parsing would silently fail every forward reference.
 
-import type { MarkdownImageNode, MarkdownInlineNode, MarkdownLinkNode } from '../ast/ast';
-import { matchHtmlTag } from '../html/html';
-import { containsAsciiControlOrSpace, isAsciiPunctuation } from './chars';
-import type { Delimiter, DelimiterChar } from './delimiter';
-import { DelimiterStack, isDelimiterChar, processEmphasis, scanDelimiterRun } from './delimiter';
-import { matchEntity } from './entity';
-import type { FootnoteLabelSet } from './footnote';
-import { matchFootnoteLabel } from './footnote';
-import { applyGfmAutolinks } from './gfm-autolink';
-import type { LinkReferenceMap, ParsedSpan } from './link';
-import { matchLinkLabel, normalizeLinkLabel, parseLinkDestination, parseLinkTitle, skipInlineWhitespace } from './link';
-import { matchMathInlineSpan } from './math';
-import { InlineNode, createTextNode } from './node';
+import type {
+  MarkdownImageNode,
+  MarkdownInlineNode,
+  MarkdownLinkNode,
+} from "../ast/ast";
+import { matchHtmlTag } from "../html/html";
+import { containsAsciiControlOrSpace, isAsciiPunctuation } from "./chars";
+import type { Delimiter, DelimiterChar } from "./delimiter";
+import {
+  DelimiterStack,
+  isDelimiterChar,
+  processEmphasis,
+  scanDelimiterRun,
+} from "./delimiter";
+import { matchEntity } from "./entity";
+import type { FootnoteLabelSet } from "./footnote";
+import { matchFootnoteLabel } from "./footnote";
+import { applyGfmAutolinks } from "./gfm-autolink";
+import type { LinkReferenceMap, ParsedSpan } from "./link";
+import {
+  matchLinkLabel,
+  normalizeLinkLabel,
+  parseLinkDestination,
+  parseLinkTitle,
+  skipInlineWhitespace,
+} from "./link";
+import { matchMathInlineSpan } from "./math";
+import { InlineNode, createTextNode } from "./node";
 
 export interface InlineParseOptions {
   // GFM's extended (bracket-less) autolinks -- `www.example.com`, a bare `https://...`, a bare email address. Enabled by default because this package targets CommonMark *and* GFM; pure-CommonMark callers (and this package's own CommonMark conformance suite) switch it off, since a bare URL in paragraph text is plain text under CommonMark alone.
@@ -38,10 +53,11 @@ const PLAIN_TEXT_PATTERN = /[^\n`[\]\\!<&*_~]+/y;
 const URI_AUTOLINK_PATTERN = /<[A-Za-z][A-Za-z0-9.+-]{1,31}:[^<>]*>/y;
 
 // spec 0.31.2 adopts the HTML5 specification's own non-normative email regex verbatim for this purpose.
-const EMAIL_AUTOLINK_PATTERN = /<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/y;
+const EMAIL_AUTOLINK_PATTERN =
+  /<([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)>/y;
 
 // A hard line break is "two or more spaces at the end of a line" (spec 0.31.2, "Hard line breaks"); one trailing space is a soft break with the space dropped.
-const HARD_BREAK_SPACES = '  ';
+const HARD_BREAK_SPACES = "  ";
 
 // A `]` closing a reference link needs the source text of the label between the brackets; a label of exactly two characters is `[]`, the COLLAPSED form, which carries no label of its own and reuses the link text instead.
 const EMPTY_LABEL_LENGTH = 2;
@@ -68,15 +84,22 @@ interface LinkTarget {
 
 function stripOneSurroundingSpace(content: string): string {
   // spec 0.31.2: "If the resulting string both begins and ends with a space character, but does not consist entirely of space characters, a single space character is removed from the front and back."
-  if (content.startsWith(' ') && content.endsWith(' ') && /[^ ]/.test(content)) {
+  if (
+    content.startsWith(" ") &&
+    content.endsWith(" ") &&
+    /[^ ]/.test(content)
+  ) {
     return content.slice(1, content.length - 1);
   }
   return content;
 }
 
-function createWrapper(kind: 'emphasis' | 'strong' | 'strikethrough', marker: DelimiterChar): InlineNode {
+function createWrapper(
+  kind: "emphasis" | "strong" | "strikethrough",
+  marker: DelimiterChar,
+): InlineNode {
   const node = new InlineNode(kind);
-  if (marker !== '~') {
+  if (marker !== "~") {
     node.marker = marker;
   }
   return node;
@@ -87,12 +110,17 @@ class InlineParser {
   private readonly references: LinkReferenceMap;
   private readonly footnotes: FootnoteLabelSet;
   private readonly gfmStrikethrough: boolean;
-  private readonly container = new InlineNode('container');
+  private readonly container = new InlineNode("container");
   private readonly delimiters = new DelimiterStack();
   private brackets: Bracket | undefined;
   private pos = 0;
 
-  constructor(text: string, references: LinkReferenceMap, footnotes: FootnoteLabelSet, options: InlineParseOptions) {
+  constructor(
+    text: string,
+    references: LinkReferenceMap,
+    footnotes: FootnoteLabelSet,
+    options: InlineParseOptions,
+  ) {
     this.text = text;
     this.references = references;
     this.footnotes = footnotes;
@@ -111,28 +139,28 @@ class InlineParser {
   private step(): void {
     const char = this.text.charAt(this.pos);
     switch (char) {
-      case '\n':
+      case "\n":
         this.parseLineBreak();
         return;
-      case '\\':
+      case "\\":
         this.parseBackslash();
         return;
-      case '`':
+      case "`":
         this.parseCodeSpan();
         return;
-      case '<':
+      case "<":
         this.parseAngleBracket();
         return;
-      case '&':
+      case "&":
         this.parseEntity();
         return;
-      case '[':
+      case "[":
         this.parseOpenBracket();
         return;
-      case '!':
+      case "!":
         this.parseBang();
         return;
-      case ']':
+      case "]":
         this.parseCloseBracket();
         return;
       default:
@@ -167,15 +195,17 @@ class InlineParser {
   private parseLineBreak(): void {
     this.pos += 1;
     const last = this.container.lastChild;
-    if (last?.kind === 'text' && last.literal.endsWith(' ')) {
+    if (last?.kind === "text" && last.literal.endsWith(" ")) {
       const hard = last.literal.endsWith(HARD_BREAK_SPACES);
-      last.literal = last.literal.replace(/ +$/, '');
-      this.container.appendChild(new InlineNode(hard ? 'hardBreak' : 'softBreak'));
+      last.literal = last.literal.replace(/ +$/, "");
+      this.container.appendChild(
+        new InlineNode(hard ? "hardBreak" : "softBreak"),
+      );
     } else {
-      this.container.appendChild(new InlineNode('softBreak'));
+      this.container.appendChild(new InlineNode("softBreak"));
     }
     // Leading spaces on the next line are not content. The block phase already strips a paragraph continuation line's indentation, so this only matters for a block whose raw content keeps it.
-    while (this.text.charAt(this.pos) === ' ') {
+    while (this.text.charAt(this.pos) === " ") {
       this.pos += 1;
     }
   }
@@ -187,15 +217,15 @@ class InlineParser {
     const backslashIndex = this.pos;
     this.pos += 1;
     const next = this.text.charAt(this.pos);
-    if (next === '\n') {
+    if (next === "\n") {
       this.pos += 1;
-      this.container.appendChild(new InlineNode('hardBreak'));
+      this.container.appendChild(new InlineNode("hardBreak"));
       return;
     }
-    if (next === '(') {
+    if (next === "(") {
       const span = matchMathInlineSpan(this.text, backslashIndex);
       if (span !== undefined) {
-        const node = new InlineNode('mathInline');
+        const node = new InlineNode("mathInline");
         // Strip the \( / \) delimiters (two characters each) -- literal is the inner LaTeX only, matching MarkdownCodeSpanNode's own convention (see src/ast/ast.ts's own MarkdownMathInlineNode comment for why this node does NOT keep its delimiters the way MarkdownRawHtmlNode does).
         node.literal = span.slice(2, span.length - 2);
         this.container.appendChild(node);
@@ -208,32 +238,34 @@ class InlineParser {
       this.pos += 1;
       return;
     }
-    this.appendText('\\');
+    this.appendText("\\");
   }
 
   // spec 0.31.2, "Code spans": a backtick string of length N opens; the code span ends at the next backtick string of EXACTLY length N (a longer or shorter run is content, not a closer). With no such closer anywhere in the block, the opening run is literal text.
   private parseCodeSpan(): void {
     const start = this.pos;
     let openLength = 0;
-    while (this.text.charAt(start + openLength) === '`') {
+    while (this.text.charAt(start + openLength) === "`") {
       openLength += 1;
     }
     const afterOpen = start + openLength;
 
     let scan = afterOpen;
     while (scan < this.text.length) {
-      if (this.text.charAt(scan) !== '`') {
+      if (this.text.charAt(scan) !== "`") {
         scan += 1;
         continue;
       }
       let runLength = 0;
-      while (this.text.charAt(scan + runLength) === '`') {
+      while (this.text.charAt(scan + runLength) === "`") {
         runLength += 1;
       }
       if (runLength === openLength) {
-        const node = new InlineNode('codeSpan');
+        const node = new InlineNode("codeSpan");
         // spec 0.31.2: "First, line endings are converted to spaces."
-        node.literal = stripOneSurroundingSpace(this.text.slice(afterOpen, scan).replace(/\n/g, ' '));
+        node.literal = stripOneSurroundingSpace(
+          this.text.slice(afterOpen, scan).replace(/\n/g, " "),
+        );
         this.container.appendChild(node);
         this.pos = scan + runLength;
         return;
@@ -249,7 +281,7 @@ class InlineParser {
   private parseAngleBracket(): void {
     const uri = this.matchUriAutolink();
     if (uri !== undefined) {
-      const node = new InlineNode('autolink');
+      const node = new InlineNode("autolink");
       node.destination = uri;
       this.container.appendChild(node);
       this.pos += uri.length + 2;
@@ -260,7 +292,7 @@ class InlineParser {
     const email = EMAIL_AUTOLINK_PATTERN.exec(this.text);
     const address = email?.[1];
     if (email !== null && address !== undefined) {
-      const node = new InlineNode('autolink');
+      const node = new InlineNode("autolink");
       node.destination = address;
       node.email = true;
       this.container.appendChild(node);
@@ -270,14 +302,14 @@ class InlineParser {
 
     const tag = matchHtmlTag(this.text, this.pos);
     if (tag !== undefined) {
-      const node = new InlineNode('rawHtml');
+      const node = new InlineNode("rawHtml");
       node.literal = tag;
       this.container.appendChild(node);
       this.pos += tag.length;
       return;
     }
 
-    this.appendText('<');
+    this.appendText("<");
     this.pos += 1;
   }
 
@@ -295,11 +327,11 @@ class InlineParser {
   private parseEntity(): void {
     const entity = matchEntity(this.text, this.pos);
     if (entity === undefined) {
-      this.appendText('&');
+      this.appendText("&");
       this.pos += 1;
       return;
     }
-    const node = new InlineNode('entity');
+    const node = new InlineNode("entity");
     node.raw = entity.raw;
     node.literal = entity.value;
     this.container.appendChild(node);
@@ -307,7 +339,7 @@ class InlineParser {
   }
 
   private parseDelimiterRun(char: DelimiterChar): void {
-    if (char === '~' && !this.gfmStrikethrough) {
+    if (char === "~" && !this.gfmStrikethrough) {
       this.parseLiteralRun(char);
       return;
     }
@@ -317,7 +349,9 @@ class InlineParser {
       this.parseLiteralRun(char);
       return;
     }
-    const node = this.appendText(this.text.slice(this.pos, this.pos + run.count));
+    const node = this.appendText(
+      this.text.slice(this.pos, this.pos + run.count),
+    );
     this.pos += run.count;
     if (run.canOpen || run.canClose) {
       this.delimiters.push(char, run, node);
@@ -337,7 +371,15 @@ class InlineParser {
     if (this.brackets !== undefined) {
       this.brackets.bracketAfter = true;
     }
-    this.brackets = { node, previous: this.brackets, previousDelimiter: this.delimiters.top, index, image, active: true, bracketAfter: false };
+    this.brackets = {
+      node,
+      previous: this.brackets,
+      previousDelimiter: this.delimiters.top,
+      index,
+      image,
+      active: true,
+      bracketAfter: false,
+    };
   }
 
   // A `[` opens a link/image bracket -- unless it opens a footnote reference instead. That check runs FIRST and consumes the whole `[^label]` outright rather than pushing a bracket, for the same reason a code span binds tighter than everything after it: a reference is a single indivisible token, and letting the `[` reach the bracket stack would leave the label's own `^` and text as ordinary inline content that emphasis resolution could reach into.
@@ -347,17 +389,18 @@ class InlineParser {
     const start = this.pos;
     const footnote = this.matchFootnoteReference();
     if (footnote !== undefined) {
-      const node = new InlineNode('footnoteReference');
+      const node = new InlineNode("footnoteReference");
       node.label = footnote.label;
       this.container.appendChild(node);
       this.pos = footnote.end;
       return;
     }
     this.pos += 1;
-    this.pushBracket(this.appendText('['), start, false);
+    this.pushBracket(this.appendText("["), start, false);
   }
 
-  private matchFootnoteReference(): { readonly label: string; readonly end: number } | undefined {
+  private matchFootnoteReference():
+    { readonly label: string; readonly end: number } | undefined {
     const match = matchFootnoteLabel(this.text, this.pos);
     if (match === undefined || !this.footnotes.has(match.label)) {
       return undefined;
@@ -368,17 +411,17 @@ class InlineParser {
   private parseBang(): void {
     const start = this.pos;
     this.pos += 1;
-    if (this.text.charAt(this.pos) !== '[') {
-      this.appendText('!');
+    if (this.text.charAt(this.pos) !== "[") {
+      this.appendText("!");
       return;
     }
     // `![^label]` is an exclamation mark followed by a footnote reference, never an image whose description happens to start with a caret: the reference token is already complete before the image's own `](dest)` grammar could begin, so pushing an image bracket here would open one that can never close. Leaving the cursor on the `[` hands it straight to parseOpenBracket on the next step.
     if (this.matchFootnoteReference() !== undefined) {
-      this.appendText('!');
+      this.appendText("!");
       return;
     }
     this.pos += 1;
-    this.pushBracket(this.appendText('!['), start + 1, true);
+    this.pushBracket(this.appendText("!["), start + 1, true);
   }
 
   // spec 0.31.2, "Links"/"Images": on `]`, try an inline link `(dest "title")` first, then a full reference `[label]`, then a collapsed reference `[]`, then a shortcut reference (the link text itself as the label). A failed attempt leaves a literal `]` and pops the opener, so the same `[` is never reconsidered.
@@ -388,24 +431,26 @@ class InlineParser {
 
     const opener = this.brackets;
     if (opener === undefined) {
-      this.appendText(']');
+      this.appendText("]");
       return;
     }
     if (!opener.active) {
       this.brackets = opener.previous;
-      this.appendText(']');
+      this.appendText("]");
       return;
     }
 
-    const target = this.resolveInlineLink() ?? this.resolveReferenceLink(opener, afterCloseBracket);
+    const target =
+      this.resolveInlineLink() ??
+      this.resolveReferenceLink(opener, afterCloseBracket);
     if (target === undefined) {
       this.brackets = opener.previous;
       this.pos = afterCloseBracket;
-      this.appendText(']');
+      this.appendText("]");
       return;
     }
 
-    const node = new InlineNode(opener.image ? 'image' : 'link');
+    const node = new InlineNode(opener.image ? "image" : "link");
     node.destination = target.destination;
     node.title = target.title;
     let moving = opener.node.next;
@@ -431,11 +476,14 @@ class InlineParser {
   }
 
   private resolveInlineLink(): LinkTarget | undefined {
-    if (this.text.charAt(this.pos) !== '(') {
+    if (this.text.charAt(this.pos) !== "(") {
       return undefined;
     }
     const start = this.pos;
-    const destination = parseLinkDestination(this.text, skipInlineWhitespace(this.text, start + 1));
+    const destination = parseLinkDestination(
+      this.text,
+      skipInlineWhitespace(this.text, start + 1),
+    );
     if (destination === undefined) {
       this.pos = start;
       return undefined;
@@ -452,7 +500,7 @@ class InlineParser {
       }
     }
 
-    if (this.text.charAt(cursor) !== ')') {
+    if (this.text.charAt(cursor) !== ")") {
       this.pos = start;
       return undefined;
     }
@@ -460,7 +508,10 @@ class InlineParser {
     return { destination: destination.value, title: title?.value };
   }
 
-  private resolveReferenceLink(opener: Bracket, afterCloseBracket: number): LinkTarget | undefined {
+  private resolveReferenceLink(
+    opener: Bracket,
+    afterCloseBracket: number,
+  ): LinkTarget | undefined {
     const labelStart = this.pos;
     const labelLength = matchLinkLabel(this.text, labelStart);
     let label: string | undefined;
@@ -489,9 +540,9 @@ class InlineParser {
 function mergeAdjacentText(node: InlineNode): void {
   let child = node.firstChild;
   while (child !== undefined) {
-    if (child.kind === 'text') {
+    if (child.kind === "text") {
       let following = child.next;
-      while (following?.kind === 'text') {
+      while (following?.kind === "text") {
         child.literal += following.literal;
         const after = following.next;
         following.unlink();
@@ -508,21 +559,21 @@ function mergeAdjacentText(node: InlineNode): void {
 // An image's description is FLATTENED to plain text rather than kept as inline children, per CommonMark's own rule that it becomes the `alt` attribute (MarkdownImageNode.alt, src/ast). cmark's own plain-text rendering is restated here exactly: text, code-span, and raw-HTML literals contribute verbatim, a character reference contributes its decoded value, an autolink contributes its destination, and both break kinds contribute a single space (NOT a newline -- an alt attribute is one line).
 function flattenToPlainText(node: InlineNode): string {
   switch (node.kind) {
-    case 'text':
-    case 'codeSpan':
-    case 'rawHtml':
-    case 'entity':
+    case "text":
+    case "codeSpan":
+    case "rawHtml":
+    case "entity":
       return node.literal;
-    case 'autolink':
+    case "autolink":
       return node.destination;
-    case 'softBreak':
-    case 'hardBreak':
-      return ' ';
-    case 'footnoteReference':
+    case "softBreak":
+    case "hardBreak":
+      return " ";
+    case "footnoteReference":
       // An alt attribute is plain text, so a reference inside an image description contributes its own source spelling -- the same thing every consumer that does not resolve footnotes shows for it.
       return `[^${node.label}]`;
     default: {
-      let result = '';
+      let result = "";
       let child = node.firstChild;
       while (child !== undefined) {
         result += flattenToPlainText(child);
@@ -549,58 +600,92 @@ function toChildAstNodes(node: InlineNode): MarkdownInlineNode[] {
 function toLinkAstNode(node: InlineNode): MarkdownLinkNode {
   const children = toChildAstNodes(node);
   if (node.title === undefined) {
-    return { type: 'link', destination: node.destination, children };
+    return { type: "link", destination: node.destination, children };
   }
-  return { type: 'link', destination: node.destination, title: node.title, children };
+  return {
+    type: "link",
+    destination: node.destination,
+    title: node.title,
+    children,
+  };
 }
 
 function toImageAstNode(node: InlineNode): MarkdownImageNode {
   const alt = flattenToPlainText(node);
   if (node.title === undefined) {
-    return { type: 'image', destination: node.destination, alt };
+    return { type: "image", destination: node.destination, alt };
   }
-  return { type: 'image', destination: node.destination, title: node.title, alt };
+  return {
+    type: "image",
+    destination: node.destination,
+    title: node.title,
+    alt,
+  };
 }
 
 function toAstNode(node: InlineNode): MarkdownInlineNode | undefined {
   switch (node.kind) {
-    case 'text':
+    case "text":
       // A delimiter run fully consumed by a match leaves a zero-length text node behind; it is scaffolding, not content.
-      return node.literal.length === 0 ? undefined : { type: 'text', value: node.literal };
-    case 'emphasis':
-      return { type: 'emphasis', marker: node.marker, children: toChildAstNodes(node) };
-    case 'strong':
-      return { type: 'strong', marker: node.marker, children: toChildAstNodes(node) };
-    case 'strikethrough':
-      return { type: 'strikethrough', children: toChildAstNodes(node) };
-    case 'codeSpan':
-      return { type: 'codeSpan', literal: node.literal };
-    case 'link':
+      return node.literal.length === 0
+        ? undefined
+        : { type: "text", value: node.literal };
+    case "emphasis":
+      return {
+        type: "emphasis",
+        marker: node.marker,
+        children: toChildAstNodes(node),
+      };
+    case "strong":
+      return {
+        type: "strong",
+        marker: node.marker,
+        children: toChildAstNodes(node),
+      };
+    case "strikethrough":
+      return { type: "strikethrough", children: toChildAstNodes(node) };
+    case "codeSpan":
+      return { type: "codeSpan", literal: node.literal };
+    case "link":
       return toLinkAstNode(node);
-    case 'image':
+    case "image":
       return toImageAstNode(node);
-    case 'autolink':
-      return { type: 'autolink', destination: node.destination, email: node.email };
-    case 'hardBreak':
-      return { type: 'hardBreak' };
-    case 'softBreak':
-      return { type: 'softBreak' };
-    case 'rawHtml':
-      return { type: 'rawHtml', literal: node.literal };
-    case 'entity':
-      return { type: 'entity', raw: node.raw, value: node.literal };
-    case 'mathInline':
-      return { type: 'mathInline', literal: node.literal };
-    case 'footnoteReference':
-      return { type: 'footnoteReference', label: node.label };
-    case 'container':
+    case "autolink":
+      return {
+        type: "autolink",
+        destination: node.destination,
+        email: node.email,
+      };
+    case "hardBreak":
+      return { type: "hardBreak" };
+    case "softBreak":
+      return { type: "softBreak" };
+    case "rawHtml":
+      return { type: "rawHtml", literal: node.literal };
+    case "entity":
+      return { type: "entity", raw: node.raw, value: node.literal };
+    case "mathInline":
+      return { type: "mathInline", literal: node.literal };
+    case "footnoteReference":
+      return { type: "footnoteReference", label: node.label };
+    case "container":
       return undefined;
   }
 }
 
 // Parses one block's raw inline content. `references` is the document-global link-reference-definition table the block phase built, and `footnotes` the document-global set of footnote labels it collected alongside -- see this module's own top-of-file note on why neither can be discovered here. Both are forward-visible for the identical reason: a `[^1]` in the first paragraph resolves against a `[^1]:` definition on the last line.
-export function parseInlines(content: string, references: LinkReferenceMap, footnotes: FootnoteLabelSet, options: InlineParseOptions = {}): MarkdownInlineNode[] {
-  const root = new InlineParser(content, references, footnotes, options).parse();
+export function parseInlines(
+  content: string,
+  references: LinkReferenceMap,
+  footnotes: FootnoteLabelSet,
+  options: InlineParseOptions = {},
+): MarkdownInlineNode[] {
+  const root = new InlineParser(
+    content,
+    references,
+    footnotes,
+    options,
+  ).parse();
   if (options.gfmAutolinks ?? true) {
     applyGfmAutolinks(root);
     mergeAdjacentText(root);

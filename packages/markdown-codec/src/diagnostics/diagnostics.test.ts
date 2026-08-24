@@ -1,223 +1,362 @@
 // Coverage sweep: every entry in MarkdownDiagnosticCodes must be reachable from some real input to this package's own read/write surface (parseMarkdown, lowerMarkdown, emitMarkdown, writeMarkdown) -- a code that exists in the table but that nothing ever fires is dead documentation, worse than no documentation at all. Each case below is deliberately minimal and independent of src/block/block.test.ts, src/lower/lower.test.ts, src/emit/emit.test.ts, and src/package.test.ts's own (more thoroughly asserted) per-gap tests -- this file only cares whether the code fires at all, not what else the surrounding output looks like. The final test asserts the codes proven reachable here cover the whole MarkdownDiagnosticCodes table, so the list can never grow a new, silently-unreachable entry.
 
-import type { ContentBlock, ContentDocument, ContentTable, DocumentTree } from 'document-schema.js';
-import { PAGE_SIZE_A4 } from 'document-schema.js';
-import { describe, expect, it } from 'vitest';
-import { parseMarkdown } from '../block/block';
-import { emitMarkdown } from '../emit/emit';
-import { lowerMarkdown } from '../lower/lower';
-import { createDiagnosticCollector } from '../test-support/diagnostics';
-import { writeMarkdown } from '../write';
-import { MarkdownDiagnosticCodes } from './diagnostics';
+import type {
+  ContentBlock,
+  ContentDocument,
+  ContentTable,
+  DocumentTree,
+} from "document-schema.js";
+import { PAGE_SIZE_A4 } from "document-schema.js";
+import { describe, expect, it } from "vitest";
+import { parseMarkdown } from "../block/block";
+import { emitMarkdown } from "../emit/emit";
+import { lowerMarkdown } from "../lower/lower";
+import { createDiagnosticCollector } from "../test-support/diagnostics";
+import { writeMarkdown } from "../write";
+import { MarkdownDiagnosticCodes } from "./diagnostics";
 
 function minimalDocument(blocks: readonly ContentBlock[]): ContentDocument {
-  return { kind: 'wordprocessing', metadata: {}, sections: [{ pageSize: PAGE_SIZE_A4, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [...blocks] }] };
+  return {
+    kind: "wordprocessing",
+    metadata: {},
+    sections: [
+      {
+        pageSize: PAGE_SIZE_A4,
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        blocks: [...blocks],
+      },
+    ],
+  };
 }
 
 const reached = new Set<string>();
 
-describe('every MarkdownDiagnosticCodes entry is reachable from real input', () => {
-  it('UNCLOSED_FENCE: a fenced code block never closed before end-of-input', () => {
+describe("every MarkdownDiagnosticCodes entry is reachable from real input", () => {
+  it("UNCLOSED_FENCE: a fenced code block never closed before end-of-input", () => {
     const collector = createDiagnosticCollector();
-    parseMarkdown('```\ncode', { sink: collector.sink });
+    parseMarkdown("```\ncode", { sink: collector.sink });
     expect(collector.has(MarkdownDiagnosticCodes.UNCLOSED_FENCE)).toBe(true);
     reached.add(MarkdownDiagnosticCodes.UNCLOSED_FENCE);
   });
 
-  it('UNTERMINATED_HTML_BLOCK: an HTML comment block never closed before end-of-input', () => {
+  it("UNTERMINATED_HTML_BLOCK: an HTML comment block never closed before end-of-input", () => {
     const collector = createDiagnosticCollector();
-    parseMarkdown('<!-- comment\nmore', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.UNTERMINATED_HTML_BLOCK)).toBe(true);
+    parseMarkdown("<!-- comment\nmore", { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.UNTERMINATED_HTML_BLOCK)).toBe(
+      true,
+    );
     reached.add(MarkdownDiagnosticCodes.UNTERMINATED_HTML_BLOCK);
   });
 
-  it('TABLE_CELL_COUNT_MISMATCH: a body row with more cells than the header row', () => {
+  it("TABLE_CELL_COUNT_MISMATCH: a body row with more cells than the header row", () => {
     const collector = createDiagnosticCollector();
-    parseMarkdown('| a |\n| - |\n| 1 | 2 |', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.TABLE_CELL_COUNT_MISMATCH)).toBe(true);
+    parseMarkdown("| a |\n| - |\n| 1 | 2 |", { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_CELL_COUNT_MISMATCH),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.TABLE_CELL_COUNT_MISMATCH);
   });
 
-  it('DUPLICATE_LINK_REFERENCE: two definitions sharing one label', () => {
+  it("DUPLICATE_LINK_REFERENCE: two definitions sharing one label", () => {
     const collector = createDiagnosticCollector();
-    parseMarkdown('[a]: /1\n[a]: /2', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.DUPLICATE_LINK_REFERENCE)).toBe(true);
+    parseMarkdown("[a]: /1\n[a]: /2", { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.DUPLICATE_LINK_REFERENCE),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.DUPLICATE_LINK_REFERENCE);
   });
 
-  it('LIST_MARKER_TYPE_CONFLICT: a nested list disagreeing with its enclosing list\'s minted type', () => {
+  it("LIST_MARKER_TYPE_CONFLICT: a nested list disagreeing with its enclosing list's minted type", () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('- top\n  1. nested\n- top2', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT)).toBe(true);
+    lowerMarkdown("- top\n  1. nested\n- top2", { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT);
   });
 
-  it('INVENTED_PAGE_GEOMETRY: any lowered document', () => {
+  it("INVENTED_PAGE_GEOMETRY: any lowered document", () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('foo', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY)).toBe(true);
+    lowerMarkdown("foo", { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY)).toBe(
+      true,
+    );
     reached.add(MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY);
   });
 
-  it('NESTED_EMPHASIS_FLATTENED: emphasis nested inside emphasis', () => {
+  it("NESTED_EMPHASIS_FLATTENED: emphasis nested inside emphasis", () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('_a *b* c_', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED)).toBe(true);
+    lowerMarkdown("_a *b* c_", { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED);
   });
 
-  it('LINK_TITLE_DROPPED: the one titled shape left with nowhere to ride, a nested image inside a link', () => {
+  it("LINK_TITLE_DROPPED: the one titled shape left with nowhere to ride, a nested image inside a link", () => {
     const collector = createDiagnosticCollector();
     lowerMarkdown('[![alt](/img.png "t")](/page)', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)).toBe(true);
+    expect(collector.has(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)).toBe(
+      true,
+    );
     reached.add(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED);
   });
 
-  it('BLOCKQUOTE_CONTAINER_SKIPPED: a blockquote containing a heading', () => {
+  it("BLOCKQUOTE_CONTAINER_SKIPPED: a blockquote containing a heading", () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('> # heading', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED)).toBe(true);
+    lowerMarkdown("> # heading", { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED);
   });
 
-  it('LIST_ITEM_BLOCK_UNLISTED: a table directly inside a list item', () => {
+  it("LIST_ITEM_BLOCK_UNLISTED: a table directly inside a list item", () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('- | a |\n  | - |\n  | 1 |', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED)).toBe(true);
+    lowerMarkdown("- | a |\n  | - |\n  | 1 |", { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED);
   });
 
-  it('IMAGE_UNRESOLVED: an image with no resolver available', () => {
+  it("IMAGE_UNRESOLVED: an image with no resolver available", () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('![a](http://example.com/x.png)', { sink: collector.sink });
+    lowerMarkdown("![a](http://example.com/x.png)", { sink: collector.sink });
     expect(collector.has(MarkdownDiagnosticCodes.IMAGE_UNRESOLVED)).toBe(true);
     reached.add(MarkdownDiagnosticCodes.IMAGE_UNRESOLVED);
   });
 
-  it('RAW_HTML_PRESERVED_AS_TEXT: raw HTML with the default rawHtml option', () => {
+  it("RAW_HTML_PRESERVED_AS_TEXT: raw HTML with the default rawHtml option", () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('<div>\nx\n</div>', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT)).toBe(true);
+    lowerMarkdown("<div>\nx\n</div>", { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT);
   });
 
   it('RAW_HTML_DROPPED: raw HTML with rawHtml: "drop"', () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('<div>\nx\n</div>', { sink: collector.sink, rawHtml: 'drop' });
+    lowerMarkdown("<div>\nx\n</div>", {
+      sink: collector.sink,
+      rawHtml: "drop",
+    });
     expect(collector.has(MarkdownDiagnosticCodes.RAW_HTML_DROPPED)).toBe(true);
     reached.add(MarkdownDiagnosticCodes.RAW_HTML_DROPPED);
   });
 
-  it('MATH_INLINE_PRESERVED_AS_TEXT: an inline \\( \\) math span', () => {
+  it("MATH_INLINE_PRESERVED_AS_TEXT: an inline \\( \\) math span", () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('\\(x^2\\)', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT)).toBe(true);
+    lowerMarkdown("\\(x^2\\)", { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT);
   });
 
-  it('UNCLOSED_MATH_BLOCK: a $$ math block never closed before end-of-input', () => {
+  it("UNCLOSED_MATH_BLOCK: a $$ math block never closed before end-of-input", () => {
     const collector = createDiagnosticCollector();
-    parseMarkdown('$$\nx^2', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.UNCLOSED_MATH_BLOCK)).toBe(true);
+    parseMarkdown("$$\nx^2", { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.UNCLOSED_MATH_BLOCK)).toBe(
+      true,
+    );
     reached.add(MarkdownDiagnosticCodes.UNCLOSED_MATH_BLOCK);
   });
 
-  it('FRONT_MATTER_KEY_UNMAPPED: an unrecognised front matter key', () => {
+  it("FRONT_MATTER_KEY_UNMAPPED: an unrecognised front matter key", () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('---\nunknown: x\n---\n\nbody', { sink: collector.sink, frontMatter: true });
-    expect(collector.has(MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED)).toBe(true);
+    lowerMarkdown("---\nunknown: x\n---\n\nbody", {
+      sink: collector.sink,
+      frontMatter: true,
+    });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED);
   });
 
-  it('HEADING_LEVEL_CLAMPED: a Heading{N} styleId beyond 6', () => {
+  it("HEADING_LEVEL_CLAMPED: a Heading{N} styleId beyond 6", () => {
     const collector = createDiagnosticCollector();
-    emitMarkdown(minimalDocument([{ kind: 'paragraph', runs: [{ text: 'x' }], styleId: 'Heading9' }]), { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED)).toBe(true);
+    emitMarkdown(
+      minimalDocument([
+        { kind: "paragraph", runs: [{ text: "x" }], styleId: "Heading9" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(collector.has(MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED)).toBe(
+      true,
+    );
     reached.add(MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED);
   });
 
-  it('ADJACENT_LINKS_MERGED: two consecutive runs sharing one hyperlink', () => {
+  it("ADJACENT_LINKS_MERGED: two consecutive runs sharing one hyperlink", () => {
     const collector = createDiagnosticCollector();
-    emitMarkdown(minimalDocument([{ kind: 'paragraph', runs: [{ text: 'a', hyperlink: 'http://x' }, { text: 'b', hyperlink: 'http://x' }] }]), { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.ADJACENT_LINKS_MERGED)).toBe(true);
+    emitMarkdown(
+      minimalDocument([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "a", hyperlink: "http://x" },
+            { text: "b", hyperlink: "http://x" },
+          ],
+        },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(collector.has(MarkdownDiagnosticCodes.ADJACENT_LINKS_MERGED)).toBe(
+      true,
+    );
     reached.add(MarkdownDiagnosticCodes.ADJACENT_LINKS_MERGED);
   });
 
-  it('CODE_SPAN_AS_MONOSPACE_RUN: a run styled with the Courier New font family', () => {
+  it("CODE_SPAN_AS_MONOSPACE_RUN: a run styled with the Courier New font family", () => {
     const collector = createDiagnosticCollector();
-    emitMarkdown(minimalDocument([{ kind: 'paragraph', runs: [{ text: 'x', fontFamily: 'Courier New' }] }]), { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN)).toBe(true);
+    emitMarkdown(
+      minimalDocument([
+        { kind: "paragraph", runs: [{ text: "x", fontFamily: "Courier New" }] },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(
+      collector.has(MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN);
   });
 
-  it('PARAGRAPH_INDENT_DROPPED: indentLeftPt with no quotable styleId', () => {
+  it("PARAGRAPH_INDENT_DROPPED: indentLeftPt with no quotable styleId", () => {
     const collector = createDiagnosticCollector();
-    emitMarkdown(minimalDocument([{ kind: 'paragraph', runs: [{ text: 'x' }], indentLeftPt: 10 }]), { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED)).toBe(true);
+    emitMarkdown(
+      minimalDocument([
+        { kind: "paragraph", runs: [{ text: "x" }], indentLeftPt: 10 },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(
+      collector.has(MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED);
   });
 
-  it('LIST_NUMID_FALLBACK: a numId this package never minted', () => {
+  it("LIST_NUMID_FALLBACK: a numId this package never minted", () => {
     const collector = createDiagnosticCollector();
-    emitMarkdown(minimalDocument([{ kind: 'paragraph', runs: [{ text: 'x' }], list: { numId: 'list1', level: 0 } }]), { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK)).toBe(true);
+    emitMarkdown(
+      minimalDocument([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          list: { numId: "list1", level: 0 },
+        },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(collector.has(MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK)).toBe(
+      true,
+    );
     reached.add(MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK);
   });
 
-  it('TABLE_CELL_FORMATTING_DROPPED: a cell with colSpan set', () => {
+  it("TABLE_CELL_FORMATTING_DROPPED: a cell with colSpan set", () => {
     const collector = createDiagnosticCollector();
-    const table: ContentTable = { kind: 'table', columnWidthsPt: [100], rows: [{ cells: [{ blocks: [{ kind: 'paragraph', runs: [{ text: 'x' }] }], colSpan: 2 }] }] };
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }],
+              colSpan: 2,
+            },
+          ],
+        },
+      ],
+    };
     emitMarkdown(minimalDocument([table]), { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED)).toBe(true);
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED);
   });
 
-  it('TABLE_CELL_MULTI_PARAGRAPH_JOINED: a cell with two blocks', () => {
+  it("TABLE_CELL_MULTI_PARAGRAPH_JOINED: a cell with two blocks", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
-      kind: 'table',
+      kind: "table",
       columnWidthsPt: [100],
-      rows: [{ cells: [{ blocks: [{ kind: 'paragraph', runs: [{ text: 'a' }] }, { kind: 'paragraph', runs: [{ text: 'b' }] }] }] }],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                { kind: "paragraph", runs: [{ text: "a" }] },
+                { kind: "paragraph", runs: [{ text: "b" }] },
+              ],
+            },
+          ],
+        },
+      ],
     };
     emitMarkdown(minimalDocument([table]), { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED)).toBe(true);
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED);
   });
 
-  it('DUPLICATE_FOOTNOTE_DEFINITION: two definitions sharing one label', () => {
+  it("DUPLICATE_FOOTNOTE_DEFINITION: two definitions sharing one label", () => {
     const collector = createDiagnosticCollector();
-    parseMarkdown('[^1]: first\n\n[^1]: second', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION)).toBe(true);
+    parseMarkdown("[^1]: first\n\n[^1]: second", { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION);
   });
 
-  it('FOOTNOTE_BODY_HEADING_FLATTENED: a heading inside a definition body', () => {
+  it("FOOTNOTE_BODY_HEADING_FLATTENED: a heading inside a definition body", () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('[^1]: intro\n\n    # inner', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED)).toBe(true);
+    lowerMarkdown("[^1]: intro\n\n    # inner", { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED),
+    ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED);
   });
 
-  it('CONSTRUCT_UNREPRESENTED: a construct kind markdown has no syntax for', () => {
+  it("CONSTRUCT_UNREPRESENTED: a construct kind markdown has no syntax for", () => {
     const collector = createDiagnosticCollector();
-    emitMarkdown(minimalDocument([
-      { kind: 'constructStart', descriptor: { kind: 'division', name: 'chapter' } },
-      { kind: 'paragraph', runs: [{ text: 'inside' }] },
-      { kind: 'constructEnd' },
-    ]), { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
+    emitMarkdown(
+      minimalDocument([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "chapter" },
+        },
+        { kind: "paragraph", runs: [{ text: "inside" }] },
+        { kind: "constructEnd" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(
+      true,
+    );
     reached.add(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
   });
 
-  it('PACKAGE_TABLE_DROPPED: a DocumentTree carrying a non-empty definitions table', () => {
+  it("PACKAGE_TABLE_DROPPED: a DocumentTree carrying a non-empty definitions table", () => {
     const collector = createDiagnosticCollector();
-    const pkg: DocumentTree = { kind: 'wordprocessing', metadata: {}, children: [], definitions: { d1: { kind: 'bookmark' } } };
+    const pkg: DocumentTree = {
+      kind: "wordprocessing",
+      metadata: {},
+      children: [],
+      definitions: { d1: { kind: "bookmark" } },
+    };
     writeMarkdown(pkg, { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED)).toBe(true);
+    expect(collector.has(MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED)).toBe(
+      true,
+    );
     reached.add(MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED);
   });
 
-  it('has no dead code: every value in MarkdownDiagnosticCodes was proven reachable above', () => {
+  it("has no dead code: every value in MarkdownDiagnosticCodes was proven reachable above", () => {
     expect(reached).toEqual(new Set(Object.values(MarkdownDiagnosticCodes)));
   });
 });

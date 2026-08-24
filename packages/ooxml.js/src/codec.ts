@@ -1,10 +1,10 @@
-import { z } from 'zod';
-import { type Package, PackageSchema } from './model/package';
-import { XmlNodeSchema } from './model/node';
-import { parsePackage } from './package-io/read';
-import { serializePackage } from './package-io/write';
-import { parseXml } from './xml/parse';
-import { buildXml } from './xml/build';
+import { z } from "zod";
+import { type Package, PackageSchema } from "./model/package";
+import { XmlNodeSchema } from "./model/node";
+import { parsePackage } from "./package-io/read";
+import { serializePackage } from "./package-io/write";
+import { parseXml } from "./xml/parse";
+import { buildXml } from "./xml/build";
 
 // XML string <-> ordered XmlNode forest. Both directions are schema-validated.
 export const xmlCodec = z.codec(z.string(), z.array(XmlNodeSchema), {

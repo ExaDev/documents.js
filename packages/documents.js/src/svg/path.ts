@@ -13,8 +13,13 @@ export interface ParsedPathPoint {
 
 // A discriminated union rather than optional control fields, so a consumer narrowing on kind: 'cubic' gets non-optional controls with no assertion -- the same discipline the ContentSubpath vocabulary itself uses.
 export type ParsedPathSegment =
-  | { readonly kind: 'line'; readonly to: ParsedPathPoint }
-  | { readonly kind: 'cubic'; readonly control1: ParsedPathPoint; readonly control2: ParsedPathPoint; readonly to: ParsedPathPoint };
+  | { readonly kind: "line"; readonly to: ParsedPathPoint }
+  | {
+      readonly kind: "cubic";
+      readonly control1: ParsedPathPoint;
+      readonly control2: ParsedPathPoint;
+      readonly to: ParsedPathPoint;
+    };
 
 export interface ParsedPathSubpath {
   readonly start: ParsedPathPoint;
@@ -30,7 +35,10 @@ class PathScanner {
   constructor(readonly source: string) {}
 
   private skipSeparators(): void {
-    while (this.pos < this.source.length && /[\s,]/.test(this.source[this.pos]!)) {
+    while (
+      this.pos < this.source.length &&
+      /[\s,]/.test(this.source[this.pos]!)
+    ) {
       this.pos++;
     }
   }
@@ -57,9 +65,9 @@ class PathScanner {
   nextArcFlag(): 0 | 1 | undefined {
     this.skipSeparators();
     const char = this.source[this.pos];
-    if (char === '0' || char === '1') {
+    if (char === "0" || char === "1") {
       this.pos++;
-      return char === '0' ? 0 : 1;
+      return char === "0" ? 0 : 1;
     }
     return undefined;
   }
@@ -90,16 +98,26 @@ interface PathAccumulator {
   current?: { start: ParsedPathPoint; segments: ParsedPathSegment[] };
 }
 
-function addLine(cursor: PathCursor, acc: PathAccumulator, to: ParsedPathPoint): void {
-  acc.current!.segments.push({ kind: 'line', to });
+function addLine(
+  cursor: PathCursor,
+  acc: PathAccumulator,
+  to: ParsedPathPoint,
+): void {
+  acc.current!.segments.push({ kind: "line", to });
   cursor.x = to.x;
   cursor.y = to.y;
   cursor.lastCubicControl = undefined;
   cursor.lastQuadControl = undefined;
 }
 
-function addCubic(cursor: PathCursor, acc: PathAccumulator, control1: ParsedPathPoint, control2: ParsedPathPoint, to: ParsedPathPoint): void {
-  acc.current!.segments.push({ kind: 'cubic', control1, control2, to });
+function addCubic(
+  cursor: PathCursor,
+  acc: PathAccumulator,
+  control1: ParsedPathPoint,
+  control2: ParsedPathPoint,
+  to: ParsedPathPoint,
+): void {
+  acc.current!.segments.push({ kind: "cubic", control1, control2, to });
   cursor.x = to.x;
   cursor.y = to.y;
   cursor.lastCubicControl = control2;
@@ -107,13 +125,24 @@ function addCubic(cursor: PathCursor, acc: PathAccumulator, control1: ParsedPath
 }
 
 // The exact quadratic -> cubic elevation described in the module note: the degree-3 curve with both controls at the 2/3 marks toward the quadratic's own control IS the quadratic, so nothing is approximated.
-function addQuad(cursor: PathCursor, acc: PathAccumulator, control: ParsedPathPoint, to: ParsedPathPoint): void {
+function addQuad(
+  cursor: PathCursor,
+  acc: PathAccumulator,
+  control: ParsedPathPoint,
+  to: ParsedPathPoint,
+): void {
   const from = { x: cursor.x, y: cursor.y };
   addCubic(
     cursor,
     acc,
-    { x: from.x + (2 / 3) * (control.x - from.x), y: from.y + (2 / 3) * (control.y - from.y) },
-    { x: to.x + (2 / 3) * (control.x - to.x), y: to.y + (2 / 3) * (control.y - to.y) },
+    {
+      x: from.x + (2 / 3) * (control.x - from.x),
+      y: from.y + (2 / 3) * (control.y - from.y),
+    },
+    {
+      x: to.x + (2 / 3) * (control.x - to.x),
+      y: to.y + (2 / 3) * (control.y - to.y),
+    },
     to,
   );
   // T reflects the previous quadratic's OWN control (the point named in the Q command, not the elevated cubic's control), and the addCubic delegation above just cleared the quad family's state -- restore it so a following T reflects the right point.
@@ -121,9 +150,18 @@ function addQuad(cursor: PathCursor, acc: PathAccumulator, control: ParsedPathPo
 }
 
 // One elliptical-arc command -> cubic segments appended to the open subpath. Implements SVG 2 F.6.5's endpoint-to-centre conversion (including the out-of-range radii correction, which scales the radii up by exactly the factor that makes the endpoints reachable), then walks the arc in segments of at most 90 degrees, each emitted as a cubic whose controls sit kappa along the segment's own boundary tangents.
-function addArc(cursor: PathCursor, acc: PathAccumulator, rx: number, ry: number, xRotDeg: number, largeArc: 0 | 1, sweep: 0 | 1, to: ParsedPathPoint): void {
+function addArc(
+  cursor: PathCursor,
+  acc: PathAccumulator,
+  rx: number,
+  ry: number,
+  xRotDeg: number,
+  largeArc: 0 | 1,
+  sweep: 0 | 1,
+  to: ParsedPathPoint,
+): void {
   const from = { x: cursor.x, y: cursor.y };
-  if ((rx === 0 || ry === 0) || (from.x === to.x && from.y === to.y)) {
+  if (rx === 0 || ry === 0 || (from.x === to.x && from.y === to.y)) {
     // A zero radius renders as a straight line to the endpoint (the spec's own rule); a coincident endpoint has no arc to draw at all.
     if (from.x !== to.x || from.y !== to.y) {
       addLine(cursor, acc, to);
@@ -149,16 +187,25 @@ function addArc(cursor: PathCursor, acc: PathAccumulator, rx: number, ry: number
 
   // The centre, with the sign chosen so the large-arc/sweep flag pair picks one of the two candidates.
   const sign = largeArc !== sweep ? 1 : -1;
-  const numerator = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+  const numerator =
+    rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
   const denominator = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
-  const coefficient = denominator === 0 ? 0 : sign * Math.sqrt(Math.max(numerator, 0) / denominator);
+  const coefficient =
+    denominator === 0
+      ? 0
+      : sign * Math.sqrt(Math.max(numerator, 0) / denominator);
   const cxp = (coefficient * rx * y1p) / ry;
   const cyp = -(coefficient * ry * x1p) / rx;
   const cx = cosRot * cxp - sinRot * cyp + (from.x + to.x) / 2;
   const cy = sinRot * cxp + cosRot * cyp + (from.y + to.y) / 2;
 
   // The signed angle between two unit vectors, F.6.5's own helper.
-  const angleBetween = (ux: number, uy: number, vx: number, vy: number): number => {
+  const angleBetween = (
+    ux: number,
+    uy: number,
+    vx: number,
+    vy: number,
+  ): number => {
     const dot = ux * vx + uy * vy;
     const len = Math.hypot(ux, uy) * Math.hypot(vx, vy);
     if (len === 0) {
@@ -170,7 +217,12 @@ function addArc(cursor: PathCursor, acc: PathAccumulator, rx: number, ry: number
   };
 
   const theta1 = angleBetween(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
-  let deltaTheta = angleBetween((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+  let deltaTheta = angleBetween(
+    (x1p - cxp) / rx,
+    (y1p - cyp) / ry,
+    (-x1p - cxp) / rx,
+    (-y1p - cyp) / ry,
+  );
   if (sweep === 0 && deltaTheta > 0) {
     deltaTheta -= 2 * Math.PI;
   } else if (sweep === 1 && deltaTheta < 0) {
@@ -178,7 +230,10 @@ function addArc(cursor: PathCursor, acc: PathAccumulator, rx: number, ry: number
   }
 
   // At most 90 degrees per cubic segment -- ceil(|delta| / (pi/2)), never fewer than one segment even for a tiny arc.
-  const segmentCount = Math.max(1, Math.ceil(Math.abs(deltaTheta) / (Math.PI / 2)));
+  const segmentCount = Math.max(
+    1,
+    Math.ceil(Math.abs(deltaTheta) / (Math.PI / 2)),
+  );
   const deltaPerSegment = deltaTheta / segmentCount;
   const kappa = (4 / 3) * Math.tan(deltaPerSegment / 4);
 
@@ -209,18 +264,29 @@ function addArc(cursor: PathCursor, acc: PathAccumulator, rx: number, ry: number
 
 // The number of coordinate values each command consumes per repetition; Z consumes none.
 const COMMAND_ARITY: Record<string, number> = {
-  M: 2, m: 2,
-  L: 2, l: 2,
-  H: 1, h: 1,
-  V: 1, v: 1,
-  C: 6, c: 6,
-  S: 4, s: 4,
-  Q: 4, q: 4,
-  T: 2, t: 2,
-  A: 7, a: 7,
+  M: 2,
+  m: 2,
+  L: 2,
+  l: 2,
+  H: 1,
+  h: 1,
+  V: 1,
+  v: 1,
+  C: 6,
+  c: 6,
+  S: 4,
+  s: 4,
+  Q: 4,
+  q: 4,
+  T: 2,
+  t: 2,
+  A: 7,
+  a: 7,
 };
 
-export function parseSvgPathData(d: string): readonly ParsedPathSubpath[] | undefined {
+export function parseSvgPathData(
+  d: string,
+): readonly ParsedPathSubpath[] | undefined {
   const scanner = new PathScanner(d.trim());
   const cursor: PathCursor = { x: 0, y: 0, subpathStartX: 0, subpathStartY: 0 };
   const acc: PathAccumulator = { subpaths: [] };
@@ -228,7 +294,11 @@ export function parseSvgPathData(d: string): readonly ParsedPathSubpath[] | unde
 
   const closeSubpath = (): void => {
     if (acc.current !== undefined) {
-      acc.subpaths.push({ start: acc.current.start, closed: true, segments: acc.current.segments });
+      acc.subpaths.push({
+        start: acc.current.start,
+        closed: true,
+        segments: acc.current.segments,
+      });
       acc.current = undefined;
     }
     cursor.x = cursor.subpathStartX;
@@ -240,7 +310,11 @@ export function parseSvgPathData(d: string): readonly ParsedPathSubpath[] | unde
   const startSubpath = (at: ParsedPathPoint): void => {
     // A moveto flushes any open subpath as unclosed before opening the next.
     if (acc.current !== undefined) {
-      acc.subpaths.push({ start: acc.current.start, closed: false, segments: acc.current.segments });
+      acc.subpaths.push({
+        start: acc.current.start,
+        closed: false,
+        segments: acc.current.segments,
+      });
       acc.current = undefined;
     }
     acc.current = { start: at, segments: [] };
@@ -261,7 +335,7 @@ export function parseSvgPathData(d: string): readonly ParsedPathSubpath[] | unde
     }
     const active = command;
 
-    if (active === 'Z' || active === 'z') {
+    if (active === "Z" || active === "z") {
       closeSubpath();
       // Z takes no arguments, so an implicit repetition right after it is malformed rather than another close.
       command = undefined;
@@ -275,7 +349,7 @@ export function parseSvgPathData(d: string): readonly ParsedPathSubpath[] | unde
     // One command letter's argument stream is a series of full coordinate groups (implicit repetition); the first group of M/m is the moveto itself and every later group degenerates to a lineto per the grammar.
     let groupIndex = 0;
     for (;;) {
-      if (active === 'A' || active === 'a') {
+      if (active === "A" || active === "a") {
         // Arc arguments are not plain numbers: the two flags are single chars that may legally fuse with adjacent numbers, so they are read positionally rather than through nextNumber.
         const rx = scanner.nextNumber();
         const ry = scanner.nextNumber();
@@ -284,14 +358,32 @@ export function parseSvgPathData(d: string): readonly ParsedPathSubpath[] | unde
         const sweep = scanner.nextArcFlag();
         const x = scanner.nextNumber();
         const y = scanner.nextNumber();
-        if (rx === undefined || ry === undefined || rotation === undefined || largeArc === undefined || sweep === undefined || x === undefined || y === undefined) {
+        if (
+          rx === undefined ||
+          ry === undefined ||
+          rotation === undefined ||
+          largeArc === undefined ||
+          sweep === undefined ||
+          x === undefined ||
+          y === undefined
+        ) {
           return undefined;
         }
         if (acc.current === undefined) {
           return undefined;
         }
-        const to = active === 'A' ? { x, y } : { x: cursor.x + x, y: cursor.y + y };
-        addArc(cursor, acc, Math.abs(rx), Math.abs(ry), rotation, largeArc, sweep, to);
+        const to =
+          active === "A" ? { x, y } : { x: cursor.x + x, y: cursor.y + y };
+        addArc(
+          cursor,
+          acc,
+          Math.abs(rx),
+          Math.abs(ry),
+          rotation,
+          largeArc,
+          sweep,
+          to,
+        );
       } else {
         const args: number[] = [];
         for (let i = 0; i < arity; i++) {
@@ -301,11 +393,13 @@ export function parseSvgPathData(d: string): readonly ParsedPathSubpath[] | unde
           }
           args.push(value);
         }
-        const relative = active === active.toLowerCase() && active !== active.toUpperCase();
-        const point = (x: number, y: number): ParsedPathPoint => (relative ? { x: cursor.x + x, y: cursor.y + y } : { x, y });
+        const relative =
+          active === active.toLowerCase() && active !== active.toUpperCase();
+        const point = (x: number, y: number): ParsedPathPoint =>
+          relative ? { x: cursor.x + x, y: cursor.y + y } : { x, y };
         const upper = active.toUpperCase();
 
-        if (upper === 'M') {
+        if (upper === "M") {
           if (groupIndex === 0) {
             startSubpath(point(args[0]!, args[1]!));
           } else {
@@ -320,31 +414,72 @@ export function parseSvgPathData(d: string): readonly ParsedPathSubpath[] | unde
             return undefined;
           }
           switch (upper) {
-            case 'L':
+            case "L":
               addLine(cursor, acc, point(args[0]!, args[1]!));
               break;
-            case 'H':
-              addLine(cursor, acc, relative ? { x: cursor.x + args[0]!, y: cursor.y } : { x: args[0]!, y: cursor.y });
+            case "H":
+              addLine(
+                cursor,
+                acc,
+                relative
+                  ? { x: cursor.x + args[0]!, y: cursor.y }
+                  : { x: args[0]!, y: cursor.y },
+              );
               break;
-            case 'V':
-              addLine(cursor, acc, relative ? { x: cursor.x, y: cursor.y + args[0]! } : { x: cursor.x, y: args[0]! });
+            case "V":
+              addLine(
+                cursor,
+                acc,
+                relative
+                  ? { x: cursor.x, y: cursor.y + args[0]! }
+                  : { x: cursor.x, y: args[0]! },
+              );
               break;
-            case 'C':
-              addCubic(cursor, acc, point(args[0]!, args[1]!), point(args[2]!, args[3]!), point(args[4]!, args[5]!));
+            case "C":
+              addCubic(
+                cursor,
+                acc,
+                point(args[0]!, args[1]!),
+                point(args[2]!, args[3]!),
+                point(args[4]!, args[5]!),
+              );
               break;
-            case 'S': {
+            case "S": {
               const from = { x: cursor.x, y: cursor.y };
-              const reflected = cursor.lastCubicControl === undefined ? from : { x: 2 * from.x - cursor.lastCubicControl.x, y: 2 * from.y - cursor.lastCubicControl.y };
-              addCubic(cursor, acc, reflected, point(args[0]!, args[1]!), point(args[2]!, args[3]!));
+              const reflected =
+                cursor.lastCubicControl === undefined
+                  ? from
+                  : {
+                      x: 2 * from.x - cursor.lastCubicControl.x,
+                      y: 2 * from.y - cursor.lastCubicControl.y,
+                    };
+              addCubic(
+                cursor,
+                acc,
+                reflected,
+                point(args[0]!, args[1]!),
+                point(args[2]!, args[3]!),
+              );
               break;
             }
-            case 'Q':
-              addQuad(cursor, acc, point(args[0]!, args[1]!), point(args[2]!, args[3]!));
+            case "Q":
+              addQuad(
+                cursor,
+                acc,
+                point(args[0]!, args[1]!),
+                point(args[2]!, args[3]!),
+              );
               break;
-            case 'T': {
+            case "T": {
               const from = { x: cursor.x, y: cursor.y };
               const to = point(args[0]!, args[1]!);
-              const control = cursor.lastQuadControl === undefined ? from : { x: 2 * from.x - cursor.lastQuadControl.x, y: 2 * from.y - cursor.lastQuadControl.y };
+              const control =
+                cursor.lastQuadControl === undefined
+                  ? from
+                  : {
+                      x: 2 * from.x - cursor.lastQuadControl.x,
+                      y: 2 * from.y - cursor.lastQuadControl.y,
+                    };
               addQuad(cursor, acc, control, to);
               break;
             }
@@ -360,7 +495,11 @@ export function parseSvgPathData(d: string): readonly ParsedPathSubpath[] | unde
   }
 
   if (acc.current !== undefined) {
-    acc.subpaths.push({ start: acc.current.start, closed: false, segments: acc.current.segments });
+    acc.subpaths.push({
+      start: acc.current.start,
+      closed: false,
+      segments: acc.current.segments,
+    });
   }
   // A subpath with no segments (a bare moveto, or an M immediately followed by Z) paints nothing; dropping it here keeps every emitted subpath drawable.
   return acc.subpaths.filter((subpath) => subpath.segments.length > 0);
@@ -369,7 +508,10 @@ export function parseSvgPathData(d: string): readonly ParsedPathSubpath[] | unde
 // Probes whether the next non-separator character continues a number (digit, dot, or sign) without consuming anything -- the implicit-repetition boundary test. A sticky zero-width lookahead on the shared pattern would advance lastIndex, so this peeks the raw character class instead.
 function hasNextNumberToken(scanner: PathScanner): boolean {
   let probe = scanner.pos;
-  while (probe < scanner.source.length && /[\s,]/.test(scanner.source[probe]!)) {
+  while (
+    probe < scanner.source.length &&
+    /[\s,]/.test(scanner.source[probe]!)
+  ) {
     probe++;
   }
   const char = scanner.source[probe];

@@ -2,19 +2,24 @@
 //
 // The round-trip assertion below is "read -> write -> read -> write reproduces the same text", not "write reproduces the source byte for byte". That is not a weaker bar chosen for convenience: this package normalises freely on the way out (it escapes ASCII punctuation, regenerates code fences, and picks its own bullet glyph), so byte equality with arbitrary source text is not a property `writeMarkdownContent` has for ANY construct. What must hold, and what is asserted, is that nothing about a footnote is lost on the way through -- the second pass produces the identical document and the identical text.
 
-import type { ContentBlock, ContentDocument } from 'document-schema.js';
-import { PAGE_SIZE_A4 } from 'document-schema.js';
-import { describe, expect, it } from 'vitest';
-import { parseMarkdown } from './block/block';
-import { MarkdownDiagnosticCodes, MarkdownUnbalancedConstructMarkersError } from './diagnostics/diagnostics';
-import { emitMarkdown } from './emit/emit';
-import { readMarkdownContent } from './read';
-import { createDiagnosticCollector } from './test-support/diagnostics';
-import { writeMarkdownContent } from './write';
+import type { ContentBlock, ContentDocument } from "document-schema.js";
+import { PAGE_SIZE_A4 } from "document-schema.js";
+import { describe, expect, it } from "vitest";
+import { parseMarkdown } from "./block/block";
+import {
+  MarkdownDiagnosticCodes,
+  MarkdownUnbalancedConstructMarkersError,
+} from "./diagnostics/diagnostics";
+import { emitMarkdown } from "./emit/emit";
+import { readMarkdownContent } from "./read";
+import { createDiagnosticCollector } from "./test-support/diagnostics";
+import { writeMarkdownContent } from "./write";
 
 function blocksOf(document: ContentDocument): ContentBlock[] {
-  if (document.kind !== 'wordprocessing') {
-    throw new Error(`expected a wordprocessing document, got '${document.kind}'`);
+  if (document.kind !== "wordprocessing") {
+    throw new Error(
+      `expected a wordprocessing document, got '${document.kind}'`,
+    );
   }
   return document.sections.flatMap((section) => section.blocks);
 }
@@ -24,365 +29,781 @@ function lowered(source: string): ContentBlock[] {
 }
 
 function minimalDocument(blocks: readonly ContentBlock[]): ContentDocument {
-  return { kind: 'wordprocessing', metadata: {}, sections: [{ pageSize: PAGE_SIZE_A4, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [...blocks] }] };
+  return {
+    kind: "wordprocessing",
+    metadata: {},
+    sections: [
+      {
+        pageSize: PAGE_SIZE_A4,
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        blocks: [...blocks],
+      },
+    ],
+  };
 }
 
 // One full pass through the public surface and back, twice -- see this file's own top-of-file note on why the fixed point, rather than the source text, is what a round trip is measured against here.
-function roundTrip(source: string): { readonly written: string; readonly rewritten: string; readonly document: ContentDocument; readonly reread: ContentDocument } {
+function roundTrip(source: string): {
+  readonly written: string;
+  readonly rewritten: string;
+  readonly document: ContentDocument;
+  readonly reread: ContentDocument;
+} {
   const document = readMarkdownContent(source).document;
   const written = writeMarkdownContent(document);
   const reread = readMarkdownContent(written).document;
   return { written, rewritten: writeMarkdownContent(reread), document, reread };
 }
 
-describe('reading footnote definitions', () => {
-  it('parses a definition as its own block node carrying its label and its body', () => {
-    expect(parseMarkdown('[^1]: The note.').document.children).toEqual([
-      { type: 'footnoteDefinition', label: '1', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'The note.' }] }] },
+describe("reading footnote definitions", () => {
+  it("parses a definition as its own block node carrying its label and its body", () => {
+    expect(parseMarkdown("[^1]: The note.").document.children).toEqual([
+      {
+        type: "footnoteDefinition",
+        label: "1",
+        children: [
+          {
+            type: "paragraph",
+            children: [{ type: "text", value: "The note." }],
+          },
+        ],
+      },
     ]);
   });
 
-  it('collects every definition label into the document-global set, before any inline is parsed', () => {
-    expect([...parseMarkdown('[^a]: one\n\n[^b]: two').footnotes]).toEqual(['a', 'b']);
+  it("collects every definition label into the document-global set, before any inline is parsed", () => {
+    expect([...parseMarkdown("[^a]: one\n\n[^b]: two").footnotes]).toEqual([
+      "a",
+      "b",
+    ]);
   });
 
-  it('continues a definition body across further indented blocks', () => {
-    const [definition] = parseMarkdown('[^1]: First.\n\n    Second.\n\n    - item').document.children;
+  it("continues a definition body across further indented blocks", () => {
+    const [definition] = parseMarkdown(
+      "[^1]: First.\n\n    Second.\n\n    - item",
+    ).document.children;
     expect(definition).toEqual({
-      type: 'footnoteDefinition',
-      label: '1',
+      type: "footnoteDefinition",
+      label: "1",
       children: [
-        { type: 'paragraph', children: [{ type: 'text', value: 'First.' }] },
-        { type: 'paragraph', children: [{ type: 'text', value: 'Second.' }] },
-        { type: 'list', markerType: 'bullet', bulletMarker: '-', tight: true, children: [{ type: 'listItem', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'item' }] }] }] },
+        { type: "paragraph", children: [{ type: "text", value: "First." }] },
+        { type: "paragraph", children: [{ type: "text", value: "Second." }] },
+        {
+          type: "list",
+          markerType: "bullet",
+          bulletMarker: "-",
+          tight: true,
+          children: [
+            {
+              type: "listItem",
+              children: [
+                {
+                  type: "paragraph",
+                  children: [{ type: "text", value: "item" }],
+                },
+              ],
+            },
+          ],
+        },
       ],
     });
   });
 
-  it('ends a definition at a blank line followed by unindented content', () => {
-    expect(parseMarkdown('[^1]: note\n\nafter').document.children).toEqual([
-      { type: 'footnoteDefinition', label: '1', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'note' }] }] },
-      { type: 'paragraph', children: [{ type: 'text', value: 'after' }] },
-    ]);
-  });
-
-  it('continues a definition\'s own paragraph lazily, exactly as a list item does', () => {
-    expect(parseMarkdown('[^1]: note\nsame paragraph').document.children).toEqual([
+  it("ends a definition at a blank line followed by unindented content", () => {
+    expect(parseMarkdown("[^1]: note\n\nafter").document.children).toEqual([
       {
-        type: 'footnoteDefinition',
-        label: '1',
-        children: [{ type: 'paragraph', children: [{ type: 'text', value: 'note' }, { type: 'softBreak' }, { type: 'text', value: 'same paragraph' }] }],
-      },
-    ]);
-  });
-
-  it('accepts a definition with no body at all', () => {
-    expect(parseMarkdown('[^1]:').document.children).toEqual([{ type: 'footnoteDefinition', label: '1', children: [] }]);
-  });
-
-  it('does not let a definition interrupt a paragraph', () => {
-    expect(parseMarkdown('prose\n[^1]: not a definition').document.children).toEqual([
-      { type: 'paragraph', children: [{ type: 'text', value: 'prose' }, { type: 'softBreak' }, { type: 'text', value: '[^1]: not a definition' }] },
-    ]);
-  });
-
-  it('does not recognise a definition inside a block quote or a list item', () => {
-    // Both would put the construct pair's own extent inside a scope the enclosing container opened -- see src/block/block.ts's tryFootnoteDefinitionStart for why that is the one thing the marker contract forbids a producer from emitting. The text stays an ordinary paragraph there, exactly as it did before footnotes were recognised anywhere.
-    expect(parseMarkdown('> [^1]: quoted note text').document.children).toEqual([
-      { type: 'blockquote', children: [{ type: 'paragraph', children: [{ type: 'text', value: '[^1]: quoted note text' }] }] },
-    ]);
-    expect(parseMarkdown('- [^1]: listed note text').document.children).toEqual([
-      { type: 'list', markerType: 'bullet', bulletMarker: '-', tight: true, children: [{ type: 'listItem', children: [{ type: 'paragraph', children: [{ type: 'text', value: '[^1]: listed note text' }] }] }] },
-    ]);
-  });
-
-  it('recognises a definition that follows a list, closing the still-open list rather than folding the definition into a paragraph', () => {
-    // continueBlock (src/block/block.ts) reports a `list` node as continued unconditionally, so the container the block-start dispatch sees here is the list itself, not the document -- tryFootnoteDefinitionStart has to walk past that before its own document-only restriction applies. Without that walk this whole shape collapses: `[^1]: note` reads as an ordinary paragraph, extractDefinitions swallows it as a LINK reference definition instead, and the note body is gone.
-    expect(parseMarkdown('Body[^1].\n\n- a\n- b\n\n[^1]: note').document.children).toEqual([
-      { type: 'paragraph', children: [{ type: 'text', value: 'Body' }, { type: 'footnoteReference', label: '1' }, { type: 'text', value: '.' }] },
-      {
-        type: 'list',
-        markerType: 'bullet',
-        bulletMarker: '-',
-        tight: true,
+        type: "footnoteDefinition",
+        label: "1",
         children: [
-          { type: 'listItem', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'a' }] }] },
-          { type: 'listItem', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'b' }] }] },
+          { type: "paragraph", children: [{ type: "text", value: "note" }] },
         ],
       },
-      { type: 'footnoteDefinition', label: '1', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'note' }] }] },
+      { type: "paragraph", children: [{ type: "text", value: "after" }] },
     ]);
   });
 
-  it('still refuses a definition indented into a list item\'s own content, even though a bare definition after the same list is recognised', () => {
-    // "[^1]: note" here is indented enough to be the item's own second paragraph, so tryFootnoteDefinitionStart's guard correctly rejects it (matchedContainer is the listItem itself, not something that walks up to the document). What is left is an ordinary paragraph holding nothing but what extractDefinitions reads as a link reference definition, which leaves no block behind at all -- the item ends up with only its first paragraph.
-    expect(parseMarkdown('- a\n\n  [^1]: note').document.children).toEqual([
+  it("continues a definition's own paragraph lazily, exactly as a list item does", () => {
+    expect(
+      parseMarkdown("[^1]: note\nsame paragraph").document.children,
+    ).toEqual([
       {
-        type: 'list',
-        markerType: 'bullet',
-        bulletMarker: '-',
-        tight: true,
-        children: [{ type: 'listItem', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'a' }] }] }],
+        type: "footnoteDefinition",
+        label: "1",
+        children: [
+          {
+            type: "paragraph",
+            children: [
+              { type: "text", value: "note" },
+              { type: "softBreak" },
+              { type: "text", value: "same paragraph" },
+            ],
+          },
+        ],
       },
     ]);
   });
 
-  it('reports a duplicate label and keeps both definitions as written', () => {
+  it("accepts a definition with no body at all", () => {
+    expect(parseMarkdown("[^1]:").document.children).toEqual([
+      { type: "footnoteDefinition", label: "1", children: [] },
+    ]);
+  });
+
+  it("does not let a definition interrupt a paragraph", () => {
+    expect(
+      parseMarkdown("prose\n[^1]: not a definition").document.children,
+    ).toEqual([
+      {
+        type: "paragraph",
+        children: [
+          { type: "text", value: "prose" },
+          { type: "softBreak" },
+          { type: "text", value: "[^1]: not a definition" },
+        ],
+      },
+    ]);
+  });
+
+  it("does not recognise a definition inside a block quote or a list item", () => {
+    // Both would put the construct pair's own extent inside a scope the enclosing container opened -- see src/block/block.ts's tryFootnoteDefinitionStart for why that is the one thing the marker contract forbids a producer from emitting. The text stays an ordinary paragraph there, exactly as it did before footnotes were recognised anywhere.
+    expect(parseMarkdown("> [^1]: quoted note text").document.children).toEqual(
+      [
+        {
+          type: "blockquote",
+          children: [
+            {
+              type: "paragraph",
+              children: [{ type: "text", value: "[^1]: quoted note text" }],
+            },
+          ],
+        },
+      ],
+    );
+    expect(parseMarkdown("- [^1]: listed note text").document.children).toEqual(
+      [
+        {
+          type: "list",
+          markerType: "bullet",
+          bulletMarker: "-",
+          tight: true,
+          children: [
+            {
+              type: "listItem",
+              children: [
+                {
+                  type: "paragraph",
+                  children: [{ type: "text", value: "[^1]: listed note text" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    );
+  });
+
+  it("recognises a definition that follows a list, closing the still-open list rather than folding the definition into a paragraph", () => {
+    // continueBlock (src/block/block.ts) reports a `list` node as continued unconditionally, so the container the block-start dispatch sees here is the list itself, not the document -- tryFootnoteDefinitionStart has to walk past that before its own document-only restriction applies. Without that walk this whole shape collapses: `[^1]: note` reads as an ordinary paragraph, extractDefinitions swallows it as a LINK reference definition instead, and the note body is gone.
+    expect(
+      parseMarkdown("Body[^1].\n\n- a\n- b\n\n[^1]: note").document.children,
+    ).toEqual([
+      {
+        type: "paragraph",
+        children: [
+          { type: "text", value: "Body" },
+          { type: "footnoteReference", label: "1" },
+          { type: "text", value: "." },
+        ],
+      },
+      {
+        type: "list",
+        markerType: "bullet",
+        bulletMarker: "-",
+        tight: true,
+        children: [
+          {
+            type: "listItem",
+            children: [
+              { type: "paragraph", children: [{ type: "text", value: "a" }] },
+            ],
+          },
+          {
+            type: "listItem",
+            children: [
+              { type: "paragraph", children: [{ type: "text", value: "b" }] },
+            ],
+          },
+        ],
+      },
+      {
+        type: "footnoteDefinition",
+        label: "1",
+        children: [
+          { type: "paragraph", children: [{ type: "text", value: "note" }] },
+        ],
+      },
+    ]);
+  });
+
+  it("still refuses a definition indented into a list item's own content, even though a bare definition after the same list is recognised", () => {
+    // "[^1]: note" here is indented enough to be the item's own second paragraph, so tryFootnoteDefinitionStart's guard correctly rejects it (matchedContainer is the listItem itself, not something that walks up to the document). What is left is an ordinary paragraph holding nothing but what extractDefinitions reads as a link reference definition, which leaves no block behind at all -- the item ends up with only its first paragraph.
+    expect(parseMarkdown("- a\n\n  [^1]: note").document.children).toEqual([
+      {
+        type: "list",
+        markerType: "bullet",
+        bulletMarker: "-",
+        tight: true,
+        children: [
+          {
+            type: "listItem",
+            children: [
+              { type: "paragraph", children: [{ type: "text", value: "a" }] },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("reports a duplicate label and keeps both definitions as written", () => {
     const collector = createDiagnosticCollector();
-    const parsed = parseMarkdown('[^1]: first\n\n[^1]: second', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION)).toBe(true);
+    const parsed = parseMarkdown("[^1]: first\n\n[^1]: second", {
+      sink: collector.sink,
+    });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION),
+    ).toBe(true);
     expect(parsed.document.children).toHaveLength(2);
   });
 
-  it('leaves both spellings as ordinary text when footnotes are switched off', () => {
+  it("leaves both spellings as ordinary text when footnotes are switched off", () => {
     // A multi-word body deliberately, so the line cannot be read as a LINK reference definition either (`[^1]: note` alone is `[^1]` -> `note`, which is what this package did with the whole shape before footnotes existed).
-    expect(parseMarkdown('a[^1]\n\n[^1]: note text', { footnotes: false }).document.children).toEqual([
-      { type: 'paragraph', children: [{ type: 'text', value: 'a[^1]' }] },
-      { type: 'paragraph', children: [{ type: 'text', value: '[^1]: note text' }] },
+    expect(
+      parseMarkdown("a[^1]\n\n[^1]: note text", { footnotes: false }).document
+        .children,
+    ).toEqual([
+      { type: "paragraph", children: [{ type: "text", value: "a[^1]" }] },
+      {
+        type: "paragraph",
+        children: [{ type: "text", value: "[^1]: note text" }],
+      },
     ]);
   });
 });
 
-describe('reading footnote references', () => {
-  it('parses a reference whose label has a definition somewhere in the document', () => {
-    const [paragraph] = parseMarkdown('see[^1] here\n\n[^1]: note').document.children;
+describe("reading footnote references", () => {
+  it("parses a reference whose label has a definition somewhere in the document", () => {
+    const [paragraph] = parseMarkdown("see[^1] here\n\n[^1]: note").document
+      .children;
     expect(paragraph).toEqual({
-      type: 'paragraph',
-      children: [{ type: 'text', value: 'see' }, { type: 'footnoteReference', label: '1' }, { type: 'text', value: ' here' }],
+      type: "paragraph",
+      children: [
+        { type: "text", value: "see" },
+        { type: "footnoteReference", label: "1" },
+        { type: "text", value: " here" },
+      ],
     });
   });
 
-  it('resolves a reference against a definition that appears later in the document', () => {
-    const [paragraph] = parseMarkdown('forward[^late]\n\n[^late]: defined afterwards').document.children;
-    expect(paragraph).toEqual({ type: 'paragraph', children: [{ type: 'text', value: 'forward' }, { type: 'footnoteReference', label: 'late' }] });
-  });
-
-  it('leaves a label with no definition as ordinary text', () => {
-    expect(parseMarkdown('see[^missing] here').document.children).toEqual([{ type: 'paragraph', children: [{ type: 'text', value: 'see[^missing] here' }] }]);
-  });
-
-  it('matches labels exactly, without case folding', () => {
-    const [paragraph] = parseMarkdown('a[^Note] b[^note]\n\n[^note]: only the lower-case one is defined').document.children;
+  it("resolves a reference against a definition that appears later in the document", () => {
+    const [paragraph] = parseMarkdown(
+      "forward[^late]\n\n[^late]: defined afterwards",
+    ).document.children;
     expect(paragraph).toEqual({
-      type: 'paragraph',
-      children: [{ type: 'text', value: 'a[^Note] b' }, { type: 'footnoteReference', label: 'note' }],
+      type: "paragraph",
+      children: [
+        { type: "text", value: "forward" },
+        { type: "footnoteReference", label: "late" },
+      ],
     });
   });
 
-  it('reads `![^1]` as an exclamation mark followed by a reference, never an image', () => {
-    const [paragraph] = parseMarkdown('![^1]\n\n[^1]: note').document.children;
-    expect(paragraph).toEqual({ type: 'paragraph', children: [{ type: 'text', value: '!' }, { type: 'footnoteReference', label: '1' }] });
+  it("leaves a label with no definition as ordinary text", () => {
+    expect(parseMarkdown("see[^missing] here").document.children).toEqual([
+      {
+        type: "paragraph",
+        children: [{ type: "text", value: "see[^missing] here" }],
+      },
+    ]);
+  });
+
+  it("matches labels exactly, without case folding", () => {
+    const [paragraph] = parseMarkdown(
+      "a[^Note] b[^note]\n\n[^note]: only the lower-case one is defined",
+    ).document.children;
+    expect(paragraph).toEqual({
+      type: "paragraph",
+      children: [
+        { type: "text", value: "a[^Note] b" },
+        { type: "footnoteReference", label: "note" },
+      ],
+    });
+  });
+
+  it("reads `![^1]` as an exclamation mark followed by a reference, never an image", () => {
+    const [paragraph] = parseMarkdown("![^1]\n\n[^1]: note").document.children;
+    expect(paragraph).toEqual({
+      type: "paragraph",
+      children: [
+        { type: "text", value: "!" },
+        { type: "footnoteReference", label: "1" },
+      ],
+    });
   });
 });
 
-describe('lowering a footnote onto the schema', () => {
-  it('lowers a definition to an anchor construct bracketing its own body blocks', () => {
-    expect(lowered('[^1]: The note.')).toEqual([
-      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' } },
-      { kind: 'paragraph', runs: [{ text: 'The note.' }] },
-      { kind: 'constructEnd' },
+describe("lowering a footnote onto the schema", () => {
+  it("lowers a definition to an anchor construct bracketing its own body blocks", () => {
+    expect(lowered("[^1]: The note.")).toEqual([
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+      },
+      { kind: "paragraph", runs: [{ text: "The note." }] },
+      { kind: "constructEnd" },
     ]);
   });
 
-  it('carries a multi-block body inside the construct extent', () => {
-    expect(lowered('[^1]: One.\n\n    Two.')).toEqual([
-      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' } },
-      { kind: 'paragraph', runs: [{ text: 'One.' }] },
-      { kind: 'paragraph', runs: [{ text: 'Two.' }] },
-      { kind: 'constructEnd' },
+  it("carries a multi-block body inside the construct extent", () => {
+    expect(lowered("[^1]: One.\n\n    Two.")).toEqual([
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+      },
+      { kind: "paragraph", runs: [{ text: "One." }] },
+      { kind: "paragraph", runs: [{ text: "Two." }] },
+      { kind: "constructEnd" },
     ]);
   });
 
-  it('lowers a bodyless definition to a point anchor -- a pair with nothing between it', () => {
-    expect(lowered('[^1]:')).toEqual([
-      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' } },
-      { kind: 'constructEnd' },
+  it("lowers a bodyless definition to a point anchor -- a pair with nothing between it", () => {
+    expect(lowered("[^1]:")).toEqual([
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+      },
+      { kind: "constructEnd" },
     ]);
   });
 
-  it('lowers a reference to an ordinary run plus a point run-level anchor extent naming it', () => {
-    const document = readMarkdownContent('see[^1]\n\n[^1]: note').document;
+  it("lowers a reference to an ordinary run plus a point run-level anchor extent naming it", () => {
+    const document = readMarkdownContent("see[^1]\n\n[^1]: note").document;
     expect(blocksOf(document)[0]).toEqual({
-      kind: 'paragraph',
-      runs: [{ text: 'see' }, { text: '[^1]' }],
-      constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' }, startRun: 1, endRun: 1 }],
+      kind: "paragraph",
+      runs: [{ text: "see" }, { text: "[^1]" }],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+          startRun: 1,
+          endRun: 1,
+        },
+      ],
     });
   });
 
-  it('carries a reference inside a link as one run of that link, extent and all', () => {
-    expect(blocksOf(readMarkdownContent('[text[^1]](/u)\n\n[^1]: note').document)[0]).toEqual({
-      kind: 'paragraph',
-      runs: [{ text: 'text', hyperlink: '/u' }, { text: '[^1]', hyperlink: '/u' }],
-      constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' }, startRun: 1, endRun: 1 }],
+  it("carries a reference inside a link as one run of that link, extent and all", () => {
+    expect(
+      blocksOf(readMarkdownContent("[text[^1]](/u)\n\n[^1]: note").document)[0],
+    ).toEqual({
+      kind: "paragraph",
+      runs: [
+        { text: "text", hyperlink: "/u" },
+        { text: "[^1]", hyperlink: "/u" },
+      ],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+          startRun: 1,
+          endRun: 1,
+        },
+      ],
     });
   });
 
-  it('counts footnote-reference extents among the paragraph\'s constructs in walk order, beside a titled link\'s own extent', () => {
-    const [first] = blocksOf(readMarkdownContent('a[^1] and [b](/u "t")\n\n[^1]: note').document);
-    if (first?.kind !== 'paragraph') {
-      throw new Error(`expected a paragraph block, got '${first?.kind ?? 'none'}'`);
+  it("counts footnote-reference extents among the paragraph's constructs in walk order, beside a titled link's own extent", () => {
+    const [first] = blocksOf(
+      readMarkdownContent('a[^1] and [b](/u "t")\n\n[^1]: note').document,
+    );
+    if (first?.kind !== "paragraph") {
+      throw new Error(
+        `expected a paragraph block, got '${first?.kind ?? "none"}'`,
+      );
     }
     expect(first.constructs).toEqual([
-      { descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' }, startRun: 1, endRun: 1 },
-      { descriptor: { kind: 'link', target: { kind: 'external', uri: '/u' }, title: 't' }, startRun: 3, endRun: 4 },
+      {
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+        startRun: 1,
+        endRun: 1,
+      },
+      {
+        descriptor: {
+          kind: "link",
+          target: { kind: "external", uri: "/u" },
+          title: "t",
+        },
+        startRun: 3,
+        endRun: 4,
+      },
     ]);
   });
 
-  it('flattens a heading inside a definition body to literal ATX text, and says so', () => {
+  it("flattens a heading inside a definition body to literal ATX text, and says so", () => {
     const collector = createDiagnosticCollector();
-    const document = readMarkdownContent('[^1]: intro\n\n    ## inner', { sink: collector.sink }).document;
+    const document = readMarkdownContent("[^1]: intro\n\n    ## inner", {
+      sink: collector.sink,
+    }).document;
     expect(blocksOf(document)).toEqual([
-      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' } },
-      { kind: 'paragraph', runs: [{ text: 'intro' }] },
-      { kind: 'paragraph', runs: [{ text: '## ' }, { text: 'inner' }] },
-      { kind: 'constructEnd' },
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+      },
+      { kind: "paragraph", runs: [{ text: "intro" }] },
+      { kind: "paragraph", runs: [{ text: "## " }, { text: "inner" }] },
+      { kind: "constructEnd" },
     ]);
-    expect(collector.has(MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED)).toBe(true);
+    expect(
+      collector.has(MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED),
+    ).toBe(true);
   });
 
-  it('leaves every construct marker pair balanced, which is what the schema requires of a producer', () => {
-    const blocks = lowered('a[^x]\n\n[^x]: one\n\n    two\n\n[^y]: another');
-    const opens = blocks.filter((block) => block.kind === 'constructStart').length;
-    const closes = blocks.filter((block) => block.kind === 'constructEnd').length;
+  it("leaves every construct marker pair balanced, which is what the schema requires of a producer", () => {
+    const blocks = lowered("a[^x]\n\n[^x]: one\n\n    two\n\n[^y]: another");
+    const opens = blocks.filter(
+      (block) => block.kind === "constructStart",
+    ).length;
+    const closes = blocks.filter(
+      (block) => block.kind === "constructEnd",
+    ).length;
     expect(opens).toBe(closes);
   });
 });
 
-describe('writing footnotes back out', () => {
-  it('renders an anchor construct as a definition, and a footnote-anchor extent as its reference', () => {
-    expect(emitMarkdown(minimalDocument([
-      { kind: 'paragraph', runs: [{ text: 'see' }, { text: '[^1]' }], constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' }, startRun: 1, endRun: 1 }] },
-      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' } },
-      { kind: 'paragraph', runs: [{ text: 'note' }] },
-      { kind: 'constructEnd' },
-    ]))).toBe('see[^1]\n\n[^1]: note');
+describe("writing footnotes back out", () => {
+  it("renders an anchor construct as a definition, and a footnote-anchor extent as its reference", () => {
+    expect(
+      emitMarkdown(
+        minimalDocument([
+          {
+            kind: "paragraph",
+            runs: [{ text: "see" }, { text: "[^1]" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "anchor",
+                  anchorType: "footnote",
+                  name: "1",
+                },
+                startRun: 1,
+                endRun: 1,
+              },
+            ],
+          },
+          {
+            kind: "constructStart",
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+          },
+          { kind: "paragraph", runs: [{ text: "note" }] },
+          { kind: "constructEnd" },
+        ]),
+      ),
+    ).toBe("see[^1]\n\n[^1]: note");
   });
 
-  it('spells the reference from the extent\'s own name, the same authority the definition marker takes its label from', () => {
-    expect(emitMarkdown(minimalDocument([
-      { kind: 'paragraph', runs: [{ text: 'see' }, { text: '' }], constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '2' }, startRun: 1, endRun: 1 }] },
-    ]))).toBe('see[^2]');
+  it("spells the reference from the extent's own name, the same authority the definition marker takes its label from", () => {
+    expect(
+      emitMarkdown(
+        minimalDocument([
+          {
+            kind: "paragraph",
+            runs: [{ text: "see" }, { text: "" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "anchor",
+                  anchorType: "footnote",
+                  name: "2",
+                },
+                startRun: 1,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+      ),
+    ).toBe("see[^2]");
   });
 
-  it('indents a multi-block body to the continuation column a reader measures against', () => {
-    expect(emitMarkdown(minimalDocument([
-      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: 'long' } },
-      { kind: 'paragraph', runs: [{ text: 'one' }] },
-      { kind: 'paragraph', runs: [{ text: 'two' }] },
-      { kind: 'constructEnd' },
-    ]))).toBe('[^long]: one\n\n    two');
+  it("indents a multi-block body to the continuation column a reader measures against", () => {
+    expect(
+      emitMarkdown(
+        minimalDocument([
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "anchor",
+              anchorType: "footnote",
+              name: "long",
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "one" }] },
+          { kind: "paragraph", runs: [{ text: "two" }] },
+          { kind: "constructEnd" },
+        ]),
+      ),
+    ).toBe("[^long]: one\n\n    two");
   });
 
-  it('renders an empty extent as the bare marker, with no trailing space', () => {
-    expect(emitMarkdown(minimalDocument([
-      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' } },
-      { kind: 'constructEnd' },
-    ]))).toBe('[^1]:');
+  it("renders an empty extent as the bare marker, with no trailing space", () => {
+    expect(
+      emitMarkdown(
+        minimalDocument([
+          {
+            kind: "constructStart",
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+          },
+          { kind: "constructEnd" },
+        ]),
+      ),
+    ).toBe("[^1]:");
   });
 
-  it('escapes an ordinary run that merely looks like a reference, so it reparses as text', () => {
-    const written = emitMarkdown(minimalDocument([{ kind: 'paragraph', runs: [{ text: 'literal [^1] here' }] }]));
-    expect(written).toBe('literal \\[\\^1\\] here');
-    expect(parseMarkdown(`${written}\n\n[^1]: real`).document.children[0]).toEqual({ type: 'paragraph', children: [{ type: 'text', value: 'literal [^1] here' }] });
+  it("escapes an ordinary run that merely looks like a reference, so it reparses as text", () => {
+    const written = emitMarkdown(
+      minimalDocument([
+        { kind: "paragraph", runs: [{ text: "literal [^1] here" }] },
+      ]),
+    );
+    expect(written).toBe("literal \\[\\^1\\] here");
+    expect(
+      parseMarkdown(`${written}\n\n[^1]: real`).document.children[0],
+    ).toEqual({
+      type: "paragraph",
+      children: [{ type: "text", value: "literal [^1] here" }],
+    });
   });
 
   it('degrades a footnote-anchor extent whose own name cannot be spelled as a "[^label]" marker, rather than emitting markdown its own reader cannot parse back', () => {
     // The same gate the definition half applies (isValidFootnoteLabel, src/inline/footnote.ts) and for the same reason: AnchorDescriptorSchema.name is a bare z.string(), so a name arriving from another codec may carry whitespace or a "]" this package's own [^label] grammar cannot represent. Spelling it straight into running text would emit a marker that reparses as something else (a link, or literal prose), losing the construct with no diagnostic -- so the run's own materialised text renders escaped in the reference's place and the extent reports itself unrepresented.
     const whitespaceCollector = createDiagnosticCollector();
-    const whitespaceWritten = emitMarkdown(minimalDocument([
-      { kind: 'paragraph', runs: [{ text: 'see' }, { text: '[^My Note]' }], constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: 'My Note' }, startRun: 1, endRun: 1 }] },
-    ]), { sink: whitespaceCollector.sink });
-    expect(whitespaceWritten).toBe('see\\[\\^My Note\\]');
-    expect(whitespaceCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
+    const whitespaceWritten = emitMarkdown(
+      minimalDocument([
+        {
+          kind: "paragraph",
+          runs: [{ text: "see" }, { text: "[^My Note]" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "anchor",
+                anchorType: "footnote",
+                name: "My Note",
+              },
+              startRun: 1,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+      { sink: whitespaceCollector.sink },
+    );
+    expect(whitespaceWritten).toBe("see\\[\\^My Note\\]");
+    expect(
+      whitespaceCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED),
+    ).toBe(true);
 
     const bracketCollector = createDiagnosticCollector();
-    const bracketWritten = emitMarkdown(minimalDocument([
-      { kind: 'paragraph', runs: [{ text: 'see' }, { text: '[^a]b]' }], constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: 'a]b' }, startRun: 1, endRun: 1 }] },
-    ]), { sink: bracketCollector.sink });
-    expect(bracketWritten).toBe('see\\[\\^a\\]b\\]');
-    expect(bracketCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
+    const bracketWritten = emitMarkdown(
+      minimalDocument([
+        {
+          kind: "paragraph",
+          runs: [{ text: "see" }, { text: "[^a]b]" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "anchor",
+                anchorType: "footnote",
+                name: "a]b",
+              },
+              startRun: 1,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+      { sink: bracketCollector.sink },
+    );
+    expect(bracketWritten).toBe("see\\[\\^a\\]b\\]");
+    expect(
+      bracketCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED),
+    ).toBe(true);
   });
 
-  it('leaves a run covered only by a RANGED footnote anchor to its own escaped text: a markdown reference is a point, and a range over several runs has no spelling', () => {
+  it("leaves a run covered only by a RANGED footnote anchor to its own escaped text: a markdown reference is a point, and a range over several runs has no spelling", () => {
     // A foreign producer may name a footnote anchor over a sub-sequence of runs rather than at a point (odf.js's reader spells its text:note reference that way); this package's own read side never does. Only the point form is a markdown reference site, so the range renders transparently -- its runs keep their own text, the same silent construct loss every other run-level extent markdown cannot spell already takes (a bookmark, a comment reference).
-    const written = emitMarkdown(minimalDocument([
-      { kind: 'paragraph', runs: [{ text: 'see ' }, { text: 'note ' }, { text: 'mark' }], constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, startRun: 1, endRun: 3 }] },
-    ]));
-    expect(written).toBe('see note mark');
+    const written = emitMarkdown(
+      minimalDocument([
+        {
+          kind: "paragraph",
+          runs: [{ text: "see " }, { text: "note " }, { text: "mark" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "anchor",
+                anchorType: "footnote",
+                name: "1",
+                definition: "n1",
+              },
+              startRun: 1,
+              endRun: 3,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(written).toBe("see note mark");
   });
 
-  it('renders a construct markdown has no syntax for transparently, keeping its extent', () => {
+  it("renders a construct markdown has no syntax for transparently, keeping its extent", () => {
     const collector = createDiagnosticCollector();
-    const written = emitMarkdown(minimalDocument([
-      { kind: 'constructStart', descriptor: { kind: 'division', name: 'chapter-one' } },
-      { kind: 'paragraph', runs: [{ text: 'content inside a division' }] },
-      { kind: 'constructEnd' },
-    ]), { sink: collector.sink });
-    expect(written).toBe('content inside a division');
-    expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
+    const written = emitMarkdown(
+      minimalDocument([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "chapter-one" },
+        },
+        { kind: "paragraph", runs: [{ text: "content inside a division" }] },
+        { kind: "constructEnd" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(written).toBe("content inside a division");
+    expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(
+      true,
+    );
   });
 
   it('degrades a footnote anchor whose own name cannot be spelled as a "[^label]:" marker, rather than emitting markdown its own reader cannot parse back', () => {
     // AnchorDescriptorSchema.name is a bare z.string() -- document-schema.js places no grammar constraint of its own on it, so a name from another codec sharing the same ContentDocument pivot may carry whitespace or a "]" this package's own [^label] grammar (src/inline/footnote.ts) cannot represent. Spelling either straight into a marker would emit text this package's own reader reparses as something else entirely (a link reference definition, or a plain paragraph), losing the construct with no diagnostic -- so both fall back to the same transparent degrade an unrepresentable construct kind already gets.
     const whitespaceCollector = createDiagnosticCollector();
-    const whitespaceWritten = emitMarkdown(minimalDocument([
-      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: 'My Note' } },
-      { kind: 'paragraph', runs: [{ text: 'body' }] },
-      { kind: 'constructEnd' },
-    ]), { sink: whitespaceCollector.sink });
-    expect(whitespaceWritten).toBe('body');
-    expect(whitespaceCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
-    expect(parseMarkdown(whitespaceWritten).document.children).toEqual([{ type: 'paragraph', children: [{ type: 'text', value: 'body' }] }]);
+    const whitespaceWritten = emitMarkdown(
+      minimalDocument([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "anchor",
+            anchorType: "footnote",
+            name: "My Note",
+          },
+        },
+        { kind: "paragraph", runs: [{ text: "body" }] },
+        { kind: "constructEnd" },
+      ]),
+      { sink: whitespaceCollector.sink },
+    );
+    expect(whitespaceWritten).toBe("body");
+    expect(
+      whitespaceCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED),
+    ).toBe(true);
+    expect(parseMarkdown(whitespaceWritten).document.children).toEqual([
+      { type: "paragraph", children: [{ type: "text", value: "body" }] },
+    ]);
 
     const bracketCollector = createDiagnosticCollector();
-    const bracketWritten = emitMarkdown(minimalDocument([
-      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: 'a]b' } },
-      { kind: 'paragraph', runs: [{ text: 'body' }] },
-      { kind: 'constructEnd' },
-    ]), { sink: bracketCollector.sink });
-    expect(bracketWritten).toBe('body');
-    expect(bracketCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
+    const bracketWritten = emitMarkdown(
+      minimalDocument([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "a]b" },
+        },
+        { kind: "paragraph", runs: [{ text: "body" }] },
+        { kind: "constructEnd" },
+      ]),
+      { sink: bracketCollector.sink },
+    );
+    expect(bracketWritten).toBe("body");
+    expect(
+      bracketCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED),
+    ).toBe(true);
   });
 
-  it('renders a nested construct inside a footnote body', () => {
-    expect(emitMarkdown(minimalDocument([
-      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' } },
-      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'mark' } },
-      { kind: 'paragraph', runs: [{ text: 'bookmarked note' }] },
-      { kind: 'constructEnd' },
-      { kind: 'constructEnd' },
-    ]))).toBe('[^1]: bookmarked note');
+  it("renders a nested construct inside a footnote body", () => {
+    expect(
+      emitMarkdown(
+        minimalDocument([
+          {
+            kind: "constructStart",
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+          },
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "anchor",
+              anchorType: "bookmark",
+              name: "mark",
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "bookmarked note" }] },
+          { kind: "constructEnd" },
+          { kind: "constructEnd" },
+        ]),
+      ),
+    ).toBe("[^1]: bookmarked note");
   });
 
-  it('throws rather than guessing when the markers do not pair up', () => {
-    expect(() => emitMarkdown(minimalDocument([{ kind: 'constructEnd' }]))).toThrow(MarkdownUnbalancedConstructMarkersError);
-    expect(() => emitMarkdown(minimalDocument([{ kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' } }]))).toThrow(MarkdownUnbalancedConstructMarkersError);
+  it("throws rather than guessing when the markers do not pair up", () => {
+    expect(() =>
+      emitMarkdown(minimalDocument([{ kind: "constructEnd" }])),
+    ).toThrow(MarkdownUnbalancedConstructMarkersError);
+    expect(() =>
+      emitMarkdown(
+        minimalDocument([
+          {
+            kind: "constructStart",
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+          },
+        ]),
+      ),
+    ).toThrow(MarkdownUnbalancedConstructMarkersError);
   });
 });
 
-describe('round trip', () => {
+describe("round trip", () => {
   const sources = [
-    'Text with a note[^1] here.\n\n[^1]: The note body.',
-    'A[^a] and B[^b].\n\n[^a]: First.\n\n[^b]: Second.',
-    'See[^long].\n\n[^long]: First paragraph.\n\n    Second paragraph.\n\n    ```\n    code\n    ```',
-    '[^1]:',
-    '# Heading\n\nBody[^n].\n\n[^n]: note with *emphasis*, `code`, and a [link](/u).',
-    '[^1]: body\n\n    - a\n    - b',
-    'Escaped \\[^1\\] stays literal.\n\n[^1]: while this one is real.',
-    'Unmatched [^nope] stays literal text.',
-    'Body[^1].\n\n- a\n- b\n\n[^1]: note',
-    '| cell[^1] |\n| - |\n\n[^1]: a reference inside a table cell, whose extent rides the cell\'s own paragraph',
+    "Text with a note[^1] here.\n\n[^1]: The note body.",
+    "A[^a] and B[^b].\n\n[^a]: First.\n\n[^b]: Second.",
+    "See[^long].\n\n[^long]: First paragraph.\n\n    Second paragraph.\n\n    ```\n    code\n    ```",
+    "[^1]:",
+    "# Heading\n\nBody[^n].\n\n[^n]: note with *emphasis*, `code`, and a [link](/u).",
+    "[^1]: body\n\n    - a\n    - b",
+    "Escaped \\[^1\\] stays literal.\n\n[^1]: while this one is real.",
+    "Unmatched [^nope] stays literal text.",
+    "Body[^1].\n\n- a\n- b\n\n[^1]: note",
+    "| cell[^1] |\n| - |\n\n[^1]: a reference inside a table cell, whose extent rides the cell's own paragraph",
   ];
 
-  it.each(sources)('reaches a fixed point for %j', (source) => {
+  it.each(sources)("reaches a fixed point for %j", (source) => {
     const { written, rewritten, document, reread } = roundTrip(source);
     expect(rewritten).toBe(written);
     expect(reread).toEqual(document);
   });
 
-  it('keeps a definition body that a plain reparse would otherwise flatten into the surrounding flow', () => {
-    const { written } = roundTrip('intro[^1]\n\n[^1]: first\n\n    second\n\nafter the note');
-    expect(written).toBe('intro[^1]\n\n[^1]: first\n\n    second\n\nafter the note');
-    expect(blocksOf(readMarkdownContent(written).document).map((block) => block.kind)).toEqual(['paragraph', 'constructStart', 'paragraph', 'paragraph', 'constructEnd', 'paragraph']);
+  it("keeps a definition body that a plain reparse would otherwise flatten into the surrounding flow", () => {
+    const { written } = roundTrip(
+      "intro[^1]\n\n[^1]: first\n\n    second\n\nafter the note",
+    );
+    expect(written).toBe(
+      "intro[^1]\n\n[^1]: first\n\n    second\n\nafter the note",
+    );
+    expect(
+      blocksOf(readMarkdownContent(written).document).map(
+        (block) => block.kind,
+      ),
+    ).toEqual([
+      "paragraph",
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+      "paragraph",
+    ]);
   });
 });

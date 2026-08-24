@@ -1,63 +1,63 @@
-import type { ContentDocument, MathSymbolEntry } from 'document-schema.js';
-import type { LatexDiagnostic } from './diagnostics';
+import type { ContentDocument, MathSymbolEntry } from "document-schema.js";
+import type { LatexDiagnostic } from "./diagnostics";
 
 // The symbol-table half of the lowering: the map from LaTeX's written symbol commands to the glyphs a symbol table keys on, the id-minting scheme that keeps a formula's `sym` references resolvable, and the conservative prose scanner that seeds a document's table from its own defining sentences. The symbol table is the curation layer the schema defines (document-schema.js src/math.ts): presentation-inert, never consulted by rendering, and the thing that makes a lowered equation computable -- a `sym` node is a reference, and this module is where references acquire targets.
 
 // A LaTeX symbol command to its single written glyph, the form the symbol table's own `glyph` field expects ("the written form as it appears in presentation"). temml hands symbol commands through as mathord/textord nodes whose text is the raw command ('\\alpha', '\\infty'); the table keys on what a reader actually sees, so the map is to the Unicode character. Greek (both cases, plus the variant letters), the letterlike symbols, and the few common blackboard/structural glyphs engineers actually write -- anything outside the map degrades to an `unparsed` node rather than entering the table under a command name no human wrote.
 const COMMAND_GLYPHS: Readonly<Record<string, string>> = {
-  '\\alpha': 'α',
-  '\\beta': 'β',
-  '\\gamma': 'γ',
-  '\\delta': 'δ',
-  '\\epsilon': 'ε',
-  '\\varepsilon': 'ε',
-  '\\zeta': 'ζ',
-  '\\eta': 'η',
-  '\\theta': 'θ',
-  '\\vartheta': 'ϑ',
-  '\\iota': 'ι',
-  '\\kappa': 'κ',
-  '\\lambda': 'λ',
-  '\\mu': 'μ',
-  '\\nu': 'ν',
-  '\\xi': 'ξ',
-  '\\pi': 'π',
-  '\\varpi': 'ϖ',
-  '\\rho': 'ρ',
-  '\\varrho': 'ϱ',
-  '\\sigma': 'σ',
-  '\\varsigma': 'ς',
-  '\\tau': 'τ',
-  '\\upsilon': 'υ',
-  '\\phi': 'φ',
-  '\\varphi': 'φ',
-  '\\chi': 'χ',
-  '\\psi': 'ψ',
-  '\\omega': 'ω',
-  '\\Gamma': 'Γ',
-  '\\Delta': 'Δ',
-  '\\Theta': 'Θ',
-  '\\Lambda': 'Λ',
-  '\\Xi': 'Ξ',
-  '\\Pi': 'Π',
-  '\\Sigma': 'Σ',
-  '\\Upsilon': 'Υ',
-  '\\Phi': 'Φ',
-  '\\Psi': 'Ψ',
-  '\\Omega': 'Ω',
-  '\\infty': '∞',
-  '\\partial': '∂',
-  '\\nabla': '∇',
-  '\\ell': 'ℓ',
-  '\\hbar': 'ℏ',
-  '\\Re': 'ℜ',
-  '\\Im': 'ℑ',
-  '\\aleph': 'ℵ',
+  "\\alpha": "α",
+  "\\beta": "β",
+  "\\gamma": "γ",
+  "\\delta": "δ",
+  "\\epsilon": "ε",
+  "\\varepsilon": "ε",
+  "\\zeta": "ζ",
+  "\\eta": "η",
+  "\\theta": "θ",
+  "\\vartheta": "ϑ",
+  "\\iota": "ι",
+  "\\kappa": "κ",
+  "\\lambda": "λ",
+  "\\mu": "μ",
+  "\\nu": "ν",
+  "\\xi": "ξ",
+  "\\pi": "π",
+  "\\varpi": "ϖ",
+  "\\rho": "ρ",
+  "\\varrho": "ϱ",
+  "\\sigma": "σ",
+  "\\varsigma": "ς",
+  "\\tau": "τ",
+  "\\upsilon": "υ",
+  "\\phi": "φ",
+  "\\varphi": "φ",
+  "\\chi": "χ",
+  "\\psi": "ψ",
+  "\\omega": "ω",
+  "\\Gamma": "Γ",
+  "\\Delta": "Δ",
+  "\\Theta": "Θ",
+  "\\Lambda": "Λ",
+  "\\Xi": "Ξ",
+  "\\Pi": "Π",
+  "\\Sigma": "Σ",
+  "\\Upsilon": "Υ",
+  "\\Phi": "Φ",
+  "\\Psi": "Ψ",
+  "\\Omega": "Ω",
+  "\\infty": "∞",
+  "\\partial": "∂",
+  "\\nabla": "∇",
+  "\\ell": "ℓ",
+  "\\hbar": "ℏ",
+  "\\Re": "ℜ",
+  "\\Im": "ℑ",
+  "\\aleph": "ℵ",
 };
 
 // The written glyph a symbol-command text carries, or undefined for a command outside the map. A plain (non-command) character is its own glyph and passes through unchanged.
 export function glyphOfSymbolText(text: string): string | undefined {
-  if (!text.startsWith('\\')) {
+  if (!text.startsWith("\\")) {
     return text;
   }
   return COMMAND_GLYPHS[text];
@@ -97,7 +97,7 @@ export class SymbolResolver {
       return existing.id;
     }
     const id = mintedSymbolId(glyph);
-    this.minted.set(glyph, { glyph, scope: 'document', id });
+    this.minted.set(glyph, { glyph, scope: "document", id });
     return id;
   }
 
@@ -127,18 +127,21 @@ function sentencesOf(text: string): string[] {
 }
 
 // Scans a wordprocessing document's own prose for symbol definitions and seeds table entries from them -- the "where equations acquire computability at all" half of the pipeline: a symbol the prose defines gets a table entry (with the defining sentence recorded as its definitionSource), and a formula's reference to that glyph then resolves to the curated entry instead of an auto-mint. Conservative by construction: only the two sentence-level where/let forms, only single-letter(+optional subscript) symbol shapes, and every hit is reported through the sink so a caller can audit what was seeded. No quantityKind or preferredUnit is ever inferred -- prose says what a symbol is in words, and mapping those words onto a quantity vocabulary is curation this package does not attempt.
-export function extractSymbolDefinitionsFromProse(document: ContentDocument, sink?: (diagnostic: LatexDiagnostic) => void): MathSymbolEntry[] {
-  if (document.kind !== 'wordprocessing') {
+export function extractSymbolDefinitionsFromProse(
+  document: ContentDocument,
+  sink?: (diagnostic: LatexDiagnostic) => void,
+): MathSymbolEntry[] {
+  if (document.kind !== "wordprocessing") {
     return [];
   }
   const entries: MathSymbolEntry[] = [];
   const seen = new Set<string>();
   for (const section of document.sections) {
     for (const block of section.blocks) {
-      if (block.kind !== 'paragraph') {
+      if (block.kind !== "paragraph") {
         continue;
       }
-      const text = block.runs.map((run) => run.text).join('');
+      const text = block.runs.map((run) => run.text).join("");
       for (const sentence of sentencesOf(text)) {
         const entry = proseDefinitionIn(sentence);
         if (entry === undefined || seen.has(entry.glyph)) {
@@ -146,7 +149,10 @@ export function extractSymbolDefinitionsFromProse(document: ContentDocument, sin
         }
         seen.add(entry.glyph);
         entries.push(entry);
-        sink?.({ code: 'symbols/prose-definition-found', detail: `"${entry.glyph}" from: ${sentence}` });
+        sink?.({
+          code: "symbols/prose-definition-found",
+          detail: `"${entry.glyph}" from: ${sentence}`,
+        });
       }
     }
   }
@@ -164,7 +170,12 @@ function proseDefinitionIn(sentence: string): MathSymbolEntry | undefined {
     if (PROSE_SYMBOL_PATTERN.exec(candidate)?.[0] !== candidate) {
       continue;
     }
-    return { glyph: candidate, scope: 'document', id: mintedSymbolId(candidate), definitionSource: sentence };
+    return {
+      glyph: candidate,
+      scope: "document",
+      id: mintedSymbolId(candidate),
+      definitionSource: sentence,
+    };
   }
   return undefined;
 }

@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import type { Package } from '../../model/package';
-import type { XmlElement } from '../../model/node';
-import { attr, childrenWithTag, rootElement } from '../util';
+import { z } from "zod";
+import type { Package } from "../../model/package";
+import type { XmlElement } from "../../model/node";
+import { attr, childrenWithTag, rootElement } from "../util";
 
 // Resolves word/numbering.xml's real w:abstractNum/w:num definitions -- the glyph/format, start-at value, and restart rule a consumer needs to actually render a list's own markers -- as a companion to (not a replacement for) ContentListMembership (document-schema.js), which read.ts's readListMembership already tracks unchanged: a paragraph's own numId/level membership. NumberingDefinitions is deliberately a separate, top-level structure exported alongside DocxDocument rather than folded into ContentListMembership itself, for two reasons: (1) ContentListMembership is document-schema.js's own schema, shared verbatim across ooxml.js/odf.js/documents.js -- widening it with an ooxml-specific numbering-definition payload would leak this package's own model into a schema the sibling packages also depend on; (2) a definition is a genuinely document-level resource referenced by numId, not a per-paragraph one -- every paragraph sharing a numId would otherwise carry an identical copy of that numId's full level table repeated on every paragraph, rather than the keyed-map-once, referenced-by-id-many-times shape this file provides.
 
@@ -24,22 +24,25 @@ export const NumberingDefinitionSchema = z.object({
 export type NumberingDefinition = z.infer<typeof NumberingDefinitionSchema>;
 
 // Keyed by w:numId -- the same identifier ContentListMembership.numId carries.
-export type NumberingDefinitions = Readonly<Record<string, NumberingDefinition>>;
+export type NumberingDefinitions = Readonly<
+  Record<string, NumberingDefinition>
+>;
 
-const NUMBERING_PART_PATH = 'word/numbering.xml';
+const NUMBERING_PART_PATH = "word/numbering.xml";
 
 function readLevel(lvl: XmlElement): NumberingLevel | undefined {
-  const numFmtEl = childrenWithTag(lvl, 'w:numFmt')[0];
-  const lvlTextEl = childrenWithTag(lvl, 'w:lvlText')[0];
-  const format = numFmtEl === undefined ? undefined : attr(numFmtEl, 'w:val');
-  const text = lvlTextEl === undefined ? undefined : attr(lvlTextEl, 'w:val');
+  const numFmtEl = childrenWithTag(lvl, "w:numFmt")[0];
+  const lvlTextEl = childrenWithTag(lvl, "w:lvlText")[0];
+  const format = numFmtEl === undefined ? undefined : attr(numFmtEl, "w:val");
+  const text = lvlTextEl === undefined ? undefined : attr(lvlTextEl, "w:val");
   if (format === undefined || text === undefined) {
     return undefined;
   }
-  const startEl = childrenWithTag(lvl, 'w:start')[0];
-  const startVal = startEl === undefined ? undefined : attr(startEl, 'w:val');
-  const restartEl = childrenWithTag(lvl, 'w:lvlRestart')[0];
-  const restartVal = restartEl === undefined ? undefined : attr(restartEl, 'w:val');
+  const startEl = childrenWithTag(lvl, "w:start")[0];
+  const startVal = startEl === undefined ? undefined : attr(startEl, "w:val");
+  const restartEl = childrenWithTag(lvl, "w:lvlRestart")[0];
+  const restartVal =
+    restartEl === undefined ? undefined : attr(restartEl, "w:val");
   const level: NumberingLevel = {
     format,
     text,
@@ -51,10 +54,12 @@ function readLevel(lvl: XmlElement): NumberingLevel | undefined {
   return level;
 }
 
-function readAbstractNumLevels(abstractNum: XmlElement): Record<string, NumberingLevel> {
+function readAbstractNumLevels(
+  abstractNum: XmlElement,
+): Record<string, NumberingLevel> {
   const levels: Record<string, NumberingLevel> = {};
-  for (const lvl of childrenWithTag(abstractNum, 'w:lvl')) {
-    const ilvl = attr(lvl, 'w:ilvl');
+  for (const lvl of childrenWithTag(abstractNum, "w:lvl")) {
+    const ilvl = attr(lvl, "w:ilvl");
     if (ilvl === undefined) {
       continue;
     }
@@ -67,14 +72,17 @@ function readAbstractNumLevels(abstractNum: XmlElement): Record<string, Numberin
 }
 
 // w:num/w:lvlOverride overrides one level of its target abstractNum, either wholesale (a nested w:lvl child, the identical shape an abstractNum's own w:lvl uses) or narrowly (w:startOverride alone, changing only where that level's counter begins while keeping its format/text/restart unchanged).
-function applyLevelOverrides(baseLevels: Readonly<Record<string, NumberingLevel>>, num: XmlElement): Record<string, NumberingLevel> {
+function applyLevelOverrides(
+  baseLevels: Readonly<Record<string, NumberingLevel>>,
+  num: XmlElement,
+): Record<string, NumberingLevel> {
   const levels = { ...baseLevels };
-  for (const override of childrenWithTag(num, 'w:lvlOverride')) {
-    const ilvl = attr(override, 'w:ilvl');
+  for (const override of childrenWithTag(num, "w:lvlOverride")) {
+    const ilvl = attr(override, "w:ilvl");
     if (ilvl === undefined) {
       continue;
     }
-    const nestedLvl = childrenWithTag(override, 'w:lvl')[0];
+    const nestedLvl = childrenWithTag(override, "w:lvl")[0];
     if (nestedLvl !== undefined) {
       const level = readLevel(nestedLvl);
       if (level !== undefined) {
@@ -82,8 +90,11 @@ function applyLevelOverrides(baseLevels: Readonly<Record<string, NumberingLevel>
       }
       continue;
     }
-    const startOverrideEl = childrenWithTag(override, 'w:startOverride')[0];
-    const startOverrideVal = startOverrideEl === undefined ? undefined : attr(startOverrideEl, 'w:val');
+    const startOverrideEl = childrenWithTag(override, "w:startOverride")[0];
+    const startOverrideVal =
+      startOverrideEl === undefined
+        ? undefined
+        : attr(startOverrideEl, "w:val");
     const base = levels[ilvl];
     if (startOverrideVal !== undefined && base !== undefined) {
       levels[ilvl] = { ...base, startAt: Number(startOverrideVal) };
@@ -100,8 +111,8 @@ export function readNumberingDefinitions(pkg: Package): NumberingDefinitions {
   }
 
   const abstractNums = new Map<string, Record<string, NumberingLevel>>();
-  for (const abstractNum of childrenWithTag(root, 'w:abstractNum')) {
-    const abstractNumId = attr(abstractNum, 'w:abstractNumId');
+  for (const abstractNum of childrenWithTag(root, "w:abstractNum")) {
+    const abstractNumId = attr(abstractNum, "w:abstractNumId");
     if (abstractNumId === undefined) {
       continue;
     }
@@ -109,10 +120,13 @@ export function readNumberingDefinitions(pkg: Package): NumberingDefinitions {
   }
 
   const definitions: Record<string, NumberingDefinition> = {};
-  for (const num of childrenWithTag(root, 'w:num')) {
-    const numId = attr(num, 'w:numId');
-    const abstractNumIdEl = childrenWithTag(num, 'w:abstractNumId')[0];
-    const abstractNumId = abstractNumIdEl === undefined ? undefined : attr(abstractNumIdEl, 'w:val');
+  for (const num of childrenWithTag(root, "w:num")) {
+    const numId = attr(num, "w:numId");
+    const abstractNumIdEl = childrenWithTag(num, "w:abstractNumId")[0];
+    const abstractNumId =
+      abstractNumIdEl === undefined
+        ? undefined
+        : attr(abstractNumIdEl, "w:val");
     if (numId === undefined || abstractNumId === undefined) {
       continue;
     }

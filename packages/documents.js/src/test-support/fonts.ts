@@ -1,23 +1,36 @@
 // Never imported by src/index.ts and never reaches dist/. See docx.ts's top-of-file comment -- the same reasoning applies here, with one addition specific to fonts: a font-embedding fixture is only worth anything if the embedded bytes are a REAL font, so these fixtures embed genuine Caladea faces rather than a hand-authored stub. The bytes come from pdf-codec's own vendored, OFL-licensed Caladea assets (the faces its font registry already falls back to as metric-compatible Cambria substitutes), inflated at fixture-build time -- so this repository commits no font binary of its own, and the fixtures still exercise the real parse/OS-2/cmap paths a hand-rolled stub could not.
 //
 // The docx fixture's obfuscation deliberately does NOT go through src/fonts/obfuscation.ts. It XORs the prefix with 16 literal key bytes, and for the first face those bytes are the ones ECMA-376 Part 4, 2.8.1 states for its own worked-example GUID, quoted from the specification rather than computed here. That keeps the round trip honest in the one place it could otherwise be circular: the production code derives those key bytes from the GUID string, the fixture never does, so a wrong derivation cannot cancel itself out -- it produces bytes that fail the sfnt-signature check. (The SECOND key below has no specification worked example behind it and IS hand-derived here; it exists only to prove that two faces of one family are deobfuscated with their own separate keys, not that the derivation is right.)
-import type { Package as OoxmlPackage } from 'ooxml.js';
-import type { Package as OdfPackage } from 'odf.js';
-import { decodePackage as decodeOoxmlPackage, zipPackage as zipOoxmlPackage } from 'ooxml.js';
-import { decodePackage as decodeOdfPackage, ODF_MEDIA_TYPES, zipPackage as zipOdfPackage } from 'odf.js';
-import { CALADEA_BOLD_FONT_DEFLATED_BASE64 } from 'pdf-codec/assets/caladea-bold';
-import { CALADEA_ITALIC_FONT_DEFLATED_BASE64 } from 'pdf-codec/assets/caladea-italic';
-import { CALADEA_REGULAR_FONT_DEFLATED_BASE64 } from 'pdf-codec/assets/caladea-regular';
-import { base64ToBytes } from 'ooxml.js';
-import { inflateSync } from 'fflate';
+import type { Package as OoxmlPackage } from "ooxml.js";
+import type { Package as OdfPackage } from "odf.js";
+import {
+  decodePackage as decodeOoxmlPackage,
+  zipPackage as zipOoxmlPackage,
+} from "ooxml.js";
+import {
+  decodePackage as decodeOdfPackage,
+  ODF_MEDIA_TYPES,
+  zipPackage as zipOdfPackage,
+} from "odf.js";
+import { CALADEA_BOLD_FONT_DEFLATED_BASE64 } from "pdf-codec/assets/caladea-bold";
+import { CALADEA_ITALIC_FONT_DEFLATED_BASE64 } from "pdf-codec/assets/caladea-italic";
+import { CALADEA_REGULAR_FONT_DEFLATED_BASE64 } from "pdf-codec/assets/caladea-regular";
+import { base64ToBytes } from "ooxml.js";
+import { inflateSync } from "fflate";
 
 // ECMA-376 Part 4, 2.8.1's own worked example: this GUID and these key bytes are quoted from the specification, not computed here. deriveFontKey must reproduce SPEC_FONT_KEY_BYTES from SPEC_FONT_KEY_GUID exactly.
-export const SPEC_FONT_KEY_GUID = '{001B70DC-AA60-4AD5-90EC-18A0948E1EAE}';
-export const SPEC_FONT_KEY_BYTES: readonly number[] = [0xae, 0x1e, 0x8e, 0x94, 0xa0, 0x18, 0xec, 0x90, 0xd5, 0x4a, 0x60, 0xaa, 0xdc, 0x70, 0x1b, 0x00];
+export const SPEC_FONT_KEY_GUID = "{001B70DC-AA60-4AD5-90EC-18A0948E1EAE}";
+export const SPEC_FONT_KEY_BYTES: readonly number[] = [
+  0xae, 0x1e, 0x8e, 0x94, 0xa0, 0x18, 0xec, 0x90, 0xd5, 0x4a, 0x60, 0xaa, 0xdc,
+  0x70, 0x1b, 0x00,
+];
 
 // A second, unrelated GUID, so a fixture can prove two faces of the same family are deobfuscated with their own separate keys rather than one shared one.
-export const SECOND_FONT_KEY_GUID = '{7B2F4E11-C3A9-4D68-8F05-2E6D1A9C4B37}';
-export const SECOND_FONT_KEY_BYTES: readonly number[] = [0x37, 0x4b, 0x9c, 0x1a, 0x6d, 0x2e, 0x05, 0x8f, 0x68, 0x4d, 0xa9, 0xc3, 0x11, 0x4e, 0x2f, 0x7b];
+export const SECOND_FONT_KEY_GUID = "{7B2F4E11-C3A9-4D68-8F05-2E6D1A9C4B37}";
+export const SECOND_FONT_KEY_BYTES: readonly number[] = [
+  0x37, 0x4b, 0x9c, 0x1a, 0x6d, 0x2e, 0x05, 0x8f, 0x68, 0x4d, 0xa9, 0xc3, 0x11,
+  0x4e, 0x2f, 0x7b,
+];
 
 const OBFUSCATED_PREFIX_LENGTH = 32;
 
@@ -53,7 +66,10 @@ export function caladeaItalicBytes(): Uint8Array<ArrayBuffer> {
 }
 
 // The write-side half of ECMA-376 2.8.1, taking the 16 key bytes DIRECTLY rather than a GUID string -- see this file's top comment for why that separation is what keeps the round-trip test non-circular.
-export function obfuscateFontBytes(bytes: Uint8Array<ArrayBuffer>, keyBytes: readonly number[]): Uint8Array<ArrayBuffer> {
+export function obfuscateFontBytes(
+  bytes: Uint8Array<ArrayBuffer>,
+  keyBytes: readonly number[],
+): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(bytes.length);
   out.set(bytes);
   for (let i = 0; i < OBFUSCATED_PREFIX_LENGTH; i++) {
@@ -94,14 +110,20 @@ const DOCX_FONT_TABLE_RELS_XML = enc(
 
 function embeddedFontDocxParts(): Record<string, Uint8Array<ArrayBuffer>> {
   return {
-    '[Content_Types].xml': CONTENT_TYPES_XML,
-    '_rels/.rels': DOCX_ROOT_RELS_XML,
-    'word/document.xml': DOCX_DOCUMENT_XML,
-    'word/_rels/document.xml.rels': DOCX_DOCUMENT_RELS_XML,
-    'word/fontTable.xml': DOCX_FONT_TABLE_XML,
-    'word/_rels/fontTable.xml.rels': DOCX_FONT_TABLE_RELS_XML,
-    'word/fonts/font1.odttf': obfuscateFontBytes(caladeaRegularBytes(), SPEC_FONT_KEY_BYTES),
-    'word/fonts/font2.odttf': obfuscateFontBytes(caladeaBoldBytes(), SECOND_FONT_KEY_BYTES),
+    "[Content_Types].xml": CONTENT_TYPES_XML,
+    "_rels/.rels": DOCX_ROOT_RELS_XML,
+    "word/document.xml": DOCX_DOCUMENT_XML,
+    "word/_rels/document.xml.rels": DOCX_DOCUMENT_RELS_XML,
+    "word/fontTable.xml": DOCX_FONT_TABLE_XML,
+    "word/_rels/fontTable.xml.rels": DOCX_FONT_TABLE_RELS_XML,
+    "word/fonts/font1.odttf": obfuscateFontBytes(
+      caladeaRegularBytes(),
+      SPEC_FONT_KEY_BYTES,
+    ),
+    "word/fonts/font2.odttf": obfuscateFontBytes(
+      caladeaBoldBytes(),
+      SECOND_FONT_KEY_BYTES,
+    ),
   };
 }
 
@@ -129,12 +151,12 @@ const PPTX_PRESENTATION_RELS_XML = enc(
 
 function embeddedFontPptxParts(): Record<string, Uint8Array<ArrayBuffer>> {
   return {
-    '[Content_Types].xml': PPTX_CONTENT_TYPES_XML,
-    '_rels/.rels': PPTX_ROOT_RELS_XML,
-    'ppt/presentation.xml': PPTX_PRESENTATION_XML,
-    'ppt/_rels/presentation.xml.rels': PPTX_PRESENTATION_RELS_XML,
-    'ppt/fonts/font1.fntdata': caladeaRegularBytes(),
-    'ppt/fonts/font2.fntdata': caladeaItalicBytes(),
+    "[Content_Types].xml": PPTX_CONTENT_TYPES_XML,
+    "_rels/.rels": PPTX_ROOT_RELS_XML,
+    "ppt/presentation.xml": PPTX_PRESENTATION_XML,
+    "ppt/_rels/presentation.xml.rels": PPTX_PRESENTATION_RELS_XML,
+    "ppt/fonts/font1.fntdata": caladeaRegularBytes(),
+    "ppt/fonts/font2.fntdata": caladeaItalicBytes(),
   };
 }
 
@@ -173,18 +195,21 @@ const FONT_REQUEST_FONT_MANIFEST_ENTRIES =
 
 function fontRequestManifest(withFonts: boolean): Uint8Array<ArrayBuffer> {
   return enc(
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">${FONT_REQUEST_MANIFEST_ENTRIES}${withFonts ? FONT_REQUEST_FONT_MANIFEST_ENTRIES : ''}</manifest:manifest>`,
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">${FONT_REQUEST_MANIFEST_ENTRIES}${withFonts ? FONT_REQUEST_FONT_MANIFEST_ENTRIES : ""}</manifest:manifest>`,
   );
 }
 
-function embeddedFontOdtEntries(): (readonly [string, { readonly bytes: Uint8Array<ArrayBuffer>; readonly stored?: boolean }])[] {
+function embeddedFontOdtEntries(): (readonly [
+  string,
+  { readonly bytes: Uint8Array<ArrayBuffer>; readonly stored?: boolean },
+])[] {
   return [
-    ['mimetype', { bytes: ODT_MIMETYPE, stored: true }],
-    ['content.xml', { bytes: ODT_CONTENT_XML }],
-    ['styles.xml', { bytes: ODT_STYLES_XML }],
-    ['META-INF/manifest.xml', { bytes: ODT_MANIFEST_XML }],
-    ['Fonts/Caladea_Regular.ttf', { bytes: caladeaRegularBytes() }],
-    ['Fonts/Caladea_Bold.ttf', { bytes: caladeaBoldBytes() }],
+    ["mimetype", { bytes: ODT_MIMETYPE, stored: true }],
+    ["content.xml", { bytes: ODT_CONTENT_XML }],
+    ["styles.xml", { bytes: ODT_STYLES_XML }],
+    ["META-INF/manifest.xml", { bytes: ODT_MANIFEST_XML }],
+    ["Fonts/Caladea_Regular.ttf", { bytes: caladeaRegularBytes() }],
+    ["Fonts/Caladea_Bold.ttf", { bytes: caladeaBoldBytes() }],
   ];
 }
 
@@ -194,18 +219,27 @@ export function embeddedFontOdtPackage(): OdfPackage {
 }
 
 // An odt whose one paragraph asks for `family` by fo:font-family, optionally embedding the real Caladea faces alongside it. Deliberately a separate fixture from embeddedFontOdtPackage above rather than an option on it, because the two answer different questions: that one reproduces LibreOffice's own markup exactly (style:font-name on the text style, resolved through office:font-face-decls) to prove EXTRACTION, this one has to survive odf.js's own style reading all the way to a ContentRun.fontFamily so a whole conversion can be driven by it -- and odf.js resolves fo:font-family, not the style:font-name -> office:font-face-decls indirection. Both attributes are valid ODF; only the former currently reaches a ContentRun, which is why the extraction fixture above renders as the default family despite embedding real faces.
-export function fontRequestOdtBytes(family: string, embedCaladea = false): Uint8Array<ArrayBuffer> {
-  const declarations = embedCaladea ? ODT_FONT_FACE_DECLS : '';
+export function fontRequestOdtBytes(
+  family: string,
+  embedCaladea = false,
+): Uint8Array<ArrayBuffer> {
+  const declarations = embedCaladea ? ODT_FONT_FACE_DECLS : "";
   const content = enc(
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${ODF_NS}>${declarations}<office:automatic-styles><style:style style:name="T1" style:family="text"><style:text-properties fo:font-family="${family}"/></style:style></office:automatic-styles><office:body><office:text><text:p><text:span text:style-name="T1">Font sample</text:span></text:p></office:text></office:body></office:document-content>`,
   );
-  const entries: (readonly [string, { readonly bytes: Uint8Array<ArrayBuffer>; readonly stored?: boolean }])[] = [
-    ['mimetype', { bytes: ODT_MIMETYPE, stored: true }],
-    ['content.xml', { bytes: content }],
-    ['META-INF/manifest.xml', { bytes: fontRequestManifest(embedCaladea) }],
+  const entries: (readonly [
+    string,
+    { readonly bytes: Uint8Array<ArrayBuffer>; readonly stored?: boolean },
+  ])[] = [
+    ["mimetype", { bytes: ODT_MIMETYPE, stored: true }],
+    ["content.xml", { bytes: content }],
+    ["META-INF/manifest.xml", { bytes: fontRequestManifest(embedCaladea) }],
   ];
   if (embedCaladea) {
-    entries.push(['Fonts/Caladea_Regular.ttf', { bytes: caladeaRegularBytes() }], ['Fonts/Caladea_Bold.ttf', { bytes: caladeaBoldBytes() }]);
+    entries.push(
+      ["Fonts/Caladea_Regular.ttf", { bytes: caladeaRegularBytes() }],
+      ["Fonts/Caladea_Bold.ttf", { bytes: caladeaBoldBytes() }],
+    );
   }
   return zipOdfPackage(entries);
 }

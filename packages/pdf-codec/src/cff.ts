@@ -1,4 +1,4 @@
-import { hasBytes, u8, u16, u24, u32 } from './sfnt';
+import { hasBytes, u8, u16, u24, u32 } from "./sfnt";
 
 // The two container structures every CFF (Compact Font Format 1.0) font is built out of -- the INDEX (spec section 5) and the DICT (section 4) -- and nothing else. Both readers here are format plumbing shared by the two CFF consumers in this package: cff-probe.ts (is this font CID-keyed?) and cff-bounds.ts (what does this glyph's charstring actually draw?). Neither structure is specific to either question, and a second hand-rolled copy of the INDEX offset arithmetic or the DICT operand encoding is exactly the kind of drift that produces a reader which is subtly right about one font and wrong about the next.
 //
@@ -56,7 +56,11 @@ const NIBBLES_PER_BYTE = 2;
 const HIGH_NIBBLE_SHIFT = 4;
 const LOW_NIBBLE_MASK = 0xf;
 
-function readOffsetAt(bytes: Uint8Array<ArrayBuffer>, offset: number, offSize: number): number {
+function readOffsetAt(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+  offSize: number,
+): number {
   if (offSize === 1) {
     return u8(bytes, offset);
   }
@@ -70,14 +74,21 @@ function readOffsetAt(bytes: Uint8Array<ArrayBuffer>, offset: number, offSize: n
 }
 
 // A CFF INDEX: a count, an offset size, count+1 offsets of that size, then the data those offsets carve up. The offsets are 1-based relative to the byte immediately BEFORE the data block, which is why `dataOrigin` below is one short of where the data actually starts -- a genuine off-by-one in the format itself rather than in this reader. Returns `undefined` for anything that is not a well-formed INDEX at `offset`.
-export function readCffIndex(bytes: Uint8Array<ArrayBuffer>, offset: number): CffIndex | undefined {
+export function readCffIndex(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+): CffIndex | undefined {
   if (!hasBytes(bytes, offset, INDEX_COUNT_SIZE)) {
     return undefined;
   }
   const count = u16(bytes, offset);
   if (count === 0) {
     // An empty INDEX is just its own two count bytes -- no offset size and no offset array follow (spec section 5).
-    return { count: 0, endOffset: offset + INDEX_COUNT_SIZE, entry: () => undefined };
+    return {
+      count: 0,
+      endOffset: offset + INDEX_COUNT_SIZE,
+      entry: () => undefined,
+    };
   }
   if (!hasBytes(bytes, offset + INDEX_COUNT_SIZE, INDEX_OFF_SIZE_SIZE)) {
     return undefined;
@@ -113,7 +124,13 @@ export function readCffIndex(bytes: Uint8Array<ArrayBuffer>, offset: number): Cf
   return {
     count,
     endOffset: dataOrigin + 1 + dataLength,
-    entry: (index: number) => (index < 0 || index >= count ? undefined : bytes.subarray(dataOrigin + offsets[index]!, dataOrigin + offsets[index + 1]!)),
+    entry: (index: number) =>
+      index < 0 || index >= count
+        ? undefined
+        : bytes.subarray(
+            dataOrigin + offsets[index]!,
+            dataOrigin + offsets[index + 1]!,
+          ),
   };
 }
 
@@ -125,12 +142,16 @@ interface RealOperand {
 // Decodes a real-number operand starting at `start` (the first byte after the 30 marker): one packed nibble pair per byte, ending at the first 0xf nibble in either position.
 //
 // A nibble stream that terminates cleanly but does not spell a finite number (say "0E-1-", which the byte pair 0x0c 0x1e produces) yields NaN rather than failing the whole DICT. Where the stream ENDS is unambiguous either way -- that is what the terminator nibble is for -- so one unreadable operand value costs a caller nothing unless it actually reads that operand, and every caller in this package validates the operands it uses. Refusing the DICT outright would instead throw away the operators around it, which is how a font with one odd real number in a string-valued entry would end up unembeddable for no reason.
-function readRealOperand(data: Uint8Array<ArrayBuffer>, start: number): RealOperand | undefined {
-  let text = '';
+function readRealOperand(
+  data: Uint8Array<ArrayBuffer>,
+  start: number,
+): RealOperand | undefined {
+  let text = "";
   for (let i = start; i < data.length; i++) {
     const byte = data[i]!;
     for (let n = 0; n < NIBBLES_PER_BYTE; n++) {
-      const nibble = n === 0 ? byte >> HIGH_NIBBLE_SHIFT : byte & LOW_NIBBLE_MASK;
+      const nibble =
+        n === 0 ? byte >> HIGH_NIBBLE_SHIFT : byte & LOW_NIBBLE_MASK;
       if (nibble === REAL_NIBBLE_TERMINATOR) {
         return { value: Number(text), endOffset: i + 1 };
       }
@@ -140,13 +161,13 @@ function readRealOperand(data: Uint8Array<ArrayBuffer>, start: number): RealOper
       if (nibble <= 9) {
         text += String(nibble);
       } else if (nibble === REAL_NIBBLE_DECIMAL_POINT) {
-        text += '.';
+        text += ".";
       } else if (nibble === REAL_NIBBLE_EXPONENT) {
-        text += 'E';
+        text += "E";
       } else if (nibble === REAL_NIBBLE_NEGATIVE_EXPONENT) {
-        text += 'E-';
+        text += "E-";
       } else if (nibble === REAL_NIBBLE_MINUS) {
-        text += '-';
+        text += "-";
       }
     }
   }
@@ -154,7 +175,9 @@ function readRealOperand(data: Uint8Array<ArrayBuffer>, start: number): RealOper
 }
 
 // Parses a whole DICT into its operator -> operands map, or `undefined` for a stream that is not a well-formed DICT: a truncated operand, an escape byte with no second byte, a malformed real, or one of the reserved first bytes (22..27, 31, 255) that appear in no valid DICT.
-export function parseCffDict(data: Uint8Array<ArrayBuffer>): CffDict | undefined {
+export function parseCffDict(
+  data: Uint8Array<ArrayBuffer>,
+): CffDict | undefined {
   const dict = new Map<number, readonly number[]>();
   let operands: number[] = [];
   let i = 0;
@@ -209,15 +232,26 @@ export function parseCffDict(data: Uint8Array<ArrayBuffer>): CffDict | undefined
       if (!hasBytes(data, i + 1, 1)) {
         return undefined;
       }
-      operands.push((b0 - DICT_OPERAND_MEDIUM_FIRST_BYTE_BIAS) * BYTE_RADIX + u8(data, i + 1) + DICT_OPERAND_MEDIUM_BIAS);
+      operands.push(
+        (b0 - DICT_OPERAND_MEDIUM_FIRST_BYTE_BIAS) * BYTE_RADIX +
+          u8(data, i + 1) +
+          DICT_OPERAND_MEDIUM_BIAS,
+      );
       i += 2;
       continue;
     }
-    if (b0 >= DICT_OPERAND_NEGATIVE_MEDIUM_FIRST && b0 <= DICT_OPERAND_NEGATIVE_MEDIUM_LAST) {
+    if (
+      b0 >= DICT_OPERAND_NEGATIVE_MEDIUM_FIRST &&
+      b0 <= DICT_OPERAND_NEGATIVE_MEDIUM_LAST
+    ) {
       if (!hasBytes(data, i + 1, 1)) {
         return undefined;
       }
-      operands.push(-(b0 - DICT_OPERAND_NEGATIVE_MEDIUM_FIRST_BYTE_BIAS) * BYTE_RADIX - u8(data, i + 1) - DICT_OPERAND_MEDIUM_BIAS);
+      operands.push(
+        -(b0 - DICT_OPERAND_NEGATIVE_MEDIUM_FIRST_BYTE_BIAS) * BYTE_RADIX -
+          u8(data, i + 1) -
+          DICT_OPERAND_MEDIUM_BIAS,
+      );
       i += 2;
       continue;
     }

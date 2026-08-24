@@ -1,10 +1,15 @@
-import { z } from 'zod';
-import { contentDocumentSharedFields, ContentFormulaSchema } from './content';
-import { DefinitionsTableSchema, StylesTableSchema } from './definitions';
-import { PageSizeSchema } from './geometry';
-import { LayoutMetadataSchema } from './metadata';
-import { DrawPageGroupSchema, SectionGroupSchema, SheetGroupSchema, SlideGroupSchema } from './package-node';
-import { SourceResidueSchema } from './source';
+import { z } from "zod";
+import { contentDocumentSharedFields, ContentFormulaSchema } from "./content";
+import { DefinitionsTableSchema, StylesTableSchema } from "./definitions";
+import { PageSizeSchema } from "./geometry";
+import { LayoutMetadataSchema } from "./metadata";
+import {
+  DrawPageGroupSchema,
+  SectionGroupSchema,
+  SheetGroupSchema,
+  SlideGroupSchema,
+} from "./package-node";
+import { SourceResidueSchema } from "./source";
 
 // DocumentTree is the single hierarchical artefact: structure, layout, and content fused in one tree (ExaDev/document-schema.js#20). The root carries what no tree node can -- the document kind (moved up from the retired flat `content` field; the empty documents are legal, so the kind cannot be inferred from the children and the envelope keeps it explicit), the required metadata, the optional document-level symbolTable (the same shared fields every ContentDocument arm spreads -- one declaration, spliced in from src/content.ts), and the envelope's optional tables and arrays: `pages` (each rendered page's own size, indexed to match every content node's own `frames[].pageIndex` -- present once a layout pass has run, absent for a content-only package), the package-level table facility of src/definitions.ts -- `styles`, `definitions`, and the three construct tables `layers`/`attachments`/`destinations` added in 4.1.0 -- and the keyed `source` residue table (src/source.ts, ExaDev/documents.js#718): the package-level half of the quarantined residue channel, for whole-package facts no content node owns. Everything structural hangs off `children`: one group per top-level container (a section, slide, sheet, or draw page), each holding its own content tree -- see src/package-node.ts for the node vocabulary and its structural discrimination rule.
 
@@ -26,29 +31,29 @@ const packageEnvelopeFields = {
   source: z.record(z.string(), SourceResidueSchema).optional(), // the package-level half of the quarantined residue channel (src/source.ts): whole-package facts no content node owns -- an unmapped markdown frontmatter key, a PDF XMP packet, a docx custom XML store. Keyed by the producer's own identifier for what each entry reconstructs (a part path, a named store, 'frontmatter'), opaque to this package exactly as a definitions-table id is. Its own root field rather than a `definitions` tenant for the same reason `styles` is: separate key namespaces, and a consumer reaches residue without filtering kind-tagged entries. Like the other tables it is tree-only -- the flat ContentDocument is the codec-exchange CONTENT shape and carries per-node residue on its nodes, while package-level residue rides the assembled tree (factorStyles re-carries it, src/factor-styles.ts).
 };
 
-export const DocumentTreeSchema = z.discriminatedUnion('kind', [
+export const DocumentTreeSchema = z.discriminatedUnion("kind", [
   z.object({
-    kind: z.literal('wordprocessing'),
+    kind: z.literal("wordprocessing"),
     ...packageEnvelopeFields,
     children: z.array(SectionGroupSchema),
   }),
   z.object({
-    kind: z.literal('presentation'),
+    kind: z.literal("presentation"),
     ...packageEnvelopeFields,
     children: z.array(SlideGroupSchema),
   }),
   z.object({
-    kind: z.literal('spreadsheet'),
+    kind: z.literal("spreadsheet"),
     ...packageEnvelopeFields,
     children: z.array(SheetGroupSchema),
   }),
   z.object({
-    kind: z.literal('drawing'),
+    kind: z.literal("drawing"),
     ...packageEnvelopeFields,
     children: z.array(DrawPageGroupSchema),
   }),
   z.object({
-    kind: z.literal('formula'),
+    kind: z.literal("formula"),
     ...packageEnvelopeFields,
     // Exactly one: decompose emits a single ContentFormula and flatten requires exactly one (document-outline.js's phase-1 reference throws on any other count), so the schema states the cardinality the bijection needs rather than admitting trees that cannot round-trip.
     children: z.array(ContentFormulaSchema).length(1),

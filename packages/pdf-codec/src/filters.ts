@@ -1,11 +1,11 @@
-import { inflateTolerant } from './bytes/flate';
-import { isAsciiWhitespace } from './bytes/reader';
-import type { PdfDiagnosticSink } from './diagnostics';
-import { decodeCcittFax } from './image/ccitt';
-import { decodeJbig2Embedded } from './image/jbig2';
-import type { PdfDict, PdfObject } from './objects';
-import { asArray, asBool, asDict, asName, asNumber, dictGet } from './objects';
-import { applyPredictor, readPredictorParams } from './predictors';
+import { inflateTolerant } from "./bytes/flate";
+import { isAsciiWhitespace } from "./bytes/reader";
+import type { PdfDiagnosticSink } from "./diagnostics";
+import { decodeCcittFax } from "./image/ccitt";
+import { decodeJbig2Embedded } from "./image/jbig2";
+import type { PdfDict, PdfObject } from "./objects";
+import { asArray, asBool, asDict, asName, asNumber, dictGet } from "./objects";
+import { applyPredictor, readPredictorParams } from "./predictors";
 
 export interface DecodedStream {
   readonly bytes: Uint8Array<ArrayBuffer>;
@@ -14,49 +14,69 @@ export interface DecodedStream {
 }
 
 // Follows one indirect reference. Only /DecodeParms entries that are themselves whole objects need this -- in practice just JBIG2Decode's /JBIG2Globals stream, which a producer essentially always writes as a reference since several images share it. Declared as a bare callback rather than taking src/interpret.ts's PdfObjectResolver so this module keeps no dependency on the interpreter.
-export type PdfIndirectResolver = (obj: PdfObject | undefined) => PdfObject | undefined;
+export type PdfIndirectResolver = (
+  obj: PdfObject | undefined,
+) => PdfObject | undefined;
 
 // Runs a stream's raw bytes through its /Filter chain (a single name or an array of names, with /DecodeParms supplying per-filter parameters in the same single-or-array shape). Recoverable per-filter issues (an unresolvable /Predictor, an unimplemented filter) degrade with a diagnostic and stop the chain rather than throwing -- the caller decides whether the partially- or un-decoded result is still useful (e.g. a DCTDecode image's bytes are perfectly usable as-is).
-export function decodeStream(raw: Uint8Array<ArrayBuffer>, dict: PdfDict, sink: PdfDiagnosticSink, resolve?: PdfIndirectResolver): DecodedStream {
+export function decodeStream(
+  raw: Uint8Array<ArrayBuffer>,
+  dict: PdfDict,
+  sink: PdfDiagnosticSink,
+  resolve?: PdfIndirectResolver,
+): DecodedStream {
   const filters = filterNames(dict);
   const parms = decodeParmsList(dict, filters.length);
   let bytes = raw;
   for (let i = 0; i < filters.length; i++) {
     const filter = filters[i]!;
     const parm = parms[i];
-    if (filter === 'FlateDecode' || filter === 'Fl') {
+    if (filter === "FlateDecode" || filter === "Fl") {
       bytes = applyPredictorIfPresent(inflateTolerant(bytes).bytes, parm, sink);
-    } else if (filter === 'LZWDecode' || filter === 'LZW') {
-      const earlyChange = (asNumber(parm ? dictGet(parm, 'EarlyChange') : undefined) ?? 1) !== 0;
-      bytes = applyPredictorIfPresent(lzwDecode(bytes, earlyChange, sink), parm, sink);
-    } else if (filter === 'ASCII85Decode' || filter === 'A85') {
+    } else if (filter === "LZWDecode" || filter === "LZW") {
+      const earlyChange =
+        (asNumber(parm ? dictGet(parm, "EarlyChange") : undefined) ?? 1) !== 0;
+      bytes = applyPredictorIfPresent(
+        lzwDecode(bytes, earlyChange, sink),
+        parm,
+        sink,
+      );
+    } else if (filter === "ASCII85Decode" || filter === "A85") {
       bytes = ascii85Decode(bytes);
-    } else if (filter === 'ASCIIHexDecode' || filter === 'AHx') {
+    } else if (filter === "ASCIIHexDecode" || filter === "AHx") {
       bytes = asciiHexDecode(bytes);
-    } else if (filter === 'RunLengthDecode' || filter === 'RL') {
+    } else if (filter === "RunLengthDecode" || filter === "RL") {
       bytes = runLengthDecode(bytes);
-    } else if (filter === 'CCITTFaxDecode' || filter === 'CCF') {
+    } else if (filter === "CCITTFaxDecode" || filter === "CCF") {
       bytes = ccittFaxDecode(bytes, parm, dict, sink);
-    } else if (filter === 'JBIG2Decode') {
+    } else if (filter === "JBIG2Decode") {
       const decoded = jbig2Decode(bytes, parm, dict, sink, resolve);
       if (decoded === undefined) {
-        return { bytes, remainingFilter: 'JBIG2Decode' };
+        return { bytes, remainingFilter: "JBIG2Decode" };
       }
       bytes = decoded;
-    } else if (filter === 'DCTDecode' || filter === 'DCT') {
-      return { bytes, remainingFilter: 'DCTDecode' };
-    } else if (filter === 'JPXDecode') {
+    } else if (filter === "DCTDecode" || filter === "DCT") {
+      return { bytes, remainingFilter: "DCTDecode" };
+    } else if (filter === "JPXDecode") {
       // Handed on undecoded for the same reason DCTDecode is, though for the opposite half of the problem: a JPEG 2000 codestream decodes to samples whose component count and bit depth come from the codestream itself rather than from the image dictionary (ISO 32000-1 7.4.9), and DecodedStream has nowhere to put those. src/images-read.ts, which does have somewhere to put them, decodes it.
-      return { bytes, remainingFilter: 'JPXDecode' };
+      return { bytes, remainingFilter: "JPXDecode" };
     } else {
-      sink({ code: 'pdf/unsupported-filter', severity: 'warning', message: `unsupported stream filter "${filter}"; leaving remaining bytes undecoded` });
+      sink({
+        code: "pdf/unsupported-filter",
+        severity: "warning",
+        message: `unsupported stream filter "${filter}"; leaving remaining bytes undecoded`,
+      });
       return { bytes, remainingFilter: filter };
     }
   }
   return { bytes };
 }
 
-function applyPredictorIfPresent(data: Uint8Array<ArrayBuffer>, parm: PdfDict | undefined, sink: PdfDiagnosticSink): Uint8Array<ArrayBuffer> {
+function applyPredictorIfPresent(
+  data: Uint8Array<ArrayBuffer>,
+  parm: PdfDict | undefined,
+  sink: PdfDiagnosticSink,
+): Uint8Array<ArrayBuffer> {
   return applyPredictor(data, readPredictorParams(parm), sink);
 }
 
@@ -65,16 +85,26 @@ function applyPredictorIfPresent(data: Uint8Array<ArrayBuffer>, parm: PdfDict | 
 // /Rows falls back to the stream dictionary's own /Height because Table 11 defaults /Rows to 0 ("decode until the data runs out"), and a real producer very often leaves it there and lets the image dictionary carry the row count -- resolving it here means the decoder gets a definite row count and stops on it rather than reading whatever trailing bits an encoder left behind.
 //
 // /EndOfLine, /EndOfBlock, and /DamagedRowsBeforeError are deliberately not consulted: the decoder handles an EOL wherever one actually appears rather than being told in advance whether to expect one, stops at an end-of-block marker or at the declared row count whichever comes first, and reports damage through the diagnostic sink rather than switching between "throw" and "keep going" on a per-document count.
-function ccittFaxDecode(data: Uint8Array<ArrayBuffer>, parm: PdfDict | undefined, dict: PdfDict, sink: PdfDiagnosticSink): Uint8Array<ArrayBuffer> {
-  const parmGet = (key: string): PdfObject | undefined => (parm !== undefined ? dictGet(parm, key) : undefined);
-  const rows = asNumber(parmGet('Rows')) ?? asNumber(dictGet(dict, 'Height') ?? dictGet(dict, 'H'));
+function ccittFaxDecode(
+  data: Uint8Array<ArrayBuffer>,
+  parm: PdfDict | undefined,
+  dict: PdfDict,
+  sink: PdfDiagnosticSink,
+): Uint8Array<ArrayBuffer> {
+  const parmGet = (key: string): PdfObject | undefined =>
+    parm !== undefined ? dictGet(parm, key) : undefined;
+  const rows =
+    asNumber(parmGet("Rows")) ??
+    asNumber(dictGet(dict, "Height") ?? dictGet(dict, "H"));
   return decodeCcittFax(data, {
-    k: asNumber(parmGet('K')),
-    columns: asNumber(parmGet('Columns')),
+    k: asNumber(parmGet("K")),
+    columns: asNumber(parmGet("Columns")),
     rows,
-    blackIs1: asBool(parmGet('BlackIs1')),
-    encodedByteAlign: asBool(parmGet('EncodedByteAlign')),
-    onWarning: (message) => { sink({ code: 'pdf/ccitt-fax-degraded', severity: 'warning', message }); },
+    blackIs1: asBool(parmGet("BlackIs1")),
+    encodedByteAlign: asBool(parmGet("EncodedByteAlign")),
+    onWarning: (message) => {
+      sink({ code: "pdf/ccitt-fax-degraded", severity: "warning", message });
+    },
   }).bytes;
 }
 
@@ -83,32 +113,56 @@ function ccittFaxDecode(data: Uint8Array<ArrayBuffer>, parm: PdfDict | undefined
 // Two polarity/sizing details, both of them PDF's rather than JBIG2's, and both handled here so src/image/jbig2.ts stays free of PDF knowledge. First, JBIG2 codes a black pixel as a 1 bit (T.88 3.29) while a PDF 1-bit /DeviceGray image reads 0 as black, so the decoded bitmap is inverted on the way out -- exactly the convention CCITTFaxDecode reaches through its own /BlackIs1 defaulting to false. Second, the image dictionary's own /Width and /Height are authoritative over the page information segment's, which is also the only way a JBIG2 page of "unknown" (striped) height resolves at all.
 //
 // Returns undefined when the stream uses a JBIG2 feature this decoder does not implement, or is malformed. That degrades exactly like an unimplemented filter: the caller gets the still-encoded bytes back with remainingFilter set, skips the image, and the rest of the page still reads.
-function jbig2Decode(data: Uint8Array<ArrayBuffer>, parm: PdfDict | undefined, dict: PdfDict, sink: PdfDiagnosticSink, resolve: PdfIndirectResolver | undefined): Uint8Array<ArrayBuffer> | undefined {
-  const globalsObj = parm !== undefined ? dictGet(parm, 'JBIG2Globals') : undefined;
-  const resolvedGlobals = resolve !== undefined ? resolve(globalsObj) : globalsObj;
+function jbig2Decode(
+  data: Uint8Array<ArrayBuffer>,
+  parm: PdfDict | undefined,
+  dict: PdfDict,
+  sink: PdfDiagnosticSink,
+  resolve: PdfIndirectResolver | undefined,
+): Uint8Array<ArrayBuffer> | undefined {
+  const globalsObj =
+    parm !== undefined ? dictGet(parm, "JBIG2Globals") : undefined;
+  const resolvedGlobals =
+    resolve !== undefined ? resolve(globalsObj) : globalsObj;
   let globals: Uint8Array<ArrayBuffer> | undefined;
-  if (resolvedGlobals?.kind === 'stream') {
-    globals = decodeStream(resolvedGlobals.raw, resolvedGlobals.dict, sink, resolve).bytes;
+  if (resolvedGlobals?.kind === "stream") {
+    globals = decodeStream(
+      resolvedGlobals.raw,
+      resolvedGlobals.dict,
+      sink,
+      resolve,
+    ).bytes;
   } else if (globalsObj !== undefined) {
-    sink({ code: 'pdf/jbig2-degraded', severity: 'warning', message: 'a JBIG2Decode stream declares /JBIG2Globals but it could not be resolved to a stream; decoding without it, which will fail if the page refers to a shared symbol dictionary' });
+    sink({
+      code: "pdf/jbig2-degraded",
+      severity: "warning",
+      message:
+        "a JBIG2Decode stream declares /JBIG2Globals but it could not be resolved to a stream; decoding without it, which will fail if the page refers to a shared symbol dictionary",
+    });
   }
 
   try {
     const image = decodeJbig2Embedded(data, {
       globals,
-      width: asNumber(dictGet(dict, 'Width') ?? dictGet(dict, 'W')),
-      height: asNumber(dictGet(dict, 'Height') ?? dictGet(dict, 'H')),
-      onWarning: (message) => { sink({ code: 'pdf/jbig2-degraded', severity: 'warning', message }); },
+      width: asNumber(dictGet(dict, "Width") ?? dictGet(dict, "W")),
+      height: asNumber(dictGet(dict, "Height") ?? dictGet(dict, "H")),
+      onWarning: (message) => {
+        sink({ code: "pdf/jbig2-degraded", severity: "warning", message });
+      },
     });
     return Uint8Array.from(image.bytes, (byte) => byte ^ 0xff);
   } catch (error) {
-    sink({ code: 'pdf/jbig2-undecodable', severity: 'warning', message: `JBIG2Decode stream could not be decoded (${error instanceof Error ? error.message : String(error)}); leaving its bytes undecoded` });
+    sink({
+      code: "pdf/jbig2-undecodable",
+      severity: "warning",
+      message: `JBIG2Decode stream could not be decoded (${error instanceof Error ? error.message : String(error)}); leaving its bytes undecoded`,
+    });
     return undefined;
   }
 }
 
 function filterNames(dict: PdfDict): string[] {
-  const filterObj = dictGet(dict, 'Filter') ?? dictGet(dict, 'F');
+  const filterObj = dictGet(dict, "Filter") ?? dictGet(dict, "F");
   if (filterObj === undefined) {
     return [];
   }
@@ -130,9 +184,13 @@ function filterNames(dict: PdfDict): string[] {
   return names;
 }
 
-function decodeParmsList(dict: PdfDict, count: number): (PdfDict | undefined)[] {
-  const parmsObj = dictGet(dict, 'DecodeParms') ?? dictGet(dict, 'DP');
-  const empty = (): (PdfDict | undefined)[] => Array.from({ length: count }, () => undefined);
+function decodeParmsList(
+  dict: PdfDict,
+  count: number,
+): (PdfDict | undefined)[] {
+  const parmsObj = dictGet(dict, "DecodeParms") ?? dictGet(dict, "DP");
+  const empty = (): (PdfDict | undefined)[] =>
+    Array.from({ length: count }, () => undefined);
   if (parmsObj === undefined) {
     return empty();
   }
@@ -160,7 +218,10 @@ function initialLzwDictionary(): Uint8Array<ArrayBuffer>[] {
   return Array.from({ length: 256 }, (_, i) => new Uint8Array([i]));
 }
 
-function concatTwo(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+function concatTwo(
+  a: Uint8Array<ArrayBuffer>,
+  b: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(a.length + b.length);
   out.set(a, 0);
   out.set(b, a.length);
@@ -168,7 +229,11 @@ function concatTwo(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): Uint
 }
 
 // `earlyChange` mirrors the filter's own /EarlyChange DecodeParms entry (default true): when set, the code width grows one code sooner than the dictionary size alone would demand, matching how essentially every real-world PDF/TIFF encoder actually writes the bitstream.
-export function lzwDecode(data: Uint8Array<ArrayBuffer>, earlyChange: boolean, sink: PdfDiagnosticSink): Uint8Array<ArrayBuffer> {
+export function lzwDecode(
+  data: Uint8Array<ArrayBuffer>,
+  earlyChange: boolean,
+  sink: PdfDiagnosticSink,
+): Uint8Array<ArrayBuffer> {
   const out: number[] = [];
   let dict = initialLzwDictionary();
   let nextCode = LZW_FIRST_NEW_CODE;
@@ -188,7 +253,8 @@ export function lzwDecode(data: Uint8Array<ArrayBuffer>, earlyChange: boolean, s
       pos++;
       bitCount += 8;
     }
-    const value = (bitBuffer >>> (bitCount - codeWidth)) & ((1 << codeWidth) - 1);
+    const value =
+      (bitBuffer >>> (bitCount - codeWidth)) & ((1 << codeWidth) - 1);
     bitCount -= codeWidth;
     return value;
   };
@@ -212,7 +278,11 @@ export function lzwDecode(data: Uint8Array<ArrayBuffer>, earlyChange: boolean, s
     } else if (code === nextCode && prevEntry !== undefined) {
       entry = concatTwo(prevEntry, new Uint8Array([prevEntry[0] ?? 0]));
     } else {
-      sink({ code: 'pdf/lzw-corrupt', severity: 'warning', message: `LZW stream referenced code ${String(code)} with no valid dictionary entry; stopping decode with what was recovered so far` });
+      sink({
+        code: "pdf/lzw-corrupt",
+        severity: "warning",
+        message: `LZW stream referenced code ${String(code)} with no valid dictionary entry; stopping decode with what was recovered so far`,
+      });
       break;
     }
     for (const byte of entry) {
@@ -242,18 +312,29 @@ const ASCII85_MIN_DIGIT = 0x21; // '!'
 const ASCII85_MAX_DIGIT = 0x75; // 'u'
 const ASCII85_MAX_DIGIT_VALUE = ASCII85_MAX_DIGIT - ASCII85_MIN_DIGIT; // 84 -- the padding value for a final, partial group
 
-function pushAscii85Group(out: number[], digits: number[], byteCount: number): void {
+function pushAscii85Group(
+  out: number[],
+  digits: number[],
+  byteCount: number,
+): void {
   let value = 0;
   for (const digit of digits) {
     value = value * 85 + digit;
   }
-  const bytes = [(value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff];
+  const bytes = [
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ];
   for (let i = 0; i < byteCount; i++) {
     out.push(bytes[i]!);
   }
 }
 
-export function ascii85Decode(data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+export function ascii85Decode(
+  data: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   const out: number[] = [];
   let tuple: number[] = [];
   let i = 0;
@@ -306,7 +387,9 @@ function hexDigitValue(byte: number): number | undefined {
   return undefined;
 }
 
-export function asciiHexDecode(data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+export function asciiHexDecode(
+  data: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   const digits: number[] = [];
   for (const byte of data) {
     if (byte === 0x3e) {
@@ -331,7 +414,9 @@ export function asciiHexDecode(data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayB
 
 const RUN_LENGTH_EOD = 128;
 
-export function runLengthDecode(data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+export function runLengthDecode(
+  data: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   const out: number[] = [];
   let i = 0;
   while (i < data.length) {

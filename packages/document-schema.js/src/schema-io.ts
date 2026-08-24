@@ -1,12 +1,12 @@
-import { type ContentDocument, ContentDocumentSchema } from './content';
-import { type DocumentTree, DocumentTreeSchema } from './package';
+import { type ContentDocument, ContentDocumentSchema } from "./content";
+import { type DocumentTree, DocumentTreeSchema } from "./package";
 
 // The two kinds published as .schema.json files (see scripts/generate-json-schemas.mjs, which imports SCHEMA_FILE_NAMES/schemaUriFor from this module rather than declaring its own copy). Kept in one place so the id string, the filename, and the URL are never edited independently.
-export type DocumentSchemaKind = 'DocumentTree' | 'ContentDocument';
+export type DocumentSchemaKind = "DocumentTree" | "ContentDocument";
 
 export const SCHEMA_FILE_NAMES: Record<DocumentSchemaKind, string> = {
-  DocumentTree: 'document-tree.schema.json',
-  ContentDocument: 'content-document.schema.json',
+  DocumentTree: "document-tree.schema.json",
+  ContentDocument: "content-document.schema.json",
 };
 
 // __PACKAGE_VERSION__ is a literal string constant, not a runtime read -- see src/global.d.ts, tsdown.config.ts, and vitest.config.ts.
@@ -22,7 +22,10 @@ export function schemaUriFor(kind: DocumentSchemaKind): string {
 const SCHEMA_URI_PATTERN =
   /^https:\/\/cdn\.jsdelivr\.net\/npm\/document-schema\.js@([^/]+)\/schemas\/(document-tree|document-package|content-document|layout-document)\.schema\.json$/;
 
-interface SchemaUriParts { version: string; stem: string }
+interface SchemaUriParts {
+  version: string;
+  stem: string;
+}
 
 function parseSchemaUri(uri: string): SchemaUriParts | undefined {
   const match = SCHEMA_URI_PATTERN.exec(uri);
@@ -36,10 +39,10 @@ function parseSchemaUri(uri: string): SchemaUriParts | undefined {
 
 function kindForFileStem(stem: string): DocumentSchemaKind | undefined {
   switch (stem) {
-    case 'document-tree':
-      return 'DocumentTree';
-    case 'content-document':
-      return 'ContentDocument';
+    case "document-tree":
+      return "DocumentTree";
+    case "content-document":
+      return "ContentDocument";
     default:
       return undefined;
   }
@@ -53,30 +56,37 @@ function majorVersionOf(version: string): number | undefined {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // The one place a raw, unvalidated $schema value is read back out of an unknown input -- used by documentFromJson below, and exported on its own for a caller that only wants to know "what kind of document is this, if any" without also parsing the rest of the value. Version-agnostic on purpose: it answers "which kind does this URI name", not "may this installed release parse it" -- a value tagged by an older or newer release is still recognisable as "a DocumentTree" from its file stem alone, and only documentFromJson applies the version gate. A layout-document URI returns undefined here because this package no longer defines that kind, and a document-package URI returns undefined here too because that stem was renamed away in this major; documentFromJson recognises both separately and answers each with its own tombstone.
-export function documentSchemaKindOf(value: unknown): DocumentSchemaKind | undefined {
+export function documentSchemaKindOf(
+  value: unknown,
+): DocumentSchemaKind | undefined {
   if (!isRecord(value)) return undefined;
-  if (!('$schema' in value) || typeof value.$schema !== 'string') return undefined;
+  if (!("$schema" in value) || typeof value.$schema !== "string")
+    return undefined;
   const parts = parseSchemaUri(value.$schema);
   if (parts === undefined) return undefined;
   return kindForFileStem(parts.stem);
 }
 
 export type DocumentTreeJson = DocumentTree & { readonly $schema: string };
-export type ContentDocumentJson = ContentDocument & { readonly $schema: string };
+export type ContentDocumentJson = ContentDocument & {
+  readonly $schema: string;
+};
 
 // No re-validation here: the parameter type already guarantees a real DocumentTree at the call site, so re-parsing it would be defensive code for a case that can't happen. $schema is spread first so it's also the first enumerable/JSON key.
 //
 // $schema is envelope metadata, not content: a content hash or structural comparison computed over a serialised dump must exclude it (document-outline.js's leafContentHash recipe -- canonicalise, stringify, SHA-256 -- is the family's stated canonicaliser, and the $schema key is stripped before that canonicalisation runs, never hashed alongside the content it merely labels). Two dumps of one document by two different installed releases hash equal once $schema is excluded; hashing it in would make the digest name the dumper, not the document.
 export function documentTreeWithSchema(value: DocumentTree): DocumentTreeJson {
-  return { $schema: schemaUriFor('DocumentTree'), ...value };
+  return { $schema: schemaUriFor("DocumentTree"), ...value };
 }
 
-export function contentDocumentWithSchema(value: ContentDocument): ContentDocumentJson {
-  return { $schema: schemaUriFor('ContentDocument'), ...value };
+export function contentDocumentWithSchema(
+  value: ContentDocument,
+): ContentDocumentJson {
+  return { $schema: schemaUriFor("ContentDocument"), ...value };
 }
 
 export class UnrecognizedDocumentSchemaError extends Error {
@@ -86,7 +96,7 @@ export class UnrecognizedDocumentSchemaError extends Error {
     super(
       `documentFromJson: value has no recognized "$schema" property (expected one of the document-schema.js .schema.json URIs; found: ${JSON.stringify(schema)}).`,
     );
-    this.name = 'UnrecognizedDocumentSchemaError';
+    this.name = "UnrecognizedDocumentSchemaError";
     this.schema = schema;
   }
 }
@@ -99,7 +109,7 @@ export class LayoutSchemaDemotedError extends Error {
     super(
       `documentFromJson: this value is a layout-document dump (${schema}), and LayoutDocument moved to pdf-codec in document-schema.js 4.0.0 (ExaDev/pdf-codec#65). Read it with pdf-codec's own layout model, or with a document-schema.js 3.x release.`,
     );
-    this.name = 'LayoutSchemaDemotedError';
+    this.name = "LayoutSchemaDemotedError";
     this.schema = schema;
   }
 }
@@ -112,7 +122,7 @@ export class DocumentPackageRenamedError extends Error {
     super(
       `documentFromJson: this value is a document-package dump (${schema}), and DocumentPackage was renamed to DocumentTree in document-schema.js 5.0.0 (ExaDev/documents.js#661). Read it with a document-schema.js 4.x release, or re-dump it with a 5.x release.`,
     );
-    this.name = 'DocumentPackageRenamedError';
+    this.name = "DocumentPackageRenamedError";
     this.schema = schema;
   }
 }
@@ -126,14 +136,17 @@ export class SchemaVersionMismatchError extends Error {
   constructor(schema: string, dumpVersion: string, installedVersion: string) {
     const dumpMajor = majorVersionOf(dumpVersion);
     const installedMajor = majorVersionOf(installedVersion);
-    const isOlder = dumpMajor !== undefined && installedMajor !== undefined && dumpMajor < installedMajor;
+    const isOlder =
+      dumpMajor !== undefined &&
+      installedMajor !== undefined &&
+      dumpMajor < installedMajor;
     super(
       `documentFromJson: this dump's $schema pins document-schema.js@${dumpVersion}, but the installed release is @${installedVersion}, and a dump only parses under the major that wrote it.` +
         (isOlder
           ? ` Dumps from before 4.0.0 carry the retired formatVersion field and (for packages) the flat { formatVersion, content, pages } shape, replaced in 4.0.0 by the tree-form DocumentTree (ExaDev/document-schema.js#20, named DocumentPackage before ExaDev/documents.js#661's 5.0.0 rename). Re-dump the value with a release matching its own major, or parse it with the release that produced it.`
           : ` Upgrade document-schema.js to read it.`),
     );
-    this.name = 'SchemaVersionMismatchError';
+    this.name = "SchemaVersionMismatchError";
     this.schema = schema;
     this.dumpVersion = dumpVersion;
     this.installedVersion = installedVersion;
@@ -141,22 +154,24 @@ export class SchemaVersionMismatchError extends Error {
 }
 
 export type DocumentJsonResult =
-  | { kind: 'DocumentTree'; value: DocumentTree }
-  | { kind: 'ContentDocument'; value: ContentDocument };
+  | { kind: "DocumentTree"; value: DocumentTree }
+  | { kind: "ContentDocument"; value: ContentDocument };
 
 // The ingest entry point for a value of unknown provenance. $schema selects which schema to run and the version gate decides whether this release may run it; the schema itself still does the real structural validation (a recognized $schema with a structurally invalid body throws the underlying ZodError, not one of this module's errors). Within one major the installed schema validates the dump -- patch and minor releases are semver-compatible with the major's schema generation -- and across majors it refuses, because a major boundary is exactly where the schema's shape may have changed incompatibly (4.0.0's tree-form envelope being the live example). A caller that already knows the kind and trusts the value's provenance can keep calling DocumentTreeSchema.parse(value) (etc.) directly, unchanged -- these schemas are plain (non-strict) z.object()s, so they already tolerate and silently strip an incoming $schema property with zero new code -- but such a caller is validating structure only, not version: that is the documented difference between a direct parse and this dispatch.
 export function documentFromJson(value: unknown): DocumentJsonResult {
-  if (!isRecord(value) || typeof value.$schema !== 'string') {
-    throw new UnrecognizedDocumentSchemaError(isRecord(value) ? value.$schema : undefined);
+  if (!isRecord(value) || typeof value.$schema !== "string") {
+    throw new UnrecognizedDocumentSchemaError(
+      isRecord(value) ? value.$schema : undefined,
+    );
   }
   const parts = parseSchemaUri(value.$schema);
   if (parts === undefined) {
     throw new UnrecognizedDocumentSchemaError(value.$schema);
   }
-  if (parts.stem === 'layout-document') {
+  if (parts.stem === "layout-document") {
     throw new LayoutSchemaDemotedError(value.$schema);
   }
-  if (parts.stem === 'document-package') {
+  if (parts.stem === "document-package") {
     throw new DocumentPackageRenamedError(value.$schema);
   }
   const kind = kindForFileStem(parts.stem);
@@ -167,12 +182,16 @@ export function documentFromJson(value: unknown): DocumentJsonResult {
   const dumpMajor = majorVersionOf(parts.version);
   const installedMajor = majorVersionOf(__PACKAGE_VERSION__);
   if (dumpMajor !== installedMajor) {
-    throw new SchemaVersionMismatchError(value.$schema, parts.version, __PACKAGE_VERSION__);
+    throw new SchemaVersionMismatchError(
+      value.$schema,
+      parts.version,
+      __PACKAGE_VERSION__,
+    );
   }
   switch (kind) {
-    case 'DocumentTree':
+    case "DocumentTree":
       return { kind, value: DocumentTreeSchema.parse(value) };
-    case 'ContentDocument':
+    case "ContentDocument":
       return { kind, value: ContentDocumentSchema.parse(value) };
   }
 }

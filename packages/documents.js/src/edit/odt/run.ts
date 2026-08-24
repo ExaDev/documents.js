@@ -1,9 +1,9 @@
-import type { Package, XmlElement, XmlNode } from 'odf.js';
-import type { Color as LayoutColor } from 'document-schema.js';
-import { removeChild } from '../../xml/edit';
-import { el } from '../../xml/fragment';
-import { decodeOdfText, encodeOdfText } from '../../xml/odf-text';
-import { applyStyleChange, readCurrentStyleProperties } from './props';
+import type { Package, XmlElement, XmlNode } from "odf.js";
+import type { Color as LayoutColor } from "document-schema.js";
+import { removeChild } from "../../xml/edit";
+import { el } from "../../xml/fragment";
+import { decodeOdfText, encodeOdfText } from "../../xml/odf-text";
+import { applyStyleChange, readCurrentStyleProperties } from "./props";
 
 export interface RunInit {
   readonly text?: string;
@@ -31,7 +31,9 @@ export class OdtRun {
 
   private live(): XmlElement {
     if (this.removed) {
-      throw new Error('this OdtRun has been removed from its paragraph and can no longer be used');
+      throw new Error(
+        "this OdtRun has been removed from its paragraph and can no longer be used",
+      );
     }
     return this.node;
   }
@@ -46,59 +48,68 @@ export class OdtRun {
   }
 
   get bold(): boolean {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'text').bold ?? false;
+    return (
+      readCurrentStyleProperties(this.pkg, this.live(), "text").bold ?? false
+    );
   }
 
   set bold(value: boolean) {
-    applyStyleChange(this.pkg, this.live(), 'text', { bold: value });
+    applyStyleChange(this.pkg, this.live(), "text", { bold: value });
   }
 
   get italic(): boolean {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'text').italic ?? false;
+    return (
+      readCurrentStyleProperties(this.pkg, this.live(), "text").italic ?? false
+    );
   }
 
   set italic(value: boolean) {
-    applyStyleChange(this.pkg, this.live(), 'text', { italic: value });
+    applyStyleChange(this.pkg, this.live(), "text", { italic: value });
   }
 
   get underline(): boolean {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'text').underline ?? false;
+    return (
+      readCurrentStyleProperties(this.pkg, this.live(), "text").underline ??
+      false
+    );
   }
 
   set underline(value: boolean) {
-    applyStyleChange(this.pkg, this.live(), 'text', { underline: value });
+    applyStyleChange(this.pkg, this.live(), "text", { underline: value });
   }
 
   get strike(): boolean {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'text').strike ?? false;
+    return (
+      readCurrentStyleProperties(this.pkg, this.live(), "text").strike ?? false
+    );
   }
 
   set strike(value: boolean) {
-    applyStyleChange(this.pkg, this.live(), 'text', { strike: value });
+    applyStyleChange(this.pkg, this.live(), "text", { strike: value });
   }
 
   get fontFamily(): string | undefined {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'text').fontFamily;
+    return readCurrentStyleProperties(this.pkg, this.live(), "text").fontFamily;
   }
 
   set fontFamily(value: string) {
-    applyStyleChange(this.pkg, this.live(), 'text', { fontFamily: value });
+    applyStyleChange(this.pkg, this.live(), "text", { fontFamily: value });
   }
 
   get sizePt(): number | undefined {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'text').sizePt;
+    return readCurrentStyleProperties(this.pkg, this.live(), "text").sizePt;
   }
 
   set sizePt(value: number) {
-    applyStyleChange(this.pkg, this.live(), 'text', { sizePt: value });
+    applyStyleChange(this.pkg, this.live(), "text", { sizePt: value });
   }
 
   get color(): LayoutColor | undefined {
-    return readCurrentStyleProperties(this.pkg, this.live(), 'text').color;
+    return readCurrentStyleProperties(this.pkg, this.live(), "text").color;
   }
 
   set color(value: LayoutColor) {
-    applyStyleChange(this.pkg, this.live(), 'text', { color: value });
+    applyStyleChange(this.pkg, this.live(), "text", { color: value });
   }
 
   remove(): void {
@@ -109,7 +120,7 @@ export class OdtRun {
 
 // Builds a fresh text:span from scratch (not a live view -- for constructing new runs to append or insert, whose properties are then read back through OdtRun once inserted into the tree). Applying init's properties by constructing a throwaway OdtRun over the new node and driving it through the exact same setters every later mutation uses, rather than duplicating the resolve-merge-intern logic here a second time -- the throwaway container ([]) is never touched, since remove() is never called during construction.
 export function buildRun(pkg: Package, init: RunInit = {}): XmlElement {
-  const node = el('text:span');
+  const node = el("text:span");
   if (init.text !== undefined) {
     node.children = encodeOdfText(init.text);
   }

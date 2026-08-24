@@ -5,7 +5,7 @@
 // - px has no natural "points per pixel" ratio of its own; ODF (like CSS) assumes the CSS reference pixel, 96px = 1in = 72pt, so 1px = 0.75pt. This is the same assumption properties.ts's own original parseLength established and this module now supersedes -- see this file's own test suite for the LibreOffice-round-trip evidence.
 // - cm/mm/in/pt are exact physical-unit ratios (1in = 2.54cm = 25.4mm exactly, per the international yard-and-pound agreement since 1959; 1in = 72pt, the standard PostScript/DTP point this package's own model already uses throughout), not approximations.
 
-export type LengthUnit = 'cm' | 'mm' | 'in' | 'pt' | 'pc' | 'px';
+export type LengthUnit = "cm" | "mm" | "in" | "pt" | "pc" | "px";
 
 // ODF's `length` datatype: a (possibly negative, possibly fractional) number immediately followed by one of these six unit suffixes.
 const LENGTH_PATTERN = /^(-?(?:\d+(?:\.\d+)?|\.\d+))(cm|mm|in|pt|pc|px)$/;
@@ -18,23 +18,30 @@ const CSS_REFERENCE_PIXELS_PER_INCH = 96; // The CSS reference pixel (and ODF's 
 
 function unitToPtFactor(unit: LengthUnit): number {
   switch (unit) {
-    case 'pt':
+    case "pt":
       return 1;
-    case 'in':
+    case "in":
       return POINTS_PER_INCH;
-    case 'cm':
+    case "cm":
       return POINTS_PER_INCH / CM_PER_INCH;
-    case 'mm':
+    case "mm":
       return POINTS_PER_INCH / MM_PER_INCH;
-    case 'pc':
+    case "pc":
       return POINTS_PER_PICA;
-    case 'px':
+    case "px":
       return POINTS_PER_INCH / CSS_REFERENCE_PIXELS_PER_INCH;
   }
 }
 
 function isLengthUnit(value: string): value is LengthUnit {
-  return value === 'cm' || value === 'mm' || value === 'in' || value === 'pt' || value === 'pc' || value === 'px';
+  return (
+    value === "cm" ||
+    value === "mm" ||
+    value === "in" ||
+    value === "pt" ||
+    value === "pc" ||
+    value === "px"
+  );
 }
 
 // Parses an ODF length value (any of its six valid units) into points, or undefined if the string doesn't match the ODF `length` grammar at all. Liberal on read -- an adopted real-world document may use any unit -- deliberately paired with formatOdfLength below, whose own default output unit is "pt" (this package's own writers always emit pt, avoiding a unit-conversion rounding step entirely -- see properties.ts's own note on why).
@@ -52,7 +59,7 @@ export function parseOdfLength(value: string): number | undefined {
 }
 
 // The reverse of parseOdfLength: formats a point value as an ODF length string in the given unit (default "pt", matching this package's own writers' always-pt convention). No rounding is applied -- the conversion is an exact IEEE-754 division, so the result may carry more decimal places than a human would type by hand (real LibreOffice output does the same, e.g. "0.423cm" for a value that didn't originate in cm); a caller that wants a specific display precision is responsible for rounding the input pt value itself before calling this.
-export function formatOdfLength(pt: number, unit: LengthUnit = 'pt'): string {
+export function formatOdfLength(pt: number, unit: LengthUnit = "pt"): string {
   const value = pt / unitToPtFactor(unit);
   return `${value}${unit}`;
 }

@@ -7,7 +7,9 @@
 const MESSAGE_SQL_PREVIEW_LENGTH = 200;
 
 function truncateForMessage(sql: string): string {
-  return sql.length > MESSAGE_SQL_PREVIEW_LENGTH ? `${sql.slice(0, MESSAGE_SQL_PREVIEW_LENGTH)}...` : sql;
+  return sql.length > MESSAGE_SQL_PREVIEW_LENGTH
+    ? `${sql.slice(0, MESSAGE_SQL_PREVIEW_LENGTH)}...`
+    : sql;
 }
 
 // A real SQL construct this engine recognises and deliberately does not implement. `construct` names exactly which one (e.g. 'JOIN', 'subquery', 'DISTINCT', 'scalar function UPPER'), so a caller can branch on the category rather than pattern-matching the message text; `sql` is the offending statement's own full source text, verbatim.
@@ -16,8 +18,10 @@ export class HsqldbSqlUnsupportedError extends Error {
   readonly sql: string;
 
   constructor(construct: string, sql: string) {
-    super(`HSQLDB SQL: ${construct} is not supported by this bounded single-table query engine -- in statement: ${truncateForMessage(sql)}`);
-    this.name = 'HsqldbSqlUnsupportedError';
+    super(
+      `HSQLDB SQL: ${construct} is not supported by this bounded single-table query engine -- in statement: ${truncateForMessage(sql)}`,
+    );
+    this.name = "HsqldbSqlUnsupportedError";
     this.construct = construct;
     this.sql = sql;
   }
@@ -29,8 +33,10 @@ export class HsqldbSqlParseError extends Error {
   readonly offset: number;
 
   constructor(message: string, sql: string, offset: number) {
-    super(`HSQLDB SQL parse error at offset ${String(offset)}: ${message} -- in statement: ${truncateForMessage(sql)}`);
-    this.name = 'HsqldbSqlParseError';
+    super(
+      `HSQLDB SQL parse error at offset ${String(offset)}: ${message} -- in statement: ${truncateForMessage(sql)}`,
+    );
+    this.name = "HsqldbSqlParseError";
     this.sql = sql;
     this.offset = offset;
   }
@@ -41,8 +47,10 @@ export class HsqldbSqlEvaluationError extends Error {
   readonly sql: string;
 
   constructor(message: string, sql: string) {
-    super(`HSQLDB SQL evaluation error: ${message} -- in statement: ${truncateForMessage(sql)}`);
-    this.name = 'HsqldbSqlEvaluationError';
+    super(
+      `HSQLDB SQL evaluation error: ${message} -- in statement: ${truncateForMessage(sql)}`,
+    );
+    this.name = "HsqldbSqlEvaluationError";
     this.sql = sql;
   }
 }

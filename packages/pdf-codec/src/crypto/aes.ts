@@ -46,7 +46,14 @@ const { SBOX, INV_SBOX } = (() => {
   const invSbox = new Uint8Array(256);
   for (let i = 0; i < 256; i++) {
     const b = inverse[i]!;
-    const s = (b ^ rotl8(b, 1) ^ rotl8(b, 2) ^ rotl8(b, 3) ^ rotl8(b, 4) ^ AFFINE_CONSTANT) & 0xff;
+    const s =
+      (b ^
+        rotl8(b, 1) ^
+        rotl8(b, 2) ^
+        rotl8(b, 3) ^
+        rotl8(b, 4) ^
+        AFFINE_CONSTANT) &
+      0xff;
     sbox[i] = s;
     invSbox[s] = i;
   }
@@ -59,7 +66,13 @@ interface ExpandedKey {
 }
 
 function subWord(word: number): number {
-  return ((SBOX[(word >>> 24) & 0xff]! << 24) | (SBOX[(word >>> 16) & 0xff]! << 16) | (SBOX[(word >>> 8) & 0xff]! << 8) | SBOX[word & 0xff]!) >>> 0;
+  return (
+    ((SBOX[(word >>> 24) & 0xff]! << 24) |
+      (SBOX[(word >>> 16) & 0xff]! << 16) |
+      (SBOX[(word >>> 8) & 0xff]! << 8) |
+      SBOX[word & 0xff]!) >>>
+    0
+  );
 }
 
 function rotWord(word: number): number {
@@ -69,13 +82,20 @@ function rotWord(word: number): number {
 // FIPS 197 5.2's KeyExpansion, valid for all three standard key sizes -- Nk = key words, Nr = Nk + 6 rounds, and the extra SubWord at i % Nk === 4 that only AES-256 (Nk = 8) ever reaches.
 function expandKey(key: Uint8Array<ArrayBuffer>): ExpandedKey {
   if (key.length !== 16 && key.length !== 24 && key.length !== 32) {
-    throw new Error(`AES key must be 16, 24, or 32 bytes; got ${String(key.length)}`);
+    throw new Error(
+      `AES key must be 16, 24, or 32 bytes; got ${String(key.length)}`,
+    );
   }
   const nk = key.length / 4;
   const rounds = nk + 6;
   const words = new Uint32Array(WORDS_PER_BLOCK * (rounds + 1));
   for (let i = 0; i < nk; i++) {
-    words[i] = ((key[4 * i]! << 24) | (key[4 * i + 1]! << 16) | (key[4 * i + 2]! << 8) | key[4 * i + 3]!) >>> 0;
+    words[i] =
+      ((key[4 * i]! << 24) |
+        (key[4 * i + 1]! << 16) |
+        (key[4 * i + 2]! << 8) |
+        key[4 * i + 3]!) >>>
+      0;
   }
   let rcon = 1;
   for (let i = nk; i < words.length; i++) {
@@ -91,7 +111,11 @@ function expandKey(key: Uint8Array<ArrayBuffer>): ExpandedKey {
   return { words, rounds };
 }
 
-function addRoundKey(state: Uint8Array<ArrayBuffer>, words: Uint32Array, round: number): void {
+function addRoundKey(
+  state: Uint8Array<ArrayBuffer>,
+  words: Uint32Array,
+  round: number,
+): void {
   for (let c = 0; c < WORDS_PER_BLOCK; c++) {
     const word = words[round * WORDS_PER_BLOCK + c]!;
     // The word's four bytes map onto rows 0..3 of the column, most significant byte first (FIPS 197 5.1.4).
@@ -101,7 +125,10 @@ function addRoundKey(state: Uint8Array<ArrayBuffer>, words: Uint32Array, round: 
   }
 }
 
-function substituteBytes(state: Uint8Array<ArrayBuffer>, table: Uint8Array): void {
+function substituteBytes(
+  state: Uint8Array<ArrayBuffer>,
+  table: Uint8Array,
+): void {
   for (let i = 0; i < AES_BLOCK_BYTES; i++) {
     state[i] = table[state[i]!]!;
   }
@@ -112,13 +139,22 @@ function shiftRows(state: Uint8Array<ArrayBuffer>, direction: 1 | -1): void {
   const source = Uint8Array.from(state);
   for (let r = 1; r < WORDS_PER_BLOCK; r++) {
     for (let c = 0; c < WORDS_PER_BLOCK; c++) {
-      state[r + 4 * c] = source[r + 4 * (((c + direction * r) % WORDS_PER_BLOCK + WORDS_PER_BLOCK) % WORDS_PER_BLOCK)]!;
+      state[r + 4 * c] =
+        source[
+          r +
+            4 *
+              ((((c + direction * r) % WORDS_PER_BLOCK) + WORDS_PER_BLOCK) %
+                WORDS_PER_BLOCK)
+        ]!;
     }
   }
 }
 
 // FIPS 197 5.1.3 / 5.3.3: each column is multiplied by a fixed polynomial over GF(2^8) -- {02,03,01,01} forward, {0e,0b,0d,09} inverse.
-function mixColumns(state: Uint8Array<ArrayBuffer>, coefficients: readonly [number, number, number, number]): void {
+function mixColumns(
+  state: Uint8Array<ArrayBuffer>,
+  coefficients: readonly [number, number, number, number],
+): void {
   const [k0, k1, k2, k3] = coefficients;
   for (let c = 0; c < WORDS_PER_BLOCK; c++) {
     const a0 = state[4 * c]!;
@@ -126,14 +162,21 @@ function mixColumns(state: Uint8Array<ArrayBuffer>, coefficients: readonly [numb
     const a2 = state[4 * c + 2]!;
     const a3 = state[4 * c + 3]!;
     state[4 * c] = gmul(a0, k0) ^ gmul(a1, k1) ^ gmul(a2, k2) ^ gmul(a3, k3);
-    state[4 * c + 1] = gmul(a0, k3) ^ gmul(a1, k0) ^ gmul(a2, k1) ^ gmul(a3, k2);
-    state[4 * c + 2] = gmul(a0, k2) ^ gmul(a1, k3) ^ gmul(a2, k0) ^ gmul(a3, k1);
-    state[4 * c + 3] = gmul(a0, k1) ^ gmul(a1, k2) ^ gmul(a2, k3) ^ gmul(a3, k0);
+    state[4 * c + 1] =
+      gmul(a0, k3) ^ gmul(a1, k0) ^ gmul(a2, k1) ^ gmul(a3, k2);
+    state[4 * c + 2] =
+      gmul(a0, k2) ^ gmul(a1, k3) ^ gmul(a2, k0) ^ gmul(a3, k1);
+    state[4 * c + 3] =
+      gmul(a0, k1) ^ gmul(a1, k2) ^ gmul(a2, k3) ^ gmul(a3, k0);
   }
 }
 
-const FORWARD_MIX: readonly [number, number, number, number] = [0x02, 0x03, 0x01, 0x01];
-const INVERSE_MIX: readonly [number, number, number, number] = [0x0e, 0x0b, 0x0d, 0x09];
+const FORWARD_MIX: readonly [number, number, number, number] = [
+  0x02, 0x03, 0x01, 0x01,
+];
+const INVERSE_MIX: readonly [number, number, number, number] = [
+  0x0e, 0x0b, 0x0d, 0x09,
+];
 
 // FIPS 197 5.1's Cipher, in place on a 16-byte state.
 function encryptBlock(state: Uint8Array<ArrayBuffer>, key: ExpandedKey): void {
@@ -168,13 +211,20 @@ function wholeBlockCount(byteLength: number): number {
   return Math.floor(byteLength / AES_BLOCK_BYTES);
 }
 
-export function aesCbcDecrypt(key: Uint8Array<ArrayBuffer>, iv: Uint8Array<ArrayBuffer>, data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+export function aesCbcDecrypt(
+  key: Uint8Array<ArrayBuffer>,
+  iv: Uint8Array<ArrayBuffer>,
+  data: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   const expanded = expandKey(key);
   const blocks = wholeBlockCount(data.length);
   const out = new Uint8Array(blocks * AES_BLOCK_BYTES);
   const chain = Uint8Array.from(iv.subarray(0, AES_BLOCK_BYTES));
   for (let b = 0; b < blocks; b++) {
-    const cipherBlock = data.subarray(b * AES_BLOCK_BYTES, (b + 1) * AES_BLOCK_BYTES);
+    const cipherBlock = data.subarray(
+      b * AES_BLOCK_BYTES,
+      (b + 1) * AES_BLOCK_BYTES,
+    );
     const state = Uint8Array.from(cipherBlock);
     decryptBlock(state, expanded);
     for (let i = 0; i < AES_BLOCK_BYTES; i++) {
@@ -185,7 +235,11 @@ export function aesCbcDecrypt(key: Uint8Array<ArrayBuffer>, iv: Uint8Array<Array
   return out;
 }
 
-export function aesCbcEncrypt(key: Uint8Array<ArrayBuffer>, iv: Uint8Array<ArrayBuffer>, data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+export function aesCbcEncrypt(
+  key: Uint8Array<ArrayBuffer>,
+  iv: Uint8Array<ArrayBuffer>,
+  data: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   const expanded = expandKey(key);
   const blocks = wholeBlockCount(data.length);
   const out = new Uint8Array(blocks * AES_BLOCK_BYTES);
@@ -201,4 +255,3 @@ export function aesCbcEncrypt(key: Uint8Array<ArrayBuffer>, iv: Uint8Array<Array
   }
   return out;
 }
-

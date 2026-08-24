@@ -1,5 +1,5 @@
-import type { DimensionVector } from 'document-schema.js';
-import { dimensionToString } from './dimensions';
+import type { DimensionVector } from "document-schema.js";
+import { dimensionToString } from "./dimensions";
 
 // Real, exported error classes for every failure this package's evaluator and solver can hit -- the family's own convention (document-schema.js's schema-io.ts, archive-codec's OlePackageFormatError/CompoundFileFormatError, its ArchiveWalkLimitError) is a thrown Error subclass a caller can catch by name, never a `{ ok: false, error }` result wrapper. evaluate() and solveFor() follow that same idiom: a *successful* evaluate() call returns a plain Quantity | Interval (see evaluate.ts), and every failure throws one of these instead of being folded into the return type.
 
@@ -9,12 +9,17 @@ export class IncompatibleDimensionsError extends Error {
   readonly left: DimensionVector;
   readonly right: DimensionVector;
 
-  constructor(operation: string, left: DimensionVector, right: DimensionVector, detail?: string) {
+  constructor(
+    operation: string,
+    left: DimensionVector,
+    right: DimensionVector,
+    detail?: string,
+  ) {
     super(
       `'${operation}' requires compatible dimensions, got ${dimensionToString(left)} and ${dimensionToString(right)}` +
-        (detail === undefined ? '.' : ` (${detail}).`),
+        (detail === undefined ? "." : ` (${detail}).`),
     );
-    this.name = 'IncompatibleDimensionsError';
+    this.name = "IncompatibleDimensionsError";
     this.operation = operation;
     this.left = left;
     this.right = right;
@@ -27,7 +32,7 @@ export class UnboundSymbolError extends Error {
 
   constructor(symbol: string) {
     super(`symbol '${symbol}' has no entry in the supplied bindings.`);
-    this.name = 'UnboundSymbolError';
+    this.name = "UnboundSymbolError";
     this.symbol = symbol;
   }
 }
@@ -37,8 +42,10 @@ export class UnknownUnitError extends Error {
   readonly unit: string;
 
   constructor(unit: string) {
-    super(`unit '${unit}' is not registered in the supplied symbol table's units.`);
-    this.name = 'UnknownUnitError';
+    super(
+      `unit '${unit}' is not registered in the supplied symbol table's units.`,
+    );
+    this.name = "UnknownUnitError";
     this.unit = unit;
   }
 }
@@ -49,7 +56,7 @@ export class DivisionByZeroError extends Error {
 
   constructor(operation: string, detail: string) {
     super(`'${operation}': division by zero (${detail}).`);
-    this.name = 'DivisionByZeroError';
+    this.name = "DivisionByZeroError";
     this.operation = operation;
   }
 }
@@ -60,7 +67,7 @@ export class UnsupportedExpressionError extends Error {
 
   constructor(context: string, detail: string) {
     super(`${context}: ${detail}.`);
-    this.name = 'UnsupportedExpressionError';
+    this.name = "UnsupportedExpressionError";
     this.context = context;
   }
 }
@@ -71,19 +78,25 @@ export class NumericDomainError extends Error {
 
   constructor(operation: string, detail: string) {
     super(`'${operation}': ${detail}.`);
-    this.name = 'NumericDomainError';
+    this.name = "NumericDomainError";
     this.operation = operation;
   }
 }
 
 // Thrown when bisection or Newton's method exhausts its iteration budget (or, for bisection, is handed a bracket whose endpoints don't straddle zero; or, for Newton, hits a vanishing/non-finite derivative) without the residual dropping under the requested tolerance -- solveFor never returns a number it cannot vouch for.
 export class NonConvergentSolveError extends Error {
-  readonly method: 'bisection' | 'newton';
+  readonly method: "bisection" | "newton";
   readonly iterations: number;
 
-  constructor(method: 'bisection' | 'newton', iterations: number, detail: string) {
-    super(`solveFor (${method}) did not converge after ${iterations} iteration(s): ${detail}.`);
-    this.name = 'NonConvergentSolveError';
+  constructor(
+    method: "bisection" | "newton",
+    iterations: number,
+    detail: string,
+  ) {
+    super(
+      `solveFor (${method}) did not converge after ${iterations} iteration(s): ${detail}.`,
+    );
+    this.name = "NonConvergentSolveError";
     this.method = method;
     this.iterations = iterations;
   }

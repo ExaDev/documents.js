@@ -2,7 +2,7 @@
 //
 // No Zod schema wraps MarkdownDiagnostic, matching PdfDiagnostic's own precedent: a diagnostic is produced exclusively by this package's own read pipeline, is consumed by a caller-supplied sink rather than round-tripped through JSON, and validating our own output would validate nothing a caller couldn't already see from the TypeScript type itself.
 
-export type MarkdownDiagnosticSeverity = 'info' | 'warning';
+export type MarkdownDiagnosticSeverity = "info" | "warning";
 
 export interface MarkdownDiagnostic {
   // A stable, namespaced code (e.g. 'md/unclosed-fence', 'md/code-span-as-monospace-run') -- callers are expected to branch on this, not on `message`, which is free text for humans. See MarkdownDiagnosticCodes below for the codes this layer already names.
@@ -25,36 +25,36 @@ export const NOOP_MARKDOWN_DIAGNOSTIC_SINK: MarkdownDiagnosticSink = () => {
 //
 // Degrade tier: an individual construct src/lower's ContentDocument mapping (or src/emit's inverse) cannot represent faithfully, named per the mapping table in the repository's own task history -- see src/lower/ and src/emit/'s own top-of-file comments for the read/write side each code belongs to. Every one of these is reachable from real markdown/ContentDocument input; src/lower.test.ts and src/emit.test.ts each exercise the codes their own stage produces, and src/diagnostics/diagnostics.test.ts asserts the whole MarkdownDiagnosticCodes table has no dead entry.
 export const MarkdownDiagnosticCodes = {
-  UNCLOSED_FENCE: 'md/unclosed-fence',
-  UNCLOSED_MATH_BLOCK: 'md/unclosed-math-block',
-  UNTERMINATED_HTML_BLOCK: 'md/unterminated-html-block',
-  TABLE_CELL_COUNT_MISMATCH: 'md/table-cell-count-mismatch',
-  DUPLICATE_LINK_REFERENCE: 'md/duplicate-link-reference',
-  DUPLICATE_FOOTNOTE_DEFINITION: 'md/duplicate-footnote-definition',
-  LIST_MARKER_TYPE_CONFLICT: 'md/list-marker-type-conflict',
+  UNCLOSED_FENCE: "md/unclosed-fence",
+  UNCLOSED_MATH_BLOCK: "md/unclosed-math-block",
+  UNTERMINATED_HTML_BLOCK: "md/unterminated-html-block",
+  TABLE_CELL_COUNT_MISMATCH: "md/table-cell-count-mismatch",
+  DUPLICATE_LINK_REFERENCE: "md/duplicate-link-reference",
+  DUPLICATE_FOOTNOTE_DEFINITION: "md/duplicate-footnote-definition",
+  LIST_MARKER_TYPE_CONFLICT: "md/list-marker-type-conflict",
   // src/lower (read side: markdown -> ContentDocument)
-  INVENTED_PAGE_GEOMETRY: 'md/invented-page-geometry',
-  NESTED_EMPHASIS_FLATTENED: 'md/nested-emphasis-flattened',
-  LINK_TITLE_DROPPED: 'md/link-title-dropped',
-  BLOCKQUOTE_CONTAINER_SKIPPED: 'md/blockquote-container-skipped',
-  LIST_ITEM_BLOCK_UNLISTED: 'md/list-item-block-unlisted',
-  IMAGE_UNRESOLVED: 'md/image-unresolved',
-  RAW_HTML_PRESERVED_AS_TEXT: 'md/raw-html-preserved-as-text',
-  RAW_HTML_DROPPED: 'md/raw-html-dropped',
-  MATH_INLINE_PRESERVED_AS_TEXT: 'md/math-inline-preserved-as-text',
-  FRONT_MATTER_KEY_UNMAPPED: 'md/front-matter-key-unmapped',
-  FOOTNOTE_BODY_HEADING_FLATTENED: 'md/footnote-body-heading-flattened',
+  INVENTED_PAGE_GEOMETRY: "md/invented-page-geometry",
+  NESTED_EMPHASIS_FLATTENED: "md/nested-emphasis-flattened",
+  LINK_TITLE_DROPPED: "md/link-title-dropped",
+  BLOCKQUOTE_CONTAINER_SKIPPED: "md/blockquote-container-skipped",
+  LIST_ITEM_BLOCK_UNLISTED: "md/list-item-block-unlisted",
+  IMAGE_UNRESOLVED: "md/image-unresolved",
+  RAW_HTML_PRESERVED_AS_TEXT: "md/raw-html-preserved-as-text",
+  RAW_HTML_DROPPED: "md/raw-html-dropped",
+  MATH_INLINE_PRESERVED_AS_TEXT: "md/math-inline-preserved-as-text",
+  FRONT_MATTER_KEY_UNMAPPED: "md/front-matter-key-unmapped",
+  FOOTNOTE_BODY_HEADING_FLATTENED: "md/footnote-body-heading-flattened",
   // src/emit (write side: ContentDocument -> markdown)
-  CONSTRUCT_UNREPRESENTED: 'md/construct-unrepresented',
+  CONSTRUCT_UNREPRESENTED: "md/construct-unrepresented",
   // src/write.ts (tree write side: DocumentTree -> markdown, ahead of flattening)
-  PACKAGE_TABLE_DROPPED: 'md/package-table-dropped',
-  HEADING_LEVEL_CLAMPED: 'md/heading-level-clamped',
-  ADJACENT_LINKS_MERGED: 'md/adjacent-links-merged',
-  CODE_SPAN_AS_MONOSPACE_RUN: 'md/code-span-as-monospace-run',
-  PARAGRAPH_INDENT_DROPPED: 'md/paragraph-indent-dropped',
-  LIST_NUMID_FALLBACK: 'md/list-numid-fallback',
-  TABLE_CELL_FORMATTING_DROPPED: 'md/table-cell-formatting-dropped',
-  TABLE_CELL_MULTI_PARAGRAPH_JOINED: 'md/table-cell-multi-paragraph-joined',
+  PACKAGE_TABLE_DROPPED: "md/package-table-dropped",
+  HEADING_LEVEL_CLAMPED: "md/heading-level-clamped",
+  ADJACENT_LINKS_MERGED: "md/adjacent-links-merged",
+  CODE_SPAN_AS_MONOSPACE_RUN: "md/code-span-as-monospace-run",
+  PARAGRAPH_INDENT_DROPPED: "md/paragraph-indent-dropped",
+  LIST_NUMID_FALLBACK: "md/list-numid-fallback",
+  TABLE_CELL_FORMATTING_DROPPED: "md/table-cell-formatting-dropped",
+  TABLE_CELL_MULTI_PARAGRAPH_JOINED: "md/table-cell-multi-paragraph-joined",
 } as const;
 
 // The throw tier: input this package cannot meaningfully process at all, regardless of what a diagnostic sink could report about it. Carries the same `code` vocabulary as MarkdownDiagnostic so a caller can distinguish failure reasons programmatically, not just by message text.
@@ -63,16 +63,16 @@ export class MarkdownParseError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = 'MarkdownParseError';
+    this.name = "MarkdownParseError";
     this.code = code;
   }
 }
 
 // The input bytes do not decode as valid UTF-8 -- thrown before any scanning begins, since there is no meaningful line/column position to attribute a recover-tier diagnostic to.
 export class MarkdownInvalidUtf8Error extends MarkdownParseError {
-  constructor(message = 'input is not valid UTF-8') {
-    super('md/invalid-utf8', message);
-    this.name = 'MarkdownInvalidUtf8Error';
+  constructor(message = "input is not valid UTF-8") {
+    super("md/invalid-utf8", message);
+    this.name = "MarkdownInvalidUtf8Error";
   }
 }
 
@@ -82,8 +82,11 @@ export class MarkdownInputTooLargeError extends MarkdownParseError {
   readonly actualBytes: number;
 
   constructor(maxInputBytes: number, actualBytes: number) {
-    super('md/input-too-large', `input is ${String(actualBytes)} bytes, exceeding the configured maximum of ${String(maxInputBytes)} bytes`);
-    this.name = 'MarkdownInputTooLargeError';
+    super(
+      "md/input-too-large",
+      `input is ${String(actualBytes)} bytes, exceeding the configured maximum of ${String(maxInputBytes)} bytes`,
+    );
+    this.name = "MarkdownInputTooLargeError";
     this.maxInputBytes = maxInputBytes;
     this.actualBytes = actualBytes;
   }
@@ -94,8 +97,11 @@ export class MarkdownNestingLimitExceededError extends MarkdownParseError {
   readonly maxNesting: number;
 
   constructor(maxNesting: number) {
-    super('md/nesting-limit-exceeded', `block nesting exceeds the configured limit of ${String(maxNesting)}`);
-    this.name = 'MarkdownNestingLimitExceededError';
+    super(
+      "md/nesting-limit-exceeded",
+      `block nesting exceeds the configured limit of ${String(maxNesting)}`,
+    );
+    this.name = "MarkdownNestingLimitExceededError";
     this.maxNesting = maxNesting;
   }
 }
@@ -106,7 +112,7 @@ export class MarkdownWriteError extends Error {
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = 'MarkdownWriteError';
+    this.name = "MarkdownWriteError";
     this.code = code;
   }
 }
@@ -114,13 +120,22 @@ export class MarkdownWriteError extends Error {
 // Thrown by writeMarkdown when handed a ContentDocument whose block list's construct boundary markers (document-schema.js 4.2.0's ContentConstructStart/ContentConstructEnd) do not pair up as balanced brackets -- an end with no construct open at that point, or a start still open when the list ended. This is the throw tier rather than a degrade because an unbalanced list is malformed input rather than a shape to repair: the schema's own bracket-matching contract states outright that the blocks between a matched pair ARE the construct's extent, so with the pairing broken there is no extent to render and no correct guess about which blocks the producer meant to include. Detected via document-schema.js's own findConstructMarkerImbalance -- the one shared definition of the check, which every codec that emits a pair and documents.js's own decompose all have to agree on exactly.
 export class MarkdownUnbalancedConstructMarkersError extends MarkdownWriteError {
   // Which end of the pairing failed, and the offending block's own index in its section's block list -- carried verbatim from findConstructMarkerImbalance so a caller can locate it without re-running the walk.
-  readonly imbalanceKind: 'unmatchedEnd' | 'unclosedStart';
+  readonly imbalanceKind: "unmatchedEnd" | "unclosedStart";
   readonly blockIndex: number;
 
-  constructor(imbalanceKind: 'unmatchedEnd' | 'unclosedStart', blockIndex: number) {
-    const description = imbalanceKind === 'unmatchedEnd' ? 'a constructEnd marker closes no open construct' : 'a constructStart marker is never closed';
-    super('md/unbalanced-construct-markers', `${description} at block index ${String(blockIndex)}; a block list's construct boundary markers must pair as balanced brackets`);
-    this.name = 'MarkdownUnbalancedConstructMarkersError';
+  constructor(
+    imbalanceKind: "unmatchedEnd" | "unclosedStart",
+    blockIndex: number,
+  ) {
+    const description =
+      imbalanceKind === "unmatchedEnd"
+        ? "a constructEnd marker closes no open construct"
+        : "a constructStart marker is never closed";
+    super(
+      "md/unbalanced-construct-markers",
+      `${description} at block index ${String(blockIndex)}; a block list's construct boundary markers must pair as balanced brackets`,
+    );
+    this.name = "MarkdownUnbalancedConstructMarkersError";
     this.imbalanceKind = imbalanceKind;
     this.blockIndex = blockIndex;
   }
@@ -129,13 +144,19 @@ export class MarkdownUnbalancedConstructMarkersError extends MarkdownWriteError 
 // Thrown by writeMarkdown/writeMarkdownContent when a paragraph's run-level construct extent (document-schema.js's RunConstructExtent, ContentParagraph.constructs) does not name real runs -- an inverted range, or bounds reaching outside 0..runs.length. The run-level twin of MarkdownUnbalancedConstructMarkersError, detected through document-schema.js's own findRunConstructFault for the same reason that check uses findConstructMarkerImbalance: one shared definition of "well-formed" every codec and consumer agrees on. The throw tier rather than a degrade because a range that names no real runs has no position to render anything at -- guessing one would silently move a construct onto runs the producer never pointed it at.
 export class MarkdownInvalidRunConstructExtentError extends MarkdownWriteError {
   // Which way the range was faulty and the offending entry's own index in the paragraph's constructs array -- carried verbatim from findRunConstructFault so a caller can locate it without re-running the walk.
-  readonly faultKind: 'invertedRange' | 'beyondRuns';
+  readonly faultKind: "invertedRange" | "beyondRuns";
   readonly entryIndex: number;
 
-  constructor(faultKind: 'invertedRange' | 'beyondRuns', entryIndex: number) {
-    const description = faultKind === 'invertedRange' ? 'ends before it starts' : 'reaches outside the paragraph\'s own runs';
-    super('md/run-construct-extent-invalid', `a paragraph's run-level construct extent ${description} (constructs entry ${String(entryIndex)}); a run extent must name real runs in 0..runs.length`);
-    this.name = 'MarkdownInvalidRunConstructExtentError';
+  constructor(faultKind: "invertedRange" | "beyondRuns", entryIndex: number) {
+    const description =
+      faultKind === "invertedRange"
+        ? "ends before it starts"
+        : "reaches outside the paragraph's own runs";
+    super(
+      "md/run-construct-extent-invalid",
+      `a paragraph's run-level construct extent ${description} (constructs entry ${String(entryIndex)}); a run extent must name real runs in 0..runs.length`,
+    );
+    this.name = "MarkdownInvalidRunConstructExtentError";
     this.faultKind = faultKind;
     this.entryIndex = entryIndex;
   }
@@ -146,8 +167,11 @@ export class MarkdownUnsupportedDocumentKindError extends MarkdownWriteError {
   readonly kind: string;
 
   constructor(kind: string) {
-    super('md/write-side-not-wordprocessing', `writeMarkdown only supports a 'wordprocessing' ContentDocument, got '${kind}'`);
-    this.name = 'MarkdownUnsupportedDocumentKindError';
+    super(
+      "md/write-side-not-wordprocessing",
+      `writeMarkdown only supports a 'wordprocessing' ContentDocument, got '${kind}'`,
+    );
+    this.name = "MarkdownUnsupportedDocumentKindError";
     this.kind = kind;
   }
 }
@@ -156,7 +180,10 @@ export class MarkdownUnsupportedDocumentKindError extends MarkdownWriteError {
 export class MarkdownPackageFlattenError extends MarkdownWriteError {
   constructor(cause: unknown) {
     const detail = cause instanceof Error ? cause.message : String(cause);
-    super('md/package-flatten-failed', `flattening the package for write failed: ${detail}`);
-    this.name = 'MarkdownPackageFlattenError';
+    super(
+      "md/package-flatten-failed",
+      `flattening the package for write failed: ${detail}`,
+    );
+    this.name = "MarkdownPackageFlattenError";
   }
 }

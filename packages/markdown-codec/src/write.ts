@@ -10,29 +10,45 @@
 //
 // The remaining way flattenTree can throw for a 'wordprocessing' package -- a heading/list group carrying a style ref with no top-level styles table to resolve it against -- is not something writeMarkdown can rule out with a cheap up-front check the way the kind mismatch above is, so it is caught and rewrapped as MarkdownPackageFlattenError instead: a bare Error from a dependency is not part of this package's own MarkdownWriteError hierarchy, and a caller catching that hierarchy around this entry point should not need to know flattenTree's own exception type to catch it.
 
-import { flattenTree, type ContentDocument, type DefinitionEntry, type DefinitionsTable, type DocumentTree } from 'document-schema.js';
-import { MarkdownDiagnosticCodes, MarkdownPackageFlattenError, MarkdownUnsupportedDocumentKindError, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from './diagnostics/diagnostics';
-import type { MarkdownDiagnosticSink } from './diagnostics/diagnostics';
-import { emitMarkdown } from './emit/emit';
-import { emitFrontMatter } from './emit/front-matter';
-import { escapeLinkDestination, renderLinkTitle } from './emit/inline';
-import type { WriteMarkdownOptions } from './options/options';
+import {
+  flattenTree,
+  type ContentDocument,
+  type DefinitionEntry,
+  type DefinitionsTable,
+  type DocumentTree,
+} from "document-schema.js";
+import {
+  MarkdownDiagnosticCodes,
+  MarkdownPackageFlattenError,
+  MarkdownUnsupportedDocumentKindError,
+  NOOP_MARKDOWN_DIAGNOSTIC_SINK,
+} from "./diagnostics/diagnostics";
+import type { MarkdownDiagnosticSink } from "./diagnostics/diagnostics";
+import { emitMarkdown } from "./emit/emit";
+import { emitFrontMatter } from "./emit/front-matter";
+import { escapeLinkDestination, renderLinkTitle } from "./emit/inline";
+import type { WriteMarkdownOptions } from "./options/options";
 
 // Renders one definitions-table entry as its markdown spelling when it is this package's own link tenant -- the exact field shape src/read.ts's linkDefinitionEntries mints ({ kind: 'link', destination, title? }). The gate is the shape, not the kind string alone: a foreign producer's 'link'-kind entry with a different body must never be rendered as a markdown definition it never was. Narrowing is by capture-then-check because DefinitionEntry's body is deliberately loose (the tenant's own vocabulary, never document-schema.js's to enumerate).
-function renderLinkDefinition(label: string, entry: DefinitionEntry): string | undefined {
+function renderLinkDefinition(
+  label: string,
+  entry: DefinitionEntry,
+): string | undefined {
   const destination = entry.destination;
   const title = entry.title;
-  if (typeof destination !== 'string') {
+  if (typeof destination !== "string") {
     return undefined;
   }
-  if (title !== undefined && typeof title !== 'string') {
+  if (title !== undefined && typeof title !== "string") {
     return undefined;
   }
-  return `[${label}]: ${escapeLinkDestination(destination)}${title === undefined ? '' : ` "${renderLinkTitle(title)}"`}`;
+  return `[${label}]: ${escapeLinkDestination(destination)}${title === undefined ? "" : ` "${renderLinkTitle(title)}"`}`;
 }
 
 // Renders this package's own link-tenant definitions as their markdown spelling, one definition per line, in first-definition order (the table's own insertion order). The label re-emits verbatim inside its brackets -- a normalised label round-trips because normalisation is idempotent -- and the destination/title escape exactly as an inline link's do.
-function renderLinkDefinitions(definitions: DefinitionsTable): string | undefined {
+function renderLinkDefinitions(
+  definitions: DefinitionsTable,
+): string | undefined {
   const lines: string[] = [];
   for (const [label, entry] of Object.entries(definitions)) {
     const line = renderLinkDefinition(label, entry);
@@ -40,25 +56,47 @@ function renderLinkDefinitions(definitions: DefinitionsTable): string | undefine
       lines.push(line);
     }
   }
-  return lines.length > 0 ? lines.join('\n') : undefined;
+  return lines.length > 0 ? lines.join("\n") : undefined;
 }
 
 // Reports one PACKAGE_TABLE_DROPPED diagnostic per non-empty package-level table flattenTree's own envelope does not carry into the ContentDocument it returns -- with one refinement since the definitions row landed: the definitions table reports only when it holds entries this package cannot render (a foreign tenant), because its own link entries ARE rendered rather than dropped. Named individually (rather than one diagnostic for "some table was dropped") so a caller's sink can tell which table's data it needs to have captured before calling writeMarkdown, the same granularity every other degrade-tier code in this package already gives.
-function reportDroppedPackageTables(documentPackage: DocumentTree, definitionsRendered: boolean, sink: MarkdownDiagnosticSink): void {
+function reportDroppedPackageTables(
+  documentPackage: DocumentTree,
+  definitionsRendered: boolean,
+  sink: MarkdownDiagnosticSink,
+): void {
   const definitions = documentPackage.definitions;
-  const unrenderableDefinitions = definitions !== undefined && !definitionsRendered && Object.keys(definitions).length > 0;
+  const unrenderableDefinitions =
+    definitions !== undefined &&
+    !definitionsRendered &&
+    Object.keys(definitions).length > 0;
   const tables: readonly (readonly [name: string, present: boolean])[] = [
-    ['definitions', unrenderableDefinitions],
-    ['layers', documentPackage.layers !== undefined && Object.keys(documentPackage.layers).length > 0],
-    ['attachments', documentPackage.attachments !== undefined && Object.keys(documentPackage.attachments).length > 0],
-    ['destinations', documentPackage.destinations !== undefined && Object.keys(documentPackage.destinations).length > 0],
-    ['pages', documentPackage.pages !== undefined && documentPackage.pages.length > 0],
+    ["definitions", unrenderableDefinitions],
+    [
+      "layers",
+      documentPackage.layers !== undefined &&
+        Object.keys(documentPackage.layers).length > 0,
+    ],
+    [
+      "attachments",
+      documentPackage.attachments !== undefined &&
+        Object.keys(documentPackage.attachments).length > 0,
+    ],
+    [
+      "destinations",
+      documentPackage.destinations !== undefined &&
+        Object.keys(documentPackage.destinations).length > 0,
+    ],
+    [
+      "pages",
+      documentPackage.pages !== undefined && documentPackage.pages.length > 0,
+    ],
   ];
   for (const [name, present] of tables) {
     if (!present) continue;
     sink({
       code: MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED,
-      severity: 'info',
+      severity: "info",
       message: `the package's own "${name}" table has no markdown representation; flattenTree's envelope carries forward only metadata and symbolTable, so "${name}" is dropped rather than rendered`,
     });
   }
@@ -67,13 +105,24 @@ function reportDroppedPackageTables(documentPackage: DocumentTree, definitionsRe
 // The tree-form DocumentTree -> markdown source text. The abort check is here as well as in writeMarkdownContent because flattening is real work done before that delegated check would run, and an already-aborted call should not perform it.
 //
 // Two tree-only facts render here ahead of flattening, both the write-side inverse of src/read.ts's splices: this package's own link-tenant definitions render as `[label]: destination "title"` lines appended after the body, and the package-level frontmatter residue (the verbatim original block) replaces the metadata-generated front matter when frontMatter: true asks for one at all -- the restorable tier's exact mechanism, the same-format writer re-emitting its own residue as-is.
-export function writeMarkdown(documentPackage: DocumentTree, options: WriteMarkdownOptions = {}): string {
+export function writeMarkdown(
+  documentPackage: DocumentTree,
+  options: WriteMarkdownOptions = {},
+): string {
   options.signal?.throwIfAborted();
-  if (documentPackage.kind !== 'wordprocessing') throw new MarkdownUnsupportedDocumentKindError(documentPackage.kind);
+  if (documentPackage.kind !== "wordprocessing")
+    throw new MarkdownUnsupportedDocumentKindError(documentPackage.kind);
 
   const sink = options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
-  const definitionsBlock = documentPackage.definitions === undefined ? undefined : renderLinkDefinitions(documentPackage.definitions);
-  reportDroppedPackageTables(documentPackage, definitionsBlock !== undefined, sink);
+  const definitionsBlock =
+    documentPackage.definitions === undefined
+      ? undefined
+      : renderLinkDefinitions(documentPackage.definitions);
+  reportDroppedPackageTables(
+    documentPackage,
+    definitionsBlock !== undefined,
+    sink,
+  );
 
   let flattened: ContentDocument;
   try {
@@ -81,15 +130,31 @@ export function writeMarkdown(documentPackage: DocumentTree, options: WriteMarkd
   } catch (error) {
     throw new MarkdownPackageFlattenError(error);
   }
-  const body = writeMarkdownContent(flattened, { ...options, frontMatter: false });
+  const body = writeMarkdownContent(flattened, {
+    ...options,
+    frontMatter: false,
+  });
   const frontMatterResidue = documentPackage.source?.frontmatter;
-  const frontMatter = options.frontMatter === true ? (frontMatterResidue?.format === 'markdown' ? frontMatterResidue.xml : emitFrontMatter(flattened.metadata)) : undefined;
-  const withFrontMatter = frontMatter === undefined ? body : `${frontMatter}\n\n${body}`;
-  return definitionsBlock === undefined ? withFrontMatter : (withFrontMatter.length > 0 ? `${withFrontMatter}\n\n${definitionsBlock}` : definitionsBlock);
+  const frontMatter =
+    options.frontMatter === true
+      ? frontMatterResidue?.format === "markdown"
+        ? frontMatterResidue.xml
+        : emitFrontMatter(flattened.metadata)
+      : undefined;
+  const withFrontMatter =
+    frontMatter === undefined ? body : `${frontMatter}\n\n${body}`;
+  return definitionsBlock === undefined
+    ? withFrontMatter
+    : withFrontMatter.length > 0
+      ? `${withFrontMatter}\n\n${definitionsBlock}`
+      : definitionsBlock;
 }
 
 // The flat ContentDocument -> markdown source text, without the tree transform. The level documents.js's own conversion pipeline writes at, and the one to use when a caller already holds flat content rather than a package.
-export function writeMarkdownContent(document: ContentDocument, options: WriteMarkdownOptions = {}): string {
+export function writeMarkdownContent(
+  document: ContentDocument,
+  options: WriteMarkdownOptions = {},
+): string {
   options.signal?.throwIfAborted();
   return emitMarkdown(document, options);
 }

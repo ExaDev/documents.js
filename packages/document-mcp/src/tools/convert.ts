@@ -1,12 +1,23 @@
-import type { McpServer } from '@modelcontextprotocol/server';
-import { base64ToBytes, createLocalDocumentConverter, DocumentFormatSchema, type FontSubstitution } from 'documents.js';
-import { z } from 'zod';
-import { DocumentInputSchema, resolveDocumentInput } from '../io/document-input';
-import { DocumentOutputSchema, resolveDocumentOutput } from '../io/document-output';
+import type { McpServer } from "@modelcontextprotocol/server";
+import {
+  base64ToBytes,
+  createLocalDocumentConverter,
+  DocumentFormatSchema,
+  type FontSubstitution,
+} from "documents.js";
+import { z } from "zod";
+import {
+  DocumentInputSchema,
+  resolveDocumentInput,
+} from "../io/document-input";
+import {
+  DocumentOutputSchema,
+  resolveDocumentOutput,
+} from "../io/document-output";
 
 // Mirrors document-schema.js's own `Diagnostic` (re-exported as a type-only `Diagnostic` from documents.js, with no accompanying Zod schema) -- the shape every DocumentConverter.convert() result reports through `diagnostics`, regardless of source/target format.
 const DiagnosticSchema = z.object({
-  severity: z.enum(['info', 'warning']),
+  severity: z.enum(["info", "warning"]),
   code: z.string(),
   message: z.string(),
   pageIndex: z.number().optional(),
@@ -17,47 +28,57 @@ const FontSubstitutionSchema = z.object({
   requestedFamily: z.string(),
   requestedBold: z.boolean(),
   requestedItalic: z.boolean(),
-  reason: z.enum(['missing-face', 'vendored-substitute']),
+  reason: z.enum(["missing-face", "vendored-substitute"]),
   resolvedFamily: z.string(),
 });
 
 // Mirrors ../io/document-output's `ResolvedDocumentOutput` union (`WrittenDocumentOutput | InlineDocumentOutput`) -- that module exports the type but not a Zod schema for it.
 const ResolvedDocumentOutputSchema = z.union([
   z.object({ path: z.string(), byteLength: z.number() }),
-  z.object({ bytesBase64: z.string(), byteLength: z.number(), large: z.literal(true).optional() }),
+  z.object({
+    bytesBase64: z.string(),
+    byteLength: z.number(),
+    large: z.literal(true).optional(),
+  }),
 ]);
 
 // A caller-supplied extra font face -- pdf-codec's `ProvidedFont` with its raw `bytes` field replaced by `bytesBase64`, matching DocumentInputSchema's own inline-bytes naming convention.
 const FontInputSchema = z.object({
-  family: z.string().describe('The font family name this face provides.'),
-  bold: z.boolean().describe('Whether this face is the bold weight.'),
-  italic: z.boolean().describe('Whether this face is the italic slope.'),
-  bytesBase64: z.string().describe('Base64-encoded font program bytes (TrueType/OpenType/CFF) for this family/weight/style combination.'),
+  family: z.string().describe("The font family name this face provides."),
+  bold: z.boolean().describe("Whether this face is the bold weight."),
+  italic: z.boolean().describe("Whether this face is the italic slope."),
+  bytesBase64: z
+    .string()
+    .describe(
+      "Base64-encoded font program bytes (TrueType/OpenType/CFF) for this family/weight/style combination.",
+    ),
 });
 
 const ConvertDocumentInputSchema = z.object({
-  source: DocumentInputSchema.describe('The document to convert.'),
+  source: DocumentInputSchema.describe("The document to convert."),
   targetFormat: DocumentFormatSchema.describe(
-    'The format to convert the document to. Not every (source, targetFormat) pair is supported directly -- call list_document_conversions first to confirm this one is.',
+    "The format to convert the document to. Not every (source, targetFormat) pair is supported directly -- call list_document_conversions first to confirm this one is.",
   ),
-  output: DocumentOutputSchema.optional().describe('Where to write the converted document. Omit entirely to receive the bytes inline, base64-encoded, instead.'),
+  output: DocumentOutputSchema.optional().describe(
+    "Where to write the converted document. Omit entirely to receive the bytes inline, base64-encoded, instead.",
+  ),
   fonts: z
     .array(FontInputSchema)
     .optional()
     .describe(
-      'Extra font faces to make available to the conversion, for a family the source document does not already embed. Only consulted by a conversion that runs a layout engine (a <format>-to-pdf conversion); every other conversion ignores this option entirely.',
+      "Extra font faces to make available to the conversion, for a family the source document does not already embed. Only consulted by a conversion that runs a layout engine (a <format>-to-pdf conversion); every other conversion ignores this option entirely.",
     ),
   onSubstitutionDiagnostics: z
     .boolean()
     .optional()
     .describe(
-      'When true, additionally report each individual font-substitution event as structured fontSubstitutions (which family/weight/style was requested, what it resolved to instead, and why). Every substitution is always reported as a plain diagnostic in `diagnostics` regardless of this flag -- this only controls whether the fuller, structured event is also collected.',
+      "When true, additionally report each individual font-substitution event as structured fontSubstitutions (which family/weight/style was requested, what it resolved to instead, and why). Every substitution is always reported as a plain diagnostic in `diagnostics` regardless of this flag -- this only controls whether the fuller, structured event is also collected.",
     ),
   images: z
     .record(z.string(), z.string())
     .optional()
     .describe(
-      'A map from a markdown image destination (the part in the parentheses of ![](..)) to its base64-encoded PNG/JPEG bytes, for resolving a markdown source\'s own non-data: images. Only consulted by a markdown-sourced conversion; every other conversion ignores it. A destination absent from the map degrades to alt text, matching documents.js\'s own MarkdownImageResolver port -- an MCP caller has no filesystem context to read a relative path from, so any image that is not a data: URI must be supplied here explicitly to be embedded.',
+      "A map from a markdown image destination (the part in the parentheses of ![](..)) to its base64-encoded PNG/JPEG bytes, for resolving a markdown source's own non-data: images. Only consulted by a markdown-sourced conversion; every other conversion ignores it. A destination absent from the map degrades to alt text, matching documents.js's own MarkdownImageResolver port -- an MCP caller has no filesystem context to read a relative path from, so any image that is not a data: URI must be supplied here explicitly to be embedded.",
     ),
 });
 
@@ -71,7 +92,9 @@ export const ConvertDocumentOutputSchema = z.object({
 
 // The full structuredContent shape list_document_conversions returns -- exported for the same reason as ConvertDocumentOutputSchema above.
 export const ListDocumentConversionsOutputSchema = z.object({
-  conversions: z.array(z.object({ source: DocumentFormatSchema, target: DocumentFormatSchema })),
+  conversions: z.array(
+    z.object({ source: DocumentFormatSchema, target: DocumentFormatSchema }),
+  ),
 });
 
 export function registerConvertTools(server: McpServer): void {
@@ -79,15 +102,25 @@ export function registerConvertTools(server: McpServer): void {
   const converter = createLocalDocumentConverter();
 
   server.registerTool(
-    'convert_document',
+    "convert_document",
     {
-      title: 'Convert document',
+      title: "Convert document",
       description:
         "Converts a document from one supported format to another via documents.js's DocumentConverter port -- docx, pptx, xlsx, odt, odp, ods, odg, odf, markdown, and pdf. Not every (source, targetFormat) pair is supported directly (odf, for instance, only ever converts to pdf); call list_document_conversions first to see which pairs actually are.",
       inputSchema: ConvertDocumentInputSchema,
       outputSchema: ConvertDocumentOutputSchema,
     },
-    async ({ source, targetFormat, output, fonts, onSubstitutionDiagnostics, images }, ctx) => {
+    async (
+      {
+        source,
+        targetFormat,
+        output,
+        fonts,
+        onSubstitutionDiagnostics,
+        images,
+      },
+      ctx,
+    ) => {
       const { signal } = ctx.mcpReq;
       const { bytes, format } = await resolveDocumentInput(source, { signal });
 
@@ -96,44 +129,74 @@ export function registerConvertTools(server: McpServer): void {
         { source: { format, bytes }, targetFormat },
         {
           signal,
-          fonts: fonts?.map((font) => ({ family: font.family, bold: font.bold, italic: font.italic, bytes: base64ToBytes(font.bytesBase64) })),
+          fonts: fonts?.map((font) => ({
+            family: font.family,
+            bold: font.bold,
+            italic: font.italic,
+            bytes: base64ToBytes(font.bytesBase64),
+          })),
           // Only wired under the flag: the local converter already records every substitution as a `font/substituted` Diagnostic in result.diagnostics below regardless of whether a callback is supplied, so an unconditional callback here would report the same event twice, once per channel.
-          onFontSubstitution: onSubstitutionDiagnostics === true ? (substitution: FontSubstitution) => fontSubstitutions.push(substitution) : undefined,
+          onFontSubstitution:
+            onSubstitutionDiagnostics === true
+              ? (substitution: FontSubstitution) =>
+                  fontSubstitutions.push(substitution)
+              : undefined,
           // An MCP caller has no filesystem context, so it supplies any non-data: markdown image bytes explicitly as a destination -> base64 map; a destination absent from the map degrades to alt text, exactly as documents.js's MarkdownImageResolver port defines.
-          images: images === undefined ? undefined : (destination: string) => {
-            const base64 = images[destination];
-            return base64 === undefined ? undefined : { bytes: base64ToBytes(base64) };
-          },
+          images:
+            images === undefined
+              ? undefined
+              : (destination: string) => {
+                  const base64 = images[destination];
+                  return base64 === undefined
+                    ? undefined
+                    : { bytes: base64ToBytes(base64) };
+                },
         },
       );
 
-      const resolvedOutput = await resolveDocumentOutput(result.document.bytes, output ?? {});
+      const resolvedOutput = await resolveDocumentOutput(
+        result.document.bytes,
+        output ?? {},
+      );
 
       const structuredContent: z.infer<typeof ConvertDocumentOutputSchema> = {
         targetFormat: result.document.format,
         output: resolvedOutput,
         diagnostics: [...result.diagnostics],
-        ...(onSubstitutionDiagnostics === true ? { fontSubstitutions: [...fontSubstitutions] } : {}),
+        ...(onSubstitutionDiagnostics === true
+          ? { fontSubstitutions: [...fontSubstitutions] }
+          : {}),
       };
 
-      return { content: [{ type: 'text', text: JSON.stringify(structuredContent) }], structuredContent };
+      return {
+        content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+        structuredContent,
+      };
     },
   );
 
   server.registerTool(
-    'list_document_conversions',
+    "list_document_conversions",
     {
-      title: 'List document conversions',
+      title: "List document conversions",
       description:
         "Lists every (source, target) format pair convert_document actually supports, straight from documents.js's own DocumentConverter port -- the definitive source of truth for what convert_document will and will not accept as a (source, targetFormat) combination.",
       outputSchema: ListDocumentConversionsOutputSchema,
     },
     () => {
-      const structuredContent: z.infer<typeof ListDocumentConversionsOutputSchema> = {
-        conversions: converter.conversions.map((conversion) => ({ source: conversion.source, target: conversion.target })),
+      const structuredContent: z.infer<
+        typeof ListDocumentConversionsOutputSchema
+      > = {
+        conversions: converter.conversions.map((conversion) => ({
+          source: conversion.source,
+          target: conversion.target,
+        })),
       };
 
-      return { content: [{ type: 'text', text: JSON.stringify(structuredContent) }], structuredContent };
+      return {
+        content: [{ type: "text", text: JSON.stringify(structuredContent) }],
+        structuredContent,
+      };
     },
   );
 }

@@ -1,10 +1,13 @@
-import type { XmlElement } from '../../model/node';
-import type { Package } from '../../model/package';
-import { findChildElement, rootElement } from '../../xml/query';
-import { readOdtContent, type OdtDocument } from '../odt/read';
-import { resolveOdbComponent } from './read';
-import { subDocumentPackage } from './subdocument';
-import { readOdfFormDefinitions, type OdbFormDefinition } from '../shared/forms';
+import type { XmlElement } from "../../model/node";
+import type { Package } from "../../model/package";
+import { findChildElement, rootElement } from "../../xml/query";
+import { readOdtContent, type OdtDocument } from "../odt/read";
+import { resolveOdbComponent } from "./read";
+import { subDocumentPackage } from "./subdocument";
+import {
+  readOdfFormDefinitions,
+  type OdbFormDefinition,
+} from "../shared/forms";
 
 // A .odb form sub-document -> its ordinary ODF text content PLUS its office:forms/form:form control tree. STATIC STRUCTURE ONLY: nothing here executes SQL, opens a connection, resolves a control's runtime value, or evaluates a list box's own value list -- a form's real rendered content only exists once a live database engine has answered its query, which is categorically out of scope for this package (see typed/odb/read.ts's own top-of-file note for the same boundary applied to the inventory).
 //
@@ -30,23 +33,36 @@ export interface OdbForm {
   forms: OdbFormDefinition[];
 }
 
-const CONTENT_PART = 'content.xml';
+const CONTENT_PART = "content.xml";
 
 // office:text/office:forms' own top-level form:form children, through typed/shared/forms.ts's walker (the same walk the odt reader maps onto content controls). An office:text with no office:forms element at all (a form sub-document whose designer deleted every control, or an ordinary .odt read through this same path) yields an empty array rather than throwing -- the text content is still perfectly readable, so this degrades rather than failing, matching this package's general "malformed-but-salvageable degrades" posture.
-function readFormDefinitions(contentRoot: XmlElement | undefined): OdbFormDefinition[] {
-  const body = contentRoot === undefined ? undefined : findChildElement(contentRoot.children, 'office:body');
-  const text = body === undefined ? undefined : findChildElement(body.children, 'office:text');
-  const forms = text === undefined ? undefined : findChildElement(text.children, 'office:forms');
+function readFormDefinitions(
+  contentRoot: XmlElement | undefined,
+): OdbFormDefinition[] {
+  const body =
+    contentRoot === undefined
+      ? undefined
+      : findChildElement(contentRoot.children, "office:body");
+  const text =
+    body === undefined
+      ? undefined
+      : findChildElement(body.children, "office:text");
+  const forms =
+    text === undefined
+      ? undefined
+      : findChildElement(text.children, "office:forms");
   return forms === undefined ? [] : readOdfFormDefinitions(forms);
 }
 
 // Package + a form's own db:forms/db:component name -> OdbForm. Throws when the .odb declares no form by that name, or when the sub-document its db:component points at is missing from the package -- both are genuinely unusable references rather than salvageable degradations, matching every other typed reader's own "missing required structural element" throw convention.
 export function readOdbForm(pkg: Package, formName: string): OdbForm {
-  const component = resolveOdbComponent(pkg, 'form', formName);
+  const component = resolveOdbComponent(pkg, "form", formName);
   const subPackage = subDocumentPackage(pkg, component.href);
   const contentPart = subPackage.parts[CONTENT_PART];
-  if (contentPart?.kind !== 'xml') {
-    throw new Error(`readOdbForm: form "${formName}" sub-document ${component.href}/${CONTENT_PART} is not an XML part`);
+  if (contentPart?.kind !== "xml") {
+    throw new Error(
+      `readOdbForm: form "${formName}" sub-document ${component.href}/${CONTENT_PART} is not an XML part`,
+    );
   }
   return {
     name: component.name,

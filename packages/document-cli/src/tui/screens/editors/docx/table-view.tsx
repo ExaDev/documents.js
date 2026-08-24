@@ -1,9 +1,12 @@
-import { Box, Text, useInput } from 'ink';
-import { useState, type ReactElement } from 'react';
-import { useAppDispatch, useAppState } from '../../../state/context.js';
-import { anyOverlayOpen, currentScreen } from '../../../state/types.js';
-import { liveTableAt, paragraphFamilyDocument } from '../../shared/paragraph-family.js';
-import { truncatePreview } from '../../shared/text.js';
+import { Box, Text, useInput } from "ink";
+import { useState, type ReactElement } from "react";
+import { useAppDispatch, useAppState } from "../../../state/context.js";
+import { anyOverlayOpen, currentScreen } from "../../../state/types.js";
+import {
+  liveTableAt,
+  paragraphFamilyDocument,
+} from "../../shared/paragraph-family.js";
+import { truncatePreview } from "../../shared/text.js";
 
 const CELL_WIDTH = 16;
 
@@ -19,48 +22,70 @@ export function TableViewScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const [cursor, setCursor] = useState({ row: 0, column: 0 });
-  const [mergeAnchor, setMergeAnchor] = useState<CellAddress | undefined>(undefined);
+  const [mergeAnchor, setMergeAnchor] = useState<CellAddress | undefined>(
+    undefined,
+  );
 
   const screen = currentScreen(state);
   const doc = paragraphFamilyDocument(state.openDocument);
-  const table = screen.kind === 'tableView' && doc !== undefined ? liveTableAt(doc, screen.blockIndex) : undefined;
+  const table =
+    screen.kind === "tableView" && doc !== undefined
+      ? liveTableAt(doc, screen.blockIndex)
+      : undefined;
   const rows = table === undefined ? [] : table.rows();
   const rowCount = rows.length;
   const columnCount = rows[0]?.cells().length ?? 0;
   const clampedRow = rowCount === 0 ? 0 : Math.min(cursor.row, rowCount - 1);
-  const clampedColumn = columnCount === 0 ? 0 : Math.min(cursor.column, columnCount - 1);
+  const clampedColumn =
+    columnCount === 0 ? 0 : Math.min(cursor.column, columnCount - 1);
 
   const commitMerge = (anchor: CellAddress): void => {
-    if (screen.kind !== 'tableView') {
+    if (screen.kind !== "tableView") {
       return;
     }
     const startRow = Math.min(anchor.row, clampedRow);
     const startColumn = Math.min(anchor.column, clampedColumn);
     const rowSpan = Math.abs(clampedRow - anchor.row) + 1;
     const colSpan = Math.abs(clampedColumn - anchor.column) + 1;
-    dispatch({ type: 'MERGE_TABLE_CELLS', tableIndex: screen.blockIndex, startRow, startColumn, rowSpan, colSpan });
+    dispatch({
+      type: "MERGE_TABLE_CELLS",
+      tableIndex: screen.blockIndex,
+      startRow,
+      startColumn,
+      rowSpan,
+      colSpan,
+    });
     setMergeAnchor(undefined);
   };
 
   useInput(
     (input, key) => {
-      if (table === undefined || screen.kind !== 'tableView') {
+      if (table === undefined || screen.kind !== "tableView") {
         return;
       }
-      if (key.upArrow || input === 'k') {
+      if (key.upArrow || input === "k") {
         setCursor({ row: Math.max(0, clampedRow - 1), column: clampedColumn });
         return;
       }
-      if (key.downArrow || input === 'j') {
-        setCursor({ row: rowCount === 0 ? 0 : Math.min(rowCount - 1, clampedRow + 1), column: clampedColumn });
+      if (key.downArrow || input === "j") {
+        setCursor({
+          row: rowCount === 0 ? 0 : Math.min(rowCount - 1, clampedRow + 1),
+          column: clampedColumn,
+        });
         return;
       }
-      if (key.leftArrow || input === 'h') {
+      if (key.leftArrow || input === "h") {
         setCursor({ row: clampedRow, column: Math.max(0, clampedColumn - 1) });
         return;
       }
-      if (key.rightArrow || input === 'l') {
-        setCursor({ row: clampedRow, column: columnCount === 0 ? 0 : Math.min(columnCount - 1, clampedColumn + 1) });
+      if (key.rightArrow || input === "l") {
+        setCursor({
+          row: clampedRow,
+          column:
+            columnCount === 0
+              ? 0
+              : Math.min(columnCount - 1, clampedColumn + 1),
+        });
         return;
       }
       if (key.escape) {
@@ -68,10 +93,10 @@ export function TableViewScreen(): ReactElement {
           setMergeAnchor(undefined);
           return;
         }
-        dispatch({ type: 'POP_SCREEN' });
+        dispatch({ type: "POP_SCREEN" });
         return;
       }
-      if (input === 'm' && rowCount > 0 && columnCount > 0) {
+      if (input === "m" && rowCount > 0 && columnCount > 0) {
         if (mergeAnchor === undefined) {
           setMergeAnchor({ row: clampedRow, column: clampedColumn });
         } else {
@@ -84,20 +109,38 @@ export function TableViewScreen(): ReactElement {
           commitMerge(mergeAnchor);
           return;
         }
-        dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'tableCellDetail', blockIndex: screen.blockIndex, row: clampedRow, col: clampedColumn } });
+        dispatch({
+          type: "PUSH_SCREEN",
+          screen: {
+            kind: "tableCellDetail",
+            blockIndex: screen.blockIndex,
+            row: clampedRow,
+            col: clampedColumn,
+          },
+        });
       }
     },
     { isActive: !anyOverlayOpen(state) },
   );
 
-  if (screen.kind !== 'tableView') {
-    return <Text color="red">TableViewScreen rendered outside a tableView screen.</Text>;
+  if (screen.kind !== "tableView") {
+    return (
+      <Text color="red">
+        TableViewScreen rendered outside a tableView screen.
+      </Text>
+    );
   }
   if (doc === undefined) {
-    return <Text color="red">TableViewScreen requires an open docx, odt or markdown document.</Text>;
+    return (
+      <Text color="red">
+        TableViewScreen requires an open docx, odt or markdown document.
+      </Text>
+    );
   }
   if (table === undefined) {
-    return <Text color="red">There is no table at index {screen.blockIndex}.</Text>;
+    return (
+      <Text color="red">There is no table at index {screen.blockIndex}.</Text>
+    );
   }
 
   return (
@@ -111,11 +154,24 @@ export function TableViewScreen(): ReactElement {
         rows.map((row, rowIndex) => (
           <Box key={rowIndex}>
             {row.cells().map((cell, columnIndex) => {
-              const isSelected = rowIndex === clampedRow && columnIndex === clampedColumn;
-              const isAnchor = rowIndex === mergeAnchor?.row && columnIndex === mergeAnchor.column;
+              const isSelected =
+                rowIndex === clampedRow && columnIndex === clampedColumn;
+              const isAnchor =
+                rowIndex === mergeAnchor?.row &&
+                columnIndex === mergeAnchor.column;
               return (
-                <Box key={columnIndex} width={CELL_WIDTH} borderStyle="single" borderColor={isSelected ? 'cyan' : isAnchor ? 'yellow' : 'gray'}>
-                  <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>
+                <Box
+                  key={columnIndex}
+                  width={CELL_WIDTH}
+                  borderStyle="single"
+                  borderColor={
+                    isSelected ? "cyan" : isAnchor ? "yellow" : "gray"
+                  }
+                >
+                  <Text
+                    color={isSelected ? "cyan" : undefined}
+                    inverse={isSelected}
+                  >
                     {truncatePreview(cell.text, CELL_WIDTH - 2)}
                   </Text>
                 </Box>
@@ -124,7 +180,11 @@ export function TableViewScreen(): ReactElement {
           </Box>
         ))
       )}
-      <Text dimColor>{mergeAnchor === undefined ? 'Arrows/hjkl move, Enter to edit a cell, m to anchor a merge, Esc back' : 'Arrows/hjkl to the opposite corner, m/Enter to merge, Esc to cancel'}</Text>
+      <Text dimColor>
+        {mergeAnchor === undefined
+          ? "Arrows/hjkl move, Enter to edit a cell, m to anchor a merge, Esc back"
+          : "Arrows/hjkl to the opposite corner, m/Enter to merge, Esc to cancel"}
+      </Text>
     </Box>
   );
 }

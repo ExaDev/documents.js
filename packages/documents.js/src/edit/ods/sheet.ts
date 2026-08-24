@@ -1,15 +1,29 @@
-import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { parseCellReference } from 'document-schema.js';
-import { attr } from 'ooxml.js';
-import type { ContentEmbeddedObject, ContentSheetImage, ContentSheetPrintSettings } from 'document-schema.js';
-import { removeChild, setAttr } from '../../xml/edit';
-import { COVERED_CELL_TAG, resolveCellNode } from './address';
-import { OdsCell } from './cell';
-import { ensureColumnDefaultWidth, ensureRowDefaultHeight, writeColumnHidden, writeColumnWidth, writeRowHeight, writeRowHidden } from './column-row';
-import { insertSheetEmbeddedObject, insertSheetImage } from './floating';
-import { readSheetPrintSettings, writeSheetPrintSettings } from './print-settings';
+import type { Package, XmlElement, XmlNode } from "odf.js";
+import { parseCellReference } from "document-schema.js";
+import { attr } from "ooxml.js";
+import type {
+  ContentEmbeddedObject,
+  ContentSheetImage,
+  ContentSheetPrintSettings,
+} from "document-schema.js";
+import { removeChild, setAttr } from "../../xml/edit";
+import { COVERED_CELL_TAG, resolveCellNode } from "./address";
+import { OdsCell } from "./cell";
+import {
+  ensureColumnDefaultWidth,
+  ensureRowDefaultHeight,
+  writeColumnHidden,
+  writeColumnWidth,
+  writeRowHeight,
+  writeRowHidden,
+} from "./column-row";
+import { insertSheetEmbeddedObject, insertSheetImage } from "./floating";
+import {
+  readSheetPrintSettings,
+  writeSheetPrintSettings,
+} from "./print-settings";
 
-const NAME_ATTR = 'table:name';
+const NAME_ATTR = "table:name";
 
 // A live view over a table:table element -- see odt/table.ts's own top-of-file rationale for the same live-view pattern. cell/cellAt are the ONLY way this editor ever reaches a table:table-cell: both route through address.ts's resolveCellNode, which individuates (splitting a repeated run, or gap-filling with a placeholder run, per address.ts's own top-of-file note) rather than ever materializing every position between a sheet's current content and the address a caller actually asked for.
 export class OdsSheet {
@@ -26,7 +40,9 @@ export class OdsSheet {
 
   private live(): XmlElement {
     if (this.removed) {
-      throw new Error('this OdsSheet has been removed from the spreadsheet and can no longer be used');
+      throw new Error(
+        "this OdsSheet has been removed from the spreadsheet and can no longer be used",
+      );
     }
     return this.node;
   }
@@ -34,7 +50,7 @@ export class OdsSheet {
   get name(): string {
     const value = attr(this.live(), NAME_ATTR);
     if (value === undefined) {
-      throw new Error('this table:table element has no table:name attribute');
+      throw new Error("this table:table element has no table:name attribute");
     }
     return value;
   }
@@ -87,7 +103,9 @@ export class OdsSheet {
     const tableElement = this.live();
     const node = resolveCellNode(tableElement, row, column);
     if (node.tag === COVERED_CELL_TAG) {
-      throw new Error(`cell (${row}, ${column}) is covered by a merged range -- address the merge's own anchor cell instead`);
+      throw new Error(
+        `cell (${row}, ${column}) is covered by a merged range -- address the merge's own anchor cell instead`,
+      );
     }
     ensureColumnDefaultWidth(this.pkg, tableElement, column);
     ensureRowDefaultHeight(this.pkg, tableElement, row);
@@ -98,40 +116,64 @@ export class OdsSheet {
   cellAt(reference: string): OdsCell {
     const parsed = parseCellReference(reference);
     if (parsed === undefined) {
-      throw new Error(`cellAt: "${reference}" is not a valid A1-style cell reference`);
+      throw new Error(
+        `cellAt: "${reference}" is not a valid A1-style cell reference`,
+      );
     }
     return this.cell(parsed.row, parsed.column);
   }
 
   // Merges the rowSpan x colSpan rectangle anchored at (startRow, startColumn): the anchor cell gets table:number-rows-spanned/table:number-columns-spanned (only written when >1, matching how an unmerged cell carries neither attribute at all), and every OTHER covered position in the rectangle is stamped as a table:covered-table-cell -- ODF's own required marker for "this position's content lives at the anchor", never a real table:table-cell of its own (see odf.js's own readOdsContent comment: "the anchor cell's own colSpan/rowSpan already communicates the merge; nothing to emit" for a covered cell it reads back). Returns the anchor as an OdsCell so a caller can set its value/formula/displayText via the same chain. Each covered position is resolved (and, if it fell inside a repeated run, individuated) via the exact same resolveCellNode every ordinary cell() call uses, so REACHING a huge sparse rectangle is exactly as cheap as writing to its own anchor cell alone -- but stamping it is genuinely O(rowSpan x colSpan), not O(1): unlike a single cell write, every covered position needs its own real table:covered-table-cell marker (this does not compress the covered run itself via table:number-columns-repeated), so a very large merge (a hundred rows by a hundred columns, say) does real, proportional work, just never work proportional to how far from the sheet's origin that rectangle sits.
-  mergeCells(startRow: number, startColumn: number, rowSpan: number, colSpan: number): OdsCell {
-    if (!Number.isInteger(rowSpan) || rowSpan < 1 || !Number.isInteger(colSpan) || colSpan < 1) {
-      throw new Error(`mergeCells: rowSpan and colSpan must be positive integers, got rowSpan=${rowSpan}, colSpan=${colSpan}`);
+  mergeCells(
+    startRow: number,
+    startColumn: number,
+    rowSpan: number,
+    colSpan: number,
+  ): OdsCell {
+    if (
+      !Number.isInteger(rowSpan) ||
+      rowSpan < 1 ||
+      !Number.isInteger(colSpan) ||
+      colSpan < 1
+    ) {
+      throw new Error(
+        `mergeCells: rowSpan and colSpan must be positive integers, got rowSpan=${rowSpan}, colSpan=${colSpan}`,
+      );
     }
     const tableElement = this.live();
     const anchorNode = resolveCellNode(tableElement, startRow, startColumn);
     if (anchorNode.tag === COVERED_CELL_TAG) {
-      throw new Error(`mergeCells: (${startRow}, ${startColumn}) is already covered by another merged range`);
+      throw new Error(
+        `mergeCells: (${startRow}, ${startColumn}) is already covered by another merged range`,
+      );
     }
     // mergeCells never routes through cell() itself, so every distinct row/column the merge's own rectangle covers needs the same default-width/height stamping cell() applies -- once per distinct index, not once per cell.
     for (let rowOffset = 0; rowOffset < rowSpan; rowOffset++) {
       ensureRowDefaultHeight(this.pkg, tableElement, startRow + rowOffset);
     }
     for (let columnOffset = 0; columnOffset < colSpan; columnOffset++) {
-      ensureColumnDefaultWidth(this.pkg, tableElement, startColumn + columnOffset);
+      ensureColumnDefaultWidth(
+        this.pkg,
+        tableElement,
+        startColumn + columnOffset,
+      );
     }
     if (rowSpan > 1) {
-      setAttr(anchorNode, 'table:number-rows-spanned', String(rowSpan));
+      setAttr(anchorNode, "table:number-rows-spanned", String(rowSpan));
     }
     if (colSpan > 1) {
-      setAttr(anchorNode, 'table:number-columns-spanned', String(colSpan));
+      setAttr(anchorNode, "table:number-columns-spanned", String(colSpan));
     }
     for (let rowOffset = 0; rowOffset < rowSpan; rowOffset++) {
       for (let columnOffset = 0; columnOffset < colSpan; columnOffset++) {
         if (rowOffset === 0 && columnOffset === 0) {
           continue;
         }
-        const coveredNode = resolveCellNode(tableElement, startRow + rowOffset, startColumn + columnOffset);
+        const coveredNode = resolveCellNode(
+          tableElement,
+          startRow + rowOffset,
+          startColumn + columnOffset,
+        );
         coveredNode.tag = COVERED_CELL_TAG;
         coveredNode.attributes = [];
         coveredNode.children = [];

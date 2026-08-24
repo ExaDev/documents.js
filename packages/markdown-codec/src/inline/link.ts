@@ -1,7 +1,7 @@
 // Link-syntax primitives shared by three callers that must agree exactly or reference resolution silently breaks: the inline phase's own inline-link parsing (`[text](dest "title")`), its reference-link resolution (`[text][label]`, `[text][]`, `[text]`), and the block phase's link-reference-definition scanning (`[label]: dest "title"`, not yet written -- see LinkReferenceMap below). A link label written by the block phase and a label read by the inline phase must normalise identically, so normalisation lives here once rather than being restated on each side.
 
-import { isAsciiControl, isMarkdownSpace } from './chars';
-import { unescapeString } from './entity';
+import { isAsciiControl, isMarkdownSpace } from "./chars";
+import { unescapeString } from "./entity";
 
 export interface LinkReferenceDefinition {
   readonly destination: string;
@@ -20,29 +20,29 @@ const MAX_LINK_LABEL_LENGTH = 999;
 export function normalizeLinkLabel(labelWithBrackets: string): string {
   return labelWithBrackets
     .slice(1, labelWithBrackets.length - 1)
-    .replace(/^[ \t\r\n]+/, '')
-    .replace(/[ \t\r\n]+$/, '')
-    .replace(/[ \t\r\n]+/g, ' ')
+    .replace(/^[ \t\r\n]+/, "")
+    .replace(/[ \t\r\n]+$/, "")
+    .replace(/[ \t\r\n]+/g, " ")
     .toLowerCase()
     .toUpperCase();
 }
 
 // Matches a link label starting at `start` (which must be the `[`), returning the length INCLUDING both brackets, or 0 when what follows is not a valid label. spec 0.31.2: a label "begins with a left bracket and ends with the first right bracket that is not backslash-escaped"; unescaped square brackets are not allowed between them. A zero-length or all-whitespace label is still matched here (length 2 for `[]`) -- distinguishing an empty label (a COLLAPSED reference) from a real one is the caller's job, and the two need different handling.
 export function matchLinkLabel(text: string, start: number): number {
-  if (text.charAt(start) !== '[') {
+  if (text.charAt(start) !== "[") {
     return 0;
   }
   let index = start + 1;
   while (index < text.length) {
     const char = text.charAt(index);
-    if (char === '\\') {
+    if (char === "\\") {
       index += 2;
       continue;
     }
-    if (char === '[') {
+    if (char === "[") {
       return 0;
     }
-    if (char === ']') {
+    if (char === "]") {
       const length = index + 1 - start;
       return length - 2 > MAX_LINK_LABEL_LENGTH ? 0 : length;
     }
@@ -57,20 +57,26 @@ export interface ParsedSpan {
 }
 
 // spec 0.31.2: a link destination is either "a sequence of zero or more characters between an opening `<` and a closing `>` that contains no line endings or unescaped `<` or `>` characters", or "a nonempty sequence of characters that does not start with `<`, does not include ASCII control characters or space, and includes parentheses only if (a) they are backslash-escaped or (b) they are part of a balanced pair of unescaped parentheses". Returns the UNESCAPED destination (backslash escapes and character references resolved) -- percent-encoding for an HTML `href` is a rendering concern, not a parse-time one, so the value here stays the author's own text and writeMarkdown can emit it back unchanged.
-export function parseLinkDestination(text: string, start: number): ParsedSpan | undefined {
-  if (text.charAt(start) === '<') {
+export function parseLinkDestination(
+  text: string,
+  start: number,
+): ParsedSpan | undefined {
+  if (text.charAt(start) === "<") {
     let index = start + 1;
     while (index < text.length) {
       const char = text.charAt(index);
-      if (char === '\\') {
+      if (char === "\\") {
         index += 2;
         continue;
       }
-      if (char === '\n' || char === '<') {
+      if (char === "\n" || char === "<") {
         return undefined;
       }
-      if (char === '>') {
-        return { value: unescapeString(text.slice(start + 1, index)), end: index + 1 };
+      if (char === ">") {
+        return {
+          value: unescapeString(text.slice(start + 1, index)),
+          end: index + 1,
+        };
       }
       index += 1;
     }
@@ -81,16 +87,16 @@ export function parseLinkDestination(text: string, start: number): ParsedSpan | 
   let openParens = 0;
   while (index < text.length) {
     const char = text.charAt(index);
-    if (char === '\\' && text.length > index + 1) {
+    if (char === "\\" && text.length > index + 1) {
       index += 2;
       continue;
     }
-    if (char === '(') {
+    if (char === "(") {
       openParens += 1;
       index += 1;
       continue;
     }
-    if (char === ')') {
+    if (char === ")") {
       if (openParens === 0) {
         break;
       }
@@ -98,7 +104,7 @@ export function parseLinkDestination(text: string, start: number): ParsedSpan | 
       index += 1;
       continue;
     }
-    if (char === ' ' || isAsciiControl(char)) {
+    if (char === " " || isAsciiControl(char)) {
       break;
     }
     index += 1;
@@ -107,7 +113,7 @@ export function parseLinkDestination(text: string, start: number): ParsedSpan | 
     return undefined;
   }
   // An empty destination is legal only in the `<>` form handled above; a bare empty run means there was no destination here at all. The one exception is an immediately-following `)`, which is an inline link with an omitted destination (`[link]()`).
-  if (index === start && text.charAt(index) !== ')') {
+  if (index === start && text.charAt(index) !== ")") {
     return undefined;
   }
   return { value: unescapeString(text.slice(start, index)), end: index };
@@ -116,11 +122,14 @@ export function parseLinkDestination(text: string, start: number): ParsedSpan | 
 const TITLE_DELIMITERS: ReadonlyMap<string, string> = new Map([
   ['"', '"'],
   ["'", "'"],
-  ['(', ')'],
+  ["(", ")"],
 ]);
 
 // spec 0.31.2: a link title is a run between matching `"`, `'`, or `(`/`)`, with the delimiter itself permitted inside only when backslash-escaped. The parenthesised form additionally forbids an unescaped `(` as well as an unescaped `)`, since an unbalanced open paren inside would be ambiguous with the enclosing inline link's own parentheses.
-export function parseLinkTitle(text: string, start: number): ParsedSpan | undefined {
+export function parseLinkTitle(
+  text: string,
+  start: number,
+): ParsedSpan | undefined {
   const opener = text.charAt(start);
   const closer = TITLE_DELIMITERS.get(opener);
   if (closer === undefined) {
@@ -129,14 +138,17 @@ export function parseLinkTitle(text: string, start: number): ParsedSpan | undefi
   let index = start + 1;
   while (index < text.length) {
     const char = text.charAt(index);
-    if (char === '\\') {
+    if (char === "\\") {
       index += 2;
       continue;
     }
     if (char === closer) {
-      return { value: unescapeString(text.slice(start + 1, index)), end: index + 1 };
+      return {
+        value: unescapeString(text.slice(start + 1, index)),
+        end: index + 1,
+      };
     }
-    if (opener === '(' && char === '(') {
+    if (opener === "(" && char === "(") {
       return undefined;
     }
     index += 1;
@@ -150,7 +162,7 @@ export function skipInlineWhitespace(text: string, start: number): number {
   let seenLineEnding = false;
   while (index < text.length) {
     const char = text.charAt(index);
-    if (char === '\n') {
+    if (char === "\n") {
       if (seenLineEnding) {
         break;
       }
@@ -158,7 +170,7 @@ export function skipInlineWhitespace(text: string, start: number): number {
       index += 1;
       continue;
     }
-    if (char !== ' ' && char !== '\t') {
+    if (char !== " " && char !== "\t") {
       break;
     }
     index += 1;
@@ -170,7 +182,7 @@ export function isBlankRemainderOfLine(text: string, start: number): boolean {
   let index = start;
   while (index < text.length) {
     const char = text.charAt(index);
-    if (char === '\n') {
+    if (char === "\n") {
       return true;
     }
     if (!isMarkdownSpace(char)) {

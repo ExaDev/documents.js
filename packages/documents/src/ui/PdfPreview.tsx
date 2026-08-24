@@ -1,8 +1,15 @@
-import { Badge, Group, LoadingOverlay, Paper, Stack, Text } from '@mantine/core';
+import {
+  Badge,
+  Group,
+  LoadingOverlay,
+  Paper,
+  Stack,
+  Text,
+} from "@mantine/core";
 
-import { usePdfObjectUrl } from '../hooks/usePdfObjectUrl';
-import { iframe as iframeStyle } from './PdfPreview.css';
-import { flexColumn, previewFrame } from './previewPanel.css';
+import { usePdfObjectUrl } from "../hooks/usePdfObjectUrl";
+import { iframe as iframeStyle } from "./PdfPreview.css";
+import { flexColumn, previewFrame } from "./previewPanel.css";
 
 export interface PdfPreviewProps {
   label: string;
@@ -13,7 +20,13 @@ export interface PdfPreviewProps {
 }
 
 // Every document.js format can render to PDF (odf included, via odfToPdf), so previewing any format -- not just PDF itself -- is a matter of rendering its PDF rendition. The caller decides whether that rendition needs generating (a non-PDF format) or already exists (the format is PDF outright).
-export function PdfPreview({ label, format, bytes, loading, error }: PdfPreviewProps) {
+export function PdfPreview({
+  label,
+  format,
+  bytes,
+  loading,
+  error,
+}: PdfPreviewProps) {
   const url = usePdfObjectUrl(bytes);
 
   return (
@@ -41,7 +54,11 @@ export function PdfPreview({ label, format, bytes, loading, error }: PdfPreviewP
             </Text>
           </Group>
         ) : (
-          <iframe src={url} title={`${label} preview`} className={iframeStyle} />
+          <iframe
+            src={url}
+            title={`${label} preview`}
+            className={iframeStyle}
+          />
         )}
       </Paper>
     </Stack>

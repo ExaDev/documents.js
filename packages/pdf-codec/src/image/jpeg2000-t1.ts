@@ -1,11 +1,14 @@
-import { MqDecoder, createArithContexts } from './jbig2-arith';
-import { Jpeg2000ParseError, Jpeg2000UnsupportedError } from './jpeg2000-errors';
+import { MqDecoder, createArithContexts } from "./jbig2-arith";
+import {
+  Jpeg2000ParseError,
+  Jpeg2000UnsupportedError,
+} from "./jpeg2000-errors";
 
 // The EBCOT tier-1 code-block decoder of ISO/IEC 15444-1 Annex D: three coding passes per bit-plane (significance propagation, magnitude refinement, cleanup) driven by the same MQ arithmetic decoder JBIG2 uses. T.800 Annex C and T.88 Annex E specify the identical coder -- same Qe state table, same INITDEC/BYTEIN/DECODE/RENORMD -- so src/image/jbig2-arith.ts's MqDecoder is reused verbatim here rather than duplicated. The only JPEG 2000-specific part of the entropy layer is which contexts start in a non-zero state (Table D.7), applied below.
 //
 // This module has no codestream knowledge at all: it is handed one code-block's bytes, its dimensions, which subband it belongs to, and how many bit-planes and coding passes were coded, and it hands back one signed integer per coefficient.
 
-export type Jpeg2000SubbandType = 'LL' | 'HL' | 'LH' | 'HH';
+export type Jpeg2000SubbandType = "LL" | "HL" | "LH" | "HH";
 
 // T.800 Table D.7's own numbering: contexts 0-8 are the zero-coding (significance) labels, 9-13 the sign-coding labels, 14-16 the magnitude-refinement labels, 17 the run-length context, 18 the uniform context.
 const SIGN_CONTEXT_BASE = 9;
@@ -59,17 +62,26 @@ export interface Jpeg2000CodeBlockResult {
 
 function throwForUnsupportedStyle(style: number): void {
   if ((style & STYLE_SELECTIVE_BYPASS) !== 0) {
-    throw new Jpeg2000UnsupportedError('the code-block style enables selective arithmetic coding bypass (lazy mode), which splits a code-block into raw and arithmetically coded segments this decoder does not read');
+    throw new Jpeg2000UnsupportedError(
+      "the code-block style enables selective arithmetic coding bypass (lazy mode), which splits a code-block into raw and arithmetically coded segments this decoder does not read",
+    );
   }
   if ((style & STYLE_TERMINATE_ALL) !== 0) {
-    throw new Jpeg2000UnsupportedError('the code-block style terminates the arithmetic coder on every coding pass, which splits a code-block into one segment per pass this decoder does not read');
+    throw new Jpeg2000UnsupportedError(
+      "the code-block style terminates the arithmetic coder on every coding pass, which splits a code-block into one segment per pass this decoder does not read",
+    );
   }
   // The remaining flag, predictable termination (0x10), is deliberately accepted and ignored rather than named as a constant above: it constrains how an encoder terminates so a decoder can detect corruption, and changes nothing at all about how correct data decodes.
 }
 
 // T.800 Table D.1. The three neighbour sums are the count of significant horizontal (2 max), vertical (2 max), and diagonal (4 max) neighbours; HL swaps the roles of the horizontal and vertical sums relative to LL/LH, and HH is driven by the diagonal count against the combined horizontal-plus-vertical one.
-function zeroCodingContext(subband: Jpeg2000SubbandType, horizontal: number, vertical: number, diagonal: number): number {
-  if (subband === 'HH') {
+function zeroCodingContext(
+  subband: Jpeg2000SubbandType,
+  horizontal: number,
+  vertical: number,
+  diagonal: number,
+): number {
+  if (subband === "HH") {
     const straight = horizontal + vertical;
     if (diagonal >= 3) {
       return 8;
@@ -83,8 +95,8 @@ function zeroCodingContext(subband: Jpeg2000SubbandType, horizontal: number, ver
     return straight >= 2 ? 2 : straight === 1 ? 1 : 0;
   }
   // HL is the horizontally low-pass band, so its own table is LL/LH's with the two axes exchanged.
-  const primary = subband === 'HL' ? vertical : horizontal;
-  const secondary = subband === 'HL' ? horizontal : vertical;
+  const primary = subband === "HL" ? vertical : horizontal;
+  const secondary = subband === "HL" ? horizontal : vertical;
   if (primary === 2) {
     return 8;
   }
@@ -126,12 +138,29 @@ const SIGN_CONTEXT_TABLE: readonly number[] = (() => {
 
 const SIGN_XOR_FLAG = 0x08;
 
-export function decodeJpeg2000CodeBlock(options: Jpeg2000CodeBlockDecodeOptions): Jpeg2000CodeBlockResult {
-  const { width, height, subband, zeroBitPlanes, maxBitPlanes, totalPasses, codeBlockStyle, data } = options;
+export function decodeJpeg2000CodeBlock(
+  options: Jpeg2000CodeBlockDecodeOptions,
+): Jpeg2000CodeBlockResult {
+  const {
+    width,
+    height,
+    subband,
+    zeroBitPlanes,
+    maxBitPlanes,
+    totalPasses,
+    codeBlockStyle,
+    data,
+  } = options;
   throwForUnsupportedStyle(codeBlockStyle);
   const values = new Int32Array(Math.max(width * height, 0));
   const codedBitPlanes = maxBitPlanes - zeroBitPlanes;
-  if (width <= 0 || height <= 0 || codedBitPlanes <= 0 || totalPasses <= 0 || data.length === 0) {
+  if (
+    width <= 0 ||
+    height <= 0 ||
+    codedBitPlanes <= 0 ||
+    totalPasses <= 0 ||
+    data.length === 0
+  ) {
     return { values };
   }
 
@@ -156,52 +185,87 @@ export function decodeJpeg2000CodeBlock(options: Jpeg2000CodeBlockDecodeOptions)
   const mq = new MqDecoder(data, 0, data.length);
 
   const verticallyCausal = (codeBlockStyle & STYLE_VERTICALLY_CAUSAL) !== 0;
-  const segmentationSymbols = (codeBlockStyle & STYLE_SEGMENTATION_SYMBOLS) !== 0;
+  const segmentationSymbols =
+    (codeBlockStyle & STYLE_SEGMENTATION_SYMBOLS) !== 0;
   const resetEachPass = (codeBlockStyle & STYLE_RESET_CONTEXTS) !== 0;
 
   const at = (x: number, y: number): number => (y + 1) * stride + (x + 1);
 
   // In vertically causal mode (T.800 Table A.19) a coefficient never sees the stripe below its own, so the row after the current stripe is treated as insignificant no matter what it actually holds.
-  const belowVisible = (y: number, stripeEnd: number): boolean => !verticallyCausal || y + 1 < stripeEnd;
+  const belowVisible = (y: number, stripeEnd: number): boolean =>
+    !verticallyCausal || y + 1 < stripeEnd;
 
-  const significanceContext = (x: number, y: number, stripeEnd: number): number => {
+  const significanceContext = (
+    x: number,
+    y: number,
+    stripeEnd: number,
+  ): number => {
     const n = at(x, y);
     const below = belowVisible(y, stripeEnd);
     const horizontal = (significant[n - 1] ?? 0) + (significant[n + 1] ?? 0);
-    const vertical = (significant[n - stride] ?? 0) + (below ? (significant[n + stride] ?? 0) : 0);
+    const vertical =
+      (significant[n - stride] ?? 0) +
+      (below ? (significant[n + stride] ?? 0) : 0);
     const diagonal =
       (significant[n - stride - 1] ?? 0) +
       (significant[n - stride + 1] ?? 0) +
-      (below ? (significant[n + stride - 1] ?? 0) + (significant[n + stride + 1] ?? 0) : 0);
+      (below
+        ? (significant[n + stride - 1] ?? 0) +
+          (significant[n + stride + 1] ?? 0)
+        : 0);
     return zeroCodingContext(subband, horizontal, vertical, diagonal);
   };
 
-  const neighbourhoodIsSignificant = (x: number, y: number, stripeEnd: number): boolean => {
+  const neighbourhoodIsSignificant = (
+    x: number,
+    y: number,
+    stripeEnd: number,
+  ): boolean => {
     const n = at(x, y);
     const below = belowVisible(y, stripeEnd);
-    const straight = (significant[n - 1] ?? 0) + (significant[n + 1] ?? 0) + (significant[n - stride] ?? 0) + (below ? (significant[n + stride] ?? 0) : 0);
+    const straight =
+      (significant[n - 1] ?? 0) +
+      (significant[n + 1] ?? 0) +
+      (significant[n - stride] ?? 0) +
+      (below ? (significant[n + stride] ?? 0) : 0);
     const diagonal =
       (significant[n - stride - 1] ?? 0) +
       (significant[n - stride + 1] ?? 0) +
-      (below ? (significant[n + stride - 1] ?? 0) + (significant[n + stride + 1] ?? 0) : 0);
+      (below
+        ? (significant[n + stride - 1] ?? 0) +
+          (significant[n + stride + 1] ?? 0)
+        : 0);
     return straight + diagonal > 0;
   };
 
   // D.3.2: the sign is coded against the clamped sum of each axis's two neighbours, where a significant positive neighbour contributes +1, a significant negative one -1, and an insignificant one nothing.
-  const contribution = (cell: number): number => ((significant[cell] ?? 0) === 0 ? 0 : (negative[cell] ?? 0) === 1 ? -1 : 1);
-  const clampToUnit = (value: number): number => (value > 0 ? 1 : value < 0 ? -1 : 0);
+  const contribution = (cell: number): number =>
+    (significant[cell] ?? 0) === 0 ? 0 : (negative[cell] ?? 0) === 1 ? -1 : 1;
+  const clampToUnit = (value: number): number =>
+    value > 0 ? 1 : value < 0 ? -1 : 0;
 
   const decodeSign = (x: number, y: number, stripeEnd: number): void => {
     const n = at(x, y);
     const below = belowVisible(y, stripeEnd);
     const horizontal = clampToUnit(contribution(n - 1) + contribution(n + 1));
-    const vertical = clampToUnit(contribution(n - stride) + (below ? contribution(n + stride) : 0));
-    const packed = SIGN_CONTEXT_TABLE[(horizontal + 1) * 3 + (vertical + 1)] ?? 0;
-    const decision = mq.decode(contexts, SIGN_CONTEXT_BASE + (packed & ~SIGN_XOR_FLAG));
+    const vertical = clampToUnit(
+      contribution(n - stride) + (below ? contribution(n + stride) : 0),
+    );
+    const packed =
+      SIGN_CONTEXT_TABLE[(horizontal + 1) * 3 + (vertical + 1)] ?? 0;
+    const decision = mq.decode(
+      contexts,
+      SIGN_CONTEXT_BASE + (packed & ~SIGN_XOR_FLAG),
+    );
     negative[n] = decision ^ ((packed & SIGN_XOR_FLAG) !== 0 ? 1 : 0);
   };
 
-  const becomeSignificant = (x: number, y: number, plane: number, stripeEnd: number): void => {
+  const becomeSignificant = (
+    x: number,
+    y: number,
+    plane: number,
+    stripeEnd: number,
+  ): void => {
     const n = at(x, y);
     significant[n] = 1;
     magnitude[n] = 1 << plane;
@@ -273,7 +337,9 @@ export function decodeJpeg2000CodeBlock(options: Jpeg2000CodeBlockDecodeOptions)
             continue;
           }
           // Two bits in the uniform context give the index of the first coefficient in the column that does become significant; the ones above it are known insignificant and are not coded at all.
-          const firstSignificant = (mq.decode(contexts, UNIFORM_CONTEXT) << 1) | mq.decode(contexts, UNIFORM_CONTEXT);
+          const firstSignificant =
+            (mq.decode(contexts, UNIFORM_CONTEXT) << 1) |
+            mq.decode(contexts, UNIFORM_CONTEXT);
           for (let row = stripe; row < stripe + firstSignificant; row++) {
             lastCodedPlane[at(x, row)] = plane;
           }
@@ -295,15 +361,25 @@ export function decodeJpeg2000CodeBlock(options: Jpeg2000CodeBlockDecodeOptions)
       }
     }
     if (segmentationSymbols) {
-      const symbol = (mq.decode(contexts, UNIFORM_CONTEXT) << 3) | (mq.decode(contexts, UNIFORM_CONTEXT) << 2) | (mq.decode(contexts, UNIFORM_CONTEXT) << 1) | mq.decode(contexts, UNIFORM_CONTEXT);
+      const symbol =
+        (mq.decode(contexts, UNIFORM_CONTEXT) << 3) |
+        (mq.decode(contexts, UNIFORM_CONTEXT) << 2) |
+        (mq.decode(contexts, UNIFORM_CONTEXT) << 1) |
+        mq.decode(contexts, UNIFORM_CONTEXT);
       if (symbol !== SEGMENTATION_SYMBOL) {
-        throw new Jpeg2000ParseError(`a cleanup pass ended with segmentation symbol 0x${symbol.toString(16)} rather than the 0xA ISO/IEC 15444-1 D.3.4 requires, so this code-block's coded data is corrupt`);
+        throw new Jpeg2000ParseError(
+          `a cleanup pass ended with segmentation symbol 0x${symbol.toString(16)} rather than the 0xA ISO/IEC 15444-1 D.3.4 requires, so this code-block's coded data is corrupt`,
+        );
       }
     }
     codedThisPlane.fill(0);
   };
 
-  function columnIsRunLengthEligible(x: number, stripe: number, stripeEnd: number): boolean {
+  function columnIsRunLengthEligible(
+    x: number,
+    stripe: number,
+    stripeEnd: number,
+  ): boolean {
     for (let y = stripe; y < stripeEnd; y++) {
       const n = at(x, y);
       if ((significant[n] ?? 0) === 1 || (codedThisPlane[n] ?? 0) === 1) {
@@ -344,8 +420,10 @@ export function decodeJpeg2000CodeBlock(options: Jpeg2000CodeBlockDecodeOptions)
         continue;
       }
       // The doubled, mid-point-reconstructed value this module's own result type documents.
-      const reconstructed = 2 * (magnitude[n] ?? 0) + (1 << (lastCodedPlane[n] ?? 0));
-      values[y * width + x] = (negative[n] ?? 0) === 1 ? -reconstructed : reconstructed;
+      const reconstructed =
+        2 * (magnitude[n] ?? 0) + (1 << (lastCodedPlane[n] ?? 0));
+      values[y * width + x] =
+        (negative[n] ?? 0) === 1 ? -reconstructed : reconstructed;
     }
   }
   return { values };

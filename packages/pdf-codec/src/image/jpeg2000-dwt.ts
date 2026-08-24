@@ -33,7 +33,9 @@ export interface Jpeg2000SubbandBounds {
   readonly hV1: number;
 }
 
-export function subbandBounds(bounds: Jpeg2000ResolutionBounds): Jpeg2000SubbandBounds {
+export function subbandBounds(
+  bounds: Jpeg2000ResolutionBounds,
+): Jpeg2000SubbandBounds {
   return {
     llU0: Math.ceil(bounds.u0 / 2),
     llU1: Math.ceil(bounds.u1 / 2),
@@ -68,7 +70,11 @@ interface InterleaveSource {
   readonly hh: (u: number, v: number) => number;
 }
 
-function interleave(source: InterleaveSource, bounds: Jpeg2000ResolutionBounds, write: (u: number, v: number, value: number) => void): void {
+function interleave(
+  source: InterleaveSource,
+  bounds: Jpeg2000ResolutionBounds,
+  write: (u: number, v: number, value: number) => void,
+): void {
   const sub = subbandBounds(bounds);
   for (let v = sub.llV0; v < sub.llV1; v++) {
     for (let u = sub.llU0; u < sub.llU1; u++) {
@@ -102,12 +108,16 @@ function inverse53Filter(buffer: Int32Array, i0: number, i1: number): void {
   // X(2n) = Y(2n) - floor((Y(2n-1) + Y(2n+1) + 2) / 4)
   for (let n = first; n <= last; n++) {
     const index = base + 2 * n;
-    buffer[index] = (buffer[index] ?? 0) - Math.floor(((buffer[index - 1] ?? 0) + (buffer[index + 1] ?? 0) + 2) / 4);
+    buffer[index] =
+      (buffer[index] ?? 0) -
+      Math.floor(((buffer[index - 1] ?? 0) + (buffer[index + 1] ?? 0) + 2) / 4);
   }
   // X(2n+1) = Y(2n+1) + floor((X(2n) + X(2n+2)) / 2)
   for (let n = first; n < last; n++) {
     const index = base + 2 * n + 1;
-    buffer[index] = (buffer[index] ?? 0) + Math.floor(((buffer[index - 1] ?? 0) + (buffer[index + 1] ?? 0)) / 2);
+    buffer[index] =
+      (buffer[index] ?? 0) +
+      Math.floor(((buffer[index - 1] ?? 0) + (buffer[index + 1] ?? 0)) / 2);
   }
 }
 
@@ -127,19 +137,27 @@ function inverse97Filter(buffer: Float32Array, i0: number, i1: number): void {
   }
   // F-10: X(2n) -= delta * (X(2n-1) + X(2n+1))
   for (let n = first - 1; n <= last + 1; n++) {
-    buffer[even(n)] = (buffer[even(n)] ?? 0) - LIFT_DELTA * ((buffer[even(n) - 1] ?? 0) + (buffer[even(n) + 1] ?? 0));
+    buffer[even(n)] =
+      (buffer[even(n)] ?? 0) -
+      LIFT_DELTA * ((buffer[even(n) - 1] ?? 0) + (buffer[even(n) + 1] ?? 0));
   }
   // F-11: X(2n+1) -= gamma * (X(2n) + X(2n+2))
   for (let n = first - 1; n <= last; n++) {
-    buffer[odd(n)] = (buffer[odd(n)] ?? 0) - LIFT_GAMMA * ((buffer[odd(n) - 1] ?? 0) + (buffer[odd(n) + 1] ?? 0));
+    buffer[odd(n)] =
+      (buffer[odd(n)] ?? 0) -
+      LIFT_GAMMA * ((buffer[odd(n) - 1] ?? 0) + (buffer[odd(n) + 1] ?? 0));
   }
   // F-12: X(2n) -= beta * (X(2n-1) + X(2n+1))
   for (let n = first; n <= last + 1; n++) {
-    buffer[even(n)] = (buffer[even(n)] ?? 0) - LIFT_BETA * ((buffer[even(n) - 1] ?? 0) + (buffer[even(n) + 1] ?? 0));
+    buffer[even(n)] =
+      (buffer[even(n)] ?? 0) -
+      LIFT_BETA * ((buffer[even(n) - 1] ?? 0) + (buffer[even(n) + 1] ?? 0));
   }
   // F-13: X(2n+1) -= alpha * (X(2n) + X(2n+2))
   for (let n = first; n <= last; n++) {
-    buffer[odd(n)] = (buffer[odd(n)] ?? 0) - LIFT_ALPHA * ((buffer[odd(n) - 1] ?? 0) + (buffer[odd(n) + 1] ?? 0));
+    buffer[odd(n)] =
+      (buffer[odd(n)] ?? 0) -
+      LIFT_ALPHA * ((buffer[odd(n) - 1] ?? 0) + (buffer[odd(n) + 1] ?? 0));
   }
 }
 
@@ -188,7 +206,15 @@ export interface Jpeg2000IrreversibleSubbands {
   readonly hh: Float32Array;
 }
 
-function interleaveSource(bands: { ll: ArrayLike<number>; hl: ArrayLike<number>; lh: ArrayLike<number>; hh: ArrayLike<number> }, bounds: Jpeg2000ResolutionBounds): InterleaveSource {
+function interleaveSource(
+  bands: {
+    ll: ArrayLike<number>;
+    hl: ArrayLike<number>;
+    lh: ArrayLike<number>;
+    hh: ArrayLike<number>;
+  },
+  bounds: Jpeg2000ResolutionBounds,
+): InterleaveSource {
   const sub = subbandBounds(bounds);
   const llWidth = sub.llU1 - sub.llU0;
   const hWidth = sub.hU1 - sub.hU0;
@@ -201,7 +227,10 @@ function interleaveSource(bands: { ll: ArrayLike<number>; hl: ArrayLike<number>;
 }
 
 // F.3.2 2D_SR for the reversible 5-3 filter: interleave the four subbands onto the resolution level's own grid, filter every row, then filter every column. Returns the reconstructed level in raster order over [u0, u1) x [v0, v1).
-export function inverseDwt53Level(bands: Jpeg2000ReversibleSubbands, bounds: Jpeg2000ResolutionBounds): Int32Array {
+export function inverseDwt53Level(
+  bands: Jpeg2000ReversibleSubbands,
+  bounds: Jpeg2000ResolutionBounds,
+): Int32Array {
   const { u0, u1, v0, v1 } = bounds;
   const width = u1 - u0;
   const height = v1 - v0;
@@ -213,7 +242,9 @@ export function inverseDwt53Level(bands: Jpeg2000ReversibleSubbands, bounds: Jpe
     output[(v - v0) * width + (u - u0)] = value;
   });
 
-  const scratch = new Int32Array(Math.max(width, height) + 2 * EXTENSION_MARGIN);
+  const scratch = new Int32Array(
+    Math.max(width, height) + 2 * EXTENSION_MARGIN,
+  );
   // HOR_SR (F.3.5) then VER_SR (F.3.6), in that order -- with integer lifting the two are not commutative.
   for (let v = 0; v < height; v++) {
     const rowStart = v * width;
@@ -256,7 +287,10 @@ export function inverseDwt53Level(bands: Jpeg2000ReversibleSubbands, bounds: Jpe
 }
 
 // F.3.2 2D_SR for the irreversible 9-7 filter, structurally identical to the reversible one above but in floating point over already-dequantized coefficients.
-export function inverseDwt97Level(bands: Jpeg2000IrreversibleSubbands, bounds: Jpeg2000ResolutionBounds): Float32Array {
+export function inverseDwt97Level(
+  bands: Jpeg2000IrreversibleSubbands,
+  bounds: Jpeg2000ResolutionBounds,
+): Float32Array {
   const { u0, u1, v0, v1 } = bounds;
   const width = u1 - u0;
   const height = v1 - v0;
@@ -268,7 +302,9 @@ export function inverseDwt97Level(bands: Jpeg2000IrreversibleSubbands, bounds: J
     output[(v - v0) * width + (u - u0)] = value;
   });
 
-  const scratch = new Float32Array(Math.max(width, height) + 2 * EXTENSION_MARGIN);
+  const scratch = new Float32Array(
+    Math.max(width, height) + 2 * EXTENSION_MARGIN,
+  );
   for (let v = 0; v < height; v++) {
     const rowStart = v * width;
     synthesiseLine(

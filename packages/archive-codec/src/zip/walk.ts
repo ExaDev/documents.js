@@ -1,5 +1,5 @@
-import { isZipArchive } from './detect';
-import { unzipPackage } from './container';
+import { isZipArchive } from "./detect";
+import { unzipPackage } from "./container";
 
 // Depth derivation: real producers do not nest archives deeply. The motivating case -- an OOXML package embedding another OOXML package as an OLE object (word/embeddings/*.xlsx) -- bottoms out at depth 2, and the deepest legitimate nesting the format ecosystem emits (J2EE packaging, where an EAR embeds WARs that themselves embed JARs) tops out around depth 3. 8 more than doubles that ceiling before any honest document is rejected, while still bounding the recursion against adversarial input: a ZIP quine is depth-unbounded, and without a cap a single crafted archive would recurse until the host exhausts memory. An entry's depth is its ancestors.length + 1 (entries of the root archive are depth 1).
 export const MAX_WALK_DEPTH = 8;
@@ -14,7 +14,7 @@ export interface ArchiveWalkEntry {
   readonly bytes: Uint8Array<ArrayBuffer>;
 }
 
-export type ArchiveWalkLimit = 'depth' | 'total-bytes';
+export type ArchiveWalkLimit = "depth" | "total-bytes";
 
 // Thrown when a walk exceeds its depth cap or cumulative decompressed-bytes budget. A distinct error class (rather than a plain Error) because the guards are this package's reason to exist: a consumer must be able to discriminate a limit hit from a corrupt-archive failure and decide its own degradation, which the limit field provides.
 export class ArchiveWalkLimitError extends Error {
@@ -22,7 +22,7 @@ export class ArchiveWalkLimitError extends Error {
 
   constructor(limit: ArchiveWalkLimit, message: string) {
     super(message);
-    this.name = 'ArchiveWalkLimitError';
+    this.name = "ArchiveWalkLimitError";
     this.limit = limit;
   }
 }
@@ -40,7 +40,9 @@ export function walkArchive(
   const maxDepth = options.maxDepth ?? MAX_WALK_DEPTH;
   const maxTotalBytes = options.maxTotalBytes ?? MAX_WALK_TOTAL_BYTES;
   if (!isZipArchive(bytes)) {
-    throw new Error('walkArchive input is not a ZIP archive (leading magic bytes are not PK\\x03\\x04 or PK\\x05\\x06)');
+    throw new Error(
+      "walkArchive input is not a ZIP archive (leading magic bytes are not PK\\x03\\x04 or PK\\x05\\x06)",
+    );
   }
   const entries: ArchiveWalkEntry[] = [];
   let totalBytes = 0;
@@ -48,12 +50,15 @@ export function walkArchive(
   return entries;
 
   // visit() lists archive's entries at depth ancestors.length + 1. The depth check fires at descent time, before the too-deep archive is decompressed at all.
-  function visit(archive: Uint8Array<ArrayBuffer>, ancestors: readonly string[]): void {
+  function visit(
+    archive: Uint8Array<ArrayBuffer>,
+    ancestors: readonly string[],
+  ): void {
     const depth = ancestors.length + 1;
     if (depth > maxDepth) {
       throw new ArchiveWalkLimitError(
-        'depth',
-        `archive nesting exceeds the maximum walk depth of ${maxDepth} at ${ancestors.join(' > ')}`,
+        "depth",
+        `archive nesting exceeds the maximum walk depth of ${maxDepth} at ${ancestors.join(" > ")}`,
       );
     }
     for (const [path, entryBytes] of Object.entries(unzipPackage(archive))) {
@@ -61,7 +66,7 @@ export function walkArchive(
       totalBytes += entryBytes.length;
       if (totalBytes > maxTotalBytes) {
         throw new ArchiveWalkLimitError(
-          'total-bytes',
+          "total-bytes",
           `cumulative decompressed size of the walk exceeded the ${maxTotalBytes}-byte budget at ${path}`,
         );
       }

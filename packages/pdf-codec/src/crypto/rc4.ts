@@ -4,7 +4,10 @@
 
 const STATE_SIZE = 256;
 
-export function rc4(key: Uint8Array<ArrayBuffer>, data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+export function rc4(
+  key: Uint8Array<ArrayBuffer>,
+  data: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   const state = new Uint8Array(STATE_SIZE);
   for (let i = 0; i < STATE_SIZE; i++) {
     state[i] = i;
