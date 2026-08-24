@@ -9,14 +9,17 @@ import type { KnipConfig } from "knip";
  */
 const config: KnipConfig = {
   // qpdf is a deliberately optional external tool, not a dependency to declare. documents.js's formula test probes for it with `which qpdf` and skips the cross-check when it is absent, so the suite passes with or without it -- the same convention this repo already uses for its gitignored conformance corpora. Declaring it would make an optional local convenience a hard requirement of the workspace.
-  ignoreBinaries: ["qpdf"],
+  //
+  // `info` is not a binary at all: check-dependency-age.ts runs `execFileSync("pnpm", ["info", name, "time", "--json"])`, and knip reads the first argument as a command of its own. There is nothing to declare -- pnpm is the package manager running the script.
+  ignoreBinaries: ["qpdf", "info"],
 
   workspaces: {
     // The workspace root builds nothing. Its files are the tooling configs, which are entry points by definition -- each is loaded by the tool it configures, never imported.
     ".": {
-      // Only eslint.shared.ts needs naming: knip already infers every other root config from the tool that reads it. This one is imported by the others rather than loaded by a tool, so nothing else marks it as reachable.
-      entry: ["eslint.shared.ts"],
-      project: ["*.ts"],
+      // eslint.shared.ts is imported by the other root configs rather than loaded by a tool, so nothing else marks it reachable. The .github/scripts entries are the opposite case: CI invokes each as a `node` entry point and nothing imports them, so without naming them knip reports both the scripts and everything they import as unused -- which is how `semver` first looked dead here.
+      entry: ["eslint.shared.ts", ".github/scripts/*.ts"],
+      // `*.ts` alone is not recursive, so it never reached .github/scripts and the scripts' own imports were invisible.
+      project: ["*.ts", ".github/scripts/**/*.ts"],
     },
 
     // Every library package. Every module rather than just `src/index.ts`: the exports map's `"./*"` wildcard plus tsdown's own `entry: ["src/**/*.ts"]` means each module ships as its own importable subpath, so treating only the barrel as an entry would report the entire package as unused.

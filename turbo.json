@@ -162,6 +162,16 @@
       ],
       "outputs": [".eslintcache"]
     },
+    // The root package has suites of its own -- the two CI scripts under .github/scripts. Without this entry `turbo run _test` skips the root package entirely, so they would never run.
+    "//#_test": {
+      "inputs": [
+        ".github/scripts/**",
+        "vitest.root.config.ts",
+        "pnpm-workspace.yaml",
+        "pnpm-lock.yaml"
+      ],
+      "outputs": []
+    },
     // knip is a whole-workspace analysis by construction: it resolves the import graph across every package at once to decide what is unreachable, so there is no per-package equivalent to run. Registered as a root task for that reason, not as a convenience.
     "//#_knip": {
       "inputs": [
