@@ -11,4 +11,4 @@
 # A SHA recorded here goes stale if the branch is later rebased, since the rebase rewrites it. Record it after the reformat commit reaches its final position in history, and re-check it after any rebase: `git log --format='%H %s' | grep '^.* style: format'` against the entries below.
 
 # style: format the workspace with prettier
-a40bbdefdb7f738eb36a1253ca7bd2387cab06b2
+e8febdfde25d9d1386e8f6ab489291ac3b59cd45
