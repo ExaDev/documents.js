@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/ExaDev/documents.js/compare/documents@2.0.0...documents@2.0.1) (2026-08-24)
+
+
+### Dependencies
+
+- Updated documents.js to ^6.0.1
+
 # [2.0.0](https://github.com/ExaDev/documents.js/compare/documents@1.26.56...documents@2.0.0) (2026-08-23)
 
 
