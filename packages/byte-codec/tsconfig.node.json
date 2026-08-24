@@ -2,16 +2,15 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "lib": ["ES2024"],
-    "types": ["node"]
+    "types": ["node"],
+    // eslint.config.ts imports the workspace-root eslint.shared.ts by its real path, extension included, which is what ESLint's own TS config loader resolves. TypeScript rejects a .ts import specifier without this, and permits it here because the extended config sets noEmit.
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src/**/*.test.ts",
     "src/test-support/**/*.ts",
-    "commitlint.config.ts",
-    "eslint.config.ts",
-    "release.config.ts",
-    "tsdown.config.ts",
-    "vitest.workers.config.ts"
+    // A glob rather than a hand-listed set, matching the other library packages here. The list this replaces still named commitlint.config.ts and release.config.ts -- files that existed when this package was its own repository and are workspace-root-only now -- while omitting vitest.config.ts, which does exist. A config file absent from every program is not a silent no-op: type-aware ESLint fails on it outright with "not found in any of the provided project(s)".
+    "*.config.ts"
   ],
   "exclude": []
 }
