@@ -199,7 +199,7 @@ importers:
         specifier: ^3.0.0
         version: link:../document-outline.js
       document-schema.js:
-        specifier: ^5.0.0
+        specifier: ^5.1.0
         version: link:../document-schema.js
       documents.js:
         specifier: ^6.0.1
