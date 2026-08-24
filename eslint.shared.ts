@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import prettierRecommended from 'eslint-plugin-prettier/recommended';
 import exadevRecommendedTypeChecked from '@exadev/eslint-config';
 import globals from 'globals';
 import { builtinModules } from 'node:module';
@@ -208,5 +209,7 @@ export function packageLintConfig(options: PackageLintOptions): ReturnType<typeo
           },
         })
       : []),
+    // LAST, and that ordering is the whole contract: this bundles eslint-config-prettier, which turns OFF every stylistic rule that would otherwise fight the formatter. Placed earlier, a later config could re-enable one and the two would disagree forever, each "fixing" the other's output.
+    prettierRecommended,
   );
 }
