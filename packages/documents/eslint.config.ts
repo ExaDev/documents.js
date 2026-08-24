@@ -1,29 +1,23 @@
-import js from '@eslint/js';
-import exadevRecommendedTypeChecked from '@exadev/eslint-config';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import { packageLintConfig } from '../../eslint.shared.ts';
 
 export default tseslint.config(
-  {
-    ignores: ['dist', 'coverage', 'node_modules', 'playwright-report', 'test-results', 'src/routeTree.gen.ts'],
-  },
-  {
-    // Pin the TSConfig root so the parser isn't confused by stray tsconfig.json files elsewhere in the tree. Required because lint-staged runs eslint at commit time.
-    languageOptions: {
-      parserOptions: { project: ['./tsconfig.json', './tsconfig.worker.json', './tsconfig.node.json'], tsconfigRootDir: import.meta.dirname },
-    },
-  },
-  js.configs.recommended,
-  // Bundles typescript-eslint's recommendedTypeChecked + stylisticTypeChecked, this org's exadev/* rules (barrel-policy defaults to 'banned' -- this app has no npm exports map / public entry point, so 'banned' is the right default rather than overriding it), noInlineConfig, and an outright ban on type assertions and @ts-expect-error (relaxed in test files). See @exadev/eslint-config's own README.
-  ...exadevRecommendedTypeChecked,
-  {
-    rules: {
-      '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
-    },
-  },
+  ...packageLintConfig({
+    tsconfigRootDir: import.meta.dirname,
+    // Three programs, not the usual two: the app, the browser Web Worker, and the Node-side config files.
+    projects: ['./tsconfig.json', './tsconfig.worker.json', './tsconfig.node.json'],
+    additionalIgnores: ['playwright-report', 'test-results', 'src/routeTree.gen.ts'],
+    // Not Worker-isomorphic: this is a browser app, and its own RPC import boundary below is what keeps the conversion engine out of the main bundle.
+    isomorphic: false,
+    // No npm exports map and no public entry point, so the rule's default stays right rather than being relaxed to 'single'.
+    barrelPolicy: 'banned',
+    // Globals are scoped per layer below instead. Node globals everywhere would let a `process.env` read in browser code lint clean.
+    nodeGlobals: false,
+  }),
   {
     // React UI layer only -- the worker/rpc/db/ports/adapters layers stay plain TS with no JSX/browser-global rules.
     files: ['src/**/*.tsx', 'src/ui/**/*.ts', 'src/routes/**/*.ts'],
@@ -64,12 +58,12 @@ export default tseslint.config(
               group: ['documents.js', 'documents.js/**'],
               allowTypeImports: true,
               allowImportNames: ['DocumentFormatSchema', 'DOCUMENT_FORMATS', 'columnIndexToLetters'],
-              message: 'UI code may not import documents.js\'s conversion/editor functions directly -- go through the RPC client (src/rpc/client.ts). Only src/workers/** may call them.',
+              message: "UI code may not import documents.js's conversion/editor functions directly -- go through the RPC client (src/rpc/client.ts). Only src/workers/** may call them.",
             },
             {
               group: ['odf.js', 'odf.js/**', 'ooxml.js', 'ooxml.js/**', 'pdf-codec', 'pdf-codec/**', 'markdown-codec', 'markdown-codec/**'],
               allowTypeImports: true,
-              message: 'UI code may not import documents.js\'s sibling libraries directly -- go through the RPC client. Only src/workers/** may import these.',
+              message: "UI code may not import documents.js's sibling libraries directly -- go through the RPC client. Only src/workers/** may import these.",
             },
           ],
         },
