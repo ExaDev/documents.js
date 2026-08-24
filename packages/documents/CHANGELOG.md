@@ -1,3 +1,39 @@
+## [2.1.0](https://github.com/ExaDev/documents.js/compare/documents%402.0.1...documents%402.1.0) (2026-08-24)
+
+### Features
+
+* **eslint:** enable strictTypeChecked across the workspace ([246d69b](https://github.com/ExaDev/documents.js/commit/246d69b8ca2e0cfaeec3813facbe4466f715bc1e))
+* **eslint:** lint JSON, Markdown, and YAML alongside the TypeScript ([5a150be](https://github.com/ExaDev/documents.js/commit/5a150be97d9d5d84024f935fae3deff5b4266eae))
+* **knip:** check the workspace for unused files, exports, and dependencies ([384a260](https://github.com/ExaDev/documents.js/commit/384a260d9f969b360c90033ffef630ba0f7ceca7))
+
+### Code Refactoring
+
+* clear what strictTypeChecked's non-deviated rules found ([4a7ad62](https://github.com/ExaDev/documents.js/commit/4a7ad62ebfabddbc4c3f7cc018838448a9abd926))
+* **eslint:** move the seven preset-using packages onto the shared config ([bfb9fbc](https://github.com/ExaDev/documents.js/commit/bfb9fbc0cef3dad0d229e0193a1817f182412d58))
+* **tsconfig:** share the strict compiler options through one base config ([e86a366](https://github.com/ExaDev/documents.js/commit/e86a3661ac30c7f304206409272141b97b4fd3ee))
+
+### Documentation
+
+* add the licence, security, and issue-template files the repo was missing ([d7d1059](https://github.com/ExaDev/documents.js/commit/d7d10591ec11dfc523d45414e2ad7340e4b2ba75))
+
+### Styles
+
+* format the workspace with prettier ([c12e740](https://github.com/ExaDev/documents.js/commit/c12e74028aaf5f62cad1c64a414d091c7ecc83db))
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.1.0 in documents [skip ci] ([2f6eb0e](https://github.com/ExaDev/documents.js/commit/2f6eb0e563f3cb019a6f039df1cc8b3e332e6bbb))
+* **deps:** bump documents.js to ^6.1.0 in documents [skip ci] ([af8df12](https://github.com/ExaDev/documents.js/commit/af8df1280fc8877884de9ea020e0e36f8448bde4))
+* **deps:** bump markdown-codec to ^6.1.0 in documents [skip ci] ([23a9810](https://github.com/ExaDev/documents.js/commit/23a98109875dd202e49131c361ce601ecde81277))
+* **deps:** drop the dependencies each package no longer uses ([62c2108](https://github.com/ExaDev/documents.js/commit/62c2108c1e8ff3db7f24e6de012c17d65993528d))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.1.0
+- Updated markdown-codec to ^6.1.0
+- Updated document-schema.js to ^5.1.0
+
 ## [2.0.1](https://github.com/ExaDev/documents.js/compare/documents@2.0.0...documents@2.0.1) (2026-08-24)
 
 
