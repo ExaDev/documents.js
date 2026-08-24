@@ -1,4 +1,4 @@
-import { base64ToBytes } from '../util/base64';
+import { base64ToBytes } from "../util/base64";
 
 // Real CCITT Group 3/Group 4 bitstreams, encoded by libtiff (LIBTIFF 4.7.2, driven through Pillow 12.1.0 and tiffcp) rather than by anything in this package -- the same "independent implementation on purpose" rationale test-support/encrypted-pdfs.ts states for its own fixtures: a stream this package encoded itself would let a mistake in the T.4 code tables cancel out between an encoder and a decoder that shared it, and pass anyway. Embedded as base64 so the suite needs no filesystem access.
 //
@@ -44,123 +44,147 @@ export function ccittFixtureBitmap(fixture: CcittFaxFixture): boolean[] {
 
 export const CCITT_FAX_FIXTURES: readonly CcittFaxFixture[] = [
   {
-    name: 'checker8',
+    name: "checker8",
     columns: 16,
     rows: 8,
-    isBlack: (x, y) => ((x / 2 | 0) + (y / 2 | 0)) % 2 === 0,
+    isBlack: (x, y) => (((x / 2) | 0) + ((y / 2) | 0)) % 2 === 0,
     encodings: {
-      group4: 'Jrl8vl//wwgggggv+EEEEEEEF/4YQQQQQX/ABABA',
-      group3OneDimensional: 'ABNd999wATXfffcAF9998AF9998AE13333ABNd999wAX333wAX333w==',
-      group3TwoDimensional: 'ABmu+++4AL/gA3333wAX+ADNd999wAX/ABvvvvgAv8A=',
-      group3TwoDimensionalFilled: 'AAGa7777gAF/wAG++++AAX+AAZrvvvuAAX/AAb7774ABf4A=',
+      group4: "Jrl8vl//wwgggggv+EEEEEEEF/4YQQQQQX/ABABA",
+      group3OneDimensional:
+        "ABNd999wATXfffcAF9998AF9998AE13333ABNd999wAX333wAX333w==",
+      group3TwoDimensional: "ABmu+++4AL/gA3333wAX+ADNd999wAX/ABvvvvgAv8A=",
+      group3TwoDimensionalFilled:
+        "AAGa7777gAF/wAG++++AAX+AAZrvvvuAAX/AAb7774ABf4A=",
     },
   },
   {
-    name: 'diagonal',
+    name: "diagonal",
     columns: 24,
     rows: 12,
     isBlack: (x, y) => x === y || x === y + 1 || x + y === 20,
     encodings: {
-      group4: 'JrlOraVtK2lbStpW0raVtKw70ER+ACAC',
-      group3OneDimensional: 'ABNdOoABH6lYAL+iwAGMhcADedeADnNTAB75UAB/tHABnukAA0iAAT5AANEPoA==',
-      group3TwoDimensional: 'ABmunUAAm0oAN/RYACbSgA7zrwATaUAH3yoACbSgA57pAAJhwAZ8gAEgiPw=',
-      group3TwoDimensionalFilled: 'AAGa6dQAATaUAAG/osABNpQAAd514AE2lAAB98qAATaUAAHPdIABMOABnyAAASCI/A==',
+      group4: "JrlOraVtK2lbStpW0raVtKw70ER+ACAC",
+      group3OneDimensional:
+        "ABNdOoABH6lYAL+iwAGMhcADedeADnNTAB75UAB/tHABnukAA0iAAT5AANEPoA==",
+      group3TwoDimensional:
+        "ABmunUAAm0oAN/RYACbSgA7zrwATaUAH3yoACbSgA57pAAJhwAZ8gAEgiPw=",
+      group3TwoDimensionalFilled:
+        "AAGa6dQAATaUAAG/osABNpQAAd514AE2lAAB98qAATaUAAHPdIABMOABnyAAASCI/A==",
     },
   },
   {
-    name: 'box',
+    name: "box",
     columns: 32,
     rows: 16,
-    isBlack: (x, y) => x === 0 || x === 31 || y === 0 || y === 15 || (x >= 8 && x <= 20 && y >= 5 && y <= 9),
+    isBlack: (x, y) =>
+      x === 0 ||
+      x === 31 ||
+      y === 0 ||
+      y === 15 ||
+      (x >= 8 && x <= 20 && y >= 5 && y <= 9),
     encodings: {
-      group4: 'JqDVKA//+fBP////H//+MAEAEA==',
-      group3OneDimensional: 'ABNQagATVAaABNUBoAE1QGgATVAaABNV4IdAAmq8EOgATVeCHQAJqvBDoAE1Xgh0ACaoDQAJqgNAAmqA0ACaoDQAJqgNAAmoNQA=',
-      group3TwoDimensional: 'ABmoNQAKUBwAZqgNAAvABmqA0ACz4JgAzVeCHQAL8AGarwQ6ABfgAzVAaABeADNUBoAF4AM1QGgAUYA=',
-      group3TwoDimensionalFilled: 'AAGag1AAAUoDgAGaoDQAAXgAAZqgNAABZ8EwAZqvBDoAAX4AAZqvBDoAAX4AAZqgNAABeAABmqA0AAF4AAGaoDQAAUY=',
+      group4: "JqDVKA//+fBP////H//+MAEAEA==",
+      group3OneDimensional:
+        "ABNQagATVAaABNUBoAE1QGgATVAaABNV4IdAAmq8EOgATVeCHQAJqvBDoAE1Xgh0ACaoDQAJqgNAAmqA0ACaoDQAJqgNAAmoNQA=",
+      group3TwoDimensional:
+        "ABmoNQAKUBwAZqgNAAvABmqA0ACz4JgAzVeCHQAL8AGarwQ6ABfgAzVAaABeADNUBoAF4AM1QGgAUYA=",
+      group3TwoDimensionalFilled:
+        "AAGag1AAAUoDgAGaoDQAAXgAAZqgNAABZ8EwAZqvBDoAAX4AAZqvBDoAAX4AAZqgNAABeAABmqA0AAF4AAGaoDQAAUY=",
     },
   },
   {
-    name: 'sparse',
+    name: "sparse",
     columns: 64,
     rows: 6,
     isBlack: (x, y) => x % 17 === y % 3,
     encodings: {
-      group4: 'JqjUjUjUrKqKqKqKQyqiqiqijhBCEEIQQhBDZVRVRVRSGVUVUVUUcAEAEA==',
-      group3OneDimensional: 'ABNVUqlUiAAR1UqlUkAAuqlUqkcAE1VSqVSIABHVSqVSQAC6qVSqRw==',
-      group3TwoDimensional: 'ABmqqVSqRAAJlVFVFVFIABuqlUqkcAEEEIQQhBCEEMAGOqlUqkgAEyqiqiqijg==',
-      group3TwoDimensionalFilled: 'AAGaqpVKpEAAATKqKqKqKQABuqlUqkcAAQQQhBCEEIQQwAGOqlUqkgABMqoqoqoo4A==',
+      group4: "JqjUjUjUrKqKqKqKQyqiqiqijhBCEEIQQhBDZVRVRVRSGVUVUVUUcAEAEA==",
+      group3OneDimensional:
+        "ABNVUqlUiAAR1UqlUkAAuqlUqkcAE1VSqVSIABHVSqVSQAC6qVSqRw==",
+      group3TwoDimensional:
+        "ABmqqVSqRAAJlVFVFVFIABuqlUqkcAEEEIQQhBCEEMAGOqlUqkgAEyqiqiqijg==",
+      group3TwoDimensionalFilled:
+        "AAGaqpVKpEAAATKqKqKqKQABuqlUqkcAAQQQhBCEEIQQwAGOqlUqkgABMqoqoqoo4A==",
     },
   },
   {
-    name: 'solidblack',
+    name: "solidblack",
     columns: 8,
     rows: 4,
     isBlack: () => true,
     encodings: {
-      group4: 'JqL+ACAC',
-      group3OneDimensional: 'ABNRQATUUAE1FABNRQ==',
-      group3TwoDimensional: 'ABmooALABmooALA=',
-      group3TwoDimensionalFilled: 'AAGaigABYAGaigABYA==',
+      group4: "JqL+ACAC",
+      group3OneDimensional: "ABNRQATUUAE1FABNRQ==",
+      group3TwoDimensional: "ABmooALABmooALA=",
+      group3TwoDimensionalFilled: "AAGaigABYAGaigABYA==",
     },
   },
   {
-    name: 'solidwhite',
+    name: "solidwhite",
     columns: 8,
     rows: 4,
     isBlack: () => false,
     encodings: {
-      group4: '8AEAEA==',
-      group3OneDimensional: 'ABmADMAGYAMw',
-      group3TwoDimensional: 'ABzABQAcwAU=',
-      group3TwoDimensionalFilled: 'AAHMAAFAAcwAAUA=',
+      group4: "8AEAEA==",
+      group3OneDimensional: "ABmADMAGYAMw",
+      group3TwoDimensional: "ABzABQAcwAU=",
+      group3TwoDimensionalFilled: "AAHMAAFAAcwAAUA=",
     },
   },
   {
-    name: 'wide',
+    name: "wide",
     columns: 200,
     rows: 5,
-    isBlack: (x, y) => ((x / 7 | 0) + y) % 3 === 0,
+    isBlack: (x, y) => (((x / 7) | 0) + y) % 3 === 0,
     encodings: {
-      group4: 'JqM6DOgzoM6DOgzoM6DOgzoOJ8Z0GdBnQZ0GdBnQZ0GdBz4zoM6DOgzoM6DOgzoM6DOjJqM6DOgzoM6DOgzoM6DOgzoOJ8Z0GdBnQZ0GdBnQZ0GdBwAQAQ==',
-      group3OneDimensional: 'ABNR6D0HoPQeg9B6D0HoOwAdB6D0HoPQeg9B6D0GgAHx6D0HoPQeg9B6D0HowATUeg9B6D0HoPQeg9B6DsAHQeg9B6D0HoPQeg9BoA==',
-      group3TwoDimensional: 'ABmo9B6D0HoPQeg9B6D0HYAIT4zoM6DOgzoM6DOgzoM6DgA/HoPQeg9B6D0HoPQejABE1GdBnQZ0GdBnQZ0GdBnQZ0HAB6D0HoPQeg9B6D0HoNA=',
-      group3TwoDimensionalFilled: 'AAGaj0HoPQeg9B6D0HoPQdgAAQnxnQZ0GdBnQZ0GdBnQZ0HAAfj0HoPQeg9B6D0HoPRgARNRnQZ0GdBnQZ0GdBnQZ0GdBwAB6D0HoPQeg9B6D0HoNAA=',
+      group4:
+        "JqM6DOgzoM6DOgzoM6DOgzoOJ8Z0GdBnQZ0GdBnQZ0GdBz4zoM6DOgzoM6DOgzoM6DOjJqM6DOgzoM6DOgzoM6DOgzoOJ8Z0GdBnQZ0GdBnQZ0GdBwAQAQ==",
+      group3OneDimensional:
+        "ABNR6D0HoPQeg9B6D0HoOwAdB6D0HoPQeg9B6D0GgAHx6D0HoPQeg9B6D0HowATUeg9B6D0HoPQeg9B6DsAHQeg9B6D0HoPQeg9BoA==",
+      group3TwoDimensional:
+        "ABmo9B6D0HoPQeg9B6D0HYAIT4zoM6DOgzoM6DOgzoM6DgA/HoPQeg9B6D0HoPQejABE1GdBnQZ0GdBnQZ0GdBnQZ0HAB6D0HoPQeg9B6D0HoNA=",
+      group3TwoDimensionalFilled:
+        "AAGaj0HoPQeg9B6D0HoPQdgAAQnxnQZ0GdBnQZ0GdBnQZ0HAAfj0HoPQeg9B6D0HoPRgARNRnQZ0GdBnQZ0GdBnQZ0GdBwAB6D0HoPQeg9B6D0HoNAA=",
     },
   },
   {
-    name: 'oddwidth',
+    name: "oddwidth",
     columns: 13,
     rows: 7,
     isBlack: (x, y) => (x * y) % 5 < 2,
     encodings: {
-      group4: 'JqCTweFoIFQQKulpa4qKuIhzweFABABA',
-      group3OneDimensional: 'ABNQQAE144xwATVOh06HTgAmqHTodOh0ACaqONwATUEABNeOMcA=',
-      group3TwoDimensional: 'ABmoIACng8KADNU6HTodOAC0tLUAGaqONwAURDABmvHGOA==',
-      group3TwoDimensionalFilled: 'AAGaggABTweFAAGap0OnQ6cAAWlpagABmqjjcAFEQwABmvHGOA==',
+      group4: "JqCTweFoIFQQKulpa4qKuIhzweFABABA",
+      group3OneDimensional:
+        "ABNQQAE144xwATVOh06HTgAmqHTodOh0ACaqONwATUEABNeOMcA=",
+      group3TwoDimensional: "ABmoIACng8KADNU6HTodOAC0tLUAGaqONwAURDABmvHGOA==",
+      group3TwoDimensionalFilled:
+        "AAGaggABTweFAAGap0OnQ6cAAWlpagABmqjjcAFEQwABmvHGOA==",
     },
   },
   {
-    name: 'shrink',
+    name: "shrink",
     columns: 40,
     rows: 9,
     isBlack: (x, y) => y % 3 === 0 && x >= 4 && x <= 34,
     encodings: {
-      group4: 'Ng0xzYNMc2DTHABABA==',
-      group3OneDimensional: 'ABsGnAASkAEpABsGnAASkAEpABsGnAASkAEp',
-      group3TwoDimensional: 'AB2DTgAIYAMpABGwaYAMpABQAdg04ACGADKQ',
-      group3TwoDimensionalFilled: 'AAHYNOAAAQwAAZSAARsGmAABlIABQAHYNOAAAQwAAZSA',
+      group4: "Ng0xzYNMc2DTHABABA==",
+      group3OneDimensional: "ABsGnAASkAEpABsGnAASkAEpABsGnAASkAEp",
+      group3TwoDimensional: "AB2DTgAIYAMpABGwaYAMpABQAdg04ACGADKQ",
+      group3TwoDimensionalFilled:
+        "AAHYNOAAAQwAAZSAARsGmAABlIABQAHYNOAAAQwAAZSA",
     },
   },
   {
-    name: 'longruns',
+    name: "longruns",
     columns: 2600,
     rows: 3,
     isBlack: (x, y) => x % 1900 < 1300 - y * 400,
     encodings: {
-      group4: 'JqBSDQWhQBKAskDk2oU5A1AkbSyQNQJF5gAgAg==',
-      group3OneDimensional: 'ABNQKQaGhQBKAsABNQOTahSBKAsABNQNQJG0sgagSLzA',
-      group3TwoDimensional: 'ABmoFINDQoAlAWAApA5NqFMAGagagSNpZA1AkXmA',
-      group3TwoDimensionalFilled: 'AAGagUg0NCgCUBYAAUgcm1CmAAGagagSNpZA1AkXmA==',
+      group4: "JqBSDQWhQBKAskDk2oU5A1AkbSyQNQJF5gAgAg==",
+      group3OneDimensional: "ABNQKQaGhQBKAsABNQOTahSBKAsABNQNQJG0sgagSLzA",
+      group3TwoDimensional: "ABmoFINDQoAlAWAApA5NqFMAGagagSNpZA1AkXmA",
+      group3TwoDimensionalFilled:
+        "AAGagUg0NCgCUBYAAUgcm1CmAAGagagSNpZA1AkXmA==",
     },
   },
 ];

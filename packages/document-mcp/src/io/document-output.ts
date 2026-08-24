@@ -1,12 +1,17 @@
-import { writeFile } from 'node:fs/promises';
-import { bytesToBase64 } from 'documents.js';
-import { z } from 'zod';
+import { writeFile } from "node:fs/promises";
+import { bytesToBase64 } from "documents.js";
+import { z } from "zod";
 
 /**
  * The hybrid output shape every MCP tool that produces a document accepts: an optional filesystem path to write the result to. Omitting it returns the bytes inline, base64-encoded, instead.
  */
 export const DocumentOutputSchema = z.object({
-  outputPath: z.string().optional().describe('Filesystem path to write the resulting document to. Omit to receive the document bytes inline, base64-encoded, in the tool result instead.'),
+  outputPath: z
+    .string()
+    .optional()
+    .describe(
+      "Filesystem path to write the resulting document to. Omit to receive the document bytes inline, base64-encoded, in the tool result instead.",
+    ),
 });
 
 export type DocumentOutput = z.infer<typeof DocumentOutputSchema>;
@@ -27,12 +32,16 @@ export interface InlineDocumentOutput {
   readonly large?: true;
 }
 
-export type ResolvedDocumentOutput = WrittenDocumentOutput | InlineDocumentOutput;
+export type ResolvedDocumentOutput =
+  WrittenDocumentOutput | InlineDocumentOutput;
 
 /**
  * Resolves output bytes against the hybrid DocumentOutput shape: writes to `outputPath` and reports the path plus byte length when one is given, otherwise returns the bytes inline as base64 (flagged `large: true` above `LARGE_RESULT_THRESHOLD_BYTES`, never truncated or refused).
  */
-export async function resolveDocumentOutput(bytes: Uint8Array<ArrayBuffer>, output: DocumentOutput): Promise<ResolvedDocumentOutput> {
+export async function resolveDocumentOutput(
+  bytes: Uint8Array<ArrayBuffer>,
+  output: DocumentOutput,
+): Promise<ResolvedDocumentOutput> {
   if (output.outputPath !== undefined) {
     await writeFile(output.outputPath, bytes);
     return { path: output.outputPath, byteLength: bytes.byteLength };

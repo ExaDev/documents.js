@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import { type Package, PackageSchema } from './model/package';
-import type { Attribute, XmlNode } from './model/node';
-import { decodePackage, encodePackage } from './codec';
+import { z } from "zod";
+import { type Package, PackageSchema } from "./model/package";
+import type { Attribute, XmlNode } from "./model/node";
+import { decodePackage, encodePackage } from "./codec";
 
 // A flat number[] of alternating [nameIdx, valueIdx, ...] pairs into the string table.
 export type CompactAttrPairs = number[];
@@ -28,7 +28,7 @@ function isUnknownArray(value: unknown): value is unknown[] {
 }
 
 function isCompactAttrPairs(value: unknown): value is CompactAttrPairs {
-  return isUnknownArray(value) && value.every((v) => typeof v === 'number');
+  return isUnknownArray(value) && value.every((v) => typeof v === "number");
 }
 
 // Recursive structural guard, mirroring model/node.ts's isXmlNode: z.lazy + z.union collapses to `unknown` for the element-children case in this zod version, so the recursive union goes through z.custom instead.
@@ -38,18 +38,22 @@ export function isCompactXmlNode(value: unknown): value is CompactXmlNode {
   }
   const code = value[0];
   if (code === 1 || code === 2 || code === 3) {
-    return value.length === 2 && typeof value[1] === 'number';
+    return value.length === 2 && typeof value[1] === "number";
   }
   if (code === 4) {
     return value.length === 2 && isCompactAttrPairs(value[1]);
   }
   if (code === 5) {
-    return value.length === 3 && typeof value[1] === 'number' && typeof value[2] === 'number';
+    return (
+      value.length === 3 &&
+      typeof value[1] === "number" &&
+      typeof value[2] === "number"
+    );
   }
   if (code === 0) {
     return (
       value.length === 4 &&
-      typeof value[1] === 'number' &&
+      typeof value[1] === "number" &&
       isCompactAttrPairs(value[2]) &&
       Array.isArray(value[3]) &&
       value[3].every(isCompactXmlNode)
@@ -61,7 +65,10 @@ export function isCompactXmlNode(value: unknown): value is CompactXmlNode {
 export const CompactXmlNodeSchema = z.custom<CompactXmlNode>(isCompactXmlNode);
 
 // A CompactPart is either an XML part (a CompactXmlNode[] forest) or a binary part (a single string-table index for its base64); Array.isArray discriminates the two.
-export const CompactPartSchema = z.union([z.array(CompactXmlNodeSchema), z.number()]);
+export const CompactPartSchema = z.union([
+  z.array(CompactXmlNodeSchema),
+  z.number(),
+]);
 export type CompactPart = z.infer<typeof CompactPartSchema>;
 
 export const CompactPackageSchema = z.object({
@@ -87,7 +94,10 @@ class StringTable {
   }
 }
 
-function encodeAttrs(attributes: Attribute[], table: StringTable): CompactAttrPairs {
+function encodeAttrs(
+  attributes: Attribute[],
+  table: StringTable,
+): CompactAttrPairs {
   const pairs: CompactAttrPairs = [];
   for (const attribute of attributes) {
     pairs.push(table.intern(attribute.name), table.intern(attribute.value));
@@ -97,17 +107,17 @@ function encodeAttrs(attributes: Attribute[], table: StringTable): CompactAttrPa
 
 function encodeNode(node: XmlNode, table: StringTable): CompactXmlNode {
   switch (node.type) {
-    case 'text':
+    case "text":
       return [1, table.intern(node.value)];
-    case 'cdata':
+    case "cdata":
       return [2, table.intern(node.value)];
-    case 'comment':
+    case "comment":
       return [3, table.intern(node.value)];
-    case 'declaration':
+    case "declaration":
       return [4, encodeAttrs(node.attributes, table)];
-    case 'pi':
+    case "pi":
       return [5, table.intern(node.target), table.intern(node.content)];
-    case 'element':
+    case "element":
       return [
         0,
         table.intern(node.tag),
@@ -121,7 +131,10 @@ function packageToCompact(pkg: Package): CompactPackage {
   const table = new StringTable();
   const p: Record<string, CompactPart> = {};
   for (const [path, part] of Object.entries(pkg.parts)) {
-    p[path] = part.kind === 'binary' ? table.intern(part.base64) : part.nodes.map((node) => encodeNode(node, table));
+    p[path] =
+      part.kind === "binary"
+        ? table.intern(part.base64)
+        : part.nodes.map((node) => encodeNode(node, table));
   }
   return { s: table.strings, p };
 }
@@ -140,9 +153,14 @@ function decodeAttrs(pairs: CompactAttrPairs, strings: string[]): Attribute[] {
     const nameIdx = pairs[i];
     const valueIdx = pairs[i + 1];
     if (nameIdx === undefined || valueIdx === undefined) {
-      throw new Error('fromCompact: attribute index pairs array has odd length');
+      throw new Error(
+        "fromCompact: attribute index pairs array has odd length",
+      );
     }
-    attributes.push({ name: stringAt(strings, nameIdx), value: stringAt(strings, valueIdx) });
+    attributes.push({
+      name: stringAt(strings, nameIdx),
+      value: stringAt(strings, valueIdx),
+    });
   }
   return attributes;
 }
@@ -150,18 +168,22 @@ function decodeAttrs(pairs: CompactAttrPairs, strings: string[]): Attribute[] {
 function decodeNode(node: CompactXmlNode, strings: string[]): XmlNode {
   switch (node[0]) {
     case 1:
-      return { type: 'text', value: stringAt(strings, node[1]) };
+      return { type: "text", value: stringAt(strings, node[1]) };
     case 2:
-      return { type: 'cdata', value: stringAt(strings, node[1]) };
+      return { type: "cdata", value: stringAt(strings, node[1]) };
     case 3:
-      return { type: 'comment', value: stringAt(strings, node[1]) };
+      return { type: "comment", value: stringAt(strings, node[1]) };
     case 4:
-      return { type: 'declaration', attributes: decodeAttrs(node[1], strings) };
+      return { type: "declaration", attributes: decodeAttrs(node[1], strings) };
     case 5:
-      return { type: 'pi', target: stringAt(strings, node[1]), content: stringAt(strings, node[2]) };
+      return {
+        type: "pi",
+        target: stringAt(strings, node[1]),
+        content: stringAt(strings, node[2]),
+      };
     case 0:
       return {
-        type: 'element',
+        type: "element",
         tag: stringAt(strings, node[1]),
         attributes: decodeAttrs(node[2], strings),
         children: node[3].map((child) => decodeNode(child, strings)),
@@ -170,12 +192,12 @@ function decodeNode(node: CompactXmlNode, strings: string[]): XmlNode {
 }
 
 function compactToPackage(cpkg: CompactPackage): Package {
-  const parts: Package['parts'] = {};
+  const parts: Package["parts"] = {};
   for (const [path, part] of Object.entries(cpkg.p)) {
     parts[path] =
-      typeof part === 'number'
-        ? { kind: 'binary', base64: stringAt(cpkg.s, part) }
-        : { kind: 'xml', nodes: part.map((node) => decodeNode(node, cpkg.s)) };
+      typeof part === "number"
+        ? { kind: "binary", base64: stringAt(cpkg.s, part) }
+        : { kind: "xml", nodes: part.map((node) => decodeNode(node, cpkg.s)) };
   }
   return { parts };
 }
@@ -195,15 +217,23 @@ export function fromCompact(cpkg: CompactPackage): Package {
 }
 
 // OOXML package bytes <-> the ooxml.js compact form directly, composing packageCodec and compactCodec so callers who only care about bytes and CompactPackage don't have to go through Package by hand.
-export const compactPackageCodec = z.codec(z.instanceof(Uint8Array), CompactPackageSchema, {
-  decode: (bytes) => toCompact(decodePackage(bytes)),
-  encode: (cpkg) => encodePackage(fromCompact(cpkg)),
-});
+export const compactPackageCodec = z.codec(
+  z.instanceof(Uint8Array),
+  CompactPackageSchema,
+  {
+    decode: (bytes) => toCompact(decodePackage(bytes)),
+    encode: (cpkg) => encodePackage(fromCompact(cpkg)),
+  },
+);
 
-export function decodeCompactPackage(bytes: Uint8Array<ArrayBuffer>): CompactPackage {
+export function decodeCompactPackage(
+  bytes: Uint8Array<ArrayBuffer>,
+): CompactPackage {
   return z.decode(compactPackageCodec, bytes);
 }
 
-export function encodeCompactPackage(cpkg: CompactPackage): Uint8Array<ArrayBuffer> {
+export function encodeCompactPackage(
+  cpkg: CompactPackage,
+): Uint8Array<ArrayBuffer> {
   return z.encode(compactPackageCodec, cpkg);
 }

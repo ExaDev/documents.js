@@ -1,20 +1,20 @@
-import type { ContentFormula, ContentVector } from 'document-schema.js';
-import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { formatOdfLength } from 'odf.js';
-import { elementsWithTag } from 'ooxml.js';
-import type { Box } from 'document-schema.js';
-import { removeChild } from '../../xml/edit';
-import { el } from '../../xml/fragment';
-import { decodeOdfText } from '../../xml/odf-text';
-import type { OdgVector } from '../odg/vector';
-import { appendVectorTo } from '../odg/vector';
-import { buildParagraph } from '../odt/paragraph';
-import type { TableInit } from '../odt/table';
-import { buildTable, OdtTable } from '../odt/table';
-import { insertFormulaFrameMedia } from './formula';
-import type { ImageInit, MediaContext } from './image';
-import { insertImageFrameMedia } from './image';
-import { buildTableFrame, buildTextBoxFrame, OdpShape } from './shape';
+import type { ContentFormula, ContentVector } from "document-schema.js";
+import type { Package, XmlElement, XmlNode } from "odf.js";
+import { formatOdfLength } from "odf.js";
+import { elementsWithTag } from "ooxml.js";
+import type { Box } from "document-schema.js";
+import { removeChild } from "../../xml/edit";
+import { el } from "../../xml/fragment";
+import { decodeOdfText } from "../../xml/odf-text";
+import type { OdgVector } from "../odg/vector";
+import { appendVectorTo } from "../odg/vector";
+import { buildParagraph } from "../odt/paragraph";
+import type { TableInit } from "../odt/table";
+import { buildTable, OdtTable } from "../odt/table";
+import { insertFormulaFrameMedia } from "./formula";
+import type { ImageInit, MediaContext } from "./image";
+import { insertImageFrameMedia } from "./image";
+import { buildTableFrame, buildTextBoxFrame, OdpShape } from "./shape";
 
 export interface TextBoxInit {
   readonly frame: Box;
@@ -32,7 +32,7 @@ export interface SlideTableInit {
 
 function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
   for (const child of parent.children) {
-    if (child.type === 'element' && child.tag === tag) {
+    if (child.type === "element" && child.tag === tag) {
       return child;
     }
   }
@@ -46,19 +46,21 @@ const NOTES_FRAME_WIDTH_PT = 300;
 const NOTES_FRAME_HEIGHT_PT = 100;
 
 function buildNotesElement(pkg: Package, value: string): XmlElement {
-  const paragraphs = value.split('\n').map((line) => buildParagraph(pkg, { text: line }));
-  const textBox = el('draw:text-box', {}, paragraphs);
+  const paragraphs = value
+    .split("\n")
+    .map((line) => buildParagraph(pkg, { text: line }));
+  const textBox = el("draw:text-box", {}, paragraphs);
   const frame = el(
-    'draw:frame',
+    "draw:frame",
     {
-      'svg:x': formatOdfLength(NOTES_FRAME_X_PT),
-      'svg:y': formatOdfLength(NOTES_FRAME_Y_PT),
-      'svg:width': formatOdfLength(NOTES_FRAME_WIDTH_PT),
-      'svg:height': formatOdfLength(NOTES_FRAME_HEIGHT_PT),
+      "svg:x": formatOdfLength(NOTES_FRAME_X_PT),
+      "svg:y": formatOdfLength(NOTES_FRAME_Y_PT),
+      "svg:width": formatOdfLength(NOTES_FRAME_WIDTH_PT),
+      "svg:height": formatOdfLength(NOTES_FRAME_HEIGHT_PT),
     },
     [textBox],
   );
-  return el('presentation:notes', {}, [frame]);
+  return el("presentation:notes", {}, [frame]);
 }
 
 export interface SlideContext {
@@ -86,7 +88,9 @@ export class OdpSlide {
 
   private live(): XmlElement {
     if (this.removed) {
-      throw new Error('this OdpSlide has been removed from the presentation and can no longer be used');
+      throw new Error(
+        "this OdpSlide has been removed from the presentation and can no longer be used",
+      );
     }
     return this.node;
   }
@@ -96,7 +100,11 @@ export class OdpSlide {
     const node = this.live();
     const out: OdpShape[] = [];
     for (const child of node.children) {
-      if (child.type === 'element' && child.tag === 'draw:frame' && directChild(child, 'table:table') === undefined) {
+      if (
+        child.type === "element" &&
+        child.tag === "draw:frame" &&
+        directChild(child, "table:table") === undefined
+      ) {
         out.push(new OdpShape(node.children, child, this.context.pkg));
       }
     }
@@ -105,7 +113,11 @@ export class OdpSlide {
 
   addTextBox(init: TextBoxInit): OdpShape {
     const node = this.live();
-    const frameElement = buildTextBoxFrame(this.context.pkg, init.frame, init.text);
+    const frameElement = buildTextBoxFrame(
+      this.context.pkg,
+      init.frame,
+      init.text,
+    );
     node.children.push(frameElement);
     return new OdpShape(node.children, frameElement, this.context.pkg);
   }
@@ -121,7 +133,11 @@ export class OdpSlide {
   // A real embedded ODF formula sub-document, positioned like any other slide shape (src/edit/odp/formula.ts's own buildFormulaFrame -- svg:x/svg:y, not odt's text-flow "as-char" anchoring). The odp counterpart to OdtBody.appendFormula (src/edit/odt/editor.ts), and what closes the write-side gap src/edit/odp/content.ts's own appendShape previously had: a formula-kind embedded object dropped silently rather than being written.
   addFormula(frame: Box, formula: ContentFormula): OdpShape {
     const node = this.live();
-    const frameElement = insertFormulaFrameMedia(this.context.pkg, frame, formula);
+    const frameElement = insertFormulaFrameMedia(
+      this.context.pkg,
+      frame,
+      formula,
+    );
     node.children.push(frameElement);
     return new OdpShape(node.children, frameElement, this.context.pkg);
   }
@@ -134,7 +150,11 @@ export class OdpSlide {
     node.children.push(frameElement);
     return {
       shape: new OdpShape(node.children, frameElement, this.context.pkg),
-      table: new OdtTable(frameElement.children, tableElement, this.context.pkg),
+      table: new OdtTable(
+        frameElement.children,
+        tableElement,
+        this.context.pkg,
+      ),
     };
   }
 
@@ -143,10 +163,10 @@ export class OdpSlide {
     const node = this.live();
     const out: OdpTableShape[] = [];
     for (const child of node.children) {
-      if (child.type !== 'element' || child.tag !== 'draw:frame') {
+      if (child.type !== "element" || child.tag !== "draw:frame") {
         continue;
       }
-      const tableElement = directChild(child, 'table:table');
+      const tableElement = directChild(child, "table:table");
       if (tableElement === undefined) {
         continue;
       }
@@ -165,18 +185,18 @@ export class OdpSlide {
 
   // presentation:notes is a direct child of draw:page, typically wrapping a single draw:frame > draw:text-box with one text:p per line -- mirroring odf.js's own readSlideNotes (typed/odp/read.ts), which is not exported, so this is a small, deliberate reimplementation of the identical deep text:p search + decodeOdfText + join('\n') logic on the write side's own read-back path.
   get notes(): string {
-    const notesElement = directChild(this.live(), 'presentation:notes');
+    const notesElement = directChild(this.live(), "presentation:notes");
     if (notesElement === undefined) {
-      return '';
+      return "";
     }
-    return elementsWithTag(notesElement.children, 'text:p')
+    return elementsWithTag(notesElement.children, "text:p")
       .map((p) => decodeOdfText(p.children))
-      .join('\n');
+      .join("\n");
   }
 
   set notes(value: string) {
     const node = this.live();
-    const existing = directChild(node, 'presentation:notes');
+    const existing = directChild(node, "presentation:notes");
     const notesElement = buildNotesElement(this.context.pkg, value);
     if (existing === undefined) {
       node.children.push(notesElement);

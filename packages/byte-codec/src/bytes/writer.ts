@@ -36,7 +36,9 @@ export class ByteWriter {
 }
 
 // Concatenates a list of byte chunks into one contiguous array without the O(n^2) cost of repeated single-chunk concatenation.
-export function concatBytes(chunks: readonly Uint8Array[]): Uint8Array<ArrayBuffer> {
+export function concatBytes(
+  chunks: readonly Uint8Array[],
+): Uint8Array<ArrayBuffer> {
   const writer = new ByteWriter();
   for (const chunk of chunks) {
     writer.writeBytes(chunk);

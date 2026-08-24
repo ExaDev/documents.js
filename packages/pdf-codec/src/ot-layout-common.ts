@@ -1,4 +1,4 @@
-import { hasBytes, u16 } from './sfnt';
+import { hasBytes, u16 } from "./sfnt";
 
 // The two OpenType Common Table Formats every OpenType Layout table is built out of (Microsoft's OpenType spec, "Common Table Formats"; ISO/IEC 14496-22 clause 6.1): a Coverage table, which answers "does this subtable apply to this glyph, and if so where does it sit in the subtable's own parallel value array", and a ClassDef table, which answers "which class does this glyph belong to". Both are shared vocabulary rather than any one table's private business -- 'GPOS' (gpos-table.ts) and 'MATH' (math-table.ts) both index glyphs through the identical Coverage layout -- which is why they live here rather than being parsed twice.
 //
@@ -14,7 +14,10 @@ interface GlyphRange {
 }
 
 // The range covering `glyphId`, by bisection over a list sorted on `startGlyphId`. Ranges are sorted at parse time rather than trusted to arrive sorted: the spec requires both tables' format 2 records to be in glyph order, but a font from an arbitrary source document is not obliged to be correct, and an unsorted list would otherwise make this search silently miss real entries.
-function findRange(ranges: readonly GlyphRange[], glyphId: number): GlyphRange | undefined {
+function findRange(
+  ranges: readonly GlyphRange[],
+  glyphId: number,
+): GlyphRange | undefined {
   let low = 0;
   let high = ranges.length - 1;
   while (low <= high) {
@@ -32,10 +35,25 @@ function findRange(ranges: readonly GlyphRange[], glyphId: number): GlyphRange |
 }
 
 // Appends `[glyphId, glyphId] -> value` to `ranges`, extending the previous range instead when this glyph continues it. Whether a glyph continues the previous range depends on which table is being built: a Coverage index climbs by one per glyph (`valueStep` 1), a ClassDef class stays flat across its range (`valueStep` 0).
-function pushGlyph(ranges: GlyphRange[], glyphId: number, value: number, valueStep: number): void {
+function pushGlyph(
+  ranges: GlyphRange[],
+  glyphId: number,
+  value: number,
+  valueStep: number,
+): void {
   const previous = ranges[ranges.length - 1];
-  if (previous !== undefined && glyphId === previous.endGlyphId + 1 && value === previous.value + (previous.endGlyphId - previous.startGlyphId + 1) * valueStep) {
-    ranges[ranges.length - 1] = { startGlyphId: previous.startGlyphId, endGlyphId: glyphId, value: previous.value };
+  if (
+    previous !== undefined &&
+    glyphId === previous.endGlyphId + 1 &&
+    value ===
+      previous.value +
+        (previous.endGlyphId - previous.startGlyphId + 1) * valueStep
+  ) {
+    ranges[ranges.length - 1] = {
+      startGlyphId: previous.startGlyphId,
+      endGlyphId: glyphId,
+      value: previous.value,
+    };
     return;
   }
   ranges.push({ startGlyphId: glyphId, endGlyphId: glyphId, value });
@@ -44,7 +62,11 @@ function pushGlyph(ranges: GlyphRange[], glyphId: number, value: number, valueSt
 const RANGE_RECORD_SIZE = 6; // uint16 startGlyphID + uint16 endGlyphID + uint16 (startCoverageIndex | class) -- the identical record layout Coverage format 2 and ClassDef format 2 both use
 
 // Reads the shared start/end/value record array both format 2 tables store, at `recordsOffset`, and returns it sorted by start glyph. A record whose end precedes its start is dropped rather than treated as empty or inverted: it describes no glyphs either way, and keeping it would only put an unsearchable entry in the bisection list.
-function parseRangeRecords(bytes: Uint8Array<ArrayBuffer>, recordsOffset: number, recordCount: number): GlyphRange[] | undefined {
+function parseRangeRecords(
+  bytes: Uint8Array<ArrayBuffer>,
+  recordsOffset: number,
+  recordCount: number,
+): GlyphRange[] | undefined {
   if (!hasBytes(bytes, recordsOffset, recordCount * RANGE_RECORD_SIZE)) {
     return undefined;
   }
@@ -56,7 +78,11 @@ function parseRangeRecords(bytes: Uint8Array<ArrayBuffer>, recordsOffset: number
     if (endGlyphId < startGlyphId) {
       continue;
     }
-    ranges.push({ startGlyphId, endGlyphId, value: u16(bytes, recordOffset + 4) });
+    ranges.push({
+      startGlyphId,
+      endGlyphId,
+      value: u16(bytes, recordOffset + 4),
+    });
   }
   ranges.sort((a, b) => a.startGlyphId - b.startGlyphId);
   return ranges;
@@ -72,7 +98,10 @@ export interface CoverageTable {
   entries(): IterableIterator<readonly [number, number]>;
 }
 
-export function parseCoverage(bytes: Uint8Array<ArrayBuffer>, coverageOffset: number): CoverageTable | undefined {
+export function parseCoverage(
+  bytes: Uint8Array<ArrayBuffer>,
+  coverageOffset: number,
+): CoverageTable | undefined {
   if (!hasBytes(bytes, coverageOffset, COVERAGE_HEADER_SIZE)) {
     return undefined;
   }
@@ -92,7 +121,11 @@ export function parseCoverage(bytes: Uint8Array<ArrayBuffer>, coverageOffset: nu
     ranges.sort((a, b) => a.startGlyphId - b.startGlyphId);
   } else if (format === 2) {
     // Format 2: start/end ranges, each carrying the coverage index of its own first glyph.
-    ranges = parseRangeRecords(bytes, coverageOffset + COVERAGE_HEADER_SIZE, count);
+    ranges = parseRangeRecords(
+      bytes,
+      coverageOffset + COVERAGE_HEADER_SIZE,
+      count,
+    );
   }
   if (ranges === undefined) {
     return undefined;
@@ -101,11 +134,17 @@ export function parseCoverage(bytes: Uint8Array<ArrayBuffer>, coverageOffset: nu
   return {
     coverageIndex(glyphId: number): number | undefined {
       const range = findRange(resolved, glyphId);
-      return range === undefined ? undefined : range.value + (glyphId - range.startGlyphId);
+      return range === undefined
+        ? undefined
+        : range.value + (glyphId - range.startGlyphId);
     },
     *entries(): IterableIterator<readonly [number, number]> {
       for (const range of resolved) {
-        for (let glyphId = range.startGlyphId; glyphId <= range.endGlyphId; glyphId++) {
+        for (
+          let glyphId = range.startGlyphId;
+          glyphId <= range.endGlyphId;
+          glyphId++
+        ) {
           yield [glyphId, range.value + (glyphId - range.startGlyphId)];
         }
       }
@@ -119,7 +158,10 @@ const CLASS_DEF_FORMAT_2_HEADER_SIZE = 4; // uint16 classFormat + uint16 classRa
 // A parsed ClassDef table. Class 0 is the spec's own catch-all for "every glyph the table does not otherwise assign", so this resolves to a class for any glyph rather than to `undefined` -- an unlisted glyph genuinely is in class 0, not absent.
 export type ClassDefTable = (glyphId: number) => number;
 
-export function parseClassDef(bytes: Uint8Array<ArrayBuffer>, classDefOffset: number): ClassDefTable | undefined {
+export function parseClassDef(
+  bytes: Uint8Array<ArrayBuffer>,
+  classDefOffset: number,
+): ClassDefTable | undefined {
   if (!hasBytes(bytes, classDefOffset, CLASS_DEF_FORMAT_2_HEADER_SIZE)) {
     return undefined;
   }
@@ -138,11 +180,20 @@ export function parseClassDef(bytes: Uint8Array<ArrayBuffer>, classDefOffset: nu
     }
     ranges = [];
     for (let i = 0; i < glyphCount; i++) {
-      pushGlyph(ranges, startGlyphId + i, u16(bytes, classArrayOffset + i * 2), 0);
+      pushGlyph(
+        ranges,
+        startGlyphId + i,
+        u16(bytes, classArrayOffset + i * 2),
+        0,
+      );
     }
   } else if (format === 2) {
     // Format 2: start/end ranges, each assigning one class to every glyph it spans.
-    ranges = parseRangeRecords(bytes, classDefOffset + CLASS_DEF_FORMAT_2_HEADER_SIZE, u16(bytes, classDefOffset + 2));
+    ranges = parseRangeRecords(
+      bytes,
+      classDefOffset + CLASS_DEF_FORMAT_2_HEADER_SIZE,
+      u16(bytes, classDefOffset + 2),
+    );
   }
   if (ranges === undefined) {
     return undefined;

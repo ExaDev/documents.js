@@ -4,7 +4,7 @@
 //
 // The GFM corpus ships only as prose (assets/gfm/spec.txt), with its examples in the same fenced format the CommonMark spec source uses: a line of at least 32 backticks followed by the word `example` and -- for an extension example -- the extension's own name; then the markdown; then a line containing only `.`; then the expected HTML; then a closing line of backticks. Extracting them here rather than vendoring a second, pre-built JSON keeps that asset exactly as fetched from its canonical source, which is what assets/gfm/NOTICE.md records.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync } from "node:fs";
 
 export interface SpecExample {
   readonly markdown: string;
@@ -14,13 +14,23 @@ export interface SpecExample {
 }
 
 function isSpecExample(value: unknown): value is SpecExample {
-  if (typeof value !== 'object' || value === null) {
+  if (typeof value !== "object" || value === null) {
     return false;
   }
-  if (!('markdown' in value) || !('html' in value) || !('example' in value) || !('section' in value)) {
+  if (
+    !("markdown" in value) ||
+    !("html" in value) ||
+    !("example" in value) ||
+    !("section" in value)
+  ) {
     return false;
   }
-  return typeof value.markdown === 'string' && typeof value.html === 'string' && typeof value.example === 'number' && typeof value.section === 'string';
+  return (
+    typeof value.markdown === "string" &&
+    typeof value.html === "string" &&
+    typeof value.example === "number" &&
+    typeof value.section === "string"
+  );
 }
 
 function isSpecExampleArray(value: unknown): value is SpecExample[] {
@@ -28,9 +38,16 @@ function isSpecExampleArray(value: unknown): value is SpecExample[] {
 }
 
 export function loadSpecExamples(): SpecExample[] {
-  const raw: unknown = JSON.parse(readFileSync(new URL('../../assets/commonmark/spec.json', import.meta.url), 'utf8'));
+  const raw: unknown = JSON.parse(
+    readFileSync(
+      new URL("../../assets/commonmark/spec.json", import.meta.url),
+      "utf8",
+    ),
+  );
   if (!isSpecExampleArray(raw)) {
-    throw new Error('assets/commonmark/spec.json is not an array of {markdown, html, example, section} examples');
+    throw new Error(
+      "assets/commonmark/spec.json is not an array of {markdown, html, example, section} examples",
+    );
   }
   return raw;
 }
@@ -41,21 +58,24 @@ const GFM_EXAMPLE_END_PATTERN = /^`{32,}\s*$/;
 const GFM_SECTION_PATTERN = /^#{1,6} (.+)$/;
 
 // The spec source writes a literal tab as U+2192 (RIGHTWARDS ARROW) inside its own examples so tabs stay visible in the rendered prose; the corpus generator substitutes it back. Doing the same here is not a convenience -- several examples depend on the character really being a tab.
-const VISIBLE_TAB = '→';
+const VISIBLE_TAB = "→";
 
 // Every example in assets/gfm/spec.txt tagged with `extension` (`table`, `strikethrough`, `autolink`, ...), in document order. Untagged examples are deliberately not returned: those are the CommonMark base, which the machine-readable CommonMark corpus already covers at its own pinned spec version.
 export function loadGfmExtensionExamples(extension: string): SpecExample[] {
-  const lines = readFileSync(new URL('../../assets/gfm/spec.txt', import.meta.url), 'utf8').split('\n');
+  const lines = readFileSync(
+    new URL("../../assets/gfm/spec.txt", import.meta.url),
+    "utf8",
+  ).split("\n");
   const examples: SpecExample[] = [];
-  let section = '';
+  let section = "";
   let index = 0;
   let exampleNumber = 0;
 
   while (index < lines.length) {
-    const line = lines[index] ?? '';
+    const line = lines[index] ?? "";
     const heading = GFM_SECTION_PATTERN.exec(line);
     if (heading !== null) {
-      section = heading[1] ?? '';
+      section = heading[1] ?? "";
       index += 1;
       continue;
     }
@@ -68,22 +88,25 @@ export function loadGfmExtensionExamples(extension: string): SpecExample[] {
     exampleNumber += 1;
     index += 1;
     const markdown: string[] = [];
-    while (index < lines.length && lines[index] !== '.') {
-      markdown.push(lines[index] ?? '');
+    while (index < lines.length && lines[index] !== ".") {
+      markdown.push(lines[index] ?? "");
       index += 1;
     }
     index += 1;
     const html: string[] = [];
-    while (index < lines.length && !GFM_EXAMPLE_END_PATTERN.test(lines[index] ?? '')) {
-      html.push(lines[index] ?? '');
+    while (
+      index < lines.length &&
+      !GFM_EXAMPLE_END_PATTERN.test(lines[index] ?? "")
+    ) {
+      html.push(lines[index] ?? "");
       index += 1;
     }
     index += 1;
 
     if (start[1] === extension) {
       examples.push({
-        markdown: `${markdown.join('\n')}\n`.replaceAll(VISIBLE_TAB, '\t'),
-        html: `${html.join('\n')}\n`.replaceAll(VISIBLE_TAB, '\t'),
+        markdown: `${markdown.join("\n")}\n`.replaceAll(VISIBLE_TAB, "\t"),
+        html: `${html.join("\n")}\n`.replaceAll(VISIBLE_TAB, "\t"),
         example: exampleNumber,
         section,
       });

@@ -1,19 +1,19 @@
-import { Alert, Container, Paper, Select, Stack, Title } from '@mantine/core';
-import { createFileRoute } from '@tanstack/react-router';
-import { DocumentFormatSchema } from 'documents.js';
-import type { DocumentFormat } from 'documents.js';
-import { useState } from 'react';
+import { Alert, Container, Paper, Select, Stack, Title } from "@mantine/core";
+import { createFileRoute } from "@tanstack/react-router";
+import { DocumentFormatSchema } from "documents.js";
+import type { DocumentFormat } from "documents.js";
+import { useState } from "react";
 
-import { useDocumentFormats } from '../hooks/useConversions';
-import { useInspectDocument } from '../hooks/useInspect';
-import type { OpenedFile } from '../ports/fileAccess';
-import { inferFormatFromFilename } from '../shared/extensionToFormat';
-import { DiagnosticsPanel } from '../ui/DiagnosticsPanel';
-import { FileUpload } from '../ui/FileUpload';
-import { InspectPanel } from '../ui/InspectPanel';
-import { notifyError } from '../ui/notify';
+import { useDocumentFormats } from "../hooks/useConversions";
+import { useInspectDocument } from "../hooks/useInspect";
+import type { OpenedFile } from "../ports/fileAccess";
+import { inferFormatFromFilename } from "../shared/extensionToFormat";
+import { DiagnosticsPanel } from "../ui/DiagnosticsPanel";
+import { FileUpload } from "../ui/FileUpload";
+import { InspectPanel } from "../ui/InspectPanel";
+import { notifyError } from "../ui/notify";
 
-export const Route = createFileRoute('/inspect')({
+export const Route = createFileRoute("/inspect")({
   component: InspectPage,
 });
 
@@ -24,7 +24,14 @@ function InspectPage() {
   const inspect = useInspectDocument();
 
   const runInspect = (opened: OpenedFile, chosenFormat: DocumentFormat) => {
-    inspect.mutate({ format: chosenFormat, bytes: opened.bytes }, { onError: (error) => { notifyError('Could not inspect document', error); } });
+    inspect.mutate(
+      { format: chosenFormat, bytes: opened.bytes },
+      {
+        onError: (error) => {
+          notifyError("Could not inspect document", error);
+        },
+      },
+    );
   };
 
   const handleFile = (opened: OpenedFile) => {
@@ -51,9 +58,17 @@ function InspectPage() {
         <Title order={2}>Inspect</Title>
         <Paper withBorder p="md">
           <Stack gap="sm">
-            <FileUpload formatHint={formats.data?.join(', ')} file={file} onFile={handleFile} loading={inspect.isPending} />
+            <FileUpload
+              formatHint={formats.data?.join(", ")}
+              file={file}
+              onFile={handleFile}
+              loading={inspect.isPending}
+            />
             {file !== undefined && format === undefined && (
-              <Alert color="yellow">Could not detect "{file.name}"'s format from its extension -- pick it below.</Alert>
+              <Alert color="yellow">
+                Could not detect "{file.name}"'s format from its extension --
+                pick it below.
+              </Alert>
             )}
             {file !== undefined && (
               <Select

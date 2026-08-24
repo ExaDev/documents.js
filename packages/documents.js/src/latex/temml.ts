@@ -1,5 +1,5 @@
-import type { MathMlNode } from 'document-schema.js';
-import temml from 'temml';
+import type { MathMlNode } from "document-schema.js";
+import temml from "temml";
 
 // The pinned LaTeX parser. temml (https://temml.org, MIT, zero dependencies of its own) is the one component of the two-layer math model this ecosystem deliberately does not hand-write -- a LaTeX grammar is a large, fiddly surface with no supply-chain-averse payoff the way the hand-written MathML typesetting engine has one -- so it is a real dependency, pinned to the EXACT version recorded in package.json ("temml": "0.13.4", no caret). The pin is load-bearing, not tidiness: this module consumes temml's underscore-prefixed internal API (__parse, the KaTeX-style parse-node tree, and __renderToMathMLTree, the virtual MathML tree), which carries no stability guarantee across releases, and the two-layer model's storage contract says a stored presentation string has ONE defined parse. A caret range would silently change that defined meaning under a consumer's feet; the exact pin makes "which parse does this stored string have" a function of the package's own version. Bumping the pin is a deliberate act that must re-run src/latex/lower.test.ts, whose lowering table cases pin the parse-node shapes this version produces.
 //
@@ -15,11 +15,11 @@ export interface TemmlNode {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function isTemmlNode(value: unknown): value is TemmlNode {
-  return isRecord(value) && typeof value.type === 'string';
+  return isRecord(value) && typeof value.type === "string";
 }
 
 export function isTemmlNodeArray(value: unknown): value is TemmlNode[] {
@@ -39,34 +39,51 @@ export function sourceSpanOf(node: TemmlNode): TemmlSourceSpan | undefined {
   }
   const start = loc.start;
   const end = loc.end;
-  if (typeof start !== 'number' || typeof end !== 'number' || !Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
+  if (
+    typeof start !== "number" ||
+    typeof end !== "number" ||
+    !Number.isInteger(start) ||
+    !Number.isInteger(end) ||
+    start < 0 ||
+    end < start
+  ) {
     return undefined;
   }
   return { start, end };
 }
 
-export function sourceSlice(input: string, span: TemmlSourceSpan | undefined): string {
+export function sourceSlice(
+  input: string,
+  span: TemmlSourceSpan | undefined,
+): string {
   if (span === undefined) {
-    return '';
+    return "";
   }
   return input.slice(span.start, span.end);
 }
 
 // The result of handing one LaTeX string to the pinned parser: either the parse-node list plus the presentation-MathML tree (both derived from the same single parse, so the two views can never disagree about what the string said), or the parser's own failure message.
 export type LatexParseResult =
-  | { readonly status: 'parsed'; readonly nodes: readonly TemmlNode[]; readonly mathml: readonly MathMlNode[] }
-  | { readonly status: 'unparseable'; readonly message: string };
+  | {
+      readonly status: "parsed";
+      readonly nodes: readonly TemmlNode[];
+      readonly mathml: readonly MathMlNode[];
+    }
+  | { readonly status: "unparseable"; readonly message: string };
 
 export function parseLatex(latex: string): LatexParseResult {
   try {
     const nodes: unknown = temml.__parse(latex, TEMML_OPTIONS);
     if (!isTemmlNodeArray(nodes)) {
-      return { status: 'unparseable', message: 'parser returned a shape this package does not recognise' };
+      return {
+        status: "unparseable",
+        message: "parser returned a shape this package does not recognise",
+      };
     }
     const mathml = mathmlOf(latex);
-    return { status: 'parsed', nodes, mathml };
+    return { status: "parsed", nodes, mathml };
   } catch (error) {
-    return { status: 'unparseable', message: errorMessage(error) };
+    return { status: "unparseable", message: errorMessage(error) };
   }
 }
 
@@ -90,8 +107,8 @@ function toMathMlNodes(value: unknown): MathMlNode[] | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
-  if (typeof value.text === 'string' && value.type === undefined) {
-    return [{ type: 'text', value: value.text }];
+  if (typeof value.text === "string" && value.type === undefined) {
+    return [{ type: "text", value: value.text }];
   }
   if (!Array.isArray(value.children)) {
     return undefined;
@@ -108,23 +125,29 @@ function toMathMlNodes(value: unknown): MathMlNode[] | undefined {
     // A DocumentFragment: transparent, its converted children stand in for it directly.
     return children;
   }
-  if (typeof value.type !== 'string') {
+  if (typeof value.type !== "string") {
     return undefined;
   }
   const attributes = attributesOf(value.attributes);
   if (attributes === undefined) {
     return undefined;
   }
-  return [{ type: 'element', tag: value.type, attributes, children }];
+  return [{ type: "element", tag: value.type, attributes, children }];
 }
 
-function attributesOf(value: unknown): { readonly name: string; readonly value: string }[] | undefined {
+function attributesOf(
+  value: unknown,
+): { readonly name: string; readonly value: string }[] | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
   const attributes: { name: string; value: string }[] = [];
   for (const [name, attributeValue] of Object.entries(value)) {
-    if (typeof attributeValue === 'string' || typeof attributeValue === 'number' || typeof attributeValue === 'boolean') {
+    if (
+      typeof attributeValue === "string" ||
+      typeof attributeValue === "number" ||
+      typeof attributeValue === "boolean"
+    ) {
       attributes.push({ name, value: String(attributeValue) });
     }
   }

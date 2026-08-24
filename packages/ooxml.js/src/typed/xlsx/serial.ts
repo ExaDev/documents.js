@@ -1,6 +1,6 @@
-import type { Package } from '../../model/package';
-import { attr, childrenWithTag, rootElement } from '../util';
-import { readXmlBool } from './util';
+import type { Package } from "../../model/package";
+import { attr, childrenWithTag, rootElement } from "../util";
+import { readXmlBool } from "./util";
 
 // xlsx stores every date and time as a bare serial NUMBER in the cell's own <v> -- a day count plus a fraction-of-a-day -- with nothing in the cell itself saying it is temporal at all; that lives entirely in the number format its style points at (see typed/xlsx/number-format.ts). This module converts between one and the canonical ISO spellings document-schema.js's own ContentCellValue doc comment fixes for its three temporal variants ('date' is YYYY-MM-DD, 'time' is a 24-hour zero-padded HH:MM:SS wall-clock time of day, 'dateTime' is YYYY-MM-DDTHH:MM:SS), in both directions: serial -> ISO for typed/xlsx/content.ts's reader, ISO -> serial for typed/xlsx/build.ts's writer.
 
@@ -9,7 +9,7 @@ const MS_PER_HOUR = 3_600_000;
 const MS_PER_MINUTE = 60_000;
 const MS_PER_SECOND = 1000;
 
-const WORKBOOK_PATH = 'xl/workbook.xml';
+const WORKBOOK_PATH = "xl/workbook.xml";
 
 // Which of the two epochs a workbook's serials are counted from: the 1900 system (the default, and what every mainstream producer writes -- this package's own kitchen-sink fixture carries an explicit date1904="false") or the 1904 system, historically the Macintosh Excel default and still legal to write. Getting this wrong shifts every date in the file by 1462 days, so it is read from the file rather than assumed.
 export function readDate1904(pkg: Package): boolean {
@@ -17,8 +17,8 @@ export function readDate1904(pkg: Package): boolean {
   if (workbook === undefined) {
     return false;
   }
-  const workbookPr = childrenWithTag(workbook, 'workbookPr')[0];
-  return workbookPr !== undefined && readXmlBool(attr(workbookPr, 'date1904'));
+  const workbookPr = childrenWithTag(workbook, "workbookPr")[0];
+  return workbookPr !== undefined && readXmlBool(attr(workbookPr, "date1904"));
 }
 
 // The serial the 1900 system reserves for a day that never existed: 1900-02-29. Lotus 1-2-3 treated 1900 as a leap year and Excel reproduced the bug for file compatibility, so serials at or above 61 are one day ahead of a true day count from 1899-12-31, and serial 60 itself denotes a date with no place on the calendar.
@@ -38,11 +38,13 @@ interface SplitSerial {
 function splitSerial(serial: number): SplitSerial {
   const days = Math.floor(serial);
   const msWithinDay = Math.round((serial - days) * MS_PER_DAY);
-  return msWithinDay >= MS_PER_DAY ? { days: days + 1, msWithinDay: 0 } : { days, msWithinDay };
+  return msWithinDay >= MS_PER_DAY
+    ? { days: days + 1, msWithinDay: 0 }
+    : { days, msWithinDay };
 }
 
 function pad(value: number, length: number): string {
-  return String(value).padStart(length, '0');
+  return String(value).padStart(length, "0");
 }
 
 // Every calculation below is done in UTC deliberately: a serial carries no timezone, and using local-time Date methods would shift a date across a day boundary for any host west of Greenwich.
@@ -52,7 +54,10 @@ function isoDateOfUtcMs(ms: number): string {
 }
 
 // The day-count half of a serial, as a calendar date -- undefined when the serial names no real date, which the caller degrades to a plain number rather than emitting an invalid one. Two cases produce that: a negative serial (no date exists before either epoch), and serial 60 in the 1900 system (the phantom leap day above).
-function isoDateOfDayCount(days: number, date1904: boolean): string | undefined {
+function isoDateOfDayCount(
+  days: number,
+  date1904: boolean,
+): string | undefined {
   if (days < 0) {
     return undefined;
   }
@@ -62,7 +67,10 @@ function isoDateOfDayCount(days: number, date1904: boolean): string | undefined 
   if (days === PHANTOM_LEAP_DAY_SERIAL) {
     return undefined;
   }
-  const originUtcMs = days < PHANTOM_LEAP_DAY_SERIAL ? ORIGIN_1900_BELOW_PHANTOM_UTC_MS : ORIGIN_1900_ABOVE_PHANTOM_UTC_MS;
+  const originUtcMs =
+    days < PHANTOM_LEAP_DAY_SERIAL
+      ? ORIGIN_1900_BELOW_PHANTOM_UTC_MS
+      : ORIGIN_1900_ABOVE_PHANTOM_UTC_MS;
   return isoDateOfUtcMs(originUtcMs + days * MS_PER_DAY);
 }
 
@@ -73,22 +81,34 @@ function isoTimeOfMsWithinDay(msWithinDay: number): string {
   return `${pad(hours, 2)}:${pad(minutes, 2)}:${pad(seconds, 2)}`;
 }
 
-export function serialToIsoDate(serial: number, date1904: boolean): string | undefined {
-  return Number.isFinite(serial) ? isoDateOfDayCount(splitSerial(serial).days, date1904) : undefined;
+export function serialToIsoDate(
+  serial: number,
+  date1904: boolean,
+): string | undefined {
+  return Number.isFinite(serial)
+    ? isoDateOfDayCount(splitSerial(serial).days, date1904)
+    : undefined;
 }
 
 // A time-of-day format renders only the fractional part -- a serial of 2.5 under `h:mm` displays as noon, not as "two days and twelve hours" -- so the day count is discarded here rather than made an error. Sub-second precision is discarded too: ContentCellValue's own 'time' spelling is fixed at HH:MM:SS with no fractional-seconds part.
 export function serialToIsoTime(serial: number): string | undefined {
-  return Number.isFinite(serial) && serial >= 0 ? isoTimeOfMsWithinDay(splitSerial(serial).msWithinDay) : undefined;
+  return Number.isFinite(serial) && serial >= 0
+    ? isoTimeOfMsWithinDay(splitSerial(serial).msWithinDay)
+    : undefined;
 }
 
-export function serialToIsoDateTime(serial: number, date1904: boolean): string | undefined {
+export function serialToIsoDateTime(
+  serial: number,
+  date1904: boolean,
+): string | undefined {
   if (!Number.isFinite(serial)) {
     return undefined;
   }
   const { days, msWithinDay } = splitSerial(serial);
   const date = isoDateOfDayCount(days, date1904);
-  return date === undefined ? undefined : `${date}T${isoTimeOfMsWithinDay(msWithinDay)}`;
+  return date === undefined
+    ? undefined
+    : `${date}T${isoTimeOfMsWithinDay(msWithinDay)}`;
 }
 
 // --- ISO -> serial: the write direction ---------------------------------------------------------------------------
@@ -103,13 +123,20 @@ const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_TIME_PATTERN = /^(\d{2}):(\d{2}):(\d{2})$/;
 
 // The 'T' of the canonical 'YYYY-MM-DDTHH:MM:SS' dateTime spelling, which isoDateTimeToSerial splits on rather than matching with a pattern of its own, so the date and time halves are validated by exactly the same two functions a bare date and a bare time go through.
-const ISO_DATE_TIME_SEPARATOR = 'T';
+const ISO_DATE_TIME_SEPARATOR = "T";
 
 // Date.UTC silently ROLLS OVER an out-of-range component (month 13 becomes January of the next year, February 30th becomes March 1st or 2nd), so the only way to reject an impossible calendar date is to read the resulting instant's own components back and require every one of them still to match what was asked for. This also rejects a two-digit-year interpretation for a year below 100 (Date.UTC(50, ...) means 1950), which has no serial in either epoch anyway.
-function utcMsOfCalendarDate(year: number, month: number, day: number): number | undefined {
+function utcMsOfCalendarDate(
+  year: number,
+  month: number,
+  day: number,
+): number | undefined {
   const utcMs = Date.UTC(year, month - 1, day);
   const date = new Date(utcMs);
-  const matches = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  const matches =
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
   return matches ? utcMs : undefined;
 }
 
@@ -132,7 +159,11 @@ export function isoDateToSerial(iso: string): number | undefined {
   if (year === undefined || month === undefined || day === undefined) {
     return undefined;
   }
-  const utcMs = utcMsOfCalendarDate(Number.parseInt(year, 10), Number.parseInt(month, 10), Number.parseInt(day, 10));
+  const utcMs = utcMsOfCalendarDate(
+    Number.parseInt(year, 10),
+    Number.parseInt(month, 10),
+    Number.parseInt(day, 10),
+  );
   return utcMs === undefined ? undefined : dayCountOfUtcMs(utcMs);
 }
 
@@ -153,7 +184,12 @@ export function isoTimeToSerial(iso: string): number | undefined {
   if (hourCount > 23 || minuteCount > 59 || secondCount > 59) {
     return undefined;
   }
-  return (hourCount * MS_PER_HOUR + minuteCount * MS_PER_MINUTE + secondCount * MS_PER_SECOND) / MS_PER_DAY;
+  return (
+    (hourCount * MS_PER_HOUR +
+      minuteCount * MS_PER_MINUTE +
+      secondCount * MS_PER_SECOND) /
+    MS_PER_DAY
+  );
 }
 
 export function isoDateTimeToSerial(iso: string): number | undefined {
@@ -163,5 +199,7 @@ export function isoDateTimeToSerial(iso: string): number | undefined {
   }
   const days = isoDateToSerial(iso.slice(0, separatorIndex));
   const fractionOfDay = isoTimeToSerial(iso.slice(separatorIndex + 1));
-  return days === undefined || fractionOfDay === undefined ? undefined : days + fractionOfDay;
+  return days === undefined || fractionOfDay === undefined
+    ? undefined
+    : days + fractionOfDay;
 }

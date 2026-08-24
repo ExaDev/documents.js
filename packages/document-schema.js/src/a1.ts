@@ -11,7 +11,10 @@ export function columnLettersToIndex(letters: string): number | undefined {
   let index = 0;
   for (const ch of letters.toUpperCase()) {
     const code = ch.charCodeAt(0);
-    if (code < ALPHABET_START_CODE || code >= ALPHABET_START_CODE + ALPHABET_SIZE) {
+    if (
+      code < ALPHABET_START_CODE ||
+      code >= ALPHABET_START_CODE + ALPHABET_SIZE
+    ) {
       return undefined;
     }
     index = index * ALPHABET_SIZE + (code - ALPHABET_START_CODE + 1);
@@ -21,7 +24,7 @@ export function columnLettersToIndex(letters: string): number | undefined {
 
 export function columnIndexToLetters(index: number): string {
   let remaining = index + 1;
-  let letters = '';
+  let letters = "";
   while (remaining > 0) {
     const digit = (remaining - 1) % ALPHABET_SIZE;
     letters = String.fromCharCode(ALPHABET_START_CODE + digit) + letters;
@@ -65,7 +68,7 @@ export interface CellRange {
 }
 
 export function parseRangeReference(ref: string): CellRange | undefined {
-  const separatorIndex = ref.indexOf(':');
+  const separatorIndex = ref.indexOf(":");
   const startRaw = separatorIndex === -1 ? ref : ref.slice(0, separatorIndex);
   const endRaw = separatorIndex === -1 ? ref : ref.slice(separatorIndex + 1);
   const start = parseCellReference(startRaw);

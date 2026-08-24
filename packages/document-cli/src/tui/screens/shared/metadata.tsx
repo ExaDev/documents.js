@@ -1,9 +1,9 @@
-import { Box, Text, useInput } from 'ink';
-import type { ReactElement } from 'react';
-import { formatMetadataLines } from '../../../runtime/metadata-format.js';
-import { metadataFor } from '../../format/read-metadata.js';
-import { useAppDispatch, useAppState } from '../../state/context.js';
-import { anyOverlayOpen } from '../../state/types.js';
+import { Box, Text, useInput } from "ink";
+import type { ReactElement } from "react";
+import { formatMetadataLines } from "../../../runtime/metadata-format.js";
+import { metadataFor } from "../../format/read-metadata.js";
+import { useAppDispatch, useAppState } from "../../state/context.js";
+import { anyOverlayOpen } from "../../state/types.js";
 
 // A deliberately read-only screen, reachable for any open document ('m' from app.tsx's own shell-level global useInput): DocxEditor/OdtEditor/PptxEditor/OdpEditor/OdsEditor/OdgEditor expose no metadata setter on an already-open live editor today -- there is no `editor.metadata = {...}` the way there is `run.bold = true`. That is a genuine documents.js-level gap (see this repo's own set-metadata CLI command, which patches metadata by rebuilding the whole package from a freshly-read ContentDocument rather than mutating a live editor in place), not something this screen could work around without reimplementing that rebuild inside the TUI's own edit loop. Reviewed and left out of scope deliberately: this screen shows what a document's own metadata currently is, nothing more, until documents.js grows a live setter to edit through.
 export function MetadataScreen(): ReactElement {
@@ -13,8 +13,8 @@ export function MetadataScreen(): ReactElement {
 
   useInput(
     (input, key) => {
-      if (key.escape || key.leftArrow || input === 'h') {
-        dispatch({ type: 'POP_SCREEN' });
+      if (key.escape || key.leftArrow || input === "h") {
+        dispatch({ type: "POP_SCREEN" });
       }
     },
     { isActive: doc !== undefined && !anyOverlayOpen(state) },

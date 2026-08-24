@@ -1,13 +1,13 @@
-import { Box, Text } from 'ink';
-import { useState, type ReactElement } from 'react';
-import { parseXml, type MathMlNode } from 'documents.js';
-import { ListView } from '../../components/list-view.js';
-import { TextField } from '../../components/text-field.js';
-import { useNavigationInput } from '../../keybindings/use-navigation-input.js';
-import { describeError } from '../../errors.js';
-import { FORMULA_PRESETS } from './formula-presets.js';
+import { Box, Text } from "ink";
+import { useState, type ReactElement } from "react";
+import { parseXml, type MathMlNode } from "documents.js";
+import { ListView } from "../../components/list-view.js";
+import { TextField } from "../../components/text-field.js";
+import { useNavigationInput } from "../../keybindings/use-navigation-input.js";
+import { describeError } from "../../errors.js";
+import { FORMULA_PRESETS } from "./formula-presets.js";
 
-const RAW_ENTRY_LABEL = 'Raw MathML...';
+const RAW_ENTRY_LABEL = "Raw MathML...";
 
 interface PickerRow {
   readonly label: string;
@@ -15,7 +15,13 @@ interface PickerRow {
   readonly mathml: readonly MathMlNode[] | undefined;
 }
 
-const PICKER_ROWS: readonly PickerRow[] = [...FORMULA_PRESETS.map((preset) => ({ label: preset.label, mathml: preset.mathml })), { label: RAW_ENTRY_LABEL, mathml: undefined }];
+const PICKER_ROWS: readonly PickerRow[] = [
+  ...FORMULA_PRESETS.map((preset) => ({
+    label: preset.label,
+    mathml: preset.mathml,
+  })),
+  { label: RAW_ENTRY_LABEL, mathml: undefined },
+];
 
 export interface FormulaPickerProps {
   readonly isActive: boolean;
@@ -39,7 +45,7 @@ export function FormulaPicker(props: FormulaPickerProps): ReactElement {
         return;
       }
       if (row.mathml === undefined) {
-        setRawInput('');
+        setRawInput("");
         return;
       }
       props.onMathml(row.mathml);
@@ -49,7 +55,10 @@ export function FormulaPicker(props: FormulaPickerProps): ReactElement {
   if (rawInput !== undefined) {
     return (
       <Box flexDirection="column" borderStyle="round" paddingX={1}>
-        <Text bold>Raw MathML (the children of the &lt;math&gt; root, e.g. &lt;mfrac&gt;...&lt;/mfrac&gt;)</Text>
+        <Text bold>
+          Raw MathML (the children of the &lt;math&gt; root, e.g.
+          &lt;mfrac&gt;...&lt;/mfrac&gt;)
+        </Text>
         <TextField
           value={rawInput}
           isFocused
@@ -80,8 +89,8 @@ export function FormulaPicker(props: FormulaPickerProps): ReactElement {
         selectedIndex={selectedIndex}
         reservedRows={PICKER_ROWS.length + 2}
         renderItem={(row, isSelected) => (
-          <Text color={isSelected ? 'cyan' : undefined}>
-            {isSelected ? '> ' : '  '}
+          <Text color={isSelected ? "cyan" : undefined}>
+            {isSelected ? "> " : "  "}
             {row.label}
           </Text>
         )}

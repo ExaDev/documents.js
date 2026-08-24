@@ -1,6 +1,6 @@
-import { Badge, Group, List, Spoiler, Stack, Text } from '@mantine/core';
+import { Badge, Group, List, Spoiler, Stack, Text } from "@mantine/core";
 
-import type { Diagnostic } from '../shared/diagnostics';
+import type { Diagnostic } from "../shared/diagnostics";
 
 export interface DiagnosticsPanelProps {
   diagnostics: readonly Diagnostic[];
@@ -27,8 +27,12 @@ function DiagnosticRow({ diagnostic }: { diagnostic: Diagnostic }) {
 export function DiagnosticsPanel({ diagnostics }: DiagnosticsPanelProps) {
   if (diagnostics.length === 0) return null;
 
-  const warnings = diagnostics.filter((diagnostic) => diagnostic.severity === 'warning');
-  const info = diagnostics.filter((diagnostic) => diagnostic.severity === 'info');
+  const warnings = diagnostics.filter(
+    (diagnostic) => diagnostic.severity === "warning",
+  );
+  const info = diagnostics.filter(
+    (diagnostic) => diagnostic.severity === "info",
+  );
 
   const infoList = (
     <List size="sm" spacing="xs">
@@ -49,7 +53,11 @@ export function DiagnosticsPanel({ diagnostics }: DiagnosticsPanelProps) {
       )}
       {info.length > 0 &&
         (info.length > INFO_COLLAPSE_THRESHOLD ? (
-          <Spoiler maxHeight={0} showLabel={`Show ${info.length} more`} hideLabel="Show less">
+          <Spoiler
+            maxHeight={0}
+            showLabel={`Show ${info.length} more`}
+            hideLabel="Show less"
+          >
             {infoList}
           </Spoiler>
         ) : (

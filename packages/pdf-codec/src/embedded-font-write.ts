@@ -1,10 +1,17 @@
-import { crc32 } from './bytes/crc32';
-import { deflate } from './bytes/flate';
-import type { EmbeddedFace } from './embedded-font';
-import type { PdfDict, PdfObject } from './objects';
-import { pdfArray, pdfDict, pdfHexString, pdfName, pdfNum, pdfStream } from './objects';
-import type { SfntSubsetResult } from './sfnt-subset';
-import { buildToUnicodeCMap } from './tounicode';
+import { crc32 } from "./bytes/crc32";
+import { deflate } from "./bytes/flate";
+import type { EmbeddedFace } from "./embedded-font";
+import type { PdfDict, PdfObject } from "./objects";
+import {
+  pdfArray,
+  pdfDict,
+  pdfHexString,
+  pdfName,
+  pdfNum,
+  pdfStream,
+} from "./objects";
+import type { SfntSubsetResult } from "./sfnt-subset";
+import { buildToUnicodeCMap } from "./tounicode";
 
 // The PDF object group for an embedded, subsetted TrueType-outline text face: a /Type0 composite font shown through Identity-H, its /CIDFontType2 descendant, that descendant's /FontDescriptor, the /FontFile2 stream carrying the subset font program itself, and a ToUnicode CMap. The direct counterpart to math-font-write.ts's own five-object group for the vendored math font, and deliberately shaped the same way: this module builds dictionary and stream VALUES only, and the caller (write.ts, which allocates object numbers in a fixed order for determinism) passes in the references each object needs to point at the others.
 //
@@ -32,11 +39,19 @@ const SUBSET_TAG_CODE_SPACE = SUBSET_TAG_ALPHABET_SIZE ** SUBSET_TAG_LENGTH;
 const UPPERCASE_A_CHAR_CODE = 65;
 
 // The tag for one subset of one face: a CRC32 over the face's own PostScript name (family and style in one string) and the exact ascending glyph-ID list the subset carries, folded into six letters. Deterministic by construction -- identical input yields a byte-identical tag, and therefore byte-identical output for the whole document, which is the same guarantee write.ts's own fixed object-allocation order exists to give. A hash rather than a counter precisely because a counter would depend on how many other fonts a particular document happened to embed first.
-export function embeddedSubsetTag(postScriptName: string, glyphIds: readonly number[]): string {
-  let value = crc32(new TextEncoder().encode(`${postScriptName} ${glyphIds.join(',')}`)) % SUBSET_TAG_CODE_SPACE;
-  let tag = '';
+export function embeddedSubsetTag(
+  postScriptName: string,
+  glyphIds: readonly number[],
+): string {
+  let value =
+    crc32(new TextEncoder().encode(`${postScriptName} ${glyphIds.join(",")}`)) %
+    SUBSET_TAG_CODE_SPACE;
+  let tag = "";
   for (let i = 0; i < SUBSET_TAG_LENGTH; i++) {
-    tag = String.fromCharCode(UPPERCASE_A_CHAR_CODE + (value % SUBSET_TAG_ALPHABET_SIZE)) + tag;
+    tag =
+      String.fromCharCode(
+        UPPERCASE_A_CHAR_CODE + (value % SUBSET_TAG_ALPHABET_SIZE),
+      ) + tag;
     value = Math.floor(value / SUBSET_TAG_ALPHABET_SIZE);
   }
   return tag;
@@ -71,64 +86,92 @@ function computeFlags(face: EmbeddedFace): number {
 }
 
 // One /W entry per glyph the subset carries, in ascending glyph-ID order. sfnt-subset.ts already returns its glyph IDs sorted, and this preserves that order rather than re-deriving one -- the same "sorted for deterministic, byte-identical output" reasoning math-font-write.ts's own buildWidthsArray states. Every glyph in the subset gets an entry, including .notdef: a document that shows a character the face has no glyph for advances by .notdef's own real width (see embedded-font.ts's encodeForShowEmbedded), which would otherwise silently fall back to /DW.
-function buildWidthsArray(face: EmbeddedFace, glyphIds: readonly number[]): PdfObject {
+function buildWidthsArray(
+  face: EmbeddedFace,
+  glyphIds: readonly number[],
+): PdfObject {
   const entries: PdfObject[] = [];
   for (const glyphId of glyphIds) {
-    entries.push(pdfNum(glyphId), pdfArray([pdfNum(face.glyphSpaceWidth(glyphId))]));
+    entries.push(
+      pdfNum(glyphId),
+      pdfArray([pdfNum(face.glyphSpaceWidth(glyphId))]),
+    );
   }
   return pdfArray(entries);
 }
 
-function buildFontDescriptor(face: EmbeddedFace, baseFont: string, fontFileRef: PdfObject): PdfDict {
+function buildFontDescriptor(
+  face: EmbeddedFace,
+  baseFont: string,
+  fontFileRef: PdfObject,
+): PdfDict {
   const m = face.metrics;
   const entries = new Map<string, PdfObject>([
-    ['Type', pdfName('FontDescriptor')],
-    ['FontName', pdfName(baseFont)],
-    ['Flags', pdfNum(computeFlags(face))],
-    ['FontBBox', pdfArray(m.bboxGlyphSpace.map((n) => pdfNum(n)))],
-    ['ItalicAngle', pdfNum(m.italicAngleDegrees)],
-    ['Ascent', pdfNum(m.ascentGlyphSpace)],
-    ['Descent', pdfNum(m.descentGlyphSpace)],
-    ['CapHeight', pdfNum(m.capHeightGlyphSpace)],
-    ['StemV', pdfNum(NOMINAL_STEM_V)],
+    ["Type", pdfName("FontDescriptor")],
+    ["FontName", pdfName(baseFont)],
+    ["Flags", pdfNum(computeFlags(face))],
+    ["FontBBox", pdfArray(m.bboxGlyphSpace.map((n) => pdfNum(n)))],
+    ["ItalicAngle", pdfNum(m.italicAngleDegrees)],
+    ["Ascent", pdfNum(m.ascentGlyphSpace)],
+    ["Descent", pdfNum(m.descentGlyphSpace)],
+    ["CapHeight", pdfNum(m.capHeightGlyphSpace)],
+    ["StemV", pdfNum(NOMINAL_STEM_V)],
   ]);
   // /XHeight is optional (Table 122) and only some 'OS/2' versions declare it -- written when the font states it, omitted rather than invented when it does not.
   if (m.xHeightGlyphSpace !== undefined) {
-    entries.set('XHeight', pdfNum(m.xHeightGlyphSpace));
+    entries.set("XHeight", pdfNum(m.xHeightGlyphSpace));
   }
-  entries.set('FontFile2', fontFileRef);
+  entries.set("FontFile2", fontFileRef);
   return pdfDict(entries);
 }
 
 // The embedded font program: the subset sfnt, whole. /Length1 is the length of these bytes as they stand here, BEFORE any compression -- serialize.ts derives the stream's own /Length from what actually follows the `stream` keyword, so the two are independently correct and cannot be confused for one another.
-function buildFontFileStream(subsetBytes: Uint8Array<ArrayBuffer>, compress: boolean): PdfObject {
-  const entries = new Map<string, PdfObject>([['Length1', pdfNum(subsetBytes.length)]]);
+function buildFontFileStream(
+  subsetBytes: Uint8Array<ArrayBuffer>,
+  compress: boolean,
+): PdfObject {
+  const entries = new Map<string, PdfObject>([
+    ["Length1", pdfNum(subsetBytes.length)],
+  ]);
   if (compress) {
-    entries.set('Filter', pdfName('FlateDecode'));
+    entries.set("Filter", pdfName("FlateDecode"));
   }
-  return pdfStream(pdfDict(entries), compress ? deflate(subsetBytes) : subsetBytes);
+  return pdfStream(
+    pdfDict(entries),
+    compress ? deflate(subsetBytes) : subsetBytes,
+  );
 }
 
 // Builds the five PDF objects one embedded text face needs. `subset` is that face's own sfnt-subset.ts output (its glyph IDs drive /W, its bytes are the /FontFile2 program, and both feed the subset tag); `usedGlyphs` is the glyph-ID -> Unicode mapping the ToUnicode CMap is built from -- a subset of `subset.glyphIds`, since a glyph pulled in only as a composite's component represents no character of its own.
-export function buildEmbeddedFontObjects(face: EmbeddedFace, subset: SfntSubsetResult, usedGlyphs: ReadonlyMap<number, number>, refs: EmbeddedFontObjectRefs, compress: boolean): EmbeddedFontObjects {
+export function buildEmbeddedFontObjects(
+  face: EmbeddedFace,
+  subset: SfntSubsetResult,
+  usedGlyphs: ReadonlyMap<number, number>,
+  refs: EmbeddedFontObjectRefs,
+  compress: boolean,
+): EmbeddedFontObjects {
   const baseFont = `${embeddedSubsetTag(face.postScriptName, subset.glyphIds)}+${face.postScriptName}`;
 
   const cidFont = pdfDict({
-    Type: pdfName('Font'),
-    Subtype: pdfName('CIDFontType2'),
+    Type: pdfName("Font"),
+    Subtype: pdfName("CIDFontType2"),
     BaseFont: pdfName(baseFont),
-    CIDSystemInfo: pdfDict({ Registry: pdfHexString(new TextEncoder().encode('Adobe')), Ordering: pdfHexString(new TextEncoder().encode('Identity')), Supplement: pdfNum(0) }),
+    CIDSystemInfo: pdfDict({
+      Registry: pdfHexString(new TextEncoder().encode("Adobe")),
+      Ordering: pdfHexString(new TextEncoder().encode("Identity")),
+      Supplement: pdfNum(0),
+    }),
     FontDescriptor: refs.descriptorRef,
     DW: pdfNum(DEFAULT_WIDTH),
     W: buildWidthsArray(face, subset.glyphIds),
-    CIDToGIDMap: pdfName('Identity'),
+    CIDToGIDMap: pdfName("Identity"),
   });
 
   const type0 = pdfDict({
-    Type: pdfName('Font'),
-    Subtype: pdfName('Type0'),
+    Type: pdfName("Font"),
+    Subtype: pdfName("Type0"),
     BaseFont: pdfName(baseFont),
-    Encoding: pdfName('Identity-H'),
+    Encoding: pdfName("Identity-H"),
     DescendantFonts: pdfArray([refs.cidFontRef]),
     ToUnicode: refs.toUnicodeRef,
   });

@@ -1,11 +1,16 @@
-import type { ContentDocument, ContentShape } from 'document-schema.js';
+import type { ContentDocument, ContentShape } from "document-schema.js";
 
-import type { Package } from 'odf.js';
-import { childrenWithTag, findChildElement, readOdpContent as readOdpFlat, rootElement } from 'odf.js';
-import { buildDrawingBlock } from '../../model/embedded-drawing';
-import { buildFormulaBlock } from '../../model/formula';
-import { collectSlideFormulaFrames } from '../formula/detect';
-import { collectSlideVectorGroups } from '../vector/detect';
+import type { Package } from "odf.js";
+import {
+  childrenWithTag,
+  findChildElement,
+  readOdpContent as readOdpFlat,
+  rootElement,
+} from "odf.js";
+import { buildDrawingBlock } from "../../model/embedded-drawing";
+import { buildFormulaBlock } from "../../model/formula";
+import { collectSlideFormulaFrames } from "../formula/detect";
+import { collectSlideVectorGroups } from "../vector/detect";
 
 // Package -> ContentDocument (the presentation variant). A thin adapter over odf.js's own readOdpContent (imported here as readOdpFlat because this module's own export already holds that name; odf.js 5.0.0 renamed this flat reader to readOdpContent and gave the bare readOdp name to its tree-form DocumentTree counterpart), mirroring src/ooxml/pptx/read.ts's readPptxContent exactly: odf.js's OdpDocument is already { metadata, slides }, the identical shape the pptx reader produces, so this is nothing more than the envelope wrap. This is the concrete, load-bearing proof that odp and pptx genuinely share one pivot and one layout engine -- convertPresentationToLayout (src/layout/slides.ts) takes a PresentationContentDocument and has no idea, and no way to tell, which format produced it.
 //
@@ -17,24 +22,45 @@ import { collectSlideVectorGroups } from '../vector/detect';
 export function readOdpContent(pkg: Package): ContentDocument {
   const odpDoc = readOdpFlat(pkg);
 
-  const contentPart = pkg.parts['content.xml'];
-  if (contentPart?.kind === 'xml') {
+  const contentPart = pkg.parts["content.xml"];
+  if (contentPart?.kind === "xml") {
     const root = rootElement(contentPart.nodes);
-    const body = root === undefined ? undefined : findChildElement(root.children, 'office:body');
-    const presentation = body === undefined ? undefined : findChildElement(body.children, 'office:presentation');
-    const pageElements = presentation === undefined ? [] : childrenWithTag(presentation, 'draw:page');
+    const body =
+      root === undefined
+        ? undefined
+        : findChildElement(root.children, "office:body");
+    const presentation =
+      body === undefined
+        ? undefined
+        : findChildElement(body.children, "office:presentation");
+    const pageElements =
+      presentation === undefined
+        ? []
+        : childrenWithTag(presentation, "draw:page");
 
     pageElements.forEach((pageElement, slideIndex) => {
       const slide = odpDoc.slides[slideIndex];
       if (slide === undefined) {
         return;
       }
-      for (const found of collectSlideFormulaFrames(pageElement.children, pkg)) {
+      for (const found of collectSlideFormulaFrames(
+        pageElement.children,
+        pkg,
+      )) {
         const shape = slide.shapes[found.shapeIndex];
         if (shape === undefined) {
           continue;
         }
-        slide.shapes[found.shapeIndex] = { ...shape, blocks: [buildFormulaBlock(found.formula, found.frame, `slides[${slideIndex}].shapes[${found.shapeIndex}]`)] };
+        slide.shapes[found.shapeIndex] = {
+          ...shape,
+          blocks: [
+            buildFormulaBlock(
+              found.formula,
+              found.frame,
+              `slides[${slideIndex}].shapes[${found.shapeIndex}]`,
+            ),
+          ],
+        };
       }
 
       const groups = collectSlideVectorGroups(pageElement.children, pkg);
@@ -46,16 +72,26 @@ export function readOdpContent(pkg: Package): ContentDocument {
       let groupIndex = 0;
       // index <= slide.shapes.length (not <) so a group inserted at the very end -- after every real shape -- is handled by the same loop, exactly as src/model/block-splice.ts's own spliceBlocks handles a placement whose index equals blocks.length.
       while (shapeIndex <= slide.shapes.length) {
-        while (groupIndex < groups.length && groups[groupIndex]!.insertBeforeShapeIndex === shapeIndex) {
+        while (
+          groupIndex < groups.length &&
+          groups[groupIndex]!.insertBeforeShapeIndex === shapeIndex
+        ) {
           const group = groups[groupIndex]!;
           const sourcePath = `slides[${slideIndex}].shapes[${shapes.length}]`;
           shapes.push({
-            frame: { xPt: 0, yPt: 0, widthPt: slide.size.widthPt, heightPt: slide.size.heightPt },
+            frame: {
+              xPt: 0,
+              yPt: 0,
+              widthPt: slide.size.widthPt,
+              heightPt: slide.size.heightPt,
+            },
             insetLeftPt: 0,
             insetTopPt: 0,
             insetRightPt: 0,
             insetBottomPt: 0,
-            blocks: [{ ...buildDrawingBlock(slide.size, group.vectors), sourcePath }],
+            blocks: [
+              { ...buildDrawingBlock(slide.size, group.vectors), sourcePath },
+            ],
             sourcePath,
           });
           groupIndex += 1;
@@ -70,5 +106,9 @@ export function readOdpContent(pkg: Package): ContentDocument {
     });
   }
 
-  return { kind: 'presentation', metadata: { ...odpDoc.metadata }, slides: odpDoc.slides };
+  return {
+    kind: "presentation",
+    metadata: { ...odpDoc.metadata },
+    slides: odpDoc.slides,
+  };
 }

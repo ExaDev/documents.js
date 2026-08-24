@@ -1,8 +1,12 @@
-import type { LayoutMetadata } from 'document-schema.js';
-import type { Package } from '../../model/package';
-import type { XmlElement } from '../../model/node';
-import { rootElement, findChildElement, childrenWithTag } from '../../xml/query';
-import { decodeXmlText } from '../../xml/entities';
+import type { LayoutMetadata } from "document-schema.js";
+import type { Package } from "../../model/package";
+import type { XmlElement } from "../../model/node";
+import {
+  rootElement,
+  findChildElement,
+  childrenWithTag,
+} from "../../xml/query";
+import { decodeXmlText } from "../../xml/entities";
 
 // Reads meta.xml (office:document-meta / office:meta) into document-schema.js's LayoutMetadata shape. Every element name below was verified against real LibreOffice 26.2 output -- both genuine user-authored documents (LibreOffice's own bundled .ott/.ots/.otp templates under /Applications/LibreOffice.app/Contents/Resources/template/**, which carry real author/date metadata from having actually been edited and saved) and the OASIS ODF schema itself (datypic.com's office:meta content-model reference) -- rather than assumed to mirror OOXML's docProps/core.xml one-for-one. Two mappings are genuinely non-obvious and were confirmed, not guessed:
 // - ODF's `dc:creator` is NOT "the document's author" the way OOXML's dc:creator is -- confirmed from several real LibreOffice-authored templates (e.g. CV.ott, the l10n normal templates): `dc:creator` records whoever most recently saved the document (Dublin Core's own "responsible for producing the resource's current content"), while `meta:initial-creator` records whoever first created it. LayoutMetadata's `author` field maps to meta:initial-creator, mirroring the ROLE ooxml.js's own DocumentMetadata.author plays for OOXML's dc:creator (the original, byline-style author) -- not to ODF's own dc:creator, which has no equivalent field in LayoutMetadata at all (there is no "last modified by" field, matching how OOXML's cp:lastModifiedBy is likewise never read into DocumentMetadata).
@@ -12,20 +16,23 @@ import { decodeXmlText } from '../../xml/entities';
 //
 // meta.xml is an entirely OPTIONAL ODF part, and every one of office:meta's own children is individually optional too -- a document with no meta.xml at all, or one whose office:meta is empty, is perfectly valid ODF, not a malformed or unusable one. Absence at every level (missing part, missing office:document-meta/office:meta, a missing individual field) is therefore modelled the same way throughout: simply omit that field (or return {}), never throw and never diagnose it as an error.
 
-export const META_PART = 'meta.xml';
+export const META_PART = "meta.xml";
 
 // Plain, entity-decoded text content of a simple meta.xml element (dc:title, dc:subject, meta:initial-creator, meta:generator, meta:creation-date, dc:date, one meta:keyword, ...). Real ODF meta.xml elements are never mixed content -- no nested elements, and none of paragraph content's text:s/text:tab whitespace-run encoding (see text.ts for that, which is specific to text:p/text:h document content, not meta.xml) -- so a direct child-text-node concatenation is all real-world meta.xml ever needs.
 function elementText(element: XmlElement): string {
-  let text = '';
+  let text = "";
   for (const child of element.children) {
-    if (child.type === 'text') {
+    if (child.type === "text") {
       text += decodeXmlText(child.value);
     }
   }
   return text;
 }
 
-function firstElementText(container: XmlElement, tag: string): string | undefined {
+function firstElementText(
+  container: XmlElement,
+  tag: string,
+): string | undefined {
   const element = childrenWithTag(container, tag)[0];
   if (element === undefined) {
     return undefined;
@@ -36,44 +43,47 @@ function firstElementText(container: XmlElement, tag: string): string | undefine
 
 export function readOdfMetadata(pkg: Package): LayoutMetadata {
   const part = pkg.parts[META_PART];
-  if (part?.kind !== 'xml') {
+  if (part?.kind !== "xml") {
     return {};
   }
   const root = rootElement(part.nodes);
-  const meta = root === undefined ? undefined : findChildElement(root.children, 'office:meta');
+  const meta =
+    root === undefined
+      ? undefined
+      : findChildElement(root.children, "office:meta");
   if (meta === undefined) {
     return {};
   }
 
   const metadata: LayoutMetadata = {};
 
-  const title = firstElementText(meta, 'dc:title');
+  const title = firstElementText(meta, "dc:title");
   if (title !== undefined) {
     metadata.title = title;
   }
-  const author = firstElementText(meta, 'meta:initial-creator');
+  const author = firstElementText(meta, "meta:initial-creator");
   if (author !== undefined) {
     metadata.author = author;
   }
-  const subject = firstElementText(meta, 'dc:subject');
+  const subject = firstElementText(meta, "dc:subject");
   if (subject !== undefined) {
     metadata.subject = subject;
   }
-  const keywords = childrenWithTag(meta, 'meta:keyword')
+  const keywords = childrenWithTag(meta, "meta:keyword")
     .map(elementText)
     .filter((keyword) => keyword.length > 0);
   if (keywords.length > 0) {
     metadata.keywords = keywords;
   }
-  const creator = firstElementText(meta, 'meta:generator');
+  const creator = firstElementText(meta, "meta:generator");
   if (creator !== undefined) {
     metadata.creator = creator;
   }
-  const createdIso = firstElementText(meta, 'meta:creation-date');
+  const createdIso = firstElementText(meta, "meta:creation-date");
   if (createdIso !== undefined) {
     metadata.createdIso = createdIso;
   }
-  const modifiedIso = firstElementText(meta, 'dc:date');
+  const modifiedIso = firstElementText(meta, "dc:date");
   if (modifiedIso !== undefined) {
     metadata.modifiedIso = modifiedIso;
   }

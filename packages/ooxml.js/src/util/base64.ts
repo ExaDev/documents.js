@@ -1,6 +1,7 @@
 // Isomorphic base64 helpers (no Node Buffer): round-trip Uint8Array <-> base64 string.
 
-const TABLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const TABLE =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 const DECODE: Uint8Array<ArrayBuffer> = (() => {
   const map = new Uint8Array(256).fill(255);
@@ -11,7 +12,7 @@ const DECODE: Uint8Array<ArrayBuffer> = (() => {
 })();
 
 export function bytesToBase64(bytes: Uint8Array<ArrayBuffer>): string {
-  let out = '';
+  let out = "";
   const len = bytes.length;
   for (let i = 0; i < len; i = i + 3) {
     const b0 = bytes[i]!;
@@ -19,14 +20,14 @@ export function bytesToBase64(bytes: Uint8Array<ArrayBuffer>): string {
     const b2 = i + 2 < len ? bytes[i + 2]! : 0;
     out += TABLE.charAt(b0 >> 2);
     out += TABLE.charAt(((b0 & 0x03) << 4) | (b1 >> 4));
-    out += i + 1 < len ? TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6)) : '=';
-    out += i + 2 < len ? TABLE.charAt(b2 & 0x3f) : '=';
+    out += i + 1 < len ? TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6)) : "=";
+    out += i + 2 < len ? TABLE.charAt(b2 & 0x3f) : "=";
   }
   return out;
 }
 
 export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
-  const clean = b64.replace(/[^A-Za-z0-9+/=]/g, '');
+  const clean = b64.replace(/[^A-Za-z0-9+/=]/g, "");
   const len = clean.length;
   const out = new Uint8Array(((len * 3) / 4) | 0);
   let p = 0;
@@ -36,7 +37,7 @@ export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
     const c2 = clean.charCodeAt(i + 2);
     const c3 = clean.charCodeAt(i + 3);
     if (c0 === 255 || c1 === 255) {
-      throw new Error('invalid base64 input');
+      throw new Error("invalid base64 input");
     }
     out[p++] = (c0 << 2) | (c1 >> 4);
     if (c2 !== 61) {

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { decodePackage, zipPackage } from '../index';
-import { readPptxContent } from './pptx/read';
+import { describe, expect, it } from "vitest";
+import { decodePackage, zipPackage } from "../index";
+import { readPptxContent } from "./pptx/read";
 
 // Integration-level coverage for readPptxContent, exercised through a real zip round trip (decodePackage(zipPackage(...))) rather than raw Package/XmlElement fixtures -- the deep placeholder-inheritance, run-cascade, group-transform, and table coverage lives in ./pptx/read.test.ts and ./pptx/inherit.test.ts. This file replaces the pre-existing flat-shape (index/text/shapes/tables) test suite, which asserted a shape readPptxContent no longer has -- see the BREAKING CHANGE described in PptxDocument's own doc comment.
 
@@ -34,12 +34,12 @@ const SLIDE_2 = enc(
 
 function pptxParts(): Record<string, Uint8Array<ArrayBuffer>> {
   return {
-    '[Content_Types].xml': CONTENT_TYPES_PPTX,
-    '_rels/.rels': ROOT_RELS_PPTX,
-    'ppt/presentation.xml': PRESENTATION,
-    'ppt/_rels/presentation.xml.rels': PRESENTATION_RELS,
-    'ppt/slides/slide1.xml': SLIDE_1,
-    'ppt/slides/slide2.xml': SLIDE_2,
+    "[Content_Types].xml": CONTENT_TYPES_PPTX,
+    "_rels/.rels": ROOT_RELS_PPTX,
+    "ppt/presentation.xml": PRESENTATION,
+    "ppt/_rels/presentation.xml.rels": PRESENTATION_RELS,
+    "ppt/slides/slide1.xml": SLIDE_1,
+    "ppt/slides/slide2.xml": SLIDE_2,
   };
 }
 
@@ -66,75 +66,81 @@ const SLIDE_1_NOTES_RELS = enc(
 
 function pptxWithNotesParts(): Record<string, Uint8Array<ArrayBuffer>> {
   return {
-    '[Content_Types].xml': CONTENT_TYPES_WITH_NOTES,
-    '_rels/.rels': ROOT_RELS_PPTX,
-    'ppt/presentation.xml': PRESENTATION,
-    'ppt/_rels/presentation.xml.rels': PRESENTATION_RELS,
-    'ppt/slides/slide1.xml': SLIDE_WITH_SHAPE_AND_TABLE,
-    'ppt/slides/slide2.xml': SLIDE_ONE_SHAPE,
-    'ppt/slides/_rels/slide1.xml.rels': SLIDE_1_NOTES_RELS,
-    'ppt/notesSlides/notesSlide1.xml': NOTES_SLIDE_1,
+    "[Content_Types].xml": CONTENT_TYPES_WITH_NOTES,
+    "_rels/.rels": ROOT_RELS_PPTX,
+    "ppt/presentation.xml": PRESENTATION,
+    "ppt/_rels/presentation.xml.rels": PRESENTATION_RELS,
+    "ppt/slides/slide1.xml": SLIDE_WITH_SHAPE_AND_TABLE,
+    "ppt/slides/slide2.xml": SLIDE_ONE_SHAPE,
+    "ppt/slides/_rels/slide1.xml.rels": SLIDE_1_NOTES_RELS,
+    "ppt/notesSlides/notesSlide1.xml": NOTES_SLIDE_1,
   };
 }
 
-function shapeText(shape: { blocks: { kind: string; runs?: { text: string }[] }[] } | undefined): string | undefined {
+function shapeText(
+  shape: { blocks: { kind: string; runs?: { text: string }[] }[] } | undefined,
+): string | undefined {
   const block = shape?.blocks[0];
-  return block?.kind === 'paragraph' ? block.runs?.[0]?.text : undefined;
+  return block?.kind === "paragraph" ? block.runs?.[0]?.text : undefined;
 }
 
-describe('readPptxContent', () => {
-  it('projects slides in numeric order (via p:sldIdLst) with each shape\'s own text', () => {
+describe("readPptxContent", () => {
+  it("projects slides in numeric order (via p:sldIdLst) with each shape's own text", () => {
     const result = readPptxContent(decodePackage(zipPackage(pptxParts())));
     expect(result.slides).toHaveLength(2);
-    expect(shapeText(result.slides[0]?.shapes[0])).toBe('First slide');
-    expect(shapeText(result.slides[1]?.shapes[0])).toBe('Second ');
-    expect(shapeText(result.slides[1]?.shapes[1])).toBe('slide');
+    expect(shapeText(result.slides[0]?.shapes[0])).toBe("First slide");
+    expect(shapeText(result.slides[1]?.shapes[0])).toBe("Second ");
+    expect(shapeText(result.slides[1]?.shapes[1])).toBe("slide");
   });
 
-  it('yields an empty slide list when p:sldIdLst is empty -- slide order/presence comes from the presentation part, not from scanning slide files', () => {
+  it("yields an empty slide list when p:sldIdLst is empty -- slide order/presence comes from the presentation part, not from scanning slide files", () => {
     const emptyPresentation = enc(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst/></p:presentation>',
     );
     const result = readPptxContent(
       decodePackage(
         zipPackage({
-          '[Content_Types].xml': CONTENT_TYPES_PPTX,
-          '_rels/.rels': ROOT_RELS_PPTX,
-          'ppt/presentation.xml': emptyPresentation,
+          "[Content_Types].xml": CONTENT_TYPES_PPTX,
+          "_rels/.rels": ROOT_RELS_PPTX,
+          "ppt/presentation.xml": emptyPresentation,
         }),
       ),
     );
     expect(result.slides).toEqual([]);
   });
 
-  it('projects per-slide shapes, a table, and resolved notes', () => {
-    const result = readPptxContent(decodePackage(zipPackage(pptxWithNotesParts())));
+  it("projects per-slide shapes, a table, and resolved notes", () => {
+    const result = readPptxContent(
+      decodePackage(zipPackage(pptxWithNotesParts())),
+    );
     expect(result.slides).toHaveLength(2);
     const first = result.slides[0];
     const second = result.slides[1];
 
     // slide1: one text shape, one table graphic frame.
-    expect(shapeText(first?.shapes[0])).toBe('Shape one');
+    expect(shapeText(first?.shapes[0])).toBe("Shape one");
     const tableBlock = first?.shapes[1]?.blocks[0];
-    if (tableBlock?.kind !== 'table') {
-      throw new Error('expected a table block');
+    if (tableBlock?.kind !== "table") {
+      throw new Error("expected a table block");
     }
     expect(tableBlock.rows).toHaveLength(1);
     expect(tableBlock.rows[0]?.cells).toHaveLength(2);
 
     // slide1: notes resolved through the slide's /notesSlide relationship.
-    expect(first?.notes).toBe('Speaker notes');
+    expect(first?.notes).toBe("Speaker notes");
 
     // slide2: a single shape and no notes.
     expect(second?.shapes).toHaveLength(1);
-    expect(shapeText(second?.shapes[0])).toBe('Solo shape');
-    expect(second?.notes).toBe('');
+    expect(shapeText(second?.shapes[0])).toBe("Solo shape");
+    expect(second?.notes).toBe("");
   });
 
-  it('reads document metadata via readCoreProperties', () => {
+  it("reads document metadata via readCoreProperties", () => {
     const parts = pptxParts();
-    parts['docProps/core.xml'] = enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<cp:coreProperties xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Fixture Deck</dc:title></cp:coreProperties>');
+    parts["docProps/core.xml"] = enc(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<cp:coreProperties xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Fixture Deck</dc:title></cp:coreProperties>',
+    );
     const result = readPptxContent(decodePackage(zipPackage(parts)));
-    expect(result.metadata.title).toBe('Fixture Deck');
+    expect(result.metadata.title).toBe("Fixture Deck");
   });
 });

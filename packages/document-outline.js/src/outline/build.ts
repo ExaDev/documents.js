@@ -15,8 +15,8 @@ import {
   type ShapeGroupNode,
   type SheetGroupNode,
   type SlideGroupNode,
-} from 'document-schema.js';
-import type { OutlineChild, OutlineLeaf, OutlineNode } from './node';
+} from "document-schema.js";
+import type { OutlineChild, OutlineLeaf, OutlineNode } from "./node";
 
 // Builds the hierarchical outline over a DocumentTree (document-schema.js 4.0.0's promoted shape, ExaDev/document-schema.js#20), dispatching on pkg.kind and projecting pkg.children. This is the TOC PROJECTION, not a decomposition: it deliberately re-groups across container boundaries -- a wordprocessing package's sections flow into one tree, a slide's paragraphs are taken across its shapes in shape order -- which is exactly the lossiness a table of contents wants, and exactly why the lossless decompose/flatten pair lives in documents.js's package boundary instead (ExaDev/document-outline.js#2 phase 2: one implementation, one authority; this package keeps no second copy of the grouping semantics). Returns the root scope's children, OutlineChild[]: the root is not itself a node (no synthetic "document" root group), so a wordprocessing document's pre-heading content -- or a document with no grouping signal at all -- appears as leaves directly in the returned array alongside (or instead of) group nodes. Document order is preserved everywhere: a child always appears in the position its source node occupied.
 //
@@ -30,15 +30,15 @@ import type { OutlineChild, OutlineLeaf, OutlineNode } from './node';
 // - formula: a single group whose one leaf child is the ContentFormula itself -- a standalone equation has no hierarchy to build, but chunking consumers still get it as one retrievable unit. The group's label is the formula's LaTeX linearisation when present, else the empty string.
 export function buildOutline(pkg: DocumentTree): OutlineChild[] {
   switch (pkg.kind) {
-    case 'wordprocessing':
+    case "wordprocessing":
       return wordprocessingOutline(pkg.children);
-    case 'presentation':
+    case "presentation":
       return presentationOutline(pkg.children);
-    case 'spreadsheet':
+    case "spreadsheet":
       return spreadsheetOutline(pkg.children);
-    case 'drawing':
+    case "drawing":
       return drawingOutline(pkg.children);
-    case 'formula':
+    case "formula":
       // The schema pins a formula package's children to exactly one ContentFormula, so the single element is the whole content and the [0] access can never miss on a schema-valid package.
       return formulaOutline(pkg.children[0]!);
   }
@@ -61,33 +61,53 @@ function headingScopeOf(scope: SectionFlowScope): OutlineChild[] {
 }
 
 // One walk serves every nesting depth: a heading/list group projects its anchor through the stack machine, then its children walk with the newly opened node as the live scope -- which is how a tree section's internal nesting survives intact while the stacks still carry open scopes ACROSS section boundaries (the caller decides whether to reuse one scope across sections or start fresh).
-function walkSectionFlow(scope: SectionFlowScope, children: readonly SectionChild[]): void {
+function walkSectionFlow(
+  scope: SectionFlowScope,
+  children: readonly SectionChild[],
+): void {
   for (const child of children) {
     if (isHeadingGroupNode(child)) {
       scope.listStack.length = 0;
       const level = child.node.headingLevel;
-      for (let top = scope.headingStack.at(-1); top !== undefined && top.level >= level; top = scope.headingStack.at(-1)) {
+      for (
+        let top = scope.headingStack.at(-1);
+        top !== undefined && top.level >= level;
+        top = scope.headingStack.at(-1)
+      ) {
         scope.headingStack.pop();
       }
-      const node: OutlineNode = { text: paragraphText(child.node), level, children: [] };
+      const node: OutlineNode = {
+        text: paragraphText(child.node),
+        level,
+        children: [],
+      };
       const parent = scope.headingStack.at(-1);
       (parent !== undefined ? parent.children : scope.root).push(node);
       scope.headingStack.push(node);
       walkSectionFlow(scope, child.children);
     } else if (isListGroupNode(child)) {
-      openListGroup(scope.listStack, headingScopeOf(scope), paragraphText(child.node), child.node.list.level);
+      openListGroup(
+        scope.listStack,
+        headingScopeOf(scope),
+        paragraphText(child.node),
+        child.node.list.level,
+      );
       walkSectionFlow(scope, child.children);
     } else if (isSectionConstructGroupNode(child)) {
       // A construct group carries no text/level of its own (its node is a ConstructDescriptor, not a paragraph), so it can never become an OutlineNode -- it attaches at the CURRENT scope exactly as any other non-paragraph block does (the innermost open list group, else the innermost open heading scope), disturbing neither stack, while its own children project as a wholly self-contained section flow via a fresh scope.
       const parent = scope.listStack.at(-1);
-      (parent !== undefined ? parent.children : headingScopeOf(scope)).push(...projectSectionFlow(child.children));
-    } else if (child.kind === 'paragraph') {
+      (parent !== undefined ? parent.children : headingScopeOf(scope)).push(
+        ...projectSectionFlow(child.children),
+      );
+    } else if (child.kind === "paragraph") {
       // A paragraph at a leaf position carries neither grouping signal (the decomposition only anchors paragraphs that carry one; a Heading-styled paragraph without headingLevel is exactly such a leaf), so it sits flat at its scope and closes the list nesting: list items nest under the last list item, never across an intervening plain paragraph, which would otherwise leave a later deeper item traversing before an earlier sibling and break the document-order guarantee.
       scope.listStack.length = 0;
       headingScopeOf(scope).push(child);
     } else {
       const parent = scope.listStack.at(-1);
-      (parent !== undefined ? parent.children : headingScopeOf(scope)).push(child);
+      (parent !== undefined ? parent.children : headingScopeOf(scope)).push(
+        child,
+      );
     }
   }
 }
@@ -99,7 +119,9 @@ function projectSectionFlow(children: readonly SectionChild[]): OutlineChild[] {
   return scope.root;
 }
 
-function wordprocessingOutline(sections: readonly SectionGroupNode[]): OutlineChild[] {
+function wordprocessingOutline(
+  sections: readonly SectionGroupNode[],
+): OutlineChild[] {
   const scope = freshSectionFlowScope();
   for (const section of sections) {
     walkSectionFlow(scope, section.children);
@@ -108,15 +130,26 @@ function wordprocessingOutline(sections: readonly SectionGroupNode[]): OutlineCh
 }
 
 // One list/shape flow's walk: a list group projects its anchor through the stack machine (openListGroup carries the same level-popping semantics as the heading stack above, on list.level's 0-based scale), a construct group attaches transparently with its own subtree self-contained (the ShapeChild/ListChild counterpart of walkSectionFlow's construct handling), and every other child is a leaf that sits at the current list scope.
-function walkShapeFlow(listStack: OutlineNode[], scope: OutlineChild[], children: readonly ShapeChild[]): void {
+function walkShapeFlow(
+  listStack: OutlineNode[],
+  scope: OutlineChild[],
+  children: readonly ShapeChild[],
+): void {
   for (const child of children) {
     if (isListGroupNode(child)) {
-      openListGroup(listStack, scope, paragraphText(child.node), child.node.list.level);
+      openListGroup(
+        listStack,
+        scope,
+        paragraphText(child.node),
+        child.node.list.level,
+      );
       walkShapeFlow(listStack, scope, child.children);
     } else if (isShapeConstructGroupNode(child)) {
       const parent = listStack.at(-1);
-      (parent !== undefined ? parent.children : scope).push(...projectShapeFlow(child.children));
-    } else if (child.kind === 'paragraph') {
+      (parent !== undefined ? parent.children : scope).push(
+        ...projectShapeFlow(child.children),
+      );
+    } else if (child.kind === "paragraph") {
       // Same flat-and-close rule as wordprocessing's plain paragraphs, and it also covers the heading-styled paragraph leaf a shape's flow legitimately carries (headingLevel is not a depth signal in a shape -- see the per-kind contract above).
       listStack.length = 0;
       scope.push(child);
@@ -136,7 +169,11 @@ function projectShapeFlow(children: readonly ShapeChild[]): OutlineChild[] {
 
 function presentationOutline(slides: readonly SlideGroupNode[]): OutlineNode[] {
   return slides.map((slide, index) => {
-    const group: OutlineNode = { text: `Slide ${String(index + 1)}`, level: 1, children: [] };
+    const group: OutlineNode = {
+      text: `Slide ${String(index + 1)}`,
+      level: 1,
+      children: [],
+    };
     const listStack: OutlineNode[] = [];
     // The slide's own children are its shape groups; walking each shape's children in order takes the slide's paragraphs across its shapes -- the deliberate TOC lossiness (the shape boundary the source format carries is the decomposition's to preserve, not the outline's).
     for (const shape of slide.children) {
@@ -147,7 +184,11 @@ function presentationOutline(slides: readonly SlideGroupNode[]): OutlineNode[] {
 }
 
 function spreadsheetOutline(sheets: readonly SheetGroupNode[]): OutlineNode[] {
-  return sheets.map((sheet) => ({ text: sheet.node.name, level: 1, children: [...sheet.children] }));
+  return sheets.map((sheet) => ({
+    text: sheet.node.name,
+    level: 1,
+    children: [...sheet.children],
+  }));
 }
 
 function drawingOutline(pages: readonly DrawPageGroupNode[]): OutlineNode[] {
@@ -185,7 +226,7 @@ function formulaOutline(formula: ContentFormula): OutlineChild[] {
   return [
     {
       // presentation.latex is the equation's most readable linearisation and therefore the group's label; absence (an allowed state) means the empty string, and the ContentFormula leaf always carries the actual content whatever the label.
-      text: formula.presentation?.latex ?? '',
+      text: formula.presentation?.latex ?? "",
       level: 1,
       children: [formula],
     },
@@ -193,8 +234,17 @@ function formulaOutline(formula: ContentFormula): OutlineChild[] {
 }
 
 // Opens a list-item group carrying `text` at `level` under the deepest open list group with a strictly shallower level (or directly under `scopeChildren` when none is open), popping equal-or-deeper groups closed -- the same stack semantics heading groups follow, on list.level's 0-based scale, so a level jump nests directly under the nearest shallower item with no synthetic intermediates.
-function openListGroup(listStack: OutlineNode[], scopeChildren: OutlineChild[], text: string, level: number): void {
-  for (let top = listStack.at(-1); top !== undefined && top.level >= level; top = listStack.at(-1)) {
+function openListGroup(
+  listStack: OutlineNode[],
+  scopeChildren: OutlineChild[],
+  text: string,
+  level: number,
+): void {
+  for (
+    let top = listStack.at(-1);
+    top !== undefined && top.level >= level;
+    top = listStack.at(-1)
+  ) {
     listStack.pop();
   }
   const node: OutlineNode = { text, level, children: [] };
@@ -204,5 +254,5 @@ function openListGroup(listStack: OutlineNode[], scopeChildren: OutlineChild[], 
 }
 
 function paragraphText(paragraph: ContentParagraph): string {
-  return paragraph.runs.map((run) => run.text).join('');
+  return paragraph.runs.map((run) => run.text).join("");
 }

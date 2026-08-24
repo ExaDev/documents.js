@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
-import { ColorSchema } from './color';
+import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import { ColorSchema } from "./color";
 import {
   ContentBorderSchema,
   ContentCellBordersSchema,
@@ -27,8 +27,8 @@ import {
   ContentSubpathSchema,
   ContentVectorSchema,
   ContentCellValueSchema,
-} from './content';
-import { CONTENT_DEFS } from './content-json-schema-defs';
+} from "./content";
+import { CONTENT_DEFS } from "./content-json-schema-defs";
 import {
   AnchorDescriptorSchema,
   ConstructDescriptorSchema,
@@ -39,9 +39,19 @@ import {
   LinkDescriptorSchema,
   LinkTargetSchema,
   ProvenanceDescriptorSchema,
-} from './construct';
-import { DefinitionEntrySchema, StyleEntrySchema, StyleParagraphPropertiesSchema, StyleRunPropertiesSchema } from './definitions';
-import { BoxSchema, LayoutFrameSchema, MarginsSchema, PageSizeSchema } from './geometry';
+} from "./construct";
+import {
+  DefinitionEntrySchema,
+  StyleEntrySchema,
+  StyleParagraphPropertiesSchema,
+  StyleRunPropertiesSchema,
+} from "./definitions";
+import {
+  BoxSchema,
+  LayoutFrameSchema,
+  MarginsSchema,
+  PageSizeSchema,
+} from "./geometry";
 import {
   DimensionVectorSchema,
   ExactRationalSchema,
@@ -56,7 +66,7 @@ import {
   MathUnitSchema,
   MathUnparsedSchema,
   SymbolTableSchema,
-} from './math';
+} from "./math";
 import {
   DrawPageDescriptorSchema,
   HeadingParagraphSchema,
@@ -65,9 +75,9 @@ import {
   ShapeDescriptorSchema,
   SheetDescriptorSchema,
   SlideDescriptorSchema,
-} from './package-node';
-import { AlignmentSchema } from './style';
-import { SourceResidueSchema } from './source';
+} from "./package-node";
+import { AlignmentSchema } from "./style";
+import { SourceResidueSchema } from "./source";
 
 // This is the regression test scripts/generate-json-schemas.mjs's own top comment calls for: the only structural defence that generator has against silently drifting away from src/content.ts/src/color.ts/src/geometry.ts/src/style.ts/src/math.ts/src/package-node.ts/src/definitions.ts, since CONTENT_DEFS (content-json-schema-defs.ts) is transcribed by hand rather than generated. Not every entry in CONTENT_DEFS can be checked this way -- ContentBlock/ContentTable/ContentTableRow/ContentTableCell/ContentEmbeddedObject(Block)/MathMlNode/MathMlElement/MathMlAttribute all sit downstream of one of the genuinely un-representable z.custom() nodes (ContentBlockSchema, ContentEmbeddedObjectSchema, MathMlNodeSchema), the nine package-tree group wrappers sit downstream of the tree's own per-kind group schemas (src/package-node.ts, z.custom over recursive guards, reached only through the hand fragments' own children pointers), and ContentFormula/MathExpression/MathApp/MathSum/MathProd/MathMatrix sit downstream of the fourth opaque node (MathExpressionSchema, reached through ContentFormulaSchema.content for the first and through the grammar's own recursion for the rest) -- see that module's own top comment -- so a bare z.toJSONSchema() call over their real schema counterpart either throws or degrades to `{}` for the recursive/custom part, which is exactly the problem CONTENT_DEFS exists to work around in the first place. What CAN be checked -- because a real, non-recursive, non-custom exported Zod schema exists for it -- is every leaf and near-leaf fragment: Color, Box, LayoutFrame, Alignment, SourceResidue, ContentStrokeStyle, ContentBorder, ContentCellBorders, ContentListMembership, ContentRun, ContentParagraph, ContentImageBlock, ContentPageBreak, PageSize, Margins, SectionDescriptor, SlideDescriptor, SheetDescriptor, DrawPageDescriptor, ShapeDescriptor, HeadingParagraph, ListParagraph, the whole construct descriptor vocabulary (ContentControlDescriptor, FieldDescriptor, AnchorDescriptor, LinkTarget, LinkDescriptor, ProvenanceDescriptor, DivisionSource, DivisionDescriptor, and the ConstructDescriptor union over them -- each a plain z.strictObject or a union of them, reaching no opaque node), the flat form's two construct boundary markers (ContentConstructStart, whose only non-literal field is that same ConstructDescriptor union, and ContentConstructEnd, whose kind literal is its whole payload), ContentSheetCell, ContentCellValue, ContentSheetCellComment, ContentSheetColumn, ContentSheetRow, ContentSheetPrintSettings, ContentSheetPrintRange, ContentSheetRepeatRange, ContentSheetImage, ContentStroke, ContentPathPoint, ContentPathSegment, ContentSubpath, ContentVector, StyleParagraphProperties, StyleRunProperties, StyleEntry, DefinitionEntry, ExactRational, DimensionVector, MathPresentation, MathProvenance, MathUncertainty, MathNum, MathQty, MathSym, MathUnparsed, MathSymbolEntry, MathUnit, MathNormalisationContext, SymbolTable. None of these reaches ContentBlockSchema, ContentEmbeddedObjectSchema, MathMlNodeSchema, MathExpressionSchema, or a tree group schema from anywhere in its own field tree, so each can be generated live and compared directly.
 //
@@ -151,20 +161,24 @@ const { schemas: liveSchemas } = z.toJSONSchema(registry, {
 });
 
 // Strips the top-level $schema/$id every registry-root result carries -- an artefact of generating each schema as its own standalone root (see the top comment above), not present in CONTENT_DEFS's own nested fragments.
-function withoutRootMarkers(fragment: z.core.JSONSchema.JSONSchema): Record<string, unknown> {
+function withoutRootMarkers(
+  fragment: z.core.JSONSchema.JSONSchema,
+): Record<string, unknown> {
   const rest: Record<string, unknown> = { ...fragment };
   delete rest.$schema;
   delete rest.$id;
   return rest;
 }
 
-describe('CONTENT_DEFS vs live z.toJSONSchema() output', () => {
+describe("CONTENT_DEFS vs live z.toJSONSchema() output", () => {
   it.each(Object.keys(REGISTERED_SCHEMAS))(
-    '%s: hand-authored fragment matches a live z.toJSONSchema() call over its real schema',
+    "%s: hand-authored fragment matches a live z.toJSONSchema() call over its real schema",
     (id) => {
       const live = liveSchemas[id];
       if (live === undefined) {
-        throw new Error(`z.toJSONSchema() produced no schema for registered id "${id}"`);
+        throw new Error(
+          `z.toJSONSchema() produced no schema for registered id "${id}"`,
+        );
       }
       const handAuthored = CONTENT_DEFS[id];
       if (handAuthored === undefined) {

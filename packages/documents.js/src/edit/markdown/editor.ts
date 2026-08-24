@@ -3,21 +3,25 @@ import type {
   ContentDocument,
   ContentParagraph as ContentParagraphNode,
   ContentTable as ContentTableNode,
-} from 'document-schema.js';
-import type { NumIdMintState, ReadMarkdownOptions, WriteMarkdownOptions } from 'markdown-codec';
-import { createNumIdMintState, mintListNumId } from 'markdown-codec';
-import type { Margins, PageSize } from 'document-schema.js';
-import { resolveMetadataTimestamps } from '../../model/metadata';
-import { readMarkdownContent } from '../../markdown/read';
-import { buildMarkdownText } from '../../markdown/write';
-import type { ClockPort } from '../../ports/clock';
-import { systemClock } from '../../ports/clock';
-import type { MarkdownListInit } from './list';
-import { MarkdownList } from './list';
-import type { ParagraphInit } from './paragraph';
-import { buildParagraph, MarkdownParagraph } from './paragraph';
-import type { TableInit } from './table';
-import { buildTable, MarkdownTable } from './table';
+} from "document-schema.js";
+import type {
+  NumIdMintState,
+  ReadMarkdownOptions,
+  WriteMarkdownOptions,
+} from "markdown-codec";
+import { createNumIdMintState, mintListNumId } from "markdown-codec";
+import type { Margins, PageSize } from "document-schema.js";
+import { resolveMetadataTimestamps } from "../../model/metadata";
+import { readMarkdownContent } from "../../markdown/read";
+import { buildMarkdownText } from "../../markdown/write";
+import type { ClockPort } from "../../ports/clock";
+import { systemClock } from "../../ports/clock";
+import type { MarkdownListInit } from "./list";
+import { MarkdownList } from "./list";
+import type { ParagraphInit } from "./paragraph";
+import { buildParagraph, MarkdownParagraph } from "./paragraph";
+import type { TableInit } from "./table";
+import { buildTable, MarkdownTable } from "./table";
 
 export interface MarkdownBody {
   paragraphs(): MarkdownParagraph[];
@@ -36,7 +40,9 @@ class MarkdownBodyImpl implements MarkdownBody {
   // Direct top-level blocks only -- a paragraph inside a table cell (see table.ts) is reached via MarkdownTable, mirroring OdtEditor.paragraphs'/DocxEditor.paragraphs' own direct-children-only scope (src/edit/odt/editor.ts, src/edit/docx/editor.ts). A list item IS a direct top-level paragraph (markdown has no structural list container -- see list.ts's own top-of-file note), so it is surfaced here too, carrying its own .list membership.
   paragraphs(): MarkdownParagraph[] {
     return this.blocks
-      .filter((block): block is ContentParagraphNode => block.kind === 'paragraph')
+      .filter(
+        (block): block is ContentParagraphNode => block.kind === "paragraph",
+      )
       .map((block) => new MarkdownParagraph(this.blocks, block));
   }
 
@@ -48,7 +54,7 @@ class MarkdownBodyImpl implements MarkdownBody {
 
   tables(): MarkdownTable[] {
     return this.blocks
-      .filter((block): block is ContentTableNode => block.kind === 'table')
+      .filter((block): block is ContentTableNode => block.kind === "table")
       .map((block) => new MarkdownTable(this.blocks, block));
   }
 
@@ -82,12 +88,14 @@ export class MarkdownEditor {
   private readonly document: ContentDocument;
 
   constructor(document: ContentDocument) {
-    if (document.kind !== 'wordprocessing') {
-      throw new Error(`MarkdownEditor requires a wordprocessing ContentDocument, got "${document.kind}"`);
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `MarkdownEditor requires a wordprocessing ContentDocument, got "${document.kind}"`,
+      );
     }
     const section = document.sections[0];
     if (section === undefined) {
-      throw new Error('markdown ContentDocument carries no sections');
+      throw new Error("markdown ContentDocument carries no sections");
     }
     this.document = document;
     this.body = new MarkdownBodyImpl(section.blocks, createNumIdMintState());
@@ -107,14 +115,22 @@ export class MarkdownEditor {
   }
 }
 
-export function openMarkdown(text: string, options?: ReadMarkdownOptions): MarkdownEditor {
+export function openMarkdown(
+  text: string,
+  options?: ReadMarkdownOptions,
+): MarkdownEditor {
   return new MarkdownEditor(readMarkdownContent(text, options));
 }
 
 // Creates a fresh markdown document with real metadata createdIso/modifiedIso timestamps -- mirrors createOdt/createOdp/createOds/createOdg's own default-on clock behaviour exactly (see src/edit/odt/editor.ts's own createOdt). Built via readMarkdownContent('', ...) rather than a hand-constructed ContentDocument, reusing markdown-codec's own "every lowered document gets one empty ContentSection with A4 + 1in default page geometry" behaviour (see that package's own MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY) as the single source of truth for what an empty markdown document looks like, rather than restating it here.
-export function createMarkdownEditor(options?: CreateMarkdownEditorOptions): MarkdownEditor {
+export function createMarkdownEditor(
+  options?: CreateMarkdownEditorOptions,
+): MarkdownEditor {
   const clock = options?.clock ?? systemClock;
-  const document = readMarkdownContent('', { pageSize: options?.pageSize, margins: options?.margins });
+  const document = readMarkdownContent("", {
+    pageSize: options?.pageSize,
+    margins: options?.margins,
+  });
   document.metadata = resolveMetadataTimestamps(document.metadata, clock);
   return new MarkdownEditor(document);
 }

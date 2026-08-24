@@ -1,8 +1,20 @@
-import type { ContentStrokeStyle } from 'document-schema.js';
-import type { Color as LayoutColor } from 'document-schema.js';
-import type { LayoutFont } from 'document-schema.js';
-import { registerImageBytes, spliceOut } from './util';
-import type { LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutInternalLink, LayoutItem, LayoutLine, LayoutLink, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'pdf-codec';
+import type { ContentStrokeStyle } from "document-schema.js";
+import type { Color as LayoutColor } from "document-schema.js";
+import type { LayoutFont } from "document-schema.js";
+import { registerImageBytes, spliceOut } from "./util";
+import type {
+  LayoutEllipse,
+  LayoutImage,
+  LayoutImageAsset,
+  LayoutInternalLink,
+  LayoutItem,
+  LayoutLine,
+  LayoutLink,
+  LayoutPath,
+  LayoutRect,
+  LayoutSubpath,
+  LayoutText,
+} from "pdf-codec";
 
 // Live-view classes over a page's own LayoutItem entries -- the PDF-editor equivalent of src/edit/docx/run.ts's DocxRun or src/edit/odg/vector.ts's OdgBoxVector/OdgLineVector/OdgPathVector, adapted to this package's own model: a LayoutItem is a plain, Zod-inferred object (not an XmlElement), so there is no attribute tree to read/write through -- every getter/setter here reads or mutates the actual object sitting inside the page's own `items` array directly, and saving is nothing more than writePdf(doc) (PdfEditor.toBytes()). `container` is that page's own `LayoutItem[]` array (the exact reference PdfPage.items()/append*/insert* hold), `node` is this item's own object inside it.
 //
@@ -24,7 +36,9 @@ abstract class PdfItemBase<T extends LayoutItem> {
 
   protected live(): T {
     if (this.removed) {
-      throw new Error(`this ${this.typeName} has been removed from its page and can no longer be used`);
+      throw new Error(
+        `this ${this.typeName} has been removed from its page and can no longer be used`,
+      );
     }
     return this.node;
   }
@@ -32,7 +46,7 @@ abstract class PdfItemBase<T extends LayoutItem> {
   // sourcePath is assigned only by a format reader at read time (document-schema.js's own layout.ts doc comment) -- never meaningfully settable here, so this exposes it read-only, matching what every LayoutItem variant actually carries. The internalLink item is the deliberate exception (an annotation rectangle is never laid out from a ContentDocument item), so it reads as undefined rather than being modelled on that variant.
   get sourcePath(): string | undefined {
     const node = this.live();
-    return node.kind === 'internalLink' ? undefined : node.sourcePath;
+    return node.kind === "internalLink" ? undefined : node.sourcePath;
   }
 
   remove(): void {
@@ -55,7 +69,11 @@ function requireNonNegative(value: number, field: string): void {
 }
 
 // Sets `node[key]` when `value` is defined, or removes the key entirely when it isn't -- matching every optional LayoutItem field's own Zod-schema shape (an absent key, never a present key holding `undefined`), the same convention DocxParagraph's own alignment/styleId setters follow for w:jc/w:pStyle by removing the element outright rather than writing one with no value.
-function setOrDelete<T extends object, K extends keyof T>(node: T, key: K, value: T[K]): void {
+function setOrDelete<T extends object, K extends keyof T>(
+  node: T,
+  key: K,
+  value: T[K],
+): void {
   if (value === undefined) {
     Reflect.deleteProperty(node, key);
     return;
@@ -77,9 +95,9 @@ export interface PdfTextInit {
 }
 
 export function buildTextItem(init: PdfTextInit): LayoutText {
-  requirePositive(init.sizePt, 'sizePt');
+  requirePositive(init.sizePt, "sizePt");
   return {
-    kind: 'text',
+    kind: "text",
     xPt: init.xPt,
     yPt: init.yPt,
     text: init.text,
@@ -92,10 +110,10 @@ export function buildTextItem(init: PdfTextInit): LayoutText {
 }
 
 export class PdfTextItem extends PdfItemBase<LayoutText> {
-  readonly kind = 'text' as const;
+  readonly kind = "text" as const;
 
   constructor(container: LayoutItem[], node: LayoutText) {
-    super(container, node, 'PdfTextItem');
+    super(container, node, "PdfTextItem");
   }
 
   get xPt(): number {
@@ -135,7 +153,7 @@ export class PdfTextItem extends PdfItemBase<LayoutText> {
   }
 
   set sizePt(value: number) {
-    requirePositive(value, 'sizePt');
+    requirePositive(value, "sizePt");
     this.live().sizePt = value;
   }
 
@@ -153,9 +171,9 @@ export class PdfTextItem extends PdfItemBase<LayoutText> {
 
   set widthPt(value: number | undefined) {
     if (value !== undefined) {
-      requireNonNegative(value, 'widthPt');
+      requireNonNegative(value, "widthPt");
     }
-    setOrDelete(this.live(), 'widthPt', value);
+    setOrDelete(this.live(), "widthPt", value);
   }
 
   get rotationDeg(): number | undefined {
@@ -163,7 +181,7 @@ export class PdfTextItem extends PdfItemBase<LayoutText> {
   }
 
   set rotationDeg(value: number | undefined) {
-    setOrDelete(this.live(), 'rotationDeg', value);
+    setOrDelete(this.live(), "rotationDeg", value);
   }
 
   get underline(): boolean | undefined {
@@ -171,7 +189,7 @@ export class PdfTextItem extends PdfItemBase<LayoutText> {
   }
 
   set underline(value: boolean | undefined) {
-    setOrDelete(this.live(), 'underline', value);
+    setOrDelete(this.live(), "underline", value);
   }
 }
 
@@ -195,31 +213,49 @@ export interface PdfEllipseInit {
   readonly stroke?: { readonly color: LayoutColor; readonly widthPt: number };
 }
 
-function requireValidStroke(stroke: { readonly color: LayoutColor; readonly widthPt: number } | undefined): void {
+function requireValidStroke(
+  stroke: { readonly color: LayoutColor; readonly widthPt: number } | undefined,
+): void {
   if (stroke !== undefined) {
-    requirePositive(stroke.widthPt, 'stroke.widthPt');
+    requirePositive(stroke.widthPt, "stroke.widthPt");
   }
 }
 
 export function buildRectItem(init: PdfRectInit): LayoutRect {
-  requireNonNegative(init.widthPt, 'widthPt');
-  requireNonNegative(init.heightPt, 'heightPt');
+  requireNonNegative(init.widthPt, "widthPt");
+  requireNonNegative(init.heightPt, "heightPt");
   requireValidStroke(init.stroke);
-  return { kind: 'rect', xPt: init.xPt, yPt: init.yPt, widthPt: init.widthPt, heightPt: init.heightPt, fill: init.fill, stroke: init.stroke };
+  return {
+    kind: "rect",
+    xPt: init.xPt,
+    yPt: init.yPt,
+    widthPt: init.widthPt,
+    heightPt: init.heightPt,
+    fill: init.fill,
+    stroke: init.stroke,
+  };
 }
 
 export function buildEllipseItem(init: PdfEllipseInit): LayoutEllipse {
-  requirePositive(init.widthPt, 'widthPt');
-  requirePositive(init.heightPt, 'heightPt');
+  requirePositive(init.widthPt, "widthPt");
+  requirePositive(init.heightPt, "heightPt");
   requireValidStroke(init.stroke);
-  return { kind: 'ellipse', xPt: init.xPt, yPt: init.yPt, widthPt: init.widthPt, heightPt: init.heightPt, fill: init.fill, stroke: init.stroke };
+  return {
+    kind: "ellipse",
+    xPt: init.xPt,
+    yPt: init.yPt,
+    widthPt: init.widthPt,
+    heightPt: init.heightPt,
+    fill: init.fill,
+    stroke: init.stroke,
+  };
 }
 
 export class PdfRectItem extends PdfItemBase<LayoutRect> {
-  readonly kind = 'rect' as const;
+  readonly kind = "rect" as const;
 
   constructor(container: LayoutItem[], node: LayoutRect) {
-    super(container, node, 'PdfRectItem');
+    super(container, node, "PdfRectItem");
   }
 
   get xPt(): number {
@@ -243,7 +279,7 @@ export class PdfRectItem extends PdfItemBase<LayoutRect> {
   }
 
   set widthPt(value: number) {
-    requireNonNegative(value, 'widthPt');
+    requireNonNegative(value, "widthPt");
     this.live().widthPt = value;
   }
 
@@ -252,7 +288,7 @@ export class PdfRectItem extends PdfItemBase<LayoutRect> {
   }
 
   set heightPt(value: number) {
-    requireNonNegative(value, 'heightPt');
+    requireNonNegative(value, "heightPt");
     this.live().heightPt = value;
   }
 
@@ -261,24 +297,28 @@ export class PdfRectItem extends PdfItemBase<LayoutRect> {
   }
 
   set fill(value: LayoutColor | undefined) {
-    setOrDelete(this.live(), 'fill', value);
+    setOrDelete(this.live(), "fill", value);
   }
 
-  get stroke(): { readonly color: LayoutColor; readonly widthPt: number } | undefined {
+  get stroke():
+    { readonly color: LayoutColor; readonly widthPt: number } | undefined {
     return this.live().stroke;
   }
 
-  set stroke(value: { readonly color: LayoutColor; readonly widthPt: number } | undefined) {
+  set stroke(
+    value:
+      { readonly color: LayoutColor; readonly widthPt: number } | undefined,
+  ) {
     requireValidStroke(value);
-    setOrDelete(this.live(), 'stroke', value);
+    setOrDelete(this.live(), "stroke", value);
   }
 }
 
 export class PdfEllipseItem extends PdfItemBase<LayoutEllipse> {
-  readonly kind = 'ellipse' as const;
+  readonly kind = "ellipse" as const;
 
   constructor(container: LayoutItem[], node: LayoutEllipse) {
-    super(container, node, 'PdfEllipseItem');
+    super(container, node, "PdfEllipseItem");
   }
 
   get xPt(): number {
@@ -302,7 +342,7 @@ export class PdfEllipseItem extends PdfItemBase<LayoutEllipse> {
   }
 
   set widthPt(value: number) {
-    requirePositive(value, 'widthPt');
+    requirePositive(value, "widthPt");
     this.live().widthPt = value;
   }
 
@@ -311,7 +351,7 @@ export class PdfEllipseItem extends PdfItemBase<LayoutEllipse> {
   }
 
   set heightPt(value: number) {
-    requirePositive(value, 'heightPt');
+    requirePositive(value, "heightPt");
     this.live().heightPt = value;
   }
 
@@ -320,16 +360,20 @@ export class PdfEllipseItem extends PdfItemBase<LayoutEllipse> {
   }
 
   set fill(value: LayoutColor | undefined) {
-    setOrDelete(this.live(), 'fill', value);
+    setOrDelete(this.live(), "fill", value);
   }
 
-  get stroke(): { readonly color: LayoutColor; readonly widthPt: number } | undefined {
+  get stroke():
+    { readonly color: LayoutColor; readonly widthPt: number } | undefined {
     return this.live().stroke;
   }
 
-  set stroke(value: { readonly color: LayoutColor; readonly widthPt: number } | undefined) {
+  set stroke(
+    value:
+      { readonly color: LayoutColor; readonly widthPt: number } | undefined,
+  ) {
     requireValidStroke(value);
-    setOrDelete(this.live(), 'stroke', value);
+    setOrDelete(this.live(), "stroke", value);
   }
 }
 
@@ -346,15 +390,24 @@ export interface PdfLineInit {
 }
 
 export function buildLineItem(init: PdfLineInit): LayoutLine {
-  requirePositive(init.widthPt, 'widthPt');
-  return { kind: 'line', x1Pt: init.x1Pt, y1Pt: init.y1Pt, x2Pt: init.x2Pt, y2Pt: init.y2Pt, color: init.color, widthPt: init.widthPt, style: init.style };
+  requirePositive(init.widthPt, "widthPt");
+  return {
+    kind: "line",
+    x1Pt: init.x1Pt,
+    y1Pt: init.y1Pt,
+    x2Pt: init.x2Pt,
+    y2Pt: init.y2Pt,
+    color: init.color,
+    widthPt: init.widthPt,
+    style: init.style,
+  };
 }
 
 export class PdfLineItem extends PdfItemBase<LayoutLine> {
-  readonly kind = 'line' as const;
+  readonly kind = "line" as const;
 
   constructor(container: LayoutItem[], node: LayoutLine) {
-    super(container, node, 'PdfLineItem');
+    super(container, node, "PdfLineItem");
   }
 
   get x1Pt(): number {
@@ -402,7 +455,7 @@ export class PdfLineItem extends PdfItemBase<LayoutLine> {
   }
 
   set widthPt(value: number) {
-    requirePositive(value, 'widthPt');
+    requirePositive(value, "widthPt");
     this.live().widthPt = value;
   }
 
@@ -411,7 +464,7 @@ export class PdfLineItem extends PdfItemBase<LayoutLine> {
   }
 
   set style(value: ContentStrokeStyle | undefined) {
-    setOrDelete(this.live(), 'style', value);
+    setOrDelete(this.live(), "style", value);
   }
 }
 
@@ -420,21 +473,28 @@ export class PdfLineItem extends PdfItemBase<LayoutLine> {
 export interface PdfPathInit {
   readonly subpaths: readonly LayoutSubpath[];
   readonly fill?: LayoutColor;
-  readonly fillRule?: 'nonzero' | 'evenodd';
+  readonly fillRule?: "nonzero" | "evenodd";
   readonly stroke?: { readonly color: LayoutColor; readonly widthPt: number };
   readonly style?: ContentStrokeStyle;
 }
 
 export function buildPathItem(init: PdfPathInit): LayoutPath {
   requireValidStroke(init.stroke);
-  return { kind: 'path', subpaths: [...init.subpaths], fill: init.fill, fillRule: init.fillRule, stroke: init.stroke, style: init.style };
+  return {
+    kind: "path",
+    subpaths: [...init.subpaths],
+    fill: init.fill,
+    fillRule: init.fillRule,
+    stroke: init.stroke,
+    style: init.style,
+  };
 }
 
 export class PdfPathItem extends PdfItemBase<LayoutPath> {
-  readonly kind = 'path' as const;
+  readonly kind = "path" as const;
 
   constructor(container: LayoutItem[], node: LayoutPath) {
-    super(container, node, 'PdfPathItem');
+    super(container, node, "PdfPathItem");
   }
 
   // A whole-array-replace setter only, in v1 -- no per-segment/per-point live editing of an existing path (see this module's own top-of-file scope note and the pdf editor's own module doc comment for why).
@@ -451,24 +511,28 @@ export class PdfPathItem extends PdfItemBase<LayoutPath> {
   }
 
   set fill(value: LayoutColor | undefined) {
-    setOrDelete(this.live(), 'fill', value);
+    setOrDelete(this.live(), "fill", value);
   }
 
-  get fillRule(): 'nonzero' | 'evenodd' | undefined {
+  get fillRule(): "nonzero" | "evenodd" | undefined {
     return this.live().fillRule;
   }
 
-  set fillRule(value: 'nonzero' | 'evenodd' | undefined) {
-    setOrDelete(this.live(), 'fillRule', value);
+  set fillRule(value: "nonzero" | "evenodd" | undefined) {
+    setOrDelete(this.live(), "fillRule", value);
   }
 
-  get stroke(): { readonly color: LayoutColor; readonly widthPt: number } | undefined {
+  get stroke():
+    { readonly color: LayoutColor; readonly widthPt: number } | undefined {
     return this.live().stroke;
   }
 
-  set stroke(value: { readonly color: LayoutColor; readonly widthPt: number } | undefined) {
+  set stroke(
+    value:
+      { readonly color: LayoutColor; readonly widthPt: number } | undefined,
+  ) {
     requireValidStroke(value);
-    setOrDelete(this.live(), 'stroke', value);
+    setOrDelete(this.live(), "stroke", value);
   }
 
   get style(): ContentStrokeStyle | undefined {
@@ -476,7 +540,7 @@ export class PdfPathItem extends PdfItemBase<LayoutPath> {
   }
 
   set style(value: ContentStrokeStyle | undefined) {
-    setOrDelete(this.live(), 'style', value);
+    setOrDelete(this.live(), "style", value);
   }
 }
 
@@ -489,23 +553,38 @@ export interface PdfImageInit {
   readonly heightPt: number;
   readonly rotationDeg?: number;
   readonly bytes: Uint8Array<ArrayBuffer>;
-  readonly format: 'png' | 'jpeg';
+  readonly format: "png" | "jpeg";
 }
 
-export function buildImageItem(init: PdfImageInit, images: Record<string, LayoutImageAsset>): LayoutImage {
-  requirePositive(init.widthPt, 'widthPt');
-  requirePositive(init.heightPt, 'heightPt');
+export function buildImageItem(
+  init: PdfImageInit,
+  images: Record<string, LayoutImageAsset>,
+): LayoutImage {
+  requirePositive(init.widthPt, "widthPt");
+  requirePositive(init.heightPt, "heightPt");
   const imageId = registerImageBytes(init.bytes, init.format, images);
-  return { kind: 'image', imageId, xPt: init.xPt, yPt: init.yPt, widthPt: init.widthPt, heightPt: init.heightPt, rotationDeg: init.rotationDeg };
+  return {
+    kind: "image",
+    imageId,
+    xPt: init.xPt,
+    yPt: init.yPt,
+    widthPt: init.widthPt,
+    heightPt: init.heightPt,
+    rotationDeg: init.rotationDeg,
+  };
 }
 
 export class PdfImageItem extends PdfItemBase<LayoutImage> {
-  readonly kind = 'image' as const;
+  readonly kind = "image" as const;
 
   private readonly images: Record<string, LayoutImageAsset>;
 
-  constructor(container: LayoutItem[], node: LayoutImage, images: Record<string, LayoutImageAsset>) {
-    super(container, node, 'PdfImageItem');
+  constructor(
+    container: LayoutItem[],
+    node: LayoutImage,
+    images: Record<string, LayoutImageAsset>,
+  ) {
+    super(container, node, "PdfImageItem");
     this.images = images;
   }
 
@@ -534,7 +613,7 @@ export class PdfImageItem extends PdfItemBase<LayoutImage> {
   }
 
   set widthPt(value: number) {
-    requirePositive(value, 'widthPt');
+    requirePositive(value, "widthPt");
     this.live().widthPt = value;
   }
 
@@ -543,7 +622,7 @@ export class PdfImageItem extends PdfItemBase<LayoutImage> {
   }
 
   set heightPt(value: number) {
-    requirePositive(value, 'heightPt');
+    requirePositive(value, "heightPt");
     this.live().heightPt = value;
   }
 
@@ -552,11 +631,11 @@ export class PdfImageItem extends PdfItemBase<LayoutImage> {
   }
 
   set rotationDeg(value: number | undefined) {
-    setOrDelete(this.live(), 'rotationDeg', value);
+    setOrDelete(this.live(), "rotationDeg", value);
   }
 
   // Registers `bytes` in the document-wide image registry (deduplicated by content, exactly like a fresh appendImage/insertImageAt) and repoints this item's own imageId at the result -- position/size are untouched. The previous imageId is left exactly as it was in `images`: pruning it would be unsafe, since dedup means another item elsewhere in the document may still be referencing the identical entry: writePdf only ever embeds an images[] entry actually referenced by some item on some page, so an orphaned entry this call leaves behind is simply never written out.
-  setImage(bytes: Uint8Array<ArrayBuffer>, format: 'png' | 'jpeg'): void {
+  setImage(bytes: Uint8Array<ArrayBuffer>, format: "png" | "jpeg"): void {
     const node = this.live();
     node.imageId = registerImageBytes(bytes, format, this.images);
   }
@@ -573,17 +652,24 @@ export interface PdfLinkInit {
 }
 
 export function buildLinkItem(init: PdfLinkInit): LayoutLink {
-  requireNonNegative(init.widthPt, 'widthPt');
-  requireNonNegative(init.heightPt, 'heightPt');
-  return { kind: 'link', uri: init.uri, xPt: init.xPt, yPt: init.yPt, widthPt: init.widthPt, heightPt: init.heightPt };
+  requireNonNegative(init.widthPt, "widthPt");
+  requireNonNegative(init.heightPt, "heightPt");
+  return {
+    kind: "link",
+    uri: init.uri,
+    xPt: init.xPt,
+    yPt: init.yPt,
+    widthPt: init.widthPt,
+    heightPt: init.heightPt,
+  };
 }
 
 // An internal navigation link item (#721): destination names an entry of the document's destinations table rather than a URI. Geometry edits mirror PdfLinkItem's; the destination itself is read/write as the plain name it is.
 export class PdfInternalLinkItem extends PdfItemBase<LayoutInternalLink> {
-  readonly kind = 'internalLink' as const;
+  readonly kind = "internalLink" as const;
 
   constructor(container: LayoutItem[], node: LayoutInternalLink) {
-    super(container, node, 'PdfInternalLinkItem');
+    super(container, node, "PdfInternalLinkItem");
   }
 
   get destination(): string {
@@ -615,7 +701,7 @@ export class PdfInternalLinkItem extends PdfItemBase<LayoutInternalLink> {
   }
 
   set widthPt(value: number) {
-    requireNonNegative(value, 'widthPt');
+    requireNonNegative(value, "widthPt");
     this.live().widthPt = value;
   }
 
@@ -624,16 +710,16 @@ export class PdfInternalLinkItem extends PdfItemBase<LayoutInternalLink> {
   }
 
   set heightPt(value: number) {
-    requireNonNegative(value, 'heightPt');
+    requireNonNegative(value, "heightPt");
     this.live().heightPt = value;
   }
 }
 
 export class PdfLinkItem extends PdfItemBase<LayoutLink> {
-  readonly kind = 'link' as const;
+  readonly kind = "link" as const;
 
   constructor(container: LayoutItem[], node: LayoutLink) {
-    super(container, node, 'PdfLinkItem');
+    super(container, node, "PdfLinkItem");
   }
 
   get uri(): string {
@@ -665,7 +751,7 @@ export class PdfLinkItem extends PdfItemBase<LayoutLink> {
   }
 
   set widthPt(value: number) {
-    requireNonNegative(value, 'widthPt');
+    requireNonNegative(value, "widthPt");
     this.live().widthPt = value;
   }
 
@@ -674,33 +760,45 @@ export class PdfLinkItem extends PdfItemBase<LayoutLink> {
   }
 
   set heightPt(value: number) {
-    requireNonNegative(value, 'heightPt');
+    requireNonNegative(value, "heightPt");
     this.live().heightPt = value;
   }
 }
 
 // --- dispatch --------------------------------------------------------------------------------------------------
 
-export type PdfItem = PdfTextItem | PdfImageItem | PdfRectItem | PdfEllipseItem | PdfLineItem | PdfPathItem | PdfLinkItem | PdfInternalLinkItem;
+export type PdfItem =
+  | PdfTextItem
+  | PdfImageItem
+  | PdfRectItem
+  | PdfEllipseItem
+  | PdfLineItem
+  | PdfPathItem
+  | PdfLinkItem
+  | PdfInternalLinkItem;
 
 // Wraps whichever LayoutItem `node` actually is in its matching live-view class -- the read-side counterpart to buildTextItem/buildRectItem/etc above, and the single place kind-to-class dispatch lives. PdfPage's own items()/textItems()/imageItems()/etc, and every append*/insert*At below, funnel through this.
-export function wrapItem(container: LayoutItem[], node: LayoutItem, images: Record<string, LayoutImageAsset>): PdfItem {
+export function wrapItem(
+  container: LayoutItem[],
+  node: LayoutItem,
+  images: Record<string, LayoutImageAsset>,
+): PdfItem {
   switch (node.kind) {
-    case 'text':
+    case "text":
       return new PdfTextItem(container, node);
-    case 'image':
+    case "image":
       return new PdfImageItem(container, node, images);
-    case 'rect':
+    case "rect":
       return new PdfRectItem(container, node);
-    case 'ellipse':
+    case "ellipse":
       return new PdfEllipseItem(container, node);
-    case 'internalLink':
+    case "internalLink":
       return new PdfInternalLinkItem(container, node);
-    case 'line':
+    case "line":
       return new PdfLineItem(container, node);
-    case 'path':
+    case "path":
       return new PdfPathItem(container, node);
-    case 'link':
+    case "link":
       return new PdfLinkItem(container, node);
   }
 }

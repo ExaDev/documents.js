@@ -11,7 +11,7 @@ export class FirebirdBackupParseError extends Error {
 
   constructor(message: string, offset: number) {
     super(`Firebird backup parse error at byte offset ${offset}: ${message}`);
-    this.name = 'FirebirdBackupParseError';
+    this.name = "FirebirdBackupParseError";
     this.offset = offset;
   }
 }
@@ -37,7 +37,10 @@ export class FirebirdBackupReader {
   readTag(): number {
     const byte = this.bytes[this.position];
     if (byte === undefined) {
-      throw new FirebirdBackupParseError('unexpected end of stream reading a tag byte', this.position);
+      throw new FirebirdBackupParseError(
+        "unexpected end of stream reading a tag byte",
+        this.position,
+      );
     }
     this.position++;
     return byte;
@@ -51,7 +54,10 @@ export class FirebirdBackupReader {
   private readLengthByte(): number {
     const byte = this.bytes[this.position];
     if (byte === undefined) {
-      throw new FirebirdBackupParseError('unexpected end of stream reading an attribute length byte', this.position);
+      throw new FirebirdBackupParseError(
+        "unexpected end of stream reading an attribute length byte",
+        this.position,
+      );
     }
     this.position++;
     return byte;
@@ -59,7 +65,10 @@ export class FirebirdBackupReader {
 
   private readRawBytes(length: number): Uint8Array<ArrayBuffer> {
     if (this.position + length > this.bytes.length) {
-      throw new FirebirdBackupParseError(`unexpected end of stream reading ${length} raw byte(s)`, this.position);
+      throw new FirebirdBackupParseError(
+        `unexpected end of stream reading ${length} raw byte(s)`,
+        this.position,
+      );
     }
     const slice = this.bytes.subarray(this.position, this.position + length);
     this.position += length;
@@ -76,15 +85,23 @@ export class FirebirdBackupReader {
   readInt32Attribute(): number {
     const bytes = this.readAttributeBytes();
     if (bytes.length !== 4) {
-      throw new FirebirdBackupParseError(`expected a 4-byte int32 attribute, found ${bytes.length} byte(s)`, this.position);
+      throw new FirebirdBackupParseError(
+        `expected a 4-byte int32 attribute, found ${bytes.length} byte(s)`,
+        this.position,
+      );
     }
-    return (bytes[0] ?? 0) | ((bytes[1] ?? 0) << 8) | ((bytes[2] ?? 0) << 16) | ((bytes[3] ?? 0) << 24);
+    return (
+      (bytes[0] ?? 0) |
+      ((bytes[1] ?? 0) << 8) |
+      ((bytes[2] ?? 0) << 16) |
+      ((bytes[3] ?? 0) << 24)
+    );
   }
 
   // A length-prefixed attribute value decoded as text. Real gbak output is always plain ASCII/Latin-1 for the identifiers and paths this reader cares about (table/column names, file paths); UTF-8 decoding degrades gracefully to the same result for that range and correctly handles a UTF-8-encoded name should one appear.
   readTextAttribute(): string {
     const bytes = this.readAttributeBytes();
-    return new TextDecoder('utf-8').decode(bytes);
+    return new TextDecoder("utf-8").decode(bytes);
   }
 
   // Skips one full attribute (tag already consumed by the caller via readTag; this reads and discards its length-prefixed value) -- the generic mechanism this reader uses to walk past any attribute whose own meaning is out of scope (relation/field/database attributes this reader has no use for), without losing stream alignment. Never valid for att_data_data (see readDataPayload) -- callers must special-case that tag before reaching here. NOT valid either for a genuinely blob-valued attribute (att_relation_view_blr/att_field_default_value/att_trig_blr/att_trig_source and similar -- a compound "length-of-length then raw bytes" shape restore.epp's own get_blr_blob/get_misc_blob/get_source_blob read, wider than the plain ≤255-byte value every other attribute uses) -- a real, tracked, bounded gap this reader's own real fixture never exercises (no relation/field/index/trigger in it carries a description, default value, or BLR body) but would misalign the stream on a real file that does. See the package README's .odb Tier 3 Fidelity note.
@@ -118,7 +135,10 @@ export class FirebirdBackupReader {
   private readSignedByte(): number {
     const byte = this.bytes[this.position];
     if (byte === undefined) {
-      throw new FirebirdBackupParseError('unexpected end of stream reading a compression control byte', this.position);
+      throw new FirebirdBackupParseError(
+        "unexpected end of stream reading a compression control byte",
+        this.position,
+      );
     }
     this.position++;
     return byte >= 0x80 ? byte - 0x100 : byte;
@@ -171,7 +191,10 @@ export class XdrReader {
   // A big-endian 32-bit signed integer -- the wire shape underlying xdr_long AND xdr_short (xdr_short widens its 16-bit value to a full XDR long on the wire; see readInt16 below).
   readInt32(): number {
     if (this.position + 4 > this.end) {
-      throw new FirebirdBackupParseError('unexpected end of XDR data reading a 4-byte integer', this.position);
+      throw new FirebirdBackupParseError(
+        "unexpected end of XDR data reading a 4-byte integer",
+        this.position,
+      );
     }
     const b0 = this.bytes[this.position] ?? 0;
     const b1 = this.bytes[this.position + 1] ?? 0;
@@ -179,7 +202,7 @@ export class XdrReader {
     const b3 = this.bytes[this.position + 3] ?? 0;
     this.position += 4;
     // Signed 32-bit big-endian reassembly via a >>> 0 unsigned round-trip through `| 0` -- (b0<<24) alone can already overflow into unsigned-looking territory in JS bitwise ops, so build unsigned first, then reinterpret as signed with `| 0`.
-    return ((b0 << 24) | (b1 << 16) | (b2 << 8) | b3) | 0;
+    return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3 | 0;
   }
 
   // xdr_short's own wire shape: NOT a 2-byte value -- Firebird's XDR has no native 16-bit type, so a "short" is sign-extended to a full 4-byte XDR long on encode (xdr.cpp: `temp = *ip; PUTLONG(xdrs, &temp);`) and truncated back to 16 bits with sign preserved on decode (`*ip = (SSHORT) temp;`).
@@ -198,7 +221,10 @@ export class XdrReader {
   // IEEE-754 double via xdr_double's own two-32-bit-word shape (`FB_LONG_DOUBLE_FIRST`/`FB_LONG_DOUBLE_SECOND` select which 32-bit half of the in-memory double is PUTLONG'd first -- the constant itself lives in a platform header this reader's own source research did not track down). Read here as the high-order word first, i.e. a standard big-endian IEEE-754 double with no further word-swap -- cross-checked against a real Firebird-embedded fixture's own DOUBLE PRECISION column value (see src/firebird/backup.test.ts) and confirmed to decode correctly on the little-endian (x86/ARM) hosts every real gbak build this reader was tested against actually runs on.
   readDouble(): number {
     if (this.position + 8 > this.end) {
-      throw new FirebirdBackupParseError('unexpected end of XDR data reading an 8-byte double', this.position);
+      throw new FirebirdBackupParseError(
+        "unexpected end of XDR data reading an 8-byte double",
+        this.position,
+      );
     }
     const buffer = new ArrayBuffer(8);
     const view = new DataView(buffer);
@@ -211,7 +237,10 @@ export class XdrReader {
 
   readFloat(): number {
     if (this.position + 4 > this.end) {
-      throw new FirebirdBackupParseError('unexpected end of XDR data reading a 4-byte float', this.position);
+      throw new FirebirdBackupParseError(
+        "unexpected end of XDR data reading a 4-byte float",
+        this.position,
+      );
     }
     const buffer = new ArrayBuffer(4);
     const view = new DataView(buffer);
@@ -225,7 +254,10 @@ export class XdrReader {
   // xdr_opaque: `len` raw bytes, then (4 - len) & 3 zero filler bytes -- every opaque run is padded to a 4-byte boundary regardless of its own declared length.
   readOpaque(len: number): Uint8Array<ArrayBuffer> {
     if (this.position + len > this.end) {
-      throw new FirebirdBackupParseError(`unexpected end of XDR data reading ${len} opaque byte(s)`, this.position);
+      throw new FirebirdBackupParseError(
+        `unexpected end of XDR data reading ${len} opaque byte(s)`,
+        this.position,
+      );
     }
     const slice = this.bytes.subarray(this.position, this.position + len);
     this.position += len;

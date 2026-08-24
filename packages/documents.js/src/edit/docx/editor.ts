@@ -1,18 +1,18 @@
-import type { Package, XmlElement } from 'ooxml.js';
-import { decodePackage, encodePackage, rootElement } from 'ooxml.js';
-import { resolveMetadataTimestamps } from '../../model/metadata';
-import type { ClockPort } from '../../ports/clock';
-import { systemClock } from '../../ports/clock';
-import { el } from '../../xml/fragment';
-import type { ImageMediaContext } from './paragraph';
-import { buildParagraph, DocxParagraph } from './paragraph';
-import type { ParagraphInit } from './paragraph';
-import { createEmptyDocxPackage } from './scaffold';
-import { buildTable, DocxTable } from './table';
-import type { TableInit } from './table';
+import type { Package, XmlElement } from "ooxml.js";
+import { decodePackage, encodePackage, rootElement } from "ooxml.js";
+import { resolveMetadataTimestamps } from "../../model/metadata";
+import type { ClockPort } from "../../ports/clock";
+import { systemClock } from "../../ports/clock";
+import { el } from "../../xml/fragment";
+import type { ImageMediaContext } from "./paragraph";
+import { buildParagraph, DocxParagraph } from "./paragraph";
+import type { ParagraphInit } from "./paragraph";
+import { createEmptyDocxPackage } from "./scaffold";
+import { buildTable, DocxTable } from "./table";
+import type { TableInit } from "./table";
 
-const DOCUMENT_PART_PATH = 'word/document.xml';
-const MEDIA_DIR = 'word/media';
+const DOCUMENT_PART_PATH = "word/document.xml";
+const MEDIA_DIR = "word/media";
 
 export interface DocxBody {
   insertParagraphAt(index: number, init?: ParagraphInit): DocxParagraph;
@@ -31,7 +31,7 @@ function findDocumentRoot(pkg: Package): XmlElement {
 
 function findBody(documentRoot: XmlElement): XmlElement {
   for (const child of documentRoot.children) {
-    if (child.type === 'element' && child.tag === 'w:body') {
+    if (child.type === "element" && child.tag === "w:body") {
       return child;
     }
   }
@@ -40,14 +40,16 @@ function findBody(documentRoot: XmlElement): XmlElement {
 
 // w:sectPr, when it appears as a direct child of w:body (the document's final/only section), must be the LAST child -- every new top-level element is inserted immediately before it.
 function bodyInsertionPoint(body: XmlElement): number {
-  const sectPrIndex = body.children.findIndex((c) => c.type === 'element' && c.tag === 'w:sectPr');
+  const sectPrIndex = body.children.findIndex(
+    (c) => c.type === "element" && c.tag === "w:sectPr",
+  );
   return sectPrIndex === -1 ? body.children.length : sectPrIndex;
 }
 
 function bodyElementIndicesByTag(body: XmlElement, tag: string): number[] {
   const indices: number[] = [];
   body.children.forEach((child, i) => {
-    if (child.type === 'element' && child.tag === tag) {
+    if (child.type === "element" && child.tag === tag) {
       indices.push(i);
     }
   });
@@ -63,16 +65,33 @@ class DocxBodyImpl implements DocxBody {
 
   appendParagraph(init?: ParagraphInit): DocxParagraph {
     const paragraphElement = buildParagraph(init);
-    this.body.children.splice(bodyInsertionPoint(this.body), 0, paragraphElement);
-    return new DocxParagraph(this.body.children, paragraphElement, this.imageContext, this.pkg);
+    this.body.children.splice(
+      bodyInsertionPoint(this.body),
+      0,
+      paragraphElement,
+    );
+    return new DocxParagraph(
+      this.body.children,
+      paragraphElement,
+      this.imageContext,
+      this.pkg,
+    );
   }
 
   insertParagraphAt(index: number, init?: ParagraphInit): DocxParagraph {
     const paragraphElement = buildParagraph(init);
-    const indices = bodyElementIndicesByTag(this.body, 'w:p');
-    const insertAt = index < indices.length ? (indices[index] ?? bodyInsertionPoint(this.body)) : bodyInsertionPoint(this.body);
+    const indices = bodyElementIndicesByTag(this.body, "w:p");
+    const insertAt =
+      index < indices.length
+        ? (indices[index] ?? bodyInsertionPoint(this.body))
+        : bodyInsertionPoint(this.body);
     this.body.children.splice(insertAt, 0, paragraphElement);
-    return new DocxParagraph(this.body.children, paragraphElement, this.imageContext, this.pkg);
+    return new DocxParagraph(
+      this.body.children,
+      paragraphElement,
+      this.imageContext,
+      this.pkg,
+    );
   }
 
   appendTable(init: TableInit): DocxTable {
@@ -82,8 +101,8 @@ class DocxBodyImpl implements DocxBody {
   }
 
   appendPageBreak(): void {
-    const run = el('w:r', {}, [el('w:br', { 'w:type': 'page' })]);
-    const paragraph = el('w:p', {}, [run]);
+    const run = el("w:r", {}, [el("w:br", { "w:type": "page" })]);
+    const paragraph = el("w:p", {}, [run]);
     this.body.children.splice(bodyInsertionPoint(this.body), 0, paragraph);
   }
 }
@@ -110,11 +129,15 @@ export class DocxEditor {
     const imageContext: ImageMediaContext = {
       pkg: this.pkg,
       documentRoot,
-      media: { pkg: this.pkg, partPath: DOCUMENT_PART_PATH, mediaDir: MEDIA_DIR },
+      media: {
+        pkg: this.pkg,
+        partPath: DOCUMENT_PART_PATH,
+        mediaDir: MEDIA_DIR,
+      },
     };
     const out: DocxParagraph[] = [];
     for (const child of body.children) {
-      if (child.type === 'element' && child.tag === 'w:p') {
+      if (child.type === "element" && child.tag === "w:p") {
         out.push(new DocxParagraph(body.children, child, imageContext));
       }
     }
@@ -125,7 +148,7 @@ export class DocxEditor {
     const body = findBody(findDocumentRoot(this.pkg));
     const out: DocxTable[] = [];
     for (const child of body.children) {
-      if (child.type === 'element' && child.tag === 'w:tbl') {
+      if (child.type === "element" && child.tag === "w:tbl") {
         out.push(new DocxTable(body.children, child));
       }
     }

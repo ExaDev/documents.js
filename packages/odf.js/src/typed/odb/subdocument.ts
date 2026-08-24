@@ -1,4 +1,4 @@
-import type { Package } from '../../model/package';
+import type { Package } from "../../model/package";
 
 // A synthetic sub-Package view over an embedded ODF sub-document's own directory inside a larger package. An embedded sub-document (a .odb's forms/<PersistentName>/ or reports/<PersistentName>/ directory; a .odt's "Object 1/" embedded Math object) is a COMPLETE, self-contained ODF document whose parts happen to be stored under a path prefix rather than at the package root -- content.xml, styles.xml, settings.xml and meta.xml all sit at "<prefix>/content.xml" and friends, exactly as they would at the root of a standalone file. Re-keying those parts relative to the prefix therefore produces a genuine Package that every existing typed reader in this package (readOdtContent, readOdsContent, readOdpContent, readOdgContent, readOdfFormulaMathMl) accepts unmodified, with no sub-document-aware variant of any of them needed.
 //
@@ -9,12 +9,16 @@ export interface SubDocumentPackageOptions {
   allowMissingContent?: boolean;
 }
 
-const CONTENT_PART = 'content.xml';
+const CONTENT_PART = "content.xml";
 
 // Every part of `pkg` stored under `prefix` (with or without a trailing slash), re-keyed relative to it. Throws when the prefix holds no content.xml at all, unless allowMissingContent is set.
-export function subDocumentPackage(pkg: Package, prefix: string, options: SubDocumentPackageOptions = {}): Package {
-  const normalised = prefix.endsWith('/') ? prefix : `${prefix}/`;
-  const parts: Record<string, Package['parts'][string]> = {};
+export function subDocumentPackage(
+  pkg: Package,
+  prefix: string,
+  options: SubDocumentPackageOptions = {},
+): Package {
+  const normalised = prefix.endsWith("/") ? prefix : `${prefix}/`;
+  const parts: Record<string, Package["parts"][string]> = {};
   for (const [path, part] of Object.entries(pkg.parts)) {
     if (!path.startsWith(normalised)) {
       continue;
@@ -24,8 +28,13 @@ export function subDocumentPackage(pkg: Package, prefix: string, options: SubDoc
       parts[relative] = part;
     }
   }
-  if (options.allowMissingContent !== true && parts[CONTENT_PART] === undefined) {
-    throw new Error(`subDocumentPackage: package has no ${normalised}${CONTENT_PART} part`);
+  if (
+    options.allowMissingContent !== true &&
+    parts[CONTENT_PART] === undefined
+  ) {
+    throw new Error(
+      `subDocumentPackage: package has no ${normalised}${CONTENT_PART} part`,
+    );
   }
   return { parts };
 }

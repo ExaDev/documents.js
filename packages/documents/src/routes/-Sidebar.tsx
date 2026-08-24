@@ -1,5 +1,5 @@
-import { Anchor, NavLink, Stack, Tooltip } from '@mantine/core';
-import { Link } from '@tanstack/react-router';
+import { Anchor, NavLink, Stack, Tooltip } from "@mantine/core";
+import { Link } from "@tanstack/react-router";
 import {
   IconArrowsExchange,
   IconBooks,
@@ -12,31 +12,34 @@ import {
   IconTag,
   IconTags,
   IconTypography,
-} from '@tabler/icons-react';
+} from "@tabler/icons-react";
 
-import { relativeTime } from '../shared/relativeTime';
-import { disabledNavItem, navLink, versionAnchor } from './-Sidebar.css';
+import { relativeTime } from "../shared/relativeTime";
+import { disabledNavItem, navLink, versionAnchor } from "./-Sidebar.css";
 
 // Not a route -- the '-' prefix keeps TanStack Router's file-based generator from treating this as one.
 const NAV_ITEMS = [
-  { to: '/convert', label: 'Convert', icon: IconArrowsExchange },
-  { to: '/metadata', label: 'Metadata', icon: IconTags },
-  { to: '/inspect', label: 'Inspect', icon: IconFileSearch },
-  { to: '/fonts', label: 'Fonts', icon: IconTypography },
-  { to: '/recent', label: 'Recent', icon: IconHistory },
+  { to: "/convert", label: "Convert", icon: IconArrowsExchange },
+  { to: "/metadata", label: "Metadata", icon: IconTags },
+  { to: "/inspect", label: "Inspect", icon: IconFileSearch },
+  { to: "/fonts", label: "Fonts", icon: IconTypography },
+  { to: "/recent", label: "Recent", icon: IconHistory },
 ] as const;
 
 // Tools already tracked as follow-up work -- headroom in the nav without inventing empty route files ahead of time.
 const PLANNED_ITEMS = [
-  { label: 'Editors', icon: IconEdit },
-  { label: '.odb', icon: IconDatabase },
-  { label: '.odm', icon: IconBooks },
-  { label: 'Package / JSON', icon: IconJson },
+  { label: "Editors", icon: IconEdit },
+  { label: ".odb", icon: IconDatabase },
+  { label: ".odm", icon: IconBooks },
+  { label: "Package / JSON", icon: IconJson },
 ] as const;
 
 // Build-time git state (see vite.config.ts's `define` block) rather than a dry-run prediction: whenever this build's HEAD is an exact semantic-release tag, CI's own job graph guarantees that tag already exists on disk (the deploy job checks out `ref: main` fresh, strictly after the release job pushed) -- there is nothing to predict, only real state to read.
 const versionLabel = __APP_RELEASE_TAG__ ?? __APP_COMMIT_SHA__.slice(0, 7);
-const versionHref = __APP_RELEASE_TAG__ !== null ? `${__APP_REPO_URL__}/releases/tag/${__APP_RELEASE_TAG__}` : `${__APP_REPO_URL__}/commit/${__APP_COMMIT_SHA__}`;
+const versionHref =
+  __APP_RELEASE_TAG__ !== null
+    ? `${__APP_REPO_URL__}/releases/tag/${__APP_RELEASE_TAG__}`
+    : `${__APP_REPO_URL__}/commit/${__APP_COMMIT_SHA__}`;
 const VersionIcon = __APP_RELEASE_TAG__ !== null ? IconTag : IconGitCommit;
 
 export function Sidebar() {
@@ -52,7 +55,12 @@ export function Sidebar() {
         {NAV_ITEMS.map((item) => (
           <Link key={item.to} to={item.to} className={navLink}>
             {({ isActive }) => (
-              <NavLink component="div" label={item.label} leftSection={<item.icon size={18} />} active={isActive} />
+              <NavLink
+                component="div"
+                label={item.label}
+                leftSection={<item.icon size={18} />}
+                active={isActive}
+              />
             )}
           </Link>
         ))}

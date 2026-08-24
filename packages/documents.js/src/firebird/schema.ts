@@ -1,6 +1,6 @@
-import type { FirebirdBackupReader } from './reader';
-import { decodeBlrType, describeFieldType } from './blr-types';
-import type { FirebirdPhysicalType } from './blr-types';
+import type { FirebirdBackupReader } from "./reader";
+import { decodeBlrType, describeFieldType } from "./blr-types";
+import type { FirebirdPhysicalType } from "./blr-types";
 
 // rec_relation (schema: table name + column definitions) parsing, matching Firebird's own restore.epp get_relation/get_field shape exactly -- see this reader's own README-FORMAT.md note and the burp.h grammar comment: `<rec_relation> <rel name> <att_end> <local fields> <view> <rec_relation_end>`, where each local field is `<rec_field> <att_field_...> <att_end>`. This module produces the SCHEMA only -- see data.ts for the separate rec_relation_data (row) records that reference a relation purely by name.
 
@@ -33,7 +33,7 @@ export interface FirebirdRelation {
 export class FirebirdSchemaParseError extends Error {
   constructor(message: string) {
     super(`Firebird backup schema parse error: ${message}`);
-    this.name = 'FirebirdSchemaParseError';
+    this.name = "FirebirdSchemaParseError";
   }
 }
 
@@ -100,19 +100,42 @@ function readField(reader: FirebirdBackupReader): FirebirdField {
   }
 
   if (name === undefined) {
-    throw new FirebirdSchemaParseError('a rec_field record had no att_field_name attribute');
+    throw new FirebirdSchemaParseError(
+      "a rec_field record had no att_field_name attribute",
+    );
   }
   if (blrType === undefined) {
-    throw new FirebirdSchemaParseError(`field "${name}" had no att_field_type attribute`);
+    throw new FirebirdSchemaParseError(
+      `field "${name}" had no att_field_type attribute`,
+    );
   }
 
   const physicalType = decodeBlrType(blrType);
-  const typeLabel = describeFieldType(physicalType, lengthBytes, scale, characterLength, subType);
-  return { name, physicalType, lengthBytes, scale, characterLength, subType, fieldNumber, typeLabel, computed };
+  const typeLabel = describeFieldType(
+    physicalType,
+    lengthBytes,
+    scale,
+    characterLength,
+    subType,
+  );
+  return {
+    name,
+    physicalType,
+    lengthBytes,
+    scale,
+    characterLength,
+    subType,
+    fieldNumber,
+    typeLabel,
+    computed,
+  };
 }
 
 // Reads one rec_relation's own attribute list, then loops over its nested rec_field records until rec_relation_end (the tag itself already consumed by the caller). Throws FirebirdCompositeRecordUnsupportedError (via the caller-supplied onUnhandledNested callback) for a rec_view child -- a view has no rows of its own to back up and this reader has not verified its own attribute shape against a real fixture; see the README's .odb Tier 3 Gotchas entry.
-export function readRelationSchema(reader: FirebirdBackupReader, onUnhandledNested: (recordType: number) => never): FirebirdRelation {
+export function readRelationSchema(
+  reader: FirebirdBackupReader,
+  onUnhandledNested: (recordType: number) => never,
+): FirebirdRelation {
   let name: string | undefined;
 
   for (;;) {
@@ -128,7 +151,9 @@ export function readRelationSchema(reader: FirebirdBackupReader, onUnhandledNest
   }
 
   if (name === undefined) {
-    throw new FirebirdSchemaParseError('a rec_relation record had no att_relation_name attribute');
+    throw new FirebirdSchemaParseError(
+      "a rec_relation record had no att_relation_name attribute",
+    );
   }
 
   const fields: FirebirdField[] = [];

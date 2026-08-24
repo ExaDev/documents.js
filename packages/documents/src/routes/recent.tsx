@@ -1,9 +1,9 @@
-import { Container, Paper, Stack, Title } from '@mantine/core';
-import { createFileRoute } from '@tanstack/react-router';
+import { Container, Paper, Stack, Title } from "@mantine/core";
+import { createFileRoute } from "@tanstack/react-router";
 
-import { RecentFilesPanel } from '../ui/RecentFilesPanel';
+import { RecentFilesPanel } from "../ui/RecentFilesPanel";
 
-export const Route = createFileRoute('/recent')({
+export const Route = createFileRoute("/recent")({
   component: RecentPage,
 });
 

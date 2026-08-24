@@ -1,4 +1,4 @@
-import type { Box, ContentPathPoint, ContentSubpath } from 'document-schema.js';
+import type { Box, ContentPathPoint, ContentSubpath } from "document-schema.js";
 
 // ODF's vector-primitive geometry grammar: draw:path's own svg:d (a real SVG-path-like mini-language, verified against genuine LibreOffice 26.2 output rather than assumed identical to plain SVG -- see the notes below on where it genuinely matches and where a caller must not assume more than what was verified) and draw:polygon/draw:polyline's own draw:points (a completely SEPARATE, simpler comma/space-delimited coordinate-pair list -- NOT an svg:d string at all, confirmed empirically: a straight-line-only closed/open multi-point shape round-trips through LibreOffice's own writer as draw:polygon/draw:polyline with draw:points, never as draw:path with svg:d, regardless of which UNO shape service created it -- LibreOffice reserves draw:path/svg:d specifically for geometry containing at least one genuine Bezier curve segment).
 //
@@ -19,8 +19,13 @@ export interface OdfRawPoint {
 }
 
 export type OdfRawSegment =
-  | { readonly kind: 'line'; readonly to: OdfRawPoint }
-  | { readonly kind: 'cubic'; readonly control1: OdfRawPoint; readonly control2: OdfRawPoint; readonly to: OdfRawPoint };
+  | { readonly kind: "line"; readonly to: OdfRawPoint }
+  | {
+      readonly kind: "cubic";
+      readonly control1: OdfRawPoint;
+      readonly control2: OdfRawPoint;
+      readonly to: OdfRawPoint;
+    };
 
 export interface OdfRawSubpath {
   readonly start: OdfRawPoint;
@@ -36,7 +41,8 @@ export interface OdfViewBox {
 }
 
 // svg:viewBox="minX minY width height" -- four whitespace-separated numbers, reusing SVG's own viewBox grammar directly (ODF's svg: namespace is explicitly "xmlns:svg-compatible", not a coincidental naming). width/height of zero or negative would make scaleOdfRawPoint's own division meaningless, so those are rejected here (undefined) rather than propagating a divide-by-zero/negative-scale result further down.
-const VIEW_BOX_PATTERN = /^(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)$/;
+const VIEW_BOX_PATTERN =
+  /^(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)$/;
 
 export function parseOdfViewBox(value: string): OdfViewBox | undefined {
   const match = VIEW_BOX_PATTERN.exec(value.trim());
@@ -60,7 +66,7 @@ export function parseOdfPointsList(value: string): OdfRawPoint[] {
     if (pair.length === 0) {
       continue;
     }
-    const [xRaw, yRaw] = pair.split(',');
+    const [xRaw, yRaw] = pair.split(",");
     if (xRaw === undefined || yRaw === undefined) {
       continue;
     }
@@ -75,26 +81,51 @@ export function parseOdfPointsList(value: string): OdfRawPoint[] {
 }
 
 // Builds a single raw subpath directly from an already-parsed draw:points coordinate list (draw:polygon -> closed, draw:polyline -> open), reusing the exact same OdfRawSubpath shape svg:d parsing produces below -- so buildOdfSubpaths (the shared viewBox-scaling step) serves both grammars identically. undefined for an empty points list: no first point means no resolvable geometry at all, mirroring this module's other "nothing to build from" contracts.
-export function rawSubpathFromPoints(points: readonly OdfRawPoint[], closed: boolean): OdfRawSubpath | undefined {
+export function rawSubpathFromPoints(
+  points: readonly OdfRawPoint[],
+  closed: boolean,
+): OdfRawSubpath | undefined {
   const start = points[0];
   if (start === undefined) {
     return undefined;
   }
   return {
     start,
-    segments: points.slice(1).map((to) => ({ kind: 'line', to })),
+    segments: points.slice(1).map((to) => ({ kind: "line", to })),
     closed,
   };
 }
 
-const COMMAND_LETTERS = new Set(['M', 'm', 'L', 'l', 'H', 'h', 'V', 'v', 'C', 'c', 'S', 's', 'Q', 'q', 'T', 't', 'A', 'a', 'Z', 'z']);
+const COMMAND_LETTERS = new Set([
+  "M",
+  "m",
+  "L",
+  "l",
+  "H",
+  "h",
+  "V",
+  "v",
+  "C",
+  "c",
+  "S",
+  "s",
+  "Q",
+  "q",
+  "T",
+  "t",
+  "A",
+  "a",
+  "Z",
+  "z",
+]);
 
 function isCommandLetter(token: string): boolean {
   return COMMAND_LETTERS.has(token);
 }
 
 // A single SVG-grammar number: optional sign, then digits with an optional fractional part (or a bare ".5"-style fraction), then an optional exponent -- the same shape real ODF svg:d output actually used (see this file's own top-of-file note), matched with NO required separator from a preceding number, which is what lets "1000-4000" tokenize as two numbers ("1000", "-4000") the way real LibreOffice output does.
-const PATH_TOKEN_PATTERN = /[MmLlHhVvCcSsQqTtAaZz]|-?(?:\d+\.\d+|\.\d+|\d+)(?:[eE][-+]?\d+)?/g;
+const PATH_TOKEN_PATTERN =
+  /[MmLlHhVvCcSsQqTtAaZz]|-?(?:\d+\.\d+|\.\d+|\d+)(?:[eE][-+]?\d+)?/g;
 
 function tokenizePathData(d: string): string[] {
   return d.match(PATH_TOKEN_PATTERN) ?? [];
@@ -106,7 +137,9 @@ export function parseOdfPathData(d: string): OdfRawSubpath[] {
   const subpaths: OdfRawSubpath[] = [];
   let current: OdfRawPoint = { x: 0, y: 0 };
   let subpathStart: OdfRawPoint = { x: 0, y: 0 };
-  let activeSubpath: { start: OdfRawPoint; segments: OdfRawSegment[]; closed: boolean } | undefined;
+  let activeSubpath:
+    | { start: OdfRawPoint; segments: OdfRawSegment[]; closed: boolean }
+    | undefined;
   let command: string | undefined;
   let firstMInCommand = true;
 
@@ -131,7 +164,7 @@ export function parseOdfPathData(d: string): OdfRawSubpath[] {
       break;
     }
     if (isCommandLetter(token)) {
-      if (token === 'Z' || token === 'z') {
+      if (token === "Z" || token === "z") {
         if (activeSubpath !== undefined) {
           activeSubpath.closed = true;
           current = subpathStart;
@@ -152,7 +185,7 @@ export function parseOdfPathData(d: string): OdfRawSubpath[] {
     }
     const upper = command.toUpperCase();
     const relative = command !== upper;
-    if (upper === 'M' || upper === 'L') {
+    if (upper === "M" || upper === "L") {
       const xTok = tokens[i];
       const yTok = tokens[i + 1];
       i += 2;
@@ -164,14 +197,16 @@ export function parseOdfPathData(d: string): OdfRawSubpath[] {
       if (!Number.isFinite(x) || !Number.isFinite(y)) {
         continue;
       }
-      const point = relative ? { x: current.x + x, y: current.y + y } : { x, y };
-      if (upper === 'M' && firstMInCommand) {
+      const point = relative
+        ? { x: current.x + x, y: current.y + y }
+        : { x, y };
+      if (upper === "M" && firstMInCommand) {
         startSubpath(point);
         firstMInCommand = false;
       } else {
-        pushSegment({ kind: 'line', to: point }, point);
+        pushSegment({ kind: "line", to: point }, point);
       }
-    } else if (upper === 'H') {
+    } else if (upper === "H") {
       const xTok = tokens[i];
       i += 1;
       if (xTok === undefined) {
@@ -181,9 +216,11 @@ export function parseOdfPathData(d: string): OdfRawSubpath[] {
       if (!Number.isFinite(x)) {
         continue;
       }
-      const point = relative ? { x: current.x + x, y: current.y } : { x, y: current.y };
-      pushSegment({ kind: 'line', to: point }, point);
-    } else if (upper === 'V') {
+      const point = relative
+        ? { x: current.x + x, y: current.y }
+        : { x, y: current.y };
+      pushSegment({ kind: "line", to: point }, point);
+    } else if (upper === "V") {
       const yTok = tokens[i];
       i += 1;
       if (yTok === undefined) {
@@ -193,9 +230,11 @@ export function parseOdfPathData(d: string): OdfRawSubpath[] {
       if (!Number.isFinite(y)) {
         continue;
       }
-      const point = relative ? { x: current.x, y: current.y + y } : { x: current.x, y };
-      pushSegment({ kind: 'line', to: point }, point);
-    } else if (upper === 'C') {
+      const point = relative
+        ? { x: current.x, y: current.y + y }
+        : { x: current.x, y };
+      pushSegment({ kind: "line", to: point }, point);
+    } else if (upper === "C") {
       const rawArgs = tokens.slice(i, i + 6);
       i += 6;
       if (rawArgs.length < 6) {
@@ -210,10 +249,14 @@ export function parseOdfPathData(d: string): OdfRawSubpath[] {
       if (![x1, y1, x2, y2, x, y].every(Number.isFinite)) {
         continue;
       }
-      const control1 = relative ? { x: current.x + x1, y: current.y + y1 } : { x: x1, y: y1 };
-      const control2 = relative ? { x: current.x + x2, y: current.y + y2 } : { x: x2, y: y2 };
+      const control1 = relative
+        ? { x: current.x + x1, y: current.y + y1 }
+        : { x: x1, y: y1 };
+      const control2 = relative
+        ? { x: current.x + x2, y: current.y + y2 }
+        : { x: x2, y: y2 };
       const to = relative ? { x: current.x + x, y: current.y + y } : { x, y };
-      pushSegment({ kind: 'cubic', control1, control2, to }, to);
+      pushSegment({ kind: "cubic", control1, control2, to }, to);
     } else {
       // S/s, Q/q, T/t, A/a -- recognised so the token stream stays in sync, but not converted into a segment. See this file's own top-of-file note on why (out of ContentPathSegmentSchema's own 'line'/'cubic' vocabulary, and not exercised by any real ODF output this module verified against).
       i += 1;
@@ -224,22 +267,33 @@ export function parseOdfPathData(d: string): OdfRawSubpath[] {
 }
 
 // Scales a raw (viewBox-local) point into the path's own local point space -- sized to frame.widthPt x frame.heightPt, per ContentVectorSchema's own 'path' variant contract (document-schema.js's content.ts: "the size of the path's own local coordinate space, distinct from the subpaths' local-space points"). Deliberately does NOT add frame.xPt/yPt: that offset is the frame's own PAGE-space placement, kept separate from the subpaths' LOCAL space, exactly as that schema comment specifies.
-export function scaleOdfRawPoint(point: OdfRawPoint, viewBox: OdfViewBox, frame: Box): ContentPathPoint {
+export function scaleOdfRawPoint(
+  point: OdfRawPoint,
+  viewBox: OdfViewBox,
+  frame: Box,
+): ContentPathPoint {
   return {
     xPt: (point.x - viewBox.minX) * (frame.widthPt / viewBox.width),
     yPt: (point.y - viewBox.minY) * (frame.heightPt / viewBox.height),
   };
 }
 
-export function buildOdfSubpaths(rawSubpaths: readonly OdfRawSubpath[], viewBox: OdfViewBox, frame: Box): ContentSubpath[] {
+export function buildOdfSubpaths(
+  rawSubpaths: readonly OdfRawSubpath[],
+  viewBox: OdfViewBox,
+  frame: Box,
+): ContentSubpath[] {
   return rawSubpaths.map((raw) => ({
     start: scaleOdfRawPoint(raw.start, viewBox, frame),
     closed: raw.closed,
     segments: raw.segments.map((segment) =>
-      segment.kind === 'line'
-        ? { kind: 'line' as const, to: scaleOdfRawPoint(segment.to, viewBox, frame) }
+      segment.kind === "line"
+        ? {
+            kind: "line" as const,
+            to: scaleOdfRawPoint(segment.to, viewBox, frame),
+          }
         : {
-            kind: 'cubic' as const,
+            kind: "cubic" as const,
             control1: scaleOdfRawPoint(segment.control1, viewBox, frame),
             control2: scaleOdfRawPoint(segment.control2, viewBox, frame),
             to: scaleOdfRawPoint(segment.to, viewBox, frame),

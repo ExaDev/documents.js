@@ -1,18 +1,32 @@
-import type { DocumentTree } from 'document-schema.js';
-import type { MarkdownImageResolver } from 'markdown-codec';
-import type { FontSubstitution, ProvidedFont } from 'document-schema.js';
-import type { ClockPort } from '../ports/clock';
-import { z } from 'zod';
+import type { DocumentTree } from "document-schema.js";
+import type { MarkdownImageResolver } from "markdown-codec";
+import type { FontSubstitution, ProvidedFont } from "document-schema.js";
+import type { ClockPort } from "../ports/clock";
+import { z } from "zod";
 
 // The conversion behaviour modelled as a swappable port/contract, not a hard-wired function -- this workspace's standing "portable runtime and storage boundaries" convention, even though the only implementation today (local.ts) is entirely synchronous under the hood. `convert()` itself stays async and takes a mandatory abort signal regardless of that: it's a portability contract for a future non-local adapter (a remote conversion service, say), not a reflection of the local implementation's own synchronicity.
 
 // 'odf' (an ODF formula document) has exactly one direction wired into this port (odf -> pdf, via odfToPdf -- see local.ts) -- unlike every other member here, there is deliberately no pdf -> odf entry: odmToPdf's own README/gotcha explains why that reverse direction is not attempted (recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem, not a geometry-reconstruction one). 'markdown' shares the wordprocessing ContentDocument variant with docx/odt (see capability.ts's own FORMAT_CAPABILITIES.markdown) -- it has a genuine two-way layout-engine edge to/from pdf (markdownToPdf/pdfToMarkdown), plus direct same-variant bridges to docx and odt, exactly like odt already has to docx. 'csv' shares the spreadsheet ContentDocument variant with xlsx/ods -- like xlsx it has no layout engine of its own (the composition engine routes csv <-> pdf through the ods bridge), and TSV is the SAME member with { delimiter: '\t' } rather than a second enum entry, since a delimiter is a parse option, not a different document format. 'svg' shares the drawing ContentDocument variant with odg -- unlike csv it DOES have a layout path of its own (svg -> pdf renders the read drawing ContentDocument through the same convertDrawingToLayout engine odg feeds), plus a same-variant bridge to odg and pdf-composed routes to everything else.
 //
 // Zod-first, matching this package's own convention (src/model/bytes.ts and every document-schema.js-sourced union re-exported above): the schema is the source of truth, DocumentFormat is inferred from it rather than hand-written, and DOCUMENT_FORMATS (below) is derived from the same schema rather than a second, independently-typed literal array that could drift out of sync with it.
-export const DocumentFormatSchema = z.enum(['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'svg', 'odf', 'csv', 'markdown', 'pdf']);
+export const DocumentFormatSchema = z.enum([
+  "docx",
+  "pptx",
+  "xlsx",
+  "odt",
+  "odp",
+  "ods",
+  "odg",
+  "svg",
+  "odf",
+  "csv",
+  "markdown",
+  "pdf",
+]);
 export type DocumentFormat = z.infer<typeof DocumentFormatSchema>;
 // Every DocumentFormat member as a plain readonly array, for a caller that wants to enumerate or validate against the full format set without constructing its own Zod schema -- e.g. a CLI's own usage-error text, or an MCP tool's JSON-schema `enum` input.
-export const DOCUMENT_FORMATS: readonly DocumentFormat[] = DocumentFormatSchema.options;
+export const DOCUMENT_FORMATS: readonly DocumentFormat[] =
+  DocumentFormatSchema.options;
 
 export interface DocumentPayload {
   readonly format: DocumentFormat;
@@ -20,7 +34,7 @@ export interface DocumentPayload {
 }
 
 export interface Diagnostic {
-  readonly severity: 'info' | 'warning';
+  readonly severity: "info" | "warning";
   readonly code: string;
   readonly message: string;
   readonly pageIndex?: number;
@@ -61,6 +75,12 @@ export interface ConversionOptions {
 export interface DocumentConverter {
   // Bumped whenever DocumentConverter's own contract shape changes -- e.g. ConversionResult gaining a new field a caller might need to branch on, or convert()'s own options gaining one an implementation is now expected to honour -- not when the conversions table simply grows with more supported source/target pairs (that's discoverable at runtime via `conversions` itself, not a breaking contract change).
   readonly contractVersion: number;
-  readonly conversions: readonly { readonly source: DocumentFormat; readonly target: DocumentFormat }[];
-  convert(request: ConversionRequest, options: ConversionOptions): Promise<ConversionResult>;
+  readonly conversions: readonly {
+    readonly source: DocumentFormat;
+    readonly target: DocumentFormat;
+  }[];
+  convert(
+    request: ConversionRequest,
+    options: ConversionOptions,
+  ): Promise<ConversionResult>;
 }

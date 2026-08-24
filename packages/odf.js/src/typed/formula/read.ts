@@ -1,10 +1,14 @@
-import type { ContentDocument, DocumentTree, LayoutMetadata } from 'document-schema.js';
-import { assembleTree } from 'document-schema.js';
-import type { XmlElement, XmlNode } from '../../model/node';
-import type { Package } from '../../model/package';
-import { attrValue, elementsWithTag, rootElement } from '../../xml/query';
-import { decodeXmlText } from '../../xml/entities';
-import { readOdfMetadata } from '../shared/metadata';
+import type {
+  ContentDocument,
+  DocumentTree,
+  LayoutMetadata,
+} from "document-schema.js";
+import { assembleTree } from "document-schema.js";
+import type { XmlElement, XmlNode } from "../../model/node";
+import type { Package } from "../../model/package";
+import { attrValue, elementsWithTag, rootElement } from "../../xml/query";
+import { decodeXmlText } from "../../xml/entities";
+import { readOdfMetadata } from "../shared/metadata";
 
 // Package -> a standalone (or embedded) ODF Formula's raw MathML content. .odf (OpenDocument Formula) is structurally unlike every other odf.js typed reader's content.xml: there is no office:document-content/office:body wrapper at all -- the whole part IS one MathML document. Confirmed against GENUINE LibreOffice 26.2 output, not assumed: a headless UNO Basic macro (mirroring the same technique the ods/odg/odp readers' own top-of-file notes describe) created a private:factory/smath document, set its own Formula property to a real StarMath expression with a fraction and a square root ("f(x) = {x^2} over {2} + sqrt {x}"), and saved it via the "math8" filter -- the same UNO call path File > Save As itself uses -- for BOTH a standalone .odf and a Math object embedded inside a real .odt (via a com.sun.star.text.TextEmbeddedObject with Math's own CLSID, "078B7ABA-54FC-457F-8551-6147E776A997"). In both cases content.xml's root element IS content.xml's own MathML root, with NO office:document-content wrapper around it either way.
 //
@@ -20,17 +24,19 @@ export interface OdfFormulaDocument {
   metadata: LayoutMetadata;
 }
 
-const CONTENT_PART = 'content.xml';
+const CONTENT_PART = "content.xml";
 
 // Bare "math" is what genuine LibreOffice output actually produces (see this module's own top-of-file note); "math:math" is kept alongside it purely as a defensive match for a producer that binds the MathML namespace to a prefix instead of using it as the default namespace.
-const MATH_ROOT_TAGS = ['math', 'math:math'];
-const ANNOTATION_TAGS = ['annotation', 'math:annotation'];
+const MATH_ROOT_TAGS = ["math", "math:math"];
+const ANNOTATION_TAGS = ["annotation", "math:annotation"];
 
 // MathML's own semantics/annotation mechanism identifies an annotation's notation by its encoding attribute, e.g. "StarMath 5.0" -- a version-suffixed string, so this checks the encoding's own namespace-style prefix rather than an exact match.
-const STARMATH_ENCODING_PREFIX = 'StarMath';
+const STARMATH_ENCODING_PREFIX = "StarMath";
 
 // content.xml's own MathML root: checked first at the part's own root position (the real, confirmed LibreOffice shape -- see this module's own top-of-file note), then as a descendant of whatever the actual root element turns out to be (the defensive "wrapped in office:document-content" fallback the design brief asked for, never itself observed in real output). Exported for typed/draw/embedded.ts, which asks the identical question of an EMBEDDED object's own sub-document content.xml when that sub-document turns out to have no office:body to classify it by -- the same detection, reused rather than restated, so the two can never disagree about what counts as a MathML root.
-export function findMathRoot(nodes: readonly XmlNode[]): XmlElement | undefined {
+export function findMathRoot(
+  nodes: readonly XmlNode[],
+): XmlElement | undefined {
   const root = rootElement(nodes);
   if (root === undefined) {
     return undefined;
@@ -49,9 +55,9 @@ export function findMathRoot(nodes: readonly XmlNode[]): XmlElement | undefined 
 
 // Plain, entity-decoded text content of a MathML <annotation> element -- real StarMath annotations are simple text content, never mixed with nested elements, mirroring metadata.ts's own elementText for the identical reason.
 function annotationText(element: XmlElement): string {
-  let text = '';
+  let text = "";
   for (const child of element.children) {
-    if (child.type === 'text') {
+    if (child.type === "text") {
       text += decodeXmlText(child.value);
     }
   }
@@ -62,7 +68,7 @@ function annotationText(element: XmlElement): string {
 function findStarMathAnnotation(mathRoot: XmlElement): string | undefined {
   for (const tag of ANNOTATION_TAGS) {
     for (const annotation of elementsWithTag(mathRoot.children, tag)) {
-      const encoding = attrValue(annotation, 'encoding');
+      const encoding = attrValue(annotation, "encoding");
       if (!encoding?.startsWith(STARMATH_ENCODING_PREFIX)) {
         continue;
       }
@@ -78,18 +84,24 @@ function findStarMathAnnotation(mathRoot: XmlElement): string | undefined {
 // Package -> OdfFormulaDocument. Throws only when content.xml itself, or a MathML root within it (see findMathRoot), is missing -- a genuinely unusable package, mirroring every other odf.js typed reader's own "missing required structural element" throw convention. `mathml` is the MathML root's own children (its real content -- typically a single <semantics> element wrapping the presentation MathML plus any <annotation>s, per real LibreOffice output; occasionally, for hand-authored presentation-only MathML with no <semantics> wrapper, the presentation elements directly), returned as the raw, lossless XmlNode[] this reader read them as -- see readOdfFormulaContent below for the document-schema.js-pivot-shaped alternative built on top of this same result.
 export function readOdfFormulaMathMl(pkg: Package): OdfFormulaDocument {
   const contentPart = pkg.parts[CONTENT_PART];
-  if (contentPart?.kind !== 'xml') {
-    throw new Error(`readOdfFormulaMathMl: package has no ${CONTENT_PART} part`);
+  if (contentPart?.kind !== "xml") {
+    throw new Error(
+      `readOdfFormulaMathMl: package has no ${CONTENT_PART} part`,
+    );
   }
   const mathRoot = findMathRoot(contentPart.nodes);
   if (mathRoot === undefined) {
-    throw new Error(`readOdfFormulaMathMl: ${CONTENT_PART} has no MathML root element`);
+    throw new Error(
+      `readOdfFormulaMathMl: ${CONTENT_PART} has no MathML root element`,
+    );
   }
 
   const metadata = readOdfMetadata(pkg);
   const starMath = findStarMathAnnotation(mathRoot);
 
-  return starMath === undefined ? { mathml: mathRoot.children, metadata } : { starMath, mathml: mathRoot.children, metadata };
+  return starMath === undefined
+    ? { mathml: mathRoot.children, metadata }
+    : { starMath, mathml: mathRoot.children, metadata };
 }
 
 // Package -> a real document-schema.js ContentDocument of kind 'formula'. Built directly on readOdfFormulaMathMl's own result -- same throw behaviour, same metadata, same raw mathml/starMath -- just reshaped into the ContentDocumentSchema 'formula' variant document-schema.js 2.0.0 now defines, for a caller that wants the shared pivot type rather than this reader's own bespoke OdfFormulaDocument shape. readOdfFormulaMathMl itself is unchanged and remains the right call for a caller that wants the raw, lossless data with no pivot-schema shaping at all.
@@ -99,7 +111,7 @@ export function readOdfFormulaContent(pkg: Package): ContentDocument {
   const { mathml, starMath, metadata } = readOdfFormulaMathMl(pkg);
 
   return {
-    kind: 'formula',
+    kind: "formula",
     metadata,
     formula: starMath === undefined ? { mathml } : { mathml, starMath },
   };

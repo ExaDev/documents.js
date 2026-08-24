@@ -7,11 +7,12 @@ export interface ImageDimensions {
   readonly heightPx: number;
 }
 
-export type ImageFormat = 'png' | 'jpeg';
+export type ImageFormat = "png" | "jpeg";
 
 // --- Isomorphic base64 (Uint8Array <-> string), no Node Buffer. ---
 
-const BASE64_TABLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const BASE64_TABLE =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 const BASE64_DECODE: Uint8Array = (() => {
   const map = new Uint8Array(256).fill(255);
@@ -24,7 +25,7 @@ const BASE64_DECODE: Uint8Array = (() => {
 const BASE64_PADDING_CODE = 61; // '='
 
 export function bytesToBase64(bytes: Uint8Array): string {
-  let out = '';
+  let out = "";
   const { length } = bytes;
   for (let index = 0; index < length; index += 3) {
     const b0 = bytes[index]!;
@@ -32,14 +33,17 @@ export function bytesToBase64(bytes: Uint8Array): string {
     const b2 = index + 2 < length ? bytes[index + 2]! : 0;
     out += BASE64_TABLE.charAt(b0 >> 2);
     out += BASE64_TABLE.charAt(((b0 & 0x03) << 4) | (b1 >> 4));
-    out += index + 1 < length ? BASE64_TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6)) : '=';
-    out += index + 2 < length ? BASE64_TABLE.charAt(b2 & 0x3f) : '=';
+    out +=
+      index + 1 < length
+        ? BASE64_TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6))
+        : "=";
+    out += index + 2 < length ? BASE64_TABLE.charAt(b2 & 0x3f) : "=";
   }
   return out;
 }
 
 export function base64ToBytes(base64: string): Uint8Array {
-  const clean = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+  const clean = base64.replace(/[^A-Za-z0-9+/=]/g, "");
   const { length } = clean;
   const out = new Uint8Array(Math.floor((length * 3) / 4));
   let position = 0;
@@ -49,7 +53,7 @@ export function base64ToBytes(base64: string): Uint8Array {
     const code2 = clean.charCodeAt(index + 2);
     const code3 = clean.charCodeAt(index + 3);
     if (c0 === 255 || c1 === 255) {
-      throw new Error('invalid base64 input');
+      throw new Error("invalid base64 input");
     }
     out[position] = (c0 << 2) | (c1 >> 4);
     position += 1;
@@ -72,7 +76,13 @@ function readUint16BE(bytes: Uint8Array, offset: number): number {
 }
 
 function readUint32BE(bytes: Uint8Array, offset: number): number {
-  return ((bytes[offset]! << 24) | (bytes[offset + 1]! << 16) | (bytes[offset + 2]! << 8) | bytes[offset + 3]!) >>> 0;
+  return (
+    ((bytes[offset]! << 24) |
+      (bytes[offset + 1]! << 16) |
+      (bytes[offset + 2]! << 8) |
+      bytes[offset + 3]!) >>>
+    0
+  );
 }
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -91,11 +101,19 @@ function readPngDimensions(bytes: Uint8Array): ImageDimensions | undefined {
   if (bytes.length < PNG_HEADER_BYTES) {
     return undefined;
   }
-  if (bytes[12] !== 0x49 || bytes[13] !== 0x48 || bytes[14] !== 0x44 || bytes[15] !== 0x52) {
+  if (
+    bytes[12] !== 0x49 ||
+    bytes[13] !== 0x48 ||
+    bytes[14] !== 0x44 ||
+    bytes[15] !== 0x52
+  ) {
     // not 'IHDR'
     return undefined;
   }
-  return { widthPx: readUint32BE(bytes, 16), heightPx: readUint32BE(bytes, 20) };
+  return {
+    widthPx: readUint32BE(bytes, 16),
+    heightPx: readUint32BE(bytes, 20),
+  };
 }
 
 // Start-Of-Frame markers (0xC0-0xCF), excluding 0xC4 (DHT, a Huffman table, not a frame header), 0xC8 (JPG, reserved), and 0xCC (DAC, an arithmetic-coding conditioning table) -- despite sitting in the same numeric run, none of these three carry width/height.
@@ -108,7 +126,12 @@ function isStartOfFrameMarker(marker: number): boolean {
 
 // Markers with no following length field at all: SOI (0xD8), EOI (0xD9), the eight restart markers RST0-RST7 (0xD0-0xD7), and TEM (0x01).
 function hasNoLengthField(marker: number): boolean {
-  return marker === 0xd8 || marker === 0xd9 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7);
+  return (
+    marker === 0xd8 ||
+    marker === 0xd9 ||
+    marker === 0x01 ||
+    (marker >= 0xd0 && marker <= 0xd7)
+  );
 }
 
 // Walks JPEG marker segments from the SOI (0xFFD8) until a Start-Of-Frame marker's own segment: length(2, BE) + precision(1) + height(2, BE) + width(2, BE) -- height before width, unlike PNG. Every other marker segment is skipped by its own declared length (which includes the 2 length bytes themselves).
@@ -163,12 +186,14 @@ function isJpeg(bytes: Uint8Array): boolean {
 // The same signature check readImageDimensions already makes internally to choose which reader to run, exposed so a caller (src/lower/image.ts) can pick ContentImageBlock's own `format` field from the identical bytes without a second, potentially-divergent sniff of its own. Returns undefined for anything that is neither a PNG nor a JPEG -- ContentImageBlockSchema's own `format` field has no third member to fall back to.
 export function detectImageFormat(bytes: Uint8Array): ImageFormat | undefined {
   if (isPng(bytes)) {
-    return 'png';
+    return "png";
   }
-  return isJpeg(bytes) ? 'jpeg' : undefined;
+  return isJpeg(bytes) ? "jpeg" : undefined;
 }
 
-export function readImageDimensions(bytes: Uint8Array): ImageDimensions | undefined {
+export function readImageDimensions(
+  bytes: Uint8Array,
+): ImageDimensions | undefined {
   if (isPng(bytes)) {
     return readPngDimensions(bytes);
   }

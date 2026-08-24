@@ -3,7 +3,11 @@
 const ISC_TIME_SECONDS_PRECISION = 10000;
 
 // The exact integer algorithm from NoThrowTimeStamp::decode_date, restated in TypeScript -- not reimplemented from a generic Julian-day formula, since the two magic constants (1721119, 2400001) are specific to Firebird's own MJD-based epoch and this reader's own testing is against Firebird's real output, not a general calendar library.
-export function decodeFirebirdDate(days: number): { year: number; month: number; day: number } {
+export function decodeFirebirdDate(days: number): {
+  year: number;
+  month: number;
+  day: number;
+} {
   let nday = days + 2400001 - 1721119;
   const century = Math.floor((4 * nday - 1) / 146097);
   nday = 4 * nday - 1 - 146097 * century;
@@ -29,7 +33,12 @@ export function decodeFirebirdDate(days: number): { year: number; month: number;
   return { year, month, day };
 }
 
-export function decodeFirebirdTime(ticks: number): { hours: number; minutes: number; seconds: number; fractions: number } {
+export function decodeFirebirdTime(ticks: number): {
+  hours: number;
+  minutes: number;
+  seconds: number;
+  fractions: number;
+} {
   let remaining = ticks;
   const hours = Math.floor(remaining / (3600 * ISC_TIME_SECONDS_PRECISION));
   remaining %= 3600 * ISC_TIME_SECONDS_PRECISION;
@@ -41,11 +50,11 @@ export function decodeFirebirdTime(ticks: number): { hours: number; minutes: num
 }
 
 function pad2(value: number): string {
-  return String(value).padStart(2, '0');
+  return String(value).padStart(2, "0");
 }
 
 function pad4(value: number): string {
-  return String(value).padStart(4, '0');
+  return String(value).padStart(4, "0");
 }
 
 // Matches this package's own ContentCellValue 'date' kind's string convention (src/hsqldb/script.ts's own DATE/TIMESTAMP literal handling): an ISO-shaped "YYYY-MM-DD" (or "YYYY-MM-DD HH:MM:SS[.fff]" for a timestamp), never a Date object or epoch number -- ContentCellValue's date/time kinds are both plain strings.
@@ -57,7 +66,7 @@ export function formatFirebirdDate(days: number): string {
 export function formatFirebirdTime(ticks: number): string {
   const { hours, minutes, seconds, fractions } = decodeFirebirdTime(ticks);
   const millis = Math.round(fractions / 10);
-  return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}.${String(millis).padStart(3, '0')}`;
+  return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}.${String(millis).padStart(3, "0")}`;
 }
 
 export function formatFirebirdTimestamp(days: number, ticks: number): string {

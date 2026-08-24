@@ -1,12 +1,32 @@
-import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { buildOdfSubpaths, formatOdfLength, parseLinePoints, parseOdfPathData, parseOdfViewBox, resolveOdfShapeGeometry } from 'odf.js';
-import type { Box, Color, ContentPathPoint, ContentStroke, ContentSubpath, ContentVector } from 'document-schema.js';
-import { attr } from 'ooxml.js';
-import { removeChild, setAttr } from '../../xml/edit';
-import { el } from '../../xml/fragment';
-import { applyOdfGeometry } from '../geometry';
-import { buildGraphicStyle, readGraphicFill, readGraphicStroke, setGraphicFill, setGraphicStroke } from './style';
-import { buildSvgPathData, buildSvgViewBox } from './svg-path';
+import type { Package, XmlElement, XmlNode } from "odf.js";
+import {
+  buildOdfSubpaths,
+  formatOdfLength,
+  parseLinePoints,
+  parseOdfPathData,
+  parseOdfViewBox,
+  resolveOdfShapeGeometry,
+} from "odf.js";
+import type {
+  Box,
+  Color,
+  ContentPathPoint,
+  ContentStroke,
+  ContentSubpath,
+  ContentVector,
+} from "document-schema.js";
+import { attr } from "ooxml.js";
+import { removeChild, setAttr } from "../../xml/edit";
+import { el } from "../../xml/fragment";
+import { applyOdfGeometry } from "../geometry";
+import {
+  buildGraphicStyle,
+  readGraphicFill,
+  readGraphicStroke,
+  setGraphicFill,
+  setGraphicStroke,
+} from "./style";
+import { buildSvgPathData, buildSvgViewBox } from "./svg-path";
 
 // Live-view classes over odg's own vector-primitive elements -- draw:rect/draw:ellipse/draw:line/draw:path, the geometry a drawing carries that a presentation typically doesn't (see odf.js's own typed/draw/shapes.ts top-of-file note, which this module's builders are the write-side counterpart to).
 //
@@ -15,7 +35,7 @@ import { buildSvgPathData, buildSvgViewBox } from './svg-path';
 // Every constructed vector element carries an empty <text:p/> child, matching real LibreOffice output for every vector-primitive kind (confirmed against odf.js's own typed/shared/path.ts and typed/odg/read.test.ts ground-truth fixtures, and this package's own test-support/odg.ts) even though odf.js's own reader never actually reads it back for any ContentVector variant -- it is schema-valid, harmless, and keeps a freshly written .odg indistinguishable in shape from a real LibreOffice-authored one.
 
 function directTextP(): XmlElement {
-  return el('text:p');
+  return el("text:p");
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -28,29 +48,43 @@ export interface BoxVectorInit {
   readonly textFlowAnchored?: boolean;
 }
 
-export type OdgBoxVectorKind = 'rect' | 'ellipse';
+export type OdgBoxVectorKind = "rect" | "ellipse";
 
-function buildBoxVectorElement(pkg: Package, tag: 'draw:rect' | 'draw:ellipse', init: BoxVectorInit): XmlElement {
-  const styleName = buildGraphicStyle(pkg, { fill: init.fill, stroke: init.stroke, textFlowAnchored: init.textFlowAnchored });
+function buildBoxVectorElement(
+  pkg: Package,
+  tag: "draw:rect" | "draw:ellipse",
+  init: BoxVectorInit,
+): XmlElement {
+  const styleName = buildGraphicStyle(pkg, {
+    fill: init.fill,
+    stroke: init.stroke,
+    textFlowAnchored: init.textFlowAnchored,
+  });
   return el(
     tag,
     {
-      'draw:style-name': styleName,
-      'svg:x': formatOdfLength(init.frame.xPt),
-      'svg:y': formatOdfLength(init.frame.yPt),
-      'svg:width': formatOdfLength(init.frame.widthPt),
-      'svg:height': formatOdfLength(init.frame.heightPt),
+      "draw:style-name": styleName,
+      "svg:x": formatOdfLength(init.frame.xPt),
+      "svg:y": formatOdfLength(init.frame.yPt),
+      "svg:width": formatOdfLength(init.frame.widthPt),
+      "svg:height": formatOdfLength(init.frame.heightPt),
     },
     [directTextP()],
   );
 }
 
-export function buildRectElement(pkg: Package, init: BoxVectorInit): XmlElement {
-  return buildBoxVectorElement(pkg, 'draw:rect', init);
+export function buildRectElement(
+  pkg: Package,
+  init: BoxVectorInit,
+): XmlElement {
+  return buildBoxVectorElement(pkg, "draw:rect", init);
 }
 
-export function buildEllipseElement(pkg: Package, init: BoxVectorInit): XmlElement {
-  return buildBoxVectorElement(pkg, 'draw:ellipse', init);
+export function buildEllipseElement(
+  pkg: Package,
+  init: BoxVectorInit,
+): XmlElement {
+  return buildBoxVectorElement(pkg, "draw:ellipse", init);
 }
 
 export class OdgBoxVector {
@@ -67,17 +101,19 @@ export class OdgBoxVector {
 
   private live(): XmlElement {
     if (this.removed) {
-      throw new Error('this OdgBoxVector has been removed from its page and can no longer be used');
+      throw new Error(
+        "this OdgBoxVector has been removed from its page and can no longer be used",
+      );
     }
     return this.node;
   }
 
   get kind(): OdgBoxVectorKind {
-    return this.live().tag === 'draw:ellipse' ? 'ellipse' : 'rect';
+    return this.live().tag === "draw:ellipse" ? "ellipse" : "rect";
   }
 
   get name(): string | undefined {
-    return attr(this.live(), 'draw:name');
+    return attr(this.live(), "draw:name");
   }
 
   get frame(): Box | undefined {
@@ -95,7 +131,9 @@ export class OdgBoxVector {
   set rotationDeg(value: number | undefined) {
     const currentFrame = this.frame;
     if (currentFrame === undefined) {
-      throw new Error('cannot set rotationDeg on a vector with no resolvable frame (missing svg:width/svg:height)');
+      throw new Error(
+        "cannot set rotationDeg on a vector with no resolvable frame (missing svg:width/svg:height)",
+      );
     }
     applyOdfGeometry(this.live(), currentFrame, value);
   }
@@ -132,16 +170,22 @@ export interface LineVectorInit {
   readonly textFlowAnchored?: boolean;
 }
 
-export function buildLineElement(pkg: Package, init: LineVectorInit): XmlElement {
-  const styleName = buildGraphicStyle(pkg, { stroke: init.stroke, textFlowAnchored: init.textFlowAnchored });
+export function buildLineElement(
+  pkg: Package,
+  init: LineVectorInit,
+): XmlElement {
+  const styleName = buildGraphicStyle(pkg, {
+    stroke: init.stroke,
+    textFlowAnchored: init.textFlowAnchored,
+  });
   return el(
-    'draw:line',
+    "draw:line",
     {
-      'draw:style-name': styleName,
-      'svg:x1': formatOdfLength(init.from.xPt),
-      'svg:y1': formatOdfLength(init.from.yPt),
-      'svg:x2': formatOdfLength(init.to.xPt),
-      'svg:y2': formatOdfLength(init.to.yPt),
+      "draw:style-name": styleName,
+      "svg:x1": formatOdfLength(init.from.xPt),
+      "svg:y1": formatOdfLength(init.from.yPt),
+      "svg:x2": formatOdfLength(init.to.xPt),
+      "svg:y2": formatOdfLength(init.to.yPt),
     },
     [directTextP()],
   );
@@ -149,7 +193,7 @@ export function buildLineElement(pkg: Package, init: LineVectorInit): XmlElement
 
 export class OdgLineVector {
   // A fixed discriminant, unlike OdgBoxVector's own tag-derived getter -- draw:line is the only element this class ever wraps.
-  readonly kind = 'line';
+  readonly kind = "line";
 
   private readonly container: XmlNode[];
   private readonly node: XmlElement;
@@ -164,13 +208,15 @@ export class OdgLineVector {
 
   private live(): XmlElement {
     if (this.removed) {
-      throw new Error('this OdgLineVector has been removed from its page and can no longer be used');
+      throw new Error(
+        "this OdgLineVector has been removed from its page and can no longer be used",
+      );
     }
     return this.node;
   }
 
   get name(): string | undefined {
-    return attr(this.live(), 'draw:name');
+    return attr(this.live(), "draw:name");
   }
 
   get from(): ContentPathPoint | undefined {
@@ -179,8 +225,8 @@ export class OdgLineVector {
 
   set from(value: ContentPathPoint) {
     const node = this.live();
-    setAttr(node, 'svg:x1', formatOdfLength(value.xPt));
-    setAttr(node, 'svg:y1', formatOdfLength(value.yPt));
+    setAttr(node, "svg:x1", formatOdfLength(value.xPt));
+    setAttr(node, "svg:y1", formatOdfLength(value.yPt));
   }
 
   get to(): ContentPathPoint | undefined {
@@ -189,8 +235,8 @@ export class OdgLineVector {
 
   set to(value: ContentPathPoint) {
     const node = this.live();
-    setAttr(node, 'svg:x2', formatOdfLength(value.xPt));
-    setAttr(node, 'svg:y2', formatOdfLength(value.yPt));
+    setAttr(node, "svg:x2", formatOdfLength(value.xPt));
+    setAttr(node, "svg:y2", formatOdfLength(value.yPt));
   }
 
   get stroke(): ContentStroke | undefined {
@@ -218,18 +264,25 @@ export interface PathVectorInit {
   readonly textFlowAnchored?: boolean;
 }
 
-export function buildPathElement(pkg: Package, init: PathVectorInit): XmlElement {
-  const styleName = buildGraphicStyle(pkg, { fill: init.fill, stroke: init.stroke, textFlowAnchored: init.textFlowAnchored });
+export function buildPathElement(
+  pkg: Package,
+  init: PathVectorInit,
+): XmlElement {
+  const styleName = buildGraphicStyle(pkg, {
+    fill: init.fill,
+    stroke: init.stroke,
+    textFlowAnchored: init.textFlowAnchored,
+  });
   return el(
-    'draw:path',
+    "draw:path",
     {
-      'draw:style-name': styleName,
-      'svg:x': formatOdfLength(init.frame.xPt),
-      'svg:y': formatOdfLength(init.frame.yPt),
-      'svg:width': formatOdfLength(init.frame.widthPt),
-      'svg:height': formatOdfLength(init.frame.heightPt),
-      'svg:viewBox': buildSvgViewBox(init.frame.widthPt, init.frame.heightPt),
-      'svg:d': buildSvgPathData(init.subpaths),
+      "draw:style-name": styleName,
+      "svg:x": formatOdfLength(init.frame.xPt),
+      "svg:y": formatOdfLength(init.frame.yPt),
+      "svg:width": formatOdfLength(init.frame.widthPt),
+      "svg:height": formatOdfLength(init.frame.heightPt),
+      "svg:viewBox": buildSvgViewBox(init.frame.widthPt, init.frame.heightPt),
+      "svg:d": buildSvgPathData(init.subpaths),
     },
     [directTextP()],
   );
@@ -237,7 +290,7 @@ export function buildPathElement(pkg: Package, init: PathVectorInit): XmlElement
 
 export class OdgPathVector {
   // A fixed discriminant, for the same reason OdgLineVector's is: draw:path is the only element this class ever wraps.
-  readonly kind = 'path';
+  readonly kind = "path";
 
   private readonly container: XmlNode[];
   private readonly node: XmlElement;
@@ -252,13 +305,15 @@ export class OdgPathVector {
 
   private live(): XmlElement {
     if (this.removed) {
-      throw new Error('this OdgPathVector has been removed from its page and can no longer be used');
+      throw new Error(
+        "this OdgPathVector has been removed from its page and can no longer be used",
+      );
     }
     return this.node;
   }
 
   get name(): string | undefined {
-    return attr(this.live(), 'draw:name');
+    return attr(this.live(), "draw:name");
   }
 
   get frame(): Box | undefined {
@@ -276,7 +331,9 @@ export class OdgPathVector {
   set rotationDeg(value: number | undefined) {
     const currentFrame = this.frame;
     if (currentFrame === undefined) {
-      throw new Error('cannot set rotationDeg on a vector with no resolvable frame (missing svg:width/svg:height)');
+      throw new Error(
+        "cannot set rotationDeg on a vector with no resolvable frame (missing svg:width/svg:height)",
+      );
     }
     applyOdfGeometry(this.live(), currentFrame, value);
   }
@@ -300,10 +357,14 @@ export class OdgPathVector {
   // Reparses svg:viewBox + svg:d through odf.js's OWN real parser (parseOdfViewBox / parseOdfPathData / buildOdfSubpaths, the exact same functions readDrawPathVector uses) every call, scaled against the CURRENT frame -- rather than caching whatever ContentSubpath[] the caller originally passed to addPath/PathVectorInit. This is both a genuinely live accessor (reflects a later `.frame =` resize, per this class's own frame-setter note) and the round-trip proof this module's own test suite leans on: every read of subpaths re-derives from the real written-and-reparsed XML, never from a cached JS value.
   get subpaths(): ContentSubpath[] {
     const node = this.live();
-    const viewBoxValue = attr(node, 'svg:viewBox');
-    const dValue = attr(node, 'svg:d');
+    const viewBoxValue = attr(node, "svg:viewBox");
+    const dValue = attr(node, "svg:d");
     const frame = resolveOdfShapeGeometry(node)?.frame;
-    if (viewBoxValue === undefined || dValue === undefined || frame === undefined) {
+    if (
+      viewBoxValue === undefined ||
+      dValue === undefined ||
+      frame === undefined
+    ) {
       return [];
     }
     const viewBox = parseOdfViewBox(viewBoxValue);
@@ -322,19 +383,23 @@ export class OdgPathVector {
 // ---------------------------------------------------------------------------------------------------------------
 // The three classes above as one union, discriminated on `kind` -- the same four-member vocabulary ContentVectorSchema's own variants carry ('rect'/'ellipse'/'line'/'path'), so a caller holding an OdgVector narrows it exactly as it would narrow a ContentVector. OdgBoxVector's own kind is the one member resolved from the live element's tag rather than being fixed per class, since one class serves both draw:rect and draw:ellipse (see its own note above).
 
-export type OdgVectorKind = OdgBoxVectorKind | 'line' | 'path';
+export type OdgVectorKind = OdgBoxVectorKind | "line" | "path";
 
 export type OdgVector = OdgBoxVector | OdgLineVector | OdgPathVector;
 
 // Wraps whichever vector-primitive element `node` actually is in its matching live-view class, or reports undefined for an element that is not a vector primitive at all (a draw:frame, most commonly -- draw:page mixes frames and vectors in one children list, since document order IS paint order for both). This is the read-side inverse of buildRectElement/buildEllipseElement/buildLineElement/buildPathElement above, and the single place tag-to-class dispatch lives: OdgPage.vectors (page.ts) is its caller.
-export function wrapVectorElement(container: XmlNode[], node: XmlElement, pkg: Package): OdgVector | undefined {
+export function wrapVectorElement(
+  container: XmlNode[],
+  node: XmlElement,
+  pkg: Package,
+): OdgVector | undefined {
   switch (node.tag) {
-    case 'draw:rect':
-    case 'draw:ellipse':
+    case "draw:rect":
+    case "draw:ellipse":
       return new OdgBoxVector(container, node, pkg);
-    case 'draw:line':
+    case "draw:line":
       return new OdgLineVector(container, node, pkg);
-    case 'draw:path':
+    case "draw:path":
       return new OdgPathVector(container, node, pkg);
     default:
       return undefined;
@@ -350,41 +415,75 @@ export interface VectorElementOptions {
   readonly textFlowAnchored?: boolean;
 }
 
-export function buildVectorElement(pkg: Package, vector: ContentVector, options?: VectorElementOptions): XmlElement {
+export function buildVectorElement(
+  pkg: Package,
+  vector: ContentVector,
+  options?: VectorElementOptions,
+): XmlElement {
   const textFlowAnchored = options?.textFlowAnchored;
   const element = buildUnanchoredVectorElement(pkg, vector, textFlowAnchored);
   if (textFlowAnchored === true) {
-    setAttr(element, 'text:anchor-type', 'paragraph');
+    setAttr(element, "text:anchor-type", "paragraph");
   }
   return element;
 }
 
 // buildVectorElement plus the append-and-wrap step every container-level caller then repeats: OdgPage.addVector and OdpSlide.addVector are each nothing but this against their own draw:page's children list. Dispatches to the matching live-view class straight off the ContentVector's own discriminant rather than re-deriving it from the built element's tag, so there is no impossible "not a vector after all" branch to narrow away.
-export function appendVectorTo(container: XmlNode[], pkg: Package, vector: ContentVector, options?: VectorElementOptions): OdgVector {
+export function appendVectorTo(
+  container: XmlNode[],
+  pkg: Package,
+  vector: ContentVector,
+  options?: VectorElementOptions,
+): OdgVector {
   const element = buildVectorElement(pkg, vector, options);
   container.push(element);
   switch (vector.kind) {
-    case 'line':
+    case "line":
       return new OdgLineVector(container, element, pkg);
-    case 'path':
+    case "path":
       return new OdgPathVector(container, element, pkg);
-    case 'rect':
-    case 'ellipse':
+    case "rect":
+    case "ellipse":
       return new OdgBoxVector(container, element, pkg);
   }
 }
 
-function buildUnanchoredVectorElement(pkg: Package, vector: ContentVector, textFlowAnchored: boolean | undefined): XmlElement {
+function buildUnanchoredVectorElement(
+  pkg: Package,
+  vector: ContentVector,
+  textFlowAnchored: boolean | undefined,
+): XmlElement {
   // 'line' is the one variant ContentVectorSchema gives no rotationDeg at all (two endpoints already encode any orientation a line can have), so it needs no applyOdfGeometry pass and returns straight from its builder.
-  if (vector.kind === 'line') {
-    return buildLineElement(pkg, { from: vector.from, to: vector.to, stroke: vector.stroke, textFlowAnchored });
+  if (vector.kind === "line") {
+    return buildLineElement(pkg, {
+      from: vector.from,
+      to: vector.to,
+      stroke: vector.stroke,
+      textFlowAnchored,
+    });
   }
   const element =
-    vector.kind === 'rect'
-      ? buildRectElement(pkg, { frame: vector.frame, fill: vector.fill, stroke: vector.stroke, textFlowAnchored })
-      : vector.kind === 'ellipse'
-        ? buildEllipseElement(pkg, { frame: vector.frame, fill: vector.fill, stroke: vector.stroke, textFlowAnchored })
-        : buildPathElement(pkg, { frame: vector.frame, subpaths: vector.subpaths, fill: vector.fill, stroke: vector.stroke, textFlowAnchored });
+    vector.kind === "rect"
+      ? buildRectElement(pkg, {
+          frame: vector.frame,
+          fill: vector.fill,
+          stroke: vector.stroke,
+          textFlowAnchored,
+        })
+      : vector.kind === "ellipse"
+        ? buildEllipseElement(pkg, {
+            frame: vector.frame,
+            fill: vector.fill,
+            stroke: vector.stroke,
+            textFlowAnchored,
+          })
+        : buildPathElement(pkg, {
+            frame: vector.frame,
+            subpaths: vector.subpaths,
+            fill: vector.fill,
+            stroke: vector.stroke,
+            textFlowAnchored,
+          });
   if (vector.rotationDeg !== undefined) {
     // Rewrites the plain svg:x/svg:y the builder just wrote into the draw:transform form a rotated ODF shape actually uses -- ODF never carries both (see src/edit/geometry.ts's own applyOdfGeometry note).
     applyOdfGeometry(element, vector.frame, vector.rotationDeg);

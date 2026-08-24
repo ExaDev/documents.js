@@ -1,4 +1,4 @@
-import { Jpeg2000ParseError } from './jpeg2000-errors';
+import { Jpeg2000ParseError } from "./jpeg2000-errors";
 
 // The two bit-level primitives a JPEG 2000 packet header is built from: the stuffed-bit reader of ISO/IEC 15444-1 B.10.1 and the tag tree of B.10.2. Both are pure bitstream mechanics with no knowledge of what the values mean, which is why they sit below jpeg2000-t2.ts rather than inside it.
 
@@ -37,7 +37,9 @@ export class PacketBitReader {
       const stuffed = this.previousByte === 0xff;
       const byte = this.nextByte();
       if (stuffed && (byte & 0x80) !== 0) {
-        throw new Jpeg2000ParseError('a packet header byte following 0xFF has its stuffed bit set, which ISO/IEC 15444-1 B.10.1 forbids');
+        throw new Jpeg2000ParseError(
+          "a packet header byte following 0xFF has its stuffed bit set, which ISO/IEC 15444-1 B.10.1 forbids",
+        );
       }
       this.buffer = byte;
       this.previousByte = byte;
@@ -98,12 +100,21 @@ export class TagTree {
   }
 
   // Decodes whether the leaf at (x, y) holds a value strictly below `threshold`, consuming exactly as many bits as the encoder wrote for that question. Returning false leaves the leaf undetermined -- a later call with a higher threshold resumes from the same partial state, which is how inclusion information is spread across quality layers.
-  decode(reader: PacketBitReader, x: number, y: number, threshold: number): boolean {
+  decode(
+    reader: PacketBitReader,
+    x: number,
+    y: number,
+    threshold: number,
+  ): boolean {
     const path: number[] = [];
     let levelX = x;
     let levelY = y;
     for (let level = 0; level < this.levelOffsets.length; level++) {
-      path.push((this.levelOffsets[level] ?? 0) + levelY * (this.levelWidths[level] ?? 1) + levelX);
+      path.push(
+        (this.levelOffsets[level] ?? 0) +
+          levelY * (this.levelWidths[level] ?? 1) +
+          levelX,
+      );
       levelX = levelX >> 1;
       levelY = levelY >> 1;
     }

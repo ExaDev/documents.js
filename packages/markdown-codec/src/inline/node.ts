@@ -5,37 +5,37 @@
 // This type is entirely internal: it is never exported from src/index.ts, never crosses a public boundary, and is discarded the moment toInlineAst has walked it.
 
 export type InlineNodeKind =
-  | 'text'
-  | 'emphasis'
-  | 'strong'
-  | 'strikethrough'
-  | 'codeSpan'
-  | 'link'
-  | 'image'
-  | 'autolink'
-  | 'hardBreak'
-  | 'softBreak'
-  | 'rawHtml'
-  | 'entity'
-  | 'mathInline'
-  | 'footnoteReference'
+  | "text"
+  | "emphasis"
+  | "strong"
+  | "strikethrough"
+  | "codeSpan"
+  | "link"
+  | "image"
+  | "autolink"
+  | "hardBreak"
+  | "softBreak"
+  | "rawHtml"
+  | "entity"
+  | "mathInline"
+  | "footnoteReference"
   // The synthetic root every inline parse builds into -- never converted to an AST node itself, only its children are.
-  | 'container';
+  | "container";
 
 export class InlineNode {
   readonly kind: InlineNodeKind;
 
   // Literal text (text/codeSpan/rawHtml), the resolved character(s) of an entity, or the destination of a link/image/autolink -- each node kind reads only the fields its own kind defines, exactly as MarkdownInlineNode's discriminated union does after conversion.
-  literal = '';
-  destination = '';
+  literal = "";
+  destination = "";
   title: string | undefined;
   email = false;
   // Which of `*`/`_` produced an emphasis/strong node, preserved so writeMarkdown can emit the original marker rather than normalising every document to one character.
-  marker: '_' | '*' = '*';
+  marker: "_" | "*" = "*";
   // An entity node's own literal source text (e.g. '&amp;'), kept alongside `literal`'s decoded value.
-  raw = '';
+  raw = "";
   // A footnote reference's own label -- kept in its own field rather than reusing `literal`, since a reference has no literal text of its own: `[^1]` is the label's SPELLING, reconstructed on the way out, not content the parser read.
-  label = '';
+  label = "";
 
   parent: InlineNode | undefined;
   firstChild: InlineNode | undefined;
@@ -93,7 +93,7 @@ export class InlineNode {
 }
 
 export function createTextNode(literal: string): InlineNode {
-  const node = new InlineNode('text');
+  const node = new InlineNode("text");
   node.literal = literal;
   return node;
 }

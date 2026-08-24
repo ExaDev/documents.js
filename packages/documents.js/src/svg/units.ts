@@ -8,7 +8,8 @@ const PT_PER_IN = 72;
 const SVG_NUMBER_PATTERN = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/;
 
 // Resolves one SVG length against the user-unit convention in force and returns it in points. A bare number is a user unit; under the root coordinate systems this reader builds (viewBox mapped 1:1 onto the viewport, or the 0.75pt fallback when the svg declares neither -- see readSvgContent's own root notes), one user unit is one CSS px, hence the PT_PER_PX factor. The absolute units convert by their exact factors, pc and q included (1pc = 12pt, 1q = 1/40cm exactly). Returns undefined for em/ex/% -- each needs a font context or a referent this reader keeps no model of -- and for malformed values; an unresolvable length is the caller's diagnostic to report, never a silent zero.
-const SVG_LENGTH_PATTERN = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)(px|pt|mm|cm|in|pc|q|em|ex|%)?$/;
+const SVG_LENGTH_PATTERN =
+  /^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)(px|pt|mm|cm|in|pc|q|em|ex|%)?$/;
 
 export function parseSvgLengthPt(raw: string | undefined): number | undefined {
   if (raw === undefined) {
@@ -24,19 +25,19 @@ export function parseSvgLengthPt(raw: string | undefined): number | undefined {
   }
   switch (match[2]) {
     case undefined:
-    case 'px':
+    case "px":
       return value * PT_PER_PX;
-    case 'pt':
+    case "pt":
       return value;
-    case 'mm':
+    case "mm":
       return value * PT_PER_MM;
-    case 'cm':
+    case "cm":
       return value * PT_PER_CM;
-    case 'in':
+    case "in":
       return value * PT_PER_IN;
-    case 'pc':
+    case "pc":
       return value * 12;
-    case 'q':
+    case "q":
       return (value * PT_PER_CM) / 40;
     default:
       return undefined;
@@ -57,18 +58,31 @@ export interface SvgViewBox {
   readonly height: number;
 }
 
-export function parseSvgViewBox(raw: string | undefined): SvgViewBox | undefined {
+export function parseSvgViewBox(
+  raw: string | undefined,
+): SvgViewBox | undefined {
   if (raw === undefined) {
     return undefined;
   }
-  const parts = raw.trim().replace(/,/g, ' ').split(/\s+/);
+  const parts = raw.trim().replace(/,/g, " ").split(/\s+/);
   if (parts.length !== 4) {
     return undefined;
   }
-  const numbers = parts.map((part) => (SVG_NUMBER_PATTERN.test(part) ? Number(part) : Number.NaN));
+  const numbers = parts.map((part) =>
+    SVG_NUMBER_PATTERN.test(part) ? Number(part) : Number.NaN,
+  );
   // The parts.length === 4 check above guarantees every index exists, so the non-null assertions restate that check rather than assume past it -- the identical indexed access pattern read.ts's own polyline points use.
-  if (!numbers.every((value) => Number.isFinite(value)) || numbers[2]! < 0 || numbers[3]! < 0) {
+  if (
+    !numbers.every((value) => Number.isFinite(value)) ||
+    numbers[2]! < 0 ||
+    numbers[3]! < 0
+  ) {
     return undefined;
   }
-  return { minX: numbers[0]!, minY: numbers[1]!, width: numbers[2]!, height: numbers[3]! };
+  return {
+    minX: numbers[0]!,
+    minY: numbers[1]!,
+    width: numbers[2]!,
+    height: numbers[3]!,
+  };
 }

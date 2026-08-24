@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 // The colour type shared by every content/layout schema. Ported from ooxml.js's typed/shared/color.ts and documents.js's src/model/color.ts (identical shape in both, modulo naming) -- this is the canonical home now; both packages import it from here instead of maintaining their own copy. DrawingML's colour-transform maths (ColorTransform/applyColorTransforms -- shade/tint/lumMod/lumOff) is deliberately NOT here: that's OOXML cascade-resolution logic used only inside ooxml.js's own readDocx/readPptx, not a content-model shape.
 
@@ -33,7 +33,7 @@ export function rgbHexToColor(hex: string): Color {
 
 function toHexByte(component: number): string {
   const byte = Math.round(component * HEX_BYTE_MAX);
-  return byte.toString(16).padStart(2, '0');
+  return byte.toString(16).padStart(2, "0");
 }
 
 // The exact inverse of rgbHexToColor, rounding each component to the nearest byte; always returns a lowercase 6-digit hex string with no leading '#'.

@@ -1,5 +1,5 @@
-import type { Color } from './color';
-import type { LayoutFont } from './style';
+import type { Color } from "./color";
+import type { LayoutFont } from "./style";
 
 // The text-layout port contracts a layout engine consumes, independent of any concrete font backend. pdf-codec implements TextMeasurer (over the standard-14 AFM widths and any caller/embedded faces); a layout engine (documents.js's src/layout/) takes a TextMeasurer as an injected parameter and depends only on this interface, never on the implementation. Kept here -- the neutral shared-schema package, already home to LayoutFont/Color these reference -- so a layout engine never reaches into a specific rendering backend for its contracts. Mirrors src/codec.ts's own precedent of hosting behavioural ports alongside the Zod schemas.
 
@@ -44,7 +44,9 @@ export interface StyledFragment {
 
 // One laid-out line: its fragments (each with its x offset within the line) and the line's own metrics. `descentPt` is negative, per AFM convention.
 export interface WrappedLine {
-  readonly fragments: readonly (StyledFragment & { readonly xOffsetPt: number })[];
+  readonly fragments: readonly (StyledFragment & {
+    readonly xOffsetPt: number;
+  })[];
   readonly widthPt: number;
   readonly maxSizePt: number;
   readonly ascentPt: number;

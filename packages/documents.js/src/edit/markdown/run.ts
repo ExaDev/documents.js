@@ -1,5 +1,5 @@
-import type { ContentRun } from 'document-schema.js';
-import { MONOSPACE_FONT_FAMILY } from 'markdown-codec';
+import type { ContentRun } from "document-schema.js";
+import { MONOSPACE_FONT_FAMILY } from "markdown-codec";
 
 export interface RunInit {
   readonly text?: string;
@@ -25,7 +25,9 @@ export class MarkdownRun {
 
   private live(): ContentRun {
     if (this.removed) {
-      throw new Error('this MarkdownRun has been removed from its paragraph and can no longer be used');
+      throw new Error(
+        "this MarkdownRun has been removed from its paragraph and can no longer be used",
+      );
     }
     return this.node;
   }
@@ -115,7 +117,7 @@ export class MarkdownRun {
 
 // Builds a fresh ContentRun from scratch (not a live view -- for constructing new runs to append or insert, whose properties are then read back through MarkdownRun once inserted into a paragraph's runs array). Mirrors odt's run.ts buildRun: applies init's properties by constructing a throwaway MarkdownRun over the new node and driving it through the exact same setters every later mutation uses.
 export function buildRun(init: RunInit = {}): ContentRun {
-  const node: ContentRun = { text: init.text ?? '' };
+  const node: ContentRun = { text: init.text ?? "" };
   const run = new MarkdownRun([], node);
   if (init.bold !== undefined) {
     run.bold = init.bold;

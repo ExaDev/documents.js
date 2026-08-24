@@ -1,7 +1,11 @@
-import type { XmlElement, XmlNode } from 'ooxml.js';
+import type { XmlElement, XmlNode } from "ooxml.js";
 
 // Sets an attribute's value, updating it in place if already present, or appending it if not.
-export function setAttr(element: XmlElement, name: string, value: string): void {
+export function setAttr(
+  element: XmlElement,
+  name: string,
+  value: string,
+): void {
   for (const a of element.attributes) {
     if (a.name === name) {
       a.value = value;
@@ -28,12 +32,20 @@ export function removeChild(container: XmlNode[], child: XmlNode): boolean {
   return true;
 }
 
-export function insertBefore(container: XmlNode[], reference: XmlNode, newNode: XmlNode): void {
+export function insertBefore(
+  container: XmlNode[],
+  reference: XmlNode,
+  newNode: XmlNode,
+): void {
   const index = container.indexOf(reference);
   container.splice(index === -1 ? container.length : index, 0, newNode);
 }
 
-export function insertAfter(container: XmlNode[], reference: XmlNode, newNode: XmlNode): void {
+export function insertAfter(
+  container: XmlNode[],
+  reference: XmlNode,
+  newNode: XmlNode,
+): void {
   const index = container.indexOf(reference);
   container.splice(index === -1 ? container.length : index + 1, 0, newNode);
 }
@@ -41,14 +53,18 @@ export function insertAfter(container: XmlNode[], reference: XmlNode, newNode: X
 // Inserts `child` into `parent.children` at the position ECMA-376's element sequence for `parent`'s content model dictates, given as `order` (an array of tag names in schema-defined order). Word rejects a file whose ordered content model (e.g. CT_RPr: w:rFonts before w:b before w:i before w:color before w:sz) is violated, so property setters must never simply append.
 //
 // A tag not present in `order` is treated as unordered and left where document order otherwise placed it: the search only ever compares against siblings whose own tag *is* in `order`.
-export function insertInSchemaOrder(parent: XmlElement, child: XmlElement, order: readonly string[]): void {
+export function insertInSchemaOrder(
+  parent: XmlElement,
+  child: XmlElement,
+  order: readonly string[],
+): void {
   const childRank = order.indexOf(child.tag);
   if (childRank === -1) {
     parent.children.push(child);
     return;
   }
   for (const sibling of parent.children) {
-    if (sibling.type !== 'element') {
+    if (sibling.type !== "element") {
       continue;
     }
     const siblingRank = order.indexOf(sibling.tag);
@@ -61,9 +77,12 @@ export function insertInSchemaOrder(parent: XmlElement, child: XmlElement, order
 }
 
 // The first direct child element with the given tag, or undefined if none exists -- a convenience for property accessors that need to find-or-create a single child (e.g. w:rPr on a w:r).
-export function directChildElement(parent: XmlElement, tag: string): XmlElement | undefined {
+export function directChildElement(
+  parent: XmlElement,
+  tag: string,
+): XmlElement | undefined {
   for (const child of parent.children) {
-    if (child.type === 'element' && child.tag === tag) {
+    if (child.type === "element" && child.tag === tag) {
       return child;
     }
   }

@@ -1,6 +1,6 @@
-import type { DocumentFormat } from 'documents.js';
+import type { DocumentFormat } from "documents.js";
 
-import type { OpenedFile } from '../ports/fileAccess';
+import type { OpenedFile } from "../ports/fileAccess";
 
 export interface PendingReopen {
   file: OpenedFile;

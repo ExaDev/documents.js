@@ -1,37 +1,54 @@
-import { type Command } from 'commander';
-import { type LayoutImageAsset, type LayoutItem, readPdf } from 'documents.js';
-import { createRuntimeSignal } from '../runtime/abort';
-import { createDiagnosticReporter, pdfDiagnosticToDiagnostic } from '../runtime/diagnostics';
-import { mapErrorToExit, EXIT_SUCCESS } from '../runtime/exit-codes';
-import { readInput } from '../runtime/io';
-import { formatMetadataLines, presentMetadataEntries } from '../runtime/metadata-format';
-import { formatError } from './shared';
+import { type Command } from "commander";
+import { type LayoutImageAsset, type LayoutItem, readPdf } from "documents.js";
+import { createRuntimeSignal } from "../runtime/abort";
+import {
+  createDiagnosticReporter,
+  pdfDiagnosticToDiagnostic,
+} from "../runtime/diagnostics";
+import { mapErrorToExit, EXIT_SUCCESS } from "../runtime/exit-codes";
+import { readInput } from "../runtime/io";
+import {
+  formatMetadataLines,
+  presentMetadataEntries,
+} from "../runtime/metadata-format";
+import { formatError } from "./shared";
 
 interface PdfInspectCliOptions {
   readonly json: boolean;
   readonly full: boolean;
 }
 
-function buildItemKindHistogram(items: readonly LayoutItem[]): Map<LayoutItem['kind'], number> {
-  const histogram = new Map<LayoutItem['kind'], number>();
+function buildItemKindHistogram(
+  items: readonly LayoutItem[],
+): Map<LayoutItem["kind"], number> {
+  const histogram = new Map<LayoutItem["kind"], number>();
   for (const item of items) {
     histogram.set(item.kind, (histogram.get(item.kind) ?? 0) + 1);
   }
   return histogram;
 }
 
-function countImagesByFormat(images: Readonly<Record<string, LayoutImageAsset>>): Map<LayoutImageAsset['format'], number> {
-  const counts = new Map<LayoutImageAsset['format'], number>();
+function countImagesByFormat(
+  images: Readonly<Record<string, LayoutImageAsset>>,
+): Map<LayoutImageAsset["format"], number> {
+  const counts = new Map<LayoutImageAsset["format"], number>();
   for (const asset of Object.values(images)) {
     counts.set(asset.format, (counts.get(asset.format) ?? 0) + 1);
   }
   return counts;
 }
 
-async function runPdfInspect(input: string, options: PdfInspectCliOptions): Promise<number> {
-  const command = 'pdf-inspect';
+async function runPdfInspect(
+  input: string,
+  options: PdfInspectCliOptions,
+): Promise<number> {
+  const command = "pdf-inspect";
   const { signal, getAbortReason } = createRuntimeSignal({});
-  const reporter = createDiagnosticReporter({ json: options.json, quiet: false, command });
+  const reporter = createDiagnosticReporter({
+    json: options.json,
+    quiet: false,
+    command,
+  });
 
   try {
     const inputBytes = await readInput(input, { signal });
@@ -65,24 +82,28 @@ async function runPdfInspect(input: string, options: PdfInspectCliOptions): Prom
       return EXIT_SUCCESS;
     }
 
-    process.stdout.write(`${layout.pages.length} page${layout.pages.length === 1 ? '' : 's'}\n`);
+    process.stdout.write(
+      `${layout.pages.length} page${layout.pages.length === 1 ? "" : "s"}\n`,
+    );
     layout.pages.forEach((page, index) => {
       const histogram = buildItemKindHistogram(page.items);
       const histogramText = Array.from(histogram.entries())
         .map(([kind, count]) => `${kind}=${count}`)
-        .join(', ');
-      process.stdout.write(`  page ${index + 1}: ${page.widthPt}pt x ${page.heightPt}pt${histogramText === '' ? '' : ` (${histogramText})`}\n`);
+        .join(", ");
+      process.stdout.write(
+        `  page ${index + 1}: ${page.widthPt}pt x ${page.heightPt}pt${histogramText === "" ? "" : ` (${histogramText})`}\n`,
+      );
     });
 
     if (presentMetadataEntries(layout.metadata).length > 0) {
-      process.stdout.write('metadata:\n');
+      process.stdout.write("metadata:\n");
       for (const line of formatMetadataLines(layout.metadata)) {
         process.stdout.write(`  ${line}\n`);
       }
     }
 
     if (imagesByFormat.size > 0) {
-      process.stdout.write('images:\n');
+      process.stdout.write("images:\n");
       for (const [format, count] of imagesByFormat) {
         process.stdout.write(`  ${format}: ${count}\n`);
       }
@@ -97,10 +118,20 @@ async function runPdfInspect(input: string, options: PdfInspectCliOptions): Prom
 
 export function registerPdfInspectCommand(program: Command): void {
   program
-    .command('pdf-inspect <input>')
-    .description('inspect a PDF: page count, per-page size and item-kind histogram, document metadata, and embedded image formats')
-    .option('--json', 'emit the summary as JSON instead of a human-readable report', false)
-    .option('--full', 'dump the entire parsed LayoutDocument as JSON instead of a summary', false)
+    .command("pdf-inspect <input>")
+    .description(
+      "inspect a PDF: page count, per-page size and item-kind histogram, document metadata, and embedded image formats",
+    )
+    .option(
+      "--json",
+      "emit the summary as JSON instead of a human-readable report",
+      false,
+    )
+    .option(
+      "--full",
+      "dump the entire parsed LayoutDocument as JSON instead of a summary",
+      false,
+    )
     .action(async (input: string, options: PdfInspectCliOptions) => {
       process.exitCode = await runPdfInspect(input, options);
     });

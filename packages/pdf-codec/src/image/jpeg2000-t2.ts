@@ -1,15 +1,33 @@
-import type { Jpeg2000CodingStyle, Jpeg2000ImageSize, Jpeg2000ProgressionOrder, Jpeg2000Quantization, Jpeg2000StepSize } from './jpeg2000-codestream';
-import { Jpeg2000ParseError, Jpeg2000UnsupportedError } from './jpeg2000-errors';
-import type { Jpeg2000SubbandType } from './jpeg2000-t1';
-import { PacketBitReader, TagTree } from './jpeg2000-tagtree';
+import type {
+  Jpeg2000CodingStyle,
+  Jpeg2000ImageSize,
+  Jpeg2000ProgressionOrder,
+  Jpeg2000Quantization,
+  Jpeg2000StepSize,
+} from "./jpeg2000-codestream";
+import {
+  Jpeg2000ParseError,
+  Jpeg2000UnsupportedError,
+} from "./jpeg2000-errors";
+import type { Jpeg2000SubbandType } from "./jpeg2000-t1";
+import { PacketBitReader, TagTree } from "./jpeg2000-tagtree";
 
 // The tile structure of ISO/IEC 15444-1 Annex B and the tier-2 packet decoding of B.9/B.10: working out which code-blocks exist and where their coded bytes are, without decoding a single coefficient. Splitting this from tier-1 keeps the two halves of EBCOT independently checkable -- this module's whole output is "code-block X's data is these byte ranges, carrying this many coding passes".
 
 // B.3: the three subbands a resolution level above zero contributes, in the order the codestream lists them (and the order their quantization step sizes appear in QCD).
-const HIGHER_RESOLUTION_BANDS: readonly Jpeg2000SubbandType[] = ['HL', 'LH', 'HH'];
+const HIGHER_RESOLUTION_BANDS: readonly Jpeg2000SubbandType[] = [
+  "HL",
+  "LH",
+  "HH",
+];
 
 // E.1.1 Table E.1: the log2 gain of each subband's synthesis, used to size the quantization step relative to the component's own bit depth.
-const SUBBAND_GAIN_LOG2: Readonly<Record<Jpeg2000SubbandType, number>> = { LL: 0, HL: 1, LH: 1, HH: 2 };
+const SUBBAND_GAIN_LOG2: Readonly<Record<Jpeg2000SubbandType, number>> = {
+  LL: 0,
+  HL: 1,
+  LH: 1,
+  HH: 2,
+};
 
 // B.10.7: the code-block length signalling starts from a four-bit field width and grows only when the encoder says so.
 const INITIAL_LBLOCK = 3;
@@ -88,7 +106,11 @@ function ceilDiv(value: number, divisor: number): number {
 }
 
 // B.3 equation B-4: a tile is the intersection of its slot in the tile grid with the image area.
-function tileBounds(siz: Jpeg2000ImageSize, tileX: number, tileY: number): Bounds {
+function tileBounds(
+  siz: Jpeg2000ImageSize,
+  tileX: number,
+  tileY: number,
+): Bounds {
   return {
     x0: Math.max(siz.xtosiz + tileX * siz.xtsiz, siz.xosiz),
     y0: Math.max(siz.ytosiz + tileY * siz.ytsiz, siz.yosiz),
@@ -99,25 +121,54 @@ function tileBounds(siz: Jpeg2000ImageSize, tileX: number, tileY: number): Bound
 
 // B.5 equation B-6: a component's own coordinate grid is the reference grid divided by that component's sub-sampling factors.
 function componentBounds(tile: Bounds, dx: number, dy: number): Bounds {
-  return { x0: ceilDiv(tile.x0, dx), y0: ceilDiv(tile.y0, dy), x1: ceilDiv(tile.x1, dx), y1: ceilDiv(tile.y1, dy) };
+  return {
+    x0: ceilDiv(tile.x0, dx),
+    y0: ceilDiv(tile.y0, dy),
+    x1: ceilDiv(tile.x1, dx),
+    y1: ceilDiv(tile.y1, dy),
+  };
 }
 
 // B.5 equation B-14: resolution level r of a tile-component covers its own coordinates scaled down by the decomposition levels still to be applied.
-function resolutionBounds(component: Bounds, levels: number, resolution: number): Bounds {
+function resolutionBounds(
+  component: Bounds,
+  levels: number,
+  resolution: number,
+): Bounds {
   const scale = 2 ** (levels - resolution);
-  return { x0: ceilDiv(component.x0, scale), y0: ceilDiv(component.y0, scale), x1: ceilDiv(component.x1, scale), y1: ceilDiv(component.y1, scale) };
+  return {
+    x0: ceilDiv(component.x0, scale),
+    y0: ceilDiv(component.y0, scale),
+    x1: ceilDiv(component.x1, scale),
+    y1: ceilDiv(component.y1, scale),
+  };
 }
 
 // B.6: how many precincts a resolution level is partitioned into. A level with no area holds none at all, which is not the same as holding one empty one.
-function precinctGrid(bounds: Bounds, ppx: number, ppy: number): { wide: number; high: number } {
+function precinctGrid(
+  bounds: Bounds,
+  ppx: number,
+  ppy: number,
+): { wide: number; high: number } {
   return {
-    wide: bounds.x1 > bounds.x0 ? Math.ceil(bounds.x1 / 2 ** ppx) - Math.floor(bounds.x0 / 2 ** ppx) : 0,
-    high: bounds.y1 > bounds.y0 ? Math.ceil(bounds.y1 / 2 ** ppy) - Math.floor(bounds.y0 / 2 ** ppy) : 0,
+    wide:
+      bounds.x1 > bounds.x0
+        ? Math.ceil(bounds.x1 / 2 ** ppx) - Math.floor(bounds.x0 / 2 ** ppx)
+        : 0,
+    high:
+      bounds.y1 > bounds.y0
+        ? Math.ceil(bounds.y1 / 2 ** ppy) - Math.floor(bounds.y0 / 2 ** ppy)
+        : 0,
   };
 }
 
 // Whether any resolution level of any component of this one tile is split into more than one precinct -- the exact condition buildPacketSequence refuses a position-driven progression order under. Computed from the geometry alone, with none of buildTileGeometry's own per-code-block allocation, so readJpeg2000Metadata can answer "is this decodable" for a large image without paying to set up a decode it is not going to run.
-export function tileHasSubdividedPrecincts(siz: Jpeg2000ImageSize, tileX: number, tileY: number, codingPerComponent: readonly Jpeg2000CodingStyle[]): boolean {
+export function tileHasSubdividedPrecincts(
+  siz: Jpeg2000ImageSize,
+  tileX: number,
+  tileY: number,
+  codingPerComponent: readonly Jpeg2000CodingStyle[],
+): boolean {
   const tile = tileBounds(siz, tileX, tileY);
   for (let c = 0; c < siz.components.length; c++) {
     const size = siz.components[c];
@@ -131,7 +182,11 @@ export function tileHasSubdividedPrecincts(siz: Jpeg2000ImageSize, tileX: number
       if (precinctSize === undefined) {
         continue;
       }
-      const grid = precinctGrid(resolutionBounds(component, coding.decompositionLevels, r), precinctSize.ppx, precinctSize.ppy);
+      const grid = precinctGrid(
+        resolutionBounds(component, coding.decompositionLevels, r),
+        precinctSize.ppx,
+        precinctSize.ppy,
+      );
       if (grid.wide * grid.high > 1) {
         return true;
       }
@@ -141,7 +196,11 @@ export function tileHasSubdividedPrecincts(siz: Jpeg2000ImageSize, tileX: number
 }
 
 // B.7 equation B-15: the coordinates of subband b, where (xob, yob) is (0,0) for LL, (1,0) for HL, (0,1) for LH and (1,1) for HH, and nb is the number of decomposition levels still applied to that band.
-function bandCoordinate(componentCoordinate: number, levels: number, orientation: number): number {
+function bandCoordinate(
+  componentCoordinate: number,
+  levels: number,
+  orientation: number,
+): number {
   if (levels === 0) {
     return componentCoordinate;
   }
@@ -154,24 +213,40 @@ function quantizationIndex(resolution: number, bandIndex: number): number {
 }
 
 // E.1.1 equation E-5: with derived quantization only the LL band's step size is transmitted and every other band's exponent follows from its own decomposition level.
-function stepSizeFor(quantization: Jpeg2000Quantization, resolution: number, bandIndex: number): Jpeg2000StepSize {
-  if (quantization.style === 'derived') {
+function stepSizeFor(
+  quantization: Jpeg2000Quantization,
+  resolution: number,
+  bandIndex: number,
+): Jpeg2000StepSize {
+  if (quantization.style === "derived") {
     const base = quantization.stepSizes[0];
     if (base === undefined) {
-      throw new Jpeg2000ParseError('a QCD/QCC marker declares derived quantization but carries no step size');
+      throw new Jpeg2000ParseError(
+        "a QCD/QCC marker declares derived quantization but carries no step size",
+      );
     }
-    return { exponent: Math.max(base.exponent - Math.max(resolution - 1, 0), 0), mantissa: base.mantissa };
+    return {
+      exponent: Math.max(base.exponent - Math.max(resolution - 1, 0), 0),
+      mantissa: base.mantissa,
+    };
   }
   const index = quantizationIndex(resolution, bandIndex);
   const step = quantization.stepSizes[index];
   if (step === undefined) {
-    throw new Jpeg2000ParseError(`a QCD/QCC marker carries no step size for subband ${String(index)}, which its own decomposition level count requires`);
+    throw new Jpeg2000ParseError(
+      `a QCD/QCC marker carries no step size for subband ${String(index)}, which its own decomposition level count requires`,
+    );
   }
   return step;
 }
 
 function buildPrecinct(
-  band: { readonly x0: number; readonly y0: number; readonly x1: number; readonly y1: number },
+  band: {
+    readonly x0: number;
+    readonly y0: number;
+    readonly x1: number;
+    readonly y1: number;
+  },
   precinctX: number,
   precinctY: number,
   bandPpx: number,
@@ -181,8 +256,10 @@ function buildPrecinct(
 ): Jpeg2000Precinct {
   const precinctWidth = 2 ** bandPpx;
   const precinctHeight = 2 ** bandPpy;
-  const originX = (Math.floor(band.x0 / precinctWidth) + precinctX) * precinctWidth;
-  const originY = (Math.floor(band.y0 / precinctHeight) + precinctY) * precinctHeight;
+  const originX =
+    (Math.floor(band.x0 / precinctWidth) + precinctX) * precinctWidth;
+  const originY =
+    (Math.floor(band.y0 / precinctHeight) + precinctY) * precinctHeight;
   const px0 = Math.max(originX, band.x0);
   const py0 = Math.max(originY, band.y0);
   const px1 = Math.min(originX + precinctWidth, band.x1);
@@ -218,7 +295,11 @@ function buildPrecinct(
       });
     }
   }
-  return { inclusion: new TagTree(gridWidth, gridHeight), zeroBitPlaneTree: new TagTree(gridWidth, gridHeight), codeBlocks };
+  return {
+    inclusion: new TagTree(gridWidth, gridHeight),
+    zeroBitPlaneTree: new TagTree(gridWidth, gridHeight),
+    codeBlocks,
+  };
 }
 
 export function buildTileGeometry(
@@ -234,8 +315,14 @@ export function buildTileGeometry(
     const componentSize = siz.components[c];
     const coding = codingPerComponent[c];
     const quantization = quantizationPerComponent[c];
-    if (componentSize === undefined || coding === undefined || quantization === undefined) {
-      throw new Jpeg2000ParseError(`no coding style or quantization is defined for component ${String(c)}`);
+    if (
+      componentSize === undefined ||
+      coding === undefined ||
+      quantization === undefined
+    ) {
+      throw new Jpeg2000ParseError(
+        `no coding style or quantization is defined for component ${String(c)}`,
+      );
     }
     const bounds = componentBounds(tile, componentSize.dx, componentSize.dy);
     const levels = coding.decompositionLevels;
@@ -245,24 +332,32 @@ export function buildTileGeometry(
       const { x0: rx0, y0: ry0, x1: rx1, y1: ry1 } = level;
       const precinctSize = coding.precinctSizes[r];
       if (precinctSize === undefined) {
-        throw new Jpeg2000ParseError(`the coding style declares ${String(levels)} decomposition levels but no precinct size for resolution ${String(r)}`);
+        throw new Jpeg2000ParseError(
+          `the coding style declares ${String(levels)} decomposition levels but no precinct size for resolution ${String(r)}`,
+        );
       }
       const { ppx, ppy } = precinctSize;
       // B.6: for a resolution above zero the precinct partition maps onto the subbands at half its own size, so a precinct exponent of zero would have no subband-side meaning at all.
       if (r > 0 && (ppx === 0 || ppy === 0)) {
-        throw new Jpeg2000ParseError(`resolution level ${String(r)} declares a precinct exponent of zero, which ISO/IEC 15444-1 B.6 permits only at resolution level 0`);
+        throw new Jpeg2000ParseError(
+          `resolution level ${String(r)} declares a precinct exponent of zero, which ISO/IEC 15444-1 B.6 permits only at resolution level 0`,
+        );
       }
-      const { wide: precinctsWide, high: precinctsHigh } = precinctGrid(level, ppx, ppy);
+      const { wide: precinctsWide, high: precinctsHigh } = precinctGrid(
+        level,
+        ppx,
+        ppy,
+      );
       const bandPpx = r === 0 ? ppx : ppx - 1;
       const bandPpy = r === 0 ? ppy : ppy - 1;
 
-      const bandTypes = r === 0 ? (['LL'] as const) : HIGHER_RESOLUTION_BANDS;
+      const bandTypes = r === 0 ? (["LL"] as const) : HIGHER_RESOLUTION_BANDS;
       const subbands: Jpeg2000Subband[] = [];
       for (let b = 0; b < bandTypes.length; b++) {
-        const type = bandTypes[b] ?? 'LL';
+        const type = bandTypes[b] ?? "LL";
         const bandLevels = r === 0 ? levels : levels - r + 1;
-        const xob = type === 'HL' || type === 'HH' ? 1 : 0;
-        const yob = type === 'LH' || type === 'HH' ? 1 : 0;
+        const xob = type === "HL" || type === "HH" ? 1 : 0;
+        const yob = type === "LH" || type === "HH" ? 1 : 0;
         const bx0 = bandCoordinate(bounds.x0, bandLevels, xob);
         const by0 = bandCoordinate(bounds.y0, bandLevels, yob);
         const bx1 = bandCoordinate(bounds.x1, bandLevels, xob);
@@ -271,7 +366,17 @@ export function buildTileGeometry(
         const precincts: Jpeg2000Precinct[] = [];
         for (let py = 0; py < precinctsHigh; py++) {
           for (let px = 0; px < precinctsWide; px++) {
-            precincts.push(buildPrecinct({ x0: bx0, y0: by0, x1: bx1, y1: by1 }, px, py, bandPpx, bandPpy, coding.codeBlockWidthExp, coding.codeBlockHeightExp));
+            precincts.push(
+              buildPrecinct(
+                { x0: bx0, y0: by0, x1: bx1, y1: by1 },
+                px,
+                py,
+                bandPpx,
+                bandPpy,
+                coding.codeBlockWidthExp,
+                coding.codeBlockHeightExp,
+              ),
+            );
           }
         }
         subbands.push({
@@ -286,7 +391,16 @@ export function buildTileGeometry(
           precincts,
         });
       }
-      resolutions.push({ index: r, x0: rx0, y0: ry0, x1: rx1, y1: ry1, precinctsWide, precinctsHigh, subbands });
+      resolutions.push({
+        index: r,
+        x0: rx0,
+        y0: ry0,
+        x1: rx1,
+        y1: ry1,
+        precinctsWide,
+        precinctsHigh,
+        subbands,
+      });
     }
     components.push({ ...bounds, coding, quantization, resolutions });
   }
@@ -324,19 +438,30 @@ interface PacketPosition {
 }
 
 // B.12: the five progression orders, as the nesting of the four loops each one names. RPCL, PCRL and CPRL iterate position on the reference grid rather than by precinct index, which only collapses to a plain loop when every tile-component-resolution holds exactly one precinct -- the check below refuses anything else rather than emitting packets in the wrong order.
-export function buildPacketSequence(tile: Jpeg2000TileGeometry, order: Jpeg2000ProgressionOrder, layers: number): PacketPosition[] {
-  const maxResolutions = Math.max(...tile.components.map((component) => component.resolutions.length));
+export function buildPacketSequence(
+  tile: Jpeg2000TileGeometry,
+  order: Jpeg2000ProgressionOrder,
+  layers: number,
+): PacketPosition[] {
+  const maxResolutions = Math.max(
+    ...tile.components.map((component) => component.resolutions.length),
+  );
   const precinctCount = (component: number, resolution: number): number => {
     const resolutions = tile.components[component]?.resolutions;
     const level = resolutions?.[resolution];
     return level === undefined ? 0 : level.precinctsWide * level.precinctsHigh;
   };
   const packets: PacketPosition[] = [];
-  const push = (layer: number, resolution: number, component: number, precinct: number): void => {
+  const push = (
+    layer: number,
+    resolution: number,
+    component: number,
+    precinct: number,
+  ): void => {
     packets.push({ layer, resolution, component, precinct });
   };
 
-  if (order === 'LRCP') {
+  if (order === "LRCP") {
     for (let l = 0; l < layers; l++) {
       for (let r = 0; r < maxResolutions; r++) {
         for (let c = 0; c < tile.components.length; c++) {
@@ -348,7 +473,7 @@ export function buildPacketSequence(tile: Jpeg2000TileGeometry, order: Jpeg2000P
     }
     return packets;
   }
-  if (order === 'RLCP') {
+  if (order === "RLCP") {
     for (let r = 0; r < maxResolutions; r++) {
       for (let l = 0; l < layers; l++) {
         for (let c = 0; c < tile.components.length; c++) {
@@ -364,11 +489,13 @@ export function buildPacketSequence(tile: Jpeg2000TileGeometry, order: Jpeg2000P
   for (let c = 0; c < tile.components.length; c++) {
     for (let r = 0; r < maxResolutions; r++) {
       if (precinctCount(c, r) > 1) {
-        throw new Jpeg2000UnsupportedError(`progression order ${order} is only decoded here when every resolution level holds a single precinct, and this codestream subdivides at least one of them`);
+        throw new Jpeg2000UnsupportedError(
+          `progression order ${order} is only decoded here when every resolution level holds a single precinct, and this codestream subdivides at least one of them`,
+        );
       }
     }
   }
-  if (order === 'RPCL') {
+  if (order === "RPCL") {
     for (let r = 0; r < maxResolutions; r++) {
       for (let c = 0; c < tile.components.length; c++) {
         for (let l = 0; l < layers; l++) {
@@ -380,7 +507,7 @@ export function buildPacketSequence(tile: Jpeg2000TileGeometry, order: Jpeg2000P
     }
     return packets;
   }
-  if (order === 'PCRL') {
+  if (order === "PCRL") {
     for (let c = 0; c < tile.components.length; c++) {
       for (let r = 0; r < maxResolutions; r++) {
         for (let l = 0; l < layers; l++) {
@@ -432,16 +559,25 @@ export function readTilePackets(
       break;
     }
     if (position >= end) {
-      options.onWarning(`the tile's coded data ended after ${String(packetIndex)} of ${String(sequence.length)} packets; the rest of the image is reconstructed from what did arrive`);
+      options.onWarning(
+        `the tile's coded data ended after ${String(packetIndex)} of ${String(sequence.length)} packets; the rest of the image is reconstructed from what did arrive`,
+      );
       return position;
     }
-    if (options.useSop && position + SOP_SEGMENT_BYTES <= end && data[position] === MARKER_SOP_HIGH && data[position + 1] === MARKER_SOP_LOW) {
+    if (
+      options.useSop &&
+      position + SOP_SEGMENT_BYTES <= end &&
+      data[position] === MARKER_SOP_HIGH &&
+      data[position + 1] === MARKER_SOP_LOW
+    ) {
       position += SOP_SEGMENT_BYTES;
     }
     const component = tile.components[packet.component];
     const resolution = component?.resolutions[packet.resolution];
     if (component === undefined || resolution === undefined) {
-      throw new Jpeg2000ParseError('the progression sequence names a resolution level the tile does not have');
+      throw new Jpeg2000ParseError(
+        "the progression sequence names a resolution level the tile does not have",
+      );
     }
 
     const reader = new PacketBitReader(data, position, end);
@@ -454,14 +590,28 @@ export function readTilePackets(
           continue;
         }
         for (const block of precinct.codeBlocks) {
-          const isIncluded = block.included ? reader.readBit() === 1 : precinct.inclusion.decode(reader, block.gridX, block.gridY, packet.layer + 1);
+          const isIncluded = block.included
+            ? reader.readBit() === 1
+            : precinct.inclusion.decode(
+                reader,
+                block.gridX,
+                block.gridY,
+                packet.layer + 1,
+              );
           if (!isIncluded) {
             continue;
           }
           if (!block.included) {
             block.included = true;
             let threshold = 1;
-            while (!precinct.zeroBitPlaneTree.decode(reader, block.gridX, block.gridY, threshold)) {
+            while (
+              !precinct.zeroBitPlaneTree.decode(
+                reader,
+                block.gridX,
+                block.gridY,
+                threshold,
+              )
+            ) {
               threshold++;
             }
             block.zeroBitPlanes = threshold - 1;
@@ -481,7 +631,12 @@ export function readTilePackets(
     }
     reader.alignToByte();
     position = reader.offset;
-    if (options.useEph && position + EPH_MARKER_BYTES <= end && data[position] === MARKER_SOP_HIGH && data[position + 1] === MARKER_EPH_LOW) {
+    if (
+      options.useEph &&
+      position + EPH_MARKER_BYTES <= end &&
+      data[position] === MARKER_SOP_HIGH &&
+      data[position + 1] === MARKER_EPH_LOW
+    ) {
       position += EPH_MARKER_BYTES;
     }
 
@@ -493,7 +648,9 @@ export function readTilePackets(
       }
       const chunkEnd = Math.min(position + length, end);
       if (chunkEnd < position + length) {
-        options.onWarning('a code-block declares more coded bytes than the tile carries; decoding it from the bytes that did arrive');
+        options.onWarning(
+          "a code-block declares more coded bytes than the tile carries; decoding it from the bytes that did arrive",
+        );
       }
       block.chunks.push({ start: position, end: chunkEnd });
       position += length;

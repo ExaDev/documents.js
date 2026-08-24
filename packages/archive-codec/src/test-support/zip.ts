@@ -4,7 +4,9 @@ export function readUint16LE(bytes: Uint8Array, offset: number): number {
   const b0 = bytes[offset];
   const b1 = bytes[offset + 1];
   if (b0 === undefined || b1 === undefined) {
-    throw new Error(`truncated zip bytes while reading a uint16 at offset ${offset}`);
+    throw new Error(
+      `truncated zip bytes while reading a uint16 at offset ${offset}`,
+    );
   }
   return b0 | (b1 << 8);
 }
@@ -14,8 +16,15 @@ export function readUint32LE(bytes: Uint8Array, offset: number): number {
   const b1 = bytes[offset + 1];
   const b2 = bytes[offset + 2];
   const b3 = bytes[offset + 3];
-  if (b0 === undefined || b1 === undefined || b2 === undefined || b3 === undefined) {
-    throw new Error(`truncated zip bytes while reading a uint32 at offset ${offset}`);
+  if (
+    b0 === undefined ||
+    b1 === undefined ||
+    b2 === undefined ||
+    b3 === undefined
+  ) {
+    throw new Error(
+      `truncated zip bytes while reading a uint32 at offset ${offset}`,
+    );
   }
   return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0;
 }
@@ -30,14 +39,19 @@ export function localFileHeaderNames(bytes: Uint8Array): string[] {
     const filenameLength = readUint16LE(bytes, offset + 26);
     const extraLength = readUint16LE(bytes, offset + 28);
     const nameStart = offset + 30;
-    names.push(decoder.decode(bytes.subarray(nameStart, nameStart + filenameLength)));
+    names.push(
+      decoder.decode(bytes.subarray(nameStart, nameStart + filenameLength)),
+    );
     offset = nameStart + filenameLength + extraLength + compressedSize;
   }
   return names;
 }
 
 // The compression method (0 = stored, 8 = deflated) of a given entry's local file header, walked in the same physical order as localFileHeaderNames. Local header layout per the ZIP application-note: signature (4 bytes), version needed (2), general-purpose flags (2), compression method (2) -- so the method field sits at byte offset 8 within each header.
-export function localHeaderCompressionMethod(bytes: Uint8Array, entryIndex: number): number {
+export function localHeaderCompressionMethod(
+  bytes: Uint8Array,
+  entryIndex: number,
+): number {
   let offset = 0;
   let index = 0;
   while (offset < bytes.length && readUint32LE(bytes, offset) === 0x04034b50) {

@@ -1,4 +1,4 @@
-import type { Color } from 'document-schema.js';
+import type { Color } from "document-schema.js";
 
 // The Color/ColorSchema shape (and COLOR_BLACK/rgbHexToColor/colorToRgbHex) now live in document-schema.js -- this file keeps only the DrawingML colour-transform cascade below, which is genuinely OOXML-specific logic, not a content-model shape.
 
@@ -6,7 +6,7 @@ import type { Color } from 'document-schema.js';
 const OOXML_PERCENT_SCALE = 100_000;
 
 export interface ColorTransform {
-  readonly kind: 'shade' | 'tint' | 'lumMod' | 'lumOff';
+  readonly kind: "shade" | "tint" | "lumMod" | "lumOff";
   readonly value: number;
 }
 
@@ -24,9 +24,16 @@ function linearToSrgb(c: number): number {
 }
 
 // shade: 10% shade is 10% of the (linearised) input colour combined with 90% black -- i.e. linear *= pct. tint: 10% tint is 10% of the (linearised) input colour combined with 90% white -- i.e. linear = 1 - (1 - linear) * pct. Both formulas and the linear-space requirement are verified against Apache POI's DrawPaint.applyColorTransform.
-function applyShadeOrTint(color: Color, kind: 'shade' | 'tint', value: number): Color {
+function applyShadeOrTint(
+  color: Color,
+  kind: "shade" | "tint",
+  value: number,
+): Color {
   const pct = value / OOXML_PERCENT_SCALE;
-  const transform = kind === 'shade' ? (linear: number) => linear * pct : (linear: number) => 1 - (1 - linear) * pct;
+  const transform =
+    kind === "shade"
+      ? (linear: number) => linear * pct
+      : (linear: number) => 1 - (1 - linear) * pct;
   return {
     r: clamp01(linearToSrgb(transform(srgbToLinear(color.r)))),
     g: clamp01(linearToSrgb(transform(srgbToLinear(color.g)))),
@@ -98,23 +105,30 @@ function hslToRgb(hsl: Hsl): Color {
 }
 
 // lumMod: multiplies luminance by the given percentage (50% halves it, 200% doubles it). lumOff: shifts luminance by the given percentage, additively, with hue/saturation unchanged (a 10% offset to 20% luminance yields 30%). Both operate in HSL space, per ECMA-376's own description of these transforms and Apache POI's DrawPaint implementation.
-function applyLumModOrOff(color: Color, kind: 'lumMod' | 'lumOff', value: number): Color {
+function applyLumModOrOff(
+  color: Color,
+  kind: "lumMod" | "lumOff",
+  value: number,
+): Color {
   const hsl = rgbToHsl(color);
   const pct = value / OOXML_PERCENT_SCALE;
-  const l = clamp01(kind === 'lumMod' ? hsl.l * pct : hsl.l + pct);
+  const l = clamp01(kind === "lumMod" ? hsl.l * pct : hsl.l + pct);
   return hslToRgb({ ...hsl, l });
 }
 
 // Applies a sequence of DrawingML colour-transform children to a base colour (an a:srgbClr's own value, or an a:schemeClr's theme-resolved value). Shade/tint are applied first, in linear space; lumMod/lumOff second, in HSL space -- a two-pass model (rather than processing each child strictly in its own XML document order) matching Apache POI's DrawPaint.applyColorTransform, a mature, independently-verified OOXML renderer.
-export function applyColorTransforms(base: Color, transforms: readonly ColorTransform[]): Color {
+export function applyColorTransforms(
+  base: Color,
+  transforms: readonly ColorTransform[],
+): Color {
   let color = base;
   for (const t of transforms) {
-    if (t.kind === 'shade' || t.kind === 'tint') {
+    if (t.kind === "shade" || t.kind === "tint") {
       color = applyShadeOrTint(color, t.kind, t.value);
     }
   }
   for (const t of transforms) {
-    if (t.kind === 'lumMod' || t.kind === 'lumOff') {
+    if (t.kind === "lumMod" || t.kind === "lumOff") {
       color = applyLumModOrOff(color, t.kind, t.value);
     }
   }

@@ -1,14 +1,21 @@
 #!/usr/bin/env node
-import { CommanderError } from 'commander';
-import { formatError } from './commands/shared';
-import { createProgram } from './program';
-import { createRuntimeSignal } from './runtime/abort';
-import { EXIT_INPUT_ERROR, EXIT_SUCCESS, EXIT_USAGE_ERROR } from './runtime/exit-codes';
+import { CommanderError } from "commander";
+import { formatError } from "./commands/shared";
+import { createProgram } from "./program";
+import { createRuntimeSignal } from "./runtime/abort";
+import {
+  EXIT_INPUT_ERROR,
+  EXIT_SUCCESS,
+  EXIT_USAGE_ERROR,
+} from "./runtime/exit-codes";
 
 // Shared by the bare-invocation dispatch path and the registered 'tui [file]' subcommand below -- the only thing that differs between them is how each computes startPath, so the actual lazy-import-and-run logic lives here once. Importing './tui/index.js' dynamically (not at module top level) is what keeps a plain `document-cli docx-to-pdf a b` invocation from ever paying React/Ink's module-load cost or touching the terminal.
-async function launchTui(startPath: string | undefined, signal: AbortSignal): Promise<void> {
+async function launchTui(
+  startPath: string | undefined,
+  signal: AbortSignal,
+): Promise<void> {
   try {
-    const { runTui } = await import('./tui/index.js');
+    const { runTui } = await import("./tui/index.js");
     await runTui({ startPath, signal });
     process.exitCode = EXIT_SUCCESS;
   } catch (error) {
@@ -20,7 +27,7 @@ async function launchTui(startPath: string | undefined, signal: AbortSignal): Pr
 
 // Only the leading non-flag token counts as a start path, matching how every other command in this CLI separates flags from positional arguments -- 'tui --foo bar' should treat 'bar' as the start path, not '--foo'.
 function findStartPath(args: readonly string[]): string | undefined {
-  return args.find((arg) => !arg.startsWith('-'));
+  return args.find((arg) => !arg.startsWith("-"));
 }
 
 async function main(): Promise<void> {
@@ -30,10 +37,12 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const [dispatchToken] = args;
 
-  if (dispatchToken === undefined || dispatchToken === 'tui') {
+  if (dispatchToken === undefined || dispatchToken === "tui") {
     if (!process.stdout.isTTY) {
-      if (dispatchToken === 'tui') {
-        process.stderr.write('the TUI requires an interactive terminal (TTY); stdout is currently redirected\n');
+      if (dispatchToken === "tui") {
+        process.stderr.write(
+          "the TUI requires an interactive terminal (TTY); stdout is currently redirected\n",
+        );
         process.exitCode = EXIT_USAGE_ERROR;
         return;
       }
@@ -43,15 +52,17 @@ async function main(): Promise<void> {
       return;
     }
 
-    const remainingArgs = dispatchToken === 'tui' ? args.slice(1) : args;
+    const remainingArgs = dispatchToken === "tui" ? args.slice(1) : args;
     await launchTui(findStartPath(remainingArgs), signal);
     return;
   }
 
   const program = createProgram();
   program
-    .command('tui [file]')
-    .description('launch the interactive terminal UI, optionally opening a file immediately')
+    .command("tui [file]")
+    .description(
+      "launch the interactive terminal UI, optionally opening a file immediately",
+    )
     .action(async (file: string | undefined) => {
       await launchTui(file, signal);
     });

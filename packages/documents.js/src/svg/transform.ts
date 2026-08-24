@@ -8,14 +8,28 @@ export interface AffineMatrix {
   readonly f: number;
 }
 
-export const IDENTITY_MATRIX: AffineMatrix = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+export const IDENTITY_MATRIX: AffineMatrix = {
+  a: 1,
+  b: 0,
+  c: 0,
+  d: 1,
+  e: 0,
+  f: 0,
+};
 
-export function applyMatrix(m: AffineMatrix, x: number, y: number): { readonly x: number; readonly y: number } {
+export function applyMatrix(
+  m: AffineMatrix,
+  x: number,
+  y: number,
+): { readonly x: number; readonly y: number } {
   return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f };
 }
 
 // Applies `inner` first and `outer` second -- the SVG nesting semantics: a group's transform maps its children's coordinates, so the total matrix walking into a child is outerCTM * childOwnTransform, matrix-multiplied in that left-to-right order (outer ∘ inner as function composition).
-export function composeMatrices(outer: AffineMatrix, inner: AffineMatrix): AffineMatrix {
+export function composeMatrices(
+  outer: AffineMatrix,
+  inner: AffineMatrix,
+): AffineMatrix {
   return {
     a: outer.a * inner.a + outer.c * inner.b,
     b: outer.b * inner.a + outer.d * inner.b,
@@ -27,7 +41,14 @@ export function composeMatrices(outer: AffineMatrix, inner: AffineMatrix): Affin
 }
 
 export function applyScale(m: AffineMatrix, factor: number): AffineMatrix {
-  return { a: m.a * factor, b: m.b * factor, c: m.c * factor, d: m.d * factor, e: m.e * factor, f: m.f * factor };
+  return {
+    a: m.a * factor,
+    b: m.b * factor,
+    c: m.c * factor,
+    d: m.d * factor,
+    e: m.e * factor,
+    f: m.f * factor,
+  };
 }
 
 // The mean of the two column scales -- the factor a stroke width grows by under m. Not the determinant's square root: for a shear-heavy matrix the columns disagree, and the mean keeps a stroked line's weight tracking the average of how the matrix stretches each basis direction, which is the best one-number answer a schema carrying a scalar stroke width has.
@@ -57,7 +78,14 @@ export function similarityRotationDeg(m: AffineMatrix): number {
 
 // The transform attribute grammar: a whitespace/comma-separated list of function calls translate(tx [ty]), scale(sx [sy]), rotate(angle [cx cy]), skewX(a), skewY(a), matrix(a b c d e f), applied LEFT TO RIGHT in list order -- which is the composition order composeMatrices(outer, inner) with each list entry as the new outer. Numbers reuse the shared SVG number grammar; function names are case-sensitive per the spec. Returns undefined for any malformed list (an unknown function, a bad argument count, a non-finite number) rather than a partial parse -- a half-applied transform would silently misplace every descendant.
 const TRANSFORM_NUMBER = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/y;
-const TRANSFORM_FUNCTIONS = ['translate', 'scale', 'rotate', 'skewX', 'skewY', 'matrix'] as const;
+const TRANSFORM_FUNCTIONS = [
+  "translate",
+  "scale",
+  "rotate",
+  "skewX",
+  "skewY",
+  "matrix",
+] as const;
 type TransformFunctionName = (typeof TRANSFORM_FUNCTIONS)[number];
 
 interface TransformScanner {
@@ -65,10 +93,13 @@ interface TransformScanner {
 }
 
 // Returns whether a comma was consumed, so the argument loop can reject a comma left dangling before the closing paren -- "rotate(90,)" is malformed, not an omitted argument silently accepted as rotate(90).
-function skipTransformSeparators(source: string, scanner: TransformScanner): boolean {
+function skipTransformSeparators(
+  source: string,
+  scanner: TransformScanner,
+): boolean {
   let comma = false;
   while (scanner.pos < source.length && /[\s,]/.test(source[scanner.pos]!)) {
-    if (source[scanner.pos] === ',') {
+    if (source[scanner.pos] === ",") {
       comma = true;
     }
     scanner.pos++;
@@ -76,7 +107,10 @@ function skipTransformSeparators(source: string, scanner: TransformScanner): boo
   return comma;
 }
 
-function scanTransformNumber(source: string, scanner: TransformScanner): number | undefined {
+function scanTransformNumber(
+  source: string,
+  scanner: TransformScanner,
+): number | undefined {
   TRANSFORM_NUMBER.lastIndex = scanner.pos;
   const match = TRANSFORM_NUMBER.exec(source);
   if (match === null) {
@@ -87,14 +121,17 @@ function scanTransformNumber(source: string, scanner: TransformScanner): number 
   return Number.isFinite(value) ? value : undefined;
 }
 
-function matrixFromFunction(name: TransformFunctionName, args: readonly number[]): AffineMatrix | undefined {
+function matrixFromFunction(
+  name: TransformFunctionName,
+  args: readonly number[],
+): AffineMatrix | undefined {
   switch (name) {
-    case 'translate':
+    case "translate":
       if (args.length !== 1 && args.length !== 2) {
         return undefined;
       }
       return { a: 1, b: 0, c: 0, d: 1, e: args[0]!, f: args[1] ?? 0 };
-    case 'scale': {
+    case "scale": {
       if (args.length !== 1 && args.length !== 2) {
         return undefined;
       }
@@ -102,46 +139,79 @@ function matrixFromFunction(name: TransformFunctionName, args: readonly number[]
       const sy = args[1] ?? sx;
       return { a: sx, b: 0, c: 0, d: sy, e: 0, f: 0 };
     }
-    case 'rotate': {
+    case "rotate": {
       if (args.length !== 1 && args.length !== 3) {
         return undefined;
       }
       const radians = (args[0]! * Math.PI) / 180;
       const cos = Math.cos(radians);
       const sin = Math.sin(radians);
-      const rotation: AffineMatrix = { a: cos, b: sin, c: -sin, d: cos, e: 0, f: 0 };
+      const rotation: AffineMatrix = {
+        a: cos,
+        b: sin,
+        c: -sin,
+        d: cos,
+        e: 0,
+        f: 0,
+      };
       if (args.length === 1) {
         return rotation;
       }
       // rotate(a, cx, cy) is exactly translate(cx, cy) rotate(a) translate(-cx, -cy), spelled out here rather than delegated so the centre arithmetic stays in one place.
       const cx = args[1]!;
       const cy = args[2]!;
-      return composeMatrices(composeMatrices({ a: 1, b: 0, c: 0, d: 1, e: cx, f: cy }, rotation), { a: 1, b: 0, c: 0, d: 1, e: -cx, f: -cy });
+      return composeMatrices(
+        composeMatrices({ a: 1, b: 0, c: 0, d: 1, e: cx, f: cy }, rotation),
+        { a: 1, b: 0, c: 0, d: 1, e: -cx, f: -cy },
+      );
     }
-    case 'skewX':
+    case "skewX":
       if (args.length !== 1) {
         return undefined;
       }
-      return { a: 1, b: 0, c: Math.tan((args[0]! * Math.PI) / 180), d: 1, e: 0, f: 0 };
-    case 'skewY':
+      return {
+        a: 1,
+        b: 0,
+        c: Math.tan((args[0]! * Math.PI) / 180),
+        d: 1,
+        e: 0,
+        f: 0,
+      };
+    case "skewY":
       if (args.length !== 1) {
         return undefined;
       }
-      return { a: 1, b: Math.tan((args[0]! * Math.PI) / 180), c: 0, d: 1, e: 0, f: 0 };
-    case 'matrix':
+      return {
+        a: 1,
+        b: Math.tan((args[0]! * Math.PI) / 180),
+        c: 0,
+        d: 1,
+        e: 0,
+        f: 0,
+      };
+    case "matrix":
       if (args.length !== 6) {
         return undefined;
       }
-      return { a: args[0]!, b: args[1]!, c: args[2]!, d: args[3]!, e: args[4]!, f: args[5]! };
+      return {
+        a: args[0]!,
+        b: args[1]!,
+        c: args[2]!,
+        d: args[3]!,
+        e: args[4]!,
+        f: args[5]!,
+      };
   }
 }
 
-export function parseSvgTransform(raw: string | undefined): AffineMatrix | undefined {
+export function parseSvgTransform(
+  raw: string | undefined,
+): AffineMatrix | undefined {
   if (raw === undefined) {
     return undefined;
   }
   const source = raw.trim();
-  if (source === '') {
+  if (source === "") {
     return undefined;
   }
   const scanner: TransformScanner = { pos: 0 };
@@ -151,20 +221,22 @@ export function parseSvgTransform(raw: string | undefined): AffineMatrix | undef
     if (scanner.pos >= source.length) {
       break;
     }
-    const name = TRANSFORM_FUNCTIONS.find((candidate) => source.startsWith(candidate, scanner.pos));
+    const name = TRANSFORM_FUNCTIONS.find((candidate) =>
+      source.startsWith(candidate, scanner.pos),
+    );
     if (name === undefined) {
       return undefined;
     }
     scanner.pos += name.length;
     skipTransformSeparators(source, scanner);
-    if (source[scanner.pos] !== '(') {
+    if (source[scanner.pos] !== "(") {
       return undefined;
     }
     scanner.pos++;
     const args: number[] = [];
     for (;;) {
       const hadComma = skipTransformSeparators(source, scanner);
-      if (source[scanner.pos] === ')') {
+      if (source[scanner.pos] === ")") {
         if (hadComma) {
           return undefined;
         }

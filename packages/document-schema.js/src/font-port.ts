@@ -20,7 +20,7 @@ export interface FontSubstitution {
   readonly requestedFamily: string;
   readonly requestedBold: boolean;
   readonly requestedItalic: boolean;
-  readonly reason: 'missing-face' | 'vendored-substitute';
+  readonly reason: "missing-face" | "vendored-substitute";
   // The family whose face was actually used: the same requested family for 'missing-face' (only the weight/style narrowed), or the vendored family name for 'vendored-substitute'.
   readonly resolvedFamily: string;
 }
@@ -29,6 +29,6 @@ export interface FontRegistryOptions {
   readonly sourceFonts?: readonly ProvidedFont[];
   readonly fonts?: readonly ProvidedFont[];
   // 'none' disables the vendored substitute table entirely, for a caller that wants only its own supplied faces. Defaults to 'vendored'.
-  readonly substitutes?: 'vendored' | 'none';
+  readonly substitutes?: "vendored" | "none";
   readonly onSubstitution?: (substitution: FontSubstitution) => void;
 }

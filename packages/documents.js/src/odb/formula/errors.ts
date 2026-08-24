@@ -11,7 +11,9 @@
 const MESSAGE_FORMULA_PREVIEW_LENGTH = 200;
 
 function truncateForMessage(formula: string): string {
-  return formula.length > MESSAGE_FORMULA_PREVIEW_LENGTH ? `${formula.slice(0, MESSAGE_FORMULA_PREVIEW_LENGTH)}...` : formula;
+  return formula.length > MESSAGE_FORMULA_PREVIEW_LENGTH
+    ? `${formula.slice(0, MESSAGE_FORMULA_PREVIEW_LENGTH)}...`
+    : formula;
 }
 
 // A genuine Report Builder function this engine recognises as a function call and deliberately does not implement. `functionName` is the name exactly as written in the formula (not upper-cased), so a caller can branch on it rather than pattern-matching the message text; `formula` is the offending formula's own full source text, verbatim.
@@ -20,8 +22,10 @@ export class RptFormulaUnsupportedError extends Error {
   readonly formula: string;
 
   constructor(functionName: string, formula: string) {
-    super(`Report Builder formula: rpt:${functionName} is not supported by this bounded formula engine -- supported functions are HASCHANGED, LEFT, SUM, COUNT, AVG, MIN, MAX -- in formula: ${truncateForMessage(formula)}`);
-    this.name = 'RptFormulaUnsupportedError';
+    super(
+      `Report Builder formula: rpt:${functionName} is not supported by this bounded formula engine -- supported functions are HASCHANGED, LEFT, SUM, COUNT, AVG, MIN, MAX -- in formula: ${truncateForMessage(formula)}`,
+    );
+    this.name = "RptFormulaUnsupportedError";
     this.functionName = functionName;
     this.formula = formula;
   }
@@ -33,8 +37,10 @@ export class RptFormulaParseError extends Error {
   readonly offset: number;
 
   constructor(message: string, formula: string, offset: number) {
-    super(`Report Builder formula parse error at offset ${String(offset)}: ${message} -- in formula: ${truncateForMessage(formula)}`);
-    this.name = 'RptFormulaParseError';
+    super(
+      `Report Builder formula parse error at offset ${String(offset)}: ${message} -- in formula: ${truncateForMessage(formula)}`,
+    );
+    this.name = "RptFormulaParseError";
     this.formula = formula;
     this.offset = offset;
   }
@@ -45,8 +51,10 @@ export class RptFormulaEvaluationError extends Error {
   readonly formula: string;
 
   constructor(message: string, formula: string) {
-    super(`Report Builder formula evaluation error: ${message} -- in formula: ${truncateForMessage(formula)}`);
-    this.name = 'RptFormulaEvaluationError';
+    super(
+      `Report Builder formula evaluation error: ${message} -- in formula: ${truncateForMessage(formula)}`,
+    );
+    this.name = "RptFormulaEvaluationError";
     this.formula = formula;
   }
 }
@@ -56,8 +64,10 @@ export class RptReportStructureError extends Error {
   readonly reportName: string;
 
   constructor(message: string, reportName: string) {
-    super(`Report Builder report structure error in report "${reportName}": ${message}`);
-    this.name = 'RptReportStructureError';
+    super(
+      `Report Builder report structure error in report "${reportName}": ${message}`,
+    );
+    this.name = "RptReportStructureError";
     this.reportName = reportName;
   }
 }

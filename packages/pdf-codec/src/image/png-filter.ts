@@ -17,10 +17,17 @@ function paethPredictor(a: number, b: number, c: number): number {
 
 // The value a filter type predicts from the left (a), above (b), and above-left (c) samples -- added back in during unfiltering, or subtracted out during filtering. Returning a value from a pure function (rather than assigning inside a switch) sidesteps having to prove a switch over a literal union is exhaustive to a variable declared without an initialiser.
 function isPngFilterType(value: number): value is PngFilterType {
-  return value === 0 || value === 1 || value === 2 || value === 3 || value === 4;
+  return (
+    value === 0 || value === 1 || value === 2 || value === 3 || value === 4
+  );
 }
 
-function predictorValue(filterType: PngFilterType, a: number, b: number, c: number): number {
+function predictorValue(
+  filterType: PngFilterType,
+  a: number,
+  b: number,
+  c: number,
+): number {
   if (filterType === 1) {
     return a;
   }
@@ -62,7 +69,10 @@ export function unfilterScanlines(
       const raw = data[rowStart + x]!;
       const a = x >= bpp ? out[outRowStart + x - bpp]! : 0;
       const b = prevOutRowStart === undefined ? 0 : out[prevOutRowStart + x]!;
-      const c = x >= bpp && prevOutRowStart !== undefined ? out[prevOutRowStart + x - bpp]! : 0;
+      const c =
+        x >= bpp && prevOutRowStart !== undefined
+          ? out[prevOutRowStart + x - bpp]!
+          : 0;
       out[outRowStart + x] = (raw + predictorValue(filterByte, a, b, c)) & 0xff;
     }
   }
@@ -91,7 +101,8 @@ function filterRowInto(
     const rawByte = raw[rowStart + x]!;
     const a = x >= bpp ? raw[rowStart + x - bpp]! : 0;
     const b = prevRowStart === undefined ? 0 : raw[prevRowStart + x]!;
-    const c = x >= bpp && prevRowStart !== undefined ? raw[prevRowStart + x - bpp]! : 0;
+    const c =
+      x >= bpp && prevRowStart !== undefined ? raw[prevRowStart + x - bpp]! : 0;
     out[outOffset + x] = (rawByte - predictorValue(filterType, a, b, c)) & 0xff;
   }
 }
@@ -104,7 +115,7 @@ export function filterScanlines(
   height: number,
   bytesPerRow: number,
   bpp: number,
-  strategy: 'none' | 'adaptive' = 'adaptive',
+  strategy: "none" | "adaptive" = "adaptive",
 ): Uint8Array<ArrayBuffer> {
   const stride = bytesPerRow + 1;
   const out = new Uint8Array(height * stride);
@@ -115,9 +126,18 @@ export function filterScanlines(
     const prevRowStart = y > 0 ? rowStart - bytesPerRow : undefined;
     const outRowStart = y * stride;
 
-    if (strategy === 'none') {
+    if (strategy === "none") {
       out[outRowStart] = 0;
-      filterRowInto(raw, rowStart, prevRowStart, bytesPerRow, bpp, 0, out, outRowStart + 1);
+      filterRowInto(
+        raw,
+        rowStart,
+        prevRowStart,
+        bytesPerRow,
+        bpp,
+        0,
+        out,
+        outRowStart + 1,
+      );
       continue;
     }
 
@@ -125,7 +145,16 @@ export function filterScanlines(
     let bestSum = Number.POSITIVE_INFINITY;
     let best: Uint8Array<ArrayBuffer> | undefined;
     for (const filterType of ALL_FILTER_TYPES) {
-      filterRowInto(raw, rowStart, prevRowStart, bytesPerRow, bpp, filterType, candidate, 0);
+      filterRowInto(
+        raw,
+        rowStart,
+        prevRowStart,
+        bytesPerRow,
+        bpp,
+        filterType,
+        candidate,
+        0,
+      );
       const sum = sumOfAbsSigned(candidate);
       if (sum < bestSum) {
         bestSum = sum;

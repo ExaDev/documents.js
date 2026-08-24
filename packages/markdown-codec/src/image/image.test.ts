@@ -1,12 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { readImageDimensions } from './image';
+import { describe, expect, it } from "vitest";
+import { readImageDimensions } from "./image";
 
 function bytes(...values: number[]): Uint8Array {
   return new Uint8Array(values);
 }
 
-describe('readImageDimensions', () => {
-  it('reads a PNG IHDR chunk width/height', () => {
+describe("readImageDimensions", () => {
+  it("reads a PNG IHDR chunk width/height", () => {
     const png = bytes(
       0x89,
       0x50,
@@ -41,12 +41,23 @@ describe('readImageDimensions', () => {
     expect(readImageDimensions(png)).toEqual({ widthPx: 300, heightPx: 100 });
   });
 
-  it('returns undefined for a truncated PNG with no full IHDR', () => {
-    const truncated = bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00);
+  it("returns undefined for a truncated PNG with no full IHDR", () => {
+    const truncated = bytes(
+      0x89,
+      0x50,
+      0x4e,
+      0x47,
+      0x0d,
+      0x0a,
+      0x1a,
+      0x0a,
+      0x00,
+      0x00,
+    );
     expect(readImageDimensions(truncated)).toBeUndefined();
   });
 
-  it('reads a JPEG SOF0 frame header width/height, skipping a preceding APP0 segment by its own declared length', () => {
+  it("reads a JPEG SOF0 frame header width/height, skipping a preceding APP0 segment by its own declared length", () => {
     const jpeg = bytes(
       0xff,
       0xd8, // SOI
@@ -75,7 +86,7 @@ describe('readImageDimensions', () => {
     expect(readImageDimensions(jpeg)).toEqual({ widthPx: 32, heightPx: 16 });
   });
 
-  it('does not mistake DHT (0xC4) for a frame header despite sharing the SOF numeric range', () => {
+  it("does not mistake DHT (0xC4) for a frame header despite sharing the SOF numeric range", () => {
     const jpeg = bytes(
       0xff,
       0xd8, // SOI
@@ -105,11 +116,11 @@ describe('readImageDimensions', () => {
     expect(readImageDimensions(jpeg)).toEqual({ widthPx: 3, heightPx: 2 });
   });
 
-  it('returns undefined for neither a PNG signature nor a JPEG SOI marker', () => {
+  it("returns undefined for neither a PNG signature nor a JPEG SOI marker", () => {
     expect(readImageDimensions(bytes(0x00, 0x01, 0x02, 0x03))).toBeUndefined();
   });
 
-  it('returns undefined for a JPEG with no frame header before the end of input', () => {
+  it("returns undefined for a JPEG with no frame header before the end of input", () => {
     const jpeg = bytes(0xff, 0xd8, 0xff, 0xe0, 0x00, 0x02);
     expect(readImageDimensions(jpeg)).toBeUndefined();
   });

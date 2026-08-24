@@ -1,7 +1,12 @@
-import type { XmlElement } from '../../model/node';
-import type { Package } from '../../model/package';
-import { rootElement, findChildElement, childrenWithTag, attrValue } from '../../xml/query';
-import { decodeXmlText } from '../../xml/entities';
+import type { XmlElement } from "../../model/node";
+import type { Package } from "../../model/package";
+import {
+  rootElement,
+  findChildElement,
+  childrenWithTag,
+  attrValue,
+} from "../../xml/query";
+import { decodeXmlText } from "../../xml/entities";
 
 // Package -> OdbInventory: connection info plus the NAMES of forms/queries/reports/tables in a .odb (application/vnd.oasis.opendocument.base) database front-end package -- never their content, and never the embedded/external database engine's own binary or script storage. This is deliberately NOT a typed content reader in the sense readOdtContent/readOdpContent/readOdsContent/readOdgContent are: a .odb's real "content" -- table rows, query result sets, form/report layout and logic -- lives either inside a real database engine (HSQLDB, Firebird, or an external server) this reader does not and will not parse, or inside each form's/report's own genuine ODF sub-document (a real, separately-readable office:document-content the existing readOdtContent-style machinery could open on its own merit, but which this reader deliberately never opens, matching the "never their content" mandate). HSQLDB/Firebird binary parsing is separate, later work in the documents.js repo, not here.
 //
@@ -24,7 +29,7 @@ import { decodeXmlText } from '../../xml/entities';
 // driverClass, present in this reader's own design brief's illustrative return shape, is deliberately never populated: a full read of the OASIS ODF 1.3 RelaxNG schema's entire db: namespace (every db-* define -- the real database/connection element vocabulary) turns up no driver-class-equivalent attribute anywhere. db:driver-settings carries db:system-driver-settings/db:base-dn/db:parameter-name-substitution/db:show-deleted/db:is-first-row-header-line, none of which name a JDBC driver class. Kept in OdbConnectionInfo's own type as optional -- matching src/typed/odm/read.ts's own OdmSection.inlineContent precedent, a field the design brief asked for and kept ready rather than dropped, in case a future ODF revision or a non-LibreOffice producer's own extension attribute does carry one -- but never set by this reader, since ODF itself has nowhere to source it from.
 
 export interface OdbConnectionInfo {
-  type: 'embedded' | 'external';
+  type: "embedded" | "external";
   // See this module's own top-of-file note: never populated by this reader -- ODF's own db: schema has no driver-class-equivalent attribute anywhere. Kept for a future producer/revision that might add one.
   driverClass?: string;
   url?: string;
@@ -55,84 +60,123 @@ export interface OdbInventory {
   reports: OdbComponentInfo[];
 }
 
-const CONTENT_PART = 'content.xml';
-const EMBEDDED_URL_PREFIX = 'sdbc:embedded:';
+const CONTENT_PART = "content.xml";
+const EMBEDDED_URL_PREFIX = "sdbc:embedded:";
 
 // db:server-database has no single xlink:href of its own (unlike db:connection-resource/db:file-based-database) -- db:type plus either db:hostname[:db:port] or db:local-socket-name, plus an optional db:database-name, describe the connection instead. Never empirically observed (see this module's own top-of-file note); this formats those parts into one descriptive URL-shaped string on a defensible best-effort basis, purely for OdbConnectionInfo.url's own benefit -- it is not a real connection URL any driver would accept verbatim.
-function formatServerDatabaseUrl(serverDatabase: XmlElement): string | undefined {
-  const dbType = attrValue(serverDatabase, 'db:type');
+function formatServerDatabaseUrl(
+  serverDatabase: XmlElement,
+): string | undefined {
+  const dbType = attrValue(serverDatabase, "db:type");
   if (dbType === undefined) {
     return undefined;
   }
-  const hostname = attrValue(serverDatabase, 'db:hostname');
-  const port = attrValue(serverDatabase, 'db:port');
-  const localSocketName = attrValue(serverDatabase, 'db:local-socket-name');
-  const databaseName = attrValue(serverDatabase, 'db:database-name');
-  const host = hostname === undefined ? localSocketName : `${hostname}${port === undefined ? '' : `:${port}`}`;
+  const hostname = attrValue(serverDatabase, "db:hostname");
+  const port = attrValue(serverDatabase, "db:port");
+  const localSocketName = attrValue(serverDatabase, "db:local-socket-name");
+  const databaseName = attrValue(serverDatabase, "db:database-name");
+  const host =
+    hostname === undefined
+      ? localSocketName
+      : `${hostname}${port === undefined ? "" : `:${port}`}`;
 
   if (host === undefined) {
-    return databaseName === undefined ? `${dbType}://` : `${dbType}:///${databaseName}`;
+    return databaseName === undefined
+      ? `${dbType}://`
+      : `${dbType}:///${databaseName}`;
   }
-  return databaseName === undefined ? `${dbType}://${host}` : `${dbType}://${host}/${databaseName}`;
+  return databaseName === undefined
+    ? `${dbType}://${host}`
+    : `${dbType}://${host}/${databaseName}`;
 }
 
 // db:data-source/db:connection-data -> OdbConnectionInfo, or undefined if the office:database element carries no connection data at all (malformed but salvageable, matching this codebase's general degrade-not-throw posture for an optional/malformed sub-part). db:connection-data's own content model is a CHOICE (per the OASIS RNG schema) between db:connection-resource (the common, genuinely-observed case -- a single xlink:href covering both embedded and external connections alike, discriminated here purely by the "sdbc:embedded:" URL scheme prefix confirmed in this reader's own real fixture) and db:database-description (a file-based or server-based description, handled defensively -- see formatServerDatabaseUrl above and this module's own top-of-file note on why neither was ever empirically observed).
-function readConnectionInfo(databaseElement: XmlElement): OdbConnectionInfo | undefined {
-  const dataSource = findChildElement(databaseElement.children, 'db:data-source');
-  const connectionData = dataSource === undefined ? undefined : findChildElement(dataSource.children, 'db:connection-data');
+function readConnectionInfo(
+  databaseElement: XmlElement,
+): OdbConnectionInfo | undefined {
+  const dataSource = findChildElement(
+    databaseElement.children,
+    "db:data-source",
+  );
+  const connectionData =
+    dataSource === undefined
+      ? undefined
+      : findChildElement(dataSource.children, "db:connection-data");
   if (connectionData === undefined) {
     return undefined;
   }
 
-  const resource = findChildElement(connectionData.children, 'db:connection-resource');
+  const resource = findChildElement(
+    connectionData.children,
+    "db:connection-resource",
+  );
   if (resource !== undefined) {
-    const url = attrValue(resource, 'xlink:href');
+    const url = attrValue(resource, "xlink:href");
     if (url === undefined) {
       return undefined;
     }
-    return { type: url.startsWith(EMBEDDED_URL_PREFIX) ? 'embedded' : 'external', url };
+    return {
+      type: url.startsWith(EMBEDDED_URL_PREFIX) ? "embedded" : "external",
+      url,
+    };
   }
 
-  const description = findChildElement(connectionData.children, 'db:database-description');
+  const description = findChildElement(
+    connectionData.children,
+    "db:database-description",
+  );
   if (description === undefined) {
     return undefined;
   }
 
-  const fileBased = findChildElement(description.children, 'db:file-based-database');
+  const fileBased = findChildElement(
+    description.children,
+    "db:file-based-database",
+  );
   if (fileBased !== undefined) {
-    const url = attrValue(fileBased, 'xlink:href');
-    return url === undefined ? { type: 'external' } : { type: 'external', url };
+    const url = attrValue(fileBased, "xlink:href");
+    return url === undefined ? { type: "external" } : { type: "external", url };
   }
 
-  const serverDatabase = findChildElement(description.children, 'db:server-database');
+  const serverDatabase = findChildElement(
+    description.children,
+    "db:server-database",
+  );
   if (serverDatabase !== undefined) {
     const url = formatServerDatabaseUrl(serverDatabase);
-    return url === undefined ? { type: 'external' } : { type: 'external', url };
+    return url === undefined ? { type: "external" } : { type: "external", url };
   }
 
   return undefined;
 }
 
 // Walks db:queries' own db:query/db:query-collection children (recursively, since a query can sit inside an arbitrarily nested named group -- per the OASIS schema's own db-queries define), collecting each db:query's own db:name, db:command, and (when present) db:escape-processing -- see this module's own top-of-file note on why db:command is read now. db:command is entity-decoded (xml/entities.ts's decodeXmlText) before being returned, the same "projected plain-text content" treatment every other typed reader in this package already gives a real XML text value -- odf.js's own lossless model keeps entities raw for round-trip fidelity (processEntities:false), and OdbQueryInfo.command is exactly the boundary where that raw encoding needs to be undone (real SQL like `SELECT * FROM "Customers"` is stored in content.xml as `&quot;Customers&quot;`). A query missing either its name or its command (malformed -- both are mandatory per the schema) is skipped rather than returned half-populated, matching this reader's general "malformed-but-salvageable degrades, never fabricates" posture. A db:query-collection's own db:name (a folder-like grouping) is never itself collected as a query definition.
-function collectQueryDefinitions(container: XmlElement, definitions: OdbQueryInfo[]): void {
+function collectQueryDefinitions(
+  container: XmlElement,
+  definitions: OdbQueryInfo[],
+): void {
   for (const child of container.children) {
-    if (child.type !== 'element') {
+    if (child.type !== "element") {
       continue;
     }
-    if (child.tag === 'db:query') {
-      const name = attrValue(child, 'db:name');
-      const command = attrValue(child, 'db:command');
+    if (child.tag === "db:query") {
+      const name = attrValue(child, "db:name");
+      const command = attrValue(child, "db:command");
       if (name === undefined || command === undefined) {
         continue;
       }
       const decodedCommand = decodeXmlText(command);
-      const escapeProcessingRaw = attrValue(child, 'db:escape-processing');
+      const escapeProcessingRaw = attrValue(child, "db:escape-processing");
       definitions.push(
         escapeProcessingRaw === undefined
           ? { name, command: decodedCommand }
-          : { name, command: decodedCommand, escapeProcessing: escapeProcessingRaw === 'true' },
+          : {
+              name,
+              command: decodedCommand,
+              escapeProcessing: escapeProcessingRaw === "true",
+            },
       );
-    } else if (child.tag === 'db:query-collection') {
+    } else if (child.tag === "db:query-collection") {
       collectQueryDefinitions(child, definitions);
     }
   }
@@ -149,18 +193,33 @@ function collectTableNames(databaseElement: XmlElement): string[] {
     }
   };
 
-  const representations = findChildElement(databaseElement.children, 'db:table-representations');
+  const representations = findChildElement(
+    databaseElement.children,
+    "db:table-representations",
+  );
   if (representations !== undefined) {
-    for (const representation of childrenWithTag(representations, 'db:table-representation')) {
-      pushName(attrValue(representation, 'db:name'));
+    for (const representation of childrenWithTag(
+      representations,
+      "db:table-representation",
+    )) {
+      pushName(attrValue(representation, "db:name"));
     }
   }
 
-  const schemaDefinition = findChildElement(databaseElement.children, 'db:schema-definition');
-  const tableDefinitions = schemaDefinition === undefined ? undefined : findChildElement(schemaDefinition.children, 'db:table-definitions');
+  const schemaDefinition = findChildElement(
+    databaseElement.children,
+    "db:schema-definition",
+  );
+  const tableDefinitions =
+    schemaDefinition === undefined
+      ? undefined
+      : findChildElement(schemaDefinition.children, "db:table-definitions");
   if (tableDefinitions !== undefined) {
-    for (const definition of childrenWithTag(tableDefinitions, 'db:table-definition')) {
-      pushName(attrValue(definition, 'db:name'));
+    for (const definition of childrenWithTag(
+      tableDefinitions,
+      "db:table-definition",
+    )) {
+      pushName(attrValue(definition, "db:name"));
     }
   }
 
@@ -168,38 +227,50 @@ function collectTableNames(databaseElement: XmlElement): string[] {
 }
 
 // db:forms / db:reports -> OdbComponentInfo[], walking db:component-collection groups recursively and collecting only their db:component leaves (never a collection's own db:name, matching collectQueryDefinitions' treatment of db:query-collection above). A db:component missing either db:name or xlink:href -- both mandatory per the OASIS schema -- is skipped rather than returned half-populated, the same "malformed-but-salvageable degrades, never fabricates" posture this reader applies to a db:query missing its command. The href is entity-decoded like every other projected string value here; a trailing "/" (never emitted by real LibreOffice output, which writes a bare "forms/Obj11") is trimmed so a caller always sees one canonical path shape.
-function collectComponents(container: XmlElement, components: OdbComponentInfo[]): void {
+function collectComponents(
+  container: XmlElement,
+  components: OdbComponentInfo[],
+): void {
   for (const child of container.children) {
-    if (child.type !== 'element') {
+    if (child.type !== "element") {
       continue;
     }
-    if (child.tag === 'db:component-collection') {
+    if (child.tag === "db:component-collection") {
       collectComponents(child, components);
       continue;
     }
-    if (child.tag !== 'db:component') {
+    if (child.tag !== "db:component") {
       continue;
     }
-    const name = attrValue(child, 'db:name');
-    const rawHref = attrValue(child, 'xlink:href');
+    const name = attrValue(child, "db:name");
+    const rawHref = attrValue(child, "xlink:href");
     if (name === undefined || rawHref === undefined) {
       continue;
     }
     const decodedHref = decodeXmlText(rawHref);
-    const href = decodedHref.endsWith('/') ? decodedHref.slice(0, -1) : decodedHref;
+    const href = decodedHref.endsWith("/")
+      ? decodedHref.slice(0, -1)
+      : decodedHref;
     if (href.length === 0) {
       continue;
     }
-    const asTemplateRaw = attrValue(child, 'db:as-template');
+    const asTemplateRaw = attrValue(child, "db:as-template");
     components.push(
       asTemplateRaw === undefined
         ? { name: decodeXmlText(name), href }
-        : { name: decodeXmlText(name), href, asTemplate: asTemplateRaw === 'true' },
+        : {
+            name: decodeXmlText(name),
+            href,
+            asTemplate: asTemplateRaw === "true",
+          },
     );
   }
 }
 
-function readComponents(databaseElement: XmlElement, tag: string): OdbComponentInfo[] {
+function readComponents(
+  databaseElement: XmlElement,
+  tag: string,
+): OdbComponentInfo[] {
   const container = findChildElement(databaseElement.children, tag);
   if (container === undefined) {
     return [];
@@ -210,13 +281,19 @@ function readComponents(databaseElement: XmlElement, tag: string): OdbComponentI
 }
 
 // Package + which container + a component's own name -> that component's OdbComponentInfo. The shared name-to-href resolution readOdbForm/readOdbReport are both built on, kept here (rather than duplicated in each) because db:forms and db:reports are the same registry shape read the same way. First match wins when a .odb genuinely declares the same name twice across different db:component-collection folders -- ODF stores no composed "Folder/Name" path to disambiguate with (see this module's own top-of-file note), so preferring the first in document order is the only non-inventing choice available.
-export function resolveOdbComponent(pkg: Package, kind: 'form' | 'report', name: string): OdbComponentInfo {
+export function resolveOdbComponent(
+  pkg: Package,
+  kind: "form" | "report",
+  name: string,
+): OdbComponentInfo {
   const inventory = readOdbInventory(pkg);
-  const components = kind === 'form' ? inventory.forms : inventory.reports;
+  const components = kind === "form" ? inventory.forms : inventory.reports;
   const match = components.find((component) => component.name === name);
   if (match === undefined) {
-    const available = components.map((component) => component.name).join(', ');
-    throw new Error(`resolveOdbComponent: no ${kind} named "${name}" -- available: ${available === '' ? '(none)' : available}`);
+    const available = components.map((component) => component.name).join(", ");
+    throw new Error(
+      `resolveOdbComponent: no ${kind} named "${name}" -- available: ${available === "" ? "(none)" : available}`,
+    );
   }
   return match;
 }
@@ -224,27 +301,38 @@ export function resolveOdbComponent(pkg: Package, kind: 'form' | 'report', name:
 // Package -> OdbInventory. Throws only when content.xml itself, or its own office:body/office:database element, is missing -- a genuinely unusable package, mirroring every other odf.js typed reader's own "missing required structural element" throw convention (see e.g. readOdtContent, readOdm). Everything else -- no connection data, no queries, no forms/reports/tables -- degrades to undefined/an empty array rather than throwing, matching this reader's own general "malformed-but-salvageable input degrades gracefully" posture; readOdbInventory has no diagnostics channel to report a partial read through, the same shape readOdtContent/readOdm/readOdfFormulaMathMl already establish.
 export function readOdbInventory(pkg: Package): OdbInventory {
   const contentPart = pkg.parts[CONTENT_PART];
-  if (contentPart?.kind !== 'xml') {
+  if (contentPart?.kind !== "xml") {
     throw new Error(`readOdbInventory: package has no ${CONTENT_PART} part`);
   }
   const contentRoot = rootElement(contentPart.nodes);
-  const body = contentRoot === undefined ? undefined : findChildElement(contentRoot.children, 'office:body');
-  const databaseElement = body === undefined ? undefined : findChildElement(body.children, 'office:database');
+  const body =
+    contentRoot === undefined
+      ? undefined
+      : findChildElement(contentRoot.children, "office:body");
+  const databaseElement =
+    body === undefined
+      ? undefined
+      : findChildElement(body.children, "office:database");
   if (databaseElement === undefined) {
-    throw new Error(`readOdbInventory: ${CONTENT_PART} has no office:body/office:database element`);
+    throw new Error(
+      `readOdbInventory: ${CONTENT_PART} has no office:body/office:database element`,
+    );
   }
 
   const connection = readConnectionInfo(databaseElement);
 
   const queries: OdbQueryInfo[] = [];
-  const queriesElement = findChildElement(databaseElement.children, 'db:queries');
+  const queriesElement = findChildElement(
+    databaseElement.children,
+    "db:queries",
+  );
   if (queriesElement !== undefined) {
     collectQueryDefinitions(queriesElement, queries);
   }
 
   const tables = collectTableNames(databaseElement);
-  const forms = readComponents(databaseElement, 'db:forms');
-  const reports = readComponents(databaseElement, 'db:reports');
+  const forms = readComponents(databaseElement, "db:forms");
+  const reports = readComponents(databaseElement, "db:reports");
 
   return { connection, tables, queries, forms, reports };
 }

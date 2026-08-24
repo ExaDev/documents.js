@@ -6,7 +6,7 @@
 export class OlePackageFormatError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'OlePackageFormatError';
+    this.name = "OlePackageFormatError";
   }
 }
 
@@ -18,37 +18,55 @@ export interface OlePackage {
 }
 
 // Reads one null-terminated string starting at offset, returning its bytes' end (the position after the null). The strings are producer-locale ANSI; decoding as windows-1252 keeps every byte's glyph rather than corrupting high bytes, and no consumer of this package branches on their content.
-const ANSI_DECODER = new TextDecoder('windows-1252');
+const ANSI_DECODER = new TextDecoder("windows-1252");
 
-function readZeroTerminated(bytes: Uint8Array<ArrayBuffer>, offset: number, fieldName: string): { readonly value: string; readonly next: number } {
+function readZeroTerminated(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+  fieldName: string,
+): { readonly value: string; readonly next: number } {
   let end = offset;
   while (end < bytes.length && bytes[end] !== 0) {
     end++;
   }
   if (end >= bytes.length) {
-    throw new OlePackageFormatError(`Package stream ends inside its ${fieldName} string with no terminator`);
+    throw new OlePackageFormatError(
+      `Package stream ends inside its ${fieldName} string with no terminator`,
+    );
   }
-  return { value: ANSI_DECODER.decode(bytes.subarray(offset, end)), next: end + 1 };
+  return {
+    value: ANSI_DECODER.decode(bytes.subarray(offset, end)),
+    next: end + 1,
+  };
 }
 
 // Parses a Package stream into its descriptive strings and the packaged file's bytes. Throws OlePackageFormatError on any structural shortfall -- loud failure, never a truncated file that looks complete.
 export function readOlePackage(bytes: Uint8Array<ArrayBuffer>): OlePackage {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let offset = 2; // the opaque header word
-  const label = readZeroTerminated(bytes, offset, 'label');
+  const label = readZeroTerminated(bytes, offset, "label");
   offset = label.next;
-  const sourcePath = readZeroTerminated(bytes, offset, 'source path');
+  const sourcePath = readZeroTerminated(bytes, offset, "source path");
   offset = sourcePath.next;
   offset += 8; // opaque (widely believed to be a FILETIME; nothing downstream reads it)
-  const tempPath = readZeroTerminated(bytes, offset, 'temp path');
+  const tempPath = readZeroTerminated(bytes, offset, "temp path");
   offset = tempPath.next;
   if (offset + 4 > bytes.length) {
-    throw new OlePackageFormatError('Package stream ends before its packaged file size field');
+    throw new OlePackageFormatError(
+      "Package stream ends before its packaged file size field",
+    );
   }
   const fileByteCount = view.getUint32(offset, true);
   offset += 4;
   if (offset + fileByteCount > bytes.length) {
-    throw new OlePackageFormatError(`Package stream declares ${fileByteCount} packaged-file bytes but holds only ${bytes.length - offset}`);
+    throw new OlePackageFormatError(
+      `Package stream declares ${fileByteCount} packaged-file bytes but holds only ${bytes.length - offset}`,
+    );
   }
-  return { label: label.value, sourcePath: sourcePath.value, tempPath: tempPath.value, fileBytes: bytes.slice(offset, offset + fileByteCount) };
+  return {
+    label: label.value,
+    sourcePath: sourcePath.value,
+    tempPath: tempPath.value,
+    fileBytes: bytes.slice(offset, offset + fileByteCount),
+  };
 }

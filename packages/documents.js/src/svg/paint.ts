@@ -1,9 +1,11 @@
-import type { Color } from 'document-schema.js';
+import type { Color } from "document-schema.js";
 
 // SVG paint and colour parsing: the presentation-attribute vocabulary the reader consumes (fill, stroke, stroke-width, stroke-dasharray, fill-rule, opacity). CSS-wide syntax (the style attribute, selectors, inherited CSS rules) is deliberately out of scope -- a style attribute is reported through the svg/css-style-ignored diagnostic instead of being half-parsed, because a partial CSS implementation that honours some declarations and drops others silently misrepresents the document.
 
 // The CSS/SVG named-colour keywords (CSS Color Module Level 4's named-colour table, which SVG 2 incorporates wholesale). Keys are matched case-insensitively per CSS identifier rules; values are the sRGB 8-bit triplets normalised to the 0..1 floats ColorSchema carries.
-const NAMED_COLORS: Readonly<Record<string, readonly [number, number, number]>> = {
+const NAMED_COLORS: Readonly<
+  Record<string, readonly [number, number, number]>
+> = {
   aliceblue: [240, 248, 255],
   antiquewhite: [250, 235, 215],
   aqua: [0, 255, 255],
@@ -174,21 +176,32 @@ export function parseSvgColor(raw: string): Color | undefined {
     const digits = hex[1]!;
     if (digits.length === 3 || digits.length === 4) {
       const expand = (char: string) => Number.parseInt(char + char, 16);
-      return from8Bit(expand(digits[0]!), expand(digits[1]!), expand(digits[2]!));
+      return from8Bit(
+        expand(digits[0]!),
+        expand(digits[1]!),
+        expand(digits[2]!),
+      );
     }
     if (digits.length === 6 || digits.length === 8) {
-      return from8Bit(Number.parseInt(digits.slice(0, 2), 16), Number.parseInt(digits.slice(2, 4), 16), Number.parseInt(digits.slice(4, 6), 16));
+      return from8Bit(
+        Number.parseInt(digits.slice(0, 2), 16),
+        Number.parseInt(digits.slice(2, 4), 16),
+        Number.parseInt(digits.slice(4, 6), 16),
+      );
     }
     return undefined;
   }
   const fn = FUNCTION_COLOR_PATTERN.exec(value);
   if (fn !== null) {
-    const parts = fn[1]!.trim().split(SPLIT_COMPONENTS).filter((part) => part !== '');
+    const parts = fn[1]!
+      .trim()
+      .split(SPLIT_COMPONENTS)
+      .filter((part) => part !== "");
     if (parts.length !== 3 && parts.length !== 4) {
       return undefined;
     }
     const channel = (part: string): number | undefined => {
-      if (part.endsWith('%')) {
+      if (part.endsWith("%")) {
         const pct = Number(part.slice(0, -1));
         return Number.isFinite(pct) ? (pct / 100) * 255 : undefined;
       }
@@ -208,41 +221,43 @@ export function parseSvgColor(raw: string): Color | undefined {
 
 // One SVG <paint> value (SVG 2, "Fill Properties"): 'none', 'currentColor', a colour, or a url(#id) reference to a paint server (gradient/pattern). The url form carries the fragment so the caller can decide what to do with it (this reader reports it as the gradient diagnostic rather than pretending it is a colour); 'inherit' is folded into the caller's inheritance walk rather than resolved here.
 export type SvgPaint =
-  | { readonly kind: 'none' }
-  | { readonly kind: 'currentColor' }
-  | { readonly kind: 'color'; readonly color: Color }
-  | { readonly kind: 'url'; readonly fragment: string };
+  | { readonly kind: "none" }
+  | { readonly kind: "currentColor" }
+  | { readonly kind: "color"; readonly color: Color }
+  | { readonly kind: "url"; readonly fragment: string };
 
 const URL_PAINT_PATTERN = /^url\(\s*['"]?#([^'")\s]*)['"]?\s*\)$/;
 
 export function parseSvgPaint(raw: string): SvgPaint | undefined {
   const value = raw.trim();
-  if (value === 'none') {
-    return { kind: 'none' };
+  if (value === "none") {
+    return { kind: "none" };
   }
-  if (value === 'currentColor') {
-    return { kind: 'currentColor' };
+  if (value === "currentColor") {
+    return { kind: "currentColor" };
   }
   const url = URL_PAINT_PATTERN.exec(value);
   if (url !== null) {
-    return { kind: 'url', fragment: url[1]! };
+    return { kind: "url", fragment: url[1]! };
   }
   const color = parseSvgColor(value);
-  return color === undefined ? undefined : { kind: 'color', color };
+  return color === undefined ? undefined : { kind: "color", color };
 }
 
 // The stroke-dasharray vocabulary reduced to the two stroke styles ContentStroke's own enum carries: a pattern whose every on-length is at most one user unit reads as 'dotted' (dot-style patterns are "0.5 1", "1 3", "0 4"...), anything else dash-shaped reads as 'dashed'. 'none' (and a malformed value) is undefined -- a solid stroke, which is also the attribute's default.
-export type SvgDashStyle = 'dashed' | 'dotted';
+export type SvgDashStyle = "dashed" | "dotted";
 
-export function parseSvgDashStyle(raw: string | undefined): SvgDashStyle | undefined {
+export function parseSvgDashStyle(
+  raw: string | undefined,
+): SvgDashStyle | undefined {
   if (raw === undefined) {
     return undefined;
   }
   const value = raw.trim();
-  if (value === '' || value === 'none') {
+  if (value === "" || value === "none") {
     return undefined;
   }
-  const numbers = value.split(/[\s,]+/).filter((part) => part !== '');
+  const numbers = value.split(/[\s,]+/).filter((part) => part !== "");
   if (numbers.length === 0) {
     return undefined;
   }
@@ -250,5 +265,7 @@ export function parseSvgDashStyle(raw: string | undefined): SvgDashStyle | undef
   if (!lengths.every((length) => Number.isFinite(length) && length >= 0)) {
     return undefined;
   }
-  return lengths.filter((_, index) => index % 2 === 0).every((on) => on <= 1) ? 'dotted' : 'dashed';
+  return lengths.filter((_, index) => index % 2 === 0).every((on) => on <= 1)
+    ? "dotted"
+    : "dashed";
 }

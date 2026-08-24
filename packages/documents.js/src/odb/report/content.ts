@@ -1,9 +1,9 @@
-import type { ContentDocument } from 'document-schema.js';
-import type { OdbReport, Package } from 'odf.js';
-import { readOdbInventory, readOdbReport } from 'odf.js';
-import type { HsqldbDecodeOptions } from '../../hsqldb/rowformat';
-import { renderOdbReportContent } from './render';
-import { resolveOdbReportRows } from './source';
+import type { ContentDocument } from "document-schema.js";
+import type { OdbReport, Package } from "odf.js";
+import { readOdbInventory, readOdbReport } from "odf.js";
+import type { HsqldbDecodeOptions } from "../../hsqldb/rowformat";
+import { renderOdbReportContent } from "./render";
+import { resolveOdbReportRows } from "./source";
 
 // The whole .odb report pipeline in one call: a package in, the report it declares rendered over its own real data out. It composes stages that each remain independently usable, matching how readOdbTables/decodeHsqldbCachedTables/readFirebirdBackup already sit beside each other -- readOdbReport (odf.js: the report's static band/group structure), resolveOdbReportRows (src/odb/report/source.ts: rpt:command/rpt:command-type -> real rows, via readOdbTables and the src/odb/sql/ engine), and renderOdbReportContent (src/odb/report/render.ts: the report plus those rows -> a wordprocessing ContentDocument, through src/odb/formula/'s band and group evaluation).
 //
@@ -16,10 +16,10 @@ export class OdbReportNotSpecifiedError extends Error {
   constructor(availableReports: readonly string[]) {
     super(
       availableReports.length === 0
-        ? 'readOdbReportContent: this .odb declares no reports at all'
-        : `readOdbReportContent: this .odb declares more than one report (${availableReports.join(', ')}) -- pass { report: '<name>' } to select one`,
+        ? "readOdbReportContent: this .odb declares no reports at all"
+        : `readOdbReportContent: this .odb declares more than one report (${availableReports.join(", ")}) -- pass { report: '<name>' } to select one`,
     );
-    this.name = 'OdbReportNotSpecifiedError';
+    this.name = "OdbReportNotSpecifiedError";
     this.availableReports = availableReports;
   }
 }
@@ -36,12 +36,20 @@ function selectReport(pkg: Package, reportName: string | undefined): OdbReport {
   const declared = readOdbInventory(pkg).reports;
   const only = declared.length === 1 ? declared[0] : undefined;
   if (only === undefined) {
-    throw new OdbReportNotSpecifiedError(declared.map((component) => component.name));
+    throw new OdbReportNotSpecifiedError(
+      declared.map((component) => component.name),
+    );
   }
   return readOdbReport(pkg, only.name);
 }
 
-export function readOdbReportContent(pkg: Package, options?: OdbReportContentOptions): ContentDocument {
+export function readOdbReportContent(
+  pkg: Package,
+  options?: OdbReportContentOptions,
+): ContentDocument {
   const report = selectReport(pkg, options?.report);
-  return renderOdbReportContent(report, resolveOdbReportRows(pkg, report, options));
+  return renderOdbReportContent(
+    report,
+    resolveOdbReportRows(pkg, report, options),
+  );
 }

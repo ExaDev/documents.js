@@ -1,21 +1,21 @@
-import { McpServer } from '@modelcontextprotocol/server';
+import { McpServer } from "@modelcontextprotocol/server";
 
 // resolveJsonModule lets rolldown (via tsdown) inline this package's own declared version straight into the bundle at build time -- no runtime fs read, no import-attribute syntax that would otherwise need to differ between the ESM and CJS build outputs. Matches document-cli's own src/program.ts convention.
-import { version } from '../package.json';
-import { registerConvertTools } from './tools/convert';
-import { registerDocxExtrasTools } from './tools/docx-extras';
-import { registerFontTools } from './tools/fonts';
-import { registerFromPackageTools } from './tools/from-package';
-import { registerMetadataTools } from './tools/metadata';
-import { registerOdbTools } from './tools/odb';
-import { registerOdbRenderReportTools } from './tools/odb-render-report';
-import { registerOdmTools } from './tools/odm';
-import { registerOutlineTools } from './tools/outline';
-import { registerPdfInspectTools } from './tools/pdf-inspect';
+import { version } from "../package.json";
+import { registerConvertTools } from "./tools/convert";
+import { registerDocxExtrasTools } from "./tools/docx-extras";
+import { registerFontTools } from "./tools/fonts";
+import { registerFromPackageTools } from "./tools/from-package";
+import { registerMetadataTools } from "./tools/metadata";
+import { registerOdbTools } from "./tools/odb";
+import { registerOdbRenderReportTools } from "./tools/odb-render-report";
+import { registerOdmTools } from "./tools/odm";
+import { registerOutlineTools } from "./tools/outline";
+import { registerPdfInspectTools } from "./tools/pdf-inspect";
 
 // Builds a fresh MCP server instance advertising this package's own name and version. Never parses argv or connects a transport itself -- that is src/bin.ts's job, so this stays testable as pure construction and importable from anywhere (including a future HTTP entry point, should one be added).
 export function createServer(): McpServer {
-  const server = new McpServer({ name: 'document-mcp', version });
+  const server = new McpServer({ name: "document-mcp", version });
 
   registerConvertTools(server);
   registerDocxExtrasTools(server);

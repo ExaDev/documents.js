@@ -1,6 +1,10 @@
-import type { OdbReport, OdbReportBand, OdbReportGroup } from 'odf.js';
-import { RptReportStructureError } from './errors';
-import type { RptBandDefinition, RptGroupDefinition, RptReportDefinition } from './evaluate';
+import type { OdbReport, OdbReportBand, OdbReportGroup } from "odf.js";
+import { RptReportStructureError } from "./errors";
+import type {
+  RptBandDefinition,
+  RptGroupDefinition,
+  RptReportDefinition,
+} from "./evaluate";
 
 // The one file in src/odb/formula/ that knows odf.js's own report shape, mirroring how src/hsqldb/ and src/firebird/ keep every odf.js Package/XmlElement concern out of their decoders and let src/odb/read.ts do the adapting. It maps odf.js's OdbReport -- what readOdbReport parses out of a .odb's own reports/*/content.xml -- onto the RptReportDefinition src/odb/formula/evaluate.ts runs, so the evaluator itself never imports odf.js and can be exercised against a hand-built definition.
 //
@@ -14,21 +18,31 @@ export function rptBandDefinition(band: OdbReportBand): RptBandDefinition {
   return { formulas: band.elements.map((element) => element.formula) };
 }
 
-function bandDefinition(band: OdbReportBand | undefined): RptBandDefinition | undefined {
+function bandDefinition(
+  band: OdbReportBand | undefined,
+): RptBandDefinition | undefined {
   return band === undefined ? undefined : rptBandDefinition(band);
 }
 
 // The report's own rpt:group tree flattened to the outermost-first chain both this mapping and a renderer index by level. Structural only: a group declaring no break test is this chain's business to carry, not to reject -- groupDefinition below is what needs an rpt:group-expression, and a renderer walking the same chain for a band's own elements does not.
-export function odbReportGroupChain(report: OdbReport): readonly OdbReportGroup[] {
+export function odbReportGroupChain(
+  report: OdbReport,
+): readonly OdbReportGroup[] {
   const chain: OdbReportGroup[] = [];
   let level: readonly OdbReportGroup[] = report.groups;
   while (level.length > 0) {
     if (level.length > 1) {
-      throw new RptReportStructureError(`${String(level.length)} sibling groups are declared at one nesting level, but Report Builder nests groups strictly and this engine's scoping is defined only for a chain`, report.name);
+      throw new RptReportStructureError(
+        `${String(level.length)} sibling groups are declared at one nesting level, but Report Builder nests groups strictly and this engine's scoping is defined only for a chain`,
+        report.name,
+      );
     }
     const group = level[0];
     if (group === undefined) {
-      throw new RptReportStructureError('a group nesting level reported a non-zero length but held no group', report.name);
+      throw new RptReportStructureError(
+        "a group nesting level reported a non-zero length but held no group",
+        report.name,
+      );
     }
     chain.push(group);
     level = group.groups;
@@ -36,24 +50,41 @@ export function odbReportGroupChain(report: OdbReport): readonly OdbReportGroup[
   return chain;
 }
 
-function groupDefinition(group: OdbReportGroup, level: number, reportName: string): RptGroupDefinition {
+function groupDefinition(
+  group: OdbReportGroup,
+  level: number,
+  reportName: string,
+): RptGroupDefinition {
   if (group.groupExpression === undefined) {
-    throw new RptReportStructureError(`the group at nesting level ${String(level)} declares no rpt:group-expression, so there is no break test to evaluate`, reportName);
+    throw new RptReportStructureError(
+      `the group at nesting level ${String(level)} declares no rpt:group-expression, so there is no break test to evaluate`,
+      reportName,
+    );
   }
   return {
     groupExpression: group.groupExpression,
-    functions: group.functions.map((declaration) => ({ name: declaration.name, formula: declaration.formula })),
+    functions: group.functions.map((declaration) => ({
+      name: declaration.name,
+      formula: declaration.formula,
+    })),
     header: bandDefinition(group.header),
     footer: bandDefinition(group.footer),
   };
 }
 
 // Maps a report as odf.js read it onto the definition src/odb/formula/evaluate.ts's runRptReport consumes. Structural only: no formula is parsed here, so an unsupported function still surfaces from the run itself rather than from this mapping.
-export function rptDefinitionFromReport(report: OdbReport): RptReportDefinition {
+export function rptDefinitionFromReport(
+  report: OdbReport,
+): RptReportDefinition {
   return {
-    functions: report.functions.map((declaration) => ({ name: declaration.name, formula: declaration.formula })),
+    functions: report.functions.map((declaration) => ({
+      name: declaration.name,
+      formula: declaration.formula,
+    })),
     reportHeader: bandDefinition(report.reportHeader),
-    groups: odbReportGroupChain(report).map((group, level) => groupDefinition(group, level, report.name)),
+    groups: odbReportGroupChain(report).map((group, level) =>
+      groupDefinition(group, level, report.name),
+    ),
     detail: bandDefinition(report.detail),
     reportFooter: bandDefinition(report.reportFooter),
   };

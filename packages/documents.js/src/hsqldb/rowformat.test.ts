@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { HsqldbDataCursor, readHsqldbColumnValue } from './rowformat';
+import { describe, expect, it } from "vitest";
+import { HsqldbDataCursor, readHsqldbColumnValue } from "./rowformat";
 
 // Isolated, synthetic-byte-sequence tests for readHsqldbColumnValue's own exactValue sidecar logic (document-schema.js's ContentCellValueSchema doc comment: "a producer should only set it when String(Number(exactValue)) would not round-trip back to exactValue exactly") -- hand-constructed against the exact documented byte shape (a 1-byte present-flag, then a big-endian int64 for BIGINT, or a length-prefixed two's-complement magnitude plus a big-endian scale for DECIMAL/NUMERIC), the same "isolated primitive, independent of the real-fixture end-to-end proof" convention src/firebird/reader.test.ts already uses for XdrReader. The real EMPLOYEES/DEPARTMENTS/ORDERS fixtures in src/hsqldb/cache.test.ts deliberately never carry a value beyond Number.MAX_SAFE_INTEGER (their own BIGINT column is documented as "near, but safely inside" it), so that boundary case is exercised here instead.
 
@@ -47,52 +47,67 @@ function decimalCursor(unscaled: bigint, scale: number): HsqldbDataCursor {
 const BIGINT_TYPE_CODE = -5;
 const NUMERIC_TYPE_CODE = 2;
 
-describe('readHsqldbColumnValue: exactValue sidecar for BIGINT', () => {
-  it('attaches a real exactValue for a BIGINT value beyond Number.MAX_SAFE_INTEGER', () => {
+describe("readHsqldbColumnValue: exactValue sidecar for BIGINT", () => {
+  it("attaches a real exactValue for a BIGINT value beyond Number.MAX_SAFE_INTEGER", () => {
     const value = 9223372036854775807n; // HSQLDB/Java Long.MAX_VALUE
     const cell = readHsqldbColumnValue(bigintCursor(value), BIGINT_TYPE_CODE);
-    expect(cell.kind).toBe('number');
-    if (cell.kind !== 'number') return;
+    expect(cell.kind).toBe("number");
+    if (cell.kind !== "number") return;
     expect(cell.value).toBe(Number(value));
-    expect(cell.exactValue).toBe('9223372036854775807');
+    expect(cell.exactValue).toBe("9223372036854775807");
   });
 
-  it('attaches a real exactValue for a negative BIGINT beyond -Number.MAX_SAFE_INTEGER', () => {
+  it("attaches a real exactValue for a negative BIGINT beyond -Number.MAX_SAFE_INTEGER", () => {
     const value = -9223372036854775808n; // Long.MIN_VALUE
     const cell = readHsqldbColumnValue(bigintCursor(value), BIGINT_TYPE_CODE);
-    expect(cell.kind).toBe('number');
-    if (cell.kind !== 'number') return;
-    expect(cell.exactValue).toBe('-9223372036854775808');
+    expect(cell.kind).toBe("number");
+    if (cell.kind !== "number") return;
+    expect(cell.exactValue).toBe("-9223372036854775808");
   });
 
-  it('leaves exactValue unset for an ordinary BIGINT value that survives the round trip through Number() exactly', () => {
-    const cell = readHsqldbColumnValue(bigintCursor(123456789012345n), BIGINT_TYPE_CODE);
-    expect(cell).toEqual({ kind: 'number', value: 123456789012345 });
+  it("leaves exactValue unset for an ordinary BIGINT value that survives the round trip through Number() exactly", () => {
+    const cell = readHsqldbColumnValue(
+      bigintCursor(123456789012345n),
+      BIGINT_TYPE_CODE,
+    );
+    expect(cell).toEqual({ kind: "number", value: 123456789012345 });
   });
 });
 
-describe('readHsqldbColumnValue: exactValue sidecar for DECIMAL/NUMERIC', () => {
-  it('attaches a real exactValue for a scaled decimal with more significant digits than a double can carry', () => {
+describe("readHsqldbColumnValue: exactValue sidecar for DECIMAL/NUMERIC", () => {
+  it("attaches a real exactValue for a scaled decimal with more significant digits than a double can carry", () => {
     // unscaled=100000000000000001, scale=2 -> 1000000000000000.01 -- 18 significant digits, genuinely beyond double precision.
-    const cell = readHsqldbColumnValue(decimalCursor(100000000000000001n, 2), NUMERIC_TYPE_CODE);
-    expect(cell.kind).toBe('number');
-    if (cell.kind !== 'number') return;
-    expect(cell.exactValue).toBe('1000000000000000.01');
-    expect(cell.value).toBe(Number('1000000000000000.01'));
+    const cell = readHsqldbColumnValue(
+      decimalCursor(100000000000000001n, 2),
+      NUMERIC_TYPE_CODE,
+    );
+    expect(cell.kind).toBe("number");
+    if (cell.kind !== "number") return;
+    expect(cell.exactValue).toBe("1000000000000000.01");
+    expect(cell.value).toBe(Number("1000000000000000.01"));
   });
 
-  it('leaves exactValue unset for an ordinary DECIMAL(10,2) value Number() already represents exactly, even with a non-zero fractional part', () => {
-    const cell = readHsqldbColumnValue(decimalCursor(12550n, 2), NUMERIC_TYPE_CODE); // 125.50
-    expect(cell).toEqual({ kind: 'number', value: 125.5 });
+  it("leaves exactValue unset for an ordinary DECIMAL(10,2) value Number() already represents exactly, even with a non-zero fractional part", () => {
+    const cell = readHsqldbColumnValue(
+      decimalCursor(12550n, 2),
+      NUMERIC_TYPE_CODE,
+    ); // 125.50
+    expect(cell).toEqual({ kind: "number", value: 125.5 });
   });
 
-  it('leaves exactValue unset for a whole-number-valued DECIMAL(10,2) cell -- trailing fractional zeros carry no extra precision', () => {
-    const cell = readHsqldbColumnValue(decimalCursor(25000n, 2), NUMERIC_TYPE_CODE); // 250.00, matching the real EMPLOYEES.BONUS fixture's own row 3
-    expect(cell).toEqual({ kind: 'number', value: 250 });
+  it("leaves exactValue unset for a whole-number-valued DECIMAL(10,2) cell -- trailing fractional zeros carry no extra precision", () => {
+    const cell = readHsqldbColumnValue(
+      decimalCursor(25000n, 2),
+      NUMERIC_TYPE_CODE,
+    ); // 250.00, matching the real EMPLOYEES.BONUS fixture's own row 3
+    expect(cell).toEqual({ kind: "number", value: 250 });
   });
 
-  it('leaves exactValue unset for a negative DECIMAL Number() already represents exactly', () => {
-    const cell = readHsqldbColumnValue(decimalCursor(-25050n, 2), NUMERIC_TYPE_CODE); // -250.50, matching the real Firebird fixture's own BONUS row
-    expect(cell).toEqual({ kind: 'number', value: -250.5 });
+  it("leaves exactValue unset for a negative DECIMAL Number() already represents exactly", () => {
+    const cell = readHsqldbColumnValue(
+      decimalCursor(-25050n, 2),
+      NUMERIC_TYPE_CODE,
+    ); // -250.50, matching the real Firebird fixture's own BONUS row
+    expect(cell).toEqual({ kind: "number", value: -250.5 });
   });
 });

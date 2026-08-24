@@ -11,16 +11,32 @@ const NOSTREAM = 0xffffffff;
 const enc = (s: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(s);
 
 // The OLE packaging ([MS-OLEDS] OLENativeStream's Packager spelling): header word, label, source path, 8 opaque bytes, temp path, then the file's size and bytes.
-function packageStreamOf(fileBytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+function packageStreamOf(
+  fileBytes: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   const zstring = (s: string): Uint8Array<ArrayBuffer> => enc(`${s}\0`);
-  const parts = [new Uint8Array([0x02, 0x00]), zstring('Book1.xlsx'), zstring('C:\\data\\Book1.xlsx'), new Uint8Array(8), zstring('C:\\temp\\Book1.xlsx'), new Uint8Array(4), fileBytes];
-  const out = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
+  const parts = [
+    new Uint8Array([0x02, 0x00]),
+    zstring("Book1.xlsx"),
+    zstring("C:\\data\\Book1.xlsx"),
+    new Uint8Array(8),
+    zstring("C:\\temp\\Book1.xlsx"),
+    new Uint8Array(4),
+    fileBytes,
+  ];
+  const out = new Uint8Array(
+    parts.reduce((total, part) => total + part.length, 0),
+  );
   let offset = 0;
   for (const part of parts) {
     out.set(part, offset);
     offset += part.length;
   }
-  new DataView(out.buffer).setUint32(out.length - fileBytes.length - 4, fileBytes.length, true);
+  new DataView(out.buffer).setUint32(
+    out.length - fileBytes.length - 4,
+    fileBytes.length,
+    true,
+  );
   return out;
 }
 
@@ -32,7 +48,15 @@ function put32(view: DataView, offset: number, value: number): void {
   view.setUint32(offset, value, true);
 }
 
-function writeEntry(entry: DataView, name: string, objectType: number, rightId: number, childId: number, startSector: number, size: number): void {
+function writeEntry(
+  entry: DataView,
+  name: string,
+  objectType: number,
+  rightId: number,
+  childId: number,
+  startSector: number,
+  size: number,
+): void {
   const encoded = enc(name);
   for (let i = 0; i < encoded.length; i++) {
     entry.setUint8(i * 2, encoded[i] ?? 0);
@@ -49,10 +73,16 @@ function writeEntry(entry: DataView, name: string, objectType: number, rightId: 
 }
 
 // Builds the .bin bytes: a version-3 compound file whose root storage carries the packaged file as its stream -- 'Package' by default, overridable for fixtures that need the no-Package-stream shape a native legacy embed produces. The stream is placed by the mini-stream cutoff exactly as a real producer would place it (below the cutoff in the mini stream, at or above it in its own FAT-chained sectors).
-export function oleObjectBin(fileBytes: Uint8Array<ArrayBuffer>, options: { readonly streamName?: string } = {}): Uint8Array<ArrayBuffer> {
+export function oleObjectBin(
+  fileBytes: Uint8Array<ArrayBuffer>,
+  options: { readonly streamName?: string } = {},
+): Uint8Array<ArrayBuffer> {
   const packageStream = packageStreamOf(fileBytes);
   const small = packageStream.length < MINI_STREAM_CUTOFF;
-  const padded = new Uint8Array(Math.ceil(packageStream.length / (small ? MINI_SECTOR_SIZE : SECTOR_SIZE)) * (small ? MINI_SECTOR_SIZE : SECTOR_SIZE));
+  const padded = new Uint8Array(
+    Math.ceil(packageStream.length / (small ? MINI_SECTOR_SIZE : SECTOR_SIZE)) *
+      (small ? MINI_SECTOR_SIZE : SECTOR_SIZE),
+  );
   padded.set(packageStream);
   const streamSectors = Math.ceil(padded.length / SECTOR_SIZE);
   const miniFatSector = 2 + streamSectors;
@@ -85,8 +115,24 @@ export function oleObjectBin(fileBytes: Uint8Array<ArrayBuffer>, options: { read
 
   // Directory: root entry 0 (its stream IS the mini stream) and the Package stream as entry 1.
   const directory = new Uint8Array(SECTOR_SIZE);
-  writeEntry(new DataView(directory.buffer, 0, 128), 'Root Entry', 5, NOSTREAM, 1, small ? 2 : ENDOFCHAIN, small ? padded.length : 0);
-  writeEntry(new DataView(directory.buffer, 128, 128), options.streamName ?? 'Package', 2, NOSTREAM, NOSTREAM, small ? 0 : 2, packageStream.length);
+  writeEntry(
+    new DataView(directory.buffer, 0, 128),
+    "Root Entry",
+    5,
+    NOSTREAM,
+    1,
+    small ? 2 : ENDOFCHAIN,
+    small ? padded.length : 0,
+  );
+  writeEntry(
+    new DataView(directory.buffer, 128, 128),
+    options.streamName ?? "Package",
+    2,
+    NOSTREAM,
+    NOSTREAM,
+    small ? 0 : 2,
+    packageStream.length,
+  );
 
   // FAT: sector 0 holds the FAT itself, sector 1 the directory, sectors 2.. the stream's (or mini stream's) sectors, then the mini-FAT sector.
   const fatView = new DataView(file.buffer, SECTOR_SIZE, SECTOR_SIZE);
@@ -94,7 +140,11 @@ export function oleObjectBin(fileBytes: Uint8Array<ArrayBuffer>, options: { read
   fatView.setUint32(4, ENDOFCHAIN, true);
   const streamStart = 2;
   for (let sector = streamStart; sector < 2 + streamSectors; sector++) {
-    fatView.setUint32(sector * 4, sector === 1 + streamSectors ? ENDOFCHAIN : sector + 1, true);
+    fatView.setUint32(
+      sector * 4,
+      sector === 1 + streamSectors ? ENDOFCHAIN : sector + 1,
+      true,
+    );
   }
   if (small) {
     fatView.setUint32(miniFatSector * 4, ENDOFCHAIN, true);
@@ -102,10 +152,18 @@ export function oleObjectBin(fileBytes: Uint8Array<ArrayBuffer>, options: { read
 
   if (small) {
     // Mini-FAT: the stream's mini sectors chained then ENDOFCHAIN, FREESECT padding after.
-    const miniFatView = new DataView(file.buffer, SECTOR_SIZE + miniFatSector * SECTOR_SIZE, SECTOR_SIZE);
+    const miniFatView = new DataView(
+      file.buffer,
+      SECTOR_SIZE + miniFatSector * SECTOR_SIZE,
+      SECTOR_SIZE,
+    );
     const miniSectorCount = padded.length / MINI_SECTOR_SIZE;
     for (let i = 0; i < miniSectorCount; i++) {
-      miniFatView.setUint32(i * 4, i === miniSectorCount - 1 ? ENDOFCHAIN : i + 1, true);
+      miniFatView.setUint32(
+        i * 4,
+        i === miniSectorCount - 1 ? ENDOFCHAIN : i + 1,
+        true,
+      );
     }
   }
 

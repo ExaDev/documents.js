@@ -1,17 +1,25 @@
-import type { LayoutItem, LayoutPage } from 'documents.js';
-import { Box, Text } from 'ink';
-import type { ReactElement } from 'react';
-import { ListView } from '../../../components/list-view.js';
-import { useNavigationInput } from '../../../keybindings/use-navigation-input.js';
-import { useAppDispatch, useAppState } from '../../../state/context.js';
-import { anyOverlayOpen } from '../../../state/types.js';
-import { formatSize, requirePdfDocument } from './shared.js';
+import type { LayoutItem, LayoutPage } from "documents.js";
+import { Box, Text } from "ink";
+import type { ReactElement } from "react";
+import { ListView } from "../../../components/list-view.js";
+import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
+import { useAppDispatch, useAppState } from "../../../state/context.js";
+import { anyOverlayOpen } from "../../../state/types.js";
+import { formatSize, requirePdfDocument } from "./shared.js";
 
 // Fixed rather than derived from the union's own member count, because the order here is display order (text and images first, as the most common content, vector primitives after), not an exhaustiveness requirement -- `summariseItemKinds` below tolerates a kind never appearing at all.
-const LAYOUT_ITEM_KIND_ORDER: readonly LayoutItem['kind'][] = ['text', 'image', 'rect', 'ellipse', 'line', 'path', 'link'];
+const LAYOUT_ITEM_KIND_ORDER: readonly LayoutItem["kind"][] = [
+  "text",
+  "image",
+  "rect",
+  "ellipse",
+  "line",
+  "path",
+  "link",
+];
 
 function summariseItemKinds(items: readonly LayoutItem[]): string {
-  const counts = new Map<LayoutItem['kind'], number>();
+  const counts = new Map<LayoutItem["kind"], number>();
   for (const item of items) {
     const current = counts.get(item.kind);
     counts.set(item.kind, current === undefined ? 1 : current + 1);
@@ -23,7 +31,7 @@ function summariseItemKinds(items: readonly LayoutItem[]): string {
       parts.push(`${count} ${kind}`);
     }
   }
-  return parts.length === 0 ? 'no items' : parts.join(', ');
+  return parts.length === 0 ? "no items" : parts.join(", ");
 }
 
 function pageSummaryText(page: LayoutPage): string {
@@ -42,8 +50,16 @@ export function PdfPageListScreen(): ReactElement {
   const doc = requirePdfDocument(state.openDocument);
 
   const query = state.searchQuery.trim().toLowerCase();
-  const indexed: IndexedPage[] = doc.layout.pages.map((page, pageIndex) => ({ page, pageIndex }));
-  const pages = query === '' ? indexed : indexed.filter((entry) => pageSummaryText(entry.page).toLowerCase().includes(query));
+  const indexed: IndexedPage[] = doc.layout.pages.map((page, pageIndex) => ({
+    page,
+    pageIndex,
+  }));
+  const pages =
+    query === ""
+      ? indexed
+      : indexed.filter((entry) =>
+          pageSummaryText(entry.page).toLowerCase().includes(query),
+        );
 
   const { selectedIndex } = useNavigationInput({
     itemCount: pages.length,
@@ -52,10 +68,13 @@ export function PdfPageListScreen(): ReactElement {
       if (entry === undefined) {
         return;
       }
-      dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'pdfPageItems', pageIndex: entry.pageIndex } });
+      dispatch({
+        type: "PUSH_SCREEN",
+        screen: { kind: "pdfPageItems", pageIndex: entry.pageIndex },
+      });
     },
     onBack: () => {
-      dispatch({ type: 'POP_SCREEN' });
+      dispatch({ type: "POP_SCREEN" });
     },
     isActive: !anyOverlayOpen(state),
   });
@@ -68,9 +87,13 @@ export function PdfPageListScreen(): ReactElement {
       <ListView
         items={pages}
         selectedIndex={selectedIndex}
-        emptyMessage={query === '' ? 'This PDF has no pages.' : `No pages match "${state.searchQuery}".`}
+        emptyMessage={
+          query === ""
+            ? "This PDF has no pages."
+            : `No pages match "${state.searchQuery}".`
+        }
         renderItem={({ page, pageIndex }, isSelected) => (
-          <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>
+          <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
             Page {pageIndex + 1} -- {pageSummaryText(page)}
           </Text>
         )}

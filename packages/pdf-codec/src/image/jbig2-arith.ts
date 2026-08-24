@@ -93,7 +93,9 @@ export class MqDecoder {
   }
 
   private byteAt(index: number): number {
-    return index >= this.start && index < this.end ? (this.data[index] ?? PAST_END_BYTE) : PAST_END_BYTE;
+    return index >= this.start && index < this.end
+      ? (this.data[index] ?? PAST_END_BYTE)
+      : PAST_END_BYTE;
   }
 
   // BYTEIN (T.88 Figure E.19). B is the byte at BP and B1 the byte after it; the 0xFF/>0x8F pair is the marker test that lets a decoder run past the end of the coded segment without consuming anything.
@@ -192,11 +194,14 @@ const INTEGER_RANGES: readonly (readonly [number, number])[] = [
 ];
 
 // The out-of-band value A.2 step 5 defines (S = 1 with a zero magnitude), which several procedures use as a terminator rather than as a number. Modelled as `undefined` rather than a sentinel number so a caller cannot silently treat it as a real value.
-export function decodeInteger(mq: MqDecoder, contexts: ArithContexts): number | undefined {
+export function decodeInteger(
+  mq: MqDecoder,
+  contexts: ArithContexts,
+): number | undefined {
   let prev = 1;
   const nextBit = (): number => {
     const bit = mq.decode(contexts, prev);
-    prev = prev < 256 ? (prev << 1) | bit : ((((prev << 1) | bit) & 511) | 256);
+    prev = prev < 256 ? (prev << 1) | bit : (((prev << 1) | bit) & 511) | 256;
     return bit;
   };
   const readBits = (count: number): number => {
@@ -236,7 +241,11 @@ export function createSymbolIdContexts(codeLength: number): ArithContexts {
   return createArithContexts(codeLength + 1);
 }
 
-export function decodeSymbolId(mq: MqDecoder, contexts: ArithContexts, codeLength: number): number {
+export function decodeSymbolId(
+  mq: MqDecoder,
+  contexts: ArithContexts,
+  codeLength: number,
+): number {
   let prev = 1;
   for (let i = 0; i < codeLength; i++) {
     prev = (prev << 1) | mq.decode(contexts, prev);

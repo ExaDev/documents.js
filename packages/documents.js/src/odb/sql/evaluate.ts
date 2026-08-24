@@ -1,9 +1,23 @@
-import type { ContentCellValue } from 'document-schema.js';
-import type { HsqldbTable } from '../../hsqldb/script';
-import { aggregateCellValues, CELL_NULL, cellComparisonKey, compareCellValues } from '../values';
-import { HsqldbSqlEvaluationError } from './errors';
-import type { SqlComparisonOperator } from './lexer';
-import type { SqlAggregateFunction, SqlColumnRef, SqlLiteral, SqlNameRef, SqlOperand, SqlPredicate, SqlSelectStatement, SqlSortDirection } from './parser';
+import type { ContentCellValue } from "document-schema.js";
+import type { HsqldbTable } from "../../hsqldb/script";
+import {
+  aggregateCellValues,
+  CELL_NULL,
+  cellComparisonKey,
+  compareCellValues,
+} from "../values";
+import { HsqldbSqlEvaluationError } from "./errors";
+import type { SqlComparisonOperator } from "./lexer";
+import type {
+  SqlAggregateFunction,
+  SqlColumnRef,
+  SqlLiteral,
+  SqlNameRef,
+  SqlOperand,
+  SqlPredicate,
+  SqlSelectStatement,
+  SqlSortDirection,
+} from "./parser";
 
 // Executes a parsed single-table SELECT (src/odb/sql/parser.ts) against a real HsqldbTable -- the exact table shape readOdbTables produces for every .odb tier, so a saved .odb query can be run over the data this package already extracts, with no database engine anywhere in the path. Everything happens in memory over the rows it is handed; nothing here reads a package, a file, or a network connection.
 //
@@ -22,112 +36,141 @@ export interface SqlResultSet {
   readonly rows: readonly (readonly ContentCellValue[])[];
 }
 
-type Truth = 'true' | 'false' | 'unknown';
+type Truth = "true" | "false" | "unknown";
 
 // Turns a src/odb/values.ts failure into this engine's own error, carrying the statement that produced it. Shared value semantics, engine-specific error class -- see that module's own top-of-file comment for why the split exists.
 function sqlFailure(sql: string): (message: string) => Error {
   return (message: string) => new HsqldbSqlEvaluationError(message, sql);
 }
 
-function compareValues(left: ContentCellValue, right: ContentCellValue, sql: string): number {
+function compareValues(
+  left: ContentCellValue,
+  right: ContentCellValue,
+  sql: string,
+): number {
   return compareCellValues(left, right, sqlFailure(sql));
 }
 
-function truthOfComparison(ordering: number, operator: SqlComparisonOperator): Truth {
+function truthOfComparison(
+  ordering: number,
+  operator: SqlComparisonOperator,
+): Truth {
   switch (operator) {
-    case '=':
-      return ordering === 0 ? 'true' : 'false';
-    case '<>':
-      return ordering === 0 ? 'false' : 'true';
-    case '<':
-      return ordering < 0 ? 'true' : 'false';
-    case '>':
-      return ordering > 0 ? 'true' : 'false';
-    case '<=':
-      return ordering <= 0 ? 'true' : 'false';
-    case '>=':
-      return ordering >= 0 ? 'true' : 'false';
+    case "=":
+      return ordering === 0 ? "true" : "false";
+    case "<>":
+      return ordering === 0 ? "false" : "true";
+    case "<":
+      return ordering < 0 ? "true" : "false";
+    case ">":
+      return ordering > 0 ? "true" : "false";
+    case "<=":
+      return ordering <= 0 ? "true" : "false";
+    case ">=":
+      return ordering >= 0 ? "true" : "false";
   }
 }
 
 function notTruth(truth: Truth): Truth {
-  if (truth === 'true') {
-    return 'false';
+  if (truth === "true") {
+    return "false";
   }
-  return truth === 'false' ? 'true' : 'unknown';
+  return truth === "false" ? "true" : "unknown";
 }
 
 function andTruth(left: Truth, right: Truth): Truth {
-  if (left === 'false' || right === 'false') {
-    return 'false';
+  if (left === "false" || right === "false") {
+    return "false";
   }
-  return left === 'true' && right === 'true' ? 'true' : 'unknown';
+  return left === "true" && right === "true" ? "true" : "unknown";
 }
 
 function orTruth(left: Truth, right: Truth): Truth {
-  if (left === 'true' || right === 'true') {
-    return 'true';
+  if (left === "true" || right === "true") {
+    return "true";
   }
-  return left === 'false' && right === 'false' ? 'false' : 'unknown';
+  return left === "false" && right === "false" ? "false" : "unknown";
 }
 
 function literalToValue(literal: SqlLiteral): ContentCellValue {
   switch (literal.kind) {
-    case 'number':
-      return { kind: 'number', value: literal.value };
-    case 'string':
-      return { kind: 'string', value: literal.value };
-    case 'boolean':
-      return { kind: 'boolean', value: literal.value };
-    case 'null':
+    case "number":
+      return { kind: "number", value: literal.value };
+    case "string":
+      return { kind: "string", value: literal.value };
+    case "boolean":
+      return { kind: "boolean", value: literal.value };
+    case "null":
       return CELL_NULL;
   }
 }
 
 // SQL LIKE, with % matching any run of characters (including none) and _ matching exactly one. Case-sensitive, matching both HSQLDB's and Firebird's own default LIKE behaviour. Every other character in the pattern matches literally, including regular-expression metacharacters, which is what the escaping below is for; a LIKE ... ESCAPE clause is rejected outright by the parser rather than approximated here.
 function likePatternToRegExp(pattern: string): RegExp {
-  let source = '^';
+  let source = "^";
   for (const character of pattern) {
-    if (character === '%') {
-      source += '[\\s\\S]*';
-    } else if (character === '_') {
-      source += '[\\s\\S]';
+    if (character === "%") {
+      source += "[\\s\\S]*";
+    } else if (character === "_") {
+      source += "[\\s\\S]";
     } else {
-      source += character.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      source += character.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
   }
   return new RegExp(`${source}$`);
 }
 
 // SQL's own identifier rule, as both HSQLDB and Firebird implement it and as real LibreOffice-generated .odb queries rely on: a double-quoted name matches only exactly, while an unquoted one (already folded to upper case by the lexer) may also match a real name case-insensitively. An unquoted name matching more than one real name case-insensitively is genuinely ambiguous and throws rather than picking one.
-function resolveName(candidates: readonly string[], ref: SqlNameRef, what: string, sql: string): string {
+function resolveName(
+  candidates: readonly string[],
+  ref: SqlNameRef,
+  what: string,
+  sql: string,
+): string {
   const exact = candidates.find((candidate) => candidate === ref.name);
   if (exact !== undefined) {
     return exact;
   }
   if (!ref.quoted) {
-    const folded = candidates.filter((candidate) => candidate.toUpperCase() === ref.name);
+    const folded = candidates.filter(
+      (candidate) => candidate.toUpperCase() === ref.name,
+    );
     if (folded.length > 1) {
-      throw new HsqldbSqlEvaluationError(`${what} "${ref.name}" is ambiguous -- it matches ${folded.join(', ')} case-insensitively`, sql);
+      throw new HsqldbSqlEvaluationError(
+        `${what} "${ref.name}" is ambiguous -- it matches ${folded.join(", ")} case-insensitively`,
+        sql,
+      );
     }
     const only = folded[0];
     if (only !== undefined) {
       return only;
     }
   }
-  throw new HsqldbSqlEvaluationError(`${what} "${ref.name}" not found -- available: ${candidates.length === 0 ? '(none)' : candidates.join(', ')}`, sql);
+  throw new HsqldbSqlEvaluationError(
+    `${what} "${ref.name}" not found -- available: ${candidates.length === 0 ? "(none)" : candidates.join(", ")}`,
+    sql,
+  );
 }
 
-function resolveTable(tables: readonly HsqldbTable[], ref: SqlNameRef, sql: string): HsqldbTable {
+function resolveTable(
+  tables: readonly HsqldbTable[],
+  ref: SqlNameRef,
+  sql: string,
+): HsqldbTable {
   const resolvedName = resolveName(
     tables.map((table) => table.tableName),
     ref,
-    'table',
+    "table",
     sql,
   );
-  const table = tables.find((candidate) => candidate.tableName === resolvedName);
+  const table = tables.find(
+    (candidate) => candidate.tableName === resolvedName,
+  );
   if (table === undefined) {
-    throw new HsqldbSqlEvaluationError(`table "${resolvedName}" not found`, sql);
+    throw new HsqldbSqlEvaluationError(
+      `table "${resolvedName}" not found`,
+      sql,
+    );
   }
   return table;
 }
@@ -147,7 +190,10 @@ class ColumnResolver {
   nameAt(index: number): string {
     const name = this.columnNames[index];
     if (name === undefined) {
-      throw new HsqldbSqlEvaluationError(`column index ${String(index)} is outside table "${this.table.tableName}"`, this.sql);
+      throw new HsqldbSqlEvaluationError(
+        `column index ${String(index)} is outside table "${this.table.tableName}"`,
+        this.sql,
+      );
     }
     return name;
   }
@@ -159,12 +205,22 @@ class ColumnResolver {
       return cached;
     }
     if (ref.qualifier !== undefined) {
-      const qualifier = resolveName([this.table.tableName], ref.qualifier, 'table qualifier', this.sql);
+      const qualifier = resolveName(
+        [this.table.tableName],
+        ref.qualifier,
+        "table qualifier",
+        this.sql,
+      );
       if (qualifier !== this.table.tableName) {
-        throw new HsqldbSqlEvaluationError(`table qualifier "${ref.qualifier.name}" does not name the table in FROM ("${this.table.tableName}")`, this.sql);
+        throw new HsqldbSqlEvaluationError(
+          `table qualifier "${ref.qualifier.name}" does not name the table in FROM ("${this.table.tableName}")`,
+          this.sql,
+        );
       }
     }
-    const index = this.columnNames.indexOf(resolveName(this.columnNames, ref.column, 'column', this.sql));
+    const index = this.columnNames.indexOf(
+      resolveName(this.columnNames, ref.column, "column", this.sql),
+    );
     this.cache.set(ref, index);
     return index;
   }
@@ -172,100 +228,163 @@ class ColumnResolver {
   valueAt(index: number, row: readonly ContentCellValue[]): ContentCellValue {
     const value = row[index];
     if (value === undefined) {
-      throw new HsqldbSqlEvaluationError(`malformed table "${this.table.tableName}": a row carries ${String(row.length)} values but the table declares ${String(this.columnNames.length)} columns`, this.sql);
+      throw new HsqldbSqlEvaluationError(
+        `malformed table "${this.table.tableName}": a row carries ${String(row.length)} values but the table declares ${String(this.columnNames.length)} columns`,
+        this.sql,
+      );
     }
     return value;
   }
 
-  valueOf(ref: SqlColumnRef, row: readonly ContentCellValue[]): ContentCellValue {
+  valueOf(
+    ref: SqlColumnRef,
+    row: readonly ContentCellValue[],
+  ): ContentCellValue {
     return this.valueAt(this.indexOf(ref), row);
   }
 }
 
-function operandValue(operand: SqlOperand, row: readonly ContentCellValue[], resolver: ColumnResolver): ContentCellValue {
-  return operand.kind === 'literal' ? literalToValue(operand.literal) : resolver.valueOf(operand.column, row);
+function operandValue(
+  operand: SqlOperand,
+  row: readonly ContentCellValue[],
+  resolver: ColumnResolver,
+): ContentCellValue {
+  return operand.kind === "literal"
+    ? literalToValue(operand.literal)
+    : resolver.valueOf(operand.column, row);
 }
 
-function evaluateLike(value: ContentCellValue, pattern: string, sql: string): Truth {
+function evaluateLike(
+  value: ContentCellValue,
+  pattern: string,
+  sql: string,
+): Truth {
   const key = cellComparisonKey(value);
   if (key === undefined) {
-    return 'unknown';
+    return "unknown";
   }
-  if (key.valueClass !== 'text') {
-    throw new HsqldbSqlEvaluationError(`LIKE requires a text value, but its left operand is a ${key.valueClass} value`, sql);
+  if (key.valueClass !== "text") {
+    throw new HsqldbSqlEvaluationError(
+      `LIKE requires a text value, but its left operand is a ${key.valueClass} value`,
+      sql,
+    );
   }
-  return likePatternToRegExp(pattern).test(key.text) ? 'true' : 'false';
+  return likePatternToRegExp(pattern).test(key.text) ? "true" : "false";
 }
 
-function evaluateIn(value: ContentCellValue, values: readonly SqlLiteral[], sql: string): Truth {
-  if (value.kind === 'empty') {
-    return 'unknown';
+function evaluateIn(
+  value: ContentCellValue,
+  values: readonly SqlLiteral[],
+  sql: string,
+): Truth {
+  if (value.kind === "empty") {
+    return "unknown";
   }
   let sawNull = false;
   for (const literal of values) {
     const candidate = literalToValue(literal);
-    if (candidate.kind === 'empty') {
+    if (candidate.kind === "empty") {
       sawNull = true;
       continue;
     }
     if (compareValues(value, candidate, sql) === 0) {
-      return 'true';
+      return "true";
     }
   }
   // SQL's own rule, and the one most easily got wrong: a non-match against a list containing NULL is UNKNOWN, not FALSE -- which is why "x NOT IN (1, NULL)" excludes every row rather than keeping the ones where x is not 1.
-  return sawNull ? 'unknown' : 'false';
+  return sawNull ? "unknown" : "false";
 }
 
-function evaluatePredicate(predicate: SqlPredicate, row: readonly ContentCellValue[], resolver: ColumnResolver, sql: string): Truth {
+function evaluatePredicate(
+  predicate: SqlPredicate,
+  row: readonly ContentCellValue[],
+  resolver: ColumnResolver,
+  sql: string,
+): Truth {
   switch (predicate.kind) {
-    case 'comparison': {
+    case "comparison": {
       const left = operandValue(predicate.left, row, resolver);
       const right = operandValue(predicate.right, row, resolver);
-      if (left.kind === 'empty' || right.kind === 'empty') {
-        return 'unknown';
+      if (left.kind === "empty" || right.kind === "empty") {
+        return "unknown";
       }
-      return truthOfComparison(compareValues(left, right, sql), predicate.operator);
+      return truthOfComparison(
+        compareValues(left, right, sql),
+        predicate.operator,
+      );
     }
-    case 'isNull': {
-      const isNull = operandValue(predicate.operand, row, resolver).kind === 'empty';
-      return (predicate.negated ? !isNull : isNull) ? 'true' : 'false';
+    case "isNull": {
+      const isNull =
+        operandValue(predicate.operand, row, resolver).kind === "empty";
+      return (predicate.negated ? !isNull : isNull) ? "true" : "false";
     }
-    case 'like': {
-      const truth = evaluateLike(operandValue(predicate.operand, row, resolver), predicate.pattern, sql);
+    case "like": {
+      const truth = evaluateLike(
+        operandValue(predicate.operand, row, resolver),
+        predicate.pattern,
+        sql,
+      );
       return predicate.negated ? notTruth(truth) : truth;
     }
-    case 'in': {
-      const truth = evaluateIn(operandValue(predicate.operand, row, resolver), predicate.values, sql);
+    case "in": {
+      const truth = evaluateIn(
+        operandValue(predicate.operand, row, resolver),
+        predicate.values,
+        sql,
+      );
       return predicate.negated ? notTruth(truth) : truth;
     }
-    case 'between': {
+    case "between": {
       const value = operandValue(predicate.operand, row, resolver);
       const lower = operandValue(predicate.lower, row, resolver);
       const upper = operandValue(predicate.upper, row, resolver);
-      if (value.kind === 'empty' || lower.kind === 'empty' || upper.kind === 'empty') {
-        return 'unknown';
+      if (
+        value.kind === "empty" ||
+        lower.kind === "empty" ||
+        upper.kind === "empty"
+      ) {
+        return "unknown";
       }
-      const truth = andTruth(truthOfComparison(compareValues(value, lower, sql), '>='), truthOfComparison(compareValues(value, upper, sql), '<='));
+      const truth = andTruth(
+        truthOfComparison(compareValues(value, lower, sql), ">="),
+        truthOfComparison(compareValues(value, upper, sql), "<="),
+      );
       return predicate.negated ? notTruth(truth) : truth;
     }
-    case 'not':
-      return notTruth(evaluatePredicate(predicate.predicate, row, resolver, sql));
-    case 'and':
-      return andTruth(evaluatePredicate(predicate.left, row, resolver, sql), evaluatePredicate(predicate.right, row, resolver, sql));
-    case 'or':
-      return orTruth(evaluatePredicate(predicate.left, row, resolver, sql), evaluatePredicate(predicate.right, row, resolver, sql));
+    case "not":
+      return notTruth(
+        evaluatePredicate(predicate.predicate, row, resolver, sql),
+      );
+    case "and":
+      return andTruth(
+        evaluatePredicate(predicate.left, row, resolver, sql),
+        evaluatePredicate(predicate.right, row, resolver, sql),
+      );
+    case "or":
+      return orTruth(
+        evaluatePredicate(predicate.left, row, resolver, sql),
+        evaluatePredicate(predicate.right, row, resolver, sql),
+      );
   }
 }
 
 // COUNT(*) never reaches src/odb/values.ts's aggregateCellValues: it counts rows, not values, and is answered directly from the group's own row count. Everything routed here is the "over a column's values" case, where NULLs are skipped by every aggregate.
-function aggregateOverValues(aggregate: SqlAggregateFunction, values: readonly ContentCellValue[], sql: string): ContentCellValue {
+function aggregateOverValues(
+  aggregate: SqlAggregateFunction,
+  values: readonly ContentCellValue[],
+  sql: string,
+): ContentCellValue {
   return aggregateCellValues(aggregate, values, sqlFailure(sql));
 }
 
 // NULL sorts after every non-NULL value under an ascending term; a descending term negates the whole comparison, which puts NULLs first. Stated as one rule rather than two so the two directions can never drift apart.
-function compareForSort(left: ContentCellValue, right: ContentCellValue, sql: string): number {
-  const leftNull = left.kind === 'empty';
-  const rightNull = right.kind === 'empty';
+function compareForSort(
+  left: ContentCellValue,
+  right: ContentCellValue,
+  sql: string,
+): number {
+  const leftNull = left.kind === "empty";
+  const rightNull = right.kind === "empty";
   if (leftNull || rightNull) {
     if (leftNull && rightNull) {
       return 0;
@@ -280,7 +399,11 @@ interface SortableRow {
   readonly sortKeys: readonly ContentCellValue[];
 }
 
-function sortRows(rows: readonly SortableRow[], directions: readonly SqlSortDirection[], sql: string): readonly (readonly ContentCellValue[])[] {
+function sortRows(
+  rows: readonly SortableRow[],
+  directions: readonly SqlSortDirection[],
+  sql: string,
+): readonly (readonly ContentCellValue[])[] {
   // Array.prototype.sort is stable (ES2019 onward), which is exactly what carries tied rows through in their original order -- nothing else here preserves it.
   return [...rows]
     .sort((left, right) => {
@@ -288,11 +411,14 @@ function sortRows(rows: readonly SortableRow[], directions: readonly SqlSortDire
         const leftKey = left.sortKeys[index];
         const rightKey = right.sortKeys[index];
         if (leftKey === undefined || rightKey === undefined) {
-          throw new HsqldbSqlEvaluationError('an ORDER BY term has no sort key on this row', sql);
+          throw new HsqldbSqlEvaluationError(
+            "an ORDER BY term has no sort key on this row",
+            sql,
+          );
         }
         const ordering = compareForSort(leftKey, rightKey, sql);
         if (ordering !== 0) {
-          return direction === 'asc' ? ordering : -ordering;
+          return direction === "asc" ? ordering : -ordering;
         }
       }
       return 0;
@@ -305,45 +431,63 @@ function groupKeyOf(values: readonly ContentCellValue[]): string {
   return values
     .map((value) => {
       switch (value.kind) {
-        case 'empty':
-          return 'null';
-        case 'boolean':
+        case "empty":
+          return "null";
+        case "boolean":
           return `boolean:${String(value.value)}`;
-        case 'number':
-        case 'percentage':
-        case 'currency':
+        case "number":
+        case "percentage":
+        case "currency":
           return `numeric:${String(value.value)}`;
-        case 'date':
-        case 'time':
-        case 'dateTime':
-        case 'string':
-        case 'error':
+        case "date":
+        case "time":
+        case "dateTime":
+        case "string":
+        case "error":
           return `text:${value.value}`;
       }
     })
-    .join(' ');
+    .join(" ");
 }
 
 // The select list, resolved against the real table once: a plain column becomes its own index, an aggregate its function plus (for the four that take one) its argument's index, and SELECT * expands to every column index in declaration order. Resolving up front is what lets both projection paths below run with no unreachable branches for shapes that were already ruled out.
-type PlanItem = { readonly kind: 'column'; readonly index: number; readonly text: string } | { readonly kind: 'aggregate'; readonly aggregate: SqlAggregateFunction; readonly argumentIndex: number | undefined; readonly outputName: string };
+type PlanItem =
+  | { readonly kind: "column"; readonly index: number; readonly text: string }
+  | {
+      readonly kind: "aggregate";
+      readonly aggregate: SqlAggregateFunction;
+      readonly argumentIndex: number | undefined;
+      readonly outputName: string;
+    };
 
-function planSelectList(statement: SqlSelectStatement, table: HsqldbTable, resolver: ColumnResolver): readonly PlanItem[] {
+function planSelectList(
+  statement: SqlSelectStatement,
+  table: HsqldbTable,
+  resolver: ColumnResolver,
+): readonly PlanItem[] {
   const plan: PlanItem[] = [];
   for (const item of statement.items) {
     switch (item.kind) {
-      case 'star':
+      case "star":
         for (const [index] of table.columns.entries()) {
-          plan.push({ kind: 'column', index, text: resolver.nameAt(index) });
+          plan.push({ kind: "column", index, text: resolver.nameAt(index) });
         }
         break;
-      case 'column':
-        plan.push({ kind: 'column', index: resolver.indexOf(item.column), text: item.column.text });
-        break;
-      case 'aggregate':
+      case "column":
         plan.push({
-          kind: 'aggregate',
+          kind: "column",
+          index: resolver.indexOf(item.column),
+          text: item.column.text,
+        });
+        break;
+      case "aggregate":
+        plan.push({
+          kind: "aggregate",
           aggregate: item.aggregate,
-          argumentIndex: item.argument.kind === 'star' ? undefined : resolver.indexOf(item.argument.column),
+          argumentIndex:
+            item.argument.kind === "star"
+              ? undefined
+              : resolver.indexOf(item.argument.column),
           outputName: item.outputName,
         });
         break;
@@ -352,18 +496,33 @@ function planSelectList(statement: SqlSelectStatement, table: HsqldbTable, resol
   return plan;
 }
 
-function planColumnNames(plan: readonly PlanItem[], resolver: ColumnResolver): readonly string[] {
-  return plan.map((item) => (item.kind === 'column' ? resolver.nameAt(item.index) : item.outputName));
+function planColumnNames(
+  plan: readonly PlanItem[],
+  resolver: ColumnResolver,
+): readonly string[] {
+  return plan.map((item) =>
+    item.kind === "column" ? resolver.nameAt(item.index) : item.outputName,
+  );
 }
 
-function evaluateUngrouped(statement: SqlSelectStatement, plan: readonly PlanItem[], matching: readonly (readonly ContentCellValue[])[], resolver: ColumnResolver): SqlResultSet {
+function evaluateUngrouped(
+  statement: SqlSelectStatement,
+  plan: readonly PlanItem[],
+  matching: readonly (readonly ContentCellValue[])[],
+  resolver: ColumnResolver,
+): SqlResultSet {
   const projection = plan.map((item) => {
-    if (item.kind !== 'column') {
-      throw new HsqldbSqlEvaluationError(`${item.outputName} is an aggregate, so every other select-list item must be grouped`, statement.sql);
+    if (item.kind !== "column") {
+      throw new HsqldbSqlEvaluationError(
+        `${item.outputName} is an aggregate, so every other select-list item must be grouped`,
+        statement.sql,
+      );
     }
     return item.index;
   });
-  const orderIndices = statement.orderBy.map((term) => resolver.indexOf(term.column));
+  const orderIndices = statement.orderBy.map((term) =>
+    resolver.indexOf(term.column),
+  );
   const sortable = matching.map((row) => ({
     output: projection.map((index) => resolver.valueAt(index, row)),
     sortKeys: orderIndices.map((index) => resolver.valueAt(index, row)),
@@ -383,7 +542,11 @@ interface RowGroup {
   readonly rows: (readonly ContentCellValue[])[];
 }
 
-function partitionIntoGroups(rows: readonly (readonly ContentCellValue[])[], groupIndices: readonly number[], resolver: ColumnResolver): readonly RowGroup[] {
+function partitionIntoGroups(
+  rows: readonly (readonly ContentCellValue[])[],
+  groupIndices: readonly number[],
+  resolver: ColumnResolver,
+): readonly RowGroup[] {
   const groups = new Map<string, RowGroup>();
   for (const row of rows) {
     const keyValues = groupIndices.map((index) => resolver.valueAt(index, row));
@@ -398,33 +561,47 @@ function partitionIntoGroups(rows: readonly (readonly ContentCellValue[])[], gro
   return [...groups.values()];
 }
 
-function evaluateGrouped(statement: SqlSelectStatement, plan: readonly PlanItem[], matching: readonly (readonly ContentCellValue[])[], resolver: ColumnResolver): SqlResultSet {
+function evaluateGrouped(
+  statement: SqlSelectStatement,
+  plan: readonly PlanItem[],
+  matching: readonly (readonly ContentCellValue[])[],
+  resolver: ColumnResolver,
+): SqlResultSet {
   const groupIndices = statement.groupBy.map((ref) => resolver.indexOf(ref));
 
   for (const item of plan) {
-    if (item.kind === 'column' && !groupIndices.includes(item.index)) {
-      throw new HsqldbSqlEvaluationError(`column "${item.text}" is neither grouped nor aggregated -- add it to GROUP BY or wrap it in an aggregate`, statement.sql);
+    if (item.kind === "column" && !groupIndices.includes(item.index)) {
+      throw new HsqldbSqlEvaluationError(
+        `column "${item.text}" is neither grouped nor aggregated -- add it to GROUP BY or wrap it in an aggregate`,
+        statement.sql,
+      );
     }
   }
 
   // An aggregate with no GROUP BY treats the whole post-WHERE row set as one group, and still produces exactly one row when that set is empty (COUNT(*) = 0, every other aggregate NULL).
-  const groups = groupIndices.length === 0 ? [{ keyValues: [], rows: [...matching] }] : partitionIntoGroups(matching, groupIndices, resolver);
+  const groups =
+    groupIndices.length === 0
+      ? [{ keyValues: [], rows: [...matching] }]
+      : partitionIntoGroups(matching, groupIndices, resolver);
 
   const orderPositions = statement.orderBy.map((term) => {
     const position = groupIndices.indexOf(resolver.indexOf(term.column));
     if (position < 0) {
-      throw new HsqldbSqlEvaluationError(`ORDER BY column "${term.column.text}" is not a GROUP BY column -- a grouped result has no single value for it`, statement.sql);
+      throw new HsqldbSqlEvaluationError(
+        `ORDER BY column "${term.column.text}" is not a GROUP BY column -- a grouped result has no single value for it`,
+        statement.sql,
+      );
     }
     return position;
   });
 
   const sortable = groups.map((group) => ({
     output: plan.map((item): ContentCellValue => {
-      if (item.kind === 'aggregate') {
+      if (item.kind === "aggregate") {
         const argumentIndex = item.argumentIndex;
         if (argumentIndex === undefined) {
           // COUNT(*) counts rows, not values -- the only aggregate that never looks at a column at all.
-          return { kind: 'number', value: group.rows.length };
+          return { kind: "number", value: group.rows.length };
         }
         return aggregateOverValues(
           item.aggregate,
@@ -434,14 +611,20 @@ function evaluateGrouped(statement: SqlSelectStatement, plan: readonly PlanItem[
       }
       const keyValue = group.keyValues[groupIndices.indexOf(item.index)];
       if (keyValue === undefined) {
-        throw new HsqldbSqlEvaluationError(`grouped column "${item.text}" has no value on this group`, statement.sql);
+        throw new HsqldbSqlEvaluationError(
+          `grouped column "${item.text}" has no value on this group`,
+          statement.sql,
+        );
       }
       return keyValue;
     }),
     sortKeys: orderPositions.map((position) => {
       const keyValue = group.keyValues[position];
       if (keyValue === undefined) {
-        throw new HsqldbSqlEvaluationError('an ORDER BY term resolved to a GROUP BY column with no value on this group', statement.sql);
+        throw new HsqldbSqlEvaluationError(
+          "an ORDER BY term resolved to a GROUP BY column with no value on this group",
+          statement.sql,
+        );
       }
       return keyValue;
     }),
@@ -457,18 +640,33 @@ function evaluateGrouped(statement: SqlSelectStatement, plan: readonly PlanItem[
   };
 }
 
-export function evaluateSelect(statement: SqlSelectStatement, tables: readonly HsqldbTable[]): SqlResultSet {
+export function evaluateSelect(
+  statement: SqlSelectStatement,
+  tables: readonly HsqldbTable[],
+): SqlResultSet {
   const table = resolveTable(tables, statement.from, statement.sql);
   const resolver = new ColumnResolver(table, statement.sql);
   const plan = planSelectList(statement, table, resolver);
 
   const where = statement.where;
-  const matching = where === undefined ? table.rows : table.rows.filter((row) => evaluatePredicate(where, row, resolver, statement.sql) === 'true');
+  const matching =
+    where === undefined
+      ? table.rows
+      : table.rows.filter(
+          (row) =>
+            evaluatePredicate(where, row, resolver, statement.sql) === "true",
+        );
 
-  const hasAggregate = plan.some((item) => item.kind === 'aggregate');
+  const hasAggregate = plan.some((item) => item.kind === "aggregate");
   if (statement.groupBy.length > 0 || hasAggregate) {
-    if (statement.groupBy.length > 0 && statement.items.some((item) => item.kind === 'star')) {
-      throw new HsqldbSqlEvaluationError('SELECT * is not valid with GROUP BY -- name the grouped columns and the aggregates explicitly', statement.sql);
+    if (
+      statement.groupBy.length > 0 &&
+      statement.items.some((item) => item.kind === "star")
+    ) {
+      throw new HsqldbSqlEvaluationError(
+        "SELECT * is not valid with GROUP BY -- name the grouped columns and the aggregates explicitly",
+        statement.sql,
+      );
     }
     return evaluateGrouped(statement, plan, matching, resolver);
   }
