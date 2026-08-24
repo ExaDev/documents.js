@@ -7,7 +7,8 @@
     ".node-version",
     "eslint.shared.ts",
     "prettier.config.ts",
-    "knip.config.ts"
+    "knip.config.ts",
+    "tsconfig.base.json"
   ],
 
   // Every task name is the underscore-prefixed one each package already used for its real command (`_build` runs tsdown; the package's own `build` script was `turbo run _build`). Running the public names from here instead would make turbo invoke those wrapper scripts, which invoke turbo again -- the recursive-call case Turborepo's own docs warn against ("You should only define these commands in the root package.json"). The wrapper scripts stay in place and stay usable for a single package, but the root pipeline reaches straight past them to the leaf commands.

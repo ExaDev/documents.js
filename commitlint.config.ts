@@ -90,6 +90,7 @@ const REPOSITORY_SCOPES = [
   "knip",
   "lint",
   "prettier",
+  "tsconfig",
   "turbo",
   "workspace",
 ] as const;
