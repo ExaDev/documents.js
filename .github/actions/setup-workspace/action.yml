@@ -21,7 +21,7 @@ runs:
     - uses: actions/setup-node@v7
       with:
         # A single source of truth for the whole workspace, rather than a version literal repeated in every job. registry-url is deliberately absent everywhere: setting it makes setup-node write an .npmrc containing an _authToken line, and that line wins over the OIDC token exchange -- so the setting that looks like it configures the registry is exactly the one that would stop trusted publishing working.
-        node-version-file: .node-version
+        node-version-file: .tool-versions
         cache: pnpm
 
     - run: pnpm install --frozen-lockfile
