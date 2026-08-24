@@ -32,7 +32,7 @@ runs:
     # The key was previously `...-${{ github.sha }}`, which is wrong in both directions. actions/cache treats a key as immutable, so the first run for a commit wrote the cache and every re-run of that same commit found its exact key already present and skipped the save -- meaning a re-run could never repair or extend a cache written by a partially failed run. More importantly the key said nothing about the lockfile or the pipeline definition, so `restore-keys` would happily restore a cache built under a different pnpm-lock.yaml or a different turbo.json into a run whose task graph had changed underneath it.
     #
     # hashFiles puts the lockfile and turbo.json into the key itself, so changing either starts a fresh cache lineage rather than inheriting a stale one; github.run_id keeps every run's key unique, so each run genuinely saves what it computed. The two-level restore-keys then prefers a cache from the same lockfile/turbo.json generation and falls back to the newest cache for the task only when that generation has no entry yet.
-    - uses: actions/cache@v4
+    - uses: actions/cache@v6
       with:
         path: .turbo
         key: turbo-${{ inputs.task }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.run_id }}
