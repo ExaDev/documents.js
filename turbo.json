@@ -6,7 +6,8 @@
     "pnpm-lock.yaml",
     ".node-version",
     "eslint.shared.ts",
-    "prettier.config.ts"
+    "prettier.config.ts",
+    "knip.config.ts"
   ],
 
   // Every task name is the underscore-prefixed one each package already used for its real command (`_build` runs tsdown; the package's own `build` script was `turbo run _build`). Running the public names from here instead would make turbo invoke those wrapper scripts, which invoke turbo again -- the recursive-call case Turborepo's own docs warn against ("You should only define these commands in the root package.json"). The wrapper scripts stay in place and stay usable for a single package, but the root pipeline reaches straight past them to the leaf commands.
@@ -48,6 +49,8 @@
       // Unit tests are co-located as src/**/*.test.ts, so src/** covers them; test/ holds only the smoke and workerd suites, which have their own tasks below.
       "inputs": [
         "src/**",
+        // documents.js's examples suite reads the committed goldens under examples/, so they are a real input to the task. Undeclared, editing a golden left the previous result cached and the change untested -- which is how a stale golden survived unnoticed until the schema package's own major bump made it fail.
+        "examples/**",
         "vitest.config.ts",
         "vitest.unit.config.ts",
         "package.json"
@@ -60,6 +63,8 @@
       "dependsOn": ["^_build"],
       "inputs": [
         "src/**",
+        // documents.js's examples suite reads the committed goldens under examples/, so they are a real input to the task. Undeclared, editing a golden left the previous result cached and the change untested -- which is how a stale golden survived unnoticed until the schema package's own major bump made it fail.
+        "examples/**",
         "vitest.config.ts",
         "vitest.unit.config.ts",
         "package.json"

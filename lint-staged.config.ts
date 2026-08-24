@@ -36,7 +36,8 @@ function groupByDirectory(
 }
 
 const config: Configuration = {
-  "*.{ts,tsx}": (files) =>
+  // Every extension the lint gate now checks, not just TypeScript. JSON, Markdown, and YAML became lintable when the shared config gained those languages, and a glob that stops at ts/tsx means a staged README or workflow file is committed unformatted and then fails CI -- the one thing this hook exists to prevent.
+  "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc,md,yml,yaml}": (files) =>
     [...groupByDirectory(files)].map(([directory, paths]) => {
       const pathsRelativeToDirectory = paths.map(
         (path) => `"${directory === "." ? path : relative(directory, path)}"`,
