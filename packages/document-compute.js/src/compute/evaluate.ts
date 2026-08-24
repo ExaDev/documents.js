@@ -123,15 +123,29 @@ function evaluateQty(node: MathQty, context: SymbolTable): Quantity {
   return quantity(rationalToNumber(siValue), unit.dimension);
 }
 
+// Arity check and tuple narrowing in one step. The length comparison is what rejects a wrong-arity call; the undefined checks are what let the return type be a fixed-length tuple under noUncheckedIndexedAccess, which is otherwise only reachable through a type assertion. Neither check is redundant: the length comparison alone leaves each element optional, and the undefined checks alone would accept a call with extra arguments.
+function expectTwoArgs(args: readonly EvaluationResult[], subject: string): readonly [EvaluationResult, EvaluationResult] {
+  const [left, right] = args;
+  if (args.length !== 2 || left === undefined || right === undefined) {
+    throw new UnsupportedExpressionError('evaluate', `${subject} takes exactly 2 arguments, got ${args.length}`);
+  }
+  return [left, right];
+}
+
+function expectOneArg(args: readonly EvaluationResult[], subject: string): EvaluationResult {
+  const [only] = args;
+  if (args.length !== 1 || only === undefined) {
+    throw new UnsupportedExpressionError('evaluate', `${subject} takes exactly 1 argument, got ${args.length}`);
+  }
+  return only;
+}
+
 function evaluateApp(node: MathApp, bindings: FormulaBindings, context: SymbolTable): EvaluationResult {
   const args = node.args.map((arg) => evaluate(arg, bindings, context));
 
   const binary = BINARY_OPERATORS[node.operator];
   if (binary !== undefined) {
-    if (args.length !== 2) {
-      throw new UnsupportedExpressionError('evaluate', `operator '${node.operator}' takes exactly 2 arguments, got ${args.length}`);
-    }
-    const [left, right] = args as [EvaluationResult, EvaluationResult];
+    const [left, right] = expectTwoArgs(args, `operator '${node.operator}'`);
     if (isInterval(left) || isInterval(right)) {
       return binary.interval(toInterval(left), toInterval(right));
     }
@@ -140,10 +154,7 @@ function evaluateApp(node: MathApp, bindings: FormulaBindings, context: SymbolTa
 
   const unary = UNARY_OPERATORS[node.operator];
   if (unary !== undefined) {
-    if (args.length !== 1) {
-      throw new UnsupportedExpressionError('evaluate', `operator '${node.operator}' takes exactly 1 argument, got ${args.length}`);
-    }
-    const [only] = args as [EvaluationResult];
+    const only = expectOneArg(args, `operator '${node.operator}'`);
     if (isInterval(only)) {
       if (unary.interval === undefined) {
         throw new UnsupportedExpressionError('evaluate', `operator '${node.operator}' has no interval rule in this pass`);
@@ -155,10 +166,7 @@ function evaluateApp(node: MathApp, bindings: FormulaBindings, context: SymbolTa
 
   // math:pow is binary like the arithmetic operators above but is not defined over intervals in this pass (a general interval power needs monotonicity analysis this pass does not implement -- see the README's scope note), so it is handled on its own rather than folded into BINARY_OPERATORS.
   if (node.operator === 'math:pow') {
-    if (args.length !== 2) {
-      throw new UnsupportedExpressionError('evaluate', `'math:pow' takes exactly 2 arguments, got ${args.length}`);
-    }
-    const [base, exponent] = args as [EvaluationResult, EvaluationResult];
+    const [base, exponent] = expectTwoArgs(args, "'math:pow'");
     return powQuantity(asQuantity(base, 'evaluate'), asQuantity(exponent, 'evaluate'));
   }
 
