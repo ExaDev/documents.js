@@ -9,9 +9,7 @@ export default tseslint.config(
     isomorphic: true,
   }),
   {
-    // TEMPORARY, pending a decision. no-pointless-reassignment reports `export const contentHashV1 = stableContentHash` in outline/graph.ts, and it is right that the two are identical today. Collapsing it is not a local cleanup though: contentHashV1 reaches consumers through this package's root barrel and is named in the README's exports table, while stableContentHash is deliberately kept off that barrel (outline/hash is reachable only by subpath). Removing it is therefore a breaking change to a published surface, and it would leave the root with no way to compute a graph node id at all.
-    //
-    // Scoped to the one declaration rather than the package, and to be deleted either way once the call is made: collapse it and re-export stableContentHash from the barrel, or keep the binding and drop only the speculative "must be forked later" rationale from its comment.
+    // no-pointless-reassignment reports `export const contentHashV1 = stableContentHash` in outline/graph.ts, and it is right that the two are the same function today. It is kept anyway: contentHashV1 is what this package publishes from its root barrel, named in the README's exports table, while stableContentHash is deliberately absent from that barrel (outline/hash is reachable only by subpath). Collapsing it would remove a public export and leave the root with no way to compute a graph node id, which is a deliberate API decision rather than a formatting cleanup.
     files: ["src/outline/graph.ts"],
     rules: { "exadev/no-pointless-reassignment": "off" },
   },
