@@ -9,6 +9,8 @@
     "types": ["node"],
     "jsx": "react-jsx",
     "noEmit": true,
+    // eslint.config.ts imports the workspace-root eslint.shared.ts by its real path, extension included, which is what ESLint's own TS config loader resolves. TypeScript rejects a .ts import specifier without this, and permits it here because noEmit is set.
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
