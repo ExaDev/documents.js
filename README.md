@@ -16,40 +16,40 @@ The packages layer from foundation up to user-facing interfaces. Each depends on
 
 ### Foundation
 
-| Package | What it is |
-| --- | --- |
-| [`document-schema.js`](packages/document-schema.js/README.md) | The canonical, format-agnostic content and document-tree schema shared by every codec, plus the structural transform between them (`decompose`/`flattenTree`/`factorStyles`/`assembleTree`, converting a flat `ContentDocument` to and from the tree-form `DocumentTree`). Free of any format-specific or I/O behaviour: the transform lives here because every codec depends on this package and none of them depends on `documents.js`, so it is the only layer a codec can reach to expose `DocumentTree` publicly without a dependency cycle. |
-| [`byte-codec`](packages/byte-codec/README.md) | Generic byte-level primitives (`ByteWriter`, `ByteReader`, CRC-32, deflate/inflate) and PNG/JPEG image encoding and decoding, with zero knowledge of any document format. |
-| [`document-outline.js`](packages/document-outline.js/README.md) | Utilities for consumers holding a tree-form `DocumentTree`: the TOC outline projection, effective-property resolution, and the flatten/leaf-text/stable-hash helpers. Depends on the schema alone, and is consumed by the interface packages rather than by the codecs. |
-| [`archive-codec`](packages/archive-codec/README.md) | Recursive archive (ZIP-in-ZIP) detection and walking with depth and cumulative decompressed-size guards, plus bounded classic OLE compound-file ([MS-CFB]) reading and OLE Package stream unwrapping — zero document-format knowledge. Consumed by `ooxml.js`, whose pptx (`p:oleObj`) and docx (`o:OLEObject`) OLE reading detects a ZIP-payload embedded object through it and decodes the nested package as a content document, and unwraps the classic `.bin` compound-file spelling through its CFB reader to the same nested decode. |
-| [`document-compute.js`](packages/document-compute.js/README.md) | Units-typed evaluation over the schema's `MathExpression`: `evaluate()` for point values and bounded intervals through one interpreter with exact-rational unit conversion, plus `solveFor()` numeric root-finding on one unknown. Depends on the schema alone; a leaf nothing else depends on yet — it is not wired into any conversion pipeline. |
+| Package                                                         | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`document-schema.js`](packages/document-schema.js/README.md)   | The canonical, format-agnostic content and document-tree schema shared by every codec, plus the structural transform between them (`decompose`/`flattenTree`/`factorStyles`/`assembleTree`, converting a flat `ContentDocument` to and from the tree-form `DocumentTree`). Free of any format-specific or I/O behaviour: the transform lives here because every codec depends on this package and none of them depends on `documents.js`, so it is the only layer a codec can reach to expose `DocumentTree` publicly without a dependency cycle. |
+| [`byte-codec`](packages/byte-codec/README.md)                   | Generic byte-level primitives (`ByteWriter`, `ByteReader`, CRC-32, deflate/inflate) and PNG/JPEG image encoding and decoding, with zero knowledge of any document format.                                                                                                                                                                                                                                                                                                                                                                         |
+| [`document-outline.js`](packages/document-outline.js/README.md) | Utilities for consumers holding a tree-form `DocumentTree`: the TOC outline projection, effective-property resolution, and the flatten/leaf-text/stable-hash helpers. Depends on the schema alone, and is consumed by the interface packages rather than by the codecs.                                                                                                                                                                                                                                                                           |
+| [`archive-codec`](packages/archive-codec/README.md)             | Recursive archive (ZIP-in-ZIP) detection and walking with depth and cumulative decompressed-size guards, plus bounded classic OLE compound-file ([MS-CFB]) reading and OLE Package stream unwrapping — zero document-format knowledge. Consumed by `ooxml.js`, whose pptx (`p:oleObj`) and docx (`o:OLEObject`) OLE reading detects a ZIP-payload embedded object through it and decodes the nested package as a content document, and unwraps the classic `.bin` compound-file spelling through its CFB reader to the same nested decode.        |
+| [`document-compute.js`](packages/document-compute.js/README.md) | Units-typed evaluation over the schema's `MathExpression`: `evaluate()` for point values and bounded intervals through one interpreter with exact-rational unit conversion, plus `solveFor()` numeric root-finding on one unknown. Depends on the schema alone; a leaf nothing else depends on yet — it is not wired into any conversion pipeline.                                                                                                                                                                                                |
 
 ### Format codecs
 
 Each converts one document format to and from the shared schema, built on `document-schema.js`:
 
-| Package | Formats |
-| --- | --- |
-| [`ooxml.js`](packages/ooxml.js/README.md) | OOXML packages (docx, pptx, xlsx) to and from JSON. |
-| [`odf.js`](packages/odf.js/README.md) | OpenDocument packages (odt, ods, odp) to and from JSON. |
-| [`markdown-codec`](packages/markdown-codec/README.md) | CommonMark+GFM to and from the shared content schema. |
-| [`pdf-codec`](packages/pdf-codec/README.md) | Parses arbitrary real-world PDFs and generates new ones, also depending on `byte-codec`. |
+| Package                                               | Formats                                                                                  |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [`ooxml.js`](packages/ooxml.js/README.md)             | OOXML packages (docx, pptx, xlsx) to and from JSON.                                      |
+| [`odf.js`](packages/odf.js/README.md)                 | OpenDocument packages (odt, ods, odp) to and from JSON.                                  |
+| [`markdown-codec`](packages/markdown-codec/README.md) | CommonMark+GFM to and from the shared content schema.                                    |
+| [`pdf-codec`](packages/pdf-codec/README.md)           | Parses arbitrary real-world PDFs and generates new ones, also depending on `byte-codec`. |
 
 ### Conversion engine
 
-| Package | What it is |
-| --- | --- |
+| Package                                           | What it is                                                                                                                                                  |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`documents.js`](packages/documents.js/README.md) | Bidirectional docx/pptx to and from PDF conversion, and a read+write editable OOXML document model, built on `ooxml.js` and depending on every codec above. |
 
 ### Interfaces
 
 Each exposes the conversion engine through a different surface:
 
-| Package | Surface |
-| --- | --- |
-| [`document-cli`](packages/document-cli/README.md) | CLI and interactive Ink TUI covering every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/markdown conversion, bridge, and editor as a scriptable command or a terminal app. |
-| [`document-mcp`](packages/document-mcp/README.md) | MCP server exposing the conversion, `.odb`, metadata, and font tooling as MCP tools. |
-| [`documents`](packages/documents/README.md) | Client-only, statically-built web UI for every conversion and editing tool in the ecosystem, also depending directly on `markdown-codec` and `odf.js`. The one package here that is never published: it deploys to GitHub Pages instead. |
+| Package                                           | Surface                                                                                                                                                                                                                                  |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`document-cli`](packages/document-cli/README.md) | CLI and interactive Ink TUI covering every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/markdown conversion, bridge, and editor as a scriptable command or a terminal app.                                                             |
+| [`document-mcp`](packages/document-mcp/README.md) | MCP server exposing the conversion, `.odb`, metadata, and font tooling as MCP tools.                                                                                                                                                     |
+| [`documents`](packages/documents/README.md)       | Client-only, statically-built web UI for every conversion and editing tool in the ecosystem, also depending directly on `markdown-codec` and `odf.js`. The one package here that is never published: it deploys to GitHub Pages instead. |
 
 ## PDF is an equal peer, not a junction
 

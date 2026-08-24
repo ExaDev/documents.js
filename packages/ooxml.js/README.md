@@ -75,7 +75,7 @@ Worker-isomorphic: runtime `src/` uses no Node-only APIs (no `node:*` imports, n
 ## Usage
 
 ```ts
-import { decodePackage, encodePackage } from 'ooxml.js';
+import { decodePackage, encodePackage } from "ooxml.js";
 
 // .docx / .pptx / .xlsx bytes -> faithful JSON Package
 const pkg = decodePackage(new Uint8Array(await file.arrayBuffer()));
@@ -89,8 +89,8 @@ const bytes = encodePackage(pkg);
 The core is a Zod 4 codec, so both directions are schema-validated:
 
 ```ts
-import { z } from 'zod';
-import { packageCodec } from 'ooxml.js';
+import { z } from "zod";
+import { packageCodec } from "ooxml.js";
 
 const pkg = z.decode(packageCodec, bytes);
 const out = z.encode(packageCodec, pkg);
@@ -100,11 +100,11 @@ const out = z.encode(packageCodec, pkg);
 
 Above the lossless core sit typed readers that resolve a format's own cascades — the docx style cascade, pptx's placeholder → layout → master → theme inheritance, xlsx's style-index → number-format classification — so order, styling, and geometry come through, not just flattened text. Each format has two entry points onto the same read: one producing `document-schema.js`'s tree-form `DocumentTree`, one producing the flat, content-level shape that tree decomposes.
 
-| Format | `DocumentTree` (primary) | Flat, content-level |
-| --- | --- | --- |
-| docx | `readDocx` / `buildDocxPackage` | `readDocxContent` / `buildDocxPackageFromContent` |
-| pptx | `readPptx` (read-only) | `readPptxContent` (read-only) |
-| xlsx | `readXlsx` / `buildXlsxPackage` | `readXlsxContent` / `buildXlsxPackageFromContent` |
+| Format | `DocumentTree` (primary)        | Flat, content-level                               |
+| ------ | ------------------------------- | ------------------------------------------------- |
+| docx   | `readDocx` / `buildDocxPackage` | `readDocxContent` / `buildDocxPackageFromContent` |
+| pptx   | `readPptx` (read-only)          | `readPptxContent` (read-only)                     |
+| xlsx   | `readXlsx` / `buildXlsxPackage` | `readXlsxContent` / `buildXlsxPackageFromContent` |
 
 `readXlsxWorkbook` sits outside the table: a separate lossy, cell-values-only reading view (sheet names, references, resolved values, formulas, merged ranges, defined names) with no write side.
 
@@ -113,7 +113,12 @@ Above the lossless core sit typed readers that resolve a format's own cascades �
 `readDocx`/`readPptx`/`readXlsx` decompose what they read into the tree `document-schema.js` defines — one group per top-level container, headings and lists nested inside the section they belong to, block-scoped constructs promoted to the region they span, repeated formatting factored into a package-level styles table. `buildDocxPackage`/`buildXlsxPackage` take one back the other way:
 
 ```ts
-import { buildDocxPackage, decodePackage, encodePackage, readDocx } from 'ooxml.js';
+import {
+  buildDocxPackage,
+  decodePackage,
+  encodePackage,
+  readDocx,
+} from "ooxml.js";
 
 const document = readDocx(decodePackage(bytes)); // DocumentTree, kind: 'wordprocessing'
 // document.children is one section group per section, the section's page geometry on the group's own
@@ -132,7 +137,11 @@ Minting has a real consequence for a caller walking the tree by hand, and it is 
 The `Content`-suffixed functions are what the tree-form ones wrap, exported in their own right for a caller driving a pipeline stage by stage (`documents.js`'s conversion engine does exactly this) or needing what the tree has no spelling for. Routing through the tree costs no fidelity of its own: `buildDocxPackage(readDocx(pkg))` builds the identical `Package` `buildDocxPackageFromContent(readDocxContent(pkg))` does, and flattening a tree reproduces exactly the content its content-level reader returns — both pinned in `src/typed/document-tree.test.ts`.
 
 ```ts
-import { buildXlsxPackageFromContent, decodePackage, readXlsxContent } from 'ooxml.js';
+import {
+  buildXlsxPackageFromContent,
+  decodePackage,
+  readXlsxContent,
+} from "ooxml.js";
 
 const content = readXlsxContent(decodePackage(bytes)); // ContentDocument, kind: 'spreadsheet'
 const pkg = buildXlsxPackageFromContent(content); // a fresh Package built from scratch, not a write-back into `pkg`
@@ -152,11 +161,11 @@ A construct with format-specific specifics the harmonised vocabulary does not na
 
 The `DocumentTree` readers and writers took the primary names, and the functions that held them were renamed rather than removed. Every one of them still behaves exactly as it did:
 
-| Was | Is now |
-| --- | --- |
-| `readDocx` | `readDocxContent` |
-| `readPptx` | `readPptxContent` |
-| `readXlsx` | `readXlsxWorkbook` |
+| Was                | Is now                        |
+| ------------------ | ----------------------------- |
+| `readDocx`         | `readDocxContent`             |
+| `readPptx`         | `readPptxContent`             |
+| `readXlsx`         | `readXlsxWorkbook`            |
 | `buildDocxPackage` | `buildDocxPackageFromContent` |
 | `buildXlsxPackage` | `buildXlsxPackageFromContent` |
 
@@ -169,21 +178,21 @@ Three of the renames are silent under a plain call — `readDocx`, `readPptx`, a
 Every module under `src/` is importable directly, by the same path it has relative to `src/`, without going through the barrel:
 
 ```ts
-import { bytesToBase64, base64ToBytes } from 'ooxml.js/util/base64';
-import { readXlsxContent } from 'ooxml.js/typed/xlsx/content';
-import { readDocx, buildDocxPackage } from 'ooxml.js/typed/document-tree';
+import { bytesToBase64, base64ToBytes } from "ooxml.js/util/base64";
+import { readXlsxContent } from "ooxml.js/typed/xlsx/content";
+import { readDocx, buildDocxPackage } from "ooxml.js/typed/document-tree";
 ```
 
 ## The ooxml.js format
 
 **The ooxml.js format** is a compact, still-plain-JSON alternative to the verbose `Package` (which repeats `type`/`tag`/`attributes`/`children` keys per node, with tag/namespace strings recurring thousands of times) — tuple-encoded nodes plus one interned string table, composing on `packageCodec`:
 
-```
+```text
 OOXML bytes --[packageCodec]--> Package --[compactCodec]--> CompactPackage (the ooxml.js format)
 ```
 
 ```ts
-import { decodePackage, toCompact, fromCompact } from 'ooxml.js';
+import { decodePackage, toCompact, fromCompact } from "ooxml.js";
 
 const pkg = decodePackage(bytes);
 const compact = toCompact(pkg); // { s: string[], p: Record<path, CompactPart> }
@@ -246,7 +255,7 @@ Reading the outer tuple: `[0, 0, [], [...]]` is an element whose tag is `s[0]` (
 All three format pairs have a direct codec — `packageCodec` (bytes ⇄ `Package`), `compactCodec` (`Package` ⇄ `CompactPackage`), and `compactPackageCodec` (bytes ⇄ `CompactPackage` directly):
 
 ```ts
-import { decodeCompactPackage, encodeCompactPackage } from 'ooxml.js';
+import { decodeCompactPackage, encodeCompactPackage } from "ooxml.js";
 
 const compact = decodeCompactPackage(bytes); // OOXML bytes -> CompactPackage directly
 const out = encodeCompactPackage(compact); // CompactPackage -> OOXML bytes directly

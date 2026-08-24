@@ -8,11 +8,19 @@
     "lib": ["ES2024"],
     "types": ["node"],
     "noEmit": true,
+    // eslint.config.ts imports eslint.shared.ts by its real path, extension included, which is what ESLint's own TypeScript config loader resolves. TypeScript rejects a .ts specifier without this, and permits it here because noEmit is set.
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true
   },
-  "include": ["eslint.config.ts", "eslint.shared.ts", "prettier.config.ts", "commitlint.config.ts", "lint-staged.config.ts"]
+  "include": [
+    "eslint.config.ts",
+    "eslint.shared.ts",
+    "prettier.config.ts",
+    "commitlint.config.ts",
+    "lint-staged.config.ts"
+  ]
 }

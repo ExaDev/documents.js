@@ -24,34 +24,37 @@ To run a single test file, pass its path to vitest directly, e.g. `pnpm exec vit
 
 ## What it provides
 
-| Module | Exports |
-|---|---|
-| `compute/rational` | `Rational`, `toRational`, `toExactRational`, `addRational`, `subtractRational`, `multiplyRational`, `divideRational`, `rationalToNumber` |
-| `compute/dimensions` | `dimensionExponent`, `dimensionsEqual`, `isDimensionless`, `multiplyDimensions`, `divideDimensions`, `scaleDimension`, `dimensionToString` |
-| `compute/quantity` | `quantity`, `addQuantities`, `subtractQuantities`, `multiplyQuantities`, `divideQuantities`, `negateQuantity`, `absQuantity`, `powQuantity`, `sqrtQuantity`, `sinQuantity`, `cosQuantity`, `tanQuantity` |
-| `compute/interval` | `interval`, `pointInterval`, `addIntervals`, `subtractIntervals`, `multiplyIntervals`, `divideIntervals`, `negateInterval`, `absInterval` |
-| `compute/evaluate` | `evaluate`, `EvaluationResult`, `isInterval` |
-| `compute/solve` | `solveFor`, `SolveMethod`, `SolveForOptions` |
-| `compute/errors` | `IncompatibleDimensionsError`, `UnboundSymbolError`, `UnknownUnitError`, `DivisionByZeroError`, `UnsupportedExpressionError`, `NumericDomainError`, `NonConvergentSolveError` |
+| Module               | Exports                                                                                                                                                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compute/rational`   | `Rational`, `toRational`, `toExactRational`, `addRational`, `subtractRational`, `multiplyRational`, `divideRational`, `rationalToNumber`                                                                 |
+| `compute/dimensions` | `dimensionExponent`, `dimensionsEqual`, `isDimensionless`, `multiplyDimensions`, `divideDimensions`, `scaleDimension`, `dimensionToString`                                                               |
+| `compute/quantity`   | `quantity`, `addQuantities`, `subtractQuantities`, `multiplyQuantities`, `divideQuantities`, `negateQuantity`, `absQuantity`, `powQuantity`, `sqrtQuantity`, `sinQuantity`, `cosQuantity`, `tanQuantity` |
+| `compute/interval`   | `interval`, `pointInterval`, `addIntervals`, `subtractIntervals`, `multiplyIntervals`, `divideIntervals`, `negateInterval`, `absInterval`                                                                |
+| `compute/evaluate`   | `evaluate`, `EvaluationResult`, `isInterval`                                                                                                                                                             |
+| `compute/solve`      | `solveFor`, `SolveMethod`, `SolveForOptions`                                                                                                                                                             |
+| `compute/errors`     | `IncompatibleDimensionsError`, `UnboundSymbolError`, `UnknownUnitError`, `DivisionByZeroError`, `UnsupportedExpressionError`, `NumericDomainError`, `NonConvergentSolveError`                            |
 
 Every module in the table is re-exported from the package root, so its exports import from `'document-compute.js'` directly.
 
 The value types this evaluator consumes and produces — `Quantity`, `Interval`, `EvaluationValue`, `FormulaBindings`, and their Zod schemas — are not defined here: they are typed contracts in `document-schema.js` itself (`src/math.ts`, beside `MathExpression`), so evaluation inputs are schema-validated shapes like everything else in that package. Import them from `'document-schema.js'` the same way this package does:
 
 ```ts
-import { evaluate } from 'document-compute.js';
-import type { FormulaBindings, MathExpression } from 'document-schema.js';
+import { evaluate } from "document-compute.js";
+import type { FormulaBindings, MathExpression } from "document-schema.js";
 
 // F = m * a
 const force: MathExpression = {
-  kind: 'app',
-  operator: 'math:multiply',
-  args: [{ kind: 'sym', id: 'm' }, { kind: 'sym', id: 'a' }],
+  kind: "app",
+  operator: "math:multiply",
+  args: [
+    { kind: "sym", id: "m" },
+    { kind: "sym", id: "a" },
+  ],
 };
 
 const bindings: FormulaBindings = {
-  m: { kind: 'quantity', magnitude: 2, dimension: { mass: 1 } },
-  a: { kind: 'quantity', magnitude: 3, dimension: { length: 1, time: -2 } },
+  m: { kind: "quantity", magnitude: 2, dimension: { mass: 1 } },
+  a: { kind: "quantity", magnitude: 3, dimension: { length: 1, time: -2 } },
 };
 
 const result = evaluate(force, bindings);
@@ -80,18 +83,21 @@ The issue's own example is a compliance region: `0.87 <= cos(phi) <= 1`. Rather 
 Both throw `NonConvergentSolveError` rather than returning a number they cannot vouch for: bisection when its bracket doesn't straddle a root or the iteration budget (`options.maxIterations`, default 100) runs out before the residual drops under `options.tolerance` (default `1e-9`); Newton when the numeric derivative vanishes or diverges, or the same budget/tolerance is exhausted. `options.unknownDimension` sets the `DimensionVector` the unknown is bound under at each trial point (default dimensionless) so a physically dimensioned unknown (a length, a mass) solves correctly against a formula that checks dimensions along the way.
 
 ```ts
-import { solveFor } from 'document-compute.js';
-import type { MathExpression } from 'document-schema.js';
+import { solveFor } from "document-compute.js";
+import type { MathExpression } from "document-schema.js";
 
 // x^2 = 4, solve for x
 const xSquared: MathExpression = {
-  kind: 'app',
-  operator: 'math:pow',
-  args: [{ kind: 'sym', id: 'x' }, { kind: 'num', numerator: '2', denominator: '1' }],
+  kind: "app",
+  operator: "math:pow",
+  args: [
+    { kind: "sym", id: "x" },
+    { kind: "num", numerator: "2", denominator: "1" },
+  ],
 };
 
-solveFor(xSquared, 4, 'x', {}, { bracket: [0, 3] }); // 2, via bisection
-solveFor(xSquared, 4, 'x', {}, { method: 'newton', initialGuess: 3 }); // 2, via Newton
+solveFor(xSquared, 4, "x", {}, { bracket: [0, 3] }); // 2, via bisection
+solveFor(xSquared, 4, "x", {}, { method: "newton", initialGuess: 3 }); // 2, via Newton
 ```
 
 ## Deviations from the issue

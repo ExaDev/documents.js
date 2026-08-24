@@ -4,7 +4,7 @@
 
 > Hand-written CommonMark+GFM ⇄ `DocumentTree` codec, built on [document-schema.js](../document-schema.js/README.md).
 
-The same "hand-write the format instead of wrapping a third-party library" bet as [`pdf-codec`](../pdf-codec/README.md), aimed at CommonMark and GFM. No `micromark`/`remark`/`marked`/`markdown-it`/`commonmark`/`mdast`/`unified`/`turndown`/`showdown` dependency (enforced by eslint `no-restricted-imports`). Runtime dependencies: `document-schema.js` (the shared pivot) and `zod`. `readMarkdown`/`writeMarkdown` read and write that pivot's tree-form `DocumentTree`; `readMarkdownContent`/`writeMarkdownContent` read and write the flat `ContentDocument` underneath it — the same model [`documents.js`](https://github.com/ExaDev/documents.js) builds docx/pptx/odt/odp conversions around. See [Two encodings](#two-encodings-documentpackage-and-contentdocument).
+The same "hand-write the format instead of wrapping a third-party library" bet as [`pdf-codec`](../pdf-codec/README.md), aimed at CommonMark and GFM. No `micromark`/`remark`/`marked`/`markdown-it`/`commonmark`/`mdast`/`unified`/`turndown`/`showdown` dependency (enforced by eslint `no-restricted-imports`). Runtime dependencies: `document-schema.js` (the shared pivot) and `zod`. `readMarkdown`/`writeMarkdown` read and write that pivot's tree-form `DocumentTree`; `readMarkdownContent`/`writeMarkdownContent` read and write the flat `ContentDocument` underneath it — the same model [`documents.js`](https://github.com/ExaDev/documents.js) builds docx/pptx/odt/odp conversions around. See [Two encodings](#two-encodings-documenttree-and-contentdocument).
 
 ```mermaid
 graph TD
@@ -76,30 +76,33 @@ Published to [npmjs.org](https://www.npmjs.com/package/markdown-codec) via OIDC 
 Reading and writing markdown text:
 
 ```ts
-import { readMarkdown, writeMarkdown } from 'markdown-codec';
+import { readMarkdown, writeMarkdown } from "markdown-codec";
 
-const { documentPackage, diagnostics } = readMarkdown('# Title\n\nSome **bold** text with a [link](https://example.com).', {
-  frontMatter: true, // parse a leading YAML front matter block into the package's metadata
-  footnotes: true, // recognise [^label] markers and [^label]: definitions (default; see Footnotes)
-  images: (destination) => undefined, // a synchronous MarkdownImageResolver port for non-data: URI images
-});
+const { documentPackage, diagnostics } = readMarkdown(
+  "# Title\n\nSome **bold** text with a [link](https://example.com).",
+  {
+    frontMatter: true, // parse a leading YAML front matter block into the package's metadata
+    footnotes: true, // recognise [^label] markers and [^label]: definitions (default; see Footnotes)
+    images: (destination) => undefined, // a synchronous MarkdownImageResolver port for non-data: URI images
+  },
+);
 
 const markdown = writeMarkdown(documentPackage, {
-  bulletListMarker: '-',
-  emphasisMarker: '_',
+  bulletListMarker: "-",
+  emphasisMarker: "_",
   frontMatter: true, // emit the package's metadata back out as a leading front matter block
 });
 ```
 
-`documentPackage` is a `DocumentTree` — document-schema.js's tree form, with a minted styles table (see [Two encodings](#two-encodings-documentpackage-and-contentdocument)). The field is named `documentPackage` rather than `package` because `package` is a reserved word in strict mode, so `const { package } = readMarkdown(src)` would not parse.
+`documentPackage` is a `DocumentTree` — document-schema.js's tree form, with a minted styles table (see [Two encodings](#two-encodings-documenttree-and-contentdocument)). The field is named `documentPackage` rather than `package` because `package` is a reserved word in strict mode, so `const { package } = readMarkdown(src)` would not parse.
 
 Both accept an optional `signal` (`AbortSignal`) and `sink` (`MarkdownDiagnosticSink`, called once per recoverable issue or construct-mapping gap — see [Gotchas](#gotchas-and-quirks)). `writeMarkdown` throws `MarkdownUnsupportedDocumentKindError` for a package whose `kind` is not `'wordprocessing'`, checked before flattening so every non-`'wordprocessing'` package reaches it the same way regardless of what else about that package would have failed document-schema.js's own `flattenTree`. A `'wordprocessing'` package can still fail to flatten — a group carrying a style reference the package's own `styles` table has no entry for — and that failure surfaces as `MarkdownPackageFlattenError`, not a bare `Error` from the dependency. A `DocumentTree`'s own `layers`/`attachments`/`destinations`/`pages` tables have no flat-`ContentDocument` home to land in; `writeMarkdown` reports one `PACKAGE_TABLE_DROPPED` diagnostic per non-empty table it finds rather than dropping them without a trace. The `definitions` table is the one exemption: this package's own link-tenant entries (what `readMarkdown` splices there from the source's reference definitions) render back out as `[label]: destination "title"` lines, so only a table holding foreign tenants reports.
 
 The same round trip as a schema-validated [`z.codec()`](https://zod.dev) pair, mirroring `pdf-codec`'s `pdfCodec`:
 
 ```ts
-import { z } from 'zod';
-import { markdownCodec, MarkdownBytesSchema } from 'markdown-codec';
+import { z } from "zod";
+import { markdownCodec, MarkdownBytesSchema } from "markdown-codec";
 
 const documentPackage = z.decode(markdownCodec, bytes); // throws if bytes are not well-formed UTF-8
 const bytes2 = z.encode(markdownCodec, documentPackage);
@@ -113,17 +116,17 @@ document-schema.js states one document in two shapes, and owns the transform bet
 
 This package exposes a read/write pair and a codec at each level. The unsuffixed names are the tree-form ones and are what to reach for by default — a codec is a construction site, so the tree is what a caller gets unless they ask for otherwise. The `Content`-suffixed names are the flat pair one level down, mirroring the `readXlsx`/`readXlsxContent` naming already in [`ooxml.js`](../ooxml.js/README.md):
 
-| Level | Read | Write | Codec | Value type |
-| --- | --- | --- | --- | --- |
-| Tree (default) | `readMarkdown` | `writeMarkdown` | `markdownCodec` | `DocumentTree` |
-| Flat | `readMarkdownContent` | `writeMarkdownContent` | `markdownContentCodec` | `ContentDocument` |
+| Level          | Read                  | Write                  | Codec                  | Value type        |
+| -------------- | --------------------- | ---------------------- | ---------------------- | ----------------- |
+| Tree (default) | `readMarkdown`        | `writeMarkdown`        | `markdownCodec`        | `DocumentTree`    |
+| Flat           | `readMarkdownContent` | `writeMarkdownContent` | `markdownContentCodec` | `ContentDocument` |
 
 The tree pair is the flat pair with the transform composed on — `readMarkdown` is `assembleTree` over `readMarkdownContent`, `writeMarkdown` is `flattenTree` before `writeMarkdownContent` — plus the two tree-only carries the flat form has no root for: the source's reference definitions splice into `documentPackage.definitions` (link tenant, keyed by normalised label) and the verbatim front-matter block into `documentPackage.source.frontmatter`, both rendered back out by `writeMarkdown` (`[label]: dest "title"` lines after the body; the original front matter verbatim in place of the regenerated block). Sources carrying neither render identically to the flat pair, pinned in `src/package.test.ts`; a source carrying either renders its extra block, which is the point of reaching for the tree. Options, diagnostics, and error behaviour are identical at both levels.
 
 Reach for the flat pair when composing a package boundary by hand (`decompose`/`flattenTree` directly, or `factorStyles` with your own minting policy), when feeding a `ContentDocument`-consuming builder such as `documents.js`'s conversion pipeline, or when a layout stage needs to stamp frames onto content before it is decomposed. Everything else wants the tree.
 
 ```ts
-import { readMarkdownContent, writeMarkdownContent } from 'markdown-codec';
+import { readMarkdownContent, writeMarkdownContent } from "markdown-codec";
 
 const { document } = readMarkdownContent(source); // a ContentDocument: kind, metadata, sections
 const markdown = writeMarkdownContent(document);
@@ -223,17 +226,15 @@ Emission is the inverse and validates first: a section's markers must pair as ba
 
 **Round-trip conformance rate** (read → write → reparse → render to HTML, compared byte for byte against expected HTML):
 
-| Corpus | Examples | Passing round trip | Rate |
-| --- | --- | --- | --- |
-| CommonMark 0.31.2 (`assets/commonmark/spec.json`) | 652 | 511 | 78.4% |
-| GFM tagged extensions (table/strikethrough/autolink/task-list, `assets/gfm/spec.txt`) | 23 | 22 | 95.7% |
-| Combined | 675 | 533 | 79.0% |
+| Corpus                                                                                | Examples | Passing round trip | Rate  |
+| ------------------------------------------------------------------------------------- | -------- | ------------------ | ----- |
+| CommonMark 0.31.2 (`assets/commonmark/spec.json`)                                     | 652      | 511                | 78.4% |
+| GFM tagged extensions (table/strikethrough/autolink/task-list, `assets/gfm/spec.txt`) | 23       | 22                 | 95.7% |
+| Combined                                                                              | 675      | 533                | 79.0% |
 
 Every non-passing example is named individually in `src/test-support/conformance-exclusions.ts`, attributed to a closed set of causes (shrink-only — see [Conventions](#conventions)): most commonly a soft line break collapsing to a space, a nested/unresolved image title, an emphasis-span collision, or a blockquote whose heading content skips its container pair.
 
 **Optional real-world corpus.** `test/corpus/` (gitignored) holds a `pnpm test:corpus` project for a manual sanity check against sibling READMEs on disk — asserts no throw and real content on reparse, not byte fidelity. Not part of `pnpm test`; run locally before significant parser/lower/emit changes.
-
-
 
 ## Release and publishing
 

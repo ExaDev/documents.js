@@ -2,5 +2,5 @@
   // A no-op Worker whose only purpose is to host archive-codec's source as the module graph the workers test suite (test/workers/**) imports against under the real workerd runtime -- there is no fetch handler to exercise, only the library's own ZIP container, detection, and recursive-walking code running inside a Cloudflare Workers isolate to prove it carries zero Node-only API usage.
   "name": "archive-codec-workers-test",
   "main": "src/index.ts",
-  "compatibility_date": "2024-09-23"
+  "compatibility_date": "2024-09-23",
 }

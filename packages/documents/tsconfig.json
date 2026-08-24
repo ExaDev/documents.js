@@ -17,5 +17,12 @@
     "types": ["vite/client", "wicg-file-system-access"]
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/workers/**", "src/**/*.worker.ts", "src/rpc/router.ts", "src/rpc/sessionRouter.ts"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/workers/**",
+    "src/**/*.worker.ts",
+    "src/rpc/router.ts",
+    "src/rpc/sessionRouter.ts"
+  ]
 }

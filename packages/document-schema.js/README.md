@@ -59,23 +59,36 @@ Two format-agnostic helpers live here because they operate on the content model 
 ## Usage
 
 ```ts
-import { ContentDocumentSchema, DocumentTreeSchema } from 'document-schema.js';
+import { ContentDocumentSchema, DocumentTreeSchema } from "document-schema.js";
 
 // The codec-exchange form: what every format's reader produces and every writer consumes -- always flat,
 // always fully materialised (no styles table, no refs), never versioned (that lives on the serialised artefact).
-const content = ContentDocumentSchema.parse(someWordprocessingOrPresentationValue);
+const content = ContentDocumentSchema.parse(
+  someWordprocessingOrPresentationValue,
+);
 
 // The package tree: what a serialised dump carries. `children` holds one group per top-level container,
 // with the content grouped inside it (see "The package tree" below).
 const pkg = DocumentTreeSchema.parse({
-  kind: 'wordprocessing',
-  metadata: { title: 'Example' },
+  kind: "wordprocessing",
+  metadata: { title: "Example" },
   children: [
     {
-      node: { kind: 'section', pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 } },
+      node: {
+        kind: "section",
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+      },
       children: [
-        { node: { kind: 'paragraph', headingLevel: 1, runs: [{ text: 'Heading' }] }, children: [] },
-        { kind: 'paragraph', runs: [{ text: 'Body.' }] },
+        {
+          node: {
+            kind: "paragraph",
+            headingLevel: 1,
+            runs: [{ text: "Heading" }],
+          },
+          children: [],
+        },
+        { kind: "paragraph", runs: [{ text: "Body." }] },
       ],
     },
   ],
@@ -83,7 +96,10 @@ const pkg = DocumentTreeSchema.parse({
 
 // Once a layout pass has fused rendered positions onto the tree's own nodes (each via its own `frames` array)
 // and reported each page's own size, `pages` is populated to match:
-const laidOut = DocumentTreeSchema.parse({ ...pkg, pages: [{ widthPt: 612, heightPt: 792 }] });
+const laidOut = DocumentTreeSchema.parse({
+  ...pkg,
+  pages: [{ widthPt: 612, heightPt: 792 }],
+});
 ```
 
 ## The package tree
@@ -109,7 +125,12 @@ The codecs do not change: they keep producing flat `ContentDocument`s (their nat
 The transform between the two encodings lives in this package, alongside the schemas that define them:
 
 ```ts
-import { assembleTree, decompose, factorStyles, flattenTree } from 'document-schema.js';
+import {
+  assembleTree,
+  decompose,
+  factorStyles,
+  flattenTree,
+} from "document-schema.js";
 
 // The one call a construction site makes: decompose the flat content into the tree, splice the envelope
 // onto the root, and mint a styles table over the result. `pages` is optional -- pass it once a layout
@@ -120,13 +141,13 @@ const pkg = assembleTree(content, pages);
 const flat = flattenTree(pkg);
 
 // The two halves on their own, for a caller composing its own boundary.
-const children = decompose(content);   // flat -> the TreeChildren a DocumentTree's children field carries
-const reminted = factorStyles(pkg);    // re-mint an already-assembled tree (idempotent)
+const children = decompose(content); // flat -> the TreeChildren a DocumentTree's children field carries
+const reminted = factorStyles(pkg); // re-mint an already-assembled tree (idempotent)
 ```
 
 `decompose` throws `ConstructMarkerImbalanceError` — carrying `src/content.ts`'s own `ConstructMarkerImbalance` payload, so a caller narrows with `instanceof` and reads the offending block index rather than parsing a message — when a container's `constructStart`/`constructEnd` markers do not pair up. Promotion is defined only over a balanced stream, so an unbalanced one is refused rather than repaired into a plausible tree.
 
-**This is a deliberate amendment to the "schemas only" charter, not a drift from it.** The transform is not business logic and not format-specific behaviour: it is the canonical, purely structural, zero-I/O relationship between the two shapes this package already defines, and its correctness contract *is* the three laws above. It lives here because it has to: `ooxml.js`, `odf.js`, `markdown-codec`, and `pdf-codec` all depend on this package and none of them depends on `documents.js`, so a codec whose public read/write functions speak `DocumentTree` directly can only reach the transform if the transform sits at or below the schema layer. Everything the charter actually guards against — XML, ZIP, PDF, fonts, layout, bytes, filesystem — remains firmly out.
+**This is a deliberate amendment to the "schemas only" charter, not a drift from it.** The transform is not business logic and not format-specific behaviour: it is the canonical, purely structural, zero-I/O relationship between the two shapes this package already defines, and its correctness contract _is_ the three laws above. It lives here because it has to: `ooxml.js`, `odf.js`, `markdown-codec`, and `pdf-codec` all depend on this package and none of them depends on `documents.js`, so a codec whose public read/write functions speak `DocumentTree` directly can only reach the transform if the transform sits at or below the schema layer. Everything the charter actually guards against — XML, ZIP, PDF, fonts, layout, bytes, filesystem — remains firmly out.
 
 The laws are pinned in `src/bijection.test.ts` over a corpus spanning every document kind, every leaf the tree vocabulary admits, and every grouping signal `decompose` reads (headings, list levels, and construct boundaries in each block flow that admits them). `documents.js` runs the same law harness over its own real-format corpus — reader output for every format it supports, editor builds, and conversion captures carrying a layout pass's real frames and pages — which is the complement this package cannot host, since every reader in it belongs to a package that depends on this one.
 
@@ -139,21 +160,50 @@ In the tree, a construct is a group like any other: `{ node: <descriptor>, child
 ```ts
 // A tracked insertion inside a docx content control, and a footnote marker whose body lives in the definitions table.
 const pkg = DocumentTreeSchema.parse({
-  kind: 'wordprocessing',
+  kind: "wordprocessing",
   metadata: {},
-  definitions: { n1: { kind: 'footnote', blocks: [{ kind: 'paragraph', runs: [{ text: 'The note body.' }] }] } },
+  definitions: {
+    n1: {
+      kind: "footnote",
+      blocks: [{ kind: "paragraph", runs: [{ text: "The note body." }] }],
+    },
+  },
   children: [
     {
-      node: { kind: 'section', pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 } },
+      node: {
+        kind: "section",
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+      },
       children: [
         {
-          node: { kind: 'contentControl', controlType: 'richText', tag: 'ClientBlock', lock: 'container' },
+          node: {
+            kind: "contentControl",
+            controlType: "richText",
+            tag: "ClientBlock",
+            lock: "container",
+          },
           children: [
             {
-              node: { kind: 'provenance', change: 'insertion', author: 'A. Reviewer', dateIso: '2026-08-18T09:00:00Z' },
-              children: [{ kind: 'paragraph', runs: [{ text: 'Inserted sentence.' }] }],
+              node: {
+                kind: "provenance",
+                change: "insertion",
+                author: "A. Reviewer",
+                dateIso: "2026-08-18T09:00:00Z",
+              },
+              children: [
+                { kind: "paragraph", runs: [{ text: "Inserted sentence." }] },
+              ],
             },
-            { node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, children: [] },
+            {
+              node: {
+                kind: "anchor",
+                anchorType: "footnote",
+                name: "1",
+                definition: "n1",
+              },
+              children: [],
+            },
           ],
         },
       ],
@@ -164,19 +214,19 @@ const pkg = DocumentTreeSchema.parse({
 
 The six kinds (`src/construct.ts`):
 
-| Kind | Carries | Where it comes from |
-| --- | --- | --- |
-| `contentControl` | `controlType`, `tag`, `alias`, `lock`, `value`, `checked`, `options` | docx block and inline SDTs, docx legacy `w:ffData` form fields, ODF `office:forms` controls and TOC/index wrappers, PDF AcroForm widgets and their field tree |
-| `field` | `instruction`, `cachedResult` | docx `w:fldChar`/`w:instrText` and `w:fldSimple`, ODF field masters and simple fields, ODF cross-reference displays, pptx `a:fld` |
-| `anchor` | `anchorType`, `name`, `definition` | docx bookmarks, comment extents, footnote/endnote references; ODF `text:bookmark`, `text:reference-mark*`, `text:note`, `office:annotation`; PDF sticky notes and markup annotations; markdown footnote markers |
-| `link` | `target` (external URI or internal anchor name), `title` | docx `@w:anchor`, pptx slide jumps, PDF `GoTo`/`/Dest` and link annotations, markdown link/image titles |
-| `provenance` | `change`, `author`, `dateIso` | docx `w:ins`/`w:del` and move tracking, ODF `text:tracked-changes`/`text:changed-region` |
-| `division` | `name`, `columnCount`, `protected`, `linked`, `source` | ODF `text:section` and `text:section-source`, tagged PDF `/Sect` and `/Div` |
+| Kind             | Carries                                                              | Where it comes from                                                                                                                                                                                             |
+| ---------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contentControl` | `controlType`, `tag`, `alias`, `lock`, `value`, `checked`, `options` | docx block and inline SDTs, docx legacy `w:ffData` form fields, ODF `office:forms` controls and TOC/index wrappers, PDF AcroForm widgets and their field tree                                                   |
+| `field`          | `instruction`, `cachedResult`                                        | docx `w:fldChar`/`w:instrText` and `w:fldSimple`, ODF field masters and simple fields, ODF cross-reference displays, pptx `a:fld`                                                                               |
+| `anchor`         | `anchorType`, `name`, `definition`                                   | docx bookmarks, comment extents, footnote/endnote references; ODF `text:bookmark`, `text:reference-mark*`, `text:note`, `office:annotation`; PDF sticky notes and markup annotations; markdown footnote markers |
+| `link`           | `target` (external URI or internal anchor name), `title`             | docx `@w:anchor`, pptx slide jumps, PDF `GoTo`/`/Dest` and link annotations, markdown link/image titles                                                                                                         |
+| `provenance`     | `change`, `author`, `dateIso`                                        | docx `w:ins`/`w:del` and move tracking, ODF `text:tracked-changes`/`text:changed-region`                                                                                                                        |
+| `division`       | `name`, `columnCount`, `protected`, `linked`, `source`               | ODF `text:section` and `text:section-source`, tagged PDF `/Sect` and `/Div`                                                                                                                                     |
 
 Five things bound the vocabulary, and each is a decision rather than an omission:
 
 - **Block-scoped extents are groups; run-scoped extents are a paragraph field.** A construct group wraps the block flow of a section, heading group, shape, or list item — and since the run-level extent mechanism landed ([#741](https://github.com/ExaDev/documents.js/issues/741)), a construct covering a sub-sequence of one paragraph's runs is a `RunConstructExtent` on that paragraph's own optional `constructs` field: a descriptor plus a half-open `startRun`/`endRun` range, so the paragraph it sits in is never split to host a wrapper (see [Run-level construct extents](#run-level-construct-extents) below). One occurrence, one scope, one encoding: a construct bracketing whole blocks is a marker pair in the flat form and a group in the tree; a construct covering a run sub-sequence is a field on the paragraph in both. An external hyperlink stays on `ContentRun.hyperlink` regardless — `link` groups are for block-scoped and annotated extents a flat run field cannot express, never a replacement for it.
-- **Crossing and boundary-straddling block extents are a ratified drop.** Two block-scoped constructs whose extents cross (the first ends inside the second, the second inside the first) have no encoding in either form, structurally: the tree states a construct as a group and no tree holds crossing subtrees, while the flat form's bracket matching re-pairs a crossing couple into a different nesting than the source meant. The id-keyed pairing that could express them (WordprocessingML's own `w:id`) is exactly what the marker contract refuses — an id has no home on the tree side and no deterministic way back through `flatten`. The same holds for an extent straddling a block-list boundary (a section break, a table cell's wall), because each block list is its own bracket scope and cross-list pairing is ids again. Within one paragraph, crossing extents *are* encodable — run ranges are data, not brackets — so this ratification covers block scope only; a codec reading a crossing or straddling pair drops the crossing extent and keeps the properly nested one.
+- **Crossing and boundary-straddling block extents are a ratified drop.** Two block-scoped constructs whose extents cross (the first ends inside the second, the second inside the first) have no encoding in either form, structurally: the tree states a construct as a group and no tree holds crossing subtrees, while the flat form's bracket matching re-pairs a crossing couple into a different nesting than the source meant. The id-keyed pairing that could express them (WordprocessingML's own `w:id`) is exactly what the marker contract refuses — an id has no home on the tree side and no deterministic way back through `flatten`. The same holds for an extent straddling a block-list boundary (a section break, a table cell's wall), because each block list is its own bracket scope and cross-list pairing is ids again. Within one paragraph, crossing extents _are_ encodable — run ranges are data, not brackets — so this ratification covers block scope only; a codec reading a crossing or straddling pair drops the crossing extent and keeps the properly nested one.
 - **Two group variants, one per block flow.** `SectionConstructGroup` sits in a section's or heading group's flow and admits heading children; `ShapeConstructGroup` sits in a shape's or list item's and does not — exactly the `SectionChild`/`ShapeChild` split that already existed. A construct nests in and around every other group, so a `provenance` wrapper inside a `contentControl` inside a `division` is a legal (and real) docx shape. Constructs are **not** legal as direct children of a slide, sheet, drawing page, or the package root: those hold containers and leaves, not block flow. The flat form's marker pair follows the same rule by construction: it is a `ContentBlock`, so it can only appear where block flow already runs.
 - **`division` is first-class, not degraded.** [#24](https://github.com/ExaDev/document-schema.js/issues/24) posed ODF `text:section` as a choice between a new generic kind and degrading to `contentControl` with the specifics in residue. It is first-class, on the odf inventory's own recommendation: `ContentSection` cannot host it (that is page geometry, one `pageSize`/`margins` pair, and it does not nest, while a division nests arbitrarily and usually changes no page geometry at all), and burying a structural container in the form-control vocabulary would make `contentControl` mean two unrelated things. It clears #22's no-format-specific-kinds bar on a real analogue — tagged PDF's `/Sect` and `/Div` are the same construct — not on ODF's say-so. It is spelled `division` rather than `section` because `{ kind: 'section' }` is already the page-geometry container descriptor.
 - **Residue rides the descriptors, spelt identically to everywhere else.** #22's channel 2 has landed (see [The residue channel](#the-residue-channel)): every descriptor, `division` included, carries the same optional `source: { format, xml }` every content node carries, because a descriptor is the construct group's node payload — a node position, not a special case. A matched marker pair moves it across the flat/tree boundary inside the descriptor the open marker already embeds, so the markers themselves stay bare and the construct group keeps its strict `{ node, style, children }` shape. `division` was the one refusal until this major: its `source` already named the external-chapter link (`DivisionSource`, landed 4.1.0), one name could not mean two facts, and renaming the landed field wanted a major. [#743](https://github.com/ExaDev/documents.js/issues/743) does exactly that — the link now rides `linked`, and `source` carries division's own residue rows (ODF `text:filter-name`) like every other descriptor.
@@ -186,44 +236,86 @@ Five things bound the vocabulary, and each is a decision rather than an omission
 The tree has a wrapper node to hang an extent off; the flat `ContentDocument` does not — a section's, shape's, or table cell's content is one block list and nothing else. So the flat encoding of a construct is a **matched pair of boundary markers** bracketing the blocks it spans, added to `ContentBlock` as two new kinds (`src/content.ts`):
 
 ```ts
-import type { ContentBlock } from 'document-schema.js';
+import type { ContentBlock } from "document-schema.js";
 
 // The flat form of the same construct region the tree example above carries as nested groups: a tracked
 // insertion and a footnote marker, both inside one content control.
 const blocks: ContentBlock[] = [
-  { kind: 'constructStart', descriptor: { kind: 'contentControl', controlType: 'richText', tag: 'ClientBlock', lock: 'container' } },
-  { kind: 'constructStart', descriptor: { kind: 'provenance', change: 'insertion', author: 'A. Reviewer', dateIso: '2026-08-18T09:00:00Z' } },
-  { kind: 'paragraph', runs: [{ text: 'Inserted sentence.' }] },
-  { kind: 'constructEnd' },
-  { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' } },
-  { kind: 'constructEnd' },
-  { kind: 'constructEnd' },
+  {
+    kind: "constructStart",
+    descriptor: {
+      kind: "contentControl",
+      controlType: "richText",
+      tag: "ClientBlock",
+      lock: "container",
+    },
+  },
+  {
+    kind: "constructStart",
+    descriptor: {
+      kind: "provenance",
+      change: "insertion",
+      author: "A. Reviewer",
+      dateIso: "2026-08-18T09:00:00Z",
+    },
+  },
+  { kind: "paragraph", runs: [{ text: "Inserted sentence." }] },
+  { kind: "constructEnd" },
+  {
+    kind: "constructStart",
+    descriptor: {
+      kind: "anchor",
+      anchorType: "footnote",
+      name: "1",
+      definition: "n1",
+    },
+  },
+  { kind: "constructEnd" },
+  { kind: "constructEnd" },
 ];
 ```
 
 This is what makes the descriptor vocabulary reachable at all from the shape a codec produces: every codec reads and writes `ContentDocument`, so a construct facility wired only onto the tree is a facility no codec can emit into. `decompose` promotes each matched pair into the construct group the tree already has, and `flatten` emits the pair back.
 
 - **Pairing is ordinary bracket matching.** A `constructEnd` closes the nearest preceding still-open `constructStart` in the **same block list**, and the blocks between them are the extent. That is the entire mechanism — there is deliberately **no id, name, or other pairing key** on either marker. An id would have to be minted by whichever producer emitted the pair and then reproduced byte-for-byte by `flatten` to satisfy law 1 above, and a construct group carries a descriptor and its children and nothing else, so the id would be a value with no home on the tree side and no deterministic way back. A bare bracket has nothing to reproduce and nothing to get wrong, and bracket matching already generalises to arbitrary nesting depth and to different construct kinds nested inside each other.
-- **Matching never straddles a block list.** A pair opened in a section's blocks closes in that same array; a pair opened inside a table cell closes inside that cell. That cell is also where a construct inside a table is expressible in *either* encoding, because decomposition treats a table as one leaf and never descends into it — so a cell's block list stays flat in a tree too, markers and all.
+- **Matching never straddles a block list.** A pair opened in a section's blocks closes in that same array; a pair opened inside a table cell closes inside that cell. That cell is also where a construct inside a table is expressible in _either_ encoding, because decomposition treats a table as one leaf and never descends into it — so a cell's block list stays flat in a tree too, markers and all.
 - **An unbalanced list is invalid input, not a shape to repair.** A close with nothing open, or a start still open when the list ends, is malformed: `decompose` throws rather than inventing a boundary. `findConstructMarkerImbalance(blocks)` is the one shared definition of that check — it returns `{ kind: 'unmatchedEnd' | 'unclosedStart', index }` for the first fault or `undefined` when the list balances, and it exists here because a codec emitting pairs, another reading them, and `decompose` promoting them must all agree on exactly one answer, and no schema can express balance (it is a property of a list's sequence, not of any block in it). It is deliberately non-recursive: each block list is its own bracket scope, so a caller walking nested lists calls it once per list. Balance is checked here, not by the schema — `ContentDocumentSchema.parse` still accepts a section whose blocks carry an unmatched marker (pinned by a dedicated test), since a Zod-only refinement expressing balance would validate against a rule the published `content-document.schema.json` fragment cannot express and so would silently diverge from it.
 - **Balance is necessary but not sufficient — an extent must not cross a heading-group or list-group scope boundary.** Headings and list items have no delimiter of their own in the flat form; a heading paragraph's scope runs until the next paragraph whose `headingLevel` is shallower than or equal to its own, and a list item's scope runs until nesting shallows back out — exactly the nesting `decompose` infers when it builds `HeadingGroupNode`/`ListGroupNode`. A pair whose extent contains a paragraph that closes a scope open before the pair started gives `decompose` no single correct tree: nesting the construct group inside the closing scope strands that paragraph with no legal parent, and closing the scope at the `constructStart` and hoisting the construct group out silently moves everything after that paragraph out of a scope it belonged to. `findConstructMarkerImbalance` cannot see this — balance is a property of the marker pair alone, not of what sits between the two markers — so this package does not check it either; `decompose` is the sole enforcement point, since only it walks the heading/list nesting needed to detect a crossing, and it must reject a crossing extent exactly as it already rejects an unbalanced one, rather than silently picking between the two divergent trees. A producer (`ooxml.js`, `odf.js`, `markdown-codec`, `pdf-codec`) must never open a marker pair inside a heading or list scope that some other block inside the extent goes on to close.
-- **A marker carries nothing but its kind and (on the open half) its descriptor.** No `frames` or `sourcePath` — a boundary renders nothing, occupies no space, and has no position — and no `style` ref, since refs are tree-only and a construct group's own ref never resolves onto the construct anyway; it only extends the chain passed to its children, which already carry their own resolved properties. A construct's residue is not a marker field either: it rides *inside* the descriptor the open marker embeds, the same `source` field that descriptor carries as a tree node.
-- **The tree refuses markers at leaf positions.** `TreeBlockLeaf` (`src/package-node.ts`) is `ContentBlock` minus the two marker kinds, and every block-flow child position uses it. A construct is a *group* in the tree; admitting the marker pair there as well would put one fact in two encodings inside one tree, and `decompose(flatten(x)) === x` could never hold for it. Table cells are not an exception to this — a cell's blocks are flat in both encodings, so nothing there crosses the boundary.
+- **A marker carries nothing but its kind and (on the open half) its descriptor.** No `frames` or `sourcePath` — a boundary renders nothing, occupies no space, and has no position — and no `style` ref, since refs are tree-only and a construct group's own ref never resolves onto the construct anyway; it only extends the chain passed to its children, which already carry their own resolved properties. A construct's residue is not a marker field either: it rides _inside_ the descriptor the open marker embeds, the same `source` field that descriptor carries as a tree node.
+- **The tree refuses markers at leaf positions.** `TreeBlockLeaf` (`src/package-node.ts`) is `ContentBlock` minus the two marker kinds, and every block-flow child position uses it. A construct is a _group_ in the tree; admitting the marker pair there as well would put one fact in two encodings inside one tree, and `decompose(flatten(x)) === x` could never hold for it. Table cells are not an exception to this — a cell's blocks are flat in both encodings, so nothing there crosses the boundary.
 
 ### Run-level construct extents
 
 A construct whose extent is a **sub-sequence of one paragraph's runs** — an inline field, a mid-paragraph bookmark, a comment reference site, a footnote reference marker — is not a marker pair and not a group; it is an entry on the paragraph it sits inside ([#741](https://github.com/ExaDev/documents.js/issues/741)):
 
 ```ts
-import type { ContentParagraph } from 'document-schema.js';
+import type { ContentParagraph } from "document-schema.js";
 
 // A bookmark over the middle two runs of four, and a point footnote reference at the paragraph's end.
 const paragraph: ContentParagraph = {
-  kind: 'paragraph',
-  runs: [{ text: 'before ' }, { text: 'marked ' }, { text: 'words' }, { text: ' after' }],
+  kind: "paragraph",
+  runs: [
+    { text: "before " },
+    { text: "marked " },
+    { text: "words" },
+    { text: " after" },
+  ],
   constructs: [
-    { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'midway' }, startRun: 1, endRun: 3 },
-    { descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, startRun: 4, endRun: 4 },
+    {
+      descriptor: { kind: "anchor", anchorType: "bookmark", name: "midway" },
+      startRun: 1,
+      endRun: 3,
+    },
+    {
+      descriptor: {
+        kind: "anchor",
+        anchorType: "footnote",
+        name: "1",
+        definition: "n1",
+      },
+      startRun: 4,
+      endRun: 4,
+    },
   ],
 };
 ```
@@ -254,7 +346,7 @@ It is one field with one shape at every position a producer fact can sit:
 
 "Full fidelity" is three testable tiers, not one ([#22](https://github.com/ExaDev/document-schema.js/issues/22)'s definition, restated now that both channels exist):
 
-1. **Semantic fidelity** — every translatable construct survives as a first-class node of the harmonised vocabulary, so cross-format conversion loses no *meaning*. This is channel 1 alone: source → schema → target never touches residue, because residue names the source format precisely so a cross-format consumer can tell it is not its concern.
+1. **Semantic fidelity** — every translatable construct survives as a first-class node of the harmonised vocabulary, so cross-format conversion loses no _meaning_. This is channel 1 alone: source → schema → target never touches residue, because residue names the source format precisely so a cross-format consumer can tell it is not its concern.
 2. **Restorable fidelity** — same-format re-emission rebuilds the original from semantic nodes plus residue, verified by round-trip tests over each codec's corpus. This is the tier the residue channel exists for: a semantic pivot alone cannot promise it (a degraded gallery name has nowhere to come back from), and byte identity is not required for it.
 3. **Byte fidelity** — the lossless layer's job (`ooxml.js`'s `decodePackage`/`encodePackage`, `odf.js`'s package model): live views over the raw parts, for any format, forever. No semantic pivot achieves byte identity, and this package does not pretend otherwise — the tiers are stacked, not competing: byte fidelity subsumes restorable, which subsumes semantic.
 
@@ -279,16 +371,16 @@ Resolution is one overlay chain — outermost ancestor group's style, each neare
 Every module is also importable directly — `tsdown` builds one file per source module, and `package.json`'s `"./*"` export makes each individually resolvable:
 
 ```ts
-import { schemaUriFor } from 'document-schema.js/schema-io';
-import { ColorSchema } from 'document-schema.js/color';
+import { schemaUriFor } from "document-schema.js/schema-io";
+import { ColorSchema } from "document-schema.js/color";
 ```
 
 ## Codecs
 
-`ContentCodec` (`src/codec.ts`) is the format-agnostic *interface* a sibling package's docx/pptx/odt/odp/ods/odg/xlsx/markdown codec can implement, so a caller working across formats holds one of these instead of a format-specific function pair:
+`ContentCodec` (`src/codec.ts`) is the format-agnostic _interface_ a sibling package's docx/pptx/odt/odp/ods/odg/xlsx/markdown codec can implement, so a caller working across formats holds one of these instead of a format-specific function pair:
 
 ```ts
-import type { ContentCodec } from 'document-schema.js';
+import type { ContentCodec } from "document-schema.js";
 
 declare const docxCodec: ContentCodec; // read(bytes) -> ContentDocument; write(content) -> bytes -- write is optional
 ```
@@ -304,14 +396,14 @@ This package also hosts the **port contracts** a layout engine consumes: `TextMe
 Two plain [JSON Schema](https://json-schema.org) files are published — generated from the Zod definitions via [`z.toJSONSchema()`](https://zod.dev/json-schema) at build time (`scripts/generate-json-schemas.mjs`) — for non-TypeScript consumers:
 
 ```ts
-const documentTreeSchema = require('document-schema.js/schemas/document-tree.schema.json');
+const documentTreeSchema = require("document-schema.js/schemas/document-tree.schema.json");
 // or, from a bundler/toolchain that supports JSON module imports:
-import documentTreeSchema from 'document-schema.js/schemas/document-tree.schema.json' with { type: 'json' };
+import documentTreeSchema from "document-schema.js/schemas/document-tree.schema.json" with { type: "json" };
 ```
 
 or from any language/tool that can read a file out of `node_modules`:
 
-```
+```text
 node_modules/document-schema.js/schemas/document-tree.schema.json
 node_modules/document-schema.js/schemas/content-document.schema.json
 ```
@@ -326,14 +418,22 @@ Each file's `$id` is a jsdelivr URL pinned to the exact npm version — immutabl
 
 ```ts
 export const MathMlElementSchema: z.ZodType<MathMlElement> = z.object({
-  type: z.literal('element'),
+  type: z.literal("element"),
   tag: z.string(),
   attributes: z.array(MathMlAttributeSchema),
   children: z.lazy(() => z.array(MathMlNodeSchema)),
 });
-export const MathMlNodeSchema: z.ZodType<MathMlNode> = z.discriminatedUnion('type', [
-  MathMlTextSchema, MathMlCdataSchema, MathMlCommentSchema, MathMlDeclarationSchema, MathMlPiSchema, MathMlElementSchema,
-]);
+export const MathMlNodeSchema: z.ZodType<MathMlNode> = z.discriminatedUnion(
+  "type",
+  [
+    MathMlTextSchema,
+    MathMlCdataSchema,
+    MathMlCommentSchema,
+    MathMlDeclarationSchema,
+    MathMlPiSchema,
+    MathMlElementSchema,
+  ],
+);
 ```
 
 — fails to typecheck: annotating `MathMlElementSchema` as `z.ZodType<MathMlElement>` widens it so `z.discriminatedUnion` (which needs each member's internal `propValues`) rejects it, and dropping the annotation hits TypeScript's circular-inference error. The fix: annotate **only the outer union's binding** (`MathMlNodeSchema`), leaving every member schema unannotated and fully inferred — all tests passed, and `z.toJSONSchema()` produced a real `oneOf` with `{ "$ref": "#" }` at the recursion point.
@@ -357,26 +457,34 @@ A bare `DocumentTreeSchema.parse(value)` does **not** version-discriminate — i
 `documentTreeWithSchema`/`contentDocumentWithSchema` each stamp a `$schema` property pointing at the `.schema.json` file for the currently installed version:
 
 ```ts
-import { documentTreeWithSchema } from 'document-schema.js';
+import { documentTreeWithSchema } from "document-schema.js";
 
 const tagged = documentTreeWithSchema(pkg);
 // { $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@5.0.0/schemas/document-tree.schema.json', kind: 'wordprocessing', metadata: {...}, children: [...] }
-writeFileSync('package.json.doc', JSON.stringify(tagged, null, 2));
+writeFileSync("package.json.doc", JSON.stringify(tagged, null, 2));
 ```
 
 A caller who already knows the kind can keep using the schemas directly — `DocumentTreeSchema.parse(value)` tolerates and strips an incoming `$schema` (none are `.strict()`). `documentFromJson` is for the "don't yet know the kind or provenance" case, reading `$schema` to decide which schema to run and whether this release may run it:
 
 ```ts
-import { documentFromJson, SchemaVersionMismatchError, UnrecognizedDocumentSchemaError } from 'document-schema.js';
+import {
+  documentFromJson,
+  SchemaVersionMismatchError,
+  UnrecognizedDocumentSchemaError,
+} from "document-schema.js";
 
 try {
-  const { kind, value } = documentFromJson(JSON.parse(readFileSync('some-file.json', 'utf8')));
+  const { kind, value } = documentFromJson(
+    JSON.parse(readFileSync("some-file.json", "utf8")),
+  );
   // kind: 'DocumentTree' | 'ContentDocument'
 } catch (error) {
   if (error instanceof UnrecognizedDocumentSchemaError) {
-    console.error('not a document-schema.js value:', error.schema);
+    console.error("not a document-schema.js value:", error.schema);
   } else if (error instanceof SchemaVersionMismatchError) {
-    console.error(`dump is @${error.dumpVersion}, installed is @${error.installedVersion}`);
+    console.error(
+      `dump is @${error.dumpVersion}, installed is @${error.installedVersion}`,
+    );
   }
 }
 ```
