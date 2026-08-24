@@ -1,9 +1,29 @@
-import type { ContentBlock, ContentParagraph, ContentSection, DefinitionsTable, DocumentTree, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor, SourceResidue } from 'document-schema.js';
-import { assembleTree, PAGE_SIZE_A4 } from 'document-schema.js';
-import type { Package } from '../../model/package';
-import type { XmlElement, XmlNode } from '../../model/node';
-import { rootElement, findChildElement, childrenWithTag, attrValue } from '../../xml/query';
-import { mintOdfListNumId, readOdfListParagraphs, type OdfListIdState } from '../shared/list';
+import type {
+  ContentBlock,
+  ContentParagraph,
+  ContentSection,
+  DefinitionsTable,
+  DocumentTree,
+  LayoutMetadata,
+  Margins,
+  PageSize,
+  ProvenanceDescriptor,
+  SourceResidue,
+} from "document-schema.js";
+import { assembleTree, PAGE_SIZE_A4 } from "document-schema.js";
+import type { Package } from "../../model/package";
+import type { XmlElement, XmlNode } from "../../model/node";
+import {
+  rootElement,
+  findChildElement,
+  childrenWithTag,
+  attrValue,
+} from "../../xml/query";
+import {
+  mintOdfListNumId,
+  readOdfListParagraphs,
+  type OdfListIdState,
+} from "../shared/list";
 import {
   addOdfPackageResidue,
   collectOdfDataStyleDefinitions,
@@ -22,17 +42,24 @@ import {
   type OdfDefinitionsSink,
   type OdfMarkerEvent,
   type OdfMarkerHalf,
-} from '../shared/constructs';
-import { readOdfParagraph, readOdfConstructBodyBlocks, readParagraphOrHeading } from '../shared/paragraph';
-import { resolveStyleElementChain } from '../shared/cascade';
-import { readOdfFormControlConstructs } from '../shared/forms';
-import { readOdfTable } from '../shared/table';
-import { readOdfMetadata } from '../shared/metadata';
-import { readOdfMasterPageElements } from '../shared/masterpage';
-import { parsePageSize, parseMargins } from '../shared/geometry';
-import { parseOdfLength } from '../shared/units';
-import { readDrawFrame } from '../draw/shapes';
-import { readDrawObjectReference, readEmbeddedObjectDocument } from '../draw/embedded';
+} from "../shared/constructs";
+import {
+  readOdfParagraph,
+  readOdfConstructBodyBlocks,
+  readParagraphOrHeading,
+} from "../shared/paragraph";
+import { resolveStyleElementChain } from "../shared/cascade";
+import { readOdfFormControlConstructs } from "../shared/forms";
+import { readOdfTable } from "../shared/table";
+import { readOdfMetadata } from "../shared/metadata";
+import { readOdfMasterPageElements } from "../shared/masterpage";
+import { parsePageSize, parseMargins } from "../shared/geometry";
+import { parseOdfLength } from "../shared/units";
+import { readDrawFrame } from "../draw/shapes";
+import {
+  readDrawObjectReference,
+  readEmbeddedObjectDocument,
+} from "../draw/embedded";
 
 // Package -> OdtDocument: the first end-to-end ODF content reader, producing GENUINE ContentSection[] values (document-schema.js's own pivot type, the one documents.js's docx flow/pagination engine already consumes) from a real .odt package. This is the concrete proof of the whole odf.js architectural bet -- that odt and docx can share one pivot and one layout algorithm despite being completely unrelated XML formats -- so every mapping below is deliberately expressed in terms document-schema.js already defines, never a lookalike shape of its own.
 //
@@ -44,7 +71,7 @@ import { readDrawObjectReference, readEmbeddedObjectDocument } from '../draw/emb
 
 // Options for both reader levels. `frames` decides who reads an anchored draw:frame in text flow: 'lift' (the default) is this reader's own native reading -- an image frame contributes its image block after its paragraph, an object frame its embedded-object block, a text-box frame its content blocks -- while 'none' contributes nothing for frames at all, for a CONSUMER that runs its own frame-detection passes over the same package and would otherwise read every frame twice. documents.js is that consumer today: its odt adapter's formula/image/vector passes carry the richer placement semantics (a formula-only paragraph consumed rather than followed, deep walks into table cells and nested groups, slide-index placement for odp), built when this reader did not read frames at all; opting out keeps those passes exact rather than forcing this reader to replicate every one of their placements before it can read a single frame.
 export interface OdtReadOptions {
-  frames?: 'lift' | 'none';
+  frames?: "lift" | "none";
 }
 
 export interface OdtDocument {
@@ -61,22 +88,28 @@ export interface OdtDocument {
 }
 
 // One header/footer variant under one style:master-page. The variant names ODF's own three-per-kind split (the plain style:header/style:footer is the default -- right-page, in a mirrored layout -- with -left and -first beside it); a variant the master page spells style:display="false" contributes no part, since it renders nothing.
-export type OdtHeaderFooterVariant = 'default' | 'left' | 'first';
+export type OdtHeaderFooterVariant = "default" | "left" | "first";
 
 export interface OdtHeaderFooterPart {
   readonly masterPage: string;
-  readonly kind: 'header' | 'footer';
+  readonly kind: "header" | "footer";
   readonly variant: OdtHeaderFooterVariant;
   readonly blocks: ContentBlock[];
 }
 
-const ODT_HEADER_FOOTER_TAGS: ReadonlyMap<string, { readonly kind: 'header' | 'footer'; readonly variant: OdtHeaderFooterVariant }> = new Map([
-  ['style:header', { kind: 'header', variant: 'default' }],
-  ['style:header-left', { kind: 'header', variant: 'left' }],
-  ['style:header-first', { kind: 'header', variant: 'first' }],
-  ['style:footer', { kind: 'footer', variant: 'default' }],
-  ['style:footer-left', { kind: 'footer', variant: 'left' }],
-  ['style:footer-first', { kind: 'footer', variant: 'first' }],
+const ODT_HEADER_FOOTER_TAGS: ReadonlyMap<
+  string,
+  {
+    readonly kind: "header" | "footer";
+    readonly variant: OdtHeaderFooterVariant;
+  }
+> = new Map([
+  ["style:header", { kind: "header", variant: "default" }],
+  ["style:header-left", { kind: "header", variant: "left" }],
+  ["style:header-first", { kind: "header", variant: "first" }],
+  ["style:footer", { kind: "footer", variant: "default" }],
+  ["style:footer-left", { kind: "footer", variant: "left" }],
+  ["style:footer-first", { kind: "footer", variant: "first" }],
 ]);
 
 // A mid-flow master-page switch recorded during the block walk: the flat block index where the new section opens, and the master page it switches to. `index` addresses the pre-marker-splice walked list, exactly like every OdfConstructExtent index.
@@ -85,21 +118,32 @@ interface OdtSectionSplit {
   readonly masterPage: string;
 }
 
-const CONTENT_PART = 'content.xml';
-const AUTOMATIC_STYLE_PARTS = [CONTENT_PART, 'styles.xml'] as const;
+const CONTENT_PART = "content.xml";
+const AUTOMATIC_STYLE_PARTS = [CONTENT_PART, "styles.xml"] as const;
 
 // text:h identity in the office:text walk is the shared readParagraphOrHeading (typed/shared/paragraph.ts, imported above) -- the same heading-identity step that module's own table-cell walk now applies, so a heading reads identically at body level and inside a table cell. List membership is never set alongside it: the shared walker (typed/shared/list.ts's readOdfListParagraphs) attaches it for paragraphs it reads inside a text:list, since ODF list membership is purely structural (which text:list/text:list-item this element is nested inside), never an attribute on the paragraph element itself the way docx's w:numPr is.
 
 // A paragraph's effective master page: the most specific style in its resolved "paragraph" chain whose own style:paragraph-properties carries style:master-page-name (the ODF attribute that switches the page style from the paragraph it is applied to -- OASIS OpenDocument part 3, section 19.501; it lives on style:paragraph-properties, never on the paragraph element itself, because ODF has no direct formatting). The chain is walked root-first so a nearer link's name overrides a further one's, exactly as cascade property resolution does. Memoised per style name in the walk state: the same style name repeats across a document's paragraphs, and each resolution is a full two-part style-container scan.
-function resolveParagraphMasterPageName(element: XmlElement, pkg: Package, state: OdtFlowState): string | undefined {
-  const styleName = attrValue(element, 'text:style-name');
+function resolveParagraphMasterPageName(
+  element: XmlElement,
+  pkg: Package,
+  state: OdtFlowState,
+): string | undefined {
+  const styleName = attrValue(element, "text:style-name");
   if (state.masterPageByStyleName.has(styleName)) {
     return state.masterPageByStyleName.get(styleName);
   }
   let resolved: string | undefined;
-  for (const style of resolveStyleElementChain(styleName, 'paragraph', pkg).elements) {
-    const properties = findChildElement(style.children, 'style:paragraph-properties');
-    const name = properties === undefined ? undefined : attrValue(properties, 'style:master-page-name');
+  for (const style of resolveStyleElementChain(styleName, "paragraph", pkg)
+    .elements) {
+    const properties = findChildElement(
+      style.children,
+      "style:paragraph-properties",
+    );
+    const name =
+      properties === undefined
+        ? undefined
+        : attrValue(properties, "style:master-page-name");
     if (name !== undefined) {
       resolved = name;
     }
@@ -141,20 +185,36 @@ interface ReadParagraph {
 }
 
 // One paragraph's own anchored draw:frame children (flattening any draw:g group exactly as ods's cell-anchored walker does) -> the blocks they contribute after the paragraph, grouped by the direct child they were lifted from. A frame resolving an embedded object becomes a ContentEmbeddedObjectBlock at the frame's own geometry, read through typed/draw/embedded.ts's own readEmbeddedObjectDocument -- the one shared kind -> reader table every frame-reading format hands its references to, so this module never imports a sibling format reader (see that module's top-of-file note for why the dispatch is inverted into it rather than living per-reader: this reader needs ods's reader for an embedded Calc sheet, and ods's needs this one for an embedded Writer document, so per-reader dispatch re-creates the reader cycle whichever direction is refused). Chart objects additionally quarantine the chart element in residue, carried by the same return. Any other frame contributes its own content blocks -- a text box's paragraphs, a table frame's table, an image frame's image -- spliced in frame document order, with the frame's own position recorded only where a target node carries geometry (the embedded object's frame and the image block's size); a text box's position is a real, documented narrowing.
-function readAnchoredFrameSources(paragraphElement: XmlElement, pkg: Package, state: OdtFlowState): LiftedFrameSource[] {
+function readAnchoredFrameSources(
+  paragraphElement: XmlElement,
+  pkg: Package,
+  state: OdtFlowState,
+): LiftedFrameSource[] {
   if (!state.liftFrames) {
     return [];
   }
   const sources: LiftedFrameSource[] = [];
-  const readFrameInto = (blocks: ContentBlock[], frameElement: XmlElement): void => {
+  const readFrameInto = (
+    blocks: ContentBlock[],
+    frameElement: XmlElement,
+  ): void => {
     const shape = readDrawFrame(frameElement, [], pkg, state.listIdState, true);
     if (shape === undefined) {
       return;
     }
     const reference = readDrawObjectReference(frameElement, pkg);
     if (reference !== undefined) {
-      const { document, residue } = readEmbeddedObjectDocument(reference, shape.frame, 'odt');
-      const embeddedBlock: ContentBlock = { kind: 'embeddedObject', objectKind: reference.objectKind, document, frame: shape.frame };
+      const { document, residue } = readEmbeddedObjectDocument(
+        reference,
+        shape.frame,
+        "odt",
+      );
+      const embeddedBlock: ContentBlock = {
+        kind: "embeddedObject",
+        objectKind: reference.objectKind,
+        document,
+        frame: shape.frame,
+      };
       if (residue !== undefined) {
         embeddedBlock.source = residue;
       }
@@ -164,19 +224,19 @@ function readAnchoredFrameSources(paragraphElement: XmlElement, pkg: Package, st
     blocks.push(...shape.blocks);
   };
   for (const child of paragraphElement.children) {
-    if (child.type !== 'element') {
+    if (child.type !== "element") {
       continue;
     }
-    if (child.tag === 'draw:frame') {
+    if (child.tag === "draw:frame") {
       const blocks: ContentBlock[] = [];
       readFrameInto(blocks, child);
       if (blocks.length > 0) {
         sources.push({ child, blocks });
       }
-    } else if (child.tag === 'draw:g') {
+    } else if (child.tag === "draw:g") {
       const blocks: ContentBlock[] = [];
       for (const grandChild of child.children) {
-        if (grandChild.type === 'element' && grandChild.tag === 'draw:frame') {
+        if (grandChild.type === "element" && grandChild.tag === "draw:frame") {
           readFrameInto(blocks, grandChild);
         }
       }
@@ -204,22 +264,47 @@ function liftedBlocksBeforeHalf(read: ReadParagraph, half: XmlElement): number {
 }
 
 // Walks block-level content (text:p, text:h, text:list, table:table) in document order, at ONE nesting level -- office:text's own top-level children, or a construct wrapper's own children. text:section records a division extent over its own blocks (descriptor: name, protected flag, the column count its own style sets, and the external-chapter link of a text:section-source); the index wrappers (text:table-of-content and its six siblings) record index contentControl extents over their cached text:index-body blocks; text:index-title unwraps transparently -- the title is one of the cached blocks, not a wrapper of its own. Every extent -- wrapper or marker pair -- is spliced into markers by ONE pass at the end of the walk (insertOdfConstructMarkers, in readOdtContent below), so a pair crossing another extent is dropped by that pass rather than emitted as markers that would decode to a nesting the source never had. text:tracked-changes and the text:*-decls containers contribute no blocks: their regions and declarations were collected before the walk and live in the state and the definitions table. Anything else (an office:forms, an anchored draw:frame, text:soft-page-break, ...) is not walked here -- see the scope note at the top of this file for which of those are deliberate gaps. Table CELL content is not walked here at all -- readOdfTable owns that entirely (see this file's own top-of-file note on the scope it inherits from doing so).
-function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState, baseIndex = 0): ContentBlock[] {
+function readBlocks(
+  nodes: readonly XmlNode[],
+  pkg: Package,
+  state: OdtFlowState,
+  baseIndex = 0,
+): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   // Paragraph-half events are recorded only once each paragraph's final block index is known -- an index in the ONE flat block list the caller will splice markers into, hence the baseIndex offset every recursive wrapper call threads in (a wrapper's own children build their blocks in this call's local array, but their marker events must name positions in the enclosing list). The same offset applies to the wrapper branches' own extents: a nested wrapper's startIndex/endIndex are recorded against the enclosing flat list (baseIndex + the local array length), never the local array alone, or a wrapper nested after a preceding sibling would bracket blocks that precede it. That is also why every paragraph path funnels through here rather than recording inside the reader callback: the list walker runs all its callbacks before a single block is pushed, so a callback-time index would be the same for every item of the list.
   const emitParagraphs = (reads: readonly ReadParagraph[]): void => {
     let cursor = baseIndex + blocks.length;
     for (const read of reads) {
       // A paragraph whose own style chain names a DIFFERENT master page opens a new section at its own block index: ODF's page-style switch is defined to force a page break with the new master page, which is exactly ContentSection's own boundary. A paragraph naming the section's current master page (or naming none) changes nothing -- the switch is stated by the style that carries it, never inferred from style identity.
-      if (read.masterPageName !== undefined && read.masterPageName !== state.masterPage) {
-        state.sectionSplits.push({ index: cursor, masterPage: read.masterPageName });
+      if (
+        read.masterPageName !== undefined &&
+        read.masterPageName !== state.masterPage
+      ) {
+        state.sectionSplits.push({
+          index: cursor,
+          masterPage: read.masterPageName,
+        });
         state.masterPage = read.masterPageName;
       }
       const lifted = read.liftedSources.flatMap((source) => source.blocks);
       for (const half of read.halves) {
-        const eventIndex = odfMarkerHalfEventIndex(half, read.element, cursor, liftedBlocksBeforeHalf(read, half.element));
+        const eventIndex = odfMarkerHalfEventIndex(
+          half,
+          read.element,
+          cursor,
+          liftedBlocksBeforeHalf(read, half.element),
+        );
         if (eventIndex !== undefined) {
-          state.markerEvents.push({ kind: half.kind, side: half.side, key: half.key, index: eventIndex, qualified: true, order: state.order++, descriptor: half.descriptor, element: half.element });
+          state.markerEvents.push({
+            kind: half.kind,
+            side: half.side,
+            key: half.key,
+            index: eventIndex,
+            qualified: true,
+            order: state.order++,
+            descriptor: half.descriptor,
+            element: half.element,
+          });
         }
       }
       blocks.push(read.paragraph);
@@ -231,16 +316,28 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
   };
   const readOneParagraph = (element: XmlElement): ReadParagraph => {
     const halves: OdfMarkerHalf[] = [];
-    const paragraph = readOdfParagraph(element, pkg, { provenanceRegions: state.provenanceRegions, markersOut: halves, definitions: state.definitions, listIdState: state.listIdState, format: 'odt' });
-    return { element, paragraph: readParagraphOrHeading(element, paragraph), halves, liftedSources: readAnchoredFrameSources(element, pkg, state), masterPageName: resolveParagraphMasterPageName(element, pkg, state) };
+    const paragraph = readOdfParagraph(element, pkg, {
+      provenanceRegions: state.provenanceRegions,
+      markersOut: halves,
+      definitions: state.definitions,
+      listIdState: state.listIdState,
+      format: "odt",
+    });
+    return {
+      element,
+      paragraph: readParagraphOrHeading(element, paragraph),
+      halves,
+      liftedSources: readAnchoredFrameSources(element, pkg, state),
+      masterPageName: resolveParagraphMasterPageName(element, pkg, state),
+    };
   };
   for (const node of nodes) {
-    if (node.type !== 'element') {
+    if (node.type !== "element") {
       continue;
     }
-    if (node.tag === 'text:p' || node.tag === 'text:h') {
+    if (node.tag === "text:p" || node.tag === "text:h") {
       emitParagraphs([readOneParagraph(node)]);
-    } else if (node.tag === 'text:list') {
+    } else if (node.tag === "text:list") {
       const numId = mintOdfListNumId(pkg, node, state.listIdState);
       const reads: ReadParagraph[] = [];
       readOdfListParagraphs(node, { numId, level: 0 }, (element) => {
@@ -249,34 +346,68 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
         return read.paragraph;
       });
       emitParagraphs(reads);
-    } else if (node.tag === 'table:table') {
+    } else if (node.tag === "table:table") {
       blocks.push(readOdfTable(node, pkg));
-    } else if (node.tag === 'text:section') {
+    } else if (node.tag === "text:section") {
       const startIndex = baseIndex + blocks.length;
       const order = state.order++;
       blocks.push(...readBlocks(node.children, pkg, state, startIndex));
-      state.wrapperExtents.push({ startIndex, endIndex: baseIndex + blocks.length, order, descriptor: odfDivisionDescriptor(node, pkg) });
+      state.wrapperExtents.push({
+        startIndex,
+        endIndex: baseIndex + blocks.length,
+        order,
+        descriptor: odfDivisionDescriptor(node, pkg),
+      });
       // A DDE-linked section's text:dde-source (the live-link statement itself, beside the cached blocks the walk just read): quarantined at the package tier under the 'dde-links' key rather than on the division descriptor's own residue.
-      addOdfPackageResidue(state.packageResidue, 'dde-links', 'odt', ...childrenWithTag(node, 'text:dde-source'));
+      addOdfPackageResidue(
+        state.packageResidue,
+        "dde-links",
+        "odt",
+        ...childrenWithTag(node, "text:dde-source"),
+      );
     } else if (isOdfIndexWrapper(node)) {
       const startIndex = baseIndex + blocks.length;
       const order = state.order++;
-      const body = node.children.find((child): child is XmlElement => child.type === 'element' && child.tag === 'text:index-body');
-      blocks.push(...(body === undefined ? [] : readBlocks(body.children, pkg, state, startIndex)));
-      state.wrapperExtents.push({ startIndex, endIndex: baseIndex + blocks.length, order, descriptor: odfIndexControlDescriptor(node) });
-    } else if (node.tag === 'text:index-title') {
-      blocks.push(...readBlocks(node.children, pkg, state, baseIndex + blocks.length));
-    } else if (node.tag === 'office:forms') {
+      const body = node.children.find(
+        (child): child is XmlElement =>
+          child.type === "element" && child.tag === "text:index-body",
+      );
+      blocks.push(
+        ...(body === undefined
+          ? []
+          : readBlocks(body.children, pkg, state, startIndex)),
+      );
+      state.wrapperExtents.push({
+        startIndex,
+        endIndex: baseIndex + blocks.length,
+        order,
+        descriptor: odfIndexControlDescriptor(node),
+      });
+    } else if (node.tag === "text:index-title") {
+      blocks.push(
+        ...readBlocks(node.children, pkg, state, baseIndex + blocks.length),
+      );
+    } else if (node.tag === "office:forms") {
       // Form controls in an ordinary text document: point contentControl constructs in pre-order, through the same form-tree walker the odb reader uses (typed/shared/forms.ts). ODF form controls have no rendered block extent -- their geometry lives in the drawing layer's draw:control elements, which no reader resolves -- so these are point pairs, safe to emit directly: a marker sequence is transparent to the bracket-matching splice pass, which counts them as blocks at their own indices.
-      blocks.push(...readOdfFormControlConstructs(node, 'odt'));
+      blocks.push(...readOdfFormControlConstructs(node, "odt"));
       // The XForms half of the same container: an xforms:model is a whole form definition this vocabulary has no analogue for, so it quarantines at the package tier (all models of the document under one key) rather than degrading to a control it is not.
-      addOdfPackageResidue(state.packageResidue, 'xforms', 'odt', ...childrenWithTag(node, 'xforms:model'));
-    } else if (node.tag === 'text:dde-connection-decls') {
+      addOdfPackageResidue(
+        state.packageResidue,
+        "xforms",
+        "odt",
+        ...childrenWithTag(node, "xforms:model"),
+      );
+    } else if (node.tag === "text:dde-connection-decls") {
       // DDE connection declarations: the declaration side of a live-link system no content node owns, so the container's declarations quarantine at the package tier while contributing no blocks -- exactly like the field-master decls that were collected before the walk.
-      addOdfPackageResidue(state.packageResidue, 'dde-connections', 'odt', ...childrenWithTag(node, 'text:dde-connection-decl'));
+      addOdfPackageResidue(
+        state.packageResidue,
+        "dde-connections",
+        "odt",
+        ...childrenWithTag(node, "text:dde-connection-decl"),
+      );
     } else if (isOdfExtensionElement(node)) {
       // Vendor-extension elements: producer-private vocabulary this family's stated policy never chases, quarantined at the package tier keyed by their own tag (same-tag occurrences concatenate into one entry).
-      addOdfPackageResidue(state.packageResidue, node.tag, 'odt', node);
+      addOdfPackageResidue(state.packageResidue, node.tag, "odt", node);
     }
   }
   return blocks;
@@ -285,30 +416,45 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
 function parseKnownOdfLength(value: string): number {
   const parsed = parseOdfLength(value);
   if (parsed === undefined) {
-    throw new Error(`readOdtContent: internal error -- "${value}" is not a valid ODF length literal`);
+    throw new Error(
+      `readOdtContent: internal error -- "${value}" is not a valid ODF length literal`,
+    );
   }
   return parsed;
 }
 
-const DEFAULT_MARGIN_PT = parseKnownOdfLength('2cm');
-const DEFAULT_MARGINS: Margins = { topPt: DEFAULT_MARGIN_PT, rightPt: DEFAULT_MARGIN_PT, bottomPt: DEFAULT_MARGIN_PT, leftPt: DEFAULT_MARGIN_PT };
+const DEFAULT_MARGIN_PT = parseKnownOdfLength("2cm");
+const DEFAULT_MARGINS: Margins = {
+  topPt: DEFAULT_MARGIN_PT,
+  rightPt: DEFAULT_MARGIN_PT,
+  bottomPt: DEFAULT_MARGIN_PT,
+  leftPt: DEFAULT_MARGIN_PT,
+};
 
 // A style:page-layout can live in either part's own office:automatic-styles (verified against real LibreOffice output) -- mirroring readOdpContent's own findPageLayoutElement (typed/odp/read.ts), which searches both content.xml and styles.xml for the identical reason (and cascade.ts's own collectStyles, which does the same for style:style/style:default-style). Duplicated here in full, deliberately, rather than importing readOdpContent's own private helper: this reader's own "first master page in document order" master-page selection differs enough from readOdpContent's own per-slide draw:master-page-name lookup that sharing just the page-layout half would leave the master-page half split across two modules for no real gain -- and readOdpContent's own findPageLayoutElement was never exported for reuse in the first place.
-function findPageLayoutElement(pkg: Package, pageLayoutName: string | undefined): XmlElement | undefined {
+function findPageLayoutElement(
+  pkg: Package,
+  pageLayoutName: string | undefined,
+): XmlElement | undefined {
   if (pageLayoutName === undefined) {
     return undefined;
   }
   for (const partPath of AUTOMATIC_STYLE_PARTS) {
     const part = pkg.parts[partPath];
-    if (part?.kind !== 'xml') {
+    if (part?.kind !== "xml") {
       continue;
     }
     const root = rootElement(part.nodes);
-    const automaticStyles = root === undefined ? undefined : findChildElement(root.children, 'office:automatic-styles');
+    const automaticStyles =
+      root === undefined
+        ? undefined
+        : findChildElement(root.children, "office:automatic-styles");
     if (automaticStyles === undefined) {
       continue;
     }
-    const found = childrenWithTag(automaticStyles, 'style:page-layout').find((element) => attrValue(element, 'style:name') === pageLayoutName);
+    const found = childrenWithTag(automaticStyles, "style:page-layout").find(
+      (element) => attrValue(element, "style:name") === pageLayoutName,
+    );
     if (found !== undefined) {
       return found;
     }
@@ -319,13 +465,21 @@ function findPageLayoutElement(pkg: Package, pageLayoutName: string | undefined)
 // One style:master-page's own geometry, through its style:page-layout-name -> style:page-layout -> style:page-layout-properties chain.
 //
 // ODF/LibreOffice's own out-of-the-box defaults for a freshly created, unmodified text document -- confirmed directly against a real Writer document's own style:page-layout-properties (21cm x 29.7cm page, 2cm margins on every side) -- used only when that chain does not resolve (no page-layout-name, no such page-layout, or a page-layout with no properties). Deliberately A4-based rather than reusing document-schema.js's own PAGE_SIZE_LETTER convention (which ooxml.js's docx reader falls back to): Word's real default is genuinely Letter-sized, but ODF/LibreOffice's real default is genuinely A4-sized, so each reader's own fallback should reflect the format it actually reads, not a single cross-format constant -- mirroring readOdpContent's own SLIDE_SIZE_WIDESCREEN fallback choice for the same reason.
-function resolveMasterPageGeometry(pkg: Package, masterPage: XmlElement): { pageSize: PageSize; margins: Margins } {
-  const layoutName = attrValue(masterPage, 'style:page-layout-name');
+function resolveMasterPageGeometry(
+  pkg: Package,
+  masterPage: XmlElement,
+): { pageSize: PageSize; margins: Margins } {
+  const layoutName = attrValue(masterPage, "style:page-layout-name");
   const layout = findPageLayoutElement(pkg, layoutName);
-  const properties = layout === undefined ? undefined : findChildElement(layout.children, 'style:page-layout-properties');
+  const properties =
+    layout === undefined
+      ? undefined
+      : findChildElement(layout.children, "style:page-layout-properties");
 
-  const pageSize = properties === undefined ? undefined : parsePageSize(properties);
-  const margins = properties === undefined ? undefined : parseMargins(properties);
+  const pageSize =
+    properties === undefined ? undefined : parsePageSize(properties);
+  const margins =
+    properties === undefined ? undefined : parseMargins(properties);
 
   return {
     pageSize: pageSize ?? PAGE_SIZE_A4,
@@ -339,7 +493,10 @@ function splitOdtSections(
   extents: readonly OdfConstructExtent[],
   splits: readonly OdtSectionSplit[],
   initialMasterPage: string | undefined,
-  geometryByMasterPage: ReadonlyMap<string, { pageSize: PageSize; margins: Margins }>,
+  geometryByMasterPage: ReadonlyMap<
+    string,
+    { pageSize: PageSize; margins: Margins }
+  >,
 ): { sections: ContentSection[]; masterPages: (string | undefined)[] } {
   let initial = initialMasterPage;
   let boundaries = splits;
@@ -353,108 +510,205 @@ function splitOdtSections(
   const masterPages: (string | undefined)[] = [];
   for (let segment = 0; segment <= boundaries.length; segment += 1) {
     const start = segment === 0 ? 0 : boundaries[segment - 1]!.index;
-    const end = segment === boundaries.length ? walked.length : boundaries[segment]!.index;
-    const masterPage = segment === 0 ? initial : boundaries[segment - 1]!.masterPage;
-    const geometry = masterPage === undefined ? undefined : geometryByMasterPage.get(masterPage);
+    const end =
+      segment === boundaries.length
+        ? walked.length
+        : boundaries[segment]!.index;
+    const masterPage =
+      segment === 0 ? initial : boundaries[segment - 1]!.masterPage;
+    const geometry =
+      masterPage === undefined
+        ? undefined
+        : geometryByMasterPage.get(masterPage);
     const segmentExtents = extents
       .filter((extent) => extent.startIndex >= start && extent.endIndex <= end)
-      .map((extent) => ({ ...extent, startIndex: extent.startIndex - start, endIndex: extent.endIndex - start }));
-    const blocks = insertOdfConstructMarkers(walked.slice(start, end), segmentExtents);
-    sections.push({ pageSize: geometry?.pageSize ?? PAGE_SIZE_A4, margins: geometry?.margins ?? DEFAULT_MARGINS, blocks, ...(segment > 0 ? { breakType: 'nextPage' as const } : {}) });
+      .map((extent) => ({
+        ...extent,
+        startIndex: extent.startIndex - start,
+        endIndex: extent.endIndex - start,
+      }));
+    const blocks = insertOdfConstructMarkers(
+      walked.slice(start, end),
+      segmentExtents,
+    );
+    sections.push({
+      pageSize: geometry?.pageSize ?? PAGE_SIZE_A4,
+      margins: geometry?.margins ?? DEFAULT_MARGINS,
+      blocks,
+      ...(segment > 0 ? { breakType: "nextPage" as const } : {}),
+    });
     masterPages.push(masterPage);
   }
   return { sections, masterPages };
 }
 
 // Package -> OdtDocument. Throws only when content.xml itself, or its own office:body/office:text element, is missing -- a genuinely unusable package, mirroring exactly how ooxml.js's own readDocx throws when word/document.xml or its w:body is missing, rather than degrading gracefully the way a merely malformed or absent OPTIONAL part (meta.xml, styles.xml, an individual style reference) does throughout the rest of this reader.
-export function readOdtContent(pkg: Package, options: OdtReadOptions = {}): OdtDocument {
+export function readOdtContent(
+  pkg: Package,
+  options: OdtReadOptions = {},
+): OdtDocument {
   const contentPart = pkg.parts[CONTENT_PART];
-  if (contentPart?.kind !== 'xml') {
+  if (contentPart?.kind !== "xml") {
     throw new Error(`readOdtContent: package has no ${CONTENT_PART} part`);
   }
   const contentRoot = rootElement(contentPart.nodes);
-  const body = contentRoot === undefined ? undefined : findChildElement(contentRoot.children, 'office:body');
-  const textElement = body === undefined ? undefined : findChildElement(body.children, 'office:text');
+  const body =
+    contentRoot === undefined
+      ? undefined
+      : findChildElement(contentRoot.children, "office:body");
+  const textElement =
+    body === undefined
+      ? undefined
+      : findChildElement(body.children, "office:text");
   if (textElement === undefined) {
-    throw new Error(`readOdtContent: ${CONTENT_PART} has no office:body/office:text element`);
+    throw new Error(
+      `readOdtContent: ${CONTENT_PART} has no office:body/office:text element`,
+    );
   }
 
   const metadata = readOdfMetadata(pkg);
 
   // The master-page inventory: the first style:master-page in document order is the document's starting page style, and any paragraph style's style:master-page-name switch names another one. A master page element without style:name (malformed -- the ODF schema requires it) is skipped whole, both here and in the header/footer walk below.
   const masterPageElements = readOdfMasterPageElements(pkg);
-  const geometryByMasterPage = new Map<string, { pageSize: PageSize; margins: Margins }>();
+  const geometryByMasterPage = new Map<
+    string,
+    { pageSize: PageSize; margins: Margins }
+  >();
   for (const masterPage of masterPageElements) {
-    const name = attrValue(masterPage, 'style:name');
+    const name = attrValue(masterPage, "style:name");
     if (name !== undefined) {
-      geometryByMasterPage.set(name, resolveMasterPageGeometry(pkg, masterPage));
+      geometryByMasterPage.set(
+        name,
+        resolveMasterPageGeometry(pkg, masterPage),
+      );
     }
   }
-  const firstMasterPageName = masterPageElements.map((masterPage) => attrValue(masterPage, 'style:name')).find((name) => name !== undefined);
+  const firstMasterPageName = masterPageElements
+    .map((masterPage) => attrValue(masterPage, "style:name"))
+    .find((name) => name !== undefined);
 
   // The document-level collections the block walk resolves against, gathered first because a marker anywhere in the body may reference a declaration or region stated anywhere else in it: tracked-change regions (id-keyed), the definitions sink note and annotation bodies mint into, and the field master declarations (keys namespaced per family).
   const provenanceRegions = new Map<string, ProvenanceDescriptor>();
   collectOdfProvenanceRegions(textElement.children, provenanceRegions);
-  const definitions: OdfDefinitionsSink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
+  const definitions: OdfDefinitionsSink = {
+    entries: {},
+    nextNoteOrdinal: 1,
+    nextAnnotationOrdinal: 1,
+  };
   collectOdfFieldMasterDefinitions(textElement.children, definitions.entries);
   // The styles-side definition tenants live in EITHER part: number:* data styles and font declarations are collected across both parts' whole node forests, since office:font-face-decls genuinely appears in each part and data styles are residents of whichever automatic-styles container references them.
   for (const partPath of AUTOMATIC_STYLE_PARTS) {
     const part = pkg.parts[partPath];
-    if (part?.kind !== 'xml') {
+    if (part?.kind !== "xml") {
       continue;
     }
     collectOdfDataStyleDefinitions(part.nodes, definitions.entries);
     collectOdfFontFaceDefinitions(part.nodes, definitions.entries);
   }
 
-  const state: OdtFlowState = { listIdState: { next: 1 }, provenanceRegions, definitions, wrapperExtents: [], markerEvents: [], liftFrames: options.frames !== 'none', sectionSplits: [], masterPageByStyleName: new Map(), packageResidue: {}, masterPage: firstMasterPageName, order: 0 };
+  const state: OdtFlowState = {
+    listIdState: { next: 1 },
+    provenanceRegions,
+    definitions,
+    wrapperExtents: [],
+    markerEvents: [],
+    liftFrames: options.frames !== "none",
+    sectionSplits: [],
+    masterPageByStyleName: new Map(),
+    packageResidue: {},
+    masterPage: firstMasterPageName,
+    order: 0,
+  };
   const walked = readBlocks(textElement.children, pkg, state);
-  const { extents: markerExtents, paired } = resolveOdfMarkerEvents(state.markerEvents);
-  const extents: OdfConstructExtent[] = [...state.wrapperExtents, ...markerExtents];
+  const { extents: markerExtents, paired } = resolveOdfMarkerEvents(
+    state.markerEvents,
+  );
+  const extents: OdfConstructExtent[] = [
+    ...state.wrapperExtents,
+    ...markerExtents,
+  ];
   // The block-scope twin of the paragraph reader's unpaired-annotation fallback: an annotation half that reached a paragraph edge but never met its office:annotation-end becomes a point construct at that block position, because the end element is optional and a single-position comment needs none.
   for (const event of state.markerEvents) {
-    if (event.kind === 'annotation' && event.side === 'start' && !paired.has(event.element)) {
+    if (
+      event.kind === "annotation" &&
+      event.side === "start" &&
+      !paired.has(event.element)
+    ) {
       const descriptor = event.descriptor();
       if (descriptor !== undefined) {
-        extents.push({ startIndex: event.index, endIndex: event.index, order: event.order, descriptor });
+        extents.push({
+          startIndex: event.index,
+          endIndex: event.index,
+          order: event.order,
+          descriptor,
+        });
       }
     }
   }
-  const { sections, masterPages } = splitOdtSections(walked, extents, state.sectionSplits, firstMasterPageName, geometryByMasterPage);
+  const { sections, masterPages } = splitOdtSections(
+    walked,
+    extents,
+    state.sectionSplits,
+    firstMasterPageName,
+    geometryByMasterPage,
+  );
 
   // A master page's header/footer bodies: real block flow through the same body walker note and annotation bodies use, read AFTER the main walk so the definitions sink is live (a page-number field inside a footer mints its definitions entries into the same document-wide table). A variant carrying no readable paragraph/list child contributes no part at all.
   const headerFooterParts: OdtHeaderFooterPart[] = [];
   for (const masterPage of masterPageElements) {
-    const masterPageName = attrValue(masterPage, 'style:name');
+    const masterPageName = attrValue(masterPage, "style:name");
     if (masterPageName === undefined) {
       continue;
     }
     for (const child of masterPage.children) {
-      if (child.type !== 'element') {
+      if (child.type !== "element") {
         continue;
       }
       const slot = ODT_HEADER_FOOTER_TAGS.get(child.tag);
-      if (slot === undefined || attrValue(child, 'style:display') === 'false') {
+      if (slot === undefined || attrValue(child, "style:display") === "false") {
         continue;
       }
-      const blocks = readOdfConstructBodyBlocks(child, pkg, { provenanceRegions, definitions, listIdState: state.listIdState, format: 'odt' }, state.listIdState);
+      const blocks = readOdfConstructBodyBlocks(
+        child,
+        pkg,
+        {
+          provenanceRegions,
+          definitions,
+          listIdState: state.listIdState,
+          format: "odt",
+        },
+        state.listIdState,
+      );
       if (blocks.length > 0) {
-        headerFooterParts.push({ masterPage: masterPageName, kind: slot.kind, variant: slot.variant, blocks });
+        headerFooterParts.push({
+          masterPage: masterPageName,
+          kind: slot.kind,
+          variant: slot.variant,
+          blocks,
+        });
       }
     }
   }
 
   // The document-level residue table closes over the walk's own discoveries with the one row that needs no walk at all: every non-content XML part of the package, keyed by its own part path.
-  const packageResidue: Record<string, SourceResidue> = { ...state.packageResidue };
-  collectOdfNonContentPartResidue(pkg, 'odt', packageResidue);
+  const packageResidue: Record<string, SourceResidue> = {
+    ...state.packageResidue,
+  };
+  collectOdfNonContentPartResidue(pkg, "odt", packageResidue);
 
   return {
     metadata,
     sections,
-    ...(Object.keys(definitions.entries).length > 0 ? { definitions: definitions.entries } : {}),
+    ...(Object.keys(definitions.entries).length > 0
+      ? { definitions: definitions.entries }
+      : {}),
     ...(headerFooterParts.length > 0 ? { headerFooterParts } : {}),
-    ...(masterPageElements.length > 0 ? { sectionMasterPages: masterPages } : {}),
-    ...(Object.keys(packageResidue).length > 0 ? { source: packageResidue } : {}),
+    ...(masterPageElements.length > 0
+      ? { sectionMasterPages: masterPages }
+      : {}),
+    ...(Object.keys(packageResidue).length > 0
+      ? { source: packageResidue }
+      : {}),
   };
 }
 
@@ -463,9 +717,19 @@ export function readOdtContent(pkg: Package, options: OdtReadOptions = {}): OdtD
 // assembleTree rather than bare decompose, per that function's own doc comment ("the tree-form DocumentTree every construction site reports"): decompose alone yields the `children` array for a caller composing its own package boundary, whereas a reader IS a construction site and owes its caller the whole package -- envelope spliced on, styles table minted over the result -- exactly as documents.js's own conversion pipeline already does at every package it builds. factorStyles is not called here either: assembleTree already mints, and re-minting an already-minted package is a no-op by law (iii).
 //
 // No `pages` argument is passed, and none can be: `pages` carries each RENDERED page's own size, which only a layout pass can report. A reader runs strictly before any layout, so the package it returns is a content-only one -- its nodes carry no `frames` and its root carries no `pages`, which is the honest shape for a document nothing has laid out yet.
-export function readOdt(pkg: Package, options: OdtReadOptions = {}): DocumentTree {
-  const { metadata, sections, definitions, source } = readOdtContent(pkg, options);
-  const assembled = assembleTree({ kind: 'wordprocessing', metadata, sections });
+export function readOdt(
+  pkg: Package,
+  options: OdtReadOptions = {},
+): DocumentTree {
+  const { metadata, sections, definitions, source } = readOdtContent(
+    pkg,
+    options,
+  );
+  const assembled = assembleTree({
+    kind: "wordprocessing",
+    metadata,
+    sections,
+  });
   // The definitions table has no flat-ContentDocument spelling to ride through assembleTree's envelope splice (the flat form is the codec-exchange CONTENT shape; package-level tables are tree-only), so it attaches to the freshly assembled root here -- the same route factorStyles' re-entry uses to carry it, and minting never reads it either way. The package-tier residue table rides the identical route, per that channel's own contract.
   if (definitions !== undefined) {
     assembled.definitions = definitions;

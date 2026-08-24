@@ -1,7 +1,7 @@
-import { RPCHandler } from '@orpc/server/message-port';
+import { RPCHandler } from "@orpc/server/message-port";
 
-import { router } from '../rpc/router';
-import { collectTransferableBuffers } from '../shared/transferables';
+import { router } from "../rpc/router";
+import { collectTransferableBuffers } from "../shared/transferables";
 
 // This is the one runtime entry point allowed to import documents.js's real conversion functions on the "server" side of the oRPC boundary -- see src/rpc/router.ts for the procedures and src/rpc/client.ts for the main-thread caller.
 const handler = new RPCHandler(router, {

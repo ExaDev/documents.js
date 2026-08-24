@@ -1,29 +1,67 @@
-import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentSheet, ContentSheetCell, ContentTableCell, ContentTable, ContentVector, DocumentTree, LayoutFrame } from 'document-schema.js';
-import { COLOR_BLACK, DEFAULT_LAYOUT_FONT, flattenTree } from 'document-schema.js';
-import { LAYOUT_FORMAT_VERSION, writePdf } from 'pdf-codec';
-import { flipY } from '../model/geometry';
-import { convertVector } from '../layout/drawing';
-import { NOMINAL_CELL_TEXT_SIZE_PT } from '../layout/sheets';
-import { NOMINAL_TEXT_SIZE_PT, pushCellBorderLines, registerImage, runFont } from '../layout/shared';
-import { DOCUMENT_FORMAT_CODECS } from '../codecs/registry';
-import { requireArrayBufferBytes } from '../model/bytes';
-import type { DocumentFormat } from './port';
-import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'pdf-codec';
+import type {
+  ContentBlock,
+  ContentImageBlock,
+  ContentParagraph,
+  ContentRun,
+  ContentSheet,
+  ContentSheetCell,
+  ContentTableCell,
+  ContentTable,
+  ContentVector,
+  DocumentTree,
+  LayoutFrame,
+} from "document-schema.js";
+import {
+  COLOR_BLACK,
+  DEFAULT_LAYOUT_FONT,
+  flattenTree,
+} from "document-schema.js";
+import { LAYOUT_FORMAT_VERSION, writePdf } from "pdf-codec";
+import { flipY } from "../model/geometry";
+import { convertVector } from "../layout/drawing";
+import { NOMINAL_CELL_TEXT_SIZE_PT } from "../layout/sheets";
+import {
+  NOMINAL_TEXT_SIZE_PT,
+  pushCellBorderLines,
+  registerImage,
+  runFont,
+} from "../layout/shared";
+import { DOCUMENT_FORMAT_CODECS } from "../codecs/registry";
+import { requireArrayBufferBytes } from "../model/bytes";
+import type { DocumentFormat } from "./port";
+import type {
+  LayoutDocument,
+  LayoutImage,
+  LayoutImageAsset,
+  LayoutItem,
+  LayoutLink,
+  LayoutPage,
+  LayoutText,
+} from "pdf-codec";
 
 // Builds any DocumentFormat's own bytes from an already-assembled tree-form DocumentTree -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back. The tree is flattened once at this boundary (flattenTree, which also materialises any styles-table refs away): the builders' public signatures already take the flat ContentDocument, so nothing downstream of this point knows the tree exists -- the boundary design in one sentence. Every target except 'pdf' dispatches through DOCUMENT_FORMAT_CODECS (src/codecs/registry.ts), building a fresh package through the identical buildXPackage function the matching pdf-to-X/bridge conversion already uses, then encoding it with that format's own codec -- xlsx goes through this exact same dispatch (DOCUMENT_FORMAT_CODECS.xlsx.content.write wraps ooxml.js's buildXlsxPackageFromContent), no longer a named exception. 'odf' still has no builder at all -- a standalone formula document has no write path from ContentDocument to begin with -- so it alone is rejected outright ahead of the registry lookup.
-export function buildDocumentBytes(pkg: DocumentTree, target: DocumentFormat): Uint8Array<ArrayBuffer> {
-  if (target === 'pdf') {
+export function buildDocumentBytes(
+  pkg: DocumentTree,
+  target: DocumentFormat,
+): Uint8Array<ArrayBuffer> {
+  if (target === "pdf") {
     if (pkg.pages === undefined) {
-      throw new Error("this DocumentTree has no pages -- only a package dumped from a <format>-to-pdf or pdf-to-<format> conversion carries them; a bridge conversion's own dump (e.g. odt-to-docx) never does, so 'pdf' is not a reachable target from it");
+      throw new Error(
+        "this DocumentTree has no pages -- only a package dumped from a <format>-to-pdf or pdf-to-<format> conversion carries them; a bridge conversion's own dump (e.g. odt-to-docx) never does, so 'pdf' is not a reachable target from it",
+      );
     }
     return writePdf(layoutDocumentFromPackage(pkg));
   }
-  if (target === 'odf') {
-    throw new Error("'odf' (a standalone formula document) cannot be built from a DocumentTree -- there is no ContentDocument-to-odf builder");
+  if (target === "odf") {
+    throw new Error(
+      "'odf' (a standalone formula document) cannot be built from a DocumentTree -- there is no ContentDocument-to-odf builder",
+    );
   }
   const content = DOCUMENT_FORMAT_CODECS[target].content;
   if (!content?.write) {
-    throw new Error(`DocumentFormat '${target}' has no content.write codec in DOCUMENT_FORMAT_CODECS, and is not 'pdf'/'odf' -- this is an internal invariant violation, not a caller error`);
+    throw new Error(
+      `DocumentFormat '${target}' has no content.write codec in DOCUMENT_FORMAT_CODECS, and is not 'pdf'/'odf' -- this is an internal invariant violation, not a caller error`,
+    );
   }
   return requireArrayBufferBytes(content.write(flattenTree(pkg)));
 }
@@ -43,7 +81,10 @@ interface FrameWalkState {
 }
 
 // The page a frame's own pageIndex names, or undefined when it points outside the package's own pages array -- an internally inconsistent or hand-edited package. There is nothing to render such a frame onto, so each emitter skips it; every other frame in the same tree still renders.
-function pageOfFrame(state: FrameWalkState, frame: LayoutFrame): LayoutPage | undefined {
+function pageOfFrame(
+  state: FrameWalkState,
+  frame: LayoutFrame,
+): LayoutPage | undefined {
   return state.pages[frame.pageIndex];
 }
 
@@ -59,29 +100,59 @@ function emitRun(state: FrameWalkState, run: ContentRun): void {
   }
   const font = runFont(run);
   const sizePt = run.sizePt ?? NOMINAL_TEXT_SIZE_PT;
-  const textItem: LayoutText = { kind: 'text', text: run.text, xPt: frame.xPt, yPt: frame.yPt, font, sizePt, color: run.color ?? COLOR_BLACK, underline: run.underline };
+  const textItem: LayoutText = {
+    kind: "text",
+    text: run.text,
+    xPt: frame.xPt,
+    yPt: frame.yPt,
+    font,
+    sizePt,
+    color: run.color ?? COLOR_BLACK,
+    underline: run.underline,
+  };
   page.items.push(textItem);
   if (run.hyperlink !== undefined) {
-    const link: LayoutLink = { kind: 'link', uri: run.hyperlink, xPt: frame.xPt, yPt: frame.yPt, widthPt: frame.widthPt, heightPt: frame.heightPt };
+    const link: LayoutLink = {
+      kind: "link",
+      uri: run.hyperlink,
+      xPt: frame.xPt,
+      yPt: frame.yPt,
+      widthPt: frame.widthPt,
+      heightPt: frame.heightPt,
+    };
     page.items.push(link);
   }
 }
 
 // A paragraph's own frames record its list-marker placements (engine.ts stamps the paragraph node, not any run, for the marker it derives from list membership). The marker text itself came from the engine's own per-numId counters, which a package does not carry, so there is nothing honest to re-render at those positions -- the frames stay recorded on the node (traceability) and emit nothing here.
-function emitParagraph(state: FrameWalkState, paragraph: ContentParagraph): void {
+function emitParagraph(
+  state: FrameWalkState,
+  paragraph: ContentParagraph,
+): void {
   for (const run of paragraph.runs) {
     emitRun(state, run);
   }
 }
 
-function emitImageBlock(state: FrameWalkState, block: ContentImageBlock, frames: readonly LayoutFrame[] | undefined): void {
+function emitImageBlock(
+  state: FrameWalkState,
+  block: ContentImageBlock,
+  frames: readonly LayoutFrame[] | undefined,
+): void {
   for (const frame of frames ?? []) {
     const page = pageOfFrame(state, frame);
     if (page === undefined) {
       continue;
     }
     const imageId = registerImage(block, state.images);
-    const image: LayoutImage = { kind: 'image', imageId, xPt: frame.xPt, yPt: frame.yPt, widthPt: frame.widthPt, heightPt: frame.heightPt };
+    const image: LayoutImage = {
+      kind: "image",
+      imageId,
+      xPt: frame.xPt,
+      yPt: frame.yPt,
+      widthPt: frame.widthPt,
+      heightPt: frame.heightPt,
+    };
     page.items.push(image);
   }
 }
@@ -94,19 +165,40 @@ function emitTableCell(state: FrameWalkState, cell: ContentTableCell): void {
       continue;
     }
     if (cell.background !== undefined) {
-      page.items.push({ kind: 'rect', xPt: frame.xPt, yPt: frame.yPt, widthPt: frame.widthPt, heightPt: frame.heightPt, fill: cell.background });
+      page.items.push({
+        kind: "rect",
+        xPt: frame.xPt,
+        yPt: frame.yPt,
+        widthPt: frame.widthPt,
+        heightPt: frame.heightPt,
+        fill: cell.background,
+      });
     }
     if (cell.borders !== undefined) {
-      const frameYDown = flipY({ xPt: frame.xPt, yPt: frame.yPt, widthPt: frame.widthPt, heightPt: frame.heightPt }, page.heightPt);
-      pushCellBorderLines(cell.borders, frameYDown, page.heightPt, cell.sourcePath, page.items);
+      const frameYDown = flipY(
+        {
+          xPt: frame.xPt,
+          yPt: frame.yPt,
+          widthPt: frame.widthPt,
+          heightPt: frame.heightPt,
+        },
+        page.heightPt,
+      );
+      pushCellBorderLines(
+        cell.borders,
+        frameYDown,
+        page.heightPt,
+        cell.sourcePath,
+        page.items,
+      );
     }
   }
   for (const block of cell.blocks) {
-    if (block.kind === 'paragraph') {
+    if (block.kind === "paragraph") {
       emitParagraph(state, block);
-    } else if (block.kind === 'image') {
+    } else if (block.kind === "image") {
       emitImageBlock(state, block, block.frames);
-    } else if (block.kind === 'table') {
+    } else if (block.kind === "table") {
       emitTable(state, block);
     }
   }
@@ -134,7 +226,9 @@ function emitVector(state: FrameWalkState, vector: ContentVector): void {
 
 // One spreadsheet cell. A cell whose runs carry stamped frames renders those (per-run styling survives); a cell with no runs -- or none that rendered, e.g. a numeric overflow the engine replaced with a synthesised '###' -- falls back to its displayText at the cell's own frames through the same nominal font/size the sheets engine itself renders an unstyled cell at. Exact either way, per the single-line note in the module doc above.
 function emitSheetCell(state: FrameWalkState, cell: ContentSheetCell): void {
-  const hasStampedRuns = (cell.runs ?? []).some((run) => (run.frames?.length ?? 0) > 0);
+  const hasStampedRuns = (cell.runs ?? []).some(
+    (run) => (run.frames?.length ?? 0) > 0,
+  );
   if (hasStampedRuns) {
     for (const run of cell.runs ?? []) {
       emitRun(state, run);
@@ -145,7 +239,15 @@ function emitSheetCell(state: FrameWalkState, cell: ContentSheetCell): void {
       if (page === undefined) {
         continue;
       }
-      page.items.push({ kind: 'text', text: cell.displayText, xPt: frame.xPt, yPt: frame.yPt, font: DEFAULT_LAYOUT_FONT, sizePt: NOMINAL_CELL_TEXT_SIZE_PT, color: COLOR_BLACK });
+      page.items.push({
+        kind: "text",
+        text: cell.displayText,
+        xPt: frame.xPt,
+        yPt: frame.yPt,
+        font: DEFAULT_LAYOUT_FONT,
+        sizePt: NOMINAL_CELL_TEXT_SIZE_PT,
+        color: COLOR_BLACK,
+      });
     }
   }
   for (const frame of cell.frames ?? []) {
@@ -154,11 +256,32 @@ function emitSheetCell(state: FrameWalkState, cell: ContentSheetCell): void {
       continue;
     }
     if (cell.background !== undefined) {
-      page.items.push({ kind: 'rect', xPt: frame.xPt, yPt: frame.yPt, widthPt: frame.widthPt, heightPt: frame.heightPt, fill: cell.background });
+      page.items.push({
+        kind: "rect",
+        xPt: frame.xPt,
+        yPt: frame.yPt,
+        widthPt: frame.widthPt,
+        heightPt: frame.heightPt,
+        fill: cell.background,
+      });
     }
     if (cell.borders !== undefined) {
-      const frameYDown = flipY({ xPt: frame.xPt, yPt: frame.yPt, widthPt: frame.widthPt, heightPt: frame.heightPt }, page.heightPt);
-      pushCellBorderLines(cell.borders, frameYDown, page.heightPt, cell.sourcePath, page.items);
+      const frameYDown = flipY(
+        {
+          xPt: frame.xPt,
+          yPt: frame.yPt,
+          widthPt: frame.widthPt,
+          heightPt: frame.heightPt,
+        },
+        page.heightPt,
+      );
+      pushCellBorderLines(
+        cell.borders,
+        frameYDown,
+        page.heightPt,
+        cell.sourcePath,
+        page.items,
+      );
     }
   }
 }
@@ -175,20 +298,30 @@ function emitSheet(state: FrameWalkState, sheet: ContentSheet): void {
         continue;
       }
       const imageId = registerImage(image, state.images);
-      const layoutImage: LayoutImage = { kind: 'image', imageId, xPt: frame.xPt, yPt: frame.yPt, widthPt: frame.widthPt, heightPt: frame.heightPt };
+      const layoutImage: LayoutImage = {
+        kind: "image",
+        imageId,
+        xPt: frame.xPt,
+        yPt: frame.yPt,
+        widthPt: frame.widthPt,
+        heightPt: frame.heightPt,
+      };
       page.items.push(layoutImage);
     }
   }
 }
 
 // The shared block walk for the three shape-carrying variants (wordprocessing sections, presentation slides, drawing pages): paragraphs/images/tables/embedded objects emit from their own frames wherever they sit in the tree.
-function emitBlocks(state: FrameWalkState, blocks: readonly ContentBlock[]): void {
+function emitBlocks(
+  state: FrameWalkState,
+  blocks: readonly ContentBlock[],
+): void {
   for (const block of blocks) {
-    if (block.kind === 'paragraph') {
+    if (block.kind === "paragraph") {
       emitParagraph(state, block);
-    } else if (block.kind === 'image') {
+    } else if (block.kind === "image") {
       emitImageBlock(state, block, block.frames);
-    } else if (block.kind === 'table') {
+    } else if (block.kind === "table") {
       emitTable(state, block);
     }
     // 'embeddedObject' and 'pageBreak' emit nothing: an embedded formula's glyphs rendered through writePdf's positioned-formulas channel (CID-font glyph runs with no LayoutItem kind, which never travelled in a DocumentTree even before the fusion -- its frame is honoured as a position record on the node, and nothing renders from it), and a page break is structural, with no placement of its own.
@@ -197,25 +330,29 @@ function emitBlocks(state: FrameWalkState, blocks: readonly ContentBlock[]): voi
 
 // The public inverse. Flattens the tree once (materialising any styles refs away) and walks the flat content's own structure in document order, so the items land on each page in the same order the original layout pass emitted them (paint order is array order); a package whose content carries no frames at all (a bridge dump, or fresh reader output) still rebuilds the pages themselves, empty. Walking the flattened form rather than the tree directly is a deliberate one-implementation choice: flatten is the single tree-to-flat authority (bijection-tested), the walk below stays the flat document walk it always was, and every other consumer (buildDocumentBytes, lintMathCoherence) shares the same flattened view.
 export function layoutDocumentFromPackage(pkg: DocumentTree): LayoutDocument {
-  const pages: LayoutPage[] = (pkg.pages ?? []).map((page) => ({ widthPt: page.widthPt, heightPt: page.heightPt, items: [] }));
+  const pages: LayoutPage[] = (pkg.pages ?? []).map((page) => ({
+    widthPt: page.widthPt,
+    heightPt: page.heightPt,
+    items: [],
+  }));
   const state: FrameWalkState = { pages, images: {} };
   const content = flattenTree(pkg);
-  if (content.kind === 'wordprocessing') {
+  if (content.kind === "wordprocessing") {
     for (const section of content.sections) {
       emitBlocks(state, section.blocks);
     }
-  } else if (content.kind === 'presentation') {
+  } else if (content.kind === "presentation") {
     for (const slide of content.slides) {
       for (const shape of slide.shapes) {
         // A shape's own frames carry no renderable payload (a bare shape emits no item of its own -- its content blocks carry everything), so only its blocks walk.
         emitBlocks(state, shape.blocks);
       }
     }
-  } else if (content.kind === 'spreadsheet') {
+  } else if (content.kind === "spreadsheet") {
     for (const sheet of content.sheets) {
       emitSheet(state, sheet);
     }
-  } else if (content.kind === 'drawing') {
+  } else if (content.kind === "drawing") {
     for (const drawPage of content.pages) {
       for (const vector of drawPage.vectors) {
         emitVector(state, vector);
@@ -226,5 +363,10 @@ export function layoutDocumentFromPackage(pkg: DocumentTree): LayoutDocument {
     }
   }
   // 'formula' content has no frames to walk at all: a standalone formula document renders through writePdf's own formula positioning (see convert.ts's odfToPdf), of which a package carries no record beyond the page sizes themselves.
-  return { formatVersion: LAYOUT_FORMAT_VERSION, metadata: content.metadata, pages, images: state.images };
+  return {
+    formatVersion: LAYOUT_FORMAT_VERSION,
+    metadata: content.metadata,
+    pages,
+    images: state.images,
+  };
 }

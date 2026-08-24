@@ -1,8 +1,12 @@
-import type { ContentBlock, ContentControlDescriptor, ContentControlType } from 'document-schema.js';
-import type { XmlElement } from '../../model/node';
-import { attrValue, childrenWithTag } from '../../xml/query';
-import { decodeXmlText } from '../../xml/entities';
-import { odfResidue, type OdfResidueFormat } from './constructs';
+import type {
+  ContentBlock,
+  ContentControlDescriptor,
+  ContentControlType,
+} from "document-schema.js";
+import type { XmlElement } from "../../model/node";
+import { attrValue, childrenWithTag } from "../../xml/query";
+import { decodeXmlText } from "../../xml/entities";
+import { odfResidue, type OdfResidueFormat } from "./constructs";
 
 // The form:form/form:<kind> tree walker, extracted from typed/odb/form.ts (which keeps it as its own reading engine and re-exports the types) so the odt reader can reuse the SAME walk for office:forms in an ordinary text document without importing odb/form.ts -- that module imports the odt reader for its own sub-document reading, so the walker living there would turn odt's forms row into a reader cycle. The tree shapes and attribute names here are the ones typed/odb/form.ts verified against real LibreOffice Base output; see that module's own top-of-file note for the evidence.
 
@@ -28,9 +32,9 @@ export interface OdbFormDefinition {
   subForms: OdbFormDefinition[];
 }
 
-const FORM_ELEMENT_TAG = 'form:form';
-const FORM_PROPERTIES_TAG = 'form:properties';
-const FORM_TAG_PREFIX = 'form:';
+const FORM_ELEMENT_TAG = "form:form";
+const FORM_PROPERTIES_TAG = "form:properties";
+const FORM_TAG_PREFIX = "form:";
 
 // A form:* attribute's own value, entity-decoded -- odf.js's lossless model keeps entities raw for round-trip fidelity, and every projected string this walker returns is exactly the boundary where that encoding needs undoing.
 function formAttr(element: XmlElement, name: string): string | undefined {
@@ -39,24 +43,30 @@ function formAttr(element: XmlElement, name: string): string | undefined {
 }
 
 function readControl(element: XmlElement): OdbFormControl {
-  const control: OdbFormControl = { tag: element.tag, controls: readControls(element) };
-  const name = formAttr(element, 'form:name');
+  const control: OdbFormControl = {
+    tag: element.tag,
+    controls: readControls(element),
+  };
+  const name = formAttr(element, "form:name");
   if (name !== undefined) {
     control.name = name;
   }
-  const controlImplementation = formAttr(element, 'form:control-implementation');
+  const controlImplementation = formAttr(
+    element,
+    "form:control-implementation",
+  );
   if (controlImplementation !== undefined) {
     control.controlImplementation = controlImplementation;
   }
-  const dataField = formAttr(element, 'form:data-field');
+  const dataField = formAttr(element, "form:data-field");
   if (dataField !== undefined) {
     control.dataField = dataField;
   }
-  const id = formAttr(element, 'form:id');
+  const id = formAttr(element, "form:id");
   if (id !== undefined) {
     control.id = id;
   }
-  const label = formAttr(element, 'form:label');
+  const label = formAttr(element, "form:label");
   if (label !== undefined) {
     control.label = label;
   }
@@ -67,7 +77,7 @@ function readControl(element: XmlElement): OdbFormControl {
 function readControls(container: XmlElement): OdbFormControl[] {
   const controls: OdbFormControl[] = [];
   for (const child of container.children) {
-    if (child.type !== 'element' || !child.tag.startsWith(FORM_TAG_PREFIX)) {
+    if (child.type !== "element" || !child.tag.startsWith(FORM_TAG_PREFIX)) {
       continue;
     }
     if (child.tag === FORM_ELEMENT_TAG || child.tag === FORM_PROPERTIES_TAG) {
@@ -81,32 +91,35 @@ function readControls(container: XmlElement): OdbFormControl[] {
 function readFormDefinition(element: XmlElement): OdbFormDefinition {
   const subForms: OdbFormDefinition[] = [];
   for (const child of element.children) {
-    if (child.type === 'element' && child.tag === FORM_ELEMENT_TAG) {
+    if (child.type === "element" && child.tag === FORM_ELEMENT_TAG) {
       subForms.push(readFormDefinition(child));
     }
   }
-  const definition: OdbFormDefinition = { controls: readControls(element), subForms };
-  const name = formAttr(element, 'form:name');
+  const definition: OdbFormDefinition = {
+    controls: readControls(element),
+    subForms,
+  };
+  const name = formAttr(element, "form:name");
   if (name !== undefined) {
     definition.name = name;
   }
-  const command = formAttr(element, 'form:command');
+  const command = formAttr(element, "form:command");
   if (command !== undefined) {
     definition.command = command;
   }
-  const commandType = formAttr(element, 'form:command-type');
+  const commandType = formAttr(element, "form:command-type");
   if (commandType !== undefined) {
     definition.commandType = commandType;
   }
-  const datasource = formAttr(element, 'form:datasource');
+  const datasource = formAttr(element, "form:datasource");
   if (datasource !== undefined) {
     definition.datasource = datasource;
   }
-  const filter = formAttr(element, 'form:filter');
+  const filter = formAttr(element, "form:filter");
   if (filter !== undefined) {
     definition.filter = filter;
   }
-  const order = formAttr(element, 'form:order');
+  const order = formAttr(element, "form:order");
   if (order !== undefined) {
     definition.order = order;
   }
@@ -114,10 +127,12 @@ function readFormDefinition(element: XmlElement): OdbFormDefinition {
 }
 
 // An office:forms element's own top-level form:form children, in document order -- the tree the odt reader maps onto content controls and the odb reader reads as OdbFormDefinition (via the re-export in typed/odb/form.ts).
-export function readOdfFormDefinitions(formsElement: XmlElement): OdbFormDefinition[] {
+export function readOdfFormDefinitions(
+  formsElement: XmlElement,
+): OdbFormDefinition[] {
   const definitions: OdbFormDefinition[] = [];
   for (const child of formsElement.children) {
-    if (child.type === 'element' && child.tag === FORM_ELEMENT_TAG) {
+    if (child.type === "element" && child.tag === FORM_ELEMENT_TAG) {
       definitions.push(readFormDefinition(child));
     }
   }
@@ -128,38 +143,47 @@ export function readOdfFormDefinitions(formsElement: XmlElement): OdbFormDefinit
 
 // Which ContentControlType a form:<kind> control degrades to. The members document-schema.js itself names as ODF spellings (checkbox, listbox->dropDown, combobox, button) map exactly; the text-entry family maps to plainText; a grid is a container of column controls (group); everything else has no analogue and degrades to richText with its whole element quarantined in residue -- the standing degrade-to-nearest-kind-with-residue rule.
 const CONTROL_TYPE_BY_TAG: ReadonlyMap<string, ContentControlType> = new Map([
-  ['form:text', 'plainText'],
-  ['form:textarea', 'plainText'],
-  ['form:formatted-text', 'plainText'],
-  ['form:password', 'plainText'],
-  ['form:file', 'plainText'],
-  ['form:listbox', 'dropDown'],
-  ['form:combobox', 'comboBox'],
-  ['form:checkbox', 'checkbox'],
-  ['form:radio', 'checkbox'],
-  ['form:button', 'button'],
-  ['form:image-frame', 'picture'],
-  ['form:fixed-text', 'richText'],
-  ['form:frame', 'richText'],
-  ['form:grid', 'group'],
-  ['form:hidden', 'richText'],
+  ["form:text", "plainText"],
+  ["form:textarea", "plainText"],
+  ["form:formatted-text", "plainText"],
+  ["form:password", "plainText"],
+  ["form:file", "plainText"],
+  ["form:listbox", "dropDown"],
+  ["form:combobox", "comboBox"],
+  ["form:checkbox", "checkbox"],
+  ["form:radio", "checkbox"],
+  ["form:button", "button"],
+  ["form:image-frame", "picture"],
+  ["form:fixed-text", "richText"],
+  ["form:frame", "richText"],
+  ["form:grid", "group"],
+  ["form:hidden", "richText"],
 ]);
 
 // The original form element a walker node came from is what residue serialises, so the construct builder walks the ELEMENTS directly rather than the projected nodes -- the projection loses the form:properties bag this mapping deliberately quarantines.
-function controlConstruct(element: XmlElement, format: OdfResidueFormat): ContentBlock[] {
+function controlConstruct(
+  element: XmlElement,
+  format: OdfResidueFormat,
+): ContentBlock[] {
   const mapped = CONTROL_TYPE_BY_TAG.get(element.tag);
-  const descriptor: ContentControlDescriptor = { kind: 'contentControl', controlType: mapped ?? 'richText' };
-  const name = formAttr(element, 'form:name');
+  const descriptor: ContentControlDescriptor = {
+    kind: "contentControl",
+    controlType: mapped ?? "richText",
+  };
+  const name = formAttr(element, "form:name");
   if (name !== undefined) {
     descriptor.tag = name;
   }
   if (mapped !== undefined) {
-    const value = formAttr(element, 'form:current-value') ?? formAttr(element, 'form:value');
+    const value =
+      formAttr(element, "form:current-value") ??
+      formAttr(element, "form:value");
     if (value !== undefined) {
       descriptor.value = value;
     }
-    if (element.tag === 'form:checkbox' || element.tag === 'form:radio') {
-      descriptor.checked = formAttr(element, 'form:current-state') === 'checked';
+    if (element.tag === "form:checkbox" || element.tag === "form:radio") {
+      descriptor.checked =
+        formAttr(element, "form:current-state") === "checked";
     }
     const properties = childrenWithTag(element, FORM_PROPERTIES_TAG)[0];
     if (properties !== undefined) {
@@ -168,18 +192,21 @@ function controlConstruct(element: XmlElement, format: OdfResidueFormat): Conten
   } else {
     descriptor.source = odfResidue(format, element);
   }
-  return [
-    { kind: 'constructStart', descriptor },
-    { kind: 'constructEnd' },
-  ];
+  return [{ kind: "constructStart", descriptor }, { kind: "constructEnd" }];
 }
 
 // One office:forms element -> the point contentControl constructs its tree reads as, in pre-order: each form:form becomes a group control carrying its name, each control its mapped kind, tag, and value/checked state. ODF form controls have no rendered block extent in the text flow -- their geometry lives in the drawing layer's draw:control elements, which no reader resolves -- so every construct here is a point pair and the tree shape states as pre-order document order (the exact structure, bindings included, stays the odb reader's own model for documents that are form sub-documents). The office:forms wrapper element itself emits no construct: it is a pure container, and the group member already names what its child forms are.
-export function readOdfFormControlConstructs(formsElement: XmlElement, format: OdfResidueFormat): ContentBlock[] {
+export function readOdfFormControlConstructs(
+  formsElement: XmlElement,
+  format: OdfResidueFormat,
+): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   const emitForm = (form: XmlElement): void => {
-    const descriptor: ContentControlDescriptor = { kind: 'contentControl', controlType: 'group' };
-    const name = formAttr(form, 'form:name');
+    const descriptor: ContentControlDescriptor = {
+      kind: "contentControl",
+      controlType: "group",
+    };
+    const name = formAttr(form, "form:name");
     if (name !== undefined) {
       descriptor.tag = name;
     }
@@ -187,20 +214,26 @@ export function readOdfFormControlConstructs(formsElement: XmlElement, format: O
     if (properties !== undefined) {
       descriptor.source = odfResidue(format, properties);
     }
-    blocks.push({ kind: 'constructStart', descriptor }, { kind: 'constructEnd' });
+    blocks.push(
+      { kind: "constructStart", descriptor },
+      { kind: "constructEnd" },
+    );
     for (const child of form.children) {
-      if (child.type !== 'element') {
+      if (child.type !== "element") {
         continue;
       }
       if (child.tag === FORM_ELEMENT_TAG) {
         emitForm(child);
-      } else if (child.tag.startsWith(FORM_TAG_PREFIX) && child.tag !== FORM_PROPERTIES_TAG) {
+      } else if (
+        child.tag.startsWith(FORM_TAG_PREFIX) &&
+        child.tag !== FORM_PROPERTIES_TAG
+      ) {
         blocks.push(...controlConstruct(child, format));
       }
     }
   };
   for (const child of formsElement.children) {
-    if (child.type === 'element' && child.tag === FORM_ELEMENT_TAG) {
+    if (child.type === "element" && child.tag === FORM_ELEMENT_TAG) {
       emitForm(child);
     }
   }

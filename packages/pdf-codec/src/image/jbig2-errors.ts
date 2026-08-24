@@ -6,7 +6,7 @@
 export class Jbig2ParseError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'Jbig2ParseError';
+    this.name = "Jbig2ParseError";
   }
 }
 
@@ -14,6 +14,6 @@ export class Jbig2ParseError extends Error {
 export class Jbig2UnsupportedError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'Jbig2UnsupportedError';
+    this.name = "Jbig2UnsupportedError";
   }
 }

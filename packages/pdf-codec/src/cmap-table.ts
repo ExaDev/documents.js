@@ -1,5 +1,5 @@
-import type { SfntFont } from './sfnt';
-import { hasBytes, sfntTableBytes, u16, u32 } from './sfnt';
+import type { SfntFont } from "./sfnt";
+import { hasBytes, sfntTableBytes, u16, u32 } from "./sfnt";
 
 // A Unicode code point -> glyph ID lookup built from a font's own 'cmap' table (ISO/IEC 14496-22 clause 5.1). Three subtable formats are parsed: 4 (segmented, BMP-only, uint16 glyph IDs), 12 (segmented coverage, full Unicode range, uint32 glyph IDs), and 6 (a single contiguous trimmed range) -- the two formats every mainstream font tool emits for a font meant to cover the supplementary-plane Mathematical Alphanumeric Symbols block, plus the small trimmed format some subsetting tools emit for a font reduced to one narrow character range, which a font extracted from a source document may well be. Format 12 is preferred whenever present (it alone can map a code point above U+FFFF, which most of this package's own mathvariant-mapped characters are); format 4 is the fallback for a font that only ships BMP coverage, and format 6 the last resort.
 //
@@ -19,7 +19,10 @@ interface Format4Segment {
 
 const FORMAT_4_HEADER_SIZE = 14; // format, length, language, segCountX2, searchRange, entrySelector, rangeShift
 
-function parseFormat4(bytes: Uint8Array<ArrayBuffer>, subtableOffset: number): CmapLookup | undefined {
+function parseFormat4(
+  bytes: Uint8Array<ArrayBuffer>,
+  subtableOffset: number,
+): CmapLookup | undefined {
   if (!hasBytes(bytes, subtableOffset, FORMAT_4_HEADER_SIZE)) {
     return undefined;
   }
@@ -61,7 +64,10 @@ function parseFormat4(bytes: Uint8Array<ArrayBuffer>, subtableOffset: number): C
       if (segment.idRangeOffset === 0) {
         return (codePoint + segment.idDelta) & 0xffff;
       }
-      const glyphIndexAddress = segment.idRangeOffsetPos + segment.idRangeOffset + (codePoint - segment.startCode) * 2;
+      const glyphIndexAddress =
+        segment.idRangeOffsetPos +
+        segment.idRangeOffset +
+        (codePoint - segment.startCode) * 2;
       if (!hasBytes(bytes, glyphIndexAddress, 2)) {
         return undefined; // a segment whose glyph-index array runs past the table maps nothing here, rather than reading past the end
       }
@@ -81,7 +87,10 @@ interface Format12Group {
 const FORMAT_12_HEADER_SIZE = 16; // format, reserved, length, language, numGroups
 const FORMAT_12_GROUP_SIZE = 12;
 
-function parseFormat12(bytes: Uint8Array<ArrayBuffer>, subtableOffset: number): CmapLookup | undefined {
+function parseFormat12(
+  bytes: Uint8Array<ArrayBuffer>,
+  subtableOffset: number,
+): CmapLookup | undefined {
   if (!hasBytes(bytes, subtableOffset, FORMAT_12_HEADER_SIZE)) {
     return undefined;
   }
@@ -112,7 +121,10 @@ function parseFormat12(bytes: Uint8Array<ArrayBuffer>, subtableOffset: number): 
 const FORMAT_6_HEADER_SIZE = 10; // format, length, language, firstCode, entryCount
 
 // Format 6 ("trimmed table mapping"): one contiguous run of code points, each with an explicit glyph ID. Rare in a fully-featured font, but a subsetting tool that reduces a font to a single narrow character range sometimes emits it in place of a one-segment format 4, so it is worth reading as a fallback rather than declaring such a font unmappable.
-function parseFormat6(bytes: Uint8Array<ArrayBuffer>, subtableOffset: number): CmapLookup | undefined {
+function parseFormat6(
+  bytes: Uint8Array<ArrayBuffer>,
+  subtableOffset: number,
+): CmapLookup | undefined {
   if (!hasBytes(bytes, subtableOffset, FORMAT_6_HEADER_SIZE)) {
     return undefined;
   }
@@ -158,12 +170,14 @@ function preferenceRank(subtable: CmapSubtableRecord): number {
 
 // Picks the best available cmap subtable and returns a lookup function, or `undefined` if the font has no readable 'cmap' at all -- a font with no usable character-to-glyph mapping is one the caller must degrade around (skip the glyph, substitute another font), not one worth aborting a whole conversion over.
 export function buildCmapLookup(font: SfntFont): CmapLookup | undefined {
-  const cmapBytes = sfntTableBytes(font, 'cmap');
+  const cmapBytes = sfntTableBytes(font, "cmap");
   if (cmapBytes === undefined || !hasBytes(cmapBytes, 0, CMAP_HEADER_SIZE)) {
     return undefined;
   }
   const numTables = u16(cmapBytes, 2);
-  if (!hasBytes(cmapBytes, CMAP_HEADER_SIZE, numTables * SUBTABLE_RECORD_SIZE)) {
+  if (
+    !hasBytes(cmapBytes, CMAP_HEADER_SIZE, numTables * SUBTABLE_RECORD_SIZE)
+  ) {
     return undefined;
   }
 
@@ -182,10 +196,17 @@ export function buildCmapLookup(font: SfntFont): CmapLookup | undefined {
     });
   }
 
-  const candidates = subtables.filter((s) => s.format === 4 || s.format === 6 || s.format === 12).sort((a, b) => preferenceRank(a) - preferenceRank(b));
+  const candidates = subtables
+    .filter((s) => s.format === 4 || s.format === 6 || s.format === 12)
+    .sort((a, b) => preferenceRank(a) - preferenceRank(b));
   // Walk in preference order rather than taking only the best: a font whose preferred subtable turns out to be truncated can still be driven by a lower-ranked one that is intact.
   for (const candidate of candidates) {
-    const lookup = candidate.format === 12 ? parseFormat12(cmapBytes, candidate.offset) : candidate.format === 4 ? parseFormat4(cmapBytes, candidate.offset) : parseFormat6(cmapBytes, candidate.offset);
+    const lookup =
+      candidate.format === 12
+        ? parseFormat12(cmapBytes, candidate.offset)
+        : candidate.format === 4
+          ? parseFormat4(cmapBytes, candidate.offset)
+          : parseFormat6(cmapBytes, candidate.offset);
     if (lookup !== undefined) {
       return lookup;
     }

@@ -1,19 +1,23 @@
-import type { Package, XmlElement } from 'odf.js';
-import { decodePackage, encodePackage } from 'odf.js';
-import { attr } from 'ooxml.js';
-import { resolveMetadataTimestamps } from '../../model/metadata';
-import type { ClockPort } from '../../ports/clock';
-import { systemClock } from '../../ports/clock';
-import { el } from '../../xml/fragment';
-import { ensureAutomaticStyles } from '../odt/automatic-styles';
-import { createEmptyOdsPackage, MASTER_PAGE_NAME, SHEET_TABLE_STYLE_NAME } from './scaffold';
-import { OdsSheet } from './sheet';
+import type { Package, XmlElement } from "odf.js";
+import { decodePackage, encodePackage } from "odf.js";
+import { attr } from "ooxml.js";
+import { resolveMetadataTimestamps } from "../../model/metadata";
+import type { ClockPort } from "../../ports/clock";
+import { systemClock } from "../../ports/clock";
+import { el } from "../../xml/fragment";
+import { ensureAutomaticStyles } from "../odt/automatic-styles";
+import {
+  createEmptyOdsPackage,
+  MASTER_PAGE_NAME,
+  SHEET_TABLE_STYLE_NAME,
+} from "./scaffold";
+import { OdsSheet } from "./sheet";
 
-const CONTENT_PART_PATH = 'content.xml';
+const CONTENT_PART_PATH = "content.xml";
 
 function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
   for (const child of parent.children) {
-    if (child.type === 'element' && child.tag === tag) {
+    if (child.type === "element" && child.tag === tag) {
       return child;
     }
   }
@@ -22,7 +26,10 @@ function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
 
 function findRoot(pkg: Package): XmlElement {
   const part = pkg.parts[CONTENT_PART_PATH];
-  const root = part?.kind === 'xml' ? part.nodes.find((n): n is XmlElement => n.type === 'element') : undefined;
+  const root =
+    part?.kind === "xml"
+      ? part.nodes.find((n): n is XmlElement => n.type === "element")
+      : undefined;
   if (root === undefined) {
     throw new Error(`package has no root element at ${CONTENT_PART_PATH}`);
   }
@@ -31,10 +38,13 @@ function findRoot(pkg: Package): XmlElement {
 
 function findOfficeSpreadsheet(pkg: Package): XmlElement {
   const contentRoot = findRoot(pkg);
-  const body = directChild(contentRoot, 'office:body');
-  const spreadsheet = body === undefined ? undefined : directChild(body, 'office:spreadsheet');
+  const body = directChild(contentRoot, "office:body");
+  const spreadsheet =
+    body === undefined ? undefined : directChild(body, "office:spreadsheet");
   if (spreadsheet === undefined) {
-    throw new Error(`${CONTENT_PART_PATH} has no office:body/office:spreadsheet element`);
+    throw new Error(
+      `${CONTENT_PART_PATH} has no office:body/office:spreadsheet element`,
+    );
   }
   return spreadsheet;
 }
@@ -43,12 +53,21 @@ function findOfficeSpreadsheet(pkg: Package): XmlElement {
 function ensureSheetTableStyleName(pkg: Package): string {
   const automaticStyles = ensureAutomaticStyles(pkg);
   const existing = automaticStyles.children.find(
-    (child) => child.type === 'element' && child.tag === 'style:style' && attr(child, 'style:name') === SHEET_TABLE_STYLE_NAME,
+    (child) =>
+      child.type === "element" &&
+      child.tag === "style:style" &&
+      attr(child, "style:name") === SHEET_TABLE_STYLE_NAME,
   );
   if (existing !== undefined) {
     return SHEET_TABLE_STYLE_NAME;
   }
-  automaticStyles.children.push(el('style:style', { 'style:name': SHEET_TABLE_STYLE_NAME, 'style:family': 'table', 'style:master-page-name': MASTER_PAGE_NAME }));
+  automaticStyles.children.push(
+    el("style:style", {
+      "style:name": SHEET_TABLE_STYLE_NAME,
+      "style:family": "table",
+      "style:master-page-name": MASTER_PAGE_NAME,
+    }),
+  );
   return SHEET_TABLE_STYLE_NAME;
 }
 
@@ -63,7 +82,7 @@ export class OdsEditor {
     const spreadsheet = findOfficeSpreadsheet(this.pkg);
     const out: OdsSheet[] = [];
     for (const child of spreadsheet.children) {
-      if (child.type === 'element' && child.tag === 'table:table') {
+      if (child.type === "element" && child.tag === "table:table") {
         out.push(new OdsSheet(spreadsheet.children, child, this.pkg));
       }
     }
@@ -82,14 +101,20 @@ export class OdsEditor {
   addSheet(name: string): OdsSheet {
     const spreadsheet = findOfficeSpreadsheet(this.pkg);
     const styleName = ensureSheetTableStyleName(this.pkg);
-    const tableElement = el('table:table', { 'table:name': name, 'table:style-name': styleName });
+    const tableElement = el("table:table", {
+      "table:name": name,
+      "table:style-name": styleName,
+    });
     spreadsheet.children.push(tableElement);
     return new OdsSheet(spreadsheet.children, tableElement, this.pkg);
   }
 
   removeSheetAt(index: number): void {
     const spreadsheet = findOfficeSpreadsheet(this.pkg);
-    const tableElements = spreadsheet.children.filter((child): child is XmlElement => child.type === 'element' && child.tag === 'table:table');
+    const tableElements = spreadsheet.children.filter(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "table:table",
+    );
     const target = tableElements[index];
     if (target === undefined) {
       throw new Error(`sheet index ${index} does not exist`);

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 // The semantic half of this package's two-layer math model. A formula is stored as two co-equal authoritative layers, joined in ContentFormulaSchema (src/content.ts): presentation -- a verbatim LaTeX string a renderer serialises exactly as stored, never re-derived from semantics -- and content -- a MathExpression tree from this module, which a computer can evaluate. Neither layer is stored derived from the other: string-to-tree lowering is total (any input at least degrades to an `unparsed` node), tree-to-string rendering is partial (some trees have no conventional linear form), and storage takes the recoverable side of that asymmetry by carrying both verbatim. The atomic pair-edit rule the whole design serves: editing one layer must never silently mutate the other, and any canonical/normalised form used to match or diff the two is a derived view computed at comparison time, never written back into either layer. This module holds only schemas and structural type guards, no lowering or rendering logic -- those live in the packages that produce and consume formulas.
 
@@ -21,18 +21,21 @@ export type ExactRational = z.infer<typeof ExactRationalSchema>;
 
 // The seven SI base quantities (SI Brochure order), the axes every derived quantity's dimension is expressed over. Closed on purpose: adding a base dimension is a schema-level change, not something a document may do locally, and the current seven cover every SI-coherent quantity.
 export const SI_BASE_DIMENSIONS = [
-  'length',
-  'mass',
-  'time',
-  'electricCurrent',
-  'thermodynamicTemperature',
-  'amountOfSubstance',
-  'luminousIntensity',
+  "length",
+  "mass",
+  "time",
+  "electricCurrent",
+  "thermodynamicTemperature",
+  "amountOfSubstance",
+  "luminousIntensity",
 ] as const;
 export type SiBaseDimension = (typeof SI_BASE_DIMENSIONS)[number];
 
 // A dimension as exponents over the SI bases, one entry per base with a non-zero exponent -- speed is { length: 1, time: -1 }, force { length: 1, mass: 1, time: -2 }, and an omitted key means exponent zero. Exponents are integers because every SI-coherent derived quantity is an integer product of base quantities. {} is the dimensionless vector (radian, count, a per-unit ratio).
-export const DimensionVectorSchema = z.partialRecord(z.enum(SI_BASE_DIMENSIONS), z.number().int());
+export const DimensionVectorSchema = z.partialRecord(
+  z.enum(SI_BASE_DIMENSIONS),
+  z.number().int(),
+);
 export type DimensionVector = z.infer<typeof DimensionVectorSchema>;
 
 // -- Units --
@@ -59,7 +62,9 @@ export const MathNormalisationContextSchema = z.object({
     }),
   ),
 });
-export type MathNormalisationContext = z.infer<typeof MathNormalisationContextSchema>;
+export type MathNormalisationContext = z.infer<
+  typeof MathNormalisationContextSchema
+>;
 
 // -- The symbol table --
 
@@ -111,13 +116,13 @@ export type MathUncertainty = z.infer<typeof MathUncertaintySchema>;
 // The grammar is closed -- these variants plus the recursive ones below are the whole node vocabulary -- and extensible: domain semantics enter through the namespaced operator registry ('app' below) and new node kinds are schema versions, not local extensions.
 
 export const MathNumSchema = z.object({
-  kind: z.literal('num'),
+  kind: z.literal("num"),
   ...EXACT_RATIONAL_FIELDS,
 });
 export type MathNum = z.infer<typeof MathNumSchema>;
 
 export const MathQtySchema = z.object({
-  kind: z.literal('qty'),
+  kind: z.literal("qty"),
   value: ExactRationalSchema, // the measured or exact value, itself rational so unit chains over it stay exact
   unit: z.string(), // unit-registry id this quantity is expressed in, e.g. 'si:metre'
   uncertainty: MathUncertaintySchema.optional(),
@@ -126,14 +131,14 @@ export type MathQty = z.infer<typeof MathQtySchema>;
 
 // A named symbol, referenced by table id rather than written form: the symbol table owns glyph-to-meaning curation, and an expression that embedded glyphs would duplicate it. id resolves lexically -- a 'sum'/'prod' binder whose binder name matches shadows the table entry inside that binder's body (the bound variable is local), and otherwise the id is looked up in the document's symbolTable. An id matching neither is a dangling reference, detectable by a consumer walking the expression against the table, not by this grammar alone.
 export const MathSymSchema = z.object({
-  kind: z.literal('sym'),
+  kind: z.literal("sym"),
   id: z.string(), // symbol-table id, or a binder-local name within the binder that introduced it
 });
 export type MathSym = z.infer<typeof MathSymSchema>;
 
 // The first-class fallback: source LaTeX this grammar could not cover, so a coverage gap stays visible data instead of becoming a parse failure. Anything can degrade to this node; nothing below it is interpreted.
 export const MathUnparsedSchema = z.object({
-  kind: z.literal('unparsed'),
+  kind: z.literal("unparsed"),
   latex: z.string(), // the verbatim source construct that resisted lowering
 });
 export type MathUnparsed = z.infer<typeof MathUnparsedSchema>;
@@ -142,14 +147,14 @@ export type MathUnparsed = z.infer<typeof MathUnparsedSchema>;
 
 // Operator application. operator is a namespaced registry id -- 'math:divide', 'math:sqrt' for the core arithmetic registry every reference consumer of this grammar implements, a domain prefix for a domain registry ('physics:planck', room for later registries) -- with everything about the operator (its arity, argument order, semantics) owned by the registry its prefix names, not restated here. args is variadic for the same reason: the registry defines how many arguments mean what.
 export interface MathApp {
-  kind: 'app';
+  kind: "app";
   operator: string;
   args: MathExpression[];
 }
 
 // Shared shape of the two binder variants (MathSum/MathProd below): binder is the bound variable's own name, lexically scoped to this binder's body (it shadows same-id symbol-table entries there); lower/upper are the bounds as full expressions -- a set-membership lower bound such as i element-of S is itself an 'app', and bounds referencing a table symbol (an infinity entry, say) are 'sym' nodes; body is the summand/product the binder ranges over.
 export interface MathSum {
-  kind: 'sum';
+  kind: "sum";
   binder: string;
   lower: MathExpression;
   upper: MathExpression;
@@ -157,7 +162,7 @@ export interface MathSum {
 }
 
 export interface MathProd {
-  kind: 'prod';
+  kind: "prod";
   binder: string;
   lower: MathExpression;
   upper: MathExpression;
@@ -166,23 +171,31 @@ export interface MathProd {
 
 // A matrix as rows of expressions -- nested arrays rather than a flat array plus row/column counts, so the shape is its own dimension statement and the only invariant left to check is that every row has the same number of columns (enforced on both validation paths below). Entry order is row-major, the universal convention.
 export interface MathMatrix {
-  kind: 'matrix';
+  kind: "matrix";
   rows: MathExpression[][];
 }
 
 // MathExpression is recursive through app args, binder bounds/bodies, and matrix rows -- hand-written with a structural z.custom() guard below, mirroring ContentBlock's and MathMlNode's identical treatment, since z.lazy() collapses to `unknown` for recursive children in the pinned Zod version.
-export type MathExpression = MathNum | MathQty | MathSym | MathApp | MathSum | MathProd | MathMatrix | MathUnparsed;
+export type MathExpression =
+  | MathNum
+  | MathQty
+  | MathSym
+  | MathApp
+  | MathSum
+  | MathProd
+  | MathMatrix
+  | MathUnparsed;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isExactRational(value: unknown): value is ExactRational {
   return (
     isRecord(value) &&
-    typeof value.numerator === 'string' &&
+    typeof value.numerator === "string" &&
     CANONICAL_SIGNED_INTEGER.test(value.numerator) &&
-    typeof value.denominator === 'string' &&
+    typeof value.denominator === "string" &&
     CANONICAL_POSITIVE_INTEGER.test(value.denominator)
   );
 }
@@ -191,8 +204,9 @@ function isMathUncertainty(value: unknown): value is MathUncertainty {
   return (
     isRecord(value) &&
     isExactRational(value.magnitude) &&
-    (value.unit === undefined || typeof value.unit === 'string') &&
-    (value.coverageFactor === undefined || (typeof value.coverageFactor === 'number' && value.coverageFactor > 0))
+    (value.unit === undefined || typeof value.unit === "string") &&
+    (value.coverageFactor === undefined ||
+      (typeof value.coverageFactor === "number" && value.coverageFactor > 0))
   );
 }
 
@@ -202,36 +216,40 @@ export function isMathExpression(value: unknown): value is MathExpression {
     return false;
   }
   const kind = value.kind;
-  if (kind === 'num') {
+  if (kind === "num") {
     return (
-      typeof value.numerator === 'string' &&
+      typeof value.numerator === "string" &&
       CANONICAL_SIGNED_INTEGER.test(value.numerator) &&
-      typeof value.denominator === 'string' &&
+      typeof value.denominator === "string" &&
       CANONICAL_POSITIVE_INTEGER.test(value.denominator)
     );
   }
-  if (kind === 'qty') {
+  if (kind === "qty") {
     return (
       isExactRational(value.value) &&
-      typeof value.unit === 'string' &&
+      typeof value.unit === "string" &&
       (value.uncertainty === undefined || isMathUncertainty(value.uncertainty))
     );
   }
-  if (kind === 'sym') {
-    return typeof value.id === 'string';
+  if (kind === "sym") {
+    return typeof value.id === "string";
   }
-  if (kind === 'app') {
-    return typeof value.operator === 'string' && Array.isArray(value.args) && value.args.every(isMathExpression);
-  }
-  if (kind === 'sum' || kind === 'prod') {
+  if (kind === "app") {
     return (
-      typeof value.binder === 'string' &&
+      typeof value.operator === "string" &&
+      Array.isArray(value.args) &&
+      value.args.every(isMathExpression)
+    );
+  }
+  if (kind === "sum" || kind === "prod") {
+    return (
+      typeof value.binder === "string" &&
       isMathExpression(value.lower) &&
       isMathExpression(value.upper) &&
       isMathExpression(value.body)
     );
   }
-  if (kind === 'matrix') {
+  if (kind === "matrix") {
     if (!Array.isArray(value.rows)) {
       return false;
     }
@@ -244,8 +262,8 @@ export function isMathExpression(value: unknown): value is MathExpression {
     }
     return widths.size <= 1;
   }
-  if (kind === 'unparsed') {
-    return typeof value.latex === 'string';
+  if (kind === "unparsed") {
+    return typeof value.latex === "string";
   }
   return false;
 }
@@ -255,7 +273,7 @@ export const MathExpressionSchema = z.custom<MathExpression>(isMathExpression);
 // The per-variant schemas for the recursive kinds, defined after MathExpressionSchema because their child fields go through it -- matching MathMlElementSchema's own placement after MathMlNodeSchema (src/mathml.ts). The non-recursive variants' schemas sit with the leaves above.
 
 export const MathAppSchema = z.object({
-  kind: z.literal('app'),
+  kind: z.literal("app"),
   operator: z.string(), // namespaced operator-registry id, e.g. 'math:divide'
   args: z.array(MathExpressionSchema),
 });
@@ -269,22 +287,24 @@ const BINDER_SCHEMA_FIELDS = {
 
 // sum and prod are two variants of one shape rather than one 'binder' variant with an op field, so a consumer's exhaustive switch over the grammar distinguishes them at the discriminant like every other kind.
 export const MathSumSchema = z.object({
-  kind: z.literal('sum'),
+  kind: z.literal("sum"),
   ...BINDER_SCHEMA_FIELDS,
 });
 
 export const MathProdSchema = z.object({
-  kind: z.literal('prod'),
+  kind: z.literal("prod"),
   ...BINDER_SCHEMA_FIELDS,
 });
 
 // The equal-row-width refinement is the one matrix invariant the nested-array shape cannot state structurally; it mirrors the identical check in isMathExpression's 'matrix' branch so both validation paths accept and reject the same values.
-export const MathMatrixSchema = z.object({
-  kind: z.literal('matrix'),
-  rows: z.array(z.array(MathExpressionSchema)),
-}).refine((matrix) => new Set(matrix.rows.map((row) => row.length)).size <= 1, {
-  message: 'matrix rows must all have the same number of columns',
-});
+export const MathMatrixSchema = z
+  .object({
+    kind: z.literal("matrix"),
+    rows: z.array(z.array(MathExpressionSchema)),
+  })
+  .refine((matrix) => new Set(matrix.rows.map((row) => row.length)).size <= 1, {
+    message: "matrix rows must all have the same number of columns",
+  });
 
 // -- Evaluation runtime values --
 //
@@ -292,7 +312,7 @@ export const MathMatrixSchema = z.object({
 
 // The runtime result of evaluating a MathExpression, and the point-valued half of what a caller may bind to a symbol: a plain JS magnitude already resolved into the SI-coherent base units for its dimension, alongside that dimension as a DimensionVector. Deliberately not the same shape as MathQty: MathQty is a document-authored expression-tree leaf (an exact value plus a unit-registry id, meaningless until resolved against a SymbolTable), while Quantity is the resolved value itself, so an evaluator can compare and combine two Quantities by their dimension vectors directly with no registry lookup in the loop.
 export const QuantitySchema = z.object({
-  kind: z.literal('quantity'),
+  kind: z.literal("quantity"),
   magnitude: z.number(), // a plain float, not an ExactRational: trig/sqrt results and numeric solve-for roots have no exact rational representation in general, so exactness is spent where it buys something (unit-conversion factors, resolved before this value exists) rather than held here as false precision
   dimension: DimensionVectorSchema,
 });
@@ -301,12 +321,14 @@ export type Quantity = z.infer<typeof QuantitySchema>;
 // The bounded-value counterpart to Quantity over the identical dimension model, for a formula whose stated fact is a compliance region rather than a point (e.g. 0.87 <= cos(phi) <= 1). min/max are both inclusive; the refinement below is the schema-level half of that invariant, an assembling function is the code-path half for values built outside z.parse.
 export const IntervalSchema = z
   .object({
-    kind: z.literal('interval'),
+    kind: z.literal("interval"),
     min: z.number(),
     max: z.number(),
     dimension: DimensionVectorSchema,
   })
-  .refine((value) => value.min <= value.max, { message: 'interval min must not exceed max' });
+  .refine((value) => value.min <= value.max, {
+    message: "interval min must not exceed max",
+  });
 export type Interval = z.infer<typeof IntervalSchema>;
 
 // One bindable value: a point Quantity or a bounded Interval, so a single binding shape serves both evaluation modes without the caller having to know in advance which mode a given formula needs.
@@ -314,5 +336,8 @@ export const EvaluationValueSchema = z.union([QuantitySchema, IntervalSchema]);
 export type EvaluationValue = z.infer<typeof EvaluationValueSchema>;
 
 // The concrete values a MathExpression's 'sym' nodes reference: keyed by symbol-table id (MathSym.id / MathSymbolEntry.id above), each entry being one EvaluationValue.
-export const FormulaBindingsSchema = z.record(z.string(), EvaluationValueSchema);
+export const FormulaBindingsSchema = z.record(
+  z.string(),
+  EvaluationValueSchema,
+);
 export type FormulaBindings = z.infer<typeof FormulaBindingsSchema>;

@@ -1,5 +1,5 @@
-import type { Package } from 'ooxml.js';
-import { decodePackage, zipPackage } from 'ooxml.js';
+import type { Package } from "ooxml.js";
+import { decodePackage, zipPackage } from "ooxml.js";
 
 // Never imported by src/index.ts and never reaches dist/. See docx.ts's top-of-file comment -- the same reasoning applies here.
 
@@ -31,11 +31,11 @@ const SLIDE1_XML = enc(
 
 function pptxParts(): Record<string, Uint8Array<ArrayBuffer>> {
   return {
-    '[Content_Types].xml': CONTENT_TYPES_XML,
-    '_rels/.rels': ROOT_RELS_XML,
-    'ppt/presentation.xml': PRESENTATION_XML,
-    'ppt/_rels/presentation.xml.rels': PRESENTATION_RELS_XML,
-    'ppt/slides/slide1.xml': SLIDE1_XML,
+    "[Content_Types].xml": CONTENT_TYPES_XML,
+    "_rels/.rels": ROOT_RELS_XML,
+    "ppt/presentation.xml": PRESENTATION_XML,
+    "ppt/_rels/presentation.xml.rels": PRESENTATION_RELS_XML,
+    "ppt/slides/slide1.xml": SLIDE1_XML,
   };
 }
 

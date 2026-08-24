@@ -1,9 +1,9 @@
-import type { XmlElement, XmlNode } from '../../model/node';
-import type { Package } from '../../model/package';
-import { findChildElement, attrValue, rootElement } from '../../xml/query';
-import { decodeXmlText } from '../../xml/entities';
-import { resolveOdbComponent } from './read';
-import { subDocumentPackage } from './subdocument';
+import type { XmlElement, XmlNode } from "../../model/node";
+import type { Package } from "../../model/package";
+import { findChildElement, attrValue, rootElement } from "../../xml/query";
+import { decodeXmlText } from "../../xml/entities";
+import { resolveOdbComponent } from "./read";
+import { subDocumentPackage } from "./subdocument";
 
 // A .odb Report Builder report sub-document -> its static band/group/field STRUCTURE. Nothing here executes SQL, connects to a database, evaluates an rpt: formula, or renders a page: a report's real output only exists once a live engine has answered rpt:command and the (Java, Pentaho-derived) reporting engine has laid the answer out, both categorically out of scope for this package. What IS statically present in the file -- and what this reader returns -- is the complete design: the data binding, the band stack, the group tree, and every band's own bound fields and computed expressions.
 //
@@ -31,7 +31,14 @@ export interface OdbReportElement {
 
 export interface OdbReportBand {
   // Which band this is, from its own rpt: element tag.
-  kind: 'report-header' | 'page-header' | 'group-header' | 'detail' | 'group-footer' | 'page-footer' | 'report-footer';
+  kind:
+    | "report-header"
+    | "page-header"
+    | "group-header"
+    | "detail"
+    | "group-footer"
+    | "page-footer"
+    | "report-footer";
   // The band layout table's own table:name, e.g. 'Group Footer'. Producer-assigned, not user-visible.
   name?: string;
   elements: OdbReportElement[];
@@ -86,16 +93,16 @@ export interface OdbReport {
   functions: OdbReportFunction[];
 }
 
-const CONTENT_PART = 'content.xml';
-const GROUP_TAG = 'rpt:group';
-const FUNCTION_TAG = 'rpt:function';
-const REPORT_ELEMENT_TAG = 'rpt:report-element';
-const REPORT_COMPONENT_TAG = 'rpt:report-component';
-const RPT_TAG_PREFIX = 'rpt:';
+const CONTENT_PART = "content.xml";
+const GROUP_TAG = "rpt:group";
+const FUNCTION_TAG = "rpt:function";
+const REPORT_ELEMENT_TAG = "rpt:report-element";
+const REPORT_COMPONENT_TAG = "rpt:report-component";
+const RPT_TAG_PREFIX = "rpt:";
 
 // The exact bound-field formula shape real Report Builder output writes for a plain column binding -- see this module's own top-of-file note (finding 5).
-const FIELD_FORMULA_PREFIX = 'field:[';
-const FIELD_FORMULA_SUFFIX = ']';
+const FIELD_FORMULA_PREFIX = "field:[";
+const FIELD_FORMULA_SUFFIX = "]";
 
 function reportAttr(element: XmlElement, name: string): string | undefined {
   const raw = attrValue(element, name);
@@ -104,25 +111,32 @@ function reportAttr(element: XmlElement, name: string): string | undefined {
 
 // An ODF boolean attribute -> a real boolean, or undefined when the attribute is absent entirely -- never defaulted, matching how readOdbInventory already treats db:escape-processing/db:as-template.
 function parseOptionalBoolean(raw: string | undefined): boolean | undefined {
-  return raw === undefined ? undefined : raw === 'true';
+  return raw === undefined ? undefined : raw === "true";
 }
 
 // 'field:[AMOUNT]' -> 'AMOUNT'; anything else (a computed 'rpt:...' expression, or an unrecognised shape) -> undefined, left to stand as formula alone rather than being partially parsed.
 function boundFieldName(formula: string | undefined): string | undefined {
-  if (formula === undefined || !formula.startsWith(FIELD_FORMULA_PREFIX) || !formula.endsWith(FIELD_FORMULA_SUFFIX)) {
+  if (
+    formula === undefined ||
+    !formula.startsWith(FIELD_FORMULA_PREFIX) ||
+    !formula.endsWith(FIELD_FORMULA_SUFFIX)
+  ) {
     return undefined;
   }
-  const inner = formula.slice(FIELD_FORMULA_PREFIX.length, formula.length - FIELD_FORMULA_SUFFIX.length);
+  const inner = formula.slice(
+    FIELD_FORMULA_PREFIX.length,
+    formula.length - FIELD_FORMULA_SUFFIX.length,
+  );
   return inner.length === 0 ? undefined : inner;
 }
 
 // All text-node content beneath `element`, entity-decoded -- an rpt:fixed-content's own label lives in a nested text:p, and a label split across several text nodes (or wrapped in a text:span by a styled label) still reads as one string.
 function elementText(element: XmlElement): string {
-  let text = '';
+  let text = "";
   for (const child of element.children) {
-    if (child.type === 'text') {
+    if (child.type === "text") {
       text += decodeXmlText(child.value);
-    } else if (child.type === 'element') {
+    } else if (child.type === "element") {
       text += elementText(child);
     }
   }
@@ -134,25 +148,35 @@ function reportElementChild(element: XmlElement): XmlElement | undefined {
   return findChildElement(element.children, REPORT_ELEMENT_TAG);
 }
 
-function readReportElement(element: XmlElement, reportElement: XmlElement): OdbReportElement {
+function readReportElement(
+  element: XmlElement,
+  reportElement: XmlElement,
+): OdbReportElement {
   const control: OdbReportElement = { tag: element.tag };
-  const component = findChildElement(reportElement.children, REPORT_COMPONENT_TAG);
-  const name = component === undefined ? undefined : reportAttr(component, 'draw:name');
+  const component = findChildElement(
+    reportElement.children,
+    REPORT_COMPONENT_TAG,
+  );
+  const name =
+    component === undefined ? undefined : reportAttr(component, "draw:name");
   if (name !== undefined) {
     control.name = name;
   }
 
-  const formula = reportAttr(element, 'rpt:formula');
+  const formula = reportAttr(element, "rpt:formula");
   if (formula !== undefined) {
     control.formula = formula;
   }
 
   // A control's own literal text comes from its non-rpt: children only -- rpt:report-element carries no text of its own, and descending into it would be reading the control's metadata as if it were content.
-  let text = '';
+  let text = "";
   for (const child of element.children) {
-    if (child.type === 'text') {
+    if (child.type === "text") {
       text += decodeXmlText(child.value);
-    } else if (child.type === 'element' && !child.tag.startsWith(RPT_TAG_PREFIX)) {
+    } else if (
+      child.type === "element" &&
+      !child.tag.startsWith(RPT_TAG_PREFIX)
+    ) {
       text += elementText(child);
     }
   }
@@ -168,9 +192,12 @@ function readReportElement(element: XmlElement, reportElement: XmlElement): OdbR
 }
 
 // Every control anywhere beneath `node` (a band's own layout table, whose cells and paragraphs are arbitrarily nested -- see this module's own top-of-file note, finding 3), in document order. Recursion stops AT a control rather than descending through it, so a control's own rpt:report-element metadata is never mistaken for a nested control.
-function collectControls(nodes: readonly XmlNode[], controls: OdbReportElement[]): void {
+function collectControls(
+  nodes: readonly XmlNode[],
+  controls: OdbReportElement[],
+): void {
   for (const node of nodes) {
-    if (node.type !== 'element') {
+    if (node.type !== "element") {
       continue;
     }
     if (node.tag.startsWith(RPT_TAG_PREFIX)) {
@@ -184,19 +211,27 @@ function collectControls(nodes: readonly XmlNode[], controls: OdbReportElement[]
   }
 }
 
-function readBand(element: XmlElement, kind: OdbReportBand['kind']): OdbReportBand {
+function readBand(
+  element: XmlElement,
+  kind: OdbReportBand["kind"],
+): OdbReportBand {
   const elements: OdbReportElement[] = [];
   collectControls(element.children, elements);
   const band: OdbReportBand = { kind, elements };
-  const table = findChildElement(element.children, 'table:table');
-  const name = table === undefined ? undefined : reportAttr(table, 'table:name');
+  const table = findChildElement(element.children, "table:table");
+  const name =
+    table === undefined ? undefined : reportAttr(table, "table:name");
   if (name !== undefined) {
     band.name = name;
   }
   return band;
 }
 
-function readBandIfPresent(container: XmlElement, tag: string, kind: OdbReportBand['kind']): OdbReportBand | undefined {
+function readBandIfPresent(
+  container: XmlElement,
+  tag: string,
+  kind: OdbReportBand["kind"],
+): OdbReportBand | undefined {
   const element = findChildElement(container.children, tag);
   return element === undefined ? undefined : readBand(element, kind);
 }
@@ -204,11 +239,11 @@ function readBandIfPresent(container: XmlElement, tag: string, kind: OdbReportBa
 function readFunctions(container: XmlElement): OdbReportFunction[] {
   const functions: OdbReportFunction[] = [];
   for (const child of container.children) {
-    if (child.type !== 'element' || child.tag !== FUNCTION_TAG) {
+    if (child.type !== "element" || child.tag !== FUNCTION_TAG) {
       continue;
     }
-    const name = reportAttr(child, 'rpt:name');
-    const formula = reportAttr(child, 'rpt:formula');
+    const name = reportAttr(child, "rpt:name");
+    const formula = reportAttr(child, "rpt:formula");
     if (name === undefined || formula === undefined) {
       continue;
     }
@@ -218,42 +253,51 @@ function readFunctions(container: XmlElement): OdbReportFunction[] {
 }
 
 function readGroup(element: XmlElement): OdbReportGroup {
-  const group: OdbReportGroup = { functions: readFunctions(element), groups: [] };
-  const groupExpression = reportAttr(element, 'rpt:group-expression');
+  const group: OdbReportGroup = {
+    functions: readFunctions(element),
+    groups: [],
+  };
+  const groupExpression = reportAttr(element, "rpt:group-expression");
   if (groupExpression !== undefined) {
     group.groupExpression = groupExpression;
   }
-  const sortExpression = reportAttr(element, 'rpt:sort-expression');
+  const sortExpression = reportAttr(element, "rpt:sort-expression");
   if (sortExpression !== undefined) {
     group.sortExpression = sortExpression;
   }
-  const sortAscending = parseOptionalBoolean(attrValue(element, 'rpt:sort-ascending'));
+  const sortAscending = parseOptionalBoolean(
+    attrValue(element, "rpt:sort-ascending"),
+  );
   if (sortAscending !== undefined) {
     group.sortAscending = sortAscending;
   }
-  const startNewColumn = parseOptionalBoolean(attrValue(element, 'rpt:start-new-column'));
+  const startNewColumn = parseOptionalBoolean(
+    attrValue(element, "rpt:start-new-column"),
+  );
   if (startNewColumn !== undefined) {
     group.startNewColumn = startNewColumn;
   }
-  const resetPageNumber = parseOptionalBoolean(attrValue(element, 'rpt:reset-page-number'));
+  const resetPageNumber = parseOptionalBoolean(
+    attrValue(element, "rpt:reset-page-number"),
+  );
   if (resetPageNumber !== undefined) {
     group.resetPageNumber = resetPageNumber;
   }
-  const keepTogether = reportAttr(element, 'rpt:keep-together');
+  const keepTogether = reportAttr(element, "rpt:keep-together");
   if (keepTogether !== undefined) {
     group.keepTogether = keepTogether;
   }
 
-  const header = readBandIfPresent(element, 'rpt:group-header', 'group-header');
+  const header = readBandIfPresent(element, "rpt:group-header", "group-header");
   if (header !== undefined) {
     group.header = header;
   }
-  const footer = readBandIfPresent(element, 'rpt:group-footer', 'group-footer');
+  const footer = readBandIfPresent(element, "rpt:group-footer", "group-footer");
   if (footer !== undefined) {
     group.footer = footer;
   }
   for (const child of element.children) {
-    if (child.type === 'element' && child.tag === GROUP_TAG) {
+    if (child.type === "element" && child.tag === GROUP_TAG) {
       group.groups.push(readGroup(child));
     }
   }
@@ -262,9 +306,9 @@ function readGroup(element: XmlElement): OdbReportGroup {
 
 // The detail band, descending the group chain to reach it -- see this module's own top-of-file note (finding 2). Follows the FIRST rpt:group at each level, matching real output, where a level holds at most one nested group.
 function findDetail(container: XmlElement): OdbReportBand | undefined {
-  const detail = findChildElement(container.children, 'rpt:detail');
+  const detail = findChildElement(container.children, "rpt:detail");
   if (detail !== undefined) {
-    return readBand(detail, 'detail');
+    return readBand(detail, "detail");
   }
   const group = findChildElement(container.children, GROUP_TAG);
   return group === undefined ? undefined : findDetail(group);
@@ -272,22 +316,32 @@ function findDetail(container: XmlElement): OdbReportBand | undefined {
 
 // Package + a report's own db:reports/db:component name -> OdbReport. Throws when the .odb declares no report by that name, when the sub-document its db:component points at is missing from the package, or when that sub-document's content.xml has no office:body/office:report element -- all three are genuinely unusable references rather than salvageable degradations, matching every other typed reader's own "missing required structural element" throw convention.
 export function readOdbReport(pkg: Package, reportName: string): OdbReport {
-  const component = resolveOdbComponent(pkg, 'report', reportName);
+  const component = resolveOdbComponent(pkg, "report", reportName);
   const subPackage = subDocumentPackage(pkg, component.href);
   const contentPart = subPackage.parts[CONTENT_PART];
-  if (contentPart?.kind !== 'xml') {
-    throw new Error(`readOdbReport: report "${reportName}" sub-document ${component.href}/${CONTENT_PART} is not an XML part`);
+  if (contentPart?.kind !== "xml") {
+    throw new Error(
+      `readOdbReport: report "${reportName}" sub-document ${component.href}/${CONTENT_PART} is not an XML part`,
+    );
   }
   const contentRoot = rootElement(contentPart.nodes);
-  const body = contentRoot === undefined ? undefined : findChildElement(contentRoot.children, 'office:body');
-  const reportElement = body === undefined ? undefined : findChildElement(body.children, 'office:report');
+  const body =
+    contentRoot === undefined
+      ? undefined
+      : findChildElement(contentRoot.children, "office:body");
+  const reportElement =
+    body === undefined
+      ? undefined
+      : findChildElement(body.children, "office:report");
   if (reportElement === undefined) {
-    throw new Error(`readOdbReport: report "${reportName}" sub-document ${component.href}/${CONTENT_PART} has no office:body/office:report element`);
+    throw new Error(
+      `readOdbReport: report "${reportName}" sub-document ${component.href}/${CONTENT_PART} has no office:body/office:report element`,
+    );
   }
 
   const groups: OdbReportGroup[] = [];
   for (const child of reportElement.children) {
-    if (child.type === 'element' && child.tag === GROUP_TAG) {
+    if (child.type === "element" && child.tag === GROUP_TAG) {
       groups.push(readGroup(child));
     }
   }
@@ -298,28 +352,36 @@ export function readOdbReport(pkg: Package, reportName: string): OdbReport {
     groups,
     functions: readFunctions(reportElement),
   };
-  const command = reportAttr(reportElement, 'rpt:command');
+  const command = reportAttr(reportElement, "rpt:command");
   if (command !== undefined) {
     report.command = command;
   }
-  const commandType = reportAttr(reportElement, 'rpt:command-type');
+  const commandType = reportAttr(reportElement, "rpt:command-type");
   if (commandType !== undefined) {
     report.commandType = commandType;
   }
-  const caption = reportAttr(reportElement, 'office:caption');
+  const caption = reportAttr(reportElement, "office:caption");
   if (caption !== undefined) {
     report.caption = caption;
   }
-  const mimeType = reportAttr(reportElement, 'office:mimetype');
+  const mimeType = reportAttr(reportElement, "office:mimetype");
   if (mimeType !== undefined) {
     report.mimeType = mimeType;
   }
 
-  const reportHeader = readBandIfPresent(reportElement, 'rpt:report-header', 'report-header');
+  const reportHeader = readBandIfPresent(
+    reportElement,
+    "rpt:report-header",
+    "report-header",
+  );
   if (reportHeader !== undefined) {
     report.reportHeader = reportHeader;
   }
-  const pageHeader = readBandIfPresent(reportElement, 'rpt:page-header', 'page-header');
+  const pageHeader = readBandIfPresent(
+    reportElement,
+    "rpt:page-header",
+    "page-header",
+  );
   if (pageHeader !== undefined) {
     report.pageHeader = pageHeader;
   }
@@ -327,11 +389,19 @@ export function readOdbReport(pkg: Package, reportName: string): OdbReport {
   if (detail !== undefined) {
     report.detail = detail;
   }
-  const pageFooter = readBandIfPresent(reportElement, 'rpt:page-footer', 'page-footer');
+  const pageFooter = readBandIfPresent(
+    reportElement,
+    "rpt:page-footer",
+    "page-footer",
+  );
   if (pageFooter !== undefined) {
     report.pageFooter = pageFooter;
   }
-  const reportFooter = readBandIfPresent(reportElement, 'rpt:report-footer', 'report-footer');
+  const reportFooter = readBandIfPresent(
+    reportElement,
+    "rpt:report-footer",
+    "report-footer",
+  );
   if (reportFooter !== undefined) {
     report.reportFooter = reportFooter;
   }

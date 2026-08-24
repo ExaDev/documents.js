@@ -1,10 +1,10 @@
-import type { OdbQueryInfo, OdbReport, Package } from 'odf.js';
-import { readOdbInventory } from 'odf.js';
-import type { HsqldbDecodeOptions } from '../../hsqldb/rowformat';
-import { readOdbTables } from '../read';
-import type { SqlResultSet } from '../sql/evaluate';
-import { evaluateSelect } from '../sql/evaluate';
-import { parseSelect } from '../sql/parser';
+import type { OdbQueryInfo, OdbReport, Package } from "odf.js";
+import { readOdbInventory } from "odf.js";
+import type { HsqldbDecodeOptions } from "../../hsqldb/rowformat";
+import { readOdbTables } from "../read";
+import type { SqlResultSet } from "../sql/evaluate";
+import { evaluateSelect } from "../sql/evaluate";
+import { parseSelect } from "../sql/parser";
 
 // Resolves what a Report Builder report's own rpt:command/rpt:command-type pair actually names, into the real rows the report renders over. This is the one place the .odb's three data-binding shapes are distinguished; everything downstream sees only a SqlResultSet, exactly as if the report had been written against a literal SELECT in the first place.
 //
@@ -26,7 +26,7 @@ export class OdbReportDataSourceError extends Error {
 
   constructor(message: string, report: OdbReport) {
     super(`Report "${report.name}" data source: ${message}`);
-    this.name = 'OdbReportDataSourceError';
+    this.name = "OdbReportDataSourceError";
     this.reportName = report.name;
     this.command = report.command;
     this.commandType = report.commandType;
@@ -38,36 +38,59 @@ function quotedIdentifier(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
-function savedQueryCommand(report: OdbReport, commandName: string, queries: readonly OdbQueryInfo[]): string {
+function savedQueryCommand(
+  report: OdbReport,
+  commandName: string,
+  queries: readonly OdbQueryInfo[],
+): string {
   const query = queries.find((candidate) => candidate.name === commandName);
   if (query === undefined) {
-    throw new OdbReportDataSourceError(`rpt:command-type is "query" and rpt:command names "${commandName}", but this .odb declares no such saved query -- available quer${queries.length === 1 ? 'y' : 'ies'}: ${queries.length === 0 ? '(none)' : queries.map((candidate) => candidate.name).join(', ')}`, report);
+    throw new OdbReportDataSourceError(
+      `rpt:command-type is "query" and rpt:command names "${commandName}", but this .odb declares no such saved query -- available quer${queries.length === 1 ? "y" : "ies"}: ${queries.length === 0 ? "(none)" : queries.map((candidate) => candidate.name).join(", ")}`,
+      report,
+    );
   }
   return query.command;
 }
 
 // The SQL text a report's own data binding resolves to. Separated from running it so a caller can see exactly which statement a report will issue -- and so the three-shape resolution above is testable without any table data at all.
-export function odbReportCommandSql(report: OdbReport, queries: readonly OdbQueryInfo[]): string {
+export function odbReportCommandSql(
+  report: OdbReport,
+  queries: readonly OdbQueryInfo[],
+): string {
   const command = report.command;
   if (command === undefined) {
-    throw new OdbReportDataSourceError('the report declares no rpt:command, so there is no table, query, or statement to read its rows from', report);
+    throw new OdbReportDataSourceError(
+      "the report declares no rpt:command, so there is no table, query, or statement to read its rows from",
+      report,
+    );
   }
   switch (report.commandType) {
-    case 'table':
+    case "table":
       return `SELECT * FROM ${quotedIdentifier(command)}`;
-    case 'query':
+    case "query":
       return savedQueryCommand(report, command, queries);
-    case 'command':
+    case "command":
       return command;
     case undefined:
-      throw new OdbReportDataSourceError(`the report declares rpt:command "${command}" but no rpt:command-type, so whether that names a table, a saved query, or a literal statement is undetermined`, report);
+      throw new OdbReportDataSourceError(
+        `the report declares rpt:command "${command}" but no rpt:command-type, so whether that names a table, a saved query, or a literal statement is undetermined`,
+        report,
+      );
     default:
-      throw new OdbReportDataSourceError(`rpt:command-type "${report.commandType}" is not one of the three values this package resolves ("table", "query", "command")`, report);
+      throw new OdbReportDataSourceError(
+        `rpt:command-type "${report.commandType}" is not one of the three values this package resolves ("table", "query", "command")`,
+        report,
+      );
   }
 }
 
 // A report plus the .odb it lives in -> the real rows it renders, in the command's own order. Reads the package's table data through readOdbTables, so whichever storage tier the .odb uses (HSQLDB TEXT/CACHED/BINARY, or Firebird) is already resolved by the time the query engine sees it.
-export function resolveOdbReportRows(pkg: Package, report: OdbReport, options?: HsqldbDecodeOptions): SqlResultSet {
+export function resolveOdbReportRows(
+  pkg: Package,
+  report: OdbReport,
+  options?: HsqldbDecodeOptions,
+): SqlResultSet {
   const sql = odbReportCommandSql(report, readOdbInventory(pkg).queries);
   return evaluateSelect(parseSelect(sql), readOdbTables(pkg, options));
 }

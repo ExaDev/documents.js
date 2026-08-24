@@ -1,7 +1,7 @@
 // What a caller inspecting a standalone TrueType/OpenType font FILE needs before using it as a ProvidedFont (src/font-registry.ts): the family/bold/italic triple a font declares about itself, read out of its own 'name'/'OS/2'/'head' tables. This is a thin public wrapper over sfnt.ts's parseSfnt and font-tables.ts's parseName/parseOs2/parseHead -- every one of those already parses the tables this needs; nothing here re-reads a table those modules do not already expose. embedded-font.ts's own EmbeddedFace.postScriptName is the wrong field for this job even though it is already public: a PostScript name is a naming convention rather than a structured family+style pair ("ArialMT", "TimesNewRomanPS-BoldMT"), and recovering a family from one is guesswork where the 'name' table states it outright.
-import type { HeadTable, NameTable, Os2Table } from './font-tables';
-import { parseHead, parseName, parseOs2 } from './font-tables';
-import { hasBytes, parseSfnt, u32 } from './sfnt';
+import type { HeadTable, NameTable, Os2Table } from "./font-tables";
+import { parseHead, parseName, parseOs2 } from "./font-tables";
+import { hasBytes, parseSfnt, u32 } from "./sfnt";
 
 export interface FontFace {
   readonly family: string;
@@ -13,7 +13,7 @@ export interface FontFace {
 export class FontFaceParseError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'FontFaceParseError';
+    this.name = "FontFaceParseError";
   }
 }
 
@@ -33,31 +33,52 @@ const HEAD_MAC_STYLE_BOLD = 0x0001;
 const HEAD_MAC_STYLE_ITALIC = 0x0002;
 
 // 'OS/2' fsSelection is the field the OpenType spec designates as authoritative for a face's own weight/slope; 'head' macStyle is the older field required to agree with it, and the only one a legacy Mac-only TrueType with no 'OS/2' table still declares. fsSelection is read wherever the table exists (parseOs2 already requires enough bytes for it) and macStyle only as the fallback.
-function readStyle(head: HeadTable | undefined, os2: Os2Table | undefined, source: string): { readonly bold: boolean; readonly italic: boolean } {
+function readStyle(
+  head: HeadTable | undefined,
+  os2: Os2Table | undefined,
+  source: string,
+): { readonly bold: boolean; readonly italic: boolean } {
   if (os2 !== undefined) {
-    return { bold: (os2.fsSelection & OS2_FS_SELECTION_BOLD) !== 0, italic: (os2.fsSelection & OS2_FS_SELECTION_ITALIC) !== 0 };
+    return {
+      bold: (os2.fsSelection & OS2_FS_SELECTION_BOLD) !== 0,
+      italic: (os2.fsSelection & OS2_FS_SELECTION_ITALIC) !== 0,
+    };
   }
   if (head !== undefined) {
-    return { bold: (head.macStyle & HEAD_MAC_STYLE_BOLD) !== 0, italic: (head.macStyle & HEAD_MAC_STYLE_ITALIC) !== 0 };
+    return {
+      bold: (head.macStyle & HEAD_MAC_STYLE_BOLD) !== 0,
+      italic: (head.macStyle & HEAD_MAC_STYLE_ITALIC) !== 0,
+    };
   }
-  throw new FontFaceParseError(`${source} declares neither a readable 'OS/2' nor a readable 'head' table, so its weight and slope cannot be determined`);
+  throw new FontFaceParseError(
+    `${source} declares neither a readable 'OS/2' nor a readable 'head' table, so its weight and slope cannot be determined`,
+  );
 }
 
 function readFamily(name: NameTable | undefined, source: string): string {
   if (name?.familyName === undefined) {
-    throw new FontFaceParseError(`${source} declares no family name in its 'name' table, so the font family it provides cannot be determined`);
+    throw new FontFaceParseError(
+      `${source} declares no family name in its 'name' table, so the font family it provides cannot be determined`,
+    );
   }
   return name.familyName;
 }
 
 // Reads a standalone font file's own family/bold/italic declaration -- for a caller holding the raw bytes of a .ttf/.otf a user supplied (e.g. as a ProvidedFont candidate), not a font already extracted from a source document. `source` names the file in every error this throws, matching every other multi-input read path in this package's own callers, since the bytes alone carry no such label.
-export function readFontFace(bytes: Uint8Array<ArrayBuffer>, source: string): FontFace {
+export function readFontFace(
+  bytes: Uint8Array<ArrayBuffer>,
+  source: string,
+): FontFace {
   const font = parseSfnt(bytes);
   if (font === undefined) {
     if (isTrueTypeCollection(bytes)) {
-      throw new FontFaceParseError(`${source} is a TrueType Collection (.ttc), which packs several faces into one file; extract the single face you want and pass that instead`);
+      throw new FontFaceParseError(
+        `${source} is a TrueType Collection (.ttc), which packs several faces into one file; extract the single face you want and pass that instead`,
+      );
     }
-    throw new FontFaceParseError(`${source} is not a TrueType/OpenType font file (no recognised sfnt version); a .woff/.woff2 file must be converted to .ttf/.otf first`);
+    throw new FontFaceParseError(
+      `${source} is not a TrueType/OpenType font file (no recognised sfnt version); a .woff/.woff2 file must be converted to .ttf/.otf first`,
+    );
   }
 
   const family = readFamily(parseName(font), source);

@@ -1,6 +1,6 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation } from "@tanstack/react-query";
 
-import { convertViaWorker } from '../adapters/documentConverter/workerDocumentConverter';
+import { convertViaWorker } from "../adapters/documentConverter/workerDocumentConverter";
 
 export function useConvert() {
   return useMutation({

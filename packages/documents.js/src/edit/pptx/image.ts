@@ -1,10 +1,10 @@
-import type { Package, XmlElement } from 'ooxml.js';
-import type { Box } from 'document-schema.js';
-import { addImageMedia } from '../../opc/media';
-import { buildPictureShape } from './shape';
+import type { Package, XmlElement } from "ooxml.js";
+import type { Box } from "document-schema.js";
+import { addImageMedia } from "../../opc/media";
+import { buildPictureShape } from "./shape";
 
 export interface ImageInit {
-  readonly format: 'png' | 'jpeg';
+  readonly format: "png" | "jpeg";
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly altText?: string;
 }
@@ -24,9 +24,9 @@ function nextShapeId(slideRoot: XmlElement): number {
     if (node === undefined) {
       continue;
     }
-    if (node.tag === 'p:cNvPr') {
+    if (node.tag === "p:cNvPr") {
       for (const a of node.attributes) {
-        if (a.name === 'id') {
+        if (a.name === "id") {
           const n = Number.parseInt(a.value, 10);
           if (!Number.isNaN(n) && n > max) {
             max = n;
@@ -35,7 +35,7 @@ function nextShapeId(slideRoot: XmlElement): number {
       }
     }
     for (const child of node.children) {
-      if (child.type === 'element') {
+      if (child.type === "element") {
         stack.push(child);
       }
     }
@@ -44,8 +44,19 @@ function nextShapeId(slideRoot: XmlElement): number {
 }
 
 // Adds the binary media part + content-type entry + relationship, then returns the p:pic shape fragment referencing it, positioned at `frame`. The caller (PptxSlide) inserts the returned element into the slide's p:spTree.
-export function insertPictureShapeMedia(context: MediaContext, slideRoot: XmlElement, frame: Box, image: ImageInit): XmlElement {
-  const { relationshipId } = addImageMedia(context.pkg, context.partPath, context.mediaDir, image.format, image.bytes);
+export function insertPictureShapeMedia(
+  context: MediaContext,
+  slideRoot: XmlElement,
+  frame: Box,
+  image: ImageInit,
+): XmlElement {
+  const { relationshipId } = addImageMedia(
+    context.pkg,
+    context.partPath,
+    context.mediaDir,
+    image.format,
+    image.bytes,
+  );
   const id = nextShapeId(slideRoot);
   return buildPictureShape(frame, relationshipId, id);
 }

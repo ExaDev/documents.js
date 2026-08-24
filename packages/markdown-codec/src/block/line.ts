@@ -4,8 +4,8 @@
 //
 // What this adds on top of the scanner: the three derived quantities every continuation rule and block start is written against -- where the line's next non-space character is, how many columns of indentation precede it, and whether the line is blank -- plus `rest()`, the "what is left of this line, with a partially consumed tab's remaining columns materialised as real spaces" operation that turns a cursor position back into the text a leaf block stores.
 
-import type { MarkdownScanMark } from '../scan/scan';
-import { MarkdownScanCursor } from '../scan/scan';
+import type { MarkdownScanMark } from "../scan/scan";
+import { MarkdownScanCursor } from "../scan/scan";
 
 // The indentation at which a line becomes indented code rather than whatever it would otherwise be (spec 0.31.2: "An indented code block is composed of one or more indented chunks... preceded by four or more spaces of indentation").
 export const CODE_INDENT_COLUMNS = 4;
@@ -63,7 +63,7 @@ export class LineCursor {
   // Recomputes where the next non-space character is, from the cursor's current position. Called once per open block as the continuation walk descends, since stripping a container's own prefix changes the answer.
   findNextNonspace(): void {
     const saved = this.cursor.mark();
-    while (this.cursor.peek() === ' ') {
+    while (this.cursor.peek() === " ") {
       this.cursor.next();
     }
     this.nextNonspaceMark = this.cursor.mark();
@@ -96,7 +96,9 @@ export class LineCursor {
   rest(): string {
     const mark = this.cursor.mark();
     if (mark.pendingTabColumns > 0) {
-      return ' '.repeat(mark.pendingTabColumns) + this.text.slice(mark.rawOffset + 1);
+      return (
+        " ".repeat(mark.pendingTabColumns) + this.text.slice(mark.rawOffset + 1)
+      );
     }
     return this.text.slice(mark.rawOffset);
   }

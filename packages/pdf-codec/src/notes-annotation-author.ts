@@ -1,3 +1,3 @@
 // The /T author marker this package's own writer stamps on a hidden presenter-notes annotation (see write.ts's buildNotesAnnotDict) and its reader checks back (read.ts's readPageNotes), so the two halves can never drift apart on a second, private copy of the string. This marker is the one symbol the read pipeline and the write pipeline genuinely share, which is exactly why it lives in its own leaf module rather than in write.ts: read.ts importing it from write.ts would pull the whole write path -- and with it the vendored font assets write.ts eagerly imports -- into the module graph of a consumer that only ever reads PDFs. The read-graph guard test (src/read-graph.test.ts) holds that boundary.
 
-export const NOTES_ANNOTATION_AUTHOR = 'documents.js:notes';
+export const NOTES_ANNOTATION_AUTHOR = "documents.js:notes";

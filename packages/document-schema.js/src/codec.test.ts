@@ -1,20 +1,25 @@
-import { describe, expect, it } from 'vitest';
-import type { ContentCodec } from './codec';
-import type { ContentDocument } from './content';
+import { describe, expect, it } from "vitest";
+import type { ContentCodec } from "./codec";
+import type { ContentDocument } from "./content";
 
 function wordprocessingDocument(): ContentDocument {
   return {
-    kind: 'wordprocessing',
-    metadata: { title: 'Codec round trip', author: 'document-schema.js' },
+    kind: "wordprocessing",
+    metadata: { title: "Codec round trip", author: "document-schema.js" },
     sections: [
       {
         pageSize: { widthPt: 612, heightPt: 792 },
         margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
         blocks: [
           {
-            kind: 'paragraph',
-            runs: [{ text: 'Hello, codec.', sourcePath: 'sections[0].blocks[0].runs[0]' }],
-            sourcePath: 'sections[0].blocks[0]',
+            kind: "paragraph",
+            runs: [
+              {
+                text: "Hello, codec.",
+                sourcePath: "sections[0].blocks[0].runs[0]",
+              },
+            ],
+            sourcePath: "sections[0].blocks[0]",
           },
         ],
       },
@@ -22,15 +27,15 @@ function wordprocessingDocument(): ContentDocument {
   };
 }
 
-describe('ContentCodec', () => {
-  it('accepts a real implementation carrying both read and write', () => {
+describe("ContentCodec", () => {
+  it("accepts a real implementation carrying both read and write", () => {
     const codec: ContentCodec = {
       read: (bytes) => {
         expect(bytes).toBeInstanceOf(Uint8Array);
         return wordprocessingDocument();
       },
       write: (content) => {
-        expect(content.kind).toBe('wordprocessing');
+        expect(content.kind).toBe("wordprocessing");
         return new Uint8Array([1, 2, 3]);
       },
     };
@@ -40,16 +45,18 @@ describe('ContentCodec', () => {
     expect(codec.write?.(content)).toEqual(new Uint8Array([1, 2, 3]));
   });
 
-  it('accepts a real implementation that omits write entirely, proving it is genuinely optional', () => {
+  it("accepts a real implementation that omits write entirely, proving it is genuinely optional", () => {
     const readOnlyCodec: ContentCodec = {
       read: () => wordprocessingDocument(),
     };
 
-    expect('write' in readOnlyCodec).toBe(false);
-    expect(readOnlyCodec.read(new Uint8Array([0]))).toEqual(wordprocessingDocument());
+    expect("write" in readOnlyCodec).toBe(false);
+    expect(readOnlyCodec.read(new Uint8Array([0]))).toEqual(
+      wordprocessingDocument(),
+    );
   });
 
-  it('threads a format-specific TOptions type through both read and write', () => {
+  it("threads a format-specific TOptions type through both read and write", () => {
     interface OdtReadOptions {
       signal?: AbortSignal;
     }
@@ -61,6 +68,8 @@ describe('ContentCodec', () => {
       },
     };
 
-    expect(codec.read(new Uint8Array([0]), {})).toEqual(wordprocessingDocument());
+    expect(codec.read(new Uint8Array([0]), {})).toEqual(
+      wordprocessingDocument(),
+    );
   });
 });

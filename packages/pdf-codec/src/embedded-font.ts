@@ -1,12 +1,18 @@
-import type { CmapLookup } from './cmap-table';
-import { buildCmapLookup } from './cmap-table';
-import { parseHead, parseMaxp, parseName, parseOs2, parsePost } from './font-tables';
-import { parseGlyf } from './glyf';
-import { buildGposKernLookup } from './gpos-table';
-import type { HmtxTable } from './hmtx-table';
-import { parseHmtx } from './hmtx-table';
-import type { SfntFont } from './sfnt';
-import { hasBytes, i16, sfntTableBytes, u16 } from './sfnt';
+import type { CmapLookup } from "./cmap-table";
+import { buildCmapLookup } from "./cmap-table";
+import {
+  parseHead,
+  parseMaxp,
+  parseName,
+  parseOs2,
+  parsePost,
+} from "./font-tables";
+import { parseGlyf } from "./glyf";
+import { buildGposKernLookup } from "./gpos-table";
+import type { HmtxTable } from "./hmtx-table";
+import { parseHmtx } from "./hmtx-table";
+import type { SfntFont } from "./sfnt";
+import { hasBytes, i16, sfntTableBytes, u16 } from "./sfnt";
 
 // A parsed, ready-to-embed TrueType-outline text face: everything the PDF write path needs to state a font's metrics in a /FontDescriptor, to resolve a string's characters to glyph IDs, and to measure that string -- read once from the font's own 'cmap'/'hmtx'/'head'/'hhea'/'OS/2'/'post'/'name' tables and cached, the same shape math-font.ts's own loadMathFont provides for the vendored math font.
 //
@@ -75,7 +81,12 @@ function scaleToGlyphSpace(designUnits: number, unitsPerEm: number): number {
 }
 
 // The cap height a /FontDescriptor must carry for a nonsymbolic font (ISO 32000-1 Table 122). 'OS/2' version 2 and later declares it outright; for an older table it is measured off the 'H' glyph's own outline, which is exactly what that field means. A face with neither -- no 'H' at all, or an unreadable one -- falls back to its ascent, the only remaining value the font itself states.
-function resolveCapHeight(font: SfntFont, cmap: CmapLookup, declared: number | undefined, ascent: number): number {
+function resolveCapHeight(
+  font: SfntFont,
+  cmap: CmapLookup,
+  declared: number | undefined,
+  ascent: number,
+): number {
   if (declared !== undefined) {
     return declared;
   }
@@ -85,7 +96,10 @@ function resolveCapHeight(font: SfntFont, cmap: CmapLookup, declared: number | u
   if (head === undefined || maxp === undefined || glyphId === undefined) {
     return ascent;
   }
-  const glyf = parseGlyf(font, { numGlyphs: maxp.numGlyphs, indexToLocFormat: head.indexToLocFormat });
+  const glyf = parseGlyf(font, {
+    numGlyphs: maxp.numGlyphs,
+    indexToLocFormat: head.indexToLocFormat,
+  });
   return glyf?.glyphHeader(glyphId)?.yMax ?? ascent;
 }
 
@@ -94,7 +108,11 @@ function isSerifByPanose(panose: readonly number[] | undefined): boolean {
     return false;
   }
   const serifStyle = panose[PANOSE_SERIF_STYLE_OFFSET];
-  return serifStyle !== undefined && serifStyle >= PANOSE_FIRST_SERIF_STYLE && serifStyle <= PANOSE_LAST_SERIF_STYLE;
+  return (
+    serifStyle !== undefined &&
+    serifStyle >= PANOSE_FIRST_SERIF_STYLE &&
+    serifStyle <= PANOSE_LAST_SERIF_STYLE
+  );
 }
 
 // Reads `font` into an EmbeddedFace, or returns `undefined` for a font this package cannot describe in a PDF font dictionary at all: one with no readable 'head' (no design grid), no 'cmap' (no way to resolve a character to a glyph), no 'hhea'/'hmtx' (no advance widths), or no PostScript name (nothing legal to write as /BaseFont). Every one of those is a font the caller must substitute another face for rather than embed -- the same "degrade around this font, don't abort the document" contract sfnt-subset.ts's own `undefined` return carries.
@@ -113,13 +131,22 @@ function readEmbeddedFace(font: SfntFont): EmbeddedFace | undefined {
   const maxp = parseMaxp(font);
   const name = parseName(font);
   const cmap = buildCmapLookup(font);
-  if (head === undefined || maxp === undefined || cmap === undefined || name?.postScriptName === undefined) {
+  if (
+    head === undefined ||
+    maxp === undefined ||
+    cmap === undefined ||
+    name?.postScriptName === undefined
+  ) {
     return undefined;
   }
   // hhea's own ascender/descender, matching math-font.ts's own choice: they are the vertical extents the font itself declares for line layout, and unlike 'OS/2's several competing pairs there is only one of them. Reading this here also establishes every precondition parseHmtx would otherwise throw on, so its failure case is the same `undefined` every other missing-table branch here returns rather than an exception escaping this module.
   const hhea = parseHhea(font);
-  const hmtxBytes = sfntTableBytes(font, 'hmtx');
-  if (hhea === undefined || hmtxBytes === undefined || !hasBytes(hmtxBytes, 0, hhea.numberOfHMetrics * LONG_HOR_METRIC_SIZE)) {
+  const hmtxBytes = sfntTableBytes(font, "hmtx");
+  if (
+    hhea === undefined ||
+    hmtxBytes === undefined ||
+    !hasBytes(hmtxBytes, 0, hhea.numberOfHMetrics * LONG_HOR_METRIC_SIZE)
+  ) {
     return undefined;
   }
   const hmtx: HmtxTable = parseHmtx(font);
@@ -127,7 +154,8 @@ function readEmbeddedFace(font: SfntFont): EmbeddedFace | undefined {
   const os2 = parseOs2(font);
   const post = parsePost(font);
   const { unitsPerEm } = head;
-  const scale = (designUnits: number): number => scaleToGlyphSpace(designUnits, unitsPerEm);
+  const scale = (designUnits: number): number =>
+    scaleToGlyphSpace(designUnits, unitsPerEm);
   const capHeight = resolveCapHeight(font, cmap, os2?.sCapHeight, hhea.ascent);
   // The face's own pair kerning, read once here rather than per string: gpos-table.ts walks the whole 'GPOS' table up front and reduces it to per-subtable closures precisely so a query costs a bisection, and this cache is what makes "once" mean once per face rather than once per run of text. A face with no reachable kerning is given a lookup that adjusts nothing, so encodeForShowEmbedded below stays one code path instead of two.
   const kern = buildGposKernLookup(font);
@@ -141,14 +169,25 @@ function readEmbeddedFace(font: SfntFont): EmbeddedFace | undefined {
       ascentGlyphSpace: scale(hhea.ascent),
       descentGlyphSpace: scale(hhea.descent),
       lineGapGlyphSpace: scale(hhea.lineGap),
-      typoAscentGlyphSpace: os2 === undefined ? undefined : scale(os2.sTypoAscender),
-      typoDescentGlyphSpace: os2 === undefined ? undefined : scale(os2.sTypoDescender),
-      typoLineGapGlyphSpace: os2 === undefined ? undefined : scale(os2.sTypoLineGap),
-      winAscentGlyphSpace: os2 === undefined ? undefined : scale(os2.usWinAscent),
-      winDescentGlyphSpace: os2 === undefined ? undefined : -scale(os2.usWinDescent),
+      typoAscentGlyphSpace:
+        os2 === undefined ? undefined : scale(os2.sTypoAscender),
+      typoDescentGlyphSpace:
+        os2 === undefined ? undefined : scale(os2.sTypoDescender),
+      typoLineGapGlyphSpace:
+        os2 === undefined ? undefined : scale(os2.sTypoLineGap),
+      winAscentGlyphSpace:
+        os2 === undefined ? undefined : scale(os2.usWinAscent),
+      winDescentGlyphSpace:
+        os2 === undefined ? undefined : -scale(os2.usWinDescent),
       capHeightGlyphSpace: scale(capHeight),
-      xHeightGlyphSpace: os2?.sxHeight === undefined ? undefined : scale(os2.sxHeight),
-      bboxGlyphSpace: [scale(head.xMin), scale(head.yMin), scale(head.xMax), scale(head.yMax)],
+      xHeightGlyphSpace:
+        os2?.sxHeight === undefined ? undefined : scale(os2.sxHeight),
+      bboxGlyphSpace: [
+        scale(head.xMin),
+        scale(head.yMin),
+        scale(head.xMax),
+        scale(head.yMax),
+      ],
       italicAngleDegrees: post?.italicAngle ?? 0,
       underlinePositionGlyphSpace: scale(post?.underlinePosition ?? 0),
       underlineThicknessGlyphSpace: scale(post?.underlineThickness ?? 0),
@@ -156,7 +195,11 @@ function readEmbeddedFace(font: SfntFont): EmbeddedFace | undefined {
     },
     glyphId: (codePoint: number) => cmap(codePoint),
     glyphSpaceWidth: (glyphId: number) => scale(hmtx.advanceWidth(glyphId)),
-    kernGlyphSpace: kern === undefined ? () => 0 : (leftGlyphId: number, rightGlyphId: number) => scale(kern(leftGlyphId, rightGlyphId) ?? 0),
+    kernGlyphSpace:
+      kern === undefined
+        ? () => 0
+        : (leftGlyphId: number, rightGlyphId: number) =>
+            scale(kern(leftGlyphId, rightGlyphId) ?? 0),
   };
 }
 
@@ -168,8 +211,15 @@ const HHEA_NUMBER_OF_HMETRICS_OFFSET = 34;
 const LONG_HOR_METRIC_SIZE = 4; // advanceWidth (uint16) + leftSideBearing (int16)
 
 // 'hhea' (ISO/IEC 14496-22 clause 5.2.3): the three vertical metrics a /FontDescriptor and a line-height calculation are built from, plus the metric count that bounds 'hmtx'. font-tables.ts parses the whole-font tables a FontDescriptor otherwise needs but not this one, since nothing before now needed a general 'hhea' reader -- hmtx-table.ts reads only numberOfHMetrics out of it, and math-font.ts reaches into its raw bytes directly.
-function parseHhea(font: SfntFont): { readonly ascent: number; readonly descent: number; readonly lineGap: number; readonly numberOfHMetrics: number } | undefined {
-  const bytes = sfntTableBytes(font, 'hhea');
+function parseHhea(font: SfntFont):
+  | {
+      readonly ascent: number;
+      readonly descent: number;
+      readonly lineGap: number;
+      readonly numberOfHMetrics: number;
+    }
+  | undefined {
+  const bytes = sfntTableBytes(font, "hhea");
   if (bytes === undefined || !hasBytes(bytes, 0, HHEA_TABLE_SIZE)) {
     return undefined;
   }
@@ -177,7 +227,12 @@ function parseHhea(font: SfntFont): { readonly ascent: number; readonly descent:
   if (numberOfHMetrics === 0) {
     return undefined;
   }
-  return { ascent: i16(bytes, HHEA_ASCENDER_OFFSET), descent: i16(bytes, HHEA_DESCENDER_OFFSET), lineGap: i16(bytes, HHEA_LINE_GAP_OFFSET), numberOfHMetrics };
+  return {
+    ascent: i16(bytes, HHEA_ASCENDER_OFFSET),
+    descent: i16(bytes, HHEA_DESCENDER_OFFSET),
+    lineGap: i16(bytes, HHEA_LINE_GAP_OFFSET),
+    numberOfHMetrics,
+  };
 }
 
 // A character the face has no glyph for at all. Reported rather than silently swallowed -- .notdef was shown in its place, and only the caller can decide whether that means substituting another face or accepting a notdef box. Deliberately not WinAnsiSubstitution's own { from, to } shape: nothing visible was chosen as a replacement here, so there is no honest `to` to state.
@@ -207,7 +262,10 @@ export interface EmbeddedShow {
 // The single code path both measurement and content-stream emission must go through for text drawn in an embedded face -- exactly winansi.ts's own encodeForShow rationale, for exactly the same reason: encoding and measuring a string in two separate steps risks the two disagreeing about which characters resolved to which glyph, which silently desyncs a line's computed wrap point from what is actually drawn on the page. Substituted characters advance by .notdef's own real width, so the measurement stays true to the glyphs that will be shown rather than to the ones that were asked for.
 //
 // Pair kerning is applied here, inside that same one path, for that same one reason: a width that included kerning while the content stream drew unkerned glyphs (or the reverse) would be the identical silent desync in a new place. `width1000` and `kerns` are computed in one pass over one glyph sequence, so a caller cannot measure by a route the drawing path does not take. Kerning is looked up between the glyphs that will actually be SHOWN, .notdef included -- the same "measure what will be drawn, not what was asked for" rule the substitution handling above follows.
-export function encodeForShowEmbedded(text: string, face: EmbeddedFace): EmbeddedShow {
+export function encodeForShowEmbedded(
+  text: string,
+  face: EmbeddedFace,
+): EmbeddedShow {
   const glyphIds: number[] = [];
   const substitutions: EmbeddedFaceSubstitution[] = [];
   const kerns: EmbeddedKern[] = [];
@@ -222,7 +280,10 @@ export function encodeForShowEmbedded(text: string, face: EmbeddedFace): Embedde
     if (previous !== undefined) {
       const adjustment1000 = face.kernGlyphSpace(previous, shown);
       if (adjustment1000 !== 0) {
-        kerns.push({ codeOffset: glyphIds.length * CID_BYTE_LENGTH, adjustment1000 });
+        kerns.push({
+          codeOffset: glyphIds.length * CID_BYTE_LENGTH,
+          adjustment1000,
+        });
         width1000 += adjustment1000;
       }
     }
@@ -238,7 +299,10 @@ export function encodeForShowEmbedded(text: string, face: EmbeddedFace): Embedde
 }
 
 // Every code point across `texts` that `face` has a glyph for, keyed by that glyph ID -- the CID -> Unicode pairs a ToUnicode CMap needs, collected across every run a document draws in this one face. Mirrors math-content-write.ts's own collectUsedGlyphs, and shares its assumption: a face's 'cmap' is an injective Unicode-to-glyph mapping in practice, so the first code point seen for a glyph is the one that glyph represents. Characters the face cannot map contribute nothing -- .notdef stands for no Unicode text at all, and claiming otherwise in a ToUnicode CMap would make a copy/paste recover a character the page never showed.
-export function collectEmbeddedGlyphs(texts: Iterable<string>, face: EmbeddedFace): ReadonlyMap<number, number> {
+export function collectEmbeddedGlyphs(
+  texts: Iterable<string>,
+  face: EmbeddedFace,
+): ReadonlyMap<number, number> {
   const used = new Map<number, number>();
   for (const text of texts) {
     for (const character of text) {

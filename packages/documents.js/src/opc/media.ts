@@ -1,10 +1,14 @@
-import type { Package } from 'ooxml.js';
-import { bytesToBase64 } from 'ooxml.js';
-import { buildRelativeTarget } from './paths';
-import { addRelationship } from './rels';
-import { defaultContentTypeForExtension, ensureDefaultContentType } from './content-types';
+import type { Package } from "ooxml.js";
+import { bytesToBase64 } from "ooxml.js";
+import { buildRelativeTarget } from "./paths";
+import { addRelationship } from "./rels";
+import {
+  defaultContentTypeForExtension,
+  ensureDefaultContentType,
+} from "./content-types";
 
-const IMAGE_RELATIONSHIP_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+const IMAGE_RELATIONSHIP_TYPE =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
 
 export interface AddedMedia {
   readonly partPath: string;
@@ -12,11 +16,18 @@ export interface AddedMedia {
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function nextMediaIndex(pkg: Package, mediaDir: string, fileNamePrefix: string, extension: string): number {
-  const pattern = new RegExp(`^${escapeRegExp(fileNamePrefix)}(\\d+)\\.${escapeRegExp(extension)}$`);
+function nextMediaIndex(
+  pkg: Package,
+  mediaDir: string,
+  fileNamePrefix: string,
+  extension: string,
+): number {
+  const pattern = new RegExp(
+    `^${escapeRegExp(fileNamePrefix)}(\\d+)\\.${escapeRegExp(extension)}$`,
+  );
   const prefix = `${mediaDir}/`;
   let max = 0;
   for (const path of Object.keys(pkg.parts)) {
@@ -44,16 +55,23 @@ export function addImageMedia(
   pkg: Package,
   fromPartPath: string,
   mediaDir: string, // e.g. 'word/media' or 'ppt/media'
-  format: 'png' | 'jpeg',
+  format: "png" | "jpeg",
   bytes: Uint8Array<ArrayBuffer>,
 ): AddedMedia {
-  const extension = format === 'jpeg' ? 'jpeg' : 'png';
-  const fileNamePrefix = 'image';
+  const extension = format === "jpeg" ? "jpeg" : "png";
+  const fileNamePrefix = "image";
   const index = nextMediaIndex(pkg, mediaDir, fileNamePrefix, extension);
   const partPath = `${mediaDir}/${fileNamePrefix}${index}.${extension}`;
-  pkg.parts[partPath] = { kind: 'binary', base64: bytesToBase64(bytes) };
-  ensureDefaultContentType(pkg, extension, defaultContentTypeForExtension(extension));
+  pkg.parts[partPath] = { kind: "binary", base64: bytesToBase64(bytes) };
+  ensureDefaultContentType(
+    pkg,
+    extension,
+    defaultContentTypeForExtension(extension),
+  );
   const target = buildRelativeTarget(fromPartPath, partPath);
-  const relationshipId = addRelationship(pkg, fromPartPath, { type: IMAGE_RELATIONSHIP_TYPE, target });
+  const relationshipId = addRelationship(pkg, fromPartPath, {
+    type: IMAGE_RELATIONSHIP_TYPE,
+    target,
+  });
   return { partPath, relationshipId };
 }

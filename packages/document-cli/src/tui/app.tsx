@@ -1,47 +1,77 @@
-import { Box, Text, useApp, useInput } from 'ink';
-import { useEffect, type ReactElement } from 'react';
-import { CommandPalette } from './components/command-palette.js';
-import { ConfirmDialog } from './components/confirm-dialog.js';
-import { DiagnosticsPanel } from './components/diagnostics-panel.js';
-import { ErrorDetail } from './components/error-detail.js';
-import { HelpOverlay } from './components/help-overlay.js';
-import { SearchOverlay } from './components/search-overlay.js';
-import { StatusLine } from './components/status-line.js';
-import { describeError } from './errors.js';
-import { openDocumentAtPath } from './format/open-document.js';
-import { DocxBodyListScreen, ParagraphDetailScreen, RunEditorScreen, TableCellDetailScreen, TableViewScreen } from './screens/editors/docx/index.js';
-import { DocxExtrasScreen } from './screens/editors/docx/extras.js';
-import { MarkdownBodyListScreen, MarkdownViewSourceScreen } from './screens/editors/markdown/index.js';
-import { OdbFormDetailScreen } from './screens/editors/odb/form-detail.js';
-import { OdbFormListScreen } from './screens/editors/odb/form-list.js';
-import { OdbReportDetailScreen } from './screens/editors/odb/report-detail.js';
-import { OdbReportListScreen } from './screens/editors/odb/report-list.js';
-import { OdbReportRenderScreen } from './screens/editors/odb/report-render.js';
-import { OdbTableListScreen } from './screens/editors/odb/table-list.js';
-import { OdbTableRowsScreen } from './screens/editors/odb/table-rows.js';
-import { OdgPageListScreen } from './screens/editors/odg/page-list.js';
-import { OdgPageDetailScreen } from './screens/editors/odg/page-detail.js';
-import { OdgShapeOrVectorDetailScreen } from './screens/editors/odg/shape-or-vector-detail.js';
-import { NotesEditorScreen, OdpSlideListScreen, ShapeEditorScreen, SlideDetailScreen, SlideTableDetailScreen } from './screens/editors/odp/index.js';
-import { OdsSheetListScreen } from './screens/editors/ods/sheet-list.js';
-import { OdsPrintSettingsEditorScreen } from './screens/editors/ods/print-settings-editor.js';
-import { OdsSpreadsheetGridScreen } from './screens/editors/ods/spreadsheet-grid.js';
-import { ListEditorScreen, OdtBodyListScreen } from './screens/editors/odt/index.js';
-import { PdfPageListScreen } from './screens/editors/pdf/page-list.js';
-import { PdfItemDetailScreen } from './screens/editors/pdf/item-detail.js';
-import { PdfPageItemsScreen } from './screens/editors/pdf/page-items.js';
-import { PptxSlideListScreen } from './screens/editors/pptx/index.js';
-import { ExportOptionsScreen } from './screens/export-options.js';
-import { FilePickerScreen } from './screens/file-picker.js';
-import { LauncherScreen } from './screens/launcher.js';
-import { NewDocumentPickerScreen } from './screens/new-document-picker.js';
-import { SaveAsPromptScreen } from './screens/save-as-prompt.js';
-import { MetadataScreen } from './screens/shared/metadata.js';
-import { AppStateProvider, useAppDispatch, useAppState } from './state/context.js';
-import { saveOpenDocumentAction } from './state/save-document.js';
-import { anyOverlayOpen, currentScreen, type AppState, type Screen } from './state/types.js';
+import { Box, Text, useApp, useInput } from "ink";
+import { useEffect, type ReactElement } from "react";
+import { CommandPalette } from "./components/command-palette.js";
+import { ConfirmDialog } from "./components/confirm-dialog.js";
+import { DiagnosticsPanel } from "./components/diagnostics-panel.js";
+import { ErrorDetail } from "./components/error-detail.js";
+import { HelpOverlay } from "./components/help-overlay.js";
+import { SearchOverlay } from "./components/search-overlay.js";
+import { StatusLine } from "./components/status-line.js";
+import { describeError } from "./errors.js";
+import { openDocumentAtPath } from "./format/open-document.js";
+import {
+  DocxBodyListScreen,
+  ParagraphDetailScreen,
+  RunEditorScreen,
+  TableCellDetailScreen,
+  TableViewScreen,
+} from "./screens/editors/docx/index.js";
+import { DocxExtrasScreen } from "./screens/editors/docx/extras.js";
+import {
+  MarkdownBodyListScreen,
+  MarkdownViewSourceScreen,
+} from "./screens/editors/markdown/index.js";
+import { OdbFormDetailScreen } from "./screens/editors/odb/form-detail.js";
+import { OdbFormListScreen } from "./screens/editors/odb/form-list.js";
+import { OdbReportDetailScreen } from "./screens/editors/odb/report-detail.js";
+import { OdbReportListScreen } from "./screens/editors/odb/report-list.js";
+import { OdbReportRenderScreen } from "./screens/editors/odb/report-render.js";
+import { OdbTableListScreen } from "./screens/editors/odb/table-list.js";
+import { OdbTableRowsScreen } from "./screens/editors/odb/table-rows.js";
+import { OdgPageListScreen } from "./screens/editors/odg/page-list.js";
+import { OdgPageDetailScreen } from "./screens/editors/odg/page-detail.js";
+import { OdgShapeOrVectorDetailScreen } from "./screens/editors/odg/shape-or-vector-detail.js";
+import {
+  NotesEditorScreen,
+  OdpSlideListScreen,
+  ShapeEditorScreen,
+  SlideDetailScreen,
+  SlideTableDetailScreen,
+} from "./screens/editors/odp/index.js";
+import { OdsSheetListScreen } from "./screens/editors/ods/sheet-list.js";
+import { OdsPrintSettingsEditorScreen } from "./screens/editors/ods/print-settings-editor.js";
+import { OdsSpreadsheetGridScreen } from "./screens/editors/ods/spreadsheet-grid.js";
+import {
+  ListEditorScreen,
+  OdtBodyListScreen,
+} from "./screens/editors/odt/index.js";
+import { PdfPageListScreen } from "./screens/editors/pdf/page-list.js";
+import { PdfItemDetailScreen } from "./screens/editors/pdf/item-detail.js";
+import { PdfPageItemsScreen } from "./screens/editors/pdf/page-items.js";
+import { PptxSlideListScreen } from "./screens/editors/pptx/index.js";
+import { ExportOptionsScreen } from "./screens/export-options.js";
+import { FilePickerScreen } from "./screens/file-picker.js";
+import { LauncherScreen } from "./screens/launcher.js";
+import { NewDocumentPickerScreen } from "./screens/new-document-picker.js";
+import { SaveAsPromptScreen } from "./screens/save-as-prompt.js";
+import { MetadataScreen } from "./screens/shared/metadata.js";
+import {
+  AppStateProvider,
+  useAppDispatch,
+  useAppState,
+} from "./state/context.js";
+import { saveOpenDocumentAction } from "./state/save-document.js";
+import {
+  anyOverlayOpen,
+  currentScreen,
+  type AppState,
+  type Screen,
+} from "./state/types.js";
 
-export function App(props: { readonly startPath?: string; readonly cwd?: string }): ReactElement {
+export function App(props: {
+  readonly startPath?: string;
+  readonly cwd?: string;
+}): ReactElement {
   return (
     <AppStateProvider cwd={props.cwd}>
       <AppShell startPath={props.startPath} />
@@ -55,80 +85,93 @@ function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
   const format = state.openDocument?.format;
 
   switch (screen.kind) {
-    case 'launcher':
+    case "launcher":
       return <LauncherScreen />;
-    case 'filePicker':
+    case "filePicker":
       return <FilePickerScreen />;
-    case 'newDocumentPicker':
+    case "newDocumentPicker":
       return <NewDocumentPickerScreen />;
-    case 'bodyList':
-      if (format === 'odt') {
+    case "bodyList":
+      if (format === "odt") {
         return <OdtBodyListScreen />;
       }
-      return format === 'markdown' ? <MarkdownBodyListScreen /> : <DocxBodyListScreen />;
-    case 'docxExtras':
+      return format === "markdown" ? (
+        <MarkdownBodyListScreen />
+      ) : (
+        <DocxBodyListScreen />
+      );
+    case "docxExtras":
       return <DocxExtrasScreen />;
-    case 'paragraphDetail':
+    case "paragraphDetail":
       return <ParagraphDetailScreen />;
-    case 'runEditor':
+    case "runEditor":
       return <RunEditorScreen />;
-    case 'tableView':
+    case "tableView":
       return <TableViewScreen />;
-    case 'tableCellDetail':
+    case "tableCellDetail":
       return <TableCellDetailScreen />;
-    case 'listEditor':
+    case "listEditor":
       return <ListEditorScreen />;
-    case 'slideList':
-      return format === 'odp' ? <OdpSlideListScreen /> : <PptxSlideListScreen />;
-    case 'slideDetail':
+    case "slideList":
+      return format === "odp" ? (
+        <OdpSlideListScreen />
+      ) : (
+        <PptxSlideListScreen />
+      );
+    case "slideDetail":
       return <SlideDetailScreen screen={screen} />;
-    case 'shapeEditor':
+    case "shapeEditor":
       return <ShapeEditorScreen screen={screen} />;
-    case 'slideTableDetail':
+    case "slideTableDetail":
       return <SlideTableDetailScreen screen={screen} />;
-    case 'notesEditor':
+    case "notesEditor":
       return <NotesEditorScreen screen={screen} />;
-    case 'sheetList':
+    case "sheetList":
       return <OdsSheetListScreen />;
-    case 'spreadsheetGrid':
+    case "spreadsheetGrid":
       return <OdsSpreadsheetGridScreen />;
-    case 'cellDetail':
-      return <Text>cellDetail is rendered inline by spreadsheetGrid and is never pushed as its own screen.</Text>;
-    case 'printSettingsEditor':
+    case "cellDetail":
+      return (
+        <Text>
+          cellDetail is rendered inline by spreadsheetGrid and is never pushed
+          as its own screen.
+        </Text>
+      );
+    case "printSettingsEditor":
       return <OdsPrintSettingsEditorScreen />;
-    case 'pageList':
+    case "pageList":
       return <OdgPageListScreen />;
-    case 'pageDetail':
+    case "pageDetail":
       return <OdgPageDetailScreen />;
-    case 'shapeOrVectorDetail':
+    case "shapeOrVectorDetail":
       return <OdgShapeOrVectorDetailScreen />;
-    case 'odbTableList':
+    case "odbTableList":
       return <OdbTableListScreen />;
-    case 'odbTableRows':
+    case "odbTableRows":
       return <OdbTableRowsScreen />;
-    case 'odbFormList':
+    case "odbFormList":
       return <OdbFormListScreen />;
-    case 'odbFormDetail':
+    case "odbFormDetail":
       return <OdbFormDetailScreen />;
-    case 'odbReportList':
+    case "odbReportList":
       return <OdbReportListScreen />;
-    case 'odbReportDetail':
+    case "odbReportDetail":
       return <OdbReportDetailScreen />;
-    case 'odbReportRender':
+    case "odbReportRender":
       return <OdbReportRenderScreen />;
-    case 'viewSource':
+    case "viewSource":
       return <MarkdownViewSourceScreen />;
-    case 'pdfPageList':
+    case "pdfPageList":
       return <PdfPageListScreen />;
-    case 'pdfPageItems':
+    case "pdfPageItems":
       return <PdfPageItemsScreen />;
-    case 'pdfItemDetail':
+    case "pdfItemDetail":
       return <PdfItemDetailScreen />;
-    case 'exportOptions':
+    case "exportOptions":
       return <ExportOptionsScreen />;
-    case 'saveAsPrompt':
+    case "saveAsPrompt":
       return <SaveAsPromptScreen />;
-    case 'metadata':
+    case "metadata":
       return <MetadataScreen />;
   }
 }
@@ -144,10 +187,10 @@ function Overlay({ state }: { readonly state: AppState }): ReactElement {
       <ConfirmDialog
         message="Quit? The open document has unsaved changes."
         onConfirm={() => {
-          dispatch({ type: 'CONFIRM_QUIT' });
+          dispatch({ type: "CONFIRM_QUIT" });
         }}
         onCancel={() => {
-          dispatch({ type: 'CANCEL_QUIT' });
+          dispatch({ type: "CANCEL_QUIT" });
         }}
       />
     );
@@ -157,10 +200,10 @@ function Overlay({ state }: { readonly state: AppState }): ReactElement {
       <ConfirmDialog
         message="Close this document? It has unsaved changes."
         onConfirm={() => {
-          dispatch({ type: 'CONFIRM_CLOSE' });
+          dispatch({ type: "CONFIRM_CLOSE" });
         }}
         onCancel={() => {
-          dispatch({ type: 'CANCEL_CLOSE' });
+          dispatch({ type: "CANCEL_CLOSE" });
         }}
       />
     );
@@ -180,7 +223,11 @@ function Overlay({ state }: { readonly state: AppState }): ReactElement {
   return <Box />;
 }
 
-function AppShell({ startPath }: { readonly startPath?: string }): ReactElement {
+function AppShell({
+  startPath,
+}: {
+  readonly startPath?: string;
+}): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const { exit } = useApp();
@@ -196,16 +243,20 @@ function AppShell({ startPath }: { readonly startPath?: string }): ReactElement 
       try {
         const doc = await openDocumentAtPath(startPath, {
           onDiagnostic: (diagnostic) => {
-            dispatch({ type: 'APPEND_DIAGNOSTIC', diagnostic });
+            dispatch({ type: "APPEND_DIAGNOSTIC", diagnostic });
           },
         });
         if (!lifecycle.cancelled) {
           // OPEN_FILE_SUCCESS resets the stack to that format's root screen itself, so there is no separate RESET_STACK to dispatch here.
-          dispatch({ type: 'OPEN_FILE_SUCCESS', path: startPath, doc });
+          dispatch({ type: "OPEN_FILE_SUCCESS", path: startPath, doc });
         }
       } catch (error) {
         if (!lifecycle.cancelled) {
-          dispatch({ type: 'OPEN_FILE_ERROR', message: `Could not open ${startPath}`, detail: describeError(error) });
+          dispatch({
+            type: "OPEN_FILE_ERROR",
+            message: `Could not open ${startPath}`,
+            detail: describeError(error),
+          });
         }
       }
     })();
@@ -223,19 +274,23 @@ function AppShell({ startPath }: { readonly startPath?: string }): ReactElement 
   // Ctrl+C only reaches this handler when the caller renders with `{ exitOnCtrlC: false }`; Ink's default swallows it and unmounts directly, skipping the unsaved-changes confirmation.
   useInput(
     (input, key) => {
-      if (input === 'q' || (key.ctrl && input === 'c')) {
-        dispatch({ type: 'REQUEST_QUIT' });
+      if (input === "q" || (key.ctrl && input === "c")) {
+        dispatch({ type: "REQUEST_QUIT" });
         return;
       }
-      if (key.ctrl && input === 's') {
+      if (key.ctrl && input === "s") {
         const doc = state.openDocument;
         if (doc === undefined) {
-          dispatch({ type: 'SET_STATUS', severity: 'warning', text: 'There is no open document to save' });
+          dispatch({
+            type: "SET_STATUS",
+            severity: "warning",
+            text: "There is no open document to save",
+          });
           return;
         }
         const path = doc.path;
         if (path === undefined) {
-          dispatch({ type: 'SAVE_AS_REQUEST' });
+          dispatch({ type: "SAVE_AS_REQUEST" });
           return;
         }
         void (async () => {
@@ -243,36 +298,40 @@ function AppShell({ startPath }: { readonly startPath?: string }): ReactElement 
         })();
         return;
       }
-      if (key.ctrl && input === 'w') {
-        dispatch({ type: 'REQUEST_CLOSE' });
+      if (key.ctrl && input === "w") {
+        dispatch({ type: "REQUEST_CLOSE" });
         return;
       }
-      if (key.ctrl && input === 'z') {
-        dispatch({ type: 'UNDO' });
+      if (key.ctrl && input === "z") {
+        dispatch({ type: "UNDO" });
         return;
       }
-      if (input === ':') {
-        dispatch({ type: 'OPEN_OVERLAY', overlay: 'commandPalette' });
+      if (input === ":") {
+        dispatch({ type: "OPEN_OVERLAY", overlay: "commandPalette" });
         return;
       }
-      if (input === '/') {
-        dispatch({ type: 'OPEN_OVERLAY', overlay: 'search' });
+      if (input === "/") {
+        dispatch({ type: "OPEN_OVERLAY", overlay: "search" });
         return;
       }
-      if (input === '?') {
-        dispatch({ type: 'OPEN_OVERLAY', overlay: 'help' });
+      if (input === "?") {
+        dispatch({ type: "OPEN_OVERLAY", overlay: "help" });
         return;
       }
-      if (key.ctrl && input === 'd') {
-        dispatch({ type: 'OPEN_OVERLAY', overlay: 'diagnosticsPanel' });
+      if (key.ctrl && input === "d") {
+        dispatch({ type: "OPEN_OVERLAY", overlay: "diagnosticsPanel" });
         return;
       }
-      if (input === 'm') {
+      if (input === "m") {
         if (state.openDocument === undefined) {
-          dispatch({ type: 'SET_STATUS', severity: 'warning', text: 'There is no open document to show metadata for' });
+          dispatch({
+            type: "SET_STATUS",
+            severity: "warning",
+            text: "There is no open document to show metadata for",
+          });
           return;
         }
-        dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'metadata' } });
+        dispatch({ type: "PUSH_SCREEN", screen: { kind: "metadata" } });
       }
     },
     { isActive: !overlayOpen },

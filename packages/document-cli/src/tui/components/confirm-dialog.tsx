@@ -1,5 +1,5 @@
-import { Box, Text, useInput } from 'ink';
-import type { ReactElement } from 'react';
+import { Box, Text, useInput } from "ink";
+import type { ReactElement } from "react";
 
 export interface ConfirmDialogProps {
   readonly message: string;
@@ -9,11 +9,11 @@ export interface ConfirmDialogProps {
 
 export function ConfirmDialog(props: ConfirmDialogProps): ReactElement {
   useInput((input, key) => {
-    if (input === 'y' || input === 'Y' || key.return) {
+    if (input === "y" || input === "Y" || key.return) {
       props.onConfirm();
       return;
     }
-    if (input === 'n' || input === 'N' || key.escape) {
+    if (input === "n" || input === "N" || key.escape) {
       props.onCancel();
     }
   });

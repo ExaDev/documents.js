@@ -4,7 +4,7 @@
 export class Jpeg2000ParseError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'Jpeg2000ParseError';
+    this.name = "Jpeg2000ParseError";
   }
 }
 
@@ -12,6 +12,6 @@ export class Jpeg2000ParseError extends Error {
 export class Jpeg2000UnsupportedError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'Jpeg2000UnsupportedError';
+    this.name = "Jpeg2000UnsupportedError";
   }
 }

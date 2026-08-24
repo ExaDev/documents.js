@@ -1,7 +1,11 @@
-import { z } from 'zod';
-import { ColorSchema } from './color';
-import { ContentListMembershipSchema, type ContentParagraph, type ContentRun } from './content';
-import { AlignmentSchema } from './style';
+import { z } from "zod";
+import { ColorSchema } from "./color";
+import {
+  ContentListMembershipSchema,
+  type ContentParagraph,
+  type ContentRun,
+} from "./content";
+import { AlignmentSchema } from "./style";
 
 // The package-level definitions-table facility (ExaDev/document-schema.js#21): named tables at the DocumentTree root whose entries tree nodes reference by string id, so repeated data is stated once and referenced many times. Styles were the first tenant (the StylesTableSchema below), and the tenant-generic DefinitionsTableSchema beside it is what let every later tenant land without this module changing: link, footnote, and comment definitions (ExaDev/markdown-codec#63, ExaDev/document-schema.js#22) ride the `definitions` field, and 4.1.0's three construct tables -- `layers`, `attachments`, `destinations` (ExaDev/document-schema.js#24) -- are three more root fields of this same generic type rather than three parallel shapes. This module defines the schemas and the pure resolution helpers; the frequency pass that mints entries from repeated property tuples is src/factor-styles.ts, which consumes them.
 
@@ -17,7 +21,9 @@ export const StyleParagraphPropertiesSchema = z.strictObject({
   pageBreakBefore: z.boolean().optional(), // the page-boundary flags ContentParagraph carries -- the styles-table spelling of a paragraph style that forces a page break
   pageBreakAfter: z.boolean().optional(),
 });
-export type StyleParagraphProperties = z.infer<typeof StyleParagraphPropertiesSchema>;
+export type StyleParagraphProperties = z.infer<
+  typeof StyleParagraphPropertiesSchema
+>;
 
 // The run half of a style entry: the canonical ContentRun direct formatting properties. sizePt is the real field name (ContentRunSchema's own) -- the issue text's "fontPt" was a typo, corrected in its errata comment. Same strictness and the same ban-list reasoning as StyleParagraphPropertiesSchema above.
 export const StyleRunPropertiesSchema = z.strictObject({
@@ -48,12 +54,21 @@ export const DefinitionEntrySchema = z.looseObject({
 });
 export type DefinitionEntry = z.infer<typeof DefinitionEntrySchema>;
 
-export const DefinitionsTableSchema = z.record(z.string(), DefinitionEntrySchema);
+export const DefinitionsTableSchema = z.record(
+  z.string(),
+  DefinitionEntrySchema,
+);
 export type DefinitionsTable = z.infer<typeof DefinitionsTableSchema>;
 
 // Field-wise overlay of two style entries: for every property of both halves, inner's value (when present) wins over outer's; a property absent from inner falls through to outer. Explicitly-present-undefined inner values do not overwrite outer -- a key set to undefined is JSON-identical to an absent key (it never serialises), and treating it as a value would make the overlay's result depend on how the producer spelled absence.
-export function overlayStyleEntries(outer: StyleEntry, inner: StyleEntry): StyleEntry {
-  const paragraph = overlayParagraphProperties(outer.paragraph, inner.paragraph);
+export function overlayStyleEntries(
+  outer: StyleEntry,
+  inner: StyleEntry,
+): StyleEntry {
+  const paragraph = overlayParagraphProperties(
+    outer.paragraph,
+    inner.paragraph,
+  );
   const run = overlayRunProperties(outer.run, inner.run);
   return {
     ...(paragraph !== undefined ? { paragraph } : {}),
@@ -70,11 +85,15 @@ function overlayParagraphProperties(
   const merged: StyleParagraphProperties = { ...outer };
   if (inner.alignment !== undefined) merged.alignment = inner.alignment;
   if (inner.list !== undefined) merged.list = inner.list;
-  if (inner.spacingBeforePt !== undefined) merged.spacingBeforePt = inner.spacingBeforePt;
-  if (inner.spacingAfterPt !== undefined) merged.spacingAfterPt = inner.spacingAfterPt;
+  if (inner.spacingBeforePt !== undefined)
+    merged.spacingBeforePt = inner.spacingBeforePt;
+  if (inner.spacingAfterPt !== undefined)
+    merged.spacingAfterPt = inner.spacingAfterPt;
   if (inner.lineSpacing !== undefined) merged.lineSpacing = inner.lineSpacing;
-  if (inner.indentLeftPt !== undefined) merged.indentLeftPt = inner.indentLeftPt;
-  if (inner.indentFirstLinePt !== undefined) merged.indentFirstLinePt = inner.indentFirstLinePt;
+  if (inner.indentLeftPt !== undefined)
+    merged.indentLeftPt = inner.indentLeftPt;
+  if (inner.indentFirstLinePt !== undefined)
+    merged.indentFirstLinePt = inner.indentFirstLinePt;
   return merged;
 }
 
@@ -96,12 +115,17 @@ function overlayRunProperties(
 }
 
 // Folds one node's full overlay chain into a single effective entry: refs ordered outermost first (the nearest ancestor group's style, then each further-out one, ending with the node's own group ref -- however many levels the tree actually uses). An unknown ref throws rather than resolving to nothing, because a package whose tree references an id the styles table does not carry is malformed and a silent skip would quietly drop that level of the chain -- consistency between refs and the table is the producer's responsibility (the same deliberate non-enforcement DocumentTreeSchema applies to pages-versus-frames), but once resolution runs, it runs loudly.
-export function resolveStyleChain(styles: StylesTable, refs: readonly string[]): StyleEntry {
+export function resolveStyleChain(
+  styles: StylesTable,
+  refs: readonly string[],
+): StyleEntry {
   let resolved: StyleEntry = {};
   for (const ref of refs) {
     const entry = styles[ref];
     if (entry === undefined) {
-      throw new Error(`resolveStyleChain: style ref "${ref}" names no entry in the styles table`);
+      throw new Error(
+        `resolveStyleChain: style ref "${ref}" names no entry in the styles table`,
+      );
     }
     resolved = overlayStyleEntries(resolved, entry);
   }
@@ -115,40 +139,74 @@ export function applyParagraphStyleProperties(
 ): ContentParagraph {
   if (properties === undefined) return paragraph;
   const effective: ContentParagraph = { ...paragraph };
-  if (effective.alignment === undefined && properties.alignment !== undefined) effective.alignment = properties.alignment;
-  if (effective.list === undefined && properties.list !== undefined) effective.list = properties.list;
-  if (effective.spacingBeforePt === undefined && properties.spacingBeforePt !== undefined) {
+  if (effective.alignment === undefined && properties.alignment !== undefined)
+    effective.alignment = properties.alignment;
+  if (effective.list === undefined && properties.list !== undefined)
+    effective.list = properties.list;
+  if (
+    effective.spacingBeforePt === undefined &&
+    properties.spacingBeforePt !== undefined
+  ) {
     effective.spacingBeforePt = properties.spacingBeforePt;
   }
-  if (effective.spacingAfterPt === undefined && properties.spacingAfterPt !== undefined) {
+  if (
+    effective.spacingAfterPt === undefined &&
+    properties.spacingAfterPt !== undefined
+  ) {
     effective.spacingAfterPt = properties.spacingAfterPt;
   }
-  if (effective.lineSpacing === undefined && properties.lineSpacing !== undefined) effective.lineSpacing = properties.lineSpacing;
-  if (effective.indentLeftPt === undefined && properties.indentLeftPt !== undefined) {
+  if (
+    effective.lineSpacing === undefined &&
+    properties.lineSpacing !== undefined
+  )
+    effective.lineSpacing = properties.lineSpacing;
+  if (
+    effective.indentLeftPt === undefined &&
+    properties.indentLeftPt !== undefined
+  ) {
     effective.indentLeftPt = properties.indentLeftPt;
   }
-  if (effective.indentFirstLinePt === undefined && properties.indentFirstLinePt !== undefined) {
+  if (
+    effective.indentFirstLinePt === undefined &&
+    properties.indentFirstLinePt !== undefined
+  ) {
     effective.indentFirstLinePt = properties.indentFirstLinePt;
   }
-  if (effective.pageBreakBefore === undefined && properties.pageBreakBefore !== undefined) {
+  if (
+    effective.pageBreakBefore === undefined &&
+    properties.pageBreakBefore !== undefined
+  ) {
     effective.pageBreakBefore = properties.pageBreakBefore;
   }
-  if (effective.pageBreakAfter === undefined && properties.pageBreakAfter !== undefined) {
+  if (
+    effective.pageBreakAfter === undefined &&
+    properties.pageBreakAfter !== undefined
+  ) {
     effective.pageBreakAfter = properties.pageBreakAfter;
   }
   return effective;
 }
 
 // Applies a resolved entry's run half to one run, as run-level defaults: the run's own properties win, style-supplied values fill only the gaps. This is the overlay chain's one extra level down (a resolved entry's run half is the default for every run of the paragraph it resolved for, and each run's own formatting sits innermost on top of it).
-export function applyRunStyleProperties(properties: StyleRunProperties | undefined, run: ContentRun): ContentRun {
+export function applyRunStyleProperties(
+  properties: StyleRunProperties | undefined,
+  run: ContentRun,
+): ContentRun {
   if (properties === undefined) return run;
   const effective: ContentRun = { ...run };
-  if (effective.bold === undefined && properties.bold !== undefined) effective.bold = properties.bold;
-  if (effective.italic === undefined && properties.italic !== undefined) effective.italic = properties.italic;
-  if (effective.underline === undefined && properties.underline !== undefined) effective.underline = properties.underline;
-  if (effective.strike === undefined && properties.strike !== undefined) effective.strike = properties.strike;
-  if (effective.fontFamily === undefined && properties.fontFamily !== undefined) effective.fontFamily = properties.fontFamily;
-  if (effective.sizePt === undefined && properties.sizePt !== undefined) effective.sizePt = properties.sizePt;
-  if (effective.color === undefined && properties.color !== undefined) effective.color = properties.color;
+  if (effective.bold === undefined && properties.bold !== undefined)
+    effective.bold = properties.bold;
+  if (effective.italic === undefined && properties.italic !== undefined)
+    effective.italic = properties.italic;
+  if (effective.underline === undefined && properties.underline !== undefined)
+    effective.underline = properties.underline;
+  if (effective.strike === undefined && properties.strike !== undefined)
+    effective.strike = properties.strike;
+  if (effective.fontFamily === undefined && properties.fontFamily !== undefined)
+    effective.fontFamily = properties.fontFamily;
+  if (effective.sizePt === undefined && properties.sizePt !== undefined)
+    effective.sizePt = properties.sizePt;
+  if (effective.color === undefined && properties.color !== undefined)
+    effective.color = properties.color;
   return effective;
 }

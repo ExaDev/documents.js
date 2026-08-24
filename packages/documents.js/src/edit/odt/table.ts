@@ -1,12 +1,21 @@
-import type { ContentCellBorders, ContentStrokeStyle, Color } from 'document-schema.js';
-import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { formatOdfColor, formatOdfLength, parseOdfColor, parseOdfLength } from 'odf.js';
-import { attr } from 'ooxml.js';
-import { removeAttr, removeChild, setAttr } from '../../xml/edit';
-import { el } from '../../xml/fragment';
-import { ensureAutomaticStyles, nextStyleName } from './automatic-styles';
-import type { ParagraphInit } from './paragraph';
-import { buildParagraph, OdtParagraph } from './paragraph';
+import type {
+  ContentCellBorders,
+  ContentStrokeStyle,
+  Color,
+} from "document-schema.js";
+import type { Package, XmlElement, XmlNode } from "odf.js";
+import {
+  formatOdfColor,
+  formatOdfLength,
+  parseOdfColor,
+  parseOdfLength,
+} from "odf.js";
+import { attr } from "ooxml.js";
+import { removeAttr, removeChild, setAttr } from "../../xml/edit";
+import { el } from "../../xml/fragment";
+import { ensureAutomaticStyles, nextStyleName } from "./automatic-styles";
+import type { ParagraphInit } from "./paragraph";
+import { buildParagraph, OdtParagraph } from "./paragraph";
 
 export interface TableInit {
   readonly rows: number;
@@ -17,38 +26,58 @@ export interface TableInit {
 // 468pt (6.5in) -- US Letter page width (612pt) minus 1in margins either side (2 x 72pt), matching createEmptyOdtPackage's own default page-layout (scaffold.ts) and docx's identical DEFAULT_TABLE_WIDTH_TWIPS (src/edit/docx/table.ts, in twips: 9360 / 20 = 468pt) -- the content width a new table defaults to when no explicit widths are given.
 const DEFAULT_TABLE_WIDTH_PT = 468;
 
-const TABLE_COLUMN_STYLE_PREFIX = 'OdtCol';
-const TABLE_CELL_STYLE_PREFIX = 'OdtCell';
+const TABLE_COLUMN_STYLE_PREFIX = "OdtCol";
+const TABLE_CELL_STYLE_PREFIX = "OdtCell";
 
 // odf.js's own reader resolves a cell's background and borders out of style:table-cell-properties (fo:background-color and fo:border-left/right/top/bottom, each a "<width> <style> <color>" shorthand -- see typed/shared/table.ts readCellStyleDecoration). But odf.js's StyleRegistry/StyleProperties model only text/paragraph formatting and never emit a style:table-cell-properties element at all, exactly the same hole src/edit/odg/style.ts closes for style:graphic-properties. This is the table-cell counterpart: a small, self-contained, append-only writer scoped to exactly the two attributes a cell's background and borders need, reusing ensureAutomaticStyles/nextStyleName (the shared find-or-create office:automatic-styles + mint-next-name logic) rather than a third reimplementation of that lookup -- mirroring both internTableColumnWidth above and odg/style.ts's own graphic-family writer.
 
-const BORDER_EDGE_ATTRS: Readonly<Record<'top' | 'right' | 'bottom' | 'left', string>> = {
-  top: 'fo:border-top',
-  right: 'fo:border-right',
-  bottom: 'fo:border-bottom',
-  left: 'fo:border-left',
+const BORDER_EDGE_ATTRS: Readonly<
+  Record<"top" | "right" | "bottom" | "left", string>
+> = {
+  top: "fo:border-top",
+  right: "fo:border-right",
+  bottom: "fo:border-bottom",
+  left: "fo:border-left",
 };
 
-function formatBorderShorthand(color: Color, widthPt: number, style?: ContentStrokeStyle): string {
-  return `${formatOdfLength(widthPt)} ${style ?? 'solid'} ${formatOdfColor(color)}`;
+function formatBorderShorthand(
+  color: Color,
+  widthPt: number,
+  style?: ContentStrokeStyle,
+): string {
+  return `${formatOdfLength(widthPt)} ${style ?? "solid"} ${formatOdfColor(color)}`;
 }
 
-function findCellPropertiesReadOnly(pkg: Package, element: XmlElement): XmlElement | undefined {
-  const styleName = attr(element, 'table:style-name');
+function findCellPropertiesReadOnly(
+  pkg: Package,
+  element: XmlElement,
+): XmlElement | undefined {
+  const styleName = attr(element, "table:style-name");
   if (styleName === undefined) {
     return undefined;
   }
-  const part = pkg.parts['content.xml'];
-  const root = part?.kind === 'xml' ? part.nodes.find((n): n is XmlElement => n.type === 'element') : undefined;
+  const part = pkg.parts["content.xml"];
+  const root =
+    part?.kind === "xml"
+      ? part.nodes.find((n): n is XmlElement => n.type === "element")
+      : undefined;
   if (root === undefined) {
     return undefined;
   }
   for (const child of root.children) {
-    if (child.type === 'element' && child.tag === 'office:automatic-styles') {
+    if (child.type === "element" && child.tag === "office:automatic-styles") {
       for (const style of child.children) {
-        if (style.type === 'element' && style.tag === 'style:style' && attr(style, 'style:name') === styleName && attr(style, 'style:family') === 'table-cell') {
+        if (
+          style.type === "element" &&
+          style.tag === "style:style" &&
+          attr(style, "style:name") === styleName &&
+          attr(style, "style:family") === "table-cell"
+        ) {
           for (const props of style.children) {
-            if (props.type === 'element' && props.tag === 'style:table-cell-properties') {
+            if (
+              props.type === "element" &&
+              props.tag === "style:table-cell-properties"
+            ) {
               return props;
             }
           }
@@ -64,18 +93,21 @@ export interface CellDecoration {
   readonly borders?: ContentCellBorders;
 }
 
-export function readCellDecoration(pkg: Package, element: XmlElement): CellDecoration {
+export function readCellDecoration(
+  pkg: Package,
+  element: XmlElement,
+): CellDecoration {
   const props = findCellPropertiesReadOnly(pkg, element);
   if (props === undefined) {
     return {};
   }
   let background: Color | undefined;
-  const backgroundValue = attr(props, 'fo:background-color');
+  const backgroundValue = attr(props, "fo:background-color");
   if (backgroundValue !== undefined) {
     background = parseOdfColor(backgroundValue);
   }
   const borders: ContentCellBorders = {};
-  (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
+  (["top", "right", "bottom", "left"] as const).forEach((edge) => {
     const raw = attr(props, BORDER_EDGE_ATTRS[edge]);
     if (raw === undefined) {
       return;
@@ -84,7 +116,13 @@ export function readCellDecoration(pkg: Package, element: XmlElement): CellDecor
     const widthToken = tokens[0];
     const styleToken = tokens[1];
     const colorToken = tokens[2];
-    if (widthToken === undefined || styleToken === undefined || colorToken === undefined || styleToken === 'none' || styleToken === 'hidden') {
+    if (
+      widthToken === undefined ||
+      styleToken === undefined ||
+      colorToken === undefined ||
+      styleToken === "none" ||
+      styleToken === "hidden"
+    ) {
       return;
     }
     const widthPt = parseOdfLength(widthToken);
@@ -92,53 +130,97 @@ export function readCellDecoration(pkg: Package, element: XmlElement): CellDecor
     if (widthPt === undefined || widthPt <= 0 || color === undefined) {
       return;
     }
-    const style: ContentStrokeStyle | undefined = styleToken === 'solid' || styleToken === 'dashed' || styleToken === 'dotted' || styleToken === 'double' ? styleToken : undefined;
-    borders[edge] = style === undefined ? { color, widthPt } : { color, widthPt, style };
+    const style: ContentStrokeStyle | undefined =
+      styleToken === "solid" ||
+      styleToken === "dashed" ||
+      styleToken === "dotted" ||
+      styleToken === "double"
+        ? styleToken
+        : undefined;
+    borders[edge] =
+      style === undefined ? { color, widthPt } : { color, widthPt, style };
   });
-  return { background, borders: Object.keys(borders).length === 0 ? undefined : borders };
+  return {
+    background,
+    borders: Object.keys(borders).length === 0 ? undefined : borders,
+  };
 }
 
 // Mints a fresh style:style[family="table-cell"] automatic style carrying `decoration`'s background/borders in its style:table-cell-properties, and returns its style:name for a caller to set as the cell's own table:style-name. Each call mints its own style (never mutates an existing one), matching the append-only invariant every other hand-rolled style writer in this codebase follows.
-export function buildCellStyle(pkg: Package, decoration: CellDecoration): string {
+export function buildCellStyle(
+  pkg: Package,
+  decoration: CellDecoration,
+): string {
   const automaticStyles = ensureAutomaticStyles(pkg);
-  const name = nextStyleName(automaticStyles, 'style:style', TABLE_CELL_STYLE_PREFIX);
+  const name = nextStyleName(
+    automaticStyles,
+    "style:style",
+    TABLE_CELL_STYLE_PREFIX,
+  );
   const propsAttrs: Record<string, string> = {};
   if (decoration.background !== undefined) {
-    propsAttrs['fo:background-color'] = formatOdfColor(decoration.background);
+    propsAttrs["fo:background-color"] = formatOdfColor(decoration.background);
   }
   if (decoration.borders !== undefined) {
-    (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
+    (["top", "right", "bottom", "left"] as const).forEach((edge) => {
       const border = decoration.borders![edge];
       if (border !== undefined) {
-        propsAttrs[BORDER_EDGE_ATTRS[edge]] = formatBorderShorthand(border.color, border.widthPt, border.style);
+        propsAttrs[BORDER_EDGE_ATTRS[edge]] = formatBorderShorthand(
+          border.color,
+          border.widthPt,
+          border.style,
+        );
       }
     });
   }
-  const properties = Object.keys(propsAttrs).length === 0 ? [] : [el('style:table-cell-properties', propsAttrs)];
-  automaticStyles.children.push(el('style:style', { 'style:name': name, 'style:family': 'table-cell' }, properties));
+  const properties =
+    Object.keys(propsAttrs).length === 0
+      ? []
+      : [el("style:table-cell-properties", propsAttrs)];
+  automaticStyles.children.push(
+    el(
+      "style:style",
+      { "style:name": name, "style:family": "table-cell" },
+      properties,
+    ),
+  );
   return name;
 }
 
 // odf.js's StyleRegistry cannot express a table column's width at all -- StylePropertiesSchema (src/styles/properties.ts) has no columnWidthPt field, so style:table-column-properties/@style:column-width (the only place ODF records it) is entirely outside what StyleRegistry.intern can produce. This is therefore hand-rolled, mirroring StyleRegistry.intern's own append-only, fingerprint-deduplicated contract by hand: reuse an existing table-column style if one with the exact same formatted width is already present, otherwise mint a fresh name (via automatic-styles.ts's nextStyleName) and append a new entry -- never mutate or remove an existing one.
 function internTableColumnWidth(pkg: Package, widthPt: number): string {
   const automaticStyles = ensureAutomaticStyles(pkg);
-  const formatted = formatOdfLength(widthPt, 'pt');
+  const formatted = formatOdfLength(widthPt, "pt");
   for (const child of automaticStyles.children) {
-    if (child.type !== 'element' || child.tag !== 'style:style' || attr(child, 'style:family') !== 'table-column') {
+    if (
+      child.type !== "element" ||
+      child.tag !== "style:style" ||
+      attr(child, "style:family") !== "table-column"
+    ) {
       continue;
     }
-    const props = child.children.find((c): c is XmlElement => c.type === 'element' && c.tag === 'style:table-column-properties');
-    if (props !== undefined && attr(props, 'style:column-width') === formatted) {
-      const existingName = attr(child, 'style:name');
+    const props = child.children.find(
+      (c): c is XmlElement =>
+        c.type === "element" && c.tag === "style:table-column-properties",
+    );
+    if (
+      props !== undefined &&
+      attr(props, "style:column-width") === formatted
+    ) {
+      const existingName = attr(child, "style:name");
       if (existingName !== undefined) {
         return existingName;
       }
     }
   }
-  const name = nextStyleName(automaticStyles, 'style:style', TABLE_COLUMN_STYLE_PREFIX);
+  const name = nextStyleName(
+    automaticStyles,
+    "style:style",
+    TABLE_COLUMN_STYLE_PREFIX,
+  );
   automaticStyles.children.push(
-    el('style:style', { 'style:name': name, 'style:family': 'table-column' }, [
-      el('style:table-column-properties', { 'style:column-width': formatted }),
+    el("style:style", { "style:name": name, "style:family": "table-column" }, [
+      el("style:table-column-properties", { "style:column-width": formatted }),
     ]),
   );
   return name;
@@ -157,7 +239,10 @@ export class OdtTableCell {
   paragraphs(): OdtParagraph[] {
     const out: OdtParagraph[] = [];
     for (const child of this.node.children) {
-      if (child.type === 'element' && (child.tag === 'text:p' || child.tag === 'text:h')) {
+      if (
+        child.type === "element" &&
+        (child.tag === "text:p" || child.tag === "text:h")
+      ) {
         out.push(new OdtParagraph(this.node.children, child, this.pkg));
       }
     }
@@ -173,35 +258,35 @@ export class OdtTableCell {
   get text(): string {
     return this.paragraphs()
       .map((p) => p.text)
-      .join('\n');
+      .join("\n");
   }
 
   get colSpan(): number | undefined {
-    const raw = attr(this.node, 'table:number-columns-spanned');
+    const raw = attr(this.node, "table:number-columns-spanned");
     return raw === undefined ? undefined : Number(raw);
   }
 
   // Marks this cell as the top-left of an N-column merge (ODF's own table:number-columns-spanned) -- the write-side inverse of odf.js's own readTableCell, whose ContentTableCell.colSpan this mirrors. Unlike docx's gridSpan, ODF still needs one real element per covered grid column even for a horizontal merge -- OdtTableRow.appendCoveredCell writes those, this setter only marks the merge's own starting cell.
   set colSpan(value: number | undefined) {
     if (value === undefined) {
-      removeAttr(this.node, 'table:number-columns-spanned');
+      removeAttr(this.node, "table:number-columns-spanned");
       return;
     }
-    setAttr(this.node, 'table:number-columns-spanned', String(value));
+    setAttr(this.node, "table:number-columns-spanned", String(value));
   }
 
   get rowSpan(): number | undefined {
-    const raw = attr(this.node, 'table:number-rows-spanned');
+    const raw = attr(this.node, "table:number-rows-spanned");
     return raw === undefined ? undefined : Number(raw);
   }
 
   // Marks this cell as the top of an N-row merge (ODF's own table:number-rows-spanned) -- the write-side inverse of odf.js's own readTableCell, whose ContentTableCell.rowSpan this mirrors. The rows below still need a real table:covered-table-cell element at the same grid column (OdtTableRow.appendCoveredCell) -- ODF has no attribute-only way to express "this cell continues one above it" the way docx's w:vMerge does.
   set rowSpan(value: number | undefined) {
     if (value === undefined) {
-      removeAttr(this.node, 'table:number-rows-spanned');
+      removeAttr(this.node, "table:number-rows-spanned");
       return;
     }
-    setAttr(this.node, 'table:number-rows-spanned', String(value));
+    setAttr(this.node, "table:number-rows-spanned", String(value));
   }
 
   // Cell background and per-edge borders live in style:table-cell-properties (fo:background-color and fo:border-top/right/bottom/left) -- outside what odf.js's StyleRegistry can express, so each setter re-mints a fresh table-cell automatic style carrying BOTH the change and the other decoration already on the cell (read back via readCellDecoration), repointing table:style-name at the result. Mirrors src/edit/odg/style.ts's setGraphicFill/setGraphicStroke (read-current, merge, mint) so setting background then borders -- or vice versa -- lands both in one style rather than the second clobbering the first.
@@ -211,8 +296,11 @@ export class OdtTableCell {
 
   set background(value: Color | undefined) {
     const current = readCellDecoration(this.pkg, this.node);
-    const name = buildCellStyle(this.pkg, { background: value, borders: current.borders });
-    setAttr(this.node, 'table:style-name', name);
+    const name = buildCellStyle(this.pkg, {
+      background: value,
+      borders: current.borders,
+    });
+    setAttr(this.node, "table:style-name", name);
   }
 
   get borders(): ContentCellBorders | undefined {
@@ -221,8 +309,11 @@ export class OdtTableCell {
 
   set borders(value: ContentCellBorders | undefined) {
     const current = readCellDecoration(this.pkg, this.node);
-    const name = buildCellStyle(this.pkg, { background: current.background, borders: value });
-    setAttr(this.node, 'table:style-name', name);
+    const name = buildCellStyle(this.pkg, {
+      background: current.background,
+      borders: value,
+    });
+    setAttr(this.node, "table:style-name", name);
   }
 }
 
@@ -238,7 +329,7 @@ export class OdtTableRow {
   cells(): OdtTableCell[] {
     const out: OdtTableCell[] = [];
     for (const child of this.node.children) {
-      if (child.type === 'element' && child.tag === 'table:table-cell') {
+      if (child.type === "element" && child.tag === "table:table-cell") {
         out.push(new OdtTableCell(child, this.pkg));
       }
     }
@@ -254,14 +345,18 @@ export class OdtTableRow {
 
   // Appends a table:covered-table-cell -- ODF's own placeholder for a grid position consumed by a horizontal (table:number-columns-spanned) or vertical (table:number-rows-spanned) merge starting elsewhere. Carries no content at all, matching odf.js's own readTableRow, which reads one back as a bare `{ blocks: [] }` regardless of what (if anything) real-world producers ever put inside one.
   appendCoveredCell(): void {
-    this.node.children.push(el('table:covered-table-cell'));
+    this.node.children.push(el("table:covered-table-cell"));
   }
 
   // This row's own true grid-column list -- BOTH real table:table-cell and placeholder table:covered-table-cell children, in document order. ODF's grid model guarantees exactly one child element (of either tag) per grid position in every row, which is why walking both tags (rather than cells()' own real-cell-only filter) gives a startColumnIndex that is correct even for a row a prior vertical merge already covered.
   private gridCells(): XmlElement[] {
     const out: XmlElement[] = [];
     for (const child of this.node.children) {
-      if (child.type === 'element' && (child.tag === 'table:table-cell' || child.tag === 'table:covered-table-cell')) {
+      if (
+        child.type === "element" &&
+        (child.tag === "table:table-cell" ||
+          child.tag === "table:covered-table-cell")
+      ) {
         out.push(child);
       }
     }
@@ -269,16 +364,23 @@ export class OdtTableRow {
   }
 
   // Merges colSpan grid columns of THIS row into one cell: the anchor at startColumnIndex gets table:number-columns-spanned (via OdtTableCell.colSpan), and every OTHER covered position is RETAGGED in place to table:covered-table-cell -- exactly OdsSheet.mergeCells' own technique (src/edit/ods/sheet.ts: `element.tag = ...; element.attributes = []; element.children = [];`), never removed and reinserted, since ODF's grid model requires one child element per grid position regardless of merge state. Consumed cells' own content is discarded silently and unconditionally -- no check, no guard -- matching that same precedent exactly: documented, intentional behaviour, not a silent trap.
-  mergeCellsHorizontally(startColumnIndex: number, colSpan: number): OdtTableCell {
+  mergeCellsHorizontally(
+    startColumnIndex: number,
+    colSpan: number,
+  ): OdtTableCell {
     if (!Number.isInteger(colSpan) || colSpan < 1) {
-      throw new Error(`mergeCellsHorizontally: colSpan must be a positive integer, got ${colSpan}`);
+      throw new Error(
+        `mergeCellsHorizontally: colSpan must be a positive integer, got ${colSpan}`,
+      );
     }
     const gridCells = this.gridCells();
     const anchorElement = gridCells[startColumnIndex];
     if (anchorElement === undefined) {
-      throw new Error(`mergeCellsHorizontally: column ${startColumnIndex} does not exist in this row`);
+      throw new Error(
+        `mergeCellsHorizontally: column ${startColumnIndex} does not exist in this row`,
+      );
     }
-    if (anchorElement.tag === 'table:covered-table-cell') {
+    if (anchorElement.tag === "table:covered-table-cell") {
       throw new Error(
         `mergeCellsHorizontally: column ${startColumnIndex} is already covered by another merge -- address that merge's own anchor cell instead`,
       );
@@ -291,7 +393,7 @@ export class OdtTableRow {
     for (let i = 1; i < colSpan; i++) {
       const consumedElement = gridCells[startColumnIndex + i];
       if (consumedElement !== undefined) {
-        consumedElement.tag = 'table:covered-table-cell';
+        consumedElement.tag = "table:covered-table-cell";
         consumedElement.attributes = [];
         consumedElement.children = [];
       }
@@ -306,16 +408,18 @@ export class OdtTableRow {
     const gridCells = this.gridCells();
     const element = gridCells[columnIndex];
     if (element === undefined) {
-      throw new Error(`markCellCovered: column ${columnIndex} does not exist in this row`);
+      throw new Error(
+        `markCellCovered: column ${columnIndex} does not exist in this row`,
+      );
     }
-    element.tag = 'table:covered-table-cell';
+    element.tag = "table:covered-table-cell";
     element.attributes = [];
     element.children = [];
   }
 }
 
 function buildCell(pkg: Package): XmlElement {
-  return el('table:table-cell', {}, [buildParagraph(pkg)]);
+  return el("table:table-cell", {}, [buildParagraph(pkg)]);
 }
 
 function buildRow(pkg: Package, columnCount: number): XmlElement {
@@ -323,7 +427,7 @@ function buildRow(pkg: Package, columnCount: number): XmlElement {
   for (let i = 0; i < columnCount; i++) {
     cells.push(buildCell(pkg));
   }
-  return el('table:table-row', {}, cells);
+  return el("table:table-row", {}, cells);
 }
 
 export class OdtTable {
@@ -340,7 +444,9 @@ export class OdtTable {
 
   private live(): XmlElement {
     if (this.removed) {
-      throw new Error('this OdtTable has been removed and can no longer be used');
+      throw new Error(
+        "this OdtTable has been removed and can no longer be used",
+      );
     }
     return this.node;
   }
@@ -348,7 +454,7 @@ export class OdtTable {
   rows(): OdtTableRow[] {
     const out: OdtTableRow[] = [];
     for (const child of this.live().children) {
-      if (child.type === 'element' && child.tag === 'table:table-row') {
+      if (child.type === "element" && child.tag === "table:table-row") {
         out.push(new OdtTableRow(child, this.pkg));
       }
     }
@@ -362,7 +468,9 @@ export class OdtTable {
     }
     const cell = row.cells()[columnIndex];
     if (cell === undefined) {
-      throw new Error(`column ${columnIndex} does not exist in row ${rowIndex}`);
+      throw new Error(
+        `column ${columnIndex} does not exist in row ${rowIndex}`,
+      );
     }
     return cell;
   }
@@ -377,20 +485,34 @@ export class OdtTable {
   // Appends an empty table:table-row with no cells yet, for a caller (buildOdtPackage's own appendTable) that needs to build a merged table's cells one at a time via OdtTableRow.appendCell/appendCoveredCell rather than the uniform-grid shape appendRow(columnCount) always produces.
   appendEmptyRow(): OdtTableRow {
     const node = this.live();
-    const row = el('table:table-row');
+    const row = el("table:table-row");
     node.children.push(row);
     return new OdtTableRow(row, this.pkg);
   }
 
   // Merges the rowSpan x colSpan rectangle anchored at (startRow, startColumn): calls OdtTableRow.mergeCellsHorizontally on the anchor row (which sets the anchor's own colSpan), sets rowSpan on that same anchor cell when rowSpan > 1, then calls markCellCovered for every column the rectangle covers on every row below the anchor -- unlike docx, ODF's grid model means only the FIRST row of a vertical merge needs a real horizontal merge; every row below it just needs its own covered positions stamped, since table:number-rows-spanned on the anchor already says how many rows the merge covers.
-  mergeCells(startRow: number, startColumn: number, rowSpan: number, colSpan: number): OdtTableCell {
-    if (!Number.isInteger(rowSpan) || rowSpan < 1 || !Number.isInteger(colSpan) || colSpan < 1) {
-      throw new Error(`mergeCells: rowSpan and colSpan must be positive integers, got rowSpan=${rowSpan}, colSpan=${colSpan}`);
+  mergeCells(
+    startRow: number,
+    startColumn: number,
+    rowSpan: number,
+    colSpan: number,
+  ): OdtTableCell {
+    if (
+      !Number.isInteger(rowSpan) ||
+      rowSpan < 1 ||
+      !Number.isInteger(colSpan) ||
+      colSpan < 1
+    ) {
+      throw new Error(
+        `mergeCells: rowSpan and colSpan must be positive integers, got rowSpan=${rowSpan}, colSpan=${colSpan}`,
+      );
     }
     const rows = this.rows();
     const anchorRow = rows[startRow];
     if (anchorRow === undefined) {
-      throw new Error(`mergeCells: row ${startRow} does not exist in this table`);
+      throw new Error(
+        `mergeCells: row ${startRow} does not exist in this table`,
+      );
     }
     const anchor = anchorRow.mergeCellsHorizontally(startColumn, colSpan);
     if (rowSpan > 1) {
@@ -398,7 +520,9 @@ export class OdtTable {
       for (let r = 1; r < rowSpan; r++) {
         const coveredRow = rows[startRow + r];
         if (coveredRow === undefined) {
-          throw new Error(`mergeCells: rowSpan ${rowSpan} starting at row ${startRow} exceeds this table's own ${rows.length} rows`);
+          throw new Error(
+            `mergeCells: rowSpan ${rowSpan} starting at row ${startRow} exceeds this table's own ${rows.length} rows`,
+          );
         }
         for (let c = 0; c < colSpan; c++) {
           coveredRow.markCellCovered(startColumn + c);
@@ -419,11 +543,15 @@ export function buildTable(pkg: Package, init: TableInit): XmlElement {
   const columns: XmlElement[] = [];
   for (let i = 0; i < init.columns; i++) {
     const widthPt = init.columnWidthsPt?.[i] ?? defaultWidth;
-    columns.push(el('table:table-column', { 'table:style-name': internTableColumnWidth(pkg, widthPt) }));
+    columns.push(
+      el("table:table-column", {
+        "table:style-name": internTableColumnWidth(pkg, widthPt),
+      }),
+    );
   }
   const rows: XmlElement[] = [];
   for (let r = 0; r < init.rows; r++) {
     rows.push(buildRow(pkg, init.columns));
   }
-  return el('table:table', {}, [...columns, ...rows]);
+  return el("table:table", {}, [...columns, ...rows]);
 }

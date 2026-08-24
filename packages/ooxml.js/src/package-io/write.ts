@@ -1,7 +1,7 @@
-import type { Package, Part } from '../model/package';
-import { base64ToBytes } from '../util/base64';
-import { buildXml } from '../xml/build';
-import { zipPackage } from '../zip';
+import type { Package, Part } from "../model/package";
+import { base64ToBytes } from "../util/base64";
+import { buildXml } from "../xml/build";
+import { zipPackage } from "../zip";
 
 export function serializePackage(pkg: Package): Uint8Array<ArrayBuffer> {
   const entries: Record<string, Uint8Array<ArrayBuffer>> = {};
@@ -13,9 +13,9 @@ export function serializePackage(pkg: Package): Uint8Array<ArrayBuffer> {
 
 function partToBytes(part: Part): Uint8Array<ArrayBuffer> {
   switch (part.kind) {
-    case 'xml':
+    case "xml":
       return new TextEncoder().encode(buildXml(part.nodes));
-    case 'binary':
+    case "binary":
       return base64ToBytes(part.base64);
   }
 }

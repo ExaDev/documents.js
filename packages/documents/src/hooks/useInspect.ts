@@ -1,9 +1,14 @@
-import { useMutation } from '@tanstack/react-query';
-import type { ContentDocument, DocumentFormat, DocumentTreeJson, LayoutDocument } from 'documents.js';
+import { useMutation } from "@tanstack/react-query";
+import type {
+  ContentDocument,
+  DocumentFormat,
+  DocumentTreeJson,
+  LayoutDocument,
+} from "documents.js";
 
-import { getRpcClient } from '../rpc/client';
-import type { Diagnostic } from '../shared/diagnostics';
-import { contentSummary } from '../shared/contentCounts';
+import { getRpcClient } from "../rpc/client";
+import type { Diagnostic } from "../shared/diagnostics";
+import { contentSummary } from "../shared/contentCounts";
 
 // Reads a document's content directly from bytes via the content.read RPC endpoint -- no conversion, no PDF layout pass. Used by every content-backed preview (markdown, csv, svg, docx, odt, xlsx, ods, pptx, odp, odg, odf).
 export interface ReadContentInput {
@@ -25,13 +30,15 @@ export function useReadContent() {
 
 // Plain mirror of pdf.inspect's own SanitizedLayoutImageAssetSchema (src/rpc/router.ts) -- LayoutImageAsset minus its unbounded base64 payload, plus an estimated byteLength in its place.
 export interface SanitizedLayoutImageAsset {
-  format: 'png' | 'jpeg';
+  format: "png" | "jpeg";
   widthPx: number;
   heightPx: number;
   byteLength: number;
 }
 
-export type SanitizedLayoutDocument = Omit<LayoutDocument, 'images'> & { images: Record<string, SanitizedLayoutImageAsset> };
+export type SanitizedLayoutDocument = Omit<LayoutDocument, "images"> & {
+  images: Record<string, SanitizedLayoutImageAsset>;
+};
 
 interface InspectDiagnostics {
   diagnostics: readonly Diagnostic[];
@@ -39,7 +46,7 @@ interface InspectDiagnostics {
 
 // Structure derived from a PDF layout pass (page count, per-item-kind breakdown, the full LayoutDocument tree). Produced by pdf.inspect on the worker, consuming PDF bytes a caller already has on hand.
 export interface PdfInspectResult extends InspectDiagnostics {
-  backing: 'pdf';
+  backing: "pdf";
   pageCount: number;
   itemKindCounts: Record<string, number>;
   metadata: {
@@ -57,7 +64,7 @@ export interface PdfInspectResult extends InspectDiagnostics {
 
 // Structure derived directly from a read document (variant-aware summary + the $schema-stamped tree-form DocumentTree), produced client-side from content already on hand -- no PDF layout pass, no second RPC. Used by formats that preview their native representation rather than a PDF rendition.
 export interface ContentInspectResult extends InspectDiagnostics {
-  backing: 'content';
+  backing: "content";
   summary: readonly string[];
   package: DocumentTreeJson;
 }
@@ -65,13 +72,23 @@ export interface ContentInspectResult extends InspectDiagnostics {
 export type InspectResult = PdfInspectResult | ContentInspectResult;
 
 // Constructs a content-backed InspectResult from a content.read result already on the client -- pure, synchronous, no RPC. The summary is variant-aware (sections+blocks vs sheets+cells vs ...) and counted over the flat form; the tree shows the stamped package, the document's artefact form.
-export function contentInspectResult(read: ContentReadResult): ContentInspectResult {
-  return { backing: 'content', diagnostics: [], summary: contentSummary(read.content), package: read.package };
+export function contentInspectResult(
+  read: ContentReadResult,
+): ContentInspectResult {
+  return {
+    backing: "content",
+    diagnostics: [],
+    summary: contentSummary(read.content),
+    package: read.package,
+  };
 }
 
-async function inspectPdfBytes(bytes: Uint8Array<ArrayBuffer>, diagnostics: readonly Diagnostic[] = []): Promise<PdfInspectResult> {
+async function inspectPdfBytes(
+  bytes: Uint8Array<ArrayBuffer>,
+  diagnostics: readonly Diagnostic[] = [],
+): Promise<PdfInspectResult> {
   const inspected = await getRpcClient().pdf.inspect({ bytes });
-  return { backing: 'pdf', ...inspected, diagnostics };
+  return { backing: "pdf", ...inspected, diagnostics };
 }
 
 // Structural inspection (page count, item-kind breakdown, metadata) only ever runs on PDF bytes -- this is the shared entry point for that, used directly by the Convert page, which already has PDF bytes on hand from its own preview conversion and would otherwise pay for a redundant conversion via useInspectDocument below.
@@ -89,9 +106,16 @@ export interface InspectDocumentInput {
 // Every documents.js format can render to PDF (see convert.tsx's own preview rationale) -- inspecting a non-PDF source is therefore "convert it to PDF, then run the same structural inspector on the result", reusing the app's existing convert-to-a-common-representation approach rather than inventing a second, format-specific notion of "structure" for every source format. Used by the Inspect page, which -- unlike Convert -- has no PDF bytes already in hand, so the conversion's own diagnostics (e.g. a font substitution) are surfaced too, not just the inspection result.
 export function useInspectDocument() {
   return useMutation({
-    mutationFn: async ({ format, bytes }: InspectDocumentInput): Promise<PdfInspectResult> => {
-      if (format === 'pdf') return inspectPdfBytes(bytes);
-      const converted = await getRpcClient().convert({ source: format, targetFormat: 'pdf', bytes });
+    mutationFn: async ({
+      format,
+      bytes,
+    }: InspectDocumentInput): Promise<PdfInspectResult> => {
+      if (format === "pdf") return inspectPdfBytes(bytes);
+      const converted = await getRpcClient().convert({
+        source: format,
+        targetFormat: "pdf",
+        bytes,
+      });
       return inspectPdfBytes(converted.document.bytes, converted.diagnostics);
     },
   });

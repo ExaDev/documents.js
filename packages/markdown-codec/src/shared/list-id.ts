@@ -4,11 +4,12 @@
 //
 // A numId that does not match this grammar at all (e.g. "list1", "3" -- odf.js's own convention, or any other format's own numId scheme entirely) is a cross-format value this package never minted itself: src/emit falls back to rendering it as an ordinary bullet list -- tight, start 1, never a task list -- per MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK, the documented cross-format contract. A ContentListMembership with no numId at all (optional since document-schema.js 3.3.0, for a source that carries only a depth) gets the same src/emit fallback under the same code.
 
-const NUMID_PATTERN = /^md(\d+):(bullet|ordered)(?:@(\d+))?(\+task)?(\+loose)?$/;
+const NUMID_PATTERN =
+  /^md(\d+):(bullet|ordered)(?:@(\d+))?(\+task)?(\+loose)?$/;
 const DEFAULT_ORDERED_START = 1;
 
 export interface ListNumIdInfo {
-  readonly type: 'bullet' | 'ordered';
+  readonly type: "bullet" | "ordered";
   // Present only when type is 'ordered' and the start differs from the default (1).
   readonly start?: number;
   readonly task: boolean;
@@ -16,7 +17,7 @@ export interface ListNumIdInfo {
 }
 
 export interface ListNumIdMintOptions {
-  readonly type: 'bullet' | 'ordered';
+  readonly type: "bullet" | "ordered";
   readonly start?: number;
   readonly task: boolean;
   readonly loose: boolean;
@@ -31,12 +32,20 @@ export function createNumIdMintState(): NumIdMintState {
   return { next: 1 };
 }
 
-export function mintListNumId(state: NumIdMintState, options: ListNumIdMintOptions): string {
+export function mintListNumId(
+  state: NumIdMintState,
+  options: ListNumIdMintOptions,
+): string {
   const id = state.next;
   state.next += 1;
-  const startSuffix = options.type === 'ordered' && options.start !== undefined && options.start !== DEFAULT_ORDERED_START ? `@${String(options.start)}` : '';
-  const taskSuffix = options.task ? '+task' : '';
-  const looseSuffix = options.loose ? '+loose' : '';
+  const startSuffix =
+    options.type === "ordered" &&
+    options.start !== undefined &&
+    options.start !== DEFAULT_ORDERED_START
+      ? `@${String(options.start)}`
+      : "";
+  const taskSuffix = options.task ? "+task" : "";
+  const looseSuffix = options.loose ? "+loose" : "";
   return `md${String(id)}:${options.type}${startSuffix}${taskSuffix}${looseSuffix}`;
 }
 
@@ -47,16 +56,26 @@ export function parseListNumId(numId: string): ListNumIdInfo | undefined {
     return undefined;
   }
   const type = match[2];
-  if (type === undefined || (type !== 'bullet' && type !== 'ordered')) {
+  if (type === undefined || (type !== "bullet" && type !== "ordered")) {
     return undefined;
   }
   const startText = match[3];
-  const start = type === 'ordered' && startText !== undefined ? Number.parseInt(startText, 10) : undefined;
-  return { type, start, task: match[4] !== undefined, loose: match[5] !== undefined };
+  const start =
+    type === "ordered" && startText !== undefined
+      ? Number.parseInt(startText, 10)
+      : undefined;
+  return {
+    type,
+    start,
+    task: match[4] !== undefined,
+    loose: match[5] !== undefined,
+  };
 }
 
 // The type this numId was MINTED with -- used by src/lower's own nested-list conflict check, which compares a nested list's real marker type against this without re-deriving every other property of the string.
-export function mintedListType(numId: string): 'bullet' | 'ordered' | undefined {
+export function mintedListType(
+  numId: string,
+): "bullet" | "ordered" | undefined {
   return parseListNumId(numId)?.type;
 }
 

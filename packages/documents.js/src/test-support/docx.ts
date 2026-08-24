@@ -1,5 +1,5 @@
-import type { Package } from 'ooxml.js';
-import { decodePackage, zipPackage } from 'ooxml.js';
+import type { Package } from "ooxml.js";
+import { decodePackage, zipPackage } from "ooxml.js";
 
 // Never imported by src/index.ts and never reaches dist/ -- this module exists purely to give tests a realistic, hand-authored docx fixture without committing a binary Office file. Built from XML string constants and zipped via ooxml.js's own zipPackage/decodePackage -- never via this package's own createEmptyDocxPackage (src/edit/docx/scaffold.ts), so a bug in that scaffold cannot hide behind a fixture built with the same code.
 
@@ -26,19 +26,21 @@ function stylesXml(fontFamily: string): Uint8Array<ArrayBuffer> {
   );
 }
 
-const STYLES_XML = stylesXml('Calibri');
+const STYLES_XML = stylesXml("Calibri");
 
 const DOCUMENT_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t xml:space="preserve">Hello, world!</w:t></w:r></w:p><w:tbl><w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>A1</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>B1</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>',
 );
 
-function docxParts(styles: Uint8Array<ArrayBuffer> = STYLES_XML): Record<string, Uint8Array<ArrayBuffer>> {
+function docxParts(
+  styles: Uint8Array<ArrayBuffer> = STYLES_XML,
+): Record<string, Uint8Array<ArrayBuffer>> {
   return {
-    '[Content_Types].xml': CONTENT_TYPES_XML,
-    '_rels/.rels': ROOT_RELS_XML,
-    'word/document.xml': DOCUMENT_XML,
-    'word/_rels/document.xml.rels': DOCUMENT_RELS_XML,
-    'word/styles.xml': styles,
+    "[Content_Types].xml": CONTENT_TYPES_XML,
+    "_rels/.rels": ROOT_RELS_XML,
+    "word/document.xml": DOCUMENT_XML,
+    "word/_rels/document.xml.rels": DOCUMENT_RELS_XML,
+    "word/styles.xml": styles,
   };
 }
 
@@ -53,7 +55,7 @@ export function minimalDocxBytes(): Uint8Array<ArrayBuffer> {
 
 // The same document, asking for Arial: a family the standard 14 covers directly (Helvetica is metric-compatible with it) and which no vendored substitute claims, so a conversion of this fixture resolves every run to a standard font and embeds nothing.
 export function standardFontDocxBytes(): Uint8Array<ArrayBuffer> {
-  return zipPackage(docxParts(stylesXml('Arial')));
+  return zipPackage(docxParts(stylesXml("Arial")));
 }
 
 // A second, structurally authentic docx package exercising every part readDocx (ooxml.js) reads that readDocxContent (./read.ts, this package) does not carry through ContentDocument at all -- comments, footnotes (including the separator/continuationSeparator pair readDocx's own readFootnotes filters out), headers/footers, and a numbering (abstractNum/num) definition -- for readDocxExtras' (./extras.ts) own round-trip test. Full content-type overrides and relationships are included for realism even though readDocx itself locates comments/footnotes/numbering by fixed part path and headers/footers by path prefix, needing no relationship at all.
@@ -67,12 +69,12 @@ const EXTRAS_DOCUMENT_RELS_XML = enc(
 
 const EXTRAS_DOCUMENT_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-    '<w:body>' +
+    "<w:body>" +
     '<w:p><w:commentRangeStart w:id="0"/><w:r><w:t xml:space="preserve">Reviewed text</w:t></w:r><w:commentRangeEnd w:id="0"/><w:r><w:commentReference w:id="0"/></w:r></w:p>' +
     '<w:p><w:r><w:t xml:space="preserve">See the note below</w:t></w:r><w:r><w:footnoteReference w:id="1"/></w:r></w:p>' +
     '<w:p><w:pPr><w:numPr><w:numId w:val="1"/><w:ilvl w:val="0"/></w:numPr></w:pPr><w:r><w:t xml:space="preserve">First item</w:t></w:r></w:p>' +
     '<w:sectPr><w:headerReference w:type="default" r:id="rId5" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><w:footerReference w:type="default" r:id="rId6" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>' +
-    '</w:body></w:document>',
+    "</w:body></w:document>",
 );
 
 const EXTRAS_COMMENTS_XML = enc(
@@ -84,14 +86,14 @@ const EXTRAS_FOOTNOTES_XML = enc(
     '<w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote>' +
     '<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>' +
     '<w:footnote w:id="1"><w:p><w:r><w:t>See appendix A for details.</w:t></w:r></w:p></w:footnote>' +
-    '</w:footnotes>',
+    "</w:footnotes>",
 );
 
 const EXTRAS_NUMBERING_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
     '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum>' +
     '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>' +
-    '</w:numbering>',
+    "</w:numbering>",
 );
 
 const EXTRAS_HEADER_XML = enc(
@@ -105,16 +107,16 @@ const EXTRAS_FOOTER_XML = enc(
 export function docxWithExtrasPackage(): Package {
   return decodePackage(
     zipPackage({
-      '[Content_Types].xml': EXTRAS_CONTENT_TYPES_XML,
-      '_rels/.rels': ROOT_RELS_XML,
-      'word/document.xml': EXTRAS_DOCUMENT_XML,
-      'word/_rels/document.xml.rels': EXTRAS_DOCUMENT_RELS_XML,
-      'word/styles.xml': STYLES_XML,
-      'word/comments.xml': EXTRAS_COMMENTS_XML,
-      'word/footnotes.xml': EXTRAS_FOOTNOTES_XML,
-      'word/numbering.xml': EXTRAS_NUMBERING_XML,
-      'word/header1.xml': EXTRAS_HEADER_XML,
-      'word/footer1.xml': EXTRAS_FOOTER_XML,
+      "[Content_Types].xml": EXTRAS_CONTENT_TYPES_XML,
+      "_rels/.rels": ROOT_RELS_XML,
+      "word/document.xml": EXTRAS_DOCUMENT_XML,
+      "word/_rels/document.xml.rels": EXTRAS_DOCUMENT_RELS_XML,
+      "word/styles.xml": STYLES_XML,
+      "word/comments.xml": EXTRAS_COMMENTS_XML,
+      "word/footnotes.xml": EXTRAS_FOOTNOTES_XML,
+      "word/numbering.xml": EXTRAS_NUMBERING_XML,
+      "word/header1.xml": EXTRAS_HEADER_XML,
+      "word/footer1.xml": EXTRAS_FOOTER_XML,
     }),
   );
 }
@@ -127,11 +129,11 @@ const TABLE_CELL_EQUATION_DOCUMENT_XML = enc(
 export function docxWithTableCellEquationPackage(): Package {
   return decodePackage(
     zipPackage({
-      '[Content_Types].xml': CONTENT_TYPES_XML,
-      '_rels/.rels': ROOT_RELS_XML,
-      'word/document.xml': TABLE_CELL_EQUATION_DOCUMENT_XML,
-      'word/_rels/document.xml.rels': DOCUMENT_RELS_XML,
-      'word/styles.xml': STYLES_XML,
+      "[Content_Types].xml": CONTENT_TYPES_XML,
+      "_rels/.rels": ROOT_RELS_XML,
+      "word/document.xml": TABLE_CELL_EQUATION_DOCUMENT_XML,
+      "word/_rels/document.xml.rels": DOCUMENT_RELS_XML,
+      "word/styles.xml": STYLES_XML,
     }),
   );
 }

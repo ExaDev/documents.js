@@ -1,4 +1,4 @@
-import type { MathColor, MathRule, MathStroke } from 'document-schema.js';
+import type { MathColor, MathRule, MathStroke } from "document-schema.js";
 
 // Builds a real, hand-drawn radical sign -- a short down-then-up hook (MathStroke) plus a horizontal vinculum (MathRule) over the radicand -- rather than substituting the font's own bare U+221A glyph, which has no way to extend its own vinculum to cover an arbitrary-width radicand. Proportions are fixed fractions of the sign's own total height (signHeightPt = radicalExtraAscenderPt + ruleThicknessPt + gapPt + radicand.heightPt, computed by the caller), matching the classic three-segment radical shape real typesetting systems draw: a short initial downstroke, a longer diagonal upstroke to the sign's own top-left corner, then the vinculum running right from there across the full radicand width. `originXPt`/`originYPt` place the sign's own top-left corner (the bounding box corner, not any one stroke point) in the caller's coordinate space.
 export interface RadicalSign {
@@ -14,7 +14,14 @@ const TICK_WIDTH_FRACTION = 0.16; // horizontal run of the short initial downstr
 const HOOK_WIDTH_FRACTION = 0.38; // horizontal run of the long upstroke, from the tick's low point to the sign's own top-left
 const SIGN_TOP_Y_FRACTION = 0.04; // the vinculum's own y, just shy of the sign's absolute top (leaves a hair of headroom, matching real radical glyphs which never touch their own bounding box's top edge)
 
-export function buildRadicalSign(originXPt: number, originYPt: number, signHeightPt: number, radicandWidthPt: number, ruleThicknessPt: number, color: MathColor): RadicalSign {
+export function buildRadicalSign(
+  originXPt: number,
+  originYPt: number,
+  signHeightPt: number,
+  radicandWidthPt: number,
+  ruleThicknessPt: number,
+  color: MathColor,
+): RadicalSign {
   const tickStartY = originYPt + signHeightPt * TICK_START_Y_FRACTION;
   const tickEndY = originYPt + signHeightPt * TICK_END_Y_FRACTION;
   const topY = originYPt + signHeightPt * SIGN_TOP_Y_FRACTION;
@@ -22,7 +29,7 @@ export function buildRadicalSign(originXPt: number, originYPt: number, signHeigh
   const hookWidthPt = signHeightPt * HOOK_WIDTH_FRACTION;
 
   const hook: MathStroke = {
-    kind: 'stroke',
+    kind: "stroke",
     points: [
       { xPt: originXPt, yPt: tickStartY },
       { xPt: originXPt + tickWidthPt, yPt: tickEndY },
@@ -33,7 +40,7 @@ export function buildRadicalSign(originXPt: number, originYPt: number, signHeigh
   };
 
   const vinculum: MathRule = {
-    kind: 'rule',
+    kind: "rule",
     xPt: originXPt + hookWidthPt,
     yPt: topY,
     widthPt: radicandWidthPt,

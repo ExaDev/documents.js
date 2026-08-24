@@ -34,7 +34,11 @@ export class MarkdownScanCursor {
   }
 
   get position(): ScanPosition {
-    return { offset: this.rawOffset, line: this.lineNumber, column: this.columnNumber };
+    return {
+      offset: this.rawOffset,
+      line: this.lineNumber,
+      column: this.columnNumber,
+    };
   }
 
   atEnd(): boolean {
@@ -44,17 +48,17 @@ export class MarkdownScanCursor {
   // The next effective character without consuming it: a real source character, or a synthetic single space while a tab's own expansion is only partially consumed. Never returns '\t' or '\r' -- a tab's columns come back as ' ' one at a time, and a line ending (LF, CRLF, or lone CR) comes back as a single '\n', matching next()'s own normalisation.
   peek(): string | undefined {
     if (this.pendingTabColumns > 0) {
-      return ' ';
+      return " ";
     }
     if (this.rawOffset >= this.source.length) {
       return undefined;
     }
     const char = this.source[this.rawOffset];
-    if (char === '\t') {
-      return ' ';
+    if (char === "\t") {
+      return " ";
     }
-    if (char === '\r') {
-      return '\n';
+    if (char === "\r") {
+      return "\n";
     }
     return char;
   }
@@ -72,30 +76,31 @@ export class MarkdownScanCursor {
       if (this.pendingTabColumns === 0) {
         this.rawOffset += 1;
       }
-      return ' ';
+      return " ";
     }
     if (this.rawOffset >= this.source.length) {
       return undefined;
     }
     const char = this.source[this.rawOffset];
-    if (char === '\t') {
-      const width = MARKDOWN_TAB_STOP_WIDTH - (this.columnNumber % MARKDOWN_TAB_STOP_WIDTH);
+    if (char === "\t") {
+      const width =
+        MARKDOWN_TAB_STOP_WIDTH - (this.columnNumber % MARKDOWN_TAB_STOP_WIDTH);
       this.columnNumber += 1;
       if (width > 1) {
         this.pendingTabColumns = width - 1;
       } else {
         this.rawOffset += 1;
       }
-      return ' ';
+      return " ";
     }
-    if (char === '\r') {
-      this.rawOffset += this.source[this.rawOffset + 1] === '\n' ? 2 : 1;
+    if (char === "\r") {
+      this.rawOffset += this.source[this.rawOffset + 1] === "\n" ? 2 : 1;
       this.lineNumber += 1;
       this.columnNumber = 0;
-      return '\n';
+      return "\n";
     }
     this.rawOffset += 1;
-    if (char === '\n') {
+    if (char === "\n") {
       this.lineNumber += 1;
       this.columnNumber = 0;
     } else {

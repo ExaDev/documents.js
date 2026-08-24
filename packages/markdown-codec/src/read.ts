@@ -15,11 +15,17 @@
 //
 // Wiring: readMarkdownContent is a thin wrapper over src/lower/lower.ts's lowerMarkdown (front matter extraction, block parsing, and lowering, already composed there over raw text) -- the pipeline src/lower/lower.ts's own top-of-file table documents in full: src/scan (tokenize) -> src/block (block structure) -> src/inline (inline content, deferred per block) -> src/lower (AST -> ContentDocument), with src/html and src/image consulted by src/block/src/inline respectively. What this module itself adds: collecting every diagnostic lowerMarkdown reports into the returned `diagnostics` array (in addition to forwarding each one to a caller-supplied sink, exactly like it would see them calling lowerMarkdown directly), and a single AbortSignal check up front -- the parser is synchronous and single-pass, so there is no natural mid-parse checkpoint to check again later, matching this package's own "identity, clock, and observability are first-class ports" convention without overclaiming incremental cancellation it cannot actually provide.
 
-import { assembleTree, type ContentDocument, type DefinitionEntry, type DocumentTree, type SourceResidue } from 'document-schema.js';
-import type { LinkReferenceMap } from './inline/link';
-import type { MarkdownDiagnostic } from './diagnostics/diagnostics';
-import { lowerMarkdownDetailed } from './lower/lower';
-import type { ReadMarkdownOptions } from './options/options';
+import {
+  assembleTree,
+  type ContentDocument,
+  type DefinitionEntry,
+  type DocumentTree,
+  type SourceResidue,
+} from "document-schema.js";
+import type { LinkReferenceMap } from "./inline/link";
+import type { MarkdownDiagnostic } from "./diagnostics/diagnostics";
+import { lowerMarkdownDetailed } from "./lower/lower";
+import type { ReadMarkdownOptions } from "./options/options";
 
 // The field is `documentPackage` rather than the bare noun `package`: `package` is a reserved word in strict mode, so `const { package } = readMarkdown(src)` -- the idiom every caller reaches for first -- is a syntax error, and the only spellings that work are an alias or a property access. A name whose obvious use is illegal is the wrong name.
 export interface ReadMarkdownResult {
@@ -40,7 +46,10 @@ interface ReadDetail {
   readonly frontMatterSource: string | undefined;
 }
 
-function readMarkdownDetail(text: string, options: ReadMarkdownOptions): ReadDetail {
+function readMarkdownDetail(
+  text: string,
+  options: ReadMarkdownOptions,
+): ReadDetail {
   options.signal?.throwIfAborted();
 
   const diagnostics: MarkdownDiagnostic[] = [];
@@ -57,36 +66,63 @@ function readMarkdownDetail(text: string, options: ReadMarkdownOptions): ReadDet
 }
 
 // The definitions-table tenant this package mints: one entry per link reference definition, keyed by the definition's own normalised label, body in this package's own vocabulary ({ kind: 'link', destination, title? }) -- the per-tenant fields are the tenant's, never document-schema.js's.
-function linkDefinitionEntries(references: LinkReferenceMap): Record<string, DefinitionEntry> | undefined {
+function linkDefinitionEntries(
+  references: LinkReferenceMap,
+): Record<string, DefinitionEntry> | undefined {
   if (references.size === 0) {
     return undefined;
   }
   const entries: Record<string, DefinitionEntry> = {};
   for (const [label, definition] of references) {
-    entries[label] = definition.title === undefined ? { kind: 'link', destination: definition.destination } : { kind: 'link', destination: definition.destination, title: definition.title };
+    entries[label] =
+      definition.title === undefined
+        ? { kind: "link", destination: definition.destination }
+        : {
+            kind: "link",
+            destination: definition.destination,
+            title: definition.title,
+          };
   }
   return entries;
 }
 
 // Markdown source text -> the tree-form DocumentTree. The diagnostics are the identical set readMarkdownContent collects -- the tree transform reports none of its own, since decomposition and minting are pure structure over content the lower pipeline has already finished producing. Two facts the flat form has no home for splice onto the assembled tree: the reference definition table (pkg.definitions, the link tenant) and the verbatim front-matter block (pkg.source.frontmatter, the package-level residue table) -- both tree-only by document-schema.js's own design, which is exactly why the tree is the form to reach for when those facts must survive.
-export function readMarkdown(text: string, options: ReadMarkdownOptions = {}): ReadMarkdownResult {
+export function readMarkdown(
+  text: string,
+  options: ReadMarkdownOptions = {},
+): ReadMarkdownResult {
   const detail = readMarkdownDetail(text, options);
   const assembled = assembleTree(detail.document);
   const definitions = linkDefinitionEntries(detail.references);
-  const frontMatterResidue: SourceResidue | undefined = detail.frontMatterSource === undefined ? undefined : { format: 'markdown', xml: detail.frontMatterSource };
+  const frontMatterResidue: SourceResidue | undefined =
+    detail.frontMatterSource === undefined
+      ? undefined
+      : { format: "markdown", xml: detail.frontMatterSource };
   const documentPackage: DocumentTree =
     definitions === undefined && frontMatterResidue === undefined
       ? assembled
       : {
           ...assembled,
-          ...(definitions !== undefined ? { definitions: { ...assembled.definitions, ...definitions } } : {}),
-          ...(frontMatterResidue !== undefined ? { source: { ...(assembled.source ?? {}), frontmatter: frontMatterResidue } } : {}),
+          ...(definitions !== undefined
+            ? { definitions: { ...assembled.definitions, ...definitions } }
+            : {}),
+          ...(frontMatterResidue !== undefined
+            ? {
+                source: {
+                  ...(assembled.source ?? {}),
+                  frontmatter: frontMatterResidue,
+                },
+              }
+            : {}),
         };
   return { documentPackage, diagnostics: detail.diagnostics };
 }
 
 // Markdown source text -> the flat ContentDocument, without the tree transform. The form documents.js's own conversion pipeline consumes, and the level to work at when composing a package boundary by hand (decompose/flattenTree rather than assembleTree) or feeding a ContentDocument-consuming builder directly. The reference definition table and the raw front-matter block have no flat home and are not carried here -- reference USE sites already resolved to hyperlink-carrying runs at parse time, so only re-emission fidelity (the tree pair's job) ever needed them.
-export function readMarkdownContent(text: string, options: ReadMarkdownOptions = {}): ReadMarkdownContentResult {
+export function readMarkdownContent(
+  text: string,
+  options: ReadMarkdownOptions = {},
+): ReadMarkdownContentResult {
   const detail = readMarkdownDetail(text, options);
   return { document: detail.document, diagnostics: detail.diagnostics };
 }

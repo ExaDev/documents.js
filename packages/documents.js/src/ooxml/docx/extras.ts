@@ -1,5 +1,12 @@
-import type { Comment, Footnote, HeaderFooterPart, NumberingDefinitions, Package, SectionHeaderFooterReferences } from 'ooxml.js';
-import { readDocxContent as readDocxFlat } from 'ooxml.js';
+import type {
+  Comment,
+  Footnote,
+  HeaderFooterPart,
+  NumberingDefinitions,
+  Package,
+  SectionHeaderFooterReferences,
+} from "ooxml.js";
+import { readDocxContent as readDocxFlat } from "ooxml.js";
 
 // The docx metadata readDocxContent (./read.ts) deliberately drops because it genuinely doesn't fit ContentDocument's section/block shape: comments, footnotes, the header/footer layer (headerFooterParts carrying every word/header*/word/footer* part as block flow, referenced or not, plus sectionHeaderFooters' per-section slot references), and numbering (abstractNum/num) definitions. ooxml.js's own readDocxContent (the flat DocxDocument reader since ooxml.js 4.0.0; the bare readDocx name now reads the tree-form DocumentTree) already reads all of it -- this is a thin re-projection of that same call, exposed as its own real return type rather than forced into a shape that doesn't model it. Comment/Footnote/NumberingDefinitions/HeaderFooterPart/SectionHeaderFooterReferences are ooxml.js's own types, reused directly rather than mirrored locally.
 export interface DocxExtras {

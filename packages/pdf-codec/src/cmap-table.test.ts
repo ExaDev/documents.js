@@ -1,20 +1,20 @@
-import { describe, expect, it } from 'vitest';
-import { buildCmapLookup } from './cmap-table';
-import type { SfntFont } from './sfnt';
-import { parseSfnt } from './sfnt';
-import { caladeaRegularBytes, carlitoRegularBytes } from './test-support/fonts';
+import { describe, expect, it } from "vitest";
+import { buildCmapLookup } from "./cmap-table";
+import type { SfntFont } from "./sfnt";
+import { parseSfnt } from "./sfnt";
+import { caladeaRegularBytes, carlitoRegularBytes } from "./test-support/fonts";
 
 // The glyph IDs asserted below were read out of the real vendored .ttf files by a standalone Node script walking the 'cmap' subtables with a bare DataView, independently of this module.
 function parse(bytes: Uint8Array<ArrayBuffer>): SfntFont {
   const font = parseSfnt(bytes);
   if (font === undefined) {
-    throw new Error('font failed to parse as an sfnt container');
+    throw new Error("font failed to parse as an sfnt container");
   }
   return font;
 }
 
-describe('buildCmapLookup against the real vendored fonts', () => {
-  it('resolves Carlito Regular code points to their real glyph IDs', () => {
+describe("buildCmapLookup against the real vendored fonts", () => {
+  it("resolves Carlito Regular code points to their real glyph IDs", () => {
     const lookup = buildCmapLookup(parse(carlitoRegularBytes()));
     expect(lookup).toBeDefined();
     expect(lookup!(0x20)).toBe(2); // space
@@ -29,7 +29,7 @@ describe('buildCmapLookup against the real vendored fonts', () => {
     expect(lookup!(0x2019)).toBe(317); // RIGHT SINGLE QUOTATION MARK
   });
 
-  it('resolves Caladea Regular code points to their real glyph IDs', () => {
+  it("resolves Caladea Regular code points to their real glyph IDs", () => {
     const lookup = buildCmapLookup(parse(caladeaRegularBytes()));
     expect(lookup).toBeDefined();
     expect(lookup!(0x41)).toBe(5);
@@ -38,7 +38,7 @@ describe('buildCmapLookup against the real vendored fonts', () => {
     expect(lookup!(0x2019)).toBe(331);
   });
 
-  it('returns undefined for a code point the font does not cover', () => {
+  it("returns undefined for a code point the font does not cover", () => {
     const lookup = buildCmapLookup(parse(carlitoRegularBytes()));
     expect(lookup!(0x1_0000)).toBeUndefined(); // an unassigned supplementary-plane code point, which no BMP-only format 4 subtable can reach
     expect(lookup!(0x4e00)).toBeUndefined(); // a CJK ideograph, outside a Latin text font's coverage
@@ -46,7 +46,11 @@ describe('buildCmapLookup against the real vendored fonts', () => {
 });
 
 // A minimal sfnt carrying exactly one 'cmap' subtable, built to the spec's own layout (ISO/IEC 14496-22 clause 5.1). No vendored font here ships a format 6 subtable as its only mapping, so the fallback that reads one has no real font to exercise it.
-function buildFontWithCmapSubtable(platformId: number, encodingId: number, subtable: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+function buildFontWithCmapSubtable(
+  platformId: number,
+  encodingId: number,
+  subtable: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   const CMAP_HEADER_SIZE = 4;
   const SUBTABLE_RECORD_SIZE = 8;
   const subtableOffset = CMAP_HEADER_SIZE + SUBTABLE_RECORD_SIZE;
@@ -70,7 +74,10 @@ function buildFontWithCmapSubtable(platformId: number, encodingId: number, subta
   return font;
 }
 
-function buildFormat6Subtable(firstCode: number, glyphIds: readonly number[]): Uint8Array<ArrayBuffer> {
+function buildFormat6Subtable(
+  firstCode: number,
+  glyphIds: readonly number[],
+): Uint8Array<ArrayBuffer> {
   const HEADER_SIZE = 10;
   const subtable = new Uint8Array(HEADER_SIZE + glyphIds.length * 2);
   const view = new DataView(subtable.buffer);
@@ -84,9 +91,11 @@ function buildFormat6Subtable(firstCode: number, glyphIds: readonly number[]): U
   return subtable;
 }
 
-describe('format 6 (trimmed table mapping)', () => {
-  it('drives a font whose only subtable is a format 6 one', () => {
-    const font = parse(buildFontWithCmapSubtable(1, 0, buildFormat6Subtable(0x41, [11, 12, 13])));
+describe("format 6 (trimmed table mapping)", () => {
+  it("drives a font whose only subtable is a format 6 one", () => {
+    const font = parse(
+      buildFontWithCmapSubtable(1, 0, buildFormat6Subtable(0x41, [11, 12, 13])),
+    );
     const lookup = buildCmapLookup(font);
     expect(lookup).toBeDefined();
     expect(lookup!(0x41)).toBe(11);
@@ -94,16 +103,22 @@ describe('format 6 (trimmed table mapping)', () => {
     expect(lookup!(0x43)).toBe(13);
   });
 
-  it('maps nothing outside its own trimmed range, and treats an explicit glyph 0 as unmapped', () => {
-    const font = parse(buildFontWithCmapSubtable(1, 0, buildFormat6Subtable(0x41, [11, 0, 13])));
+  it("maps nothing outside its own trimmed range, and treats an explicit glyph 0 as unmapped", () => {
+    const font = parse(
+      buildFontWithCmapSubtable(1, 0, buildFormat6Subtable(0x41, [11, 0, 13])),
+    );
     const lookup = buildCmapLookup(font);
     expect(lookup!(0x40)).toBeUndefined(); // below firstCode
     expect(lookup!(0x44)).toBeUndefined(); // past the last entry
     expect(lookup!(0x42)).toBeUndefined(); // present, but mapped to .notdef
   });
 
-  it('reports a truncated format 6 subtable as unreadable rather than reading past it', () => {
-    const complete = buildFontWithCmapSubtable(1, 0, buildFormat6Subtable(0x41, [11, 12, 13]));
+  it("reports a truncated format 6 subtable as unreadable rather than reading past it", () => {
+    const complete = buildFontWithCmapSubtable(
+      1,
+      0,
+      buildFormat6Subtable(0x41, [11, 12, 13]),
+    );
     const truncated = complete.subarray(0, complete.length - 2);
     const clipped = new Uint8Array(truncated.length);
     clipped.set(truncated);
@@ -114,18 +129,23 @@ describe('format 6 (trimmed table mapping)', () => {
   });
 });
 
-describe('degrading on an unusable cmap', () => {
-  it('returns undefined for a font with no cmap table at all', () => {
+describe("degrading on an unusable cmap", () => {
+  it("returns undefined for a font with no cmap table at all", () => {
     const bytes = carlitoRegularBytes();
     const font = parse(bytes);
-    const withoutCmap: SfntFont = { bytes: font.bytes, tables: new Map([...font.tables].filter(([tag]) => tag !== 'cmap')) };
+    const withoutCmap: SfntFont = {
+      bytes: font.bytes,
+      tables: new Map([...font.tables].filter(([tag]) => tag !== "cmap")),
+    };
     expect(buildCmapLookup(withoutCmap)).toBeUndefined();
   });
 
-  it('returns undefined for a font whose only subtable is in a format this module does not read', () => {
+  it("returns undefined for a font whose only subtable is in a format this module does not read", () => {
     // Format 0 (byte encoding table): the original 1-byte Macintosh mapping, deliberately unread.
     const format0 = new Uint8Array(262);
     new DataView(format0.buffer).setUint16(2, format0.length);
-    expect(buildCmapLookup(parse(buildFontWithCmapSubtable(1, 0, format0)))).toBeUndefined();
+    expect(
+      buildCmapLookup(parse(buildFontWithCmapSubtable(1, 0, format0))),
+    ).toBeUndefined();
   });
 });

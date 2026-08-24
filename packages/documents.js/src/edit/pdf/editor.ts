@@ -1,11 +1,15 @@
-import type { LayoutMetadata } from 'document-schema.js';
-import type { LayoutDocument, ReadPdfOptions, WritePdfOptions } from 'pdf-codec';
-import { LAYOUT_FORMAT_VERSION, readPdf, writePdf } from 'pdf-codec';
-import { resolveMetadataTimestamps } from '../../model/metadata';
-import type { ClockPort } from '../../ports/clock';
-import { systemClock } from '../../ports/clock';
-import type { PageInit } from './page';
-import { buildPage, PdfPage } from './page';
+import type { LayoutMetadata } from "document-schema.js";
+import type {
+  LayoutDocument,
+  ReadPdfOptions,
+  WritePdfOptions,
+} from "pdf-codec";
+import { LAYOUT_FORMAT_VERSION, readPdf, writePdf } from "pdf-codec";
+import { resolveMetadataTimestamps } from "../../model/metadata";
+import type { ClockPort } from "../../ports/clock";
+import { systemClock } from "../../ports/clock";
+import type { PageInit } from "./page";
+import { buildPage, PdfPage } from "./page";
 
 // A live-view PDF editor over pdf-codec's own positioned-item model (LayoutDocument), NOT a content-stream/byte-level editor -- see this module's own package doc comment for the full rationale. `doc` is the ONE mutable LayoutDocument every PdfPage/PdfItem this editor hands out holds a live reference directly into; toBytes() runs writePdf(doc, options) fresh on every call, so there is nothing to keep in sync -- the document IS the working copy.
 //
@@ -27,12 +31,16 @@ export class PdfEditor {
 
   // Every page, in document order -- a fresh PdfPage wrapper every call, never cached, exactly matching every other editor family in this package (DocxEditor.paragraphs(), OdgEditor.pages()): each wrapper holds a live reference into the actual LayoutPage object inside doc.pages, so mutating through one and re-reading through a freshly obtained wrapper from a later call observes the same change.
   pages(): PdfPage[] {
-    return this.doc.pages.map((page) => new PdfPage(this.doc.pages, page, this.doc.images));
+    return this.doc.pages.map(
+      (page) => new PdfPage(this.doc.pages, page, this.doc.images),
+    );
   }
 
   page(index: number): PdfPage | undefined {
     const node = this.doc.pages[index];
-    return node === undefined ? undefined : new PdfPage(this.doc.pages, node, this.doc.images);
+    return node === undefined
+      ? undefined
+      : new PdfPage(this.doc.pages, node, this.doc.images);
   }
 
   appendPage(init?: PageInit): PdfPage {
@@ -60,7 +68,10 @@ export class PdfEditor {
 // Parses `bytes` via pdf-codec's own readPdf and wraps the result as the one live, mutable LayoutDocument this editor and every PdfPage/PdfItem it hands out share.
 //
 // SECURITY NOTE: if `bytes` is encrypted with the PDF standard security handler and an empty user password (the common "restrict editing, not reading" case), readPdf decrypts it transparently and this call succeeds with a perfectly ordinary-looking PdfEditor -- there is no field on the resulting document recording that this happened. toBytes() on the returned editor writes a plain, UNENCRYPTED PDF regardless, even though the source was encrypted. A caller that needs to preserve or re-apply the source's encryption must do so itself; this editor has no re-encryption path at all. A source requiring a real (non-empty) password throws PdfPasswordRequiredError, and one using an unsupported security handler throws PdfEncryptedError, both from readPdf itself before this function returns.
-export function openPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions): PdfEditor {
+export function openPdf(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: ReadPdfOptions,
+): PdfEditor {
   return new PdfEditor(readPdf(bytes, options));
 }
 
@@ -77,7 +88,9 @@ export function createPdf(options?: CreatePdfOptions): PdfEditor {
   const doc: LayoutDocument = {
     formatVersion: LAYOUT_FORMAT_VERSION,
     metadata,
-    pages: [buildPage({ widthPt: options?.widthPt, heightPt: options?.heightPt })],
+    pages: [
+      buildPage({ widthPt: options?.widthPt, heightPt: options?.heightPt }),
+    ],
     images: {},
   };
   return new PdfEditor(doc);

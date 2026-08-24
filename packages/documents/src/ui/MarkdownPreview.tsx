@@ -1,10 +1,36 @@
-import { Badge, Group, LoadingOverlay, Paper, Stack, Text } from '@mantine/core';
-import type { ContentBlock, ContentDocument, ContentParagraph } from 'documents.js';
-import type { ReactNode } from 'react';
+import {
+  Badge,
+  Group,
+  LoadingOverlay,
+  Paper,
+  Stack,
+  Text,
+} from "@mantine/core";
+import type {
+  ContentBlock,
+  ContentDocument,
+  ContentParagraph,
+} from "documents.js";
+import type { ReactNode } from "react";
 
-import { buildListForest, collectBlockGroups, HEADING_STYLE_PATTERN, HEADING_TAGS, renderImage, renderRuns, renderTable } from './contentBlocks';
-import { blockquote as blockquoteStyle, codeBlock as codeBlockStyle, heading as headingStyle, hr as hrStyle, list as listStyle, paragraph as paragraphStyle } from './contentBlocks.css';
-import { flexColumn, previewFrame } from './previewPanel.css';
+import {
+  buildListForest,
+  collectBlockGroups,
+  HEADING_STYLE_PATTERN,
+  HEADING_TAGS,
+  renderImage,
+  renderRuns,
+  renderTable,
+} from "./contentBlocks";
+import {
+  blockquote as blockquoteStyle,
+  codeBlock as codeBlockStyle,
+  heading as headingStyle,
+  hr as hrStyle,
+  list as listStyle,
+  paragraph as paragraphStyle,
+} from "./contentBlocks.css";
+import { flexColumn, previewFrame } from "./previewPanel.css";
 
 export interface MarkdownPreviewProps {
   label: string;
@@ -15,7 +41,13 @@ export interface MarkdownPreviewProps {
 }
 
 // Renders a markdown-sourced ContentDocument natively as HTML instead of round-tripping it through the PDF pipeline the way PdfPreview does for every other format -- markdown isn't paginated, so a print-layout PDF is a poor fit for it, and it sidesteps documents.js's own markdownToPdf entirely (see ExaDev/documents#1). The paragraph styleId/list.numId values consumed here are the small convention src/rpc/router.ts's normalizeMarkdownStyling rewrites markdown-codec's own private ones into -- never the raw "Heading1"/"md1:ordered@1" strings themselves, so this component has no dependency on markdown-codec's internal string formats.
-export function MarkdownPreview({ label, format, content, loading, error }: MarkdownPreviewProps) {
+export function MarkdownPreview({
+  label,
+  format,
+  content,
+  loading,
+  error,
+}: MarkdownPreviewProps) {
   return (
     <Stack gap={4} className={flexColumn}>
       <Group gap="xs">
@@ -26,7 +58,11 @@ export function MarkdownPreview({ label, format, content, loading, error }: Mark
           {format}
         </Badge>
       </Group>
-      <Paper withBorder pos="relative" className={previewFrame({ scroll: true, padded: true })}>
+      <Paper
+        withBorder
+        pos="relative"
+        className={previewFrame({ scroll: true, padded: true })}
+      >
         <LoadingOverlay visible={loading === true} />
         {error !== undefined ? (
           <Group h="100%" justify="center">
@@ -54,7 +90,7 @@ function renderRunsMd(runs: Parameters<typeof renderRuns>[0]): ReactNode {
 }
 
 function renderContentDocument(content: ContentDocument): ReactNode {
-  if (content.kind !== 'wordprocessing') return null;
+  if (content.kind !== "wordprocessing") return null;
   return content.sections.map((section, sectionIndex) => (
     <div key={sectionIndex}>{renderBlockGroups(section.blocks)}</div>
   ));
@@ -62,7 +98,7 @@ function renderContentDocument(content: ContentDocument): ReactNode {
 
 function renderBlockGroups(blocks: readonly ContentBlock[]): ReactNode {
   return collectBlockGroups(blocks).map((group, index) =>
-    group.kind === 'listGroup' ? (
+    group.kind === "listGroup" ? (
       <div key={index}>{renderListNodes(buildListForest(group.items))}</div>
     ) : (
       <div key={index}>{renderBlock(group)}</div>
@@ -71,29 +107,34 @@ function renderBlockGroups(blocks: readonly ContentBlock[]): ReactNode {
 }
 
 function renderBlock(block: ContentBlock): ReactNode {
-  if (block.kind === 'paragraph') return renderParagraph(block);
-  if (block.kind === 'table') return renderTable(block, renderBlockGroups);
-  if (block.kind === 'image') return renderImage(block);
+  if (block.kind === "paragraph") return renderParagraph(block);
+  if (block.kind === "table") return renderTable(block, renderBlockGroups);
+  if (block.kind === "image") return renderImage(block);
   return null;
 }
 
 function renderParagraph(paragraph: ContentParagraph): ReactNode {
-  const headingMatch = HEADING_STYLE_PATTERN.exec(paragraph.styleId ?? '');
+  const headingMatch = HEADING_STYLE_PATTERN.exec(paragraph.styleId ?? "");
   if (headingMatch !== null) {
     const Tag = HEADING_TAGS[Number(headingMatch[1])];
-    if (Tag !== undefined) return <Tag className={headingStyle}>{renderRunsMd(paragraph.runs)}</Tag>;
+    if (Tag !== undefined)
+      return <Tag className={headingStyle}>{renderRunsMd(paragraph.runs)}</Tag>;
   }
-  if (paragraph.styleId === 'quote') {
-    return <blockquote className={blockquoteStyle}>{renderRunsMd(paragraph.runs)}</blockquote>;
+  if (paragraph.styleId === "quote") {
+    return (
+      <blockquote className={blockquoteStyle}>
+        {renderRunsMd(paragraph.runs)}
+      </blockquote>
+    );
   }
-  if (paragraph.styleId === 'code-block') {
+  if (paragraph.styleId === "code-block") {
     return (
       <pre className={codeBlockStyle}>
-        <code>{paragraph.runs.map((run) => run.text).join('')}</code>
+        <code>{paragraph.runs.map((run) => run.text).join("")}</code>
       </pre>
     );
   }
-  if (paragraph.styleId === 'horizontal-rule') {
+  if (paragraph.styleId === "horizontal-rule") {
     return <hr className={hrStyle} />;
   }
   return <p className={paragraphStyle}>{renderRunsMd(paragraph.runs)}</p>;

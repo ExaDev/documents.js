@@ -10,27 +10,71 @@
 //
 // ContentPageBreak and ContentEmbeddedObjectBlock have no markdown representation of any kind (this package's own src/lower never produces either, but ContentDocument is a shared pivot a caller can construct directly) -- both are silently dropped, contributing no output at all; this is not one of this package's own named mapping gaps (there was never a markdown construct to lose fidelity from), so it carries no diagnostic code.
 
-import type { ConstructDescriptor, ContentBlock, ContentConstructEnd, ContentConstructStart, ContentDocument, ContentParagraph } from 'document-schema.js';
-import { clampHeadingLevel, findConstructMarkerImbalance, findRunConstructFault } from 'document-schema.js';
-import { MarkdownInvalidRunConstructExtentError, MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKindError } from '../diagnostics/diagnostics';
-import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
-import { MarkdownDiagnosticCodes, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
-import { DEFAULT_BULLET_LIST_MARKER, DEFAULT_CODE_FENCE_CHAR, DEFAULT_EMPHASIS_MARKER, DEFAULT_HEADING_STYLE, DEFAULT_LINE_ENDING, DEFAULT_ORDERED_LIST_DELIMITER, DEFAULT_THEMATIC_BREAK_CHAR } from '../defaults/defaults';
-import { isValidFootnoteLabel } from '../inline/footnote';
-import type { MarkdownHeadingStyle, WriteMarkdownOptions } from '../options/options';
-import type { ListNumIdInfo } from '../shared/list-id';
-import { parseListNumId } from '../shared/list-id';
-import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID, QUOTE_INDENT_PT, QUOTE_STYLE_ID, TASK_CHECKBOX_CHECKED, TASK_CHECKBOX_UNCHECKED, parseHeadingStyleId } from '../shared/style-constants';
-import { emitFrontMatter } from './front-matter';
-import { emitImage } from './image';
-import type { InlineEmitContext } from './inline';
-import { emitRuns, escapeLinkDestination, escapeMarkdownText, renderLinkTitle } from './inline';
-import type { TableEmitContext } from './table';
-import { emitTable } from './table';
+import type {
+  ConstructDescriptor,
+  ContentBlock,
+  ContentConstructEnd,
+  ContentConstructStart,
+  ContentDocument,
+  ContentParagraph,
+} from "document-schema.js";
+import {
+  clampHeadingLevel,
+  findConstructMarkerImbalance,
+  findRunConstructFault,
+} from "document-schema.js";
+import {
+  MarkdownInvalidRunConstructExtentError,
+  MarkdownUnbalancedConstructMarkersError,
+  MarkdownUnsupportedDocumentKindError,
+} from "../diagnostics/diagnostics";
+import type { MarkdownDiagnosticSink } from "../diagnostics/diagnostics";
+import {
+  MarkdownDiagnosticCodes,
+  NOOP_MARKDOWN_DIAGNOSTIC_SINK,
+} from "../diagnostics/diagnostics";
+import {
+  DEFAULT_BULLET_LIST_MARKER,
+  DEFAULT_CODE_FENCE_CHAR,
+  DEFAULT_EMPHASIS_MARKER,
+  DEFAULT_HEADING_STYLE,
+  DEFAULT_LINE_ENDING,
+  DEFAULT_ORDERED_LIST_DELIMITER,
+  DEFAULT_THEMATIC_BREAK_CHAR,
+} from "../defaults/defaults";
+import { isValidFootnoteLabel } from "../inline/footnote";
+import type {
+  MarkdownHeadingStyle,
+  WriteMarkdownOptions,
+} from "../options/options";
+import type { ListNumIdInfo } from "../shared/list-id";
+import { parseListNumId } from "../shared/list-id";
+import {
+  CODE_BLOCK_STYLE_ID,
+  HORIZONTAL_RULE_STYLE_ID,
+  HTML_PREFORMATTED_STYLE_ID,
+  MATH_BLOCK_STYLE_ID,
+  QUOTE_INDENT_PT,
+  QUOTE_STYLE_ID,
+  TASK_CHECKBOX_CHECKED,
+  TASK_CHECKBOX_UNCHECKED,
+  parseHeadingStyleId,
+} from "../shared/style-constants";
+import { emitFrontMatter } from "./front-matter";
+import { emitImage } from "./image";
+import type { InlineEmitContext } from "./inline";
+import {
+  emitRuns,
+  escapeLinkDestination,
+  escapeMarkdownText,
+  renderLinkTitle,
+} from "./inline";
+import type { TableEmitContext } from "./table";
+import { emitTable } from "./table";
 
 // Whether an image destination is itself an embedded-bytes spelling -- the one case where re-emitting the destination verbatim would re-embed the very bytes WriteMarkdownOptions.images: false asks to omit.
 function isDataUri(destination: string): boolean {
-  return destination.startsWith('data:');
+  return destination.startsWith("data:");
 }
 
 interface EmitContext extends TableEmitContext {
@@ -50,15 +94,17 @@ interface EmitContext extends TableEmitContext {
 
 // setext's own grammar (spec 0.31.2, "Setext headings") only distinguishes two levels (a run of '=' for level 1, of '-' for level 2) -- there is no setext spelling for level 3 and deeper, so headingStyle: 'setext' still falls back to ATX there.
 const MAX_SETEXT_LEVEL = 2;
-const SETEXT_LEVEL_1_CHAR = '=';
-const SETEXT_LEVEL_2_CHAR = '-';
+const SETEXT_LEVEL_1_CHAR = "=";
+const SETEXT_LEVEL_2_CHAR = "-";
 const MIN_SETEXT_UNDERLINE_LENGTH = 1;
 
 function renderSetextHeading(level: number, text: string): string {
   const underlineChar = level === 1 ? SETEXT_LEVEL_1_CHAR : SETEXT_LEVEL_2_CHAR;
   // A setext underline's own length has no semantic meaning beyond "one or more" -- matching the heading text's own rendered length keeps the output visually tidy without claiming any significance for the exact count.
-  const firstLine = text.split('\n')[0] ?? '';
-  const underline = underlineChar.repeat(Math.max(MIN_SETEXT_UNDERLINE_LENGTH, firstLine.length));
+  const firstLine = text.split("\n")[0] ?? "";
+  const underline = underlineChar.repeat(
+    Math.max(MIN_SETEXT_UNDERLINE_LENGTH, firstLine.length),
+  );
   return `${text}\n${underline}`;
 }
 
@@ -80,16 +126,27 @@ function longestRunLength(text: string, char: string): number {
 }
 
 function codeFenceFor(literal: string, fenceChar: string): string {
-  return fenceChar.repeat(Math.max(MIN_CODE_FENCE_LENGTH, longestRunLength(literal, fenceChar) + 1));
+  return fenceChar.repeat(
+    Math.max(MIN_CODE_FENCE_LENGTH, longestRunLength(literal, fenceChar) + 1),
+  );
 }
 
-const QUOTABLE_STYLE_IDS: ReadonlySet<string> = new Set([QUOTE_STYLE_ID, CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID]);
+const QUOTABLE_STYLE_IDS: ReadonlySet<string> = new Set([
+  QUOTE_STYLE_ID,
+  CODE_BLOCK_STYLE_ID,
+  HORIZONTAL_RULE_STYLE_ID,
+  HTML_PREFORMATTED_STYLE_ID,
+  MATH_BLOCK_STYLE_ID,
+]);
 
 function isQuotableStyle(styleId: string | undefined): boolean {
   if (styleId === undefined) {
     return false;
   }
-  return QUOTABLE_STYLE_IDS.has(styleId) || parseHeadingStyleId(styleId) !== undefined;
+  return (
+    QUOTABLE_STYLE_IDS.has(styleId) ||
+    parseHeadingStyleId(styleId) !== undefined
+  );
 }
 
 function quoteDepthOf(paragraph: ContentParagraph): number {
@@ -100,100 +157,148 @@ function quoteDepthOf(paragraph: ContentParagraph): number {
 }
 
 // One paragraph's OWN construct-specific rendering -- heading/code-block/rule/preformatted-HTML/plain -- with no blockquote or list-marker wrapping applied yet (renderParagraph below layers those on afterwards, uniformly, regardless of which of these five shapes produced the body).
-function renderParagraphBody(paragraph: ContentParagraph, context: EmitContext): string {
+function renderParagraphBody(
+  paragraph: ContentParagraph,
+  context: EmitContext,
+): string {
   if (paragraph.styleId === HORIZONTAL_RULE_STYLE_ID) {
     return context.thematicBreakChar.repeat(3);
   }
   if (paragraph.styleId === CODE_BLOCK_STYLE_ID) {
-    const literal = paragraph.runs.map((run) => run.text).join('');
+    const literal = paragraph.runs.map((run) => run.text).join("");
     const fence = codeFenceFor(literal, context.codeFenceChar);
     // The inverse of src/lower/lower.ts's splitInfoString: the language word and the quarantined remainder rejoin as the fence's info line, one space between them. Both halves re-emit verbatim -- the language is a source-format identifier, not something to re-spell, and the remainder is this package's own markdown residue, which a same-format writer re-emits as-is (the residue channel's restorable tier).
-    const remainder = paragraph.source?.format === 'markdown' ? paragraph.source.xml : undefined;
-    const info = [paragraph.codeLanguage, remainder].filter((part) => part !== undefined && part.length > 0).join(' ');
+    const remainder =
+      paragraph.source?.format === "markdown"
+        ? paragraph.source.xml
+        : undefined;
+    const info = [paragraph.codeLanguage, remainder]
+      .filter((part) => part !== undefined && part.length > 0)
+      .join(" ");
     const opening = info.length > 0 ? `${fence} ${info}` : fence;
     // An empty code block ("```\n```\n", zero content lines) must not gain a spurious blank content line here -- the middle `\n${literal}\n` template below would otherwise insert one, which a reparse reads back as ONE literal blank line of content rather than none at all.
-    return literal.length === 0 ? `${opening}\n${fence}` : `${opening}\n${literal}\n${fence}`;
+    return literal.length === 0
+      ? `${opening}\n${fence}`
+      : `${opening}\n${literal}\n${fence}`;
   }
   if (paragraph.styleId === HTML_PREFORMATTED_STYLE_ID) {
     // The quarantined original wins when present (src/lower/lower.ts's rawHtml carry): the runs hold the block-separator-trimmed literal, the residue the verbatim source, and a same-format writer re-emits its own residue as-is.
-    return paragraph.source?.format === 'markdown' ? paragraph.source.xml : paragraph.runs.map((run) => run.text).join('');
+    return paragraph.source?.format === "markdown"
+      ? paragraph.source.xml
+      : paragraph.runs.map((run) => run.text).join("");
   }
   if (paragraph.styleId === MATH_BLOCK_STYLE_ID) {
     // A fresh $$ pair regenerated around the preserved literal -- src/lower/lower.ts's own lowerMathBlock never kept the original delimiter lines either, exactly mirroring how a fenced code block regenerates its own fence (codeFenceFor) rather than preserving the source fence's exact character/length.
-    const literal = paragraph.runs.map((run) => run.text).join('');
+    const literal = paragraph.runs.map((run) => run.text).join("");
     return `$$\n${literal}\n$$`;
   }
-  const headingLevel = paragraph.styleId === undefined ? undefined : parseHeadingStyleId(paragraph.styleId);
+  const headingLevel =
+    paragraph.styleId === undefined
+      ? undefined
+      : parseHeadingStyleId(paragraph.styleId);
   if (headingLevel !== undefined) {
     const level = clampHeadingLevel(headingLevel);
     if (level !== headingLevel) {
-      context.sink({ code: MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED, severity: 'info', message: `heading level ${String(headingLevel)} exceeds ATX's own six-"#" ceiling and is clamped to ${String(level)}` });
+      context.sink({
+        code: MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED,
+        severity: "info",
+        message: `heading level ${String(headingLevel)} exceeds ATX's own six-"#" ceiling and is clamped to ${String(level)}`,
+      });
     }
     const text = emitRuns(paragraph.runs, context, paragraph.constructs);
-    if (context.headingStyle === 'setext' && level <= MAX_SETEXT_LEVEL) {
+    if (context.headingStyle === "setext" && level <= MAX_SETEXT_LEVEL) {
       return renderSetextHeading(level, text);
     }
-    return `${'#'.repeat(level)} ${text}`;
+    return `${"#".repeat(level)} ${text}`;
   }
   return emitRuns(paragraph.runs, context, paragraph.constructs);
 }
 
 // Applies blockquote wrapping ('> ' repeated per recovered nesting level, on every line of the body) on top of renderParagraphBody's own construct-specific rendering -- see this module's own top-of-file note for exactly which styleIds this applies to, and MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED for the ones it does not. A paragraph already inside a blockquote-rendered division construct does NOT re-enter here: the division's own rendering prefixes '> ' per level, and reading the indent back as depth on top of that would double-count the same fact.
-function renderParagraph(paragraph: ContentParagraph, context: EmitContext): string {
+function renderParagraph(
+  paragraph: ContentParagraph,
+  context: EmitContext,
+): string {
   const body = renderParagraphBody(paragraph, context);
   const depth = context.divisionDepth > 0 ? 0 : quoteDepthOf(paragraph);
   if (depth === 0) {
     return body;
   }
   if (!isQuotableStyle(paragraph.styleId)) {
-    context.sink({ code: MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED, severity: 'info', message: `paragraph carries indentLeftPt (${String(paragraph.indentLeftPt)}pt) with no styleId this package recognises as quotable; the indent has no other markdown representation and is dropped` });
+    context.sink({
+      code: MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED,
+      severity: "info",
+      message: `paragraph carries indentLeftPt (${String(paragraph.indentLeftPt)}pt) with no styleId this package recognises as quotable; the indent has no other markdown representation and is dropped`,
+    });
     return body;
   }
-  const prefix = '> '.repeat(depth);
+  const prefix = "> ".repeat(depth);
   return body
-    .split('\n')
+    .split("\n")
     .map((line) => `${prefix}${line}`)
-    .join('\n');
+    .join("\n");
 }
 
 // Every ContentBlock kind that renders as content in its own right -- the whole union MINUS the two construct boundary markers, which are structure rather than content and are consumed by groupConstructItems below before any block reaches here. Spelled as a type rather than as two unreachable switch arms so the compiler, not a comment, is what guarantees a marker never arrives.
-type RenderableBlock = Exclude<ContentBlock, ContentConstructStart | ContentConstructEnd>;
+type RenderableBlock = Exclude<
+  ContentBlock,
+  ContentConstructStart | ContentConstructEnd
+>;
 
-function renderTopLevelBlock(block: RenderableBlock, context: EmitContext): string {
+function renderTopLevelBlock(
+  block: RenderableBlock,
+  context: EmitContext,
+): string {
   switch (block.kind) {
-    case 'paragraph':
+    case "paragraph":
       return renderParagraph(block, context);
-    case 'table':
+    case "table":
       return emitTable(block, context);
-    case 'image':
+    case "image":
       return emitImage(block, context.embedImages);
-    case 'embeddedObject':
+    case "embeddedObject":
       // The inverse of src/lower/lower.ts's lowerMathBlock: an embedded FORMULA whose presentation layer carries LaTeX re-renders as a fresh $$ pair around that verbatim string (an empty LaTeX spelling an empty block, matching how the old MathBlock paragraph emitted one). Any other embedded object -- another document kind, or a formula with no presentation LaTeX (an ODF equation carrying only MathML) -- has no markdown spelling at all and is silently dropped, as it always was: this package never had a construct to lose fidelity from there.
-      if (block.objectKind === 'formula' && block.document.kind === 'formula' && block.document.formula.presentation !== undefined) {
+      if (
+        block.objectKind === "formula" &&
+        block.document.kind === "formula" &&
+        block.document.formula.presentation !== undefined
+      ) {
         const latex = block.document.formula.presentation.latex;
-        return latex.length === 0 ? '$$\n$$' : `$$\n${latex}\n$$`;
+        return latex.length === 0 ? "$$\n$$" : `$$\n${latex}\n$$`;
       }
-      return '';
-    case 'pageBreak':
-      return '';
+      return "";
+    case "pageBreak":
+      return "";
   }
 }
 
 // --- List rendering: every ContentParagraph carrying .list is its own list item (see src/lower/lower.ts's own top-of-file note on why ContentListMembership cannot distinguish a continuation paragraph from a fresh sibling item -- this package resolves that ambiguity the same way on both sides, consistently). ---
 
 // numId undefined is a depth-only ContentListMembership -- document-schema.js 3.3.0+ makes numId optional for sources that carry a level but no numbering identity of their own (OOXML drawing paragraphs' a:pPr/@lvl being the motivating case) -- and it lands in the same documented cross-format fallback as a foreign numId string: with no marker type, task-ness, or loose-ness to recover, the item renders as an ordinary, tight, non-task bullet at its own level.
-function listInfoFor(numId: string | undefined, context: EmitContext): ListNumIdInfo | undefined {
+function listInfoFor(
+  numId: string | undefined,
+  context: EmitContext,
+): ListNumIdInfo | undefined {
   if (numId === undefined) {
     if (!context.reportedAbsentNumIdFallback) {
       context.reportedAbsentNumIdFallback = true;
-      context.sink({ code: MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK, severity: 'info', message: 'a list membership with no numId of its own (a depth-only ContentListMembership) has no marker type, task-ness, or loose-ness to recover and falls back to an ordinary, tight, non-task bullet list' });
+      context.sink({
+        code: MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK,
+        severity: "info",
+        message:
+          "a list membership with no numId of its own (a depth-only ContentListMembership) has no marker type, task-ness, or loose-ness to recover and falls back to an ordinary, tight, non-task bullet list",
+      });
     }
     return undefined;
   }
   const info = parseListNumId(numId);
   if (info === undefined && !context.reportedFallbackNumIds.has(numId)) {
     context.reportedFallbackNumIds.add(numId);
-    context.sink({ code: MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK, severity: 'info', message: `numId "${numId}" was not minted by this package's own src/lower and falls back to an ordinary, tight, non-task bullet list` });
+    context.sink({
+      code: MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK,
+      severity: "info",
+      message: `numId "${numId}" was not minted by this package's own src/lower and falls back to an ordinary, tight, non-task bullet list`,
+    });
   }
   return info;
 }
@@ -202,12 +307,17 @@ function listInfoFor(numId: string | undefined, context: EmitContext): ListNumId
 function stripCheckboxRun(item: ContentParagraph): ContentParagraph {
   const first = item.runs[0];
   const checked = first?.text.startsWith(`${TASK_CHECKBOX_CHECKED} `);
-  const glyphPrefix = checked ? `${TASK_CHECKBOX_CHECKED} ` : `${TASK_CHECKBOX_UNCHECKED} `;
+  const glyphPrefix = checked
+    ? `${TASK_CHECKBOX_CHECKED} `
+    : `${TASK_CHECKBOX_UNCHECKED} `;
   if (!first?.text.startsWith(glyphPrefix)) {
     return item;
   }
   const strippedText = first.text.slice(glyphPrefix.length);
-  const runs = strippedText.length === 0 ? item.runs.slice(1) : [{ ...first, text: strippedText }, ...item.runs.slice(1)];
+  const runs =
+    strippedText.length === 0
+      ? item.runs.slice(1)
+      : [{ ...first, text: strippedText }, ...item.runs.slice(1)];
   return { ...item, runs };
 }
 
@@ -217,21 +327,27 @@ interface FirstBlockCheckbox {
   readonly stripGlyph: boolean;
 }
 
-function firstBlockCheckbox(first: ContentParagraph, taskNumId: boolean): FirstBlockCheckbox {
+function firstBlockCheckbox(
+  first: ContentParagraph,
+  taskNumId: boolean,
+): FirstBlockCheckbox {
   if (first.list?.checked !== undefined) {
-    return { checkboxText: first.list.checked ? '[x] ' : '[ ] ', stripGlyph: false };
+    return {
+      checkboxText: first.list.checked ? "[x] " : "[ ] ",
+      stripGlyph: false,
+    };
   }
   if (!taskNumId) {
-    return { checkboxText: '', stripGlyph: false };
+    return { checkboxText: "", stripGlyph: false };
   }
-  const leading = first.runs[0]?.text ?? '';
+  const leading = first.runs[0]?.text ?? "";
   if (leading.startsWith(`${TASK_CHECKBOX_CHECKED} `)) {
-    return { checkboxText: '[x] ', stripGlyph: true };
+    return { checkboxText: "[x] ", stripGlyph: true };
   }
   if (leading.startsWith(`${TASK_CHECKBOX_UNCHECKED} `)) {
-    return { checkboxText: '[ ] ', stripGlyph: true };
+    return { checkboxText: "[ ] ", stripGlyph: true };
   }
-  return { checkboxText: '', stripGlyph: false };
+  return { checkboxText: "", stripGlyph: false };
 }
 
 interface RenderedListMarker {
@@ -241,10 +357,15 @@ interface RenderedListMarker {
   readonly bareLength: number;
 }
 
-function renderListItemMarker(numId: string | undefined, info: ListNumIdInfo | undefined, checkboxText: string, context: EmitContext): RenderedListMarker {
+function renderListItemMarker(
+  numId: string | undefined,
+  info: ListNumIdInfo | undefined,
+  checkboxText: string,
+  context: EmitContext,
+): RenderedListMarker {
   // Only a parsed numId string can carry type 'ordered', so the ordered-counter key is present exactly when this branch is live.
-  if (info?.type === 'ordered' && numId !== undefined) {
-    const next = context.orderedCounters.get(numId) ?? (info.start ?? 1);
+  if (info?.type === "ordered" && numId !== undefined) {
+    const next = context.orderedCounters.get(numId) ?? info.start ?? 1;
     context.orderedCounters.set(numId, next + 1);
     const bare = `${String(next)}${context.orderedDelimiter} `;
     return { full: `${bare}${checkboxText}`, bareLength: bare.length };
@@ -260,7 +381,10 @@ interface ListItemPart {
 }
 
 // Renders one contiguous, flat run of .list-carrying paragraphs -- possibly spanning several sibling top-level lists back to back, and arbitrarily nested sub-lists (a paragraph whose own level is deeper than its predecessor's is that predecessor's own nested list content, recursed into here). One ITEM is the run of same-level paragraphs sharing one itemId -- the write-side inverse of src/lower/lower.ts's minted item identity -- so a multi-block item renders one marker line with every later block continued on the continuation indent after a blank line (the only spacing a reparse reads back as separate blocks inside one item). A membership with no itemId at all is the cross-format shape: each paragraph is its own item, exactly as this writer always treated them. Loose/tight spacing between two SIBLING items sharing the same numId is read from that numId's own `loose` flag; a boundary between two DIFFERENT numIds always gets a blank line, matching how two genuinely separate lists always render with visual separation.
-function renderListRegion(items: readonly ContentParagraph[], context: EmitContext): string {
+function renderListRegion(
+  items: readonly ContentParagraph[],
+  context: EmitContext,
+): string {
   const parts: ListItemPart[] = [];
   let index = 0;
   while (index < items.length) {
@@ -275,7 +399,10 @@ function renderListRegion(items: readonly ContentParagraph[], context: EmitConte
     if (itemId !== undefined) {
       while (ownEnd < items.length) {
         const candidate = items[ownEnd];
-        if (candidate?.list?.level !== level || candidate.list.itemId !== itemId) {
+        if (
+          candidate?.list?.level !== level ||
+          candidate.list.itemId !== itemId
+        ) {
           break;
         }
         ownEnd += 1;
@@ -284,7 +411,10 @@ function renderListRegion(items: readonly ContentParagraph[], context: EmitConte
     const ownBlocks = items.slice(index, ownEnd);
 
     let lookahead = ownEnd;
-    while (lookahead < items.length && (items[lookahead]?.list?.level ?? -1) > level) {
+    while (
+      lookahead < items.length &&
+      (items[lookahead]?.list?.level ?? -1) > level
+    ) {
       lookahead += 1;
     }
     const nestedItems = items.slice(ownEnd, lookahead);
@@ -293,24 +423,33 @@ function renderListRegion(items: readonly ContentParagraph[], context: EmitConte
     if (first === undefined) {
       break;
     }
-    const { checkboxText, stripGlyph } = firstBlockCheckbox(first, info?.task === true);
+    const { checkboxText, stripGlyph } = firstBlockCheckbox(
+      first,
+      info?.task === true,
+    );
     const marker = renderListItemMarker(numId, info, checkboxText, context);
-    const indent = ' '.repeat(marker.bareLength);
-    const bodyLines = renderParagraphBody(stripGlyph ? stripCheckboxRun(first) : first, context).split('\n');
-    const [firstLine = '', ...restLines] = bodyLines;
-    let text = [`${marker.full}${firstLine}`, ...restLines.map((line) => `${indent}${line}`)].join('\n');
+    const indent = " ".repeat(marker.bareLength);
+    const bodyLines = renderParagraphBody(
+      stripGlyph ? stripCheckboxRun(first) : first,
+      context,
+    ).split("\n");
+    const [firstLine = "", ...restLines] = bodyLines;
+    let text = [
+      `${marker.full}${firstLine}`,
+      ...restLines.map((line) => `${indent}${line}`),
+    ].join("\n");
     for (const extra of ownBlocks.slice(1)) {
       const rendered = renderParagraphBody(extra, context)
-        .split('\n')
+        .split("\n")
         .map((line) => (line.length === 0 ? line : `${indent}${line}`))
-        .join('\n');
+        .join("\n");
       text += `\n\n${rendered}`;
     }
     if (nestedItems.length > 0) {
       const nested = renderListRegion(nestedItems, context)
-        .split('\n')
+        .split("\n")
         .map((line) => (line.length === 0 ? line : `${indent}${line}`))
-        .join('\n');
+        .join("\n");
       text += `\n${nested}`;
     }
 
@@ -318,13 +457,16 @@ function renderListRegion(items: readonly ContentParagraph[], context: EmitConte
     index = lookahead;
   }
 
-  let out = '';
+  let out = "";
   for (const [partIndex, part] of parts.entries()) {
     if (partIndex > 0) {
       const previous = parts[partIndex - 1]!;
       const sameList = previous.numId === part.numId;
-      const loose = sameList && previous.numId !== undefined && (parseListNumId(previous.numId)?.loose ?? false);
-      out += sameList && !loose ? '\n' : '\n\n';
+      const loose =
+        sameList &&
+        previous.numId !== undefined &&
+        (parseListNumId(previous.numId)?.loose ?? false);
+      out += sameList && !loose ? "\n" : "\n\n";
     }
     out += part.text;
   }
@@ -342,11 +484,14 @@ interface ConstructItem {
 }
 
 function isConstructItem(item: EmitItem): item is ConstructItem {
-  return 'descriptor' in item;
+  return "descriptor" in item;
 }
 
 // Bracket matching, per document-schema.js's own contract: a constructEnd closes the nearest preceding still-open constructStart in the SAME block list, and the blocks between them are that construct's extent. emitMarkdown validates the whole list's balance up front (findConstructMarkerImbalance -- the one shared definition of that check, which this writer, every sibling codec, and documents.js's decompose all have to agree on exactly), so by the time this runs a closing marker for every open one is known to exist.
-function groupConstructItems(blocks: readonly ContentBlock[], start: number): { readonly items: EmitItem[]; readonly next: number } {
+function groupConstructItems(
+  blocks: readonly ContentBlock[],
+  start: number,
+): { readonly items: EmitItem[]; readonly next: number } {
   const items: EmitItem[] = [];
   let index = start;
   while (index < blocks.length) {
@@ -355,10 +500,10 @@ function groupConstructItems(blocks: readonly ContentBlock[], start: number): { 
       break;
     }
     index += 1;
-    if (block.kind === 'constructEnd') {
+    if (block.kind === "constructEnd") {
       return { items, next: index };
     }
-    if (block.kind === 'constructStart') {
+    if (block.kind === "constructStart") {
       const nested = groupConstructItems(blocks, index);
       items.push({ descriptor: block.descriptor, children: nested.items });
       index = nested.next;
@@ -378,9 +523,12 @@ function renderFootnoteDefinition(name: string, body: string): string {
   if (body.length === 0) {
     return marker;
   }
-  const indent = ' '.repeat(FOOTNOTE_CONTINUATION_INDENT);
-  const [firstLine = '', ...restLines] = body.split('\n');
-  return [`${marker} ${firstLine}`, ...restLines.map((line) => (line.length === 0 ? line : `${indent}${line}`))].join('\n');
+  const indent = " ".repeat(FOOTNOTE_CONTINUATION_INDENT);
+  const [firstLine = "", ...restLines] = body.split("\n");
+  return [
+    `${marker} ${firstLine}`,
+    ...restLines.map((line) => (line.length === 0 ? line : `${indent}${line}`)),
+  ].join("\n");
 }
 
 // A construct markdown has a syntax for renders as that syntax; one it does not is TRANSPARENT -- its extent still renders in place, and only the construct's own identity is lost. That is the correct degrade rather than dropping the extent: a ContentDocument reaching this writer from another codec (an odt division, a docx content control, a tracked-change wrapper) carries real content inside markers markdown cannot spell, and dropping the wrapper's content along with the wrapper would lose the document, not just the construct.
@@ -388,47 +536,69 @@ function renderFootnoteDefinition(name: string, body: string): string {
 // `anchor` has a markdown spelling for its footnote arm, and `link` for exactly one shape: the titled resolved image src/lower/lower.ts brackets with a pair -- `![alt](dest "title")`, the destination restored verbatim from the descriptor's target instead of re-embedded as a data: URI. Everything else (a bookmark, an endnote, a comment, an internal-target link, any other descriptor kind) has no CommonMark or GFM syntax at all.
 function renderConstruct(item: ConstructItem, context: EmitContext): string {
   const { descriptor } = item;
-  if (descriptor.kind === 'anchor' && descriptor.anchorType === 'footnote') {
+  if (descriptor.kind === "anchor" && descriptor.anchorType === "footnote") {
     const body = renderItems(item.children, context);
     if (isValidFootnoteLabel(descriptor.name)) {
       return renderFootnoteDefinition(descriptor.name, body);
     }
-    context.sink({ code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED, severity: 'info', message: `a footnote anchor's own name "${descriptor.name}" cannot be spelled as a "[^label]:" marker (whitespace or "]" would reparse as something else); its own extent still renders in place, but the construct itself is not represented` });
+    context.sink({
+      code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      severity: "info",
+      message: `a footnote anchor's own name "${descriptor.name}" cannot be spelled as a "[^label]:" marker (whitespace or "]" would reparse as something else); its own extent still renders in place, but the construct itself is not represented`,
+    });
     return body;
   }
-  if (descriptor.kind === 'division') {
+  if (descriptor.kind === "division") {
     // The blockquote spelling is gated on this package's own dual carry, not on the descriptor alone: a division whose wrapped paragraphs carry the quote indent is a blockquote this package's own read side minted (pair for the boundary, indent for the materialised formatting -- see src/lower/lower.ts's lowerBlockquote), and it renders as '> ' on every line with a bare '>' holding blank lines open. A division whose paragraphs carry no such indent is a FOREIGN one -- an ODF text:section, a tagged-PDF /Sect -- and renders transparently below: a named section is not a markdown blockquote, and rendering it as one would invent a construct the source never had. Non-paragraph children (a table, an image) carry no indent either way and do not vote; nested construct children defer to their own gate.
     const materialised = item.children.every((child) => {
       if (isConstructItem(child)) {
         return true;
       }
-      return child.block.kind !== 'paragraph' || (child.block.indentLeftPt !== undefined && child.block.indentLeftPt >= QUOTE_INDENT_PT);
+      return (
+        child.block.kind !== "paragraph" ||
+        (child.block.indentLeftPt !== undefined &&
+          child.block.indentLeftPt >= QUOTE_INDENT_PT)
+      );
     });
     if (materialised) {
       context.divisionDepth += 1;
       const body = renderItems(item.children, context);
       context.divisionDepth -= 1;
       return body
-        .split('\n')
-        .map((line) => (line.length === 0 ? '>' : `> ${line}`))
-        .join('\n');
+        .split("\n")
+        .map((line) => (line.length === 0 ? ">" : `> ${line}`))
+        .join("\n");
     }
   }
-  if (descriptor.kind === 'link' && descriptor.target.kind === 'external') {
+  if (descriptor.kind === "link" && descriptor.target.kind === "external") {
     // The mint condition is exact -- a pair around precisely one image block, the shape this package's own read side mints. A link construct of any other shape (an annotated block extent from another codec, a run-level pair flattened into a block list) renders transparently below rather than being guessed at.
-    const onlyChild = item.children.length === 1 && !isConstructItem(item.children[0]!) ? item.children[0]!.block : undefined;
-    if (onlyChild?.kind === 'image' && !isDataUri(descriptor.target.uri)) {
-      const alt = escapeMarkdownText(onlyChild.altText ?? '');
-      return `![${alt}](${escapeLinkDestination(descriptor.target.uri)}${descriptor.title === undefined ? '' : ` "${renderLinkTitle(descriptor.title)}"`})`;
+    const onlyChild =
+      item.children.length === 1 && !isConstructItem(item.children[0]!)
+        ? item.children[0]!.block
+        : undefined;
+    if (onlyChild?.kind === "image" && !isDataUri(descriptor.target.uri)) {
+      const alt = escapeMarkdownText(onlyChild.altText ?? "");
+      return `![${alt}](${escapeLinkDestination(descriptor.target.uri)}${descriptor.title === undefined ? "" : ` "${renderLinkTitle(descriptor.title)}"`})`;
     }
-    if (onlyChild?.kind === 'image' && isDataUri(descriptor.target.uri) && !context.embedImages) {
+    if (
+      onlyChild?.kind === "image" &&
+      isDataUri(descriptor.target.uri) &&
+      !context.embedImages
+    ) {
       // The destination IS the bytes and the caller asked for no bytes -- the pair falls back to the plain no-bytes rendering and the construct goes unrepresented for it.
       return emitImage(onlyChild, false);
     }
   }
   const body = renderItems(item.children, context);
-  const detail = descriptor.kind === 'anchor' ? `${descriptor.kind} (${descriptor.anchorType})` : descriptor.kind;
-  context.sink({ code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED, severity: 'info', message: `a "${detail}" construct has no markdown syntax; its own extent still renders in place, but the construct itself is not represented` });
+  const detail =
+    descriptor.kind === "anchor"
+      ? `${descriptor.kind} (${descriptor.anchorType})`
+      : descriptor.kind;
+  context.sink({
+    code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+    severity: "info",
+    message: `a "${detail}" construct has no markdown syntax; its own extent still renders in place, but the construct itself is not represented`,
+  });
   return body;
 }
 
@@ -449,10 +619,17 @@ function renderItems(items: readonly EmitItem[], context: EmitContext): string {
       index += 1;
       continue;
     }
-    if (item.block.kind === 'paragraph' && item.block.list !== undefined) {
+    if (item.block.kind === "paragraph" && item.block.list !== undefined) {
       const region: ContentParagraph[] = [];
       let end = index;
-      for (let candidate = items[end]; candidate !== undefined && !isConstructItem(candidate) && candidate.block.kind === 'paragraph' && candidate.block.list !== undefined; candidate = items[end]) {
+      for (
+        let candidate = items[end];
+        candidate !== undefined &&
+        !isConstructItem(candidate) &&
+        candidate.block.kind === "paragraph" &&
+        candidate.block.list !== undefined;
+        candidate = items[end]
+      ) {
         region.push(candidate.block);
         end += 1;
       }
@@ -466,13 +643,19 @@ function renderItems(items: readonly EmitItem[], context: EmitContext): string {
     }
     index += 1;
   }
-  return parts.join('\n\n');
+  return parts.join("\n\n");
 }
 
-function emitBlocks(blocks: readonly ContentBlock[], context: EmitContext): string {
+function emitBlocks(
+  blocks: readonly ContentBlock[],
+  context: EmitContext,
+): string {
   const imbalance = findConstructMarkerImbalance(blocks);
   if (imbalance !== undefined) {
-    throw new MarkdownUnbalancedConstructMarkersError(imbalance.kind, imbalance.index);
+    throw new MarkdownUnbalancedConstructMarkersError(
+      imbalance.kind,
+      imbalance.index,
+    );
   }
   validateRunConstructExtents(blocks);
   return renderItems(groupConstructItems(blocks, 0).items, context);
@@ -481,13 +664,16 @@ function emitBlocks(blocks: readonly ContentBlock[], context: EmitContext): stri
 // A paragraph's run-level construct extents must name real runs before anything renders them -- the run-level twin of the marker-balance check above, through document-schema.js's own findRunConstructFault so every codec and consumer agree on one definition of well-formed. Tables are walked into because a cell's block list holds its own paragraphs (and nothing else descends further: a table inside a table cell is not a shape GFM or this model produces).
 function validateRunConstructExtents(blocks: readonly ContentBlock[]): void {
   for (const block of blocks) {
-    if (block.kind === 'paragraph' && block.constructs !== undefined) {
+    if (block.kind === "paragraph" && block.constructs !== undefined) {
       const fault = findRunConstructFault(block);
       if (fault !== undefined) {
-        throw new MarkdownInvalidRunConstructExtentError(fault.kind, fault.index);
+        throw new MarkdownInvalidRunConstructExtentError(
+          fault.kind,
+          fault.index,
+        );
       }
     }
-    if (block.kind === 'table') {
+    if (block.kind === "table") {
       for (const row of block.rows) {
         for (const cell of row.cells) {
           validateRunConstructExtents(cell.blocks);
@@ -497,17 +683,25 @@ function validateRunConstructExtents(blocks: readonly ContentBlock[]): void {
   }
 }
 
-export function emitMarkdown(document: ContentDocument, options: WriteMarkdownOptions = {}): string {
-  if (document.kind !== 'wordprocessing') {
+export function emitMarkdown(
+  document: ContentDocument,
+  options: WriteMarkdownOptions = {},
+): string {
+  if (document.kind !== "wordprocessing") {
     throw new MarkdownUnsupportedDocumentKindError(document.kind);
   }
 
-  const sink: MarkdownDiagnosticSink = options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
-  const inlineContext: InlineEmitContext = { sink, emphasisMarker: options.emphasisMarker ?? DEFAULT_EMPHASIS_MARKER };
+  const sink: MarkdownDiagnosticSink =
+    options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
+  const inlineContext: InlineEmitContext = {
+    sink,
+    emphasisMarker: options.emphasisMarker ?? DEFAULT_EMPHASIS_MARKER,
+  };
   const context: EmitContext = {
     ...inlineContext,
     bulletMarker: options.bulletListMarker ?? DEFAULT_BULLET_LIST_MARKER,
-    orderedDelimiter: options.orderedListDelimiter ?? DEFAULT_ORDERED_LIST_DELIMITER,
+    orderedDelimiter:
+      options.orderedListDelimiter ?? DEFAULT_ORDERED_LIST_DELIMITER,
     codeFenceChar: options.codeFenceChar ?? DEFAULT_CODE_FENCE_CHAR,
     thematicBreakChar: options.thematicBreakChar ?? DEFAULT_THEMATIC_BREAK_CHAR,
     headingStyle: options.headingStyle ?? DEFAULT_HEADING_STYLE,
@@ -518,12 +712,17 @@ export function emitMarkdown(document: ContentDocument, options: WriteMarkdownOp
     divisionDepth: 0,
   };
 
-  const sections = document.sections.map((section) => emitBlocks(section.blocks, context));
-  const body = sections.join('\n\n');
+  const sections = document.sections.map((section) =>
+    emitBlocks(section.blocks, context),
+  );
+  const body = sections.join("\n\n");
 
-  const frontMatter = options.frontMatter === true ? emitFrontMatter(document.metadata) : undefined;
+  const frontMatter =
+    options.frontMatter === true
+      ? emitFrontMatter(document.metadata)
+      : undefined;
   const text = frontMatter === undefined ? body : `${frontMatter}\n\n${body}`;
 
   const lineEnding = options.lineEnding ?? DEFAULT_LINE_ENDING;
-  return lineEnding === 'crlf' ? text.replaceAll('\n', '\r\n') : text;
+  return lineEnding === "crlf" ? text.replaceAll("\n", "\r\n") : text;
 }

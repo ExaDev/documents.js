@@ -1,32 +1,59 @@
-import { writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
-import { type DocumentFormat, createLocalDocumentConverter, documentTreeWithSchema } from 'documents.js';
-import { inferFormatFromExtension, isDocumentFormat } from '../format';
-import { createRuntimeSignal } from '../runtime/abort';
-import { createDiagnosticReporter, createFontSubstitutionReporter } from '../runtime/diagnostics';
-import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
-import { loadProvidedFonts } from '../runtime/fonts';
-import { createFilesystemMarkdownImageResolver } from '../runtime/markdown-images';
-import { readInput, resolveDefaultOutputPath, writeOutput } from '../runtime/io';
+import { writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import {
+  type DocumentFormat,
+  createLocalDocumentConverter,
+  documentTreeWithSchema,
+} from "documents.js";
+import { inferFormatFromExtension, isDocumentFormat } from "../format";
+import { createRuntimeSignal } from "../runtime/abort";
+import {
+  createDiagnosticReporter,
+  createFontSubstitutionReporter,
+} from "../runtime/diagnostics";
+import {
+  EXIT_SUCCESS,
+  EXIT_USAGE_ERROR,
+  mapErrorToExit,
+} from "../runtime/exit-codes";
+import { loadProvidedFonts } from "../runtime/fonts";
+import { createFilesystemMarkdownImageResolver } from "../runtime/markdown-images";
+import {
+  readInput,
+  resolveDefaultOutputPath,
+  writeOutput,
+} from "../runtime/io";
 
 // Every DocumentFormat this CLI's commands know how to name in a usage error -- shared between the generic `convert` command (commands/convert.ts) and `from-package` (commands/from-package.ts), the two commands whose target format is not already fixed by their own name.
-export const KNOWN_DOCUMENT_FORMATS = 'docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, pdf';
+export const KNOWN_DOCUMENT_FORMATS =
+  "docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, pdf";
 
 // Resolves a target DocumentFormat the same way for both callers above: an explicit --to always wins (it is the caller stating intent unambiguously), falling back to the output path's own extension, and finally failing with a usage error naming exactly what is missing.
-export function resolveTargetFormat(output: string | undefined, out: string | undefined, to: string | undefined): { readonly format: DocumentFormat } | { readonly errorMessage: string } {
+export function resolveTargetFormat(
+  output: string | undefined,
+  out: string | undefined,
+  to: string | undefined,
+): { readonly format: DocumentFormat } | { readonly errorMessage: string } {
   if (to !== undefined) {
     if (!isDocumentFormat(to)) {
-      return { errorMessage: `unknown --to format '${to}'; expected one of ${KNOWN_DOCUMENT_FORMATS}` };
+      return {
+        errorMessage: `unknown --to format '${to}'; expected one of ${KNOWN_DOCUMENT_FORMATS}`,
+      };
     }
     return { format: to };
   }
   const destination = output ?? out;
   if (destination === undefined) {
-    return { errorMessage: 'cannot infer a target format -- pass an output path with a recognised extension, --out with one, or --to <format>' };
+    return {
+      errorMessage:
+        "cannot infer a target format -- pass an output path with a recognised extension, --out with one, or --to <format>",
+    };
   }
   const inferred = inferFormatFromExtension(destination);
   if (inferred === undefined) {
-    return { errorMessage: `cannot infer a target format from '${destination}'; pass --to <format> instead` };
+    return {
+      errorMessage: `cannot infer a target format from '${destination}'; pass --to <format> instead`,
+    };
   }
   return { format: inferred };
 }
@@ -52,7 +79,8 @@ export function formatError(error: unknown, verbose: boolean): string {
   if (!(error instanceof Error)) {
     return `error: ${String(error)}`;
   }
-  const stackClause = verbose && error.stack !== undefined ? `\n${error.stack}` : '';
+  const stackClause =
+    verbose && error.stack !== undefined ? `\n${error.stack}` : "";
   return `error: ${error.message}${stackClause}`;
 }
 
@@ -60,32 +88,61 @@ export function formatError(error: unknown, verbose: boolean): string {
 export function buildConversionAction(
   source: DocumentFormat,
   target: DocumentFormat,
-): (input: string, output: string | undefined, options: ConversionCommandOptions) => Promise<number> {
+): (
+  input: string,
+  output: string | undefined,
+  options: ConversionCommandOptions,
+) => Promise<number> {
   const command = `${source}-to-${target}`;
 
   return async (input, output, options) => {
-    if (output !== undefined && options.out !== undefined && output !== options.out) {
-      process.stderr.write(`[${command}] conflicting output destinations: positional '${output}' and --out '${options.out}'\n`);
+    if (
+      output !== undefined &&
+      options.out !== undefined &&
+      output !== options.out
+    ) {
+      process.stderr.write(
+        `[${command}] conflicting output destinations: positional '${output}' and --out '${options.out}'\n`,
+      );
       return EXIT_USAGE_ERROR;
     }
 
-    const resolvedOutput = output ?? options.out ?? (input === '-' ? '-' : resolveDefaultOutputPath(input, target));
-    const { signal, getAbortReason } = createRuntimeSignal({ timeoutMs: options.timeoutMs });
+    const resolvedOutput =
+      output ??
+      options.out ??
+      (input === "-" ? "-" : resolveDefaultOutputPath(input, target));
+    const { signal, getAbortReason } = createRuntimeSignal({
+      timeoutMs: options.timeoutMs,
+    });
 
     try {
       const inputBytes = await readInput(input, { signal });
       // Loaded before the conversion rather than lazily inside it: a mistyped --font-file path should fail before any work is done, and documents.js's own conversion functions are synchronous, so there is no point at which they could await a file read of their own.
-      const fonts = await loadProvidedFonts(options.fontFiles ?? [], { signal });
+      const fonts = await loadProvidedFonts(options.fontFiles ?? [], {
+        signal,
+      });
       const converter = createLocalDocumentConverter();
       const result = await converter.convert(
-        { source: { format: source, bytes: new Uint8Array(inputBytes) }, targetFormat: target },
+        {
+          source: { format: source, bytes: new Uint8Array(inputBytes) },
+          targetFormat: target,
+        },
         {
           signal,
           fonts,
           // Only wired under the flag: without it, every substitution is still reported through result.diagnostics below (the local converter records one whether or not a callback was supplied), so an unconditional callback here would print the same event twice.
-          onFontSubstitution: options.reportFontSubstitutions === true ? createFontSubstitutionReporter({ json: options.json, quiet: options.quiet, command }) : undefined,
+          onFontSubstitution:
+            options.reportFontSubstitutions === true
+              ? createFontSubstitutionReporter({
+                  json: options.json,
+                  quiet: options.quiet,
+                  command,
+                })
+              : undefined,
           // Resolve a markdown source's own non-data: image destinations against the input file's directory, so `convert notes.md` embeds `![](./image.png)` rather than degrading it to alt text. Ignored by every non-markdown conversion (the port threads it only to the markdown edges), so wiring it unconditionally is a no-op for docx/pptx/odt/... sources. For stdin (`-`) the base directory is the current working directory.
-          images: createFilesystemMarkdownImageResolver(input === '-' ? '.' : dirname(resolve(input))),
+          images: createFilesystemMarkdownImageResolver(
+            input === "-" ? "." : dirname(resolve(input)),
+          ),
           delimiter: options.delimiter,
           sheet: options.sheet,
           page: options.page,
@@ -94,7 +151,11 @@ export function buildConversionAction(
 
       await writeOutput(resolvedOutput, result.document.bytes);
 
-      const reporter = createDiagnosticReporter({ json: options.json, quiet: options.quiet, command });
+      const reporter = createDiagnosticReporter({
+        json: options.json,
+        quiet: options.quiet,
+        command,
+      });
       for (const diagnostic of result.diagnostics) {
         reporter.report(diagnostic);
       }
@@ -102,14 +163,27 @@ export function buildConversionAction(
       if (options.dumpPackage !== undefined) {
         // Checked generically by presence, never by which (source, target) pair this action was built for -- the port declares `package` optional, so this branch guards the declared contract rather than any particular pair (in practice the local converter reports one for every conversion, bridges included, content-only with no pages where no layout engine ran).
         if (result.package === undefined) {
-          process.stderr.write(`[${command}] this conversion does not produce an intermediate DocumentTree\n`);
+          process.stderr.write(
+            `[${command}] this conversion does not produce an intermediate DocumentTree\n`,
+          );
         } else {
           // Tagged with its own $schema before serialising, not written raw -- documentFromJson (the read side `from-package` uses to read this file back in) identifies a value's kind and version purely from that URI, so an untagged dump would be unreadable by its own round trip.
-          await writeFile(options.dumpPackage, JSON.stringify(documentTreeWithSchema(result.package), undefined, 2));
+          await writeFile(
+            options.dumpPackage,
+            JSON.stringify(
+              documentTreeWithSchema(result.package),
+              undefined,
+              2,
+            ),
+          );
         }
       }
 
-      reporter.summarize({ output: resolvedOutput, bytes: result.document.bytes.byteLength, diagnosticCount: result.diagnostics.length });
+      reporter.summarize({
+        output: resolvedOutput,
+        bytes: result.document.bytes.byteLength,
+        diagnosticCount: result.diagnostics.length,
+      });
       return EXIT_SUCCESS;
     } catch (error) {
       // The one and only catch in this action: every failure from readInput, the converter itself, writeOutput, or the dump-package write lands here, gets one clean stderr line, and maps to an exit code that reflects whether it was interrupted, timed out, or a genuine error.

@@ -5,17 +5,28 @@
 // "Shrink-only" is enforced mechanically, not by convention: src/conformance.test.ts asserts that every example named here currently FAILS. Fixing one and forgetting to delete its entry turns the suite red, so the list can never quietly accumulate examples that already pass, and can never be padded to hide a regression.
 //
 // Every reason below is a genuine, understood, ARCHITECTURAL round-trip limitation -- either a documented MarkdownDiagnosticCodes gap (src/lower/ and src/emit/'s own top-of-file tables), or a structural under-determination in document-schema.js's own ContentDocument shape (no container node for a blockquote or a fenced code span's own delimiter choice space, no field distinguishing one multi-block list item from several single-block siblings, no per-list marker-glyph identity). None of these are "not yet gotten around to" placeholders -- each was individually diagn once, and re-diagnosis found the same root cause reachable through several corpus examples at once, which is why the reason strings below are shared, named constants rather than 191 bespoke sentences.
-const SOFT_BREAK = 'a soft line break collapses to a literal space once lowered (src/lower/inline.ts\'s softBreak -> \' \' mapping), rather than surviving as cmark\'s own literal newline in the rendered HTML -- this is the single largest reason in this list by count, reachable from almost any multi-physical-line paragraph, not only src/conformance.test.ts\'s own dedicated "Soft line breaks" section';
-const LINK_TITLE = 'a link/image title has no ContentRun/ContentImageBlock field to survive on (MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)';
-const INFO_STRING = 'a fenced code block\'s own info string has no ContentParagraph field to survive on (MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED)';
-const MULTI_BLOCK = 'a list item directly containing more than one block loses its own item boundary once lowered -- ContentListMembership carries only numId/level, with no field distinguishing "one item, several blocks" from "several items sharing this numId/level" (MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED)';
-const MARKER_TYPE_CONFLICT = 'a nested list disagreeing with its enclosing list\'s own minted marker type is resolved first-wins, not preserved (MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT) -- reusing the enclosing numId is itself the correct, tested design (src/shared/list-id.ts), just lossy for a genuinely mixed-type nesting';
-const BLOCKQUOTE_STRUCTURE = 'a blockquote directly containing more than one block, or nested beyond one level, has no ContentBlockquote container of its own to preserve that structure on -- indentLeftPt only encodes a nesting DEPTH (MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH beyond level 1), never a container boundary, so this is the blockquote-shaped sibling of MULTI_BLOCK above';
-const ADJACENT_SAME_DEPTH = 'two independent containers back to back at the same depth (two blockquotes with nothing between them, or two lists using different bullet/ordered marker glyphes) are indistinguishable, once lowered, from one container spanning both -- ContentParagraph.indentLeftPt and the numId minted for each list carry no shared-boundary field of their own; merging them (tried and reverted for blockquotes, see src/emit/emit.ts\'s own emitBlocks comment) fixes no example this list\'s own SOFT_BREAK entries were not already going to fail on regardless, while genuinely breaking the common case';
-const IMAGE_SRC_UNPRESERVABLE = 'an image with no data: URI destination has no bytes for this test harness to embed (no MarkdownImageResolver was supplied, matching how readMarkdown is actually called here), so it degrades to a hyperlinked text run (MarkdownDiagnosticCodes.IMAGE_UNRESOLVED) -- and even supplying one would not help this specific byte-for-byte comparison, since embedding real bytes re-renders as a data: URI, replacing rather than preserving the original external src the expected HTML still names';
-const EMPHASIS_TORTURE = 'several directly-touching nested or sibling emphasis/strong spans (occasionally one crossing a hyperlink\'s own text boundary) leave only CommonMark\'s two delimiter characters to resolve every adjacent boundary at once -- src/emit/inline.ts\'s pickEmphasisMarker resolves the common single-boundary case (intraword adjacency, one sibling touching one wrap) but a genuine three-or-more-way clash has no second fallback character left; a same-kind nesting (emphasis-in-emphasis, strong-in-strong) is additionally flattened outright before this is ever reached (MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED)';
-const RAW_TEXT_TAG_AMBIGUITY = 'literal text that happens to look like an HTML tag (typically from an unescaped backslash inside a malformed link destination, e.g. "<foo\\>") is indistinguishable, once lowered, from genuine preserved raw HTML -- both are just plain ContentRun text with no field recording which one produced it, so escapeMarkdownText\'s own "leave a real tag unescaped" rule (needed for genuine raw HTML to survive) fires on this literal text too';
-const MATH_DELIMITER_DIVERGENCE = 'a source-level \\( directly followed (eventually) by a literal \\) is now read as inline math (ExaDev/markdown-codec#53), a deliberate divergence from cmark\'s own reading of two independently backslash-escaped parentheses -- src/inline/inline.ts\'s own new \\( recognition in parseBackslash cannot distinguish "the author escaped two literal parens" from "the author wrote inline math", because CommonMark\'s grammar gives \\( no third reading to disambiguate against; real Pandoc/GFM math-extension implementations accept the identical trade-off';
+const SOFT_BREAK =
+  "a soft line break collapses to a literal space once lowered (src/lower/inline.ts's softBreak -> ' ' mapping), rather than surviving as cmark's own literal newline in the rendered HTML -- this is the single largest reason in this list by count, reachable from almost any multi-physical-line paragraph, not only src/conformance.test.ts's own dedicated \"Soft line breaks\" section";
+const LINK_TITLE =
+  "a link/image title has no ContentRun/ContentImageBlock field to survive on (MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)";
+const INFO_STRING =
+  "a fenced code block's own info string has no ContentParagraph field to survive on (MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED)";
+const MULTI_BLOCK =
+  'a list item directly containing more than one block loses its own item boundary once lowered -- ContentListMembership carries only numId/level, with no field distinguishing "one item, several blocks" from "several items sharing this numId/level" (MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED)';
+const MARKER_TYPE_CONFLICT =
+  "a nested list disagreeing with its enclosing list's own minted marker type is resolved first-wins, not preserved (MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT) -- reusing the enclosing numId is itself the correct, tested design (src/shared/list-id.ts), just lossy for a genuinely mixed-type nesting";
+const BLOCKQUOTE_STRUCTURE =
+  "a blockquote directly containing more than one block, or nested beyond one level, has no ContentBlockquote container of its own to preserve that structure on -- indentLeftPt only encodes a nesting DEPTH (MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH beyond level 1), never a container boundary, so this is the blockquote-shaped sibling of MULTI_BLOCK above";
+const ADJACENT_SAME_DEPTH =
+  "two independent containers back to back at the same depth (two blockquotes with nothing between them, or two lists using different bullet/ordered marker glyphes) are indistinguishable, once lowered, from one container spanning both -- ContentParagraph.indentLeftPt and the numId minted for each list carry no shared-boundary field of their own; merging them (tried and reverted for blockquotes, see src/emit/emit.ts's own emitBlocks comment) fixes no example this list's own SOFT_BREAK entries were not already going to fail on regardless, while genuinely breaking the common case";
+const IMAGE_SRC_UNPRESERVABLE =
+  "an image with no data: URI destination has no bytes for this test harness to embed (no MarkdownImageResolver was supplied, matching how readMarkdown is actually called here), so it degrades to a hyperlinked text run (MarkdownDiagnosticCodes.IMAGE_UNRESOLVED) -- and even supplying one would not help this specific byte-for-byte comparison, since embedding real bytes re-renders as a data: URI, replacing rather than preserving the original external src the expected HTML still names";
+const EMPHASIS_TORTURE =
+  "several directly-touching nested or sibling emphasis/strong spans (occasionally one crossing a hyperlink's own text boundary) leave only CommonMark's two delimiter characters to resolve every adjacent boundary at once -- src/emit/inline.ts's pickEmphasisMarker resolves the common single-boundary case (intraword adjacency, one sibling touching one wrap) but a genuine three-or-more-way clash has no second fallback character left; a same-kind nesting (emphasis-in-emphasis, strong-in-strong) is additionally flattened outright before this is ever reached (MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED)";
+const RAW_TEXT_TAG_AMBIGUITY =
+  'literal text that happens to look like an HTML tag (typically from an unescaped backslash inside a malformed link destination, e.g. "<foo\\>") is indistinguishable, once lowered, from genuine preserved raw HTML -- both are just plain ContentRun text with no field recording which one produced it, so escapeMarkdownText\'s own "leave a real tag unescaped" rule (needed for genuine raw HTML to survive) fires on this literal text too';
+const MATH_DELIMITER_DIVERGENCE =
+  'a source-level \\( directly followed (eventually) by a literal \\) is now read as inline math (ExaDev/markdown-codec#53), a deliberate divergence from cmark\'s own reading of two independently backslash-escaped parentheses -- src/inline/inline.ts\'s own new \\( recognition in parseBackslash cannot distinguish "the author escaped two literal parens" from "the author wrote inline math", because CommonMark\'s grammar gives \\( no third reading to disambiguate against; real Pandoc/GFM math-extension implementations accept the identical trade-off';
 
 export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   // Tabs
@@ -26,12 +37,21 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [25, SOFT_BREAK],
   [28, SOFT_BREAK],
   [37, SOFT_BREAK],
-  [39, 'a numeric character reference decoding to a literal newline (&#10;) is indistinguishable, once lowered, from a genuine hard line break -- both are just a literal \'\\n\' character inside ContentRun.text, so escapeMarkdownText\'s own hard-break spelling fires on it too'],
-  [40, 'a numeric character reference decoding to a literal tab (&#9;) at the very start of a paragraph re-renders as literal leading whitespace, which a reparse reads as 4-column indented-code-block indentation instead of paragraph content -- there is no way to backslash-escape a literal space/tab character under CommonMark\'s own escape grammar'],
+  [
+    39,
+    "a numeric character reference decoding to a literal newline (&#10;) is indistinguishable, once lowered, from a genuine hard line break -- both are just a literal '\\n' character inside ContentRun.text, so escapeMarkdownText's own hard-break spelling fires on it too",
+  ],
+  [
+    40,
+    "a numeric character reference decoding to a literal tab (&#9;) at the very start of a paragraph re-renders as literal leading whitespace, which a reparse reads as 4-column indented-code-block indentation instead of paragraph content -- there is no way to backslash-escape a literal space/tab character under CommonMark's own escape grammar",
+  ],
   // Thematic breaks
   [46, SOFT_BREAK],
   [49, SOFT_BREAK],
-  [61, 'a list item\'s own body, once rendered as "<bulletMarker> <renderedBody>", can itself read as a higher-precedence thematic break on reparse when the body is itself a HorizontalRule-styled paragraph using the SAME character as the configured bullet marker (here, "- ---")'],
+  [
+    61,
+    'a list item\'s own body, once rendered as "<bulletMarker> <renderedBody>", can itself read as a higher-precedence thematic break on reparse when the body is itself a HorizontalRule-styled paragraph using the SAME character as the configured bullet marker (here, "- ---")',
+  ],
   // ATX headings
   [70, SOFT_BREAK],
   // Setext headings
@@ -145,12 +165,27 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [494, RAW_TEXT_TAG_AMBIGUITY],
   [505, LINK_TITLE],
   [516, EMPHASIS_TORTURE],
-  [517, 'a nested, unresolved image inside a link overwrites the OUTER link\'s own hyperlink with the inner image\'s own destination -- ContentRun.hyperlink is a single flat field with no way to represent two nested hyperlinks at once'],
-  [519, 'a link containing bracketed text that looks like (but is not) a nested link is a bracket-matching edge case this package\'s own inline phase resolves differently in nested-emphasis contexts than cmark\'s reference reading'],
-  [520, 'an image whose alt text contains bracket-nested link-like text is flattened to plain alt text (image alt text is always plain per CommonMark\'s own rule), losing the specific nested-bracket text cmark\'s own alt-text-flattening happens to preserve literally'],
+  [
+    517,
+    "a nested, unresolved image inside a link overwrites the OUTER link's own hyperlink with the inner image's own destination -- ContentRun.hyperlink is a single flat field with no way to represent two nested hyperlinks at once",
+  ],
+  [
+    519,
+    "a link containing bracketed text that looks like (but is not) a nested link is a bracket-matching edge case this package's own inline phase resolves differently in nested-emphasis contexts than cmark's reference reading",
+  ],
+  [
+    520,
+    "an image whose alt text contains bracket-nested link-like text is flattened to plain alt text (image alt text is always plain per CommonMark's own rule), losing the specific nested-bracket text cmark's own alt-text-flattening happens to preserve literally",
+  ],
   [530, EMPHASIS_TORTURE],
-  [531, 'a nested, unresolved image inside a link overwrites the OUTER link\'s own hyperlink with the inner image\'s own destination -- ContentRun.hyperlink is a single flat field with no way to represent two nested hyperlinks at once'],
-  [533, 'a link containing bracketed text that looks like (but is not) a nested link is a bracket-matching edge case this package\'s own inline phase resolves differently in nested-emphasis contexts than cmark\'s reference reading'],
+  [
+    531,
+    "a nested, unresolved image inside a link overwrites the OUTER link's own hyperlink with the inner image's own destination -- ContentRun.hyperlink is a single flat field with no way to represent two nested hyperlinks at once",
+  ],
+  [
+    533,
+    "a link containing bracketed text that looks like (but is not) a nested link is a bracket-matching edge case this package's own inline phase resolves differently in nested-emphasis contexts than cmark's reference reading",
+  ],
   [543, SOFT_BREAK],
   [552, SOFT_BREAK],
   [556, LINK_TITLE],
@@ -183,5 +218,9 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
 
 // The identical shrink-only exclusion list for src/gfm-conformance.test.ts's own read -> write -> reparse -> render measurement of the GFM extension corpus (assets/gfm/spec.txt) -- see COMMONMARK_EXCLUSIONS above for the shared rationale and reason constants. Keyed by the same per-file example numbering loadGfmExtensionExamples produces (unique across all four extension tags, since the source file numbers every example it contains, tagged or not).
 export const GFM_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
-  [203, 'a malformed table (delimiter row cell count mismatched with the header row) falls back to literal, multi-physical-line paragraph text -- ' + SOFT_BREAK],
+  [
+    203,
+    "a malformed table (delimiter row cell count mismatched with the header row) falls back to literal, multi-physical-line paragraph text -- " +
+      SOFT_BREAK,
+  ],
 ]);

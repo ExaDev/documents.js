@@ -1,4 +1,4 @@
-import type { ExactRational } from 'document-schema.js';
+import type { ExactRational } from "document-schema.js";
 
 // Exact rational arithmetic over document-schema.js's ExactRational (numerator/denominator as canonical decimal-integer strings -- see that package's src/math.ts). This module exists for one job: unit-conversion arithmetic (MathUnit.factorToSi/offsetToSi combined with a 'qty' node's own value) done end to end in BigInt, so a chain of registry conversions never compounds floating-point rounding the way repeated `Number` multiplication would. evaluate.ts is the only caller: it resolves a 'qty' leaf's exact value and its unit's exact factor/offset entirely as Rational, and calls rationalToNumber (below) exactly once, at the point the resolved SI-coherent magnitude enters this package's own Quantity as a plain JS number. Every arithmetic step upstream of that single call is bit-exact; nothing downstream of it claims to be -- see quantity.ts's header comment for why the boundary is drawn there and not further out.
 export interface Rational {
@@ -11,7 +11,10 @@ function bigintOfCanonicalDigits(digits: string): bigint {
 }
 
 export function toRational(value: ExactRational): Rational {
-  return { n: bigintOfCanonicalDigits(value.numerator), d: bigintOfCanonicalDigits(value.denominator) };
+  return {
+    n: bigintOfCanonicalDigits(value.numerator),
+    d: bigintOfCanonicalDigits(value.denominator),
+  };
 }
 
 function gcd(a: bigint, b: bigint): bigint {
@@ -26,7 +29,7 @@ function gcd(a: bigint, b: bigint): bigint {
 // Reduces to lowest terms and canonicalises to document-schema.js's own spelling (ExactRationalSchema in that package's src/math.ts): '0'/'1' for zero, otherwise the sign carried on the numerator and a strictly positive denominator with no leading zeros -- which a reduced BigInt's decimal .toString() already produces.
 function reduce(n: bigint, d: bigint): Rational {
   if (d === 0n) {
-    throw new RangeError('rational.ts: denominator must not be zero');
+    throw new RangeError("rational.ts: denominator must not be zero");
   }
   if (n === 0n) {
     return { n: 0n, d: 1n };
@@ -57,7 +60,7 @@ export function multiplyRational(a: Rational, b: Rational): Rational {
 
 export function divideRational(a: Rational, b: Rational): Rational {
   if (b.n === 0n) {
-    throw new RangeError('rational.ts: division by zero');
+    throw new RangeError("rational.ts: division by zero");
   }
   return reduce(a.n * b.d, a.d * b.n);
 }

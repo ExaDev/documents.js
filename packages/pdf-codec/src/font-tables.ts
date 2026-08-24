@@ -1,5 +1,5 @@
-import type { SfntFont } from './sfnt';
-import { hasBytes, i16, i32, sfntTableBytes, u16, u32 } from './sfnt';
+import type { SfntFont } from "./sfnt";
+import { hasBytes, i16, i32, sfntTableBytes, u16, u32 } from "./sfnt";
 
 // Parsers for the five sfnt tables that describe a font as a whole rather than a single glyph: 'head' (design grid, bounding box, and the loca format glyf.ts needs), 'maxp' (glyph count), 'OS/2' (the vertical metrics and style bits a PDF FontDescriptor is built from), 'post' (italic angle and underline geometry), and 'name' (the PostScript and family names a /BaseFont entry and any font-matching step need). Field offsets are from ISO/IEC 14496-22 clauses 5.2.2 ('head'), 5.2.6 ('maxp'), 5.2.5 ('post'), 5.2.7 ('name'), and the OS/2 table's own clause 5.2.8, and were cross-checked against the real vendored fonts (assets/fonts/{carlito,caladea}/*.ttf) while this module was built rather than transcribed from the spec alone.
 //
@@ -24,7 +24,7 @@ const MIN_UNITS_PER_EM = 16;
 const MAX_UNITS_PER_EM = 16384;
 
 export function parseHead(font: SfntFont): HeadTable | undefined {
-  const bytes = sfntTableBytes(font, 'head');
+  const bytes = sfntTableBytes(font, "head");
   if (bytes === undefined || !hasBytes(bytes, 0, HEAD_TABLE_SIZE)) {
     return undefined;
   }
@@ -58,7 +58,7 @@ export interface MaxpTable {
 const MAXP_HEADER_SIZE = 6; // version (Fixed) + numGlyphs -- the whole of a version 0.5 'maxp', and the only part of a version 1.0 one anything here reads
 
 export function parseMaxp(font: SfntFont): MaxpTable | undefined {
-  const bytes = sfntTableBytes(font, 'maxp');
+  const bytes = sfntTableBytes(font, "maxp");
   if (bytes === undefined || !hasBytes(bytes, 0, MAXP_HEADER_SIZE)) {
     return undefined;
   }
@@ -87,16 +87,20 @@ const OS2_PANOSE_OFFSET = 32;
 const OS2_PANOSE_SIZE = 10;
 
 export function parseOs2(font: SfntFont): Os2Table | undefined {
-  const bytes = sfntTableBytes(font, 'OS/2');
+  const bytes = sfntTableBytes(font, "OS/2");
   if (bytes === undefined || !hasBytes(bytes, 0, OS2_VERSION_0_SIZE)) {
     return undefined;
   }
   const version = u16(bytes, 0);
-  const hasHeights = version >= OS2_VERSION_WITH_HEIGHTS && hasBytes(bytes, 0, OS2_VERSION_2_SIZE);
+  const hasHeights =
+    version >= OS2_VERSION_WITH_HEIGHTS &&
+    hasBytes(bytes, 0, OS2_VERSION_2_SIZE);
   return {
     version,
     fsSelection: u16(bytes, 62),
-    panose: [...bytes.subarray(OS2_PANOSE_OFFSET, OS2_PANOSE_OFFSET + OS2_PANOSE_SIZE)],
+    panose: [
+      ...bytes.subarray(OS2_PANOSE_OFFSET, OS2_PANOSE_OFFSET + OS2_PANOSE_SIZE),
+    ],
     sTypoAscender: i16(bytes, 68),
     sTypoDescender: i16(bytes, 70),
     sTypoLineGap: i16(bytes, 72),
@@ -118,7 +122,7 @@ const POST_HEADER_SIZE = 32;
 const FIXED_16_16_SCALE = 65536;
 
 export function parsePost(font: SfntFont): PostTable | undefined {
-  const bytes = sfntTableBytes(font, 'post');
+  const bytes = sfntTableBytes(font, "post");
   if (bytes === undefined || !hasBytes(bytes, 0, POST_HEADER_SIZE)) {
     return undefined;
   }
@@ -155,17 +159,27 @@ interface NameRecord {
 }
 
 // UTF-16BE, the string encoding of every Windows-platform and Unicode-platform name record.
-function decodeUtf16Be(bytes: Uint8Array<ArrayBuffer>, offset: number, length: number): string {
-  let text = '';
+function decodeUtf16Be(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+  length: number,
+): string {
+  let text = "";
   for (let i = 0; i + 1 < length; i += 2) {
-    text += String.fromCharCode((bytes[offset + i]! << 8) | bytes[offset + i + 1]!);
+    text += String.fromCharCode(
+      (bytes[offset + i]! << 8) | bytes[offset + i + 1]!,
+    );
   }
   return text;
 }
 
 // A Macintosh/Roman name record. Mac Roman and Latin-1 agree exactly below U+0080 and diverge above it; font family and PostScript names are ASCII in practice (a PostScript name is required to be, clause 5.2.7), so no Mac Roman transcoding table is carried here -- a byte at or above 0x80 in such a record decodes as its Latin-1 character rather than its Mac Roman one.
-function decodeMacRoman(bytes: Uint8Array<ArrayBuffer>, offset: number, length: number): string {
-  let text = '';
+function decodeMacRoman(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+  length: number,
+): string {
+  let text = "";
   for (let i = 0; i < length; i++) {
     text += String.fromCharCode(bytes[offset + i]!);
   }
@@ -174,25 +188,40 @@ function decodeMacRoman(bytes: Uint8Array<ArrayBuffer>, offset: number, length: 
 
 // Windows/Unicode UTF-16BE records are preferred over Macintosh/Roman ones: they are what every modern font tool writes, and the Mac records some fonts still carry alongside them are the legacy copy.
 function platformRank(record: NameRecord): number {
-  if (record.platformId === PLATFORM_WINDOWS && record.encodingId === WINDOWS_ENCODING_UNICODE_BMP) {
+  if (
+    record.platformId === PLATFORM_WINDOWS &&
+    record.encodingId === WINDOWS_ENCODING_UNICODE_BMP
+  ) {
     return 0;
   }
   if (record.platformId === PLATFORM_UNICODE) {
     return 1;
   }
-  if (record.platformId === PLATFORM_MACINTOSH && record.encodingId === MACINTOSH_ENCODING_ROMAN) {
+  if (
+    record.platformId === PLATFORM_MACINTOSH &&
+    record.encodingId === MACINTOSH_ENCODING_ROMAN
+  ) {
     return 2;
   }
   return 3;
 }
 
-function readName(bytes: Uint8Array<ArrayBuffer>, records: readonly NameRecord[], nameId: number): string | undefined {
-  const matches = records.filter((record) => record.nameId === nameId && platformRank(record) < 3).sort((a, b) => platformRank(a) - platformRank(b));
+function readName(
+  bytes: Uint8Array<ArrayBuffer>,
+  records: readonly NameRecord[],
+  nameId: number,
+): string | undefined {
+  const matches = records
+    .filter((record) => record.nameId === nameId && platformRank(record) < 3)
+    .sort((a, b) => platformRank(a) - platformRank(b));
   for (const record of matches) {
     if (!hasBytes(bytes, record.stringOffset, record.length)) {
       continue; // a record whose string runs past the table: try the next-best platform rather than giving up on the name
     }
-    const text = record.platformId === PLATFORM_MACINTOSH ? decodeMacRoman(bytes, record.stringOffset, record.length) : decodeUtf16Be(bytes, record.stringOffset, record.length);
+    const text =
+      record.platformId === PLATFORM_MACINTOSH
+        ? decodeMacRoman(bytes, record.stringOffset, record.length)
+        : decodeUtf16Be(bytes, record.stringOffset, record.length);
     if (text.length > 0) {
       return text;
     }
@@ -201,7 +230,7 @@ function readName(bytes: Uint8Array<ArrayBuffer>, records: readonly NameRecord[]
 }
 
 export function parseName(font: SfntFont): NameTable | undefined {
-  const bytes = sfntTableBytes(font, 'name');
+  const bytes = sfntTableBytes(font, "name");
   if (bytes === undefined || !hasBytes(bytes, 0, NAME_HEADER_SIZE)) {
     return undefined;
   }
@@ -225,6 +254,8 @@ export function parseName(font: SfntFont): NameTable | undefined {
 
   return {
     postScriptName: readName(bytes, records, NAME_ID_POSTSCRIPT),
-    familyName: readName(bytes, records, NAME_ID_TYPOGRAPHIC_FAMILY) ?? readName(bytes, records, NAME_ID_FAMILY),
+    familyName:
+      readName(bytes, records, NAME_ID_TYPOGRAPHIC_FAMILY) ??
+      readName(bytes, records, NAME_ID_FAMILY),
   };
 }

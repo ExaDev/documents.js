@@ -1,14 +1,25 @@
-import { describe, expect, it } from 'vitest';
-import { parseHead, parseMaxp, parseName, parseOs2, parsePost } from './font-tables';
-import type { SfntFont } from './sfnt';
-import { parseSfnt } from './sfnt';
-import { caladeaRegularBytes, carlitoBoldBytes, carlitoItalicBytes, carlitoRegularBytes } from './test-support/fonts';
+import { describe, expect, it } from "vitest";
+import {
+  parseHead,
+  parseMaxp,
+  parseName,
+  parseOs2,
+  parsePost,
+} from "./font-tables";
+import type { SfntFont } from "./sfnt";
+import { parseSfnt } from "./sfnt";
+import {
+  caladeaRegularBytes,
+  carlitoBoldBytes,
+  carlitoItalicBytes,
+  carlitoRegularBytes,
+} from "./test-support/fonts";
 
 // Every expected value below was read out of the real vendored .ttf files (assets/fonts/{carlito,caladea}/) by a standalone Node script walking the sfnt table directory with a bare DataView -- not by this package's own parsers -- so these are external cross-checks rather than this module's output asserted against itself.
 function parse(bytes: Uint8Array<ArrayBuffer>): SfntFont {
   const font = parseSfnt(bytes);
   if (font === undefined) {
-    throw new Error('vendored font failed to parse as an sfnt container');
+    throw new Error("vendored font failed to parse as an sfnt container");
   }
   return font;
 }
@@ -17,8 +28,8 @@ const FS_SELECTION_ITALIC = 0x0001;
 const FS_SELECTION_BOLD = 0x0020;
 const FS_SELECTION_REGULAR = 0x0040;
 
-describe('parseHead', () => {
-  it('reads Carlito Regular: a 2048-unit design grid with a long loca index', () => {
+describe("parseHead", () => {
+  it("reads Carlito Regular: a 2048-unit design grid with a long loca index", () => {
     const head = parseHead(parse(carlitoRegularBytes()));
     expect(head).toBeDefined();
     expect(head!.unitsPerEm).toBe(2048);
@@ -30,7 +41,7 @@ describe('parseHead', () => {
     expect(head!.checkSumAdjustment).toBe(0xbadb455d);
   });
 
-  it('reads Caladea Regular: a 1000-unit design grid with a short loca index', () => {
+  it("reads Caladea Regular: a 1000-unit design grid with a short loca index", () => {
     const head = parseHead(parse(caladeaRegularBytes()));
     expect(head).toBeDefined();
     expect(head!.unitsPerEm).toBe(1000);
@@ -42,8 +53,13 @@ describe('parseHead', () => {
     expect(head!.checkSumAdjustment).toBe(0x08200720);
   });
 
-  it('reports a bounding box that actually contains the origin-relative design space', () => {
-    for (const bytes of [carlitoRegularBytes(), carlitoBoldBytes(), carlitoItalicBytes(), caladeaRegularBytes()]) {
+  it("reports a bounding box that actually contains the origin-relative design space", () => {
+    for (const bytes of [
+      carlitoRegularBytes(),
+      carlitoBoldBytes(),
+      carlitoItalicBytes(),
+      caladeaRegularBytes(),
+    ]) {
       const head = parseHead(parse(bytes));
       expect(head).toBeDefined();
       expect(head!.xMin).toBeLessThan(head!.xMax);
@@ -53,16 +69,16 @@ describe('parseHead', () => {
   });
 });
 
-describe('parseMaxp', () => {
-  it('reads the real glyph counts', () => {
+describe("parseMaxp", () => {
+  it("reads the real glyph counts", () => {
     expect(parseMaxp(parse(carlitoRegularBytes()))?.numGlyphs).toBe(2783);
     expect(parseMaxp(parse(carlitoItalicBytes()))?.numGlyphs).toBe(2783);
     expect(parseMaxp(parse(caladeaRegularBytes()))?.numGlyphs).toBe(464);
   });
 });
 
-describe('parseOs2', () => {
-  it('reads Carlito Regular vertical metrics and its REGULAR selection bit', () => {
+describe("parseOs2", () => {
+  it("reads Carlito Regular vertical metrics and its REGULAR selection bit", () => {
     const os2 = parseOs2(parse(carlitoRegularBytes()));
     expect(os2).toBeDefined();
     expect(os2!.version).toBe(3);
@@ -90,7 +106,7 @@ describe('parseOs2', () => {
     expect(italic!.sxHeight).toBe(983);
   });
 
-  it('reads Caladea Regular, a version 4 OS/2 table', () => {
+  it("reads Caladea Regular, a version 4 OS/2 table", () => {
     const os2 = parseOs2(parse(caladeaRegularBytes()));
     expect(os2).toBeDefined();
     expect(os2!.version).toBe(4);
@@ -104,8 +120,8 @@ describe('parseOs2', () => {
   });
 });
 
-describe('parsePost', () => {
-  it('reads Carlito Regular: an upright face, so a zero italic angle', () => {
+describe("parsePost", () => {
+  it("reads Carlito Regular: an upright face, so a zero italic angle", () => {
     const post = parsePost(parse(carlitoRegularBytes()));
     expect(post).toBeDefined();
     expect(post!.version).toBe(0x00030000);
@@ -121,7 +137,7 @@ describe('parsePost', () => {
     expect(post!.underlineThickness).toBe(194);
   });
 
-  it('reads Caladea Regular, a version 2.0 post table', () => {
+  it("reads Caladea Regular, a version 2.0 post table", () => {
     const post = parsePost(parse(caladeaRegularBytes()));
     expect(post!.version).toBe(0x00020000);
     expect(post!.italicAngle).toBe(0);
@@ -130,26 +146,51 @@ describe('parsePost', () => {
   });
 });
 
-describe('parseName', () => {
-  it('reads the real PostScript and family names', () => {
-    expect(parseName(parse(carlitoRegularBytes()))).toEqual({ postScriptName: 'Carlito-Regular', familyName: 'Carlito' });
-    expect(parseName(parse(carlitoBoldBytes()))).toEqual({ postScriptName: 'Carlito-Bold', familyName: 'Carlito' });
-    expect(parseName(parse(carlitoItalicBytes()))).toEqual({ postScriptName: 'Carlito-Italic', familyName: 'Carlito' });
+describe("parseName", () => {
+  it("reads the real PostScript and family names", () => {
+    expect(parseName(parse(carlitoRegularBytes()))).toEqual({
+      postScriptName: "Carlito-Regular",
+      familyName: "Carlito",
+    });
+    expect(parseName(parse(carlitoBoldBytes()))).toEqual({
+      postScriptName: "Carlito-Bold",
+      familyName: "Carlito",
+    });
+    expect(parseName(parse(carlitoItalicBytes()))).toEqual({
+      postScriptName: "Carlito-Italic",
+      familyName: "Carlito",
+    });
     // Caladea carries both Macintosh/Roman (1, 0) and Windows/Unicode (3, 1) copies of every name; the two agree here, so what this proves is that a font with both is read once, not twice or as a concatenation of the two encodings.
-    expect(parseName(parse(caladeaRegularBytes()))).toEqual({ postScriptName: 'Caladea-Regular', familyName: 'Caladea' });
+    expect(parseName(parse(caladeaRegularBytes()))).toEqual({
+      postScriptName: "Caladea-Regular",
+      familyName: "Caladea",
+    });
   });
 });
 
 // A minimal, hand-built 'name' table wrapped in a real sfnt directory. Every vendored font here carries Windows/Unicode records, so the Macintosh/Roman fallback and the "the family name is missing entirely" branch have no real font to exercise them -- these bytes are built to the spec's own record layout (clause 5.2.7) to cover exactly those two paths.
-function buildFontWithNameTable(records: readonly { platformId: number; encodingId: number; nameId: number; text: string; utf16: boolean }[]): Uint8Array<ArrayBuffer> {
+function buildFontWithNameTable(
+  records: readonly {
+    platformId: number;
+    encodingId: number;
+    nameId: number;
+    text: string;
+    utf16: boolean;
+  }[],
+): Uint8Array<ArrayBuffer> {
   const NAME_HEADER_SIZE = 6;
   const NAME_RECORD_SIZE = 12;
   const storageOffset = NAME_HEADER_SIZE + records.length * NAME_RECORD_SIZE;
   const encoded = records.map((record) => {
     const chars = [...record.text].map((character) => character.charCodeAt(0));
-    return record.utf16 ? Uint8Array.from(chars.flatMap((code) => [code >> 8, code & 0xff])) : Uint8Array.from(chars);
+    return record.utf16
+      ? Uint8Array.from(chars.flatMap((code) => [code >> 8, code & 0xff]))
+      : Uint8Array.from(chars);
   });
-  const storageLength = encoded.reduce((total, bytes) => total + bytes.length, 0);
+  const storageLength = encoded.reduce(
+    (total, bytes) => total + bytes.length,
+    0,
+  );
   const nameTable = new Uint8Array(storageOffset + storageLength);
   const nameView = new DataView(nameTable.buffer);
   nameView.setUint16(2, records.length);
@@ -179,46 +220,108 @@ function buildFontWithNameTable(records: readonly { platformId: number; encoding
   return font;
 }
 
-describe('parseName record selection', () => {
-  it('falls back to a Macintosh/Roman record when the font ships no Windows/Unicode one', () => {
+describe("parseName record selection", () => {
+  it("falls back to a Macintosh/Roman record when the font ships no Windows/Unicode one", () => {
     const font = parse(
       buildFontWithNameTable([
-        { platformId: 1, encodingId: 0, nameId: 1, text: 'MacOnly', utf16: false },
-        { platformId: 1, encodingId: 0, nameId: 6, text: 'MacOnly-Regular', utf16: false },
+        {
+          platformId: 1,
+          encodingId: 0,
+          nameId: 1,
+          text: "MacOnly",
+          utf16: false,
+        },
+        {
+          platformId: 1,
+          encodingId: 0,
+          nameId: 6,
+          text: "MacOnly-Regular",
+          utf16: false,
+        },
       ]),
     );
-    expect(parseName(font)).toEqual({ postScriptName: 'MacOnly-Regular', familyName: 'MacOnly' });
+    expect(parseName(font)).toEqual({
+      postScriptName: "MacOnly-Regular",
+      familyName: "MacOnly",
+    });
   });
 
-  it('prefers the Windows/Unicode record over the Macintosh/Roman one for the same nameID', () => {
+  it("prefers the Windows/Unicode record over the Macintosh/Roman one for the same nameID", () => {
     const font = parse(
       buildFontWithNameTable([
-        { platformId: 1, encodingId: 0, nameId: 1, text: 'MacName', utf16: false },
-        { platformId: 3, encodingId: 1, nameId: 1, text: 'WindowsName', utf16: true },
+        {
+          platformId: 1,
+          encodingId: 0,
+          nameId: 1,
+          text: "MacName",
+          utf16: false,
+        },
+        {
+          platformId: 3,
+          encodingId: 1,
+          nameId: 1,
+          text: "WindowsName",
+          utf16: true,
+        },
       ]),
     );
-    expect(parseName(font)?.familyName).toBe('WindowsName');
+    expect(parseName(font)?.familyName).toBe("WindowsName");
   });
 
-  it('prefers the typographic family (nameID 16) over the legacy family (nameID 1)', () => {
+  it("prefers the typographic family (nameID 16) over the legacy family (nameID 1)", () => {
     const font = parse(
       buildFontWithNameTable([
-        { platformId: 3, encodingId: 1, nameId: 1, text: 'Legacy Family Semibold', utf16: true },
-        { platformId: 3, encodingId: 1, nameId: 16, text: 'Typographic Family', utf16: true },
+        {
+          platformId: 3,
+          encodingId: 1,
+          nameId: 1,
+          text: "Legacy Family Semibold",
+          utf16: true,
+        },
+        {
+          platformId: 3,
+          encodingId: 1,
+          nameId: 16,
+          text: "Typographic Family",
+          utf16: true,
+        },
       ]),
     );
-    expect(parseName(font)?.familyName).toBe('Typographic Family');
+    expect(parseName(font)?.familyName).toBe("Typographic Family");
   });
 
-  it('reports an absent name as undefined rather than an empty string', () => {
-    const font = parse(buildFontWithNameTable([{ platformId: 3, encodingId: 1, nameId: 1, text: 'OnlyAFamily', utf16: true }]));
-    expect(parseName(font)).toEqual({ postScriptName: undefined, familyName: 'OnlyAFamily' });
+  it("reports an absent name as undefined rather than an empty string", () => {
+    const font = parse(
+      buildFontWithNameTable([
+        {
+          platformId: 3,
+          encodingId: 1,
+          nameId: 1,
+          text: "OnlyAFamily",
+          utf16: true,
+        },
+      ]),
+    );
+    expect(parseName(font)).toEqual({
+      postScriptName: undefined,
+      familyName: "OnlyAFamily",
+    });
   });
 });
 
-describe('missing and malformed tables', () => {
-  it('returns undefined for every table a font does not carry', () => {
-    const font = parse(buildFontWithNameTable([{ platformId: 3, encodingId: 1, nameId: 1, text: 'Nameless', utf16: true }]));
+describe("missing and malformed tables", () => {
+  it("returns undefined for every table a font does not carry", () => {
+    const font = parse(
+      buildFontWithNameTable([
+        {
+          platformId: 3,
+          encodingId: 1,
+          nameId: 1,
+          text: "Nameless",
+          utf16: true,
+        },
+      ]),
+    );
     expect(parseHead(font)).toBeUndefined();
     expect(parseMaxp(font)).toBeUndefined();
     expect(parseOs2(font)).toBeUndefined();
@@ -228,7 +331,7 @@ describe('missing and malformed tables', () => {
   it("rejects a 'head' table whose magic number is wrong rather than reporting nonsense metrics", () => {
     const bytes = carlitoRegularBytes();
     const font = parse(bytes);
-    const head = font.tables.get('head');
+    const head = font.tables.get("head");
     expect(head).toBeDefined();
     const corrupted = new Uint8Array(bytes.length);
     corrupted.set(bytes);

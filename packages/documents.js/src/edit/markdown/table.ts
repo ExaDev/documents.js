@@ -4,9 +4,9 @@ import type {
   ContentTable as ContentTableNode,
   ContentTableCell as ContentTableCellNode,
   ContentTableRow as ContentTableRowNode,
-} from 'document-schema.js';
-import type { ParagraphInit } from './paragraph';
-import { buildParagraph, MarkdownParagraph } from './paragraph';
+} from "document-schema.js";
+import type { ParagraphInit } from "./paragraph";
+import { buildParagraph, MarkdownParagraph } from "./paragraph";
 
 // 468pt (6.5in) -- matches OdtTable's own DEFAULT_TABLE_WIDTH_PT (src/edit/odt/table.ts): the content width a new table defaults to when no explicit widths are given. columnWidthsPt is a required ContentTable field but is never actually read by markdown-codec's own dist/emit/table.js emitTable -- a GFM table has no column-width concept at all, only a column count (derived from the header row's own cell count) -- so this is carried purely for schema validity, the same "markdown cannot express this, but the shared pivot still needs a value" accommodation ContentParagraph's own unused fields get elsewhere in this editor.
 const DEFAULT_TABLE_WIDTH_PT = 468;
@@ -26,7 +26,9 @@ export class MarkdownTableCell {
 
   paragraphs(): MarkdownParagraph[] {
     return this.node.blocks
-      .filter((block): block is ContentParagraphNode => block.kind === 'paragraph')
+      .filter(
+        (block): block is ContentParagraphNode => block.kind === "paragraph",
+      )
       .map((block) => new MarkdownParagraph(this.node.blocks, block));
   }
 
@@ -40,7 +42,7 @@ export class MarkdownTableCell {
   get text(): string {
     return this.paragraphs()
       .map((p) => p.text)
-      .join('\n');
+      .join("\n");
   }
 
   // Clears this cell's existing blocks and replaces them with a single paragraph carrying a single run -- the same clear-and-replace convention OdpShape.text's own setter uses (src/edit/odp/shape.ts).
@@ -86,7 +88,9 @@ export class MarkdownTable {
 
   private live(): ContentTableNode {
     if (this.removed) {
-      throw new Error('this MarkdownTable has been removed from its body and can no longer be used');
+      throw new Error(
+        "this MarkdownTable has been removed from its body and can no longer be used",
+      );
     }
     return this.node;
   }
@@ -115,10 +119,13 @@ export class MarkdownTable {
 
 // Builds a fresh ContentTable from scratch (not a live view). rows[0] is always the GFM header row on write -- see MarkdownTable.appendRow's own note.
 export function buildTable(init: TableInit): ContentTableNode {
-  const columnWidthsPt = Array.from({ length: init.columns }, () => DEFAULT_TABLE_WIDTH_PT / init.columns);
+  const columnWidthsPt = Array.from(
+    { length: init.columns },
+    () => DEFAULT_TABLE_WIDTH_PT / init.columns,
+  );
   const rows: ContentTableRowNode[] = [];
   for (let r = 0; r < init.rows; r++) {
     rows.push(buildRow(init.columns));
   }
-  return { kind: 'table', rows, columnWidthsPt };
+  return { kind: "table", rows, columnWidthsPt };
 }

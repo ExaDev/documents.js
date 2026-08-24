@@ -1,9 +1,9 @@
-import type { ContentBlock } from 'document-schema.js';
-import type { ParagraphInit } from './paragraph';
-import { buildParagraph, MarkdownParagraph } from './paragraph';
+import type { ContentBlock } from "document-schema.js";
+import type { ParagraphInit } from "./paragraph";
+import { buildParagraph, MarkdownParagraph } from "./paragraph";
 
 export interface MarkdownListInit {
-  readonly type: 'bullet' | 'ordered';
+  readonly type: "bullet" | "ordered";
   readonly start?: number;
   readonly task?: boolean;
   readonly loose?: boolean;

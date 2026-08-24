@@ -1,7 +1,7 @@
-import { Tree } from '@mantine/core';
+import { Tree } from "@mantine/core";
 
-import { toTreeData } from '../shared/jsonTree';
-import { container } from './StructureTree.css';
+import { toTreeData } from "../shared/jsonTree";
+import { container } from "./StructureTree.css";
 
 export interface StructureTreeProps {
   data: unknown;

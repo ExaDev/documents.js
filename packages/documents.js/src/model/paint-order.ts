@@ -6,15 +6,25 @@ export interface PaintOrdered {
   readonly paintOrder?: number;
 }
 
-export type PaintOrderEntry<V, S> = { readonly kind: 'vector'; readonly value: V } | { readonly kind: 'shape'; readonly value: S };
+export type PaintOrderEntry<V, S> =
+  | { readonly kind: "vector"; readonly value: V }
+  | { readonly kind: "shape"; readonly value: S };
 
 // Vectors and shapes as ONE list in true paint order, back to front.
 //
 // The merge only runs when EVERY item on the page carries a paintOrder. A page missing it anywhere -- a ContentDocument built by hand, or one produced before document-schema.js modelled the field -- falls back wholesale to the historical vectors-then-shapes order rather than sorting a partially-stamped page, where an item with no paintOrder has no defensible position to be sorted into and any choice of one would silently reorder content. That legacy order is also exactly what the merge degenerates to on a page whose items were stamped in that order to begin with, and equal paintOrder values keep their relative position either way, since the input is built vectors-first and Array.prototype.sort is stable.
-export function mergeByPaintOrder<V extends PaintOrdered, S extends PaintOrdered>(vectors: readonly V[], shapes: readonly S[]): PaintOrderEntry<V, S>[] {
-  const entries: PaintOrderEntry<V, S>[] = [...vectors.map((value) => ({ kind: 'vector' as const, value })), ...shapes.map((value) => ({ kind: 'shape' as const, value }))];
+export function mergeByPaintOrder<
+  V extends PaintOrdered,
+  S extends PaintOrdered,
+>(vectors: readonly V[], shapes: readonly S[]): PaintOrderEntry<V, S>[] {
+  const entries: PaintOrderEntry<V, S>[] = [
+    ...vectors.map((value) => ({ kind: "vector" as const, value })),
+    ...shapes.map((value) => ({ kind: "shape" as const, value })),
+  ];
   if (entries.some((entry) => entry.value.paintOrder === undefined)) {
     return entries;
   }
-  return entries.sort((a, b) => (a.value.paintOrder ?? 0) - (b.value.paintOrder ?? 0));
+  return entries.sort(
+    (a, b) => (a.value.paintOrder ?? 0) - (b.value.paintOrder ?? 0),
+  );
 }

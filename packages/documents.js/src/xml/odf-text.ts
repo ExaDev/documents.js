@@ -1,7 +1,7 @@
-import type { XmlElement, XmlNode } from 'ooxml.js';
-import { decodeOdfText as decodeOdfContainerText } from 'odf.js';
-import { el, txt } from './fragment';
-import { encodeXmlText } from './entities';
+import type { XmlElement, XmlNode } from "ooxml.js";
+import { decodeOdfText as decodeOdfContainerText } from "odf.js";
+import { el, txt } from "./fragment";
+import { encodeXmlText } from "./entities";
 
 // *** READ THIS BEFORE TOUCHING ODF TEXT CONTENT ANYWHERE IN THIS CODEBASE ***
 //
@@ -17,41 +17,41 @@ const MIN_SPACE_RUN_FOR_TEXT_S = 2;
 // Plain string -> the ODF element sequence real ODF producers (LibreOffice) use for it: a run of two or more consecutive spaces becomes <text:s text:c="N"/>, a single space stays a literal text-node character, a tab becomes <text:tab/>, a newline becomes <text:line-break/>, and every other character is literal text-node content. Adjacent literal characters are coalesced into as few text nodes as practical -- one string buffer flushed only when a text:s/text:tab/text:line-break interrupts it, never one node per character. The inverse of decodeOdfText below; encodeOdfText(decodeOdfText(encodeOdfText(s))) round-trips to encodeOdfText(s) for any s (though not necessarily to the identical node sequence a different producer might have written for the same string, since e.g. a pre-existing <text:s text:c="1"/> decodes to the same single space this function would instead emit as a literal character).
 export function encodeOdfText(text: string): XmlNode[] {
   const nodes: XmlNode[] = [];
-  let literal = '';
+  let literal = "";
 
   const flushLiteral = (): void => {
     if (literal.length > 0) {
       nodes.push(txt(encodeXmlText(literal)));
-      literal = '';
+      literal = "";
     }
   };
 
   let i = 0;
   while (i < text.length) {
     const ch = text.charAt(i);
-    if (ch === ' ') {
+    if (ch === " ") {
       let runLength = 1;
-      while (i + runLength < text.length && text[i + runLength] === ' ') {
+      while (i + runLength < text.length && text[i + runLength] === " ") {
         runLength += 1;
       }
       if (runLength >= MIN_SPACE_RUN_FOR_TEXT_S) {
         flushLiteral();
-        nodes.push(el('text:s', { 'text:c': String(runLength) }));
+        nodes.push(el("text:s", { "text:c": String(runLength) }));
       } else {
-        literal += ' ';
+        literal += " ";
       }
       i += runLength;
       continue;
     }
-    if (ch === '\t') {
+    if (ch === "\t") {
       flushLiteral();
-      nodes.push(el('text:tab'));
+      nodes.push(el("text:tab"));
       i += 1;
       continue;
     }
-    if (ch === '\n') {
+    if (ch === "\n") {
       flushLiteral();
-      nodes.push(el('text:line-break'));
+      nodes.push(el("text:line-break"));
       i += 1;
       continue;
     }
@@ -65,6 +65,6 @@ export function encodeOdfText(text: string): XmlNode[] {
 
 // The exact inverse of encodeOdfText, and the ONLY correct way to read ODF inline text content back to a plain string anywhere in this codebase -- see this file's own top-of-file warning. odf.js's own decodeOdfText (src/typed/shared/text.ts, re-exported from odf.js's package root) already implements the entire node-type dispatch this needs (text / text:s / text:tab / text:line-break / text:span, entity-decoding raw text-node values along the way) -- but it is scoped one step more broadly than this function's own bare XmlNode[] signature, operating on a whole container XmlElement's .children rather than a standalone node array (it is designed to run directly against an already-decoded text:p/text:h element, not a fragment a caller assembled by hand). Rather than re-walk those same node shapes a second time in this package, this wraps `nodes` in a throwaway synthetic element and delegates the real work entirely to odf.js's implementation.
 export function decodeOdfText(nodes: readonly XmlNode[]): string {
-  const wrapper: XmlElement = el('_odf-text-container', {}, [...nodes]);
+  const wrapper: XmlElement = el("_odf-text-container", {}, [...nodes]);
   return decodeOdfContainerText(wrapper);
 }

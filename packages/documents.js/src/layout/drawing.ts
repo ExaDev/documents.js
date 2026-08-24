@@ -1,11 +1,25 @@
-import type { Box, ContentDocument, ContentDrawPage, ContentPathPoint, ContentVector, PageSize } from 'document-schema.js';
-import { flipY } from '../model/geometry';
-import { mergeByPaintOrder } from '../model/paint-order';
-import type { Point, TextMeasurer } from 'document-schema.js';
-import { rotatePointAboutCenter } from '../model/geometry';
-import { convertShape } from './slides';
-import { layoutDocumentOf, packagePagesOf, stampFrame } from './shared';
-import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage, LayoutPathSegment, LayoutSubpath } from 'pdf-codec';
+import type {
+  Box,
+  ContentDocument,
+  ContentDrawPage,
+  ContentPathPoint,
+  ContentVector,
+  PageSize,
+} from "document-schema.js";
+import { flipY } from "../model/geometry";
+import { mergeByPaintOrder } from "../model/paint-order";
+import type { Point, TextMeasurer } from "document-schema.js";
+import { rotatePointAboutCenter } from "../model/geometry";
+import { convertShape } from "./slides";
+import { layoutDocumentOf, packagePagesOf, stampFrame } from "./shared";
+import type {
+  LayoutDocument,
+  LayoutImageAsset,
+  LayoutItem,
+  LayoutPage,
+  LayoutPathSegment,
+  LayoutSubpath,
+} from "pdf-codec";
 
 export interface DrawingLayoutResult {
   readonly document: LayoutDocument;
@@ -28,18 +42,28 @@ function boundsOfPoints(points: readonly Point[]): Box {
   return { xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY };
 }
 
-function vectorItemBounds(item: Extract<LayoutItem, { kind: 'rect' | 'ellipse' | 'line' | 'path' }>): Box {
-  if (item.kind === 'rect' || item.kind === 'ellipse') {
-    return { xPt: item.xPt, yPt: item.yPt, widthPt: item.widthPt, heightPt: item.heightPt };
+function vectorItemBounds(
+  item: Extract<LayoutItem, { kind: "rect" | "ellipse" | "line" | "path" }>,
+): Box {
+  if (item.kind === "rect" || item.kind === "ellipse") {
+    return {
+      xPt: item.xPt,
+      yPt: item.yPt,
+      widthPt: item.widthPt,
+      heightPt: item.heightPt,
+    };
   }
-  if (item.kind === 'line') {
-    return boundsOfPoints([{ x: item.x1Pt, y: item.y1Pt }, { x: item.x2Pt, y: item.y2Pt }]);
+  if (item.kind === "line") {
+    return boundsOfPoints([
+      { x: item.x1Pt, y: item.y1Pt },
+      { x: item.x2Pt, y: item.y2Pt },
+    ]);
   }
   const points: Point[] = [];
   for (const subpath of item.subpaths) {
     points.push({ x: subpath.startXPt, y: subpath.startYPt });
     for (const segment of subpath.segments) {
-      if (segment.kind === 'cubic') {
+      if (segment.kind === "cubic") {
         points.push({ x: segment.c1xPt, y: segment.c1yPt });
         points.push({ x: segment.c2xPt, y: segment.c2yPt });
       }
@@ -50,11 +74,22 @@ function vectorItemBounds(item: Extract<LayoutItem, { kind: 'rect' | 'ellipse' |
 }
 
 // Emits the vector's item(s) and stamps the vector node's own frame from the item that was emitted -- one frame per vector per page, at the exact placement the item carries (rotation already resolved into the geometry for rotated kinds).
-function emitVector(vector: ContentVector, pageIndex: number, pageHeightPt: number, out: LayoutItem[]): void {
+function emitVector(
+  vector: ContentVector,
+  pageIndex: number,
+  pageHeightPt: number,
+  out: LayoutItem[],
+): void {
   const before = out.length;
   convertVector(vector, pageHeightPt, out);
   const emitted = out.length > before ? out[out.length - 1] : undefined;
-  if (emitted !== undefined && (emitted.kind === 'rect' || emitted.kind === 'ellipse' || emitted.kind === 'line' || emitted.kind === 'path')) {
+  if (
+    emitted !== undefined &&
+    (emitted.kind === "rect" ||
+      emitted.kind === "ellipse" ||
+      emitted.kind === "line" ||
+      emitted.kind === "path")
+  ) {
     stampFrame(vector, pageIndex, vectorItemBounds(emitted));
   }
 }
@@ -67,11 +102,11 @@ export interface DrawingLayoutOptions {
   readonly measurer: TextMeasurer;
 }
 
-type DrawingContentDocument = Extract<ContentDocument, { kind: 'drawing' }>;
-type RectVector = Extract<ContentVector, { kind: 'rect' }>;
-type EllipseVector = Extract<ContentVector, { kind: 'ellipse' }>;
-type LineVector = Extract<ContentVector, { kind: 'line' }>;
-type PathVector = Extract<ContentVector, { kind: 'path' }>;
+type DrawingContentDocument = Extract<ContentDocument, { kind: "drawing" }>;
+type RectVector = Extract<ContentVector, { kind: "rect" }>;
+type EllipseVector = Extract<ContentVector, { kind: "ellipse" }>;
+type LineVector = Extract<ContentVector, { kind: "line" }>;
+type PathVector = Extract<ContentVector, { kind: "path" }>;
 
 // ROTATION, and why a rotated vector becomes a LayoutPath rather than a rotated LayoutRect/LayoutEllipse: LayoutRectSchema and LayoutEllipseSchema (document-schema.js's layout.ts) carry no rotation field at all -- only LayoutText and LayoutImage do, because pdf-codec's own content-write.ts rotates those two by emitting a text/image transformation matrix, a mechanism a path-painting operator sequence has no equivalent of. Rather than widen the shared layout schema for it, a rotated vector is resolved HERE into the one layout kind that can already express arbitrary rotated geometry exactly: a LayoutPath whose own points are the shape's own corners/curve controls after rotation. Nothing is approximated by this -- an affine rotation maps a straight edge to a straight edge and a cubic Bezier to a cubic Bezier exactly -- so a rotated rect is a genuine four-point closed subpath and a rotated ellipse is its own four cubics rotated, not a polygon stand-in for either.
 //
@@ -100,10 +135,23 @@ function boxCorners(box: Box): Point[] {
   ];
 }
 
-function convertRectVector(vector: RectVector, pageHeightPt: number, out: LayoutItem[]): void {
+function convertRectVector(
+  vector: RectVector,
+  pageHeightPt: number,
+  out: LayoutItem[],
+): void {
   const flipped = flipY(vector.frame, pageHeightPt);
   if (!isRotated(vector.rotationDeg)) {
-    out.push({ kind: 'rect', xPt: flipped.xPt, yPt: flipped.yPt, widthPt: flipped.widthPt, heightPt: flipped.heightPt, fill: vector.fill, stroke: vector.stroke, sourcePath: vector.sourcePath });
+    out.push({
+      kind: "rect",
+      xPt: flipped.xPt,
+      yPt: flipped.yPt,
+      widthPt: flipped.widthPt,
+      heightPt: flipped.heightPt,
+      fill: vector.fill,
+      stroke: vector.stroke,
+      sourcePath: vector.sourcePath,
+    });
     return;
   }
   const rotate = rotator(flipped, vector.rotationDeg);
@@ -112,16 +160,33 @@ function convertRectVector(vector: RectVector, pageHeightPt: number, out: Layout
     startXPt: start!.x,
     startYPt: start!.y,
     closed: true,
-    segments: rest.map((corner) => ({ kind: 'line' as const, xPt: corner.x, yPt: corner.y })),
+    segments: rest.map((corner) => ({
+      kind: "line" as const,
+      xPt: corner.x,
+      yPt: corner.y,
+    })),
   };
-  out.push({ kind: 'path', subpaths: [subpath], fill: vector.fill, stroke: vector.stroke, sourcePath: vector.sourcePath });
+  out.push({
+    kind: "path",
+    subpaths: [subpath],
+    fill: vector.fill,
+    stroke: vector.stroke,
+    sourcePath: vector.sourcePath,
+  });
 }
 
 // The circle-to-cubic control-point ratio: the distance, as a fraction of the radius, from an axis endpoint to its own adjacent Bezier control point that makes a single cubic segment best approximate a quarter arc. Derived, not a transcribed literal -- 4/3 * (sqrt(2) - 1) is the exact value obtained by forcing the cubic through the quarter arc's own 45-degree midpoint.
 const CIRCLE_CUBIC_RATIO = (4 / 3) * (Math.SQRT2 - 1);
 
 // One ellipse as four cubic quarter-arcs, walked counter-clockwise from the rightmost axis point -- the same four-arc construction pdf-codec's own writeEllipse emits for an unrotated LayoutEllipse, restated here in explicit point form so every one of its control points can be run through the rotation before being written out.
-function ellipseCubicPoints(flipped: Box): { readonly start: Point; readonly arcs: readonly { readonly c1: Point; readonly c2: Point; readonly to: Point }[] } {
+function ellipseCubicPoints(flipped: Box): {
+  readonly start: Point;
+  readonly arcs: readonly {
+    readonly c1: Point;
+    readonly c2: Point;
+    readonly to: Point;
+  }[];
+} {
   const cx = flipped.xPt + flipped.widthPt / 2;
   const cy = flipped.yPt + flipped.heightPt / 2;
   const rx = flipped.widthPt / 2;
@@ -131,18 +196,47 @@ function ellipseCubicPoints(flipped: Box): { readonly start: Point; readonly arc
   return {
     start: { x: cx + rx, y: cy },
     arcs: [
-      { c1: { x: cx + rx, y: cy + ky }, c2: { x: cx + kx, y: cy + ry }, to: { x: cx, y: cy + ry } },
-      { c1: { x: cx - kx, y: cy + ry }, c2: { x: cx - rx, y: cy + ky }, to: { x: cx - rx, y: cy } },
-      { c1: { x: cx - rx, y: cy - ky }, c2: { x: cx - kx, y: cy - ry }, to: { x: cx, y: cy - ry } },
-      { c1: { x: cx + kx, y: cy - ry }, c2: { x: cx + rx, y: cy - ky }, to: { x: cx + rx, y: cy } },
+      {
+        c1: { x: cx + rx, y: cy + ky },
+        c2: { x: cx + kx, y: cy + ry },
+        to: { x: cx, y: cy + ry },
+      },
+      {
+        c1: { x: cx - kx, y: cy + ry },
+        c2: { x: cx - rx, y: cy + ky },
+        to: { x: cx - rx, y: cy },
+      },
+      {
+        c1: { x: cx - rx, y: cy - ky },
+        c2: { x: cx - kx, y: cy - ry },
+        to: { x: cx, y: cy - ry },
+      },
+      {
+        c1: { x: cx + kx, y: cy - ry },
+        c2: { x: cx + rx, y: cy - ky },
+        to: { x: cx + rx, y: cy },
+      },
     ],
   };
 }
 
-function convertEllipseVector(vector: EllipseVector, pageHeightPt: number, out: LayoutItem[]): void {
+function convertEllipseVector(
+  vector: EllipseVector,
+  pageHeightPt: number,
+  out: LayoutItem[],
+): void {
   const flipped = flipY(vector.frame, pageHeightPt);
   if (!isRotated(vector.rotationDeg)) {
-    out.push({ kind: 'ellipse', xPt: flipped.xPt, yPt: flipped.yPt, widthPt: flipped.widthPt, heightPt: flipped.heightPt, fill: vector.fill, stroke: vector.stroke, sourcePath: vector.sourcePath });
+    out.push({
+      kind: "ellipse",
+      xPt: flipped.xPt,
+      yPt: flipped.yPt,
+      widthPt: flipped.widthPt,
+      heightPt: flipped.heightPt,
+      fill: vector.fill,
+      stroke: vector.stroke,
+      sourcePath: vector.sourcePath,
+    });
     return;
   }
   const rotate = rotator(flipped, vector.rotationDeg);
@@ -152,15 +246,40 @@ function convertEllipseVector(vector: EllipseVector, pageHeightPt: number, out: 
     const c1 = rotate(arc.c1);
     const c2 = rotate(arc.c2);
     const to = rotate(arc.to);
-    return { kind: 'cubic' as const, c1xPt: c1.x, c1yPt: c1.y, c2xPt: c2.x, c2yPt: c2.y, xPt: to.x, yPt: to.y };
+    return {
+      kind: "cubic" as const,
+      c1xPt: c1.x,
+      c1yPt: c1.y,
+      c2xPt: c2.x,
+      c2yPt: c2.y,
+      xPt: to.x,
+      yPt: to.y,
+    };
   });
   // closed: true even though the four arcs already return exactly to their own start -- see the README's own writeEllipse gotcha: readPdf only marks a subpath closed when it sees a real `h` operator, and an ODF/SVG consumer refuses to fill an unclosed path.
-  out.push({ kind: 'path', subpaths: [{ startXPt: rotatedStart.x, startYPt: rotatedStart.y, closed: true, segments }], fill: vector.fill, stroke: vector.stroke, sourcePath: vector.sourcePath });
+  out.push({
+    kind: "path",
+    subpaths: [
+      {
+        startXPt: rotatedStart.x,
+        startYPt: rotatedStart.y,
+        closed: true,
+        segments,
+      },
+    ],
+    fill: vector.fill,
+    stroke: vector.stroke,
+    sourcePath: vector.sourcePath,
+  });
 }
 
-function convertLineVector(vector: LineVector, pageHeightPt: number, out: LayoutItem[]): void {
+function convertLineVector(
+  vector: LineVector,
+  pageHeightPt: number,
+  out: LayoutItem[],
+): void {
   out.push({
-    kind: 'line',
+    kind: "line",
     x1Pt: vector.from.xPt,
     y1Pt: pageHeightPt - vector.from.yPt,
     x2Pt: vector.to.xPt,
@@ -172,14 +291,29 @@ function convertLineVector(vector: LineVector, pageHeightPt: number, out: Layout
 }
 
 // A path's own subpath/segment points are in the path's LOCAL coordinate space -- top-left origin, y down, sized to frame.widthPt x frame.heightPt (ContentVectorSchema's own 'path' variant contract, document-schema.js's content.ts) -- distinct from frame's own PAGE-space placement. Resolving one point to absolute PDF user space is therefore two steps in one: add the frame's own offset (placing the local point into page-space, still y-down), then flip that page-space y-down point into PDF's bottom-left/y-up space -- the same flipY math LayoutRect/LayoutEllipse use above, just applied to a bare point rather than a whole box.
-function placePathPoint(frame: Box, point: ContentPathPoint, pageHeightPt: number): { readonly xPt: number; readonly yPt: number } {
-  return { xPt: frame.xPt + point.xPt, yPt: pageHeightPt - frame.yPt - point.yPt };
+function placePathPoint(
+  frame: Box,
+  point: ContentPathPoint,
+  pageHeightPt: number,
+): { readonly xPt: number; readonly yPt: number } {
+  return {
+    xPt: frame.xPt + point.xPt,
+    yPt: pageHeightPt - frame.yPt - point.yPt,
+  };
 }
 
 // A rotated path needs no separate emission branch the way a rotated rect/ellipse does -- it was already becoming a LayoutPath regardless -- so rotation is folded straight into the same per-point placement step, applied after placePathPoint has resolved each point into PDF space and about the same flipped-frame centre every other rotated vector kind uses.
-function convertPathVector(vector: PathVector, pageHeightPt: number, out: LayoutItem[]): void {
-  const rotate = isRotated(vector.rotationDeg) ? rotator(flipY(vector.frame, pageHeightPt), vector.rotationDeg) : undefined;
-  const place = (point: ContentPathPoint): { readonly xPt: number; readonly yPt: number } => {
+function convertPathVector(
+  vector: PathVector,
+  pageHeightPt: number,
+  out: LayoutItem[],
+): void {
+  const rotate = isRotated(vector.rotationDeg)
+    ? rotator(flipY(vector.frame, pageHeightPt), vector.rotationDeg)
+    : undefined;
+  const place = (
+    point: ContentPathPoint,
+  ): { readonly xPt: number; readonly yPt: number } => {
     const placed = placePathPoint(vector.frame, point, pageHeightPt);
     if (rotate === undefined) {
       return placed;
@@ -194,50 +328,89 @@ function convertPathVector(vector: PathVector, pageHeightPt: number, out: Layout
       startYPt: start.yPt,
       closed: subpath.closed,
       segments: subpath.segments.map((segment) => {
-        if (segment.kind === 'line') {
+        if (segment.kind === "line") {
           const to = place(segment.to);
-          return { kind: 'line' as const, xPt: to.xPt, yPt: to.yPt };
+          return { kind: "line" as const, xPt: to.xPt, yPt: to.yPt };
         }
         const control1 = place(segment.control1);
         const control2 = place(segment.control2);
         const to = place(segment.to);
-        return { kind: 'cubic' as const, c1xPt: control1.xPt, c1yPt: control1.yPt, c2xPt: control2.xPt, c2yPt: control2.yPt, xPt: to.xPt, yPt: to.yPt };
+        return {
+          kind: "cubic" as const,
+          c1xPt: control1.xPt,
+          c1yPt: control1.yPt,
+          c2xPt: control2.xPt,
+          c2yPt: control2.yPt,
+          xPt: to.xPt,
+          yPt: to.yPt,
+        };
       }),
     };
   });
-  out.push({ kind: 'path', subpaths, fill: vector.fill, fillRule: vector.fillRule, stroke: vector.stroke, sourcePath: vector.sourcePath });
+  out.push({
+    kind: "path",
+    subpaths,
+    fill: vector.fill,
+    fillRule: vector.fillRule,
+    stroke: vector.stroke,
+    sourcePath: vector.sourcePath,
+  });
 }
 
 // Exported for reuse by src/convert/from-package.ts's frames-to-layout inverse: re-running the ONE vector-to-item conversion (against a package's own recorded page height) is what keeps a rebuilt LayoutDocument's vector geometry identical to what a fresh layout pass would emit, rather than a second, drifting reimplementation of the same placements.
-export function convertVector(vector: ContentVector, pageHeightPt: number, out: LayoutItem[]): void {
-  if (vector.kind === 'rect') {
+export function convertVector(
+  vector: ContentVector,
+  pageHeightPt: number,
+  out: LayoutItem[],
+): void {
+  if (vector.kind === "rect") {
     convertRectVector(vector, pageHeightPt, out);
-  } else if (vector.kind === 'ellipse') {
+  } else if (vector.kind === "ellipse") {
     convertEllipseVector(vector, pageHeightPt, out);
-  } else if (vector.kind === 'line') {
+  } else if (vector.kind === "line") {
     convertLineVector(vector, pageHeightPt, out);
   } else {
     convertPathVector(vector, pageHeightPt, out);
   }
 }
 
-function convertPage(page: ContentDrawPage, pageIndex: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>): LayoutPage {
+function convertPage(
+  page: ContentDrawPage,
+  pageIndex: number,
+  measurer: TextMeasurer,
+  images: Record<string, LayoutImageAsset>,
+): LayoutPage {
   const items: LayoutItem[] = [];
   // One merged walk in true paint order, rather than the two sequential arrays the page stores them in -- see src/model/paint-order.ts for how the merge resolves, and for what a page missing the field anywhere falls back to.
   for (const entry of mergeByPaintOrder(page.vectors, page.shapes)) {
-    if (entry.kind === 'vector') {
+    if (entry.kind === "vector") {
       emitVector(entry.value, pageIndex, page.size.heightPt, items);
     } else {
-      convertShape(entry.value, page.size.heightPt, pageIndex, measurer, images, items);
+      convertShape(
+        entry.value,
+        page.size.heightPt,
+        pageIndex,
+        measurer,
+        images,
+        items,
+      );
     }
   }
   return { widthPt: page.size.widthPt, heightPt: page.size.heightPt, items };
 }
 
 // BREAKING (documents.js 2.0.0): returns a DrawingLayoutResult ({ document, pages }) rather than a bare LayoutDocument, matching the shape the other three engines already return -- the pages half of the fused DocumentTree, alongside the frames stamped in place on `doc`'s own nodes.
-export function convertDrawingToLayout(doc: DrawingContentDocument, options: DrawingLayoutOptions): DrawingLayoutResult {
+export function convertDrawingToLayout(
+  doc: DrawingContentDocument,
+  options: DrawingLayoutOptions,
+): DrawingLayoutResult {
   const images: Record<string, LayoutImageAsset> = {};
-  const pages = doc.pages.map((page, pageIndex) => convertPage(page, pageIndex, options.measurer, images));
+  const pages = doc.pages.map((page, pageIndex) =>
+    convertPage(page, pageIndex, options.measurer, images),
+  );
   // `doc` itself now carries every placement this pass computed, stamped in place on its own nodes (frames); the returned pages array plus that mutated content is the fused unified DocumentTree a conversion reports through onDocument.
-  return { document: layoutDocumentOf(doc.metadata, pages, images), pages: packagePagesOf(pages) };
+  return {
+    document: layoutDocumentOf(doc.metadata, pages, images),
+    pages: packagePagesOf(pages),
+  };
 }

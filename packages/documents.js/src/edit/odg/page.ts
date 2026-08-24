@@ -1,12 +1,27 @@
-import type { Package, XmlElement, XmlNode } from 'odf.js';
-import type { Box } from 'document-schema.js';
-import { removeChild } from '../../xml/edit';
-import type { ImageInit, MediaContext } from '../odp/image';
-import { insertImageFrameMedia } from '../odp/image';
-import { buildTextBoxFrame, OdpShape } from '../odp/shape';
-import type { ContentVector } from 'document-schema.js';
-import type { BoxVectorInit, LineVectorInit, OdgVector, PathVectorInit } from './vector';
-import { appendVectorTo, buildEllipseElement, buildLineElement, buildPathElement, buildRectElement, OdgBoxVector, OdgLineVector, OdgPathVector, wrapVectorElement } from './vector';
+import type { Package, XmlElement, XmlNode } from "odf.js";
+import type { Box } from "document-schema.js";
+import { removeChild } from "../../xml/edit";
+import type { ImageInit, MediaContext } from "../odp/image";
+import { insertImageFrameMedia } from "../odp/image";
+import { buildTextBoxFrame, OdpShape } from "../odp/shape";
+import type { ContentVector } from "document-schema.js";
+import type {
+  BoxVectorInit,
+  LineVectorInit,
+  OdgVector,
+  PathVectorInit,
+} from "./vector";
+import {
+  appendVectorTo,
+  buildEllipseElement,
+  buildLineElement,
+  buildPathElement,
+  buildRectElement,
+  OdgBoxVector,
+  OdgLineVector,
+  OdgPathVector,
+  wrapVectorElement,
+} from "./vector";
 
 export interface TextBoxInit {
   readonly frame: Box;
@@ -36,7 +51,9 @@ export class OdgPage {
 
   private live(): XmlElement {
     if (this.removed) {
-      throw new Error('this OdgPage has been removed from the drawing and can no longer be used');
+      throw new Error(
+        "this OdgPage has been removed from the drawing and can no longer be used",
+      );
     }
     return this.node;
   }
@@ -45,7 +62,7 @@ export class OdgPage {
     const node = this.live();
     const out: OdpShape[] = [];
     for (const child of node.children) {
-      if (child.type === 'element' && child.tag === 'draw:frame') {
+      if (child.type === "element" && child.tag === "draw:frame") {
         out.push(new OdpShape(node.children, child, this.context.pkg));
       }
     }
@@ -54,7 +71,11 @@ export class OdgPage {
 
   addTextBox(init: TextBoxInit): OdpShape {
     const node = this.live();
-    const frameElement = buildTextBoxFrame(this.context.pkg, init.frame, init.text);
+    const frameElement = buildTextBoxFrame(
+      this.context.pkg,
+      init.frame,
+      init.text,
+    );
     node.children.push(frameElement);
     return new OdpShape(node.children, frameElement, this.context.pkg);
   }
@@ -74,7 +95,7 @@ export class OdgPage {
     const node = this.live();
     const out: OdgVector[] = [];
     for (const child of node.children) {
-      if (child.type !== 'element') {
+      if (child.type !== "element") {
         continue;
       }
       const vector = wrapVectorElement(node.children, child, this.context.pkg);

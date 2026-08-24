@@ -1,5 +1,5 @@
-import type { CellAggregateFunction } from '../values';
-import { RptFormulaParseError, RptFormulaUnsupportedError } from './errors';
+import type { CellAggregateFunction } from "../values";
+import { RptFormulaParseError, RptFormulaUnsupportedError } from "./errors";
 
 // The parser for a single rpt:formula attribute value -- the string LibreOffice Report Builder writes on a rpt:formatted-text control, on a rpt:function definition, and on a rpt:group's own rpt:group-expression. Formula text in, one RptFormula out. It makes no evaluation decisions at all: resolving a reference to a column or a named function, and deciding which rows an aggregate covers, are src/odb/formula/evaluate.ts's job.
 //
@@ -23,32 +23,63 @@ export type RptAggregateFunction = CellAggregateFunction;
 // A reference to a result-set column or to a named rpt:function, as written. `spelling` records which of the two forms carried it, for error messages only -- resolution never consults it.
 export interface RptReference {
   readonly name: string;
-  readonly spelling: 'bracket' | 'quote';
+  readonly spelling: "bracket" | "quote";
 }
 
 export type RptFormula =
   // field:[X] -- a plain bound-field reference. No computation at all: the referenced value passes straight through. It shares this attribute (and therefore this parser) with the rpt: forms below, which is why it is handled here rather than being left to the renderer to sniff for.
-  | { readonly kind: 'field'; readonly reference: RptReference; readonly text: string }
+  | {
+      readonly kind: "field";
+      readonly reference: RptReference;
+      readonly text: string;
+    }
   // rpt:HASCHANGED(X) -- true when X's value differs from its value on the immediately preceding row, and on the first row. Report Builder's group-break test.
-  | { readonly kind: 'hasChanged'; readonly reference: RptReference; readonly text: string }
+  | {
+      readonly kind: "hasChanged";
+      readonly reference: RptReference;
+      readonly text: string;
+    }
   // rpt:LEFT(X;n) -- the first n characters of X's text.
-  | { readonly kind: 'left'; readonly reference: RptReference; readonly length: number; readonly text: string }
+  | {
+      readonly kind: "left";
+      readonly reference: RptReference;
+      readonly length: number;
+      readonly text: string;
+    }
   // rpt:SUM(X) / COUNT / AVG / MIN / MAX -- an aggregate over the rows of whichever band the formula sits in. See src/odb/formula/evaluate.ts for the scoping rule, which is the whole substance of this engine.
-  | { readonly kind: 'aggregate'; readonly aggregate: RptAggregateFunction; readonly reference: RptReference; readonly text: string };
+  | {
+      readonly kind: "aggregate";
+      readonly aggregate: RptAggregateFunction;
+      readonly reference: RptReference;
+      readonly text: string;
+    };
 
-const AGGREGATE_FUNCTIONS: ReadonlySet<string> = new Set<RptAggregateFunction>(['COUNT', 'SUM', 'AVG', 'MIN', 'MAX']);
+const AGGREGATE_FUNCTIONS: ReadonlySet<string> = new Set<RptAggregateFunction>([
+  "COUNT",
+  "SUM",
+  "AVG",
+  "MIN",
+  "MAX",
+]);
 
 function isAggregateFunction(name: string): name is RptAggregateFunction {
   return AGGREGATE_FUNCTIONS.has(name);
 }
 
-type RptArgument = { readonly kind: 'reference'; readonly reference: RptReference } | { readonly kind: 'number'; readonly value: number };
+type RptArgument =
+  | { readonly kind: "reference"; readonly reference: RptReference }
+  | { readonly kind: "number"; readonly value: number };
 
-const FIELD_PREFIX = 'field:';
-const RPT_PREFIX = 'rpt:';
+const FIELD_PREFIX = "field:";
+const RPT_PREFIX = "rpt:";
 
 function isNameCharacter(character: string): boolean {
-  return (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character === '_';
+  return (
+    (character >= "A" && character <= "Z") ||
+    (character >= "a" && character <= "z") ||
+    (character >= "0" && character <= "9") ||
+    character === "_"
+  );
 }
 
 class FormulaScanner {
@@ -65,7 +96,10 @@ class FormulaScanner {
   }
 
   skipWhitespace(): void {
-    while (this.offset < this.formula.length && /\s/.test(this.formula.charAt(this.offset))) {
+    while (
+      this.offset < this.formula.length &&
+      /\s/.test(this.formula.charAt(this.offset))
+    ) {
       this.offset += 1;
     }
   }
@@ -93,7 +127,9 @@ class FormulaScanner {
   expect(character: string, what: string): void {
     this.skipWhitespace();
     if (this.formula.charAt(this.offset) !== character) {
-      this.fail(`expected ${what} ("${character}") but found ${this.offset >= this.formula.length ? 'the end of the formula' : `"${this.formula.charAt(this.offset)}"`}`);
+      this.fail(
+        `expected ${what} ("${character}") but found ${this.offset >= this.formula.length ? "the end of the formula" : `"${this.formula.charAt(this.offset)}"`}`,
+      );
     }
     this.offset += 1;
   }
@@ -101,7 +137,10 @@ class FormulaScanner {
   readName(what: string): string {
     this.skipWhitespace();
     const start = this.offset;
-    while (this.offset < this.formula.length && isNameCharacter(this.formula.charAt(this.offset))) {
+    while (
+      this.offset < this.formula.length &&
+      isNameCharacter(this.formula.charAt(this.offset))
+    ) {
       this.offset += 1;
     }
     if (this.offset === start) {
@@ -112,24 +151,24 @@ class FormulaScanner {
 
   // A bracketed reference's own name is taken verbatim up to the closing bracket: ODF writes a column name unescaped here, and a real column name cannot contain "]" without an escaping convention this format does not define.
   readBracketReference(): RptReference {
-    this.expect('[', 'the opening bracket of a column reference');
+    this.expect("[", "the opening bracket of a column reference");
     const start = this.offset;
-    const close = this.formula.indexOf(']', this.offset);
+    const close = this.formula.indexOf("]", this.offset);
     if (close < 0) {
       this.offset = this.formula.length;
       this.fail('unterminated column reference -- no closing "]"');
     }
     this.offset = close + 1;
-    return { name: this.formula.slice(start, close), spelling: 'bracket' };
+    return { name: this.formula.slice(start, close), spelling: "bracket" };
   }
 
   // A quoted reference, with "" as an embedded double quote -- SQL's own escaping convention, which is what both engines this package reads .odb expressions with already follow (see src/odb/sql/lexer.ts).
   readQuotedReference(): RptReference {
-    this.expect('"', 'the opening quote of a name reference');
-    let name = '';
+    this.expect('"', "the opening quote of a name reference");
+    let name = "";
     for (;;) {
       if (this.offset >= this.formula.length) {
-        this.fail('unterminated name reference -- no closing double quote');
+        this.fail("unterminated name reference -- no closing double quote");
       }
       const character = this.formula.charAt(this.offset);
       this.offset += 1;
@@ -142,83 +181,143 @@ class FormulaScanner {
         this.offset += 1;
         continue;
       }
-      return { name, spelling: 'quote' };
+      return { name, spelling: "quote" };
     }
   }
 
   readNumber(): number {
     this.skipWhitespace();
     const start = this.offset;
-    if (this.formula.charAt(this.offset) === '-') {
+    if (this.formula.charAt(this.offset) === "-") {
       this.offset += 1;
     }
-    while (this.offset < this.formula.length && this.formula.charAt(this.offset) >= '0' && this.formula.charAt(this.offset) <= '9') {
+    while (
+      this.offset < this.formula.length &&
+      this.formula.charAt(this.offset) >= "0" &&
+      this.formula.charAt(this.offset) <= "9"
+    ) {
       this.offset += 1;
     }
-    if (this.formula.charAt(this.offset) === '.') {
+    if (this.formula.charAt(this.offset) === ".") {
       this.offset += 1;
-      while (this.offset < this.formula.length && this.formula.charAt(this.offset) >= '0' && this.formula.charAt(this.offset) <= '9') {
+      while (
+        this.offset < this.formula.length &&
+        this.formula.charAt(this.offset) >= "0" &&
+        this.formula.charAt(this.offset) <= "9"
+      ) {
         this.offset += 1;
       }
     }
     const text = this.formula.slice(start, this.offset);
     const value = Number(text);
-    if (text === '' || text === '-' || !Number.isFinite(value)) {
+    if (text === "" || text === "-" || !Number.isFinite(value)) {
       this.offset = start;
-      this.fail('expected a number');
+      this.fail("expected a number");
     }
     return value;
   }
 
   readArgument(): RptArgument {
     const next = this.peek();
-    if (next === '') {
-      this.fail('expected an argument but found the end of the formula');
+    if (next === "") {
+      this.fail("expected an argument but found the end of the formula");
     }
-    if (next === '[') {
-      return { kind: 'reference', reference: this.readBracketReference() };
+    if (next === "[") {
+      return { kind: "reference", reference: this.readBracketReference() };
     }
     if (next === '"') {
-      return { kind: 'reference', reference: this.readQuotedReference() };
+      return { kind: "reference", reference: this.readQuotedReference() };
     }
-    return { kind: 'number', value: this.readNumber() };
+    return { kind: "number", value: this.readNumber() };
   }
 }
 
-function referenceArgument(argument: RptArgument | undefined, functionName: string, ordinal: string, scanner: FormulaScanner): RptReference {
-  if (argument?.kind !== 'reference') {
-    scanner.fail(`rpt:${functionName}'s ${ordinal} argument must be a column or function reference ([NAME] or "NAME")`);
+function referenceArgument(
+  argument: RptArgument | undefined,
+  functionName: string,
+  ordinal: string,
+  scanner: FormulaScanner,
+): RptReference {
+  if (argument?.kind !== "reference") {
+    scanner.fail(
+      `rpt:${functionName}'s ${ordinal} argument must be a column or function reference ([NAME] or "NAME")`,
+    );
   }
   return argument.reference;
 }
 
-function expectArgumentCount(argumentValues: readonly RptArgument[], expected: number, functionName: string, scanner: FormulaScanner): void {
+function expectArgumentCount(
+  argumentValues: readonly RptArgument[],
+  expected: number,
+  functionName: string,
+  scanner: FormulaScanner,
+): void {
   if (argumentValues.length !== expected) {
-    scanner.fail(`rpt:${functionName} takes exactly ${String(expected)} argument${expected === 1 ? '' : 's'}, but ${String(argumentValues.length)} ${argumentValues.length === 1 ? 'was' : 'were'} given`);
+    scanner.fail(
+      `rpt:${functionName} takes exactly ${String(expected)} argument${expected === 1 ? "" : "s"}, but ${String(argumentValues.length)} ${argumentValues.length === 1 ? "was" : "were"} given`,
+    );
   }
 }
 
-function buildCall(functionName: string, argumentValues: readonly RptArgument[], formula: string, scanner: FormulaScanner): RptFormula {
+function buildCall(
+  functionName: string,
+  argumentValues: readonly RptArgument[],
+  formula: string,
+  scanner: FormulaScanner,
+): RptFormula {
   const canonical = functionName.toUpperCase();
-  if (canonical === 'HASCHANGED') {
+  if (canonical === "HASCHANGED") {
     expectArgumentCount(argumentValues, 1, functionName, scanner);
-    return { kind: 'hasChanged', reference: referenceArgument(argumentValues[0], functionName, 'first', scanner), text: formula };
+    return {
+      kind: "hasChanged",
+      reference: referenceArgument(
+        argumentValues[0],
+        functionName,
+        "first",
+        scanner,
+      ),
+      text: formula,
+    };
   }
-  if (canonical === 'LEFT') {
+  if (canonical === "LEFT") {
     expectArgumentCount(argumentValues, 2, functionName, scanner);
-    const reference = referenceArgument(argumentValues[0], functionName, 'first', scanner);
+    const reference = referenceArgument(
+      argumentValues[0],
+      functionName,
+      "first",
+      scanner,
+    );
     const lengthArgument = argumentValues[1];
-    if (lengthArgument?.kind !== 'number') {
-      scanner.fail(`rpt:${functionName}'s second argument must be a number of characters`);
+    if (lengthArgument?.kind !== "number") {
+      scanner.fail(
+        `rpt:${functionName}'s second argument must be a number of characters`,
+      );
     }
     if (!Number.isInteger(lengthArgument.value) || lengthArgument.value < 0) {
-      scanner.fail(`rpt:${functionName}'s second argument must be a non-negative whole number of characters, but was ${String(lengthArgument.value)}`);
+      scanner.fail(
+        `rpt:${functionName}'s second argument must be a non-negative whole number of characters, but was ${String(lengthArgument.value)}`,
+      );
     }
-    return { kind: 'left', reference, length: lengthArgument.value, text: formula };
+    return {
+      kind: "left",
+      reference,
+      length: lengthArgument.value,
+      text: formula,
+    };
   }
   if (isAggregateFunction(canonical)) {
     expectArgumentCount(argumentValues, 1, functionName, scanner);
-    return { kind: 'aggregate', aggregate: canonical, reference: referenceArgument(argumentValues[0], functionName, 'first', scanner), text: formula };
+    return {
+      kind: "aggregate",
+      aggregate: canonical,
+      reference: referenceArgument(
+        argumentValues[0],
+        functionName,
+        "first",
+        scanner,
+      ),
+      text: formula,
+    };
   }
   throw new RptFormulaUnsupportedError(functionName, formula);
 }
@@ -229,26 +328,28 @@ export function parseRptFormula(formula: string): RptFormula {
   if (scanner.tryConsume(FIELD_PREFIX)) {
     const reference = scanner.readBracketReference();
     if (!scanner.atEnd()) {
-      scanner.fail('unexpected trailing text after a field: reference');
+      scanner.fail("unexpected trailing text after a field: reference");
     }
-    return { kind: 'field', reference, text: formula };
+    return { kind: "field", reference, text: formula };
   }
   if (!scanner.tryConsume(RPT_PREFIX)) {
-    scanner.fail(`expected a formula beginning "${FIELD_PREFIX}" or "${RPT_PREFIX}"`);
+    scanner.fail(
+      `expected a formula beginning "${FIELD_PREFIX}" or "${RPT_PREFIX}"`,
+    );
   }
-  const functionName = scanner.readName('an rpt: function name');
-  scanner.expect('(', "the opening parenthesis of a function's argument list");
+  const functionName = scanner.readName("an rpt: function name");
+  scanner.expect("(", "the opening parenthesis of a function's argument list");
   const argumentValues: RptArgument[] = [];
-  if (scanner.peek() !== ')') {
+  if (scanner.peek() !== ")") {
     argumentValues.push(scanner.readArgument());
-    while (scanner.peek() === ';') {
-      scanner.expect(';', 'an argument separator');
+    while (scanner.peek() === ";") {
+      scanner.expect(";", "an argument separator");
       argumentValues.push(scanner.readArgument());
     }
   }
-  scanner.expect(')', "the closing parenthesis of a function's argument list");
+  scanner.expect(")", "the closing parenthesis of a function's argument list");
   if (!scanner.atEnd()) {
-    scanner.fail('unexpected trailing text after a function call');
+    scanner.fail("unexpected trailing text after a function call");
   }
   return buildCall(functionName, argumentValues, formula, scanner);
 }

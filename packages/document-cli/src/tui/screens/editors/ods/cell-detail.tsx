@@ -1,28 +1,34 @@
-import type { ContentCellValue } from 'documents.js';
-import { Box, Text, useInput } from 'ink';
-import { useState, type ReactElement } from 'react';
-import { TextField } from '../../../components/text-field.js';
-import { useAppDispatch } from '../../../state/context.js';
-import { buildCellValue, CELL_VALUE_KINDS, KIND_BADGE } from './shared.js';
+import type { ContentCellValue } from "documents.js";
+import { Box, Text, useInput } from "ink";
+import { useState, type ReactElement } from "react";
+import { TextField } from "../../../components/text-field.js";
+import { useAppDispatch } from "../../../state/context.js";
+import { buildCellValue, CELL_VALUE_KINDS, KIND_BADGE } from "./shared.js";
 
 export interface CellEditorProps {
   readonly address: string;
   readonly initialText: string;
-  readonly initialKind: ContentCellValue['kind'];
+  readonly initialKind: ContentCellValue["kind"];
   // Gates this editor's own key handling exactly the way every routed screen gates its own `useNavigationInput`/`useInput` against `!anyOverlayOpen(state)` -- `OdsCellEditor` stays mounted underneath a global overlay (the command palette, search, help) rather than unmounting, so it must stop reacting to keys itself while one is open.
   readonly isActive: boolean;
   readonly onCommit: (value: ContentCellValue) => void;
   readonly onCancel: () => void;
 }
 
-function cycleKind(kind: ContentCellValue['kind'], direction: 1 | -1): ContentCellValue['kind'] {
+function cycleKind(
+  kind: ContentCellValue["kind"],
+  direction: 1 | -1,
+): ContentCellValue["kind"] {
   const index = CELL_VALUE_KINDS.indexOf(kind);
   // A kind outside the cyclable list (only 'empty' -- see CELL_VALUE_KINDS's own comment in shared.ts) starts the cycle from its first entry rather than failing.
   const from = index === -1 ? 0 : index;
-  const next = (from + direction + CELL_VALUE_KINDS.length) % CELL_VALUE_KINDS.length;
+  const next =
+    (from + direction + CELL_VALUE_KINDS.length) % CELL_VALUE_KINDS.length;
   const kindAt = CELL_VALUE_KINDS[next];
   if (kindAt === undefined) {
-    throw new Error('cycleKind computed an index outside CELL_VALUE_KINDS, which the modulo above makes impossible.');
+    throw new Error(
+      "cycleKind computed an index outside CELL_VALUE_KINDS, which the modulo above makes impossible.",
+    );
   }
   return kindAt;
 }
@@ -35,7 +41,7 @@ function cycleKind(kind: ContentCellValue['kind'], direction: 1 | -1): ContentCe
 export function OdsCellEditor(props: CellEditorProps): ReactElement {
   const dispatch = useAppDispatch();
   const [text, setText] = useState(props.initialText);
-  const [kind, setKind] = useState<ContentCellValue['kind']>(props.initialKind);
+  const [kind, setKind] = useState<ContentCellValue["kind"]>(props.initialKind);
 
   useInput(
     (_input, key) => {
@@ -63,7 +69,11 @@ export function OdsCellEditor(props: CellEditorProps): ReactElement {
           onChange={setText}
           onSubmit={() => {
             if (preview === undefined) {
-              dispatch({ type: 'SET_STATUS', severity: 'warning', text: `"${text}" is not a valid ${kind} value -- Tab to change kind` });
+              dispatch({
+                type: "SET_STATUS",
+                severity: "warning",
+                text: `"${text}" is not a valid ${kind} value -- Tab to change kind`,
+              });
               return;
             }
             props.onCommit(preview);
@@ -71,8 +81,12 @@ export function OdsCellEditor(props: CellEditorProps): ReactElement {
           onCancel={props.onCancel}
         />
       </Box>
-      {preview === undefined ? <Text color="red">Not a valid {kind} value</Text> : undefined}
-      <Text dimColor>Enter to commit, Tab / Shift+Tab to change kind, Esc to cancel</Text>
+      {preview === undefined ? (
+        <Text color="red">Not a valid {kind} value</Text>
+      ) : undefined}
+      <Text dimColor>
+        Enter to commit, Tab / Shift+Tab to change kind, Esc to cancel
+      </Text>
     </Box>
   );
 }

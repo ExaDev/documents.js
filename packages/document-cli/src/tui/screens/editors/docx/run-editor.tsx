@@ -1,9 +1,12 @@
-import { Box, Text } from 'ink';
-import { useState, type ReactElement } from 'react';
-import { TextField } from '../../../components/text-field.js';
-import { useAppDispatch, useAppState } from '../../../state/context.js';
-import { currentScreen } from '../../../state/types.js';
-import { liveParagraphAt, paragraphFamilyDocument } from '../../shared/paragraph-family.js';
+import { Box, Text } from "ink";
+import { useState, type ReactElement } from "react";
+import { TextField } from "../../../components/text-field.js";
+import { useAppDispatch, useAppState } from "../../../state/context.js";
+import { currentScreen } from "../../../state/types.js";
+import {
+  liveParagraphAt,
+  paragraphFamilyDocument,
+} from "../../shared/paragraph-family.js";
 
 export interface RunTextEditorProps {
   readonly initialText: string;
@@ -17,7 +20,14 @@ export function RunTextEditor(props: RunTextEditorProps): ReactElement {
   return (
     <Box>
       <Text color="cyan">&gt; </Text>
-      <TextField value={value} isFocused placeholder="text" onChange={setValue} onSubmit={props.onCommit} onCancel={props.onCancel} />
+      <TextField
+        value={value}
+        isFocused
+        placeholder="text"
+        onChange={setValue}
+        onSubmit={props.onCommit}
+        onCancel={props.onCancel}
+      />
     </Box>
   );
 }
@@ -28,15 +38,27 @@ export function RunEditorScreen(): ReactElement {
   const screen = currentScreen(state);
   const doc = paragraphFamilyDocument(state.openDocument);
 
-  if (screen.kind !== 'runEditor') {
-    return <Text color="red">RunEditorScreen rendered outside a runEditor screen.</Text>;
+  if (screen.kind !== "runEditor") {
+    return (
+      <Text color="red">
+        RunEditorScreen rendered outside a runEditor screen.
+      </Text>
+    );
   }
   if (doc === undefined) {
-    return <Text color="red">RunEditorScreen requires an open docx, odt or markdown document.</Text>;
+    return (
+      <Text color="red">
+        RunEditorScreen requires an open docx, odt or markdown document.
+      </Text>
+    );
   }
   const paragraph = liveParagraphAt(doc, screen.blockIndex);
   if (paragraph === undefined) {
-    return <Text color="red">There is no paragraph at index {screen.blockIndex}.</Text>;
+    return (
+      <Text color="red">
+        There is no paragraph at index {screen.blockIndex}.
+      </Text>
+    );
   }
   const run = paragraph.runs()[screen.runIndex];
   if (run === undefined) {
@@ -55,11 +77,16 @@ export function RunEditorScreen(): ReactElement {
       <RunTextEditor
         initialText={run.text}
         onCommit={(text) => {
-          dispatch({ type: 'SET_RUN_TEXT', blockIndex: screen.blockIndex, runIndex: screen.runIndex, text });
-          dispatch({ type: 'POP_SCREEN' });
+          dispatch({
+            type: "SET_RUN_TEXT",
+            blockIndex: screen.blockIndex,
+            runIndex: screen.runIndex,
+            text,
+          });
+          dispatch({ type: "POP_SCREEN" });
         }}
         onCancel={() => {
-          dispatch({ type: 'POP_SCREEN' });
+          dispatch({ type: "POP_SCREEN" });
         }}
       />
       <Text dimColor>Enter to commit, Esc to discard</Text>

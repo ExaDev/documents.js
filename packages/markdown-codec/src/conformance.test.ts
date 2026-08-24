@@ -8,57 +8,107 @@
 //
 // Anything not yet passing is named individually in src/test-support/conformance-exclusions.ts, with a test below asserting that every excluded example genuinely still fails -- see that file for why the list can only shrink.
 
-import { assembleTree, flattenTree } from 'document-schema.js';
-import { describe, expect, it } from 'vitest';
-import { parseMarkdown } from './block/block';
-import { renderDocumentToHtml } from './html/render';
-import { readMarkdownContent } from './read';
-import { COMMONMARK_EXCLUSIONS } from './test-support/conformance-exclusions';
-import type { SpecExample } from './test-support/spec-corpus';
-import { loadSpecExamples } from './test-support/spec-corpus';
-import { writeMarkdown, writeMarkdownContent } from './write';
+import { assembleTree, flattenTree } from "document-schema.js";
+import { describe, expect, it } from "vitest";
+import { parseMarkdown } from "./block/block";
+import { renderDocumentToHtml } from "./html/render";
+import { readMarkdownContent } from "./read";
+import { COMMONMARK_EXCLUSIONS } from "./test-support/conformance-exclusions";
+import type { SpecExample } from "./test-support/spec-corpus";
+import { loadSpecExamples } from "./test-support/spec-corpus";
+import { writeMarkdown, writeMarkdownContent } from "./write";
 
 // CommonMark, not CommonMark+GFM -- see this file's own top-of-file note.
-const COMMONMARK_ONLY = { gfmAutolinks: false, gfmStrikethrough: false, gfmTables: false, gfmTaskLists: false, footnotes: false };
+const COMMONMARK_ONLY = {
+  gfmAutolinks: false,
+  gfmStrikethrough: false,
+  gfmTables: false,
+  gfmTaskLists: false,
+  footnotes: false,
+};
 
 // read -> write -> reparse -> render, all through this package's real public surface -- see this file's own top-of-file note for why this is the bar now, not a direct parseMarkdown -> render measurement.
 function render(example: SpecExample): string {
   const { document } = readMarkdownContent(example.markdown, COMMONMARK_ONLY);
   const rewritten = writeMarkdownContent(document);
-  return renderDocumentToHtml(parseMarkdown(rewritten, COMMONMARK_ONLY).document);
+  return renderDocumentToHtml(
+    parseMarkdown(rewritten, COMMONMARK_ONLY).document,
+  );
 }
 
 const examples = loadSpecExamples();
 
-describe('CommonMark 0.31.2 conformance', () => {
-  it('loads the whole vendored corpus, not a section of it', () => {
+describe("CommonMark 0.31.2 conformance", () => {
+  it("loads the whole vendored corpus, not a section of it", () => {
     expect(examples.length).toBeGreaterThan(0);
-    expect(new Set(examples.map((example) => example.section)).size).toBeGreaterThan(1);
+    expect(
+      new Set(examples.map((example) => example.section)).size,
+    ).toBeGreaterThan(1);
   });
 
-  const covered = examples.filter((example) => !COMMONMARK_EXCLUSIONS.has(example.example));
-  it.each(covered.map((example) => [`example ${String(example.example)} (${example.section})`, example] as const))('%s', (_name, example) => {
+  const covered = examples.filter(
+    (example) => !COMMONMARK_EXCLUSIONS.has(example.example),
+  );
+  it.each(
+    covered.map(
+      (example) =>
+        [
+          `example ${String(example.example)} (${example.section})`,
+          example,
+        ] as const,
+    ),
+  )("%s", (_name, example) => {
     expect(render(example)).toBe(example.html);
   });
 
   // The shrink-only guarantee. An excluded example that starts passing must be removed from the list in the same change that fixes it, so the list can never hide an example that is already green.
-  const excluded = examples.filter((example) => COMMONMARK_EXCLUSIONS.has(example.example));
-  it.each(excluded.map((example) => [`example ${String(example.example)} (${example.section})`, example] as const))('excluded %s still fails', (_name, example) => {
+  const excluded = examples.filter((example) =>
+    COMMONMARK_EXCLUSIONS.has(example.example),
+  );
+  it.each(
+    excluded.map(
+      (example) =>
+        [
+          `example ${String(example.example)} (${example.section})`,
+          example,
+        ] as const,
+    ),
+  )("excluded %s still fails", (_name, example) => {
     expect(render(example)).not.toBe(example.html);
   });
 
-  it('names only examples that exist in the corpus', () => {
+  it("names only examples that exist in the corpus", () => {
     const numbers = new Set(examples.map((example) => example.example));
-    expect([...COMMONMARK_EXCLUSIONS.keys()].filter((number) => !numbers.has(number))).toEqual([]);
+    expect(
+      [...COMMONMARK_EXCLUSIONS.keys()].filter(
+        (number) => !numbers.has(number),
+      ),
+    ).toEqual([]);
   });
 });
 
 // The tree pair's own two properties (src/package.test.ts's (i) and (ii)), re-checked over every example in this suite's own corpus rather than the two fixtures that file hand-picks -- run over ALL 652 examples, not just the ones `covered` renders correct HTML for: both properties are about the assembleTree/flattenTree transform and the writeMarkdown/writeMarkdownContent pair agreeing with each other, neither of which depends on whether the CommonMark HTML round trip above happens to succeed for a given example.
-describe('tree pair matches the flat pair this suite measures', () => {
-  it.each(examples.map((example) => [`example ${String(example.example)} (${example.section})`, example] as const))('%s: flattenTree(assembleTree(document)) reproduces document, and writeMarkdown renders what writeMarkdownContent renders', (_name, example) => {
-    const { document } = readMarkdownContent(example.markdown, COMMONMARK_ONLY);
+describe("tree pair matches the flat pair this suite measures", () => {
+  it.each(
+    examples.map(
+      (example) =>
+        [
+          `example ${String(example.example)} (${example.section})`,
+          example,
+        ] as const,
+    ),
+  )(
+    "%s: flattenTree(assembleTree(document)) reproduces document, and writeMarkdown renders what writeMarkdownContent renders",
+    (_name, example) => {
+      const { document } = readMarkdownContent(
+        example.markdown,
+        COMMONMARK_ONLY,
+      );
 
-    expect(flattenTree(assembleTree(document))).toEqual(document);
-    expect(writeMarkdown(assembleTree(document))).toBe(writeMarkdownContent(document));
-  });
+      expect(flattenTree(assembleTree(document))).toEqual(document);
+      expect(writeMarkdown(assembleTree(document))).toBe(
+        writeMarkdownContent(document),
+      );
+    },
+  );
 });

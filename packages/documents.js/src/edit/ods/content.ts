@@ -1,11 +1,11 @@
-import type { ContentDocument, ContentSheetCell } from 'document-schema.js';
-import type { Package } from 'odf.js';
-import { resolveMetadataTimestamps } from '../../model/metadata';
-import type { ClockPort } from '../../ports/clock';
-import { systemClock } from '../../ports/clock';
-import { OdsEditor } from './editor';
-import { createEmptyOdsPackage } from './scaffold';
-import type { OdsSheet } from './sheet';
+import type { ContentDocument, ContentSheetCell } from "document-schema.js";
+import type { Package } from "odf.js";
+import { resolveMetadataTimestamps } from "../../model/metadata";
+import type { ClockPort } from "../../ports/clock";
+import { systemClock } from "../../ports/clock";
+import { OdsEditor } from "./editor";
+import { createEmptyOdsPackage } from "./scaffold";
+import type { OdsSheet } from "./sheet";
 
 // clock resolves content.metadata's own createdIso/modifiedIso the same way createOds does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried.
 export interface BuildOdsPackageOptions {
@@ -21,9 +21,12 @@ export interface BuildOdsPackageOptions {
 // Column/row HIDDEN state (ContentSheetColumn/Row.hidden) now round-trips too, via OdsSheet.setColumnHidden/setRowHidden (table:visibility, independent of width/height styling -- see column-row.ts's own top-of-file note on why the two never collide).
 //
 // ContentSheetImage now writes a real floating draw:frame (OdsSheet.addImage, src/edit/ods/floating.ts), and ContentSheet.embeddedObjects writes a real embedded ODF formula sub-object for every objectKind === 'formula' entry (OdsSheet.addEmbeddedObject) -- every OTHER objectKind (wordprocessing/presentation/spreadsheet/drawing) is still a documented, bounded gap, mirroring buildOdtPackage's own identical narrowing for a 'drawing' embeddedObject block: embedding one would mean writing that document's own package as a nested OLE sub-object, and no writer for that exists anywhere in this codebase. Images/embeddedObjects are written LAST, after every column/row width/height/hidden call for this sheet, so a ContentSheetImage's own anchorRow/anchorColumn resolves its absolute position against the sheet's real, final column/row sizing rather than whatever it happened to declare at some earlier point in this loop.
-export function buildOdsPackage(content: ContentDocument, options?: BuildOdsPackageOptions): Package {
-  if (content.kind !== 'spreadsheet') {
-    throw new Error('buildOdsPackage requires a spreadsheet ContentDocument');
+export function buildOdsPackage(
+  content: ContentDocument,
+  options?: BuildOdsPackageOptions,
+): Package {
+  if (content.kind !== "spreadsheet") {
+    throw new Error("buildOdsPackage requires a spreadsheet ContentDocument");
   }
   const clock = options?.clock ?? systemClock;
   const metadata = resolveMetadataTimestamps(content.metadata, clock);

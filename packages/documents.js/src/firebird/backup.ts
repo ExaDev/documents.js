@@ -1,8 +1,11 @@
-import type { HsqldbColumn, HsqldbTable } from '../hsqldb/script';
-import { FirebirdBackupReader } from './reader';
-import { readRelationSchema } from './schema';
-import type { FirebirdRelation } from './schema';
-import { readRelationData, FirebirdCompositeRecordUnsupportedError } from './data';
+import type { HsqldbColumn, HsqldbTable } from "../hsqldb/script";
+import { FirebirdBackupReader } from "./reader";
+import { readRelationSchema } from "./schema";
+import type { FirebirdRelation } from "./schema";
+import {
+  readRelationData,
+  FirebirdCompositeRecordUnsupportedError,
+} from "./data";
 
 // The top-level walk of a Firebird gbak backup stream (a .odb package's own database/firebird.fbk part -- see src/odb/read.ts's own top-of-file note and this reader's README-FORMAT.md for the full "this is a logical backup, not raw ODS pages" finding): rec_burp (backup program attributes) -> rec_database (skipped) -> zero-or-more rec_relation (schema) -> zero-or-more OTHER schema-adjacent records this reader does not need (rec_charset/rec_collation/rec_rel_constraint/etc., generically skipped) -> zero-or-more rec_relation_data (row data, referencing an earlier rec_relation purely by name) -> rec_end. Produces HsqldbTable[] -- the identical shape src/hsqldb/script.ts's own Tier 1 HSQLDB reader produces -- so odbTablesToSpreadsheetDocument/buildOdbTableCsv (src/odb/spreadsheet.ts, src/odb/csv.ts) work completely unchanged for a Firebird-backed .odb.
 
@@ -42,7 +45,7 @@ const FLAT_SKIPPABLE_RECORD_TYPES = new Set([
 export class FirebirdBackupFormatError extends Error {
   constructor(message: string) {
     super(`Firebird backup: ${message}`);
-    this.name = 'FirebirdBackupFormatError';
+    this.name = "FirebirdBackupFormatError";
   }
 }
 
@@ -61,7 +64,11 @@ const ATT_BACKUP_TRANSPORTABLE = 5;
 // att_page_size lives inside rec_database's own attribute list (a SEPARATE SERIES reset from rec_burp's), value 5 -- see this module's own README-FORMAT.md derivation.
 const ATT_PAGE_SIZE = 5;
 
-function readBurpHeader(reader: FirebirdBackupReader): { backupFormatVersion: number; transportable: boolean; compressed: boolean } {
+function readBurpHeader(reader: FirebirdBackupReader): {
+  backupFormatVersion: number;
+  transportable: boolean;
+  compressed: boolean;
+} {
   let backupFormatVersion: number | undefined;
   let transportable = false;
   let compressed = false;
@@ -90,12 +97,16 @@ function readBurpHeader(reader: FirebirdBackupReader): { backupFormatVersion: nu
   }
 
   if (backupFormatVersion === undefined) {
-    throw new FirebirdBackupFormatError('the leading rec_burp record had no att_backup_format attribute -- not a recognisable gbak backup stream');
+    throw new FirebirdBackupFormatError(
+      "the leading rec_burp record had no att_backup_format attribute -- not a recognisable gbak backup stream",
+    );
   }
   return { backupFormatVersion, transportable, compressed };
 }
 
-function readDatabaseHeader(reader: FirebirdBackupReader): { pageSizeBytes: number | undefined } {
+function readDatabaseHeader(reader: FirebirdBackupReader): {
+  pageSizeBytes: number | undefined;
+} {
   let pageSizeBytes: number | undefined;
   for (;;) {
     const attribute = reader.readTag();
@@ -120,31 +131,43 @@ export interface ReadFirebirdBackupResult {
 }
 
 function relationToColumns(relation: FirebirdRelation): HsqldbColumn[] {
-  return relation.fields.filter((field) => !field.computed).map((field) => ({ name: field.name, type: field.typeLabel }));
+  return relation.fields
+    .filter((field) => !field.computed)
+    .map((field) => ({ name: field.name, type: field.typeLabel }));
 }
 
 // Parses a complete Firebird gbak backup stream (database/firebird.fbk's own raw bytes, already extracted from the .odb package by the caller -- see src/odb/read.ts) into the same HsqldbTable[] shape src/hsqldb/script.ts's parseHsqldbScript produces for an HSQLDB-backed .odb.
-export function readFirebirdBackup(bytes: Uint8Array<ArrayBuffer>): ReadFirebirdBackupResult {
+export function readFirebirdBackup(
+  bytes: Uint8Array<ArrayBuffer>,
+): ReadFirebirdBackupResult {
   const reader = new FirebirdBackupReader(bytes);
 
   const leadingRecordType = reader.readTag();
   if (leadingRecordType !== 0) {
-    throw new FirebirdBackupFormatError(`expected the stream to open with rec_burp (tag 0), found tag ${leadingRecordType} -- not a recognisable gbak backup stream`);
+    throw new FirebirdBackupFormatError(
+      `expected the stream to open with rec_burp (tag 0), found tag ${leadingRecordType} -- not a recognisable gbak backup stream`,
+    );
   }
-  const { backupFormatVersion, transportable, compressed } = readBurpHeader(reader);
+  const { backupFormatVersion, transportable, compressed } =
+    readBurpHeader(reader);
   if (backupFormatVersion !== SUPPORTED_BACKUP_FORMAT_VERSION) {
     throw new FirebirdBackupFormatError(
       `backup format version ${backupFormatVersion} is not supported -- this reader has only been built and verified against format version ${SUPPORTED_BACKUP_FORMAT_VERSION} (Firebird 3.0-era gbak output). Refusing to guess at a different format's own attribute/record shape rather than risk silently misdecoding it.`,
     );
   }
   if (!transportable) {
-    throw new FirebirdBackupFormatError('backup is in non-transportable (native binary) row format (att_backup_transportable=false) -- this reader only decodes the transportable/XDR row encoding, the one every real fixture it was built against actually uses (gbak\'s own default).');
+    throw new FirebirdBackupFormatError(
+      "backup is in non-transportable (native binary) row format (att_backup_transportable=false) -- this reader only decodes the transportable/XDR row encoding, the one every real fixture it was built against actually uses (gbak's own default).",
+    );
   }
 
   let pageSizeBytes: number | undefined;
   const schema = new Map<string, FirebirdRelation>();
   const tablesInOrder: string[] = [];
-  const rowsByRelation = new Map<string, ReturnType<typeof readRelationData>['rows']>();
+  const rowsByRelation = new Map<
+    string,
+    ReturnType<typeof readRelationData>["rows"]
+  >();
 
   for (;;) {
     const recordType = reader.readTag();
@@ -158,7 +181,10 @@ export function readFirebirdBackup(bytes: Uint8Array<ArrayBuffer>): ReadFirebird
     }
     if (recordType === REC_RELATION) {
       const relation = readRelationSchema(reader, (nestedRecordType) => {
-        throw new FirebirdCompositeRecordUnsupportedError(nestedRecordType, 'reading a relation\'s own schema (a rec_view child, most likely)');
+        throw new FirebirdCompositeRecordUnsupportedError(
+          nestedRecordType,
+          "reading a relation's own schema (a rec_view child, most likely)",
+        );
       });
       schema.set(relation.name, relation);
       tablesInOrder.push(relation.name);
@@ -173,7 +199,10 @@ export function readFirebirdBackup(bytes: Uint8Array<ArrayBuffer>): ReadFirebird
       reader.skipFlatRecordAttributes();
       continue;
     }
-    throw new FirebirdCompositeRecordUnsupportedError(recordType, 'walking the backup stream\'s own top-level record sequence');
+    throw new FirebirdCompositeRecordUnsupportedError(
+      recordType,
+      "walking the backup stream's own top-level record sequence",
+    );
   }
 
   // No check that reader.atEnd() here -- confirmed against a real fixture that rec_end is genuinely NOT the last byte of the stream: mvol.cpp writes backup volumes in fixed-size blocks (att_backup_blksize), zero-padding the final block out to that size, so real trailing bytes after rec_end are legitimate filler, not a sign of a mis-walked stream. restore.epp's own top-level loop (`while (get_record(&record, tdgbl) != rec_end)`) matches this exactly -- it stops at rec_end and never inspects what follows.
@@ -182,10 +211,16 @@ export function readFirebirdBackup(bytes: Uint8Array<ArrayBuffer>): ReadFirebird
   const tables: HsqldbTable[] = tablesInOrder.map((name) => {
     const relation = schema.get(name);
     if (relation === undefined) {
-      throw new FirebirdBackupFormatError(`internal error: relation "${name}" missing from its own schema map`);
+      throw new FirebirdBackupFormatError(
+        `internal error: relation "${name}" missing from its own schema map`,
+      );
     }
     const rows = rowsByRelation.get(name) ?? [];
-    return { tableName: relation.name, columns: relationToColumns(relation), rows };
+    return {
+      tableName: relation.name,
+      columns: relationToColumns(relation),
+      rows,
+    };
   });
 
   return {

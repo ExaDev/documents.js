@@ -1,10 +1,10 @@
-import type { CmapLookup } from './cmap-table';
-import { buildCmapLookup } from './cmap-table';
-import { parseHead, parseMaxp } from './font-tables';
-import type { GlyfTable } from './glyf';
-import { parseGlyf } from './glyf';
-import type { SfntFont } from './sfnt';
-import { hasBytes, sfntTableBytes, u16, u32 } from './sfnt';
+import type { CmapLookup } from "./cmap-table";
+import { buildCmapLookup } from "./cmap-table";
+import { parseHead, parseMaxp } from "./font-tables";
+import type { GlyfTable } from "./glyf";
+import { parseGlyf } from "./glyf";
+import type { SfntFont } from "./sfnt";
+import { hasBytes, sfntTableBytes, u16, u32 } from "./sfnt";
 
 // A glyph subsetter for a TrueType-outline ('glyf'/'loca') sfnt font: given the Unicode code points a document actually uses for one face, it emits a new, much smaller sfnt font carrying only those glyphs' outlines.
 //
@@ -60,18 +60,26 @@ const CHECKSUM_ADJUSTMENT_MAGIC = 0xb1b0afba;
 const GLYPH_ALIGNMENT = 4;
 
 // Tables copied byte for byte when the source font has them. The hinting programs are the whole list: 'fpgm' (the font program, run once), 'prep' (the control-value program, run at each size change), and 'cvt ' (the control values both read). Dropping them from a subset would silently change how the same outlines are gridfit at small sizes.
-const COPIED_TAGS: readonly string[] = ['cvt ', 'fpgm', 'prep'];
+const COPIED_TAGS: readonly string[] = ["cvt ", "fpgm", "prep"];
 
 function alignUp(value: number): number {
   return Math.ceil(value / GLYPH_ALIGNMENT) * GLYPH_ALIGNMENT;
 }
 
-function writeU16(bytes: Uint8Array<ArrayBuffer>, offset: number, value: number): void {
+function writeU16(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+  value: number,
+): void {
   bytes[offset] = (value >>> 8) & 0xff;
   bytes[offset + 1] = value & 0xff;
 }
 
-function writeU32(bytes: Uint8Array<ArrayBuffer>, offset: number, value: number): void {
+function writeU32(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+  value: number,
+): void {
   bytes[offset] = (value >>> 24) & 0xff;
   bytes[offset + 1] = (value >>> 16) & 0xff;
   bytes[offset + 2] = (value >>> 8) & 0xff;
@@ -79,7 +87,11 @@ function writeU32(bytes: Uint8Array<ArrayBuffer>, offset: number, value: number)
 }
 
 // The sfnt checksum (clause 4.1): the sum of a region's big-endian uint32s, truncated to 32 bits. Callers pass a 4-byte-aligned region only -- every table this module writes is zero-padded to a multiple of four, which is the same thing the spec's own "pad with zeroes" wording produces.
-function checksum(bytes: Uint8Array<ArrayBuffer>, offset: number, length: number): number {
+function checksum(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+  length: number,
+): number {
   let sum = 0;
   for (let i = 0; i < length; i += GLYPH_ALIGNMENT) {
     sum = (sum + u32(bytes, offset + i)) >>> 0;
@@ -98,35 +110,64 @@ interface SourceHmtx {
 }
 
 // One glyph's advance width and left side bearing, both as their raw 16-bit patterns so the bearing round-trips without a signed/unsigned conversion in either direction. Beyond `numberOfHMetrics` a font stores only bearings, every such glyph sharing the last explicit advance (clause 5.2.4) -- the subset re-expands that into a full record per glyph, so its own numberOfHMetrics can simply equal its glyph count.
-function readHorizontalMetrics(source: SourceHmtx, glyphId: number): { advanceWidth: number; leftSideBearing: number } | undefined {
+function readHorizontalMetrics(
+  source: SourceHmtx,
+  glyphId: number,
+): { advanceWidth: number; leftSideBearing: number } | undefined {
   if (glyphId < source.numberOfHMetrics) {
     const offset = glyphId * LONG_HOR_METRIC_SIZE;
     if (!hasBytes(source.bytes, offset, LONG_HOR_METRIC_SIZE)) {
       return undefined;
     }
-    return { advanceWidth: u16(source.bytes, offset), leftSideBearing: u16(source.bytes, offset + 2) };
+    return {
+      advanceWidth: u16(source.bytes, offset),
+      leftSideBearing: u16(source.bytes, offset + 2),
+    };
   }
-  const lastAdvanceOffset = (source.numberOfHMetrics - 1) * LONG_HOR_METRIC_SIZE;
-  const bearingOffset = source.numberOfHMetrics * LONG_HOR_METRIC_SIZE + (glyphId - source.numberOfHMetrics) * LEFT_SIDE_BEARING_SIZE;
-  if (!hasBytes(source.bytes, lastAdvanceOffset, LONG_HOR_METRIC_SIZE) || !hasBytes(source.bytes, bearingOffset, LEFT_SIDE_BEARING_SIZE)) {
+  const lastAdvanceOffset =
+    (source.numberOfHMetrics - 1) * LONG_HOR_METRIC_SIZE;
+  const bearingOffset =
+    source.numberOfHMetrics * LONG_HOR_METRIC_SIZE +
+    (glyphId - source.numberOfHMetrics) * LEFT_SIDE_BEARING_SIZE;
+  if (
+    !hasBytes(source.bytes, lastAdvanceOffset, LONG_HOR_METRIC_SIZE) ||
+    !hasBytes(source.bytes, bearingOffset, LEFT_SIDE_BEARING_SIZE)
+  ) {
     return undefined;
   }
-  return { advanceWidth: u16(source.bytes, lastAdvanceOffset), leftSideBearing: u16(source.bytes, bearingOffset) };
+  return {
+    advanceWidth: u16(source.bytes, lastAdvanceOffset),
+    leftSideBearing: u16(source.bytes, bearingOffset),
+  };
 }
 
 function buildPostStub(font: SfntFont): Uint8Array<ArrayBuffer> {
   const post = new Uint8Array(POST_STUB_SIZE);
   writeU32(post, 0, POST_VERSION_3_0);
-  const sourcePost = sfntTableBytes(font, 'post');
+  const sourcePost = sfntTableBytes(font, "post");
   // italicAngle, underline geometry, and isFixedPitch are real font-wide facts a consumer may still read off an embedded program, so they are carried over where the source declares them; the four trailing memory-usage fields are left zero, which is what every subsetting tool writes and what the spec itself says may be ignored.
-  if (sourcePost !== undefined && hasBytes(sourcePost, POST_METRICS_OFFSET, POST_METRICS_SIZE)) {
-    post.set(sourcePost.subarray(POST_METRICS_OFFSET, POST_METRICS_OFFSET + POST_METRICS_SIZE), POST_METRICS_OFFSET);
+  if (
+    sourcePost !== undefined &&
+    hasBytes(sourcePost, POST_METRICS_OFFSET, POST_METRICS_SIZE)
+  ) {
+    post.set(
+      sourcePost.subarray(
+        POST_METRICS_OFFSET,
+        POST_METRICS_OFFSET + POST_METRICS_SIZE,
+      ),
+      POST_METRICS_OFFSET,
+    );
   }
   return post;
 }
 
 // The transitive closure a subset needs: the glyphs the code points map to, GID 0, and -- following each composite's own component records, which themselves may be composite -- every glyph any of those is assembled from.
-function collectGlyphIds(glyf: GlyfTable, cmap: CmapLookup, numGlyphs: number, codePoints: Iterable<number>): { used: Set<number>; unmapped: number[] } | undefined {
+function collectGlyphIds(
+  glyf: GlyfTable,
+  cmap: CmapLookup,
+  numGlyphs: number,
+  codePoints: Iterable<number>,
+): { used: Set<number>; unmapped: number[] } | undefined {
   const used = new Set<number>([0]);
   const unmapped = new Set<number>();
   const pending: number[] = [0];
@@ -173,17 +214,31 @@ function collectGlyphIds(glyf: GlyfTable, cmap: CmapLookup, numGlyphs: number, c
   return { used, unmapped: [...unmapped].sort((a, b) => a - b) };
 }
 
-export function subsetSfnt(font: SfntFont, codePoints: Iterable<number>): SfntSubsetResult | undefined {
+export function subsetSfnt(
+  font: SfntFont,
+  codePoints: Iterable<number>,
+): SfntSubsetResult | undefined {
   const head = parseHead(font);
   const maxp = parseMaxp(font);
-  const sourceHead = sfntTableBytes(font, 'head');
-  const sourceHhea = sfntTableBytes(font, 'hhea');
-  const sourceMaxp = sfntTableBytes(font, 'maxp');
-  const sourceHmtx = sfntTableBytes(font, 'hmtx');
-  if (head === undefined || maxp === undefined || sourceHead === undefined || sourceHhea === undefined || sourceMaxp === undefined || sourceHmtx === undefined) {
+  const sourceHead = sfntTableBytes(font, "head");
+  const sourceHhea = sfntTableBytes(font, "hhea");
+  const sourceMaxp = sfntTableBytes(font, "maxp");
+  const sourceHmtx = sfntTableBytes(font, "hmtx");
+  if (
+    head === undefined ||
+    maxp === undefined ||
+    sourceHead === undefined ||
+    sourceHhea === undefined ||
+    sourceMaxp === undefined ||
+    sourceHmtx === undefined
+  ) {
     return undefined;
   }
-  if (!hasBytes(sourceHead, 0, HEAD_TABLE_SIZE) || !hasBytes(sourceHhea, 0, HHEA_TABLE_SIZE) || !hasBytes(sourceMaxp, 0, MAXP_MIN_SIZE)) {
+  if (
+    !hasBytes(sourceHead, 0, HEAD_TABLE_SIZE) ||
+    !hasBytes(sourceHhea, 0, HHEA_TABLE_SIZE) ||
+    !hasBytes(sourceMaxp, 0, MAXP_MIN_SIZE)
+  ) {
     return undefined;
   }
   const numberOfHMetrics = u16(sourceHhea, HHEA_NUMBER_OF_HMETRICS_OFFSET);
@@ -191,7 +246,10 @@ export function subsetSfnt(font: SfntFont, codePoints: Iterable<number>): SfntSu
     return undefined;
   }
 
-  const glyf = parseGlyf(font, { numGlyphs: maxp.numGlyphs, indexToLocFormat: head.indexToLocFormat });
+  const glyf = parseGlyf(font, {
+    numGlyphs: maxp.numGlyphs,
+    indexToLocFormat: head.indexToLocFormat,
+  });
   const cmap = buildCmapLookup(font);
   if (glyf === undefined || cmap === undefined) {
     return undefined; // no 'glyf'/'loca' at all (a CFF-flavoured font, which needs Type2 charstring subsetting rather than this), or no character map to resolve the caller's code points through
@@ -231,12 +289,19 @@ export function subsetSfnt(font: SfntFont, codePoints: Iterable<number>): SfntSu
   // 'hmtx', re-expanded to one full record per glyph so the subset's own numberOfHMetrics can equal its glyph count -- one code path, always legal, at a cost of two bytes per glyph the source stored bearing-only.
   const hmtxData = new Uint8Array(numGlyphs * LONG_HOR_METRIC_SIZE);
   for (let glyphId = 0; glyphId < numGlyphs; glyphId++) {
-    const metrics = readHorizontalMetrics({ bytes: sourceHmtx, numberOfHMetrics }, glyphId);
+    const metrics = readHorizontalMetrics(
+      { bytes: sourceHmtx, numberOfHMetrics },
+      glyphId,
+    );
     if (metrics === undefined) {
       return undefined; // a truncated 'hmtx': the source font cannot state this glyph's advance, and inventing one would silently change how text measures
     }
     writeU16(hmtxData, glyphId * LONG_HOR_METRIC_SIZE, metrics.advanceWidth);
-    writeU16(hmtxData, glyphId * LONG_HOR_METRIC_SIZE + 2, metrics.leftSideBearing);
+    writeU16(
+      hmtxData,
+      glyphId * LONG_HOR_METRIC_SIZE + 2,
+      metrics.leftSideBearing,
+    );
   }
 
   const headData = new Uint8Array(HEAD_TABLE_SIZE);
@@ -254,13 +319,13 @@ export function subsetSfnt(font: SfntFont, codePoints: Iterable<number>): SfntSu
   writeU16(maxpData, MAXP_NUM_GLYPHS_OFFSET, numGlyphs);
 
   const tables: SubsetTable[] = [
-    { tag: 'glyf', data: glyfData },
-    { tag: 'head', data: headData },
-    { tag: 'hhea', data: hheaData },
-    { tag: 'hmtx', data: hmtxData },
-    { tag: 'loca', data: locaData },
-    { tag: 'maxp', data: maxpData },
-    { tag: 'post', data: buildPostStub(font) },
+    { tag: "glyf", data: glyfData },
+    { tag: "head", data: headData },
+    { tag: "hhea", data: hheaData },
+    { tag: "hmtx", data: hmtxData },
+    { tag: "loca", data: locaData },
+    { tag: "maxp", data: maxpData },
+    { tag: "post", data: buildPostStub(font) },
   ];
   for (const tag of COPIED_TAGS) {
     const bytes = sfntTableBytes(font, tag);
@@ -280,7 +345,8 @@ export function subsetSfnt(font: SfntFont, codePoints: Iterable<number>): SfntSu
   const searchRange = (1 << entrySelector) * TABLE_RECORD_SIZE;
   const rangeShift = numTables * TABLE_RECORD_SIZE - searchRange;
 
-  const directorySize = TABLE_DIRECTORY_HEADER_SIZE + numTables * TABLE_RECORD_SIZE;
+  const directorySize =
+    TABLE_DIRECTORY_HEADER_SIZE + numTables * TABLE_RECORD_SIZE;
   const offsets: number[] = [];
   let fileLength = alignUp(directorySize);
   for (const table of tables) {
@@ -303,14 +369,28 @@ export function subsetSfnt(font: SfntFont, codePoints: Iterable<number>): SfntSu
       file[recordOffset + c] = table.tag.charCodeAt(c);
     }
     // The record's own checksum covers the table's zero-padded region, and its length field the unpadded one (clause 4.2). For 'head' this is the checksum with checkSumAdjustment zeroed, which is exactly what the spec asks for and what the file currently holds.
-    writeU32(file, recordOffset + 4, checksum(file, tableOffset, alignUp(table.data.length)));
+    writeU32(
+      file,
+      recordOffset + 4,
+      checksum(file, tableOffset, alignUp(table.data.length)),
+    );
     writeU32(file, recordOffset + 8, tableOffset);
     writeU32(file, recordOffset + 12, table.data.length);
   }
 
   // Last, once every other byte of the file is final: the whole file, with this field still zero, must sum to the magic constant once the value written here is added back (clause 4.1). The 'head' record's own checksum above deliberately stays as computed against the zeroed field, which is what that record is defined to hold.
-  const headOffsetInFile = offsets[tables.findIndex((table) => table.tag === 'head')]!;
-  writeU32(file, headOffsetInFile + HEAD_CHECKSUM_ADJUSTMENT_OFFSET, (CHECKSUM_ADJUSTMENT_MAGIC - checksum(file, 0, fileLength)) >>> 0);
+  const headOffsetInFile =
+    offsets[tables.findIndex((table) => table.tag === "head")]!;
+  writeU32(
+    file,
+    headOffsetInFile + HEAD_CHECKSUM_ADJUSTMENT_OFFSET,
+    (CHECKSUM_ADJUSTMENT_MAGIC - checksum(file, 0, fileLength)) >>> 0,
+  );
 
-  return { bytes: file, numGlyphs, glyphIds, unmappedCodePoints: collected.unmapped };
+  return {
+    bytes: file,
+    numGlyphs,
+    glyphIds,
+    unmappedCodePoints: collected.unmapped,
+  };
 }

@@ -1,18 +1,18 @@
-import { Group, Text, useMantineTheme } from '@mantine/core';
-import { Dropzone } from '@mantine/dropzone';
-import type { FileWithPath } from '@mantine/dropzone';
-import { IconCheck, IconFile, IconUpload, IconX } from '@tabler/icons-react';
-import { useMemo } from 'react';
+import { Group, Text, useMantineTheme } from "@mantine/core";
+import { Dropzone } from "@mantine/dropzone";
+import type { FileWithPath } from "@mantine/dropzone";
+import { IconCheck, IconFile, IconUpload, IconX } from "@tabler/icons-react";
+import { useMemo } from "react";
 
-import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
-import { recordRecentFile } from '../hooks/useRecentFiles';
-import type { OpenedFile } from '../ports/fileAccess';
-import { inferFormatFromFilename } from '../shared/extensionToFormat';
-import { dropzoneContent } from './FileUpload.css';
+import { createFileAccess } from "../adapters/fileAccess/createFileAccess";
+import { recordRecentFile } from "../hooks/useRecentFiles";
+import type { OpenedFile } from "../ports/fileAccess";
+import { inferFormatFromFilename } from "../shared/extensionToFormat";
+import { dropzoneContent } from "./FileUpload.css";
 
 export interface FileUploadProps {
   /** Passed straight through to FileAccessPort.openFile's `accept` -- normalised below into Dropzone's own (looser) Accept shape, so both consumers stay driven by a single value with no risk of drift. */
-  accept?: FilePickerAcceptType['accept'];
+  accept?: FilePickerAcceptType["accept"];
   /** Short hint under the dropzone, e.g. "docx, odt, pdf, or markdown". Purely textual -- accept is what's enforced. */
   formatHint?: string;
   file?: OpenedFile;
@@ -31,17 +31,31 @@ async function toOpenedFile(file: FileWithPath): Promise<OpenedFile> {
 function recordIfRecognised(opened: OpenedFile) {
   const format = inferFormatFromFilename(opened.name);
   if (format === undefined) return;
-  void recordRecentFile({ format, name: opened.name, sizeBytes: opened.bytes.byteLength, handle: opened.handle });
+  void recordRecentFile({
+    format,
+    name: opened.name,
+    sizeBytes: opened.bytes.byteLength,
+    handle: opened.handle,
+  });
 }
 
-export function FileUpload({ accept, formatHint, file, onFile, disabled, loading }: FileUploadProps) {
+export function FileUpload({
+  accept,
+  formatHint,
+  file,
+  onFile,
+  disabled,
+  loading,
+}: FileUploadProps) {
   const theme = useMantineTheme();
   const fileAccess = useMemo(() => createFileAccess(), []);
   const dropzoneAccept = useMemo(() => {
     if (accept === undefined) return undefined;
     const normalised: Record<string, string[]> = {};
     for (const [mimeType, extensions] of Object.entries(accept)) {
-      normalised[mimeType] = Array.isArray(extensions) ? [...extensions] : [extensions];
+      normalised[mimeType] = Array.isArray(extensions)
+        ? [...extensions]
+        : [extensions];
     }
     return normalised;
   }, [accept]);
@@ -82,11 +96,19 @@ export function FileUpload({ accept, formatHint, file, onFile, disabled, loading
         <Dropzone.Reject>
           <IconX size={36} color={theme.colors.red[6]} />
         </Dropzone.Reject>
-        <Dropzone.Idle>{file !== undefined ? <IconFile size={36} /> : <IconUpload size={36} />}</Dropzone.Idle>
+        <Dropzone.Idle>
+          {file !== undefined ? (
+            <IconFile size={36} />
+          ) : (
+            <IconUpload size={36} />
+          )}
+        </Dropzone.Idle>
 
         <div>
           <Text size="sm" fw={500}>
-            {file !== undefined ? file.name : 'Drag a file here or click to browse'}
+            {file !== undefined
+              ? file.name
+              : "Drag a file here or click to browse"}
           </Text>
           {file === undefined && formatHint !== undefined && (
             <Text size="xs" c="dimmed">

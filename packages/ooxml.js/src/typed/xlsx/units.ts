@@ -1,4 +1,4 @@
-import { POINTS_PER_INCH } from '../shared/units';
+import { POINTS_PER_INCH } from "../shared/units";
 
 // SpreadsheetML-specific unit conversions: xlsx's own "character width" column-width unit, and the pixel grid it (and row heights, expressed directly in points) are built on. Ported from nowhere -- these are genuinely new to this package, xlsx being the first OOXML format ooxml.js reads geometry from that isn't already in EMU/twips/half-points.
 
@@ -17,7 +17,9 @@ export const DEFAULT_COLUMN_WIDTH_CHARS = 8.43;
 // Converts a stored <col width="..."> value (in "characters of the workbook's default font") to points. Two steps: (1) the pixel formula documented and attributed above, confirmed against both the official [MS-OI29500] specification page (which gives the reverse pixels-from-width relationship in the identical MDW terms) and multiple independent real-world tool references (the ClosedXML wiki's own "Cell Dimensions" page, SheetJS's own column-properties documentation) that all state it identically: pixels = Truncate(((256 * width + Truncate(128 / MDW)) / 256) * MDW); (2) the standard 96px/inch -> 72pt/inch conversion. Both truncations are real, integer-pixel-grid truncations Excel itself performs when rendering -- reproduced here exactly (via Math.trunc) rather than smoothed into a continuous formula, since a caller round-tripping the exact same width value through this function should see the exact same pixel count Excel itself would render.
 export function columnWidthCharsToPt(width: number): number {
   const digitWidthAllowance = Math.trunc(128 / MAX_DIGIT_WIDTH_PX);
-  const pixels = Math.trunc(((256 * width + digitWidthAllowance) / 256) * MAX_DIGIT_WIDTH_PX);
+  const pixels = Math.trunc(
+    ((256 * width + digitWidthAllowance) / 256) * MAX_DIGIT_WIDTH_PX,
+  );
   return (pixels / PIXELS_PER_INCH) * POINTS_PER_INCH;
 }
 

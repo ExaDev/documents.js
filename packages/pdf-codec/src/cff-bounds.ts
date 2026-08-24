@@ -1,7 +1,14 @@
-import { CFF_DICT_OP_CHARSTRINGS, CFF_DICT_OP_PRIVATE, CFF_DICT_OP_ROS, CFF_DICT_OP_SUBRS, parseCffDict, readCffIndex } from './cff';
-import type { CffIndex } from './cff';
-import type { GlyphInkBounds } from './glyph-bounds';
-import { hasBytes, u8, u16, u32 } from './sfnt';
+import {
+  CFF_DICT_OP_CHARSTRINGS,
+  CFF_DICT_OP_PRIVATE,
+  CFF_DICT_OP_ROS,
+  CFF_DICT_OP_SUBRS,
+  parseCffDict,
+  readCffIndex,
+} from "./cff";
+import type { CffIndex } from "./cff";
+import type { GlyphInkBounds } from "./glyph-bounds";
+import { hasBytes, u8, u16, u32 } from "./sfnt";
 
 // Per-glyph ink bounding boxes for a CFF-flavoured font, computed by interpreting each glyph's own Type 2 charstring (CFF 1.0 spec, and Adobe's "The Type 2 Charstring Format", TN 5177).
 //
@@ -129,13 +136,27 @@ function includePoint(box: BoundsBox, x: number, y: number): void {
   box.drawn = true;
 }
 
-function cubicAt(p0: number, p1: number, p2: number, p3: number, t: number): number {
+function cubicAt(
+  p0: number,
+  p1: number,
+  p2: number,
+  p3: number,
+  t: number,
+): number {
   const s = 1 - t;
-  return s * s * s * p0 + 3 * s * s * t * p1 + 3 * s * t * t * p2 + t * t * t * p3;
+  return (
+    s * s * s * p0 + 3 * s * s * t * p1 + 3 * s * t * t * p2 + t * t * t * p3
+  );
 }
 
 // The exact extent of one axis of a cubic Bezier: its endpoints, plus the curve's value at each root of its own derivative that lies strictly inside the segment. B'(t) = 3[(-p0 + 3p1 - 3p2 + p3)t^2 + 2(p0 - 2p1 + p2)t + (p1 - p0)], so the roots come from an ordinary quadratic -- with the degenerate linear case (a == 0) handled separately, which is what a curve whose control points happen to be collinear in this axis produces.
-function includeCubicAxis(p0: number, p1: number, p2: number, p3: number, apply: (value: number) => void): void {
+function includeCubicAxis(
+  p0: number,
+  p1: number,
+  p2: number,
+  p3: number,
+  apply: (value: number) => void,
+): void {
   apply(p0);
   apply(p3);
   const a = -p0 + 3 * p1 - 3 * p2 + p3;
@@ -160,7 +181,17 @@ function includeCubicAxis(p0: number, p1: number, p2: number, p3: number, apply:
   }
 }
 
-function includeCubic(box: BoundsBox, x0: number, y0: number, x1: number, y1: number, x2: number, y2: number, x3: number, y3: number): void {
+function includeCubic(
+  box: BoundsBox,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  x3: number,
+  y3: number,
+): void {
   includeCubicAxis(x0, x1, x2, x3, (value) => {
     box.minX = Math.min(box.minX, value);
     box.maxX = Math.max(box.maxX, value);
@@ -173,7 +204,15 @@ function includeCubic(box: BoundsBox, x0: number, y0: number, x1: number, y1: nu
 }
 
 // Moves the current point to the end of a cubic whose control points are given as deltas from it, accumulating the curve's exact extent on the way.
-function curveTo(state: WalkState, dx1: number, dy1: number, dx2: number, dy2: number, dx3: number, dy3: number): void {
+function curveTo(
+  state: WalkState,
+  dx1: number,
+  dy1: number,
+  dx2: number,
+  dy2: number,
+  dx3: number,
+  dy3: number,
+): void {
   const x0 = state.x;
   const y0 = state.y;
   const x1 = x0 + dx1;
@@ -201,12 +240,18 @@ function moveTo(state: WalkState, dx: number, dy: number): void {
 }
 
 // Takes the leading width operand off the stack, where the operator that just ran declares one. A charstring's optional leading width is detected purely by arity: the FIRST stack-clearing operator carries one extra argument when the glyph's width differs from the Private DICT's own defaultWidthX (TN 5177 section 3.1). The width value itself is not read here -- hmtx already supplies every advance width this package uses.
-function takeWidth(state: WalkState, evenArgs: boolean, expected: number): void {
+function takeWidth(
+  state: WalkState,
+  evenArgs: boolean,
+  expected: number,
+): void {
   if (state.widthParsed) {
     return;
   }
   state.widthParsed = true;
-  const extra = evenArgs ? state.stack.length % STEM_ARGS_PER_STEM !== 0 : state.stack.length > expected;
+  const extra = evenArgs
+    ? state.stack.length % STEM_ARGS_PER_STEM !== 0
+    : state.stack.length > expected;
   if (extra) {
     state.stack.shift();
   }
@@ -226,20 +271,29 @@ interface CharstringOperand {
 }
 
 // Decodes the operand at `offset`, or `undefined` where the byte there introduces no operand at all (an operator, 0..31 apart from 28) or where the operand it does introduce runs off the end of the charstring. The two cases are told apart by the caller from the byte's own value, since only one of them is an error.
-function readOperand(code: Uint8Array<ArrayBuffer>, offset: number): CharstringOperand | undefined {
+function readOperand(
+  code: Uint8Array<ArrayBuffer>,
+  offset: number,
+): CharstringOperand | undefined {
   const b0 = code[offset]!;
   if (b0 === CS_OPERAND_INT16) {
     if (!hasBytes(code, offset + 1, 2)) {
       return undefined;
     }
     const raw = u16(code, offset + 1);
-    return { value: raw >= 0x8000 ? raw - 0x1_0000 : raw, endOffset: offset + 3 };
+    return {
+      value: raw >= 0x8000 ? raw - 0x1_0000 : raw,
+      endOffset: offset + 3,
+    };
   }
   if (b0 === CS_OPERAND_FIXED) {
     if (!hasBytes(code, offset + 1, 4)) {
       return undefined;
     }
-    return { value: (u32(code, offset + 1) | 0) / FIXED_POINT_SCALE, endOffset: offset + 5 };
+    return {
+      value: (u32(code, offset + 1) | 0) / FIXED_POINT_SCALE,
+      endOffset: offset + 5,
+    };
   }
   if (b0 >= CS_OPERAND_SMALL_FIRST && b0 <= CS_OPERAND_SMALL_LAST) {
     return { value: b0 - CS_OPERAND_SMALL_BIAS, endOffset: offset + 1 };
@@ -248,19 +302,39 @@ function readOperand(code: Uint8Array<ArrayBuffer>, offset: number): CharstringO
     if (!hasBytes(code, offset + 1, 1)) {
       return undefined;
     }
-    return { value: (b0 - CS_OPERAND_MEDIUM_FIRST_BYTE_BIAS) * BYTE_RADIX + u8(code, offset + 1) + CS_OPERAND_MEDIUM_BIAS, endOffset: offset + 2 };
+    return {
+      value:
+        (b0 - CS_OPERAND_MEDIUM_FIRST_BYTE_BIAS) * BYTE_RADIX +
+        u8(code, offset + 1) +
+        CS_OPERAND_MEDIUM_BIAS,
+      endOffset: offset + 2,
+    };
   }
-  if (b0 >= CS_OPERAND_NEGATIVE_MEDIUM_FIRST && b0 <= CS_OPERAND_NEGATIVE_MEDIUM_LAST) {
+  if (
+    b0 >= CS_OPERAND_NEGATIVE_MEDIUM_FIRST &&
+    b0 <= CS_OPERAND_NEGATIVE_MEDIUM_LAST
+  ) {
     if (!hasBytes(code, offset + 1, 1)) {
       return undefined;
     }
-    return { value: -(b0 - CS_OPERAND_NEGATIVE_MEDIUM_FIRST_BYTE_BIAS) * BYTE_RADIX - u8(code, offset + 1) - CS_OPERAND_MEDIUM_BIAS, endOffset: offset + 2 };
+    return {
+      value:
+        -(b0 - CS_OPERAND_NEGATIVE_MEDIUM_FIRST_BYTE_BIAS) * BYTE_RADIX -
+        u8(code, offset + 1) -
+        CS_OPERAND_MEDIUM_BIAS,
+      endOffset: offset + 2,
+    };
   }
   return undefined;
 }
 
 // Runs one charstring (a glyph's own, or a subroutine's), returning false where the walk must be abandoned: a malformed or truncated charstring, a nesting/operation limit, or an operator this module deliberately does not interpret.
-function execute(code: Uint8Array<ArrayBuffer>, state: WalkState, context: CharstringContext, depth: number): boolean {
+function execute(
+  code: Uint8Array<ArrayBuffer>,
+  state: WalkState,
+  context: CharstringContext,
+  depth: number,
+): boolean {
   if (depth > MAX_SUBR_DEPTH) {
     return false;
   }
@@ -326,7 +400,11 @@ function execute(code: Uint8Array<ArrayBuffer>, state: WalkState, context: Chars
           return false;
         }
         const delta = stack[stack.length - 1]!;
-        moveTo(state, b0 === OP_HMOVETO ? delta : 0, b0 === OP_HMOVETO ? 0 : delta);
+        moveTo(
+          state,
+          b0 === OP_HMOVETO ? delta : 0,
+          b0 === OP_HMOVETO ? 0 : delta,
+        );
         stack.length = 0;
         break;
       }
@@ -349,7 +427,15 @@ function execute(code: Uint8Array<ArrayBuffer>, state: WalkState, context: Chars
       }
       case OP_RRCURVETO: {
         for (let k = 0; k + 5 < stack.length; k += 6) {
-          curveTo(state, stack[k]!, stack[k + 1]!, stack[k + 2]!, stack[k + 3]!, stack[k + 4]!, stack[k + 5]!);
+          curveTo(
+            state,
+            stack[k]!,
+            stack[k + 1]!,
+            stack[k + 2]!,
+            stack[k + 3]!,
+            stack[k + 4]!,
+            stack[k + 5]!,
+          );
         }
         stack.length = 0;
         break;
@@ -357,7 +443,15 @@ function execute(code: Uint8Array<ArrayBuffer>, state: WalkState, context: Chars
       case OP_RCURVELINE: {
         let k = 0;
         for (; k + 5 < stack.length - 2; k += 6) {
-          curveTo(state, stack[k]!, stack[k + 1]!, stack[k + 2]!, stack[k + 3]!, stack[k + 4]!, stack[k + 5]!);
+          curveTo(
+            state,
+            stack[k]!,
+            stack[k + 1]!,
+            stack[k + 2]!,
+            stack[k + 3]!,
+            stack[k + 4]!,
+            stack[k + 5]!,
+          );
         }
         if (k + 1 < stack.length) {
           lineTo(state, stack[k]!, stack[k + 1]!);
@@ -371,7 +465,15 @@ function execute(code: Uint8Array<ArrayBuffer>, state: WalkState, context: Chars
           lineTo(state, stack[k]!, stack[k + 1]!);
         }
         if (k + 5 < stack.length) {
-          curveTo(state, stack[k]!, stack[k + 1]!, stack[k + 2]!, stack[k + 3]!, stack[k + 4]!, stack[k + 5]!);
+          curveTo(
+            state,
+            stack[k]!,
+            stack[k + 1]!,
+            stack[k + 2]!,
+            stack[k + 3]!,
+            stack[k + 4]!,
+            stack[k + 5]!,
+          );
         }
         stack.length = 0;
         break;
@@ -388,9 +490,25 @@ function execute(code: Uint8Array<ArrayBuffer>, state: WalkState, context: Chars
         for (; k + 3 < stack.length; k += 4) {
           const cross = k <= 1 ? firstCross : 0;
           if (b0 === OP_VVCURVETO) {
-            curveTo(state, cross, stack[k]!, stack[k + 1]!, stack[k + 2]!, 0, stack[k + 3]!);
+            curveTo(
+              state,
+              cross,
+              stack[k]!,
+              stack[k + 1]!,
+              stack[k + 2]!,
+              0,
+              stack[k + 3]!,
+            );
           } else {
-            curveTo(state, stack[k]!, cross, stack[k + 1]!, stack[k + 2]!, stack[k + 3]!, 0);
+            curveTo(
+              state,
+              stack[k]!,
+              cross,
+              stack[k + 1]!,
+              stack[k + 2]!,
+              stack[k + 3]!,
+              0,
+            );
           }
         }
         stack.length = 0;
@@ -405,9 +523,25 @@ function execute(code: Uint8Array<ArrayBuffer>, state: WalkState, context: Chars
           const last = stack.length - k === 5;
           const extra = last ? stack[k + 4]! : 0;
           if (horizontal) {
-            curveTo(state, stack[k]!, 0, stack[k + 1]!, stack[k + 2]!, extra, stack[k + 3]!);
+            curveTo(
+              state,
+              stack[k]!,
+              0,
+              stack[k + 1]!,
+              stack[k + 2]!,
+              extra,
+              stack[k + 3]!,
+            );
           } else {
-            curveTo(state, 0, stack[k]!, stack[k + 1]!, stack[k + 2]!, stack[k + 3]!, extra);
+            curveTo(
+              state,
+              0,
+              stack[k]!,
+              stack[k + 1]!,
+              stack[k + 2]!,
+              stack[k + 3]!,
+              extra,
+            );
           }
           k += 4;
           horizontal = !horizontal;
@@ -421,8 +555,10 @@ function execute(code: Uint8Array<ArrayBuffer>, state: WalkState, context: Chars
         if (index === undefined) {
           return false;
         }
-        const subrs = b0 === OP_CALLSUBR ? context.localSubrs : context.globalSubrs;
-        const bias = b0 === OP_CALLSUBR ? context.localBias : context.globalBias;
+        const subrs =
+          b0 === OP_CALLSUBR ? context.localSubrs : context.globalSubrs;
+        const bias =
+          b0 === OP_CALLSUBR ? context.localBias : context.globalBias;
         const code2 = subrs?.entry(index + bias);
         if (code2 === undefined) {
           return false;
@@ -439,7 +575,10 @@ function execute(code: Uint8Array<ArrayBuffer>, state: WalkState, context: Chars
         // endchar's own arity rule is its own, not takeWidth's: it takes either nothing or four seac-like arguments, so a leading width shows up as exactly one or five operands. Anything else on the stack is a malformed charstring rather than a width.
         if (!state.widthParsed) {
           state.widthParsed = true;
-          if (stack.length === 1 || stack.length === ENDCHAR_SEAC_ARG_COUNT + 1) {
+          if (
+            stack.length === 1 ||
+            stack.length === ENDCHAR_SEAC_ARG_COUNT + 1
+          ) {
             stack.shift();
           }
         }
@@ -473,8 +612,24 @@ function executeEscaped(operator: number, state: WalkState): boolean {
     if (stack.length < 13) {
       return false;
     }
-    curveTo(state, stack[0]!, stack[1]!, stack[2]!, stack[3]!, stack[4]!, stack[5]!);
-    curveTo(state, stack[6]!, stack[7]!, stack[8]!, stack[9]!, stack[10]!, stack[11]!); // the 13th argument is fd, the flex depth -- a rasterisation hint with no effect on the curve
+    curveTo(
+      state,
+      stack[0]!,
+      stack[1]!,
+      stack[2]!,
+      stack[3]!,
+      stack[4]!,
+      stack[5]!,
+    );
+    curveTo(
+      state,
+      stack[6]!,
+      stack[7]!,
+      stack[8]!,
+      stack[9]!,
+      stack[10]!,
+      stack[11]!,
+    ); // the 13th argument is fd, the flex depth -- a rasterisation hint with no effect on the curve
     stack.length = 0;
     return true;
   }
@@ -495,7 +650,15 @@ function executeEscaped(operator: number, state: WalkState): boolean {
     // dx1 dy1 dx2 dy2 dx3 dx4 dx5 dy5 dx6: the final point returns to the original y.
     curveTo(state, stack[0]!, stack[1]!, stack[2]!, stack[3]!, stack[4]!, 0);
     const dy5 = stack[7]!;
-    curveTo(state, stack[5]!, 0, stack[6]!, dy5, stack[8]!, startY - (state.y + dy5));
+    curveTo(
+      state,
+      stack[5]!,
+      0,
+      stack[6]!,
+      dy5,
+      stack[8]!,
+      startY - (state.y + dy5),
+    );
     stack.length = 0;
     return true;
   }
@@ -511,13 +674,37 @@ function executeEscaped(operator: number, state: WalkState): boolean {
       dx += stack[k]!;
       dy += stack[k + 1]!;
     }
-    curveTo(state, stack[0]!, stack[1]!, stack[2]!, stack[3]!, stack[4]!, stack[5]!);
+    curveTo(
+      state,
+      stack[0]!,
+      stack[1]!,
+      stack[2]!,
+      stack[3]!,
+      stack[4]!,
+      stack[5]!,
+    );
     const controlX = state.x + stack[6]! + stack[8]!;
     const controlY = state.y + stack[7]! + stack[9]!;
     if (Math.abs(dx) > Math.abs(dy)) {
-      curveTo(state, stack[6]!, stack[7]!, stack[8]!, stack[9]!, stack[10]!, startY - controlY);
+      curveTo(
+        state,
+        stack[6]!,
+        stack[7]!,
+        stack[8]!,
+        stack[9]!,
+        stack[10]!,
+        startY - controlY,
+      );
     } else {
-      curveTo(state, stack[6]!, stack[7]!, stack[8]!, stack[9]!, startX - controlX, stack[10]!);
+      curveTo(
+        state,
+        stack[6]!,
+        stack[7]!,
+        stack[8]!,
+        stack[9]!,
+        startX - controlX,
+        stack[10]!,
+      );
     }
     stack.length = 0;
     return true;
@@ -525,13 +712,20 @@ function executeEscaped(operator: number, state: WalkState): boolean {
   return false;
 }
 
-function readPrivateSubrs(bytes: Uint8Array<ArrayBuffer>, privateOperands: readonly number[] | undefined): CffIndex | undefined {
+function readPrivateSubrs(
+  bytes: Uint8Array<ArrayBuffer>,
+  privateOperands: readonly number[] | undefined,
+): CffIndex | undefined {
   if (privateOperands === undefined || privateOperands.length < 2) {
     return undefined;
   }
   const size = privateOperands[0]!;
   const offset = privateOperands[1]!;
-  if (!Number.isInteger(size) || !Number.isInteger(offset) || !hasBytes(bytes, offset, size)) {
+  if (
+    !Number.isInteger(size) ||
+    !Number.isInteger(offset) ||
+    !hasBytes(bytes, offset, size)
+  ) {
     return undefined;
   }
   const privateDict = parseCffDict(bytes.subarray(offset, offset + size));
@@ -544,8 +738,13 @@ function readPrivateSubrs(bytes: Uint8Array<ArrayBuffer>, privateOperands: reado
 }
 
 // Reads a bare CFF font program into a per-glyph ink-bounds lookup, or `undefined` for a program this module will not walk at all: an unreadable header/Name INDEX/Top DICT, a CID-keyed font, or a missing or unreadable CharStrings INDEX. Each glyph's charstring is walked at most once; the result is memoised, since a document setting the same character repeatedly would otherwise re-run the same program per occurrence.
-export function parseCffGlyphBounds(bytes: Uint8Array<ArrayBuffer>): CffGlyphBounds | undefined {
-  if (!hasBytes(bytes, 0, CFF_HEADER_MIN_SIZE) || u8(bytes, 0) !== CFF_MAJOR_VERSION) {
+export function parseCffGlyphBounds(
+  bytes: Uint8Array<ArrayBuffer>,
+): CffGlyphBounds | undefined {
+  if (
+    !hasBytes(bytes, 0, CFF_HEADER_MIN_SIZE) ||
+    u8(bytes, 0) !== CFF_MAJOR_VERSION
+  ) {
     return undefined;
   }
   const headerSize = u8(bytes, CFF_HEADER_SIZE_OFFSET);
@@ -605,7 +804,10 @@ export function parseCffGlyphBounds(bytes: Uint8Array<ArrayBuffer>): CffGlyphBou
   };
 }
 
-function computeBounds(glyphId: number, context: CharstringContext): GlyphInkBounds | undefined {
+function computeBounds(
+  glyphId: number,
+  context: CharstringContext,
+): GlyphInkBounds | undefined {
   const code = context.charStrings.entry(glyphId);
   if (code === undefined) {
     return undefined;
@@ -617,10 +819,21 @@ function computeBounds(glyphId: number, context: CharstringContext): GlyphInkBou
     stems: 0,
     widthParsed: false,
     operations: 0,
-    box: { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity, drawn: false },
+    box: {
+      minX: Infinity,
+      minY: Infinity,
+      maxX: -Infinity,
+      maxY: -Infinity,
+      drawn: false,
+    },
   };
   if (!execute(code, state, context, 0) || !state.box.drawn) {
     return undefined;
   }
-  return { xMin: state.box.minX, yMin: state.box.minY, xMax: state.box.maxX, yMax: state.box.maxY };
+  return {
+    xMin: state.box.minX,
+    yMin: state.box.minY,
+    xMax: state.box.maxX,
+    yMax: state.box.maxY,
+  };
 }

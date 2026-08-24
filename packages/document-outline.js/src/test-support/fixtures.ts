@@ -33,10 +33,16 @@ import type {
   SlideGroupNode,
   StylesTable,
   SymbolTable,
-} from 'document-schema.js';
+} from "document-schema.js";
 
-export function textRun(text: string, options: { bold?: boolean } = {}): ContentRun {
-  return { text, ...(options.bold !== undefined ? { bold: options.bold } : {}) };
+export function textRun(
+  text: string,
+  options: { bold?: boolean } = {},
+): ContentRun {
+  return {
+    text,
+    ...(options.bold !== undefined ? { bold: options.bold } : {}),
+  };
 }
 
 export interface ParagraphOptions {
@@ -48,22 +54,31 @@ export interface ParagraphOptions {
 }
 
 // A bare paragraph LEAF (ContentParagraph): no headingLevel, no list membership -- exactly the payload that sits at a leaf position in a tree. The heading/list anchors are separate builders below, because in the tree vocabulary an anchored paragraph lives on its group's node, never as a leaf.
-export function paragraph(text: string, options: ParagraphOptions = {}): ContentParagraph {
+export function paragraph(
+  text: string,
+  options: ParagraphOptions = {},
+): ContentParagraph {
   return {
-    kind: 'paragraph',
+    kind: "paragraph",
     runs: [textRun(text, { bold: options.bold })],
     // headingLevel/listLevel here are for paragraphs that must carry the signal while sitting OUTSIDE a matching group (the heading-styled presentation leaf, the effective-resolution anchor variants), not for leaf-position grouping -- buildOutline reads signals only from group anchors.
-    ...(options.headingLevel !== undefined ? { headingLevel: options.headingLevel } : {}),
+    ...(options.headingLevel !== undefined
+      ? { headingLevel: options.headingLevel }
+      : {}),
     // numId omitted deliberately on list paragraphs: since schema 3.3.0 it is optional, and OOXML drawing paragraphs carry only a level -- exactly the slide-body shape the presentation outline nests by.
-    ...(options.listLevel !== undefined ? { list: { level: options.listLevel } } : {}),
+    ...(options.listLevel !== undefined
+      ? { list: { level: options.listLevel } }
+      : {}),
     ...(options.styleId !== undefined ? { styleId: options.styleId } : {}),
-    ...(options.indentLeftPt !== undefined ? { indentLeftPt: options.indentLeftPt } : {}),
+    ...(options.indentLeftPt !== undefined
+      ? { indentLeftPt: options.indentLeftPt }
+      : {}),
   };
 }
 
 export function table(rows: string[][]): ContentTable {
   return {
-    kind: 'table',
+    kind: "table",
     rows: rows.map((cells) => ({
       cells: cells.map((text) => ({ blocks: [paragraph(text)] })),
     })),
@@ -73,9 +88,9 @@ export function table(rows: string[][]): ContentTable {
 
 export function imageBlock(altText?: string): ContentImageBlock {
   return {
-    kind: 'image',
-    format: 'png',
-    base64: 'aW1hZ2U=',
+    kind: "image",
+    format: "png",
+    base64: "aW1hZ2U=",
     widthPt: 100,
     heightPt: 60,
     ...(altText !== undefined ? { altText } : {}),
@@ -83,24 +98,33 @@ export function imageBlock(altText?: string): ContentImageBlock {
 }
 
 export function pageBreak(): ContentPageBreak {
-  return { kind: 'pageBreak' };
+  return { kind: "pageBreak" };
 }
 
 // A rendered position for the fused-frames fixtures: a run or paragraph that has been through a layout pass carries wherever it landed, and the wrapped-run case (one node, more than one frame) is what the array-of-frames shape exists for.
-export function layoutFrame(pageIndex: number, xPt: number, yPt: number, widthPt: number, heightPt: number): LayoutFrame {
+export function layoutFrame(
+  pageIndex: number,
+  xPt: number,
+  yPt: number,
+  widthPt: number,
+  heightPt: number,
+): LayoutFrame {
   return { pageIndex, xPt, yPt, widthPt, heightPt };
 }
 
 // A paragraph whose single run carries more than one frame -- the wrapped-run case: the run's content renders in two places without the node being split or duplicated.
-export function wrappedRunParagraph(text: string, frames: LayoutFrame[]): ContentParagraph {
-  return { kind: 'paragraph', runs: [{ text, frames }] };
+export function wrappedRunParagraph(
+  text: string,
+  frames: LayoutFrame[],
+): ContentParagraph {
+  return { kind: "paragraph", runs: [{ text, frames }] };
 }
 
 export function sheetImage(altText?: string): ContentSheetImage {
   return {
-    kind: 'image',
-    format: 'jpeg',
-    base64: 'c2hlZXQtaW1hZ2U=',
+    kind: "image",
+    format: "jpeg",
+    base64: "c2hlZXQtaW1hZ2U=",
     widthPt: 200,
     heightPt: 120,
     ...(altText !== undefined ? { altText } : {}),
@@ -114,13 +138,17 @@ export function sheetImage(altText?: string): ContentSheetImage {
 // An embedded whole wordprocessing document, block-flow-shaped via embeddedObjectBlock below or sheet-anchored as-is -- the recursive arm stays one intact leaf whichever container holds it. The payload is a flat ContentDocument, not a DocumentTree: schema 4 promotes the TOP-LEVEL package to tree form, but an embedded document stays the flat codec-exchange shape it always was.
 export function embeddedObject(): ContentEmbeddedObject {
   return {
-    objectKind: 'wordprocessing',
+    objectKind: "wordprocessing",
     frame: { xPt: 10, yPt: 10, widthPt: 300, heightPt: 200 },
     document: {
-      kind: 'wordprocessing',
+      kind: "wordprocessing",
       metadata: {},
       sections: [
-        { pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [paragraph('embedded document body')] },
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [paragraph("embedded document body")],
+        },
       ],
     },
   };
@@ -129,14 +157,21 @@ export function embeddedObject(): ContentEmbeddedObject {
 // The recursive formula arm: an embedded whole formula document, anchored to a spreadsheet cell exactly as a sheet-held embedded object is (the four anchor fields are sheet-anchored-only, which is why they are set here and absent on embeddedObject above). Same flat-shape rule as embeddedObject; mathml carries a real MathMlNode tree (an element with a text child), because the schema's guard rejects bare strings.
 export function embeddedFormulaObject(): ContentEmbeddedObject {
   return {
-    objectKind: 'formula',
+    objectKind: "formula",
     frame: { xPt: 2, yPt: 2, widthPt: 120, heightPt: 40 },
     document: {
-      kind: 'formula',
+      kind: "formula",
       metadata: {},
       formula: {
-        mathml: [{ type: 'element', tag: 'mi', attributes: [], children: [{ type: 'text', value: 'P' }] }],
-        presentation: { latex: 'P = VI' },
+        mathml: [
+          {
+            type: "element",
+            tag: "mi",
+            attributes: [],
+            children: [{ type: "text", value: "P" }],
+          },
+        ],
+        presentation: { latex: "P = VI" },
       },
     },
     anchorRow: 0,
@@ -148,17 +183,22 @@ export function embeddedFormulaObject(): ContentEmbeddedObject {
 
 // The block-level spelling of an embedded object inside a section's or shape's block flow (ContentEmbeddedObjectBlock adds the kind discriminator to ContentEmbeddedObject's own fields).
 export function embeddedObjectBlock(): ContentEmbeddedObjectBlock {
-  return { ...embeddedObject(), kind: 'embeddedObject' };
+  return { ...embeddedObject(), kind: "embeddedObject" };
 }
 
 // A populated sheet cell, for grid-carrying sheets: cells ride ON the sheet descriptor, so a sheet group carries the grid and its children carry only the floating payload.
-export function sheetCell(row: number, column: number, value: ContentCellValue, displayText: string): ContentSheetCell {
+export function sheetCell(
+  row: number,
+  column: number,
+  value: ContentCellValue,
+  displayText: string,
+): ContentSheetCell {
   return { row, column, value, displayText };
 }
 
 export function vectorLine(): ContentVector {
   return {
-    kind: 'line',
+    kind: "line",
     from: { xPt: 0, yPt: 0 },
     to: { xPt: 100, yPt: 50 },
     stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
@@ -167,7 +207,7 @@ export function vectorLine(): ContentVector {
 
 export function vectorRect(): ContentVector {
   return {
-    kind: 'rect',
+    kind: "rect",
     frame: { xPt: 10, yPt: 10, widthPt: 80, heightPt: 40 },
     fill: { r: 1, g: 1, b: 1 },
   };
@@ -179,7 +219,12 @@ interface GroupOptions {
 }
 
 // The anchor paragraphs are built literally rather than through paragraph(), whose return type is the loose ContentParagraph with the grouping signal optional -- a group anchor's signal is structurally required, and the literal spread keeps it required without a cast.
-export function headingGroup(text: string, headingLevel: number, children: SectionChild[] = [], options: GroupOptions = {}): HeadingGroupNode {
+export function headingGroup(
+  text: string,
+  headingLevel: number,
+  children: SectionChild[] = [],
+  options: GroupOptions = {},
+): HeadingGroupNode {
   return {
     node: { ...paragraph(text), headingLevel },
     ...(options.style !== undefined ? { style: options.style } : {}),
@@ -187,7 +232,12 @@ export function headingGroup(text: string, headingLevel: number, children: Secti
   };
 }
 
-export function listGroup(text: string, level: number, children: ListChild[] = [], options: GroupOptions = {}): ListGroupNode {
+export function listGroup(
+  text: string,
+  level: number,
+  children: ListChild[] = [],
+  options: GroupOptions = {},
+): ListGroupNode {
   return {
     node: { ...paragraph(text), list: { level } },
     ...(options.style !== undefined ? { style: options.style } : {}),
@@ -196,17 +246,23 @@ export function listGroup(text: string, level: number, children: ListChild[] = [
 }
 
 // A construct group's node is a ConstructDescriptor, never a paragraph -- richText is the simplest member of the discriminated union (kind + controlType only), which is all these fixtures need since the outline builder never reads a construct's descriptor fields, only its kind (to recognise the wrapper) and its children.
-export function sectionConstructGroup(children: SectionChild[], options: GroupOptions = {}): SectionConstructGroupNode {
+export function sectionConstructGroup(
+  children: SectionChild[],
+  options: GroupOptions = {},
+): SectionConstructGroupNode {
   return {
-    node: { kind: 'contentControl', controlType: 'richText' },
+    node: { kind: "contentControl", controlType: "richText" },
     ...(options.style !== undefined ? { style: options.style } : {}),
     children,
   };
 }
 
-export function shapeConstructGroup(children: ShapeChild[], options: GroupOptions = {}): ShapeConstructGroupNode {
+export function shapeConstructGroup(
+  children: ShapeChild[],
+  options: GroupOptions = {},
+): ShapeConstructGroupNode {
   return {
-    node: { kind: 'contentControl', controlType: 'richText' },
+    node: { kind: "contentControl", controlType: "richText" },
     ...(options.style !== undefined ? { style: options.style } : {}),
     children,
   };
@@ -220,19 +276,25 @@ export interface SectionGroupOptions extends GroupOptions {
   margins?: Margins;
 }
 
-export function sectionGroup(children: SectionChild[], options: SectionGroupOptions = {}): SectionGroupNode {
+export function sectionGroup(
+  children: SectionChild[],
+  options: SectionGroupOptions = {},
+): SectionGroupNode {
   return {
     node: {
       pageSize: options.pageSize ?? PAGE_SIZE_A4_SECTION,
       margins: options.margins ?? MARGINS_A4_SECTION,
-      kind: 'section',
+      kind: "section",
     },
     ...(options.style !== undefined ? { style: options.style } : {}),
     children,
   };
 }
 
-export function shapeGroup(children: ShapeChild[], options: GroupOptions = {}): ShapeGroupNode {
+export function shapeGroup(
+  children: ShapeChild[],
+  options: GroupOptions = {},
+): ShapeGroupNode {
   return {
     node: {
       frame: { xPt: 0, yPt: 0, widthPt: 600, heightPt: 400 },
@@ -250,12 +312,15 @@ export interface SlideGroupOptions extends GroupOptions {
   notes?: string;
 }
 
-export function slideGroup(shapes: ShapeGroupNode[], options: SlideGroupOptions = {}): SlideGroupNode {
+export function slideGroup(
+  shapes: ShapeGroupNode[],
+  options: SlideGroupOptions = {},
+): SlideGroupNode {
   return {
     node: {
       size: { widthPt: 960, heightPt: 540 },
-      notes: options.notes ?? '',
-      kind: 'slide',
+      notes: options.notes ?? "",
+      kind: "slide",
     },
     ...(options.style !== undefined ? { style: options.style } : {}),
     children: shapes,
@@ -270,7 +335,10 @@ export interface SheetGroupOptions extends GroupOptions {
 }
 
 export function sheetGroup(options: SheetGroupOptions): SheetGroupNode {
-  const children: SheetChild[] = [...(options.images ?? []), ...(options.embeddedObjects ?? [])];
+  const children: SheetChild[] = [
+    ...(options.images ?? []),
+    ...(options.embeddedObjects ?? []),
+  ];
   return {
     node: {
       cells: options.cells ?? [],
@@ -282,18 +350,21 @@ export function sheetGroup(options: SheetGroupOptions): SheetGroupNode {
         margins: { topPt: 40, rightPt: 40, bottomPt: 40, leftPt: 40 },
         gridlines: false,
         headers: false,
-        pageOrder: 'downThenOver',
+        pageOrder: "downThenOver",
       },
-      kind: 'sheet',
+      kind: "sheet",
     },
     ...(options.style !== undefined ? { style: options.style } : {}),
     children,
   };
 }
 
-export function drawPageGroup(children: DrawPageChild[], options: GroupOptions = {}): DrawPageGroupNode {
+export function drawPageGroup(
+  children: DrawPageChild[],
+  options: GroupOptions = {},
+): DrawPageGroupNode {
   return {
-    node: { size: { widthPt: 960, heightPt: 540 }, kind: 'drawPage' },
+    node: { size: { widthPt: 960, heightPt: 540 }, kind: "drawPage" },
     ...(options.style !== undefined ? { style: options.style } : {}),
     children,
   };
@@ -303,7 +374,7 @@ export function drawPageGroup(children: DrawPageChild[], options: GroupOptions =
 export interface PackageOptions {
   metadata?: LayoutMetadata;
   symbolTable?: SymbolTable;
-  pages?: NonNullable<DocumentTree['pages']>;
+  pages?: NonNullable<DocumentTree["pages"]>;
   styles?: StylesTable;
   definitions?: DefinitionsTable;
   layers?: DefinitionsTable;
@@ -314,18 +385,29 @@ export interface PackageOptions {
 // The four tenant-generic root tables every package builder spreads in when present, in the schema's own field order -- one helper so a fixture can prove any envelope field beside the tree without a bespoke builder per kind.
 function genericTableOptions(options: PackageOptions): Record<string, unknown> {
   return {
-    ...(options.definitions !== undefined ? { definitions: options.definitions } : {}),
+    ...(options.definitions !== undefined
+      ? { definitions: options.definitions }
+      : {}),
     ...(options.layers !== undefined ? { layers: options.layers } : {}),
-    ...(options.attachments !== undefined ? { attachments: options.attachments } : {}),
-    ...(options.destinations !== undefined ? { destinations: options.destinations } : {}),
+    ...(options.attachments !== undefined
+      ? { attachments: options.attachments }
+      : {}),
+    ...(options.destinations !== undefined
+      ? { destinations: options.destinations }
+      : {}),
   };
 }
 
-export function wordprocessingPackage(children: SectionGroupNode[], options: PackageOptions = {}): DocumentTree {
+export function wordprocessingPackage(
+  children: SectionGroupNode[],
+  options: PackageOptions = {},
+): DocumentTree {
   return {
-    kind: 'wordprocessing',
+    kind: "wordprocessing",
     metadata: options.metadata ?? {},
-    ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
+    ...(options.symbolTable !== undefined
+      ? { symbolTable: options.symbolTable }
+      : {}),
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
     ...genericTableOptions(options),
@@ -333,11 +415,16 @@ export function wordprocessingPackage(children: SectionGroupNode[], options: Pac
   };
 }
 
-export function presentationPackage(children: SlideGroupNode[], options: PackageOptions = {}): DocumentTree {
+export function presentationPackage(
+  children: SlideGroupNode[],
+  options: PackageOptions = {},
+): DocumentTree {
   return {
-    kind: 'presentation',
+    kind: "presentation",
     metadata: options.metadata ?? {},
-    ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
+    ...(options.symbolTable !== undefined
+      ? { symbolTable: options.symbolTable }
+      : {}),
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
     ...genericTableOptions(options),
@@ -345,11 +432,16 @@ export function presentationPackage(children: SlideGroupNode[], options: Package
   };
 }
 
-export function spreadsheetPackage(children: SheetGroupNode[], options: PackageOptions = {}): DocumentTree {
+export function spreadsheetPackage(
+  children: SheetGroupNode[],
+  options: PackageOptions = {},
+): DocumentTree {
   return {
-    kind: 'spreadsheet',
+    kind: "spreadsheet",
     metadata: options.metadata ?? {},
-    ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
+    ...(options.symbolTable !== undefined
+      ? { symbolTable: options.symbolTable }
+      : {}),
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
     ...genericTableOptions(options),
@@ -357,11 +449,16 @@ export function spreadsheetPackage(children: SheetGroupNode[], options: PackageO
   };
 }
 
-export function drawingPackage(children: DrawPageGroupNode[], options: PackageOptions = {}): DocumentTree {
+export function drawingPackage(
+  children: DrawPageGroupNode[],
+  options: PackageOptions = {},
+): DocumentTree {
   return {
-    kind: 'drawing',
+    kind: "drawing",
     metadata: options.metadata ?? {},
-    ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
+    ...(options.symbolTable !== undefined
+      ? { symbolTable: options.symbolTable }
+      : {}),
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
     ...genericTableOptions(options),
@@ -371,11 +468,18 @@ export function drawingPackage(children: DrawPageGroupNode[], options: PackageOp
 
 export function formulaPackage(latex?: string): DocumentTree {
   return {
-    kind: 'formula',
+    kind: "formula",
     metadata: {},
     children: [
       {
-        mathml: [{ type: 'element', tag: 'mi', attributes: [], children: [{ type: 'text', value: 'x' }] }],
+        mathml: [
+          {
+            type: "element",
+            tag: "mi",
+            attributes: [],
+            children: [{ type: "text", value: "x" }],
+          },
+        ],
         ...(latex !== undefined ? { presentation: { latex } } : {}),
       },
     ],
@@ -386,15 +490,21 @@ export function formulaPackage(latex?: string): DocumentTree {
 export function minimalSymbolTable(): SymbolTable {
   return {
     symbols: [
-      { glyph: 'U', scope: 'document', id: 'symbols:voltage', quantityKind: 'si:voltage', preferredUnit: 'si:volt' },
+      {
+        glyph: "U",
+        scope: "document",
+        id: "symbols:voltage",
+        quantityKind: "si:voltage",
+        preferredUnit: "si:volt",
+      },
     ],
     units: [
       {
-        id: 'si:volt',
-        symbol: 'V',
-        name: 'volt',
+        id: "si:volt",
+        symbol: "V",
+        name: "volt",
         dimension: { mass: 1, length: 2, time: -3, electricCurrent: -1 },
-        factorToSi: { numerator: '1', denominator: '1' },
+        factorToSi: { numerator: "1", denominator: "1" },
       },
     ],
   };

@@ -1,5 +1,5 @@
-import { render } from 'ink';
-import { App } from './app.js';
+import { render } from "ink";
+import { App } from "./app.js";
 
 export interface RunTuiOptions {
   // Opened immediately on startup, skipping the launcher screen -- app.tsx's own AppShell effect drives this.
@@ -14,20 +14,23 @@ export interface RunTuiOptions {
 
 // Resolves on every ordinary in-app exit (a confirmed quit, a confirmed close) and never rejects for a recoverable, in-app condition -- a malformed startPath, a failed save, an export diagnostic all render as an in-app error toast/screen (see app.tsx's AppShell and the ErrorDetail overlay) rather than propagating here. Only rejects for a genuine framework-level failure: an uncaught exception during render, or Ink's own instance settling with a thrown error via exit(error) (which nothing in this app currently does deliberately, but the contract holds regardless).
 export async function runTui(options: RunTuiOptions = {}): Promise<void> {
-  const instance = render(<App startPath={options.startPath} cwd={options.cwd} />, {
-    stdin: options.stdin ?? process.stdin,
-    stdout: options.stdout ?? process.stdout,
-    exitOnCtrlC: false,
-  });
+  const instance = render(
+    <App startPath={options.startPath} cwd={options.cwd} />,
+    {
+      stdin: options.stdin ?? process.stdin,
+      stdout: options.stdout ?? process.stdout,
+      exitOnCtrlC: false,
+    },
+  );
 
   const forceExit = (): void => {
     instance.unmount();
   };
-  options.signal?.addEventListener('abort', forceExit, { once: true });
+  options.signal?.addEventListener("abort", forceExit, { once: true });
 
   try {
     await instance.waitUntilExit();
   } finally {
-    options.signal?.removeEventListener('abort', forceExit);
+    options.signal?.removeEventListener("abort", forceExit);
   }
 }

@@ -1,14 +1,16 @@
-import { crc32 } from '../bytes/crc32';
-import { deflate } from '../bytes/flate';
-import { ByteWriter, concatBytes } from '../bytes/writer';
-import type { RawImage } from './png-decode';
-import { filterScanlines } from './png-filter';
+import { crc32 } from "../bytes/crc32";
+import { deflate } from "../bytes/flate";
+import { ByteWriter, concatBytes } from "../bytes/writer";
+import type { RawImage } from "./png-decode";
+import { filterScanlines } from "./png-filter";
 
-const PNG_SIGNATURE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG_SIGNATURE = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
 
 export interface PngEncodeOptions {
   // 'adaptive' (the default) picks, per row, whichever of the five PNG filters minimises the sum of the filtered bytes' absolute values -- the PNG spec's own recommended heuristic. 'none' always emits filter type 0, useful for deterministic, human-auditable test output.
-  readonly filter?: 'none' | 'adaptive';
+  readonly filter?: "none" | "adaptive";
 }
 
 function u32be(value: number): Uint8Array<ArrayBuffer> {
@@ -17,7 +19,11 @@ function u32be(value: number): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-function writeChunk(writer: ByteWriter, type: string, data: Uint8Array<ArrayBuffer>): void {
+function writeChunk(
+  writer: ByteWriter,
+  type: string,
+  data: Uint8Array<ArrayBuffer>,
+): void {
   const typeBytes = new TextEncoder().encode(type);
   writer.writeBytes(u32be(data.length));
   writer.writeBytes(typeBytes);
@@ -34,7 +40,10 @@ function colorTypeFor(image: RawImage): number {
 }
 
 // Encodes normalised raw pixel data (8 bits per channel, optionally with a separate alpha plane) into PNG file bytes -- the exact inverse of decodePng's RawImage shape.
-export function encodePng(image: RawImage, options: PngEncodeOptions = {}): Uint8Array<ArrayBuffer> {
+export function encodePng(
+  image: RawImage,
+  options: PngEncodeOptions = {},
+): Uint8Array<ArrayBuffer> {
   const { width, height, channels, data, alpha } = image;
   const outChannels = alpha === undefined ? channels : channels + 1;
   const bytesPerRow = width * outChannels;
@@ -52,7 +61,13 @@ export function encodePng(image: RawImage, options: PngEncodeOptions = {}): Uint
     }
   }
 
-  const filtered = filterScanlines(interleaved, height, bytesPerRow, outChannels, options.filter ?? 'adaptive');
+  const filtered = filterScanlines(
+    interleaved,
+    height,
+    bytesPerRow,
+    outChannels,
+    options.filter ?? "adaptive",
+  );
   const compressed = deflate(filtered);
 
   const ihdr = new Uint8Array(13);
@@ -67,8 +82,8 @@ export function encodePng(image: RawImage, options: PngEncodeOptions = {}): Uint
 
   const writer = new ByteWriter();
   writer.writeBytes(PNG_SIGNATURE);
-  writeChunk(writer, 'IHDR', ihdr);
-  writeChunk(writer, 'IDAT', compressed);
-  writeChunk(writer, 'IEND', new Uint8Array(0));
+  writeChunk(writer, "IHDR", ihdr);
+  writeChunk(writer, "IDAT", compressed);
+  writeChunk(writer, "IEND", new Uint8Array(0));
   return writer.toBytes();
 }

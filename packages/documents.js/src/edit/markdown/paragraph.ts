@@ -1,7 +1,15 @@
-import type { ContentBlock, ContentListMembership, ContentParagraph as ContentParagraphNode } from 'document-schema.js';
-import { headingStyleId, parseHeadingStyleId, QUOTE_INDENT_PT } from 'markdown-codec';
-import type { RunInit } from './run';
-import { buildRun, MarkdownRun } from './run';
+import type {
+  ContentBlock,
+  ContentListMembership,
+  ContentParagraph as ContentParagraphNode,
+} from "document-schema.js";
+import {
+  headingStyleId,
+  parseHeadingStyleId,
+  QUOTE_INDENT_PT,
+} from "markdown-codec";
+import type { RunInit } from "./run";
+import { buildRun, MarkdownRun } from "./run";
 
 export interface ParagraphInit {
   readonly text?: string;
@@ -23,7 +31,9 @@ export class MarkdownParagraph {
 
   private live(): ContentParagraphNode {
     if (this.removed) {
-      throw new Error('this MarkdownParagraph has been removed from its body and can no longer be used');
+      throw new Error(
+        "this MarkdownParagraph has been removed from its body and can no longer be used",
+      );
     }
     return this.node;
   }
@@ -31,7 +41,7 @@ export class MarkdownParagraph {
   get text(): string {
     return this.live()
       .runs.map((run) => run.text)
-      .join('');
+      .join("");
   }
 
   runs(): MarkdownRun[] {
@@ -122,7 +132,10 @@ export class MarkdownParagraph {
 
 // Builds a fresh ContentParagraph from scratch (not a live view -- for constructing new paragraphs to append, whose properties are then read back through MarkdownParagraph once inserted into a body/cell's blocks array). Mirrors odt's paragraph.ts buildParagraph.
 export function buildParagraph(init: ParagraphInit = {}): ContentParagraphNode {
-  const node: ContentParagraphNode = { kind: 'paragraph', runs: init.text === undefined ? [] : [buildRun({ text: init.text })] };
+  const node: ContentParagraphNode = {
+    kind: "paragraph",
+    runs: init.text === undefined ? [] : [buildRun({ text: init.text })],
+  };
   if (init.styleId !== undefined) {
     node.styleId = init.styleId;
   }

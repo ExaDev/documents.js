@@ -21,16 +21,37 @@ const SFNT_VERSION_TRUETYPE = 0x00010000;
 const SFNT_VERSION_CFF = 0x4f54544f; // 'OTTO'
 const SFNT_VERSION_APPLE_TRUE = 0x74727565; // 'true'
 const SFNT_VERSION_APPLE_TYP1 = 0x74797031; // 'typ1'
-const SFNT_VERSIONS: ReadonlySet<number> = new Set([SFNT_VERSION_TRUETYPE, SFNT_VERSION_CFF, SFNT_VERSION_APPLE_TRUE, SFNT_VERSION_APPLE_TYP1]);
+const SFNT_VERSIONS: ReadonlySet<number> = new Set([
+  SFNT_VERSION_TRUETYPE,
+  SFNT_VERSION_CFF,
+  SFNT_VERSION_APPLE_TRUE,
+  SFNT_VERSION_APPLE_TYP1,
+]);
 
 // Whether `length` bytes starting at `offset` lie wholly inside `bytes` -- the pre-check every table parser in this package calls before reading a fixed-size record, so a malformed font degrades to `undefined` at the parser's own boundary instead of throwing out of a primitive reader.
-export function hasBytes(bytes: Uint8Array<ArrayBuffer>, offset: number, length: number): boolean {
-  return Number.isInteger(offset) && Number.isInteger(length) && offset >= 0 && length >= 0 && offset + length <= bytes.length;
+export function hasBytes(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+  length: number,
+): boolean {
+  return (
+    Number.isInteger(offset) &&
+    Number.isInteger(length) &&
+    offset >= 0 &&
+    length >= 0 &&
+    offset + length <= bytes.length
+  );
 }
 
-function requireBytes(bytes: Uint8Array<ArrayBuffer>, offset: number, length: number): void {
+function requireBytes(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+  length: number,
+): void {
   if (!hasBytes(bytes, offset, length)) {
-    throw new Error(`sfnt read of ${String(length)} byte(s) at offset ${String(offset)} is outside the ${String(bytes.length)}-byte range`);
+    throw new Error(
+      `sfnt read of ${String(length)} byte(s) at offset ${String(offset)} is outside the ${String(bytes.length)}-byte range`,
+    );
   }
 }
 
@@ -39,12 +60,21 @@ function readUint16(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
 }
 
 function readUint32(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
-  return ((bytes[offset]! << 24) | (bytes[offset + 1]! << 16) | (bytes[offset + 2]! << 8) | bytes[offset + 3]!) >>> 0;
+  return (
+    ((bytes[offset]! << 24) |
+      (bytes[offset + 1]! << 16) |
+      (bytes[offset + 2]! << 8) |
+      bytes[offset + 3]!) >>>
+    0
+  );
 }
 
 // A table tag is four bytes of printable ASCII (clause 4.2); decoding by character code rather than through a TextDecoder avoids constructing one per table record, and a byte outside printable ASCII marks a directory this reader should not trust as a directory at all.
-function decodeTag(bytes: Uint8Array<ArrayBuffer>, offset: number): string | undefined {
-  let tag = '';
+function decodeTag(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+): string | undefined {
+  let tag = "";
   for (let i = 0; i < TABLE_TAG_SIZE; i++) {
     const byte = bytes[offset + i]!;
     if (byte < 0x20 || byte > 0x7e) {
@@ -55,7 +85,9 @@ function decodeTag(bytes: Uint8Array<ArrayBuffer>, offset: number): string | und
   return tag;
 }
 
-export function parseSfnt(bytes: Uint8Array<ArrayBuffer>): SfntFont | undefined {
+export function parseSfnt(
+  bytes: Uint8Array<ArrayBuffer>,
+): SfntFont | undefined {
   if (!hasBytes(bytes, 0, TABLE_DIRECTORY_HEADER_SIZE)) {
     return undefined;
   }
@@ -63,7 +95,13 @@ export function parseSfnt(bytes: Uint8Array<ArrayBuffer>): SfntFont | undefined 
     return undefined;
   }
   const numTables = readUint16(bytes, 4);
-  if (!hasBytes(bytes, 0, TABLE_DIRECTORY_HEADER_SIZE + numTables * TABLE_RECORD_SIZE)) {
+  if (
+    !hasBytes(
+      bytes,
+      0,
+      TABLE_DIRECTORY_HEADER_SIZE + numTables * TABLE_RECORD_SIZE,
+    )
+  ) {
     return undefined;
   }
 
@@ -87,9 +125,14 @@ export function parseSfnt(bytes: Uint8Array<ArrayBuffer>): SfntFont | undefined 
   return { bytes, tables };
 }
 
-export function sfntTableBytes(font: SfntFont, tag: string): Uint8Array<ArrayBuffer> | undefined {
+export function sfntTableBytes(
+  font: SfntFont,
+  tag: string,
+): Uint8Array<ArrayBuffer> | undefined {
   const table = font.tables.get(tag);
-  return table === undefined ? undefined : font.bytes.subarray(table.offset, table.offset + table.length);
+  return table === undefined
+    ? undefined
+    : font.bytes.subarray(table.offset, table.offset + table.length);
 }
 
 // Big-endian primitive readers shared by every sfnt table parser in this package -- sfnt tables are exclusively big-endian (ISO/IEC 14496-22 clause 4), unlike this package's own PDF byte format, which is why these live here rather than being reused from src/bytes/ (that module's own ByteReader has no fixed-width integer readers at all -- see its own module comment on why: the PDF lexer tokenizes ASCII syntax, it never needs to read a binary uint16). Each throws rather than returning a sentinel for an out-of-range offset: a caller reaching one has skipped its own `hasBytes` length check, which is a defect in that parser, not a property of the font.
@@ -111,7 +154,9 @@ export function i16(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
 // A 3-byte big-endian unsigned integer -- the sfnt/CFF primitive an INDEX with offSize 3 uses for its own offset array (CFF 1.0 spec section 5), the one width between uint16 and uint32 the container format actually mixes in.
 export function u24(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
   requireBytes(bytes, offset, 3);
-  return (bytes[offset]! << 16) | (bytes[offset + 1]! << 8) | bytes[offset + 2]!;
+  return (
+    (bytes[offset]! << 16) | (bytes[offset + 1]! << 8) | bytes[offset + 2]!
+  );
 }
 
 export function u32(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
@@ -126,6 +171,9 @@ export function i32(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
 // An F2Dot14: a 16-bit signed fixed-point number with two integer bits and fourteen fraction bits (clause 4.4), used for the scale/2x2 transform entries in a composite glyph's own component records.
 const F2DOT14_SCALE = 1 << 14;
 
-export function f2dot14(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
+export function f2dot14(
+  bytes: Uint8Array<ArrayBuffer>,
+  offset: number,
+): number {
   return i16(bytes, offset) / F2DOT14_SCALE;
 }

@@ -1,11 +1,11 @@
-import { Box, Text } from 'ink';
-import { useState, type ReactElement } from 'react';
-import { ListView } from '../../../components/list-view.js';
-import { TextField } from '../../../components/text-field.js';
-import { useNavigationInput } from '../../../keybindings/use-navigation-input.js';
-import { useAppDispatch, useAppState } from '../../../state/context.js';
-import { anyOverlayOpen } from '../../../state/types.js';
-import { odsDocument } from './shared.js';
+import { Box, Text } from "ink";
+import { useState, type ReactElement } from "react";
+import { ListView } from "../../../components/list-view.js";
+import { TextField } from "../../../components/text-field.js";
+import { useNavigationInput } from "../../../keybindings/use-navigation-input.js";
+import { useAppDispatch, useAppState } from "../../../state/context.js";
+import { anyOverlayOpen } from "../../../state/types.js";
+import { odsDocument } from "./shared.js";
 
 interface SheetRow {
   readonly index: number;
@@ -27,15 +27,21 @@ export function OdsSheetListScreen(): ReactElement {
   const rows: readonly SheetRow[] = doc.editor
     .sheets()
     .map((sheet, index): SheetRow => ({ index, name: sheet.name }))
-    .filter((row) => query.length === 0 || row.name.toLowerCase().includes(query));
+    .filter(
+      (row) => query.length === 0 || row.name.toLowerCase().includes(query),
+    );
 
   const commitAdd = (name: string): void => {
     const trimmed = name.trim();
     if (trimmed.length === 0) {
-      dispatch({ type: 'SET_STATUS', severity: 'warning', text: 'A sheet needs a name' });
+      dispatch({
+        type: "SET_STATUS",
+        severity: "warning",
+        text: "A sheet needs a name",
+      });
       return;
     }
-    dispatch({ type: 'ADD_SHEET', name: trimmed });
+    dispatch({ type: "ADD_SHEET", name: trimmed });
     setDraftName(undefined);
   };
 
@@ -46,13 +52,16 @@ export function OdsSheetListScreen(): ReactElement {
       if (row === undefined) {
         return;
       }
-      dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'spreadsheetGrid', sheetIndex: row.index } });
+      dispatch({
+        type: "PUSH_SCREEN",
+        screen: { kind: "spreadsheetGrid", sheetIndex: row.index },
+      });
     },
     onBack: () => {
-      dispatch({ type: 'POP_SCREEN' });
+      dispatch({ type: "POP_SCREEN" });
     },
     onAppend: () => {
-      setDraftName('');
+      setDraftName("");
     },
     isActive,
   });
@@ -65,7 +74,7 @@ export function OdsSheetListScreen(): ReactElement {
         selectedIndex={selectedIndex}
         emptyMessage="This workbook has no sheets yet -- press 'a' to add one."
         renderItem={(row, isSelected) => (
-          <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>
+          <Text color={isSelected ? "cyan" : undefined} inverse={isSelected}>
             {row.name}
           </Text>
         )}

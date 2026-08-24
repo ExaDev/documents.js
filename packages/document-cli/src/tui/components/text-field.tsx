@@ -1,6 +1,6 @@
-import { useInput } from 'ink';
-import TextInput from 'ink-text-input';
-import type { ReactElement } from 'react';
+import { useInput } from "ink";
+import TextInput from "ink-text-input";
+import type { ReactElement } from "react";
 
 export interface TextFieldProps {
   readonly value: string;
@@ -22,5 +22,13 @@ export function TextField(props: TextFieldProps): ReactElement {
     { isActive: props.isFocused },
   );
 
-  return <TextInput value={props.value} placeholder={props.placeholder} focus={props.isFocused} onChange={props.onChange} onSubmit={props.onSubmit} />;
+  return (
+    <TextInput
+      value={props.value}
+      placeholder={props.placeholder}
+      focus={props.isFocused}
+      onChange={props.onChange}
+      onSubmit={props.onSubmit}
+    />
+  );
 }

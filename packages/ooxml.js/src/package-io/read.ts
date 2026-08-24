@@ -1,21 +1,23 @@
-import type { Package } from '../model/package';
-import { bytesToBase64 } from '../util/base64';
-import { parseXml } from '../xml/parse';
-import { unzipPackage } from '../zip';
+import type { Package } from "../model/package";
+import { bytesToBase64 } from "../util/base64";
+import { parseXml } from "../xml/parse";
+import { unzipPackage } from "../zip";
 
 export function parsePackage(bytes: Uint8Array<ArrayBuffer>): Package {
   return packageFromEntries(unzipPackage(bytes));
 }
 
 // The classify-and-parse half of parsePackage, split out for a caller that already holds unzipped entries and needs a bounded inflate between the bytes and this step: the embedded-object decode (typed/embedded.ts) walks its payload through archive-codec's guarded walk first, so its entries arrive pre-decompressed and budget-checked rather than coming from this module's own unbounded unzip.
-export function packageFromEntries(entries: Record<string, Uint8Array<ArrayBuffer>>): Package {
-  const parts: Package['parts'] = {};
+export function packageFromEntries(
+  entries: Record<string, Uint8Array<ArrayBuffer>>,
+): Package {
+  const parts: Package["parts"] = {};
   for (const [path, partBytes] of Object.entries(entries)) {
     if (looksLikeXml(partBytes)) {
-      const xml = new TextDecoder('utf-8').decode(partBytes);
-      parts[path] = { kind: 'xml', nodes: parseXml(xml) };
+      const xml = new TextDecoder("utf-8").decode(partBytes);
+      parts[path] = { kind: "xml", nodes: parseXml(xml) };
     } else {
-      parts[path] = { kind: 'binary', base64: bytesToBase64(partBytes) };
+      parts[path] = { kind: "binary", base64: bytesToBase64(partBytes) };
     }
   }
   return { parts };
@@ -24,7 +26,12 @@ export function packageFromEntries(entries: Record<string, Uint8Array<ArrayBuffe
 // An XML part (after any BOM/whitespace) starts with '<'; no standard OOXML binary part (png, jpeg, font, emf, embedded zip, ...) starts with '<', so a misclassification only ever stores an XML part losslessly as base64 -- it never misparses a binary part.
 function looksLikeXml(bytes: Uint8Array<ArrayBuffer>): boolean {
   let i = 0;
-  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0xef &&
+    bytes[1] === 0xbb &&
+    bytes[2] === 0xbf
+  ) {
     i = 3;
   }
   while (i < bytes.length) {

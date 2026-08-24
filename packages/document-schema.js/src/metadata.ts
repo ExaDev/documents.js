@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 // The metadata shape shared by ContentDocument and the DocumentTree tree root. Ported from documents.js's src/model/layout.ts (LayoutMetadataSchema), extracted into its own file back when a layout model lived in this package, so content.ts never depended on that model for it -- a content model depending on the layout model for its own metadata type was backwards. `producer` is a PDF-only concept (the tool that wrote the PDF); it has no OOXML/ODF equivalent and is simply absent -- never set -- when a ContentDocument or a purely-semantic reader (e.g. ooxml.js's own DocumentMetadata) populates this shape.
 export const LayoutMetadataSchema = z.object({

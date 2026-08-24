@@ -1,16 +1,20 @@
-import type { ContentDocument, ContentVector } from 'document-schema.js';
+import type { ContentDocument, ContentVector } from "document-schema.js";
 
-import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { findChildElement, readOdtContent as readOdtFlat, rootElement } from 'odf.js';
-import type { BlockPlacement } from '../../model/block-splice';
-import { spliceBlocks } from '../../model/block-splice';
-import { buildDrawingBlock } from '../../model/embedded-drawing';
-import { buildFormulaBlock } from '../../model/formula';
-import type { DetectedFormulaFrame } from '../formula/detect';
-import { collectFormulaFrames } from '../formula/detect';
-import type { DetectedImageFrame } from '../image/detect';
-import { collectImageFrames } from '../image/detect';
-import { collectContainerVectors, isVectorElementTag } from '../vector/detect';
+import type { Package, XmlElement, XmlNode } from "odf.js";
+import {
+  findChildElement,
+  readOdtContent as readOdtFlat,
+  rootElement,
+} from "odf.js";
+import type { BlockPlacement } from "../../model/block-splice";
+import { spliceBlocks } from "../../model/block-splice";
+import { buildDrawingBlock } from "../../model/embedded-drawing";
+import { buildFormulaBlock } from "../../model/formula";
+import type { DetectedFormulaFrame } from "../formula/detect";
+import { collectFormulaFrames } from "../formula/detect";
+import type { DetectedImageFrame } from "../image/detect";
+import { collectImageFrames } from "../image/detect";
+import { collectContainerVectors, isVectorElementTag } from "../vector/detect";
 
 // Package -> ContentDocument (the wordprocessing variant). A thin adapter over odf.js's own readOdtContent (imported here as readOdtFlat because this module's own export already holds that name; odf.js 5.0.0 renamed this flat reader to readOdtContent and gave the bare readOdt name to its tree-form DocumentTree counterpart), mirroring src/ooxml/docx/read.ts's readDocxContent exactly: odf.js's OdtDocument is already { metadata, sections }, the identical shape the docx reader produces, so this is nothing more than the envelope wrap. This is the concrete, load-bearing proof that odt and docx genuinely share one pivot and one layout engine -- convertWordprocessingToLayout (src/layout/engine.ts) takes a WordprocessingContentDocument and has no idea, and no way to tell, which format produced it.
 //
@@ -21,42 +25,87 @@ import { collectContainerVectors, isVectorElementTag } from '../vector/detect';
 // Detection is skipped outright for a document odf.js reads into more than one ContentSection: ODF itself has no notion of a docx-style w:sectPr page-setup boundary, so the upstream reader should never actually produce more than one -- this is a defensive guard against that assumption changing under this module, not an expected real-world case.
 export function readOdtContent(pkg: Package): ContentDocument {
   // frames: 'none' -- this adapter's own formula/image/vector detection passes below read the frames, with the richer placement semantics this module built before odf.js could read a frame at all (consumed formula-only paragraphs, deep walks into cells and groups). odf.js's native lift stays the default for every other consumer; opting out here keeps the two readers from reading each frame twice.
-  const odtDoc = readOdtFlat(pkg, { frames: 'none' });
+  const odtDoc = readOdtFlat(pkg, { frames: "none" });
 
-  const contentPart = pkg.parts['content.xml'];
-  if (contentPart?.kind === 'xml' && odtDoc.sections.length === 1) {
+  const contentPart = pkg.parts["content.xml"];
+  if (contentPart?.kind === "xml" && odtDoc.sections.length === 1) {
     const root = rootElement(contentPart.nodes);
-    const body = root === undefined ? undefined : findChildElement(root.children, 'office:body');
-    const text = body === undefined ? undefined : findChildElement(body.children, 'office:text');
+    const body =
+      root === undefined
+        ? undefined
+        : findChildElement(root.children, "office:body");
+    const text =
+      body === undefined
+        ? undefined
+        : findChildElement(body.children, "office:text");
     if (text !== undefined) {
       const section = odtDoc.sections[0]!;
-      const { placements: formulaPlacements, consumedBlockIndices: formulaConsumed } = collectFormulaPlacements(text.children, pkg);
-      const { placements: vectorPlacements, consumedBlockIndices: vectorConsumed } = collectVectorPlacements(text.children, pkg);
-      const { placements: imagePlacements } = collectImagePlacements(text.children, pkg);
+      const {
+        placements: formulaPlacements,
+        consumedBlockIndices: formulaConsumed,
+      } = collectFormulaPlacements(text.children, pkg);
+      const {
+        placements: vectorPlacements,
+        consumedBlockIndices: vectorConsumed,
+      } = collectVectorPlacements(text.children, pkg);
+      const { placements: imagePlacements } = collectImagePlacements(
+        text.children,
+        pkg,
+      );
 
-      if (formulaPlacements.length > 0 || vectorPlacements.length > 0 || imagePlacements.length > 0) {
+      if (
+        formulaPlacements.length > 0 ||
+        vectorPlacements.length > 0 ||
+        imagePlacements.length > 0
+      ) {
         const combined: BlockPlacement[] = [
           ...formulaPlacements.map((placement): BlockPlacement => ({
             index: placement.index,
-            build: (sourcePath) => buildFormulaBlock(placement.detected.formula, placement.detected.frame, sourcePath),
+            build: (sourcePath) =>
+              buildFormulaBlock(
+                placement.detected.formula,
+                placement.detected.frame,
+                sourcePath,
+              ),
           })),
           ...vectorPlacements.map((placement): BlockPlacement => ({
             index: placement.index,
-            build: (sourcePath) => ({ ...buildDrawingBlock(section.pageSize, placement.vectors), sourcePath }),
+            build: (sourcePath) => ({
+              ...buildDrawingBlock(section.pageSize, placement.vectors),
+              sourcePath,
+            }),
           })),
           ...imagePlacements.map((placement): BlockPlacement => ({
             index: placement.index,
-            build: (sourcePath) => ({ ...placement.detected.image, sourcePath }),
+            build: (sourcePath) => ({
+              ...placement.detected.image,
+              sourcePath,
+            }),
           })),
         ].sort((a, b) => a.index - b.index);
         // Images never contribute to the consumed set -- see this file's own top-of-file comment.
-        const consumedBlockIndices = new Set<number>([...formulaConsumed, ...vectorConsumed]);
-        odtDoc.sections[0] = { ...section, blocks: spliceBlocks(section.blocks, combined, consumedBlockIndices, (position) => `sections[0].blocks[${position}]`) };
+        const consumedBlockIndices = new Set<number>([
+          ...formulaConsumed,
+          ...vectorConsumed,
+        ]);
+        odtDoc.sections[0] = {
+          ...section,
+          blocks: spliceBlocks(
+            section.blocks,
+            combined,
+            consumedBlockIndices,
+            (position) => `sections[0].blocks[${position}]`,
+          ),
+        };
       }
     }
   }
 
-  return { kind: 'wordprocessing', metadata: { ...odtDoc.metadata }, sections: odtDoc.sections };
+  return {
+    kind: "wordprocessing",
+    metadata: { ...odtDoc.metadata },
+    sections: odtDoc.sections,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -84,25 +133,32 @@ interface FormulaCollectState extends BlockCountState {
   readonly consumedBlockIndices: Set<number>;
 }
 
-function pushFormulaPlacements(out: FormulaPlacement[], index: number, detected: readonly DetectedFormulaFrame[]): void {
+function pushFormulaPlacements(
+  out: FormulaPlacement[],
+  index: number,
+  detected: readonly DetectedFormulaFrame[],
+): void {
   for (const frame of detected) {
     out.push({ index, detected: frame });
   }
 }
 
 // True when every one of a paragraph's own children is one of the recognised elements just detected inside it (or whitespace between them) -- i.e. the paragraph has no text and no other content of its own. Shared by the formula and vector walks below, each supplying its own recognised-element list, since a paragraph mixing a formula frame with a vector primitive is not a shape any known ODF producer creates.
-function isEmbeddedObjectOnlyParagraph(paragraph: XmlElement, recognisedElements: readonly XmlElement[]): boolean {
+function isEmbeddedObjectOnlyParagraph(
+  paragraph: XmlElement,
+  recognisedElements: readonly XmlElement[],
+): boolean {
   if (recognisedElements.length === 0) {
     return false;
   }
   for (const child of paragraph.children) {
-    if (child.type === 'text') {
+    if (child.type === "text") {
       if (child.value.trim().length > 0) {
         return false;
       }
       continue;
     }
-    if (child.type !== 'element') {
+    if (child.type !== "element") {
       continue;
     }
     if (!recognisedElements.includes(child)) {
@@ -113,10 +169,19 @@ function isEmbeddedObjectOnlyParagraph(paragraph: XmlElement, recognisedElements
 }
 
 // One paragraph/heading's own contribution: its block, then every formula frame found inside it placed immediately after -- unless the paragraph is nothing but those frames, in which case the block is consumed and the formulas take its place.
-function pushFormulaParagraphPlacement(node: XmlElement, pkg: Package, state: FormulaCollectState): void {
+function pushFormulaParagraphPlacement(
+  node: XmlElement,
+  pkg: Package,
+  state: FormulaCollectState,
+): void {
   const detected = collectFormulaFrames(node.children, pkg);
   state.blockCount += 1;
-  if (isEmbeddedObjectOnlyParagraph(node, detected.map((entry) => entry.frameElement))) {
+  if (
+    isEmbeddedObjectOnlyParagraph(
+      node,
+      detected.map((entry) => entry.frameElement),
+    )
+  ) {
     state.consumedBlockIndices.add(state.blockCount - 1);
   }
   pushFormulaPlacements(state.placements, state.blockCount, detected);
@@ -125,49 +190,79 @@ function pushFormulaParagraphPlacement(node: XmlElement, pkg: Package, state: Fo
 // Mirrors odf.js's own flat-reader/readBlocks walk (typed/odt/read.ts) exactly, counting how many ContentBlocks each office:text child contributes, so a formula frame's own insertion point is COUNTED rather than approximated. That count is what true positional interleaving needs and what this adapter previously did not have: "one raw XML child = one block" does not hold in general, since a single text:list unwraps into one ContentParagraph per list item at every nesting level, and a text:section contributes its whole nested block run.
 //
 // A formula anchored inline inside a paragraph (or inside a table's own cell content) is placed immediately AFTER that paragraph's/table's own block, the closest true position ContentBlock can express: ContentRun is text-only, so there is no inline slot inside a paragraph for an embedded object to occupy, and splitting the paragraph in two around the formula would invent a paragraph boundary the source never had. A formula in a container that contributes no block of its own (a top-level draw:frame, a draw:g group) is placed at the current index instead -- i.e. exactly where it sits, between the blocks either side of it.
-function collectFormulaPlacements(nodes: readonly XmlNode[], pkg: Package): FormulaPlacements {
-  const state: FormulaCollectState = { blockCount: 0, placements: [], consumedBlockIndices: new Set<number>() };
+function collectFormulaPlacements(
+  nodes: readonly XmlNode[],
+  pkg: Package,
+): FormulaPlacements {
+  const state: FormulaCollectState = {
+    blockCount: 0,
+    placements: [],
+    consumedBlockIndices: new Set<number>(),
+  };
   walkForFormulaPlacements(nodes, pkg, state);
-  return { placements: state.placements, consumedBlockIndices: state.consumedBlockIndices };
+  return {
+    placements: state.placements,
+    consumedBlockIndices: state.consumedBlockIndices,
+  };
 }
 
-function walkForFormulaPlacements(nodes: readonly XmlNode[], pkg: Package, state: FormulaCollectState): void {
+function walkForFormulaPlacements(
+  nodes: readonly XmlNode[],
+  pkg: Package,
+  state: FormulaCollectState,
+): void {
   for (const node of nodes) {
-    if (node.type !== 'element') {
+    if (node.type !== "element") {
       continue;
     }
-    if (node.tag === 'text:p' || node.tag === 'text:h') {
+    if (node.tag === "text:p" || node.tag === "text:h") {
       pushFormulaParagraphPlacement(node, pkg, state);
-    } else if (node.tag === 'text:list') {
+    } else if (node.tag === "text:list") {
       walkListForFormulaPlacements(node.children, pkg, state);
-    } else if (node.tag === 'table:table') {
+    } else if (node.tag === "table:table") {
       state.blockCount += 1;
-      pushFormulaPlacements(state.placements, state.blockCount, collectFormulaFrames(node.children, pkg));
-    } else if (node.tag === 'text:section') {
+      pushFormulaPlacements(
+        state.placements,
+        state.blockCount,
+        collectFormulaFrames(node.children, pkg),
+      );
+    } else if (node.tag === "text:section") {
       walkForFormulaPlacements(node.children, pkg, state);
     } else {
       // Every other child contributes no block at all to the upstream reader's own output -- a draw:frame, a draw:g, a text:table-of-content placeholder, a text:sequence-decls. A formula found beneath one belongs at the current index, before whatever block the next content child produces.
-      pushFormulaPlacements(state.placements, state.blockCount, collectFormulaFrames([node], pkg));
+      pushFormulaPlacements(
+        state.placements,
+        state.blockCount,
+        collectFormulaFrames([node], pkg),
+      );
     }
   }
 }
 
 // The list half of the same mirror: the upstream reader's own readListItems descends text:list-item children only, emitting one block per text:p/text:h and recursing one nesting level per nested text:list. Anything else inside a list item (including a bare draw:frame) contributes no block, exactly as at top level.
-function walkListForFormulaPlacements(itemNodes: readonly XmlNode[], pkg: Package, state: FormulaCollectState): void {
+function walkListForFormulaPlacements(
+  itemNodes: readonly XmlNode[],
+  pkg: Package,
+  state: FormulaCollectState,
+): void {
   for (const item of itemNodes) {
-    if (item.type !== 'element' || item.tag !== 'text:list-item') {
+    if (item.type !== "element" || item.tag !== "text:list-item") {
       continue;
     }
     for (const itemChild of item.children) {
-      if (itemChild.type !== 'element') {
+      if (itemChild.type !== "element") {
         continue;
       }
-      if (itemChild.tag === 'text:p' || itemChild.tag === 'text:h') {
+      if (itemChild.tag === "text:p" || itemChild.tag === "text:h") {
         pushFormulaParagraphPlacement(itemChild, pkg, state);
-      } else if (itemChild.tag === 'text:list') {
+      } else if (itemChild.tag === "text:list") {
         walkListForFormulaPlacements(itemChild.children, pkg, state);
       } else {
-        pushFormulaPlacements(state.placements, state.blockCount, collectFormulaFrames([itemChild], pkg));
+        pushFormulaPlacements(
+          state.placements,
+          state.blockCount,
+          collectFormulaFrames([itemChild], pkg),
+        );
       }
     }
   }
@@ -195,13 +290,23 @@ interface VectorCollectState extends BlockCountState {
 }
 
 function vectorTaggedChildren(node: XmlElement): XmlElement[] {
-  return node.children.filter((child): child is XmlElement => child.type === 'element' && isVectorElementTag(child.tag));
+  return node.children.filter(
+    (child): child is XmlElement =>
+      child.type === "element" && isVectorElementTag(child.tag),
+  );
 }
 
-function pushVectorParagraphPlacement(node: XmlElement, pkg: Package, state: VectorCollectState): void {
+function pushVectorParagraphPlacement(
+  node: XmlElement,
+  pkg: Package,
+  state: VectorCollectState,
+): void {
   const vectors = collectContainerVectors(node.children, pkg);
   state.blockCount += 1;
-  if (vectors.length > 0 && isEmbeddedObjectOnlyParagraph(node, vectorTaggedChildren(node))) {
+  if (
+    vectors.length > 0 &&
+    isEmbeddedObjectOnlyParagraph(node, vectorTaggedChildren(node))
+  ) {
     state.consumedBlockIndices.add(state.blockCount - 1);
   }
   if (vectors.length > 0) {
@@ -209,28 +314,42 @@ function pushVectorParagraphPlacement(node: XmlElement, pkg: Package, state: Vec
   }
 }
 
-function collectVectorPlacements(nodes: readonly XmlNode[], pkg: Package): VectorPlacements {
-  const state: VectorCollectState = { blockCount: 0, placements: [], consumedBlockIndices: new Set<number>() };
+function collectVectorPlacements(
+  nodes: readonly XmlNode[],
+  pkg: Package,
+): VectorPlacements {
+  const state: VectorCollectState = {
+    blockCount: 0,
+    placements: [],
+    consumedBlockIndices: new Set<number>(),
+  };
   walkForVectorPlacements(nodes, pkg, state);
-  return { placements: state.placements, consumedBlockIndices: state.consumedBlockIndices };
+  return {
+    placements: state.placements,
+    consumedBlockIndices: state.consumedBlockIndices,
+  };
 }
 
-function walkForVectorPlacements(nodes: readonly XmlNode[], pkg: Package, state: VectorCollectState): void {
+function walkForVectorPlacements(
+  nodes: readonly XmlNode[],
+  pkg: Package,
+  state: VectorCollectState,
+): void {
   for (const node of nodes) {
-    if (node.type !== 'element') {
+    if (node.type !== "element") {
       continue;
     }
-    if (node.tag === 'text:p' || node.tag === 'text:h') {
+    if (node.tag === "text:p" || node.tag === "text:h") {
       pushVectorParagraphPlacement(node, pkg, state);
-    } else if (node.tag === 'text:list') {
+    } else if (node.tag === "text:list") {
       walkListForVectorPlacements(node.children, pkg, state);
-    } else if (node.tag === 'table:table') {
+    } else if (node.tag === "table:table") {
       state.blockCount += 1;
       const vectors = collectContainerVectors(node.children, pkg);
       if (vectors.length > 0) {
         state.placements.push({ index: state.blockCount, vectors });
       }
-    } else if (node.tag === 'text:section') {
+    } else if (node.tag === "text:section") {
       walkForVectorPlacements(node.children, pkg, state);
     } else {
       const vectors = collectContainerVectors([node], pkg);
@@ -241,18 +360,22 @@ function walkForVectorPlacements(nodes: readonly XmlNode[], pkg: Package, state:
   }
 }
 
-function walkListForVectorPlacements(itemNodes: readonly XmlNode[], pkg: Package, state: VectorCollectState): void {
+function walkListForVectorPlacements(
+  itemNodes: readonly XmlNode[],
+  pkg: Package,
+  state: VectorCollectState,
+): void {
   for (const item of itemNodes) {
-    if (item.type !== 'element' || item.tag !== 'text:list-item') {
+    if (item.type !== "element" || item.tag !== "text:list-item") {
       continue;
     }
     for (const itemChild of item.children) {
-      if (itemChild.type !== 'element') {
+      if (itemChild.type !== "element") {
         continue;
       }
-      if (itemChild.tag === 'text:p' || itemChild.tag === 'text:h') {
+      if (itemChild.tag === "text:p" || itemChild.tag === "text:h") {
         pushVectorParagraphPlacement(itemChild, pkg, state);
-      } else if (itemChild.tag === 'text:list') {
+      } else if (itemChild.tag === "text:list") {
         walkListForVectorPlacements(itemChild.children, pkg, state);
       } else {
         const vectors = collectContainerVectors([itemChild], pkg);
@@ -281,59 +404,90 @@ interface ImageCollectState extends BlockCountState {
   readonly placements: ImagePlacement[];
 }
 
-function pushImagePlacements(out: ImagePlacement[], index: number, detected: readonly DetectedImageFrame[]): void {
+function pushImagePlacements(
+  out: ImagePlacement[],
+  index: number,
+  detected: readonly DetectedImageFrame[],
+): void {
   for (const frame of detected) {
     out.push({ index, detected: frame });
   }
 }
 
-function pushImageParagraphPlacement(node: XmlElement, pkg: Package, state: ImageCollectState): void {
+function pushImageParagraphPlacement(
+  node: XmlElement,
+  pkg: Package,
+  state: ImageCollectState,
+): void {
   const detected = collectImageFrames(node.children, pkg);
   state.blockCount += 1;
   pushImagePlacements(state.placements, state.blockCount, detected);
 }
 
-function collectImagePlacements(nodes: readonly XmlNode[], pkg: Package): ImagePlacements {
+function collectImagePlacements(
+  nodes: readonly XmlNode[],
+  pkg: Package,
+): ImagePlacements {
   const state: ImageCollectState = { blockCount: 0, placements: [] };
   walkForImagePlacements(nodes, pkg, state);
   return { placements: state.placements };
 }
 
-function walkForImagePlacements(nodes: readonly XmlNode[], pkg: Package, state: ImageCollectState): void {
+function walkForImagePlacements(
+  nodes: readonly XmlNode[],
+  pkg: Package,
+  state: ImageCollectState,
+): void {
   for (const node of nodes) {
-    if (node.type !== 'element') {
+    if (node.type !== "element") {
       continue;
     }
-    if (node.tag === 'text:p' || node.tag === 'text:h') {
+    if (node.tag === "text:p" || node.tag === "text:h") {
       pushImageParagraphPlacement(node, pkg, state);
-    } else if (node.tag === 'text:list') {
+    } else if (node.tag === "text:list") {
       walkListForImagePlacements(node.children, pkg, state);
-    } else if (node.tag === 'table:table') {
+    } else if (node.tag === "table:table") {
       state.blockCount += 1;
-      pushImagePlacements(state.placements, state.blockCount, collectImageFrames(node.children, pkg));
-    } else if (node.tag === 'text:section') {
+      pushImagePlacements(
+        state.placements,
+        state.blockCount,
+        collectImageFrames(node.children, pkg),
+      );
+    } else if (node.tag === "text:section") {
       walkForImagePlacements(node.children, pkg, state);
     } else {
-      pushImagePlacements(state.placements, state.blockCount, collectImageFrames([node], pkg));
+      pushImagePlacements(
+        state.placements,
+        state.blockCount,
+        collectImageFrames([node], pkg),
+      );
     }
   }
 }
 
-function walkListForImagePlacements(itemNodes: readonly XmlNode[], pkg: Package, state: ImageCollectState): void {
+function walkListForImagePlacements(
+  itemNodes: readonly XmlNode[],
+  pkg: Package,
+  state: ImageCollectState,
+): void {
   for (const item of itemNodes) {
-    if (item.type !== 'element' || item.tag !== 'text:list-item') {
+    if (item.type !== "element" || item.tag !== "text:list-item") {
       continue;
     }
     for (const itemChild of item.children) {
-      if (itemChild.type !== 'element') {
+      if (itemChild.type !== "element") {
         continue;
       }
-      if (itemChild.tag === 'text:p' || itemChild.tag === 'text:h') {
+      if (itemChild.tag === "text:p" || itemChild.tag === "text:h") {
         pushImageParagraphPlacement(itemChild, pkg, state);
-      } else if (itemChild.tag === 'text:list') {
+      } else if (itemChild.tag === "text:list") {
         walkListForImagePlacements(itemChild.children, pkg, state);
       } else {
-        pushImagePlacements(state.placements, state.blockCount, collectImageFrames([itemChild], pkg));
+        pushImagePlacements(
+          state.placements,
+          state.blockCount,
+          collectImageFrames([itemChild], pkg),
+        );
       }
     }
   }

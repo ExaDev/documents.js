@@ -1,6 +1,6 @@
-import { Unzlib, inflateSync, unzlibSync, zlibSync } from 'fflate';
-import { isAsciiWhitespace } from './reader';
-import { concatBytes } from './writer';
+import { Unzlib, inflateSync, unzlibSync, zlibSync } from "fflate";
+import { isAsciiWhitespace } from "./reader";
+import { concatBytes } from "./writer";
 
 // The only file in the package that imports fflate -- the direct analogue of ooxml.js's own src/zip.ts ("a thin wrapper over fflate's zipSync/unzipSync, isomorphic and dependency-free"). PDF's FlateDecode filter and PNG's IDAT payload both use zlib-framed DEFLATE (RFC 1950 -- a 2-byte header plus a trailing Adler-32 checksum) -- that is zlibSync/unzlibSync, NOT fflate's deflateSync/inflateSync, which are raw DEFLATE (RFC 1951) with no wrapper. Emitting or expecting the wrong framing produces a stream every conformant PDF/PNG reader rejects.
 
@@ -9,14 +9,21 @@ export const MAX_INFLATE_OUTPUT_BYTES = 512 * 1024 * 1024;
 
 export type DeflateLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
-export function deflate(data: Uint8Array<ArrayBuffer>, level?: DeflateLevel): Uint8Array<ArrayBuffer> {
+export function deflate(
+  data: Uint8Array<ArrayBuffer>,
+  level?: DeflateLevel,
+): Uint8Array<ArrayBuffer> {
   return zlibSync(data, level === undefined ? undefined : { level });
 }
 
-export function inflate(data: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+export function inflate(
+  data: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   const out = unzlibSync(data);
   if (out.length > MAX_INFLATE_OUTPUT_BYTES) {
-    throw new Error(`inflated output exceeds the ${MAX_INFLATE_OUTPUT_BYTES}-byte limit`);
+    throw new Error(
+      `inflated output exceeds the ${MAX_INFLATE_OUTPUT_BYTES}-byte limit`,
+    );
   }
   return out;
 }
@@ -63,7 +70,7 @@ export function inflateTolerant(data: Uint8Array<ArrayBuffer>): InflateResult {
     // whatever chunks were emitted before the throw are still valid partial output
   }
   if (chunks.length === 0) {
-    throw new Error('unable to inflate stream: no data could be recovered');
+    throw new Error("unable to inflate stream: no data could be recovered");
   }
   return { bytes: concatBytes(chunks), recovered: true };
 }

@@ -3,11 +3,11 @@
 // This means: any new raw string documents.js wants to store into a text node's value or an attribute's value MUST be encoded here first, or a literal '&', '<', etc. would corrupt the serialized XML. encodeXmlText is the exact inverse of ooxml.js's decodeEntities.
 export function encodeXmlText(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 const LEADING_OR_TRAILING_WHITESPACE = /^\s|\s$/;

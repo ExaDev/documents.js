@@ -1,13 +1,13 @@
-import type { DocumentTree } from 'document-schema.js';
-import { assembleTree, flattenTree } from 'document-schema.js';
-import type { Package } from '../model/package';
-import { readDocxContent } from './docx/read';
-import { buildDocxPackageFromContent } from './docx/write';
-import type { BuildDocxContentOptions } from './docx/write';
-import { readPptxContent } from './pptx/read';
-import { buildXlsxPackageFromContent } from './xlsx/build';
-import { readXlsxContent } from './xlsx/content';
-import { readWorkbookDefinitions } from './xlsx/definitions';
+import type { DocumentTree } from "document-schema.js";
+import { assembleTree, flattenTree } from "document-schema.js";
+import type { Package } from "../model/package";
+import { readDocxContent } from "./docx/read";
+import { buildDocxPackageFromContent } from "./docx/write";
+import type { BuildDocxContentOptions } from "./docx/write";
+import { readPptxContent } from "./pptx/read";
+import { buildXlsxPackageFromContent } from "./xlsx/build";
+import { readXlsxContent } from "./xlsx/content";
+import { readWorkbookDefinitions } from "./xlsx/definitions";
 
 // This package's DocumentTree-native surface: one reader per OOXML format producing document-schema.js's tree-form DocumentTree, and one writer per format consuming it. These carry the primary names (readDocx, readPptx, readXlsx, buildDocxPackage, buildXlsxPackage) because the tree is the shape a caller holding a whole document wants -- containers grouped, headings and lists nested, constructs promoted to the region they span, repeated formatting factored into a styles table. The flat, content-level functions each of these wraps keep working unchanged under a `Content` name (readDocxContent, readPptxContent, readXlsxContent, buildDocxPackageFromContent, buildXlsxPackageFromContent), which is what a caller driving its own pipeline stage-by-stage -- documents.js's conversion engine, most of this repo's own tests -- reaches for.
 //
@@ -22,14 +22,19 @@ import { readWorkbookDefinitions } from './xlsx/definitions';
 // A decoded docx Package -> the tree-form DocumentTree, via readDocxContent's own full style-cascade and construct walk. The DocxDocument fields outside `sections` (comments, footnotes, header/footer parts, numbering) have no place in the tree and are dropped here; readDocxContent is the reader that returns them.
 export function readDocx(pkg: Package): DocumentTree {
   const { metadata, sections } = readDocxContent(pkg);
-  return assembleTree({ kind: 'wordprocessing', metadata, sections });
+  return assembleTree({ kind: "wordprocessing", metadata, sections });
 }
 
 // The inverse: a wordprocessing DocumentTree -> a complete, freshly-built docx Package (never a write-back into a decoded one). Exactly buildDocxPackageFromContent's own fidelity, since that is what this delegates to once the tree is flattened -- see its module comment for what a docx round trip through the pair does and does not preserve. The options are that flat writer's own, threaded straight through: an embedded presentation block rides the tree exactly like a flat one, so the injected serialiser (EmbeddedPresentationSerialiser's own comment states why it is a port) has to reach the flat writer or the tree pair would refuse what the flat pair serialises.
-export function buildDocxPackage(document: DocumentTree, options?: BuildDocxContentOptions): Package {
+export function buildDocxPackage(
+  document: DocumentTree,
+  options?: BuildDocxContentOptions,
+): Package {
   const content = flattenTree(document);
-  if (content.kind !== 'wordprocessing') {
-    throw new Error(`buildDocxPackage: expected a DocumentTree of kind "wordprocessing", got "${content.kind}"`);
+  if (content.kind !== "wordprocessing") {
+    throw new Error(
+      `buildDocxPackage: expected a DocumentTree of kind "wordprocessing", got "${content.kind}"`,
+    );
   }
   return buildDocxPackageFromContent(content, options);
 }
@@ -37,7 +42,7 @@ export function buildDocxPackage(document: DocumentTree, options?: BuildDocxCont
 // A decoded pptx Package -> the tree-form DocumentTree, via readPptxContent's own placeholder/layout/master/theme inheritance walk. Read-only: PresentationML has no writer in this package, so there is no buildPptxPackage to pair this with.
 export function readPptx(pkg: Package): DocumentTree {
   const { metadata, slides } = readPptxContent(pkg);
-  return assembleTree({ kind: 'presentation', metadata, slides });
+  return assembleTree({ kind: "presentation", metadata, slides });
 }
 
 // A decoded xlsx Package -> the tree-form DocumentTree, via readXlsxContent (the geometry- and print-settings-rich reader), which already returns a full ContentDocument envelope and so needs no envelope wrap here. Not to be confused with readXlsxWorkbook (typed/xlsx.ts): that is a different reading view of the same bytes -- cell values only, no write side, no ContentDocument shape to decompose.
@@ -52,8 +57,10 @@ export function readXlsx(pkg: Package): DocumentTree {
 // The inverse: a spreadsheet DocumentTree -> a complete, freshly-built xlsx Package. Exactly buildXlsxPackageFromContent's own fidelity (cell comments excepted, as that writer's own comment states).
 export function buildXlsxPackage(document: DocumentTree): Package {
   const content = flattenTree(document);
-  if (content.kind !== 'spreadsheet') {
-    throw new Error(`buildXlsxPackage: expected a DocumentTree of kind "spreadsheet", got "${content.kind}"`);
+  if (content.kind !== "spreadsheet") {
+    throw new Error(
+      `buildXlsxPackage: expected a DocumentTree of kind "spreadsheet", got "${content.kind}"`,
+    );
   }
   return buildXlsxPackageFromContent(content);
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 import {
   brokenStartxrefPdf,
   formXObjectPdf,
@@ -14,7 +14,7 @@ import {
   unsupportedSecurityHandlerPdf,
   withInfoDictPdf,
   xrefStreamWithObjectStreamPdf,
-} from './test-support/pdf';
+} from "./test-support/pdf";
 import {
   ENCRYPTED_FIXTURE_AUTHOR,
   ENCRYPTED_FIXTURE_PAGE_TEXT,
@@ -27,67 +27,81 @@ import {
   rc4Bits128EmptyUserPasswordPdf,
   rc4Bits128RealUserPasswordPdf,
   rc4Bits40EmptyUserPasswordPdf,
-} from './test-support/encrypted-pdfs';
-import type { PdfDiagnostic } from './diagnostics';
-import { PdfEncryptedError, PdfParseError, PdfPasswordRequiredError } from './diagnostics';
-import { normalizeRotation, pageRotationTransform, readPdf } from './read';
-import { decodePdfString } from './pdf-text';
+} from "./test-support/encrypted-pdfs";
+import type { PdfDiagnostic } from "./diagnostics";
+import {
+  PdfEncryptedError,
+  PdfParseError,
+  PdfPasswordRequiredError,
+} from "./diagnostics";
+import { normalizeRotation, pageRotationTransform, readPdf } from "./read";
+import { decodePdfString } from "./pdf-text";
 
-function textLayoutItems(items: readonly { kind: string }[]): { kind: string }[] {
-  return items.filter((i) => i.kind === 'text');
+function textLayoutItems(
+  items: readonly { kind: string }[],
+): { kind: string }[] {
+  return items.filter((i) => i.kind === "text");
 }
 
-describe('readPdf: basic structure', () => {
-  it('reads a single page with the right size and extracts its text', () => {
+describe("readPdf: basic structure", () => {
+  it("reads a single page with the right size and extracts its text", () => {
     const doc = readPdf(minimalClassicXrefPdf());
     expect(doc.pages).toHaveLength(1);
     const [page] = doc.pages;
     expect(page).toMatchObject({ widthPt: 200, heightPt: 100 });
     const [item] = page!.items;
-    expect(item).toMatchObject({ kind: 'text', text: 'Hello' });
+    expect(item).toMatchObject({ kind: "text", text: "Hello" });
   });
 
-  it('resolves the font family from /BaseFont', () => {
+  it("resolves the font family from /BaseFont", () => {
     const doc = readPdf(minimalClassicXrefPdf());
     const [item] = doc.pages[0]!.items;
-    expect(item).toMatchObject({ font: { family: 'Helvetica', weight: 'normal', style: 'normal' } });
+    expect(item).toMatchObject({
+      font: { family: "Helvetica", weight: "normal", style: "normal" },
+    });
   });
 
-  it('defaults to black fill colour', () => {
+  it("defaults to black fill colour", () => {
     const doc = readPdf(minimalClassicXrefPdf());
     const [item] = doc.pages[0]!.items;
     expect(item).toMatchObject({ color: { r: 0, g: 0, b: 0 } });
   });
 });
 
-describe('readPdf: cross-reference variants', () => {
-  it('reads a page whose Catalog/Pages/Page live inside an object stream', () => {
+describe("readPdf: cross-reference variants", () => {
+  it("reads a page whose Catalog/Pages/Page live inside an object stream", () => {
     const doc = readPdf(xrefStreamWithObjectStreamPdf());
     expect(doc.pages).toHaveLength(1);
     expect(doc.pages[0]).toMatchObject({ widthPt: 200, heightPt: 100 });
   });
 
-  it('recovers via a linear scan when startxref is broken', () => {
+  it("recovers via a linear scan when startxref is broken", () => {
     const doc = readPdf(brokenStartxrefPdf());
     expect(doc.pages).toHaveLength(1);
     expect(textLayoutItems(doc.pages[0]!.items)).toHaveLength(1);
   });
 
-  it('reflects the newest revision after an incremental update', () => {
+  it("reflects the newest revision after an incremental update", () => {
     const doc = readPdf(incrementalUpdatePdf());
     expect(doc.pages[0]).toMatchObject({ widthPt: 400, heightPt: 300 });
   });
 });
 
 // Every fixture below is a real PDF encrypted by qpdf, not by this package -- see src/test-support/encrypted-pdfs.ts. Each is an encrypted copy of the same one-page document, so one shared assertion covers every cipher: the page's content *stream* has to decrypt (the text) and so do the /Info *strings* (title and author), which under /V 4 and /V 5 travel through separately-named crypt filters and would not both come back if only one path were right.
-describe('readPdf: PDFs that open without a password', () => {
-  const fixtures: readonly (readonly [string, () => Uint8Array<ArrayBuffer>])[] = [
-    ['40-bit RC4 (/V 1 /R 2)', rc4Bits40EmptyUserPasswordPdf],
-    ['128-bit RC4 (/V 2 /R 3)', rc4Bits128EmptyUserPasswordPdf],
-    ['AES-128 (/V 4 /R 4, /CFM /AESV2)', aes128EmptyUserPasswordPdf],
-    ['AES-128 with /EncryptMetadata false', aes128CleartextMetadataPdf],
-    ['AES-256 (/V 5 /R 6, /CFM /AESV3)', aes256EmptyUserPasswordPdf],
-    ['AES-256 with its objects packed into a compressed object stream', aes256ObjectStreamsPdf],
+describe("readPdf: PDFs that open without a password", () => {
+  const fixtures: readonly (readonly [
+    string,
+    () => Uint8Array<ArrayBuffer>,
+  ])[] = [
+    ["40-bit RC4 (/V 1 /R 2)", rc4Bits40EmptyUserPasswordPdf],
+    ["128-bit RC4 (/V 2 /R 3)", rc4Bits128EmptyUserPasswordPdf],
+    ["AES-128 (/V 4 /R 4, /CFM /AESV2)", aes128EmptyUserPasswordPdf],
+    ["AES-128 with /EncryptMetadata false", aes128CleartextMetadataPdf],
+    ["AES-256 (/V 5 /R 6, /CFM /AESV3)", aes256EmptyUserPasswordPdf],
+    [
+      "AES-256 with its objects packed into a compressed object stream",
+      aes256ObjectStreamsPdf,
+    ],
   ];
 
   // AES-256's key derivation runs the SHA-256/384/512 hardened hash of ISO 32000-2 Algorithm 2.B, which is CPU-bound and slow enough under load to miss vitest's default 5000ms timeout on a busy CI runner -- applied to every fixture in this loop for a consistent timeout across the table, not just the AES-256 entries.
@@ -96,42 +110,56 @@ describe('readPdf: PDFs that open without a password', () => {
       const doc = readPdf(fixture());
       expect(doc.pages).toHaveLength(1);
       expect(doc.pages[0]).toMatchObject({ widthPt: 200, heightPt: 100 });
-      expect(textLayoutItems(doc.pages[0]!.items)).toMatchObject([{ text: ENCRYPTED_FIXTURE_PAGE_TEXT }]);
+      expect(textLayoutItems(doc.pages[0]!.items)).toMatchObject([
+        { text: ENCRYPTED_FIXTURE_PAGE_TEXT },
+      ]);
       expect(doc.metadata.title).toBe(ENCRYPTED_FIXTURE_TITLE);
       expect(doc.metadata.author).toBe(ENCRYPTED_FIXTURE_AUTHOR);
     }, 15000);
   }
 
-  it('reports no diagnostics at all while decrypting', () => {
+  it("reports no diagnostics at all while decrypting", () => {
     const diagnostics: PdfDiagnostic[] = [];
-    readPdf(aes256EmptyUserPasswordPdf(), { sink: (diagnostic) => diagnostics.push(diagnostic) });
+    readPdf(aes256EmptyUserPasswordPdf(), {
+      sink: (diagnostic) => diagnostics.push(diagnostic),
+    });
     expect(diagnostics).toEqual([]);
   }, 15000);
 });
 
-describe('readPdf: PDFs it refuses to open', () => {
+describe("readPdf: PDFs it refuses to open", () => {
   // A file that genuinely needs a user password gets its own error, distinct from PdfEncryptedError: one of the two can be resolved by whoever holds the password, and the other never can.
-  it('throws PdfPasswordRequiredError for an RC4 file with a real user password', () => {
-    expect(() => readPdf(rc4Bits128RealUserPasswordPdf())).toThrow(PdfPasswordRequiredError);
+  it("throws PdfPasswordRequiredError for an RC4 file with a real user password", () => {
+    expect(() => readPdf(rc4Bits128RealUserPasswordPdf())).toThrow(
+      PdfPasswordRequiredError,
+    );
   });
 
   // AES-256's key derivation is CPU-bound (see the timeout note above the fixtures table) -- slow enough under load to miss vitest's default 5000ms timeout.
-  it('throws PdfPasswordRequiredError for an AES-256 file with a real user password', () => {
-    expect(() => readPdf(aes256RealUserPasswordPdf())).toThrow(PdfPasswordRequiredError);
+  it("throws PdfPasswordRequiredError for an AES-256 file with a real user password", () => {
+    expect(() => readPdf(aes256RealUserPasswordPdf())).toThrow(
+      PdfPasswordRequiredError,
+    );
   }, 15000);
 
-  it('throws PdfEncryptedError, not PdfPasswordRequiredError, for a security handler no password could open', () => {
-    expect(() => readPdf(unsupportedSecurityHandlerPdf())).toThrow(PdfEncryptedError);
-    expect(() => readPdf(unsupportedSecurityHandlerPdf())).not.toThrow(PdfPasswordRequiredError);
+  it("throws PdfEncryptedError, not PdfPasswordRequiredError, for a security handler no password could open", () => {
+    expect(() => readPdf(unsupportedSecurityHandlerPdf())).toThrow(
+      PdfEncryptedError,
+    );
+    expect(() => readPdf(unsupportedSecurityHandlerPdf())).not.toThrow(
+      PdfPasswordRequiredError,
+    );
   });
 
   it('throws a PdfParseError when there is no "%PDF-" header at all', () => {
-    expect(() => readPdf(new TextEncoder().encode('not a pdf'))).toThrow(PdfParseError);
+    expect(() => readPdf(new TextEncoder().encode("not a pdf"))).toThrow(
+      PdfParseError,
+    );
   });
 });
 
-describe('readPdf: page rotation', () => {
-  it('swaps page dimensions and rotates extracted text for /Rotate 90', () => {
+describe("readPdf: page rotation", () => {
+  it("swaps page dimensions and rotates extracted text for /Rotate 90", () => {
     const doc = readPdf(rotatedPagePdf());
     expect(doc.pages[0]).toMatchObject({ widthPt: 100, heightPt: 200 }); // swapped from the unrotated 200x100 MediaBox
     const [item] = textLayoutItems(doc.pages[0]!.items);
@@ -139,7 +167,7 @@ describe('readPdf: page rotation', () => {
     expect(item).toMatchObject({ rotationDeg: -90 });
   });
 
-  it('only the rotated page changes size; a matching unrotated page does not', () => {
+  it("only the rotated page changes size; a matching unrotated page does not", () => {
     const rotated = readPdf(rotatedPagePdf()).pages[0]!;
     const unrotated = readPdf(minimalClassicXrefPdf()).pages[0]!;
     expect(rotated.widthPt).toBe(unrotated.heightPt);
@@ -147,8 +175,8 @@ describe('readPdf: page rotation', () => {
   });
 });
 
-describe('readPdf: non-zero-origin MediaBox', () => {
-  it('shifts content coordinates by the MediaBox origin', () => {
+describe("readPdf: non-zero-origin MediaBox", () => {
+  it("shifts content coordinates by the MediaBox origin", () => {
     const doc = readPdf(nonZeroOriginMediaBoxPdf());
     expect(doc.pages[0]).toMatchObject({ widthPt: 200, heightPt: 100 }); // [50 50 250 150] -> same size, shifted origin
     const [item] = textLayoutItems(doc.pages[0]!.items);
@@ -157,30 +185,36 @@ describe('readPdf: non-zero-origin MediaBox', () => {
   });
 });
 
-describe('readPdf: form XObjects', () => {
-  it('recurses into a form XObject, composing the invoking cm into its content\'s position', () => {
+describe("readPdf: form XObjects", () => {
+  it("recurses into a form XObject, composing the invoking cm into its content's position", () => {
     const doc = readPdf(formXObjectPdf());
     const [item] = textLayoutItems(doc.pages[0]!.items);
-    expect(item).toMatchObject({ text: 'In a form', xPt: 20, yPt: 20 });
+    expect(item).toMatchObject({ text: "In a form", xPt: 20, yPt: 20 });
   });
 });
 
-describe('readPdf: inline images', () => {
-  it('extracts an inline image, registered in the document image map', () => {
+describe("readPdf: inline images", () => {
+  it("extracts an inline image, registered in the document image map", () => {
     const doc = readPdf(inlineImagePdf());
-    const imageItems = doc.pages[0]!.items.filter((i) => i.kind === 'image');
+    const imageItems = doc.pages[0]!.items.filter((i) => i.kind === "image");
     expect(imageItems).toHaveLength(1);
     const [image] = imageItems;
-    expect(image).toMatchObject({ kind: 'image', xPt: 10, yPt: 0, widthPt: 100, heightPt: 100 });
-    if (image?.kind !== 'image') {
-      throw new Error('expected an image item');
+    expect(image).toMatchObject({
+      kind: "image",
+      xPt: 10,
+      yPt: 0,
+      widthPt: 100,
+      heightPt: 100,
+    });
+    if (image?.kind !== "image") {
+      throw new Error("expected an image item");
     }
-    expect(doc.images[image.imageId]).toMatchObject({ format: 'png' });
+    expect(doc.images[image.imageId]).toMatchObject({ format: "png" });
   });
 });
 
-describe('readPdf: page-tree attribute inheritance', () => {
-  it('inherits MediaBox onto both pages, and swaps dimensions only for the rotated one', () => {
+describe("readPdf: page-tree attribute inheritance", () => {
+  it("inherits MediaBox onto both pages, and swaps dimensions only for the rotated one", () => {
     const doc = readPdf(inheritedPageAttributesPdf());
     expect(doc.pages).toHaveLength(2);
     expect(doc.pages[0]).toMatchObject({ widthPt: 300, heightPt: 200 });
@@ -188,100 +222,122 @@ describe('readPdf: page-tree attribute inheritance', () => {
   });
 });
 
-describe('readPdf: cancellation', () => {
-  it('throws when the signal is already aborted before reading begins', () => {
+describe("readPdf: cancellation", () => {
+  it("throws when the signal is already aborted before reading begins", () => {
     const controller = new AbortController();
     controller.abort();
-    expect(() => readPdf(minimalClassicXrefPdf(), { signal: controller.signal })).toThrow();
+    expect(() =>
+      readPdf(minimalClassicXrefPdf(), { signal: controller.signal }),
+    ).toThrow();
   });
 
-  it('throws for an aborted signal even when the document has no pages for the page loop to check inside', () => {
+  it("throws for an aborted signal even when the document has no pages for the page loop to check inside", () => {
     const controller = new AbortController();
     controller.abort();
-    expect(() => readPdf(pagelessPdf(), { signal: controller.signal })).toThrow();
+    expect(() =>
+      readPdf(pagelessPdf(), { signal: controller.signal }),
+    ).toThrow();
   });
 
   // The abort contract's real granularity (ExaDev/documents.js#585): the signal is consulted once per page-loop iteration, so a signal aborted WHILE page 1 is being read (here: the sink fires on page 1's missing-/Resources warning and aborts) stops the parse before page 2 is ever interpreted, rather than running to completion.
-  it('honours an aborted signal between pages, not only before reading begins', () => {
+  it("honours an aborted signal between pages, not only before reading begins", () => {
     const controller = new AbortController();
     const sink = (diagnostic: PdfDiagnostic): void => {
-      if (diagnostic.code === 'pdf/object-missing-value') {
+      if (diagnostic.code === "pdf/object-missing-value") {
         controller.abort();
       }
     };
-    expect(() => readPdf(twoPagesFirstWithoutResourcesPdf(), { signal: controller.signal, sink })).toThrow();
+    expect(() =>
+      readPdf(twoPagesFirstWithoutResourcesPdf(), {
+        signal: controller.signal,
+        sink,
+      }),
+    ).toThrow();
   });
 });
 
-describe('readPdf: metadata', () => {
-  it('reads /Title, /Author, /Keywords, and /CreationDate from /Info', () => {
+describe("readPdf: metadata", () => {
+  it("reads /Title, /Author, /Keywords, and /CreationDate from /Info", () => {
     const doc = readPdf(withInfoDictPdf());
     expect(doc.metadata).toMatchObject({
-      title: 'Test Doc',
-      author: 'Jane Smith',
-      keywords: ['alpha', 'beta'],
-      createdIso: '2024-01-15T10:30:00+02:00',
+      title: "Test Doc",
+      author: "Jane Smith",
+      keywords: ["alpha", "beta"],
+      createdIso: "2024-01-15T10:30:00+02:00",
     });
   });
 });
 
-describe('readPdf: page notes', () => {
+describe("readPdf: page notes", () => {
   // pdfWithForeignHiddenAnnotationPdf is built independently of src/pdf/write.ts (see test-support/pdf.ts's own top-of-file rationale) specifically so this proves readPageNotes's /T-marker check against a genuinely foreign annotation, not just against what our own writer happens to produce.
-  it('does not mistake a third-party tool\'s own hidden sticky note for pptx speaker notes', () => {
+  it("does not mistake a third-party tool's own hidden sticky note for pptx speaker notes", () => {
     const doc = readPdf(pdfWithForeignHiddenAnnotationPdf());
     expect(doc.pages[0]!.notes).toBeUndefined();
   });
 });
 
-describe('normalizeRotation', () => {
-  it('passes through each of the four valid values', () => {
+describe("normalizeRotation", () => {
+  it("passes through each of the four valid values", () => {
     expect(normalizeRotation(0)).toBe(0);
     expect(normalizeRotation(90)).toBe(90);
     expect(normalizeRotation(180)).toBe(180);
     expect(normalizeRotation(270)).toBe(270);
   });
 
-  it('normalises a negative rotation', () => {
+  it("normalises a negative rotation", () => {
     expect(normalizeRotation(-90)).toBe(270);
   });
 
-  it('normalises a rotation past 360', () => {
+  it("normalises a rotation past 360", () => {
     expect(normalizeRotation(450)).toBe(90);
   });
 
-  it('defaults to 0 when absent', () => {
+  it("defaults to 0 when absent", () => {
     expect(normalizeRotation(undefined)).toBe(0);
   });
 });
 
-describe('pageRotationTransform', () => {
-  it('is the identity for 0, unchanged dimensions', () => {
+describe("pageRotationTransform", () => {
+  it("is the identity for 0, unchanged dimensions", () => {
     const result = pageRotationTransform(0, 200, 100);
-    expect(result).toEqual({ matrix: [1, 0, 0, 1, 0, 0], widthPt: 200, heightPt: 100 });
+    expect(result).toEqual({
+      matrix: [1, 0, 0, 1, 0, 0],
+      widthPt: 200,
+      heightPt: 100,
+    });
   });
 
-  it('maps all four corners correctly for 90 and swaps dimensions', () => {
+  it("maps all four corners correctly for 90 and swaps dimensions", () => {
     const { matrix, widthPt, heightPt } = pageRotationTransform(90, 200, 100);
     expect({ widthPt, heightPt }).toEqual({ widthPt: 100, heightPt: 200 });
-    const applyPoint = (x: number, y: number): { x: number; y: number } => ({ x: x * matrix[0] + y * matrix[2] + matrix[4], y: x * matrix[1] + y * matrix[3] + matrix[5] });
+    const applyPoint = (x: number, y: number): { x: number; y: number } => ({
+      x: x * matrix[0] + y * matrix[2] + matrix[4],
+      y: x * matrix[1] + y * matrix[3] + matrix[5],
+    });
     expect(applyPoint(0, 0)).toEqual({ x: 0, y: 200 });
     expect(applyPoint(200, 0)).toEqual({ x: 0, y: 0 });
     expect(applyPoint(200, 100)).toEqual({ x: 100, y: 0 });
     expect(applyPoint(0, 100)).toEqual({ x: 100, y: 200 });
   });
 
-  it('maps opposite corners for 180, dimensions unchanged', () => {
+  it("maps opposite corners for 180, dimensions unchanged", () => {
     const { matrix, widthPt, heightPt } = pageRotationTransform(180, 200, 100);
     expect({ widthPt, heightPt }).toEqual({ widthPt: 200, heightPt: 100 });
-    const applyPoint = (x: number, y: number): { x: number; y: number } => ({ x: x * matrix[0] + y * matrix[2] + matrix[4], y: x * matrix[1] + y * matrix[3] + matrix[5] });
+    const applyPoint = (x: number, y: number): { x: number; y: number } => ({
+      x: x * matrix[0] + y * matrix[2] + matrix[4],
+      y: x * matrix[1] + y * matrix[3] + matrix[5],
+    });
     expect(applyPoint(0, 0)).toEqual({ x: 200, y: 100 });
     expect(applyPoint(200, 100)).toEqual({ x: 0, y: 0 });
   });
 
-  it('maps all four corners correctly for 270 and swaps dimensions', () => {
+  it("maps all four corners correctly for 270 and swaps dimensions", () => {
     const { matrix, widthPt, heightPt } = pageRotationTransform(270, 200, 100);
     expect({ widthPt, heightPt }).toEqual({ widthPt: 100, heightPt: 200 });
-    const applyPoint = (x: number, y: number): { x: number; y: number } => ({ x: x * matrix[0] + y * matrix[2] + matrix[4], y: x * matrix[1] + y * matrix[3] + matrix[5] });
+    const applyPoint = (x: number, y: number): { x: number; y: number } => ({
+      x: x * matrix[0] + y * matrix[2] + matrix[4],
+      y: x * matrix[1] + y * matrix[3] + matrix[5],
+    });
     expect(applyPoint(0, 0)).toEqual({ x: 100, y: 0 });
     expect(applyPoint(200, 0)).toEqual({ x: 100, y: 200 });
     expect(applyPoint(200, 100)).toEqual({ x: 0, y: 200 });
@@ -289,14 +345,14 @@ describe('pageRotationTransform', () => {
   });
 });
 
-describe('decodePdfString', () => {
-  it('decodes a UTF-16BE-with-BOM string', () => {
+describe("decodePdfString", () => {
+  it("decodes a UTF-16BE-with-BOM string", () => {
     const bytes = new Uint8Array([0xfe, 0xff, 0x00, 0x41, 0x00, 0x42]);
-    expect(decodePdfString(bytes)).toBe('AB');
+    expect(decodePdfString(bytes)).toBe("AB");
   });
 
-  it('decodes a plain (no-BOM) string byte-for-byte as Latin-1', () => {
-    const bytes = new TextEncoder().encode('Hello');
-    expect(decodePdfString(bytes)).toBe('Hello');
+  it("decodes a plain (no-BOM) string byte-for-byte as Latin-1", () => {
+    const bytes = new TextEncoder().encode("Hello");
+    expect(decodePdfString(bytes)).toBe("Hello");
   });
 });

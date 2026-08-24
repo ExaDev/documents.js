@@ -1,17 +1,17 @@
-import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { formatOdfLength, resolveOdfShapeGeometry } from 'odf.js';
-import { attr } from 'ooxml.js';
-import type { Box } from 'document-schema.js';
-import { removeChild } from '../../xml/edit';
-import { applyOdfGeometry } from '../geometry';
-import { el } from '../../xml/fragment';
-import { buildList, OdtList } from '../odt/list';
-import type { ParagraphInit } from '../odt/paragraph';
-import { buildParagraph, OdtParagraph } from '../odt/paragraph';
+import type { Package, XmlElement, XmlNode } from "odf.js";
+import { formatOdfLength, resolveOdfShapeGeometry } from "odf.js";
+import { attr } from "ooxml.js";
+import type { Box } from "document-schema.js";
+import { removeChild } from "../../xml/edit";
+import { applyOdfGeometry } from "../geometry";
+import { el } from "../../xml/fragment";
+import { buildList, OdtList } from "../odt/list";
+import type { ParagraphInit } from "../odt/paragraph";
+import { buildParagraph, OdtParagraph } from "../odt/paragraph";
 
 function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
   for (const child of parent.children) {
-    if (child.type === 'element' && child.tag === tag) {
+    if (child.type === "element" && child.tag === tag) {
       return child;
     }
   }
@@ -33,13 +33,15 @@ export class OdpShape {
 
   private live(): XmlElement {
     if (this.removed) {
-      throw new Error('this OdpShape has been removed from its slide and can no longer be used');
+      throw new Error(
+        "this OdpShape has been removed from its slide and can no longer be used",
+      );
     }
     return this.node;
   }
 
   get name(): string | undefined {
-    return attr(this.live(), 'draw:name');
+    return attr(this.live(), "draw:name");
   }
 
   get frame(): Box | undefined {
@@ -57,7 +59,9 @@ export class OdpShape {
   set rotationDeg(value: number | undefined) {
     const currentFrame = this.frame;
     if (currentFrame === undefined) {
-      throw new Error('cannot set rotationDeg on a shape with no resolvable frame (missing svg:width/svg:height)');
+      throw new Error(
+        "cannot set rotationDeg on a shape with no resolvable frame (missing svg:width/svg:height)",
+      );
     }
     this.applyGeometry(currentFrame, value);
   }
@@ -71,11 +75,11 @@ export class OdpShape {
   private textBox(create: false): XmlElement | undefined;
   private textBox(create: boolean): XmlElement | undefined {
     const node = this.live();
-    const existing = directChild(node, 'draw:text-box');
+    const existing = directChild(node, "draw:text-box");
     if (existing !== undefined || !create) {
       return existing;
     }
-    const created = el('draw:text-box');
+    const created = el("draw:text-box");
     node.children.push(created);
     return created;
   }
@@ -87,7 +91,7 @@ export class OdpShape {
     }
     const out: OdtParagraph[] = [];
     for (const child of textBox.children) {
-      if (child.type === 'element' && child.tag === 'text:p') {
+      if (child.type === "element" && child.tag === "text:p") {
         out.push(new OdtParagraph(textBox.children, child, this.pkg));
       }
     }
@@ -104,7 +108,7 @@ export class OdpShape {
   get text(): string {
     return this.paragraphs()
       .map((p) => p.text)
-      .join('\n');
+      .join("\n");
   }
 
   set text(value: string) {
@@ -127,42 +131,49 @@ export class OdpShape {
 }
 
 // Builds a fresh draw:frame containing a draw:text-box with a single plain-text paragraph, for OdpSlide.addTextBox (slide.ts) -- the odp equivalent of pptx/shape.ts's own buildTextBoxShape.
-export function buildTextBoxFrame(pkg: Package, frame: Box, text: string): XmlElement {
+export function buildTextBoxFrame(
+  pkg: Package,
+  frame: Box,
+  text: string,
+): XmlElement {
   return el(
-    'draw:frame',
+    "draw:frame",
     {
-      'svg:x': formatOdfLength(frame.xPt),
-      'svg:y': formatOdfLength(frame.yPt),
-      'svg:width': formatOdfLength(frame.widthPt),
-      'svg:height': formatOdfLength(frame.heightPt),
+      "svg:x": formatOdfLength(frame.xPt),
+      "svg:y": formatOdfLength(frame.yPt),
+      "svg:width": formatOdfLength(frame.widthPt),
+      "svg:height": formatOdfLength(frame.heightPt),
     },
-    [el('draw:text-box', {}, [buildParagraph(pkg, { text })])],
+    [el("draw:text-box", {}, [buildParagraph(pkg, { text })])],
   );
 }
 
 // Builds a fresh draw:frame containing a draw:image referencing an already-inserted media part, for OdpSlide.addImage (slide.ts) -- the odp equivalent of pptx/shape.ts's own buildPictureShape. Unlike OOXML's p:pic, ODF's draw:image references its media part by a plain package path directly via xlink:href, with no relationship-id indirection to allocate (see src/odf-package/media.ts's own addImageMedia).
 export function buildImageFrame(partPath: string, frame: Box): XmlElement {
   return el(
-    'draw:frame',
+    "draw:frame",
     {
-      'svg:x': formatOdfLength(frame.xPt),
-      'svg:y': formatOdfLength(frame.yPt),
-      'svg:width': formatOdfLength(frame.widthPt),
-      'svg:height': formatOdfLength(frame.heightPt),
+      "svg:x": formatOdfLength(frame.xPt),
+      "svg:y": formatOdfLength(frame.yPt),
+      "svg:width": formatOdfLength(frame.widthPt),
+      "svg:height": formatOdfLength(frame.heightPt),
     },
-    [el('draw:image', { 'xlink:href': partPath })],
+    [el("draw:image", { "xlink:href": partPath })],
   );
 }
 
 // Builds a fresh draw:frame containing a table:table DIRECTLY (no draw:text-box wrapper) for OdpSlide.addTable (slide.ts) -- odf.js's own readDrawFrameContent (typed/draw/shapes.ts) checks for a table:table child before it ever looks for draw:text-box/draw:image, so a table shape's own table:table sits at the same nesting depth those do, not inside one of them. The returned frame is a live OdpShape like any other -- rotationDeg works on it exactly the same way (resolveOdfShapeGeometry/applyOdfGeometry are generic over the frame's own content) -- while tableElement is handed back separately for the caller to wrap in an OdtTable (table.ts's own table:table content model is identical wherever it lives, see src/edit/odt/table.ts).
-export function buildTableFrame(frame: Box, tableElement: XmlElement): XmlElement {
+export function buildTableFrame(
+  frame: Box,
+  tableElement: XmlElement,
+): XmlElement {
   return el(
-    'draw:frame',
+    "draw:frame",
     {
-      'svg:x': formatOdfLength(frame.xPt),
-      'svg:y': formatOdfLength(frame.yPt),
-      'svg:width': formatOdfLength(frame.widthPt),
-      'svg:height': formatOdfLength(frame.heightPt),
+      "svg:x": formatOdfLength(frame.xPt),
+      "svg:y": formatOdfLength(frame.yPt),
+      "svg:width": formatOdfLength(frame.widthPt),
+      "svg:height": formatOdfLength(frame.heightPt),
     },
     [tableElement],
   );

@@ -11,7 +11,10 @@ export interface GlyphInkBounds {
 }
 
 // The union of two ink boxes: the smallest box containing both. Used when a glyph is assembled from parts (a TrueType composite's components) and when a caller measures a whole run of glyphs as one box.
-export function unionGlyphInkBounds(a: GlyphInkBounds, b: GlyphInkBounds): GlyphInkBounds {
+export function unionGlyphInkBounds(
+  a: GlyphInkBounds,
+  b: GlyphInkBounds,
+): GlyphInkBounds {
   return {
     xMin: Math.min(a.xMin, b.xMin),
     yMin: Math.min(a.yMin, b.yMin),
