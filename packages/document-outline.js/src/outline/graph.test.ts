@@ -242,7 +242,7 @@ describe('definitions tables', () => {
     const danglingStyle = wordprocessingPackage([sectionGroup([headingGroup('H', 1, [], { style: 'missing' })])], {
       styles: { s1: { run: { bold: true } } },
     });
-    expect(() => projectDocumentGraph([{ id: 'doc', package: danglingStyle }])).toThrowError(
+    expect(() => projectDocumentGraph([{ id: 'doc', package: danglingStyle }])).toThrow(
       /style ref "missing" names no entry in the styles table/,
     );
 
@@ -250,7 +250,7 @@ describe('definitions tables', () => {
       [sectionGroup([{ node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'gone' }, children: [] }])],
       { definitions: { n1: NOTE_BODY } },
     );
-    expect(() => projectDocumentGraph([{ id: 'doc', package: danglingDefinition }])).toThrowError(
+    expect(() => projectDocumentGraph([{ id: 'doc', package: danglingDefinition }])).toThrow(
       /definition ref "gone" names no entry in the definitions table/,
     );
   });
@@ -332,7 +332,7 @@ describe('definitions tables', () => {
       },
     });
     expectSchemaValid(mutual, 'mutual');
-    expect(() => projectDocumentGraph([{ id: 'doc', package: mutual }])).toThrowError(
+    expect(() => projectDocumentGraph([{ id: 'doc', package: mutual }])).toThrow(
       /definitions table entry "n1" is reachable from its own body/,
     );
   });
@@ -648,7 +648,7 @@ describe('projectDocumentGraph', () => {
         { id: 'same', package: first },
         { id: 'same', package: second },
       ]),
-    ).toThrowError(/document id "same" assigned to more than one document/);
+    ).toThrow(/document id "same" assigned to more than one document/);
   });
 });
 

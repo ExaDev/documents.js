@@ -137,7 +137,7 @@ describe('convertDocument: drawing <-> presentation over real fixture bytes', ()
         : [];
     return blocks
       .filter((block): block is ContentParagraph => block.kind === 'paragraph')
-      .flatMap((block) => block.runs.map((run) => run.text ?? ''))
+      .flatMap((block) => block.runs.map((run) => run.text))
       .join('');
   }
 

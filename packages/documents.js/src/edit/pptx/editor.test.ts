@@ -106,13 +106,13 @@ describe('PptxSlide.notes', () => {
     const notesRoot = rootElement(editor.toPackage().parts[notesPartPath]);
     const names = notesRoot?.attributes.map((a) => a.name) ?? [];
     expect(names).toEqual(expect.arrayContaining(['xmlns:p', 'xmlns:a']));
-    const topLevelTags = notesRoot?.children.filter((c) => c.type === 'element').map((c) => (c.type === 'element' ? c.tag : ''));
+    const topLevelTags = notesRoot?.children.filter((c) => c.type === 'element').map((c) => c.tag);
     expect(topLevelTags).toEqual(['p:cSld', 'p:clrMapOvr']);
     const clrMapOvr = notesRoot === undefined ? undefined : childrenWithTag(notesRoot, 'p:clrMapOvr')[0];
     expect(clrMapOvr === undefined ? undefined : childrenWithTag(clrMapOvr, 'a:masterClrMapping')[0]).toBeDefined();
     const cSld = notesRoot === undefined ? undefined : childrenWithTag(notesRoot, 'p:cSld')[0];
     const spTree = cSld === undefined ? undefined : childrenWithTag(cSld, 'p:spTree')[0];
-    const leadingTags = spTree?.children.filter((c) => c.type === 'element').slice(0, 2).map((c) => (c.type === 'element' ? c.tag : ''));
+    const leadingTags = spTree?.children.filter((c) => c.type === 'element').slice(0, 2).map((c) => c.tag);
     expect(leadingTags).toEqual(['p:nvGrpSpPr', 'p:grpSpPr']);
   });
 

@@ -376,7 +376,7 @@ export class DocxParagraph {
     const node = this.live();
     const lastChildIndex = node.children.length - 1;
     const lastChild = node.children[lastChildIndex];
-    if (lastChild?.type !== 'element' || lastChild?.tag !== 'w:r') {
+    if (lastChild?.type !== 'element' || lastChild.tag !== 'w:r') {
       return;
     }
     const rId = addRelationship(this.pkg, 'word/document.xml', { type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink', target: url, targetMode: 'External' });

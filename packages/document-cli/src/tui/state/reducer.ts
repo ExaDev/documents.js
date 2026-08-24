@@ -668,19 +668,20 @@ export function appReducer(state: AppState, action: Action): AppState {
       if (doc === undefined) {
         return wrongDocument(state, 'a docx, odt or markdown document');
       }
-      let mergeUnsupported = false;
+      // A property on a const holder, not a bare `let`: the only write is inside the mutateGuarded callback below, and TypeScript ignores assignments made in a nested function when narrowing the enclosing scope -- so a `let` would read as `false` at the check and the warning branch would look statically dead while genuinely firing.
+      const merge = { unsupported: false };
       const nextState = mutateGuarded(state, doc, () => {
         const table = doc.editor.body.appendTable({ rows: action.rows, columns: action.columns });
         if (action.merge === undefined) {
           return;
         }
         if (!('mergeCells' in table)) {
-          mergeUnsupported = true;
+          merge.unsupported = true;
           return;
         }
         table.mergeCells(action.merge.startRow, action.merge.startColumn, action.merge.rowSpan, action.merge.colSpan);
       });
-      return mergeUnsupported ? withStatus(nextState, 'warning', 'Markdown tables do not support merged cells -- the table was created without merging') : nextState;
+      return merge.unsupported ? withStatus(nextState, 'warning', 'Markdown tables do not support merged cells -- the table was created without merging') : nextState;
     }
 
     // MarkdownTable has no mergeCells at all (see APPEND_TABLE above) -- resolved through the wide wordprocessingDocument union so the table lookup itself stays generic, with the same in-narrowing decline for a markdown table specifically.
@@ -809,11 +810,12 @@ export function appReducer(state: AppState, action: Action): AppState {
       if (paragraph === undefined) {
         return withStatus(state, 'warning', `There is no paragraph at index ${action.blockIndex}`);
       }
-      let written = true;
+      // Same holder reason as `merge` above: the write happens inside the mutate callback.
+      const omml = { written: true };
       const nextState = mutate(state, doc, () => {
-        written = paragraph.appendOfficeMath(action.mathml).written;
+        omml.written = paragraph.appendOfficeMath(action.mathml).written;
       });
-      return written ? nextState : withStatus(nextState, 'warning', 'The formula produced no OMML content and was not written');
+      return omml.written ? nextState : withStatus(nextState, 'warning', 'The formula produced no OMML content and was not written');
     }
 
     // odt's OdtBody.appendFormula has no docx counterpart at all (see the action's own doc comment) -- narrowed to odt specifically rather than through wordprocessingDocument.

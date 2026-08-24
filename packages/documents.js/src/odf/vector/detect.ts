@@ -45,7 +45,7 @@ export function collectSlideVectorGroups(pageChildren: readonly XmlNode[], pkg: 
     const insertBeforeShapeIndex = shapePaintOrders.filter((order) => order < vectorOrder).length;
     const last = groups[groups.length - 1];
     const continuesLastGroup = last?.insertBeforeShapeIndex === insertBeforeShapeIndex;
-    if (continuesLastGroup && last !== undefined) {
+    if (continuesLastGroup) {
       last.vectors.push(vector);
       continue;
     }

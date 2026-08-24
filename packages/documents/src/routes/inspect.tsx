@@ -24,7 +24,7 @@ function InspectPage() {
   const inspect = useInspectDocument();
 
   const runInspect = (opened: OpenedFile, chosenFormat: DocumentFormat) => {
-    inspect.mutate({ format: chosenFormat, bytes: opened.bytes }, { onError: (error) => notifyError('Could not inspect document', error) });
+    inspect.mutate({ format: chosenFormat, bytes: opened.bytes }, { onError: (error) => { notifyError('Could not inspect document', error); } });
   };
 
   const handleFile = (opened: OpenedFile) => {
@@ -72,7 +72,7 @@ function InspectPage() {
           <Paper withBorder p="md">
             <Stack gap="sm">
               <DiagnosticsPanel diagnostics={inspect.data.diagnostics} />
-              <InspectPanel data={inspect.data} loading={inspect.isPending} error={inspect.error ?? undefined} />
+              <InspectPanel data={inspect.data} loading={inspect.isPending} />
             </Stack>
           </Paper>
         )}

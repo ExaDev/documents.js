@@ -274,7 +274,7 @@ describe('readOdp: the package-native reader over the same fixture', () => {
 
 // The odp residue rows (ExaDev/documents.js#769): presentation transitions/sound/animations and the unmapped shape kinds quarantine on their own slide's residue, and non-content parts quarantine at the package tier. Slide transitions sit on the page's OWN drawing-page style (style:drawing-page-properties, referenced by draw:style-name), never as attributes of draw:page itself -- no ODF schema version (1.1, 1.2) puts them there, and real LibreOffice output writes them in the style (the transitions.odp fixture below is genuine Impress output).
 describe('readOdpContent: residue rows', () => {
-  function slidePackage(page: ReturnType<typeof el>, extraParts: Record<string, Package['parts'][string]> = {}, automaticStyles: ReturnType<typeof el> | undefined = undefined): Package {
+  function slidePackage(page: ReturnType<typeof el>, extraParts: Record<string, Package['parts'][string]> = {}, automaticStyles?: ReturnType<typeof el>  ): Package {
     const contentChildren = automaticStyles === undefined ? [] : [automaticStyles];
     return {
       parts: {

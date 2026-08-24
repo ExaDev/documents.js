@@ -74,7 +74,7 @@ function ccittFaxDecode(data: Uint8Array<ArrayBuffer>, parm: PdfDict | undefined
     rows,
     blackIs1: asBool(parmGet('BlackIs1')),
     encodedByteAlign: asBool(parmGet('EncodedByteAlign')),
-    onWarning: (message) => sink({ code: 'pdf/ccitt-fax-degraded', severity: 'warning', message }),
+    onWarning: (message) => { sink({ code: 'pdf/ccitt-fax-degraded', severity: 'warning', message }); },
   }).bytes;
 }
 
@@ -98,7 +98,7 @@ function jbig2Decode(data: Uint8Array<ArrayBuffer>, parm: PdfDict | undefined, d
       globals,
       width: asNumber(dictGet(dict, 'Width') ?? dictGet(dict, 'W')),
       height: asNumber(dictGet(dict, 'Height') ?? dictGet(dict, 'H')),
-      onWarning: (message) => sink({ code: 'pdf/jbig2-degraded', severity: 'warning', message }),
+      onWarning: (message) => { sink({ code: 'pdf/jbig2-degraded', severity: 'warning', message }); },
     });
     return Uint8Array.from(image.bytes, (byte) => byte ^ 0xff);
   } catch (error) {

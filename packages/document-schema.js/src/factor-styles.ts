@@ -539,12 +539,12 @@ function rebuildParagraph(paragraph: ContentParagraph, chain: ChainStrips): Cont
 // Copies a paragraph sans the named keys -- copy-then-delete, never destructuring the keys out (an unused binding) and never mutating the input (decompose embedded the caller's own node objects, and the layout pass's frames ride on them). Every mintable paragraph key is optional on ContentParagraph, so the deletes are type-honest.
 function stripParagraphKeys(paragraph: ContentParagraph, keys: readonly ParagraphKey[]): ContentParagraph {
   const copy: ContentParagraph = { ...paragraph };
-  for (const key of keys) delete copy[key];
+  for (const key of keys) Reflect.deleteProperty(copy, key);
   return copy;
 }
 
 function stripRunKeys(run: ContentRun, keys: readonly RunKey[]): ContentRun {
   const copy: ContentRun = { ...run };
-  for (const key of keys) delete copy[key];
+  for (const key of keys) Reflect.deleteProperty(copy, key);
   return copy;
 }

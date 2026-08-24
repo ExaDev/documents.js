@@ -11,7 +11,7 @@ export function usePdfObjectUrl(bytes: Uint8Array<ArrayBuffer> | undefined): str
     }
     const objectUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
     setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
+    return () => { URL.revokeObjectURL(objectUrl); };
   }, [bytes]);
 
   return url;

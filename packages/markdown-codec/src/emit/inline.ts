@@ -210,7 +210,7 @@ function linkTitleCovering(constructs: readonly RunConstructExtent[] | undefined
 }
 
 // The top-level entry: groups the run sequence by hyperlink identity FIRST (adjacent same-hyperlink runs merge into one link, MarkdownDiagnosticCodes.ADJACENT_LINKS_MERGED), then renders each group's -- or each hyperlink-free stretch's -- own text via renderNestedStyles. A group covered by a titled link extent renders `](dest "title")`, the write-side inverse of src/lower/inline.ts's titled-link carry -- the runs keep the destination (ContentRun.hyperlink, the standing reconciliation) and the extent supplies only what the run field cannot hold.
-export function emitRuns(runs: readonly ContentRun[], context: InlineEmitContext, constructs: readonly RunConstructExtent[] | undefined = undefined): string {
+export function emitRuns(runs: readonly ContentRun[], context: InlineEmitContext, constructs?: readonly RunConstructExtent[]  ): string {
   let out = '';
   let index = 0;
   while (index < runs.length) {
@@ -249,6 +249,6 @@ export function emitRuns(runs: readonly ContentRun[], context: InlineEmitContext
 }
 
 // The table-cell-specific variant (src/emit/table.ts): a GFM table row is exactly one physical line, so an embedded hard-break newline (rendered by emitRuns as a backslash-newline pair, matching escapeMarkdownText's own convention) cannot survive as-is -- it collapses to a single space instead.
-export function emitRunsSingleLine(runs: readonly ContentRun[], context: InlineEmitContext, constructs: readonly RunConstructExtent[] | undefined = undefined): string {
+export function emitRunsSingleLine(runs: readonly ContentRun[], context: InlineEmitContext, constructs?: readonly RunConstructExtent[]  ): string {
   return emitRuns(runs, context, constructs).replace(/\\\n/g, ' ');
 }

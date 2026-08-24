@@ -28,7 +28,7 @@ export function encodeOdfText(text: string): XmlNode[] {
 
   let i = 0;
   while (i < text.length) {
-    const ch = text[i];
+    const ch = text.charAt(i);
     if (ch === ' ') {
       let runLength = 1;
       while (i + runLength < text.length && text[i + runLength] === ' ') {

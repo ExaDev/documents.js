@@ -1,13 +1,13 @@
 // A chunked, growable byte-output builder: writes accumulate into a list of chunks rather than repeatedly reallocating and copying one growing buffer, which is O(n^2) for many small writes -- exactly the access pattern the PDF writer (one write per operator) and the PNG encoder (one write per scanline) both have.
 export class ByteWriter {
-  private readonly chunks: Uint8Array<ArrayBufferLike>[] = [];
+  private readonly chunks: Uint8Array[] = [];
   private byteLength = 0;
 
   get length(): number {
     return this.byteLength;
   }
 
-  writeBytes(bytes: Uint8Array<ArrayBufferLike>): void {
+  writeBytes(bytes: Uint8Array): void {
     if (bytes.length === 0) {
       return;
     }
@@ -36,7 +36,7 @@ export class ByteWriter {
 }
 
 // Concatenates a list of byte chunks into one contiguous array without the O(n^2) cost of repeated single-chunk concatenation.
-export function concatBytes(chunks: readonly Uint8Array<ArrayBufferLike>[]): Uint8Array<ArrayBuffer> {
+export function concatBytes(chunks: readonly Uint8Array[]): Uint8Array<ArrayBuffer> {
   const writer = new ByteWriter();
   for (const chunk of chunks) {
     writer.writeBytes(chunk);

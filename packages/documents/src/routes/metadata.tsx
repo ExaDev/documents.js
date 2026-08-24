@@ -37,7 +37,7 @@ function MetadataPage() {
             setTitle(metadata.title ?? '');
             setAuthor(metadata.author ?? '');
           },
-          onError: (error) => notifyError('Could not read metadata', error),
+          onError: (error) => { notifyError('Could not read metadata', error); },
         },
       );
     }
@@ -52,7 +52,7 @@ function MetadataPage() {
           notifySuccess('Metadata saved');
           void fileAccess.saveFile(bytes, { suggestedName: file.name, mimeType: 'application/octet-stream' });
         },
-        onError: (error) => notifyError('Could not save metadata', error),
+        onError: (error) => { notifyError('Could not save metadata', error); },
       },
     );
   };
@@ -73,8 +73,8 @@ function MetadataPage() {
         {readMetadata.data && (
           <Paper withBorder p="md">
             <Stack gap="sm">
-              <TextInput label="Title" value={title} onChange={(event) => setTitle(event.currentTarget.value)} />
-              <TextInput label="Author" value={author} onChange={(event) => setAuthor(event.currentTarget.value)} />
+              <TextInput label="Title" value={title} onChange={(event) => { setTitle(event.currentTarget.value); }} />
+              <TextInput label="Author" value={author} onChange={(event) => { setAuthor(event.currentTarget.value); }} />
               <Table>
                 <Table.Tbody>
                   {readMetadata.data.creator !== undefined && (

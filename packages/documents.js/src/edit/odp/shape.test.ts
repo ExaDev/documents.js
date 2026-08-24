@@ -137,8 +137,8 @@ describe('OdpShape.rotationDeg', () => {
     const newFrame = { xPt: 40, yPt: 40, widthPt: 120, heightPt: 60 };
     shape.frame = newFrame;
     expect(shape.rotationDeg).toBeCloseTo(15, 9);
-    expect(shape.frame?.xPt).toBeCloseTo(newFrame.xPt, 6);
-    expect(shape.frame?.yPt).toBeCloseTo(newFrame.yPt, 6);
+    expect(shape.frame.xPt).toBeCloseTo(newFrame.xPt, 6);
+    expect(shape.frame.yPt).toBeCloseTo(newFrame.yPt, 6);
   });
 });
 

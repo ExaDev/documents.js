@@ -4,7 +4,7 @@ import { applyOdfTransform, composeOdfGroupTransform, netRotationDeg, parseOdfTr
 
 // The geometry expectations below are not derived from the OASIS spec text alone -- they are the exact pixel-measured results of a real LibreOffice round trip: a 200pt x 60pt shape at svg:x=100pt/svg:y=100pt was rewritten with draw:transform="rotate(<radians>) translate(100pt 100pt)" for two different angles, converted to PDF via `soffice --headless --convert-to pdf`, rasterised, and its rendered bounding box measured in pixels. See transform.ts's own top-of-file note for why this was necessary (the naive SVG-transform-list reading gets the composition order/sign wrong).
 
-const closeTo = (value: number, expected: number) => expect(value).toBeCloseTo(expected, 6);
+const closeTo = (value: number, expected: number) => { expect(value).toBeCloseTo(expected, 6); };
 
 describe('parseOdfTransform', () => {
   it('parses "rotate(angle) translate(x y)" (no space before the parenthesis) into its function list, in document order', () => {

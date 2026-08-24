@@ -123,7 +123,7 @@ describe('readOdgContent', () => {
 
   it('reads the polygon\'s draw:points geometry as a closed straight-line path', () => {
     const { pages } = readOdgContent(buildFixturePackage());
-    const polygon = pages[0]?.vectors.find((v) => v.kind === 'path' && v.subpaths[0]?.closed === true && v.subpaths[0]?.segments.length === 3);
+    const polygon = pages[0]?.vectors.find((v) => v.kind === 'path' && v.subpaths[0]?.closed === true && v.subpaths[0].segments.length === 3);
     if (polygon?.kind !== 'path') {
       throw new Error('expected the polygon path vector');
     }

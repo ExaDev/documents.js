@@ -37,7 +37,7 @@ describe('DocxParagraph.insertImageAfter', () => {
     const table = editor.body.appendTable({ rows: 1, columns: 1 });
     const cellParagraph = table.cell(0, 0).appendParagraph();
     expect(() =>
-      cellParagraph.insertImageAfter({ format: 'png', bytes: PNG_BYTES, widthPt: 10, heightPt: 10 }),
+      { cellParagraph.insertImageAfter({ format: 'png', bytes: PNG_BYTES, widthPt: 10, heightPt: 10 }); },
     ).toThrow(/DocxEditor/);
   });
 });

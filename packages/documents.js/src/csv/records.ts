@@ -45,7 +45,7 @@ export function parseCsvRecords(text: string, delimiter: string = DEFAULT_CSV_DE
 
   let index = 0;
   while (index < text.length) {
-    const ch = text[index];
+    const ch = text.charAt(index);
     if (inQuotedField) {
       if (ch === '"') {
         // A doubled quote inside a quoted field is one literal quote (RFC 4180 2.7); a lone quote closes the field.

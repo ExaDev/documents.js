@@ -221,7 +221,7 @@ export function compoundFile(entries: readonly CompoundFileEntrySpec[], options:
   const miniFat = new Uint32Array(miniFatSectorCount * fatEntriesPerSector).fill(FREESECT);
   for (const { id, node } of smallStreamRecords) {
     const start = miniStartOf.get(id) ?? 0;
-    const count = Math.ceil((node.stream ?? new Uint8Array(0)).length / MINI_SECTOR_SIZE);
+    const count = Math.ceil(node.stream.length / MINI_SECTOR_SIZE);
     for (let j = 0; j < count; j++) {
       miniFat[start + j] = j === count - 1 ? ENDOFCHAIN : start + j + 1;
     }

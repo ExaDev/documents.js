@@ -601,7 +601,7 @@ describe('readOdsContent: residue rows', () => {
 
   it('never quarantines an embedded sub-document\'s own parts -- sheet-formula.ods\'s Math object rides the semantic channel alone', () => {
     const { source } = readOdsContent(loadFixture('sheet-formula.ods'));
-    expect(Object.keys(source ?? {}).every((key) => key.startsWith('Object ') === false)).toBe(true);
+    expect(Object.keys(source ?? {}).every((key) => !key.startsWith('Object '))).toBe(true);
   });
 
   it('quarantines a vendor-extension element at the spreadsheet level, keyed by its own tag', () => {
@@ -872,7 +872,7 @@ describe('readOds: the package-native reader over the same real fixtures', () =>
     if (sheet === undefined || contentSheet === undefined) {
       throw new Error('expected at least one sheet');
     }
-    const images = contentSheet.images ?? [];
+    const images = contentSheet.images;
     const embedded = contentSheet.embeddedObjects ?? [];
     expect(images.length + embedded.length).toBeGreaterThan(0);
     // Images first, then embedded objects -- the fixed order flatten's own partition reverses.

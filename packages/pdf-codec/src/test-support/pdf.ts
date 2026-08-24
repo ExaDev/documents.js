@@ -159,7 +159,7 @@ export function xrefStreamWithObjectStreamPdf(): Uint8Array<ArrayBuffer> {
   const xrefOffset = b.length; // object 6 (the xref stream) starts here, matching what stream(6, ...) is about to record
   rows[xrefOffsetPlaceholderIndex] = [1, ...be4(xrefOffset), 0, 0];
   const xrefRows = new Uint8Array(rows.length * 7);
-  rows.forEach((row, i) => xrefRows.set(row, i * 7));
+  rows.forEach((row, i) => { xrefRows.set(row, i * 7); });
   const xrefCompressed = zlibSync(xrefRows);
 
   b.stream(xrefObjNum, `<< /Type /XRef /Size ${rows.length} /W [1 4 2] /Index [0 ${rows.length}] /Root 1 0 R /Filter /FlateDecode >>`, xrefCompressed);

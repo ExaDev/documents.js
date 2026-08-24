@@ -122,7 +122,7 @@ describe('buildXlsxPackageFromContent: produces a structurally valid xlsx packag
     if (styles === undefined) {
       throw new Error('expected xl/styles.xml to have a root element');
     }
-    const tags = styles.children.filter((node) => node.type === 'element').map((node) => (node.type === 'element' ? node.tag : ''));
+    const tags = styles.children.filter((node) => node.type === 'element').map((node) => node.tag);
     // numFmts is present because this sheet has a boolean cell, whose TRUE/FALSE display format is a custom one -- see the number-format suite below for the no-custom-formats case.
     expect(tags).toEqual(['numFmts', 'fonts', 'fills', 'borders', 'cellStyleXfs', 'cellXfs', 'cellStyles']);
   });
@@ -462,7 +462,7 @@ describe('buildXlsxPackageFromContent: a workbook needing no number formats writ
 
   it('omits <numFmts> entirely and writes exactly one General cellXfs entry', () => {
     const styles = styleSheetOf(pkg);
-    const tags = styles.children.filter((node) => node.type === 'element').map((node) => (node.type === 'element' ? node.tag : ''));
+    const tags = styles.children.filter((node) => node.type === 'element').map((node) => node.tag);
     expect(tags).toEqual(['fonts', 'fills', 'borders', 'cellStyleXfs', 'cellXfs', 'cellStyles']);
     const cellXfs = requireChild(styles, 'cellXfs');
     expect(attributeOf(cellXfs, 'count')).toBe('1');

@@ -97,7 +97,7 @@ function applyBorderEdgeUpdates(accumulated: Partial<Record<BorderEdgeKey, Conte
 
 function applyBorderEdgeUpdate(accumulated: Partial<Record<BorderEdgeKey, ContentBorder>>, edge: BorderEdgeKey, update: { border: ContentBorder } | { none: true }): void {
   if ('none' in update) {
-    delete accumulated[edge];
+    Reflect.deleteProperty(accumulated, edge);
   } else {
     accumulated[edge] = update.border;
   }

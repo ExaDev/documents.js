@@ -29,7 +29,7 @@ function RootLayout() {
   const activeIndex = COLOR_SCHEME_OPTIONS.findIndex((option) => option.value === colorScheme);
   const activeOption = optionAt(activeIndex === -1 ? 0 : activeIndex);
   const nextOption = optionAt((Math.max(activeIndex, 0) + 1) % COLOR_SCHEME_OPTIONS.length);
-  const cycleColorScheme = () => setColorScheme(nextOption.value);
+  const cycleColorScheme = () => { setColorScheme(nextOption.value); };
 
   return (
     <AppShell

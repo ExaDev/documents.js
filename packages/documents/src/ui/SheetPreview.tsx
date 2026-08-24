@@ -54,7 +54,7 @@ export function SheetPreview({ label, format, content, loading, error }: SheetPr
               <SegmentedControl
                 size="xs"
                 value={String(clampedIndex)}
-                onChange={(value) => setActiveSheetIndex(Number(value))}
+                onChange={(value) => { setActiveSheetIndex(Number(value)); }}
                 data={sheets.map((sheet, index) => ({ value: String(index), label: sheet.name }))}
                 className={styles.segmentedControl}
               />

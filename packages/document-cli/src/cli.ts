@@ -31,7 +31,7 @@ async function main(): Promise<void> {
   const [dispatchToken] = args;
 
   if (dispatchToken === undefined || dispatchToken === 'tui') {
-    if (process.stdout.isTTY !== true) {
+    if (!process.stdout.isTTY) {
       if (dispatchToken === 'tui') {
         process.stderr.write('the TUI requires an interactive terminal (TTY); stdout is currently redirected\n');
         process.exitCode = EXIT_USAGE_ERROR;
