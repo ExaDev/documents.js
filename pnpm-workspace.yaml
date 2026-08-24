@@ -35,3 +35,5 @@ minimumReleaseAgeExclude:
 overrides:
   fast-uri: ^3.1.5
   js-yaml: ^4.3.1
+  # release-workspace.config.json's generateNotes step uses the conventionalcommits preset, whose templates call a helper that only conventional-changelog-writer@9 or newer provides. @semantic-release/release-notes-generator depends on conventional-changelog-writer@^8, so without this the preset loads and then throws from inside handlebars at render time -- the preset itself detects the too-old writer and registers a helper whose only job is to raise "requires conventional-changelog-writer@9 or newer". Scoped to release-notes-generator rather than global because it is the only consumer that renders with the writer at all: @semantic-release/commit-analyzer declares the same dependency but never imports it, using only the preset's whatBump.
+  "@semantic-release/release-notes-generator>conventional-changelog-writer": 9.2.1
