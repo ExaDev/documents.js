@@ -34,7 +34,7 @@ describe('zipPackage', () => {
     ]);
     const unzipped = unzipPackage(bytes);
     expect(Object.keys(unzipped).sort()).toEqual(['data.bin', 'mimetype']);
-    expect(unzipped['mimetype']).toEqual(stored);
+    expect(unzipped.mimetype).toEqual(stored);
     expect(unzipped['data.bin']).toEqual(deflated);
   });
 
@@ -42,7 +42,7 @@ describe('zipPackage', () => {
     const binary = new Uint8Array(256);
     for (let i = 0; i < binary.length; i++) binary[i] = i;
     const bytes = zipPackage([['bin', { bytes: binary }]]);
-    expect(unzipPackage(bytes)['bin']).toEqual(binary);
+    expect(unzipPackage(bytes).bin).toEqual(binary);
   });
 });
 
