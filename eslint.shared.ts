@@ -99,6 +99,15 @@ export interface PackageLintOptions {
    * For an executed entry point rather than an importable one: `documents.js`'s `src/bin.ts` is a launcher that spawns `npx`/`pnpm`/`yarn`/`bunx`, so it is Node-only by definition. It is never imported into the isomorphic surface, so exempting it leaves that surface pure -- and the package's own `tsconfig.node.json` already routes it to the Node program, so the two agree.
    */
   readonly isomorphicExemptions?: readonly string[];
+
+  /**
+   * Whether `no-non-null-assertion` is enforced. Defaults to `'error'`.
+   *
+   * `strictTypeChecked` turns this on, and it is the single largest source of violations in this workspace by an order of magnitude -- 2,395 sites, of which `documents.js` and `pdf-codec` hold 91% between them. Clearing one is not mechanical: a `!` marks a place where the code asserts a value is present, and removing it honestly means deciding what the absence means and handling it at the right boundary, not substituting a sentinel.
+   *
+   * So a package carrying more than can be worked through carefully sets `'off'` here, in its own config where the debt is visible rather than buried in this file, and is tracked for burn-down. Every other package enforces it.
+   */
+  readonly nonNullAssertion?: 'error' | 'off';
 }
 
 export function packageLintConfig(options: PackageLintOptions): ReturnType<typeof tseslint.config> {
@@ -111,6 +120,7 @@ export function packageLintConfig(options: PackageLintOptions): ReturnType<typeo
     nodeGlobals = true,
     additionalRestrictedImportPatterns = [],
     isomorphicExemptions = [],
+    nonNullAssertion = 'error',
   } = options;
 
   const runtimeSrcExemptions = ['src/**/*.test.ts', 'src/test-support/**', ...isomorphicExemptions];
@@ -136,9 +146,28 @@ export function packageLintConfig(options: PackageLintOptions): ReturnType<typeo
     js.configs.recommended,
     // Bundles typescript-eslint's recommendedTypeChecked and stylisticTypeChecked (recommendedTypeChecked already subsumes plain recommended outright), the exadev/* rules, linterOptions.noInlineConfig, consistent-type-assertions banning every type assertion, and ban-ts-comment banning @ts-expect-error alongside the preset's @ts-ignore/@ts-nocheck bans -- the last two relaxed automatically in test files. See @exadev/eslint-config's own README for the full set.
     ...exadevRecommendedTypeChecked,
+    // The strict tier on top of the preset's recommended one. What it actually adds here, measured across all thirteen packages against a current build: 3,298 violations, of which no-non-null-assertion is 2,395 and restrict-template-expressions 689 -- leaving 214 genuine findings the two deviations below do not touch. Those 214 are real (confusing void expressions, conditions that are always truthy, deprecated API use, misused spreads) and are fixed rather than configured away.
+    ...tseslint.configs.strictTypeChecked,
     {
       rules: {
         '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
+        // Deviation from strictTypeChecked, which sets every allow* to false. `allowNumber: true` accounts for all 689 reports the strict tier adds for this rule, and every one is a number interpolated into a message or an identifier -- page counts, byte offsets, sector indices, error strings naming a size. A number has one unambiguous string form, so interpolating it loses nothing and demanding an explicit String() around each would be noise.
+        //
+        // `allowAny` deliberately stays false, which is the half of this rule that catches real defects: interpolating an `any` is how "[object Object]" and "undefined" reach a user-visible message.
+        '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
+        '@typescript-eslint/no-non-null-assertion': nonNullAssertion,
+        // Deviation from strictTypeChecked, which reports every string spread. Spreading a string is how you iterate it by code point -- `[...text]` splits on code points where `text.split('')` splits on UTF-16 code units and so tears every astral character in half. This workspace parses real-world documents full of them (emoji, CJK extensions, mathematical alphanumerics), and the sites reporting here are named `codePoints` precisely because that is what they are computing.
+        //
+        // Only `string` is allowed. Every other case the rule catches -- spreading a Map, a class instance, a Promise, an array into an object -- stays an error, and those are the ones that are actually bugs.
+        '@typescript-eslint/no-misused-spread': ['error', { allow: ['string'] }],
+        // `only-allowed-literals` rather than strictTypeChecked's own `never`. The rule's default rejects `while (true)`, which this workspace uses for exactly the loops it is meant for: a Dijkstra main loop over a priority queue and two predecessor-chain walks, each terminating on an internal `break` whose condition cannot be lifted into the header without duplicating it. Rewriting them as `while (queue.length > 0)` would either change the semantics or need a second copy of the exit test.
+        //
+        // Only literal `true` is exempted, so a condition that is constant because of a genuine type mistake -- an always-truthy object, a comparison the types already decide -- still reports.
+        '@typescript-eslint/no-unnecessary-condition': ['error', { allowConstantLoopConditions: 'only-allowed-literals' }],
+        // Off. Every pair it reports is a live-view editor property where the getter returns `T | undefined` (the underlying XML attribute may be absent) and the setter takes `T` (you can only assign a real value). TypeScript has supported divergent accessor types since 4.3 precisely for this, and the asymmetry is the honest description of the API.
+        //
+        // Making them agree would mean widening each setter to `T | undefined` and giving it a documented "clear the property" behaviour -- a genuine improvement, since there is currently no way to unset a font family or colour, but a feature addition to a published editor surface with its own tests to write. Worth doing on its own; not something to smuggle into a tooling change.
+        '@typescript-eslint/related-getter-setter-pairs': 'off',
         'exadev/barrel-policy': barrelPolicy === 'off' ? 'off' : ['error', { mode: barrelPolicy }],
         // Off because every alias it flagged in this workspace was load-bearing, and its autofix removes the binding while leaving the `export`/`const` keyword behind -- syntactically invalid code, not a behaviour change.
         //
@@ -147,6 +176,13 @@ export function packageLintConfig(options: PackageLintOptions): ReturnType<typeo
         // A rule that was wrong at every occurrence, with a fix that does not produce parsable output, is not carrying its weight. Reported upstream against @exadev/eslint-config; re-enable if the fix is corrected and the "pointless" test learns to spare a binding whose type annotation or closure capture is the point.
         'exadev/no-pointless-reassignment': 'off',
       },
+    },
+    {
+      // The config files themselves call `tseslint.config()`, which typescript-eslint deprecated in favour of ESLint core's `defineConfig()`. Migrating is blocked upstream rather than by choice: `defineConfig`'s stricter `Plugin` type rejects eslint-plugin-react-hooks@7, whose `configs.flat` is a nested record of configs where ESLint's own index signature admits only a config or an array of them. The web UI's config registers that plugin, so `defineConfig` there fails `tsc` outright, and the only way through is a type assertion this workspace bans.
+      //
+      // Scoped to the config files alone, so a deprecated API anywhere in real source still reports. Revisit when eslint-plugin-react-hooks' types satisfy ESLint's `Plugin`.
+      files: ['eslint.config.ts'],
+      rules: { '@typescript-eslint/no-deprecated': 'off' },
     },
     {
       // A no-op arrow standing in for a callback prop a given test case never exercises is the ordinary way to write that, and flagging each one only pushes authors to pad it with a meaningless body. Scoped to tests: production code has no legitimate empty function body.
