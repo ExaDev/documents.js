@@ -23,7 +23,7 @@ function FontsPage() {
     if (format !== undefined) {
       extractFonts.mutate(
         { format, bytes: opened.bytes },
-        { onError: (error) => notifyError('Could not read fonts', error) },
+        { onError: (error) => { notifyError('Could not read fonts', error); } },
       );
     }
   };

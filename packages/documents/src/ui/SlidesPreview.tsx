@@ -52,7 +52,7 @@ export function SlidesPreview({ label, format, content, loading, error }: Slides
               <SegmentedControl
                 size="xs"
                 value={String(clampedIndex)}
-                onChange={(value) => setActiveIndex(Number(value))}
+                onChange={(value) => { setActiveIndex(Number(value)); }}
                 data={slides.map((_slide, index) => ({ value: String(index), label: `${index + 1}` }))}
                 className={styles.segmentedControl}
               />

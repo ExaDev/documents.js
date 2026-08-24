@@ -198,7 +198,7 @@ describe('a real PDF carrying an embedded, subsetted Carlito, read back by this 
     expect(kerning1000).toBeLessThan(0); // this string really does kern, so the subtraction above is doing work rather than standing in for nothing
     const expectedWidthPt = ((shown.width1000 - kerning1000) / 1000) * FONT_SIZE_PT;
     expect(item.widthPt).toBeCloseTo(expectedWidthPt, 4);
-    expect(item.widthPt).not.toBeCloseTo(([...TEXT].length * 1000 * FONT_SIZE_PT) / 1000, 0);
+    expect(item.widthPt).not.toBeCloseTo((Array.from(TEXT).length * 1000 * FONT_SIZE_PT) / 1000, 0);
   });
 
   it('is a genuine Type0 / Identity-H / CIDFontType2 / FontFile2 font resource, not merely something readPdf tolerated', () => {

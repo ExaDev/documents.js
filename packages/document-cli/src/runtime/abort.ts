@@ -7,12 +7,12 @@ function combineSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
   if (a.aborted) {
     forward(a);
   } else {
-    a.addEventListener('abort', () => forward(a), { once: true });
+    a.addEventListener('abort', () => { forward(a); }, { once: true });
   }
   if (b.aborted) {
     forward(b);
   } else {
-    b.addEventListener('abort', () => forward(b), { once: true });
+    b.addEventListener('abort', () => { forward(b); }, { once: true });
   }
   return controller.signal;
 }

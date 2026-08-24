@@ -71,7 +71,7 @@ export class OdtParagraph {
     const node = this.live();
     const lastChildIndex = node.children.length - 1;
     const lastChild = node.children[lastChildIndex];
-    if (lastChild?.type !== 'element' || lastChild?.tag !== 'text:span') {
+    if (lastChild?.type !== 'element' || lastChild.tag !== 'text:span') {
       return;
     }
     node.children[lastChildIndex] = el('text:a', { 'xlink:href': url, 'xlink:type': 'simple' }, [lastChild]);

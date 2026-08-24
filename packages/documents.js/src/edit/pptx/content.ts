@@ -153,7 +153,7 @@ function populatePptxTable(table: PptxTable, block: ContentTable, resolveHyperli
           tableCell.horizontalMerge = true;
           horizontalCoverRemaining -= 1;
         }
-        if (isVerticallyCovered && verticalRemaining !== undefined) {
+        if (isVerticallyCovered) {
           tableCell.verticalMerge = true;
           verticalMerges.set(colIndex, verticalRemaining - 1);
         }

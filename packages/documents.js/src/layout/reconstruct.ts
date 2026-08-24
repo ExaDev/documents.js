@@ -237,7 +237,7 @@ function layerOf(item: LayoutItem): string | undefined {
 
 // A shallow copy of the document whose pages carry only the items the default view shows -- annotations stay regardless (a sticky note pinned over hidden content is still a note). Everything downstream (clustering, table recovery, vector recovery) then works on visible content only, with no per-consumer visibility logic to forget.
 function dropHiddenLayerContent(doc: LayoutDocument): LayoutDocument {
-  const hidden = new Set((doc.layers ?? []).filter((layer) => layer.visible !== true).map((layer) => layer.name));
+  const hidden = new Set((doc.layers ?? []).filter((layer) => !layer.visible).map((layer) => layer.name));
   if (hidden.size === 0) {
     return doc;
   }

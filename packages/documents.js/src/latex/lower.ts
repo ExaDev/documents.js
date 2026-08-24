@@ -565,7 +565,7 @@ function readBinder(node: TemmlNode, context: LoweringContext): BinderRead {
     return { status: 'not-a-binder' };
   }
   const base = isTemmlNode(node.base) ? node.base : undefined;
-  if (base?.type !== 'op' || base?.symbol !== true || typeof base?.name !== 'string') {
+  if (base?.type !== 'op' || base.symbol !== true || typeof base.name !== 'string') {
     return { status: 'not-a-binder' };
   }
   if (base.name !== '\\sum' && base.name !== '\\prod') {

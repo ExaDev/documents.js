@@ -275,7 +275,7 @@ function renderListRegion(items: readonly ContentParagraph[], context: EmitConte
     if (itemId !== undefined) {
       while (ownEnd < items.length) {
         const candidate = items[ownEnd];
-        if (candidate?.list?.level !== level || candidate.list?.itemId !== itemId) {
+        if (candidate?.list?.level !== level || candidate.list.itemId !== itemId) {
           break;
         }
         ownEnd += 1;

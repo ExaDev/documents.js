@@ -85,7 +85,7 @@ export function RecentFilesPanel() {
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Remove">
-              <ActionIcon variant="subtle" color="red" onClick={() => handleRemove(record.id)}>
+              <ActionIcon variant="subtle" color="red" onClick={() => { handleRemove(record.id); }}>
                 <IconTrash size={16} />
               </ActionIcon>
             </Tooltip>

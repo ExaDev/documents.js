@@ -30,10 +30,10 @@ export function bytesToBase64(bytes: Uint8Array): string {
     const b0 = bytes[index]!;
     const b1 = index + 1 < length ? bytes[index + 1]! : 0;
     const b2 = index + 2 < length ? bytes[index + 2]! : 0;
-    out += BASE64_TABLE[b0 >> 2];
-    out += BASE64_TABLE[((b0 & 0x03) << 4) | (b1 >> 4)];
-    out += index + 1 < length ? BASE64_TABLE[((b1 & 0x0f) << 2) | (b2 >> 6)] : '=';
-    out += index + 2 < length ? BASE64_TABLE[b2 & 0x3f] : '=';
+    out += BASE64_TABLE.charAt(b0 >> 2);
+    out += BASE64_TABLE.charAt(((b0 & 0x03) << 4) | (b1 >> 4));
+    out += index + 1 < length ? BASE64_TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6)) : '=';
+    out += index + 2 < length ? BASE64_TABLE.charAt(b2 & 0x3f) : '=';
   }
   return out;
 }

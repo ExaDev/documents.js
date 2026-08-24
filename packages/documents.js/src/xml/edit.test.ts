@@ -29,7 +29,7 @@ describe('setAttr / removeAttr', () => {
     const element = el('w:sz', { 'w:val': '24' });
     removeAttr(element, 'w:val');
     expect(element.attributes).toEqual([]);
-    expect(() => removeAttr(element, 'w:val')).not.toThrow();
+    expect(() => { removeAttr(element, 'w:val'); }).not.toThrow();
   });
 });
 

@@ -319,7 +319,7 @@ describe('convertWordprocessingToLayout: list markers', () => {
       ]),
     ]);
     const items = textItems(layout.pages[0]!.items);
-    const markers = items.filter((i) => ['One', 'Two', 'Three'].includes(i.text) === false).map((i) => i.text);
+    const markers = items.filter((i) => !['One', 'Two', 'Three'].includes(i.text)).map((i) => i.text);
     expect(markers).toEqual(['•', '-', '*']);
   });
 
@@ -331,7 +331,7 @@ describe('convertWordprocessingToLayout: list markers', () => {
       ]),
     ]);
     const items = textItems(layout.pages[0]!.items);
-    const markers = items.filter((i) => ['First', 'Second'].includes(i.text) === false).map((i) => i.text);
+    const markers = items.filter((i) => !['First', 'Second'].includes(i.text)).map((i) => i.text);
     expect(markers).toEqual(['•', '•']);
   });
 
@@ -344,7 +344,7 @@ describe('convertWordprocessingToLayout: list markers', () => {
       ]),
     ]);
     const items = textItems(layout.pages[0]!.items);
-    const markers = items.filter((i) => ['First', 'Second', 'Third'].includes(i.text) === false).map((i) => i.text);
+    const markers = items.filter((i) => !['First', 'Second', 'Third'].includes(i.text)).map((i) => i.text);
     expect(markers).toEqual(['1.', '2.', '3.']);
   });
 

@@ -986,7 +986,7 @@ function readSections(body: XmlElement, ctx: DocxReadContext): { sections: Conte
     sections.push(sliceSection(PAGE_SIZE_LETTER, DEFAULT_MARGINS, undefined, from, state.blocks.length));
     headerFooters.push({});
   }
-  sections.forEach((section, sectionIndex) => assignSourcePaths(section.blocks, `sections[${sectionIndex}]`));
+  sections.forEach((section, sectionIndex) => { assignSourcePaths(section.blocks, `sections[${sectionIndex}]`); });
   return { sections, headerFooters };
 }
 

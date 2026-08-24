@@ -177,7 +177,7 @@ export class PptxEditor {
     if (rId !== undefined) {
       const rel = resolveRelationships(this.pkg, PRESENTATION_PART_PATH).get(rId);
       if (rel !== undefined) {
-        delete this.pkg.parts[rel.target];
+        Reflect.deleteProperty(this.pkg.parts, rel.target);
       }
     }
   }

@@ -190,7 +190,8 @@ function AppShell({ startPath }: { readonly startPath?: string }): ReactElement 
     if (startPath === undefined) {
       return;
     }
-    let cancelled = false;
+    // A property on a const holder rather than a bare `let`, because the only write happens in the cleanup closure below. TypeScript ignores assignments made inside a nested function when narrowing the enclosing scope, so a `let` here reads as its initialiser at both checks and both guards look statically dead -- while the write genuinely happens and the guards are what stop a dispatch after unmount.
+    const lifecycle = { cancelled: false };
     void (async () => {
       try {
         const doc = await openDocumentAtPath(startPath, {
@@ -198,18 +199,18 @@ function AppShell({ startPath }: { readonly startPath?: string }): ReactElement 
             dispatch({ type: 'APPEND_DIAGNOSTIC', diagnostic });
           },
         });
-        if (!cancelled) {
+        if (!lifecycle.cancelled) {
           // OPEN_FILE_SUCCESS resets the stack to that format's root screen itself, so there is no separate RESET_STACK to dispatch here.
           dispatch({ type: 'OPEN_FILE_SUCCESS', path: startPath, doc });
         }
       } catch (error) {
-        if (!cancelled) {
+        if (!lifecycle.cancelled) {
           dispatch({ type: 'OPEN_FILE_ERROR', message: `Could not open ${startPath}`, detail: describeError(error) });
         }
       }
     })();
     return () => {
-      cancelled = true;
+      lifecycle.cancelled = true;
     };
   }, [startPath, dispatch]);
 

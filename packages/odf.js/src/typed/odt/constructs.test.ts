@@ -101,7 +101,7 @@ describe('readOdtContent: text:section as a division construct', () => {
     ]);
     const blocks = firstSectionBlocks(pkg);
     expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'constructStart', 'constructStart', 'paragraph', 'constructEnd', 'constructEnd']);
-    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => (block.kind === 'constructStart' ? block.descriptor : undefined));
+    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => block.descriptor);
     expect(descriptors).toEqual([{ kind: 'division', name: 'Outer' }, { kind: 'division', name: 'Inner' }]);
   });
 
@@ -114,7 +114,7 @@ describe('readOdtContent: text:section as a division construct', () => {
     ]);
     const blocks = firstSectionBlocks(pkg);
     expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'constructStart', 'constructStart', 'paragraph', 'constructEnd', 'constructEnd']);
-    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => (block.kind === 'constructStart' ? block.descriptor : undefined));
+    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => block.descriptor);
     expect(descriptors).toEqual([{ kind: 'division', name: 'S' }, { kind: 'contentControl', controlType: 'index', tag: 'TOC' }]);
   });
 
@@ -180,7 +180,7 @@ describe('readOdtContent: TOC and index wrappers as index content controls', () 
       ]),
     ]);
     const blocks = firstSectionBlocks(pkg);
-    expect(blocks.filter((block) => block.kind === 'paragraph').map((block) => (block.kind === 'paragraph' ? block.runs[0]?.text : undefined))).toEqual(['Contents', 'Chapter One..........1']);
+    expect(blocks.filter((block) => block.kind === 'paragraph').map((block) => block.runs[0]?.text)).toEqual(['Contents', 'Chapter One..........1']);
   });
 });
 
@@ -347,7 +347,7 @@ describe('readOdtContent: cross-paragraph reference-mark pairing at block scope'
     ]);
     const blocks = firstSectionBlocks(pkg);
     expect(blocks.map((block) => block.kind)).toEqual(['constructStart', 'constructStart', 'paragraph', 'paragraph', 'paragraph', 'constructEnd', 'constructEnd']);
-    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => (block.kind === 'constructStart' ? block.descriptor : undefined));
+    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => block.descriptor);
     expect(descriptors).toEqual([
       { kind: 'anchor', anchorType: 'bookmark', name: 'shared' },
       { kind: 'anchor', anchorType: 'bookmark', name: 'shared' },
@@ -600,7 +600,7 @@ describe('readOdtContent: office:forms in an ordinary text document', () => {
       'constructEnd',
       'paragraph',
     ]);
-    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => (block.kind === 'constructStart' ? block.descriptor : undefined));
+    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => block.descriptor);
     expect(descriptors[0]).toMatchObject({ kind: 'contentControl', controlType: 'group', tag: 'MainForm' });
     expect(descriptors[1]).toMatchObject({ kind: 'contentControl', controlType: 'plainText', tag: 'firstName', value: 'Ada' });
     expect(descriptors[2]).toMatchObject({ kind: 'contentControl', controlType: 'checkbox', tag: 'active', checked: true });

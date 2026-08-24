@@ -122,7 +122,7 @@ function ConvertLayout() {
             resultContent.mutate({ format: parsedTarget.data, bytes: result.document.bytes });
           }
         },
-        onError: (error) => notifyError('Conversion failed', error),
+        onError: (error) => { notifyError('Conversion failed', error); },
       },
     );
   };
@@ -249,7 +249,7 @@ function ConvertLayout() {
                   ) : source === 'odf' ? (
                     <FormulaPreview
                       label="Original"
-                      format={source ?? ''}
+                      format={source}
                       content={originalContent.data?.content}
                       loading={originalContent.isPending}
                       error={originalContent.error ?? undefined}
@@ -305,7 +305,7 @@ function ConvertLayout() {
                   ) : target === 'odf' ? (
                     <FormulaPreview
                       label="Converted"
-                      format={target ?? ''}
+                      format={target}
                       content={resultContent.data?.content}
                       loading={resultContent.isPending}
                       error={resultContent.error ?? undefined}

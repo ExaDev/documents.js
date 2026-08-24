@@ -106,7 +106,7 @@ export function SlideTableDetailScreen(props: SlideTableDetailScreenProps): Reac
           <Box key={rowIndex}>
             {row.cells.map((cell, columnIndex) => {
               const isCursor = rowIndex === clampedRow && columnIndex === clampedColumn;
-              const isAnchor = rowIndex === mergeAnchor?.row && columnIndex === mergeAnchor?.column;
+              const isAnchor = rowIndex === mergeAnchor?.row && columnIndex === mergeAnchor.column;
               return (
                 <Box key={columnIndex} width={CELL_WIDTH} borderStyle="single" borderColor={isCursor ? 'cyan' : isAnchor ? 'yellow' : 'gray'}>
                   <Text color={isCursor ? 'cyan' : undefined} inverse={isCursor}>

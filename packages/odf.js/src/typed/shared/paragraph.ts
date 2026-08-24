@@ -56,7 +56,7 @@ export function readOdfConstructBodyBlocks(body: XmlElement, pkg: Package, conte
   return blocks;
 }
 
-function collectRuns(container: XmlElement, baseProperties: StyleProperties, pkg: Package, out: ContentRun[], walk: RunWalkState, hyperlinkTarget: string | undefined = undefined): void {
+function collectRuns(container: XmlElement, baseProperties: StyleProperties, pkg: Package, out: ContentRun[], walk: RunWalkState, hyperlinkTarget?: string  ): void {
   for (const node of container.children) {
     if (node.type === 'text') {
       if (node.value.length > 0) {
