@@ -4,6 +4,16 @@ Conventional commits, enforced by commitlint through a `commit-msg` hook; the sa
 
 See the [root README](README.md) for how the workspace, task pipeline, and release orchestration fit together before making a structural change.
 
+Formatting is Prettier's, enforced through ESLint rather than a separate command: `prettier/prettier` is an ordinary lint rule, so `pnpm lint` reports a formatting difference and the pre-commit hook fixes staged files automatically. `prettier.config.ts` sets one option (`singleQuote: false`); everything else is Prettier's own default deliberately, so the config states a decision rather than restating defaults.
+
+One local step is worth doing once per clone:
+
+```sh
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
+`.git-blame-ignore-revs` lists the whole-tree reformat commits, so `git blame` attributes each line to the change that actually wrote it rather than to the reformat. Git does not read the file on its own — the config above is what opts in. GitHub's blame view reads it automatically, so this only affects blame run locally.
+
 ## Adding a package to the workspace
 
 Bringing a new package into `packages/*` — whether newly written or absorbed from a former standalone repo — needs more than a directory and a `pnpm-workspace.yaml` glob match to release cleanly. In order:

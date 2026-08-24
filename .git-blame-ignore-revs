@@ -7,3 +7,8 @@
 # GitHub's blame view reads it automatically, with no configuration.
 #
 # Only whole-tree reformats belong here -- a commit that changed behaviour must stay blameable even if it also reformatted.
+#
+# A SHA recorded here goes stale if the branch is later rebased, since the rebase rewrites it. Record it after the reformat commit reaches its final position in history, and re-check it after any rebase: `git log --format='%H %s' | grep '^.* style: format'` against the entries below.
+
+# style: format the workspace with prettier
+a40bbdefdb7f738eb36a1253ca7bd2387cab06b2
