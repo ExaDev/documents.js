@@ -13,6 +13,9 @@ const config: KnipConfig = {
   // `info` is not a binary at all: check-dependency-age.ts runs `execFileSync("pnpm", ["info", name, "time", "--json"])`, and knip reads the first argument as a command of its own. There is nothing to declare -- pnpm is the package manager running the script.
   ignoreBinaries: ["qpdf", "info"],
 
+  // release-workspace.config.json names the conventionalcommits preset as a string, and @semantic-release/release-notes-generator loads it by deriving the package name from that string at runtime. There is no import anywhere for knip to follow, and knip's own semantic-release plugin cannot help: it reads semantic-release's `plugins` array, whereas this file is @exadev/semantic-release-workspace's own schema. The dependency is declared directly rather than left to pnpm's hoisted store, because resolution through the store depends on it staying a transitive dependency of @commitlint/config-conventional -- true today, and nothing enforces it.
+  ignoreDependencies: ["conventional-changelog-conventionalcommits"],
+
   workspaces: {
     // The workspace root builds nothing. Its files are the tooling configs, which are entry points by definition -- each is loaded by the tool it configures, never imported.
     ".": {

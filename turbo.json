@@ -173,6 +173,8 @@
       "inputs": [
         ".github/scripts/**",
         "vitest.root.config.ts",
+        "*.test.ts",
+        "release-workspace.config.json",
         "pnpm-workspace.yaml",
         "pnpm-lock.yaml"
       ],
