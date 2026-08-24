@@ -6,7 +6,7 @@ This repository is a pnpm workspace: one repository, one lockfile, one CI pipeli
 
 ## Getting started
 
-Node 22 (pinned in `.node-version`) and pnpm `11.6.0` (pinned as `packageManager` in the root `package.json`) are the only prerequisites; corepack resolves the latter automatically. `pnpm install` resolves and links every package in one pass — there is no per-package install step.
+Node 22 (pinned in `.tool-versions`) and pnpm `11.6.0` (pinned as `packageManager` in the root `package.json`) are the only prerequisites; corepack resolves the latter automatically. `pnpm install` resolves and links every package in one pass — there is no per-package install step.
 
 No environment variable is required for a normal build/lint/test run. `documents.js`'s examples suite regenerates its fixtures only when `GENERATE_EXAMPLES` is set; `pnpm test:corpus` additionally expects the gitignored real-world conformance corpora to already be present locally (see each codec's own README for what it checks against).
 

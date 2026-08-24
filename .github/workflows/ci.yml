@@ -33,7 +33,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
-          node-version-file: .node-version
+          node-version-file: .tool-versions
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Validate the last commit with commitlint
@@ -253,7 +253,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
-          node-version-file: .node-version
+          node-version-file: .tool-versions
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Upgrade npm for OIDC trusted publishing (needs npm CLI >=11.5.1)
@@ -337,7 +337,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
-          node-version-file: .node-version
+          node-version-file: .tool-versions
           cache: pnpm
           # Deliberately NOT setup-node's own registry-url/scope inputs (see ExaDev/documents.js#309): those write an @exadev:registry=https://npm.pkg.github.com/ *install-time* scope-to-registry mapping into .npmrc, and per setup-node's own docs an empty/omitted `scope` still falls back to the repository owner (ExaDev) when the target is GitHub Packages -- there is no way to get just the auth-token line out of that mechanism without also redirecting every @exadev-scoped *install* through it, which breaks `pnpm install` below: @exadev/eslint-config is a real devDependency published only to the default registry, never mirrored to GitHub Packages.
       - run: pnpm install --frozen-lockfile
@@ -400,7 +400,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
-          node-version-file: .node-version
+          node-version-file: .tool-versions
           cache: pnpm
           # registry-url is deliberately absent. Setting it makes setup-node write an .npmrc containing an _authToken line, and that line wins over the OIDC exchange -- so the setting that looks like it configures the registry is exactly the one that would break trusted publishing.
       - run: pnpm install --frozen-lockfile
@@ -462,7 +462,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
-          node-version-file: .node-version
+          node-version-file: .tool-versions
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build the released package

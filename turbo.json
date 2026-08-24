@@ -4,7 +4,7 @@
   // prettier.config.ts joins them for the same reason: eslint-plugin-prettier reads it at lint time, so changing a formatting option changes every package's lint result, and a per-package input one directory down cannot see it.
   "globalDependencies": [
     "pnpm-lock.yaml",
-    ".node-version",
+    ".tool-versions",
     "eslint.shared.ts",
     "prettier.config.ts",
     "knip.config.ts",
