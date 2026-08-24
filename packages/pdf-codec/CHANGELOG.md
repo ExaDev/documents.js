@@ -1,3 +1,33 @@
+## [3.5.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.4.4...pdf-codec%403.5.0) (2026-08-24)
+
+### Features
+
+* **eslint:** enable strictTypeChecked across the workspace ([246d69b](https://github.com/ExaDev/documents.js/commit/246d69b8ca2e0cfaeec3813facbe4466f715bc1e))
+* **eslint:** lint JSON, Markdown, and YAML alongside the TypeScript ([5a150be](https://github.com/ExaDev/documents.js/commit/5a150be97d9d5d84024f935fae3deff5b4266eae))
+* **prettier:** enforce formatting through eslint-plugin-prettier ([4b8624a](https://github.com/ExaDev/documents.js/commit/4b8624a4eae675e531baab674574486ff834bbf7))
+
+### Code Refactoring
+
+* clear what strictTypeChecked's non-deviated rules found ([4a7ad62](https://github.com/ExaDev/documents.js/commit/4a7ad62ebfabddbc4c3f7cc018838448a9abd926))
+* **eslint:** move the seven preset-using packages onto the shared config ([bfb9fbc](https://github.com/ExaDev/documents.js/commit/bfb9fbc0cef3dad0d229e0193a1817f182412d58))
+* **tsconfig:** share the strict compiler options through one base config ([e86a366](https://github.com/ExaDev/documents.js/commit/e86a3661ac30c7f304206409272141b97b4fd3ee))
+
+### Styles
+
+* format the workspace with prettier ([c12e740](https://github.com/ExaDev/documents.js/commit/c12e74028aaf5f62cad1c64a414d091c7ecc83db))
+
+### Miscellaneous Chores
+
+* **deps:** bump byte-codec to ^1.2.0 in pdf-codec [skip ci] ([ceaa3a9](https://github.com/ExaDev/documents.js/commit/ceaa3a98487677d52c021bee2ca77d8540f06bb9))
+* **deps:** bump document-schema.js to ^5.1.0 in pdf-codec [skip ci] ([1076e31](https://github.com/ExaDev/documents.js/commit/1076e31e84ffea9baa216f0e5778e1c90d9619ba))
+* **deps:** drop the dependencies each package no longer uses ([62c2108](https://github.com/ExaDev/documents.js/commit/62c2108c1e8ff3db7f24e6de012c17d65993528d))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.1.0
+- Updated byte-codec to ^1.2.0
+
 ## [3.4.4](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.4.3...pdf-codec@3.4.4) (2026-08-23)
 
 
