@@ -1,3 +1,37 @@
+## [4.1.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.0.1...document-mcp%404.1.0) (2026-08-24)
+
+### Features
+
+* **eslint:** lint JSON, Markdown, and YAML alongside the TypeScript ([5a150be](https://github.com/ExaDev/documents.js/commit/5a150be97d9d5d84024f935fae3deff5b4266eae))
+
+### Code Refactoring
+
+* clear what strictTypeChecked's non-deviated rules found ([4a7ad62](https://github.com/ExaDev/documents.js/commit/4a7ad62ebfabddbc4c3f7cc018838448a9abd926))
+* **eslint:** put type-aware linting on the last six packages ([e83df4b](https://github.com/ExaDev/documents.js/commit/e83df4b4c4781cb4ba33ae17b130a26545b459c9))
+* **tsconfig:** share the strict compiler options through one base config ([e86a366](https://github.com/ExaDev/documents.js/commit/e86a3661ac30c7f304206409272141b97b4fd3ee))
+
+### Documentation
+
+* **document-mcp:** attribute copyright to match every sibling package ([092a60d](https://github.com/ExaDev/documents.js/commit/092a60d5fb440b12ca9cc77579f1aa24c3646a39))
+
+### Styles
+
+* format the workspace with prettier ([c12e740](https://github.com/ExaDev/documents.js/commit/c12e74028aaf5f62cad1c64a414d091c7ecc83db))
+
+### Miscellaneous Chores
+
+* **deps:** bump document-outline.js to ^3.1.0 in document-mcp [skip ci] ([9d90f78](https://github.com/ExaDev/documents.js/commit/9d90f78e70e5b9470a48ec022ddc1f3740c48689))
+* **deps:** bump documents.js to ^6.1.0 in document-mcp [skip ci] ([0887907](https://github.com/ExaDev/documents.js/commit/088790758f2b587282b22e3754a929765edb7355))
+* **deps:** bump odf.js to ^6.1.0 in document-mcp [skip ci] ([eec86dd](https://github.com/ExaDev/documents.js/commit/eec86dd71cd0166559b3271b2f90ed2d18cc3c28))
+* **deps:** drop the dependencies each package no longer uses ([62c2108](https://github.com/ExaDev/documents.js/commit/62c2108c1e8ff3db7f24e6de012c17d65993528d))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.1.0
+- Updated odf.js to ^6.1.0
+- Updated document-outline.js to ^3.1.0
+
 ## [4.0.1](https://github.com/ExaDev/documents.js/compare/document-mcp@4.0.0...document-mcp@4.0.1) (2026-08-24)
 
 
