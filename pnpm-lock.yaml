@@ -22,8 +22,8 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.8.1(jiti@2.7.0))
       '@exadev/eslint-config':
-        specifier: ^2.1.1
-        version: 2.1.1(eslint@10.8.1(jiti@2.7.0))(typescript-eslint@8.67.0(eslint@10.8.1(jiti@2.7.0))(typescript@6.0.3))
+        specifier: 2.1.2
+        version: 2.1.2(eslint@10.8.1(jiti@2.7.0))(typescript-eslint@8.67.0(eslint@10.8.1(jiti@2.7.0))(typescript@6.0.3))
       '@exadev/semantic-release-workspace':
         specifier: ^1.0.3
         version: 1.0.3(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/git@11.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/github@12.0.9(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(typescript@6.0.3)))(semantic-release@25.0.9(typescript@6.0.3))
@@ -2331,6 +2331,13 @@ packages:
 
   '@exadev/eslint-config@2.1.1':
     resolution: {integrity: sha512-jBQHIgLSJdaIaVPqVGo+CUaZg8ytpzE35ZsOrJZMw3GN17v6ry65KDhEQbeH9Vag/or5Tcf15C8PSHwLjArlLA==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      eslint: '>=10.0.0'
+      typescript-eslint: '>=8.0.0'
+
+  '@exadev/eslint-config@2.1.2':
+    resolution: {integrity: sha512-isLVdlJ10wPn+O6iHAUQf+UQAfHvlaOfQYQVM2mUoPXsxKnDn66EvgFdWJUM9FrI/iFRI+bGzm3FfYJu/N+DTg==}
     engines: {node: '>=20'}
     peerDependencies:
       eslint: '>=10.0.0'
@@ -8101,6 +8108,11 @@ snapshots:
       levn: 0.4.1
 
   '@exadev/eslint-config@2.1.1(eslint@10.8.1(jiti@2.7.0))(typescript-eslint@8.67.0(eslint@10.8.1(jiti@2.7.0))(typescript@6.0.3))':
+    dependencies:
+      eslint: 10.8.1(jiti@2.7.0)
+      typescript-eslint: 8.67.0(eslint@10.8.1(jiti@2.7.0))(typescript@6.0.3)
+
+  '@exadev/eslint-config@2.1.2(eslint@10.8.1(jiti@2.7.0))(typescript-eslint@8.67.0(eslint@10.8.1(jiti@2.7.0))(typescript@6.0.3))':
     dependencies:
       eslint: 10.8.1(jiti@2.7.0)
       typescript-eslint: 8.67.0(eslint@10.8.1(jiti@2.7.0))(typescript@6.0.3)
