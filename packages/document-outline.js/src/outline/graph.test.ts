@@ -425,7 +425,7 @@ describe('extraction policy', () => {
     const heading = graph.nodes.find((node) => node.kind === 'paragraph' && node.headingLevel === 1)!;
     // The dereferenced ENTRY CONTENT rides on the node -- never the document-local key 's1'.
     expect(heading.style).toEqual(entry);
-    expect(graph.nodes.filter((node) => node.kind === 'documentTree')[0]!.styles).toEqual({ s1: entry });
+    expect(graph.nodes.find((node) => node.kind === 'documentTree')!.styles).toEqual({ s1: entry });
   });
 });
 
