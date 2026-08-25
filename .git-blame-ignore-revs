@@ -8,7 +8,7 @@
 #
 # Only whole-tree reformats belong here -- a commit that changed behaviour must stay blameable even if it also reformatted.
 #
-# A SHA recorded here goes stale if the branch is later rebased, since the rebase rewrites it. Record it after the reformat commit reaches its final position in history, and re-check it after any rebase: `git log --format='%H %s' | grep '^.* style: format'` against the entries below.
+# A SHA recorded here goes stale whenever the commit it names is rewritten, which includes rebase-merging the pull request that introduced it onto main -- not just a local rebase before merging. Record the SHA the commit has once it is on main, and verify with `git merge-base --is-ancestor <sha> HEAD`. Matching by subject line is not a check: a stale entry still has a real commit somewhere in the reflog to find, so grepping the log finds a plausible hash while blame silently ignores nothing.
 
 # style: format the workspace with prettier
-e8febdfde25d9d1386e8f6ab489291ac3b59cd45
+c12e74028aaf5f62cad1c64a414d091c7ecc83db
