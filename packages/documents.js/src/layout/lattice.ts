@@ -13,6 +13,8 @@ export interface LineSegment {
 }
 
 // A stroke reaches this function as either of two genuinely different LayoutItem shapes, and both must be accepted for detection to behave identically across producers. pdf-codec's own interpret.ts recovers an open, single-straight-segment, stroke-only subpath as a real LayoutLine (its shape-pattern detection, see that package's own README), so a gridline written by src/layout/sheets.ts's renderGridlines comes back from a genuine PDF round trip as a LayoutLine -- but a stroke that misses that pattern for any reason (several segments in one subpath, a subpath that is also filled) still arrives as a generic LayoutPath, and a LayoutDocument built by hand or by a producer other than readPdf may carry either. Accepting both is what makes a hand-built fixture and a real round-tripped document detect the same way.
+//
+// A third real shape joins these two: several production PDF generators draw a table's gridlines as a thin FILLED rectangle rather than a genuinely stroked line/path at all -- confirmed directly against real-world documents, where every observed gridline rect measured 0.12-2.30pt thick on its short axis. RECT_LINE_THICKNESS_TOLERANCE_PT (below) draws the line between "this rect IS a drawn line, just filled instead of stroked" and "this rect is a genuinely filled 2D block" (a shaded cell background, a coloured panel) -- a rect thin on exactly one axis is the former, read as one line segment along its long axis; a rect that is thin on neither axis, or equally thin/wide on both (a small square artefact, a corner joint), is neither and contributes nothing.
 export function extractLineCandidates(
   items: readonly LayoutItem[],
 ): LineSegment[] {
@@ -47,6 +49,31 @@ export function extractLineCandidates(
           y2Pt: segment.yPt,
         });
       }
+      continue;
+    }
+    if (item.kind === "rect") {
+      const isThinEnoughToBeALine =
+        Math.min(item.widthPt, item.heightPt) <=
+        RECT_LINE_THICKNESS_TOLERANCE_PT;
+      if (isThinEnoughToBeALine && item.widthPt > item.heightPt) {
+        const midYPt = item.yPt + item.heightPt / 2;
+        segments.push({
+          item,
+          x1Pt: item.xPt,
+          y1Pt: midYPt,
+          x2Pt: item.xPt + item.widthPt,
+          y2Pt: midYPt,
+        });
+      } else if (isThinEnoughToBeALine && item.heightPt > item.widthPt) {
+        const midXPt = item.xPt + item.widthPt / 2;
+        segments.push({
+          item,
+          x1Pt: midXPt,
+          y1Pt: item.yPt,
+          x2Pt: midXPt,
+          y2Pt: item.yPt + item.heightPt,
+        });
+      }
     }
   }
   return segments;
@@ -57,6 +84,9 @@ const AXIS_ALIGNMENT_TOLERANCE_PT = 0.5;
 
 // A stray tick mark or cell-border fragment is not evidence of a page-spanning gridline lattice -- only a segment at least this long is considered a lattice candidate at all.
 const MIN_GRIDLINE_LENGTH_PT = 4;
+
+// The short-axis thickness under which a filled LayoutRect reads as a drawn line rather than a genuinely filled 2D block -- see extractLineCandidates' own module comment for the real-world producer pattern this exists for. 3pt comfortably covers the observed 0.12-2.30pt range of real gridline-rect thicknesses while still excluding an ordinary filled cell/shading block, which is wide AND tall, not thin on exactly one axis.
+const RECT_LINE_THICKNESS_TOLERANCE_PT = 3;
 
 interface AxisSegment {
   readonly axis: "horizontal" | "vertical";
