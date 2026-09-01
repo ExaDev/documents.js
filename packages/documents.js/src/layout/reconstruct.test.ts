@@ -1407,6 +1407,87 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
     );
     expect(blocks.some((b) => b.kind === "table")).toBe(true);
   });
+
+  it("synthesizes a real table from a lattice drawn entirely as thin filled rects, not stroked lines (several real-world PDF generators draw table gridlines this way)", () => {
+    const THICKNESS = 0.5;
+    const items: LayoutItem[] = [
+      {
+        kind: "rect",
+        xPt: 0,
+        yPt: 200 - THICKNESS / 2,
+        widthPt: 300,
+        heightPt: THICKNESS,
+        fill: BLACK,
+      },
+      {
+        kind: "rect",
+        xPt: 0,
+        yPt: 150 - THICKNESS / 2,
+        widthPt: 300,
+        heightPt: THICKNESS,
+        fill: BLACK,
+      },
+      {
+        kind: "rect",
+        xPt: 0,
+        yPt: 100 - THICKNESS / 2,
+        widthPt: 300,
+        heightPt: THICKNESS,
+        fill: BLACK,
+      },
+      {
+        kind: "rect",
+        xPt: 0 - THICKNESS / 2,
+        yPt: 100,
+        widthPt: THICKNESS,
+        heightPt: 100,
+        fill: BLACK,
+      },
+      {
+        kind: "rect",
+        xPt: 120 - THICKNESS / 2,
+        yPt: 100,
+        widthPt: THICKNESS,
+        heightPt: 100,
+        fill: BLACK,
+      },
+      {
+        kind: "rect",
+        xPt: 300 - THICKNESS / 2,
+        yPt: 100,
+        widthPt: THICKNESS,
+        heightPt: 100,
+        fill: BLACK,
+      },
+      text({ text: "Name", xPt: 10, yPt: 180, widthPt: 30 }),
+      text({ text: "Total", xPt: 130, yPt: 180, widthPt: 30 }),
+      text({ text: "Acme", xPt: 10, yPt: 130, widthPt: 30 }),
+      text({ text: "10", xPt: 130, yPt: 130, widthPt: 15 }),
+    ];
+    const blocks = blocksOf(
+      reconstructWordprocessing(docFrom([page(300, 300, items)])),
+    );
+    const table = blocks.find((b) => b.kind === "table");
+    if (table?.kind !== "table") {
+      throw new Error("expected a recovered table block");
+    }
+    expect(table.columnWidthsPt).toEqual([120, 180]);
+    expect(table.rows.map((r) => r.heightPt)).toEqual([50, 50]);
+    expect(
+      table.rows.map((r) =>
+        r.cells.map((c) =>
+          c.blocks
+            .flatMap((b) =>
+              b.kind === "paragraph" ? b.runs.map((run) => run.text) : [],
+            )
+            .join(""),
+        ),
+      ),
+    ).toEqual([
+      ["Name", "Total"],
+      ["Acme", "10"],
+    ]);
+  });
 });
 
 describe("reconstructPresentation: gridline-gated table recovery", () => {
