@@ -1,3 +1,9 @@
+## [6.1.1](https://github.com/ExaDev/documents.js/compare/documents.js%406.1.0...documents.js%406.1.1) (2026-09-01)
+
+### Bug Fixes
+
+* **documents.js:** detect a gridline lattice drawn as thin filled rects ([9ceb1b6](https://github.com/ExaDev/documents.js/commit/9ceb1b6f5d8ddd9b16d152e97818bf73c647b2df))
+
 ## [6.1.0](https://github.com/ExaDev/documents.js/compare/documents.js%406.0.1...documents.js%406.1.0) (2026-08-24)
 
 ### Features
