@@ -1,3 +1,14 @@
+## [2.1.1](https://github.com/ExaDev/documents.js/compare/documents%402.1.0...documents%402.1.1) (2026-09-01)
+
+### Miscellaneous Chores
+
+* **deps:** bump documents.js to ^6.1.1 in documents [skip ci] ([dd04f5e](https://github.com/ExaDev/documents.js/commit/dd04f5e3d5075f702738b3340fd9032a08e585de))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.1.1
+
 ## [2.1.0](https://github.com/ExaDev/documents.js/compare/documents%402.0.1...documents%402.1.0) (2026-08-24)
 
 ### Features
