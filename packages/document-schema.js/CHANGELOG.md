@@ -1,3 +1,9 @@
+## [5.2.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.1.0...document-schema.js%405.2.0) (2026-09-02)
+
+### Features
+
+* **document-schema.js:** add sheet dataValidation/conditionalFormatting vocabulary ([60b4143](https://github.com/ExaDev/documents.js/commit/60b414324ecc92957ae2026a8a7a0af758dd8c09))
+
 ## [5.1.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.0.0...document-schema.js%405.1.0) (2026-08-24)
 
 ### Features
