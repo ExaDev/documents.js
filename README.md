@@ -59,6 +59,26 @@ PDF is one document format among those this ecosystem handles — never a specia
 
 This matters for anyone building on top of the conversion engine (the CLI, MCP server, or web UI). A feature like "preview this document" must render the document's own native representation (its `ContentDocument`), not silently round-trip every format through a PDF rendition just because a PDF happens to be easy to display — that would make PDF a junction in disguise, re-introducing exactly the coupling the schema layer exists to remove, and paying a full layout-engine + font-resolution + PDF-write pass for a side effect the caller never asked for. The same applies to inspection, metadata, and any other tooling: operate on the native representation, and reach for PDF only when the user's actual request names PDF.
 
+## Comparison to alternatives
+
+documents.js's own claim — one shared, Zod-typed schema doing bidirectional, lossless conversion across office formats, PDF, and markdown, as an MIT-licensed, dependency-minimal, Worker-isomorphic library — was checked against 108 real alternatives across 11 categories (open-source libraries, cross-format engines, CLI tools, MCP servers, hyperscaler document-AI platforms, and commercial/SaaS vendors), each verified by fetching its own registry page, repo, or pricing page rather than recalled from memory. One representative alternative per category:
+
+| Category                    | Closest alternative                                                                        | Licence                 | Key difference                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------- |
+| Foundation codecs           | [fflate](https://www.npmjs.com/package/fflate)                                             | MIT                     | ~8kB, zero deps — closest single-purpose analogue to `byte-codec`, but scoped to compression/ZIP alone. |
+| OOXML                       | [docx](https://www.npmjs.com/package/docx)                                                 | MIT                     | Write-only, docx/pptx only, bespoke object model — no read/round-trip path, no xlsx.                    |
+| OpenDocument                | [odf-kit](https://www.npmjs.com/package/odf-kit)                                           | Apache-2.0              | No ODP support; converts formats as hand-wired pairs, not through a shared schema.                      |
+| Markdown                    | [remark / mdast](https://www.npmjs.com/package/remark)                                     | MIT                     | Markdown-only AST; reaches other formats only via separate HTML bridges, not directly.                  |
+| PDF                         | [pdf-lib](https://www.npmjs.com/package/pdf-lib)                                           | MIT                     | PDF-only object-graph API, no shared cross-format schema; dormant since ~2021.                          |
+| Cross-format engines        | [Pandoc](https://pandoc.org/)                                                              | GPL-2.0-or-later        | Genuinely does N-format conversion via a shared AST — but GPL, native binary, untyped, not embeddable.  |
+| CLI & TUI                   | [office2pdf](https://crates.io/crates/office2pdf)                                          | Apache-2.0              | Hand-written, single Rust binary — but one-directional (OOXML→PDF only), no shared schema.              |
+| MCP servers                 | [mcp-pandoc](https://pypi.org/project/mcp-pandoc/)                                         | MIT                     | Wraps Pandoc's own AST; needs a native binary, so no Worker/browser.                                    |
+| Other language ecosystems   | [Apache POI](https://poi.apache.org/)                                                      | Apache-2.0              | Three unrelated per-format APIs (XSSF/XWPF/XSLF) — no shared schema between them.                       |
+| Platform-native document AI | [Amazon Textract](https://aws.amazon.com/textract/)                                        | Proprietary AWS service | Images/PDF only, no office formats; per-feature metered pricing; no self-hosting.                       |
+| Commercial & RAG SaaS       | [Adobe PDF Services API](https://developer.adobe.com/document-services/apis/pdf-services/) | Proprietary, cloud-only | Free to 500 transactions/month; beyond that, sales-quote only with no published price.                  |
+
+None of them combine symmetric read+write conversion, a runtime-validated shared schema, MIT licensing, and Worker/browser portability in one embeddable package — see [COMPARISON.md](COMPARISON.md) for the complete, cited comparison (all 108 entries, pricing tiers, and adoption/maintenance signals).
+
 ## Conventions
 
 Individual packages set their own build and test configuration, but as a family they share:
