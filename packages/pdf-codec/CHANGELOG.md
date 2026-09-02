@@ -1,3 +1,9 @@
+## [3.5.2](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.5.1...pdf-codec%403.5.2) (2026-09-02)
+
+### Bug Fixes
+
+* **pdf-codec:** stop guessing WinAnsi glyphs for symbolic simple fonts ([dabebe1](https://github.com/ExaDev/documents.js/commit/dabebe18022226a9a11536a0b0955d853b9e2465))
+
 ## [3.5.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.5.0...pdf-codec%403.5.1) (2026-09-02)
 
 ### Miscellaneous Chores
