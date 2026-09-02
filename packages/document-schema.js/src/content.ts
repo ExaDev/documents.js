@@ -555,6 +555,8 @@ export const ContentSheetCellSchema = z.object({
   value: ContentCellValueSchema,
   formula: z.string().optional(),
   displayText: z.string(),
+  // The producer's own raw number-format code (xlsx numFmtId's own format string, e.g. "0.00%", "$#,##0.00", "yyyy-mm-dd") -- the literal pattern `value.kind`'s percentage/currency/date/time/dateTime classification was derived FROM, kept alongside that classification rather than replacing it: two cells both classified 'percentage' can carry different display precision ("0%" vs "0.00%"), a fact the classification alone discards and a lossless-capture consumer may still want. Absent for a cell with no producer-declared format at all (xlsx's own General, ODF's own unstyled default), not a fabricated empty string.
+  numberFormatCode: z.string().optional(),
   runs: z.array(ContentRunSchema).optional(), // the rare case of genuinely mixed inline formatting within one cell's text; absent when the cell's formatting is uniform
   colSpan: z.number().int().positive().optional(),
   rowSpan: z.number().int().positive().optional(),
