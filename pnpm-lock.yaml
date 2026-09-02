@@ -288,7 +288,7 @@ importers:
         specifier: ^9.1.7
         version: 9.1.7
       markdown-codec:
-        specifier: ^6.1.1
+        specifier: ^6.1.2
         version: link:../markdown-codec
       publint:
         specifier: ^0.3.21
