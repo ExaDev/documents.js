@@ -629,6 +629,199 @@ export type ContentSheetPrintSettings = z.infer<
   typeof ContentSheetPrintSettingsSchema
 >;
 
+// A rectangular cell range on one sheet -- the target of a dataValidation or conditionalFormatting rule, which (unlike a merge, anchored on its one top-left cell) can span, and a single rule can even name several of, disjoint ranges (confirmed against a real LibreOffice-produced xlsx, ExaDev/documents.js#758: a rule's own sqref attribute carries a space-separated list of ranges, not always one). Structurally identical to ContentSheetPrintRangeSchema but kept as its own name: a print range and a rule's target range are unrelated facts that happen to share a shape.
+export const ContentSheetRangeSchema = z.object({
+  startRow: z.number().int().nonnegative(),
+  startColumn: z.number().int().nonnegative(),
+  endRow: z.number().int().nonnegative(),
+  endColumn: z.number().int().nonnegative(),
+});
+export type ContentSheetRange = z.infer<typeof ContentSheetRangeSchema>;
+
+// The 8-value ECMA-376 comparison-operator vocabulary (ST_DataValidationOperator), shared verbatim by a dataValidation rule's own numeric/date/time/textLength types and a conditionalFormatting cellIs rule below -- the one piece of real, closed vocabulary both rule families already share in the spec itself.
+export const SheetRuleOperatorSchema = z.enum([
+  "between",
+  "notBetween",
+  "equal",
+  "notEqual",
+  "greaterThan",
+  "greaterThanOrEqual",
+  "lessThan",
+  "lessThanOrEqual",
+]);
+export type SheetRuleOperator = z.infer<typeof SheetRuleOperatorSchema>;
+
+// A cell's input-constraint rule (xlsx dataValidation, ODF table:content-validation) -- promoted from the anchor-cell residue landing ooxml.js's own construct inventory deferred pending a real producer file (ExaDev/documents.js#758, verified against a real LibreOffice-produced xlsx). formula1/formula2 stay raw formula text, in whatever spelling the producer used (a literal quoted list for 'list', a cell-range reference, or a numeric/date literal): Excel's own formula language has no closed grammar this package could parse without a general formula engine, the same reason ContentSheetCell.formula is carried verbatim rather than structurally modelled.
+export const ContentSheetDataValidationTypeSchema = z.enum([
+  "whole",
+  "decimal",
+  "list",
+  "date",
+  "time",
+  "textLength",
+  "custom",
+]);
+export type ContentSheetDataValidationType = z.infer<
+  typeof ContentSheetDataValidationTypeSchema
+>;
+
+export const ContentSheetDataValidationSchema = z.object({
+  ranges: z.array(ContentSheetRangeSchema),
+  type: ContentSheetDataValidationTypeSchema,
+  operator: SheetRuleOperatorSchema.optional(), // absent for 'list' and 'custom', which have no comparison operator
+  formula1: z.string().optional(), // raw formula text -- absent only for a shape ECMA-376 itself allows with none
+  formula2: z.string().optional(), // the second bound, present only for 'between'/'notBetween'
+  allowBlank: z.boolean().optional(),
+  showInputMessage: z.boolean().optional(),
+  promptTitle: z.string().optional(),
+  prompt: z.string().optional(),
+  showErrorMessage: z.boolean().optional(),
+  errorStyle: z.enum(["stop", "warning", "information"]).optional(), // absent means 'stop', ECMA-376's own default
+  errorTitle: z.string().optional(),
+  error: z.string().optional(),
+  source: SourceResidueSchema.optional(), // the rule's own raw XML, quarantined for round-trip safety against a producer attribute this schema does not name
+});
+export type ContentSheetDataValidation = z.infer<
+  typeof ContentSheetDataValidationSchema
+>;
+
+// A conditional-format rule's resulting style, limited to the two properties actually observed on a real LibreOffice-produced dxf (font colour, fill background) -- everything else a dxf element may carry (borders, alignment overrides, font weight) rides `source` verbatim rather than being guessed at from spec alone pending its own real-producer verification.
+export const ContentSheetConditionalFormatStyleSchema = z.object({
+  textColor: ColorSchema.optional(),
+  background: ColorSchema.optional(),
+  source: SourceResidueSchema.optional(),
+});
+export type ContentSheetConditionalFormatStyle = z.infer<
+  typeof ContentSheetConditionalFormatStyleSchema
+>;
+
+// A conditional-format value object (ECMA-376's own cfvo): a threshold's own kind (an absolute number, a percent, a percentile, this range's own min/max, or a formula result) and, for every kind but min/max, the value itself as raw formula/literal text -- the same "structure yes, formula content no" boundary the rule schemas below draw throughout.
+const cfvoTypeSchema = z.enum([
+  "num",
+  "percent",
+  "max",
+  "min",
+  "formula",
+  "percentile",
+]);
+export const ContentSheetConditionalFormatValueSchema = z.object({
+  type: cfvoTypeSchema,
+  value: z.string().optional(), // absent for 'min'/'max', which name a bound rather than carrying one
+});
+export type ContentSheetConditionalFormatValue = z.infer<
+  typeof ContentSheetConditionalFormatValueSchema
+>;
+
+const conditionalFormatCommonFields = {
+  ranges: z.array(ContentSheetRangeSchema),
+  priority: z.number().int().optional(),
+  stopIfTrue: z.boolean().optional(),
+  source: SourceResidueSchema.optional(),
+};
+
+// A range's conditional display rule (xlsx conditionalFormatting/cfRule, ODF's own calcext:conditional-formats vendor extension) -- promoted from the anchor-cell residue landing for every CLOSED-form rule type ECMA-376 defines (ExaDev/documents.js#758, verified against a real LibreOffice-produced xlsx carrying cellIs and colorScale rules). The one member deliberately absent is 'expression': an arbitrary boolean formula has no closed-form structure to model without a general formula engine -- the same boundary dataValidation's own 'custom'/other formula fields already draw by staying raw text, except here there is no other field to carry it in at all, so an expression-type cfRule is not promoted by this union and continues to land through the pre-existing anchor-cell residue mechanism, unchanged.
+export const ContentSheetConditionalFormatSchema = z.discriminatedUnion(
+  "type",
+  [
+    z.object({
+      type: z.literal("cellIs"),
+      ...conditionalFormatCommonFields,
+      operator: SheetRuleOperatorSchema,
+      formula1: z.string(),
+      formula2: z.string().optional(), // present only for 'between'/'notBetween'
+      style: ContentSheetConditionalFormatStyleSchema.optional(),
+    }),
+    z.object({
+      type: z.enum([
+        "containsText",
+        "notContainsText",
+        "beginsWith",
+        "endsWith",
+      ]),
+      ...conditionalFormatCommonFields,
+      text: z.string(),
+      style: ContentSheetConditionalFormatStyleSchema.optional(),
+    }),
+    z.object({
+      type: z.enum([
+        "containsBlanks",
+        "notContainsBlanks",
+        "containsErrors",
+        "notContainsErrors",
+        "uniqueValues",
+        "duplicateValues",
+      ]),
+      ...conditionalFormatCommonFields,
+      style: ContentSheetConditionalFormatStyleSchema.optional(),
+    }),
+    z.object({
+      type: z.literal("top10"),
+      ...conditionalFormatCommonFields,
+      rank: z.number().positive(),
+      percent: z.boolean().optional(),
+      bottom: z.boolean().optional(),
+      style: ContentSheetConditionalFormatStyleSchema.optional(),
+    }),
+    z.object({
+      type: z.literal("aboveAverage"),
+      ...conditionalFormatCommonFields,
+      aboveAverage: z.boolean().optional(), // absent means true, ECMA-376's own default
+      equalAverage: z.boolean().optional(),
+      stdDev: z.number().int().positive().optional(),
+      style: ContentSheetConditionalFormatStyleSchema.optional(),
+    }),
+    z.object({
+      type: z.literal("timePeriod"),
+      ...conditionalFormatCommonFields,
+      timePeriod: z.enum([
+        "yesterday",
+        "today",
+        "tomorrow",
+        "last7Days",
+        "thisMonth",
+        "lastMonth",
+        "nextMonth",
+        "thisWeek",
+        "lastWeek",
+        "nextWeek",
+      ]),
+      style: ContentSheetConditionalFormatStyleSchema.optional(),
+    }),
+    z.object({
+      type: z.literal("colorScale"),
+      ...conditionalFormatCommonFields,
+      stops: z
+        .array(
+          z.object({
+            value: ContentSheetConditionalFormatValueSchema,
+            color: ColorSchema,
+          }),
+        )
+        .min(2)
+        .max(3),
+    }),
+    z.object({
+      type: z.literal("dataBar"),
+      ...conditionalFormatCommonFields,
+      min: ContentSheetConditionalFormatValueSchema,
+      max: ContentSheetConditionalFormatValueSchema,
+      color: ColorSchema,
+      showValue: z.boolean().optional(),
+    }),
+    z.object({
+      type: z.literal("iconSet"),
+      ...conditionalFormatCommonFields,
+      iconSetType: z.string(), // ECMA-376's own iconSet identifier, e.g. '3TrafficLights1' -- an open, producer-extensible vocabulary (custom icon sets), so a closed enum here would reject a real file rather than describe one
+      thresholds: z.array(ContentSheetConditionalFormatValueSchema),
+      reverse: z.boolean().optional(),
+      showValue: z.boolean().optional(),
+    }),
+  ],
+);
+export type ContentSheetConditionalFormat = z.infer<
+  typeof ContentSheetConditionalFormatSchema
+>;
+
 // A spreadsheet-anchored image: cell-relative placement (an xlsx/ods "anchor cell + pixel offset" style position) on top of ContentImageBlockSchema's own existing fields, rather than a second, independent image shape.
 export const ContentSheetImageSchema = ContentImageBlockSchema.extend({
   anchorRow: z.number().int().nonnegative(),
@@ -647,6 +840,8 @@ export const ContentSheetSchema = z.object({
   images: z.array(ContentSheetImageSchema),
   printSettings: ContentSheetPrintSettingsSchema,
   embeddedObjects: z.array(ContentEmbeddedObjectSchema).optional(),
+  dataValidations: z.array(ContentSheetDataValidationSchema).optional(),
+  conditionalFormats: z.array(ContentSheetConditionalFormatSchema).optional(),
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's sheet descriptor automatically (omit+extend, src/package-node.ts)
 });
 export type ContentSheet = z.infer<typeof ContentSheetSchema>;
