@@ -1,3 +1,9 @@
+## [6.1.2](https://github.com/ExaDev/documents.js/compare/documents.js%406.1.1...documents.js%406.1.2) (2026-09-02)
+
+### Bug Fixes
+
+* **documents.js:** recover tables whose gridlines have irregular per-row/column spans ([a871190](https://github.com/ExaDev/documents.js/commit/a871190ab1a15d89a602df2f6aea141f44fad004)), closes [ExaDev/documents.js#810](https://github.com/ExaDev/documents.js/issues/810)
+
 ## [6.1.1](https://github.com/ExaDev/documents.js/compare/documents.js%406.1.0...documents.js%406.1.1) (2026-09-01)
 
 ### Bug Fixes
