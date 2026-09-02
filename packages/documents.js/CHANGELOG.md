@@ -1,3 +1,24 @@
+## [6.2.1](https://github.com/ExaDev/documents.js/compare/documents.js%406.2.0...documents.js%406.2.1) (2026-09-02)
+
+### Bug Fixes
+
+* **documents.js:** fold arithmetic before relations in LaTeX lowering ([deb38ff](https://github.com/ExaDev/documents.js/commit/deb38ff8c6dd59ef9d31f80bd9745d688aee55fb)), closes [#812](https://github.com/ExaDev/documents.js/issues/812)
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.4.0 in documents.js [skip ci] ([e3555a7](https://github.com/ExaDev/documents.js/commit/e3555a729d835c03d18d0662c22278c2c1a7a537))
+* **deps:** bump markdown-codec to ^6.1.3 in documents.js [skip ci] ([b70bd08](https://github.com/ExaDev/documents.js/commit/b70bd08e6ff117af6d1393e00d8b377daad00ada))
+* **deps:** bump ooxml.js to ^6.3.1 in documents.js [skip ci] ([c2e484d](https://github.com/ExaDev/documents.js/commit/c2e484d790f9d2591121ad94e94998d03c0f7ca5))
+* **deps:** bump pdf-codec to ^3.5.4 in documents.js [skip ci] ([bcd0fd9](https://github.com/ExaDev/documents.js/commit/bcd0fd9f1446ede7922f270d1bbc9ad7eeff8379))
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.5.4
+- Updated ooxml.js to ^6.3.1
+- Updated markdown-codec to ^6.1.3
+- Updated document-schema.js to ^5.4.0
+
 ## [6.2.0](https://github.com/ExaDev/documents.js/compare/documents.js%406.1.4...documents.js%406.2.0) (2026-09-02)
 
 ### Features
