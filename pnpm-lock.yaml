@@ -656,7 +656,7 @@ importers:
   packages/epub-codec:
     dependencies:
       document-schema.js:
-        specifier: ^5.1.0
+        specifier: ^5.4.0
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: ^5.10.1
