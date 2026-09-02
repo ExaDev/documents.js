@@ -1,5 +1,7 @@
 # documents.js
 
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/documents.js) [![npm version](https://img.shields.io/npm/v/documents.js)](https://www.npmjs.com/package/documents.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
+
 > A family of independent, MIT-licensed TypeScript packages for lossless, type-safe document conversion — OOXML (docx/pptx/xlsx), OpenDocument (odt/ods/odp), Markdown, and PDF — sharing a common Zod-based schema layer, plus the CLI, MCP server, and web UI built on top of them.
 
 This repository is a pnpm workspace: one repository, one lockfile, one CI pipeline, and one release run, holding every package in the family under `packages/`. Each package keeps its own version, its own changelog, its own npm release cadence, and its own README — consolidating the repositories did not merge the packages into one artifact, and there is no lockstep version shared between them. What is shared is everything that was previously copied: the workspace settings, the task pipeline, the git hooks, commit-message validation, dependency automation, and the release orchestration.
