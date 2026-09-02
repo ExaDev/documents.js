@@ -1,3 +1,9 @@
+## [5.3.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.2.0...document-schema.js%405.3.0) (2026-09-02)
+
+### Features
+
+* **document-schema.js:** carry a sheet cell's own raw number-format code ([8b51a80](https://github.com/ExaDev/documents.js/commit/8b51a80eb50f0e02841f5ac194f7c1b1a3ff790f))
+
 ## [5.2.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.1.0...document-schema.js%405.2.0) (2026-09-02)
 
 ### Features
