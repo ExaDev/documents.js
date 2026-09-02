@@ -14,6 +14,7 @@ export * from "./xhtml/inline";
 export * from "./xhtml/list-id";
 export * from "./xhtml/read";
 export * from "./xhtml/style-constants";
+export * from "./xhtml/write";
 export * from "./xml/node";
 export * from "./xml/parse";
 export * from "./xml/build";
