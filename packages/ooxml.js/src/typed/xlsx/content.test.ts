@@ -2,7 +2,17 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ContentDocumentSchema, PAGE_SIZE_A4 } from "document-schema.js";
+import {
+  ContentDocumentSchema,
+  PAGE_SIZE_A4,
+  PAGE_SIZE_LETTER,
+} from "document-schema.js";
+import type {
+  ContentDocument,
+  ContentSheet,
+  ContentSheetConditionalFormat,
+  ContentSheetDataValidation,
+} from "document-schema.js";
 import type { Package } from "../../model/package";
 import { el, txt } from "../../xml/fragment";
 import { decodePackage, encodePackage } from "../../codec";
@@ -1891,7 +1901,7 @@ describe("readXlsxContent: drawing pictures (mixed anchor spellings)", () => {
   });
 });
 
-// The two worksheet rule families no fixture in this repo carries and no harmonised vocabulary yet names (the construct inventory's own corpus gate defers freezing their shape until a real producer file is verified against): synthesized per ECMA-376, and quarantined verbatim onto each rule's anchor cell through the residue channel -- carried, restorable by a same-format writer, never interpreted here.
+// dataValidation and conditionalFormatting rules, promoted to real vocabulary (ExaDev/documents.js#758) for every rule this package's schema names -- the two real-producer fixtures below exercise the structural read/write path; the synthetic packages further down exercise what is deliberately left un-promoted (an 'expression' cfRule, a dataValidation type this schema does not name) through the pre-existing anchor-cell residue mechanism.
 function worksheetOnlyPackage(worksheet: ReturnType<typeof el>): Package {
   const workbook = el("workbook", {}, [
     el("sheets", {}, [
@@ -1914,7 +1924,127 @@ function worksheetOnlyPackage(worksheet: ReturnType<typeof el>): Package {
   };
 }
 
-describe("readXlsxContent: dataValidation and conditionalFormatting (anchor-cell residue)", () => {
+describe("readXlsxContent: real-producer-validation-and-cellis.xlsx (real LibreOffice output)", () => {
+  const document = readXlsxContent(
+    loadFixture("real-producer-validation-and-cellis.xlsx"),
+  );
+  if (document.kind !== "spreadsheet") {
+    throw new Error("expected a spreadsheet ContentDocument");
+  }
+  const sheet = document.sheets[0];
+  if (sheet === undefined) {
+    throw new Error("expected one sheet");
+  }
+
+  // The real fixture's own <alignment horizontal="general" vertical="bottom" textRotation="0" wrapText="false" indent="0" shrinkToFit="false"/> -- the "rest of the dxf" once font/fill are structurally absorbed into textColor/background, carried as the style's own residue (empty children serialise as an explicit open/close pair, not self-closing, matching buildXml's own convention elsewhere in this suite).
+  const DXF_ALIGNMENT_RESIDUE = {
+    format: "xlsx",
+    xml: '<alignment horizontal="general" vertical="bottom" textRotation="0" wrapText="false" indent="0" shrinkToFit="false"></alignment>',
+  } as const;
+
+  it("promotes both cellIs rules sharing B1:B2, each resolving its own dxf into a textColor/background style", () => {
+    expect(sheet.conditionalFormats).toEqual([
+      {
+        type: "cellIs",
+        ranges: [{ startRow: 0, startColumn: 1, endRow: 1, endColumn: 1 }],
+        priority: 2,
+        operator: "greaterThan",
+        formula1: "10",
+        style: {
+          textColor: { r: 0, g: 0.4, b: 0 },
+          background: { r: 0.8, g: 1, b: 0.8 },
+          source: DXF_ALIGNMENT_RESIDUE,
+        },
+      },
+      {
+        type: "cellIs",
+        ranges: [{ startRow: 0, startColumn: 1, endRow: 1, endColumn: 1 }],
+        priority: 3,
+        operator: "greaterThan",
+        formula1: "20",
+        style: {
+          textColor: { r: 0.8, g: 0, b: 0 },
+          background: { r: 1, g: 0.8, b: 0.8 },
+          source: DXF_ALIGNMENT_RESIDUE,
+        },
+      },
+    ]);
+  });
+
+  it("promotes the list dataValidation over A1:B1, dropping its stray operator/formula2 (meaningless for 'list') and keeping showDropDown as attribute-level residue", () => {
+    expect(sheet.dataValidations).toEqual([
+      {
+        ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 1 }],
+        type: "list",
+        formula1: '"A,B,C"',
+        allowBlank: true,
+        showErrorMessage: true,
+        error: "Pick A, B or C.",
+        source: {
+          format: "xlsx",
+          xml: '<dataValidation showDropDown="false"></dataValidation>',
+        },
+      },
+    ]);
+  });
+
+  it("resolves B1's dual dataValidation+conditionalFormatting collision as BOTH structural, dropping the old anchor-cell residue entirely", () => {
+    const a1 = sheet.cells.find((cell) => cell.row === 0 && cell.column === 0);
+    const b1 = sheet.cells.find((cell) => cell.row === 0 && cell.column === 1);
+    expect(a1?.source).toBeUndefined();
+    expect(b1?.source).toBeUndefined();
+  });
+});
+
+describe("readXlsxContent: real-producer-colorscale.xlsx (real LibreOffice output)", () => {
+  const document = readXlsxContent(
+    loadFixture("real-producer-colorscale.xlsx"),
+  );
+  if (document.kind !== "spreadsheet") {
+    throw new Error("expected a spreadsheet ContentDocument");
+  }
+  const sheet = document.sheets[0];
+  if (sheet === undefined) {
+    throw new Error("expected one sheet");
+  }
+
+  it("promotes the colorScale rule over C1:C2 with its own inline cfvo/color stops (this fixture's cellIs pair is a known ODF round-trip artifact -- missing operator -- and is not asserted on here)", () => {
+    const colorScale = sheet.conditionalFormats?.find(
+      (format) => format.type === "colorScale",
+    );
+    expect(colorScale).toEqual({
+      type: "colorScale",
+      ranges: [{ startRow: 0, startColumn: 2, endRow: 1, endColumn: 2 }],
+      priority: 4,
+      stops: [
+        { value: { type: "num", value: "0" }, color: { r: 1, g: 0, b: 0 } },
+        { value: { type: "num", value: "0" }, color: { r: 0, g: 1, b: 0 } },
+      ],
+    });
+  });
+
+  it('parses a real multi-range sqref ("A1 C1") into BOTH ranges, not just the first -- the sqref bug fix', () => {
+    expect(sheet.dataValidations).toEqual([
+      {
+        ranges: [
+          { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+          { startRow: 0, startColumn: 2, endRow: 0, endColumn: 2 },
+        ],
+        type: "list",
+        formula1: '"A,B,C"',
+        allowBlank: true,
+        showErrorMessage: true,
+        error: "Pick A, B or C.",
+        source: {
+          format: "xlsx",
+          xml: '<dataValidation showDropDown="false"></dataValidation>',
+        },
+      },
+    ]);
+  });
+});
+
+describe("readXlsxContent: dataValidation and conditionalFormatting -- what is NOT promoted still lands as anchor-cell residue (synthetic packages)", () => {
   function readFirstCellOf(worksheet: ReturnType<typeof el>) {
     const read = readXlsxContent(worksheetOnlyPackage(worksheet));
     if (read.kind !== "spreadsheet") {
@@ -1923,40 +2053,7 @@ describe("readXlsxContent: dataValidation and conditionalFormatting (anchor-cell
     return read.sheets[0]?.cells ?? [];
   }
 
-  it("quarantines a dataValidation element verbatim on its range's anchor cell, materialising an empty cell to host it when none exists", () => {
-    const cells = readFirstCellOf(
-      el("worksheet", {}, [
-        el("sheetData", {}, [
-          el("row", { r: "2" }, [
-            el("c", { r: "B2" }, [el("v", {}, [txt("42")])]),
-          ]),
-        ]),
-        el("dataValidations", { count: "1" }, [
-          el(
-            "dataValidation",
-            {
-              type: "whole",
-              operator: "between",
-              allowBlank: "1",
-              sqref: "B2:D4",
-            },
-            [el("formula1", {}, [txt("1")]), el("formula2", {}, [txt("10")])],
-          ),
-        ]),
-      ]),
-    );
-    const anchor = cells.find((cell) => cell.row === 1 && cell.column === 1);
-    expect(anchor?.source).toEqual({
-      format: "xlsx",
-      xml: '<dataValidation type="whole" operator="between" allowBlank="1" sqref="B2:D4"><formula1>1</formula1><formula2>10</formula2></dataValidation>',
-    });
-    // The covered-but-not-anchor cells stay untouched: the sqref inside the residue names the whole range, so one copy reconstructs it.
-    expect(
-      cells.find((cell) => cell.row === 1 && cell.column === 2)?.source,
-    ).toBeUndefined();
-  });
-
-  it("quarantines a conditionalFormatting element (with its cfRule children) on its own anchor cell, and materialises an empty cell for a rule over empty cells", () => {
+  it("still quarantines an 'expression' cfRule verbatim on its anchor cell -- the one deliberate ECMA-376 member this union does not promote", () => {
     const cells = readFirstCellOf(
       el("worksheet", {}, [
         el("sheetData", {}, [
@@ -1964,50 +2061,308 @@ describe("readXlsxContent: dataValidation and conditionalFormatting (anchor-cell
             el("c", { r: "A1" }, [el("v", {}, [txt("5")])]),
           ]),
         ]),
-        el("conditionalFormatting", { sqref: "A1 A5:A9" }, [
-          el(
-            "cfRule",
-            {
-              type: "cellIs",
-              dxfId: "0",
-              priority: "1",
-              operator: "greaterThan",
-            },
-            [el("formula", {}, [txt("3")])],
-          ),
+        el("conditionalFormatting", { sqref: "A1:A2" }, [
+          el("cfRule", { type: "expression", dxfId: "0", priority: "1" }, [
+            el("formula", {}, [txt("1")]),
+          ]),
         ]),
       ]),
     );
     const anchor = cells.find((cell) => cell.row === 0 && cell.column === 0);
     expect(anchor?.source).toEqual({
       format: "xlsx",
-      xml: '<conditionalFormatting sqref="A1 A5:A9"><cfRule type="cellIs" dxfId="0" priority="1" operator="greaterThan"><formula>3</formula></cfRule></conditionalFormatting>',
+      xml: '<conditionalFormatting sqref="A1:A2"><cfRule type="expression" dxfId="0" priority="1"><formula>1</formula></cfRule></conditionalFormatting>',
     });
-    // A1:AB5 -- the SECOND range of the sqref anchors nowhere here; the FIRST range's top-left (A1) is the anchor, matching the merge/comment anchoring convention.
+  });
+
+  it("still quarantines a dataValidation whose type this package's schema does not name (ECMA-376's own 'none') verbatim on its anchor cell, materialising an empty cell to host it when none exists", () => {
+    const cells = readFirstCellOf(
+      el("worksheet", {}, [
+        el("sheetData", {}, []),
+        el("dataValidations", { count: "1" }, [
+          el("dataValidation", { type: "none", sqref: "B2:D4" }),
+        ]),
+      ]),
+    );
+    const anchor = cells.find((cell) => cell.row === 1 && cell.column === 1);
+    expect(anchor?.source).toEqual({
+      format: "xlsx",
+      xml: '<dataValidation type="none" sqref="B2:D4"></dataValidation>',
+    });
+    // The covered-but-not-anchor cells stay untouched: the sqref inside the residue names the whole range, so one copy reconstructs it.
     expect(
-      cells.find((cell) => cell.row === 4 && cell.column === 0),
+      cells.find((cell) => cell.row === 1 && cell.column === 2)?.source,
     ).toBeUndefined();
   });
 
-  it("keeps the first rule when two anchor at the same cell -- one residue slot per cell -- and leaves a rule whose sqref does not parse unattached", () => {
+  it("keeps the first residue-eligible rule when two anchor at the same cell -- one residue slot per cell -- and leaves a rule whose sqref does not parse unattached", () => {
     const cells = readFirstCellOf(
       el("worksheet", {}, [
         el("sheetData", {}, []),
         el("dataValidations", { count: "2" }, [
-          el("dataValidation", { type: "list", sqref: "C3" }, [
+          el("dataValidation", { type: "none", sqref: "C3" }, [
             el("formula1", {}, [txt("a,b,c")]),
           ]),
-          el("dataValidation", { type: "list", sqref: "C3:E5" }, [
+          el("dataValidation", { type: "none", sqref: "C3:E5" }, [
             el("formula1", {}, [txt("x,y,z")]),
           ]),
         ]),
         el("dataValidations", { count: "1" }, [
-          el("dataValidation", { type: "list", sqref: "not a ref" }),
+          el("dataValidation", { type: "none", sqref: "not a ref" }),
         ]),
       ]),
     );
     const anchor = cells.find((cell) => cell.row === 2 && cell.column === 2);
     expect(anchor?.source?.xml).toContain("a,b,c");
     expect(cells.filter((cell) => cell.source !== undefined)).toHaveLength(1);
+  });
+});
+
+// --- round-trip coverage for every rule type the real fixtures above do not happen to carry ------------------------
+
+const ROUND_TRIP_PRINT_SETTINGS: ContentSheet["printSettings"] = {
+  pageSize: PAGE_SIZE_LETTER,
+  margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+  gridlines: false,
+  headers: false,
+  pageOrder: "downThenOver",
+};
+
+function roundTripSheet(
+  sheet: Partial<ContentSheet> & Pick<ContentSheet, "name">,
+): ContentSheet {
+  const document: ContentDocument = {
+    kind: "spreadsheet",
+    metadata: {},
+    sheets: [
+      {
+        cells: [],
+        columns: [],
+        rows: [],
+        images: [],
+        printSettings: ROUND_TRIP_PRINT_SETTINGS,
+        ...sheet,
+      },
+    ],
+  };
+  const read = readXlsxContent(buildXlsxPackageFromContent(document));
+  if (read.kind !== "spreadsheet") {
+    throw new Error("expected a spreadsheet ContentDocument");
+  }
+  const roundTripped = read.sheets[0];
+  if (roundTripped === undefined) {
+    throw new Error("expected one sheet");
+  }
+  return roundTripped;
+}
+
+describe("buildXlsxPackageFromContent + readXlsxContent: dataValidation round trip, every type the real fixtures don't cover", () => {
+  it("whole, operator between", () => {
+    const validation: ContentSheetDataValidation = {
+      ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+      type: "whole",
+      operator: "between",
+      formula1: "1",
+      formula2: "10",
+      allowBlank: true,
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      dataValidations: [validation],
+    });
+    expect(sheet.dataValidations).toEqual([validation]);
+  });
+
+  it("decimal, operator greaterThan, with error message fields", () => {
+    const validation: ContentSheetDataValidation = {
+      ranges: [{ startRow: 1, startColumn: 1, endRow: 1, endColumn: 1 }],
+      type: "decimal",
+      operator: "greaterThan",
+      formula1: "0.5",
+      showErrorMessage: true,
+      errorTitle: "Bad value",
+      error: "Enter a number greater than 0.5",
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      dataValidations: [validation],
+    });
+    expect(sheet.dataValidations).toEqual([validation]);
+  });
+
+  it("date, operator greaterThanOrEqual, with input message fields", () => {
+    const validation: ContentSheetDataValidation = {
+      ranges: [{ startRow: 2, startColumn: 0, endRow: 2, endColumn: 0 }],
+      type: "date",
+      operator: "greaterThanOrEqual",
+      formula1: "45000",
+      showInputMessage: true,
+      promptTitle: "Date",
+      prompt: "Enter a date on or after 2023-03-15",
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      dataValidations: [validation],
+    });
+    expect(sheet.dataValidations).toEqual([validation]);
+  });
+
+  it("time, operator lessThan, errorStyle warning", () => {
+    const validation: ContentSheetDataValidation = {
+      ranges: [{ startRow: 3, startColumn: 0, endRow: 3, endColumn: 0 }],
+      type: "time",
+      operator: "lessThan",
+      formula1: "0.5",
+      errorStyle: "warning",
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      dataValidations: [validation],
+    });
+    expect(sheet.dataValidations).toEqual([validation]);
+  });
+
+  it("textLength, operator lessThanOrEqual, errorStyle information", () => {
+    const validation: ContentSheetDataValidation = {
+      ranges: [{ startRow: 4, startColumn: 0, endRow: 4, endColumn: 0 }],
+      type: "textLength",
+      operator: "lessThanOrEqual",
+      formula1: "50",
+      errorStyle: "information",
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      dataValidations: [validation],
+    });
+    expect(sheet.dataValidations).toEqual([validation]);
+  });
+
+  it("custom, no operator, arbitrary formula", () => {
+    const validation: ContentSheetDataValidation = {
+      ranges: [{ startRow: 5, startColumn: 0, endRow: 5, endColumn: 0 }],
+      type: "custom",
+      formula1: "ISNUMBER(A6)",
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      dataValidations: [validation],
+    });
+    expect(sheet.dataValidations).toEqual([validation]);
+  });
+});
+
+describe("buildXlsxPackageFromContent + readXlsxContent: conditionalFormat round trip, every rule family the real fixtures don't cover", () => {
+  it("containsText, with a dxf-resolved textColor style", () => {
+    const format: ContentSheetConditionalFormat = {
+      type: "containsText",
+      ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+      priority: 1,
+      text: "foo",
+      style: { textColor: { r: 1, g: 0, b: 0 } },
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      conditionalFormats: [format],
+    });
+    expect(sheet.conditionalFormats).toEqual([format]);
+  });
+
+  it("uniqueValues, the operand-free family, with stopIfTrue", () => {
+    const format: ContentSheetConditionalFormat = {
+      type: "uniqueValues",
+      ranges: [{ startRow: 1, startColumn: 1, endRow: 2, endColumn: 1 }],
+      priority: 2,
+      stopIfTrue: true,
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      conditionalFormats: [format],
+    });
+    expect(sheet.conditionalFormats).toEqual([format]);
+  });
+
+  it("top10, with percent and a dxf-resolved background style", () => {
+    const format: ContentSheetConditionalFormat = {
+      type: "top10",
+      ranges: [{ startRow: 0, startColumn: 3, endRow: 5, endColumn: 3 }],
+      priority: 5,
+      rank: 3,
+      percent: true,
+      style: { background: { r: 0, g: 1, b: 0 } },
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      conditionalFormats: [format],
+    });
+    expect(sheet.conditionalFormats).toEqual([format]);
+  });
+
+  it("aboveAverage, explicit false with equalAverage and stdDev", () => {
+    const format: ContentSheetConditionalFormat = {
+      type: "aboveAverage",
+      ranges: [{ startRow: 0, startColumn: 4, endRow: 3, endColumn: 4 }],
+      priority: 6,
+      aboveAverage: false,
+      equalAverage: true,
+      stdDev: 2,
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      conditionalFormats: [format],
+    });
+    expect(sheet.conditionalFormats).toEqual([format]);
+  });
+
+  it("timePeriod, with a dxf-resolved textColor style", () => {
+    const format: ContentSheetConditionalFormat = {
+      type: "timePeriod",
+      ranges: [{ startRow: 0, startColumn: 5, endRow: 0, endColumn: 5 }],
+      priority: 7,
+      timePeriod: "thisWeek",
+      style: { textColor: { r: 0, g: 0, b: 1 } },
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      conditionalFormats: [format],
+    });
+    expect(sheet.conditionalFormats).toEqual([format]);
+  });
+
+  it("dataBar, min/max cfvo and an explicit showValue false", () => {
+    const format: ContentSheetConditionalFormat = {
+      type: "dataBar",
+      ranges: [{ startRow: 0, startColumn: 6, endRow: 4, endColumn: 6 }],
+      priority: 8,
+      min: { type: "min" },
+      max: { type: "max" },
+      color: { r: 0, g: 1, b: 0 },
+      showValue: false,
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      conditionalFormats: [format],
+    });
+    expect(sheet.conditionalFormats).toEqual([format]);
+  });
+
+  it("iconSet, a non-default iconSetType with reverse and showValue false", () => {
+    const format: ContentSheetConditionalFormat = {
+      type: "iconSet",
+      ranges: [{ startRow: 0, startColumn: 7, endRow: 6, endColumn: 7 }],
+      priority: 9,
+      iconSetType: "3Arrows",
+      thresholds: [
+        { type: "percent", value: "0" },
+        { type: "percent", value: "33" },
+        { type: "percent", value: "67" },
+      ],
+      reverse: true,
+      showValue: false,
+    };
+    const sheet = roundTripSheet({
+      name: "Sheet1",
+      conditionalFormats: [format],
+    });
+    expect(sheet.conditionalFormats).toEqual([format]);
   });
 });
