@@ -1,3 +1,14 @@
+## [4.1.2](https://github.com/ExaDev/documents.js/compare/document-mcp%404.1.1...document-mcp%404.1.2) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump documents.js to ^6.1.2 in document-mcp [skip ci] ([5683d73](https://github.com/ExaDev/documents.js/commit/5683d73514d4036883f4c5a4f942ce68c9158b00))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.1.2
+
 ## [4.1.1](https://github.com/ExaDev/documents.js/compare/document-mcp%404.1.0...document-mcp%404.1.1) (2026-09-01)
 
 ### Miscellaneous Chores
