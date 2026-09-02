@@ -49,6 +49,11 @@ import {
   ptToUniversalMeasure,
   writeXmlBool,
 } from "./util";
+import {
+  buildConditionalFormattingElements,
+  DxfTable,
+} from "./conditional-format";
+import { buildDataValidationsElement } from "./data-validation";
 
 // ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, through the same number-format vocabulary that reader classifies (see renderCellValue and typed/xlsx/number-format.ts's own write-side section), and honestly re-approximating the one lossy conversion left on the way in (column-width characters). The read-side exceptions are cell comments and the drawing layer: the reader reads cell comments (typed/xlsx/comments.ts) but this writer emits no comments or threaded-comments part, so ContentSheetCell.comment does not survive a round trip through this pair, and the reader's drawing rows -- chart graphic frames (embeddedObjects) and pictures (images), typed/xlsx/drawings.ts -- likewise have no write side, this writer emitting no drawing part. See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
 //
@@ -287,10 +292,13 @@ function buildSharedStringsPart(sharedStrings: SharedStringTable): XmlPart {
 
 // <fonts> and the two reserved <fills> entries (index 0 "none", index 1 Excel's mandatory gray125) plus the empty reserved <borders> entry (index 0) are fixed scaffolding, confirmed against multiple independent references as the source of Excel's "we found a problem with some content" repair prompt when a hand-rolled writer omits them. On top of that scaffolding this writer now emits the real solid fills and real per-edge borders the cells themselves carried, interned by CellFormatTable alongside the number formats.
 //
-// The variable parts come straight from the CellFormatTable the worksheets filled: one <numFmt> per custom code interned (and NO <numFmts> element at all when nothing was, which is what keeps a workbook of ordinary numbers and strings byte-identical to what this writer produced before number formats existed), one <fill> per distinct solid background, one <border> per distinct edge set, and one <xf> per cell-format index -- index 0 always being the General + no-decoration default.
+// The variable parts come straight from the CellFormatTable the worksheets filled: one <numFmt> per custom code interned (and NO <numFmts> element at all when nothing was, which is what keeps a workbook of ordinary numbers and strings byte-identical to what this writer produced before number formats existed), one <fill> per distinct solid background, one <border> per distinct edge set, and one <xf> per cell-format index -- index 0 always being the General + no-decoration default. <dxfs> is the same story for conditionalFormatting rule styling: one <dxf> per DxfTable.intern call the worksheets made (also NO <dxfs> element at all when a workbook has no styled conditional-format rule), populated by the very same per-sheet build pass, which is why buildXlsxPackageFromContent's own worksheets-before-styles ordering note below applies to dxfTable exactly as it already does to cellFormats.
 //
-// CT_Stylesheet's own required child element ORDER (ECMA-376 Part 1 SS18.8.39): numFmts?, fonts?, fills?, borders?, cellStyleXfs?, cellXfs?, cellStyles?, ... -- numFmts FIRST, before the fonts element that used to lead this part.
-function buildStylesPart(cellFormats: CellFormatTable): XmlPart {
+// CT_Stylesheet's own required child element ORDER (ECMA-376 Part 1 SS18.8.39): numFmts?, fonts?, fills?, borders?, cellStyleXfs?, cellXfs?, cellStyles?, dxfs?, ... -- numFmts FIRST, before the fonts element that used to lead this part, and dxfs right after cellStyles (confirmed against real-producer-validation-and-cellis.xlsx's own styles.xml, which places its <dxfs> there, immediately before its <colors> element this writer does not emit).
+function buildStylesPart(
+  cellFormats: CellFormatTable,
+  dxfTable: DxfTable,
+): XmlPart {
   const children: XmlElement[] = [];
 
   const declarations = cellFormats.declarations();
@@ -399,6 +407,13 @@ function buildStylesPart(cellFormats: CellFormatTable): XmlPart {
       el("cellStyle", { name: "Normal", xfId: "0", builtinId: "0" }),
     ]),
   );
+
+  const dxfElements = dxfTable.dxfElements();
+  if (dxfElements.length > 0) {
+    children.push(
+      el("dxfs", { count: String(dxfElements.length) }, [...dxfElements]),
+    );
+  }
 
   return xmlPart(el("styleSheet", { xmlns: SML_NS }, children));
 }
@@ -827,11 +842,12 @@ function buildBreaksElements(settings: ContentSheetPrintSettings): {
   return result;
 }
 
-// CT_Worksheet's own required child element ORDER (ECMA-376 Part 1 SS18.3.1.99): sheetPr?, dimension?, sheetViews?, sheetFormatPr?, cols*, sheetData, ..., mergeCells?, ..., printOptions?, pageMargins?, pageSetup?, headerFooter?, rowBreaks?, colBreaks?, ... -- every element this writer emits follows that relative order (sheetViews and headerFooter are both skipped entirely: pure UI/print-preview state this package's own content model carries no data for).
+// CT_Worksheet's own required child element ORDER (ECMA-376 Part 1 SS18.3.1.99): sheetPr?, dimension?, sheetViews?, sheetFormatPr?, cols*, sheetData, ..., mergeCells?, conditionalFormatting*, dataValidations?, ..., printOptions?, pageMargins?, pageSetup?, headerFooter?, rowBreaks?, colBreaks?, ... -- every element this writer emits follows that relative order (sheetViews and headerFooter are both skipped entirely: pure UI/print-preview state this package's own content model carries no data for), confirmed against real-producer-validation-and-cellis.xlsx's own emitted order: mergeCells (this fixture has none), conditionalFormatting, dataValidations, printOptions/pageMargins/pageSetup.
 function buildWorksheetPart(
   sheet: ContentSheet,
   sharedStrings: SharedStringTable,
   cellFormats: CellFormatTable,
+  dxfTable: DxfTable,
 ): XmlPart {
   const children: XmlElement[] = [
     buildSheetPrElement(sheet.printSettings),
@@ -848,6 +864,20 @@ function buildWorksheetPart(
   const mergeCellsElement = buildMergeCellsElement(sheet.cells);
   if (mergeCellsElement !== undefined) {
     children.push(mergeCellsElement);
+  }
+
+  children.push(
+    ...buildConditionalFormattingElements(
+      sheet.conditionalFormats ?? [],
+      dxfTable,
+    ),
+  );
+
+  const dataValidationsElement = buildDataValidationsElement(
+    sheet.dataValidations ?? [],
+  );
+  if (dataValidationsElement !== undefined) {
+    children.push(dataValidationsElement);
   }
 
   children.push(
@@ -882,9 +912,10 @@ export function buildXlsxPackageFromContent(
   const sheets = document.sheets;
   const sharedStrings = new SharedStringTable();
   const cellFormats = new CellFormatTable();
-  // Building every worksheet part first, before touching xl/sharedStrings.xml or xl/styles.xml, is load-bearing: buildCellElement interns every literal string value into `sharedStrings` and every non-General number format into `cellFormats` as a side effect while it walks each sheet's cells, and buildSharedStringsPart/buildStylesPart below must both see the FULLY populated table.
+  const dxfTable = new DxfTable();
+  // Building every worksheet part first, before touching xl/sharedStrings.xml or xl/styles.xml, is load-bearing: buildCellElement interns every literal string value into `sharedStrings` and every non-General number format into `cellFormats` as a side effect while it walks each sheet's cells, buildConditionalFormattingElements interns every styled conditional-format rule into `dxfTable` the same way, and buildSharedStringsPart/buildStylesPart below must all see the FULLY populated tables.
   const worksheetParts = sheets.map((sheet) =>
-    buildWorksheetPart(sheet, sharedStrings, cellFormats),
+    buildWorksheetPart(sheet, sharedStrings, cellFormats, dxfTable),
   );
 
   const parts: Package["parts"] = {
@@ -892,7 +923,7 @@ export function buildXlsxPackageFromContent(
     "_rels/.rels": buildPackageRelsPart(),
     "xl/workbook.xml": buildWorkbookPart(sheets),
     "xl/_rels/workbook.xml.rels": buildWorkbookRelsPart(sheets.length),
-    "xl/styles.xml": buildStylesPart(cellFormats),
+    "xl/styles.xml": buildStylesPart(cellFormats, dxfTable),
     "xl/sharedStrings.xml": buildSharedStringsPart(sharedStrings),
     "docProps/core.xml": buildCorePropertiesPart(document.metadata),
     "docProps/app.xml": buildAppPropertiesPart(document.metadata),
