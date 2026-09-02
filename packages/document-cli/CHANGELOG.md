@@ -1,3 +1,14 @@
+## [5.1.2](https://github.com/ExaDev/documents.js/compare/document-cli%405.1.1...document-cli%405.1.2) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump documents.js to ^6.1.2 in document-cli [skip ci] ([5597c40](https://github.com/ExaDev/documents.js/commit/5597c403a295aedacc498af19bcc7fb4d6947730))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.1.2
+
 ## [5.1.1](https://github.com/ExaDev/documents.js/compare/document-cli%405.1.0...document-cli%405.1.1) (2026-09-01)
 
 ### Miscellaneous Chores
