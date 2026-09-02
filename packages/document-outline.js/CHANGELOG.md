@@ -1,3 +1,19 @@
+## [3.2.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.1.1...document-outline.js%403.2.0) (2026-09-02)
+
+### Features
+
+* **document-outline.js:** derive neighbour-based cell labels within a sheet region ([c935da0](https://github.com/ExaDev/documents.js/commit/c935da0ea0c1cb5514704f56bca8a82be05c42c5))
+* **document-outline.js:** segment sheet regions into connected components with a classification ([4c31bcf](https://github.com/ExaDev/documents.js/commit/4c31bcf988ecde7cc3075d58e5ca9ca572b72f65))
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.3.0 in document-outline.js [skip ci] ([a75e414](https://github.com/ExaDev/documents.js/commit/a75e41472a0f80e0deb981c523fea56f195ffe16))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.3.0
+
 ## [3.1.1](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.1.0...document-outline.js%403.1.1) (2026-09-02)
 
 ### Miscellaneous Chores
