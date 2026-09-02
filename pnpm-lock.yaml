@@ -656,7 +656,7 @@ importers:
   packages/markdown-codec:
     dependencies:
       document-schema.js:
-        specifier: ^5.1.0
+        specifier: ^5.2.0
         version: link:../document-schema.js
       zod:
         specifier: ^4.4.3
