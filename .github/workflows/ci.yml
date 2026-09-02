@@ -378,40 +378,14 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   # The three jobs below restore what the monorepo migration lost (ExaDev/documents.js#732): each standalone repository's own pipeline republished its package under alternate npm names and a @exadev/<name> scope on GitHub Packages, and signed an SPDX SBOM plus build-provenance attestation against the packed release tarball. They run after the release job (or, for a backfill, the collect-backfill-matrix job above) keyed off whichever of the two produced the matrices, and nothing depends on them -- a failure here can never block or fail the release itself or the Pages deploy.
-
-  resolve-post-release-matrices:
-    name: Resolve post-release matrices
-    needs: [release, collect-backfill-matrix]
-    # Exactly one of the two ever runs for a given trigger (release only on a push to main, collect-backfill-matrix only on a workflow_dispatch carrying backfill_tags), so this always waits on both (`always()`) and takes whichever produced output -- the other's outputs default to the empty string when its job is skipped.
-    if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      github-packages-matrix: ${{ steps.resolve.outputs.github-packages-matrix }}
-      npm-alias-matrix: ${{ steps.resolve.outputs.npm-alias-matrix }}
-      attest-matrix: ${{ steps.resolve.outputs.attest-matrix }}
-    steps:
-      - id: resolve
-        # Each matrix is passed through the environment, not interpolated as `${{ }}` directly into the script: the compact JSON these carry is full of double quotes, and splicing that as literal text into a double-quoted `echo "..."` string breaks the shell's own quoting the moment it hits the first embedded `"` -- confirmed the hard way (ExaDev/documents.js#835's own backfill dispatch): the matrices were built correctly, but this step's naive `${{ needs.release.outputs.x || needs.collect-backfill-matrix.outputs.x }}` interpolation mangled them into something that satisfied `!= '[]'` as false, and all three post-release jobs silently skipped despite real work to do. Bash's own `${VAR:-default}` parameter expansion does the same fallback without ever re-parsing the JSON as shell syntax.
-        env:
-          RELEASE_GHP: ${{ needs.release.outputs.github-packages-matrix }}
-          RELEASE_NPM: ${{ needs.release.outputs.npm-alias-matrix }}
-          RELEASE_ATTEST: ${{ needs.release.outputs.attest-matrix }}
-          BACKFILL_GHP: ${{ needs.collect-backfill-matrix.outputs.github-packages-matrix }}
-          BACKFILL_NPM: ${{ needs.collect-backfill-matrix.outputs.npm-alias-matrix }}
-          BACKFILL_ATTEST: ${{ needs.collect-backfill-matrix.outputs.attest-matrix }}
-        run: |
-          {
-            echo "github-packages-matrix=${RELEASE_GHP:-$BACKFILL_GHP}"
-            echo "npm-alias-matrix=${RELEASE_NPM:-$BACKFILL_NPM}"
-            echo "attest-matrix=${RELEASE_ATTEST:-$BACKFILL_ATTEST}"
-          } >> "$GITHUB_OUTPUT"
+  #
+  # Each of the three reads directly from `needs.release`/`needs.collect-backfill-matrix` (never through an intermediate job) and gates with its own `always() && (...)` -- deliberately, after finding a real GitHub Actions platform quirk the hard way: an earlier design funnelled both through one intermediate `resolve-post-release-matrices` job so this `always()`-plus-mixed-`needs` gating logic (and the JSON matrix fallback) lived in one place instead of three. That job's own step correctly resolved and wrote the right matrices (confirmed directly via a `cat -A "$GITHUB_OUTPUT"` dump inside the step), but a *separate* downstream job reading `needs.resolve-post-release-matrices.outputs.*` always saw `'[]'`, regardless. The one thing unique to that intermediate job was combining `always()` with a `needs` array where one member is always skipped -- and that combination is exactly what breaks a job's own advertised `outputs` for whatever depends on *it* (its own step outputs and its own reads of *its* needs' outputs are unaffected, which is why the in-job debug dump looked correct). Reading `release`/`collect-backfill-matrix` directly here sidesteps it, since those two jobs never use `always()` themselves and nothing downstream needs outputs *from* a job that does.
 
   publish-github-packages:
     name: Mirror to GitHub Packages (${{ matrix.scoped }})
-    needs: resolve-post-release-matrices
-    # The matrix-emptiness half of this condition is load-bearing: `matrix: include: []` is not an empty matrix that skips the job, it is an invalid matrix, and the run concludes failed with no failed job to point at. Guarding here is what makes a main push that released nothing (or a non-backfill dispatch) finish green.
-    if: needs.resolve-post-release-matrices.outputs.github-packages-matrix != '[]'
+    needs: [release, collect-backfill-matrix]
+    # Exactly one of the two ever runs for a given trigger (release only on a push to main, collect-backfill-matrix only on a workflow_dispatch carrying backfill_tags) -- always() waits on both regardless, and the matrix-emptiness check takes whichever produced output (the other's is the empty string when its job is skipped) and is load-bearing: `matrix: include: []` is not an empty matrix that skips the job, it is an invalid matrix, and the run concludes failed with no failed job to point at.
+    if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.github-packages-matrix || needs.collect-backfill-matrix.outputs.github-packages-matrix) != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -421,7 +395,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.resolve-post-release-matrices.outputs.github-packages-matrix) }}
+        include: ${{ fromJSON(needs.release.outputs.github-packages-matrix || needs.collect-backfill-matrix.outputs.github-packages-matrix) }}
     env:
       NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -477,9 +451,9 @@ jobs:
 
   publish-npm-aliases:
     name: Publish npm alias (${{ matrix.alias }})
-    needs: resolve-post-release-matrices
-    # See the note on publish-github-packages: an empty include list is an invalid matrix, not a skip.
-    if: needs.resolve-post-release-matrices.outputs.npm-alias-matrix != '[]'
+    needs: [release, collect-backfill-matrix]
+    # See the note on publish-github-packages: an empty include list is an invalid matrix, not a skip, and the always()-plus-direct-needs-read shape is deliberate, not incidental.
+    if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.npm-alias-matrix || needs.collect-backfill-matrix.outputs.npm-alias-matrix) != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -488,7 +462,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.resolve-post-release-matrices.outputs.npm-alias-matrix) }}
+        include: ${{ fromJSON(needs.release.outputs.npm-alias-matrix || needs.collect-backfill-matrix.outputs.npm-alias-matrix) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -539,9 +513,9 @@ jobs:
 
   attest-release-artifacts:
     name: Attest SBOM and build provenance (${{ matrix.name }})
-    needs: resolve-post-release-matrices
-    # See the note on publish-github-packages: an empty include list is an invalid matrix, not a skip.
-    if: needs.resolve-post-release-matrices.outputs.attest-matrix != '[]'
+    needs: [release, collect-backfill-matrix]
+    # See the note on publish-github-packages: an empty include list is an invalid matrix, not a skip, and the always()-plus-direct-needs-read shape is deliberate, not incidental.
+    if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.attest-matrix || needs.collect-backfill-matrix.outputs.attest-matrix) != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -551,7 +525,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.resolve-post-release-matrices.outputs.attest-matrix) }}
+        include: ${{ fromJSON(needs.release.outputs.attest-matrix || needs.collect-backfill-matrix.outputs.attest-matrix) }}
     steps:
       - uses: actions/checkout@v7
         with:
