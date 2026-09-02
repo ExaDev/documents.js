@@ -381,7 +381,7 @@ describe('dist/cli.js outline: real file round trip', () => {
 });
 
 describe('dist/cli.js outline: multi-page odg', () => {
-  // Regression coverage for the odg bridge target: OUTLINE_CONVERSION_TARGET.odg used to be 'svg', and buildSvgText refuses a multi-page document outright (SvgMultiPageNotSpecifiedError) since outline has no --page flag to answer it with -- every multi-page .odg failed outright. The bridge target is 'odp' now, which has no such per-page write constraint -- the trade-off being that each drawing page becomes a presentation slide group (labelled "Slide N", document-outline.js's own presentation-variant convention) rather than a "Page N" draw-page group, since odp is a cross-variant bridge and svg is the only same-variant target odg has, and svg is exactly the format whose own write side cannot hold more than one page at all.
+  // Regression coverage for multi-page odg outlining: outline used to bridge every source to a same-variant sibling purely to obtain a package (OUTLINE_CONVERSION_TARGET), and odg's own bridge target, svg, refuses a multi-page document outright (SvgMultiPageNotSpecifiedError) since outline has no --page flag to answer it with -- every multi-page .odg failed outright. outline now reads a source's own native tree directly (readNativeDocumentTree, documents.js), so there is no bridge and no per-page write constraint to dodge at all -- each drawing page reports as its own "Page N" draw-page group, document-outline.js's own drawing-variant convention, straight off odg's own native 'drawing' content.
   it('outlines a multi-page odg as one group per page, with no --page flag needed', async () => {
     const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
     try {
@@ -393,7 +393,7 @@ describe('dist/cli.js outline: multi-page odg', () => {
 
       const { code, stdout } = await spawnCli(['outline', inputPath]);
       expect(code).toBe(EXIT_SUCCESS);
-      expect(stdout.toString('utf8')).toBe('Slide 1\n  First page text\nSlide 2\n  Second page text\n');
+      expect(stdout.toString('utf8')).toBe('Page 1\n  First page text\nPage 2\n  Second page text\n');
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
     }
