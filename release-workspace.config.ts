@@ -1,0 +1,51 @@
+import type { ReleaseWorkspaceOptions } from "@exadev/semantic-release-workspace";
+
+const config: Pick<
+  ReleaseWorkspaceOptions,
+  "branches" | "commitStrategy" | "plugins" | "analyzeCommits" | "generateNotes"
+> = {
+  branches: ["main"],
+  commitStrategy: "single",
+  plugins: [
+    "@semantic-release/changelog",
+    ["@semantic-release/npm", { npmPublish: true }],
+    "@semantic-release/github",
+  ],
+  analyzeCommits: {
+    preset: "conventionalcommits",
+    releaseRules: [
+      { breaking: true, release: "major" },
+      { type: "feat", release: "minor" },
+      { type: "fix", release: "patch" },
+      { type: "perf", release: "patch" },
+      { type: "revert", release: "patch" },
+      { type: "refactor", release: "patch" },
+      { type: "docs", release: "patch" },
+      { type: "style", release: "patch" },
+      { type: "test", release: "patch" },
+      { type: "build", release: "patch" },
+      { type: "ci", release: "patch" },
+      { type: "chore", release: "patch" },
+    ],
+  },
+  generateNotes: {
+    preset: "conventionalcommits",
+    presetConfig: {
+      types: [
+        { type: "feat", section: "Features" },
+        { type: "fix", section: "Bug Fixes" },
+        { type: "perf", section: "Performance Improvements" },
+        { type: "revert", section: "Reverts" },
+        { type: "refactor", section: "Code Refactoring" },
+        { type: "docs", section: "Documentation" },
+        { type: "style", section: "Styles" },
+        { type: "test", section: "Tests" },
+        { type: "build", section: "Build System" },
+        { type: "ci", section: "Continuous Integration" },
+        { type: "chore", section: "Miscellaneous Chores" },
+      ],
+    },
+  },
+};
+
+export default config;
