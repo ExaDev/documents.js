@@ -1,3 +1,14 @@
+## [1.2.2](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.2.1...document-compute.js%401.2.2) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump documents.js to ^6.1.4 in document-compute.js [skip ci] ([87bf581](https://github.com/ExaDev/documents.js/commit/87bf58196d24b8e18ec92a075f7f2fbed247c616))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.1.4
+
 ## [1.2.1](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.2.0...document-compute.js%401.2.1) (2026-09-02)
 
 ### Miscellaneous Chores
