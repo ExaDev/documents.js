@@ -6,3 +6,5 @@ export * from "./compute/quantity";
 export * from "./compute/interval";
 export * from "./compute/evaluate";
 export * from "./compute/solve";
+export * from "./harness/worked-example";
+export * from "./harness/corpus";
