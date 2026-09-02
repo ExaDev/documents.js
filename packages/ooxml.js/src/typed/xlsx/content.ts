@@ -38,6 +38,9 @@ import type { SheetCellComment } from "./comments";
 import { readSheetCellComments } from "./comments";
 import { columnWidthCharsToPt, DEFAULT_ROW_HEIGHT_PT } from "./units";
 import { readXmlBool } from "./util";
+import { readDxfElements } from "./styles";
+import { readConditionalFormats } from "./conditional-format";
+import { readDataValidations } from "./data-validation";
 
 // Package -> ContentDocument (kind: 'spreadsheet'): a SpreadsheetML reader built geometry- and print-settings-rich, matching readOds's own established bar in the sibling odf.js package (real column widths, row heights, hidden rows/columns, merged ranges, every cell value kind this format actually distinguishes, and a genuinely populated ContentSheetPrintSettings), rather than the lossy cell-values-only projection typed/xlsx.ts's own readXlsxWorkbook provides. Unlike readOds, this returns a full ContentDocument envelope directly (kind/metadata/sheets) rather than a bare {metadata, sheets} shape -- readXlsxContent and typed/xlsx/build.ts's buildXlsxPackageFromContent are designed as a matched read/write pair around ContentDocument specifically, so a caller can round-trip readXlsxContent(buildXlsxPackageFromContent(x)) without an extra wrapping/unwrapping step, and documents.js's own ods<->xlsx bridge (bypassing PDF, the same way its odt<->docx/odp<->pptx bridges do) can treat this reader's own output as an already-correctly-shaped pivot value.
 //
@@ -461,16 +464,11 @@ function applyCellComments(
   }
 }
 
-// The two worksheet rule families with no harmonised vocabulary yet -- dataValidation (a range's input constraint) and conditionalFormatting (a range's conditional display rule). The construct inventory's own corpus gate defers freezing a semantic shape for them until a real producer file is verified against one, so until then each governing element is quarantined VERBATIM on its range's anchor cell through the residue channel: carried, restorable by a same-format writer, never interpreted here. The anchor is the first range's top-left position -- the same anchoring convention merges and cell comments use -- and a cell carries one residue slot, so a second rule anchoring at the same cell is skipped (the sqref inside each residue names its full range, so one copy reconstructs it). A rule whose sqref parses to nothing is left unattached rather than parked on a made-up position.
+// The narrow residue fallback left once dataValidation and conditionalFormatting were promoted to real vocabulary (ExaDev/documents.js#758): a dataValidation whose type this package's schema does not name (effectively just ECMA-376's own 'none', vanishingly rare in real files) or whose sqref does not parse, and a synthetic single-cfRule <conditionalFormatting> wrapper for a cfRule type the discriminated union does not cover ('expression' being the one real, deliberate member ExaDev/documents.js#758 chose not to promote -- see document-schema.js's own doc comment on ContentSheetConditionalFormatSchema) -- quarantined VERBATIM on its range's anchor cell through the residue channel: carried, restorable by a same-format writer, never interpreted here. The anchor is the first range's top-left position -- the same anchoring convention merges and cell comments use -- and a cell carries one residue slot, so a second rule anchoring at the same cell is skipped (the sqref inside each residue names its full range, so one copy reconstructs it). A rule whose sqref parses to nothing is left unattached rather than parked on a made-up position. The caller (readSheet below) supplies exactly the elements typed/xlsx/data-validation.ts's and typed/xlsx/conditional-format.ts's own structural readers could not promote -- this function no longer discovers <dataValidations>/<conditionalFormatting> from the worksheet itself.
 function applyCellResidueRules(
-  worksheet: XmlElement,
   cells: ContentSheetCell[],
+  rules: readonly XmlElement[],
 ): void {
-  const rules: XmlElement[] = [];
-  for (const container of childrenWithTag(worksheet, "dataValidations")) {
-    rules.push(...childrenWithTag(container, "dataValidation"));
-  }
-  rules.push(...childrenWithTag(worksheet, "conditionalFormatting"));
   if (rules.length === 0) {
     return;
   }
@@ -513,6 +511,7 @@ function readSheet(
   sharedStrings: readonly string[],
   definedNamesBySheet: ReadonlyMap<number, SheetDefinedNames>,
   context: CellFormatContext,
+  dxfs: readonly XmlElement[],
 ): ContentSheet {
   const worksheet = rootElement(pkg.parts[entry.path]);
   if (worksheet === undefined) {
@@ -531,7 +530,14 @@ function readSheet(
   }
   const cells = readCells(worksheet, sharedStrings, context);
   applyCellComments(readSheetCellComments(pkg, entry.path), cells);
-  applyCellResidueRules(worksheet, cells);
+  const { validations, residueElements: dataValidationResidue } =
+    readDataValidations(worksheet);
+  const { formats, residueElements: conditionalFormatResidue } =
+    readConditionalFormats(worksheet, dxfs);
+  applyCellResidueRules(cells, [
+    ...dataValidationResidue,
+    ...conditionalFormatResidue,
+  ]);
   // The drawing layer (typed/xlsx/drawings.ts): chart graphic frames as embedded objects and pictures as images -- objects absent and images empty when the sheet references no drawing or carries none, which is the common case.
   const drawing = readSheetDrawing(pkg, entry.path, worksheet);
   return {
@@ -543,6 +549,8 @@ function readSheet(
     ...(drawing.embeddedObjects === undefined
       ? {}
       : { embeddedObjects: drawing.embeddedObjects }),
+    ...(validations.length === 0 ? {} : { dataValidations: validations }),
+    ...(formats.length === 0 ? {} : { conditionalFormats: formats }),
     printSettings: readPrintSettings(
       worksheet,
       sheetIndex,
@@ -560,6 +568,7 @@ export function readXlsxContent(pkg: Package): ContentDocument {
   const sharedStrings = loadSharedStrings(pkg);
   const definedNamesBySheet = readDefinedNamesBySheet(pkg);
   const context = readCellFormatContext(pkg);
+  const dxfs = readDxfElements(pkg);
   const entries = resolveSheetEntries(pkg);
   const sheets = entries.map((entry, sheetIndex) =>
     readSheet(
@@ -569,6 +578,7 @@ export function readXlsxContent(pkg: Package): ContentDocument {
       sharedStrings,
       definedNamesBySheet,
       context,
+      dxfs,
     ),
   );
   return {
