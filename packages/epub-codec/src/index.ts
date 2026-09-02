@@ -6,6 +6,8 @@ export * from "./ocf/container";
 export * from "./opf/types";
 export * from "./opf/metadata";
 export * from "./opf/parse";
+export * from "./util/base64";
+export * from "./image/dimensions";
 export * from "./xml/node";
 export * from "./xml/parse";
 export * from "./xml/build";
