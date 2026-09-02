@@ -125,12 +125,12 @@ describe("lists", () => {
       {
         kind: "paragraph",
         runs: [{ text: "a" }],
-        list: { numId: "list1", level: 0, itemId: "item1" },
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
       },
       {
         kind: "paragraph",
         runs: [{ text: "b" }],
-        list: { numId: "list1", level: 0, itemId: "item2" },
+        list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
       },
     ]);
   });
@@ -141,20 +141,25 @@ describe("lists", () => {
       {
         kind: "paragraph",
         runs: [{ text: "a" }],
-        list: { numId: "list1", level: 0, itemId: "item1" },
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
       },
       {
         kind: "paragraph",
         runs: [{ text: "a1" }],
-        list: { numId: "list1", level: 1, itemId: "item2" },
+        list: { numId: "epub1:bullet", level: 1, itemId: "item2" },
       },
     ]);
   });
 
   it("mints a fresh numId for each separate top-level list", () => {
     const blocks = read(body("<ul><li>a</li></ul><ul><li>b</li></ul>"));
-    expect(blocks[0]).toMatchObject({ list: { numId: "list1" } });
-    expect(blocks[1]).toMatchObject({ list: { numId: "list2" } });
+    expect(blocks[0]).toMatchObject({ list: { numId: "epub1:bullet" } });
+    expect(blocks[1]).toMatchObject({ list: { numId: "epub2:bullet" } });
+  });
+
+  it("encodes an <ol> and its start attribute into the minted numId", () => {
+    const blocks = read(body('<ol start="3"><li>a</li></ol>'));
+    expect(blocks[0]).toMatchObject({ list: { numId: "epub1:ordered@3" } });
   });
 });
 

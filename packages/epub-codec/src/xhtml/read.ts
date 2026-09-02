@@ -26,6 +26,8 @@ import { parseXml } from "../xml/parse";
 import type { XhtmlReadContext } from "./context";
 import { isFootnoteAside, isFootnoteReferenceAnchor } from "./footnote";
 import { buildInlineRuns } from "./inline";
+import type { MintListNumIdOptions } from "./list-id";
+import { mintListNumId } from "./list-id";
 import {
   DEFINITION_BODY_INDENT_PT,
   HORIZONTAL_RULE_STYLE_ID,
@@ -48,7 +50,7 @@ interface ListItemContext {
 }
 
 interface IdMinter {
-  mintNumId(): string;
+  mintNumId(options: MintListNumIdOptions): string;
   mintItemId(): string;
 }
 
@@ -56,9 +58,9 @@ function createIdMinter(): IdMinter {
   let nextList = 0;
   let nextItem = 0;
   return {
-    mintNumId: () => {
+    mintNumId: (options) => {
       nextList += 1;
-      return `list${String(nextList)}`;
+      return mintListNumId(nextList, options);
     },
     mintItemId: () => {
       nextItem += 1;
@@ -397,7 +399,12 @@ function readBlockquote(
 }
 
 function readList(element: XmlElement, state: BuildState): ContentBlock[] {
-  const numId = state.list?.numId ?? state.minter.mintNumId();
+  const numId =
+    state.list?.numId ??
+    state.minter.mintNumId({
+      type: element.tag === "ol" ? "ordered" : "bullet",
+      start: startAttr(element),
+    });
   const level = state.list === undefined ? 0 : state.list.level + 1;
   const blocks: ContentBlock[] = [];
   for (const child of element.children) {
@@ -409,6 +416,10 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
     blocks.push(...readContainerChildren(child.children, itemState));
   }
   return blocks;
+}
+
+function startAttr(element: XmlElement): number | undefined {
+  return positiveIntAttr(element, "start");
 }
 
 function readDefinitionList(
