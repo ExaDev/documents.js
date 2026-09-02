@@ -1,3 +1,14 @@
+## [6.1.4](https://github.com/ExaDev/documents.js/compare/documents.js%406.1.3...documents.js%406.1.4) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump pdf-codec to ^3.5.2 in documents.js [skip ci] ([7f6e558](https://github.com/ExaDev/documents.js/commit/7f6e558de9c6b5b7e6cf528fdb31a521ed48ba74))
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.5.2
+
 ## [6.1.3](https://github.com/ExaDev/documents.js/compare/documents.js%406.1.2...documents.js%406.1.3) (2026-09-02)
 
 ### Miscellaneous Chores
