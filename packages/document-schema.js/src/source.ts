@@ -4,7 +4,7 @@ import { z } from "zod";
 //
 // THE QUARANTINE CONTRACT, binding on this package and stated as the enforcement stance #718 asks for: residue is schema-validated as opaque text and NEVER semantically interpreted. Within this package that is structural, not aspirational -- no module reads, resolves, normalises, factors, or branches on a `source` value: decompose and flatten carry the node objects embedding it verbatim (the bijection laws extend to it unchanged), minting's key lists exclude it (factorStyles can no more factor residue than it can frames or sourcePath, and for the same reason -- the styles table's strict entry objects reject the key outright), and schema validation checks only that `xml` is text. Outside this package the contract is a usage rule: a SAME-FORMAT writer may re-emit its own residue verbatim -- that re-emission is the restorable-fidelity tier's whole mechanism, and re-serialising opaque text is not interpreting it -- but no consumer derives semantics from it (renders it, converts it into semantic nodes, or lets it change content behaviour), and a consumer of any other format must leave it alone, which is exactly what `format` exists to make decidable.
 
-// Which format's dialect a residue value's xml is written in -- one member per reader that exists in this workspace today (ooxml.js's docx/pptx/xlsx, odf.js's odt/ods/odp/odg/odm/odb/odf, markdown-codec, pdf-codec), each named by a real reader rather than invented for symmetry, per the family's vocabulary discipline. The point of the field: a same-format writer can tell residue it may restore from residue it must not touch, without reading the xml. Closed on purpose -- a format this workspace gains a reader for adds a member, additively.
+// Which format's dialect a residue value's xml is written in -- one member per reader that exists in this workspace today (ooxml.js's docx/pptx/xlsx, odf.js's odt/ods/odp/odg/odm/odb/odf, markdown-codec, pdf-codec, epub-codec), each named by a real reader rather than invented for symmetry, per the family's vocabulary discipline. The point of the field: a same-format writer can tell residue it may restore from residue it must not touch, without reading the xml. Closed on purpose -- a format this workspace gains a reader for adds a member, additively.
 export const SourceFormatSchema = z.enum([
   "docx",
   "pptx",
@@ -18,6 +18,7 @@ export const SourceFormatSchema = z.enum([
   "odf",
   "markdown",
   "pdf",
+  "epub",
 ]);
 export type SourceFormat = z.infer<typeof SourceFormatSchema>;
 
