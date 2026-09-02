@@ -1,14 +1,16 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
+
+import releaseConfig from "./release-workspace.config";
 
 /**
  * Commit-message validation for the whole workspace. Commit messages are a property of the repository, not of a package, so this config lives at the root: every package carried an identical copy, and in one repository only one of those could ever have run.
  *
- * The allowed type list is derived from release-workspace.config.json's own releaseRules rather than restated here, preserving the invariant every package's own config was built around: a conventional-commit type cannot trigger a release without also being accepted by commit-msg validation, or the reverse. That file is the canonical release configuration -- @exadev/semantic-release-workspace reads it directly via `--config` -- so deriving from it means there is exactly one place a type gets added.
+ * The allowed type list is derived from release-workspace.config.ts's own releaseRules rather than restated here, preserving the invariant every package's own config was built around: a conventional-commit type cannot trigger a release without also being accepted by commit-msg validation, or the reverse. That file is the canonical release configuration -- @exadev/semantic-release-workspace reads it directly via `--config` -- so deriving from it means there is exactly one place a type gets added.
  *
- * Read through fs rather than a JSON import so this file makes no assumption about how commitlint's TypeScript loader handles JSON module resolution or import attributes.
+ * A plain import, not a JSON import: release-workspace.config.ts is itself a TypeScript module now, so there is no import-attribute inconsistency across loaders to guard against here the way a `.json` import would have -- commitlint's own TypeScript loader resolves this exactly as it resolves this file.
  */
 
-const RELEASE_CONFIG_FILE = "release-workspace.config.json";
+const RELEASE_CONFIG_FILE = "release-workspace.config.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -26,19 +28,15 @@ function isTypedReleaseRule(
 }
 
 function releasableCommitTypes(): readonly string[] {
-  const raw: unknown = JSON.parse(
-    readFileSync(new URL(RELEASE_CONFIG_FILE, import.meta.url), "utf8"),
-  );
-  if (
-    !isRecord(raw) ||
-    !isRecord(raw.analyzeCommits) ||
-    !isUnknownArray(raw.analyzeCommits.releaseRules)
-  ) {
+  const releaseRules: unknown = isRecord(releaseConfig.analyzeCommits)
+    ? releaseConfig.analyzeCommits.releaseRules
+    : undefined;
+  if (!isUnknownArray(releaseRules)) {
     throw new Error(
       `${RELEASE_CONFIG_FILE} must define analyzeCommits.releaseRules as an array`,
     );
   }
-  const types = raw.analyzeCommits.releaseRules
+  const types = releaseRules
     .filter(isTypedReleaseRule)
     .map((rule) => rule.type);
   if (types.length === 0) {

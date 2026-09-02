@@ -30,7 +30,7 @@
     "test:corpus": "turbo run _test:corpus",
     "_lint": "eslint . --cache --max-warnings 0",
     "_typecheck": "tsc -p tsconfig.json",
-    "release": "semantic-release-workspace release --config release-workspace.config.json",
+    "release": "semantic-release-workspace release --config release-workspace.config.ts",
     "prepare": "husky"
   },
   "devDependencies": {
