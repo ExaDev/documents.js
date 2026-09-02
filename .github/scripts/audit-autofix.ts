@@ -168,6 +168,14 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+// Whether pnpm-workspace.yaml or the lockfile actually differ from HEAD, checked directly rather than inferred from `fixed`/`prunedKeys` being non-empty. Those two lists say an advisory currently has a working override in the file this run produced -- true on every run for as long as the vulnerability exists, including a rerun against a workspace where a prior run already committed that exact override and this run's writes reproduced it byte-for-byte. Only a real git diff distinguishes "this run changed something" from "this run re-verified something already fixed," and only the former is a reason to open a PR.
+function hasUncommittedChanges(): boolean {
+  return (
+    spawnSync("git", ["diff", "--quiet", "--", WORKSPACE_FILE, LOCKFILE])
+      .status !== 0
+  );
+}
+
 // pnpm's own exit code from `update` is not a reliable signal that an override actually took effect — confirmed empirically: an unsatisfiable override (no published version clears it) still exits 0, silently leaving the package at whatever it could otherwise resolve. The only trustworthy signal is re-auditing and checking whether each candidate's own specific advisories are gone. A non-zero exit from `update` itself does mean something more fundamental broke (e.g. an unresolvable peer conflict) and is reported as `conflicted` so the caller can isolate which candidate is responsible.
 //
 // `-r`, unlike the single-importer form this was ported from: `overrides` in pnpm-workspace.yaml is a workspace-wide setting, but a non-recursive `pnpm update` re-resolves the root importer's dependencies only, leaving every one of this workspace's package importers on the resolutions already in the lockfile. Since almost everything an advisory names here is transitive to a package rather than to the root, the update would report success while the vulnerable entries the audit found stayed exactly where they were -- and the re-audit below would then correctly refuse to call the candidate fixed. Recursive is the form that matches where the overrides apply.
@@ -482,8 +490,7 @@ function main(): void {
       appendFileSync("/tmp/audit-fix-commit-body.txt", `\n${pruneLines}`);
     }
   }
-  const fixedFlag =
-    fixedAdvisories.length > 0 || prunedKeys.length > 0 ? "true" : "false";
+  const fixedFlag = hasUncommittedChanges() ? "true" : "false";
   setOutput("fixed", fixedFlag);
   // The CI job invokes this through a composite action, which declares no outputs of its own and so cannot carry a step's GITHUB_OUTPUT up to the job; the file is the channel the job re-emits from.
   //
