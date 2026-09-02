@@ -104,7 +104,7 @@
     "document-schema.js": "^5.3.0",
     "fflate": "^0.8.3",
     "markdown-codec": "^6.1.2",
-    "odf.js": "^6.1.1",
+    "odf.js": "^6.1.2",
     "ooxml.js": "^6.2.0",
     "pdf-codec": "^3.5.2",
     "temml": "0.13.4",
