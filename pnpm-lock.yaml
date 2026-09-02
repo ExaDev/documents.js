@@ -278,12 +278,18 @@ importers:
       '@types/node':
         specifier: ^26.1.2
         version: 26.2.0
+      documents.js:
+        specifier: ^6.1.2
+        version: link:../documents.js
       eslint:
         specifier: ^10.8.0
         version: 10.8.1(jiti@2.7.0)
       husky:
         specifier: ^9.1.7
         version: 9.1.7
+      markdown-codec:
+        specifier: ^6.1.0
+        version: link:../markdown-codec
       publint:
         specifier: ^0.3.21
         version: 0.3.24
