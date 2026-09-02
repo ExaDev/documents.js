@@ -1,0 +1,6 @@
+{
+  // A no-op Worker whose only purpose is to host epub-codec's source as the module graph the workers test suite (test/workers/**) imports against under the real workerd runtime -- there is no fetch handler to exercise, only the library's own OCF/OPF/XHTML/nav read-and-write code running inside a Cloudflare Workers isolate to prove it carries zero Node-only API usage.
+  "name": "epub-codec-workers-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-09-23",
+}
