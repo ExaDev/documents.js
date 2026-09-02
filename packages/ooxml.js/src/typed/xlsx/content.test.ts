@@ -144,6 +144,15 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
       });
     });
 
+    it("carries each cell's own raw numFmt code verbatim alongside its classified kind", () => {
+      expect(cellAt(3).numberFormatCode).toBe("[$-809]yyyy\\-mm\\-dd");
+      expect(cellAt(4).numberFormatCode).toBe("[$-809]hh:mm:ss");
+      expect(cellAt(5).numberFormatCode).toBe("[$-809]0.00%");
+      expect(cellAt(6).numberFormatCode).toBe("[$GBP-809]#,##0.00");
+      // This fixture's own Amount cell resolves through a redefined numFmtId 164 whose own code IS the literal string "General" (some producers write it out explicitly rather than relying on the built-in default) -- carried verbatim like any other resolved code, not specially suppressed.
+      expect(cellAt(1).numberFormatCode).toBe("General");
+    });
+
     it("leaves displayText as the plain typed-value spelling -- this reader classifies a number format, it does not render through one", () => {
       expect(cellAt(3).displayText).toBe("2026-07-31");
       expect(cellAt(4).displayText).toBe("14:30:00");

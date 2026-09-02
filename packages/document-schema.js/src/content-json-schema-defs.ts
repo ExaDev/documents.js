@@ -528,6 +528,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       value: { $ref: "#/$defs/ContentCellValue" },
       formula: { type: "string" },
       displayText: { type: "string" },
+      numberFormatCode: { type: "string" },
       runs: { type: "array", items: { $ref: "#/$defs/ContentRun" } },
       colSpan: {
         type: "integer",
