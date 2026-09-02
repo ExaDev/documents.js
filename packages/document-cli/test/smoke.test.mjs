@@ -43,8 +43,8 @@ describe('dist/cli.js --help', () => {
     const { code, stdout } = await spawnCli(['--help']);
     expect(code).toBe(EXIT_SUCCESS);
     const text = stdout.toString('utf8');
-    // markdown-to-pdf is not registered by any code in this package -- it exists only because documents.js's own createLocalDocumentConverter().conversions now includes a markdown edge, and registerConversionCommands (src/commands/convert.ts) loops over that array unmodified. Its presence here is the end-to-end proof that registering a new format entirely inside documents.js is enough.
-    for (const name of ['docx-to-pdf', 'markdown-to-pdf', 'convert', 'formats', 'odm-to-pdf', 'odb-tables', 'odb-forms', 'odb-reports', 'pdf-inspect', 'outline', 'tui']) {
+    // markdown-to-pdf and docx-to-epub are not registered by any code in this package -- they exist only because documents.js's own createLocalDocumentConverter().conversions now includes those edges, and registerConversionCommands (src/commands/convert.ts) loops over that array unmodified. Their presence here is the end-to-end proof that registering a new format entirely inside documents.js is enough (markdown-to-pdf for the original composition engine, docx-to-epub for ExaDev/documents.js#802's epub wiring).
+    for (const name of ['docx-to-pdf', 'markdown-to-pdf', 'docx-to-epub', 'convert', 'formats', 'odm-to-pdf', 'odb-tables', 'odb-forms', 'odb-reports', 'pdf-inspect', 'outline', 'tui']) {
       expect(text).toContain(name);
     }
   });
@@ -180,6 +180,39 @@ describe('dist/cli.js docx-to-markdown: real file round trip', () => {
       // Markdown is the one directly human-readable target format in this whole family -- unlike a PDF or an OOXML/ODF zip, the output can be asserted on as plain text, so this is the one round-trip test in this file that checks the actual converted CONTENT rather than only a byte-signature/length check.
       const outputText = await readFile(outputPath, 'utf8');
       expect(outputText).toContain('DocxToMarkdownSmokeMarker');
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('dist/cli.js docx-to-epub / epub-to-docx: real file round trip', () => {
+  it('converts a genuine docx fixture to epub (a real zip) and back, carrying the paragraph text through', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
+    try {
+      const docxPath = join(tmpDir, 'fixture.docx');
+      const epubPath = join(tmpDir, 'fixture.epub');
+      const roundTrippedDocxPath = join(tmpDir, 'fixture.roundtrip.docx');
+      const markdownPath = join(tmpDir, 'fixture.roundtrip.md');
+      const editor = createDocx();
+      editor.body.appendParagraph().appendRun({ text: 'DocxToEpubSmokeMarker' });
+      await writeFile(docxPath, editor.toBytes());
+
+      const toEpub = await spawnCli(['docx-to-epub', docxPath, epubPath]);
+      expect(toEpub.code).toBe(EXIT_SUCCESS);
+      const epubBytes = await readFile(epubPath);
+      // epub is a real OCF zip package (PK\x03\x04 local-file-header signature), the same byte-signature check every other package-format smoke assertion in this file uses.
+      expect(epubBytes[0]).toBe(0x50);
+      expect(epubBytes[1]).toBe(0x4b);
+
+      const toDocx = await spawnCli(['epub-to-docx', epubPath, roundTrippedDocxPath]);
+      expect(toDocx.code).toBe(EXIT_SUCCESS);
+
+      // docx isn't directly human-readable, so the round-tripped docx is converted to markdown (already proven above) purely as this test's own content-assertion vehicle.
+      const toMarkdown = await spawnCli(['docx-to-markdown', roundTrippedDocxPath, markdownPath]);
+      expect(toMarkdown.code).toBe(EXIT_SUCCESS);
+      const outputText = await readFile(markdownPath, 'utf8');
+      expect(outputText).toContain('DocxToEpubSmokeMarker');
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
     }

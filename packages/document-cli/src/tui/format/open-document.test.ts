@@ -1,7 +1,12 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createOds, odsToXlsx, openMarkdown } from "documents.js";
+import {
+  createOds,
+  odsToXlsx,
+  openMarkdown,
+  writeEpubContent,
+} from "documents.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appReducer, createInitialState } from "../state/reducer.js";
 import type { AppState, Diagnostic } from "../state/types.js";
@@ -104,6 +109,55 @@ describe("openDocumentAtPath for .csv and .svg", () => {
     const svgDoc = await openDocumentAtPath(svgPath);
     await expect(
       saveDocumentTo(svgDoc, join(workspace, "copy.svg")),
+    ).rejects.toThrow(/read-only/);
+  });
+});
+
+describe("openDocumentAtPath for .epub", () => {
+  // Real epub bytes with no EpubEditor to build one directly (documents.js has no epub live-view editor at all -- see EpubOpenDocument's own doc comment): writeEpubContent is documents.js's own re-export of epub-codec's writer, reused here purely as a source of genuine epub bytes, the same trick xlsxTestBytes above plays for xlsx.
+  function epubTestBytes(): Uint8Array<ArrayBuffer> {
+    return writeEpubContent({
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "Hello from epub" }],
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  it("opens read-only as a converted PDF preview instead of throwing, exactly like an xlsx", async () => {
+    const bytes = epubTestBytes();
+    const path = join(workspace, "book.epub");
+    await writeFile(path, bytes);
+
+    const doc = await openDocumentAtPath(path);
+    if (doc.format !== "epub") {
+      throw new Error(`expected an open epub document, got ${doc.format}`);
+    }
+    expect(doc.path).toBe(path);
+    // convertDocument("epub", "pdf", ...) bridges through docx then lays it out -- the same LayoutDocument shape a real .pdf opens as, which is what lets the pdf page-list/page-items/item-detail screens browse it with no epub-specific code (see pdf/shared.ts's own broadened requirePdfDocument).
+    expect(doc.layout.pages.length).toBeGreaterThan(0);
+    // The original bytes are kept alongside the preview so a real export can re-run the epub -> pdf bridge later with the caller's own fonts/diagnostics (see export-pdf.ts) rather than reusing this fixed preview conversion.
+    expect(doc.bytes).toStrictEqual(bytes);
+  });
+
+  it("cannot be written back to disk -- it is read-only, the same group as .xlsx/.csv/.svg", async () => {
+    const bytes = epubTestBytes();
+    const path = join(workspace, "book.epub");
+    await writeFile(path, bytes);
+    const doc = await openDocumentAtPath(path);
+
+    await expect(
+      saveDocumentTo(doc, join(workspace, "copy.epub")),
     ).rejects.toThrow(/read-only/);
   });
 });

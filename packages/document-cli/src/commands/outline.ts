@@ -24,13 +24,14 @@ import { createFilesystemMarkdownImageResolver } from "../runtime/markdown-image
 import { addQuietOption, addTimeoutOption, addVerboseOption } from "./options";
 import { KNOWN_DOCUMENT_FORMATS, formatError } from "./shared";
 
-// The conversion this command runs exists only for ConversionResult.package -- its output bytes are discarded, since the outline projects over the tree-form DocumentTree, not over any rendered target. A PDF-bypassing bridge is the cheapest conversion that still populates a package (no layout engine runs), so each of the ten content formats bridges to a sibling it shares a registry entry with; the two formats outside that set each take the one conversion they actually have -- pdf reconstructs through pdf-to-docx (a PDF carries no content tree of its own to read), and odf renders through odf-to-pdf (its only conversion; the outline reads the formula package that conversion builds, not the rendered pages). The target is otherwise incidental: the package a bridge leaves behind is built from the source document's own content, so the outline it feeds is the source document's outline.
+// The conversion this command runs exists only for ConversionResult.package -- its output bytes are discarded, since the outline projects over the tree-form DocumentTree, not over any rendered target. A PDF-bypassing bridge is the cheapest conversion that still populates a package (no layout engine runs), so each of the eleven content formats bridges to a sibling it shares a registry entry with -- epub (ExaDev/documents.js#802) bridges to docx, the same wordprocessing-variant sibling markdown already bridges to; the two formats outside that set each take the one conversion they actually have -- pdf reconstructs through pdf-to-docx (a PDF carries no content tree of its own to read), and odf renders through odf-to-pdf (its only conversion; the outline reads the formula package that conversion builds, not the rendered pages). The target is otherwise incidental: the package a bridge leaves behind is built from the source document's own content, so the outline it feeds is the source document's outline.
 const OUTLINE_CONVERSION_TARGET: Readonly<
   Record<DocumentFormat, DocumentFormat>
 > = {
   docx: "odt",
   odt: "docx",
   markdown: "docx",
+  epub: "docx",
   pptx: "odp",
   odp: "pptx",
   xlsx: "ods",

@@ -25,6 +25,7 @@ const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   svg: "svg",
   markdown: "markdown",
   md: "markdown",
+  epub: "epub",
   pdf: "pdf",
 };
 
@@ -40,6 +41,7 @@ const FORMAT_TO_EXTENSION: Readonly<Record<DocumentFormat, string>> = {
   csv: "csv",
   svg: "svg",
   markdown: "md",
+  epub: "epub",
   pdf: "pdf",
 };
 

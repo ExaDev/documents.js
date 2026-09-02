@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import {
+  convertDocument,
   createDocx,
   createOdg,
   createOdp,
@@ -106,6 +107,14 @@ export async function openDocumentAtPath(
       return { format, layout: readPdf(csvToPdf(bytes)), bytes, path };
     case "svg":
       return { format, layout: readPdf(svgToPdf(bytes)), bytes, path };
+    // documents.js has no epub live-view editor at all -- epub-codec exposes only a one-shot readEpubContent/writeEpubContent pair, never a mutable object the way DocxEditor/OdtEditor are -- so a .epub opens read-only the same way xlsx/csv/svg do: convertDocument's own epub -> pdf same-variant bridge (through docx, ExaDev/documents.js#802) once at open time, browsed through the shared pdf screen family.
+    case "epub":
+      return {
+        format,
+        layout: readPdf(convertDocument("epub", "pdf", bytes)),
+        bytes,
+        path,
+      };
     case "odf":
       throw new Error(
         "A standalone .odf formula document has no editor; convert it to PDF (odfToPdf) instead",
@@ -147,7 +156,8 @@ export async function saveDocumentTo(
     openDocument.format === "odb" ||
     openDocument.format === "xlsx" ||
     openDocument.format === "csv" ||
-    openDocument.format === "svg"
+    openDocument.format === "svg" ||
+    openDocument.format === "epub"
   ) {
     throw new Error(
       `A ${openDocument.format} document is opened read-only and cannot be written back`,

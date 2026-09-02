@@ -176,6 +176,14 @@ export interface SvgOpenDocument {
   readonly path: string;
 }
 
+// epub is the same read-only-preview story as xlsx/csv/svg one variant over: documents.js has no epub live-view editor at all (epub-codec exposes only a one-shot readEpubContent/writeEpubContent bytes<->ContentDocument pair, never a mutable XmlElement-backed object the way DocxEditor/OdtEditor are), but epub is fully wired into the composition engine (ExaDev/documents.js#802), so a .epub opens through convertDocument("epub", "pdf", bytes) once at open time and browses the result through the identical pdf page-list family every other read-only preview format uses.
+export interface EpubOpenDocument {
+  readonly format: "epub";
+  readonly layout: LayoutDocument;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly path: string;
+}
+
 // The seven formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx`/`csv`/`svg` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` -- see PdfOpenDocument's own doc comment. `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one -- editing and saving a PDF in place needs no conversion step at all.
 export type EditableOpenDocument =
   | DocxOpenDocument
@@ -194,7 +202,8 @@ export type OpenDocument =
   | OdbOpenDocument
   | XlsxOpenDocument
   | CsvOpenDocument
-  | SvgOpenDocument;
+  | SvgOpenDocument
+  | EpubOpenDocument;
 
 export type EditableFormat = EditableOpenDocument["format"];
 
@@ -380,6 +389,7 @@ export function rootScreenForFormat(format: OpenDocumentFormat): Screen {
     case "xlsx":
     case "csv":
     case "svg":
+    case "epub":
       return { kind: "pdfPageList" };
   }
 }

@@ -4,6 +4,7 @@ import {
   type DocumentFormat,
   createLocalDocumentConverter,
   documentTreeWithSchema,
+  DOCUMENT_FORMATS,
 } from "documents.js";
 import { inferFormatFromExtension, isDocumentFormat } from "../format";
 import { createRuntimeSignal } from "../runtime/abort";
@@ -24,9 +25,8 @@ import {
   writeOutput,
 } from "../runtime/io";
 
-// Every DocumentFormat this CLI's commands know how to name in a usage error -- shared between the generic `convert` command (commands/convert.ts) and `from-package` (commands/from-package.ts), the two commands whose target format is not already fixed by their own name.
-export const KNOWN_DOCUMENT_FORMATS =
-  "docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, pdf";
+// Every DocumentFormat this CLI's commands know how to name in a usage error -- shared between the generic `convert` command (commands/convert.ts) and `from-package` (commands/from-package.ts), the two commands whose target format is not already fixed by their own name. Derived from documents.js's own DOCUMENT_FORMATS rather than a hand-copied literal list, so a new format joining that schema (epub, ExaDev/documents.js#802) shows up here with no change needed in this file.
+export const KNOWN_DOCUMENT_FORMATS = DOCUMENT_FORMATS.join(", ");
 
 // Resolves a target DocumentFormat the same way for both callers above: an explicit --to always wins (it is the caller stating intent unambiguously), falling back to the output path's own extension, and finally failing with a usage error naming exactly what is missing.
 export function resolveTargetFormat(

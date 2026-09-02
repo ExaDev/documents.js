@@ -19,6 +19,7 @@ describe("isDocumentFormat", () => {
       "odf",
       "csv",
       "markdown",
+      "epub",
       "pdf",
     ]) {
       expect(isDocumentFormat(format)).toBe(true);
@@ -92,6 +93,10 @@ describe("inferFormatFromExtension", () => {
     expect(inferFormatFromExtension("table.csv")).toBe("csv");
     expect(inferFormatFromExtension("drawing.svg")).toBe("svg");
   });
+
+  it("infers epub from its own extension", () => {
+    expect(inferFormatFromExtension("book.epub")).toBe("epub");
+  });
 });
 
 describe("formatToExtension", () => {
@@ -112,6 +117,7 @@ describe("formatToExtension", () => {
       ["svg", "svg"],
       ["csv", "csv"],
       ["markdown", "md"],
+      ["epub", "epub"],
       ["pdf", "pdf"],
     ];
     for (const [format, extension] of cases) {

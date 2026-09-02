@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import {
+  convertDocument,
   csvToPdf,
   docxToPdf,
   encodeMarkdownText,
@@ -75,7 +76,7 @@ export async function exportToPdf(
     await writeFile(destinationPath, pdfBytes);
     return;
   }
-  // xlsx has no editor to read current bytes from (see state/types.ts's own XlsxOpenDocument doc comment) -- the original bytes captured at open time are re-converted here, with this call's own real fonts/diagnostics options, rather than reusing the fixed preview conversion `openDocumentAtPath` computed to build the read-only viewer. csv and svg are the identical no-editor story (their own OpenDocument doc comments), each re-converted through its own to-Pdf function the same way.
+  // xlsx has no editor to read current bytes from (see state/types.ts's own XlsxOpenDocument doc comment) -- the original bytes captured at open time are re-converted here, with this call's own real fonts/diagnostics options, rather than reusing the fixed preview conversion `openDocumentAtPath` computed to build the read-only viewer. csv, svg, and epub are the identical no-editor story (their own OpenDocument doc comments), each re-converted the same way -- epub has no named epubToPdf ergonomic function (it has no layout engine of its own, ExaDev/documents.js#802), so it re-runs through convertDocument's own epub -> pdf same-variant bridge instead.
   if (openDocument.format === "xlsx") {
     const pdfBytes = xlsxToPdf(openDocument.bytes, pdfOptions);
     await writeFile(destinationPath, pdfBytes);
@@ -88,6 +89,16 @@ export async function exportToPdf(
   }
   if (openDocument.format === "svg") {
     const pdfBytes = svgToPdf(openDocument.bytes, pdfOptions);
+    await writeFile(destinationPath, pdfBytes);
+    return;
+  }
+  if (openDocument.format === "epub") {
+    const pdfBytes = convertDocument(
+      "epub",
+      "pdf",
+      openDocument.bytes,
+      pdfOptions,
+    );
     await writeFile(destinationPath, pdfBytes);
     return;
   }
