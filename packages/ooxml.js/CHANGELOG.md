@@ -1,3 +1,27 @@
+## [6.2.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.1.0...ooxml.js%406.2.0) (2026-09-02)
+
+### Features
+
+* **ooxml.js:** read and write xlsx dataValidation/conditionalFormatting rules ([82e92b7](https://github.com/ExaDev/documents.js/commit/82e92b71d6ec056b6833d99464f50e35f16f2f0a))
+
+### Documentation
+
+* **ooxml.js:** describe real dataValidation/conditionalFormatting support ([d60d354](https://github.com/ExaDev/documents.js/commit/d60d354b7c550538ccabf506524da059da641c71))
+
+### Tests
+
+* **ooxml.js:** add real LibreOffice-produced xlsx fixtures for validation/conditional-format rules ([0d74408](https://github.com/ExaDev/documents.js/commit/0d74408a6a1254af0be39a913cc14a186c95b25d))
+* **ooxml.js:** cover xlsx dataValidation/conditionalFormatting rules ([75aaee5](https://github.com/ExaDev/documents.js/commit/75aaee55ef5d9851a75e86a877e653561269a1fb))
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.2.0 in ooxml.js [skip ci] ([5d7f11f](https://github.com/ExaDev/documents.js/commit/5d7f11f3f7328822480e65bf9b98845d89bf3e4d))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.2.0
+
 ## [6.1.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.0.0...ooxml.js%406.1.0) (2026-08-24)
 
 ### Features
