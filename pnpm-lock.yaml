@@ -501,7 +501,7 @@ importers:
         specifier: ^5.3.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^6.1.4
+        specifier: ^6.2.0
         version: link:../documents.js
       markdown-codec:
         specifier: ^6.1.2
