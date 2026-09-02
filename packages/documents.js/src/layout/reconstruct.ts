@@ -52,7 +52,7 @@ import { throwIfAborted } from "../ports/abort";
 import { stampFrame } from "./shared";
 import type { CellTypeInference, CellTypeInferenceSink } from "./cell-typing";
 import { inferCellValue } from "./cell-typing";
-import type { GridLattice } from "./lattice";
+import type { GridLattice, TableRegion } from "./lattice";
 import { detectGridLattice, findColumnIndex, findRowIndex } from "./lattice";
 
 export interface ReconstructOptions {
@@ -1817,6 +1817,26 @@ function cellBlocksFromItems(
   );
 }
 
+// Every atomic [row, column] cell the lattice's own boundaries admit, mapped to the TableRegion that owns it -- several atomic cells share one region wherever no drawn stroke separated them (a colSpan/rowSpan merge, ExaDev/documents.js#810).
+function indexRegions(
+  lattice: GridLattice,
+  rowCount: number,
+  columnCount: number,
+): TableRegion[][] {
+  const regionAt: TableRegion[][] = Array.from(
+    { length: rowCount },
+    () => new Array<TableRegion>(columnCount),
+  );
+  for (const region of lattice.regions) {
+    for (let i = region.rowStart; i < region.rowEnd; i++) {
+      for (let j = region.colStart; j < region.colEnd; j++) {
+        regionAt[i]![j] = region;
+      }
+    }
+  }
+  return regionAt;
+}
+
 function recoverTable(
   page: LayoutPage,
   pageIndex: number,
@@ -1827,7 +1847,8 @@ function recoverTable(
   }
   const rowCount = lattice.rowBoundariesDescPt.length - 1;
   const columnCount = lattice.columnBoundariesAscPt.length - 1;
-  const groups = new Map<string, LayoutText[]>();
+  const regionAt = indexRegions(lattice, rowCount, columnCount);
+  const textByRegion = new Map<TableRegion, LayoutText[]>();
   const consumedText = new Set<LayoutText>();
   for (const item of page.items) {
     if (item.kind !== "text") {
@@ -1838,7 +1859,13 @@ function recoverTable(
     if (row === undefined || column === undefined) {
       continue; // outside the lattice entirely -- a caption, a heading above the table
     }
-    addToGroup(groups, row, column, item);
+    const region = regionAt[row]![column]!;
+    const existing = textByRegion.get(region);
+    if (existing === undefined) {
+      textByRegion.set(region, [item]);
+    } else {
+      existing.push(item);
+    }
     consumedText.add(item);
   }
   if (consumedText.size === 0) {
@@ -1851,21 +1878,29 @@ function recoverTable(
       lattice.columnBoundariesAscPt[j + 1]! - lattice.columnBoundariesAscPt[j]!,
     );
   }
+  // Walks each atomic row left to right, jumping straight to a region's own colEnd once it is emitted -- exactly the positional bookkeeping ooxml.js's own docx/pptx table writers already do when they encounter a ContentTableCell with a colSpan (buildTable, docx/write.ts): one array entry consumes that many grid columns. A row strictly inside an earlier region's own rowSpan gets an empty placeholder entry at that same position instead of a second real cell, matching how a vMerge-continuation w:tc (or an hMerge/vMerge pptx a:tc) reads back on the way in (ooxml.js's own docx/pptx readTable).
   const rows: ContentTableRow[] = [];
   for (let i = 0; i < rowCount; i++) {
     const cells: ContentTableCell[] = [];
-    for (let j = 0; j < columnCount; j++) {
-      // A cell with no text recovered inside it is emitted as a genuinely empty cell rather than skipped: a ContentTableRow's cells are positional, so dropping one would shift every cell after it into the wrong column. Every cell carries its own lattice-measured frame -- the exact box the drawn gridline lattice gave it, in PDF space.
+    let j = 0;
+    while (j < columnCount) {
+      const region = regionAt[i]![j]!;
+      if (region.rowStart !== i) {
+        cells.push({ blocks: [] });
+        j = region.colEnd;
+        continue;
+      }
+      const colSpan = region.colEnd - region.colStart;
+      const rowSpan = region.rowEnd - region.rowStart;
       const cell: ContentTableCell = {
-        blocks: cellBlocksFromItems(
-          groups.get(groupKey(i, j)) ?? [],
-          pageIndex,
-        ),
+        blocks: cellBlocksFromItems(textByRegion.get(region) ?? [], pageIndex),
+        colSpan: colSpan > 1 ? colSpan : undefined,
+        rowSpan: rowSpan > 1 ? rowSpan : undefined,
       };
-      const cellLeftXPt = lattice.columnBoundariesAscPt[j]!;
-      const cellRightXPt = lattice.columnBoundariesAscPt[j + 1]!;
-      const cellTopYPt = lattice.rowBoundariesDescPt[i]!;
-      const cellBottomYPt = lattice.rowBoundariesDescPt[i + 1]!;
+      const cellLeftXPt = lattice.columnBoundariesAscPt[region.colStart]!;
+      const cellRightXPt = lattice.columnBoundariesAscPt[region.colEnd]!;
+      const cellTopYPt = lattice.rowBoundariesDescPt[region.rowStart]!;
+      const cellBottomYPt = lattice.rowBoundariesDescPt[region.rowEnd]!;
       stampFrame(cell, pageIndex, {
         xPt: cellLeftXPt,
         yPt: cellBottomYPt,
@@ -1873,6 +1908,7 @@ function recoverTable(
         heightPt: cellTopYPt - cellBottomYPt,
       });
       cells.push(cell);
+      j = region.colEnd;
     }
     rows.push({
       cells,
