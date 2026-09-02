@@ -7,6 +7,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      backfill_tags:
+        description: "Release tags (name@version) to backfill the SBOM/attestation, GitHub Packages mirror, and npm alias republish steps for, without re-running the release itself -- for a run whose post-release jobs never ran (see ExaDev/documents.js#835). Comma- or newline-separated. Leave empty for a normal manual CI run."
+        required: false
+        type: string
 
 # A new push to a pull request supersedes that PR's in-flight run. A push to main never cancels: the release job publishes to npm and pushes tags mid-run, and the audit job polls a dispatched run to decide whether to merge its own fix -- cancelling either partway leaves real work half-done. The release and Pages jobs keep their own narrower groups below; this one only stops a PR racing itself.
 concurrency:
@@ -312,13 +317,93 @@ jobs:
             echo "attest-matrix=$ATTEST"
           } >> "$GITHUB_OUTPUT"
 
-  # The three jobs below restore what the monorepo migration lost (ExaDev/documents.js#732): each standalone repository's own pipeline republished its package under alternate npm names and a @exadev/<name> scope on GitHub Packages, and signed an SPDX SBOM plus build-provenance attestation against the packed release tarball. They run after the release job, keyed off the tags it created, and nothing depends on them -- a failure here can never block or fail the release itself or the Pages deploy.
+  # Backfills the three post-release jobs below for releases whose own run never reached the "Collect the packages this run released" step -- e.g. a release job cancelled by its own timeout after the per-package publish work had already completed (ExaDev/documents.js#835). A plain re-run can't recover this: that step diffs tags against a before/after snapshot taken within the same job run, so a later run sees every already-existing tag as pre-existing, not new. This job instead builds the identical matrices directly from an explicit tag list, without re-running the release itself.
+  collect-backfill-matrix:
+    name: Collect backfill matrix
+    if: github.event_name == 'workflow_dispatch' && inputs.backfill_tags != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      github-packages-matrix: ${{ steps.collect.outputs.github-packages-matrix }}
+      npm-alias-matrix: ${{ steps.collect.outputs.npm-alias-matrix }}
+      attest-matrix: ${{ steps.collect.outputs.attest-matrix }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Build the post-release matrices from the given tags
+        id: collect
+        # Mirrors the release job's own "Collect the packages this run released" step, but sources name/version from each tag directly (tags are always `name@version`) instead of the current checkout's package.json -- the checkout here is just main at whatever commit is current, not necessarily the release commit each historical tag was cut from.
+        env:
+          # Passed through the environment rather than interpolated directly into the script below, so a tag list containing shell metacharacters is just data, never executed.
+          BACKFILL_TAGS: ${{ inputs.backfill_tags }}
+        run: |
+          GITHUB_PACKAGES='[]'
+          NPM_ALIASES='[]'
+          ATTEST='[]'
+          # Process substitution, not a pipe: a pipe would run the loop in a subshell, where GITHUB_PACKAGES/NPM_ALIASES/ATTEST's accumulated values never escape back to the `>> "$GITHUB_OUTPUT"` below.
+          while IFS= read -r RAW; do
+            TAG=$(echo "$RAW" | xargs)
+            [ -n "$TAG" ] || continue
+            if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+              echo "::error::tag $TAG does not exist in this repository; aborting backfill"
+              exit 1
+            fi
+            NAME=${TAG%@*}
+            VERSION=${TAG##*@}
+            PKG=packages/$NAME
+            if ! git cat-file -e "$TAG:$PKG/package.json" 2>/dev/null; then
+              echo "::warning::tag $TAG has no package at $PKG; skipping every post-release step for it"
+              continue
+            fi
+            PRIVATE=$(git show "$TAG:$PKG/package.json" | jq -r '.private // false')
+            [ "$PRIVATE" = "true" ] && continue
+            ATTEST=$(echo "$ATTEST" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" \
+              '. + [{name: $name, version: $version, tag: $tag}]')
+            GHP_NAME=$(jq -r --arg name "$NAME" '.[$name].githubPackages // empty' .github/release-republish.json)
+            if [ -n "$GHP_NAME" ]; then
+              GITHUB_PACKAGES=$(echo "$GITHUB_PACKAGES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg scoped "@exadev/$GHP_NAME" \
+                '. + [{name: $name, version: $version, tag: $tag, scoped: $scoped}]')
+            fi
+            while read -r ALIAS; do
+              [ -n "$ALIAS" ] || continue
+              NPM_ALIASES=$(echo "$NPM_ALIASES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg alias "$ALIAS" \
+                '. + [{name: $name, version: $version, tag: $tag, alias: $alias}]')
+            done < <(jq -r --arg name "$NAME" '.[$name].aliases // [] | .[]' .github/release-republish.json)
+          done < <(printf '%s' "$BACKFILL_TAGS" | tr ',' '\n')
+          {
+            echo "github-packages-matrix=$GITHUB_PACKAGES"
+            echo "npm-alias-matrix=$NPM_ALIASES"
+            echo "attest-matrix=$ATTEST"
+          } >> "$GITHUB_OUTPUT"
+
+  # The three jobs below restore what the monorepo migration lost (ExaDev/documents.js#732): each standalone repository's own pipeline republished its package under alternate npm names and a @exadev/<name> scope on GitHub Packages, and signed an SPDX SBOM plus build-provenance attestation against the packed release tarball. They run after the release job (or, for a backfill, the collect-backfill-matrix job above) keyed off whichever of the two produced the matrices, and nothing depends on them -- a failure here can never block or fail the release itself or the Pages deploy.
+
+  resolve-post-release-matrices:
+    name: Resolve post-release matrices
+    needs: [release, collect-backfill-matrix]
+    # Exactly one of the two ever runs for a given trigger (release only on a push to main, collect-backfill-matrix only on a workflow_dispatch carrying backfill_tags), so this always waits on both (`always()`) and takes whichever produced output -- the other's outputs default to the empty string when its job is skipped.
+    if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      github-packages-matrix: ${{ steps.resolve.outputs.github-packages-matrix }}
+      npm-alias-matrix: ${{ steps.resolve.outputs.npm-alias-matrix }}
+      attest-matrix: ${{ steps.resolve.outputs.attest-matrix }}
+    steps:
+      - id: resolve
+        run: |
+          {
+            echo "github-packages-matrix=${{ needs.release.outputs.github-packages-matrix || needs.collect-backfill-matrix.outputs.github-packages-matrix }}"
+            echo "npm-alias-matrix=${{ needs.release.outputs.npm-alias-matrix || needs.collect-backfill-matrix.outputs.npm-alias-matrix }}"
+            echo "attest-matrix=${{ needs.release.outputs.attest-matrix || needs.collect-backfill-matrix.outputs.attest-matrix }}"
+          } >> "$GITHUB_OUTPUT"
 
   publish-github-packages:
     name: Mirror to GitHub Packages (${{ matrix.scoped }})
-    needs: release
-    # The matrix-emptiness half of this condition is load-bearing: `matrix: include: []` is not an empty matrix that skips the job, it is an invalid matrix, and the run concludes failed with no failed job to point at. Guarding here is what makes a main push that released nothing finish green.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.release.outputs.github-packages-matrix != '[]'
+    needs: resolve-post-release-matrices
+    # The matrix-emptiness half of this condition is load-bearing: `matrix: include: []` is not an empty matrix that skips the job, it is an invalid matrix, and the run concludes failed with no failed job to point at. Guarding here is what makes a main push that released nothing (or a non-backfill dispatch) finish green.
+    if: needs.resolve-post-release-matrices.outputs.github-packages-matrix != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -328,7 +413,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.release.outputs.github-packages-matrix) }}
+        include: ${{ fromJSON(needs.resolve-post-release-matrices.outputs.github-packages-matrix) }}
     env:
       NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -384,9 +469,9 @@ jobs:
 
   publish-npm-aliases:
     name: Publish npm alias (${{ matrix.alias }})
-    needs: release
+    needs: resolve-post-release-matrices
     # See the note on publish-github-packages: an empty include list is an invalid matrix, not a skip.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.release.outputs.npm-alias-matrix != '[]'
+    if: needs.resolve-post-release-matrices.outputs.npm-alias-matrix != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -395,7 +480,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.release.outputs.npm-alias-matrix) }}
+        include: ${{ fromJSON(needs.resolve-post-release-matrices.outputs.npm-alias-matrix) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -446,9 +531,9 @@ jobs:
 
   attest-release-artifacts:
     name: Attest SBOM and build provenance (${{ matrix.name }})
-    needs: release
+    needs: resolve-post-release-matrices
     # See the note on publish-github-packages: an empty include list is an invalid matrix, not a skip.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.release.outputs.attest-matrix != '[]'
+    if: needs.resolve-post-release-matrices.outputs.attest-matrix != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -458,7 +543,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.release.outputs.attest-matrix) }}
+        include: ${{ fromJSON(needs.resolve-post-release-matrices.outputs.attest-matrix) }}
     steps:
       - uses: actions/checkout@v7
         with:
