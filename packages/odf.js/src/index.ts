@@ -272,6 +272,29 @@ export {
 } from "./typed/shared/forms";
 export type { OdbFormDefinition, OdbFormControl } from "./typed/shared/forms";
 
+// --- OpenOffice.org 1.x / StarOffice 6-7, the pre-OASIS ancestor ODF 1.0 was based on. Read-only, and read through the ODF readers above rather than beside them: transformOoo1Package rewrites a .sxw/.sxc/.sxi/.sxd package into the ODF shape those readers already understand, so every construct they know how to read works on an OpenOffice.org 1.x document too. See src/ooo1/transform.ts for what actually differs between the two vocabularies. ---
+export {
+  OOO1_NAMESPACES,
+  OOO1_MEDIA_TYPES,
+  isOoo1Package,
+  ooo1MediaTypeForExtension,
+  odfMediaTypeForOoo1MediaType,
+} from "./ooo1/ns";
+export type { Ooo1NamespacePrefix, Ooo1Extension } from "./ooo1/ns";
+
+export { transformOoo1Package } from "./ooo1/transform";
+
+export {
+  readSxw,
+  readSxwContent,
+  readSxc,
+  readSxcContent,
+  readSxi,
+  readSxiContent,
+  readSxd,
+  readSxdContent,
+} from "./ooo1/read";
+
 export { readOdbReport } from "./typed/odb/report";
 export type {
   OdbReport,
