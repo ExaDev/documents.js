@@ -104,6 +104,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
           "odf",
           "markdown",
           "pdf",
+          "epub",
         ],
       },
       xml: { type: "string" }, // opaque text -- validation stops at "is a string"; everything about the content is the producer's to know
