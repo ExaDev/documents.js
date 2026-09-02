@@ -702,7 +702,7 @@ importers:
   packages/markdown-codec:
     dependencies:
       document-schema.js:
-        specifier: ^5.3.0
+        specifier: ^5.4.0
         version: link:../document-schema.js
       zod:
         specifier: ^4.4.3
