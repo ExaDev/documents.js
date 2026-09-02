@@ -1,3 +1,16 @@
+## [4.1.6](https://github.com/ExaDev/documents.js/compare/document-mcp%404.1.5...document-mcp%404.1.6) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump document-outline.js to ^3.2.1 in document-mcp [skip ci] ([2a04a7d](https://github.com/ExaDev/documents.js/commit/2a04a7de6c787f45ae110da6d361eca4f0d2e943))
+* **deps:** bump documents.js to ^6.2.1 in document-mcp [skip ci] ([619e394](https://github.com/ExaDev/documents.js/commit/619e394f9147bf2e59808a51f41d7b5048a6ff7e))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.2.1
+- Updated document-outline.js to ^3.2.1
+
 ## [4.1.5](https://github.com/ExaDev/documents.js/compare/document-mcp%404.1.4...document-mcp%404.1.5) (2026-09-02)
 
 ### Code Refactoring
