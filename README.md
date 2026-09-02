@@ -50,7 +50,7 @@ Each exposes the conversion engine through a different surface:
 
 | Package                                           | Surface                                                                                                                                                                                                                     |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`document-cli`](packages/document-cli/README.md) | CLI and interactive Ink TUI covering every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/markdown conversion, bridge, and editor as a scriptable command or a terminal app.                                                |
+| [`document-cli`](packages/document-cli/README.md) | CLI and interactive Ink TUI covering every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/csv/svg/markdown/epub conversion, bridge, and editor as a scriptable command or a terminal app.                                   |
 | [`document-mcp`](packages/document-mcp/README.md) | MCP server exposing the conversion, `.odb`, metadata, and font tooling as MCP tools.                                                                                                                                        |
 | [`documents`](packages/documents/README.md)       | Client-only, statically-built web UI for every conversion and editing tool in the ecosystem, also depending directly on `markdown-codec`. The one package here that is never published: it deploys to GitHub Pages instead. |
 
