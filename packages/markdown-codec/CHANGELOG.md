@@ -1,3 +1,14 @@
+## [6.1.1](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.1.0...markdown-codec%406.1.1) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.2.0 in markdown-codec [skip ci] ([a7df916](https://github.com/ExaDev/documents.js/commit/a7df916cb18ed97db693eec933ca5e4e5a268d0f))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.2.0
+
 ## [6.1.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.0.0...markdown-codec%406.1.0) (2026-08-24)
 
 ### Features
