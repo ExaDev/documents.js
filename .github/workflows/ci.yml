@@ -225,7 +225,9 @@ jobs:
       group: release-workspace
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # @semantic-release/github's success step queries GitHub's GraphQL search API to find every PR/issue
+    # linked to a released commit, then comments and labels each one -- one round of calls per package released in this run. A release cascade touching several packages at once (e.g. a backlog of merged PRs releasing together) can burn through GitHub's GraphQL rate limit, at which point Octokit's own retry logic waits out the reset window rather than failing -- correct behaviour, but confirmed to take over 20 minutes twice in a row (run 33664031010, both attempts cancelled at almost exactly 30:00, 19:25:34Z "Request quota exhausted for request POST /graphql" through 19:47:50Z's next successful call). 30 minutes has no headroom for that wait; 60 does.
+    timeout-minutes: 60
     permissions:
       contents: write # to push release and dependency-bump commits and tags, and create GitHub Releases
       issues: write # to comment on released issues
