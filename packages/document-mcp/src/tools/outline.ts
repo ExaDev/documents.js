@@ -20,6 +20,7 @@ import {
 const OUTLINE_PROBE_TARGETS: Record<DocumentFormat, DocumentFormat> = {
   csv: "ods",
   docx: "odt",
+  epub: "docx",
   odf: "pdf",
   odg: "pdf",
   odt: "docx",

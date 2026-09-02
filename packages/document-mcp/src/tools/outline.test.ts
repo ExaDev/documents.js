@@ -13,6 +13,7 @@ import {
   encodeMarkdownText,
   odgToSvg,
   odsToXlsx,
+  writeEpubContent,
 } from "documents.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createServer } from "../server";
@@ -229,12 +230,30 @@ function buildFormatFixtures(): Record<
     return odsToXlsx(editor.toBytes());
   })();
 
+  const epubBytes = writeEpubContent({
+    kind: "wordprocessing",
+    metadata: {},
+    sections: [
+      {
+        pageSize: { widthPt: 595, heightPt: 842 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        blocks: [
+          {
+            kind: "paragraph",
+            runs: [{ text: "A paragraph of ordinary body text." }],
+          },
+        ],
+      },
+    ],
+  });
+
   return {
     csv: {
       bytes: new TextEncoder().encode("Name,Age\nAlice,30\n"),
       kind: "spreadsheet",
     },
     docx: { bytes: docxBytes, kind: "wordprocessing" },
+    epub: { bytes: epubBytes, kind: "wordprocessing" },
     odf: { bytes: odfFormulaBytes(), kind: "formula" },
     odp: { bytes: odpBytes, kind: "presentation" },
     odt: { bytes: odtBytes, kind: "wordprocessing" },
