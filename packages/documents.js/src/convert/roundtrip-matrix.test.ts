@@ -15,6 +15,7 @@ import { readOdsContent } from "../odf/ods/read";
 import { encodeSvgText } from "../svg/text";
 import { SvgMultiPageNotSpecifiedError } from "../svg/write";
 import { FRACTION_FORMULA, odfFormulaBytes } from "../test-support/odf";
+import { minimalEpubBytes } from "../test-support/epub";
 import { minimalOdgBytes } from "../test-support/odg";
 import { richMarkdownText } from "../test-support/markdown";
 import { minimalOdpBytes } from "../test-support/odp";
@@ -574,6 +575,8 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
     case "pdf":
       // Generate a minimal PDF from a docx so the sweep has real PDF bytes for every pdf-sourced pair.
       return docxToPdf(minimalDocxBytes());
+    case "epub":
+      return minimalEpubBytes();
   }
 }
 
@@ -593,8 +596,9 @@ function isValidOutput(
     case "odt":
     case "odp":
     case "ods":
-    case "odg": {
-      // All package formats are ZIP containers (PK magic bytes).
+    case "odg":
+    case "epub": {
+      // All package formats are ZIP containers (PK magic bytes) -- epub-codec's own write half produces a real OCF zip, matching every other package format's own check.
       return bytes[0] === 0x50 && bytes[1] === 0x4b;
     }
     case "markdown":

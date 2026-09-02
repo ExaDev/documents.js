@@ -1,4 +1,5 @@
 import type { ContentDocument, ContentParagraph } from "document-schema.js";
+import { readEpubContent } from "epub-codec";
 import { decodePackage as decodeOoxmlPackage } from "ooxml.js";
 import { decodePackage as decodeOdfPackage } from "odf.js";
 import { encodeMarkdownText } from "../markdown/text";
@@ -227,5 +228,54 @@ describe("convertDocument: newly-exposed cross-variant pairs", () => {
     expect(
       wordprocessingRunText(readOdtContent(decodeOdfPackage(bytes))),
     ).toContain("Slide text");
+  });
+});
+
+// --- Tests for epub's own same-variant bridge to docx/odt/markdown (ExaDev/documents.js#802): the composition engine's one BytesFormatNode (src/convert/composition.ts), reached the identical way csv/svg's own plain-text FORMAT_NODES entries are -- via executeBridge, never a hand-written epubToDocx/docxToEpub function. ---
+
+describe("convertDocument: epub same-variant bridge (newly-registered format)", () => {
+  it("docx -> epub -> docx carries the paragraph text through a real cross-format round trip", () => {
+    const editor = createDocx();
+    editor.body
+      .appendParagraph({ styleId: "Heading1" })
+      .appendRun({ text: "Report Title" });
+    editor.body.appendParagraph().appendRun({ text: "Body text" });
+
+    const epubBytes = convertDocument("docx", "epub", editor.toBytes());
+    expect(isZip(epubBytes)).toBe(true);
+    const epubContent = readEpubContent(epubBytes);
+    expect(epubContent.kind).toBe("wordprocessing");
+    expect(wordprocessingRunText(epubContent)).toContain("Report Title");
+    expect(wordprocessingRunText(epubContent)).toContain("Body text");
+
+    const docxBytes = convertDocument("epub", "docx", epubBytes);
+    expect(isZip(docxBytes)).toBe(true);
+    const roundTripped = wordprocessingRunText(
+      readDocxContent(decodeOoxmlPackage(docxBytes)),
+    );
+    expect(roundTripped).toContain("Report Title");
+    expect(roundTripped).toContain("Body text");
+  });
+
+  it("markdown -> epub produces a real epub whose section carries the heading", () => {
+    const bytes = convertDocument(
+      "markdown",
+      "epub",
+      encodeMarkdownText(richMarkdownText()),
+    );
+    expect(isZip(bytes)).toBe(true);
+    const content = readEpubContent(bytes);
+    expect(content.kind).toBe("wordprocessing");
+    expect(wordprocessingRunText(content)).toContain("Report Title");
+  });
+
+  it("epub -> markdown carries the section text into the markdown", () => {
+    const editor = createDocx();
+    editor.body.appendParagraph().appendRun({ text: "Hello from epub" });
+    const epubBytes = convertDocument("docx", "epub", editor.toBytes());
+
+    const bytes = convertDocument("epub", "markdown", epubBytes);
+    expect(bytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder().decode(bytes)).toContain("Hello from epub");
   });
 });

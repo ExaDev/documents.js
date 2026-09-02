@@ -30,6 +30,7 @@ import {
   executeBridge,
   executeFromPdf,
   FORMAT_NODES,
+  isBytesFormatNode,
   isTextFormatNode,
   LAYOUT_CAPABLE,
   resolveCompositionPlan,
@@ -64,6 +65,12 @@ export function executeToPdf(
     );
   }
   const node = FORMAT_NODES[format];
+  // epub (the one BytesFormatNode) is never LAYOUT_CAPABLE, so the guard above already throws before this point for it -- this narrows the type for the isTextFormatNode/else branch below and documents the invariant rather than leaving a silent runtime-only guarantee.
+  if (isBytesFormatNode(node)) {
+    throw new Error(
+      `executeToPdf: '${format}' is a bytes-native format with no layout engine of its own`,
+    );
+  }
 
   let content: ContentDocument;
   let fonts: FontRegistry;

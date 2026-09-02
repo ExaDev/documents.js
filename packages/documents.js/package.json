@@ -102,6 +102,7 @@
   "dependencies": {
     "byte-codec": "^1.2.0",
     "document-schema.js": "^5.1.0",
+    "epub-codec": "^0.1.0",
     "fflate": "^0.8.3",
     "markdown-codec": "^6.1.0",
     "odf.js": "^6.1.0",

@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/documents.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/documents.js) [![npm version](https://img.shields.io/npm/v/documents.js)](https://www.npmjs.com/package/documents.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> Converts between any two compatible document formats through a shared content/layout pivot. docx, pptx, odt, odp, ods, odg, xlsx, csv (TSV is the same format with a tab delimiter), svg, and markdown all read into and build from the same shared `ContentDocument` model (reported to callers as the tree-form `DocumentTree`), with PDF — reached through pdf-codec's own `LayoutDocument` view — as the one format every variant can reach. A composition engine (`convertDocument`) routes 111 (source, target) pairs across the ten content formats and PDF, including twenty PDF-pivot round trips (the eight layout-engine formats, plus xlsx and csv composing through ods), twenty-four cross-format bridge functions (same-variant direct copies, cross-variant semantic transforms, and PDF-composed), plus special-case conversions for `.odm` master documents, `.odb` database front-ends (HSQLDB and Firebird, four storage tiers), standalone `.odf` formula documents, and a bounded SQL/rpt-formula engine for `.odb` reports. Also includes: read-and-write live-view editors for all six editable formats, docx comment/footnote/header-footer exposure via `readDocxExtras`, real font resolution (source-embedded faces ahead of caller-supplied, vendored substitutes, and the standard 14), a hand-written MathML typesetting engine with embedded-font PDF rendering and a matching MathML ⇄ OMML translator, LaTeX lowering into the schema's two-layer semantic math core (pinned temml parser, symbol tables from prose, a coherence lint), and a fully hand-written PDF codec. Built on [ooxml.js](../ooxml.js/README.md), [odf.js](../odf.js/README.md), [pdf-codec](../pdf-codec/README.md), [markdown-codec](../markdown-codec/README.md), and [document-schema.js](../document-schema.js/README.md).
+> Converts between any two compatible document formats through a shared content/layout pivot. docx, pptx, odt, odp, ods, odg, xlsx, csv (TSV is the same format with a tab delimiter), svg, markdown, and epub all read into and build from the same shared `ContentDocument` model (reported to callers as the tree-form `DocumentTree`), with PDF — reached through pdf-codec's own `LayoutDocument` view — as the one format every variant can reach. A composition engine (`convertDocument`) routes 129 (source, target) pairs across the eleven content formats and PDF, including twenty PDF-pivot round trips (the eight layout-engine formats, plus xlsx and csv composing through ods), twenty-four cross-format bridge functions (same-variant direct copies, cross-variant semantic transforms, and PDF-composed), plus special-case conversions for `.odm` master documents, `.odb` database front-ends (HSQLDB and Firebird, four storage tiers), standalone `.odf` formula documents, and a bounded SQL/rpt-formula engine for `.odb` reports. Also includes: read-and-write live-view editors for all six editable formats, docx comment/footnote/header-footer exposure via `readDocxExtras`, real font resolution (source-embedded faces ahead of caller-supplied, vendored substitutes, and the standard 14), a hand-written MathML typesetting engine with embedded-font PDF rendering and a matching MathML ⇄ OMML translator, LaTeX lowering into the schema's two-layer semantic math core (pinned temml parser, symbol tables from prose, a coherence lint), and a fully hand-written PDF codec. Built on [ooxml.js](../ooxml.js/README.md), [odf.js](../odf.js/README.md), [pdf-codec](../pdf-codec/README.md), [markdown-codec](../markdown-codec/README.md), [epub-codec](../epub-codec/README.md), and [document-schema.js](../document-schema.js/README.md).
 
 `documents.js` extends `ooxml.js` in two directions `ooxml.js` deliberately does not cover: full PDF support (parsing and generating, via `pdf-codec`), and a read-**and-write** manipulation API for docx/pptx content — `ooxml.js`'s own typed readers are one-way. The PDF codec is hand-written against ISO 32000-1, with no external PDF library as a dependency — see [Fidelity](#fidelity) and pdf-codec's own README for the honest trade-off (not as robust against adversarial PDFs as a 15+-year-hardened library; fully auditable and dependency-free instead). `src/mathml/` (the MathML typesetting engine) stays in this package and is hand-written too, for the same supply-chain reason. The one deliberate exception on the math side is the LaTeX parser: `src/latex/` lowers LaTeX into the schema's semantic core over a pinned exact-version [temml](https://temml.org) dependency — see [LaTeX lowering into the semantic core](#latex-lowering-into-the-semantic-core) for why a LaTeX grammar is the one component not worth hand-writing and what the pin guarantees.
 
@@ -13,6 +13,7 @@ graph TD
     odf("odf.js")
     pdfcodec("pdf-codec")
     mdcodec("markdown-codec")
+    epubcodec("epub-codec")
     bytecodec("byte-codec")
     documents("documents.js")
     mcp("document-mcp")
@@ -22,11 +23,13 @@ graph TD
     schema --> odf
     schema --> pdfcodec
     schema --> mdcodec
+    schema --> epubcodec
     schema --> documents
     ooxml --> documents
     odf --> documents
     pdfcodec --> documents
     mdcodec --> documents
+    epubcodec --> documents
     bytecodec --> pdfcodec
     bytecodec --> documents
     documents --> mcp
@@ -40,6 +43,7 @@ graph TD
     click odf "https://github.com/ExaDev/documents.js/tree/main/packages/odf.js" "odf.js"
     click pdfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/pdf-codec" "pdf-codec"
     click mdcodec "https://github.com/ExaDev/documents.js/tree/main/packages/markdown-codec" "markdown-codec"
+    click epubcodec "https://github.com/ExaDev/documents.js/tree/main/packages/epub-codec" "epub-codec"
     click bytecodec "https://github.com/ExaDev/documents.js/tree/main/packages/byte-codec" "byte-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
     click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
@@ -72,7 +76,7 @@ npm install documents.js document-schema.js
 
 ### The generic entry point: `convertDocument`
 
-A single function, `convertDocument`, sits behind every named conversion and reaches every pair the composition engine can route — all 111 supported (source, target) combinations. The named functions below are thin one-line forwarders to it; they remain the ergonomic layer for a caller who wants a fixed pair and autocomplete discovery, while `convertDocument` is the first-class entry point for a caller working from a runtime format pair (CLI, MCP tool, matrix enumeration).
+A single function, `convertDocument`, sits behind every named conversion and reaches every pair the composition engine can route — all 129 supported (source, target) combinations. The named functions below are thin one-line forwarders to it; they remain the ergonomic layer for a caller who wants a fixed pair and autocomplete discovery, while `convertDocument` is the first-class entry point for a caller working from a runtime format pair (CLI, MCP tool, matrix enumeration). epub is reachable only through `convertDocument` (or the port below) — it has no named ergonomic function of its own, the same "composed-only" treatment `markdownToPptx` never got either: `convertDocument("epub", "docx", epubBytes)` and `convertDocument("docx", "epub", docxBytes)` reach its one same-variant bridge, and `convertDocument("epub", "pdf", epubBytes)` composes that bridge with docx's own layout engine. Two pairs stay unreachable even through `convertDocument`: `xlsx`/`csv` and `epub` each already cost two hops to reach the pdf pivot from their own side (xlsx/csv through their own ods bridge, epub through its own docx bridge), so crossing between them would need four hops against the pathfinder's three-hop cap — `resolveCompositionPlan("xlsx", "epub")` and its `csv` counterpart both return `undefined`.
 
 ```ts
 import { convertDocument } from "documents.js";
@@ -187,14 +191,14 @@ const { document, diagnostics } = await converter.convert(
 );
 ```
 
-`DocumentFormat` includes `docx`/`pptx`/`xlsx`/`odt`/`odp`/`ods`/`odg`/`svg`/`odf`/`csv`/`markdown`/`pdf` — twelve members. The port's `conversions` list is derived from `resolveCompositionPlan` plus the `odf`→`pdf` special case — 111 pairs total. `DocumentFormat` is inferred from `DocumentFormatSchema` (a real Zod schema); `DOCUMENT_FORMATS` is exported as a plain array derived from the same schema:
+`DocumentFormat` includes `docx`/`pptx`/`xlsx`/`odt`/`odp`/`ods`/`odg`/`svg`/`odf`/`csv`/`markdown`/`epub`/`pdf` — thirteen members. The port's `conversions` list is derived from `resolveCompositionPlan` plus the `odf`→`pdf` special case — 129 pairs total. `DocumentFormat` is inferred from `DocumentFormatSchema` (a real Zod schema); `DOCUMENT_FORMATS` is exported as a plain array derived from the same schema:
 
 The port also exposes `contractVersion: number`, bumped only when `DocumentConverter`'s own contract shape changes — a new field on `ConversionResult` a caller might need to branch on, or a new `ConversionOptions` field an implementation is now expected to honour — never when the `conversions` table simply grows with more supported source/target pairs (that's discoverable at runtime via `conversions` itself). It is currently `7`: the bump from `6` reflects `ConversionResult.package` changing type to the tree-form `DocumentTree` described below, which a caller reading that field must now flatten rather than read directly.
 
 ```ts
 import { DOCUMENT_FORMATS, DocumentFormatSchema } from "documents.js";
 
-console.log(DOCUMENT_FORMATS); // ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'svg', 'odf', 'csv', 'markdown', 'pdf']
+console.log(DOCUMENT_FORMATS); // ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'svg', 'odf', 'csv', 'markdown', 'epub', 'pdf']
 DocumentFormatSchema.parse(userSuppliedFormat); // throws a ZodError for anything outside that list
 ```
 
@@ -752,7 +756,7 @@ The package is layered from generic primitives outward to the two conversion dir
 - **`src/metadata/`** — cross-format metadata read/write via `DOCUMENT_FORMAT_CODECS`.
 - **`src/package-codec.ts`** — `decodeDocumentPackage`/`encodeDocumentPackage`/`decodeOdbPackage`.
 
-Dependency direction is downward and checkable. Six external dependencies each own a distinct concern: `ooxml.js` (docx/pptx/xlsx), `odf.js` (odt/ods/odp/odg), `document-schema.js` (shared schemas + port contracts), `pdf-codec` (PDF codec + text-layout/font primitives), `byte-codec` (byte/image utilities), `markdown-codec` (markdown). No `PdfObject`/`PdfDict`/`PdfStream` type appears anywhere in this package.
+Dependency direction is downward and checkable. Seven external dependencies each own a distinct concern: `ooxml.js` (docx/pptx/xlsx), `odf.js` (odt/ods/odp/odg), `document-schema.js` (shared schemas + port contracts), `pdf-codec` (PDF codec + text-layout/font primitives), `byte-codec` (byte/image utilities), `markdown-codec` (markdown), `epub-codec` (epub, read/write consumed directly at the FORMAT_NODES/DOCUMENT_FORMAT_CODECS registry boundary with no local `src/epub/` adapter of its own — unlike markdown/csv/svg, epub-codec's own `readEpubContent`/`writeEpubContent` already read and write a real wordprocessing `ContentDocument` directly). No `PdfObject`/`PdfDict`/`PdfStream` type appears anywhere in this package.
 
 ## Build, test, and lint
 
@@ -867,22 +871,25 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
 Read as **row → column**. `✓` lossless, `~` bounded, `✗` lossy, `✗✗` severe, `→` one-way, `–` no conversion. `.odm`/`.odb` sit outside this table.
 
-| ↓ from \ to → | docx | pptx | xlsx | odt | odp | ods | odg | svg | odf | markdown | csv | pdf |
-| ------------- | ---- | ---- | ---- | --- | --- | --- | --- | --- | --- | -------- | --- | --- |
-| **docx**      | —    | ~    | –    | ✓   | –   | –   | –   | ✗   | –   | ✗        | ✗   | ~   |
-| **pptx**      | ~    | —    | –    | –   | ✓   | –   | –   | ✗   | –   | –        | ✗   | ~   |
-| **xlsx**      | –    | –    | —    | –   | –   | ~   | –   | ✗   | –   | ✗✗       | ~   | ~   |
-| **odt**       | ✓    | –    | –    | —   | ~   | –   | –   | ✗   | –   | ✗        | ✗   | ~   |
-| **odp**       | –    | ✓    | –    | ~   | —   | –   | –   | ✗   | –   | –        | ✗   | ~   |
-| **ods**       | –    | –    | ~    | –   | –   | —   | –   | ✗   | –   | –        | ~   | ~   |
-| **odg**       | –    | –    | –    | –   | –   | –   | —   | ✓   | –   | –        | ✗   | ~   |
-| **svg**       | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✓   | —   | –   | ✗✗       | ✗✗  | ~   |
-| **odf**       | –    | –    | –    | –   | –   | –   | –   | –   | —   | –        | –   | →   |
-| **markdown**  | ~    | –    | ✗✗   | ~   | –   | –   | –   | ✗✗  | –   | —        | ✗✗  | ~   |
-| **csv**       | ✗    | ✗    | ✓    | ✗   | ✗   | ✓   | ✗   | ✗   | –   | ✗✗       | —   | ~   |
-| **pdf**       | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | ✗   | –   | ✗✗       | ✗   | —   |
+| ↓ from \ to → | docx | pptx | xlsx | odt | odp | ods | odg | svg | odf | markdown | csv | epub | pdf |
+| ------------- | ---- | ---- | ---- | --- | --- | --- | --- | --- | --- | -------- | --- | ---- | --- |
+| **docx**      | —    | ~    | –    | ✓   | –   | –   | –   | ✗   | –   | ✗        | ✗   | ~    | ~   |
+| **pptx**      | ~    | —    | –    | –   | ✓   | –   | –   | ✗   | –   | –        | ✗   | ~    | ~   |
+| **xlsx**      | –    | –    | —    | –   | –   | ~   | –   | ✗   | –   | ✗✗       | ~   | –    | ~   |
+| **odt**       | ✓    | –    | –    | —   | ~   | –   | –   | ✗   | –   | ✗        | ✗   | ~    | ~   |
+| **odp**       | –    | ✓    | –    | ~   | —   | –   | –   | ✗   | –   | –        | ✗   | ~    | ~   |
+| **ods**       | –    | –    | ~    | –   | –   | —   | –   | ✗   | –   | –        | ~   | ✗    | ~   |
+| **odg**       | –    | –    | –    | –   | –   | –   | —   | ✓   | –   | –        | ✗   | ✗✗   | ~   |
+| **svg**       | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✓   | —   | –   | ✗✗       | ✗✗  | ✗✗   | ~   |
+| **odf**       | –    | –    | –    | –   | –   | –   | –   | –   | —   | –        | –   | –    | →   |
+| **markdown**  | ~    | –    | ✗✗   | ~   | –   | –   | –   | ✗✗  | –   | —        | ✗✗  | ~    | ~   |
+| **csv**       | ✗    | ✗    | ✓    | ✗   | ✗   | ✓   | ✗   | ✗   | –   | ✗✗       | —   | –    | ~   |
+| **epub**      | ✓    | ~    | –    | ✓   | ~   | ✗   | ✗✗  | ✗✗  | –   | ~        | –   | —    | ~   |
+| **pdf**       | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | ✗   | –   | ✗✗       | ✗   | ✗    | —   |
 
-111 of 132 directional pairs are routable. The shared `ContentDocument` model is the hub, not PDF — twenty bridges bypass PDF entirely.
+129 of 156 directional pairs are routable. The shared `ContentDocument` model is the hub, not PDF — twenty bridges bypass PDF entirely.
+
+**epub** (ExaDev/documents.js#802) shares the wordprocessing variant with docx/odt/markdown, so its same-variant bridges to them are a direct `ContentDocument` copy each way — the asymmetry (`✓` reading FROM epub, `~` writing INTO it) reflects epub-codec's own permanent, structural write-side gaps (no sub/sup construct at all, internal-link semantics degrade to an ordinary external-style hyperlink, a cross-document footnote falls through to a plain link) rather than anything this bridge itself drops; see epub-codec's own README Gotchas for the full, exact list. Reaching a presentation-variant format costs one cross-variant transform (`~`, the same rating docx↔pptx already carries); reaching odg/svg costs two, composed through pptx (`✗✗` — a drawing's own vector geometry has no textual content for a wordprocessing-variant target to receive, the identical "text is out of the drawing read's scope" gap `svg→markdown`/`svg→csv` already document). `epub ⇄ ods` composes epub's own docx bridge with a PDF render-then-reconstruct pass (`✗`, matching every other PDF reconstruction into a wordprocessing/spreadsheet-shaped target). `xlsx`/`csv` are the only two (non-odf) formats epub cannot reach at all in either direction — see `resolveCompositionPlan`'s own module comment (`src/convert/composition.ts`) for why the hop count exceeds the pathfinder's cap.
 
 **X → PDF** is a genuine layout render: positioned text, images, tables, lists, vector primitives, styled through the full cascade. It is a faithful visual approximation, not pixel-identical — closeness depends on font availability.
 
@@ -923,6 +930,7 @@ Conventional Commits, enforced workspace-wide by commitlint through a root `comm
 - [ooxml.js](../ooxml.js/README.md) — docx/pptx/xlsx ⇄ JSON handling and typed reading, including `readXlsxContent` and the flat spreadsheet builder it pairs with, `buildXlsxPackageFromContent` (consumed by the `odsToXlsx`/`xlsxToOds` bridge and internal codecs, and re-exported directly from this package's own surface under the long-standing `buildXlsxPackage` name — see [Reading and building xlsx content directly](#reading-and-building-xlsx-content-directly)).
 - [document-schema.js](../document-schema.js/README.md) — owns `ContentDocument`, the tree-form `DocumentTree` and its styles-table facility, and the port contracts; shared by all sibling packages.
 - [markdown-codec](../markdown-codec/README.md) — CommonMark+GFM ⇄ `ContentDocument` handling. The third format (after docx/odt) sharing the wordprocessing pivot.
+- [epub-codec](../epub-codec/README.md) — EPUB 2/3 ⇄ `ContentDocument` handling (`readEpubContent`/`writeEpubContent`, consumed directly, with no local adapter of this package's own). The fourth format sharing the wordprocessing pivot, with no layout engine of its own — see [Fidelity](#fidelity) for what that means for its own PDF-pivot routing.
 - [pdf-codec](../pdf-codec/README.md) — the hand-written PDF codec (`readPdf`/`writePdf`/`pdfCodec`), the embedded STIX Two Math font, and text-measurement/font-resolution primitives.
 - [byte-codec](../byte-codec/README.md) — generic byte/image utilities (ByteWriter, CRC-32, deflate/inflate, PNG/JPEG), extracted from pdf-codec.
 - [odf.js](../odf.js/README.md) — ODF codec (odt/ods/odp/odg), also built on `document-schema.js`. Style interning, rotation, `svg:d` parsing, and manifest handling consumed directly.

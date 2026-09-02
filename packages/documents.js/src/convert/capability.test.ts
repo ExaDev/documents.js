@@ -16,7 +16,7 @@ describe("FORMAT_CAPABILITIES", () => {
     }
 
     expect(new Set(byVariant.get("wordprocessing"))).toEqual(
-      new Set(["docx", "odt", "markdown"]),
+      new Set(["docx", "odt", "markdown", "epub"]),
     );
     expect(new Set(byVariant.get("presentation"))).toEqual(
       new Set(["pptx", "odp"]),
@@ -39,6 +39,11 @@ describe("FORMAT_CAPABILITIES", () => {
   it("marks svg as the drawing family's plain-text member with its own layout path (a sibling of odg, not an ods-style composed member)", () => {
     expect(FORMAT_CAPABILITIES.svg.variant).toBe("drawing");
     expect(FORMAT_CAPABILITIES.svg.hasLayoutPath).toBe(true);
+  });
+
+  it("marks epub as the wordprocessing family's member with no layout path of its own (docx/odt/markdown carry the layout edge)", () => {
+    expect(FORMAT_CAPABILITIES.epub.variant).toBe("wordprocessing");
+    expect(FORMAT_CAPABILITIES.epub.hasLayoutPath).toBe(false);
   });
 
   it("has no undefined-variant format other than pdf and odf reporting a layout path", () => {
@@ -131,6 +136,30 @@ describe("resolveCompositionPlan", () => {
     expect(plan!.hops[0]!.executor).toBe("fromPdf");
     expect(plan!.hops[0]!.from).toBe("pdf");
     expect(plan!.hops[0]!.to).toBe("svg");
+  });
+
+  it("composes epub -> pdf through docx (bridge then toPdf), since epub has no layout engine of its own", () => {
+    const plan = resolveCompositionPlan("epub", "pdf");
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(["bridge", "toPdf"]);
+    expect(plan!.hops[0]!.from).toBe("epub");
+    expect(plan!.hops[0]!.to).toBe("docx");
+    expect(plan!.hops[1]!.from).toBe("docx");
+    expect(plan!.hops[1]!.to).toBe("pdf");
+  });
+
+  it("composes pdf -> epub through docx (fromPdf then bridge)", () => {
+    const plan = resolveCompositionPlan("pdf", "epub");
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(["fromPdf", "bridge"]);
+  });
+
+  it("routes epub -> docx/odt/markdown as a single same-variant bridge hop (never through PDF)", () => {
+    for (const target of ["docx", "odt", "markdown"] as const) {
+      const plan = resolveCompositionPlan("epub", target)!;
+      expect(plan.hops, `epub -> ${target}`).toHaveLength(1);
+      expect(plan.hops[0]!.executor, `epub -> ${target}`).toBe("bridge");
+    }
   });
 
   it("routes svg -> odg as a single same-variant bridge hop (the drawing family's plain-text member)", () => {

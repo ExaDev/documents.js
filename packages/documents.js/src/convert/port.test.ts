@@ -15,6 +15,7 @@ describe("DocumentFormatSchema / DOCUMENT_FORMATS", () => {
       "odf",
       "csv",
       "markdown",
+      "epub",
       "pdf",
     ]);
     expect(DOCUMENT_FORMATS).toEqual(DocumentFormatSchema.options);

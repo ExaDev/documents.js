@@ -588,6 +588,9 @@ importers:
       document-schema.js:
         specifier: ^5.1.0
         version: link:../document-schema.js
+      epub-codec:
+        specifier: ^0.1.0
+        version: link:../epub-codec
       fflate:
         specifier: ^0.8.3
         version: 0.8.3

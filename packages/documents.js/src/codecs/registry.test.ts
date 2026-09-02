@@ -4,6 +4,7 @@ import { odsToXlsx } from "../convert/convert";
 import { readOdfFormulaContent } from "../odf/formula/read";
 import { FRACTION_FORMULA, odfFormulaBytes } from "../test-support/odf";
 import { minimalDocxBytes } from "../test-support/docx";
+import { minimalEpubBytes } from "../test-support/epub";
 import { minimalOdgBytes } from "../test-support/odg";
 import { minimalOdpBytes } from "../test-support/odp";
 import { minimalOdsBytes, richOdsBytes } from "../test-support/ods";
@@ -26,7 +27,8 @@ function requireContentCodec(
     | "odg"
     | "markdown"
     | "xlsx"
-    | "csv",
+    | "csv"
+    | "epub",
 ) {
   const content = DOCUMENT_FORMAT_CODECS[format].content;
   if (!content?.write) {
@@ -183,6 +185,15 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
         Math.abs((column?.widthPt ?? 0) - (originalColumn.widthPt ?? 0)),
       ).toBeLessThanOrEqual(XLSX_COLUMN_WIDTH_TOLERANCE_PT);
     }
+  });
+
+  // Unlike docx/ods's own builders, epub-codec's write/read pair mints no fresh createdIso/modifiedIso when the source ContentDocument carries none (writeEpubContent's own opf/write.ts only emits dc:date/dcterms:modified when metadata already supplies them) -- so this round trip is exact equality with no withReferenceTimestamps normalization needed, the same guarantee epub-codec's own src/roundtrip.test.ts proves for a build(contentDoc) -> write -> read cycle; this test proves the identical guarantee for a read(hand-authored XHTML) -> write -> read cycle instead, exercising DOCUMENT_FORMAT_CODECS.epub's own wiring rather than epub-codec's writer directly.
+  it("epub: read -> write -> read round-trips the ContentDocument", () => {
+    const codec = requireContentCodec("epub");
+    const content = codec.read(minimalEpubBytes());
+    expect(containsText(content, "Hello from epub")).toBe(true);
+    const rebuiltBytes = codec.write!(content);
+    expect(codec.read(rebuiltBytes)).toEqual(content);
   });
 });
 

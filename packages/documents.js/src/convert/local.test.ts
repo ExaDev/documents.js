@@ -39,7 +39,7 @@ describe("createLocalDocumentConverter: shape", () => {
     const converter = createLocalDocumentConverter();
     // 7, not 6: ConversionResult.package changed TYPE to the tree-form DocumentTree of document-schema.js 4.0.0 (children carry the decomposed group tree plus the minted styles table, where it previously carried the flat { content, pages } envelope) -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
     expect(converter.contractVersion).toBe(7);
-    // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats (each reaches all 10 others within the 3-hop cap), plus the special-case odf -> pdf pair -- 111 pairs total, sorted by source then target for determinism. csv joins as a full spreadsheet-variant member: same-variant bridges to ods/xlsx directly, everything else composed through the identical ods pivot xlsx uses. svg joins as the drawing family's plain-text member the same way: a same-variant bridge to odg directly plus its own pdf layout pair, everything else composed through those two edges.
+    // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats within the 3-hop cap, plus the special-case odf -> pdf pair -- 129 pairs total, sorted by source then target for determinism. csv joins as a full spreadsheet-variant member: same-variant bridges to ods/xlsx directly, everything else composed through the identical ods pivot xlsx uses. svg joins as the drawing family's plain-text member the same way: a same-variant bridge to odg directly plus its own pdf layout pair, everything else composed through those two edges. epub joins as the wordprocessing family's plain-text, no-layout-engine-of-its-own member: same-variant bridges to docx/odt/markdown directly, everything else (including pdf, via docx's own layout edge) composed through those bridges -- except xlsx and csv, whose own two-hop detour through ods to reach pdf, stacked on epub's own one-hop detour through docx to leave pdf, needs 4 hops total and exceeds the pathfinder's 3-hop cap: xlsx<->epub and csv<->epub are consequently the only (non-odf) pairs with no route at all, not a gap in this wiring but a real consequence of three "no layout engine of its own" formats (xlsx, csv, epub) meeting pairwise across the pdf pivot with a detour on both ends.
     expect(converter.conversions).toEqual([
       { source: "csv", target: "docx" },
       { source: "csv", target: "markdown" },
@@ -52,6 +52,7 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "csv", target: "svg" },
       { source: "csv", target: "xlsx" },
       { source: "docx", target: "csv" },
+      { source: "docx", target: "epub" },
       { source: "docx", target: "markdown" },
       { source: "docx", target: "odg" },
       { source: "docx", target: "odp" },
@@ -61,8 +62,18 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "docx", target: "pptx" },
       { source: "docx", target: "svg" },
       { source: "docx", target: "xlsx" },
+      { source: "epub", target: "docx" },
+      { source: "epub", target: "markdown" },
+      { source: "epub", target: "odg" },
+      { source: "epub", target: "odp" },
+      { source: "epub", target: "ods" },
+      { source: "epub", target: "odt" },
+      { source: "epub", target: "pdf" },
+      { source: "epub", target: "pptx" },
+      { source: "epub", target: "svg" },
       { source: "markdown", target: "csv" },
       { source: "markdown", target: "docx" },
+      { source: "markdown", target: "epub" },
       { source: "markdown", target: "odg" },
       { source: "markdown", target: "odp" },
       { source: "markdown", target: "ods" },
@@ -74,6 +85,7 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "odf", target: "pdf" },
       { source: "odg", target: "csv" },
       { source: "odg", target: "docx" },
+      { source: "odg", target: "epub" },
       { source: "odg", target: "markdown" },
       { source: "odg", target: "odp" },
       { source: "odg", target: "ods" },
@@ -84,6 +96,7 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "odg", target: "xlsx" },
       { source: "odp", target: "csv" },
       { source: "odp", target: "docx" },
+      { source: "odp", target: "epub" },
       { source: "odp", target: "markdown" },
       { source: "odp", target: "odg" },
       { source: "odp", target: "ods" },
@@ -94,6 +107,7 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "odp", target: "xlsx" },
       { source: "ods", target: "csv" },
       { source: "ods", target: "docx" },
+      { source: "ods", target: "epub" },
       { source: "ods", target: "markdown" },
       { source: "ods", target: "odg" },
       { source: "ods", target: "odp" },
@@ -104,6 +118,7 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "ods", target: "xlsx" },
       { source: "odt", target: "csv" },
       { source: "odt", target: "docx" },
+      { source: "odt", target: "epub" },
       { source: "odt", target: "markdown" },
       { source: "odt", target: "odg" },
       { source: "odt", target: "odp" },
@@ -114,6 +129,7 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "odt", target: "xlsx" },
       { source: "pdf", target: "csv" },
       { source: "pdf", target: "docx" },
+      { source: "pdf", target: "epub" },
       { source: "pdf", target: "markdown" },
       { source: "pdf", target: "odg" },
       { source: "pdf", target: "odp" },
@@ -124,6 +140,7 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "pdf", target: "xlsx" },
       { source: "pptx", target: "csv" },
       { source: "pptx", target: "docx" },
+      { source: "pptx", target: "epub" },
       { source: "pptx", target: "markdown" },
       { source: "pptx", target: "odg" },
       { source: "pptx", target: "odp" },
@@ -134,6 +151,7 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "pptx", target: "xlsx" },
       { source: "svg", target: "csv" },
       { source: "svg", target: "docx" },
+      { source: "svg", target: "epub" },
       { source: "svg", target: "markdown" },
       { source: "svg", target: "odg" },
       { source: "svg", target: "odp" },
@@ -190,6 +208,36 @@ describe("createLocalDocumentConverter: shape", () => {
     expect(converter.conversions).toContainEqual({
       source: "pdf",
       target: "xlsx",
+    });
+    // epub <-> docx is a DIRECT same-variant bridge pair (epub shares docx/odt/markdown's own wordprocessing variant), pinned here for the same "keeps working even if order changes" reason -- the composed epub <-> pdf pair (through docx) is asserted directly in capability.test.ts's own resolveCompositionPlan suite instead, since it involves two hops rather than one.
+    expect(converter.conversions).toContainEqual({
+      source: "epub",
+      target: "docx",
+    });
+    expect(converter.conversions).toContainEqual({
+      source: "docx",
+      target: "epub",
+    });
+  });
+
+  // xlsx<->epub and csv<->epub are the only (non-odf) pairs the pathfinder cannot route at all: xlsx's/csv's own two-hop detour through ods to reach pdf, stacked on epub's own one-hop detour through docx to leave pdf, needs 4 hops and exceeds the 3-hop cap (see this file's own comment on the exact-array assertion above). Pinned as its own dedicated test so a future cap change is a deliberate, visible decision rather than a silent regression.
+  it("has no route between xlsx/csv and epub in either direction (the only unreachable non-odf pairs)", () => {
+    const converter = createLocalDocumentConverter();
+    expect(converter.conversions).not.toContainEqual({
+      source: "xlsx",
+      target: "epub",
+    });
+    expect(converter.conversions).not.toContainEqual({
+      source: "epub",
+      target: "xlsx",
+    });
+    expect(converter.conversions).not.toContainEqual({
+      source: "csv",
+      target: "epub",
+    });
+    expect(converter.conversions).not.toContainEqual({
+      source: "epub",
+      target: "csv",
     });
   });
 });

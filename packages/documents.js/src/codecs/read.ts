@@ -1,4 +1,5 @@
 import type { ContentDocument } from "document-schema.js";
+import { readEpubContent } from "epub-codec";
 import { readXlsxContent } from "ooxml.js";
 import { readPdf } from "pdf-codec/read";
 import type { LayoutDocument } from "pdf-codec";
@@ -39,7 +40,7 @@ export type ContentReader = (
   options?: DocumentCodecOptions,
 ) => ContentDocument;
 
-// The eleven per-format read closures, moved verbatim from the registry: each wraps the identical decode/read pair every ergonomic conversion in this package already uses for that format, with each format's own cancellation policy preserved exactly (docx/pptx/odt/odp/ods/odg/odf/xlsx have no loop of their own to hook a signal into, so their read checks it once via throwIfAborted before decoding; markdown does have one, so its read forwards the signal straight into the reader instead of checking it separately; csv/svg decoders are fatal one-pass functions with no loop, needing no separate check). The registry composes its content entries from these, so there is exactly one place the "which reader for which format" dispatch lives.
+// The twelve per-format read closures, moved verbatim from the registry: each wraps the identical decode/read pair every ergonomic conversion in this package already uses for that format, with each format's own cancellation policy preserved exactly (docx/pptx/odt/odp/ods/odg/odf/xlsx/epub have no loop of their own to hook a signal into, so their read checks it once via throwIfAborted before decoding -- epub-codec's own readEpubContent takes no signal at all, matching the rest of this group; markdown does have one, so its read forwards the signal straight into the reader instead of checking it separately; csv/svg decoders are fatal one-pass functions with no loop, needing no separate check). The registry composes its content entries from these, so there is exactly one place the "which reader for which format" dispatch lives.
 export const CONTENT_READERS: Readonly<
   Record<ReadContentFormat, ContentReader>
 > = {
@@ -92,6 +93,10 @@ export const CONTENT_READERS: Readonly<
     }),
   csv: (bytes) => readCsvContent(decodeCsvText(bytes)),
   svg: (bytes) => readSvgContent(decodeSvgText(bytes)),
+  epub: (bytes, options) => {
+    throwIfAborted(options?.signal);
+    return readEpubContent(requireArrayBufferBytes(bytes));
+  },
   xlsx: (bytes, options) => {
     throwIfAborted(options?.signal);
     return readXlsxContent(

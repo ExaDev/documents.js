@@ -1,4 +1,5 @@
 import type { ContentCodec } from "document-schema.js";
+import { writeEpubContent } from "epub-codec";
 import { buildXlsxPackageFromContent } from "ooxml.js";
 import { writePdf } from "pdf-codec";
 import type { LayoutDocument } from "pdf-codec";
@@ -105,6 +106,13 @@ export const DOCUMENT_FORMAT_CODECS: Readonly<
     content: {
       read: CONTENT_READERS.svg,
       write: (content) => encodeSvgText(buildSvgText(content)),
+    },
+  },
+  // The epub entry is the one format whose write half needs neither an encodeDocumentPackage-style package encode nor a text-boundary encode: epub-codec's writeEpubContent already returns bytes directly (see composition.ts's own BytesFormatNode), so this content.write closure calls it with no options -- DocumentCodecOptions carries no sink, so a caller wanting epub-codec's own diagnostic channel uses the named conversions (convertDocument's UnifiedConversionOptions.onEpubDiagnostic) instead, the identical "named conversions carry the per-format extras, this codec stays plain" contract csv/svg's own entries state above.
+  epub: {
+    content: {
+      read: CONTENT_READERS.epub,
+      write: (content) => writeEpubContent(content),
     },
   },
   pdf: {

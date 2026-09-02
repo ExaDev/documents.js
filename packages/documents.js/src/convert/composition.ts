@@ -52,6 +52,8 @@ import type { SvgDiagnosticSink } from "../svg/diagnostics";
 import { decodeSvgText, encodeSvgText } from "../svg/text";
 import { readSvgContent } from "../svg/read";
 import { buildSvgText } from "../svg/write";
+import type { EpubDiagnosticSink } from "epub-codec";
+import { readEpubContent, writeEpubContent } from "epub-codec";
 import type { CellTypeInferenceSink } from "../layout/cell-typing";
 import {
   reconstructDrawing,
@@ -98,12 +100,14 @@ export interface UnifiedConversionOptions {
   readonly onCellTypeInference?: CellTypeInferenceSink;
   readonly page?: number;
   readonly onSvgDiagnostic?: SvgDiagnosticSink;
+  // The epub row's own knob, on the shared shape for the identical reason onSvgDiagnostic/onCellTypeInference already sit here: epub read and build both consult the one sink epub-codec's ReadEpubOptions/WriteEpubOptions declare (a single field covering both directions, unlike svg's split read/build channels), every non-epub hop ignores it.
+  readonly onEpubDiagnostic?: EpubDiagnosticSink;
   readonly clock?: ClockPort;
 }
 
 // --- Registry: declarative per-format primitive wiring -----------------------------------------
 
-// The ten content formats this engine routes between (pdf is the layout pivot, reached via toPdf/fromPdf edges; odf is special, excluded entirely -- see the module doc).
+// The eleven content formats this engine routes between (pdf is the layout pivot, reached via toPdf/fromPdf edges; odf is special, excluded entirely -- see the module doc). docx is listed first among the wordprocessing-variant members deliberately: CONTENT_FORMATS' own order is buildCompositionGraph's iteration order, and it is the tie-break buildCompositionGraph's own Map-insertion order resolves epub's equal-cost toPdf/fromPdf routes through (see capability.ts's own FORMAT_CAPABILITIES.epub comment and composition-plans.test.ts's pinned route).
 export type ContentFormat =
   | "docx"
   | "pptx"
@@ -114,7 +118,8 @@ export type ContentFormat =
   | "odg"
   | "svg"
   | "csv"
-  | "markdown";
+  | "markdown"
+  | "epub";
 
 // The explicit, typed list of content formats, kept in sync with FORMAT_NODES' own keys. Used for iteration in the graph builder in place of `Object.keys(FORMAT_NODES)` (which returns `string[]` and would need a cast back to ContentFormat), so the registry stays cast-free end to end.
 const CONTENT_FORMATS: readonly ContentFormat[] = [
@@ -128,12 +133,13 @@ const CONTENT_FORMATS: readonly ContentFormat[] = [
   "svg",
   "csv",
   "markdown",
+  "epub",
 ];
 
 // The four ContentDocument variants a layout engine exists for. 'formula' is the fifth ContentVariant member but has no layout engine of its own (odfToPdf renders through writePdf's formula positioning, not a ContentDocument -> LayoutDocument pass), so it is excluded from this engine's layout/reconstruct registries.
 type LayoutVariant = Exclude<ContentVariant, "formula">;
 
-// Every content format's node in the composition graph: the decode -> read -> build -> encode primitive chain, plus the ContentDocument variant every format reads into and builds from. A discriminated union keeps the package (SourcePackage) and plain-text (string) halves' decode/read/build/encode signatures concrete and cast-free: the executors narrow through isTextFormatNode (below) to select the right shape. hasSourcePackage is the boolean-literal discriminant that split rests on -- and it also drives the font-registry choice in executeToPdf (createDocumentFontRegistry for a package, createFontRegistry for text), mirroring markdownToPdf's own documented divergence from docxToPdf.
+// Every content format's node in the composition graph: the decode -> read -> build -> encode primitive chain, plus the ContentDocument variant every format reads into and builds from. A discriminated union keeps the package (SourcePackage), plain-text (string), and raw-bytes halves' decode/read/build/encode signatures concrete and cast-free: the executors narrow through isTextFormatNode/isBytesFormatNode (below) to select the right shape. kind is the string-literal discriminant the split rests on (a boolean hasSourcePackage flag before epub joined -- widened to a string literal the moment a third genuinely different shape arrived, rather than overloading a two-valued flag to mean three things) -- it also drives the font-registry choice in executeToPdf (createDocumentFontRegistry for a package, createFontRegistry for text/bytes), mirroring markdownToPdf's own documented divergence from docxToPdf.
 interface PackageFormatNode {
   readonly variant: LayoutVariant;
   readonly family: "ooxml" | "odf";
@@ -147,10 +153,10 @@ interface PackageFormatNode {
     options?: UnifiedConversionOptions,
   ) => SourcePackage;
   readonly encode: (pkg: SourcePackage) => Uint8Array<ArrayBuffer>;
-  readonly hasSourcePackage: true;
+  readonly kind: "package";
 }
 
-// The plain-text half of the union: markdown, csv, and svg all decode straight from bytes to a string and read/build through their own text-level codecs -- no zip package, no font embedding, no source-package concept at all. family names the text dialect so a format can never be a member of both halves. build takes options because csv's build consumes { delimiter, sheet } and svg's build consumes { page, onSvgDiagnostic } from UnifiedConversionOptions; markdown's build ignores them.
+// The plain-text half of the union: markdown, csv, and svg all decode straight from bytes to a string and read/build through their own text-level codecs -- no zip package, no font embedding, no source-package concept at all. family names the text dialect so a format can never be a member of more than one half. build takes options because csv's build consumes { delimiter, sheet } and svg's build consumes { page, onSvgDiagnostic } from UnifiedConversionOptions; markdown's build ignores them.
 interface TextFormatNode {
   readonly variant: LayoutVariant;
   readonly family: "markdown" | "csv" | "svg";
@@ -164,14 +170,32 @@ interface TextFormatNode {
     options?: UnifiedConversionOptions,
   ) => string;
   readonly encode: (text: string) => Uint8Array<ArrayBuffer>;
-  readonly hasSourcePackage: false;
+  readonly kind: "text";
 }
 
-export type FormatNode = PackageFormatNode | TextFormatNode;
+// The raw-bytes half of the union: epub's own read/build (epub-codec's readEpubContent/writeEpubContent) operate on the zip bytes directly, with no intermediate decoded shape at all -- unlike the package half (bytes -> a real Package object) or the text half (bytes -> a UTF-8 string), epub's own OCF/ZIP layer is entirely internal to epub-codec and never surfaces here. There is consequently no decode/encode pair to declare: read takes bytes and produces a ContentDocument in one step, build takes a ContentDocument and produces bytes in one step. family is a one-member union today (only epub needs this shape), left open the same way TextFormatNode's family is for a future second raw-bytes format.
+interface BytesFormatNode {
+  readonly variant: LayoutVariant;
+  readonly family: "epub";
+  readonly read: (
+    bytes: Uint8Array<ArrayBuffer>,
+    options?: UnifiedConversionOptions,
+  ) => ContentDocument;
+  readonly build: (
+    content: ContentDocument,
+    options?: UnifiedConversionOptions,
+  ) => Uint8Array<ArrayBuffer>;
+  readonly kind: "bytes";
+}
 
-// Narrowing on the boolean-literal hasSourcePackage discriminant (not on family), so the text half stays open to further plain-text families without touching any executor: TypeScript narrows a discriminated union on literal true/false just as it does on string literals. Exported because composition-to-pdf.ts's executeToPdf branches through the same narrowing.
+export type FormatNode = PackageFormatNode | TextFormatNode | BytesFormatNode;
+
+// Narrowing on the string-literal kind discriminant (not on family), so each half stays open to further members of its own shape without touching any executor: TypeScript narrows a discriminated union on a string-literal field just as it does on true/false. Both exported because composition-to-pdf.ts's executeToPdf branches through the same narrowing.
 export function isTextFormatNode(node: FormatNode): node is TextFormatNode {
-  return !node.hasSourcePackage;
+  return node.kind === "text";
+}
+export function isBytesFormatNode(node: FormatNode): node is BytesFormatNode {
+  return node.kind === "bytes";
 }
 
 // The single source of truth for "which primitives does each format use". read/build closures thread their own per-format option subset internally: docx and pptx read/build both pull onMathDiagnostic (mirroring readDocxContent's/readPptxContent's own `{ onMathDiagnostic }` and buildDocxPackage's/buildPptxPackage's own option -- ExaDev/documents.js#563 gave pptx the identical OMML degrade-diagnostic channel docx already had), markdown read pulls signal/images (mirroring readMarkdownContent's ReadMarkdownOptions), csv read pulls delimiter/onCellTypeInference and csv build pulls delimiter/sheet (mirroring readCsvContent's ReadCsvContentOptions and buildCsvText's BuildCsvTextOptions), svg read pulls onSvgDiagnostic and svg build pulls page/onSvgDiagnostic (mirroring readSvgContent's ReadSvgContentOptions and buildSvgText's BuildSvgTextOptions), and every other format's read/build accept and ignore the thread. docxToPdf's openDocx(bytes).toPackage() and decodeOoxmlPackage(bytes) produce the identical Package (openDocx wraps decodeOoxmlPackage and toPackage returns it unmutated), so decode uses the package codec directly for uniformity -- byte-identical to docxToPdf at every downstream call site.
@@ -187,7 +211,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
         onMathDiagnostic: options?.onMathDiagnostic,
       }),
     encode: (pkg) => encodeOoxmlPackage(pkg),
-    hasSourcePackage: true,
+    kind: "package",
   },
   pptx: {
     variant: "presentation",
@@ -200,7 +224,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
         onMathDiagnostic: options?.onMathDiagnostic,
       }),
     encode: (pkg) => encodeOoxmlPackage(pkg),
-    hasSourcePackage: true,
+    kind: "package",
   },
   xlsx: {
     variant: "spreadsheet",
@@ -209,7 +233,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
     read: (pkg) => readXlsxContent(pkg),
     build: (content) => buildXlsxPackageFromContent(content),
     encode: (pkg) => encodeOoxmlPackage(pkg),
-    hasSourcePackage: true,
+    kind: "package",
   },
   odt: {
     variant: "wordprocessing",
@@ -218,7 +242,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
     read: (pkg) => readOdtContent(pkg),
     build: (content) => buildOdtPackage(content),
     encode: (pkg) => encodeOdfPackage(pkg),
-    hasSourcePackage: true,
+    kind: "package",
   },
   odp: {
     variant: "presentation",
@@ -227,7 +251,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
     read: (pkg) => readOdpContent(pkg),
     build: (content) => buildOdpPackage(content),
     encode: (pkg) => encodeOdfPackage(pkg),
-    hasSourcePackage: true,
+    kind: "package",
   },
   ods: {
     variant: "spreadsheet",
@@ -236,7 +260,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
     read: (pkg) => readOdsContent(pkg),
     build: (content) => buildOdsPackage(content),
     encode: (pkg) => encodeOdfPackage(pkg),
-    hasSourcePackage: true,
+    kind: "package",
   },
   odg: {
     variant: "drawing",
@@ -245,7 +269,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
     read: (pkg) => readOdgContent(pkg),
     build: (content) => buildOdgPackage(content),
     encode: (pkg) => encodeOdfPackage(pkg),
-    hasSourcePackage: true,
+    kind: "package",
   },
   // svg reads into the same drawing ContentDocument variant odg does, so the two form a same-variant bridge pair (cost 1) and svg additionally rides the drawing layout engine through its own toPdf/fromPdf edges -- a text format with a genuine layout path, the one combination csv's entry does not have. read pulls onSvgDiagnostic and build pulls page/onSvgDiagnostic (mirroring readSvgContent's ReadSvgContentOptions and buildSvgText's BuildSvgTextOptions, src/svg/), so a multi-page drawing reached through the build leg throws SvgMultiPageNotSpecifiedError exactly as a direct buildSvgText call would until a caller selects a page.
   svg: {
@@ -260,7 +284,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
         onSvgDiagnostic: options?.onSvgDiagnostic,
       }),
     encode: (text) => encodeSvgText(text),
-    hasSourcePackage: false,
+    kind: "text",
   },
   markdown: {
     variant: "wordprocessing",
@@ -273,7 +297,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
       }),
     build: (content) => buildMarkdownText(content),
     encode: (text) => encodeMarkdownText(text),
-    hasSourcePackage: false,
+    kind: "text",
   },
   csv: {
     variant: "spreadsheet",
@@ -290,7 +314,17 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
         sheet: options?.sheet,
       }),
     encode: (text) => encodeCsvText(text),
-    hasSourcePackage: false,
+    kind: "text",
+  },
+  // epub reads into the same wordprocessing ContentDocument variant docx/odt/markdown do, so it forms a same-variant bridge pair (cost 1) with all three -- but unlike svg's drawing-family entry above, epub has no toPdf/fromPdf edges of its own (LAYOUT_CAPABLE excludes it below): epub-codec's readEpubContent/writeEpubContent operate on the zip bytes directly, with no decode/encode split at all, so this is the one BytesFormatNode entry (see that interface's own comment). read and build both thread the one epub-codec diagnostic sink (ReadEpubOptions/WriteEpubOptions' shared `sink` field) from options.onEpubDiagnostic.
+  epub: {
+    variant: "wordprocessing",
+    family: "epub",
+    read: (bytes, options) =>
+      readEpubContent(bytes, { sink: options?.onEpubDiagnostic }),
+    build: (content, options) =>
+      writeEpubContent(content, { sink: options?.onEpubDiagnostic }),
+    kind: "bytes",
   },
 };
 
@@ -371,11 +405,13 @@ export function executeBridge(
   const sourceNode = FORMAT_NODES[source];
   const targetNode = FORMAT_NODES[target];
 
-  // Decode + read the source, branching on hasSourcePackage so the package (SourcePackage) and text (string) decoded shapes stay concrete.
+  // Decode + read the source, branching on kind so the package (SourcePackage), text (string), and raw-bytes decoded shapes stay concrete. The bytes half (epub) has no decode stage at all -- read consumes the source bytes directly.
   let content: ContentDocument;
   if (isTextFormatNode(sourceNode)) {
     const text = sourceNode.decode(bytes);
     content = sourceNode.read(text, options);
+  } else if (isBytesFormatNode(sourceNode)) {
+    content = sourceNode.read(bytes, options);
   } else {
     const pkg = sourceNode.decode(bytes);
     content = sourceNode.read(pkg, options);
@@ -404,6 +440,8 @@ export function executeBridge(
   if (isTextFormatNode(targetNode)) {
     const text = targetNode.build(buildContent, options);
     out = targetNode.encode(text);
+  } else if (isBytesFormatNode(targetNode)) {
+    out = targetNode.build(buildContent, options);
   } else {
     const pkg = targetNode.build(buildContent, options);
     out = targetNode.encode(pkg);
@@ -419,6 +457,12 @@ export function executeFromPdf(
   options?: UnifiedConversionOptions,
 ): Uint8Array<ArrayBuffer> {
   const node = FORMAT_NODES[target];
+  // epub (the one BytesFormatNode) is never LAYOUT_CAPABLE, so the pathfinder never resolves a fromPdf hop whose target is epub -- a route into epub always lands its final bridge hop from one of docx/odt/markdown instead (see FORMAT_CAPABILITIES.epub's own comment). This narrows the type for the isTextFormatNode/else branch below and documents the invariant rather than leaving a silent runtime-only guarantee.
+  if (isBytesFormatNode(node)) {
+    throw new Error(
+      `executeFromPdf: '${target}' is a bytes-native format with no decode/encode split and can never be a fromPdf hop's target -- LAYOUT_CAPABLE excludes it, so the pathfinder never proposes this hop`,
+    );
+  }
   const layout = readPdf(bytes, {
     signal: options?.signal,
     sink: options?.sink,
