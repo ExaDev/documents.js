@@ -655,9 +655,6 @@ importers:
 
   packages/epub-codec:
     dependencies:
-      byte-codec:
-        specifier: ^1.2.0
-        version: link:../byte-codec
       document-schema.js:
         specifier: ^5.1.0
         version: link:../document-schema.js
