@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/odf.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/odf.js) [![npm version](https://img.shields.io/npm/v/odf.js)](https://www.npmjs.com/package/odf.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> A hand-written, dependency-minimal codec for the OpenDocument Format (ODF — OASIS/ISO 26300): `.odt`/`.ods`/`.odp`/`.odg`/`.odf`/`.odb`/`.odm` and their template variants, built on [Zod 4](https://zod.dev) codecs.
+> A hand-written, dependency-minimal codec for the OpenDocument Format (ODF — OASIS/ISO 26300): `.odt`/`.ods`/`.odp`/`.odg`/`.odf`/`.odb`/`.odm` and their template variants, built on [Zod 4](https://zod.dev) codecs — plus read support for the pre-OASIS OpenOffice.org 1.x / StarOffice 6-7 documents ODF was based on (`.sxw`/`.sxc`/`.sxi`/`.sxd`).
 
 `odf.js` is the ODF sibling of [`ooxml.js`](../ooxml.js/README.md), mirroring its architecture: a lossless ZIP-of-XML core that round-trips any package byte-for-content-faithful, with typed readers layered on top. Two ODF-specific differences shape the design: ODF has no relationship mechanism (inter-part references are direct paths, with an exhaustive `META-INF/manifest.xml`), and ODF has no inline/direct formatting — every formatting difference must be a named "automatic style," so `odf.js` owns a style-interning subsystem (`src/styles/`) with no OOXML equivalent.
 
@@ -64,6 +64,7 @@ Under active development. Built and shipped:
 - **`readOdm`** — resolves a `.odm` master document into an ordered list of chapter references (`{ name, href, filterName? }`); chapters are genuinely external `.odt` files by ODF design, never cached.
 - **`readOdbInventory`** — resolves a `.odb` into connection info, table names, query definitions (`{ name, command, escapeProcessing? }` with real SQL text), and form/report `{ name, href }` pairs. A sub-document directory is named after an opaque _persistent_ name (`forms/Obj11`), not the user-visible name.
 - **`readOdbForm`/`readOdbReport`** — extract one sub-document's _static structure_, executing nothing: a form's control tree and data bindings, or a report's band stack, recursive group tree, bound fields, and computed expressions.
+- **OpenOffice.org 1.x / StarOffice 6-7 reading** (`readSxw`/`readSxc`/`readSxi`/`readSxd` and their `*Content` siblings, plus `transformOoo1Package` and `isOoo1Package`) — the pre-OASIS ancestor ODF 1.0 was based on, read through the ODF readers above rather than beside them. See [Reading an OpenOffice.org 1.x document](#reading-an-openofficeorg-1x-document). **Read only:** there is no `.sxw` writer, because this package has no ODF content writer for an inverse transform to target.
 
 Not yet built: live-view editors and the `.odb` database-table-export subsystem. A general-purpose SQL query engine for rendering a Report against its data is **deliberately not attempted** — building even a bounded SQL engine means reimplementing HSQLDB's/Firebird's query semantics, a materially different undertaking from decoding their file formats, with unreviewed licensing questions. Gated on the requesting engineer's explicit sign-off.
 
@@ -189,6 +190,42 @@ syncManifest(pkg); // rebuilds manifest.xml to exactly match pkg's current parts
 readMimetype(pkg); // 'application/vnd.oasis.opendocument.text'
 ```
 
+### Reading an OpenOffice.org 1.x document
+
+`.sxw`/`.sxc`/`.sxi`/`.sxd` (and their `.stw`/`.stc`/`.sti`/`.std` template counterparts) are OpenOffice.org 1.x / StarOffice 6-7 documents — the format OASIS based ODF 1.0 directly on. They read through the same functions as their ODF successors, one reader per format, at the same two levels:
+
+```ts
+import { decodePackage, readSxw, readSxcContent } from "odf.js";
+
+const document = readSxw(decodePackage(sxwBytes)); // a wordprocessing DocumentTree
+const { sheets } = readSxcContent(decodePackage(sxcBytes)); // the flat ContentSheet[] shape
+```
+
+| Format          | Reader    | Flat sibling     | Package kind     |
+| --------------- | --------- | ---------------- | ---------------- |
+| `.sxw` / `.stw` | `readSxw` | `readSxwContent` | `wordprocessing` |
+| `.sxc` / `.stc` | `readSxc` | `readSxcContent` | `spreadsheet`    |
+| `.sxi` / `.sti` | `readSxi` | `readSxiContent` | `presentation`   |
+| `.sxd` / `.std` | `readSxd` | `readSxdContent` | `drawing`        |
+
+None of these is a second reader. Each is `readOdt`/`readOds`/`readOdp`/`readOdg` run over a package `transformOoo1Package` has rewritten into the ODF shape — the same approach LibreOffice itself takes, where a `.sxw` goes through a transformer (`xmloff/source/transform/`) into the ordinary ODF importer rather than through an importer of its own. Every construct the ODF readers understand therefore works on an OpenOffice.org 1.x document too, and a fix to any of them fixes both formats at once.
+
+`transformOoo1Package` is exported for a caller that wants the transformed `Package` rather than a read of it, and returns anything that is not an OpenOffice.org 1.x package unchanged; `isOoo1Package` is the same detection on its own, decided by the namespace URIs the package's parts declare rather than by a file extension or a manifest media type. `OOO1_NAMESPACES`, `OOO1_MEDIA_TYPES`, `ooo1MediaTypeForExtension` and `odfMediaTypeForOoo1MediaType` expose the format's own namespace and media-type tables.
+
+**Read only.** There is no `.sxw` writer, and the asymmetry is not specific to this format: this package's typed layer is read-only for ODF as well, so there is no ODF content writer for an inverse transform to target. See [What differs between the two vocabularies](#what-differs-between-the-two-vocabularies) for what the transform covers, and its own module comment (`src/ooo1/transform.ts`) for the full list.
+
+### What differs between the two vocabularies
+
+ODF kept OpenOffice.org XML's document model and most of its element and attribute names. What it changed, and what `src/ooo1/` therefore implements:
+
+- **Every namespace URI OpenOffice.org minted** (`http://openoffice.org/2000/office` and its family) became an OASIS one, and `fo:`/`svg:` went the other way — OpenOffice.org bound them to the real W3C XSL-FO and SVG namespaces, where ODF mints its own `xsl-fo-compatible`/`svg-compatible` URIs.
+- **The document's genre.** OpenOffice.org 1.x names it in an `office:class` attribute on the root and puts the content straight inside `office:body`; ODF dropped the attribute and wraps the content in `office:text`/`office:spreadsheet`/`office:presentation`/`office:drawing`/`office:chart`.
+- **One `style:properties` per style became ODF's family of typed `style:*-properties` elements.** This is the one difference a namespace rename cannot paper over, because the same attribute name is valid in several of them with a different meaning in each (`fo:background-color` is a character highlight, paragraph shading, or a cell fill depending on which element it sits in). The split follows LibreOffice's own algorithm — an ordered candidate list per style family, first match wins — and lives in `src/ooo1/properties.ts`.
+- **Frames.** `draw:image`, `draw:text-box`, `draw:object` and their siblings are bare shapes carrying their own position and anchoring; ODF wraps each in a `draw:frame` that carries those instead.
+- **Renames**: `text:ordered-list`/`text:unordered-list` → `text:list`, the footnote/endnote pair → the `text:note` family with a `text:note-class`, `text:tab-stop` → `text:tab`, `text:h/@text:level` → `@text:outline-level`, `office:font-decls`/`style:font-decl` → `office:font-face-decls`/`style:font-face`, `style:page-master` → `style:page-layout`, `table:sub-table` → `table:table` + `table:is-sub-table`, and the `meta:keywords` wrapper unwrapped to bare `meta:keyword` children.
+- **Values, not just names**: lengths written in the `"inch"` unit become `"in"`; a cell's `table:value-*` attributes become `office:value-*`; the compound `style:text-underline`/`style:text-crossing-out` attributes expand into ODF's style/type/width triples; `fo:keep-with-next`'s boolean becomes `always`/`auto`; a package-internal `xlink:href` loses the `#` OpenOffice.org prefixed it with; and `office:annotation`/`office:change-info` move their author and date from attributes into `dc:creator`/`dc:date` child elements.
+- **The package.** An OpenOffice.org 1.x package has no `mimetype` part at all — the manifest's `/` entry, in its own `http://openoffice.org/2001/manifest` namespace, is the only record of the document's type. The transform rewrites that entry to the OASIS media type and synthesises the `mimetype` part.
+
 ### Direct module imports
 
 Every module is also importable directly by its own subpath, without going through the barrel:
@@ -217,6 +254,7 @@ Layered from a lossless core outward, mirroring `ooxml.js`:
 - **`src/typed/draw/`** — the shared `draw:frame`/`draw:g`/vector shape vocabulary and `readDrawImageBlock` (`shapes.ts`), plus `embedded.ts` (`readDrawObjectReference`, `readEmbeddedObjectDocument`, `readOdfChartContent` — the shared embedded-object reference resolver and the central kind→reader dispatch table).
 - **`src/typed/formula/`, `odm/`** — `readOdfFormula`/`readOdfFormulaContent`/`readOdfFormulaMathMl` and `readOdm`.
 - **`src/typed/odb/`** — `readOdbInventory`, `readOdbForm`/`readOdbReport`, `resolveOdbComponent`, `subDocumentPackage`.
+- **`src/ooo1/`** — the OpenOffice.org 1.x variant reader: `ns.ts` (the pre-OASIS namespace and `application/vnd.sun.xml.*` media-type tables plus package detection), `properties.ts` (the `style:properties` split), `transform.ts` (the whole package rewrite), `read.ts` (`readSxw`/`readSxc`/`readSxi`/`readSxd`). Sits _beside_ `typed/`, not inside it: it adds no reader of its own, it feeds the ones already there.
 
 ## Conventions
 
@@ -228,6 +266,9 @@ Layered from a lossless core outward, mirroring `ooxml.js`:
 ## Gotchas and quirks
 
 - **Several ODF namespace URIs are not what you'd guess from the prefix.** `draw:` is `...drawing:1.0`, `number:` is `...datastyle:1.0`, `fo:`/`svg:`/`smil:` are `*-compatible:1.0`. See `src/ns.ts`.
+- **OpenOffice.org 1.x's `presentation:` namespace is `http://openoffice.org/2000/presentation`, not the `2001/` one OpenOffice.org's own DTD declares.** `xmloff/dtd/nmspace.mod` says `2001/presentation`; every real `.sxi` says `2000/presentation`, and the `2001` spelling appears nowhere in LibreOffice's namespace table — so nothing could ever have read it. `config:` and `manifest:` genuinely are the `2001/` ones.
+- **An OpenOffice.org 1.x package has no `mimetype` part.** That convention arrived with ODF; before it, the manifest's `/` entry was the only record of a document's type, and it is what `isOoo1Package`-adjacent code reads. `transformOoo1Package` synthesises the ODF part.
+- **OpenOffice.org 1.x writes lengths in an `"inch"` unit ODF does not have** (`svg:width="1.9992inch"`), so `parseOdfLength` rejects them — the OpenOffice.org transform rewrites the unit before any reader sees it.
 - **`.odb`'s media type is `application/vnd.oasis.opendocument.base`**, not `...database`.
 - **`dc:creator` records whoever most recently _saved_ the document, not the author** — the original author is `meta:initial-creator`.
 - **`meta:keyword` appears once per keyword**, unlike OOXML's single comma-separated `cp:keywords`.
@@ -274,6 +315,8 @@ Conventional Commits, enforced workspace-wide by commitlint through a root `comm
 - [ooxml.js](../ooxml.js/README.md) — the OOXML sibling; architecturally mirrored, deliberately not depended on.
 - [document-schema.js](../document-schema.js/README.md) — the canonical `ContentDocument`/`DocumentTree` schema both packages depend on, and the home of the `assembleTree`/`flattenTree`/`decompose`/`factorStyles` transform between the two encodings.
 - [documents.js](https://github.com/ExaDev/documents.js) — the downstream consumer; its own `readOdtContent`/`readOdpContent`/`readOdsContent`/`readOdgContent` adapters wrap this package's flat `*Content` readers into `ContentDocument`s, adding the odt/odp formula, image, and vector detection passes those readers deliberately leave out.
+- [OpenOffice.org XML File Format 1.0](https://www.openoffice.org/xml/general.html) ([archived](https://web.archive.org/web/20240101000000*/https://www.openoffice.org/xml/general.html)) — the pre-OASIS format's own project page, and the source of the DTD (`xmloff/dtd/office.mod`, `text.mod`, `nmspace.mod`, [retained in Apache OpenOffice's tree](https://github.com/apache/openoffice/tree/trunk/main/xmloff/dtd)) that `src/ooo1/` was written against.
+- [LibreOffice's own OpenOffice.org-to-ODF transformer](https://github.com/LibreOffice/core/tree/master/xmloff/source/transform) — `OOo2Oasis.cxx`'s element and attribute action tables and `StyleOOoTContext.cxx`'s `style:properties` splitter, cross-checked against for every rename `src/ooo1/` implements. Its namespace token table is [`xmloff/source/core/xmltoken.cxx`](https://github.com/LibreOffice/core/blob/master/xmloff/source/core/xmltoken.cxx) (the `XML_N_*_OOO` entries).
 
 ## License
 

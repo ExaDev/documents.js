@@ -1,7 +1,7 @@
 {
   "name": "odf.js",
   "version": "6.1.3",
-  "description": "Type-safe, lossless round-trip conversion between OpenDocument Format packages (odt, ods, odp) and JSON, hand-written and dependency-minimal, built on Zod 4 codecs.",
+  "description": "Type-safe, lossless round-trip conversion between OpenDocument Format packages (odt, ods, odp) and JSON, plus read support for the pre-OASIS OpenOffice.org 1.x documents ODF was based on (sxw, sxc, sxi, sxd), hand-written and dependency-minimal, built on Zod 4 codecs.",
   "type": "module",
   "repository": {
     "type": "git",
@@ -72,6 +72,12 @@
     "odt",
     "ods",
     "odp",
+    "sxw",
+    "sxc",
+    "sxi",
+    "sxd",
+    "openoffice",
+    "staroffice",
     "round-trip",
     "zod",
     "codec"
