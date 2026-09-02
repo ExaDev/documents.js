@@ -1,3 +1,13 @@
+## [5.4.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.3.0...document-schema.js%405.4.0) (2026-09-02)
+
+### Features
+
+* **document-schema.js:** add epub to SourceFormatSchema ([dc0891b](https://github.com/ExaDev/documents.js/commit/dc0891bd0a811884bb69d07ff3ab414ac156aa9a))
+
+### Bug Fixes
+
+* **document-schema.js:** add epub to the SourceResidue JSON-Schema fragment ([20c790f](https://github.com/ExaDev/documents.js/commit/20c790f9b6f2954e1f41c5486043f3745038a91d))
+
 ## [5.3.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.2.0...document-schema.js%405.3.0) (2026-09-02)
 
 ### Features
