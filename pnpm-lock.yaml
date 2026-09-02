@@ -601,7 +601,7 @@ importers:
         specifier: ^6.1.2
         version: link:../markdown-codec
       odf.js:
-        specifier: ^6.1.1
+        specifier: ^6.1.2
         version: link:../odf.js
       ooxml.js:
         specifier: ^6.2.0
