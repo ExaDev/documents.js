@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { documentTreeWithSchema, type StylesTable } from 'document-schema.js';
-import { buildOutline, effectivePackage, flattenOutline, isOutlineChild, leafContentHash, outlineLeafText, projectDocumentGraph } from '../../src';
+import { buildOutline, deriveNeighbourLabels, effectivePackage, flattenOutline, isOutlineChild, leafContentHash, outlineLeafText, projectDocumentGraph, segmentSheetRegions } from '../../src';
 import { stableContentHash } from '../../src/outline/hash';
 import {
   drawPageGroup,
@@ -12,6 +12,7 @@ import {
   presentationPackage,
   sectionGroup,
   shapeGroup,
+  sheetCell,
   sheetGroup,
   sheetImage,
   slideGroup,
@@ -75,5 +76,21 @@ describe('document-outline.js under the Cloudflare Workers runtime', () => {
       leafContentHash({ kind: 'paragraph', runs: [{ text: 'before' }] }),
     );
     expect(stableContentHash(documentTreeWithSchema(pkg))).toBe(stableContentHash(pkg));
+  });
+
+  it('segments sheet regions and derives neighbour labels inside the isolate', () => {
+    const cells = [
+      sheetCell(0, 1, { kind: 'string', value: 'Revenue' }, 'Revenue'),
+      sheetCell(1, 0, { kind: 'string', value: 'Q1' }, 'Q1'),
+      sheetCell(1, 1, { kind: 'number', value: 1000 }, '1000'),
+    ];
+    const regions = segmentSheetRegions(cells);
+    expect(regions).toHaveLength(1);
+    expect(regions[0]?.cells).toHaveLength(3);
+    const labels = deriveNeighbourLabels(cells);
+    expect(labels).toHaveLength(3);
+    const value = labels.find((label) => label.cell.row === 1 && label.cell.column === 1);
+    expect(value?.above).toEqual({ ref: { row: 0, column: 1 }, text: 'Revenue', distance: 1, confidence: 1 });
+    expect(value?.left).toEqual({ ref: { row: 1, column: 0 }, text: 'Q1', distance: 1, confidence: 1 });
   });
 });

@@ -2,8 +2,9 @@
 export * from "./outline/build";
 export * from "./outline/effective";
 export * from "./outline/graph";
-// Sheet region segmentation (ExaDev/documents.js#823, "Ask 2"): a purely additional artefact a consumer opts into over a sheet's own cell array, never wired into buildOutline or any other existing entry point -- see the module doc on outline/regions.ts.
+// Sheet region segmentation and neighbour-derived labels (ExaDev/documents.js#823, "Ask 2"): both are purely additional artefacts a consumer opts into over a sheet's own cell array, never wired into buildOutline or any other existing entry point -- see the module docs on outline/regions.ts and outline/labels.ts.
 export * from "./outline/regions";
+export * from "./outline/labels";
 // The order-key module's named rebalance signal, so a caller catching exhaustion from any of the `orderKeys.*` operations branches on instanceof rather than parsing a message. Exported from here rather than relayed through outline/graph.ts, which is not a barrel: the root surface was always the intent, and graph.ts was only the conduit that reached it. Deliberately not `export *` -- the individual order-key operations stay namespaced under graph.ts's own `orderKeys` object rather than becoming top-level names.
 export { OrderKeyBudgetExhaustedError } from "./outline/order-keys";
 export * from "./outline/helpers";
