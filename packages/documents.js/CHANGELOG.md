@@ -1,3 +1,10 @@
+## [6.2.2](https://github.com/ExaDev/documents.js/compare/documents.js%406.2.1...documents.js%406.2.2) (2026-09-02)
+
+
+### Dependencies
+
+- Updated odf.js to ^6.2.0
+
 ## [6.2.1](https://github.com/ExaDev/documents.js/compare/documents.js%406.2.0...documents.js%406.2.1) (2026-09-02)
 
 ### Bug Fixes

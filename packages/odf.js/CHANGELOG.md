@@ -1,3 +1,24 @@
+## [6.2.0](https://github.com/ExaDev/documents.js/compare/odf.js%406.1.3...odf.js%406.2.0) (2026-09-02)
+
+### Features
+
+* **odf.js:** add the OpenOffice.org 1.x namespace and media-type tables ([204ff67](https://github.com/ExaDev/documents.js/commit/204ff67f53d9ca2f00256c85534c566678470b59))
+* **odf.js:** read sxw, sxc, sxi and sxd through the ODF readers ([d1ae5d6](https://github.com/ExaDev/documents.js/commit/d1ae5d641808b00b05ed06ceca56101915304c4d))
+* **odf.js:** rewrite an OpenOffice.org 1.x package into the ODF shape ([cf7c120](https://github.com/ExaDev/documents.js/commit/cf7c12073acfa0df1f01105ad9a3367f8931ddbe))
+* **odf.js:** split OpenOffice.org 1.x style:properties into ODF's typed elements ([2a388a3](https://github.com/ExaDev/documents.js/commit/2a388a330487f31766ec866018986a6710394720))
+
+### Code Refactoring
+
+* **odf.js:** drop office:class where every other attribute is handled ([777777d](https://github.com/ExaDev/documents.js/commit/777777d9d1640dd4e9ab7bea1ee8d182594eebdc))
+
+### Documentation
+
+* **odf.js:** document the OpenOffice.org 1.x reading path ([4855885](https://github.com/ExaDev/documents.js/commit/485588530995f9de76a78c1b156ab2148232a5e4))
+
+### Tests
+
+* **odf.js:** assert the OpenOffice.org 1.x surface against the built artifact ([75e7237](https://github.com/ExaDev/documents.js/commit/75e7237211145e542ab2fd276a0252ac91f4bf52))
+
 ## [6.1.3](https://github.com/ExaDev/documents.js/compare/odf.js%406.1.2...odf.js%406.1.3) (2026-09-02)
 
 ### Miscellaneous Chores
