@@ -71,7 +71,7 @@ function readEpubInternal(
     );
   }
   const opfDir = dirname(opfPath);
-  const opf = parseOpf(decodeText(opfBytes));
+  const opf = parseOpf(decodeText(opfBytes), sink);
 
   const manifestById = new Map(opf.manifest.map((item) => [item.id, item]));
 
@@ -100,13 +100,18 @@ function readEpubInternal(
       continue;
     }
     const sectionDir = dirname(fullPath);
-    const blocks = readXhtmlBody(decodeText(xhtmlBytes), {
+    const { blocks, source } = readXhtmlBody(decodeText(xhtmlBytes), {
       resolveImage: (src) => entries[resolvePackagePath(sectionDir, src)],
       sink,
       sourceHref: fullPath,
       contentWidthPt: CONTENT_WIDTH_PT,
     });
-    sections.push({ pageSize: PAGE_SIZE_A4, margins: A4_MARGINS, blocks });
+    sections.push({
+      pageSize: PAGE_SIZE_A4,
+      margins: A4_MARGINS,
+      blocks,
+      ...(source !== undefined ? { source } : {}),
+    });
   }
 
   if (sections.length === 0) {

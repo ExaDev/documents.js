@@ -17,7 +17,7 @@ function read(
     sink,
     sourceHref: "chapter1.xhtml",
     contentWidthPt: CONTENT_WIDTH_PT,
-  });
+  }).blocks;
 }
 
 describe("headings", () => {
@@ -321,7 +321,7 @@ function fakePng(widthPx: number, heightPx: number): Uint8Array<ArrayBuffer> {
 describe("images", () => {
   it("resolves a manifest image to base64 with pt dimensions derived from its pixel size", () => {
     const bytes = fakePng(96, 192);
-    const blocks = readXhtmlBody(
+    const { blocks } = readXhtmlBody(
       body('<p><img src="a.png" alt="a picture"/></p>'),
       {
         resolveImage: (href) => (href === "a.png" ? bytes : undefined),
@@ -362,7 +362,7 @@ describe("images", () => {
 
   it("degrades to alt text with a diagnostic for a resolved but unsupported format", () => {
     const sink = vi.fn();
-    const blocks = readXhtmlBody(body('<img src="a.gif" alt="a gif"/>'), {
+    const { blocks } = readXhtmlBody(body('<img src="a.gif" alt="a gif"/>'), {
       resolveImage: () => new Uint8Array([0x47, 0x49, 0x46, 0x38]),
       sink,
       sourceHref: "chapter1.xhtml",
@@ -378,7 +378,7 @@ describe("images", () => {
 describe("figure/figcaption", () => {
   it("reads the caption as a plain paragraph following the image", () => {
     const bytes = new Uint8Array([1]);
-    const blocks = readXhtmlBody(
+    const { blocks } = readXhtmlBody(
       body(
         '<figure><img src="a.png" alt="alt text"/><figcaption>Caption text</figcaption></figure>',
       ),

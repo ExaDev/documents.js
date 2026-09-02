@@ -26,7 +26,6 @@ export const NOOP_EPUB_DIAGNOSTIC_SINK: EpubDiagnosticSink = () => {
 export const EpubDiagnosticCodes = {
   // src/nav (read side: nav.xhtml/NCX -> outline, reconciled against the spine)
   NAV_SPINE_ORDER_MISMATCH: "epub/nav-spine-order-mismatch",
-  NAV_ENTRY_UNRESOLVED: "epub/nav-entry-unresolved",
   NCX_MISSING: "epub/ncx-missing",
   NAV_DOCUMENT_MISSING: "epub/nav-document-missing",
   // src/opf (read side: manifest/spine/metadata)

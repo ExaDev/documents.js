@@ -165,6 +165,28 @@ describe("writeEpubContent -> readEpubContent round trip", () => {
     expect(section.blocks).toEqual(document.sections[0]?.blocks);
   });
 
+  it("re-emits a section's own quarantined CSS residue verbatim on a same-format write", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595.28, heightPt: 841.89 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [{ kind: "paragraph", runs: [{ text: "Styled section." }] }],
+          source: {
+            format: "epub",
+            xml: "<style>p { color: red; }</style>",
+          },
+        },
+      ],
+    };
+    const result = readEpubContent(writeEpubContent(document));
+    expect(result.kind).toBe("wordprocessing");
+    if (result.kind !== "wordprocessing") return;
+    expect(result.sections[0]?.source).toEqual(document.sections[0]?.source);
+  });
+
   it("writes the OCF-mandated mimetype-first/stored byte layout at the full pipeline level", () => {
     // Not a byte-for-byte determinism check across two writes: writeOpf mints a fresh dc:identifier per call (ExaDev/documents.js#801's own explicit "generated identifier" write scope), so the OPF entry's own compressed bytes genuinely differ between two writes of the identical document -- that is correct, not a gap in the fixed-mtime/ordered-entries discipline src/zip.ts's own unit tests already pin at the fflate-wrapper level. What IS a fixed, checkable invariant at this full-pipeline level is the physical layout OCF requires: "mimetype" first, stored uncompressed, and META-INF/container.xml immediately after it.
     const document: ContentDocument = {

@@ -22,7 +22,7 @@ function roundTrip(blocks: ContentBlock[]): ContentBlock[] {
     sink: () => undefined,
     sourceHref: "chapter1.xhtml",
     contentWidthPt: CONTENT_WIDTH_PT,
-  });
+  }).blocks;
 }
 
 describe("writeXhtmlBody", () => {

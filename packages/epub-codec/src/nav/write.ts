@@ -28,7 +28,8 @@ function text(value: string): XmlNode {
   return { type: "text", value: encodeEntities(value) };
 }
 
-function sectionTitle(section: ContentSection, index: number): string {
+// A section's own title, derived from its first heading paragraph -- exported so src/write.ts's own per-section <head><title> can share the identical derivation rather than a second, potentially-divergent copy (a section's toc entry and its own document <title> should always name the same thing).
+export function sectionTitle(section: ContentSection, index: number): string {
   for (const block of section.blocks) {
     if (block.kind === "paragraph" && block.headingLevel !== undefined) {
       const label = block.runs.map((run) => run.text).join("");
