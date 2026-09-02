@@ -1,16 +1,10 @@
 {
   "branches": ["main"],
+  "commitStrategy": "single",
   "plugins": [
     "@semantic-release/changelog",
     ["@semantic-release/npm", { "npmPublish": true }],
-    "@semantic-release/github",
-    [
-      "@semantic-release/git",
-      {
-        "assets": ["CHANGELOG.md", "package.json"],
-        "message": "chore(release): ${nextRelease.gitTag} [skip ci]"
-      }
-    ]
+    "@semantic-release/github"
   ],
   "analyzeCommits": {
     "preset": "conventionalcommits",
