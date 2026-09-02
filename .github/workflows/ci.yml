@@ -370,7 +370,8 @@ jobs:
               NPM_ALIASES=$(echo "$NPM_ALIASES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg alias "$ALIAS" \
                 '. + [{name: $name, version: $version, tag: $tag, alias: $alias}]')
             done < <(jq -r --arg name "$NAME" '.[$name].aliases // [] | .[]' .github/release-republish.json)
-          done < <(printf '%s' "$BACKFILL_TAGS" | tr ',' '\n')
+          # printf '%s\n', not '%s': `tr` never adds a trailing newline of its own, and `read` silently drops the last line of a while-read loop when it hits EOF without one -- confirmed the hard way, the final tag in a comma-separated backfill_tags list was dropped from every matrix with no warning or error. The trailing \n here survives the comma-to-newline translation as the terminator the last tag needs.
+          done < <(printf '%s\n' "$BACKFILL_TAGS" | tr ',' '\n')
           {
             echo "github-packages-matrix=$GITHUB_PACKAGES"
             echo "npm-alias-matrix=$NPM_ALIASES"
