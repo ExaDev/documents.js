@@ -11,6 +11,7 @@ export * from "./image/dimensions";
 export * from "./xhtml/context";
 export * from "./xhtml/footnote";
 export * from "./xhtml/inline";
+export * from "./xhtml/list-id";
 export * from "./xhtml/read";
 export * from "./xhtml/style-constants";
 export * from "./xml/node";
