@@ -1,3 +1,14 @@
+## [3.5.3](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.5.2...pdf-codec%403.5.3) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.3.0 in pdf-codec [skip ci] ([212b078](https://github.com/ExaDev/documents.js/commit/212b07819c2c34997c2905c0eb5246ef41b72ee7))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.3.0
+
 ## [3.5.2](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.5.1...pdf-codec%403.5.2) (2026-09-02)
 
 ### Bug Fixes
