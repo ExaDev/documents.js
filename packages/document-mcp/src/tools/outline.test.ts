@@ -19,7 +19,7 @@ import { createServer } from "../server";
 import { odfFormulaBytes } from "../test-support/odf-formula-fixture";
 import { buildMultiPagePdf } from "../test-support/pdf-fixture";
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- proving `outline_document` is registered under that name, reads a real source document through the converter port, and answers with document-outline.js's buildOutline TOC projection as structured JSON an MCP client can render directly.
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- proving `outline_document` is registered under that name, reads a real source document's own native tree directly (documents.js's readNativeDocumentTree, no bridging conversion involved), and answers with document-outline.js's buildOutline TOC projection as structured JSON an MCP client can render directly.
 
 interface ConnectedPair {
   readonly client: Client;
@@ -122,7 +122,7 @@ describe("outline_document", () => {
     });
   });
 
-  it("outlines a multi-page drawing, one group per page -- the odg regression: buildSvgText refuses more than one page, so the internal probe target routes odg through pdf, not svg", async () => {
+  it("outlines a multi-page drawing, one group per page -- odg reads its own native 'drawing' content directly, with no per-page selection constraint (the svg writer's own SvgMultiPageNotSpecifiedError has no bearing here at all, since nothing bridges through svg)", async () => {
     const editor = createOdg();
     editor.addPage();
     editor.addPage();
@@ -180,7 +180,7 @@ describe("outline_document", () => {
 
 const SHAPE_FRAME: Box = { xPt: 0, yPt: 0, widthPt: 100, heightPt: 20 };
 
-// One real, minimal source document per DocumentFormat not already pinned exactly by a test above (markdown and ods carry their own deep structural assertion; odg carries its own regression pin) -- every OUTLINE_PROBE_TARGETS entry the tool actually dispatches through gets driven at least once, which is exactly the coverage gap that let the odg target ship broken: the two pre-existing deep tests only ever touched 2 of the then-12 entries.
+// One real, minimal source document per DocumentFormat not already pinned exactly by a test above (markdown and ods carry their own deep structural assertion; odg carries its own regression pin) -- every DocumentFormat readNativeDocumentTree dispatches through gets driven at least once, so a format-specific reader gap surfaces here rather than staying invisible behind the two pre-existing deep tests, which only ever touched 2 of the twelve.
 function buildFormatFixtures(): Record<
   Exclude<DocumentFormat, "markdown" | "ods" | "odg">,
   { readonly bytes: Uint8Array<ArrayBuffer>; readonly kind: string }
