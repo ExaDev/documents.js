@@ -312,7 +312,7 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       document-outline.js:
-        specifier: ^3.1.0
+        specifier: ^3.1.1
         version: link:../document-outline.js
       documents.js:
         specifier: ^6.1.2
