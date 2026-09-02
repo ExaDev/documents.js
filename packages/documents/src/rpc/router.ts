@@ -15,6 +15,7 @@ import {
   readDocxContent,
   readDocxExtras,
   readDocumentMetadata,
+  readEpubContent,
   readOdfFormulaContent,
   readOdgContent,
   readOdpContent,
@@ -274,7 +275,7 @@ const SanitizedLayoutDocumentSchema = LayoutDocumentSchema.extend({
   images: z.record(z.string(), SanitizedLayoutImageAssetSchema),
 });
 
-// Reads a ContentDocument directly from bytes, bypassing the conversion engine entirely -- no target build/encode, no PDF layout pass. Every format's standalone content reader is exported from documents.js (xlsx included since documents.js 2.0 -- before that, xlsx had to detour through the xlsx->ods bridge and read .content off the conversion result). markdown, csv, and svg are the plain-text formats: their readers take the decoded string, not a package, so each decodes its bytes up front the way markdown always has.
+// Reads a ContentDocument directly from bytes, bypassing the conversion engine entirely -- no target build/encode, no PDF layout pass. Every format's standalone content reader is exported from documents.js (xlsx included since documents.js 2.0 -- before that, xlsx had to detour through the xlsx->ods bridge and read .content off the conversion result). markdown, csv, and svg are the plain-text formats: their readers take the decoded string, not a package, so each decodes its bytes up front the way markdown always has. epub is neither a package nor plain text: readEpubContent (epub-codec, via documents.js's own re-export) reads its zip bytes directly with no decodeDocumentPackage step of its own -- see documents.js's own BytesFormatNode (src/convert/composition.ts) for why.
 function readContentForFormat(
   format: DocumentFormat,
   bytes: Uint8Array<ArrayBuffer>,
@@ -283,6 +284,7 @@ function readContentForFormat(
     return readMarkdownContent(new TextDecoder().decode(bytes));
   if (format === "csv") return readCsvContent(new TextDecoder().decode(bytes));
   if (format === "svg") return readSvgContent(new TextDecoder().decode(bytes));
+  if (format === "epub") return readEpubContent(bytes);
   if (format === "pdf") throw new Error("PDF has no standalone content reader");
   const pkg = decodeDocumentPackage(format, bytes);
   switch (format) {

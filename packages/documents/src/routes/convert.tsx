@@ -53,8 +53,9 @@ function isSheetFormat(format: string | null): boolean {
   return format === "xlsx" || format === "ods" || format === "csv";
 }
 
+// epub reads as a wordprocessing-kind ContentDocument too (readEpubContent), and -- unlike markdown -- carries no private styling convention of its own that this app's MarkdownPreview branch exists to translate (router.ts's normalizeMarkdownStyling is markdown-numId-specific), so it previews through the same native-HTML renderer as docx/odt rather than through MarkdownPreview.
 function isWordProcessingFormat(format: string | null): boolean {
-  return format === "docx" || format === "odt";
+  return format === "docx" || format === "odt" || format === "epub";
 }
 
 // svg reads as a drawing-kind ContentDocument (readSvgContent), so it previews through the same pages/shapes/vectors renderer as odg.
