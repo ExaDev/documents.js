@@ -106,7 +106,7 @@
     "eslint": "^10.8.0",
     "husky": "^9.1.7",
     "ink-testing-library": "^4.0.0",
-    "odf.js": "^6.1.1",
+    "odf.js": "^6.1.2",
     "publint": "^0.3.22",
     "semantic-release": "^25.0.8",
     "tsdown": "^0.22.14",
