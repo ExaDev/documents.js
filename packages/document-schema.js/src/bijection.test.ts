@@ -7,6 +7,8 @@ import {
   type ContentDocument,
   type ContentEmbeddedObject,
   type ContentSheetCell,
+  type ContentSheetConditionalFormat,
+  type ContentSheetDataValidation,
   type ContentSheetImage,
   type ContentSheetPrintSettings,
   type ContentShape,
@@ -541,6 +543,31 @@ function corpus(): readonly CorpusEntry[] {
             ] satisfies ContentSheetImage[],
             printSettings: PRINT_SETTINGS,
             embeddedObjects: [embeddedDrawing],
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 2, startColumn: 0, endRow: 2, endColumn: 0 },
+                ],
+                type: "list",
+                formula1: '"A,B,C"',
+                allowBlank: true,
+                showErrorMessage: true,
+                errorStyle: "stop",
+                error: "Pick A, B or C.",
+              },
+            ] satisfies ContentSheetDataValidation[],
+            conditionalFormats: [
+              {
+                type: "cellIs",
+                ranges: [
+                  { startRow: 0, startColumn: 1, endRow: 1, endColumn: 1 },
+                ],
+                priority: 1,
+                operator: "greaterThan",
+                formula1: "10",
+                style: { background: { r: 0.8, g: 1, b: 0.8 } },
+              },
+            ] satisfies ContentSheetConditionalFormat[],
           },
           {
             name: "Empty",
