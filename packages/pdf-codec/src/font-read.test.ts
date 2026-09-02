@@ -187,6 +187,168 @@ describe("createFontResolver: simple fonts", () => {
       true,
     );
   });
+
+  it("resolves a /Differences glyph name outside WinAnsi's own repertoire via the Symbol/ZapfDingbats glyph-name table, on an ordinary Latin font", () => {
+    // A ordinary Latin-family font with one code repurposed via /Differences for a single symbol character -- a common real-world pattern (an engineering document splicing an Ohm symbol into otherwise Latin body text) rather than a whole font switching character sets. Before this glyph-name table existed, "Omega" resolved to nothing (glyphNameToUnicode only knew WinAnsi's own glyph names), so this code fell through to the replacement character even though /Differences correctly named the glyph.
+    const { sink, diagnostics } = collectDiagnostics();
+    const encodingDict = pdfDict({
+      Differences: pdfArray([pdfNum(87), pdfName("Omega")]),
+    });
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type1"),
+      BaseFont: pdfName("Helvetica"),
+      Encoding: encodingDict,
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    // The Adobe Glyph List maps the PostScript name "Omega" to U+2126 OHM SIGN, not U+03A9 GREEK CAPITAL LETTER OMEGA -- see encoding.ts's own header comment on SYMBOL_AND_ZAPFDINGBATS_GLYPH_UNICODE for why.
+    expect(font?.decodeToUnicode(new Uint8Array([87]))).toBe("Ω");
+    expect(diagnostics.some((d) => d.code === "text/unmapped-encoding")).toBe(
+      false,
+    );
+  });
+
+  it('resolves a /Differences glyph name from the ZapfDingbats "aNNN" namespace via the same glyph-name table', () => {
+    const { sink } = collectDiagnostics();
+    const encodingDict = pdfDict({
+      Differences: pdfArray([pdfNum(200), pdfName("a1")]),
+    });
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type1"),
+      BaseFont: pdfName("Helvetica"),
+      Encoding: encodingDict,
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font?.decodeToUnicode(new Uint8Array([200]))).toBe("✁"); // UPPER BLADE SCISSORS
+  });
+});
+
+describe("createFontResolver: simple fonts with a Symbol/ZapfDingbats built-in encoding", () => {
+  it("decodes via the Symbol font's own built-in encoding when no /Encoding or /ToUnicode covers a code", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const descriptor = pdfDict({ Flags: pdfNum(4) }); // Symbolic bit (ISO 32000-1 Table 123, bit 3)
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type1"),
+      BaseFont: pdfName("Symbol"),
+      FontDescriptor: descriptor,
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    // Code 0x57 in the Symbol font's own built-in encoding is glyph "Omega" (U+2126 OHM SIGN per the AGL) -- pre-fix, this code silently fell back to WinAnsiEncoding instead and produced "W" (0x57's WinAnsi glyph), with no diagnostic at all.
+    expect(font?.decodeToUnicode(new Uint8Array([0x57]))).toBe("Ω");
+    expect(diagnostics.some((d) => d.code === "text/unmapped-encoding")).toBe(
+      false,
+    );
+  });
+
+  it("recognises the Symbol/ZapfDingbats built-in encoding by /BaseFont alone, even with no /FontDescriptor to carry a Symbolic flag", () => {
+    const { sink } = collectDiagnostics();
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type1"),
+      BaseFont: pdfName("ABCDEF+Symbol"), // a subsetted embed still names the same standard-14 face once its subset tag is stripped
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font?.decodeToUnicode(new Uint8Array([0x57]))).toBe("Ω");
+  });
+
+  it("decodes ZapfDingbats via its own built-in encoding", () => {
+    const { sink } = collectDiagnostics();
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type1"),
+      BaseFont: pdfName("ZapfDingbats"),
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font?.decodeToUnicode(new Uint8Array([0x21]))).toBe("✁"); // code 0x21 = "a1" = UPPER BLADE SCISSORS
+  });
+
+  it("does not silently substitute a plausible-looking Latin letter for a Symbolic font this codec cannot identify", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const descriptor = pdfDict({ Flags: pdfNum(4) }); // Symbolic bit, but /BaseFont is neither Symbol nor ZapfDingbats
+    const fontDict = pdfDict({
+      Subtype: pdfName("TrueType"),
+      BaseFont: pdfName("ABCDEF+CustomSymbolSubset"),
+      FontDescriptor: descriptor,
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    // Previously this fell back to WinAnsiEncoding and produced "W" -- a plausible but wrong letter with no diagnostic. This codec has no way to know this font's real built-in encoding without parsing its embedded program, so it now reports honest "unmapped" (the replacement character plus a diagnostic) instead of guessing.
+    expect(font?.decodeToUnicode(new Uint8Array([0x57]))).toBe("�");
+    expect(diagnostics.some((d) => d.code === "text/unmapped-encoding")).toBe(
+      true,
+    );
+  });
+
+  it("still falls back to WinAnsi when /FontDescriptor explicitly clears the Symbolic flag", () => {
+    const { sink } = collectDiagnostics();
+    const descriptor = pdfDict({ Flags: pdfNum(32) }); // Nonsymbolic bit (bit 6) only -- Symbolic bit (4) is unset
+    const fontDict = pdfDict({
+      Subtype: pdfName("TrueType"),
+      BaseFont: pdfName("Arial"),
+      FontDescriptor: descriptor,
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font?.decodeToUnicode(new Uint8Array([65]))).toBe("A");
+  });
+
+  it("still prefers /ToUnicode over the Symbol built-in encoding when both are present", () => {
+    const { sink } = collectDiagnostics();
+    const objects = new Map<number, PdfObject>([
+      [
+        9,
+        pdfStream(
+          pdfDict({}),
+          textBytes("beginbfchar\n<0057> <03A9>\nendbfchar"),
+        ),
+      ],
+    ]);
+    const descriptor = pdfDict({ Flags: pdfNum(4) });
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type1"),
+      BaseFont: pdfName("Symbol"),
+      FontDescriptor: descriptor,
+      ToUnicode: pdfRef(9, 0),
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    // The document's own /ToUnicode CMap here deliberately picks the "genuine" Greek Omega (U+03A9) rather than the built-in table's AGL-conventional U+2126, and it wins: /ToUnicode is always the most specific, most authoritative source when present.
+    expect(font?.decodeToUnicode(new Uint8Array([0x57]))).toBe("Ω");
+  });
 });
 
 describe("createFontResolver: composite (Type0) fonts", () => {

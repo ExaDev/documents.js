@@ -3,7 +3,12 @@ import { parseToUnicodeCMap } from "./cmap";
 import type { ToUnicodeCMap } from "./cmap";
 import type { PdfDiagnosticSink } from "./diagnostics";
 import { decodeStream } from "./filters";
-import { glyphNameToUnicode, winAnsiGlyphName } from "./encoding";
+import {
+  glyphNameToUnicode,
+  symbolGlyphName,
+  winAnsiGlyphName,
+  zapfDingbatsGlyphName,
+} from "./encoding";
 import { resolveStandardFont } from "./fonts";
 import { styleFromBaseFontName } from "./font-style";
 import type { FontMetricsPort, PdfObjectResolver } from "./interpret";
@@ -26,7 +31,8 @@ export interface FontReadContext {
   readonly sink: PdfDiagnosticSink;
 }
 
-// ISO 32000-1 Table 123 (font descriptor /Flags): bit position n has value 2^(n-1). Bit 7 = Italic, bit 19 = ForceBold.
+// ISO 32000-1 Table 123 (font descriptor /Flags): bit position n has value 2^(n-1). Bit 3 = Symbolic, bit 7 = Italic, bit 19 = ForceBold.
+const SYMBOLIC_FLAG_BIT = 1 << 2;
 const ITALIC_FLAG_BIT = 1 << 6;
 const FORCE_BOLD_FLAG_BIT = 1 << 18;
 const REPLACEMENT_CHARACTER = "�";
@@ -35,6 +41,7 @@ function styleFlagsFromDescriptor(descriptor: PdfDict | undefined): {
   forceBold?: boolean;
   italicFlag?: boolean;
   italicAngle?: number;
+  symbolic?: boolean;
 } {
   const flags =
     descriptor !== undefined
@@ -49,7 +56,22 @@ function styleFlagsFromDescriptor(descriptor: PdfDict | undefined): {
       descriptor !== undefined
         ? asNumber(dictGet(descriptor, "ItalicAngle"))
         : undefined,
+    symbolic:
+      flags !== undefined ? (flags & SYMBOLIC_FLAG_BIT) !== 0 : undefined,
   };
+}
+
+// A simple font's own built-in encoding is knowable to a reader without parsing its embedded font program only for the two standard-14 symbol faces, whose code -> glyph mapping the PDF spec fixes (ISO 32000-1 Annex D.5/D.6): Symbol and ZapfDingbats. /BaseFont is matched after stripping a subset tag the same way styleFromBaseFontName does, since a subsetted symbol font (e.g. "ABCDEF+Symbol") is still that same standard face.
+function builtinSymbolGlyphNameLookup(
+  baseFamily: string,
+): ((code: number) => string | undefined) | undefined {
+  if (baseFamily === "Symbol") {
+    return symbolGlyphName;
+  }
+  if (baseFamily === "ZapfDingbats") {
+    return zapfDingbatsGlyphName;
+  }
+  return undefined;
 }
 
 function glyphNameToUnicodeWithUniFallback(name: string): number | undefined {
@@ -100,10 +122,13 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   const descriptor = context.resolver.resolveDict(
     dictGet(fontDict, "FontDescriptor"),
   );
+  const styleFlags = styleFlagsFromDescriptor(descriptor);
   const { baseFamily, bold, italic } = styleFromBaseFontName(
     baseFont,
-    styleFlagsFromDescriptor(descriptor),
+    styleFlags,
   );
+  const symbolic = styleFlags.symbolic ?? false;
+  const builtinGlyphName = builtinSymbolGlyphNameLookup(baseFamily);
 
   const widthsArr = asArray(dictGet(fontDict, "Widths"));
   const firstChar = asNumber(dictGet(fontDict, "FirstChar")) ?? 0;
@@ -151,6 +176,10 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
       : undefined,
   );
 
+  // The name source for a code neither /ToUnicode nor /Differences resolves. A font whose /BaseFont is literally one of the two standard-14 symbol faces always falls back to that face's own fixed built-in encoding (ISO 32000-1 9.6.6.2 -- WinAnsi/MacRoman/StandardEncoding are never valid for Symbol or ZapfDingbats, whether or not /FontDescriptor sets the Symbolic flag). Any other font that IS flagged Symbolic has some other, unknown built-in encoding this codec cannot resolve without parsing its embedded font program (see font-read.ts's own header comment) -- guessing WinAnsi there would silently substitute a plausible-looking but wrong Latin letter, so it stays unmapped instead, same as buildCompositeFont already does for a missing /ToUnicode. Only a non-symbolic (or Flags-less) font falls back to WinAnsi, matching ISO 32000-1's own default for a Type1/TrueType font's built-in encoding.
+  const fallbackGlyphName: (code: number) => string | undefined =
+    builtinGlyphName ?? (symbolic ? () => undefined : winAnsiGlyphName);
+
   const decodeToUnicode = (codes: Uint8Array<ArrayBuffer>): string => {
     let out = "";
     let unmapped = 0;
@@ -160,7 +189,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
         out += viaToUnicode;
         continue;
       }
-      const name = differencesMap.get(code) ?? winAnsiGlyphName(code);
+      const name = differencesMap.get(code) ?? fallbackGlyphName(code);
       const unicode =
         name !== undefined
           ? glyphNameToUnicodeWithUniFallback(name)
