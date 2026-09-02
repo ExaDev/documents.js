@@ -1,3 +1,26 @@
+## [6.2.0](https://github.com/ExaDev/documents.js/compare/documents.js%406.1.4...documents.js%406.2.0) (2026-09-02)
+
+### Features
+
+* **documents.js:** add readNativeDocumentTree, a bridge-free source-tree read ([3067865](https://github.com/ExaDev/documents.js/commit/30678650b6f47f882a1ac5b3b03d03241ae53f39)), references [ExaDev/documents.js#823](https://github.com/ExaDev/documents.js/issues/823)
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.3.0 in documents.js [skip ci] ([37d0665](https://github.com/ExaDev/documents.js/commit/37d06659c90d4c73e034a7355190c0d8fff59152))
+* **deps:** bump markdown-codec to ^6.1.2 in documents.js [skip ci] ([56c076d](https://github.com/ExaDev/documents.js/commit/56c076dcb8d2cf61953e3f1a19921836722dadd7))
+* **deps:** bump odf.js to ^6.1.2 in documents.js [skip ci] ([1df65af](https://github.com/ExaDev/documents.js/commit/1df65af1a411fcf2e50afcb0864b2ae9baf72863))
+* **deps:** bump ooxml.js to ^6.3.0 in documents.js [skip ci] ([92b69c3](https://github.com/ExaDev/documents.js/commit/92b69c3ba3f2ec69fb58ec76537c954b37a3bd52))
+* **deps:** bump pdf-codec to ^3.5.3 in documents.js [skip ci] ([49e9c5e](https://github.com/ExaDev/documents.js/commit/49e9c5ed0156529d271b2f2d63061c50493adcae))
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.5.3
+- Updated ooxml.js to ^6.3.0
+- Updated odf.js to ^6.1.2
+- Updated markdown-codec to ^6.1.2
+- Updated document-schema.js to ^5.3.0
+
 ## [6.1.4](https://github.com/ExaDev/documents.js/compare/documents.js%406.1.3...documents.js%406.1.4) (2026-09-02)
 
 ### Miscellaneous Chores
