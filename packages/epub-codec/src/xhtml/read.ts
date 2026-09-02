@@ -4,6 +4,7 @@ import type {
   ContentParagraph,
   ContentTableCell,
   ContentTableRow,
+  SourceResidue,
 } from "document-schema.js";
 import { clampHeadingLevel } from "document-schema.js";
 import { EpubDiagnosticCodes } from "../diagnostics";
@@ -13,6 +14,7 @@ import {
   readImageDimensions,
 } from "../image/dimensions";
 import { bytesToBase64 } from "../util/base64";
+import { buildXml } from "../xml/build";
 import type { XmlElement, XmlNode } from "../xml/node";
 import {
   attrValue,
@@ -147,17 +149,51 @@ export interface ReadXhtmlBodyOptions {
   readonly contentWidthPt: number;
 }
 
-// The top-level entry: parses one XHTML content document's full text and maps its <body> to ContentBlock[]. Throws nothing of its own -- a document with no <body> at all reads as an empty block list, since a spine itemref pointing at genuinely unparsable XML is this package's own EpubParseError territory (src/read.ts), not this module's.
+export interface ReadXhtmlBodyResult {
+  readonly blocks: ContentBlock[];
+  // The document's own <head> style declarations (<link rel="stylesheet">, <style>), quarantined verbatim -- CSS is residue, not content, per this package's own scope (ExaDev/documents.js#801: "the schema is content, not styling"). Undefined when the head carries none. Threaded up to src/read.ts, which lands it on the owning ContentSection's own `source` field; src/xhtml/write.ts re-emits it verbatim into the written <head> for a same-format (EPUB-to-EPUB) round trip -- the restorable-fidelity tier this family's every codec already documents for its own residue channel.
+  readonly source: SourceResidue | undefined;
+}
+
+// The one place a document's own <head> style declarations are found and quarantined -- see ReadXhtmlBodyResult's own note on why CSS rides residue rather than being interpreted.
+function readStyleResidue(
+  html: XmlElement,
+  context: XhtmlReadContext,
+): SourceResidue | undefined {
+  const head = findChildElement(html.children, "head");
+  if (head === undefined) {
+    return undefined;
+  }
+  const styleElements = head.children.filter(
+    (node): node is XmlElement =>
+      node.type === "element" &&
+      (node.tag === "style" ||
+        (node.tag === "link" && attrValue(node, "rel") === "stylesheet")),
+  );
+  if (styleElements.length === 0) {
+    return undefined;
+  }
+  context.sink({
+    code: EpubDiagnosticCodes.STYLE_RESIDUE,
+    severity: "info",
+    message:
+      "the document's own <head> style declarations (CSS) are quarantined as residue rather than interpreted; the schema is content, not styling",
+    href: context.sourceHref,
+  });
+  return { format: "epub", xml: buildXml(styleElements) };
+}
+
+// The top-level entry: parses one XHTML content document's full text and maps its <body> to ContentBlock[], plus any <head> style declarations quarantined as residue. Throws nothing of its own -- a document with no <body> at all reads as an empty block list, since a spine itemref pointing at genuinely unparsable XML is this package's own EpubParseError territory (src/read.ts), not this module's.
 export function readXhtmlBody(
   xml: string,
   options: ReadXhtmlBodyOptions,
-): ContentBlock[] {
+): ReadXhtmlBodyResult {
   const nodes = parseXml(xml);
   const html = rootElement(nodes);
   const body =
     html === undefined ? undefined : findChildElement(html.children, "body");
-  if (body === undefined) {
-    return [];
+  if (body === undefined || html === undefined) {
+    return { blocks: [], source: undefined };
   }
   const idElements = buildIdElementMap(body.children);
   const footnoteTargetIds = new Set<string>();
@@ -183,7 +219,9 @@ export function readXhtmlBody(
     list: undefined,
     contentWidthPt: options.contentWidthPt,
   };
-  return readContainerChildren(body.children, state);
+  const blocks = readContainerChildren(body.children, state);
+  const source = readStyleResidue(html, context);
+  return { blocks, source };
 }
 
 // Every container this package maps transparently (li, blockquote, aside, div/section/..., and the top-level body itself) is, per the XHTML content model, legally allowed to mix real block-level children with bare phrasing content (text and inline markup with no block wrapper) as siblings -- <li>text<ul>...</ul></li> is exactly as real as <li><p>text</p><ul>...</ul></li>, and both idioms appear in real EPUBs. A dispatcher that only recurses into element children whose own tag it recognises as a block would silently drop the phrasing case outright: any stray text node sitting among block siblings is skipped, wherever it falls. This walks the children in source order instead, accumulating a run of phrasing content into its own implicit paragraph (dropped if it produces no runs) and flushing it the moment a real block-level element is reached -- the same "anonymous block box" rule every browser's own HTML block-formatting context applies to inline content sitting beside block siblings. Every block-level dispatch point in this module (a <p>'s own children, a <li>'s, a <blockquote>'s, an <aside>'s, and every other container's default passthrough) reaches content exclusively through this one function; nothing else in the module walks a raw children array directly.
