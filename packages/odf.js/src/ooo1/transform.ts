@@ -194,13 +194,13 @@ const PACKAGE_HREF_ELEMENTS: ReadonlySet<string> = new Set([
 // A length written with OpenOffice.org 1.x's "inch" unit, which ODF spells "in". Matched only as a whole whitespace-delimited token so a compound value keeps its structure (fo:border-left="0.0139inch solid #000080" becomes "0.0139in solid #000080").
 const INCH_TOKEN = /(^|\s)(-?(?:\d+(?:\.\d+)?|\.\d+))inch(?=\s|$)/g;
 
-// Attributes whose value is a name the user chose, where an "inch"-shaped token would be text rather than a measurement. No ODF length attribute's local name ends in "name", so this guard costs nothing and removes the only way the substitution above could corrupt real content.
-function isNameValuedAttribute(name: string): boolean {
-  return name.endsWith("name") || name === "xlink:href";
+// Attributes that never hold a measurement, so an "inch"-shaped token in one is a user's own text (a style called "2 inch indent", a file called "2inch.png") rather than a length to rewrite. No ODF length attribute's local name ends in "name", and none is a URI, so excluding those two costs nothing and closes the only way the substitution above could corrupt real content.
+function carriesNoLength(attributeName: string): boolean {
+  return attributeName.endsWith("name") || attributeName === "xlink:href";
 }
 
 function normaliseAttributeValue(name: string, value: string): string {
-  if (isNameValuedAttribute(name)) {
+  if (carriesNoLength(name)) {
     return value;
   }
   return value.replace(INCH_TOKEN, "$1$2in");
@@ -241,6 +241,15 @@ function transformNamespaceDeclaration(attribute: Attribute): Attribute {
   };
 }
 
+// The document roots that carry office:class. ODF has no attribute for the genre at all -- office:body's own child element names it instead (see buildBody) -- so the attribute is dropped here rather than carried through to quarantine as residue that means nothing on the ODF side.
+const DOCUMENT_ROOT_ELEMENTS: ReadonlySet<string> = new Set([
+  "office:document",
+  "office:document-content",
+  "office:document-styles",
+  "office:document-meta",
+  "office:document-settings",
+]);
+
 function transformAttributes(
   element: XmlElement,
   tag: string,
@@ -253,6 +262,9 @@ function transformAttributes(
       continue;
     }
     const name = renameQName(attribute.name, prefixes);
+    if (name === "office:class" && DOCUMENT_ROOT_ELEMENTS.has(tag)) {
+      continue;
+    }
     const value = normaliseAttributeValue(name, attribute.value);
     out.push({
       name: renameAttributeFor(tag, name),
@@ -395,16 +407,17 @@ function transformElement(
     });
   }
 
+  const attributes = transformAttributes(source, renamedTag, context.prefixes);
   const childContext: TransformContext = {
     ...context,
+    // Whether this element classifies a style:properties directly inside it, and into which property families -- resolved from the already-transformed tag and attributes so the classification sees the same style:family value the output carries.
     propertyTypes: propertyTypesForContainer({
       ...source,
       tag: renamedTag,
-      attributes: transformAttributes(source, renamedTag, context.prefixes),
+      attributes,
     }),
   };
   const children = transformNodes(source.children, childContext);
-  const attributes = transformAttributes(source, renamedTag, context.prefixes);
 
   if (renamedTag === "office:body") {
     return [buildBody(attributes, children, context.documentClass)];
@@ -567,16 +580,7 @@ function transformXmlPart(nodes: readonly XmlNode[]): XmlNode[] {
         attribute.name === `${classAttributeName}:class`),
   )?.value;
   const context: TransformContext = { prefixes, documentClass };
-  return transformNodes(nodes, context).map((node) => {
-    if (node.type !== "element") {
-      return node;
-    }
-    // office:class named the genre, which office:body now carries as an element; ODF has no attribute for it.
-    return {
-      ...node,
-      attributes: withoutAttributes(node.attributes, new Set(["office:class"])),
-    };
-  });
+  return transformNodes(nodes, context);
 }
 
 const MANIFEST_PATH = "META-INF/manifest.xml";
