@@ -89,12 +89,10 @@ const BORDER_WEIGHT_UPPER_PT = {
   medium: 1.875,
 } as const;
 
-// A <color> child of a <border> edge or a <patternFill>'s <fgColor>/<bgColor>: only the rgb attribute is mapped (8 hex digits "AARRGGBB" with a leading alpha prefix, or 6 "RRGGBB" -- the last 6 digits are the real RGB in both forms). theme/indexed/tint/auto carry real colours this reader deliberately does not resolve: theme and indexed require a separate workbook-theme/table resolution this package does not model, and silently substituting black or any other fixed colour would misreport them, so the edge/fill reads as carrying no colour instead.
-function readColorRgb(
-  container: XmlElement,
-  colorTag: string,
+// A <color> element already located by its caller (one of a <border> edge's own colour, a <patternFill>'s <fgColor>/<bgColor>, or one of a colorScale's own several <color> siblings, which readColorRgb below cannot reach since it only ever takes the FIRST child of a given tag): only the rgb attribute is mapped (8 hex digits "AARRGGBB" with a leading alpha prefix, or 6 "RRGGBB" -- the last 6 digits are the real RGB in both forms). theme/indexed/tint/auto carry real colours this reader deliberately does not resolve: theme and indexed require a separate workbook-theme/table resolution this package does not model, and silently substituting black or any other fixed colour would misreport them, so the edge/fill reads as carrying no colour instead.
+export function colorFromElement(
+  colorEl: XmlElement | undefined,
 ): Color | undefined {
-  const colorEl = childrenWithTag(container, colorTag)[0];
   if (colorEl === undefined) {
     return undefined;
   }
@@ -112,6 +110,14 @@ function readColorRgb(
   } catch {
     return undefined;
   }
+}
+
+// The common case: the FIRST child of `container` named `colorTag`, resolved through colorFromElement above. Exported for typed/xlsx/conditional-format.ts, which resolves a dxf's own <font><color/></font> and <fill><patternFill><bgColor/></patternFill></fill> through the identical "first child of this tag" shape cell decoration already uses here.
+export function readColorRgb(
+  container: XmlElement,
+  colorTag: string,
+): Color | undefined {
+  return colorFromElement(childrenWithTag(container, colorTag)[0]);
 }
 
 // One <fill> -> a solid-fill background colour, or undefined for the non-solid patterns (none/gray125/darkDown/...) that do not produce a single ContentSheetCell.background value. For patternType="solid" the cell's visible background is the pattern's FOREGROUND colour (<fgColor>) per OOXML's solid-pattern semantics -- the whole cell is painted with the pattern's fg colour -- with <bgColor> as a fallback only when a producer left fgColor unset. This is the documented Excel/LibreOffice convention and what every real file's solid fill carries; reading bgColor first (the literal pattern-background) would return the wrong colour for the common case.
@@ -289,6 +295,19 @@ export function readCellStyles(pkg: Package): readonly CellStyleEntry[] {
     }
     return entry;
   });
+}
+
+// One raw <dxf> element per <dxfs><dxf>, in document order -- the array index IS a cfRule's own dxfId attribute. Unlike <cellXfs> (interned across every CELL a workbook has, decoration and number format both), a <dxfs> entry exists only to serve conditionalFormatting rules and carries a genuinely different shape (font/fill/alignment/border/numFmt/protection as full override elements, not indices into shared tables), so this is a thin positional list handed to typed/xlsx/conditional-format.ts to resolve into ContentSheetConditionalFormatStyle, not another decoration cascade of this module's own.
+export function readDxfElements(pkg: Package): readonly XmlElement[] {
+  const styleSheet = rootElement(pkg.parts[STYLES_PATH]);
+  if (styleSheet === undefined) {
+    return [];
+  }
+  const dxfsEl = childrenWithTag(styleSheet, "dxfs")[0];
+  if (dxfsEl === undefined) {
+    return [];
+  }
+  return childrenWithTag(dxfsEl, "dxf");
 }
 
 // Parse a style-table index attribute (fillId/borderId) into a narrowed `number | undefined`, so the caller's `!== undefined` guard cleanly types the subsequent array index without relying on Number.isInteger being a type guard (it is not, in this TS lib version).
