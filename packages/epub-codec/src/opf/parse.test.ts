@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EpubInvalidOpfError } from "../diagnostics";
+import { EpubInvalidOpfError, type EpubDiagnosticSink } from "../diagnostics";
 import { parseOpf } from "./parse";
 
 const OPF_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -91,5 +91,25 @@ describe("parseOpf", () => {
       '<package xmlns="http://www.idpf.org/2007/opf"><manifest/><spine/></package>',
     );
     expect(metadata).toEqual({});
+  });
+
+  it("reports dc:publisher/dc:contributor/dc:rights as unmapped metadata fields", () => {
+    const codes: string[] = [];
+    const sink: EpubDiagnosticSink = (diagnostic) =>
+      codes.push(diagnostic.code);
+    parseOpf(
+      `<package xmlns="http://www.idpf.org/2007/opf">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <dc:publisher>A Publisher</dc:publisher>
+          <dc:rights>All rights reserved</dc:rights>
+        </metadata>
+        <manifest/>
+        <spine/>
+      </package>`,
+      sink,
+    );
+    expect(
+      codes.filter((c) => c === "epub/metadata-field-unmapped"),
+    ).toHaveLength(2);
   });
 });
