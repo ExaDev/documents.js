@@ -65,7 +65,7 @@
   },
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema.js": "^5.2.0"
+    "document-schema.js": "^5.3.0"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
