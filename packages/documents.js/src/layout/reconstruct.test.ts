@@ -7,6 +7,7 @@ import type {
   ContentSheet,
   ContentSheetCell,
   ContentSlide,
+  ContentTableCell,
   ContentVector,
 } from "document-schema.js";
 import { STANDARD_METRICS } from "pdf-codec";
@@ -1487,6 +1488,139 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
       ["Name", "Total"],
       ["Acme", "10"],
     ]);
+  });
+});
+
+// --- Irregular per-row/per-column gridlines: colSpan/rowSpan recovery (ExaDev/documents.js#810) ---------------
+//
+// A real ruled table (a title block, a "field: value" row of varying length) routinely has some rows or columns whose own drawn boundary segments cover only PART of the table's full width/height, because a neighbouring cell spans past that boundary. The two real documents that originally surfaced this (NGET TS 2.01, UKPN EAS 05-0000) are reproduced here as minimal synthetic geometry rather than the licensed PDFs themselves.
+describe("reconstructWordprocessing: irregular gridlines recover colSpan/rowSpan rather than being rejected wholesale", () => {
+  it("recovers a rowSpan cell whose own row divider is drawn under only some columns, not the whole table's width", () => {
+    const items: LayoutItem[] = [
+      // Outer rectangle: x 0/150/300, y 200/150/100.
+      line(0, 200, 300, 200),
+      line(0, 100, 300, 100),
+      line(0, 100, 0, 200),
+      line(300, 100, 300, 200),
+      // The column divider runs the full height -- both rows are split into two columns.
+      line(150, 100, 150, 200),
+      // The row divider is drawn ONLY under the right column: the left column's own cell (Ref) spans both rows, so no boundary is drawn under it at y=150 at all -- exactly the "this row boundary's own merged width is narrower than the table's" symptom reported in #810 (94.4pt/134.3pt/... never converging to one consistent span).
+      line(150, 150, 300, 150),
+      text({ text: "Ref", xPt: 10, yPt: 180, widthPt: 30 }),
+      text({ text: "Name", xPt: 160, yPt: 180, widthPt: 30 }),
+      text({ text: "Value", xPt: 160, yPt: 120, widthPt: 30 }),
+    ];
+    const blocks = blocksOf(
+      reconstructWordprocessing(docFrom([page(300, 300, items)])),
+    );
+    const table = blocks.find((b) => b.kind === "table");
+    if (table?.kind !== "table") {
+      throw new Error("expected a recovered table block");
+    }
+    expect(table.rows).toHaveLength(2);
+    expect(table.rows[0]!.cells).toHaveLength(2);
+    expect(table.rows[0]!.cells[0]!.rowSpan).toBe(2);
+    expect(table.rows[0]!.cells[0]!.colSpan).toBeUndefined();
+    const textOf = (cell: ContentTableCell): string =>
+      cell.blocks
+        .flatMap((b) =>
+          b.kind === "paragraph" ? b.runs.map((r) => r.text) : [],
+        )
+        .join("");
+    expect(textOf(table.rows[0]!.cells[0]!)).toBe("Ref");
+    expect(textOf(table.rows[0]!.cells[1]!)).toBe("Name");
+    // The second row's own first entry is the rowSpan cell's continuation placeholder -- present so a positional writer (docx/pptx) advances columns correctly, but empty, matching how ooxml.js's own docx/pptx readers already expect a vMerge/vMerge continuation cell to arrive.
+    expect(table.rows[1]!.cells).toHaveLength(2);
+    expect(table.rows[1]!.cells[0]!.blocks).toEqual([]);
+    expect(textOf(table.rows[1]!.cells[1]!)).toBe("Value");
+  });
+
+  it("recovers a colSpan header cell whose own column dividers are drawn under only some rows", () => {
+    const items: LayoutItem[] = [
+      // Outer rectangle: x 0/100/200/300, y 200/150/100.
+      line(0, 200, 300, 200),
+      line(0, 100, 300, 100),
+      line(0, 100, 0, 200),
+      line(300, 100, 300, 200),
+      // The row divider runs the full width -- the header row is fully separated from the body.
+      line(0, 150, 300, 150),
+      // The column dividers are drawn ONLY under the bottom row: the header spans all three columns, so no vertical stroke crosses it at x=100/x=200 -- the mirror image of the rowSpan case above, on the column axis instead of the row axis.
+      line(100, 100, 100, 150),
+      line(200, 100, 200, 150),
+      text({ text: "Title", xPt: 10, yPt: 180, widthPt: 30 }),
+      text({ text: "A", xPt: 10, yPt: 120, widthPt: 10 }),
+      text({ text: "B", xPt: 110, yPt: 120, widthPt: 10 }),
+      text({ text: "C", xPt: 210, yPt: 120, widthPt: 10 }),
+    ];
+    const blocks = blocksOf(
+      reconstructWordprocessing(docFrom([page(300, 300, items)])),
+    );
+    const table = blocks.find((b) => b.kind === "table");
+    if (table?.kind !== "table") {
+      throw new Error("expected a recovered table block");
+    }
+    const textOf = (cell: ContentTableCell): string =>
+      cell.blocks
+        .flatMap((b) =>
+          b.kind === "paragraph" ? b.runs.map((r) => r.text) : [],
+        )
+        .join("");
+    expect(table.rows).toHaveLength(2);
+    expect(table.rows[0]!.cells).toHaveLength(1);
+    expect(table.rows[0]!.cells[0]!.colSpan).toBe(3);
+    expect(table.rows[0]!.cells[0]!.rowSpan).toBeUndefined();
+    expect(textOf(table.rows[0]!.cells[0]!)).toBe("Title");
+    expect(table.rows[1]!.cells).toHaveLength(3);
+    expect(table.rows[1]!.cells.map(textOf)).toEqual(["A", "B", "C"]);
+  });
+
+  it("rejects a lattice whose missing dividers don't reduce to a rectangular merge (an L-shaped union no colSpan/rowSpan pair can express)", () => {
+    const items: LayoutItem[] = [
+      line(0, 200, 300, 200),
+      line(0, 100, 300, 100),
+      line(0, 100, 0, 200),
+      line(300, 100, 300, 200),
+      // The column divider is drawn for the TOP row only; the row divider is drawn for the LEFT column only -- so the top-right, bottom-left, and bottom-right atomic cells all merge transitively into one region while the top-left stays alone, a shape no single colSpan/rowSpan cell can express.
+      line(150, 150, 150, 200),
+      line(0, 150, 150, 150),
+      text({ text: "Solo", xPt: 10, yPt: 180, widthPt: 30 }),
+    ];
+    const blocks = blocksOf(
+      reconstructWordprocessing(docFrom([page(300, 300, items)])),
+    );
+    expect(blocks.some((b) => b.kind === "table")).toBe(false);
+    // A rejected lattice's own text still recovers as an ordinary paragraph, and its strokes as loose vectors -- exactly as "does not fire on too few parallel lines" and "rejects a lattice with no text inside it" already establish for the other rejection paths above.
+    expect(
+      blocks.some(
+        (b) =>
+          b.kind === "paragraph" &&
+          b.runs.map((r) => r.text).join("") === "Solo",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects a lattice whose every interior boundary turns out undrawn, collapsing the outer rectangle into one cell with no real structure", () => {
+    const items: LayoutItem[] = [
+      line(0, 200, 300, 200),
+      line(0, 100, 300, 100),
+      line(0, 100, 0, 200),
+      line(300, 100, 300, 200),
+      // Both interior candidates exist (long enough to qualify, and far enough from the outer edges to be their own distinct boundary) but neither one's own drawn length covers a meaningful fraction of any atomic cell's own edge -- a stray mark, not a real divider anywhere on the grid.
+      line(0, 150, 5, 150),
+      line(150, 100, 150, 105),
+      text({ text: "Solo", xPt: 10, yPt: 180, widthPt: 30 }),
+    ];
+    const blocks = blocksOf(
+      reconstructWordprocessing(docFrom([page(300, 300, items)])),
+    );
+    expect(blocks.some((b) => b.kind === "table")).toBe(false);
+    expect(
+      blocks.some(
+        (b) =>
+          b.kind === "paragraph" &&
+          b.runs.map((r) => r.text).join("") === "Solo",
+      ),
+    ).toBe(true);
   });
 });
 
