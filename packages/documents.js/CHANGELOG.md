@@ -1,3 +1,22 @@
+## [6.1.3](https://github.com/ExaDev/documents.js/compare/documents.js%406.1.2...documents.js%406.1.3) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.2.0 in documents.js [skip ci] ([b47872c](https://github.com/ExaDev/documents.js/commit/b47872ce714aab4b9b7677c105985088ace61726))
+* **deps:** bump markdown-codec to ^6.1.1 in documents.js [skip ci] ([ef6367c](https://github.com/ExaDev/documents.js/commit/ef6367c40e520916e62c38369e3075c40678f639))
+* **deps:** bump odf.js to ^6.1.1 in documents.js [skip ci] ([3338643](https://github.com/ExaDev/documents.js/commit/333864330529b75bd3c5b71cc0e764dfcfa9c92d))
+* **deps:** bump ooxml.js to ^6.2.0 in documents.js [skip ci] ([eaf5859](https://github.com/ExaDev/documents.js/commit/eaf5859f3ae6f047761a3435d7c86b1277f47d94))
+* **deps:** bump pdf-codec to ^3.5.1 in documents.js [skip ci] ([0477ca3](https://github.com/ExaDev/documents.js/commit/0477ca3d659b478df7b03c44554f2c59713c1cde))
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.5.1
+- Updated ooxml.js to ^6.2.0
+- Updated odf.js to ^6.1.1
+- Updated markdown-codec to ^6.1.1
+- Updated document-schema.js to ^5.2.0
+
 ## [6.1.2](https://github.com/ExaDev/documents.js/compare/documents.js%406.1.1...documents.js%406.1.2) (2026-09-02)
 
 ### Bug Fixes
