@@ -1,3 +1,22 @@
+## [4.1.5](https://github.com/ExaDev/documents.js/compare/document-mcp%404.1.4...document-mcp%404.1.5) (2026-09-02)
+
+### Code Refactoring
+
+* **document-mcp:** read the native tree for outline_document ([7e66f95](https://github.com/ExaDev/documents.js/commit/7e66f9541e6a0bd82171ca341c4a79124602e694))
+
+### Miscellaneous Chores
+
+* **deps:** bump document-outline.js to ^3.2.0 in document-mcp [skip ci] ([087d632](https://github.com/ExaDev/documents.js/commit/087d6321e8c437fb5490ccf95e549c7b605e382d))
+* **deps:** bump documents.js to ^6.2.0 in document-mcp [skip ci] ([8940b05](https://github.com/ExaDev/documents.js/commit/8940b05267e6f1b7e179967e285b215f9d070185))
+* **deps:** bump odf.js to ^6.1.2 in document-mcp [skip ci] ([a238013](https://github.com/ExaDev/documents.js/commit/a238013c0068798b8b01949613024b09402f711b))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.2.0
+- Updated odf.js to ^6.1.2
+- Updated document-outline.js to ^3.2.0
+
 ## [4.1.4](https://github.com/ExaDev/documents.js/compare/document-mcp%404.1.3...document-mcp%404.1.4) (2026-09-02)
 
 ### Miscellaneous Chores
