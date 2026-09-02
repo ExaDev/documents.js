@@ -24,6 +24,7 @@ export * from "./ocf/write";
 export * from "./path";
 export * from "./read";
 export * from "./write";
+export * from "./codec";
 export * from "./xml/node";
 export * from "./xml/parse";
 export * from "./xml/build";
