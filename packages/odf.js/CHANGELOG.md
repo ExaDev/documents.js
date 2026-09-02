@@ -1,3 +1,14 @@
+## [6.1.2](https://github.com/ExaDev/documents.js/compare/odf.js%406.1.1...odf.js%406.1.2) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.3.0 in odf.js [skip ci] ([4dfdc42](https://github.com/ExaDev/documents.js/commit/4dfdc42e81a542348269fd741c297383019092f0))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.3.0
+
 ## [6.1.1](https://github.com/ExaDev/documents.js/compare/odf.js%406.1.0...odf.js%406.1.1) (2026-09-02)
 
 ### Miscellaneous Chores
