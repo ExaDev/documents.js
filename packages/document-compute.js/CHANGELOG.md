@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.1.0...document-compute.js%401.2.0) (2026-09-02)
+
+### Features
+
+* **document-compute.js:** add worked-example differential harness ([11b3204](https://github.com/ExaDev/documents.js/commit/11b320441336e55ccc04755844b66758a2a054f2))
+
 ## [1.1.0](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.0.1...document-compute.js%401.1.0) (2026-08-24)
 
 ### Features
