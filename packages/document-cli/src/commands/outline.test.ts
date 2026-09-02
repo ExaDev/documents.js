@@ -122,7 +122,7 @@ describe("outline", () => {
     expect(stdout).toBe("Q1\nQ2\n");
   });
 
-  // Regression coverage for OUTLINE_CONVERSION_TARGET.odg: it used to bridge to 'svg', and buildSvgText refuses to write a multi-page document at all (SvgMultiPageNotSpecifiedError) since this command has no --page flag to answer it with -- every multi-page .odg failed outright with an error naming a target format ('svg') the caller never asked for. The bridge target is 'odp' now (a registered odg conversion pair with no per-document page-selection constraint), so this exercises the one source format the original entry made impossible to outline past a single page.
+  // odg used to outline via a bridge to a presentation-variant sibling (odp), which meant every drawing page came back labelled "Slide N" -- a label borrowed from the bridge's own variant, not odg's. readNativeDocumentTree reads odg's own native 'drawing' ContentDocument directly with no bridging at all, so a drawing page is labelled "Page N", document-outline.js's own drawing convention -- the honest label for the source's real kind, and (incidentally) still no --page selection needed for a multi-page document, since no svg-only page-selection constraint is anywhere in this path.
   it("outlines a multi-page odg as one group per page, with no --page selection needed", async () => {
     const drawingPath = join(workspace, "slides.odg");
     const editor = createOdg();
@@ -144,9 +144,9 @@ describe("outline", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(EXIT_SUCCESS);
-    // odp is a presentation-variant bridge, so each drawing page becomes a slide group -- "Slide N", document-outline.js's own presentation convention, rather than the "Page N" a same-variant drawing bridge would use.
+    // "Page N", document-outline.js's own drawing-variant convention -- odg's own native kind, read with no bridging at all.
     expect(stdout).toBe(
-      "Slide 1\n  First page text\nSlide 2\n  Second page text\nSlide 3\n  Third page text\n",
+      "Page 1\n  First page text\nPage 2\n  Second page text\nPage 3\n  Third page text\n",
     );
   });
 

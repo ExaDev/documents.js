@@ -4,6 +4,7 @@ import {
   type DocumentFormat,
   createLocalDocumentConverter,
   documentTreeWithSchema,
+  readNativeDocumentTree,
 } from "documents.js";
 import { inferFormatFromExtension, isDocumentFormat } from "../format";
 import { createRuntimeSignal } from "../runtime/abort";
@@ -121,6 +122,10 @@ export function buildConversionAction(
       const fonts = await loadProvidedFonts(options.fontFiles ?? [], {
         signal,
       });
+      // Resolve a markdown source's own non-data: image destinations against the input file's directory, so `convert notes.md` embeds `![](./image.png)` rather than degrading it to alt text. Ignored by every non-markdown conversion, so wiring it unconditionally is a no-op for docx/pptx/odt/... sources. For stdin (`-`) the base directory is the current working directory. Shared between the real conversion below and, when --dump-package is set, the separate native-tree read -- both read the identical source bytes, so a markdown source resolves its images identically either way.
+      const images = createFilesystemMarkdownImageResolver(
+        input === "-" ? "." : dirname(resolve(input)),
+      );
       const converter = createLocalDocumentConverter();
       const result = await converter.convert(
         {
@@ -139,10 +144,7 @@ export function buildConversionAction(
                   command,
                 })
               : undefined,
-          // Resolve a markdown source's own non-data: image destinations against the input file's directory, so `convert notes.md` embeds `![](./image.png)` rather than degrading it to alt text. Ignored by every non-markdown conversion (the port threads it only to the markdown edges), so wiring it unconditionally is a no-op for docx/pptx/odt/... sources. For stdin (`-`) the base directory is the current working directory.
-          images: createFilesystemMarkdownImageResolver(
-            input === "-" ? "." : dirname(resolve(input)),
-          ),
+          images,
           delimiter: options.delimiter,
           sheet: options.sheet,
           page: options.page,
@@ -161,22 +163,17 @@ export function buildConversionAction(
       }
 
       if (options.dumpPackage !== undefined) {
-        // Checked generically by presence, never by which (source, target) pair this action was built for -- the port declares `package` optional, so this branch guards the declared contract rather than any particular pair (in practice the local converter reports one for every conversion, bridges included, content-only with no pages where no layout engine ran).
-        if (result.package === undefined) {
-          process.stderr.write(
-            `[${command}] this conversion does not produce an intermediate DocumentTree\n`,
-          );
-        } else {
-          // Tagged with its own $schema before serialising, not written raw -- documentFromJson (the read side `from-package` uses to read this file back in) identifies a value's kind and version purely from that URI, so an untagged dump would be unreadable by its own round trip.
-          await writeFile(
-            options.dumpPackage,
-            JSON.stringify(
-              documentTreeWithSchema(result.package),
-              undefined,
-              2,
-            ),
-          );
-        }
+        // Reads the SOURCE's own native tree directly, rather than trusting result.package/onDocument's report -- the intermediate hop that actually produced `target`'s bytes, which can be a lossy cross-variant bridge's shape for a target sharing no ContentDocument variant with the source (xlsx -> markdown composing through a pdf pivot reports that pivot's wordprocessing-shaped tree, with no sheet/cell/formula/A1 data at all -- ExaDev/documents.js#823). --dump-package is about what the SOURCE document itself carries, regardless of --to, so it always reads that instead. No `sink` here: the real conversion above already reports every diagnostic (including a pdf source's own parse diagnostics) through result.diagnostics, and this second read must not report them a second time.
+        const nativeTree = readNativeDocumentTree(
+          source,
+          new Uint8Array(inputBytes),
+          { signal, images },
+        );
+        // Tagged with its own $schema before serialising, not written raw -- documentFromJson (the read side `from-package` uses to read this file back in) identifies a value's kind and version purely from that URI, so an untagged dump would be unreadable by its own round trip.
+        await writeFile(
+          options.dumpPackage,
+          JSON.stringify(documentTreeWithSchema(nativeTree), undefined, 2),
+        );
       }
 
       reporter.summarize({

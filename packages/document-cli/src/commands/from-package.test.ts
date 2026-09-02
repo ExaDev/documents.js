@@ -22,7 +22,7 @@ import {
 import { createProgram } from "../program";
 import { EXIT_SUCCESS } from "../runtime/exit-codes";
 
-// Drives the real assembled commander program end to end, closing the round trip --dump-package otherwise has no return path for: a real docx-to-pdf conversion dumps its own intermediate DocumentTree to a JSON file, from-package reads that exact file back in via documentFromJson, and the docx it rebuilds from the package's own ContentDocument is opened again and checked for the original paragraph text -- proving the JSON this CLI writes is genuinely the JSON this CLI can read back, not just two independently-plausible-looking halves that happen to share a name.
+// Drives the real assembled commander program end to end, closing the round trip --dump-package otherwise has no return path for: --dump-package writes the SOURCE document's own native DocumentTree (documents.js's readNativeDocumentTree), independent of --to/the output path (ExaDev/documents.js#823) -- a docx-to-pdf run's dump is a docx's native content-only tree (no pages, no frames: docx alone never runs a layout pass), while a pdf-sourced dump always carries pages/frames, since a PDF's native representation IS positioned layout. from-package reads that exact file back in via documentFromJson, and the docx it rebuilds from the package's own ContentDocument is opened again and checked for the original paragraph text -- proving the JSON this CLI writes is genuinely the JSON this CLI can read back, not just two independently-plausible-looking halves that happen to share a name.
 
 let workspace: string;
 
@@ -97,10 +97,10 @@ describe("from-package", () => {
     const dumpedText = await readFile(packagePath, "utf-8");
     expect(dumpedText).toContain('"$schema"');
     expect(dumpedText).toContain("document-tree.schema.json");
-    // The dump carries the tree form -- container groups under children, content nodes with their own rendered frames, page sizes at the root -- and neither the retired formatVersion integer nor the old separate layout half.
+    // The dump carries the tree form -- container groups under children -- but never the retired formatVersion integer or the old separate layout half. No pages/frames here: this is docx's own NATIVE tree (readNativeDocumentTree), read directly off the source bytes rather than captured from the docx-to-pdf conversion's own rendered layout pass -- see the test below for the pdf-sourced case, whose native tree does carry them.
     expect(dumpedText).toContain('"children"');
-    expect(dumpedText).toContain('"pages"');
-    expect(dumpedText).toContain('"frames"');
+    expect(dumpedText).not.toContain('"pages"');
+    expect(dumpedText).not.toContain('"frames"');
     expect(dumpedText).not.toContain('"formatVersion"');
     expect(dumpedText).not.toContain('"layout"');
 
@@ -118,19 +118,32 @@ describe("from-package", () => {
     ).toBe(true);
   });
 
-  it("rebuilds a pdf from a dumped package's own frames and page sizes", async () => {
+  it("rebuilds a pdf from a pdf source's own native frames and page sizes", async () => {
+    const sourcePdfPath = join(workspace, "source-for-pdf-native.pdf");
     const packagePath = join(workspace, "dumped-for-pdf.package.json");
     const rebuiltPdfPath = join(workspace, "rebuilt.pdf");
 
-    // docx-to-pdf is the conversion whose dump carries a fully frame-stamped content tree, so its package is the honest input for the pdf target's rebuild-from-frames path (documents.js's layoutDocumentFromPackage -> writePdf, replacing the old stored-layout-half read).
-    const dumpRun = await runCli([
+    // A real pdf fixture, rendered from the shared docx -- its own bytes are not what --dump-package below reads from; that dump comes from the FOLLOWING pdf-to-docx run reading this pdf natively.
+    const renderRun = await runCli([
       "docx-to-pdf",
       join(workspace, "source.docx"),
-      join(workspace, "source-for-pdf.pdf"),
+      sourcePdfPath,
+    ]);
+    expect(renderRun.exitCode).toBe(EXIT_SUCCESS);
+
+    // pdf is the one DocumentFormat whose native tree always carries pages/frames -- reading it IS reconstruction from positioned layout (readNativeDocumentTree's pdf branch, the identical reconstruction pdf-to-docx's own conversion runs) -- so a pdf-sourced --dump-package dump is the correct fixture for a from-package pdf rebuild (documents.js's layoutDocumentFromPackage -> writePdf), unlike the docx-sourced dump the test above covers (content-only, no pages/frames at all).
+    const dumpRun = await runCli([
+      "pdf-to-docx",
+      sourcePdfPath,
+      join(workspace, "unused-pdf-to-docx.docx"),
       "--dump-package",
       packagePath,
     ]);
     expect(dumpRun.exitCode).toBe(EXIT_SUCCESS);
+
+    const dumpedText = await readFile(packagePath, "utf-8");
+    expect(dumpedText).toContain('"pages"');
+    expect(dumpedText).toContain('"frames"');
 
     const fromPackageRun = await runCli([
       "from-package",
@@ -261,7 +274,7 @@ describe("from-package", () => {
 
   it("rejects 'pdf' as the target when the dumped package came from a bridge conversion with no page sizes at all", async () => {
     const packagePath = join(workspace, "dumped-from-bridge.package.json");
-    // A bridge conversion (odt-to-docx) runs no layout engine at all -- its own dumped package always carries a real ContentDocument but pages left undefined (see documents.js's own DocumentBridgeOptions.onDocument comment), unlike every docx-to-pdf/pdf-to-docx dump the other tests in this file use.
+    // odt (like every non-pdf source) reads its own native ContentDocument with no layout pass at all -- --dump-package always carries pages/frames for a pdf source and never for any other, regardless of which conversion (odt-to-docx here) --dump-package rides alongside -- unlike the pdf-sourced dump the earlier test uses.
     await runCli([
       "docx-to-odt",
       join(workspace, "source.docx"),

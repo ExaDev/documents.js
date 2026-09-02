@@ -7,10 +7,7 @@ import {
   type OutlineChild,
   type OutlineLeaf,
 } from "document-outline.js";
-import {
-  type DocumentFormat,
-  createLocalDocumentConverter,
-} from "documents.js";
+import { type DocumentFormat, readNativeDocumentTree } from "documents.js";
 import { inferFormatFromExtension, isDocumentFormat } from "../format";
 import { createRuntimeSignal } from "../runtime/abort";
 import { createDiagnosticReporter } from "../runtime/diagnostics";
@@ -23,24 +20,6 @@ import { readInput } from "../runtime/io";
 import { createFilesystemMarkdownImageResolver } from "../runtime/markdown-images";
 import { addQuietOption, addTimeoutOption, addVerboseOption } from "./options";
 import { KNOWN_DOCUMENT_FORMATS, formatError } from "./shared";
-
-// The conversion this command runs exists only for ConversionResult.package -- its output bytes are discarded, since the outline projects over the tree-form DocumentTree, not over any rendered target. A PDF-bypassing bridge is the cheapest conversion that still populates a package (no layout engine runs), so each of the ten content formats bridges to a sibling it shares a registry entry with; the two formats outside that set each take the one conversion they actually have -- pdf reconstructs through pdf-to-docx (a PDF carries no content tree of its own to read), and odf renders through odf-to-pdf (its only conversion; the outline reads the formula package that conversion builds, not the rendered pages). The target is otherwise incidental: the package a bridge leaves behind is built from the source document's own content, so the outline it feeds is the source document's outline.
-const OUTLINE_CONVERSION_TARGET: Readonly<
-  Record<DocumentFormat, DocumentFormat>
-> = {
-  docx: "odt",
-  odt: "docx",
-  markdown: "docx",
-  pptx: "odp",
-  odp: "pptx",
-  xlsx: "ods",
-  ods: "xlsx",
-  csv: "xlsx",
-  odg: "odp",
-  svg: "odg",
-  pdf: "docx",
-  odf: "pdf",
-};
 
 // Two spaces per nesting depth -- the indentation is this command's level rendering. An OutlineNode's own `level` field is the SOURCE's level signal (a heading's headingLevel, a list item's list level, 1 for the synthetic slide/sheet/page groups), deliberately not used for indentation: those scales differ per construct and legitimately coexist (a level-0 list item inside a level-1 slide group), while tree depth is unambiguous and recoverable from the nesting itself.
 const INDENT = "  ";
@@ -123,7 +102,6 @@ async function runOutline(
     process.stderr.write(`[${command}] ${source.errorMessage}\n`);
     return EXIT_USAGE_ERROR;
   }
-  const target = OUTLINE_CONVERSION_TARGET[source.format];
 
   const { signal, getAbortReason } = createRuntimeSignal({
     timeoutMs: options.timeout,
@@ -136,34 +114,24 @@ async function runOutline(
 
   try {
     const inputBytes = await readInput(input, { signal });
-    const converter = createLocalDocumentConverter();
-    const result = await converter.convert(
-      {
-        source: { format: source.format, bytes: new Uint8Array(inputBytes) },
-        targetFormat: target,
-      },
+
+    // Reads the source's own native tree directly -- no bridging conversion, no discarded output bytes. A pdf source's own readPdf parse diagnostics still reach stderr exactly as they would on the matching pdf-to-docx command: `sink` receives the identical PdfDiagnostic shape reporter.report already accepts, so no mapping is needed between the two.
+    const tree = readNativeDocumentTree(
+      source.format,
+      new Uint8Array(inputBytes),
       {
         signal,
-        // Resolved exactly as buildConversionAction resolves the same option for a live conversion: a markdown source's own non-data: images resolve against the input file's directory rather than degrading to alt text with an unresolved-image diagnostic. For stdin the base directory is the current working directory, matching buildConversionAction's own stdin handling -- '-' reaches this line now that resolveSourceFormat above requires --from for it rather than failing before this conversion ever runs.
+        // Resolved exactly as buildConversionAction resolves the same option for a live conversion: a markdown source's own non-data: images resolve against the input file's directory rather than degrading to alt text with an unresolved-image diagnostic. For stdin the base directory is the current working directory, matching buildConversionAction's own stdin handling -- '-' reaches this line now that resolveSourceFormat above requires --from for it rather than failing before this read ever runs.
         images: createFilesystemMarkdownImageResolver(
           input === "-" ? "." : dirname(resolve(input)),
         ),
+        sink: (diagnostic) => {
+          reporter.report(diagnostic);
+        },
       },
     );
 
-    // The internal conversion's own diagnostics are not swallowed: a pdf reconstruction can report parse warnings and character substitutions, and those belong on stderr exactly as they would on the matching pdf-to-docx command.
-    for (const diagnostic of result.diagnostics) {
-      reporter.report(diagnostic);
-    }
-
-    // The port declares `package` optional (a remote adapter is free to report none), while the local converter this command uses populates one on every conversion -- so an absent package is a broken contract, not a document with an empty outline, and fails loudly instead of printing nothing.
-    if (result.package === undefined) {
-      throw new Error(
-        `the ${source.format}-to-${target} conversion produced no intermediate DocumentTree`,
-      );
-    }
-
-    const outline = buildOutline(result.package);
+    const outline = buildOutline(tree);
 
     if (options.json) {
       // The tree document-outline.js itself returns, verbatim -- groups as { text, level, children }, leaves as the package leaves they are -- so a consumer can walk it with that package's own isOutlineNode/isOutlineChild guards rather than a CLI-private shape.
@@ -186,7 +154,7 @@ async function runOutline(
   }
 }
 
-// Prints the table-of-contents projection over any readable document -- the first CLI surface over document-outline.js's buildOutline, reached by running the cheapest conversion that leaves a package behind (see OUTLINE_CONVERSION_TARGET) and projecting that package.
+// Prints the table-of-contents projection over any readable document -- the first CLI surface over document-outline.js's buildOutline, reached by reading the source's own native DocumentTree (readNativeDocumentTree, documents.js) and projecting that tree, with no bridging conversion and no discarded output bytes.
 export function registerOutlineCommand(program: Command): void {
   const command = program
     .command("outline <input>")
