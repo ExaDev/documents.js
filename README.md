@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/documents.js) [![npm version](https://img.shields.io/npm/v/documents.js)](https://www.npmjs.com/package/documents.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> A family of independent, MIT-licensed TypeScript packages for lossless, type-safe document conversion — OOXML (docx/pptx/xlsx), OpenDocument (odt/ods/odp), Markdown, and PDF — sharing a common Zod-based schema layer, plus the CLI, MCP server, and web UI built on top of them.
+> A family of independent, MIT-licensed TypeScript packages for lossless, type-safe document conversion — OOXML (docx/pptx/xlsx), OpenDocument (odt/ods/odp), Markdown, EPUB, and PDF — sharing a common Zod-based schema layer, plus the CLI, MCP server, and web UI built on top of them.
 
 This repository is a pnpm workspace: one repository, one lockfile, one CI pipeline, and one release run, holding every package in the family under `packages/`. Each package keeps its own version, its own changelog, its own npm release cadence, and its own README — consolidating the repositories did not merge the packages into one artifact, and there is no lockstep version shared between them. What is shared is everything that was previously copied: the workspace settings, the task pipeline, the git hooks, commit-message validation, dependency automation, and the release orchestration.
 
@@ -36,6 +36,7 @@ Each converts one document format to and from the shared schema, built on `docum
 | [`odf.js`](packages/odf.js/README.md)                 | OpenDocument packages (odt, ods, odp) to and from JSON.                                  |
 | [`markdown-codec`](packages/markdown-codec/README.md) | CommonMark+GFM to and from the shared content schema.                                    |
 | [`pdf-codec`](packages/pdf-codec/README.md)           | Parses arbitrary real-world PDFs and generates new ones, also depending on `byte-codec`. |
+| [`epub-codec`](packages/epub-codec/README.md)         | Flowable EPUB 2/3 to and from the shared content schema; writes EPUB 3 only.             |
 
 ### Conversion engine
 
@@ -86,7 +87,7 @@ Individual packages set their own build and test configuration, but as a family 
 - TypeScript with Zod 4 for schema definition and validation.
 - MIT licensing.
 - Hand-written, dependency-minimal codecs over pulling in heavyweight format libraries — see each package's own README for what it deliberately avoids depending on.
-- The foundation and format-codec packages (`byte-codec`, `document-schema.js`, `document-outline.js`, `archive-codec`, `document-compute.js`, `ooxml.js`, `odf.js`, `markdown-codec`, `pdf-codec`, `documents.js`) are Worker-isomorphic: their published `src/` must not import `node:*`/bare Node builtins or use the Node-only `Buffer` global. The `no-restricted-imports`/`no-restricted-globals` ban enforcing that is defined once in the root's `eslint.shared.ts`, which derives the module list from `node:module`'s own `builtinModules` rather than restating it; a package opts in by passing `isomorphic: true` to `packageLintConfig` rather than declaring the rule itself, and a workerd test suite proves it at runtime. The interface packages (`document-cli`, `document-mcp`, `documents`) are not held to this, since they legitimately run under Node or a browser rather than needing Worker portability.
+- The foundation and format-codec packages (`byte-codec`, `document-schema.js`, `document-outline.js`, `archive-codec`, `document-compute.js`, `ooxml.js`, `odf.js`, `markdown-codec`, `pdf-codec`, `epub-codec`, `documents.js`) are Worker-isomorphic: their published `src/` must not import `node:*`/bare Node builtins or use the Node-only `Buffer` global. The `no-restricted-imports`/`no-restricted-globals` ban enforcing that is defined once in the root's `eslint.shared.ts`, which derives the module list from `node:module`'s own `builtinModules` rather than restating it; a package opts in by passing `isomorphic: true` to `packageLintConfig` rather than declaring the rule itself, and a workerd test suite proves it at runtime. The interface packages (`document-cli`, `document-mcp`, `documents`) are not held to this, since they legitimately run under Node or a browser rather than needing Worker portability.
 
 ## Working in the workspace
 
