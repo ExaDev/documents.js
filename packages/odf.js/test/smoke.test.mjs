@@ -41,8 +41,28 @@ const FUNCTIONS = [
   'readOdfFormula',
   'readOdfFormulaContent',
   'readOdfFormulaMathMl',
+  // The OpenOffice.org 1.x readers, at the same two levels, plus the package transform they are built on and the detection a caller needs to pick between these and the ODF readers above.
+  'readSxw',
+  'readSxwContent',
+  'readSxc',
+  'readSxcContent',
+  'readSxi',
+  'readSxiContent',
+  'readSxd',
+  'readSxdContent',
+  'transformOoo1Package',
+  'isOoo1Package',
+  'ooo1MediaTypeForExtension',
+  'odfMediaTypeForOoo1MediaType',
 ];
-const OBJECTS = ['packageCodec', 'xmlCodec', 'ODF_NAMESPACES', 'ODF_MEDIA_TYPES'];
+const OBJECTS = [
+  'packageCodec',
+  'xmlCodec',
+  'ODF_NAMESPACES',
+  'ODF_MEDIA_TYPES',
+  'OOO1_NAMESPACES',
+  'OOO1_MEDIA_TYPES',
+];
 
 describe('dist/ exports are present in both builds', () => {
   for (const name of FUNCTIONS) {
