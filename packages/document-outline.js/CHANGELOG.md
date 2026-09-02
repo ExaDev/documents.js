@@ -1,3 +1,14 @@
+## [3.2.1](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.2.0...document-outline.js%403.2.1) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.4.0 in document-outline.js [skip ci] ([b79b424](https://github.com/ExaDev/documents.js/commit/b79b424d04378423b283574ed4398ecc783b8de2))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.4.0
+
 ## [3.2.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.1.1...document-outline.js%403.2.0) (2026-09-02)
 
 ### Features
