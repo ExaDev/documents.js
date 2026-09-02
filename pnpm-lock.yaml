@@ -604,7 +604,7 @@ importers:
         specifier: ^6.1.2
         version: link:../odf.js
       ooxml.js:
-        specifier: ^6.2.0
+        specifier: ^6.3.0
         version: link:../ooxml.js
       pdf-codec:
         specifier: ^3.5.2
