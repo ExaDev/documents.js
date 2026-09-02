@@ -1,3 +1,28 @@
+## [5.1.5](https://github.com/ExaDev/documents.js/compare/document-cli%405.1.4...document-cli%405.1.5) (2026-09-02)
+
+### Bug Fixes
+
+* **document-cli:** update the smoke suite's odg outline label to Page N ([2453510](https://github.com/ExaDev/documents.js/commit/2453510535696f2d3794ee6403339fc6d1beeeab))
+
+### Code Refactoring
+
+* **document-cli:** read the native tree for --dump-package and outline ([876b165](https://github.com/ExaDev/documents.js/commit/876b165e741113e7774d210850437e2907ac1006))
+
+### Miscellaneous Chores
+
+* **deps:** bump document-outline.js to ^3.2.0 in document-cli [skip ci] ([a76311c](https://github.com/ExaDev/documents.js/commit/a76311c7af44f28cbbd7f897474fc53150120b5c))
+* **deps:** bump document-schema.js to ^5.3.0 in document-cli [skip ci] ([099625c](https://github.com/ExaDev/documents.js/commit/099625c241d6e698e9e0f8b5b3a5f5dbbbd94750))
+* **deps:** bump documents.js to ^6.2.0 in document-cli [skip ci] ([b203c15](https://github.com/ExaDev/documents.js/commit/b203c1557749408a395b45c75cb3ff3bc2e95282))
+* **deps:** bump odf.js to ^6.1.2 in document-cli [skip ci] ([1fb2b99](https://github.com/ExaDev/documents.js/commit/1fb2b99590a12b45eca7b6bbc7ecf70415bb3fd2))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.2.0
+- Updated odf.js to ^6.1.2
+- Updated document-outline.js to ^3.2.0
+- Updated document-schema.js to ^5.3.0
+
 ## [5.1.4](https://github.com/ExaDev/documents.js/compare/document-cli%405.1.3...document-cli%405.1.4) (2026-09-02)
 
 ### Miscellaneous Chores
