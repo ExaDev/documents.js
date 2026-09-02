@@ -261,8 +261,8 @@ jobs:
       - name: Upgrade npm for OIDC trusted publishing (needs npm CLI >=11.5.1)
         run: npm install -g npm@latest
       - name: Record the tags present before the orchestrator runs
-        # The orchestrator creates each package's `name@version` tag in this same checkout as it releases, so diffing `git tag` across the release step is the exact record of what this run released -- the same source of truth the post-release jobs below consume.
-        run: git ls-remote --tags origin | sed 's|.*refs/tags/||' | grep -v '\^{}' | sort > release-tags-before.txt
+        # The orchestrator creates each package's `name@version` tag in this same checkout as it releases, so diffing `git tag` across the release step is the exact record of what this run released -- the same source of truth the post-release jobs below consume. Written to RUNNER_TEMP, not the working tree: commitStrategy "single" discovers what it touched via `git status` and requires a clean tree to start from, so a scratch file living inside the checkout would fail that check every run.
+        run: git ls-remote --tags origin | sed 's|.*refs/tags/||' | grep -v '\^{}' | sort > "$RUNNER_TEMP/release-tags-before.txt"
       - name: Release every package that changed, in dependency order
         # One orchestrator run replaces the per-package release jobs: it discovers the workspace from pnpm-workspace.yaml, orders packages topologically, and runs semantic-release per package with commits path-filtered to that package's own directory and tags in `name@version` form. A package whose only change is a sibling's release still gets a patch release, because its published dependency range changed. HUSKY=0 so local git hooks never fire against the automated commits.
         run: HUSKY=0 pnpm release
@@ -277,8 +277,8 @@ jobs:
         id: released
         # Builds the three matrices the post-release jobs fan out over: one attestation leg per released published package, one GitHub Packages leg per released package the map mirrors there, and one npm-alias leg per (released package, alias) pair. The version comes from each package's own package.json in this working tree -- the orchestrator has already committed the released version by the time this step runs, so it is the same version the tag names. The web UI is private and publishes nothing, so it is filtered out.
         run: |
-          git ls-remote --tags origin | sed 's|.*refs/tags/||' | grep -v '\^{}' | sort > release-tags-after.txt
-          comm -13 release-tags-before.txt release-tags-after.txt > release-tags-new.txt
+          git ls-remote --tags origin | sed 's|.*refs/tags/||' | grep -v '\^{}' | sort > "$RUNNER_TEMP/release-tags-after.txt"
+          comm -13 "$RUNNER_TEMP/release-tags-before.txt" "$RUNNER_TEMP/release-tags-after.txt" > "$RUNNER_TEMP/release-tags-new.txt"
           GITHUB_PACKAGES='[]'
           NPM_ALIASES='[]'
           ATTEST='[]'
@@ -305,7 +305,7 @@ jobs:
               NPM_ALIASES=$(echo "$NPM_ALIASES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg alias "$ALIAS" \
                 '. + [{name: $name, version: $version, tag: $tag, alias: $alias}]')
             done < <(jq -r --arg name "$NAME" '.[$name].aliases // [] | .[]' .github/release-republish.json)
-          done < release-tags-new.txt
+          done < "$RUNNER_TEMP/release-tags-new.txt"
           {
             echo "github-packages-matrix=$GITHUB_PACKAGES"
             echo "npm-alias-matrix=$NPM_ALIASES"
