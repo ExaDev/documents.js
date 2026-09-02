@@ -897,6 +897,10 @@ export {
 // --- Cross-format metadata read/write: a document's own title/author/subject/keywords/creator/producer/created/modified, resolved (and, for setDocumentMetadata, patched) by DocumentFormat across every format this package supports -- csv reads honestly empty (RFC 4180 text has no metadata container) and is rejected as a setDocumentMetadata source/target for exactly that reason; svg reads its root <title> and is rejected on the write side because <title> is its whole metadata surface, so any other override would be silently dropped. ---
 export type { ReadDocumentMetadataOptions } from "./convert/from-pdf";
 export { readDocumentMetadata } from "./convert/from-pdf";
+
+// --- The source's own native DocumentTree, by DocumentFormat, with no cross-format bridging or conversion target involved (#823 Ask 1) -- see convert/from-pdf.ts's own module comment for why this reports something genuinely different from ConversionResult.package/onDocument. ---
+export type { ReadNativeDocumentTreeOptions } from "./convert/from-pdf";
+export { readNativeDocumentTree } from "./convert/from-pdf";
 export type {
   MetadataOverrides,
   SetDocumentMetadataOptions,
