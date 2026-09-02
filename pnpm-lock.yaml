@@ -202,7 +202,7 @@ importers:
         specifier: ^5.3.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^6.1.4
+        specifier: ^6.2.0
         version: link:../documents.js
       ink:
         specifier: ^7.1.1
