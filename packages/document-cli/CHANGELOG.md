@@ -1,3 +1,18 @@
+## [5.1.6](https://github.com/ExaDev/documents.js/compare/document-cli%405.1.5...document-cli%405.1.6) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump document-outline.js to ^3.2.1 in document-cli [skip ci] ([3f303a6](https://github.com/ExaDev/documents.js/commit/3f303a6b52060bd64ebcc564c26c11f16536e10b))
+* **deps:** bump document-schema.js to ^5.4.0 in document-cli [skip ci] ([e9af586](https://github.com/ExaDev/documents.js/commit/e9af586318470cbb1d374952d5e06e75f9705ce0))
+* **deps:** bump documents.js to ^6.2.1 in document-cli [skip ci] ([7ac64b9](https://github.com/ExaDev/documents.js/commit/7ac64b949b710c24c92ebfe16c8b12ae1dd25e14))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.2.1
+- Updated document-outline.js to ^3.2.1
+- Updated document-schema.js to ^5.4.0
+
 ## [5.1.5](https://github.com/ExaDev/documents.js/compare/document-cli%405.1.4...document-cli%405.1.5) (2026-09-02)
 
 ### Bug Fixes
