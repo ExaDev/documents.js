@@ -392,11 +392,19 @@ jobs:
       attest-matrix: ${{ steps.resolve.outputs.attest-matrix }}
     steps:
       - id: resolve
+        # Each matrix is passed through the environment, not interpolated as `${{ }}` directly into the script: the compact JSON these carry is full of double quotes, and splicing that as literal text into a double-quoted `echo "..."` string breaks the shell's own quoting the moment it hits the first embedded `"` -- confirmed the hard way (ExaDev/documents.js#835's own backfill dispatch): the matrices were built correctly, but this step's naive `${{ needs.release.outputs.x || needs.collect-backfill-matrix.outputs.x }}` interpolation mangled them into something that satisfied `!= '[]'` as false, and all three post-release jobs silently skipped despite real work to do. Bash's own `${VAR:-default}` parameter expansion does the same fallback without ever re-parsing the JSON as shell syntax.
+        env:
+          RELEASE_GHP: ${{ needs.release.outputs.github-packages-matrix }}
+          RELEASE_NPM: ${{ needs.release.outputs.npm-alias-matrix }}
+          RELEASE_ATTEST: ${{ needs.release.outputs.attest-matrix }}
+          BACKFILL_GHP: ${{ needs.collect-backfill-matrix.outputs.github-packages-matrix }}
+          BACKFILL_NPM: ${{ needs.collect-backfill-matrix.outputs.npm-alias-matrix }}
+          BACKFILL_ATTEST: ${{ needs.collect-backfill-matrix.outputs.attest-matrix }}
         run: |
           {
-            echo "github-packages-matrix=${{ needs.release.outputs.github-packages-matrix || needs.collect-backfill-matrix.outputs.github-packages-matrix }}"
-            echo "npm-alias-matrix=${{ needs.release.outputs.npm-alias-matrix || needs.collect-backfill-matrix.outputs.npm-alias-matrix }}"
-            echo "attest-matrix=${{ needs.release.outputs.attest-matrix || needs.collect-backfill-matrix.outputs.attest-matrix }}"
+            echo "github-packages-matrix=${RELEASE_GHP:-$BACKFILL_GHP}"
+            echo "npm-alias-matrix=${RELEASE_NPM:-$BACKFILL_NPM}"
+            echo "attest-matrix=${RELEASE_ATTEST:-$BACKFILL_ATTEST}"
           } >> "$GITHUB_OUTPUT"
 
   publish-github-packages:
