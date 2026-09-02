@@ -114,6 +114,51 @@ describe("lowerLatex mechanical rules", () => {
       },
     },
     {
+      // ExaDev/documents.js#812: the worked-example-standard shape (a relation followed by an ungrouped arithmetic right-hand side) used to fold left-to-right in source order, treating "=" and "\times" as the same tier and producing multiply(eq(c,a), b) -- a tree with no sound mathematical reading, since multiplying an equation by a value is meaningless. Relations bind looser than arithmetic regardless of which side the arithmetic falls on.
+      latex: "c = a \\times b",
+      expected: {
+        kind: "app",
+        operator: "math:eq",
+        args: [
+          { kind: "sym", id: "symbols:c" },
+          {
+            kind: "app",
+            operator: "math:multiply",
+            args: [
+              { kind: "sym", id: "symbols:a" },
+              { kind: "sym", id: "symbols:b" },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      // Chained equality (ExaDev/documents.js#812): each relation's own operands still fold their arithmetic first (b \times c, not eq(a,b) reused as an operand to multiply), then the relations themselves fold left-to-right -- eq(eq(a, multiply(b,c)), d), not the multiply(eq(a,b),c) shape the single-tier fold used to produce.
+      latex: "a = b \\times c = d",
+      expected: {
+        kind: "app",
+        operator: "math:eq",
+        args: [
+          {
+            kind: "app",
+            operator: "math:eq",
+            args: [
+              { kind: "sym", id: "symbols:a" },
+              {
+                kind: "app",
+                operator: "math:multiply",
+                args: [
+                  { kind: "sym", id: "symbols:b" },
+                  { kind: "sym", id: "symbols:c" },
+                ],
+              },
+            ],
+          },
+          { kind: "sym", id: "symbols:d" },
+        ],
+      },
+    },
+    {
       latex: "a - b - c",
       expected: {
         kind: "app",
