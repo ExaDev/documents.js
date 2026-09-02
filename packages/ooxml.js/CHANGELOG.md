@@ -1,3 +1,18 @@
+## [6.3.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.2.0...ooxml.js%406.3.0) (2026-09-02)
+
+### Features
+
+* **document-schema.js:** carry a sheet cell's own raw number-format code ([8b51a80](https://github.com/ExaDev/documents.js/commit/8b51a80eb50f0e02841f5ac194f7c1b1a3ff790f))
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.3.0 in ooxml.js [skip ci] ([87d9f10](https://github.com/ExaDev/documents.js/commit/87d9f10ac1b737f5a34634b6666eb56ffb65ebdd))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.3.0
+
 ## [6.2.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.1.0...ooxml.js%406.2.0) (2026-09-02)
 
 ### Features
