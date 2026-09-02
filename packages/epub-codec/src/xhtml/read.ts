@@ -224,7 +224,8 @@ function readContainerChildren(
     }
     const inline = buildInlineRuns(segment, {}, state.context);
     segment = [];
-    if (inline.runs.length === 0) {
+    // A segment whose only content, once built, is whitespace produces no visible paragraph -- the common real-world case being pretty-printed XHTML's own indentation landing as a bare text node between two block-level siblings (e.g. the newline-plus-indent between <body> and its first real child), which every browser's own block-formatting context already collapses to nothing rather than an empty line. The identical rule also covers a producer's own literal `<p> </p>`/`<p></p>` (used for CSS spacing): both read as "no content here" rather than a bogus empty ContentParagraph, matching this package's own documented choice to drop an empty paragraph entirely on read.
+    if (inline.runs.every((run) => run.text.trim().length === 0)) {
       return;
     }
     const paragraph: ContentParagraph = {
