@@ -1,3 +1,14 @@
+## [6.3.1](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.3.0...ooxml.js%406.3.1) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.4.0 in ooxml.js [skip ci] ([e511ca7](https://github.com/ExaDev/documents.js/commit/e511ca72f2004afea2434a0c36d3c7d616eb39ad))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.4.0
+
 ## [6.3.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.2.0...ooxml.js%406.3.0) (2026-09-02)
 
 ### Features
