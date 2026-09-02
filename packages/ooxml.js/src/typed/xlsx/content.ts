@@ -373,6 +373,10 @@ function readCell(
     if (entry.verticalAlignment !== undefined) {
       cellEntry.verticalAlignment = entry.verticalAlignment;
     }
+    // The raw numFmt code number-format classification (above) is itself derived from and then discards -- kept here verbatim so a consumer wanting the literal producer format (distinguishing "0%" from "0.00%", both classified 'percentage' alike) has it, without this reader becoming a formatter (see this file's own top-of-file scope note).
+    if (entry.numberFormatCode !== undefined) {
+      cellEntry.numberFormatCode = entry.numberFormatCode;
+    }
   }
   return cellEntry;
 }
