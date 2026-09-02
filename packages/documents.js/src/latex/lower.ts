@@ -274,6 +274,12 @@ function operatorOfNode(node: TemmlNode): string | undefined {
   return undefined;
 }
 
+// The schema operator names RELATION_ATOM_OPERATORS maps to, so fold below can tell a relation apart from an arithmetic operator by its already-resolved schema name rather than re-deriving it from the source glyph a second time.
+const RELATION_OPERATORS: ReadonlySet<string> = new Set(
+  Object.values(RELATION_ATOM_OPERATORS),
+);
+
+// Standard mathematical convention binds a relation (=, <, \leq, ...) looser than every arithmetic operator, regardless of which side of the relation the arithmetic sits on: `c = a + b` and `a + b = c` both read as eq(add(a,b), c), never add(eq(...), ...) or add(..., eq(...)). A single flat left-to-right fold over the mixed operator list cannot express that -- it folds whichever operator comes first in source order, so `F = m \times a` (relation before arithmetic) folded eq before multiply and produced multiply(eq(F,m), a), a tree with no sound mathematical reading (multiplying an equation by a value). fold instead runs two tiers: foldArithmetic resolves every maximal run of consecutive arithmetic operators into one operand first (unchanged left-to-right arithmetic behaviour within a run), and only then folds those operands together with the relation operators between them, left to right -- so arithmetic always binds first no matter which side of a relation it sits on.
 function fold(
   first: MathExpression,
   operators: readonly string[],
@@ -281,7 +287,12 @@ function fold(
   context: LoweringContext,
   detail: string,
 ): MathExpression {
-  let folded = first;
+  let runFirst = first;
+  let runOperators: string[] = [];
+  let runSegments: TemmlNode[][] = [];
+  const operands: MathExpression[] = [];
+  const relations: string[] = [];
+
   for (let index = 0; index < operators.length; index += 1) {
     const operator = operators[index];
     const segmentNodes = segments[index];
@@ -293,6 +304,54 @@ function fold(
     if (segmentNodes.length === 0) {
       diagnose(context, "latex/operator-placement-unparsed", detail);
       return unparsed(detail);
+    }
+    if (RELATION_OPERATORS.has(operator)) {
+      operands.push(
+        foldArithmetic(runFirst, runOperators, runSegments, context),
+      );
+      relations.push(operator);
+      runFirst = lowerTerm(segmentNodes, context);
+      runOperators = [];
+      runSegments = [];
+      continue;
+    }
+    runOperators.push(operator);
+    runSegments.push(segmentNodes);
+  }
+  operands.push(foldArithmetic(runFirst, runOperators, runSegments, context));
+
+  let folded = operands[0];
+  if (folded === undefined) {
+    throw new Error("fold produced no operand for a non-empty operator list");
+  }
+  for (let index = 0; index < relations.length; index += 1) {
+    const relation = relations[index];
+    const operand = operands[index + 1];
+    if (relation === undefined || operand === undefined) {
+      throw new Error(
+        "relation and operand lists diverged while folding a lowered sequence",
+      );
+    }
+    folded = app(relation, [folded, operand]);
+  }
+  return folded;
+}
+
+// One maximal run of consecutive arithmetic operators, folded strictly left-to-right (the header comment's own contract: a - b - c is subtract(subtract(a,b),c), one application per source operator). `operators` here never contains a relation -- fold above only ever calls this on the arithmetic-only slices between relation boundaries.
+function foldArithmetic(
+  first: MathExpression,
+  operators: readonly string[],
+  segments: readonly TemmlNode[][],
+  context: LoweringContext,
+): MathExpression {
+  let folded = first;
+  for (let index = 0; index < operators.length; index += 1) {
+    const operator = operators[index];
+    const segmentNodes = segments[index];
+    if (operator === undefined || segmentNodes === undefined) {
+      throw new Error(
+        "operator and segment lists diverged while folding an arithmetic run",
+      );
     }
     folded = app(operator, [folded, lowerTerm(segmentNodes, context)]);
   }
