@@ -1,3 +1,18 @@
+## [2.1.5](https://github.com/ExaDev/documents.js/compare/documents%402.1.4...documents%402.1.5) (2026-09-02)
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.3.0 in documents [skip ci] ([44c0dba](https://github.com/ExaDev/documents.js/commit/44c0dba7005f4e557764ef908c26e23ea964fd5a))
+* **deps:** bump documents.js to ^6.2.0 in documents [skip ci] ([5bc71d7](https://github.com/ExaDev/documents.js/commit/5bc71d7a9f64d06bb799eff57b0596007fefccb3))
+* **deps:** bump markdown-codec to ^6.1.2 in documents [skip ci] ([4383405](https://github.com/ExaDev/documents.js/commit/43834056e1ddab5eaf8f11f84edb674d7cbb4e62))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.2.0
+- Updated markdown-codec to ^6.1.2
+- Updated document-schema.js to ^5.3.0
+
 ## [2.1.4](https://github.com/ExaDev/documents.js/compare/documents%402.1.3...documents%402.1.4) (2026-09-02)
 
 ### Miscellaneous Chores
