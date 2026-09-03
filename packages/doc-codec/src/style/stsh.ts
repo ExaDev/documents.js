@@ -113,3 +113,27 @@ function readXstz(bytes: Uint8Array, offset: number, what: string): string {
 export function headingLevelFromIstd(istd: number): number | undefined {
   return istd >= 1 && istd <= 9 ? istd : undefined;
 }
+
+// A minimal, genuinely spec-conformant STSH carrying zero styles ([MS-DOC] 2.9.271's own "cstd" MAY be 0; no MUST-clause requires a document to define even one). write.ts always writes one, never omits fcStshf/lcbStshf entirely, because FibRgFcLcb97's own lcbStshf field "MUST be a nonzero value" -- a document with no style sheet at all is not a construct [MS-DOC] permits, even though this package's own reader tolerates lcbStshf 0 (see read.ts). Every field is the same fixed Stshif header parseStsh's own STSHIF_SIZE check requires, populated with the values Word's own default document carries when nothing overrides them; there are no styles for it to also fold and, in turn, nothing for a paragraph's own sprmPIstd to resolve a name or heading level through -- see the README's own scope note on paragraph styles.
+export function buildEmptyStsh(): Uint8Array {
+  const stshi: number[] = [];
+  const push16 = (value: number): void => {
+    stshi.push(value & 0xff, (value >> 8) & 0xff);
+  };
+  push16(0); // cstd: no styles.
+  push16(STDF_SIZE_WITHOUT_POST_2000); // cbSTDBaseInFile.
+  push16(0x0001); // fStdStylenamesWritten, which [MS-DOC] requires to be 1.
+  push16(0); // stiMaxWhenSaved.
+  push16(0x000f); // istdMaxFixedWhenSaved, which [MS-DOC] requires to be 0x000F.
+  push16(0); // nVerBuiltInNamesWhenSaved.
+  push16(0); // ftcAsci.
+  push16(0); // ftcFE.
+  push16(0); // ftcOther.
+  push16(0); // ftcBi.
+  push16(4); // StshiLsd.cbLSD, which [MS-DOC] requires to be 4.
+  return new Uint8Array([
+    stshi.length & 0xff,
+    (stshi.length >> 8) & 0xff,
+    ...stshi,
+  ]);
+}

@@ -15,6 +15,7 @@ import { applyCharacterSprms, type CharacterProperties } from "./prop/chp";
 import { PropertyBinTable } from "./prop/fkp";
 import { applyParagraphSprms, type ParagraphProperties } from "./prop/pap";
 import { readGrpprl } from "./prop/sprm";
+import { parseFontTable } from "./style/fonts";
 import { headingLevelFromIstd, parseStsh, type StyleSheet } from "./style/stsh";
 import { readTextRange } from "./text/characters";
 import { parseClx } from "./text/piece-table";
@@ -102,6 +103,17 @@ export function readDocContent(
     ),
     "PlcBtePapx",
   );
+  const fonts =
+    fib.lcbSttbfFfn > 0
+      ? parseFontTable(
+          slice(
+            table,
+            fib.fcSttbfFfn,
+            fib.lcbSttbfFfn,
+            "SttbfFfn in the Table stream",
+          ),
+        )
+      : undefined;
 
   // The main document is the first subdocument: it starts at character position 0 and runs for ccpText characters, with the footnote, header, comment, endnote and textbox subdocuments following it in the order FibRgLw97 declares them. Only the main document is converted here; the rest are left for the subdocument support the README's scope section describes as absent.
   const range = readTextRange(wordDocument, pieceTable, 0, fib.ccpText);
@@ -110,6 +122,7 @@ export function readDocContent(
     chpxTable,
     papxTable,
     styles,
+    fonts,
     characterProperties: new Map(),
   });
 
@@ -131,6 +144,8 @@ interface ReadContext {
   readonly chpxTable: PropertyBinTable;
   readonly papxTable: PropertyBinTable;
   readonly styles: StyleSheet | undefined;
+  /** The font names sprmCRgFtc0's operand indexes into, or undefined when the document carries no SttbfFfn at all. */
+  readonly fonts: readonly string[] | undefined;
   // Character properties already folded out of one Chpx, keyed by that Chpx's own position and length in the WordDocument stream. It belongs to the whole read rather than to one paragraph because a Chpx routinely spans many paragraphs -- a document in one font is one exception covering all of it -- so a per-paragraph cache would re-parse the same grpprl once per paragraph and never hit.
   readonly characterProperties: Map<string, CharacterProperties>;
 }
@@ -307,7 +322,7 @@ function buildRuns(
       if (properties === undefined) {
         properties = {};
         if (grpprl !== undefined) {
-          applyCharacterSprms(readGrpprl(grpprl), properties);
+          applyCharacterSprms(readGrpprl(grpprl), properties, context.fonts);
         }
         context.characterProperties.set(key, properties);
       }
