@@ -1,0 +1,182 @@
+# wpd-codec
+
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/wpd-codec) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/wpd-codec) [![npm version](https://img.shields.io/npm/v/wpd-codec)](https://www.npmjs.com/package/wpd-codec) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
+
+> Hand-written, read-only WordPerfect 6.x-X6 (`.wpd`) reading into `document-schema.js`'s `ContentDocument`, from Corel's own published File Format SDK — part of the [documents.js family](../../README.md). Worker-isomorphic: the same code runs under Node and inside a Cloudflare Workers isolate.
+
+**Status: under active development.** The read path below is tested against the specification's own worked examples and against hand-built fixtures derived from its field tables, but not yet against a corpus of real WordPerfect documents. See [Remaining scope](#remaining-scope) for what is deliberately not handled yet, and [What is not yet proven](#what-is-not-yet-proven) for the honest limits of the current evidence.
+
+Created for [documents.js#819](https://github.com/ExaDev/documents.js/issues/819). The premise that made the issue worth acting on is that WordPerfect is not a reverse-engineered format: Corel shipped a File Format SDK as a supported developer product, and one specification covers the entire modern lineage — its own document-structure page states outright that "Files created in WordPerfect 6.x, through X6 are structured the same", so 1993 through 2012 is one format, not a family of them. There is also no JavaScript or TypeScript reader for it at all: [libwpd](https://libwpd.sourceforge.net/) is LGPL C++, WP_Reader is C#, and the SDK's own surviving mirror ships an Ada implementation.
+
+## Sources
+
+Everything this package does is derived from the vendor's own documentation, and every non-obvious decision in the source cites the page it comes from.
+
+| Source                                                                                                                                                                                                                                                     | What it gives                                                                                                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [WordPerfect File Format SDK help](https://github.com/OneWingedShark/WordPerfect/tree/master/doc/SDK_Help/FileFormats)                                                                                                                                     | The specification itself, mirrored in full: document structure, the prefix packet catalogue, single-byte characters and functions, every variable-length function group, the fixed-length functions, and table formulas. |
+| [WPFF Document Structure](https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_DocumentStructure.htm)                                                                                                                   | The file header, the index and packet data areas, the function-code stream's shape, the units glossary, and a complete annotated hex dump of a conforming generic prefix.                                                |
+| [WPFF Single-Byte Characters and Functions](https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_SingleByte.htm)                                                                                                        | The character model and the eighty single-byte function codes.                                                                                                                                                           |
+| [WPFF D0 EOL Functions](https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_D0-EOL.htm)                                                                                                                                | The End-of-Line group and, crucially, its "Conversion/Search mappings" column — the specification stating what a converting application should turn each break code into.                                                |
+| [WPFF Fixed-Length Multi-Byte Functions](https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_xFixedLength.htm)                                                                                                         | Attribute On/Off, the Extended Character function, and the size of every fixed-length code.                                                                                                                              |
+| [WPFF D3 Paragraph](https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_D3-Paragraph.htm) and [D4 Character](https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_D4-Character.htm) | Justification, font face and size changes, colour, and the rest of the paragraph- and character-oriented functions.                                                                                                      |
+| [WPFF prefix packet catalogue](https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_PrefixPkt0-32.htm)                                                                                                                  | The packet types, including the font typeface descriptor layout this package reads a run's font family out of.                                                                                                           |
+| [Corel's File Format SDK product page](https://web.archive.org/web/20120125025312/http://apps.corel.com/partners_developers/csp/wordperfect_fileformatsdk.htm)                                                                                             | The provenance: a supported Corel developer product documenting "the entire document format, document prefix and document codes".                                                                                        |
+
+## Getting started
+
+Requires Node.js `>=20` and pnpm `11.6.0`.
+
+```sh
+pnpm install
+pnpm build          # tsdown -> dist/ (ESM + CJS + .d.ts, one file set per src module)
+pnpm typecheck      # tsc -p tsconfig.json && tsc -p tsconfig.node.json, plus attw --pack
+pnpm lint           # eslint . --fix --cache --max-warnings 0
+pnpm test           # vitest run --project unit
+pnpm test:watch     # vitest --project unit
+pnpm test:workers   # vitest run --config vitest.workers.config.ts, inside a real Cloudflare Workers (workerd) isolate
+pnpm test:smoke     # builds dist/, then loads the built ESM and CJS barrels and every advertised deep import
+```
+
+To run a single test file, pass its path to vitest directly, e.g. `pnpm exec vitest run src/stream/tokenise.test.ts`.
+
+## Usage
+
+```ts
+import { readWpdContent } from "wpd-codec";
+
+// Both containers are accepted, decided by inspecting the bytes: a bare
+// WordPerfect 6.x file, and a WP7-and-later OLE compound file whose
+// PerfectOffice_MAIN stream holds the identical byte stream.
+const document = readWpdContent(bytes);
+document.sections[0].blocks; // paragraphs, page breaks
+```
+
+`readWpd` is the same read one level up, returning the tree-form `DocumentTree` every other codec in the family also offers. `wpdContentCodec` states the read half as `document-schema.js`'s own `ContentCodec` port, so a consumer dispatching over formats treats WordPerfect uniformly with the rest.
+
+Anything that would silently lose information is reported through an optional diagnostic sink rather than swallowed:
+
+```ts
+readWpdContent(bytes, {
+  sink: (diagnostic) => {
+    diagnostic.code; // 'wpd/unmapped-character', 'wpd/table-flattened', ...
+    diagnostic.message;
+  },
+});
+```
+
+Structural nonconformance is not a diagnostic — it throws. `WpdNotAWordPerfectFileError`, `WpdEncryptedDocumentError`, `WpdUnsupportedVersionError`, and the general `WpdFormatError` are all exported, and all extend the last.
+
+## What it provides
+
+Every module is importable by package-relative path as well as through the barrel — `tsdown` builds one dist file per src module (`root: 'src'`, the layout `archive-codec` and `ooxml.js` also ship), and `package.json`'s `./*` exports wildcard maps each subpath onto it. The smoke suite is the guard on that advertisement: it loads each module below from the built `dist/` in both module systems.
+
+| Module                | Exports                                                                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`                | `readWpdContent` (bytes to `ContentDocument`), `readWpd` (bytes to `DocumentTree`), `ReadWpdOptions`                                            |
+| `codec`               | `wpdContentCodec` (`ContentCodec`), `WpdBytesSchema`                                                                                            |
+| `format`              | `WPD_MEDIA_TYPE`, `WPD_FILE_EXTENSION`                                                                                                          |
+| `diagnostics`         | `WpdDiagnostic`, `WpdDiagnosticSink`, `WpdDiagnosticCodes`, `NOOP_WPD_DIAGNOSTIC_SINK`                                                          |
+| `errors`              | `WpdFormatError` and its three subclasses                                                                                                       |
+| `container/container` | `openWpdDocument` (container, header, packets, and document-area bounds in one), `PERFECT_OFFICE_MAIN_STREAM`, `PERFECT_OFFICE_OBJECTS_STORAGE` |
+| `container/header`    | `readFileHeader`, `hasWordPerfectFileId`, `WPD_FILE_ID`, `WPD_PREFIX_HEADER_SIZE`                                                               |
+| `container/prefix`    | `readPrefixPackets`, `packetByPrefixId`, `readTypefaceName`, `WPD_INDEX_RECORD_SIZE`, `PACKET_TYPE_DESIRED_FONT_DESCRIPTOR`                     |
+| `stream/tokenise`     | `tokeniseDocumentArea` and the four token types                                                                                                 |
+| `stream/characters`   | `decodeWpCharacter`, `decodeSingleByteCharacter`, `decodeWordString`, `UNMAPPED_CHARACTER`                                                      |
+| `stream/eol`          | `eolMappingForSubfunction`, `subfunctionForSingleByteEol`, `isSingleByteEol`                                                                    |
+| `stream/attributes`   | `decodeAttributeByte`, `runAttributesFrom`, `WpdAttribute`                                                                                      |
+
+The container and stream layers are public deliberately, not by accident: a consumer inspecting a WordPerfect file — a migration audit, a forensic tool, a reader for a construct this package does not yet lift into the shared schema — needs the parsed prefix and the raw function stream, not only the document they fold into.
+
+## Architecture
+
+A WordPerfect 6.x-X6 file is a **prefix** followed by a **document area**, optionally wrapped in an OLE compound file. Reading it is three layers, each in its own directory.
+
+**The container** (`src/container/`) resolves the wrapper and the prefix. A 16-byte header gives the offset of the document area, the product/type/version bytes, an encryption word, and the offset of the index area; a 496-byte extended header follows it, of which only the file size is documented. The index area is a run of 14-byte records — the first is the index header, and each of the rest points at one **packet** in the packet data area. A packet holds data referenced many times but not part of the document's content: a font descriptor, a style definition, a comment's text. Functions in the document area name a packet by its **prefix ID**, which is its 1-based position among the index entries, not its packet type.
+
+**The tokeniser** (`src/stream/tokenise.ts`) walks the document area. Bytes at or below 0x7F are characters; above it, four ranges of function codes — single-byte (0x80-0xCF), variable-length multi-byte (0xD0-0xEF, self-describing through a size field), fixed-length multi-byte (0xF0-0xFE, sized by a table), and 0xFF, which cannot appear at all. Every multi-byte function is bracketed by matching begin and end gates, and the variable form repeats its size before the end gate; this package verifies all three redundancies, because they are the format's own integrity check — a stream that has gone out of step fails at the very next function rather than decoding rubbish for the rest of the file.
+
+**The fold** (`src/read.ts`) turns tokens into a `ContentDocument`. Characters accumulate into the current run, an attribute or font change closes that run and opens another, and an end-of-line function closes the paragraph. Nothing recurses and nothing looks ahead, which is what makes a hand-written reader for this format tractable at all.
+
+### Two containers, one document
+
+WordPerfect 6.x writes the byte stream straight to disk. From WP7 onwards it may be wrapped in an OLE compound file, with the document in a `PerfectOffice_MAIN` stream — but the SDK is explicit that the wrapper is optional even then ("When creating WordPerfect 7/8 documents you do not need to include the OLE Compound Document wrapper"), so the container is decided by inspecting the bytes, never by the file's extension or its version bytes. Both paths produce the identical document, which the test suite asserts directly.
+
+The compound-file half is [`archive-codec`](../archive-codec/README.md)'s bounded [MS-CFB] reader rather than anything written here: sectors, FAT chains, and directory entries are container structure with no document-format knowledge in them, which is exactly that package's charter.
+
+### Byte 0x20 is not a space
+
+The one part of the character model that looks like a bug on first reading, so it is worth stating plainly. The SDK maps byte values 1 through 32 to thirty-two "Default Extended International Characters" — a shorthand for common accented letters — and byte values 33 through 127 to ASCII. Byte 0x20 is therefore the sharp s, not a space. A space is the single-byte Soft Space function 0x80, which the specification describes as "Equivalent of an ASCII 0x20", or the Hard Space function 0x81. Both statements appear twice in the SDK, and the design reason is plain from the function list: WordPerfect must distinguish a justifiable soft space from a hard one, so neither can be a plain text byte. `src/stream/characters.ts` owns the whole mapping in one place.
+
+### Deliberately not depending on libwpd
+
+The only mature reader for this format is [libwpd](https://libwpd.sourceforge.net/), which is LGPL C++ — so binding it would forfeit both this family's MIT licensing and its Worker portability in one step, and it could not run in a browser or a Workers isolate at all. Writing the parser by hand against the vendor's own specification is the same bet `markdown-codec` makes against micromark and `pdf-codec` makes against pdf-lib, and here it is not really a bet: the format is documented at byte level by the company that wrote it. An ESLint rule bans importing any libwpd binding by name rather than leaving the decision to memory.
+
+## Scope
+
+**Read-only, WordPerfect 6.0 through X6.** Two deliberate exclusions, both decided before any code was written:
+
+- **No writer.** WordPerfect File Format is complete enough to write against, but a lossless round-trip through a function-code stream — keeping prefix packet indices, use counts, and the document's own well-formedness invariants consistent — is a much larger job than reading one, and a half-correct writer is worse than no writer given the lossless bar the rest of this family holds to.
+- **No WordPerfect 4.2, 5.x, or Macintosh generations.** Those share the file ID but not the structure; they are separate formats with their own vendor documentation, not earlier drafts of this one. A 5.x file reaches `WpdUnsupportedVersionError` on its major version byte rather than being misparsed as a 6.x file.
+
+### What is handled
+
+- Both containers: a bare WordPerfect file, and an OLE compound file's `PerfectOffice_MAIN` stream.
+- The file header, with encryption, product type, file type, and major version all checked rather than assumed.
+- The index area and packet data area, with prefix IDs resolvable to packets.
+- The full document-area token stream: characters, all four function-code ranges, prefix ID references, non-deletable data, and gate/size verification.
+- The character model: ASCII, the thirty-two international shorthands, and the Extended Character function for character set 0 and the documented part of set 1.
+- Paragraph structure from the End-of-Line group, in both its single-byte and multi-byte spellings, using the specification's own conversion table — hard returns become paragraphs, soft returns become spaces, hard end-of-page becomes a `pageBreak` block.
+- Character attributes: bold, italics, underline (plain and double), and strikeout, including the specification's "ignore" bit for a nested duplicate.
+- Font family, from the Desired Font Descriptor packet a Font Face Change names; font size, from a Font Size Change; character colour.
+- Paragraph justification.
+- The Start/End of Text to Skip pair, whose contents the formatter does not display and this reader drops.
+
+### Remaining scope
+
+Everything below is recognised by the tokeniser and skipped by the fold, so a document containing it still reads — losing that construct's own structure, never the surrounding text.
+
+- **Tables.** Cell and row boundaries become paragraph breaks so a table's text survives in reading order; the grid, cell attributes, and the table's own formula language (`WPFF_TableFormulas`) are not reconstructed. Reported through `wpd/table-flattened`.
+- **Boxes and graphics** (the 0xDF group): figures, text boxes, and equations, and the WPG graphics they carry.
+- **Embedded OLE objects**, stored under the compound file's `PerfectOffice_OBJECTS` storage.
+- **Headers, footers, footnotes, and endnotes** (the 0xD6 and 0xD7 groups).
+- **Styles** (the 0xDD group) beyond the document's own Open Style: a run's directly-applied attributes are read, but a style packet's own definitions are not resolved onto the runs that reference them.
+- **Lists and outline numbering** (the 0xD8-0xDC groups).
+- **Merge codes** (the 0xDE group) and **cross-references** (0xD5).
+- **Page geometry** (the 0xD1 group): the section's page size and margins are the WordPerfect default (US Letter, one inch), not what a document that overrides them states.
+- **Document metadata**, which lives in prefix packets this reader does not yet interpret, so `metadata` is an empty envelope rather than fields invented from the file's structure.
+- **Character sets 2 and above**, and the part of set 1 the mirrored SDK pages do not tabulate. An unmapped character renders as U+FFFD and is reported through `wpd/unmapped-character` rather than dropped.
+- **Encrypted documents**, which throw: the specification states that nothing beyond the file header is intelligible without the password, so there is no partial read to offer.
+
+### What is not yet proven
+
+Stated plainly, because it is the difference between this package being correct and being consistent with its own tests:
+
+- **No real-world corpus.** Every test here is built either from the specification's own worked examples — the annotated generic-prefix hex dump, the `can't` extended-character example, the `com<0x83>ment` soft-hyphen example — or from byte sequences assembled directly from its field tables. That is strong evidence for the container, prefix, tokeniser, and the specific constructs covered; it is not evidence about what real WordPerfect documents in the wild actually contain, particularly around deletable data and the constructs listed above.
+- **The document-area's own file-size bound.** The header's file-size field is honoured only when self-consistent, because the SDK itself warns that a third-party writer failing to update it is a common real-world defect whose symptom is a document reading back blank.
+
+## Conventions
+
+- Worker-isomorphic (see the [family-wide convention](../../README.md#conventions)): runtime `src/` must not import `node:*`, a bare Node builtin, or use the `Buffer` global — enforced by a `no-restricted-imports`/`no-restricted-globals` ESLint rule and exercised in CI by running a test suite inside an actual `workerd` isolate (`pnpm test:workers`). Test files under `src/**/*.test.ts` and `src/test-support/` are exempt.
+- Only `src/index.ts` may be named `index.*`, and it may contain only re-export statements.
+- Every non-obvious constant, offset, and mapping in `src/` cites the SDK page it comes from. A number that cannot be traced to the specification does not belong in this package.
+
+## Install
+
+```sh
+pnpm add wpd-codec
+# or
+npm install wpd-codec
+```
+
+## Release and publishing
+
+Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the mechanism (topological per-package `semantic-release` via `@exadev/semantic-release-workspace`, OIDC trusted npm publishing, automatic sibling dependency-range rewriting).
+
+## Contributing
+
+Conventional Commits, enforced workspace-wide by commitlint through a root `commit-msg` hook. Work inside `packages/wpd-codec/`; see [CONTRIBUTING.md](../../CONTRIBUTING.md) for the shared git hooks and history conventions.
+
+## License
+
+MIT
