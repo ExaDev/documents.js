@@ -16,6 +16,9 @@ import { buildCsvText } from "../csv/write";
 import { encodeSvgText } from "../svg/text";
 import { buildSvgText } from "../svg/write";
 import { writeRtfContent } from "rtf-codec";
+import { writeDocContent } from "doc-codec";
+import { writeXlsContent } from "xls-codec";
+import { writePptContent } from "../ppt/write";
 import { encodeDocumentPackage } from "../package-codec";
 import {
   CONTENT_READERS,
@@ -113,6 +116,34 @@ export const DOCUMENT_FORMAT_CODECS: Readonly<
     content: {
       read: CONTENT_READERS.rtf,
       write: (content) => writeRtfContent(content),
+    },
+  },
+  // doc is rtf's structural twin: doc-codec's readDocContent/writeDocContent operate on raw [MS-CFB]+[MS-DOC] bytes directly, with writeDocContent already typed against the bare ContentDocument (it narrows to 'wordprocessing' internally, throwing DocUnsupportedError for anything else), so there is nothing for this entry to unwrap or narrow.
+  doc: {
+    content: {
+      read: CONTENT_READERS.doc,
+      write: (content) => writeDocContent(content),
+    },
+  },
+  // xls is doc's spreadsheet-variant counterpart: xls-codec's readXlsContent/writeXlsContent operate on raw [MS-CFB]+BIFF8 bytes directly -- but unlike writeDocContent, writeXlsContent's own parameter type is the narrowed XlsContentDocument rather than the bare ContentDocument, so this entry narrows with a real runtime check (matching composition.ts's own FORMAT_NODES.xls.build) rather than a cast. The throw is an internal-invariant guard: every caller reaching this write half (buildDocumentBytes, setDocumentMetadata's rebuild path) already holds a genuine spreadsheet ContentDocument by construction.
+  xls: {
+    content: {
+      read: CONTENT_READERS.xls,
+      write: (content) => {
+        if (content.kind !== "spreadsheet") {
+          throw new Error(
+            "DOCUMENT_FORMAT_CODECS.xls.content.write: expected a spreadsheet ContentDocument",
+          );
+        }
+        return writeXlsContent(content);
+      },
+    },
+  },
+  // ppt is the one legacy binary format here whose write half goes through this package's own adapter rather than the codec's own writer directly: ppt-codec's writePptContent takes the flat { metadata, slides } shape, not a full ContentDocument, so src/ppt/write.ts's own writePptContent does the narrow-and-unwrap (see that module's own comment) -- the identical adapter CONTENT_READERS.ppt already goes through on the read side.
+  ppt: {
+    content: {
+      read: CONTENT_READERS.ppt,
+      write: (content) => writePptContent(content),
     },
   },
   pdf: {

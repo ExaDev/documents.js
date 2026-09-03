@@ -1,5 +1,12 @@
-import type { ContentDocument } from "document-schema.js";
+import type {
+  ContentDocument,
+  ContentSheet,
+  ContentSheetCell,
+  ContentSheetPrintSettings,
+} from "document-schema.js";
+import { PAGE_SIZE_LETTER } from "document-schema.js";
 import { describe, expect, it } from "vitest";
+import type { XlsContentDocument } from "xls-codec";
 import { odsToXlsx } from "../convert/convert";
 import { readOdfFormulaContent } from "../odf/formula/read";
 import { FRACTION_FORMULA, odfFormulaBytes } from "../test-support/odf";
@@ -27,7 +34,10 @@ function requireContentCodec(
     | "markdown"
     | "xlsx"
     | "csv"
-    | "rtf",
+    | "rtf"
+    | "doc"
+    | "xls"
+    | "ppt",
 ) {
   const content = DOCUMENT_FORMAT_CODECS[format].content;
   if (!content?.write) {
@@ -201,6 +211,122 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
     const rebuiltBytes = codec.write!(content);
     expect(codec.read(rebuiltBytes)).toEqual(content);
   });
+
+  // doc-codec's own writer covers a single wordprocessing section, character/paragraph formatting only (no tables, images, or numbering -- see that package's README scope note), so this fixture is deliberately plain: one heading paragraph and one bold run, exercising exactly what writeDocContent can express. doc-codec always reads back metadata as {} regardless of what was written (readDocContent's own scope note), so -- like rtf above -- no withReferenceTimestamps normalisation is needed, but for the opposite reason: there is no timestamp field for either side to disagree on.
+  it("doc: read -> write -> read round-trips the ContentDocument", () => {
+    const codec = requireContentCodec("doc");
+    const content: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "Report Title", bold: true }],
+            },
+            {
+              kind: "paragraph",
+              runs: [{ text: "A plain paragraph of body text." }],
+            },
+          ],
+        },
+      ],
+    };
+    const rebuiltBytes = codec.write!(content);
+    expect(codec.read(rebuiltBytes)).toEqual(content);
+  });
+
+  // Mirrors xls-codec's own write.test.ts fixture shape (its `sheet`/`cell` helpers, restated inline here rather than imported -- that test-support is not part of xls-codec's published surface). writeXlsContent's own scope covers cell values, merges, row/column sizing, and number formats (no formulas/decoration -- see that package's README scope note), so this fixture sticks to plain cell values. A cell written with no explicit number format gains 'General' on the way back (XF 15's own ifmt resolving through the built-in table) -- the same pre-existing, documented stamping xls-codec's own write.test.ts pins, not something this registry wiring introduces -- so the expected content states it explicitly rather than asserting exact equality against the unformatted input.
+  it("xls: read -> write -> read round-trips the ContentDocument", () => {
+    const codec = requireContentCodec("xls");
+    const printSettings: ContentSheetPrintSettings = {
+      pageSize: PAGE_SIZE_LETTER,
+      margins: { topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 50.4 },
+      gridlines: false,
+      headers: false,
+      pageOrder: "downThenOver",
+    };
+    const cells: ContentSheetCell[] = [
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "Widget" },
+        displayText: "Widget",
+      },
+      {
+        row: 0,
+        column: 1,
+        value: { kind: "number", value: 42.5 },
+        displayText: "42.5",
+      },
+    ];
+    const sheet: ContentSheet = {
+      name: "Sheet1",
+      cells,
+      columns: [],
+      rows: [],
+      images: [],
+      printSettings,
+    };
+    const content: XlsContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [sheet],
+    };
+    const rebuiltBytes = codec.write!(content);
+    const roundTripped = codec.read(rebuiltBytes);
+    const expected: XlsContentDocument = {
+      ...content,
+      sheets: [
+        {
+          ...sheet,
+          cells: cells.map((cell) => ({
+            ...cell,
+            numberFormatCode: "General",
+          })),
+        },
+      ],
+    };
+    expect(roundTripped).toEqual(expected);
+  });
+
+  // Mirrors ppt-codec's own write.test.ts fixture shape. The writer's own scope is text-box slides only (see that package's README scope note); like pptx/odp above, a black-box substantive-text check is the right-scoped proof of wiring here rather than exact equality -- ppt-codec's own reader always reports PowerPoint's fixed default text insets (0.1in left/right, 0.05in top/bottom) regardless of what a shape actually carries, since it does not yet read a shape's own OfficeArtFOPT inset override (see read.ts's own DEFAULT_INSET_LEFT_RIGHT_PT/DEFAULT_INSET_TOP_BOTTOM_PT comment), a pre-existing, documented gap this registry wiring did not introduce.
+  it("ppt: read -> write -> read carries the source slide text through", () => {
+    const codec = requireContentCodec("ppt");
+    const content: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [
+        {
+          size: { widthPt: 720, heightPt: 540 },
+          notes: "",
+          shapes: [
+            {
+              frame: { xPt: 72, yPt: 36, widthPt: 360, heightPt: 180 },
+              insetLeftPt: 0,
+              insetTopPt: 0,
+              insetRightPt: 0,
+              insetBottomPt: 0,
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "Hello, PowerPoint" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(containsText(content, "Hello, PowerPoint")).toBe(true);
+    const rebuiltBytes = codec.write!(content);
+    const roundTripped = codec.read(rebuiltBytes);
+    expect(roundTripped.kind).toBe(content.kind);
+    expect(containsText(roundTripped, "Hello, PowerPoint")).toBe(true);
+  });
 });
 
 describe("DOCUMENT_FORMAT_CODECS: odf has a content.read but genuinely no content.write", () => {
@@ -240,5 +366,26 @@ describe("DOCUMENT_FORMAT_CODECS: rtf has a content codec, no layout codec", () 
   it("rtf has a content entry and no layout entry", () => {
     expect(DOCUMENT_FORMAT_CODECS.rtf.content).toBeDefined();
     expect(DOCUMENT_FORMAT_CODECS.rtf.layout).toBeUndefined();
+  });
+});
+
+describe("DOCUMENT_FORMAT_CODECS: doc has a content codec, no layout codec", () => {
+  it("doc has a content entry and no layout entry", () => {
+    expect(DOCUMENT_FORMAT_CODECS.doc.content).toBeDefined();
+    expect(DOCUMENT_FORMAT_CODECS.doc.layout).toBeUndefined();
+  });
+});
+
+describe("DOCUMENT_FORMAT_CODECS: xls has a content codec, no layout codec", () => {
+  it("xls has a content entry and no layout entry", () => {
+    expect(DOCUMENT_FORMAT_CODECS.xls.content).toBeDefined();
+    expect(DOCUMENT_FORMAT_CODECS.xls.layout).toBeUndefined();
+  });
+});
+
+describe("DOCUMENT_FORMAT_CODECS: ppt has a content codec, no layout codec", () => {
+  it("ppt has a content entry and no layout entry", () => {
+    expect(DOCUMENT_FORMAT_CODECS.ppt.content).toBeDefined();
+    expect(DOCUMENT_FORMAT_CODECS.ppt.layout).toBeUndefined();
   });
 });

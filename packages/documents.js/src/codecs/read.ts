@@ -11,6 +11,9 @@ import { readCsvContent } from "../csv/read";
 import { decodeSvgText } from "../svg/text";
 import { readSvgContent } from "../svg/read";
 import { readRtfContent } from "rtf-codec";
+import { readDocContent } from "doc-codec";
+import { readXlsContent } from "xls-codec";
+import { readPptContent } from "../ppt/read";
 import { readWpdContent } from "wpd-codec";
 import { readOdfFormulaContent } from "../odf/formula/read";
 import { readOdgContent } from "../odf/odg/read";
@@ -33,7 +36,7 @@ export interface DocumentCodecOptions {
   readonly images?: MarkdownImageResolver;
 }
 
-// Every format whose bytes decode into a ContentDocument -- all thirteen DocumentFormat members except pdf, the one layout format (its read produces a LayoutDocument through readDocumentLayout below instead, mirroring the registry's content/layout entry split).
+// Every format whose bytes decode into a ContentDocument -- all sixteen DocumentFormat members except pdf, the one layout format (its read produces a LayoutDocument through readDocumentLayout below instead, mirroring the registry's content/layout entry split).
 export type ReadContentFormat = Exclude<DocumentFormat, "pdf">;
 
 export type ContentReader = (
@@ -41,7 +44,7 @@ export type ContentReader = (
   options?: DocumentCodecOptions,
 ) => ContentDocument;
 
-// The twelve per-format read closures, moved verbatim from the registry: each wraps the identical decode/read pair every ergonomic conversion in this package already uses for that format, with each format's own cancellation policy preserved exactly (docx/pptx/odt/odp/ods/odg/odf/xlsx have no loop of their own to hook a signal into, so their read checks it once via throwIfAborted before decoding; markdown does have one, so its read forwards the signal straight into the reader instead of checking it separately; csv/svg decoders are fatal one-pass functions with no loop, needing no separate check; rtf's own readRtfContent takes bytes directly and checks the signal itself internally, once, before tokenizing -- matching markdown's own single-check-inside-the-reader shape, so rtf's closure forwards the signal straight through rather than checking it twice). The registry composes its content entries from these, so there is exactly one place the "which reader for which format" dispatch lives.
+// The fifteen per-format read closures, moved verbatim from the registry: each wraps the identical decode/read pair every ergonomic conversion in this package already uses for that format, with each format's own cancellation policy preserved exactly (docx/pptx/odt/odp/ods/odg/odf/xlsx have no loop of their own to hook a signal into, so their read checks it once via throwIfAborted before decoding; markdown does have one, so its read forwards the signal straight into the reader instead of checking it separately; csv/svg decoders are fatal one-pass functions with no loop, needing no separate check; rtf's own readRtfContent takes bytes directly and checks the signal itself internally, once, before tokenizing -- matching markdown's own single-check-inside-the-reader shape, so rtf's closure forwards the signal straight through rather than checking it twice; doc-codec's readDocContent, xls-codec's readXlsContent, and this package's own src/ppt/read.ts wrapper over ppt-codec's readPptContent take no options at all -- none of the three legacy binary codecs has a loop or a diagnostic sink of its own yet -- so each of their closures checks the signal once via throwIfAborted before decoding, the identical no-loop-format shape docx/pptx/odt/odp/ods/odg/odf/xlsx already get). The registry composes its content entries from these, so there is exactly one place the "which reader for which format" dispatch lives.
 export const CONTENT_READERS: Readonly<
   Record<ReadContentFormat, ContentReader>
 > = {
@@ -97,11 +100,26 @@ export const CONTENT_READERS: Readonly<
   // readRtfContent takes bytes directly -- RTF is byte-oriented, not text (a \binN run can carry arbitrary raw picture bytes), so unlike markdown/csv/svg there is no well-formed-UTF-8 decode step to run first. It checks options.signal itself, once, before tokenizing, matching the single-check shape every no-loop format above gets from throwIfAborted.
   rtf: (bytes, options) =>
     readRtfContent(bytes, { signal: options?.signal }).document,
+  // doc-codec's readDocContent takes bytes directly and no options -- the pre-2007 Word Binary File Format is genuinely binary ([MS-CFB] + [MS-DOC]), not text, so like rtf there is no well-formed-UTF-8 decode step, and unlike rtf there is no signal to forward at all, so throwIfAborted is the whole cancellation policy.
+  doc: (bytes, options) => {
+    throwIfAborted(options?.signal);
+    return readDocContent(requireArrayBufferBytes(bytes));
+  },
   xlsx: (bytes, options) => {
     throwIfAborted(options?.signal);
     return readXlsxContent(
       decodeDocumentPackage("xlsx", requireArrayBufferBytes(bytes)),
     );
+  },
+  // xls-codec's readXlsContent takes bytes directly and no options -- the legacy Excel Binary File Format (BIFF8) is genuinely binary, matching doc's own no-decode-step, no-signal-of-its-own shape above. XlsContentDocument (a plain Extract<ContentDocument, {kind:'spreadsheet'}>) is fully interchangeable with ContentReader's own return type at this call site, with no narrowing needed.
+  xls: (bytes, options) => {
+    throwIfAborted(options?.signal);
+    return readXlsContent(requireArrayBufferBytes(bytes));
+  },
+  // src/ppt/read.ts wraps ppt-codec's own flat readPptContent (metadata + slides, matching ooxml.js's/odf.js's own upstream flat readers) into a full 'presentation'-kind ContentDocument, the identical envelope wrap readPptxContent/readOdpContent above already do for their own formats -- see that module's own comment. Genuinely binary bytes ([MS-CFB] + [MS-PPT]), no options of its own, so the same no-decode-step, throwIfAborted-only cancellation policy as doc/xls above.
+  ppt: (bytes, options) => {
+    throwIfAborted(options?.signal);
+    return readPptContent(requireArrayBufferBytes(bytes));
   },
   // readWpdContent takes bytes directly -- a WordPerfect file is a prefix and a function-code stream, not a package this workspace's own decodeDocumentPackage knows, and its own container detection (a bare file versus an OLE compound wrapper) happens inside the reader. It has no loop of its own to hook a signal into, so its read checks the signal once before decoding, the shape every no-package format above gets from throwIfAborted. There is no matching entry in the registry's write half at all: wpd-codec ships no writer, which is what makes wpd a read-only format everywhere else in this package.
   wpd: (bytes, options) => {
