@@ -18,6 +18,8 @@ describe("SourceFormatSchema", () => {
       "odf",
       "markdown",
       "pdf",
+      "epub",
+      "rtf",
     ]) {
       expect(SourceFormatSchema.safeParse(format).success).toBe(true);
     }

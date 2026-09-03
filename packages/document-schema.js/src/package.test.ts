@@ -367,7 +367,8 @@ describe("the package-level source residue table at the root", () => {
   it("rejects a malformed residue value -- the table validates the channel's shape, it does not tenant it", () => {
     const broken = {
       ...wordprocessingPackage(),
-      source: { s: { format: "rtf", xml: "<x/>" } },
+      // 'ooxml' is a package name, never a format name, so it can never join the enum the way 'rtf' since has -- which is what makes it a stable stand-in for a value outside the closed vocabulary.
+      source: { s: { format: "ooxml", xml: "<x/>" } },
     };
     expect(DocumentTreeSchema.safeParse(broken).success).toBe(false);
     const shapeless = {
