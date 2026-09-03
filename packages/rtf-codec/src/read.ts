@@ -362,7 +362,6 @@ class ContentBuilder {
   private cellBlocks: ContentBlock[] = [];
   private pendingCellRights: number[] = [];
   private rowLeftTwips = 0;
-  private paragraphSeen = false;
 
   constructor(
     private readonly header: RtfHeader,
@@ -415,7 +414,6 @@ class ContentBuilder {
     }
     target.push(this.buildParagraph(para));
     this.runs = [];
-    this.paragraphSeen = true;
   }
 
   private buildParagraph(para: ParagraphState): ContentParagraph {
@@ -594,10 +592,6 @@ class ContentBuilder {
       this.sections.push({ pageSize, margins, blocks: [] });
     }
     return { kind: "wordprocessing", metadata, sections: this.sections };
-  }
-
-  get hasParagraph(): boolean {
-    return this.paragraphSeen;
   }
 }
 
@@ -815,17 +809,21 @@ function readRtfDetail(
         isHeaderTable || (wrapperChild && head.destination !== "ud")
           ? "skip"
           : (known ?? (head.ignorable ? "skip" : state.destination));
-      if (
-        head.ignorable &&
-        known === undefined &&
-        !isHeaderTable &&
-        head.destination !== undefined
-      ) {
-        sink({
-          code: RtfDiagnosticCodes.UNKNOWN_DESTINATION_SKIPPED,
-          severity: "info",
-          message: `the ignorable destination \\${head.destination} is not recognised and its content is discarded, as the specification requires`,
-        });
+      if (head.destination !== undefined && !isHeaderTable) {
+        if (head.ignorable && known === undefined) {
+          sink({
+            code: RtfDiagnosticCodes.UNKNOWN_DESTINATION_SKIPPED,
+            severity: "info",
+            message: `the ignorable destination \\${head.destination} is not recognised and its content is discarded, as the specification requires`,
+          });
+        } else if (known === "skip") {
+          // A destination this reader recognises and still discards: a note, an annotation, page furniture, an embedded object. Reported rather than dropped silently, because a reader that says nothing about a construct it decided not to place is indistinguishable from one that never saw it -- and in a format whose readers are REQUIRED to ignore what they do not recognise, that distinction is the only thing a caller has.
+          sink({
+            code: RtfDiagnosticCodes.CONTENT_DESTINATION_SKIPPED,
+            severity: "warning",
+            message: `the \\${head.destination} destination's content is discarded: no ContentDocument position carries it`,
+          });
+        }
       }
       if (kind === "skip") {
         index = matchingGroupEnd(tokens, index) + 1;
