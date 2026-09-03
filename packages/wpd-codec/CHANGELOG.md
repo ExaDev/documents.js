@@ -1,3 +1,16 @@
+## [1.1.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%401.0.2...wpd-codec%401.1.0) (2026-09-03)
+
+### Features
+
+* **wpd-codec:** decode the page, table, style, and summary structures ([ea82b66](https://github.com/ExaDev/documents.js/commit/ea82b66d99d5603d1360a0154fa0ee6545823277))
+* **wpd-codec:** fold the document's own page, tables, headings, and metadata into the content ([f4b07e5](https://github.com/ExaDev/documents.js/commit/f4b07e596e712cbe1ee563781318a956ed4cfc1b))
+* **wpd-codec:** read the Tab group, so columns of text stop running together ([b1c42f7](https://github.com/ExaDev/documents.js/commit/b1c42f793722aa3d001b2647c0a37c72287c8d7e))
+
+### Documentation
+
+* **wpd-codec:** record what a real WordPerfect corpus settles and what it does not ([8762fca](https://github.com/ExaDev/documents.js/commit/8762fca195ec3b8ceb20f8402af0d6e2121b1bae))
+* **wpd-codec:** state what the reader now lifts and why each remaining gap is one ([e8909d4](https://github.com/ExaDev/documents.js/commit/e8909d4a9c61d898653109d51308105caf1ee0b3))
+
 ## [1.0.2](https://github.com/ExaDev/documents.js/compare/wpd-codec%401.0.1...wpd-codec%401.0.2) (2026-09-03)
 
 

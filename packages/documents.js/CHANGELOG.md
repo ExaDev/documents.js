@@ -1,3 +1,9 @@
+## [6.3.6](https://github.com/ExaDev/documents.js/compare/documents.js%406.3.5...documents.js%406.3.6) (2026-09-03)
+
+### Bug Fixes
+
+* **documents.js:** exclude whitespace-only text from PDF heading inference ([153480d](https://github.com/ExaDev/documents.js/commit/153480dc9cd9d2fdf77b79bb003937391c899cd1))
+
 ## [6.3.5](https://github.com/ExaDev/documents.js/compare/documents.js%406.3.4...documents.js%406.3.5) (2026-09-03)
 
 ### Documentation
