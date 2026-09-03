@@ -13,7 +13,7 @@ import {
 } from "../biff/record-types";
 import { BiffFormatError, readRecords } from "../biff/records";
 import { groupRecords, type RecordGroup } from "../biff/substreams";
-import { UNDECORATED_XF_FIELDS } from "../biff/xf-colors";
+import { PALETTE_ENTRY_COUNT, UNDECORATED_XF_FIELDS } from "../biff/xf-colors";
 import {
   cellXfTrailer,
   concat,
@@ -261,11 +261,13 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("reads a Palette record's own 56 colour entries", () => {
-    // LongRGB: red, green, blue, then a reserved byte -- rgColor[0] red, rgColor[1] green, and 54 more entries the ccv count declares (55 here, deliberately not 56, to prove the reader trusts the record's own declared count rather than assuming exactly 56).
+    // LongRGB: red, green, blue, then a reserved byte -- rgColor[0] red, rgColor[1] green, and the remaining entries of the 56 ccv MUST declare.
     const entries = [
       [0xff, 0x00, 0x00, 0x00],
       [0x00, 0xff, 0x00, 0x00],
-      ...Array.from({ length: 53 }, () => [0x00, 0x00, 0x00, 0x00]),
+      ...Array.from({ length: PALETTE_ENTRY_COUNT - 2 }, () => [
+        0x00, 0x00, 0x00, 0x00,
+      ]),
     ];
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -273,9 +275,38 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.palette?.length).toBe(entries.length);
+    expect(globals.palette?.length).toBe(PALETTE_ENTRY_COUNT);
     expect(globals.palette?.[0]).toEqual({ r: 1, g: 0, b: 0 });
     expect(globals.palette?.[1]).toEqual({ r: 0, g: 1, b: 0 });
+  });
+
+  it("refuses a Palette record declaring a ccv other than the 56 the spec requires", () => {
+    // A short table is not a smaller palette: every icv from its end to 63 becomes unresolvable, so a workbook's fills and borders would all silently vanish at once rather than anything failing. 55 entries, one short of the required count.
+    const entries = Array.from({ length: PALETTE_ENTRY_COUNT - 1 }, () => [
+      0x00, 0x00, 0x00, 0x00,
+    ]);
+
+    expect(() =>
+      readWorkbookGlobals(
+        groupsOf(
+          record(RECORD_PALETTE, [...u16(entries.length), ...entries.flat()]),
+        ),
+      ),
+    ).toThrow(BiffFormatError);
+  });
+
+  it("refuses a Palette record declaring zero colour entries", () => {
+    // The degenerate case the loop bound alone would have accepted silently, yielding an empty table every icv 8-63 then failed to resolve through.
+    expect(() =>
+      readWorkbookGlobals(groupsOf(record(RECORD_PALETTE, [...u16(0)]))),
+    ).toThrow(BiffFormatError);
+  });
+
+  it("refuses a Palette record declaring a negative colour count", () => {
+    // ccv is a signed field, so 0xFFFF reads back as -1: a loop bound alone would run zero times and report an empty palette as if the record had been fine.
+    expect(() =>
+      readWorkbookGlobals(groupsOf(record(RECORD_PALETTE, [...u16(0xffff)]))),
+    ).toThrow(BiffFormatError);
   });
 
   it("leaves palette undefined when the substream carries no Palette record", () => {
