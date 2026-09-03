@@ -1,12 +1,14 @@
 import type { LayoutMetadata } from "document-schema.js";
 import type { Package } from "../../model/package";
-import type { XmlElement } from "../../model/node";
+import type { XmlElement, XmlNode } from "../../model/node";
 import {
   rootElement,
   findChildElement,
   childrenWithTag,
 } from "../../xml/query";
-import { decodeXmlText } from "../../xml/entities";
+import { decodeXmlText, encodeXmlText } from "../../xml/entities";
+import { el, txt } from "../../xml/fragment";
+import { xmlnsAttributes } from "../../ns";
 
 // Reads meta.xml (office:document-meta / office:meta) into document-schema.js's LayoutMetadata shape. Every element name below was verified against real LibreOffice 26.2 output -- both genuine user-authored documents (LibreOffice's own bundled .ott/.ots/.otp templates under /Applications/LibreOffice.app/Contents/Resources/template/**, which carry real author/date metadata from having actually been edited and saved) and the OASIS ODF schema itself (datypic.com's office:meta content-model reference) -- rather than assumed to mirror OOXML's docProps/core.xml one-for-one. Two mappings are genuinely non-obvious and were confirmed, not guessed:
 // - ODF's `dc:creator` is NOT "the document's author" the way OOXML's dc:creator is -- confirmed from several real LibreOffice-authored templates (e.g. CV.ott, the l10n normal templates): `dc:creator` records whoever most recently saved the document (Dublin Core's own "responsible for producing the resource's current content"), while `meta:initial-creator` records whoever first created it. LayoutMetadata's `author` field maps to meta:initial-creator, mirroring the ROLE ooxml.js's own DocumentMetadata.author plays for OOXML's dc:creator (the original, byline-style author) -- not to ODF's own dc:creator, which has no equivalent field in LayoutMetadata at all (there is no "last modified by" field, matching how OOXML's cp:lastModifiedBy is likewise never read into DocumentMetadata).
@@ -89,4 +91,73 @@ export function readOdfMetadata(pkg: Package): LayoutMetadata {
   }
 
   return metadata;
+}
+
+// --- the write direction: LayoutMetadata -> the meta.xml part readOdfMetadata reads back ---
+//
+// Element for element the inverse of the reader above, including both mappings that module's own note calls out as non-obvious: `author` is meta:initial-creator (ODF's original author), never dc:creator (whoever last saved it); `creator` is meta:generator (the originating application). Two LayoutMetadata fields have no ODF spelling and are therefore not written: `producer` is PDF-only, exactly as the reader never sets it, and there is nothing to write it into. `language` IS written, as dc:language -- a real ODF fact worth stating in the document even though readOdfMetadata does not yet read it back, so it does not survive a round trip through this package today.
+
+function metaElement(tag: string, value: string): XmlElement {
+  return el(tag, {}, [txt(encodeXmlText(value))]);
+}
+
+// Builds the meta.xml node forest for one LayoutMetadata: the XML declaration, the office:document-meta root declaring exactly the three prefixes its own content uses, and an office:meta carrying one element per stated field. A field the metadata does not carry contributes no element at all -- an empty dc:title is not the same fact as an absent one, and the reader treats an empty element as absent anyway.
+export function buildOdfMetaNodes(
+  metadata: LayoutMetadata,
+  version: string,
+): XmlNode[] {
+  const children: XmlElement[] = [];
+  if (metadata.creator !== undefined) {
+    children.push(metaElement("meta:generator", metadata.creator));
+  }
+  if (metadata.title !== undefined) {
+    children.push(metaElement("dc:title", metadata.title));
+  }
+  if (metadata.subject !== undefined) {
+    children.push(metaElement("dc:subject", metadata.subject));
+  }
+  for (const keyword of metadata.keywords ?? []) {
+    children.push(metaElement("meta:keyword", keyword));
+  }
+  if (metadata.author !== undefined) {
+    children.push(metaElement("meta:initial-creator", metadata.author));
+  }
+  if (metadata.createdIso !== undefined) {
+    children.push(metaElement("meta:creation-date", metadata.createdIso));
+  }
+  if (metadata.modifiedIso !== undefined) {
+    children.push(metaElement("dc:date", metadata.modifiedIso));
+  }
+  if (metadata.language !== undefined) {
+    children.push(metaElement("dc:language", metadata.language));
+  }
+  return [
+    {
+      type: "declaration",
+      attributes: [
+        { name: "version", value: "1.0" },
+        { name: "encoding", value: "UTF-8" },
+      ],
+    },
+    el(
+      "office:document-meta",
+      {
+        ...xmlnsAttributes(["office", "meta", "dc"]),
+        "office:version": encodeXmlText(version),
+      },
+      [el("office:meta", {}, children)],
+    ),
+  ];
+}
+
+// Sets (or replaces) the package's meta.xml part. Pure with respect to every other part, matching manifest.ts's own writeManifest.
+export function writeOdfMetadata(
+  pkg: Package,
+  metadata: LayoutMetadata,
+  version: string,
+): void {
+  pkg.parts[META_PART] = {
+    kind: "xml",
+    nodes: buildOdfMetaNodes(metadata, version),
+  };
 }

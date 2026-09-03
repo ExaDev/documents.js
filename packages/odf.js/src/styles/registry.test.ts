@@ -666,3 +666,83 @@ describe("gc()", () => {
     expect(registry.names()).toEqual([name]);
   });
 });
+
+// The seam a writer reaches the table and graphic families through: property elements this module's own StyleProperties vocabulary has no field for, supplied already built. It exists so the table-family styles ODF requires (a column width, a row height, a cell fill and borders) are minted by THIS registry rather than by a second, parallel name-minting mechanism beside it -- widening StyleProperties instead would change what the reader treats as unmodelled, which is load-bearing for the adoption rules above and for the residue channel.
+describe("caller-supplied property elements", () => {
+  const columnProperties = el("style:table-column-properties", {
+    "style:column-width": "60pt",
+  });
+
+  it("appends them to the minted style, after whatever the property bag itself builds", () => {
+    const pkg = contentPackage();
+    const registry = StyleRegistry.forPart(pkg, "content.xml");
+    const name = registry.intern({
+      properties: {},
+      family: "table-column",
+      propertyElements: [columnProperties],
+    });
+    expect(name).toBe("co1");
+    const minted = automaticStylesOf(pkg, "content.xml").children[0];
+    expect(minted).toEqual(
+      el(
+        "style:style",
+        { "style:name": "co1", "style:family": "table-column" },
+        [columnProperties],
+      ),
+    );
+  });
+
+  it("folds them into the fingerprint, so two element-identical requests intern to one style", () => {
+    const pkg = contentPackage();
+    const registry = StyleRegistry.forPart(pkg, "content.xml");
+    const request: InternRequest = {
+      properties: {},
+      family: "table-column",
+      propertyElements: [
+        el("style:table-column-properties", { "style:column-width": "60pt" }),
+      ],
+    };
+    const first = registry.intern(request);
+    const second = registry.intern({
+      properties: {},
+      family: "table-column",
+      propertyElements: [
+        el("style:table-column-properties", { "style:column-width": "60pt" }),
+      ],
+    });
+    expect(second).toBe(first);
+    expect(automaticStylesOf(pkg, "content.xml").children).toHaveLength(1);
+  });
+
+  it("distinguishes two requests whose elements differ, even when their property bags are identical", () => {
+    const registry = StyleRegistry.forPart(contentPackage(), "content.xml");
+    const narrow = registry.intern({
+      properties: {},
+      family: "table-column",
+      propertyElements: [
+        el("style:table-column-properties", { "style:column-width": "60pt" }),
+      ],
+    });
+    const wide = registry.intern({
+      properties: {},
+      family: "table-column",
+      propertyElements: [
+        el("style:table-column-properties", { "style:column-width": "90pt" }),
+      ],
+    });
+    expect(wide).not.toBe(narrow);
+  });
+
+  it("fingerprints an absent bag and an empty one identically, since they describe the same style", () => {
+    const registry = StyleRegistry.forPart(contentPackage(), "content.xml");
+    expect(
+      registry.fingerprint({
+        properties: { bold: true },
+        family: "text",
+        propertyElements: [],
+      }),
+    ).toBe(
+      registry.fingerprint({ properties: { bold: true }, family: "text" }),
+    );
+  });
+});
