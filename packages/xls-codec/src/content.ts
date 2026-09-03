@@ -3,6 +3,8 @@ import {
   summaryInformationToLayoutMetadata,
 } from "archive-codec";
 import type {
+  Color,
+  ContentCellBorders,
   ContentCellValue,
   ContentDocument,
   ContentSheet,
@@ -21,6 +23,7 @@ import {
   splitSubstreams,
   type Substream,
 } from "./biff/substreams";
+import { resolveFillBackground, resolveBorderEdge } from "./biff/xf-colors";
 import { readWorkbookStreams } from "./container";
 import { classifyNumberFormat } from "excel-number-format";
 import {
@@ -228,7 +231,73 @@ function mapCell(
   if (cell.formula !== undefined) {
     mapped.formula = cell.formula;
   }
+  const background = backgroundOf(globals, cell.xfIndex);
+  if (background !== undefined) {
+    mapped.background = background;
+  }
+  const borders = bordersOf(globals, cell.xfIndex);
+  if (borders !== undefined) {
+    mapped.borders = borders;
+  }
   return mapped;
+}
+
+/**
+ * A cell's own resolved fill colour, or undefined for a genuinely unfilled cell AND for every fill pattern beyond solid.
+ *
+ * A non-solid pattern (the 50%/75%/25% gray shades, the stripe and crosshatch family [MS-XLS]'s FillPattern enumeration also names) is a deliberate, permanent gap rather than an oversight: ContentSheetCell.background models one flat colour, and approximating a striped or crosshatched fill as its own foreground colour alone would misreport what the cell actually shows -- see xls-codec's README, "Cell decoration".
+ */
+function backgroundOf(
+  globals: WorkbookGlobals,
+  xfIndex: number,
+): Color | undefined {
+  const format = globals.cellFormats[xfIndex];
+  if (format === undefined) {
+    return undefined;
+  }
+  return resolveFillBackground(
+    format.decoration.fillPattern,
+    format.decoration.fillForegroundIcv,
+    globals.palette,
+  );
+}
+
+/** A cell's own resolved per-side borders, or undefined when none of its four sides carry a border this reader resolves (no border at all, or a reserved/unrecognised BorderStyle token, or a colour this package cannot express as a fixed RGB value -- see xf-colors.ts's own resolveBorderEdge). */
+function bordersOf(
+  globals: WorkbookGlobals,
+  xfIndex: number,
+): ContentCellBorders | undefined {
+  const format = globals.cellFormats[xfIndex];
+  if (format === undefined) {
+    return undefined;
+  }
+  const { decoration } = format;
+  const left = resolveBorderEdge(decoration.left, globals.palette);
+  const right = resolveBorderEdge(decoration.right, globals.palette);
+  const top = resolveBorderEdge(decoration.top, globals.palette);
+  const bottom = resolveBorderEdge(decoration.bottom, globals.palette);
+  if (
+    left === undefined &&
+    right === undefined &&
+    top === undefined &&
+    bottom === undefined
+  ) {
+    return undefined;
+  }
+  const borders: ContentCellBorders = {};
+  if (left !== undefined) {
+    borders.left = left;
+  }
+  if (right !== undefined) {
+    borders.right = right;
+  }
+  if (top !== undefined) {
+    borders.top = top;
+  }
+  if (bottom !== undefined) {
+    borders.bottom = bottom;
+  }
+  return borders;
 }
 
 /**
