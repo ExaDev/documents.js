@@ -8,7 +8,7 @@ import {
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { isDocBytes } from "./detect";
-import { DocUnsupportedError } from "./errors";
+import { DocFormatError, DocUnsupportedError } from "./errors";
 import { readDocContent } from "./read";
 import { writeDocContent } from "./write";
 
@@ -606,6 +606,22 @@ describe("writeDocContent tables", () => {
         streams.some((stream) => stream.path === "\x05SummaryInformation"),
       ).toBe(false);
       expect(readDocContent(bytes).metadata).toEqual({});
+    });
+
+    it("throws a DocFormatError, not a raw RangeError, for a malformed createdIso", () => {
+      const input: ContentDocument = {
+        ...document([paragraph([{ text: "Hello." }])]),
+        metadata: { createdIso: "not-a-real-date" },
+      };
+      expect(() => writeDocContent(input)).toThrow(DocFormatError);
+    });
+
+    it("throws a DocFormatError, not a raw RangeError, for a malformed modifiedIso", () => {
+      const input: ContentDocument = {
+        ...document([paragraph([{ text: "Hello." }])]),
+        metadata: { modifiedIso: "not-a-real-date" },
+      };
+      expect(() => writeDocContent(input)).toThrow(DocFormatError);
     });
   });
 });

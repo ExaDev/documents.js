@@ -1,5 +1,6 @@
 import type { SummaryInformationProperties } from "archive-codec";
 import type { LayoutMetadata } from "document-schema.js";
+import { DocFormatError } from "./errors";
 
 // Maps between the seven fields archive-codec's oleps/summary-information module reads from and writes to a "\x05SummaryInformation" stream, and document-schema.js's own LayoutMetadata -- the shared metadata shape a ContentDocument's `metadata` field always is. This is the only document-format-specific knowledge in the metadata path: archive-codec knows PID 2 means a title, this module knows LayoutMetadata's `title` is where that belongs for a wordprocessing document.
 //
@@ -21,9 +22,23 @@ export function summaryInformationToLayoutMetadata(
   };
 }
 
+// writeSummaryInformationStream converts createdIso/lastSavedIso straight into a FILETIME via `new Date(iso)`; a malformed string produces an Invalid Date, whose getTime() is NaN, and archive-codec's own BigInt(NaN) conversion throws an opaque RangeError with no indication which field or package caused it. Validated here, at the boundary into archive-codec's own shape, so a caller sees a DocFormatError naming the actual field instead.
+function requireValidIsoDate(
+  value: string | undefined,
+  field: "createdIso" | "modifiedIso",
+): void {
+  if (value !== undefined && Number.isNaN(new Date(value).getTime())) {
+    throw new DocFormatError(
+      `LayoutMetadata.${field} "${value}" is not a valid date string, so it cannot be written as a SummaryInformation FILETIME property`,
+    );
+  }
+}
+
 export function layoutMetadataToSummaryInformation(
   metadata: LayoutMetadata,
 ): SummaryInformationProperties {
+  requireValidIsoDate(metadata.createdIso, "createdIso");
+  requireValidIsoDate(metadata.modifiedIso, "modifiedIso");
   return {
     title: metadata.title,
     subject: metadata.subject,
