@@ -37,6 +37,8 @@ export const FORMAT_CAPABILITIES: Readonly<
     variant: "wordprocessing",
     hasLayoutPath: true,
   },
+  // rtf shares the wordprocessing variant with docx/odt/markdown (readRtfContent/writeRtfContent, rtf-codec) but follows csv/xlsx's routing exactly rather than markdown's: rtf-codec has no layout engine of its own -- no convertWordprocessingToLayout-equivalent rtf entry point -- so hasLayoutPath stays false and the composition engine routes rtf <-> pdf through a same-variant bridge to docx/odt/markdown plus that format's own layout engine, never a direct rtf -> LayoutDocument pipeline.
+  rtf: { format: "rtf", variant: "wordprocessing", hasLayoutPath: false },
   pdf: { format: "pdf", hasLayoutPath: false },
 };
 

@@ -10,6 +10,7 @@ import { decodeCsvText } from "../csv/text";
 import { readCsvContent } from "../csv/read";
 import { decodeSvgText } from "../svg/text";
 import { readSvgContent } from "../svg/read";
+import { readRtfContent } from "rtf-codec";
 import { readOdfFormulaContent } from "../odf/formula/read";
 import { readOdgContent } from "../odf/odg/read";
 import { readOdpContent } from "../odf/odp/read";
@@ -31,7 +32,7 @@ export interface DocumentCodecOptions {
   readonly images?: MarkdownImageResolver;
 }
 
-// Every format whose bytes decode into a ContentDocument -- all twelve DocumentFormat members except pdf, the one layout format (its read produces a LayoutDocument through readDocumentLayout below instead, mirroring the registry's content/layout entry split).
+// Every format whose bytes decode into a ContentDocument -- all thirteen DocumentFormat members except pdf, the one layout format (its read produces a LayoutDocument through readDocumentLayout below instead, mirroring the registry's content/layout entry split).
 export type ReadContentFormat = Exclude<DocumentFormat, "pdf">;
 
 export type ContentReader = (
@@ -39,7 +40,7 @@ export type ContentReader = (
   options?: DocumentCodecOptions,
 ) => ContentDocument;
 
-// The eleven per-format read closures, moved verbatim from the registry: each wraps the identical decode/read pair every ergonomic conversion in this package already uses for that format, with each format's own cancellation policy preserved exactly (docx/pptx/odt/odp/ods/odg/odf/xlsx have no loop of their own to hook a signal into, so their read checks it once via throwIfAborted before decoding; markdown does have one, so its read forwards the signal straight into the reader instead of checking it separately; csv/svg decoders are fatal one-pass functions with no loop, needing no separate check). The registry composes its content entries from these, so there is exactly one place the "which reader for which format" dispatch lives.
+// The twelve per-format read closures, moved verbatim from the registry: each wraps the identical decode/read pair every ergonomic conversion in this package already uses for that format, with each format's own cancellation policy preserved exactly (docx/pptx/odt/odp/ods/odg/odf/xlsx have no loop of their own to hook a signal into, so their read checks it once via throwIfAborted before decoding; markdown does have one, so its read forwards the signal straight into the reader instead of checking it separately; csv/svg decoders are fatal one-pass functions with no loop, needing no separate check; rtf's own readRtfContent takes bytes directly and checks the signal itself internally, once, before tokenizing -- matching markdown's own single-check-inside-the-reader shape, so rtf's closure forwards the signal straight through rather than checking it twice). The registry composes its content entries from these, so there is exactly one place the "which reader for which format" dispatch lives.
 export const CONTENT_READERS: Readonly<
   Record<ReadContentFormat, ContentReader>
 > = {
@@ -92,6 +93,9 @@ export const CONTENT_READERS: Readonly<
     }),
   csv: (bytes) => readCsvContent(decodeCsvText(bytes)),
   svg: (bytes) => readSvgContent(decodeSvgText(bytes)),
+  // readRtfContent takes bytes directly -- RTF is byte-oriented, not text (a \binN run can carry arbitrary raw picture bytes), so unlike markdown/csv/svg there is no well-formed-UTF-8 decode step to run first. It checks options.signal itself, once, before tokenizing, matching the single-check shape every no-loop format above gets from throwIfAborted.
+  rtf: (bytes, options) =>
+    readRtfContent(bytes, { signal: options?.signal }).document,
   xlsx: (bytes, options) => {
     throwIfAborted(options?.signal);
     return readXlsxContent(

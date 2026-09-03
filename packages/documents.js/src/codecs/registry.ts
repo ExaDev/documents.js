@@ -15,6 +15,7 @@ import { encodeCsvText } from "../csv/text";
 import { buildCsvText } from "../csv/write";
 import { encodeSvgText } from "../svg/text";
 import { buildSvgText } from "../svg/write";
+import { writeRtfContent } from "rtf-codec";
 import { encodeDocumentPackage } from "../package-codec";
 import {
   CONTENT_READERS,
@@ -105,6 +106,13 @@ export const DOCUMENT_FORMAT_CODECS: Readonly<
     content: {
       read: CONTENT_READERS.svg,
       write: (content) => encodeSvgText(buildSvgText(content)),
+    },
+  },
+  // The rtf entry is the one content codec here with no decode/encode split of its own: rtf-codec's readRtfContent/writeRtfContent operate on raw bytes directly (RTF is byte-oriented, not text -- see CONTENT_READERS.rtf's own comment), so there is no decodeDocumentPackage-style unwrap on read and no encodeDocumentPackage-style wrap on write, unlike every OPC/ODF format above and unlike markdown/csv/svg's own decode-to-text step.
+  rtf: {
+    content: {
+      read: CONTENT_READERS.rtf,
+      write: (content) => writeRtfContent(content),
     },
   },
   pdf: {
