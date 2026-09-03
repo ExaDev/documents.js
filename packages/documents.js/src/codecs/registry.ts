@@ -128,4 +128,10 @@ export const DOCUMENT_FORMAT_CODECS: Readonly<
         encodeDocumentPackage("xlsx", buildXlsxPackageFromContent(content)),
     },
   },
+  // wpd has a content.read and no content.write, exactly as odf does, and for a directly analogous reason: wpd-codec ships no writer at all. The two differ only in why -- odf has no ContentDocument-to-formula-document path anywhere in the family, while wpd's absent writer is a scope decision wpd-codec states itself -- and both surface here as an entry whose `write` is left unset rather than stubbed, so every consumer that needs to build bytes discovers the absence through the same missing field.
+  wpd: {
+    content: {
+      read: CONTENT_READERS.wpd,
+    },
+  },
 };

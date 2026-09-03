@@ -11,6 +11,7 @@ import { readCsvContent } from "../csv/read";
 import { decodeSvgText } from "../svg/text";
 import { readSvgContent } from "../svg/read";
 import { readRtfContent } from "rtf-codec";
+import { readWpdContent } from "wpd-codec";
 import { readOdfFormulaContent } from "../odf/formula/read";
 import { readOdgContent } from "../odf/odg/read";
 import { readOdpContent } from "../odf/odp/read";
@@ -101,6 +102,11 @@ export const CONTENT_READERS: Readonly<
     return readXlsxContent(
       decodeDocumentPackage("xlsx", requireArrayBufferBytes(bytes)),
     );
+  },
+  // readWpdContent takes bytes directly -- a WordPerfect file is a prefix and a function-code stream, not a package this workspace's own decodeDocumentPackage knows, and its own container detection (a bare file versus an OLE compound wrapper) happens inside the reader. It has no loop of its own to hook a signal into, so its read checks the signal once before decoding, the shape every no-package format above gets from throwIfAborted. There is no matching entry in the registry's write half at all: wpd-codec ships no writer, which is what makes wpd a read-only format everywhere else in this package.
+  wpd: (bytes, options) => {
+    throwIfAborted(options?.signal);
+    return readWpdContent(bytes);
   },
 };
 
