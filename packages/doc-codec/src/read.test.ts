@@ -132,6 +132,27 @@ describe("readDocContent", () => {
     expect(runs[0]?.bold).toBeUndefined();
   });
 
+  // A real producer writes ONE Chpx per stretch of unchanging formatting, so two consecutive bold paragraphs share a single exception that spans the paragraph mark between them. The reader has to split runs at the paragraph boundary itself rather than inheriting the split from the formatting table.
+  it("splits at paragraph boundaries even when one Chpx spans several paragraphs", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          { runs: [{ text: "first", grpprl: BOLD_ON }] },
+          { runs: [{ text: "second", grpprl: BOLD_ON }] },
+          { runs: [{ text: "third", grpprl: BOLD_ON }] },
+        ],
+      }),
+    );
+    expect(paragraphs(document)).toHaveLength(3);
+    for (const index of [0, 1, 2]) {
+      const runs = paragraphAt(document, index).runs;
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.bold).toBe(true);
+    }
+    expect(textOf(paragraphAt(document, 0))).toBe("first");
+    expect(textOf(paragraphAt(document, 2))).toBe("third");
+  });
+
   it("reads a run's font size from sprmCHps, which states it in half-points", () => {
     const document = readDocContent(
       buildDoc({
