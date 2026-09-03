@@ -14,6 +14,7 @@ import {
 import { isCompoundFile, readCompoundFile } from "archive-codec";
 import { describe, expect, it } from "vitest";
 
+import { PALETTE_ENTRY_COUNT } from "./biff/xf-colors";
 import { BiffWriteError } from "./biff/write-errors";
 import type { XlsContentDocument } from "./content";
 import { readXls, readXlsContent } from "./content";
@@ -459,6 +460,26 @@ describe("writeXlsContent", () => {
       }
       expect(() => writeXlsContent(document([sheet("Sheet1", cells)]))).toThrow(
         BiffWriteError,
+      );
+    });
+
+    it("counts the palette budget from the cells it actually writes, not from ones it skips", () => {
+      // The colour scan and the XF-interning pass have to agree on which cells count. When only the scan looked at cells the writer emits no record for, their colours still consumed palette slots -- so a workbook whose written decoration needs one colour was refused for needing 57 of the 56 a Palette record holds.
+      const cells: ContentSheetCell[] = [];
+      for (let index = 0; index < PALETTE_ENTRY_COUNT; index += 1) {
+        const hex = index.toString(16).padStart(6, "0");
+        cells.push(
+          cell(1, index, { kind: "empty" }, { background: rgbHexToColor(hex) }),
+        );
+      }
+      cells.push(
+        cell(0, 0, { kind: "number", value: 1 }, { background: coral }),
+      );
+
+      const bytes = writeXlsContent(document([sheet("Sheet1", cells)]));
+
+      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
+        coral,
       );
     });
   });
