@@ -11,6 +11,7 @@ import {
   csvToPdf,
   decodeMarkdownText,
   decodeOdbPackage,
+  docToPdf,
   encodeMarkdownText,
   openDocx,
   openMarkdown,
@@ -20,12 +21,14 @@ import {
   openOdt,
   openPdf,
   openPptx,
+  pptToPdf,
   readOdbForms,
   readOdbReports,
   readOdbTables,
   readPdf,
   rtfToPdf,
   svgToPdf,
+  xlsToPdf,
   xlsxToPdf,
 } from "documents.js";
 import type {
@@ -119,6 +122,13 @@ export async function openDocumentAtPath(
         bytes,
         path,
       };
+    // doc, xls, and ppt each mirror rtf: no live-view editor, but a genuine own-named to-Pdf conversion (docToPdf/xlsToPdf/pptToPdf), opened read-only through the identical to-Pdf-then-readPdf shape.
+    case "doc":
+      return { format, layout: readPdf(docToPdf(bytes)), bytes, path };
+    case "xls":
+      return { format, layout: readPdf(xlsToPdf(bytes)), bytes, path };
+    case "ppt":
+      return { format, layout: readPdf(pptToPdf(bytes)), bytes, path };
     case "odf":
       throw new Error(
         "A standalone .odf formula document has no editor; convert it to PDF (odfToPdf) instead",
@@ -162,7 +172,10 @@ export async function saveDocumentTo(
     openDocument.format === "csv" ||
     openDocument.format === "svg" ||
     openDocument.format === "rtf" ||
-    openDocument.format === "wpd"
+    openDocument.format === "wpd" ||
+    openDocument.format === "doc" ||
+    openDocument.format === "xls" ||
+    openDocument.format === "ppt"
   ) {
     throw new Error(
       `A ${openDocument.format} document is opened read-only and cannot be written back`,

@@ -48,22 +48,34 @@ export const Route = createFileRoute("/convert")({
   component: ConvertLayout,
 });
 
-// csv reads as a spreadsheet-kind ContentDocument (readCsvContent), so it previews through the same data grid as xlsx/ods.
+// csv reads as a spreadsheet-kind ContentDocument (readCsvContent), so it previews through the same data grid as xlsx/ods. xls (BIFF8, readXlsContent) is the same spreadsheet kind too.
 function isSheetFormat(format: string | null): boolean {
-  return format === "xlsx" || format === "ods" || format === "csv";
+  return (
+    format === "xlsx" ||
+    format === "ods" ||
+    format === "csv" ||
+    format === "xls"
+  );
 }
 
+// doc (readDocContent) is the same wordprocessing-kind ContentDocument as docx/odt/rtf.
 function isWordProcessingFormat(format: string | null): boolean {
-  return format === "docx" || format === "odt" || format === "rtf";
+  return (
+    format === "docx" ||
+    format === "odt" ||
+    format === "rtf" ||
+    format === "doc"
+  );
 }
 
-// svg reads as a drawing-kind ContentDocument (readSvgContent), so it previews through the same pages/shapes/vectors renderer as odg.
+// svg reads as a drawing-kind ContentDocument (readSvgContent), so it previews through the same pages/shapes/vectors renderer as odg. ppt (readPptContent) is the same presentation kind as pptx/odp.
 function isSlidesFormat(format: string | null): boolean {
   return (
     format === "pptx" ||
     format === "odp" ||
     format === "odg" ||
-    format === "svg"
+    format === "svg" ||
+    format === "ppt"
   );
 }
 

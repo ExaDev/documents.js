@@ -192,6 +192,30 @@ export interface WpdOpenDocument {
   readonly path: string;
 }
 
+// doc mirrors rtf exactly: no live-view editor (doc-codec has no DocEditor, only a real docToPdf conversion), opened read-only as its own readPdf result through the shared pdf screen family.
+export interface DocOpenDocument {
+  readonly format: "doc";
+  readonly layout: LayoutDocument;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly path: string;
+}
+
+// xls mirrors xlsx one variant over: no live-view editor (xls-codec has no XlsEditor either), but a genuine xlsToPdf conversion, opened read-only as its own readPdf result through the shared pdf screen family.
+export interface XlsOpenDocument {
+  readonly format: "xls";
+  readonly layout: LayoutDocument;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly path: string;
+}
+
+// ppt mirrors rtf/doc: no live-view editor (ppt-codec has no PptEditor), but a genuine pptToPdf conversion, opened read-only as its own readPdf result through the shared pdf screen family.
+export interface PptOpenDocument {
+  readonly format: "ppt";
+  readonly layout: LayoutDocument;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly path: string;
+}
+
 // The seven formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx`/`csv`/`svg`/`rtf` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` -- see PdfOpenDocument's own doc comment. `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one -- editing and saving a PDF in place needs no conversion step at all.
 export type EditableOpenDocument =
   | DocxOpenDocument
@@ -212,7 +236,10 @@ export type OpenDocument =
   | CsvOpenDocument
   | SvgOpenDocument
   | RtfOpenDocument
-  | WpdOpenDocument;
+  | WpdOpenDocument
+  | DocOpenDocument
+  | XlsOpenDocument
+  | PptOpenDocument;
 
 export type EditableFormat = EditableOpenDocument["format"];
 
@@ -400,6 +427,9 @@ export function rootScreenForFormat(format: OpenDocumentFormat): Screen {
     case "svg":
     case "rtf":
     case "wpd":
+    case "doc":
+    case "xls":
+    case "ppt":
       return { kind: "pdfPageList" };
   }
 }
