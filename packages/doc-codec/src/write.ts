@@ -1,5 +1,5 @@
 import { writeCompoundFile } from "archive-codec";
-import type { ContentDocument, ContentParagraph } from "document-schema.js";
+import type { ContentDocument } from "document-schema.js";
 import { WORD_DOCUMENT_STREAM } from "./detect";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { buildFib } from "./fib/write";
@@ -16,12 +16,13 @@ import {
 import { encodeParagraphGrpprl } from "./prop/pap-write";
 import { buildFontTable } from "./style/fonts";
 import { buildEmptyStsh } from "./style/stsh";
+import { flattenSectionBlocks } from "./table/write";
 import { buildTextClx } from "./text/piece-table-write";
 import { PARAGRAPH_MARK } from "./text/special";
 
-// The top-level write: a wordprocessing ContentDocument to real [MS-DOC] bytes, wrapped in a real [MS-CFB] compound file. Every step below inverts one of read.ts's own -- the text stream is laid out and the paragraph/character formatting encoded into grpprls first (write.ts, prop/chp-write.ts, prop/pap-write.ts), then packed into the piece table, the two property bin tables and their formatted disk pages, an empty-but-conformant style sheet, and (when a run names one) a font table (text/piece-table-write.ts, prop/fkp-write.ts, style/stsh.ts, style/fonts.ts) -- the identical structures readDocContent (read.ts) consumes, so a document this writer produces is verified by reading it back through this package's own reader rather than by inspecting its bytes in isolation.
+// The top-level write: a wordprocessing ContentDocument to real [MS-DOC] bytes, wrapped in a real [MS-CFB] compound file. Every step below inverts one of read.ts's own -- the text stream is laid out and the paragraph/character formatting encoded into grpprls first (write.ts, prop/chp-write.ts, prop/pap-write.ts, table/write.ts), then packed into the piece table, the two property bin tables and their formatted disk pages, an empty-but-conformant style sheet, and (when a run names one) a font table (text/piece-table-write.ts, prop/fkp-write.ts, style/stsh.ts, style/fonts.ts) -- the identical structures readDocContent (read.ts) consumes, so a document this writer produces is verified by reading it back through this package's own reader rather than by inspecting its bytes in isolation. A ContentTable block is expanded by table/write.ts's flattenSectionBlocks into the same flat paragraph sequence every other block already is, each with its own terminator (a cell/row mark's own cell-mark character rather than the ordinary paragraph mark) and extra grpprl bytes (sprmPFInTable, and on a row's own mark, sprmPFTtp plus its whole TAP) -- so table paragraphs flow through the identical Chpx/Papx paging logic below as every other paragraph, not a separate table-only path.
 //
-// What this writer does NOT do is stated in full in the README's own scope section, not only here: no tables, no images, no footnotes/headers/endnotes, no section geometry beyond refusing more than one section, no numbering, no paragraph styles (every paragraph is istd 0, "Normal", with every property carried as a direct exception), and no hyperlinks or fields. Each is a genuine layer of the format this writer does not implement; none is silently approximated.
+// What this writer does NOT do is stated in full in the README's own scope section, not only here: no images, no footnotes/headers/endnotes, no section geometry beyond refusing more than one section, no numbering, no paragraph styles (every paragraph is istd 0, "Normal", with every property carried as a direct exception), and no hyperlinks or fields. Each is a genuine layer of the format this writer does not implement; none is silently approximated. Tables are written, but only at depth 1 (see table/write.ts) and without cell shading/borders or any other TAP layer document-schema.js's own ContentTable/ContentTableCell has no field for.
 
 /** Where the text is written in the WordDocument stream: past the FIB (which needs under 900 bytes for the fields this writer populates), on a page boundary though not required to be. */
 const TEXT_FC = 0x400;
@@ -57,18 +58,15 @@ export function writeDocContent(
     throw new DocFormatError("a wordprocessing document must carry a section");
   }
 
-  const paragraphs: ContentParagraph[] = [];
-  for (const block of section.blocks) {
-    if (block.kind !== "paragraph") {
-      throw new DocUnsupportedError(
-        `doc-codec's writer does not yet support '${block.kind}' blocks (see README's scope note)`,
-      );
-    }
-    paragraphs.push(block);
-  }
+  const writeParagraphs = flattenSectionBlocks(section.blocks);
   // [MS-DOC] 2.4.2 requires the Main Document's own text to end in a paragraph mark; an otherwise-empty section still needs one empty paragraph to carry it, exactly as a real producer's own blank document does.
-  if (paragraphs.length === 0) {
-    paragraphs.push({ kind: "paragraph", runs: [] });
+  if (writeParagraphs.length === 0) {
+    writeParagraphs.push({
+      runs: [],
+      properties: {},
+      extraGrpprl: [],
+      terminator: PARAGRAPH_MARK,
+    });
   }
 
   // 1. Assign every distinct font name its own font-table index, in first-use order.
@@ -83,16 +81,16 @@ export function writeDocContent(
     return index;
   };
 
-  // 2. Encode every run's and paragraph's own direct formatting up front: a run's byte-identical grpprl is what decides whether it merges with its neighbour into one Chpx exception below, so the encoding has to exist before the text stream is laid out.
-  const formatted: FormattedParagraph[] = paragraphs.map((paragraph) => ({
-    runs: paragraph.runs.map((run) => ({
+  // 2. Encode every run's and paragraph's own direct formatting up front: a run's byte-identical grpprl is what decides whether it merges with its neighbour into one Chpx exception below, so the encoding has to exist before the text stream is laid out. A table paragraph's own extraGrpprl (sprmPFInTable, and on a row's own mark, sprmPFTtp plus its TAP) is appended after its ordinary direct formatting -- table/write.ts already ordered the two so a later table sprm never has to fight an earlier paragraph one for the same property.
+  const formatted: FormattedParagraph[] = writeParagraphs.map((entry) => ({
+    runs: entry.runs.map((run) => ({
       text: run.text,
       grpprl: encodeCharacterGrpprl(run, fontIndexOf),
     })),
-    grpprl: encodeParagraphGrpprl(paragraph),
+    grpprl: [...encodeParagraphGrpprl(entry.properties), ...entry.extraGrpprl],
   }));
 
-  // 3. Lay out the logical text stream: every run's characters, each paragraph closed by its own mark. Adjacent stretches with byte-identical formatting merge into one Chpx exception -- what a real producer writes, and what read.ts's own buildRuns must already split back apart at every paragraph boundary regardless of how many paragraphs one exception spans.
+  // 3. Lay out the logical text stream: every run's characters, each paragraph closed by its own mark -- an ordinary paragraph mark, or, for a table cell/row mark, its own cell mark (writeParagraphs' own terminator). Adjacent stretches with byte-identical formatting merge into one Chpx exception -- what a real producer writes, and what read.ts's own buildRuns must already split back apart at every paragraph boundary regardless of how many paragraphs one exception spans.
   let text = "";
   const paragraphStarts: number[] = [];
   const chpxRuns: {
@@ -100,7 +98,7 @@ export function writeDocContent(
     end: number;
     grpprl: readonly number[] | undefined;
   }[] = [];
-  for (const paragraph of formatted) {
+  formatted.forEach((paragraph, paragraphIndex) => {
     paragraphStarts.push(text.length);
     for (const run of paragraph.runs) {
       const runStart = text.length;
@@ -113,7 +111,9 @@ export function writeDocContent(
         });
       }
     }
-    text += String.fromCharCode(PARAGRAPH_MARK);
+    const terminator =
+      writeParagraphs[paragraphIndex]?.terminator ?? PARAGRAPH_MARK;
+    text += String.fromCharCode(terminator);
     // The mark shares the paragraph's own last run's formatting, matching what a real producer writes (test-support/doc.ts's buildDoc makes the identical choice, for the identical reason): extending that run keeps the Chpx's own ranges contiguous instead of adding a second, separately-tracked one-character exception.
     const lastRun = chpxRuns[chpxRuns.length - 1];
     if (lastRun?.end === text.length - 1) {
@@ -125,7 +125,7 @@ export function writeDocContent(
         grpprl: undefined,
       });
     }
-  }
+  });
 
   const mergedChpxRuns: typeof chpxRuns = [];
   for (const run of chpxRuns) {
