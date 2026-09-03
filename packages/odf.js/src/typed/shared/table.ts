@@ -11,11 +11,18 @@ import type {
 } from "document-schema.js";
 import type { XmlElement } from "../../model/node";
 import type { Package } from "../../model/package";
+import type { StyleRegistry } from "../../styles/registry";
+import { el } from "../../xml/fragment";
+import { encodeXmlText } from "../../xml/entities";
 import { attrValue, childrenWithTag } from "../../xml/query";
-import { parseOdfLength } from "./units";
-import { parseOdfColor } from "./color";
+import { formatOdfLength, parseOdfLength } from "./units";
+import { formatOdfColor, parseOdfColor } from "./color";
 import { findStyleElement } from "./cascade";
-import { readParagraphOrHeading, readOdfParagraph } from "./paragraph";
+import {
+  readParagraphOrHeading,
+  readOdfParagraph,
+  writeOdfParagraph,
+} from "./paragraph";
 
 // Reads a table:table element into document-schema.js's ContentTable -- the same table:table/table:table-row/table:table-cell/table:covered-table-cell markup ODF uses identically across odt/ods/odp (verified against real LibreOffice output: a presentation's own draw:frame-wrapped table uses the exact grammar below, including table:number-columns-spanned/table:covered-table-cell for merged cells), so this module is written to be reusable by a future odt/ods reader rather than living inside typed/draw/shapes.ts, even though odp is this module's only caller today.
 //
@@ -307,6 +314,182 @@ function readTableRow(rowElement: XmlElement, pkg: Package): ContentTableRow {
     }
   }
   return { cells, heightPt: resolveRowHeightPt(rowElement, pkg) };
+}
+
+// --- the write direction: a ContentTable -> the table:table element readOdfTable reads back ---
+//
+// The dimensional and decorative properties this module reads (a column's style:column-width, a row's style:row-height, a cell's fill and per-edge borders) are exactly the ones styles/properties.ts deliberately does not model, so the write side reaches them through StyleRegistry's `propertyElements` seam: the property elements are built here, where their vocabulary already lives, and the registry still owns naming, collision-checking, and deduplication. One minting authority, one place per property.
+
+function tableColumnStyle(
+  widthPt: number,
+  registry: StyleRegistry,
+): string | undefined {
+  // A column with no positive width states nothing -- readOdfTable's own fallback for a column with no resolvable width is 0pt, so a zero-width column and a column with no style are the same fact and only one of them needs a style minted.
+  if (widthPt <= 0) {
+    return undefined;
+  }
+  return registry.intern({
+    properties: {},
+    family: "table-column",
+    propertyElements: [
+      el("style:table-column-properties", {
+        "style:column-width": formatOdfLength(widthPt),
+      }),
+    ],
+  });
+}
+
+function tableRowStyle(
+  heightPt: number | undefined,
+  registry: StyleRegistry,
+): string | undefined {
+  if (heightPt === undefined) {
+    return undefined;
+  }
+  return registry.intern({
+    properties: {},
+    family: "table-row",
+    propertyElements: [
+      el("style:table-row-properties", {
+        "style:row-height": formatOdfLength(heightPt),
+      }),
+    ],
+  });
+}
+
+// One border edge in ODF's own fixed-order XSL-FO shorthand -- exactly three space-separated tokens, "<length> <border-style> <color>", the same grammar parseBorderEdge above reads. An absent ContentBorder.style is written as "solid", which is what ContentBorderSchema already documents an absent style to mean, so the value written says what the value read says.
+function formatBorderEdge(border: ContentBorder): string {
+  return `${formatOdfLength(border.widthPt)} ${border.style ?? "solid"} ${formatOdfColor(border.color)}`;
+}
+
+function tableCellStyle(
+  cell: ContentTableCell,
+  registry: StyleRegistry,
+): string | undefined {
+  const attributes: Record<string, string> = {};
+  if (cell.background !== undefined) {
+    attributes["fo:background-color"] = formatOdfColor(cell.background);
+  }
+  const borders = cell.borders;
+  if (borders !== undefined) {
+    for (const edge of BORDER_EDGE_KEYS) {
+      const border = borders[edge];
+      if (border !== undefined) {
+        attributes[BORDER_EDGE_ATTRS[edge]] = formatBorderEdge(border);
+      }
+    }
+  }
+  if (Object.keys(attributes).length === 0) {
+    return undefined;
+  }
+  return registry.intern({
+    properties: {},
+    family: "table-cell",
+    propertyElements: [el("style:table-cell-properties", attributes)],
+  });
+}
+
+// A cell's own block content. ODF's table:table-cell content model admits full block flow, but readOdfTable's cell walk reads only text:p/text:h (see readTableCell above), so writing anything else here would produce a document this package's own reader silently drops content from -- refused outright instead, naming the block kind, rather than written and lost.
+function writeCellBlocks(
+  cell: ContentTableCell,
+  registry: StyleRegistry,
+): XmlElement[] {
+  return cell.blocks.map((block) => {
+    if (block.kind !== "paragraph") {
+      throw new Error(
+        `writeOdfTable: a table cell carrying a "${block.kind}" block cannot be written -- odf.js's table reader reads only paragraphs and headings out of a cell, so writing one would lose it on the way back in`,
+      );
+    }
+    return writeOdfParagraph(block, registry);
+  });
+}
+
+function coverageKey(row: number, column: number): string {
+  return `${row},${column}`;
+}
+
+// Writes one ContentTable as the table:table element readOdfTable reads back. `tableName` is the document-unique table:name every real ODF producer writes; the caller mints it, since uniqueness is a document-wide fact one table has no way to establish on its own.
+export function writeOdfTable(
+  table: ContentTable,
+  registry: StyleRegistry,
+  tableName: string,
+): XmlElement {
+  const columns = table.columnWidthsPt.map((widthPt) => {
+    const styleName = tableColumnStyle(widthPt, registry);
+    return el(
+      "table:table-column",
+      styleName === undefined
+        ? {}
+        : { "table:style-name": encodeXmlText(styleName) },
+    );
+  });
+
+  // Which grid positions a preceding cell's own span already occupies: ODF spells those out as table:covered-table-cell elements, and readOdfTable reads each back as the empty cell a covered position is in the pivot. The set is built from the spans actually written, never from the input's own placeholder cells, so a colSpan and its covered neighbours can never disagree.
+  const covered = new Set<string>();
+  const rows = table.rows.map((row, rowIndex) => {
+    const cells = row.cells.map((cell, columnIndex) => {
+      if (covered.has(coverageKey(rowIndex, columnIndex))) {
+        return el("table:covered-table-cell");
+      }
+      const colSpan = cell.colSpan ?? 1;
+      const rowSpan = cell.rowSpan ?? 1;
+      for (let r = rowIndex; r < rowIndex + rowSpan; r += 1) {
+        for (let c = columnIndex; c < columnIndex + colSpan; c += 1) {
+          if (r !== rowIndex || c !== columnIndex) {
+            covered.add(coverageKey(r, c));
+          }
+        }
+      }
+      const attributes: Record<string, string> = {};
+      const styleName = tableCellStyle(cell, registry);
+      if (styleName !== undefined) {
+        attributes["table:style-name"] = encodeXmlText(styleName);
+      }
+      if (cell.colSpan !== undefined) {
+        attributes["table:number-columns-spanned"] = String(cell.colSpan);
+      }
+      if (cell.rowSpan !== undefined) {
+        attributes["table:number-rows-spanned"] = String(cell.rowSpan);
+      }
+      return el(
+        "table:table-cell",
+        attributes,
+        writeCellBlocks(cell, registry),
+      );
+    });
+    const rowStyleName = tableRowStyle(row.heightPt, registry);
+    return el(
+      "table:table-row",
+      rowStyleName === undefined
+        ? {}
+        : { "table:style-name": encodeXmlText(rowStyleName) },
+      cells,
+    );
+  });
+
+  // The table's own style carries the one property a real consumer needs to lay it out at all: its total width, the sum of the column widths it was given. A table whose columns state no width at all gets the alignment alone, since a fabricated width would be worse than none.
+  const totalWidthPt = table.columnWidthsPt.reduce(
+    (total, widthPt) => total + widthPt,
+    0,
+  );
+  const tableProperties: Record<string, string> = { "table:align": "margins" };
+  if (totalWidthPt > 0) {
+    tableProperties["style:width"] = formatOdfLength(totalWidthPt);
+  }
+  const tableStyleName = registry.intern({
+    properties: {},
+    family: "table",
+    propertyElements: [el("style:table-properties", tableProperties)],
+  });
+
+  return el(
+    "table:table",
+    {
+      "table:name": encodeXmlText(tableName),
+      "table:style-name": encodeXmlText(tableStyleName),
+    },
+    [...columns, ...rows],
+  );
 }
 
 export function readOdfTable(

@@ -64,9 +64,10 @@ Under active development. Built and shipped:
 - **`readOdm`** — resolves a `.odm` master document into an ordered list of chapter references (`{ name, href, filterName? }`); chapters are genuinely external `.odt` files by ODF design, never cached.
 - **`readOdbInventory`** — resolves a `.odb` into connection info, table names, query definitions (`{ name, command, escapeProcessing? }` with real SQL text), and form/report `{ name, href }` pairs. A sub-document directory is named after an opaque _persistent_ name (`forms/Obj11`), not the user-visible name.
 - **`readOdbForm`/`readOdbReport`** — extract one sub-document's _static structure_, executing nothing: a form's control tree and data bindings, or a report's band stack, recursive group tree, bound fields, and computed expressions.
-- **OpenOffice.org 1.x / StarOffice 6-7 reading** (`readSxw`/`readSxc`/`readSxi`/`readSxd` and their `*Content` siblings, plus `transformOoo1Package` and `isOoo1Package`) — the pre-OASIS ancestor ODF 1.0 was based on, read through the ODF readers above rather than beside them. See [Reading an OpenOffice.org 1.x document](#reading-an-openofficeorg-1x-document). **Read only:** there is no `.sxw` writer, because this package has no ODF content writer for an inverse transform to target.
+- **OpenOffice.org 1.x / StarOffice 6-7 reading** (`readSxw`/`readSxc`/`readSxi`/`readSxd` and their `*Content` siblings, plus `transformOoo1Package` and `isOoo1Package`) — the pre-OASIS ancestor ODF 1.0 was based on, read through the ODF readers above rather than beside them. See [Reading an OpenOffice.org 1.x document](#reading-an-openofficeorg-1x-document). **Read only:** there is no `.sxw` writer, and the inverse transform an OpenOffice.org 1.x writer would need has no OpenOffice.org-shaped target to write into.
+- **The odt writer, at the same two levels** — `writeOdt` takes the `DocumentTree` `readOdt` returns and `writeOdtContent` the flat `ContentDocument` `readOdtContent` returns, and both produce a real `.odt` `Package` (`encodePackage` turns it into bytes). Paragraphs, headings, runs with character formatting and hyperlinks, whitespace, lists, tables, images, explicit page breaks, per-section page geometry, and `meta.xml` all round-trip; the fidelity constructs and embedded objects are refused by name rather than silently dropped. See [Writing a document](#writing-a-document).
 
-Not yet built: live-view editors and the `.odb` database-table-export subsystem. A general-purpose SQL query engine for rendering a Report against its data is **deliberately not attempted** — building even a bounded SQL engine means reimplementing HSQLDB's/Firebird's query semantics, a materially different undertaking from decoding their file formats, with unreviewed licensing questions. Gated on the requesting engineer's explicit sign-off.
+Not yet built: writers for `.ods`/`.odp`/`.odg` (the odt writer is the first slice), a write path for the fidelity constructs, live-view editors, and the `.odb` database-table-export subsystem. A general-purpose SQL query engine for rendering a Report against its data is **deliberately not attempted** — building even a bounded SQL engine means reimplementing HSQLDB's/Firebird's query semantics, a materially different undertaking from decoding their file formats, with unreviewed licensing questions. Gated on the requesting engineer's explicit sign-off.
 
 ## Getting started
 
@@ -125,6 +126,25 @@ One reader per format, each returning the `DocumentTree` arm its format produces
 | `.odf` | `readOdfFormula` | `formula`        |
 
 Each is assembled through `document-schema.js`'s own `assembleTree`, so odf.js's packages are built exactly the way every other package construction site in this family builds one. No `pages` array is populated and no node carries `frames`: a reader runs before any layout pass, and rendered page geometry is a layout engine's to report, never a reader's to invent.
+
+### Writing a document
+
+A typed writer takes a `document-schema.js` `DocumentTree` or flat `ContentDocument` and returns a real `.odt` `Package` — the exact inverse of the reader pair above, mirroring `readOdt`/`readOdtContent`'s own two-level shape:
+
+```ts
+import { writeOdt, writeOdtContent, encodePackage } from "odf.js";
+
+const pkg = writeOdt(document); // document-schema.js's DocumentTree -> a real .odt Package
+const bytes = encodePackage(pkg); // Package -> bytes
+
+const pkgFromContent = writeOdtContent(contentDocument); // the flat ContentDocument level, same shape readOdtContent returns
+```
+
+Paragraphs, headings, runs (character formatting, hyperlinks), whitespace, lists, tables, images, explicit page breaks, per-section page geometry, and `meta.xml` all round-trip: `flattenTree(readOdt(writeOdt(document)))` reproduces `document` up to the same normalisation `normaliseOdtContent` states explicitly (its own doc comment — a section-less input, for instance, has no page geometry to invent, so it refuses rather than fabricating one).
+
+The fidelity constructs `readOdt` reads (fields, bookmarks, notes, annotations, tracked changes, divisions, index wrappers, forms) and embedded objects are refused **by name** rather than silently dropped — a block or paragraph carrying one throws naming exactly what it carries, since writing a document that silently lost semantic content would be worse than not writing it at all. The one deliberate exception is the quarantined residue channel: residue is opaque by construction, so re-emitting it would be actively wrong rather than merely incomplete, and it is dropped instead, a known, tracked restorable-fidelity gap rather than a silent one.
+
+Only `.odt` has a writer today — `.ods`/`.odp`/`.odg` are read-only still (see [Status](#status)).
 
 ### The flat `ContentDocument` level
 

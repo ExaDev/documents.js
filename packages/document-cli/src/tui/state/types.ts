@@ -184,6 +184,14 @@ export interface RtfOpenDocument {
   readonly path: string;
 }
 
+// wpd mirrors rtf: no editor -- wpd-codec is read-only, so there is no XmlElement tree and could never be a live view even in principle -- but a genuine `wpd -> pdf` layout-engine edge (documents.js's own composition engine, hasLayoutPath: true), opened read-only as its own `readPdf` result through the shared pdf screen family. Unlike rtf, there is no `wpdToPdf` named convenience function (wpd has no reverse direction to pair it with, and documents.js's own README states named forwarders are ergonomic sugar over `convertDocument`, not a requirement of a pair being routable), so `open-document.ts` reaches the identical edge through `convertDocument("wpd", "pdf", bytes)` directly.
+export interface WpdOpenDocument {
+  readonly format: "wpd";
+  readonly layout: LayoutDocument;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly path: string;
+}
+
 // The seven formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx`/`csv`/`svg`/`rtf` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` -- see PdfOpenDocument's own doc comment. `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one -- editing and saving a PDF in place needs no conversion step at all.
 export type EditableOpenDocument =
   | DocxOpenDocument
@@ -203,7 +211,8 @@ export type OpenDocument =
   | XlsxOpenDocument
   | CsvOpenDocument
   | SvgOpenDocument
-  | RtfOpenDocument;
+  | RtfOpenDocument
+  | WpdOpenDocument;
 
 export type EditableFormat = EditableOpenDocument["format"];
 
@@ -390,6 +399,7 @@ export function rootScreenForFormat(format: OpenDocumentFormat): Screen {
     case "csv":
     case "svg":
     case "rtf":
+    case "wpd":
       return { kind: "pdfPageList" };
   }
 }

@@ -1,3 +1,33 @@
+## [4.3.1](https://github.com/ExaDev/documents.js/compare/document-mcp%404.3.0...document-mcp%404.3.1) (2026-09-03)
+
+
+### Dependencies
+
+- Updated odf.js to ^6.3.0
+- Updated documents.js to ^6.4.1
+
+## [4.3.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.2.6...document-mcp%404.3.0) (2026-09-03)
+
+### Features
+
+* **document-mcp:** recognize .wpd file paths as a document input ([70ab3d7](https://github.com/ExaDev/documents.js/commit/70ab3d731390026be8c77604c5ee8dc1c4ab4a03))
+
+### Tests
+
+* **document-mcp:** exercise outline_document over a real wpd source ([174c4d8](https://github.com/ExaDev/documents.js/commit/174c4d862810bd087d3647e3f5d5ae3c1322db0b))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.4.0
+
+## [4.2.6](https://github.com/ExaDev/documents.js/compare/document-mcp%404.2.5...document-mcp%404.2.6) (2026-09-03)
+
+
+### Dependencies
+
+- Updated documents.js to ^6.3.6
+
 ## [4.2.5](https://github.com/ExaDev/documents.js/compare/document-mcp%404.2.4...document-mcp%404.2.5) (2026-09-03)
 
 

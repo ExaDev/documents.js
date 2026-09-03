@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { XmlElement } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
+import { buildXml } from "../../xml/build";
 import {
   getOdfSpaceCount,
   measureOdfNodeLength,
   sumOdfNodeLength,
   decodeOdfText,
+  segmentOdfText,
+  buildOdfInlineNodes,
 } from "./text";
 
 function paragraphOf(...children: XmlElement["children"]): XmlElement {
@@ -177,5 +180,78 @@ describe("decodeOdfText", () => {
       txt("!"),
     );
     expect(decodeOdfText(paragraph)).toBe("Hello\tworld   !");
+  });
+});
+
+// The write direction of the same content model. ODF collapses a run of white space to one character and strips a leading or trailing run from a paragraph outright, so exactly three positions need the explicit text:s spelling and everything else stays literal -- the property that keeps ordinary prose one text node rather than a node per word.
+describe("segmentOdfText", () => {
+  it("leaves a single interior space literal, so ordinary prose is one segment", () => {
+    expect(segmentOdfText("one two three", false, false)).toEqual([
+      { kind: "text", text: "one two three" },
+    ]);
+  });
+
+  it("splits out a run of two or more spaces, which would otherwise collapse to one", () => {
+    expect(segmentOdfText("a   b", false, false)).toEqual([
+      { kind: "text", text: "a" },
+      { kind: "space", text: "   " },
+      { kind: "text", text: "b" },
+    ]);
+  });
+
+  it("splits out a protected leading or trailing space, which would otherwise be stripped", () => {
+    expect(segmentOdfText(" a ", true, true)).toEqual([
+      { kind: "space", text: " " },
+      { kind: "text", text: "a" },
+      { kind: "space", text: " " },
+    ]);
+  });
+
+  it("leaves the same edge spaces literal when nothing needs them protected", () => {
+    expect(segmentOdfText(" a ", false, false)).toEqual([
+      { kind: "text", text: " a " },
+    ]);
+  });
+
+  it("always splits a tab and a hard line break, which have no textual spelling at all", () => {
+    expect(segmentOdfText("a\tb\nc", false, false)).toEqual([
+      { kind: "text", text: "a" },
+      { kind: "tab", text: "\t" },
+      { kind: "text", text: "b" },
+      { kind: "lineBreak", text: "\n" },
+      { kind: "text", text: "c" },
+    ]);
+  });
+
+  it("segments an empty string into nothing", () => {
+    expect(segmentOdfText("", true, true)).toEqual([]);
+  });
+
+  it("round-trips back through decodeOdfText, the property the two directions of this module share", () => {
+    for (const text of [
+      "one two",
+      "a   b",
+      " edges ",
+      "a\tb\nc",
+      "   ",
+      "trailing  ",
+    ]) {
+      const nodes = buildOdfInlineNodes(segmentOdfText(text, true, true));
+      expect(decodeOdfText(el("text:p", {}, nodes))).toBe(text);
+    }
+  });
+});
+
+describe("buildOdfInlineNodes", () => {
+  it("writes a single space as a bare text:s and a longer run as one carrying its own count", () => {
+    expect(
+      buildXml(buildOdfInlineNodes(segmentOdfText(" a  ", true, true))),
+    ).toBe('<text:s></text:s>a<text:s text:c="2"></text:s>');
+  });
+
+  it("entity-encodes text, since the model stores every string exactly as the source XML spells it", () => {
+    expect(
+      buildXml(buildOdfInlineNodes(segmentOdfText("a & b < c", false, false))),
+    ).toBe("a &amp; b &lt; c");
   });
 });

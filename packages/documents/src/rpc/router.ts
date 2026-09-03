@@ -25,6 +25,7 @@ import {
   readPdf,
   readRtfContent,
   readSvgContent,
+  readWpdContent,
   readXlsxContent,
   setDocumentMetadata,
 } from "documents.js";
@@ -275,7 +276,7 @@ const SanitizedLayoutDocumentSchema = LayoutDocumentSchema.extend({
   images: z.record(z.string(), SanitizedLayoutImageAssetSchema),
 });
 
-// Reads a ContentDocument directly from bytes, bypassing the conversion engine entirely -- no target build/encode, no PDF layout pass. Every format's standalone content reader is exported from documents.js (xlsx included since documents.js 2.0 -- before that, xlsx had to detour through the xlsx->ods bridge and read .content off the conversion result). markdown, csv, and svg are the plain-text formats: their readers take the decoded string, not a package, so each decodes its bytes up front the way markdown always has.
+// Reads a ContentDocument directly from bytes, bypassing the conversion engine entirely -- no target build/encode, no PDF layout pass. Every format's standalone content reader is exported from documents.js (xlsx included since documents.js 2.0 -- before that, xlsx had to detour through the xlsx->ods bridge and read .content off the conversion result). markdown, csv, and svg are the plain-text formats: their readers take the decoded string, not a package, so each decodes its bytes up front the way markdown always has. wpd is the one read-only format (READ_ONLY_FORMATS): it has exactly this one direction to offer -- a preview is a genuine use of it, unlike a conversion target -- so it takes bytes directly, the same shape rtf uses.
 function readContentForFormat(
   format: DocumentFormat,
   bytes: Uint8Array<ArrayBuffer>,
@@ -285,6 +286,7 @@ function readContentForFormat(
   if (format === "csv") return readCsvContent(new TextDecoder().decode(bytes));
   if (format === "svg") return readSvgContent(new TextDecoder().decode(bytes));
   if (format === "rtf") return readRtfContent(bytes).document;
+  if (format === "wpd") return readWpdContent(bytes);
   if (format === "pdf") throw new Error("PDF has no standalone content reader");
   const pkg = decodeDocumentPackage(format, bytes);
   switch (format) {

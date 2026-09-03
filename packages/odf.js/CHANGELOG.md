@@ -1,3 +1,9 @@
+## [6.3.0](https://github.com/ExaDev/documents.js/compare/odf.js%406.2.1...odf.js%406.3.0) (2026-09-03)
+
+### Features
+
+* **odf.js:** add a typed ODT content writer, ContentDocument to package ([350249f](https://github.com/ExaDev/documents.js/commit/350249f7d3fa76891a2030f5fa8b0973c8edb993))
+
 ## [6.2.1](https://github.com/ExaDev/documents.js/compare/odf.js%406.2.0...odf.js%406.2.1) (2026-09-03)
 
 
