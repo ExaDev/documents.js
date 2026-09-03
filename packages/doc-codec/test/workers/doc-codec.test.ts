@@ -1,5 +1,6 @@
+import type { ContentDocument } from "document-schema.js";
 import { describe, expect, it } from "vitest";
-import { isDocBytes, parseClx, readDocContent } from "../../src";
+import { isDocBytes, parseClx, readDocContent, writeDocContent } from "../../src";
 import { buildDoc } from "../../src/test-support/doc";
 
 // Proves doc-codec's surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. Every path here is byte arithmetic over Uint8Array and DataView plus archive-codec's compound-file reader; if any of it reached for node:fs, Buffer, or a Node-only global, the workerd isolate would throw rather than these passing. This is the runtime complement to the static no-restricted-imports guard eslint.config.ts enforces.
@@ -43,6 +44,44 @@ describe("doc-codec under the Cloudflare Workers runtime", () => {
     expect(block?.kind === "paragraph" && block.runs[0]?.text).toBe(
       "Eight-bit text.",
     );
+  });
+
+  it("writes a whole synthetic .doc end to end, with no Node-only API", () => {
+    const input: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [
+                { text: "plain " },
+                { text: "bold", bold: true, color: { r: 1, g: 0, b: 0 } },
+              ],
+              alignment: "center",
+            },
+          ],
+        },
+      ],
+    };
+    const bytes = writeDocContent(input);
+    expect(isDocBytes(bytes)).toBe(true);
+    const result = readDocContent(bytes);
+    if (result.kind !== "wordprocessing") throw new Error("wrong kind");
+    const paragraph = result.sections[0]?.blocks[0];
+    expect(paragraph?.kind === "paragraph" && paragraph.alignment).toBe(
+      "center",
+    );
+    expect(
+      paragraph?.kind === "paragraph" &&
+        paragraph.runs.map((run) => run.text),
+    ).toEqual(["plain ", "bold"]);
+    expect(
+      paragraph?.kind === "paragraph" && paragraph.runs[1]?.color,
+    ).toEqual({ r: 1, g: 0, b: 0 });
   });
 
   it("parses a piece table without touching any Node API", () => {
