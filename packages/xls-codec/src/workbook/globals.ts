@@ -1,3 +1,5 @@
+import type { Color } from "document-schema.js";
+
 import { BlockCursor } from "../biff/cursor";
 import type { SheetRange } from "../biff/ptg";
 import {
@@ -5,6 +7,7 @@ import {
   RECORD_DATE1904,
   RECORD_EXTERNSHEET,
   RECORD_FORMAT,
+  RECORD_PALETTE,
   RECORD_SST,
   RECORD_SUPBOOK,
   RECORD_XF,
@@ -16,6 +19,11 @@ import {
   readXLUnicodeString,
 } from "../biff/strings";
 import type { RecordGroup } from "../biff/substreams";
+import {
+  readLongRgbColor,
+  unpackXfDecoration,
+  type XfDecorationFields,
+} from "../biff/xf-colors";
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
 // The workbook globals substream ([MS-XLS] 2.1.7.20.3): everything that belongs to the workbook rather than to one sheet -- which sheets exist and in what order, the shared string table every string cell indexes into, the number-format and cell-format tables every numeric cell's meaning depends on, and which date epoch the whole file counts serials from. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ca4c1748-8729-4a93-abb9-4602b3a01fb1
@@ -34,7 +42,7 @@ export interface SheetEntry {
   readonly bofPosition: number;
 }
 
-/** One XF record's fixed prefix ([MS-XLS] 2.4.353). Only the fields the value path needs are carried: the trailing CellXF/StyleXF payload holds alignment, fill, and border properties whose colours are palette indices needing the Palette record to resolve, which this package does not yet read. */
+/** One XF record's fixed prefix ([MS-XLS] 2.4.353) plus its trailing CellXF/StyleXF payload's own fill/border fields. Alignment (the payload's own leading word) is still not carried: this package's schema mapping (content.ts) has no use for it, matching the reader's own documented scope. */
 export interface CellFormat {
   /** ifnt: the index of the Font record this format uses. */
   readonly fontIndex: number;
@@ -42,6 +50,8 @@ export interface CellFormat {
   readonly formatId: number;
   /** fStyle: true when this record describes a cell STYLE rather than a cell format. */
   readonly isStyle: boolean;
+  /** The trailing payload's own fill pattern/colour and per-side border fields, raw -- resolved into document-schema.js's Color/ContentCellBorders by content.ts, through this same globals object's own `palette`. */
+  readonly decoration: XfDecorationFields;
 }
 
 /** Everything the globals substream contributes to reading the sheets that follow it. */
@@ -62,6 +72,10 @@ export interface WorkbookGlobals {
    * An entry is undefined when this reader does not resolve it: the XTI's own SupBook is not this same, self-referencing workbook (a genuine external-workbook, DDE, OLE, or add-in reference -- [MS-XLS] 2.4.271's own cch table, `0x0401` being the one this reader treats as resolvable), or its itabFirst/itabLast do not name a real sheet (`-1`, "sheet could not be found"). A formula whose 3D reference lands on an undefined entry is left with `formula` absent for that cell, exactly like the other unsupported-token cases -- this reader never resolves a genuinely external workbook's own sheet names, since that needs the external workbook's own bytes, not this one's.
    */
   readonly sheetRanges: readonly (SheetRange | undefined)[];
+  /**
+   * The workbook's own custom colour table, from a Palette record ([MS-XLS] 2.4.204) -- 56 entries, index 0 being icv 8. Undefined when the file carries no Palette record at all, which is common: a real file relying purely on the fixed default 8-colour-plus-56-entry table (this package's own `resolveIcvColor` falls back to that same default table, matching [MS-XLS] "Icv"'s own documented fallback) never needs one.
+   */
+  readonly palette: readonly Color[] | undefined;
 }
 
 /** [MS-XLS] 2.4.28's own hsState values; 0x01 is Hidden and 0x02 Very Hidden. */
@@ -86,6 +100,7 @@ export function readWorkbookGlobals(
   let sharedStrings: readonly string[] = [];
   let date1904 = false;
   let externSheet: RecordGroup | undefined;
+  let palette: readonly Color[] | undefined;
 
   for (const record of records) {
     switch (record.type) {
@@ -112,8 +127,11 @@ export function readWorkbookGlobals(
       case RECORD_EXTERNSHEET:
         externSheet = record;
         break;
+      case RECORD_PALETTE:
+        palette = readPalette(record);
+        break;
       default:
-        // Every other record in the globals substream -- the window settings, the palette, the theme, the drawing group -- carries nothing this reader acts on yet.
+        // Every other record in the globals substream -- the window settings, the theme, the drawing group -- carries nothing this reader acts on yet.
         break;
     }
   }
@@ -136,6 +154,7 @@ export function readWorkbookGlobals(
     numberFormats,
     date1904,
     sheetRanges,
+    palette,
   };
 }
 
@@ -220,13 +239,33 @@ function readFormat(record: RecordGroup): { id: number; code: string } {
   return { id, code: readXLUnicodeString(cursor) };
 }
 
-/** XF ([MS-XLS] 2.4.353): a font index, a number-format identifier, then a flags field whose fStyle bit says whether the trailing payload is a CellXF or a StyleXF. */
+/** XF ([MS-XLS] 2.4.353): a font index, a number-format identifier, a flags field whose fStyle bit says whether the trailing payload is a CellXF or a StyleXF, then that 14-byte trailing payload itself -- a leading alignment/fAtr* word this reader does not act on (skipped rather than parsed: see the package README's own documented scope), then the border word, fill-pattern word, and fill-colour word xf-colors.ts's unpackXfDecoration resolves into this format's own `decoration`. CellXF and StyleXF share the identical border/fill bit layout ([MS-XLS] 2.4.353's own field table), so this reads both shapes uniformly regardless of isStyle -- a cell only ever references a CellXF entry by its own ixfe (workbook/sheet.ts's cell reading), so a StyleXF's decoration is parsed but never consulted downstream. */
 function readCellFormat(record: RecordGroup): CellFormat {
   const cursor = new BlockCursor(record.blocks);
   const fontIndex = cursor.u16();
   const formatId = cursor.u16();
   const flags = cursor.u16();
-  return { fontIndex, formatId, isStyle: (flags & XF_FLAG_STYLE) !== 0 };
+  cursor.u32(); // word1: alignment/trot/indent/fAtr* flags -- not part of this reader's schema mapping
+  const word2 = cursor.u32();
+  const word3 = cursor.u32();
+  const word4 = cursor.u16();
+  return {
+    fontIndex,
+    formatId,
+    isStyle: (flags & XF_FLAG_STYLE) !== 0,
+    decoration: unpackXfDecoration(word2, word3, word4),
+  };
+}
+
+/** Palette ([MS-XLS] 2.4.204): a signed colour count (a real file always declares 56) then that many LongRGB entries -- the write-side mirror is xf-writer.ts's own writePaletteRecord. */
+function readPalette(record: RecordGroup): readonly Color[] {
+  const cursor = new BlockCursor(record.blocks);
+  const count = cursor.i16();
+  const colors: Color[] = [];
+  for (let index = 0; index < count; index += 1) {
+    colors.push(readLongRgbColor(cursor));
+  }
+  return colors;
 }
 
 /** Date1904 ([MS-XLS] 2.4.77): a two-byte boolean. */
