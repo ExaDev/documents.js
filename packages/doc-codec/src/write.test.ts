@@ -12,7 +12,7 @@ import { DocFormatError, DocUnsupportedError } from "./errors";
 import { readDocContent } from "./read";
 import { writeDocContent } from "./write";
 
-// Verifies writeDocContent by reading its own output back through this package's own reader (readDocContent) -- the round trip this session's own writer packages (archive-codec's CFB writer, odf.js's typed writer) are all verified the same way, and the standing convention this task itself names. A byte-level inspection of the produced .doc would prove nothing readDocContent itself does not already prove by successfully parsing it.
+// Verifies writeDocContent by reading its own output back through this package's own reader (readDocContent) -- the round trip this session's own writer packages (archive-codec's CFB writer, odf.js's typed writer) are all verified the same way, and the standing convention this task itself names. This round trip alone cannot prove third-party conformance, though: ExaDev/documents.js#892 is the confirmed counterexample -- a table passed this exact suite for the whole time LibreOffice's own .doc import filter rejected it outright, because readDocContent tolerated a document whose Main Document text did not end in the ordinary paragraph mark [MS-DOC] requires. Byte-level and real-reader verification for the table writer specifically lives in the README's own "Third-party verification" paragraph and its accompanying LibreOffice checks, not here.
 
 function document(blocks: readonly ContentBlock[]): ContentDocument {
   return {
