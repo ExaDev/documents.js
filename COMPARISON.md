@@ -22,7 +22,7 @@ Scope: how the [documents.js ecosystem](README.md) compares against real alterna
 
 **documents.js counterpart:** byte-codec, archive-codec
 
-This is the category where documents.js's 'hand-written, dependency-minimal' claim is least differentiating — essentially every alternative is also hand-written or ported-from-C with no dependencies. The real question byte-codec has to answer is why it exists rather than depending on fflate. For archive-codec, the closest true counterpart is SheetJS's cfb (same MS-CFB target, plus limited writing) — but cfb has no ZIP awareness, and no ZIP library has OLE/CFB support, so the combination of recursive ZIP-in-ZIP walking with depth/size guards alongside bounded CFB reading in one package is genuinely unmatched, though narrow.
+This is the category where documents.js's 'hand-written, dependency-minimal' claim is least differentiating — essentially every alternative is also hand-written or ported-from-C with no dependencies. The real question byte-codec has to answer is why it exists rather than depending on fflate. For archive-codec, the closest true counterpart is SheetJS's cfb, which targets MS-CFB in both directions as archive-codec now does — but cfb has no ZIP awareness, and no ZIP library has OLE/CFB support, so the combination of recursive ZIP-in-ZIP walking with depth/size guards alongside bounded CFB reading and writing in one package is genuinely unmatched, though narrow.
 
 | Package / service                                              | Direction    | Approach     | Deployment | Licence                   | Pricing model      | Status    |
 | -------------------------------------------------------------- | ------------ | ------------ | ---------- | ------------------------- | ------------------ | --------- |
@@ -116,7 +116,7 @@ Standard CRC-32/CRC-32C checksum implementation with a bundled CLI. (npm · v1.2
 
 Pure-JS MS-CFB (classic OLE) container reader/writer, part of SheetJS. (npm · v1.2.2 · 2022-04-06)
 
-**vs. documents.js:** Closest direct counterpart to archive-codec's CFB reader — same approach, same target — and goes further with limited CFB writing, but has zero ZIP awareness.
+**vs. documents.js:** Closest direct counterpart to archive-codec's CFB support — same approach, same target, and the same two directions now that archive-codec writes compound files as well as reading them — but has zero ZIP awareness.
 
 **Free tier:** N/A — the package itself is free and open source; no paid tiers exist.
 
