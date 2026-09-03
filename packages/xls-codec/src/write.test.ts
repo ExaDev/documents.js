@@ -463,23 +463,125 @@ describe("writeXlsContent", () => {
       );
     });
 
-    it("counts the palette budget from the cells it actually writes, not from ones it skips", () => {
-      // The colour scan and the XF-interning pass have to agree on which cells count. When only the scan looked at cells the writer emits no record for, their colours still consumed palette slots -- so a workbook whose written decoration needs one colour was refused for needing 57 of the 56 a Palette record holds.
-      const cells: ContentSheetCell[] = [];
-      for (let index = 0; index < PALETTE_ENTRY_COUNT; index += 1) {
-        const hex = index.toString(16).padStart(6, "0");
-        cells.push(
-          cell(1, index, { kind: "empty" }, { background: rgbHexToColor(hex) }),
-        );
-      }
-      cells.push(
-        cell(0, 0, { kind: "number", value: 1 }, { background: coral }),
+    /** `count` cells whose only content is a distinct background colour each -- the shape the palette budget has to count exactly, since every one is written (as a Blank record) while carrying no value. */
+    function distinctlyColouredEmptyCells(
+      count: number,
+    ): readonly ContentSheetCell[] {
+      return Array.from({ length: count }, (_unused, index) =>
+        cell(
+          0,
+          index,
+          { kind: "empty" },
+          { background: rgbHexToColor(index.toString(16).padStart(6, "0")) },
+        ),
+      );
+    }
+
+    it("spends the palette on exactly the cells it writes, filling the record to its last slot", () => {
+      // The colour scan and the XF-interning pass have to agree on which cells count, or the budget is wrong in one direction or the other: reading wider than the writer once refused a workbook over colours nothing ever wrote, and reading narrower would leave an XF referencing a colour with no slot allocated to it.
+      const cells = distinctlyColouredEmptyCells(PALETTE_ENTRY_COUNT);
+
+      const content = readXlsContent(
+        writeXlsContent(document([sheet("Sheet1", cells)])),
       );
 
-      const bytes = writeXlsContent(document([sheet("Sheet1", cells)]));
+      for (const written of cells) {
+        expect(
+          findCell(content, 0, written.row, written.column)?.background,
+        ).toEqual(written.background);
+      }
+    });
 
-      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
-        coral,
+    it("round-trips a decorated empty cell through a real Blank record", () => {
+      // The cell has no value at all, so its background and borders live entirely in the XF a Blank record points at. Writing nothing for it -- which is right for an undecorated empty cell -- would discard them outright.
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(
+              1,
+              2,
+              { kind: "empty" },
+              {
+                background: red,
+                borders: { top: { color: blue, widthPt: 1.5 } },
+              },
+            ),
+          ]),
+        ]),
+      );
+
+      const readBack = findCell(readXlsContent(bytes), 0, 1, 2);
+      expect(readBack?.value).toEqual({ kind: "empty" });
+      expect(readBack?.background).toEqual(red);
+      expect(readBack?.borders).toEqual({
+        top: { color: blue, widthPt: 1.5 },
+      });
+    });
+
+    it("still writes nothing for an empty cell carrying no decoration", () => {
+      // The other half of the same rule: a blank with nothing to show stays absent from the read-back sheet, so the cell array remains sparse.
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "number", value: 1 }),
+            cell(1, 1, { kind: "empty" }),
+            cell(2, 2, { kind: "empty" }, { borders: {} }),
+          ]),
+        ]),
+      );
+
+      const content = readXlsContent(bytes);
+      expect(findCell(content, 0, 1, 1)).toBeUndefined();
+      expect(findCell(content, 0, 2, 2)).toBeUndefined();
+      expect(content.sheets[0]?.cells).toHaveLength(1);
+    });
+
+    it("round-trips a merged range whose anchor is empty but decorated", () => {
+      // The anchor is materialised by the Blank record this time rather than reconstructed from MergeCells, so both its spans and its decoration have to survive together.
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(
+              0,
+              0,
+              { kind: "empty" },
+              { background: red, colSpan: 2, rowSpan: 3 },
+            ),
+          ]),
+        ]),
+      );
+
+      const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
+      expect(readBack?.value).toEqual({ kind: "empty" });
+      expect(readBack?.background).toEqual(red);
+      expect(readBack?.colSpan).toBe(2);
+      expect(readBack?.rowSpan).toBe(3);
+    });
+
+    it("shares one XF between a decorated empty cell and a valued cell with the same decoration", () => {
+      // A Blank record's ixfe indexes the same cell-XF table every value record's does, so the interning pass has to treat both kinds of cell alike -- a regression would show as the wrong decoration on one of the two.
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "empty" }, { background: red }),
+            cell(0, 1, { kind: "string", value: "x" }, { background: red }),
+          ]),
+        ]),
+      );
+
+      const content = readXlsContent(bytes);
+      expect(findCell(content, 0, 0, 0)?.background).toEqual(red);
+      expect(findCell(content, 0, 0, 1)?.background).toEqual(red);
+    });
+
+    it("refuses one distinct colour past the palette's last slot", () => {
+      const cells = [
+        ...distinctlyColouredEmptyCells(PALETTE_ENTRY_COUNT),
+        cell(1, 0, { kind: "number", value: 1 }, { background: coral }),
+      ];
+
+      expect(() => writeXlsContent(document([sheet("Sheet1", cells)]))).toThrow(
+        BiffWriteError,
       );
     });
   });
