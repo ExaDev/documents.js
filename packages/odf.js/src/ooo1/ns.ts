@@ -34,6 +34,13 @@ export const OOO1_NAMESPACES = Object.freeze({
 
 export type Ooo1NamespacePrefix = keyof typeof OOO1_NAMESPACES;
 
+// Whether a prefix names a namespace this vocabulary has at all -- e.g. "smil"/"anim"/"xforms"/"db"/"rpt", ODF namespaces with no OpenOffice.org 1.x predecessor, are not. Used by the writer direction (../transform.ts's transformToOoo1Package) to decide whether a declared ODF namespace has an OpenOffice.org 1.x URI to rewrite to, or must be left exactly as it is -- the reverse of isOdfNamespacePrefix's own role in the read direction.
+export function isOoo1NamespacePrefix(
+  prefix: string,
+): prefix is Ooo1NamespacePrefix {
+  return Object.hasOwn(OOO1_NAMESPACES, prefix);
+}
+
 // The subset of the table above that OpenOffice.org itself minted -- i.e. the URIs whose mere presence identifies a document as OpenOffice.org 1.x rather than ODF. The W3C/Dublin Core entries are deliberately excluded: an ODF document declares xlink:/dc:/math: identically, so seeing one proves nothing.
 const OOO1_ONLY_NAMESPACE_URIS: ReadonlySet<string> = new Set(
   Object.values(OOO1_NAMESPACES).filter((uri) =>
@@ -97,6 +104,20 @@ export function odfMediaTypeForOoo1MediaType(
   mediaType: string,
 ): string | undefined {
   return ODF_MEDIA_TYPE_BY_OOO1_MEDIA_TYPE.get(mediaType);
+}
+
+// The reverse lookup, built once from the same table rather than duplicated: the OpenOffice.org 1.x media type an OASIS ODF media type came from, or undefined for an ODF media type this format family never had (.odb, for instance, postdates OpenOffice.org 1.x entirely and has no OOo1 predecessor at all). Every entry in ODF_MEDIA_TYPE_BY_OOO1_MEDIA_TYPE has a distinct value, so this inversion is unambiguous.
+const OOO1_MEDIA_TYPE_BY_ODF_MEDIA_TYPE: ReadonlyMap<string, string> = new Map(
+  [...ODF_MEDIA_TYPE_BY_OOO1_MEDIA_TYPE.entries()].map(
+    ([ooo1MediaType, odfMediaType]) => [odfMediaType, ooo1MediaType] as const,
+  ),
+);
+
+// The OpenOffice.org 1.x media type an OASIS ODF media type became a successor to, or undefined when the ODF media type has no OpenOffice.org 1.x predecessor in this table (a format ODF introduced after OpenOffice.org 1.x, or a media type this format family never covered at all). Used by the OOo1x writer (../write.ts) to pick a package's own OOo1 media type from the ODF media type the ODF writer it wraps (writeOdt and its future ods/odp/odg siblings) already stamped.
+export function ooo1MediaTypeForOdfMediaType(
+  mediaType: string,
+): string | undefined {
+  return OOO1_MEDIA_TYPE_BY_ODF_MEDIA_TYPE.get(mediaType);
 }
 
 // Whether a package is an OpenOffice.org 1.x one rather than an ODF one, decided by the namespace URIs its own parts declare -- never by a file extension or a manifest media type, both of which a caller may not have and a renamed file will lie about. Any XML part whose root element declares an xmlns binding to one of the openoffice.org-minted URIs is proof: ODF declares none of them, and OpenOffice.org 1.x declares several on every part's root (content.xml, styles.xml, meta.xml, settings.xml and META-INF/manifest.xml all carry their own).
