@@ -56,3 +56,83 @@ export function cffFont(
 export const ROS_OPERANDS_AND_OPERATOR = [
   28, 0x01, 0x87, 28, 0x01, 0x88, 139, 12, 30,
 ];
+
+// A DICT operand always written in the 5-byte 32-bit integer form (spec Table 3, operand 29), so an offset operand occupies the same space whatever its value -- which is what lets the builder below lay a whole font out in one pass rather than iterating until the Top DICT's own size stops changing.
+function dictInt32(value: number): number[] {
+  return [
+    29,
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ];
+}
+
+const CFF_STANDARD_STRING_COUNT = 391; // SIDs below this index the standard strings (spec Appendix A); the String INDEX starts here
+
+// A complete-enough CFF program carrying its own built-in encoding: a custom Encoding (spec section 12, format 0) mapping character codes onto glyph indices, and a charset (section 13, format 0) naming each glyph through a SID resolved against the String INDEX. Every glyph name is written as a custom string rather than reused from the standard strings, which is what a subsetted symbol font really does with names outside the ISOAdobe repertoire.
+export function cffFontWithBuiltinEncoding(options: {
+  readonly name: string;
+  readonly glyphNames: readonly string[]; // glyphs 1..n; glyph 0 is always .notdef and is not named here
+  readonly encoding: ReadonlyMap<number, number>; // character code -> glyph index
+}): Uint8Array<ArrayBuffer> {
+  const nameIndex = cffIndex([[...new TextEncoder().encode(options.name)]]);
+  const stringIndex = cffIndex(
+    options.glyphNames.map((glyphName) => [
+      ...new TextEncoder().encode(glyphName),
+    ]),
+  );
+  const globalSubrIndex = [0, 0];
+  const charset = [
+    0,
+    ...options.glyphNames.flatMap((_, index) => {
+      const sid = CFF_STANDARD_STRING_COUNT + index;
+      return [(sid >> 8) & 0xff, sid & 0xff];
+    }),
+  ];
+  const codesByGlyph = [...options.glyphNames.keys()].map((index) => {
+    for (const [code, glyph] of options.encoding) {
+      if (glyph === index + 1) {
+        return code;
+      }
+    }
+    return 0;
+  });
+  const encoding = [0, codesByGlyph.length, ...codesByGlyph];
+  const charStrings = cffIndex([
+    [14],
+    ...options.glyphNames.map(() => [14]), // one bare `endchar` charstring per glyph: the CharStrings INDEX count is what sizes the charset
+  ]);
+
+  const topDictEntrySize = 3 * dictInt32(0).length + 3; // charset, Encoding and CharStrings, each a 5-byte operand plus its one-byte operator
+  const topDictIndexSize = cffIndex([
+    new Array<number>(topDictEntrySize).fill(0),
+  ]).length;
+  const charsetOffset =
+    CFF_HEADER.length +
+    nameIndex.length +
+    topDictIndexSize +
+    stringIndex.length +
+    globalSubrIndex.length;
+  const encodingOffset = charsetOffset + charset.length;
+  const charStringsOffset = encodingOffset + encoding.length;
+  const topDict = [
+    ...dictInt32(charsetOffset),
+    15,
+    ...dictInt32(encodingOffset),
+    16,
+    ...dictInt32(charStringsOffset),
+    17,
+  ];
+
+  return new Uint8Array([
+    ...CFF_HEADER,
+    ...nameIndex,
+    ...cffIndex([topDict]),
+    ...stringIndex,
+    ...globalSubrIndex,
+    ...charset,
+    ...encoding,
+    ...charStrings,
+  ]);
+}
