@@ -1,6 +1,6 @@
 {
   "name": "document-compute.js",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Units-typed, tree-walking evaluator for document-schema.js's MathExpression -- exact-rational unit conversion, interval arithmetic, and bisection/Newton numeric solve-for, the compute package for the documents.js family.",
   "type": "module",
   "repository": {
@@ -71,7 +71,7 @@
     "@arethetypeswrong/cli": "^0.18.5",
     "@cloudflare/vitest-pool-workers": "^0.20.1",
     "@types/node": "^26.1.2",
-    "documents.js": "^6.3.0",
+    "documents.js": "^6.3.1",
     "eslint": "^10.8.0",
     "husky": "^9.1.7",
     "markdown-codec": "^6.1.3",
