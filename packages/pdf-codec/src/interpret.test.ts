@@ -199,6 +199,25 @@ describe("interpretContentStream: text", () => {
     expect(second.fontResourceName).toBe("F1");
     expect(Array.from(second.codes)).toEqual(Array.from(textBytes("Second")));
   });
+
+  it("still resets the text matrix and text line matrix to identity at BT, even though the font and other text state parameters persist", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      // Td moves the (persisted) text line matrix before the first ET; a fresh BT must not carry that translation into the second run, or "Second" would start at (0, 30) instead of (0, 0).
+      textBytes("BT /F1 12 Tf 0 30 Td (First) Tj ET BT (Second) Tj ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    const [, second] = items;
+    if (second?.kind !== "text") {
+      throw new Error("expected a text item");
+    }
+    expect(second.startMatrix).toEqual([12, 0, 0, 12, 0, 0]);
+  });
 });
 
 describe("interpretContentStream: axis-aligned rectangles", () => {
