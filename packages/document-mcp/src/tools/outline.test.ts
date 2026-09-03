@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createServer } from "../server";
 import { odfFormulaBytes } from "../test-support/odf-formula-fixture";
 import { buildMultiPagePdf } from "../test-support/pdf-fixture";
+import { wpdFixtureBytes } from "../test-support/wpd-fixture";
 
 // Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- proving `outline_document` is registered under that name, reads a real source document's own native tree directly (documents.js's readNativeDocumentTree, no bridging conversion involved), and answers with document-outline.js's buildOutline TOC projection as structured JSON an MCP client can render directly.
 
@@ -247,6 +248,7 @@ function buildFormatFixtures(): Record<
       kind: "wordprocessing",
     },
     svg: { bytes: odgToSvg(singlePageOdgBytes), kind: "drawing" },
+    wpd: { bytes: wpdFixtureBytes(), kind: "wordprocessing" },
     xlsx: { bytes: xlsxBytes, kind: "spreadsheet" },
   };
 }
