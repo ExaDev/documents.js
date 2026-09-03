@@ -1,6 +1,6 @@
 {
   "name": "ppt-codec",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Hand-written PowerPoint 97-2003 binary (.ppt, [MS-PPT]) reader against the shared document-schema.js content pivot.",
   "type": "module",
   "repository": {
@@ -75,7 +75,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "archive-codec": "^1.2.0",
+    "archive-codec": "^1.3.0",
     "document-schema.js": "^5.4.0"
   },
   "devDependencies": {

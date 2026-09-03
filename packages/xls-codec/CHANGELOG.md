@@ -1,3 +1,14 @@
+## [1.0.1](https://github.com/ExaDev/documents.js/compare/xls-codec%401.0.0...xls-codec%401.0.1) (2026-09-03)
+
+### Documentation
+
+* record that archive-codec writes compound files, not only reads them ([b8873e7](https://github.com/ExaDev/documents.js/commit/b8873e7336ecbe41e2fdb4ff19afadc94c2f65bd)), references [#815](https://github.com/ExaDev/documents.js/issues/815)
+
+
+### Dependencies
+
+- Updated archive-codec to ^1.3.0
+
 ## 1.0.0 (2026-09-03)
 
 ### Features

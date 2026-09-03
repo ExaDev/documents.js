@@ -1,3 +1,13 @@
+## [1.3.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.2.0...archive-codec%401.3.0) (2026-09-03)
+
+### Features
+
+* **archive-codec:** write conformant [MS-CFB] compound files ([46724ab](https://github.com/ExaDev/documents.js/commit/46724abb37993fbbf4a9a3f7d89aef1a01eeb517))
+
+### Documentation
+
+* **archive-codec:** describe the compound-file write path ([4ed88db](https://github.com/ExaDev/documents.js/commit/4ed88db5264ebb0ae30601d868c1c0ddac06aefb))
+
 ## [1.2.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.1.2...archive-codec%401.2.0) (2026-08-24)
 
 ### Features
