@@ -7,11 +7,11 @@ import {
 } from "../record/types";
 import {
   asciiBytes,
-  atom,
   concatBytes,
   u32le,
   utf16le,
-} from "../test-support/records";
+  writeAtom as atom,
+} from "../record/write";
 import {
   TEXT_TYPE_BODY,
   TEXT_TYPE_TITLE,

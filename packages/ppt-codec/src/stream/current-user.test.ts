@@ -3,13 +3,13 @@ import { PptFormatError } from "../errors";
 import { RT_CurrentUserAtom } from "../record/types";
 import {
   asciiBytes,
-  atom,
   concatBytes,
   u8,
   u16le,
   u32le,
   utf16le,
-} from "../test-support/records";
+  writeAtom as atom,
+} from "../record/write";
 import {
   CURRENT_USER_HEADER_TOKEN_ENCRYPTED,
   CURRENT_USER_HEADER_TOKEN_PLAIN,
