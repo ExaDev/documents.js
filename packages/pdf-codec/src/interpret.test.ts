@@ -199,6 +199,25 @@ describe("interpretContentStream: text", () => {
     expect(second.fontResourceName).toBe("F1");
     expect(Array.from(second.codes)).toEqual(Array.from(textBytes("Second")));
   });
+
+  it("still resets the text matrix and text line matrix to identity at BT, even though the font and other text state parameters persist", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      // Td moves the (persisted) text line matrix before the first ET; a fresh BT must not carry that translation into the second run, or "Second" would start at (0, 30) instead of (0, 0).
+      textBytes("BT /F1 12 Tf 0 30 Td (First) Tj ET BT (Second) Tj ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    const [, second] = items;
+    if (second?.kind !== "text") {
+      throw new Error("expected a text item");
+    }
+    expect(second.startMatrix).toEqual([12, 0, 0, 12, 0, 0]);
+  });
 });
 
 // ISO 32000-1 Table 52 lists the text state parameters (font and size, character spacing, word spacing, horizontal scaling, leading, rise) among the device-independent graphics state parameters, so `q` saves them and `Q` restores them exactly as it does the CTM or the fill colour. Only the text matrix and text line matrix are excluded -- those are text object state (9.4.1), reset by BT and untouched by q/Q.
