@@ -30,20 +30,21 @@ The packages layer from foundation up to user-facing interfaces. Each depends on
 
 Each converts one document format to and from the shared schema, built on `document-schema.js`:
 
-| Package                                               | Formats                                                                                                                                                              |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`ooxml.js`](packages/ooxml.js/README.md)             | OOXML packages (docx, pptx, xlsx) to and from JSON.                                                                                                                  |
-| [`odf.js`](packages/odf.js/README.md)                 | OpenDocument packages (odt, ods, odp) to and from JSON, plus read-only support for the pre-OASIS OpenOffice.org 1.x documents ODF was based on (sxw, sxc, sxi, sxd). |
-| [`markdown-codec`](packages/markdown-codec/README.md) | CommonMark+GFM to and from the shared content schema.                                                                                                                |
-| [`pdf-codec`](packages/pdf-codec/README.md)           | Parses arbitrary real-world PDFs and generates new ones, also depending on `byte-codec`.                                                                             |
-| [`epub-codec`](packages/epub-codec/README.md)         | Flowable EPUB 2/3 to and from the shared content schema; writes EPUB 3 only.                                                                                         |
-| [`wpd-codec`](packages/wpd-codec/README.md)           | WordPerfect 6.x-X6 (`.wpd`) to the shared content schema; read-only, and under active development.                                                                   |
+| Package                                               | Formats                                                                                                                                                               |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`ooxml.js`](packages/ooxml.js/README.md)             | OOXML packages (docx, pptx, xlsx) to and from JSON.                                                                                                                   |
+| [`odf.js`](packages/odf.js/README.md)                 | OpenDocument packages (odt, ods, odp) to and from JSON, plus read-only support for the pre-OASIS OpenOffice.org 1.x documents ODF was based on (sxw, sxc, sxi, sxd).  |
+| [`markdown-codec`](packages/markdown-codec/README.md) | CommonMark+GFM to and from the shared content schema.                                                                                                                 |
+| [`pdf-codec`](packages/pdf-codec/README.md)           | Parses arbitrary real-world PDFs and generates new ones, also depending on `byte-codec`.                                                                              |
+| [`epub-codec`](packages/epub-codec/README.md)         | Flowable EPUB 2/3 to and from the shared content schema; writes EPUB 3 only.                                                                                          |
+| [`wpd-codec`](packages/wpd-codec/README.md)           | WordPerfect 6.x-X6 (`.wpd`) to the shared content schema; read-only, and under active development.                                                                    |
+| [`doc-codec`](packages/doc-codec/README.md)           | The pre-2007 Word Binary File Format (`.doc`, [MS-DOC]) to the shared content schema, also depending on `archive-codec` for its [MS-CFB] container. Read-only so far. |
 
 ### Conversion engine
 
-| Package                                           | What it is                                                                                                                                                  |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`documents.js`](packages/documents.js/README.md) | Bidirectional docx/pptx to and from PDF conversion, and a read+write editable OOXML document model, built on `ooxml.js` and depending on every codec above. |
+| Package                                           | What it is                                                                                                                                                                                                                                                                                            |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`documents.js`](packages/documents.js/README.md) | Bidirectional docx/pptx to and from PDF conversion, and a read+write editable OOXML document model, built on `ooxml.js` and depending on every codec above that has a write path. The read-only ones (`wpd-codec`, `doc-codec`) are not among them: a conversion-engine target needs both directions. |
 
 ### Interfaces
 
@@ -88,7 +89,7 @@ Individual packages set their own build and test configuration, but as a family 
 - TypeScript with Zod 4 for schema definition and validation.
 - MIT licensing.
 - Hand-written, dependency-minimal codecs over pulling in heavyweight format libraries — see each package's own README for what it deliberately avoids depending on.
-- The foundation and format-codec packages (`byte-codec`, `document-schema.js`, `document-outline.js`, `archive-codec`, `document-compute.js`, `ooxml.js`, `odf.js`, `markdown-codec`, `pdf-codec`, `epub-codec`, `wpd-codec`, `documents.js`) are Worker-isomorphic: their published `src/` must not import `node:*`/bare Node builtins or use the Node-only `Buffer` global. The `no-restricted-imports`/`no-restricted-globals` ban enforcing that is defined once in the root's `eslint.shared.ts`, which derives the module list from `node:module`'s own `builtinModules` rather than restating it; a package opts in by passing `isomorphic: true` to `packageLintConfig` rather than declaring the rule itself, and a workerd test suite proves it at runtime. The interface packages (`document-cli`, `document-mcp`, `documents`) are not held to this, since they legitimately run under Node or a browser rather than needing Worker portability.
+- The foundation and format-codec packages (`byte-codec`, `document-schema.js`, `document-outline.js`, `archive-codec`, `document-compute.js`, `ooxml.js`, `odf.js`, `markdown-codec`, `pdf-codec`, `epub-codec`, `doc-codec`, `wpd-codec`, `documents.js`) are Worker-isomorphic: their published `src/` must not import `node:*`/bare Node builtins or use the Node-only `Buffer` global. The `no-restricted-imports`/`no-restricted-globals` ban enforcing that is defined once in the root's `eslint.shared.ts`, which derives the module list from `node:module`'s own `builtinModules` rather than restating it; a package opts in by passing `isomorphic: true` to `packageLintConfig` rather than declaring the rule itself, and a workerd test suite proves it at runtime. The interface packages (`document-cli`, `document-mcp`, `documents`) are not held to this, since they legitimately run under Node or a browser rather than needing Worker portability.
 
 ## Working in the workspace
 
