@@ -241,6 +241,30 @@ interface ParagraphState {
   pageBreakBefore: boolean;
 }
 
+// The section-level properties in force, in twips, plus the break kind. Deliberately NOT part of GroupState: "Conventions of an RTF Reader" enumerates exactly four kinds of property the brace stack scopes -- destination, character, paragraph and table -- and section formatting is not among them, so a section property set inside a group stays set after the group closes.
+//
+// A section's own <secfmt> precedes its paragraphs and \sect ends it (RTF 1.9.1, "Section Text": <section> is `<secfmt>* <hdrftr>? <para>+ (\sect <section>)?`), so the values held here when a \sect arrives are the ones belonging to the section that just closed. Only \sectd resets them; \sect alone carries them into the next section, which is why this is one mutable record rather than a value rebuilt per section.
+interface SectionState {
+  paperWidthTwips: number;
+  paperHeightTwips: number;
+  marginLeftTwips: number;
+  marginRightTwips: number;
+  marginTopTwips: number;
+  marginBottomTwips: number;
+  breakType: SectionBreakType | undefined;
+}
+
+type SectionBreakType = NonNullable<ContentSection["breakType"]>;
+
+// "\sbknone No section break", "\sbkcol Section break starts a new column", "\sbkpage Section break starts a new page", "\sbkeven Section break starts at an even page", "\sbkodd Section break starts at an odd page" (RTF 1.9.1, "Section Formatting Properties"). \sbkpage is RTF's own default and ContentSection's too ("absent means the format's own default break -- nextPage in WordprocessingML"), so it maps to `undefined` rather than restating the default as data. \sbkcol is absent from this table on purpose: a column break has no ContentSection.breakType member, so it degrades with a diagnostic rather than being silently rounded to a neighbouring member.
+const SECTION_BREAK_TYPES: ReadonlyMap<string, SectionBreakType | undefined> =
+  new Map([
+    ["sbknone", "continuous"],
+    ["sbkpage", undefined],
+    ["sbkeven", "evenPage"],
+    ["sbkodd", "oddPage"],
+  ]);
+
 interface PictureState {
   format: "png" | "jpeg" | undefined;
   unsupportedFormat: string | undefined;
@@ -609,28 +633,64 @@ class ContentBuilder {
     this.blocks.push(block);
   }
 
-  endSection(pageSize: PageSize, margins: Margins, para: ParagraphState): void {
+  endSection(section: SectionState, para: ParagraphState): void {
     this.endParagraph(para, false);
     this.closeTable();
     if (this.blocks.length === 0 && this.sections.length > 0) {
       return;
     }
-    this.sections.push({ pageSize, margins, blocks: this.blocks });
+    this.sections.push({
+      ...sectionGeometry(section),
+      ...(section.breakType === undefined
+        ? {}
+        : { breakType: section.breakType }),
+      blocks: this.blocks,
+    });
     this.blocks = [];
   }
 
   finish(
     metadata: LayoutMetadata,
-    pageSize: PageSize,
-    margins: Margins,
+    section: SectionState,
     para: ParagraphState,
   ): ContentDocument {
-    this.endSection(pageSize, margins, para);
+    this.endSection(section, para);
     if (this.sections.length === 0) {
-      this.sections.push({ pageSize, margins, blocks: [] });
+      this.sections.push({ ...sectionGeometry(section), blocks: [] });
     }
     return { kind: "wordprocessing", metadata, sections: this.sections };
   }
+}
+
+function sectionGeometry(section: SectionState): {
+  pageSize: PageSize;
+  margins: Margins;
+} {
+  return {
+    pageSize: {
+      widthPt: twipsToPoints(section.paperWidthTwips),
+      heightPt: twipsToPoints(section.paperHeightTwips),
+    },
+    margins: {
+      topPt: twipsToPoints(section.marginTopTwips),
+      rightPt: twipsToPoints(section.marginRightTwips),
+      bottomPt: twipsToPoints(section.marginBottomTwips),
+      leftPt: twipsToPoints(section.marginLeftTwips),
+    },
+  };
+}
+
+// The document-level page geometry, which is also every section's starting point and what \sectd restores. "\sectd Resets to default section properties" (RTF 1.9.1, "Section Formatting Properties") -- the document's own \paperwN/\marglN and their siblings, not a fresh set of paper defaults, since a document declaring A4 does not have its second section silently revert to Letter.
+function defaultSectionState(header: RtfHeader): SectionState {
+  return {
+    paperWidthTwips: header.page.paperWidthTwips,
+    paperHeightTwips: header.page.paperHeightTwips,
+    marginLeftTwips: header.page.marginLeftTwips,
+    marginRightTwips: header.page.marginRightTwips,
+    marginTopTwips: header.page.marginTopTwips,
+    marginBottomTwips: header.page.marginBottomTwips,
+    breakType: undefined,
+  };
 }
 
 function buildRunFields(
@@ -763,17 +823,7 @@ function readRtfDetail(
   assertRtfHeaderPresent(tokens);
   const header = readRtfHeader(tokens, sink);
   const builder = new ContentBuilder(header, sink);
-
-  const pageSize: PageSize = {
-    widthPt: twipsToPoints(header.page.paperWidthTwips),
-    heightPt: twipsToPoints(header.page.paperHeightTwips),
-  };
-  const margins: Margins = {
-    topPt: twipsToPoints(header.page.marginTopTwips),
-    rightPt: twipsToPoints(header.page.marginRightTwips),
-    bottomPt: twipsToPoints(header.page.marginBottomTwips),
-    leftPt: twipsToPoints(header.page.marginLeftTwips),
-  };
+  const section = defaultSectionState(header);
 
   const root: GroupState = {
     destination: "body",
@@ -991,7 +1041,15 @@ function readRtfDetail(
     }
 
     flushBytes();
-    applyControlWord(token.name, token.param, state, builder, header, sink);
+    applyControlWord(
+      token.name,
+      token.param,
+      state,
+      builder,
+      header,
+      section,
+      sink,
+    );
     index += 1;
   }
 
@@ -1004,12 +1062,7 @@ function readRtfDetail(
     });
   }
 
-  const document = builder.finish(
-    header.metadata,
-    pageSize,
-    margins,
-    root.para,
-  );
+  const document = builder.finish(header.metadata, section, root.para);
   return { document, diagnostics };
 }
 
@@ -1174,11 +1227,65 @@ function applyParagraphControlWord(
   }
 }
 
+// The <secfmt> production's own properties (RTF 1.9.1, "Section Formatting Properties"). Every one of them is a section-scoped twin of a document-level control word the header parser already reads -- \pgwsxnN beside \paperwN, \marglsxnN beside \marglN -- because RTF states page geometry twice: once for the document and once per section that departs from it.
+function applySectionControlWord(
+  name: string,
+  param: number | undefined,
+  section: SectionState,
+  header: RtfHeader,
+  sink: RtfDiagnosticSink,
+): boolean {
+  if (name === "sectd") {
+    Object.assign(section, defaultSectionState(header));
+    return true;
+  }
+  if (name === "sbkcol") {
+    sink({
+      code: RtfDiagnosticCodes.SECTION_BREAK_UNREPRESENTED,
+      severity: "info",
+      message:
+        "\\sbkcol starts the section at a new column; ContentSection.breakType names page-level breaks only, so the break kind is dropped and the section itself is kept",
+    });
+    section.breakType = undefined;
+    return true;
+  }
+  if (SECTION_BREAK_TYPES.has(name)) {
+    section.breakType = SECTION_BREAK_TYPES.get(name);
+    return true;
+  }
+  if (param === undefined) {
+    return false;
+  }
+  switch (name) {
+    case "pgwsxn":
+      section.paperWidthTwips = param;
+      return true;
+    case "pghsxn":
+      section.paperHeightTwips = param;
+      return true;
+    case "marglsxn":
+      section.marginLeftTwips = param;
+      return true;
+    case "margrsxn":
+      section.marginRightTwips = param;
+      return true;
+    case "margtsxn":
+      section.marginTopTwips = param;
+      return true;
+    case "margbsxn":
+      section.marginBottomTwips = param;
+      return true;
+    default:
+      return false;
+  }
+}
+
 function applyStructureControlWord(
   name: string,
   param: number | undefined,
   state: GroupState,
   builder: ContentBuilder,
+  section: SectionState,
   sink: RtfDiagnosticSink,
 ): boolean {
   switch (name) {
@@ -1217,9 +1324,9 @@ function applyStructureControlWord(
       builder.addBlock({ kind: "pageBreak" });
       return true;
     case "sect":
+      // "\sect End of section and paragraph" -- both, in that order: the paragraph closes into the section that is ending, not into the one about to begin.
       builder.endParagraph(state.para, true);
-      return true;
-    case "sectd":
+      builder.endSection(section, state.para);
       return true;
     default:
       return false;
@@ -1232,6 +1339,7 @@ function applyControlWord(
   state: GroupState,
   builder: ContentBuilder,
   header: RtfHeader,
+  section: SectionState,
   sink: RtfDiagnosticSink,
 ): void {
   const picture = state.picture;
@@ -1245,7 +1353,10 @@ function applyControlWord(
   if (applyParagraphControlWord(name, param, state)) {
     return;
   }
-  applyStructureControlWord(name, param, state, builder, sink);
+  if (applySectionControlWord(name, param, section, header, sink)) {
+    return;
+  }
+  applyStructureControlWord(name, param, state, builder, section, sink);
 }
 
 export function readRtfContent(
