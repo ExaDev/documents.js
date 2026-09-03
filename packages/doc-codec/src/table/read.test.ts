@@ -35,7 +35,7 @@ function sprmTDefTable(
   return [0x08, 0xd6, ...le16(cb), ...remainder];
 }
 
-// sprmTMerge, [MS-DOC] 2.6.4 (0x5624): an ItcFirstLim range naming the physical cells to horizontally merge, the first becoming the anchor -- the mechanism a real Word producer's own table row typically states a horizontal merge through (see tap.ts's own note), rather than TC80.tcgrf.horzMerge alone.
+// sprmTMerge, [MS-DOC] 2.6.4 (0x5624): an ItcFirstLim range naming the physical cells to horizontally merge, the first becoming the anchor -- a spec-conformant mechanism this reader still honours for a genuine third-party producer's row, even though this package's own writer states a horizontal merge purely through a merged row's own narrower, wider physical cells instead (see tap.ts's own note and ExaDev/documents.js#895).
 function sprmTMerge(itcFirst: number, itcLim: number): number[] {
   return [0x24, 0x56, itcFirst, itcLim];
 }
