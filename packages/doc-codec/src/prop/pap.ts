@@ -1,5 +1,5 @@
 import type { Alignment } from "document-schema.js";
-import { readInt16LE, readUint16LE, readUint8 } from "../bytes";
+import { readInt16LE, readUint16LE, readUint32LE, readUint8 } from "../bytes";
 import { SGC, type Prl } from "./sprm";
 
 // Paragraph properties, [MS-DOC] 2.6.3 -- the subset of the paragraph-property sprm table this reader converts. As with the character side, an opcode this package does not act on is absent rather than present-and-ignored.
@@ -38,6 +38,11 @@ const SPRM_P_F_TTP = 0x2417;
 const SPRM_P_ILVL = 0x260a;
 /** sprmPIlfo: which list the paragraph is in, as an index into PlfLfo.rgLfo. */
 const SPRM_P_ILFO = 0x460b;
+/** sprmPItap: the paragraph's own table depth -- read only far enough to detect a depth greater than 1 (a table nested inside a table cell), which this package refuses rather than mis-reads. */
+const SPRM_P_ITAP = 0x6649;
+/** sprmPFInnerTableCell / sprmPFInnerTtp: a nested table's own cell-ending or row-ending mark. Neither is acted on beyond refusing the nested table it signals. */
+const SPRM_P_F_INNER_TABLE_CELL = 0x244b;
+const SPRM_P_F_INNER_TTP = 0x244c;
 
 const TWIPS_PER_POINT = 20;
 /** LSPD: "The spacing multiplier is dyaLine/240." */
@@ -70,6 +75,10 @@ export interface ParagraphProperties {
   listLevel?: number;
   /** The list identifier (sprmPIlfo), present only when the paragraph is in a list at all. */
   listId?: number;
+  /** sprmPItap's own table depth, present only when the sprm is; a value greater than 1 marks a table nested inside a table cell. */
+  tableDepth?: number;
+  /** True when sprmPFInnerTableCell or sprmPFInnerTtp is set -- a nested table's own cell/row-ending mark, carried purely as a refusal signal since this package's table support does not descend into a nested table. */
+  nestedTableMark?: boolean;
 }
 
 function twipsToPoints(twips: number): number {
@@ -171,6 +180,13 @@ export function applyParagraphSprms(
             : Math.abs(ilfo);
         break;
       }
+      case SPRM_P_ITAP:
+        into.tableDepth = readUint32LE(prl.operand, 0);
+        break;
+      case SPRM_P_F_INNER_TABLE_CELL:
+      case SPRM_P_F_INNER_TTP:
+        if (readUint8(prl.operand, 0) !== 0) into.nestedTableMark = true;
+        break;
       default:
         // Every other paragraph sprm is a property this reader does not convert; see the README's scope note.
         break;
