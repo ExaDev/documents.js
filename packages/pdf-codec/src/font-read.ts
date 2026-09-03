@@ -99,6 +99,18 @@ function readFontProgram(
   return undefined;
 }
 
+// The embedded program, opened only if some code actually falls through to it and then remembered. A font whose /ToUnicode covers every code it shows never pays for this at all, which is where the cost is largest: an embedded face is routinely hundreds of kilobytes, and opening one means inflating the stream and parsing its tables.
+function lazyFontProgram(
+  descriptor: PdfDict | undefined,
+  context: FontReadContext,
+): () => BuiltinEncoding | undefined {
+  let read: { readonly encoding: BuiltinEncoding | undefined } | undefined;
+  return () => {
+    read ??= { encoding: readFontProgram(descriptor, context) };
+    return read.encoding;
+  };
+}
+
 // A simple font's /Encoding /Differences array: a code number followed by a run of glyph names, each assigned to consecutive codes starting there, until the next number resets the position (ISO 32000-1 9.6.6.2).
 function readDifferencesMap(
   differences: readonly PdfObject[] | undefined,
@@ -190,7 +202,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
       ? asArray(dictGet(encodingDict, "Differences"))
       : undefined,
   );
-  const programEncoding = readFontProgram(descriptor, context);
+  const programEncoding = lazyFontProgram(descriptor, context);
 
   // What a code neither /ToUnicode nor /Differences resolves falls back to, in order. A font whose /BaseFont is literally one of the two standard-14 symbol faces, and any font flagged Symbolic, is encoded by its own font program rather than by any of the standard tables (ISO 32000-1 9.6.6.2 -- WinAnsi/MacRoman/StandardEncoding are never valid for Symbol or ZapfDingbats, and 9.6.6.4 has a symbolic TrueType font's /Encoding ignored outright), so the embedded program is consulted first and the two fixed standard-14 symbol tables next. An ordinary text font is the other way round: an explicitly named base encoding is the font dictionary stating what its codes mean, and only a font that states nothing falls through to its own program, then to WinAnsi -- ISO 32000-1's own default for a Type1/TrueType built-in encoding. Where every source is silent the code stays unmapped rather than being guessed at, since a plausible-looking wrong Latin letter is worse than a visible replacement character.
   const symbolEncoded = symbolic || builtinGlyphName !== undefined;
@@ -201,7 +213,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
       return name === undefined ? undefined : glyphNameToUnicode(name);
     };
   const fromProgram = (code: number): number | undefined =>
-    programEncoding?.codeToUnicode(code);
+    programEncoding()?.codeToUnicode(code);
   const namedBase =
     namedBaseGlyphName === undefined
       ? undefined
@@ -346,7 +358,7 @@ function buildCompositeFont(
     isName(dictGet(fontDict, "Encoding"), "Identity-H") &&
     (cidToGidMap === undefined || isName(cidToGidMap, "Identity"));
   const programEncoding = cidIsGlyphId
-    ? readFontProgram(descriptor, context)
+    ? lazyFontProgram(descriptor, context)
     : undefined;
 
   const decodeToUnicode = (codes: Uint8Array<ArrayBuffer>): string => {
@@ -361,7 +373,7 @@ function buildCompositeFont(
         out += mapped;
         continue;
       }
-      const fromProgram = programEncoding?.glyphIdToUnicode(cid);
+      const fromProgram = programEncoding?.()?.glyphIdToUnicode(cid);
       if (fromProgram !== undefined) {
         out += String.fromCodePoint(fromProgram);
         continue;
