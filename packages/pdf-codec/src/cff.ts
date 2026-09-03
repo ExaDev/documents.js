@@ -17,6 +17,7 @@ export const CFF_ESCAPED_OPERATOR_BASE = 1200;
 
 // The Top DICT operators this package reads (spec Table 9 and Table 10). Everything else in a Top DICT -- the encoding, the font matrix, the copyright strings, the CID-keyed FDArray/FDSelect pair -- is skipped by the readers built on this module rather than modelled here.
 export const CFF_DICT_OP_CHARSET = 15;
+export const CFF_DICT_OP_ENCODING = 16;
 export const CFF_DICT_OP_CHARSTRINGS = 17;
 export const CFF_DICT_OP_PRIVATE = 18;
 export const CFF_DICT_OP_SUBRS = 19; // Private DICT: an offset RELATIVE to that Private DICT's own start, not to the start of the font
@@ -258,4 +259,30 @@ export function parseCffDict(
     return undefined; // 22..27, 31, 255: reserved, and present in no valid DICT
   }
   return dict;
+}
+
+// The 391 CFF standard strings (spec Appendix A), the fixed prefix of every font's string space: a SID below this list's length names one of these, and any higher SID indexes the font's own String INDEX at `sid - CFF_STANDARD_STRINGS.length`. Generated from fontTools' `fontTools.cffLib.cffStandardStrings` rather than transcribed, and held as one delimited string because a 391-element literal is data, not code.
+export const CFF_STANDARD_STRINGS: readonly string[] =
+  ".notdef space exclam quotedbl numbersign dollar percent ampersand quoteright parenleft parenright asterisk plus comma hyphen period slash zero one two three four five six seven eight nine colon semicolon less equal greater question at A B C D E F G H I J K L M N O P Q R S T U V W X Y Z bracketleft backslash bracketright asciicircum underscore quoteleft a b c d e f g h i j k l m n o p q r s t u v w x y z braceleft bar braceright asciitilde exclamdown cent sterling fraction yen florin section currency quotesingle quotedblleft guillemotleft guilsinglleft guilsinglright fi fl endash dagger daggerdbl periodcentered paragraph bullet quotesinglbase quotedblbase quotedblright guillemotright ellipsis perthousand questiondown grave acute circumflex tilde macron breve dotaccent dieresis ring cedilla hungarumlaut ogonek caron emdash AE ordfeminine Lslash Oslash OE ordmasculine ae dotlessi lslash oslash oe germandbls onesuperior logicalnot mu trademark Eth onehalf plusminus Thorn onequarter divide brokenbar degree thorn threequarters twosuperior registered minus eth multiply threesuperior copyright Aacute Acircumflex Adieresis Agrave Aring Atilde Ccedilla Eacute Ecircumflex Edieresis Egrave Iacute Icircumflex Idieresis Igrave Ntilde Oacute Ocircumflex Odieresis Ograve Otilde Scaron Uacute Ucircumflex Udieresis Ugrave Yacute Ydieresis Zcaron aacute acircumflex adieresis agrave aring atilde ccedilla eacute ecircumflex edieresis egrave iacute icircumflex idieresis igrave ntilde oacute ocircumflex odieresis ograve otilde scaron uacute ucircumflex udieresis ugrave yacute ydieresis zcaron exclamsmall Hungarumlautsmall dollaroldstyle dollarsuperior ampersandsmall Acutesmall parenleftsuperior parenrightsuperior twodotenleader onedotenleader zerooldstyle oneoldstyle twooldstyle threeoldstyle fouroldstyle fiveoldstyle sixoldstyle sevenoldstyle eightoldstyle nineoldstyle commasuperior threequartersemdash periodsuperior questionsmall asuperior bsuperior centsuperior dsuperior esuperior isuperior lsuperior msuperior nsuperior osuperior rsuperior ssuperior tsuperior ff ffi ffl parenleftinferior parenrightinferior Circumflexsmall hyphensuperior Gravesmall Asmall Bsmall Csmall Dsmall Esmall Fsmall Gsmall Hsmall Ismall Jsmall Ksmall Lsmall Msmall Nsmall Osmall Psmall Qsmall Rsmall Ssmall Tsmall Usmall Vsmall Wsmall Xsmall Ysmall Zsmall colonmonetary onefitted rupiah Tildesmall exclamdownsmall centoldstyle Lslashsmall Scaronsmall Zcaronsmall Dieresissmall Brevesmall Caronsmall Dotaccentsmall Macronsmall figuredash hypheninferior Ogoneksmall Ringsmall Cedillasmall questiondownsmall oneeighth threeeighths fiveeighths seveneighths onethird twothirds zerosuperior foursuperior fivesuperior sixsuperior sevensuperior eightsuperior ninesuperior zeroinferior oneinferior twoinferior threeinferior fourinferior fiveinferior sixinferior seveninferior eightinferior nineinferior centinferior dollarinferior periodinferior commainferior Agravesmall Aacutesmall Acircumflexsmall Atildesmall Adieresissmall Aringsmall AEsmall Ccedillasmall Egravesmall Eacutesmall Ecircumflexsmall Edieresissmall Igravesmall Iacutesmall Icircumflexsmall Idieresissmall Ethsmall Ntildesmall Ogravesmall Oacutesmall Ocircumflexsmall Otildesmall Odieresissmall OEsmall Oslashsmall Ugravesmall Uacutesmall Ucircumflexsmall Udieresissmall Yacutesmall Thornsmall Ydieresissmall 001.000 001.001 001.002 001.003 Black Bold Book Light Medium Regular Roman Semibold".split(
+    " ",
+  );
+
+// A SID resolved to the string it names: one of the standard strings above, or an entry of the font's own String INDEX. ASCII throughout (spec section 7 restricts the character set to printable ASCII), so a per-byte decode is exact rather than an approximation.
+export function cffStringForSid(
+  sid: number,
+  stringIndex: CffIndex | undefined,
+): string | undefined {
+  const standard = CFF_STANDARD_STRINGS[sid];
+  if (standard !== undefined) {
+    return standard;
+  }
+  const entry = stringIndex?.entry(sid - CFF_STANDARD_STRINGS.length);
+  if (entry === undefined) {
+    return undefined;
+  }
+  let text = "";
+  for (const byte of entry) {
+    text += String.fromCharCode(byte);
+  }
+  return text;
 }
