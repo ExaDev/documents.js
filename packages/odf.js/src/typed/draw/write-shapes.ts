@@ -289,13 +289,33 @@ function writeShapeImage(
 
 // --- the shape writer -----------------------------------------------------------------------------------------------
 
+// --- paint order: ContentShape.paintOrder -> draw:z-index -----------------------------------------------------------
+//
+// draw:z-index is the ONE spelling ODF has for a shape's stacking order independent of its position in the document, and typed/draw/shapes.ts's own paintOrderKey already reads it back (see that module's own PAINT ORDER note for the schema citation -- xsd:nonNegativeInteger, valid on draw:frame -- and for the empirical finding that real LibreOffice output never emits it, relying on document order alone, which its own reader falls back to). Writing it is therefore not a new convention this module invents: typed/ods/write.ts's own anchored-drawing frames already carry one, and the odp/odg reader already resolves one.
+//
+// A paintOrder ODF cannot spell -- negative, or fractional (ContentShapeSchema declares a plain z.number() deliberately, "to allow fractional insertion between two existing values later") -- is NOT approximated by rounding it to a neighbouring integer: that would silently reorder a shape past a sibling, changing what the document renders as. The attribute is omitted instead, and the reader's own document-encounter fallback then supplies this shape's position in its page's own shape order, which is exactly what an unspelled paint order means. typed/odp/write.ts's canonicalShape states that fallback as part of its canonical form, reading it back off THIS function so the two can never disagree.
+export function odfZIndexOf(
+  paintOrder: number | undefined,
+): number | undefined {
+  if (
+    paintOrder === undefined ||
+    !Number.isInteger(paintOrder) ||
+    paintOrder < 0
+  ) {
+    return undefined;
+  }
+  return paintOrder;
+}
+
 // One ContentShape -> the draw:frame element typed/draw/shapes.ts's own readDrawFrame reads back: geometry (svg:x/y/width/height, or draw:transform when rotated), an interned graphic-family style carrying the shape's own text insets (when non-zero), and exactly one of table:table/draw:text-box/draw:image as decided by planShapeContent. `listState` is the caller's own ListPlanState (typed/shared/list.ts) -- see planShapeContent's own note on why this module never decides its own threading policy.
 export function writeDrawFrame(
   shape: ContentShape,
   listState: ListPlanState,
   state: DrawShapeWriteState,
 ): XmlElement {
+  const zIndex = odfZIndexOf(shape.paintOrder);
   const attributes: Record<string, string> = {
+    ...(zIndex === undefined ? {} : { "draw:z-index": String(zIndex) }),
     ...frameGeometryAttrs(shape.frame, shape.rotationDeg),
   };
   if (shape.name !== undefined) {
