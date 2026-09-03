@@ -1,0 +1,281 @@
+// RTF's own fidelity constructs, mapped onto document-schema.js's harmonised construct vocabulary (its src/construct.ts) in both directions. A sibling module by the same name exists in ooxml.js (src/typed/docx/constructs.ts) and odf.js (src/typed/shared/constructs.ts) for exactly the same job, and this one follows their discipline: the descriptor SHAPES live here, next to the format spellings they translate, while the walk that decides an extent's position stays in the reader and the writer.
+//
+// Two of RTF's three candidates are real. Bookmarks are `'{\*' \bkmkstart (\bkmkcolfN? & \bkmkcollN?) #PCDATA '}'` / `'{\*' \bkmkend #PCDATA '}'` (RTF 1.9.1, "Bookmarks") and map onto the `anchor` descriptor with anchorType 'bookmark'. Revision marks are the <chrev> character-property production -- `\revised? \revauthN? \revdttmN? \crauthN? \crdateN? \deleted? \revauthdelN? \revdttmdelN? \mvf? \mvt? \mvauthN? \mvdateN?` (RTF 1.9.1, "Character Revision Mark Properties") -- and map onto `provenance`, one descriptor per change kind a run carries.
+//
+// The third, CONTENT CONTROLS, has no RTF spelling and is therefore not mapped. RTF 1.9.1 predates OOXML's `w:sdt` and specifies nothing equivalent: its "Custom XML Tags" production (\xmlopen/\xmlclose with the \xmlsdtt* scoping keywords) is a namespace/name tag over a run range with no type, lock, alias, placeholder or value, and its "Custom XML Data Properties" \*\datastore is an opaque #SDATA blob whose "format ... is unknown to RTF" by the spec's own words. What RTF has instead is form fields (`'{\*' \formfield '{' <formparams> <formstrings> '}}'` with \fftypeN naming text/check box/list, driven by a FORMTEXT/FORMCHECKBOX/FORMDROPDOWN field instruction), which ARE a contentControl analogue -- ooxml.js maps docx's own legacy w:ffData twin onto exactly that kind. They are named in this package's README gap table rather than mapped here, because the mapping needs the field machinery to hand the form field its instruction and cached result, which is its own change.
+
+import type {
+  AnchorDescriptor,
+  ConstructDescriptor,
+  ProvenanceChange,
+  ProvenanceDescriptor,
+  RunConstructExtent,
+} from "document-schema.js";
+
+// The residue channel's own format name for everything this package quarantines. `xml` names the field, not the payload's syntax -- an rtf residue value carries RTF's own brace-and-control-word text (document-schema.js's src/source.ts states this).
+export const RTF_SOURCE_FORMAT = "rtf" as const;
+
+// A bookmark's optional table-column range: "\bkmkcolfN is used to denote the first column of a table covered by a bookmark ... \bkmkcollN is used to denote the last column." No ContentDocument field carries it -- an AnchorDescriptor names an extent, not a rectangle of a table -- so it rides the descriptor's own residue verbatim, which is exactly what makes a same-format writer able to restore it.
+export interface BookmarkColumnRange {
+  readonly first: number | undefined;
+  readonly last: number | undefined;
+}
+
+export function bookmarkAnchorDescriptor(
+  name: string,
+  columns: BookmarkColumnRange | undefined,
+): AnchorDescriptor {
+  const residue = bookmarkColumnResidue(columns);
+  return {
+    kind: "anchor",
+    anchorType: "bookmark",
+    name,
+    ...(residue === undefined
+      ? {}
+      : { source: { format: RTF_SOURCE_FORMAT, xml: residue } }),
+  };
+}
+
+function bookmarkColumnResidue(
+  columns: BookmarkColumnRange | undefined,
+): string | undefined {
+  if (columns === undefined) {
+    return undefined;
+  }
+  const parts = [
+    columns.first === undefined ? "" : `\\bkmkcolf${String(columns.first)}`,
+    columns.last === undefined ? "" : `\\bkmkcoll${String(columns.last)}`,
+  ].join("");
+  return parts.length === 0 ? undefined : parts;
+}
+
+// The inverse: the control words a same-format writer re-emits inside its own {\*\bkmkstart ...}. Re-serialising opaque text is not interpreting it, which is precisely the re-emission the quarantine contract permits -- and the `format` check is what makes it decidable, so another format's residue is left alone rather than pasted into RTF.
+export function bookmarkResidueControlWords(
+  descriptor: AnchorDescriptor,
+): string {
+  const source = descriptor.source;
+  return source?.format === RTF_SOURCE_FORMAT ? source.xml : "";
+}
+
+export function isBookmarkAnchor(
+  descriptor: ConstructDescriptor,
+): descriptor is AnchorDescriptor {
+  return descriptor.kind === "anchor" && descriptor.anchorType === "bookmark";
+}
+
+// One run's worth of <chrev> state. Every field is a character property, scoped to the group exactly as \b and \i are, so it rides this package's own CharacterState and splits runs at its own boundaries.
+export interface RevisionState {
+  // "\revised Text has been added since revision marking was turned on."
+  readonly revised: boolean;
+  readonly revisedAuthor: number | undefined; // \revauthN
+  readonly revisedDateTime: number | undefined; // \revdttmN
+  // "\deleted Text has been deleted since revision marking was turned on."
+  readonly deleted: boolean;
+  readonly deletedAuthor: number | undefined; // \revauthdelN
+  readonly deletedDateTime: number | undefined; // \revdttmdelN
+  // "\mvf Text has been moved to another location (is part of a 'Move From')" / "\mvt ... (is part of a 'Move To')".
+  readonly moved: "moveFrom" | "moveTo" | undefined;
+  readonly movedAuthor: number | undefined; // \mvauthN
+  readonly movedDateTime: number | undefined; // \mvdateN
+  // \crauthN is the formatting-revision author: "Note This keyword is used to indicate formatting revisions, such as bold, italic." Its presence is what says the run carries one -- there is no \crrevised flag beside it.
+  readonly formatAuthor: number | undefined;
+  readonly formatDateTime: number | undefined; // \crdateN
+}
+
+export const NO_REVISION: RevisionState = {
+  revised: false,
+  revisedAuthor: undefined,
+  revisedDateTime: undefined,
+  deleted: false,
+  deletedAuthor: undefined,
+  deletedDateTime: undefined,
+  moved: undefined,
+  movedAuthor: undefined,
+  movedDateTime: undefined,
+  formatAuthor: undefined,
+  formatDateTime: undefined,
+};
+
+export function hasRevision(state: RevisionState): boolean {
+  return (
+    state.revised ||
+    state.deleted ||
+    state.moved !== undefined ||
+    state.formatAuthor !== undefined
+  );
+}
+
+// The provenance descriptors one run's revision state carries -- several, because a run can be inserted AND format-changed at once, and run extents are ranges rather than brackets so two of them may overlap freely.
+export function provenanceDescriptors(
+  state: RevisionState,
+  authors: readonly string[],
+): ProvenanceDescriptor[] {
+  const out: ProvenanceDescriptor[] = [];
+  if (state.revised) {
+    out.push(
+      provenanceDescriptor(
+        "insertion",
+        state.revisedAuthor,
+        state.revisedDateTime,
+        authors,
+      ),
+    );
+  }
+  if (state.deleted) {
+    out.push(
+      provenanceDescriptor(
+        "deletion",
+        state.deletedAuthor,
+        state.deletedDateTime,
+        authors,
+      ),
+    );
+  }
+  if (state.moved !== undefined) {
+    out.push(
+      provenanceDescriptor(
+        state.moved,
+        state.movedAuthor,
+        state.movedDateTime,
+        authors,
+      ),
+    );
+  }
+  if (state.formatAuthor !== undefined) {
+    out.push(
+      provenanceDescriptor(
+        "formatChange",
+        state.formatAuthor,
+        state.formatDateTime,
+        authors,
+      ),
+    );
+  }
+  return out;
+}
+
+function provenanceDescriptor(
+  change: ProvenanceChange,
+  authorIndex: number | undefined,
+  dateTime: number | undefined,
+  authors: readonly string[],
+): ProvenanceDescriptor {
+  const author = authorIndex === undefined ? undefined : authors[authorIndex];
+  const dateIso = dateTime === undefined ? undefined : isoFromDttm(dateTime);
+  return {
+    kind: "provenance",
+    change,
+    // An index naming no revision-table entry produces a descriptor with no author at all rather than a fabricated name: ProvenanceDescriptor.author is optional precisely so an unresolvable one can be absent, and inventing "Unknown" would be indistinguishable from a table that really says "Unknown".
+    ...(author === undefined || author.length === 0 ? {} : { author }),
+    ...(dateIso === undefined ? {} : { dateIso }),
+  };
+}
+
+// The DTTM bit field every revision timestamp uses, stated by RTF 1.9.1's own table under "Revision Marks":
+//
+// bits 0-5   Minute        0-59 bits 6-10  Hour          0-23 bits 11-15 Day of month  1-31 bits 16-19 Month         1-12 bits 20-28 Year          = Year - 1900 bits 29-31 Day of week   0 (Sun) - 6 (Sat)
+//
+// The weekday is derivable from the date and is not read: a DTTM whose weekday disagrees with its own date is a producer bug, and recomputing it is strictly more reliable than trusting it. The result is a bare local wall-clock ISO string with no zone designator, because DTTM carries no zone -- stamping one would assert a fact the format never stated.
+const DTTM_MINUTE_MASK = 0x3f;
+const DTTM_HOUR_SHIFT = 6;
+const DTTM_HOUR_MASK = 0x1f;
+const DTTM_DAY_SHIFT = 11;
+const DTTM_DAY_MASK = 0x1f;
+const DTTM_MONTH_SHIFT = 16;
+const DTTM_MONTH_MASK = 0xf;
+const DTTM_YEAR_SHIFT = 20;
+const DTTM_YEAR_MASK = 0x1ff;
+const DTTM_YEAR_EPOCH = 1900;
+
+export function isoFromDttm(value: number): string | undefined {
+  // A DTTM is emitted "as a long integer", so a value with its top bit set arrives here signed; the unsigned right shift restores the 32-bit pattern the bit field is defined over.
+  const bits = value >>> 0;
+  const minute = bits & DTTM_MINUTE_MASK;
+  const hour = (bits >>> DTTM_HOUR_SHIFT) & DTTM_HOUR_MASK;
+  const day = (bits >>> DTTM_DAY_SHIFT) & DTTM_DAY_MASK;
+  const month = (bits >>> DTTM_MONTH_SHIFT) & DTTM_MONTH_MASK;
+  const year = ((bits >>> DTTM_YEAR_SHIFT) & DTTM_YEAR_MASK) + DTTM_YEAR_EPOCH;
+  // A zero DTTM -- day 0, month 0 -- is what a producer writes for "no time recorded", and it is not a date. Rejecting it here keeps a fabricated 1900-00-00 out of dateIso rather than letting the field claim a timestamp the document never carried.
+  if (day === 0 || month === 0 || month > 12 || day > 31) {
+    return undefined;
+  }
+  return (
+    `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}` +
+    `T${pad(hour, 2)}:${pad(minute, 2)}:00`
+  );
+}
+
+// The inverse, for the writer: an ISO date back into the packed field. A dateIso this package cannot parse produces no \revdttmN at all rather than a zero one, since a zero DTTM is itself a claim ("no time recorded") the source may not have made.
+const ISO_DATE_TIME =
+  /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?)?/;
+
+export function dttmFromIso(dateIso: string): number | undefined {
+  const match = ISO_DATE_TIME.exec(dateIso);
+  if (match === null) {
+    return undefined;
+  }
+  const year = Number(match[1]) - DTTM_YEAR_EPOCH;
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = match[4] === undefined ? 0 : Number(match[4]);
+  const minute = match[5] === undefined ? 0 : Number(match[5]);
+  if (year < 0 || year > DTTM_YEAR_MASK) {
+    return undefined;
+  }
+  // Emitted as a signed long, matching how the parameter is read back: a value above 2^31-1 would not survive the tokenizer's own 10-digit signed parameter.
+  const bits =
+    (minute & DTTM_MINUTE_MASK) |
+    ((hour & DTTM_HOUR_MASK) << DTTM_HOUR_SHIFT) |
+    ((day & DTTM_DAY_MASK) << DTTM_DAY_SHIFT) |
+    ((month & DTTM_MONTH_MASK) << DTTM_MONTH_SHIFT) |
+    ((year & DTTM_YEAR_MASK) << DTTM_YEAR_SHIFT);
+  return bits | 0;
+}
+
+function pad(value: number, width: number): string {
+  return String(value).padStart(width, "0");
+}
+
+// Coalesces a per-run descriptor list into the fewest run extents that say the same thing: adjacent runs carrying an equal descriptor become one extent rather than one per run. Equality is structural over the descriptor's own serialisation, which is exact here because a descriptor is a plain data object built by this module with its keys always in the same order.
+export function coalesceRunConstructs(
+  perRun: readonly (readonly ConstructDescriptor[])[],
+): RunConstructExtent[] {
+  const open = new Map<
+    string,
+    { descriptor: ConstructDescriptor; start: number }
+  >();
+  const out: RunConstructExtent[] = [];
+  const close = (key: string, end: number): void => {
+    const entry = open.get(key);
+    if (entry === undefined) return;
+    out.push({
+      descriptor: entry.descriptor,
+      startRun: entry.start,
+      endRun: end,
+    });
+    open.delete(key);
+  };
+  for (const [index, descriptors] of perRun.entries()) {
+    const present = new Map(
+      descriptors.map((descriptor) => [JSON.stringify(descriptor), descriptor]),
+    );
+    for (const key of [...open.keys()]) {
+      if (!present.has(key)) {
+        close(key, index);
+      }
+    }
+    for (const [key, descriptor] of present) {
+      if (!open.has(key)) {
+        open.set(key, { descriptor, start: index });
+      }
+    }
+  }
+  for (const key of [...open.keys()]) {
+    close(key, perRun.length);
+  }
+  // Document order by where each extent starts, so a paragraph's constructs array reads the way the source did.
+  return out.sort(
+    (left, right) =>
+      left.startRun - right.startRun || left.endRun - right.endRun,
+  );
+}

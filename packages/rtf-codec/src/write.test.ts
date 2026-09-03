@@ -260,13 +260,14 @@ describe("body constructs", () => {
     expect(out).toContain("89504e470d0a1a0a");
   });
 
-  it("reports rather than silently dropping a construct boundary marker", () => {
+  it("reports rather than silently dropping a construct boundary marker RTF cannot spell", () => {
     const codes: string[] = [];
     writeRtfContent(
+      // A footnote anchor rather than a bookmark: a bookmark now has a real {\*\bkmkstart ...} spelling, while a footnote's body would need the note destination this package does not place.
       wordprocessing([
         {
           kind: "constructStart",
-          descriptor: { kind: "anchor", anchorType: "bookmark", name: "b" },
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
         },
         { kind: "paragraph", runs: [{ text: "x" }] },
         { kind: "constructEnd" },
@@ -427,6 +428,164 @@ describe("round trip through this package's own reader", () => {
       back.kind === "wordprocessing" ? back.sections[0] : undefined;
     expect(section?.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
     expect(section?.margins).toEqual(LETTER_SECTION.margins);
+  });
+
+  it("writes a run-level bookmark anchor as the {\\*\\bkmkstart}/{\\*\\bkmkend} pair bracketing its runs", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "before " }, { text: "marked" }, { text: " after" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "anchor",
+                anchorType: "bookmark",
+                name: "paradigm",
+              },
+              startRun: 1,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\bkmkstart paradigm}");
+    expect(out).toContain("{\\*\\bkmkend paradigm}");
+    expect(out.indexOf("{\\*\\bkmkstart paradigm}")).toBeLessThan(
+      out.indexOf("marked"),
+    );
+    expect(out.indexOf("marked")).toBeLessThan(
+      out.indexOf("{\\*\\bkmkend paradigm}"),
+    );
+  });
+
+  it("re-emits an rtf residue value's own control words verbatim, which is what the quarantine contract permits", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "anchor",
+                anchorType: "bookmark",
+                name: "Table1",
+                source: { format: "rtf", xml: "\\bkmkcolf2\\bkmkcoll5" },
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\bkmkstart\\bkmkcolf2\\bkmkcoll5 Table1}");
+  });
+
+  it("leaves another format's residue alone rather than pasting it into RTF", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "anchor",
+                anchorType: "bookmark",
+                name: "b",
+                source: { format: "docx", xml: "<w:bookmarkStart/>" },
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\bkmkstart b}");
+    expect(out).not.toContain("w:bookmarkStart");
+  });
+
+  it("round-trips a block-scoped bookmark through its constructStart/constructEnd markers", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "bookmark", name: "span" },
+        },
+        { kind: "paragraph", runs: [{ text: "One" }] },
+        { kind: "paragraph", runs: [{ text: "Two" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+    const blocks =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks : [];
+    expect(blocks?.map((block) => block.kind)).toEqual([
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
+  });
+
+  it("round-trips a run-level bookmark back onto the same runs", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }, { text: "c" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "anchor",
+                anchorType: "bookmark",
+                name: "mid",
+              },
+              startRun: 1,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "bookmark",
+      name: "mid",
+    });
+    expect(
+      paragraph?.runs
+        .slice(extent?.startRun ?? 0, extent?.endRun ?? 0)
+        .map((run) => run.text)
+        .join(""),
+    ).toBe("b");
+  });
+
+  it("reports a construct kind RTF has no spelling for rather than writing a bookmark for it", () => {
+    const codes: string[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "contentControl",
+            controlType: "richText",
+            tag: "T",
+          },
+        },
+        { kind: "paragraph", runs: [{ text: "x" }] },
+        { kind: "constructEnd" },
+      ]),
+      { sink: (diagnostic) => codes.push(diagnostic.code) },
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
   });
 
   it("round-trips several sections, each keeping its own geometry and break kind", () => {

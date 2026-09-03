@@ -672,6 +672,95 @@ describe("sections", () => {
   });
 });
 
+// RTF 1.9.1, "Bookmarks": <bookstart> is `'{\*' \bkmkstart (\bkmkcolfN? & \bkmkcollN?) #PCDATA '}'` and <bookend> is `'{\*' \bkmkend #PCDATA '}'`, so the bookmark's name is the destination's own text and "the bookmark start and end are matched with the bookmark tag".
+describe("bookmarks", () => {
+  it("reads a mid-paragraph bookmark as a run-level anchor extent over the runs it brackets", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard before {\\*\\bkmkstart paradigm}marked{\\*\\bkmkend paradigm} after\\par}`,
+    )[0];
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "bookmark",
+      name: "paradigm",
+    });
+    expect(
+      paragraph?.runs
+        .slice(extent?.startRun ?? 0, extent?.endRun ?? 0)
+        .map((run) => run.text)
+        .join(""),
+    ).toBe("marked");
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe(
+      "before marked after",
+    );
+  });
+
+  it("reads a bookmark with no text between its halves as a point anchor", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard here{\\*\\bkmkstart spot}{\\*\\bkmkend spot} and on\\par}`,
+    )[0];
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.startRun).toBe(extent?.endRun);
+    expect(extent?.descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "bookmark",
+      name: "spot",
+    });
+  });
+
+  it("reads a bookmark spanning several paragraphs as a constructStart/constructEnd block pair", () => {
+    const blocks = blocksOf(
+      `${HEADER}\\pard{\\*\\bkmkstart span}One\\par\\pard Two{\\*\\bkmkend span}\\par}`,
+    );
+    expect(blocks.map((block) => block.kind)).toEqual([
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
+    const start = blocks[0];
+    expect(
+      start?.kind === "constructStart" ? start.descriptor : undefined,
+    ).toEqual({ kind: "anchor", anchorType: "bookmark", name: "span" });
+  });
+
+  it("quarantines \\bkmkcolfN/\\bkmkcollN as rtf residue, which no ContentDocument field carries", () => {
+    // The spec's own example: "{\*\bkmkstart\bkmkcolf2\bkmkcoll5 Table1} places the bookmark 'Table1' in columns 2 through 5 of a table."
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard{\\*\\bkmkstart\\bkmkcolf2\\bkmkcoll5 Table1}x{\\*\\bkmkend Table1}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor.source).toEqual({
+      format: "rtf",
+      xml: "\\bkmkcolf2\\bkmkcoll5",
+    });
+  });
+
+  it("pairs the halves by name however they are ordered, and reports one that never closes", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard x{\\*\\bkmkstart never}y\\par}`),
+    );
+    const paragraph =
+      document.kind === "wordprocessing"
+        ? document.sections[0]?.blocks[0]
+        : undefined;
+    expect(
+      paragraph?.kind === "paragraph" ? paragraph.constructs : undefined,
+    ).toBeUndefined();
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+    );
+  });
+
+  it("produces a document its own schema still accepts, markers and extents included", () => {
+    const { document } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\*\\bkmkstart a}One\\par\\pard Two{\\*\\bkmkend a}\\par}`,
+      ),
+    );
+    expect(ContentDocumentSchema.safeParse(document).success).toBe(true);
+  });
+});
+
 describe("the tree-form entry point", () => {
   it("assembles the same content into a DocumentTree whose root is a wordprocessing package", () => {
     const { documentPackage } = readRtf(
