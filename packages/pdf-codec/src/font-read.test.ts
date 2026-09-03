@@ -13,6 +13,13 @@ import {
   pdfRef,
   pdfStream,
 } from "./objects";
+import { cffFontWithBuiltinEncoding } from "./test-support/cff";
+import {
+  buildCmapTable,
+  buildPostV2Table,
+  buildPostV3Table,
+  buildSfnt,
+} from "./test-support/sfnt";
 
 function collectDiagnostics(): {
   sink: PdfDiagnosticSink;
@@ -351,6 +358,308 @@ describe("createFontResolver: simple fonts with a Symbol/ZapfDingbats built-in e
   });
 });
 
+// A symbol-encoded font subset -- a handful of glyphs embedded specifically to draw Ω, µ, ± or ≤ at whatever codes the producing tool happened to pick -- carries its own built-in encoding inside the embedded font program and nowhere else. Reading it is the only way to know what code 0x57 actually draws in a font that is neither the standard-14 Symbol face nor covered by /ToUnicode or /Differences; guessing WinAnsi there yields "W", a plausible-looking wrong letter (ExaDev/documents.js#834).
+describe("createFontResolver: a font's own built-in encoding, read from its embedded program", () => {
+  // Written as an escape rather than the character itself: U+2126 OHM SIGN and U+03A9 GREEK CAPITAL LETTER OMEGA are visually identical, and the Adobe Glyph List deliberately maps the glyph name "Omega" to the former.
+  const OHM_SIGN = "Ω";
+
+  // A TrueType program whose (3,0) Microsoft Symbol cmap subtable maps a character code (offset into the 0xF000 private-use range, as ISO 32000-1 9.6.6.4 describes) onto a glyph, with that glyph named by the font's own 'post' table.
+  function symbolTrueTypeProgram(options: {
+    readonly symbolCmapFormat?: 0 | 4 | 6;
+    readonly postNames?: readonly string[];
+    readonly unicodeCmap?: ReadonlyMap<number, number>;
+  }): Uint8Array<ArrayBuffer> {
+    const subtables = [
+      {
+        platformId: 3,
+        encodingId: 0,
+        format: options.symbolCmapFormat ?? 4,
+        mappings: new Map([[0xf057, 3]]),
+      } as const,
+    ];
+    return buildSfnt(
+      new Map([
+        [
+          "cmap",
+          buildCmapTable(
+            options.unicodeCmap === undefined
+              ? subtables
+              : [
+                  ...subtables,
+                  {
+                    platformId: 3,
+                    encodingId: 1,
+                    format: 4,
+                    mappings: options.unicodeCmap,
+                  } as const,
+                ],
+          ),
+        ],
+        [
+          "post",
+          options.postNames === undefined
+            ? buildPostV3Table()
+            : buildPostV2Table(options.postNames),
+        ],
+      ]),
+    );
+  }
+
+  function fontWithProgram(
+    programKey: string,
+    program: Uint8Array<ArrayBuffer>,
+    extraFontEntries: Record<string, PdfObject> = {},
+    descriptorEntries: Record<string, PdfObject> = {},
+  ): {
+    readonly resources: PdfDict;
+    readonly objects: Map<number, PdfObject>;
+  } {
+    const objects = new Map<number, PdfObject>([
+      [7, pdfStream(pdfDict({}), program)],
+    ]);
+    const descriptor = pdfDict({
+      ...descriptorEntries,
+      [programKey]: pdfRef(7, 0),
+    });
+    const fontDict = pdfDict({
+      Subtype: pdfName("TrueType"),
+      BaseFont: pdfName("CIDFont+F3"),
+      FontDescriptor: descriptor,
+      ...extraFontEntries,
+    });
+    return { resources: pdfDict({ Font: pdfDict({ F1: fontDict }) }), objects };
+  }
+
+  it("maps a code through an embedded TrueType program's own (3,0) symbol cmap and 'post' glyph names", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const { resources, objects } = fontWithProgram(
+      "FontFile2",
+      symbolTrueTypeProgram({ postNames: ["", "", "", "Omega"] }),
+      {},
+      { Flags: pdfNum(4) }, // Symbolic
+    );
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font?.decodeToUnicode(new Uint8Array([0x57]))).toBe(OHM_SIGN);
+    expect(diagnostics.some((d) => d.code === "text/unmapped-encoding")).toBe(
+      false,
+    );
+  });
+
+  it("reads the built-in encoding even when the font descriptor never sets the Symbolic flag", () => {
+    const { sink } = collectDiagnostics();
+    // The reported case: a subset font drawing nothing but ohm signs, whose /Flags omits the Symbolic bit. Without its own program's encoding this fell through to WinAnsiEncoding and decoded as "W".
+    const { resources, objects } = fontWithProgram(
+      "FontFile2",
+      symbolTrueTypeProgram({ postNames: ["", "", "", "Omega"] }),
+    );
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    expect(
+      resolve("F1", resources)?.decodeToUnicode(new Uint8Array([0x57])),
+    ).toBe(OHM_SIGN);
+  });
+
+  it("reads a (3,0) subtable in the byte-encoding format, where codes are unshifted", () => {
+    const { sink } = collectDiagnostics();
+    const program = buildSfnt(
+      new Map([
+        [
+          "cmap",
+          buildCmapTable([
+            {
+              platformId: 3,
+              encodingId: 0,
+              format: 0,
+              mappings: new Map([[0x57, 3]]),
+            },
+          ]),
+        ],
+        ["post", buildPostV2Table(["", "", "", "Omega"])],
+      ]),
+    );
+    const { resources, objects } = fontWithProgram("FontFile2", program);
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    expect(
+      resolve("F1", resources)?.decodeToUnicode(new Uint8Array([0x57])),
+    ).toBe(OHM_SIGN);
+  });
+
+  it("falls back to the program's own Unicode cmap for a glyph the 'post' table does not name", () => {
+    const { sink } = collectDiagnostics();
+    // A subsetter that strips glyph names (version 3.0 'post') usually leaves the Unicode subtable in place, so the glyph the symbol subtable selects can still be identified by reversing it.
+    const { resources, objects } = fontWithProgram(
+      "FontFile2",
+      symbolTrueTypeProgram({ unicodeCmap: new Map([[0x2126, 3]]) }),
+    );
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    expect(
+      resolve("F1", resources)?.decodeToUnicode(new Uint8Array([0x57])),
+    ).toBe(OHM_SIGN);
+  });
+
+  it("maps a code through an embedded CFF program's own Encoding and charset", () => {
+    const { sink } = collectDiagnostics();
+    const program = cffFontWithBuiltinEncoding({
+      name: "CIDFont+F3",
+      glyphNames: ["Omega"],
+      encoding: new Map([[0x57, 1]]),
+    });
+    const { resources, objects } = fontWithProgram("FontFile3", program);
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    expect(
+      resolve("F1", resources)?.decodeToUnicode(new Uint8Array([0x57])),
+    ).toBe(OHM_SIGN);
+  });
+
+  it("maps a code through an embedded Type 1 program's own cleartext /Encoding array", () => {
+    const { sink } = collectDiagnostics();
+    const program = textBytes(
+      [
+        "%!PS-AdobeFont-1.0: SymbolSubset 001.000",
+        "/FontName /CIDFont+F3 def",
+        "/Encoding 256 array",
+        "0 1 255 {1 index exch /.notdef put} for",
+        "dup 87 /Omega put",
+        "readonly def",
+        "currentdict end",
+        "currentfile eexec",
+        "",
+      ].join("\n"),
+    );
+    const { resources, objects } = fontWithProgram("FontFile", program);
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    expect(
+      resolve("F1", resources)?.decodeToUnicode(new Uint8Array([0x57])),
+    ).toBe(OHM_SIGN);
+  });
+
+  it("still prefers an explicitly named base encoding over the embedded program's own", () => {
+    const { sink } = collectDiagnostics();
+    // A non-symbolic font that names its base encoding has said what its codes mean; the program's built-in encoding is the fallback for a font that does not (ISO 32000-1 9.6.6.2), not an override of one that does.
+    const { resources, objects } = fontWithProgram(
+      "FontFile2",
+      symbolTrueTypeProgram({ postNames: ["", "", "", "Omega"] }),
+      { Encoding: pdfName("WinAnsiEncoding") },
+    );
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    expect(
+      resolve("F1", resources)?.decodeToUnicode(new Uint8Array([0x57])),
+    ).toBe("W");
+  });
+
+  it("still prefers /Differences over the embedded program's own encoding", () => {
+    const { sink } = collectDiagnostics();
+    const { resources, objects } = fontWithProgram(
+      "FontFile2",
+      symbolTrueTypeProgram({ postNames: ["", "", "", "Omega"] }),
+      {
+        Encoding: pdfDict({
+          Differences: pdfArray([pdfNum(0x57), pdfName("mu")]),
+        }),
+      },
+    );
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    expect(
+      resolve("F1", resources)?.decodeToUnicode(new Uint8Array([0x57])),
+    ).toBe("µ");
+  });
+
+  it("reports an unmapped code rather than guessing when the embedded program yields no encoding at all", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const { resources, objects } = fontWithProgram(
+      "FontFile2",
+      buildSfnt(new Map([["post", buildPostV3Table()]])), // no 'cmap' at all: nothing to recover an encoding from
+      {},
+      { Flags: pdfNum(4) },
+    );
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    expect(
+      resolve("F1", resources)?.decodeToUnicode(new Uint8Array([0x57])),
+    ).toBe("�");
+    expect(diagnostics.some((d) => d.code === "text/unmapped-encoding")).toBe(
+      true,
+    );
+  });
+});
+
+describe("createFontResolver: named base encodings", () => {
+  function fontWithBaseEncoding(name: string): PdfDict {
+    return pdfDict({
+      Font: pdfDict({
+        F1: pdfDict({
+          Subtype: pdfName("Type1"),
+          BaseFont: pdfName("Helvetica"),
+          Encoding: pdfName(name),
+        }),
+      }),
+    });
+  }
+
+  it("decodes /MacRomanEncoding through its own table rather than approximating it as WinAnsi", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", fontWithBaseEncoding("MacRomanEncoding"));
+    // Code 0xBD is "Omega" in MacRomanEncoding and "onehalf" in WinAnsi -- the two disagree across most of the upper half. The expected character is U+2126 OHM SIGN, the Adobe Glyph List's own mapping for that name, not the visually identical U+03A9.
+    expect(font?.decodeToUnicode(new Uint8Array([0xbd]))).toBe("Ω");
+    expect(
+      diagnostics.some((d) => d.code === "char/encoding-approximated"),
+    ).toBe(false);
+  });
+
+  it("decodes /StandardEncoding through its own table", () => {
+    const { sink } = collectDiagnostics();
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", fontWithBaseEncoding("StandardEncoding"));
+    // Code 0xA9 is "quotesingle" in StandardEncoding, where WinAnsi has the copyright sign.
+    expect(font?.decodeToUnicode(new Uint8Array([0xa9]))).toBe("'");
+  });
+
+  it("still reports an approximation for a base encoding this codec has no table for", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    resolve("F1", fontWithBaseEncoding("MacExpertEncoding"));
+    expect(
+      diagnostics.some((d) => d.code === "char/encoding-approximated"),
+    ).toBe(true);
+  });
+});
+
 describe("createFontResolver: composite (Type0) fonts", () => {
   it("reads CID widths from both array and range forms of /W, with /DW as the default", () => {
     const { sink } = collectDiagnostics();
@@ -429,6 +738,49 @@ describe("createFontResolver: composite (Type0) fonts", () => {
     expect(font?.decodeToUnicode(new Uint8Array([0x00, 0x03]))).toBe("�");
     expect(diagnostics.some((d) => d.code === "text/unmapped-encoding")).toBe(
       true,
+    );
+  });
+
+  it("identifies a CID through the embedded program's own Unicode cmap when /ToUnicode is absent", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    // Identity-H with the default /CIDToGIDMap makes a CID the embedded program's own glyph ID, so the program's Unicode cmap -- read backwards -- says what that glyph is, without guessing anything.
+    const program = buildSfnt(
+      new Map([
+        [
+          "cmap",
+          buildCmapTable([
+            {
+              platformId: 3,
+              encodingId: 1,
+              format: 4,
+              mappings: new Map([[0x2126, 3]]),
+            },
+          ]),
+        ],
+      ]),
+    );
+    const objects = new Map<number, PdfObject>([
+      [7, pdfStream(pdfDict({}), program)],
+    ]);
+    const descendant = pdfDict({
+      Subtype: pdfName("CIDFontType2"),
+      FontDescriptor: pdfDict({ FontFile2: pdfRef(7, 0) }),
+    });
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type0"),
+      BaseFont: pdfName("CIDFont+F3"),
+      Encoding: pdfName("Identity-H"),
+      DescendantFonts: pdfArray([descendant]),
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font?.decodeToUnicode(new Uint8Array([0x00, 0x03]))).toBe("Ω");
+    expect(diagnostics.some((d) => d.code === "text/unmapped-encoding")).toBe(
+      false,
     );
   });
 });
