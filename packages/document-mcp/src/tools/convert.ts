@@ -106,7 +106,7 @@ export function registerConvertTools(server: McpServer): void {
     {
       title: "Convert document",
       description:
-        "Converts a document from one supported format to another via documents.js's DocumentConverter port -- docx, pptx, xlsx, odt, odp, ods, odg, odf, markdown, and pdf. Not every (source, targetFormat) pair is supported directly (odf, for instance, only ever converts to pdf); call list_document_conversions first to see which pairs actually are.",
+        "Converts a document from one supported format to another via documents.js's DocumentConverter port -- docx, pptx, xlsx, odt, odp, ods, odg, odf, markdown, rtf, csv, svg, and pdf. Not every (source, targetFormat) pair is supported directly (odf, for instance, only ever converts to pdf); call list_document_conversions first to see which pairs actually are.",
       inputSchema: ConvertDocumentInputSchema,
       outputSchema: ConvertDocumentOutputSchema,
     },
