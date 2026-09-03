@@ -496,12 +496,37 @@ describe("fields and destinations", () => {
     ).toBe(true);
   });
 
-  it("drops a footnote's body, which the flat ContentDocument has no definitions table to hold", () => {
-    const runs =
-      paragraphsOf(
-        `${HEADER}\\pard Body{\\super\\chftn}{\\footnote\\pard\\plain\\chftn The note.}.\\par}`,
-      )[0]?.runs ?? [];
+  it("drops a footnote's body, which the flat ContentDocument has no definitions table to hold, and says so", () => {
+    const source = `${HEADER}\\pard Body{\\super\\chftn}{\\footnote\\pard\\plain\\chftn The note.}.\\par}`;
+    const runs = paragraphsOf(source)[0]?.runs ?? [];
     expect(runs.map((run) => run.text).join("")).toBe("Body.");
+    expect(
+      readRtfContent(bytes(source)).diagnostics.map(
+        (diagnostic) => diagnostic.code,
+      ),
+    ).toContain(RtfDiagnosticCodes.CONTENT_DESTINATION_SKIPPED);
+  });
+
+  it("reports a discarded header or footer, which has no ContentSection field to land in", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}{\\header\\pard Page header\\par}\\pard Body.\\par}`),
+    );
+    expect(
+      diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.CONTENT_DESTINATION_SKIPPED,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("does not report a header table as a discarded content destination", () => {
+    const { diagnostics } = readRtfContent(bytes(`${HEADER}\\pard x\\par}`));
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.CONTENT_DESTINATION_SKIPPED,
+      ),
+    ).toBe(false);
   });
 
   it("reads on past an unbalanced closing brace and reports it", () => {

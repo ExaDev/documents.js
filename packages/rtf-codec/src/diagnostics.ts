@@ -25,14 +25,12 @@ export const NOOP_RTF_DIAGNOSTIC_SINK: RtfDiagnosticSink = () => {
 export const RtfDiagnosticCodes = {
   // Read side, recover tier: the input is malformed in a way the spec's own robustness advice ("RTF readers should be robust enough to handle some minor variations") says to survive rather than reject.
   UNBALANCED_GROUP: "rtf/unbalanced-group",
-  TRAILING_CONTENT: "rtf/trailing-content",
   // Read side, degrade tier: a construct read correctly at the token level whose meaning this package's ContentDocument mapping does not carry.
   UNKNOWN_DESTINATION_SKIPPED: "rtf/unknown-destination-skipped",
+  CONTENT_DESTINATION_SKIPPED: "rtf/content-destination-skipped",
   UNSUPPORTED_CODEPAGE: "rtf/unsupported-codepage",
   UNSUPPORTED_PICTURE_FORMAT: "rtf/unsupported-picture-format",
   PICTURE_SIZE_UNSTATED: "rtf/picture-size-unstated",
-  INVENTED_PAGE_GEOMETRY: "rtf/invented-page-geometry",
-  FIELD_RESULT_ONLY: "rtf/field-result-only",
   TABLE_ROW_WITHOUT_DEFINITION: "rtf/table-row-without-definition",
   TABLE_COLUMN_WIDTH_INVALID: "rtf/table-column-width-invalid",
   NESTED_TABLE_FLATTENED: "rtf/nested-table-flattened",
