@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  bTetTextStatePersistencePdf,
   brokenStartxrefPdf,
   formXObjectPdf,
   inheritedPageAttributesPdf,
@@ -96,6 +97,15 @@ describe("readPdf: basic structure", () => {
     const doc = readPdf(minimalClassicXrefPdf());
     const [item] = doc.pages[0]!.items;
     expect(item).toMatchObject({ color: { r: 0, g: 0, b: 0 } });
+  });
+
+  // ExaDev/documents.js#851: a later BT/ET block that relies on an earlier block's Tf (rather than repeating it) used to be silently dropped entirely -- readPdf's own output carried only the first line, not just a garbled or empty second one. Live-verified against the real NGED EE SPEC 123 PDF that surfaced this (novus-power/hive#1397): before this fix, page 4 of that document produced 11 items (6 with real text); after it, 105, matching its own content stream's real BT/ET block count one-for-one.
+  it("extracts text from a later BT/ET block that has no Tf of its own, relying on an earlier block's font", () => {
+    const doc = readPdf(bTetTextStatePersistencePdf());
+    expect(textLayoutItems(doc.pages[0]!.items)).toMatchObject([
+      { text: "First line" },
+      { text: "Second line" },
+    ]);
   });
 });
 

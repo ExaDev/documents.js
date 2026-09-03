@@ -111,6 +111,17 @@ export function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
+// A real-world-shaped content stream: TWO separate BT/ET blocks, the second with no Tf of its own, relying on the font the first block already selected -- exactly the pattern a real Word-exported PDF produces (each visually distinct line of a paragraph gets its own BT/ET, but only the FIRST one in a run repeats /F1 Tf) and #851's own regression case. `readPdf` used to reset the whole text state (including the selected font) at every BT, silently dropping every text-showing operator in a later BT/ET block that didn't repeat Tf.
+export function bTetTextStatePersistencePdf(): Uint8Array<ArrayBuffer> {
+  const content =
+    "BT /F1 12 Tf 10 80 Td (First line) Tj ET BT 10 60 Td (Second line) Tj ET";
+  const b = new FixtureBuilder().header("1.4");
+  catalogPagesPageFontObjects(b, 5);
+  b.stream(5, "<< >>", enc(content));
+  b.classicXrefAndTrailer(5, "/Root 1 0 R");
+  return b.bytes();
+}
+
 // A structurally valid document with an empty page tree: the page loop over doc.pages() has zero iterations, so a signal whose only check lives inside that loop would never be consulted -- the abort-contract gap this fixture exists to hold closed.
 export function pagelessPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");
