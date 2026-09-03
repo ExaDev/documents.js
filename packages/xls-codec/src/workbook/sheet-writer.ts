@@ -51,10 +51,8 @@ const ROW_FLAG_UNSYNCED_BIT = 6;
 const COLINFO_FLAG_HIDDEN = 0x0001;
 
 export interface SheetWriteContext {
-  /** The formatId ([MS-XLS] Format/XF's own ifmt) a cell's numberFormatCode (or, when absent, a representative default for its value kind) resolves to. */
-  formatIdForCell(cell: ContentSheetCell): number;
-  /** The XF index ([MS-XLS] 2.5.168 IXFCell) carrying the given formatId -- GENERAL_CELL_XF_INDEX for formatId 0, one of the workbook's other cell XFs otherwise. */
-  xfIndexForFormatId(formatId: number): number;
+  /** The XF index ([MS-XLS] 2.5.168 IXFCell) a cell's own (number format, decoration) combination resolves to -- GENERAL_CELL_XF_INDEX for a cell with General formatting and no background/borders, one of the workbook's other cell XFs otherwise. write.ts's own cell-format interning pass is what assigns and deduplicates these. */
+  xfIndexForCell(cell: ContentSheetCell): number;
   /** The shared string table index for a string cell's own text; every string a sheet writes must already be registered in the workbook-wide table before this is called. */
   sstIndexFor(text: string): number;
 }
@@ -319,8 +317,7 @@ export function buildWorksheetSubstream(
       writeRowRecord(rowIndex, cellsInRow, declaredRows.get(rowIndex)),
     );
     for (const cell of cellsInRow) {
-      const formatId = ctx.formatIdForCell(cell);
-      const xfIndex = ctx.xfIndexForFormatId(formatId);
+      const xfIndex = ctx.xfIndexForCell(cell);
       pieces.push(writeCellValueRecord(cell, xfIndex, ctx));
     }
   }
