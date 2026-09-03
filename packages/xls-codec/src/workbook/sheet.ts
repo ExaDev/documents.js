@@ -1,6 +1,7 @@
 import { BlockCursor } from "../biff/cursor";
 import { errorTextOf } from "../biff/errors";
 import {
+  RECORD_ARRAY,
   RECORD_BLANK,
   RECORD_BOOLERR,
   RECORD_COLINFO,
@@ -14,7 +15,9 @@ import {
   RECORD_NUMBER,
   RECORD_RK,
   RECORD_ROW,
+  RECORD_SHRFMLA,
   RECORD_STRING,
+  RECORD_TABLE,
 } from "../biff/record-types";
 import { BiffFormatError } from "../biff/records";
 import { decodeRkNumber } from "../biff/rk";
@@ -26,7 +29,10 @@ import { columnWidthToPoints, twipsToPoints } from "../units";
 //
 // Its record sequence is defined by that section's own ABNF, whose relevant productions are (from [MS-XLS] 2.1.7.20.6, Common Productions):
 //
-// CELLTABLE = 1*(1*Row *CELL 1*DBCell) *EntExU2 CELL      = FORMULA / Blank / MulBlank / RK / MulRk / BoolErr / Number / LabelSst FORMULA   = [Uncalced] Formula [Array / Table / ShrFmla / SUB] [String *Continue] COLUMNS   = DefColWidth *255ColInfo
+// * `CELLTABLE = 1*(1*Row *CELL 1*DBCell) *EntExU2`
+// * `CELL = FORMULA / Blank / MulBlank / RK / MulRk / BoolErr / Number / LabelSst`
+// * `FORMULA = [Uncalced] Formula [Array / Table / ShrFmla / SUB] [String *Continue]`
+// * `COLUMNS = DefColWidth *255ColInfo`
 //
 // This reader walks the records rather than parsing that grammar: a real file's ordering is reliable enough that a state machine over record types reads it correctly, and being tolerant of a producer that puts a record slightly out of the ABNF's order is worth more here than rejecting it.
 //
@@ -83,8 +89,6 @@ export interface RawSheet {
 
 /** Row record flag bits, in the 32-bit field following unused1 ([MS-XLS] 2.4.221). */
 const ROW_FLAG_HIDDEN = 0x20;
-/** fGhostDirty, which says whether ixfe_val is meaningful at all; when clear the field is explicitly undefined. */
-const ROW_FLAG_GHOST_DIRTY = 0x80;
 /** fUnsynced: the row height was set manually. When clear the height is the sheet default rather than a per-row declaration. */
 const ROW_FLAG_UNSYNCED = 0x40;
 
@@ -162,8 +166,8 @@ export function readSheetRecords(
         cells.push(readLabel(record));
         break;
       case RECORD_FORMULA:
-        // A Formula whose cached result is a string is followed by a String record carrying it, so the formula reader is given the record that follows to look at.
-        cells.push(readFormula(record, records[index + 1]));
+        // A Formula whose cached result is a string is followed by a String record carrying it, so the formula reader is given whichever record that turns out to be.
+        cells.push(readFormula(record, stringResultAfter(records, index)));
         break;
       default:
         // Every other record a worksheet substream carries -- the window settings, the page setup, the drawing objects, the row-block index -- is not read yet.
@@ -174,6 +178,34 @@ export function readSheetRecords(
   return usedRange === undefined
     ? { cells, rows, columns, merges }
     : { cells, rows, columns, merges, usedRange };
+}
+
+/**
+ * Finds the String record carrying a Formula's cached string result, if it has one.
+ *
+ * [MS-XLS] 2.5.133 says the String "immediately follows" the Formula, but the FORMULA production of [MS-XLS] 2.1.7.20.6 is wider than that -- `[Uncalced] Formula [Array / Table / ShrFmla / SUB] [String *Continue]` -- so an array formula, a data table, or a member of a shared-formula run puts one record in between. Skipping exactly those three finds the String in both shapes; anything else ends the search, so a Formula with no string result never reaches past its own cell into the next one's records.
+ */
+function stringResultAfter(
+  records: readonly RecordGroup[],
+  formulaIndex: number,
+): RecordGroup | undefined {
+  for (let index = formulaIndex + 1; index < records.length; index += 1) {
+    const candidate = records[index];
+    if (candidate === undefined) {
+      return undefined;
+    }
+    if (candidate.type === RECORD_STRING) {
+      return candidate;
+    }
+    if (
+      candidate.type !== RECORD_ARRAY &&
+      candidate.type !== RECORD_TABLE &&
+      candidate.type !== RECORD_SHRFMLA
+    ) {
+      return undefined;
+    }
+  }
+  return undefined;
 }
 
 /** Dimensions ([MS-XLS] 2.4.90): a four-byte first row, a four-byte past-the-end row, a two-byte first column, and a two-byte past-the-end column. */
@@ -204,9 +236,8 @@ function readRow(record: RecordGroup): RawRow {
   cursor.skip(4); // reserved1 and unused1.
   const flags = cursor.u8();
   const hidden = (flags & ROW_FLAG_HIDDEN) !== 0;
-  // A height is carried as a real declaration only when the producer marked it manually set or formatted; otherwise miyRw merely restates the sheet default, and ContentSheetRow documents an absent height as "no declared size, use the application default" rather than as a fabricated one.
-  const declared =
-    (flags & ROW_FLAG_UNSYNCED) !== 0 || (flags & ROW_FLAG_GHOST_DIRTY) !== 0;
+  // fUnsynced alone, which [MS-XLS] 2.4.221 defines as "whether the row height was manually set" -- the only flag that says miyRw is a real declaration rather than a restatement of the sheet default. fGhostDirty is deliberately NOT consulted here despite also being about the row: it says the row was FORMATTED (and governs whether ixfe_val is meaningful), which is a different fact and says nothing about the height. ContentSheetRow documents an absent height as "no declared size, use the application default" rather than as a fabricated one.
+  const declared = (flags & ROW_FLAG_UNSYNCED) !== 0;
   const heightPt = twipsToPoints(heightTwips);
   return declared && heightPt > 0
     ? { index, heightPt, hidden }

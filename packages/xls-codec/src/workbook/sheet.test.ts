@@ -14,6 +14,7 @@ import {
   RECORD_NUMBER,
   RECORD_RK,
   RECORD_ROW,
+  RECORD_SHRFMLA,
   RECORD_STRING,
 } from "../biff/record-types";
 import { BiffFormatError, readRecords } from "../biff/records";
@@ -280,6 +281,39 @@ describe("readSheetRecords formula cells", () => {
     );
 
     expect(cells[0]?.value).toEqual({ kind: "string", value: "Result" });
+  });
+
+  it("finds a string cached result past the ShrFmla record of a shared formula", () => {
+    // The FORMULA production of [MS-XLS] 2.1.7.20.6 is `[Uncalced] Formula [Array / Table / ShrFmla / SUB] [String *Continue]`, so a member of a shared-formula run puts a record between the Formula and its String -- checking only the immediately following record would read the result as empty.
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0xff,
+        0xff,
+        ...formulaTail,
+      ]),
+      record(RECORD_SHRFMLA, [...u16(0), ...u16(0), ...u16(0), ...u16(0)]),
+      record(RECORD_STRING, xlUnicodeString("Shared")),
+    );
+
+    expect(cells[0]?.value).toEqual({ kind: "string", value: "Shared" });
+  });
+
+  it("does not reach past an unrelated record into the next cell's own String", () => {
+    // A Formula with no string result must not adopt a String belonging to a later formula, so anything outside the production's own optional middle ends the search.
+    const cells = readCells(
+      record(RECORD_FORMULA, [...cell(0, 0), ...f64(1), ...formulaTail]),
+      record(RECORD_NUMBER, [...cell(0, 1), ...f64(2)]),
+      record(RECORD_STRING, xlUnicodeString("NotMine")),
+    );
+
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
   });
 
   it("reads a string cached result as empty when no String record follows", () => {
