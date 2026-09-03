@@ -69,14 +69,29 @@ function richString(text: string): number[] {
   ];
 }
 
+/** An XF record's own trailing CellXF/StyleXF payload ([MS-XLS] 2.4.353), undecorated: 14 zero bytes, the same shape src/test-support/biff.ts's cellXfTrailer() produces for a decoration-free fixture -- reimplemented locally rather than imported, since this file's own fixtures are built inline for the isolate (see this file's own top comment). */
+function undecoratedXfTrailer(): number[] {
+  return new Array<number>(14).fill(0);
+}
+
 /** Fifteen style XFs then one cell XF, so a cell's ixfe of 15 lands on the cell format. */
 function xfTable(formatId: number): number[] {
   const styles = Array.from({ length: 15 }, () =>
-    record(RECORD_XF, [...u16(0), ...u16(0), ...u16(0x0004), ...u16(0)]),
+    record(RECORD_XF, [
+      ...u16(0),
+      ...u16(0),
+      ...u16(0x0004),
+      ...undecoratedXfTrailer(),
+    ]),
   ).flat();
   return [
     ...styles,
-    ...record(RECORD_XF, [...u16(0), ...u16(formatId), ...u16(0), ...u16(0)]),
+    ...record(RECORD_XF, [
+      ...u16(0),
+      ...u16(formatId),
+      ...u16(0),
+      ...undecoratedXfTrailer(),
+    ]),
   ];
 }
 

@@ -4,15 +4,18 @@ import { BlockCursor } from "./cursor";
 import {
   RECORD_FONT,
   RECORD_FORMAT,
+  RECORD_PALETTE,
   RECORD_STYLE,
   RECORD_XF,
 } from "./record-types";
 import { readRecords } from "./records";
 import { readShortXLUnicodeString, readXLUnicodeString } from "./strings";
+import { readLongRgbColor, unpackXfDecoration } from "./xf-colors";
 import {
   writeCellXfRecord,
   writeFontRecord,
   writeFormatRecord,
+  writePaletteRecord,
   writeStyleRecord,
   writeStyleXfRecord,
 } from "./xf-writer";
@@ -60,6 +63,58 @@ describe("writeCellXfRecord", () => {
     const fillWord = u16At(data, 18);
     expect(fillWord & 0x7f).toBe(0x40);
     expect((fillWord >>> 7) & 0x7f).toBe(0x41);
+  });
+
+  it("writes a real solid fill and per-side borders when given a decoration, readable back through unpackXfDecoration", () => {
+    const record = writeCellXfRecord({
+      fontIndex: 0,
+      formatId: 0,
+      decoration: {
+        fillPattern: 1,
+        fillForegroundIcv: 12,
+        left: { style: 1, icv: 10 },
+        right: { style: 0, icv: 0 },
+        top: { style: 6, icv: 15 },
+        bottom: { style: 0, icv: 0 },
+      },
+    });
+    const [parsed] = readRecords(record);
+    const data = parsed?.data ?? new Uint8Array(0);
+    const cursor = new BlockCursor([data]);
+    cursor.skip(6); // ifnt, ifmt, flags
+    cursor.skip(4); // word1 -- alignment, not under test here
+    const word2 = cursor.u32();
+    const word3 = cursor.u32();
+    const word4 = cursor.u16();
+
+    expect(unpackXfDecoration(word2, word3, word4)).toEqual({
+      fillPattern: 1,
+      fillForegroundIcv: 12,
+      left: { style: 1, icv: 10 },
+      right: { style: 0, icv: 0 },
+      top: { style: 6, icv: 15 },
+      bottom: { style: 0, icv: 0 },
+    });
+  });
+
+  it("forces the fill foreground back to 'Automatic' for a border-only decoration (no fill pattern)", () => {
+    // fls=0 renders nothing regardless of icvFore's own value ([MS-XLS] CellXF), but a real Excel-written border-only cell still carries the same Automatic default an undecorated XF does -- this keeps that convention rather than leaking a stale icvFore through.
+    const record = writeCellXfRecord({
+      fontIndex: 0,
+      formatId: 0,
+      decoration: {
+        fillPattern: 0,
+        fillForegroundIcv: 20, // deliberately non-zero, to prove it's ignored
+        left: { style: 1, icv: 10 },
+        right: { style: 0, icv: 0 },
+        top: { style: 0, icv: 0 },
+        bottom: { style: 0, icv: 0 },
+      },
+    });
+    const [parsed] = readRecords(record);
+    const data = parsed?.data ?? new Uint8Array(0);
+    const fillWord = u16At(data, 18);
+    expect(fillWord & 0x7f).toBe(0x40);
   });
 });
 
@@ -133,5 +188,25 @@ describe("writeFormatRecord", () => {
     const cursor = new BlockCursor([data]);
     cursor.skip(2);
     expect(readXLUnicodeString(cursor)).toBe("yyyy-mm-dd");
+  });
+});
+
+describe("writePaletteRecord", () => {
+  it("writes a genuine Palette record: type 0x0092, ccv then that many LongRGB entries, round-tripping through readLongRgbColor", () => {
+    const colors = Array.from({ length: 56 }, (_unused, index) => ({
+      r: index / 255,
+      g: 0,
+      b: 0,
+    }));
+    const record = writePaletteRecord(colors);
+    const [parsed] = readRecords(record);
+    expect(parsed?.type).toBe(RECORD_PALETTE);
+    const data = parsed?.data ?? new Uint8Array(0);
+    expect(u16At(data, 0)).toBe(56);
+    const cursor = new BlockCursor([data]);
+    cursor.skip(2); // ccv
+    for (const color of colors) {
+      expect(readLongRgbColor(cursor)).toEqual(color);
+    }
   });
 });

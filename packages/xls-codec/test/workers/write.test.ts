@@ -88,4 +88,41 @@ describe("xls-codec write path inside workerd", () => {
     const content = readXlsContent(metadataBytes);
     expect(content.metadata).toEqual(input.metadata);
   });
+
+  it("round-trips a cell's background and borders, with no Node-only API", () => {
+    const decorated: XlsContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [
+            {
+              row: 0,
+              column: 0,
+              value: { kind: "string", value: "Decorated" },
+              displayText: "Decorated",
+              background: { r: 1, g: 0, b: 0 },
+              borders: {
+                left: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.75 },
+              },
+            },
+          ],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: PRINT_SETTINGS,
+        },
+      ],
+    };
+    const decoratedBytes = writeXlsContent(decorated);
+    const content = readXlsContent(decoratedBytes);
+    const cell = content.sheets[0]?.cells.find(
+      (c) => c.column === 0 && c.row === 0,
+    );
+    expect(cell?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(cell?.borders).toEqual({
+      left: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.75 },
+    });
+  });
 });

@@ -6,13 +6,16 @@ import {
   RECORD_DATE1904,
   RECORD_EXTERNSHEET,
   RECORD_FORMAT,
+  RECORD_PALETTE,
   RECORD_SST,
   RECORD_SUPBOOK,
   RECORD_XF,
 } from "../biff/record-types";
 import { BiffFormatError, readRecords } from "../biff/records";
 import { groupRecords, type RecordGroup } from "../biff/substreams";
+import { UNDECORATED_XF_FIELDS } from "../biff/xf-colors";
 import {
+  cellXfTrailer,
   concat,
   record,
   richExtendedString,
@@ -198,15 +201,85 @@ describe("readWorkbookGlobals", () => {
   it("reads the XF table in record order", () => {
     const globals = readWorkbookGlobals(
       groupsOf(
-        record(RECORD_XF, [...u16(0), ...u16(0), ...u16(0x0004), ...u16(0)]),
-        record(RECORD_XF, [...u16(1), ...u16(164), ...u16(0x0000), ...u16(0)]),
+        record(RECORD_XF, [
+          ...u16(0),
+          ...u16(0),
+          ...u16(0x0004),
+          ...cellXfTrailer(),
+        ]),
+        record(RECORD_XF, [
+          ...u16(1),
+          ...u16(164),
+          ...u16(0x0000),
+          ...cellXfTrailer(),
+        ]),
       ),
     );
 
     expect(globals.cellFormats).toEqual([
-      { fontIndex: 0, formatId: 0, isStyle: true },
-      { fontIndex: 1, formatId: 164, isStyle: false },
+      {
+        fontIndex: 0,
+        formatId: 0,
+        isStyle: true,
+        decoration: UNDECORATED_XF_FIELDS,
+      },
+      {
+        fontIndex: 1,
+        formatId: 164,
+        isStyle: false,
+        decoration: UNDECORATED_XF_FIELDS,
+      },
     ]);
+  });
+
+  it("reads a CellXF's own fill pattern, fill colour, and per-side border style/colour", () => {
+    // [MS-XLS] 2.4.353's own CellXF field table: word2 (border) = dgLeft|dgRight<<4|dgTop<<8|dgBottom<<12|icvLeft<<16|icvRight<<23, word3 (fill pattern) = icvTop|icvBottom<<7|fls<<26, word4 (fill colour) = icvFore|icvBack<<7. Thin borders (style 1) on left/top at icv 10, a solid fill (fls 1) at icv 12.
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_XF, [
+          ...u16(0),
+          ...u16(0),
+          ...u16(0x0000),
+          ...cellXfTrailer({
+            fillPattern: 1,
+            fillForegroundIcv: 12,
+            left: { style: 1, icv: 10 },
+            top: { style: 1, icv: 10 },
+          }),
+        ]),
+      ),
+    );
+
+    expect(globals.cellFormats[0]?.decoration).toEqual({
+      fillPattern: 1,
+      fillForegroundIcv: 12,
+      left: { style: 1, icv: 10 },
+      right: { style: 0, icv: 0 },
+      top: { style: 1, icv: 10 },
+      bottom: { style: 0, icv: 0 },
+    });
+  });
+
+  it("reads a Palette record's own 56 colour entries", () => {
+    // LongRGB: red, green, blue, then a reserved byte -- rgColor[0] red, rgColor[1] green, and 54 more entries the ccv count declares (55 here, deliberately not 56, to prove the reader trusts the record's own declared count rather than assuming exactly 56).
+    const entries = [
+      [0xff, 0x00, 0x00, 0x00],
+      [0x00, 0xff, 0x00, 0x00],
+      ...Array.from({ length: 53 }, () => [0x00, 0x00, 0x00, 0x00]),
+    ];
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_PALETTE, [...u16(entries.length), ...entries.flat()]),
+      ),
+    );
+
+    expect(globals.palette?.length).toBe(entries.length);
+    expect(globals.palette?.[0]).toEqual({ r: 1, g: 0, b: 0 });
+    expect(globals.palette?.[1]).toEqual({ r: 0, g: 1, b: 0 });
+  });
+
+  it("leaves palette undefined when the substream carries no Palette record", () => {
+    expect(readWorkbookGlobals(groupsOf()).palette).toBeUndefined();
   });
 
   it("defaults to the 1900 date system when no Date1904 record is present", () => {
@@ -297,9 +370,14 @@ describe("formatCodeOf", () => {
   const globals = readWorkbookGlobals(
     groupsOf(
       record(RECORD_FORMAT, [...u16(164), ...xlUnicodeString("0.000%")]),
-      record(RECORD_XF, [...u16(0), ...u16(9), ...u16(0), ...u16(0)]),
-      record(RECORD_XF, [...u16(0), ...u16(164), ...u16(0), ...u16(0)]),
-      record(RECORD_XF, [...u16(0), ...u16(30), ...u16(0), ...u16(0)]),
+      record(RECORD_XF, [...u16(0), ...u16(9), ...u16(0), ...cellXfTrailer()]),
+      record(RECORD_XF, [
+        ...u16(0),
+        ...u16(164),
+        ...u16(0),
+        ...cellXfTrailer(),
+      ]),
+      record(RECORD_XF, [...u16(0), ...u16(30), ...u16(0), ...cellXfTrailer()]),
     ),
   );
 
