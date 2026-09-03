@@ -7,14 +7,9 @@ import type {
 } from "document-schema.js";
 import { DocFormatError, DocUnsupportedError } from "../errors";
 import { CELL_MARK, PARAGRAPH_MARK } from "../text/special";
-import {
-  encodeMergeGrpprl,
-  encodeTableRowGrpprl,
-  type HorizontalMergeRange,
-  type TableCellMergeToWrite,
-} from "./tap-write";
+import { encodeTableRowGrpprl, type TableCellMergeToWrite } from "./tap-write";
 
-// The inverse of table/read.ts: a section's own ContentBlock list to the flat sequence of paragraphs writeDocContent's own text-layout pass consumes, expanding each ContentTable into its real [MS-DOC] physical-cell stream -- a horizontally-merged cell's colSpan becomes one real cell plus (colSpan - 1) synthetic continuation cells, each ending in its own cell mark exactly as [MS-DOC] 2.4.3 requires. A vertical-merge continuation cell is never inferred from a bare `{blocks: []}` alone -- a genuinely blank cell has the identical shape -- so flattenTable tracks which columns carry a vertical merge actually in progress (an `active` map keyed by column position, walked top to bottom exactly as ooxml.js's own buildTable tracks its identical `active` map), and only a `{blocks: []}` cell landing on a column with a merge genuinely active there becomes a continuation; every other cell, blank or not, is ordinary. The same map supplies a continuation's own physical column span from the anchor's recorded span, since the continuation cell's own (typically absent) colSpan is never the source of truth for it. Every physical cell's own grpprl carries sprmPFInTable; the row's own trailing mark additionally carries sprmPFTtp plus the row's whole TAP (tap-write.ts's encodeTableRowGrpprl).
+// The inverse of table/read.ts: a section's own ContentBlock list to the flat sequence of paragraphs writeDocContent's own text-layout pass consumes, expanding each ContentTable into its real [MS-DOC] physical-cell stream. Each ContentTableCell -- real content or a vertical-merge continuation's own `{blocks: []}` -- becomes exactly ONE physical cell, ending in its own cell mark exactly as [MS-DOC] 2.4.3 requires: a horizontally-merged (colSpan > 1) cell is never expanded into extra synthetic continuation cells, because a real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read a horizontal merge back from TCGRF.horzMerge/sprmTMerge continuation cells at all -- it states one purely as a row's own narrower, wider physical-cell layout (ExaDev/documents.js#895; see tap-write.ts's own top-of-file note for the full ground-truth finding). flattenRow instead merges the table-wide column grid's own boundaries across a cell's colSpan to compute that one physical cell's width, so the row's own rgdxaCenter genuinely has fewer entries than the table's full column count whenever a merge is present, matching what LibreOffice's own writer produces byte-for-byte. A vertical-merge continuation cell is never inferred from a bare `{blocks: []}` alone -- a genuinely blank cell has the identical shape -- so flattenTable tracks which columns carry a vertical merge actually in progress (an `active` map keyed by column position, walked top to bottom exactly as ooxml.js's own buildTable tracks its identical `active` map), and only a `{blocks: []}` cell landing on a column with a merge genuinely active there becomes a continuation; every other cell, blank or not, is ordinary. The same map supplies a continuation's own physical column span from the anchor's recorded span, since the continuation cell's own (typically absent) colSpan is never the source of truth for it. Every physical cell's own grpprl carries sprmPFInTable; the row's own trailing mark additionally carries sprmPFTtp plus the row's whole TAP (tap-write.ts's encodeTableRowGrpprl).
 
 /** sprmPFInTable (0x2416): a Bool8, "MUST be 1 any time the table depth is greater than zero". */
 const SPRM_P_F_IN_TABLE = 0x2416;
@@ -55,38 +50,16 @@ function inTableGrpprl(): number[] {
   return bytes;
 }
 
-// The row's own trailing mark: sprmPFInTable (every table paragraph carries it), sprmPFTtp (marking this one as the row's own Table Terminating Paragraph mark), the row's whole TAP (sprmTDefTable, and a row height if it has one), then one sprmTMerge per horizontal-merge range -- see tap-write.ts's own note on why a horizontal merge is written both ways.
+// The row's own trailing mark: sprmPFInTable (every table paragraph carries it), sprmPFTtp (marking this one as the row's own Table Terminating Paragraph mark), then the row's whole TAP (sprmTDefTable, and a row height if it has one) -- no separate horizontal-merge signal, since flattenRow's own physical-cell boundaries already state a merge the way a real [MS-DOC] producer does (see this module's own top-of-file note).
 function rowMarkExtraGrpprl(
   boundaries: readonly number[],
   merges: readonly TableCellMergeToWrite[],
-  mergeRanges: readonly HorizontalMergeRange[],
   heightPt: number | undefined,
 ): number[] {
   const bytes = inTableGrpprl();
   pushSprm(bytes, SPRM_P_F_TTP, [0x01]);
   bytes.push(...encodeTableRowGrpprl(boundaries, merges, heightPt));
-  bytes.push(...encodeMergeGrpprl(mergeRanges));
   return bytes;
-}
-
-// Derives each horizontal-merge range from the row's own already-expanded physical-cell merge array: a run starting at horzMerge 2 (this writer's own "first cell of a set" spelling) followed by one or more horzMerge-1 continuations.
-function mergeRangesFromCells(
-  merges: readonly TableCellMergeToWrite[],
-): HorizontalMergeRange[] {
-  const ranges: HorizontalMergeRange[] = [];
-  let index = 0;
-  while (index < merges.length) {
-    if (merges[index]?.horzMerge !== 2) {
-      index += 1;
-      continue;
-    }
-    const itcFirst = index;
-    let itcLim = index + 1;
-    while (merges[itcLim]?.horzMerge === 1) itcLim += 1;
-    ranges.push({ itcFirst, itcLim });
-    index = itcLim;
-  }
-  return ranges;
 }
 
 // A cell's own paragraphs as WriteParagraph entries: every paragraph but the last terminates with an ordinary paragraph mark (a multi-paragraph cell), the last with a cell mark -- [MS-DOC] 2.4.3's "the last paragraph in a table cell is terminated by a cell mark". An empty cell (the shared schema's vertical-merge-continuation convention, `blocks: []`) still needs the one paragraph [MS-DOC] requires to carry its own cell mark.
@@ -132,14 +105,26 @@ interface ActiveVerticalMerge {
   remaining: number;
 }
 
-// Expands one output row's own cells (colSpan-anchored; a vertical continuation is a bare `{blocks: []}`, disambiguated from a genuinely blank cell by whether `active` shows a merge actually in progress at this column -- see this module's own top-of-file note) into the row's real physical-cell stream, one WriteParagraph group and one TableCellMergeToWrite per physical cell. Mutates `active` as it walks the row, exactly as ooxml.js's own buildTable does for the identical disambiguation.
+// Expands one output row's own cells (colSpan-anchored; a vertical continuation is a bare `{blocks: []}`, disambiguated from a genuinely blank cell by whether `active` shows a merge actually in progress at this column -- see this module's own top-of-file note) into the row's real physical-cell stream: exactly ONE physical cell per ContentTableCell, its own boundary computed by merging the table-wide grid's boundary points across the cell's colSpan (never expanded into extra synthetic continuation cells -- see this module's own top-of-file note on why). Mutates `active` as it walks the row, exactly as ooxml.js's own buildTable does for the identical disambiguation.
 function flattenRow(
   cells: readonly ContentTableCell[],
   columnCount: number,
+  boundaries: readonly number[],
   active: Map<number, ActiveVerticalMerge>,
-): { paragraphs: WriteParagraph[]; merges: TableCellMergeToWrite[] } {
+): {
+  paragraphs: WriteParagraph[];
+  merges: TableCellMergeToWrite[];
+  rowBoundariesTwips: number[];
+} {
   const paragraphs: WriteParagraph[] = [];
   const merges: TableCellMergeToWrite[] = [];
+  const firstBoundary = boundaries[0];
+  if (firstBoundary === undefined) {
+    throw new DocFormatError(
+      "internal defect: a table's own column-boundary array is empty despite the columnCount guard above",
+    );
+  }
+  const rowBoundariesTwips: number[] = [firstBoundary];
   let column = 0;
   for (const cell of cells) {
     const covered = active.get(column);
@@ -167,24 +152,22 @@ function flattenRow(
     }
 
     paragraphs.push(...cellParagraphs(blocks));
-    merges.push({ horzMerge: span > 1 ? 2 : 0, vertMerge });
-    for (let extra = 1; extra < span; extra += 1) {
-      paragraphs.push({
-        runs: [],
-        properties: {},
-        extraGrpprl: inTableGrpprl(),
-        terminator: CELL_MARK,
-      });
-      merges.push({ horzMerge: 1, vertMerge });
-    }
+    merges.push({ vertMerge });
     column += span;
+    const rightBoundary = boundaries[column];
+    if (rightBoundary === undefined) {
+      throw new DocFormatError(
+        `a table cell's own colSpan runs past the table's ${columnCount}-column grid`,
+      );
+    }
+    rowBoundariesTwips.push(rightBoundary);
   }
-  if (merges.length !== columnCount) {
+  if (column !== columnCount) {
     throw new DocFormatError(
-      `a table row's own cells expand to ${merges.length} physical columns (via colSpan), but the table declares ${columnCount} in columnWidthsPt`,
+      `a table row's own cells cover ${column} columns (via colSpan), but the table declares ${columnCount} in columnWidthsPt`,
     );
   }
-  return { paragraphs, merges };
+  return { paragraphs, merges, rowBoundariesTwips };
 }
 
 function flattenTable(table: ContentTable): WriteParagraph[] {
@@ -198,17 +181,17 @@ function flattenTable(table: ContentTable): WriteParagraph[] {
   const active = new Map<number, ActiveVerticalMerge>();
   const output: WriteParagraph[] = [];
   for (const row of table.rows) {
-    const { paragraphs, merges } = flattenRow(row.cells, columnCount, active);
+    const { paragraphs, merges, rowBoundariesTwips } = flattenRow(
+      row.cells,
+      columnCount,
+      boundaries,
+      active,
+    );
     output.push(...paragraphs);
     output.push({
       runs: [],
       properties: {},
-      extraGrpprl: rowMarkExtraGrpprl(
-        boundaries,
-        merges,
-        mergeRangesFromCells(merges),
-        row.heightPt,
-      ),
+      extraGrpprl: rowMarkExtraGrpprl(rowBoundariesTwips, merges, row.heightPt),
       terminator: CELL_MARK,
     });
   }
