@@ -30,11 +30,13 @@ import {
   executeBridge,
   executeFromPdf,
   FORMAT_NODES,
+  isReadOnlyContentFormat,
   isTextFormatNode,
   LAYOUT_CAPABLE,
+  READ_ONLY_FORMAT_NODES,
   resolveCompositionPlan,
   runCompositionPlan,
-  type ContentFormat,
+  type SourceContentFormat,
   type UnifiedConversionOptions,
 } from "./composition";
 import { UnsupportedConversionError } from "./capability";
@@ -54,7 +56,7 @@ const LAYOUT_ENGINES = {
 
 // decode(source) -> [extract source fonts] -> build font registry -> read(source) -> resolve metadata -> layout engine by variant -> writePdf, reproducing the exact sequence and option-threading of convert.ts's *ToPdf functions (docxToPdf/odtToPdf/odpToPdf/odsToPdf/odgToPdf/markdownToPdf). The font registry is built from the source package's own embedded faces for package formats (createDocumentFontRegistry) and from caller-supplied faces alone for markdown (createFontRegistry), matching markdownToPdf's own documented divergence. The drawing engine takes no mathMetricsAt and produces no positioned formulas, so writePdf is called without `formulas` for that variant -- byte-identical to odgToPdf. markdownToPdf's leading throwIfAborted (decodeMarkdownText has no abort hook of its own) is reproduced; the package paths match docxToPdf/odtToPdf by not checking abort until writePdf's own loops do.
 export function executeToPdf(
-  format: ContentFormat,
+  format: SourceContentFormat,
   bytes: Uint8Array<ArrayBuffer>,
   options?: UnifiedConversionOptions,
 ): Uint8Array<ArrayBuffer> {
@@ -63,10 +65,24 @@ export function executeToPdf(
       `executeToPdf: '${format}' has no layout engine of its own`,
     );
   }
-  const node = FORMAT_NODES[format];
 
   let content: ContentDocument;
   let fonts: FontRegistry;
+  // A read-only source has no package to extract embedded faces from and no decode step to run first (see composition.ts's own ReadOnlyFormatNode), so it takes the caller-supplied-faces-only registry the text formats take -- the identical divergence markdownToPdf's own documentation already names, for the identical reason: there is no source package to ask.
+  if (isReadOnlyContentFormat(format)) {
+    throwIfAborted(options?.signal);
+    const read = READ_ONLY_FORMAT_NODES[format].read(bytes, options);
+    content = {
+      ...read,
+      metadata: resolveMetadataTimestamps(read.metadata, options?.clock),
+    };
+    fonts = createFontRegistry({
+      fonts: options?.fonts,
+      onSubstitution: options?.onFontSubstitution,
+    });
+    return renderToPdf(content, fonts, options);
+  }
+  const node = FORMAT_NODES[format];
   if (isTextFormatNode(node)) {
     throwIfAborted(options?.signal);
     const text = node.decode(bytes);
@@ -97,6 +113,15 @@ export function executeToPdf(
       onFontSubstitution: options?.onFontSubstitution,
     });
   }
+  return renderToPdf(content, fonts, options);
+}
+
+// The half of executeToPdf that is the same whatever kind of node produced the content: lay the ContentDocument out through its variant's engine, then write the PDF. Split out when read-only sources joined, so the three ways a source's content and font registry are obtained (a package's embedded faces, a text format's caller-supplied ones, a read-only format's caller-supplied ones) each end in one shared render rather than three copies of it.
+function renderToPdf(
+  content: ContentDocument,
+  fonts: FontRegistry,
+  options: UnifiedConversionOptions | undefined,
+): Uint8Array<ArrayBuffer> {
   const measurer = createFontMeasurer(fonts);
 
   // Layout by variant. Every engine returns { document, pages } plus (for the three that render embedded formulas) positioned MathML; the drawing engine takes no mathMetricsAt and produces no positioned formulas, so writePdf omits `formulas` for it -- the exact odgToPdf divergence. Each engine also stamps the placements it computed onto `content`'s own nodes in place (frames), so the content reported below is the fused unified package half, not the bare read output.
