@@ -14,7 +14,7 @@ Under active development, **read-only**. Built and shipped:
 - **Continuation-aware cursor and strings** (`src/biff/cursor.ts`, `src/biff/strings.ts`) — `Continue` records ([MS-XLS] 2.4.58) joined per the rules of the record being continued, including the case a naive reader gets wrong: an `XLUnicodeRichExtendedString` ([MS-XLS] 2.5.293) resuming after a boundary re-states its own `fHighByte` flag, which may differ from the flag the string started with. All three string shapes (`XLUnicodeString`, `ShortXLUnicodeString`, `XLUnicodeRichExtendedString`) are read.
 - **Workbook globals** (`src/workbook/globals.ts`) — `BoundSheet8` (sheet names, tab order, hidden state, type, and substream offsets), `SST` with its `Continue` chain, `Format` (custom number-format codes), `XF`'s fixed prefix (font index, format identifier, style flag), and `Date1904`.
 - **Worksheet substreams** (`src/workbook/sheet.ts`) — `Dimensions`, `Row` (height and hidden state), `ColInfo` (width and hidden state, expanded across the column range it covers), `MergeCells`, and the whole cell-value family: `Blank`, `MulBlank`, `RK`, `MulRk`, `Number`, `BoolErr`, `LabelSst`, `Label`, and `Formula` with its `String` result record.
-- **Number-format classification and date serials** (`src/number-format.ts`, `src/serial.ts`) — what turns a bare number into the schema's own `percentage`/`currency`/`date`/`time`/`dateTime` value kinds, honouring the workbook's own epoch flag and refusing the 1900 system's phantom leap day.
+- **Number-format classification and date serials** ([`excel-number-format`](../excel-number-format/README.md), `src/serial.ts`) — what turns a bare number into the schema's own `percentage`/`currency`/`date`/`time`/`dateTime` value kinds, honouring the workbook's own epoch flag and refusing the 1900 system's phantom leap day. The classification itself is a dependency, not local code: this package shares it with `ooxml.js`'s xlsx support, since it is the identical mini-language in both formats (ExaDev/documents.js#848).
 - **Schema mapping** (`src/content.ts`) — `readXlsContent` produces a `ContentDocument` of `kind: 'spreadsheet'`, and `readXls` the tree-form `DocumentTree`, in the same shape `readXlsxContent`/`readXlsx` produce: sparse 0-based cells, `displayText` on every cell, merged ranges as `colSpan`/`rowSpan` on the anchor cell, and the producer's raw format code kept alongside the classified value.
 
 ### Not built yet
@@ -86,7 +86,7 @@ Layered bottom-up, each layer testable against hand-built byte sequences taken f
 - **`src/biff/cursor.ts`** — a field cursor over one record's blocks that reads across a continuation boundary transparently while keeping the boundary observable, which is exactly what the string reader needs.
 - **`src/biff/strings.ts`**, **`src/biff/rk.ts`**, **`src/biff/errors.ts`** — the shared value encodings: the three string shapes, the `RkNumber` packed-numeric encoding, and the `BErr` error-value vocabulary.
 - **`src/workbook/globals.ts`**, **`src/workbook/sheet.ts`** — the two substream readers, each walking the record sequence its ABNF in [MS-XLS] 2.1.7.20.3 / 2.1.7.20.5 defines.
-- **`src/number-format.ts`**, **`src/serial.ts`** — number-format classification and date-serial conversion, the two pieces of xlsx semantics BIFF8 shares because ECMA-376 inherited them from BIFF.
+- **[`excel-number-format`](../excel-number-format/README.md)**, **`src/serial.ts`** — number-format classification and date-serial conversion, the two pieces of xlsx semantics BIFF8 shares because ECMA-376 inherited them from BIFF. The classifier itself is a dependency shared with `ooxml.js`, not a module in this package (ExaDev/documents.js#848) — `classifyNumberFormat` and `BUILTIN_NUMBER_FORMATS` still ride this package's own barrel (`export * from "excel-number-format"` in `src/index.ts`), so `import { classifyNumberFormat } from "xls-codec"` is unchanged.
 - **`src/content.ts`** — the mapping onto `document-schema.js`.
 
 ### Deliberately not depended on
@@ -121,6 +121,7 @@ Conventional Commits, enforced workspace-wide by commitlint through a root `comm
 - [MS-CFB]: [Compound File Binary File Format](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/53989ce4-7b05-4f8d-829b-d08d6148375b) — the container, read through `archive-codec`.
 - [archive-codec](../archive-codec/README.md) — the bounded CFB reader this package selects the `Workbook` stream through.
 - [document-schema.js](../document-schema.js/README.md) — the `ContentDocument`/`ContentSheet`/`ContentSheetCell` vocabulary this package maps onto, and the `assembleTree` transform behind `readXls`.
+- [excel-number-format](../excel-number-format/README.md) — the number-format classifier this package depends on, shared with `ooxml.js`'s xlsx support.
 - [ooxml.js](../ooxml.js/README.md) — the sibling reading `.xlsx`, BIFF8's successor, onto the same schema.
 
 ## License

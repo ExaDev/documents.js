@@ -21,8 +21,8 @@ import { readCoreProperties } from "../shared/metadata";
 import { parseCellReference, parseRangeReference } from "document-schema.js";
 import type { SheetDefinedNames } from "./defined-names";
 import { readDefinedNamesBySheet } from "./defined-names";
-import type { NumberFormatClass } from "./number-format";
-import { classifyNumberFormat } from "./number-format";
+import type { NumberFormatClass } from "excel-number-format";
+import { classifyNumberFormat } from "excel-number-format";
 import { readSheetDrawing } from "./drawings";
 import { readPrintSettings } from "./print-settings";
 import {
