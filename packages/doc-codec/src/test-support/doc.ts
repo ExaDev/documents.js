@@ -41,6 +41,15 @@ export interface DocSpec {
   readonly styles?: readonly DocStyleSpec[];
 }
 
+// Two grpprls are the same exception when both are absent or their bytes match, which is what decides whether adjacent stretches merge into one ChpxFkp run.
+function sameGrpprl(
+  a: readonly number[] | undefined,
+  b: readonly number[] | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.length === b.length && a.every((byte, index) => byte === b[index]);
+}
+
 /** Where the text is written in the WordDocument stream: past the FIB, on a page boundary, and even, which the 16-bit spelling requires. */
 const TEXT_FC = 0x400;
 
@@ -80,6 +89,20 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
     paragraphRanges.push({ start: paragraphStart, end: text.length });
   }
 
+  // Adjacent stretches with identical formatting become ONE ChpxFkp run, which is what a real producer writes: the format stores formatting as exceptions over runs of unchanging properties, not one entry per authored span. It matters for what the reader is exercised against, because the resulting run routinely spans paragraph boundaries -- two consecutive bold paragraphs are one Chpx covering both, including the paragraph mark between them -- so the reader has to split runs by paragraph itself rather than inheriting the split from the formatting table.
+  const mergedRuns: typeof runRanges = [];
+  for (const run of runRanges) {
+    const previous = mergedRuns[mergedRuns.length - 1];
+    if (
+      previous?.end === run.start &&
+      sameGrpprl(previous.grpprl, run.grpprl)
+    ) {
+      previous.end = run.end;
+      continue;
+    }
+    mergedRuns.push({ ...run });
+  }
+
   const characterFc = (cp: number): number => TEXT_FC + cp * bytesPerCharacter;
   const textByteLength = text.length * bytesPerCharacter;
 
@@ -100,7 +123,7 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
 
   wordDocument.set(
     buildChpxFkp(
-      runRanges.map((run) => ({
+      mergedRuns.map((run) => ({
         fc: characterFc(run.start),
         ...(run.grpprl === undefined ? {} : { grpprl: run.grpprl }),
       })),
