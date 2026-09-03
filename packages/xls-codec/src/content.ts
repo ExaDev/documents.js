@@ -127,7 +127,10 @@ function readSheet(
   const raw: RawSheet =
     substream === undefined
       ? { cells: [], rows: [], columns: [], merges: [] }
-      : readSheetRecords(substream.records, globals.sharedStrings);
+      : readSheetRecords(substream.records, globals.sharedStrings, {
+          sheets: globals.sheets,
+          sheetRanges: globals.sheetRanges,
+        });
   return {
     name: entry.name,
     cells: mapCells(raw, globals),
@@ -210,6 +213,9 @@ function mapCell(
   };
   if (formatCode !== undefined) {
     mapped.numberFormatCode = formatCode;
+  }
+  if (cell.formula !== undefined) {
+    mapped.formula = cell.formula;
   }
   return mapped;
 }

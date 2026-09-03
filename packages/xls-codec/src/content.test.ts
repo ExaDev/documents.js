@@ -9,14 +9,17 @@ import {
   RECORD_BOUNDSHEET8,
   RECORD_DATE1904,
   RECORD_EOF,
+  RECORD_EXTERNSHEET,
   RECORD_FILEPASS,
   RECORD_FORMAT,
+  RECORD_FORMULA,
   RECORD_COLINFO,
   RECORD_LABELSST,
   RECORD_MERGECELLS,
   RECORD_NUMBER,
   RECORD_ROW,
   RECORD_SST,
+  RECORD_SUPBOOK,
   RECORD_XF,
 } from "./biff/record-types";
 import { BiffFormatError } from "./biff/records";
@@ -456,6 +459,137 @@ describe("readXlsContent", () => {
     expect(() =>
       readXlsContent(new Uint8Array([0x50, 0x4b, 0x03, 0x04])),
     ).toThrow(BiffFormatError);
+  });
+});
+
+describe("readXlsContent formula recovery", () => {
+  // A cell reference's own RgceLoc column field ([MS-XLS] 2.5.51 ColRelU), fully relative -- the shape a bare `A1` (as opposed to `$A$1`) carries, both colRelative and rowRelative bits set.
+  const relativeColumn = (column: number) => u16(0xc000 | column);
+  /** PtgRef (value class, [MS-XLS] 2.5.198.84): a Formula's own operand for a single-cell reference. */
+  const ptgRef = (row: number, column: number) => [
+    0x44,
+    ...u16(row),
+    ...relativeColumn(column),
+  ];
+  /** The Formula record's own trailing fields after its FormulaValue ([MS-XLS] 2.4.127): flags, the calculation cache, then a CellParsedFormula's cce and rgce. */
+  const formulaTail = (rgce: readonly number[]) => [
+    ...u16(0),
+    ...u32(0),
+    ...u16(rgce.length),
+    ...rgce,
+  ];
+
+  it("recovers a formula's own text alongside its cached value", () => {
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_NUMBER, [...cell(0, 0), ...f64(1)]),
+              record(RECORD_NUMBER, [...cell(0, 1), ...f64(2)]),
+              record(RECORD_FORMULA, [
+                ...cell(0, 2),
+                ...f64(3),
+                ...formulaTail([...ptgRef(0, 0), ...ptgRef(0, 1), 0x03]),
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    const cellC1 = readXlsContent(bytes).sheets[0]?.cells.find(
+      (entry) => entry.column === 2,
+    );
+
+    expect(cellC1?.formula).toBe("A1+B1");
+    expect(cellC1?.value).toEqual({ kind: "number", value: 3 });
+  });
+
+  it("resolves a cross-sheet 3D reference through EXTERNSHEET and a self-referencing SupBook", () => {
+    // PtgArea3d (ref class, [MS-XLS] 2.5.198.28): opcode 0x3B, an ixti, then rwFirst/rwLast and each corner's own relative column field.
+    const ptgArea3d = (ixti: number) => [
+      0x3b,
+      ...u16(ixti),
+      ...u16(0),
+      ...u16(1),
+      ...relativeColumn(0),
+      ...relativeColumn(1),
+    ];
+    const bytes = xlsFile(
+      workbookStream({
+        globals: [
+          ...xfTable(0),
+          // SupBook ([MS-XLS] 2.4.271): ctab (ignored for a self-referencing link) then cch 0x0401, the self-referencing marker.
+          record(RECORD_SUPBOOK, [...u16(2), ...u16(0x0401)]),
+          // ExternSheet ([MS-XLS] 2.4.106): one XTI naming sheet index 1 ("Data") on both ends.
+          record(RECORD_EXTERNSHEET, [
+            ...u16(1),
+            ...u16(0),
+            ...u16(1),
+            ...u16(1),
+          ]),
+        ],
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_FORMULA, [
+                ...cell(0, 0),
+                ...f64(10),
+                ...formulaTail([
+                  ...ptgArea3d(0),
+                  0x19,
+                  0x10,
+                  ...u16(0), // PtgAttrSum
+                ]),
+              ]),
+            ],
+          },
+          {
+            name: "Data",
+            records: [
+              record(RECORD_NUMBER, [...cell(0, 0), ...f64(1)]),
+              record(RECORD_NUMBER, [...cell(0, 1), ...f64(2)]),
+              record(RECORD_NUMBER, [...cell(1, 0), ...f64(3)]),
+              record(RECORD_NUMBER, [...cell(1, 1), ...f64(4)]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    const cellA1 = readXlsContent(bytes).sheets[0]?.cells[0];
+
+    expect(cellA1?.formula).toBe("SUM(Data!A1:B2)");
+  });
+
+  it("leaves formula absent for a shared-formula member's own PtgExp", () => {
+    // PtgExp ([MS-XLS] 2.5.198.58): opcode 0x01, then the shared formula's own base cell -- a formula this reader deliberately does not resolve (see biff/ptg.ts), so the cached value stays correct and formula stays absent rather than reading past the token into something invented.
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_FORMULA, [
+                ...cell(0, 0),
+                ...f64(4),
+                ...formulaTail([0x01, ...u16(0), ...u16(0)]),
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    const cellA1 = readXlsContent(bytes).sheets[0]?.cells[0];
+
+    expect(cellA1?.formula).toBeUndefined();
+    expect(cellA1?.value).toEqual({ kind: "number", value: 4 });
   });
 });
 
