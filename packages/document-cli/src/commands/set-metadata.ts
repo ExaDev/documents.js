@@ -133,8 +133,8 @@ export function registerSetMetadataCommand(program: Command): void {
       [
         "",
         "Two write paths: a pdf source/target patches the metadata directly on the parsed PDF (writePdf), with no layout engine",
-        "involved at all -- genuinely lossless for everything else on the page. Every other supported format (docx, pptx, odt,",
-        "odp, ods, odg, markdown) rebuilds a fresh package from that format's own ContentDocument -- for docx specifically,",
+        "involved at all -- genuinely lossless for everything else on the page. Every other supported format (docx, pptx, xlsx,",
+        "odt, odp, ods, odg, markdown, rtf) rebuilds a fresh package from that format's own ContentDocument -- for docx specifically,",
         "this is LOSSY: it drops anything docx-extras covers (comments, footnotes, headers/footers, numbering definitions),",
         "since buildDocxPackage builds a fresh package from the ContentDocument alone, with no way to carry that data through.",
         "",

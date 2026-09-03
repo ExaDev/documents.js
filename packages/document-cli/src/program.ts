@@ -18,7 +18,7 @@ import { version } from "../package.json";
 export function createProgram(): Command {
   const program = new Command("document-cli");
   program.description(
-    "every documents.js docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/csv/svg/markdown conversion, bridge, and inspector as a scriptable command",
+    "every documents.js docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/csv/svg/markdown/rtf conversion, bridge, and inspector as a scriptable command",
   );
   program.version(version);
 
