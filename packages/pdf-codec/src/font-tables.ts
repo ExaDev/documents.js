@@ -1,5 +1,5 @@
 import type { SfntFont } from "./sfnt";
-import { hasBytes, i16, i32, sfntTableBytes, u16, u32 } from "./sfnt";
+import { hasBytes, i16, i32, sfntTableBytes, u8, u16, u32 } from "./sfnt";
 
 // Parsers for the five sfnt tables that describe a font as a whole rather than a single glyph: 'head' (design grid, bounding box, and the loca format glyf.ts needs), 'maxp' (glyph count), 'OS/2' (the vertical metrics and style bits a PDF FontDescriptor is built from), 'post' (italic angle and underline geometry), and 'name' (the PostScript and family names a /BaseFont entry and any font-matching step need). Field offsets are from ISO/IEC 14496-22 clauses 5.2.2 ('head'), 5.2.6 ('maxp'), 5.2.5 ('post'), 5.2.7 ('name'), and the OS/2 table's own clause 5.2.8, and were cross-checked against the real vendored fonts (assets/fonts/{carlito,caladea}/*.ttf) while this module was built rather than transcribed from the spec alone.
 //
@@ -131,6 +131,66 @@ export function parsePost(font: SfntFont): PostTable | undefined {
     italicAngle: i32(bytes, 4) / FIXED_16_16_SCALE, // a Fixed 16.16, not an integer degree count
     underlinePosition: i16(bytes, 8),
     underlineThickness: i16(bytes, 10),
+  };
+}
+
+// The 258 standard Macintosh glyph names, in the order a 'post' table's own glyph-name indices number them (ISO/IEC 14496-22 clause 5.2.5): an index below 258 in a version 2.0 table names the glyph from this list rather than from the table's own string array, and a version 1.0 table is nothing but this ordering. Generated from fontTools' `fontTools.ttLib.tables._p_o_s_t.standardGlyphOrder` rather than transcribed, and held as one delimited string because a 258-element literal is data, not code.
+export const MAC_STANDARD_GLYPH_ORDER: readonly string[] =
+  ".notdef .null nonmarkingreturn space exclam quotedbl numbersign dollar percent ampersand quotesingle parenleft parenright asterisk plus comma hyphen period slash zero one two three four five six seven eight nine colon semicolon less equal greater question at A B C D E F G H I J K L M N O P Q R S T U V W X Y Z bracketleft backslash bracketright asciicircum underscore grave a b c d e f g h i j k l m n o p q r s t u v w x y z braceleft bar braceright asciitilde Adieresis Aring Ccedilla Eacute Ntilde Odieresis Udieresis aacute agrave acircumflex adieresis atilde aring ccedilla eacute egrave ecircumflex edieresis iacute igrave icircumflex idieresis ntilde oacute ograve ocircumflex odieresis otilde uacute ugrave ucircumflex udieresis dagger degree cent sterling section bullet paragraph germandbls registered copyright trademark acute dieresis notequal AE Oslash infinity plusminus lessequal greaterequal yen mu partialdiff summation product pi integral ordfeminine ordmasculine Omega ae oslash questiondown exclamdown logicalnot radical florin approxequal Delta guillemotleft guillemotright ellipsis nonbreakingspace Agrave Atilde Otilde OE oe endash emdash quotedblleft quotedblright quoteleft quoteright divide lozenge ydieresis Ydieresis fraction currency guilsinglleft guilsinglright fi fl daggerdbl periodcentered quotesinglbase quotedblbase perthousand Acircumflex Ecircumflex Aacute Edieresis Egrave Iacute Icircumflex Idieresis Igrave Oacute Ocircumflex apple Ograve Uacute Ucircumflex Ugrave dotlessi circumflex tilde macron breve dotaccent ring cedilla hungarumlaut ogonek caron Lslash lslash Scaron scaron Zcaron zcaron brokenbar Eth eth Yacute yacute Thorn thorn minus multiply onesuperior twosuperior threesuperior onehalf onequarter threequarters franc Gbreve gbreve Idotaccent Scedilla scedilla Cacute cacute Ccaron ccaron dcroat".split(
+    " ",
+  );
+
+const POST_VERSION_MAC_STANDARD_ORDER = 0x00010000;
+const POST_VERSION_CUSTOM_NAMES = 0x00020000;
+
+// A glyph ID -> glyph name lookup built from a font's own 'post' table, for the two versions that carry names: 1.0 (the standard Macintosh ordering exactly) and 2.0 (a per-glyph index, below 258 into that same ordering and above it into this table's own array of Pascal strings). Returns `undefined` for versions 2.5 and 3.0, which name no glyph at all -- 3.0 in particular is what a subsetting tool writes when it strips names, so a caller must have another way to identify a glyph rather than treating a nameless font as an error.
+export function parsePostGlyphNames(
+  font: SfntFont,
+): ((glyphId: number) => string | undefined) | undefined {
+  const bytes = sfntTableBytes(font, "post");
+  if (bytes === undefined || !hasBytes(bytes, 0, POST_HEADER_SIZE)) {
+    return undefined;
+  }
+  const version = u32(bytes, 0);
+  if (version === POST_VERSION_MAC_STANDARD_ORDER) {
+    return (glyphId) => MAC_STANDARD_GLYPH_ORDER[glyphId];
+  }
+  if (version !== POST_VERSION_CUSTOM_NAMES) {
+    return undefined;
+  }
+  if (!hasBytes(bytes, POST_HEADER_SIZE, 2)) {
+    return undefined;
+  }
+  const numGlyphs = u16(bytes, POST_HEADER_SIZE);
+  const indicesOffset = POST_HEADER_SIZE + 2;
+  if (!hasBytes(bytes, indicesOffset, numGlyphs * 2)) {
+    return undefined;
+  }
+
+  // The Pascal strings run to the end of the table with no count of their own, so they are read in one pass here rather than walked again per lookup.
+  const names: string[] = [];
+  let cursor = indicesOffset + numGlyphs * 2;
+  while (hasBytes(bytes, cursor, 1)) {
+    const length = u8(bytes, cursor);
+    if (!hasBytes(bytes, cursor + 1, length)) {
+      break; // a truncated final string costs its own name, not every name before it
+    }
+    let name = "";
+    for (let i = 0; i < length; i++) {
+      name += String.fromCharCode(u8(bytes, cursor + 1 + i));
+    }
+    names.push(name);
+    cursor += 1 + length;
+  }
+
+  return (glyphId) => {
+    if (glyphId < 0 || glyphId >= numGlyphs) {
+      return undefined;
+    }
+    const index = u16(bytes, indicesOffset + glyphId * 2);
+    return index < MAC_STANDARD_GLYPH_ORDER.length
+      ? MAC_STANDARD_GLYPH_ORDER[index]
+      : names[index - MAC_STANDARD_GLYPH_ORDER.length];
   };
 }
 

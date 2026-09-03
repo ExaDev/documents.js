@@ -5,6 +5,7 @@ import {
   parseName,
   parseOs2,
   parsePost,
+  parsePostGlyphNames,
 } from "./font-tables";
 import type { SfntFont } from "./sfnt";
 import { parseSfnt } from "./sfnt";
@@ -143,6 +144,26 @@ describe("parsePost", () => {
     expect(post!.italicAngle).toBe(0);
     expect(post!.underlinePosition).toBe(-75);
     expect(post!.underlineThickness).toBe(50);
+  });
+});
+
+describe("parsePostGlyphNames", () => {
+  it("names glyphs from Caladea Regular's version 2.0 table", () => {
+    // Glyph 5 is "A" and glyph 35 is "e" in Caladea's own glyph order, read out of the .ttf by a standalone script rather than by this module.
+    const glyphName = parsePostGlyphNames(parse(caladeaRegularBytes()));
+    expect(glyphName).toBeDefined();
+    expect(glyphName!(5)).toBe("A");
+    expect(glyphName!(35)).toBe("e");
+  });
+
+  it("returns undefined past the last glyph a version 2.0 table covers", () => {
+    const glyphName = parsePostGlyphNames(parse(caladeaRegularBytes()));
+    expect(glyphName!(0xffff)).toBeUndefined();
+  });
+
+  it("returns undefined for Carlito Regular, whose version 3.0 table names nothing", () => {
+    // The common shape for a subsetted or size-optimised font: glyph names stripped entirely, so a reader must identify a glyph some other way rather than treating the absence as an error.
+    expect(parsePostGlyphNames(parse(carlitoRegularBytes()))).toBeUndefined();
   });
 });
 
