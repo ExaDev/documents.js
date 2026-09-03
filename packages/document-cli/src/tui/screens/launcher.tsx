@@ -33,7 +33,7 @@ export function LauncherScreen(): ReactElement {
       <Text bold>document-cli</Text>
       <Text dimColor>
         A terminal editor for docx, pptx, odt, odp, ods, odg, markdown, odb and
-        pdf -- xlsx, csv and svg open as read-only PDF previews.
+        pdf -- xlsx, csv, svg and rtf open as read-only PDF previews.
       </Text>
       <Text> </Text>
       <Text>

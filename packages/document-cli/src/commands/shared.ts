@@ -27,7 +27,7 @@ import {
 
 // Every DocumentFormat this CLI's commands know how to name in a usage error -- shared between the generic `convert` command (commands/convert.ts) and `from-package` (commands/from-package.ts), the two commands whose target format is not already fixed by their own name.
 export const KNOWN_DOCUMENT_FORMATS =
-  "docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, pdf";
+  "docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, pdf";
 
 // Resolves a target DocumentFormat the same way for both callers above: an explicit --to always wins (it is the caller stating intent unambiguously), falling back to the output path's own extension, and finally failing with a usage error naming exactly what is missing.
 export function resolveTargetFormat(
