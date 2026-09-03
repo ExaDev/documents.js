@@ -15,7 +15,7 @@ import {
 } from "./tap";
 import { CELL_MARK } from "../text/special";
 
-// Groups the flat paragraph-entry sequence read.ts produces into the final ContentBlock list, folding every contiguous run of table-depth-1 paragraphs into a real ContentTable with row/cell/merge structure -- [MS-DOC] 2.4.3's own Overview of Tables model: a table is a run of paragraphs each marked sprmPFInTable, cells delimited by cell-mark (0x07) characters (a cell holding more than one paragraph ends every paragraph but its last with an ordinary 0x0D mark), and each row closed by a row-ending mark of its own (sprmPFTtp, itself a 0x07 mark) that carries the row's TAP -- its column layout and every physical cell's own horizontal/vertical merge state, resolved by tap.ts. A non-table entry passes through untouched.
+// Groups the flat paragraph-entry sequence read.ts produces into the final ContentBlock list, folding every contiguous run of table-depth-1 paragraphs into a real ContentTable with row/cell/merge structure -- [MS-DOC] 2.4.3's own Overview of Tables model: a table is a run of paragraphs each marked sprmPFInTable, cells delimited by cell-mark (0x07) characters (a cell holding more than one paragraph ends every paragraph but its last with an ordinary 0x0D mark), and each row closed by a row-ending mark of its own (sprmPFTtp, itself a 0x07 mark) that carries the row's TAP -- its column layout and every physical cell's own horizontal/vertical merge state, resolved by tap.ts. A non-table entry passes through untouched. A run whose TAP this reader cannot resolve degrades to its own paragraphs rather than failing the whole document -- see tryAssembleTable's own note.
 
 const TWIPS_PER_POINT = 20;
 
@@ -38,25 +38,25 @@ export function assembleBlocks(
       index += 1;
       continue;
     }
-    const { table, nextIndex } = readTable(entries, index);
-    blocks.push(table);
+    const { runEntries, nextIndex } = collectTableRun(entries, index);
+    const table = tryAssembleTable(runEntries);
+    blocks.push(
+      ...(table !== undefined
+        ? [table]
+        : runEntries.map((run) => run.paragraph)),
+    );
     index = nextIndex;
   }
   return blocks;
 }
 
-function readTable(
+// Collects one contiguous run of table-depth-1 paragraphs -- up to but not including the first entry that has left the table -- refusing a nested table (table depth greater than 1) immediately, since that is a genuinely unimplemented feature this reader cannot represent at all, unlike the TAP-resolution gaps tryAssembleTable degrades around below. Boundary detection lives here, once, so a row this reader ends up unable to resolve still degrades to flat paragraphs across the SAME span a successfully parsed table would have occupied, rather than needing its own separate boundary logic.
+function collectTableRun(
   entries: readonly ParagraphEntry[],
   start: number,
-): { table: ContentTable; nextIndex: number } {
-  const rawRows: RawCell[][] = [];
-  const rowDefinitions: TableRowDefinition[] = [];
-  const rowHeights: (number | undefined)[] = [];
-
-  let cellParagraphs: ContentParagraph[] = [];
-  let rowCells: { blocks: ContentBlock[] }[] = [];
+): { runEntries: ParagraphEntry[]; nextIndex: number } {
+  const runEntries: ParagraphEntry[] = [];
   let index = start;
-
   while (index < entries.length) {
     const entry = entries[index];
     if (entry?.properties.inTable !== true) break;
@@ -69,22 +69,31 @@ function readTable(
         "doc-codec does not support a table nested inside a table cell (table depth greater than 1)",
       );
     }
+    runEntries.push(entry);
+    index += 1;
+  }
+  return { runEntries, nextIndex: index };
+}
 
+// Attempts to fold one contiguous run of table-depth paragraphs into a real ContentTable, per [MS-DOC] 2.4.3's own Overview of Tables: cell boundaries at each cell mark, a row closed by its own row-ending mark whose TAP (tap.ts's applyTableSprms) supplies the row's column layout and every physical cell's merge state. Returns undefined -- never throws -- when a row's own TAP cannot be resolved this way, rather than refusing the whole document: a real producer's own row mark can state its TAP indirectly (sprmPTableProps pointing at a PrcData of incremental sprmT* operations, [MS-DOC] 2.4.3's own worked example) rather than through the direct sprmTDefTable this reader follows, or a row's cell marks can simply not agree with what its TAP declares -- both genuinely legal constructs this reader does not implement, exactly the "reads with fewer properties than it states" degrade the README's scope table already documents for an indirect Papx elsewhere in this package, not corruption. The run's own paragraphs read as paragraphs instead, the same as any other property this reader does not convert. A row ending mid-cell with no terminating mark at all, by contrast, is genuine corruption (the stream itself is truncated, not merely using an unsupported mechanism) and still throws.
+function tryAssembleTable(
+  runEntries: readonly ParagraphEntry[],
+): ContentTable | undefined {
+  const rawRows: RawCell[][] = [];
+  const rowDefinitions: TableRowDefinition[] = [];
+  const rowHeights: (number | undefined)[] = [];
+
+  let cellParagraphs: ContentParagraph[] = [];
+  let rowCells: { blocks: ContentBlock[] }[] = [];
+
+  for (const entry of runEntries) {
     cellParagraphs.push(entry.paragraph);
 
     if (entry.properties.tableRowEnd === true) {
       const rowProperties = applyTableSprms(entry.grpprl, {});
       const definition = rowProperties.definition;
-      if (definition === undefined) {
-        throw new DocFormatError(
-          "a table row's own terminating mark carries no sprmTDefTable, so its column layout and cell merge state cannot be resolved",
-        );
-      }
-      if (rowCells.length !== definition.cells.length) {
-        throw new DocFormatError(
-          `a table row's own TAP declares ${definition.cells.length} physical cells, but its cell marks delimit ${rowCells.length}`,
-        );
-      }
+      if (definition === undefined) return undefined;
+      if (rowCells.length !== definition.cells.length) return undefined;
       rawRows.push(
         rowCells.map((cell, cellIndex): RawCell => {
           const merge = definition.cells[cellIndex];
@@ -104,7 +113,6 @@ function readTable(
       rowHeights.push(rowProperties.heightPt);
       rowCells = [];
       cellParagraphs = [];
-      index += 1;
       continue;
     }
 
@@ -113,7 +121,6 @@ function readTable(
       rowCells.push({ blocks: cellParagraphs });
       cellParagraphs = [];
     }
-    index += 1;
   }
 
   if (cellParagraphs.length > 0 || rowCells.length > 0) {
@@ -121,19 +128,11 @@ function readTable(
       "a table's paragraphs end without a row-ending mark to close the row's last cell",
     );
   }
-  if (rawRows.length === 0) {
-    throw new DocFormatError(
-      "a run of table-depth paragraphs produced no complete row",
-    );
-  }
 
   return {
-    table: {
-      kind: "table",
-      rows: buildRows(rawRows, rowHeights),
-      columnWidthsPt: columnWidthsFromDefinition(rowDefinitions[0]),
-    },
-    nextIndex: index,
+    kind: "table",
+    rows: buildRows(rawRows, rowHeights),
+    columnWidthsPt: columnWidthsFromDefinition(rowDefinitions[0]),
   };
 }
 
