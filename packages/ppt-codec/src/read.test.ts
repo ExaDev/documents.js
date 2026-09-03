@@ -1,4 +1,8 @@
-import { flattenTree } from "document-schema.js";
+import {
+  ContentDocumentSchema,
+  DocumentTreeSchema,
+  flattenTree,
+} from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { PptEncryptedError, PptFormatError } from "./errors";
 import {
@@ -113,6 +117,20 @@ describe("readPptContent", () => {
       { name: CURRENT_USER_STREAM, bytes: currentUserStream },
     ]);
     expect(() => readPptContent(bytes)).toThrow(PptFormatError);
+  });
+});
+
+describe("the shared schema accepts what the reader produces", () => {
+  // toEqual on a plain object proves the reader built what this suite expected; parsing proves it built what document-schema.js actually requires -- a missing ContentShape inset, or a slide without its required notes, would satisfy the first check and fail this one.
+  it("parses the flat form as a presentation ContentDocument", () => {
+    const { metadata, slides } = readPptContent(pptFile());
+    expect(() =>
+      ContentDocumentSchema.parse({ kind: "presentation", metadata, slides }),
+    ).not.toThrow();
+  });
+
+  it("parses the tree form as a DocumentTree", () => {
+    expect(() => DocumentTreeSchema.parse(readPpt(pptFile()))).not.toThrow();
   });
 });
 
