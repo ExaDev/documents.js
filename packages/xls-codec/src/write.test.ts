@@ -10,7 +10,7 @@ import {
   DocumentTreeSchema,
   PAGE_SIZE_LETTER,
 } from "document-schema.js";
-import { isCompoundFile } from "archive-codec";
+import { isCompoundFile, readCompoundFile } from "archive-codec";
 import { describe, expect, it } from "vitest";
 
 import { BiffWriteError } from "./biff/write-errors";
@@ -467,6 +467,37 @@ describe("writeXlsContent", () => {
         ]),
       ),
     ).toThrow(BiffWriteError);
+  });
+
+  describe("metadata", () => {
+    it('round-trips title/subject/author/keywords/dates through a real "\\x05SummaryInformation" stream', () => {
+      const input: XlsContentDocument = {
+        ...document([
+          sheet("Sheet1", [cell(0, 0, { kind: "number", value: 1 })]),
+        ]),
+        metadata: {
+          title: "Budget",
+          subject: "Finance",
+          author: "Joe",
+          keywords: ["finance", "quarterly"],
+          createdIso: "2024-01-15T09:00:00.000Z",
+          modifiedIso: "2024-03-20T14:30:00.000Z",
+        },
+      };
+      const bytes = writeXlsContent(input);
+      expect(readXlsContent(bytes).metadata).toEqual(input.metadata);
+    });
+
+    it('writes no "\\x05SummaryInformation" stream at all when metadata carries nothing that stream can hold', () => {
+      const bytes = writeXlsContent(
+        document([sheet("Sheet1", [cell(0, 0, { kind: "number", value: 1 })])]),
+      );
+      const streams = readCompoundFile(bytes);
+      expect(
+        streams.some((stream) => stream.path === "\x05SummaryInformation"),
+      ).toBe(false);
+      expect(readXlsContent(bytes).metadata).toEqual({});
+    });
   });
 });
 
