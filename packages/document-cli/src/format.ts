@@ -26,6 +26,7 @@ const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   markdown: "markdown",
   md: "markdown",
   rtf: "rtf",
+  wpd: "wpd",
   pdf: "pdf",
 };
 
@@ -42,6 +43,7 @@ const FORMAT_TO_EXTENSION: Readonly<Record<DocumentFormat, string>> = {
   svg: "svg",
   markdown: "md",
   rtf: "rtf",
+  wpd: "wpd",
   pdf: "pdf",
 };
 

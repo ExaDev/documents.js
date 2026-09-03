@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import {
+  convertDocument,
   csvToPdf,
   docxToPdf,
   encodeMarkdownText,
@@ -76,7 +77,7 @@ export async function exportToPdf(
     await writeFile(destinationPath, pdfBytes);
     return;
   }
-  // xlsx has no editor to read current bytes from (see state/types.ts's own XlsxOpenDocument doc comment) -- the original bytes captured at open time are re-converted here, with this call's own real fonts/diagnostics options, rather than reusing the fixed preview conversion `openDocumentAtPath` computed to build the read-only viewer. csv, svg, and rtf are the identical no-editor story (their own OpenDocument doc comments), each re-converted through its own to-Pdf function the same way.
+  // xlsx has no editor to read current bytes from (see state/types.ts's own XlsxOpenDocument doc comment) -- the original bytes captured at open time are re-converted here, with this call's own real fonts/diagnostics options, rather than reusing the fixed preview conversion `openDocumentAtPath` computed to build the read-only viewer. csv, svg, rtf, and wpd are the identical no-editor story (their own OpenDocument doc comments), each re-converted through its own to-Pdf function the same way.
   if (openDocument.format === "xlsx") {
     const pdfBytes = xlsxToPdf(openDocument.bytes, pdfOptions);
     await writeFile(destinationPath, pdfBytes);
@@ -94,6 +95,17 @@ export async function exportToPdf(
   }
   if (openDocument.format === "rtf") {
     const pdfBytes = rtfToPdf(openDocument.bytes, pdfOptions);
+    await writeFile(destinationPath, pdfBytes);
+    return;
+  }
+  // wpd has no rtfToPdf-equivalent named function (see WpdOpenDocument's own doc comment on why) -- convertDocument("wpd", "pdf", ...) reaches the identical composition-engine edge convertDocument's own named forwarders are thin wrappers over.
+  if (openDocument.format === "wpd") {
+    const pdfBytes = convertDocument(
+      "wpd",
+      "pdf",
+      openDocument.bytes,
+      pdfOptions,
+    );
     await writeFile(destinationPath, pdfBytes);
     return;
   }
