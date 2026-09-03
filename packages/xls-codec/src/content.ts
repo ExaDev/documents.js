@@ -1,4 +1,7 @@
-import { readSummaryInformation } from "archive-codec";
+import {
+  readSummaryInformation,
+  summaryInformationToLayoutMetadata,
+} from "archive-codec";
 import type {
   ContentCellValue,
   ContentDocument,
@@ -19,7 +22,6 @@ import {
   type Substream,
 } from "./biff/substreams";
 import { readWorkbookStreams } from "./container";
-import { summaryInformationToLayoutMetadata } from "./metadata";
 import { classifyNumberFormat } from "excel-number-format";
 import {
   serialToIsoDate,
