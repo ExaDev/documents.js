@@ -449,6 +449,16 @@ export function xlsxToPdf(
   return convertDocument("xlsx", "pdf", bytes, options);
 }
 
+// rtf bytes -> PDF bytes: rtf has no layout engine of its own either (capability.ts's own FORMAT_CAPABILITIES.rtf), so convertDocument's pathfinder resolves this the same shape as xlsx above -- [rtf -> docx bridge, docx -> pdf toPdf] -- rather than a direct toPdf hop. The reverse direction (pdfToRtf) lives in from-pdf.ts with the rest of the pdf-sourced family.
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function rtfToPdf(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: DocumentToPdfOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocument("rtf", "pdf", bytes, options);
+}
+
 // xlsx <-> markdown: xlsx and markdown share no ContentDocument variant (spreadsheet vs wordprocessing), so convertDocument's pathfinder resolves this as [xlsx -> ods, ods -> pdf, pdf -> markdown] -- three hops, both legs' lossiness inherited in full (the single lossiest path in the package). onDocument reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention.
 
 // Forwards to convertDocument (src/convert/composition.ts).
