@@ -18,3 +18,13 @@ const ERROR_TEXT: ReadonlyMap<number, string> = new Map([
 export function errorTextOf(code: number): string | undefined {
   return ERROR_TEXT.get(code);
 }
+
+/** The write direction's own lookup, built once from ERROR_TEXT rather than as a second hand-maintained table, so the two directions cannot drift apart. */
+const ERROR_CODE: ReadonlyMap<string, number> = new Map(
+  Array.from(ERROR_TEXT, ([code, text]) => [text, code]),
+);
+
+/** The BIFF8 error code for a cell's displayed error text, or undefined when the text is not one of the eight [MS-XLS] defines -- which the writer refuses to guess a code for rather than silently substituting a different error. */
+export function errorCodeOf(text: string): number | undefined {
+  return ERROR_CODE.get(text);
+}
