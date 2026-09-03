@@ -11,6 +11,7 @@ import { RecordBuilder } from "../biff/builder";
 import { errorCodeOf } from "../biff/errors";
 import {
   BOF_TYPE_WORKSHEET,
+  RECORD_BLANK,
   RECORD_BOF,
   RECORD_BOOLERR,
   RECORD_COLINFO,
@@ -29,12 +30,14 @@ import {
   isoTimeToSerial,
 } from "../serial";
 import { pointsToColumnWidth, pointsToTwips } from "../units";
-import { writesCellRecord } from "../written-cells";
+import { cellCarriesDecoration, writesCellRecord } from "../written-cells";
 import { GENERAL_CELL_XF_INDEX } from "./globals-writer";
 
 // The worksheet substream ([MS-XLS] 2.1.7.20.5), write side: the grid geometry and cell table for one sheet, the counterpart of workbook/sheet.ts's own readSheetRecords. See xls-codec's README for exactly which worksheet-substream records this writer emits (Dimensions, ColInfo, Row, the value-cell family, MergeCells) and which it deliberately omits (Window2, the calc-state/print-settings record family, Index/DBCell) -- real content, not per-window UI state or a lookup optimisation this reader (or any reader) does not require to find a cell.
 //
-// A blank cell -- ContentCellValue's own 'empty' kind -- is never written as a Blank record: content.ts's own mapCell drops every blank cell it reads (see its own comment), and applyMerges independently reconstructs an empty anchor for a merged range from the MergeCells record alone. Writing nothing for an 'empty' cell is therefore not a gap; it is what round-trips back to the identical read, and it is why this writer implements no Blank/MulBlank/RK/MulRk records at all -- RK and the Mul* runs are pure compaction optimisations over the same information a plain Number/LabelSst/BoolErr record already carries losslessly.
+// A blank cell -- ContentCellValue's own 'empty' kind -- splits in two. One carrying no decoration is written as nothing at all, which is what round-trips: content.ts's mapCell drops an undecorated blank it reads, and applyMerges reconstructs an empty anchor for a merged range from the MergeCells record alone. One carrying a background or a border is a Blank record ([MS-XLS] 2.4.20), because its decoration exists only in the XF that record's ixfe names and there is no other record in the sheet to hang it on. written-cells.ts holds the predicate deciding which, shared with write.ts's own workbook-wide scans so the two cannot disagree.
+//
+// MulBlank, RK, and MulRk stay unimplemented: unlike Blank, each is a pure compaction optimisation over information a plain Blank/Number record already carries losslessly.
 
 /** BIFF8's own 16-bit row index and 8-bit column index ceilings ([MS-XLS] 2.4.221's Rw structure and 2.4.53's Col256U structure): 65536 rows (0-65535), 256 columns (0-255) -- unlike xlsx's much larger grid. A cell outside this range cannot be expressed in BIFF8 at all, so it is refused rather than silently truncated into a wrapped index. */
 const MAX_ROW_INDEX = 0xffff;
@@ -82,7 +85,7 @@ function minMax(
   );
 }
 
-/** Dimensions ([MS-XLS] 2.4.90): the sheet's used range, derived from the cells this writer actually emits a value record for -- 'empty'-kind cells carry no value and so contribute nothing to the used range, matching how a real producer's own used range excludes a cell with neither data nor direct formatting. */
+/** Dimensions ([MS-XLS] 2.4.90): the sheet's used range, derived from exactly the cells this writer emits a record for -- so a decorated empty cell counts (a real producer's used range covers a cell carrying direct formatting) while an undecorated one, having neither data nor formatting, does not. */
 function writeDimensionsRecord(
   writtenCells: readonly ContentSheetCell[],
 ): Uint8Array<ArrayBuffer> {
@@ -202,7 +205,7 @@ function cellHeader(cell: ContentSheetCell, xfIndex: number): RecordBuilder {
   return new RecordBuilder().u16(cell.row).u16(cell.column).u16(xfIndex);
 }
 
-/** One value-cell record, keyed by ContentCellValue's own discriminant: Number for every numeric/temporal kind ([MS-XLS] 2.4.180 -- always the full IEEE 754 double, never the packed RK encoding, which is a compaction optimisation this writer does not implement), LabelSst for a string ([MS-XLS] 2.4.149, through the workbook-wide shared string table), BoolErr for a boolean or error value ([MS-XLS] 2.4.24). 'empty' never reaches here -- the caller filters it out before this is called, since an empty cell has no value record to write at all (see this module's own top comment). */
+/** One cell record, keyed by ContentCellValue's own discriminant: Number for every numeric/temporal kind ([MS-XLS] 2.4.180 -- always the full IEEE 754 double, never the packed RK encoding, which is a compaction optimisation this writer does not implement), LabelSst for a string ([MS-XLS] 2.4.149, through the workbook-wide shared string table), BoolErr for a boolean or error value ([MS-XLS] 2.4.24), and Blank for an 'empty' cell whose decoration is the only thing it carries ([MS-XLS] 2.4.20 -- a cell header and nothing else, so the XF its ixfe names is the whole content). An undecorated empty cell never reaches here at all: written-cells.ts's own predicate filters it out upstream, since there is nothing for it to say. */
 function writeCellValueRecord(
   cell: ContentSheetCell,
   xfIndex: number,
@@ -264,9 +267,12 @@ function writeCellValueRecord(
       );
     }
     case "empty":
-      throw new BiffWriteError(
-        "writeCellValueRecord was called for an 'empty' cell, which the caller must filter out before reaching here",
-      );
+      if (!cellCarriesDecoration(cell)) {
+        throw new BiffWriteError(
+          `internal error: writeCellValueRecord was called for the undecorated empty cell at row ${cell.row}, column ${cell.column}, which written-cells.ts's own predicate must filter out before reaching here`,
+        );
+      }
+      return writeRecord(RECORD_BLANK, cellHeader(cell, xfIndex).build());
   }
 }
 

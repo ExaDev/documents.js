@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   BOF_TYPE_WORKBOOK,
   BOF_TYPE_WORKSHEET,
+  RECORD_BLANK,
   RECORD_BOF,
   RECORD_BOOLERR,
   RECORD_BOUNDSHEET8,
@@ -535,6 +536,68 @@ describe("readXlsContent", () => {
         }),
       );
     }
+
+    it("keeps a Blank cell whose own XF carries real decoration", () => {
+      // The case a producer writes a Blank record FOR: the cell holds no value, and its fill and borders are the only thing it has to say -- so dropping it as "shows nothing" discards exactly what the record was written to carry. Two XFs here so the decorated one is not also the sheet's default: index 15 undecorated, index 16 carrying the fill and a thin top border.
+      const bytes = xlsFile(
+        workbookStream({
+          globals: [
+            ...xfTable(0),
+            record(RECORD_XF, [
+              ...u16(0),
+              ...u16(0),
+              ...u16(0),
+              ...cellXfTrailer({
+                fillPattern: 1,
+                fillForegroundIcv: 10,
+                top: { style: 1, icv: 12 },
+              }),
+            ]),
+          ],
+          sheets: [
+            {
+              name: "Sheet1",
+              records: [record(RECORD_BLANK, cell(3, 4, 16))],
+            },
+          ],
+        }),
+      );
+
+      const cells = readXlsContent(bytes).sheets[0]?.cells ?? [];
+
+      expect(cells).toHaveLength(1);
+      expect(cells[0]).toMatchObject({
+        row: 3,
+        column: 4,
+        value: { kind: "empty" },
+        displayText: "",
+      });
+      // icv 10 is the default table's own Red, icv 12 its own Blue.
+      expect(cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
+      expect(cells[0]?.borders).toEqual({
+        top: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.75 },
+      });
+    });
+
+    it("still drops a Blank cell whose XF resolves to no decoration this reader can express", () => {
+      // fls=2 is 50% gray, a pattern that deliberately resolves to no background at all (see the test below), and no side carries a border -- so this Blank has nothing to show after resolution and stays dropped, exactly as an undecorated one does.
+      const bytes = xlsFile(
+        workbookStream({
+          globals: xfTableWithDecoration(0, {
+            fillPattern: 2,
+            fillForegroundIcv: 10,
+          }),
+          sheets: [
+            {
+              name: "Sheet1",
+              records: [record(RECORD_BLANK, cell(3, 4))],
+            },
+          ],
+        }),
+      );
+
+      expect(readXlsContent(bytes).sheets[0]?.cells).toHaveLength(0);
+    });
 
     it("reads a solid fill's own foreground colour as background, through the default palette", () => {
       // icv 10: the default table's own duplicate of Red (rgColor[2], [MS-XLS] "Icv") -- resolvable with no Palette record present at all.

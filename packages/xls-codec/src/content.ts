@@ -208,13 +208,15 @@ function mapCells(raw: RawSheet, globals: WorkbookGlobals): ContentSheetCell[] {
 /**
  * Maps one raw cell, or drops it.
  *
- * A blank cell carrying no merge is dropped: ContentSheet's cell array is documented as sparse, holding only cells with something to show, and a Blank or MulBlank record states formatting this reader does not map yet. Dropping it keeps the array honest rather than filling a sheet with thousands of empty entries -- applyMerges below re-materialises the few blanks that anchor a merged range.
+ * A blank cell showing nothing at all is dropped: ContentSheet's cell array is documented as sparse, holding only cells with something to show, and dropping the blanks keeps it honest rather than filling a sheet with thousands of empty entries -- applyMerges below re-materialises the few that anchor a merged range.
+ *
+ * A Blank or MulBlank record whose own XF carries a background or a border is not that case. Its formatting is the entire reason the record exists -- a producer writes one precisely to say "this cell is empty AND looks like this" -- so it becomes an `empty`-kind cell carrying that decoration, which is also what this package's own writer emits for one.
  */
 function mapCell(
   cell: RawCell,
   globals: WorkbookGlobals,
 ): ContentSheetCell | undefined {
-  if (cell.value.kind === "blank") {
+  if (cell.value.kind === "blank" && !hasDecoration(globals, cell.xfIndex)) {
     return undefined;
   }
   const formatCode = formatCodeOf(globals, cell.xfIndex);
@@ -240,6 +242,14 @@ function mapCell(
     mapped.borders = borders;
   }
   return mapped;
+}
+
+/** Whether an XF resolves to any decoration this reader can express -- a background, or a border on at least one side. Asked of a Blank/MulBlank record's own XF, since a blank cell is worth carrying only when its formatting is something to show; asked through backgroundOf/bordersOf rather than off the raw fields, so a decoration those two decline to resolve (a non-solid fill pattern, an unrecognised BorderStyle token, an icv with no fixed RGB value) counts as no decoration here too. */
+function hasDecoration(globals: WorkbookGlobals, xfIndex: number): boolean {
+  return (
+    backgroundOf(globals, xfIndex) !== undefined ||
+    bordersOf(globals, xfIndex) !== undefined
+  );
 }
 
 /**
@@ -310,7 +320,7 @@ function resolveValue(
   formatCode: string | undefined,
   date1904: boolean,
 ): ContentCellValue {
-  // The two vocabularies name an absent value differently -- BIFF8's record family calls it blank, the schema calls it empty -- so the translation is spelled out rather than left to a structural coincidence. mapCell already drops a blank cell before reaching here; this branch is what keeps the function total for the one that survives as a merge anchor.
+  // The two vocabularies name an absent value differently -- BIFF8's record family calls it blank, the schema calls it empty -- so the translation is spelled out rather than left to a structural coincidence. mapCell drops an undecorated blank before reaching here; this branch is what a decorated one, and a blank that survives as a merge anchor, resolve through.
   if (cell.value.kind === "blank") {
     return { kind: "empty" };
   }
