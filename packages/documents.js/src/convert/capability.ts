@@ -97,7 +97,28 @@ export const FORMAT_CAPABILITIES: Readonly<
     hasLayoutPath: false,
     readOnly: false,
   },
-  // wpd shares the wordprocessing variant with docx/odt/markdown/rtf (wpd-codec's readWpdContent), and is the first read-only member: wpd-codec ships a reader and no writer, deliberately -- see that package's own Scope. hasLayoutPath is true for markdown's reason rather than rtf's: what it reads is a wordprocessing ContentDocument convertWordprocessingToLayout renders unmodified, and with no reverse direction to keep symmetrical there is nothing to weigh that against, so wpd -> pdf is a direct layout pass rather than a build-and-re-read through a docx bridge.
+  // doc shares the wordprocessing variant with docx/odt/markdown/rtf (doc-codec's readDocContent/writeDocContent, the pre-2007 Word Binary File Format) and follows rtf's routing exactly: doc-codec has no layout engine of its own -- no convertWordprocessingToLayout-equivalent doc entry point -- so hasLayoutPath stays false and the composition engine routes doc <-> pdf through a same-variant bridge to docx/odt/markdown/rtf plus that format's own toPdf/fromPdf edge. readOnly is false: doc-codec's writeDocContent is a real writer (single-section wordprocessing content, character/paragraph formatting only -- see that package's own README scope note), not merely a reader with no counterpart the way wpd-codec's is.
+  doc: {
+    format: "doc",
+    variant: "wordprocessing",
+    hasLayoutPath: false,
+    readOnly: false,
+  },
+  // xls shares the spreadsheet variant with xlsx/ods/csv (xls-codec's readXlsContent/writeXlsContent, the legacy Excel Binary File Format/BIFF8) and follows xlsx/csv's routing exactly: no layout engine of its own, so xls <-> pdf routes through the ods bridge + ods's own layout engine, never a direct xls -> LayoutDocument pipeline. readOnly is false: xls-codec's writeXlsContent is a real writer (cell values, merges, row/column sizing, number formats -- see that package's own README scope note).
+  xls: {
+    format: "xls",
+    variant: "spreadsheet",
+    hasLayoutPath: false,
+    readOnly: false,
+  },
+  // ppt shares the presentation variant with pptx/odp (ppt-codec's readPptContent/writePptContent, PowerPoint 97-2003 binary presentations) but, unlike pptx/odp, has no layout engine of its own -- so hasLayoutPath stays false and ppt <-> pdf routes through a same-variant bridge to pptx/odp plus that format's own toPdf/fromPdf edge, the identical composed routing rtf/doc get within the wordprocessing family. readOnly is false: ppt-codec's writePptContent is a real writer, narrower in scope than the reader (text-box slides only -- see that package's own README scope note), but a real write path all the same.
+  ppt: {
+    format: "ppt",
+    variant: "presentation",
+    hasLayoutPath: false,
+    readOnly: false,
+  },
+  // wpd shares the wordprocessing variant with docx/odt/markdown/rtf/doc (wpd-codec's readWpdContent), and is the first read-only member: wpd-codec ships a reader and no writer, deliberately -- see that package's own Scope. hasLayoutPath is true for markdown's reason rather than rtf's: what it reads is a wordprocessing ContentDocument convertWordprocessingToLayout renders unmodified, and with no reverse direction to keep symmetrical there is nothing to weigh that against, so wpd -> pdf is a direct layout pass rather than a build-and-re-read through a docx bridge.
   wpd: {
     format: "wpd",
     variant: "wordprocessing",

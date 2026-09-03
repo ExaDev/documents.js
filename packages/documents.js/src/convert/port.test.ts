@@ -16,6 +16,9 @@ describe("DocumentFormatSchema / DOCUMENT_FORMATS", () => {
       "csv",
       "markdown",
       "rtf",
+      "doc",
+      "xls",
+      "ppt",
       "wpd",
       "pdf",
     ]);

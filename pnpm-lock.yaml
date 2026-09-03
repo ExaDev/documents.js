@@ -631,9 +631,15 @@ importers:
 
   packages/documents.js:
     dependencies:
+      archive-codec:
+        specifier: ^1.3.0
+        version: link:../archive-codec
       byte-codec:
         specifier: ^1.2.0
         version: link:../byte-codec
+      doc-codec:
+        specifier: ^1.0.2
+        version: link:../doc-codec
       document-schema.js:
         specifier: ^5.5.0
         version: link:../document-schema.js
@@ -652,6 +658,9 @@ importers:
       pdf-codec:
         specifier: ^3.6.2
         version: link:../pdf-codec
+      ppt-codec:
+        specifier: ^1.0.2
+        version: link:../ppt-codec
       rtf-codec:
         specifier: ^1.1.0
         version: link:../rtf-codec
@@ -661,6 +670,9 @@ importers:
       wpd-codec:
         specifier: workspace:^
         version: link:../wpd-codec
+      xls-codec:
+        specifier: ^1.0.2
+        version: link:../xls-codec
       zod:
         specifier: ^4.4.3
         version: 4.4.3

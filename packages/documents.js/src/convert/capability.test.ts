@@ -16,13 +16,13 @@ describe("FORMAT_CAPABILITIES", () => {
     }
 
     expect(new Set(byVariant.get("wordprocessing"))).toEqual(
-      new Set(["docx", "odt", "markdown", "rtf", "wpd"]),
+      new Set(["docx", "odt", "markdown", "rtf", "doc", "wpd"]),
     );
     expect(new Set(byVariant.get("presentation"))).toEqual(
-      new Set(["pptx", "odp"]),
+      new Set(["pptx", "odp", "ppt"]),
     );
     expect(new Set(byVariant.get("spreadsheet"))).toEqual(
-      new Set(["xlsx", "ods", "csv"]),
+      new Set(["xlsx", "ods", "csv", "xls"]),
     );
     expect(new Set(byVariant.get("drawing"))).toEqual(new Set(["odg", "svg"]));
   });
@@ -44,6 +44,18 @@ describe("FORMAT_CAPABILITIES", () => {
   it("marks rtf as the wordprocessing family's plain-text member with no layout path of its own (an xlsx/csv-style composed member, not an svg-style one)", () => {
     expect(FORMAT_CAPABILITIES.rtf.variant).toBe("wordprocessing");
     expect(FORMAT_CAPABILITIES.rtf.hasLayoutPath).toBe(false);
+  });
+
+  it("marks doc/xls/ppt as read-and-write, layout-less members of their own variant family (the three legacy binary codecs, each xlsx/csv/rtf-style composed)", () => {
+    expect(FORMAT_CAPABILITIES.doc.variant).toBe("wordprocessing");
+    expect(FORMAT_CAPABILITIES.doc.hasLayoutPath).toBe(false);
+    expect(FORMAT_CAPABILITIES.doc.readOnly).toBe(false);
+    expect(FORMAT_CAPABILITIES.xls.variant).toBe("spreadsheet");
+    expect(FORMAT_CAPABILITIES.xls.hasLayoutPath).toBe(false);
+    expect(FORMAT_CAPABILITIES.xls.readOnly).toBe(false);
+    expect(FORMAT_CAPABILITIES.ppt.variant).toBe("presentation");
+    expect(FORMAT_CAPABILITIES.ppt.hasLayoutPath).toBe(false);
+    expect(FORMAT_CAPABILITIES.ppt.readOnly).toBe(false);
   });
 
   it("has no undefined-variant format other than pdf and odf reporting a layout path", () => {
@@ -178,6 +190,111 @@ describe("resolveCompositionPlan", () => {
     expect(resolveCompositionPlan("csv", "rtf")).toBeUndefined();
     expect(resolveCompositionPlan("rtf", "xlsx")).toBeUndefined();
     expect(resolveCompositionPlan("xlsx", "rtf")).toBeUndefined();
+  });
+
+  it("routes doc -> docx as a single same-variant bridge hop (never through PDF)", () => {
+    const plan = resolveCompositionPlan("doc", "docx");
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe("bridge");
+    expect(plan!.hops[0]!.from).toBe("doc");
+    expect(plan!.hops[0]!.to).toBe("docx");
+  });
+
+  it("composes doc -> pdf through docx (bridge then toPdf), since doc has no layout engine of its own", () => {
+    const plan = resolveCompositionPlan("doc", "pdf");
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(["bridge", "toPdf"]);
+  });
+
+  it("composes pdf -> doc through docx (fromPdf then bridge)", () => {
+    const plan = resolveCompositionPlan("pdf", "doc");
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(["fromPdf", "bridge"]);
+  });
+
+  it("routes doc -> ppt as a single cross-variant transform hop (wordprocessing -> presentation, never through PDF)", () => {
+    // doc and ppt are each layout-less within their own variant, but the cross-variant TRANSFORMS edge between wordprocessing and presentation costs 2 regardless of hasLayoutPath -- so this is a real one-hop route, cheaper than either format's own PDF composition.
+    const plan = resolveCompositionPlan("doc", "ppt");
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe("bridge");
+  });
+
+  it("returns undefined for doc <-> csv, doc <-> xlsx, and doc <-> xls -- the identical one-hop-too-many gap rtf <-> csv/xlsx already has", () => {
+    // doc has no toPdf/fromPdf edge of its own (like rtf), so reaching any spreadsheet-variant member needs doc -> {docx|odt|markdown|rtf} (bridge) -> pdf (toPdf) -> ods (fromPdf) -> {csv|xlsx|xls} (bridge): four hops, one past the cap.
+    expect(resolveCompositionPlan("doc", "csv")).toBeUndefined();
+    expect(resolveCompositionPlan("csv", "doc")).toBeUndefined();
+    expect(resolveCompositionPlan("doc", "xlsx")).toBeUndefined();
+    expect(resolveCompositionPlan("xlsx", "doc")).toBeUndefined();
+    expect(resolveCompositionPlan("doc", "xls")).toBeUndefined();
+    expect(resolveCompositionPlan("xls", "doc")).toBeUndefined();
+  });
+
+  it("routes xls -> ods as a single same-variant bridge hop (never through PDF)", () => {
+    const plan = resolveCompositionPlan("xls", "ods");
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe("bridge");
+  });
+
+  it("composes xls -> pdf through ods (bridge then toPdf), since xls has no layout engine of its own", () => {
+    const plan = resolveCompositionPlan("xls", "pdf");
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(["bridge", "toPdf"]);
+    expect(plan!.hops[0]!.from).toBe("xls");
+    expect(plan!.hops[0]!.to).toBe("ods");
+  });
+
+  it("composes pdf -> xls through ods (fromPdf then bridge)", () => {
+    const plan = resolveCompositionPlan("pdf", "xls");
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(["fromPdf", "bridge"]);
+  });
+
+  it("composes xls -> markdown through ods and pdf (three hops), within the cap even though xls itself has no layout engine of its own", () => {
+    const plan = resolveCompositionPlan("xls", "markdown");
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(3);
+  });
+
+  it("returns undefined for xls <-> rtf -- reaching a layout-less wordprocessing member needs one hop more than the cap allows", () => {
+    expect(resolveCompositionPlan("xls", "rtf")).toBeUndefined();
+    expect(resolveCompositionPlan("rtf", "xls")).toBeUndefined();
+  });
+
+  it("returns undefined for xls <-> ppt -- both endpoints need their own same-variant bridge hop before pdf, one hop more than the cap allows", () => {
+    // xls -> ods (bridge) -> pdf (toPdf) -> pptx (fromPdf) -> ppt (bridge): four hops, since neither xls nor ppt is LAYOUT_CAPABLE on its own.
+    expect(resolveCompositionPlan("xls", "ppt")).toBeUndefined();
+    expect(resolveCompositionPlan("ppt", "xls")).toBeUndefined();
+  });
+
+  it("routes ppt -> pptx as a single same-variant bridge hop (never through PDF)", () => {
+    const plan = resolveCompositionPlan("ppt", "pptx");
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe("bridge");
+  });
+
+  it("composes ppt -> pdf through pptx (bridge then toPdf), since ppt has no layout engine of its own", () => {
+    const plan = resolveCompositionPlan("ppt", "pdf");
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(["bridge", "toPdf"]);
+    expect(plan!.hops[0]!.from).toBe("ppt");
+    expect(plan!.hops[0]!.to).toBe("pptx");
+  });
+
+  it("composes pdf -> ppt through pptx (fromPdf then bridge)", () => {
+    const plan = resolveCompositionPlan("pdf", "ppt");
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(["fromPdf", "bridge"]);
+  });
+
+  it("returns undefined for ppt <-> csv and ppt <-> xlsx -- the identical too-many-hops gap ppt <-> xls already has", () => {
+    expect(resolveCompositionPlan("ppt", "csv")).toBeUndefined();
+    expect(resolveCompositionPlan("csv", "ppt")).toBeUndefined();
+    expect(resolveCompositionPlan("ppt", "xlsx")).toBeUndefined();
+    expect(resolveCompositionPlan("xlsx", "ppt")).toBeUndefined();
   });
 
   it("composes csv -> markdown through ods and pdf (three hops), mirroring the xlsx -> markdown last-resort route", () => {

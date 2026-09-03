@@ -1,6 +1,7 @@
 import { decodePackage as decodeOdfPackage } from "odf.js";
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from "ooxml.js";
 import { readPdf } from "pdf-codec";
+import { isCompoundFile } from "archive-codec";
 import { describe, expect, it } from "vitest";
 import { encodeCsvText } from "../csv/text";
 import { parseCsvRecords } from "../csv/records";
@@ -11,6 +12,9 @@ import { createOdt, openOdt } from "../edit/odt/editor";
 import { openPptx } from "../edit/pptx/editor";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
 import { rtfBytesFromLatin1 } from "rtf-codec";
+import { DocUnsupportedError, writeDocContent } from "doc-codec";
+import { writeXlsContent } from "xls-codec";
+import { writePptContent } from "../ppt/write";
 import { requireArrayBufferBytes } from "../model/bytes";
 import { readOdgContent } from "../odf/odg/read";
 import { readOdsContent } from "../odf/ods/read";
@@ -584,6 +588,87 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
       );
     case "odf":
       return odfFormulaBytes(FRACTION_FORMULA);
+    case "doc":
+      // Built through doc-codec's own writeDocContent directly (not through this package's FORMAT_NODES.doc.build, the very wiring several sweep pairs exercise) -- a bold heading paragraph and a plain paragraph, matching this switch's own rtf case in spirit: minimal but real enough that every doc-sourced sweep pair carries recognisable text through. doc-codec's writer covers a single wordprocessing section only (see that package's README scope note), which this fixture already satisfies.
+      return writeDocContent({
+        kind: "wordprocessing",
+        metadata: {},
+        sections: [
+          {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+            blocks: [
+              { kind: "paragraph", runs: [{ text: "Heading", bold: true }] },
+              {
+                kind: "paragraph",
+                runs: [{ text: "A paragraph of text." }],
+              },
+            ],
+          },
+        ],
+      });
+    case "xls":
+      // Built through xls-codec's own writeXlsContent directly, matching doc's own independence-from-the-wiring-under-test rationale above -- one sheet, two plain cells.
+      return writeXlsContent({
+        kind: "spreadsheet",
+        metadata: {},
+        sheets: [
+          {
+            name: "Sheet1",
+            cells: [
+              {
+                row: 0,
+                column: 0,
+                value: { kind: "string", value: "Widget" },
+                displayText: "Widget",
+              },
+              {
+                row: 0,
+                column: 1,
+                value: { kind: "number", value: 42.5 },
+                displayText: "42.5",
+              },
+            ],
+            columns: [],
+            rows: [],
+            images: [],
+            printSettings: {
+              pageSize: { widthPt: 612, heightPt: 792 },
+              margins: { topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 50.4 },
+              gridlines: false,
+              headers: false,
+              pageOrder: "downThenOver",
+            },
+          },
+        ],
+      });
+    case "ppt":
+      // Built through this package's own src/ppt/write.ts (ppt-codec's own writePptContent, wrapped -- see that module's own comment), matching doc/xls's own independence-from-the-wiring-under-test rationale: one slide, one text-box shape, one paragraph.
+      return writePptContent({
+        kind: "presentation",
+        metadata: {},
+        slides: [
+          {
+            size: { widthPt: 720, heightPt: 540 },
+            notes: "",
+            shapes: [
+              {
+                frame: { xPt: 72, yPt: 36, widthPt: 360, heightPt: 180 },
+                insetLeftPt: 0,
+                insetTopPt: 0,
+                insetRightPt: 0,
+                insetBottomPt: 0,
+                blocks: [
+                  {
+                    kind: "paragraph",
+                    runs: [{ text: "Sweep fixture" }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
     case "wpd":
       return minimalWpdBytes();
     case "pdf":
@@ -626,6 +711,11 @@ function isValidOutput(
     case "odf":
       // odf has no content.write and is never a sweep target -- ALL_SUPPORTED_PAIRS is derived from the port's own conversions, which excludes every odf-target pair (see local.ts's own odf/pdf special case). Present here only so the switch is exhaustive over every DocumentFormat member, matching fixtureBytes' own coverage.
       return false;
+    case "doc":
+    case "xls":
+    case "ppt":
+      // All three legacy binary formats are [MS-CFB] compound files -- the identical container docx/pptx/ods et al. wrap in a ZIP, but the classic OLE signature instead. isCompoundFile is archive-codec's own detector, the same one doc-codec's/xls-codec's own isDocBytes/isXlsFile build on.
+      return isCompoundFile(bytes);
     case "wpd":
       // wpd is read-only (READ_ONLY_FORMATS) and is never a sweep target for the identical reason odf above is not -- ALL_SUPPORTED_PAIRS excludes every wpd-target pair since wpd-codec ships no writer. Present here only for the same exhaustiveness reason as odf's own case.
       return false;
@@ -636,6 +726,14 @@ const ALL_SUPPORTED_PAIRS = createLocalDocumentConverter().conversions;
 
 // svg -> csv and svg -> markdown are the one pair family whose honest output is EMPTY: svg's read scope is vector graphics only (text is out of scope by design, reported as svg/text-unsupported), and neither csv nor markdown has any vector vocabulary, so there is literally nothing these two targets can carry. The conversion still runs and still produces a valid zero-record csv / zero-block markdown -- pinned here as the pair's own expected result, with every text-carrying source keeping the non-empty requirement unchanged.
 const EMPTY_OUTPUT_PAIRS = new Set(["svg->csv", "svg->markdown"]);
+
+// doc's own writer is scoped to a single section of plain paragraphs (see doc-codec's README scope note): no tables, images, numbering, or embedded objects. Every one of these four sweep sources routes REAL, richer-than-plain-paragraph content at doc through its own fixtureBytes -- docx/odt carry a table (their own minimalDocxBytes/minimalOdtBytes fixtures, shared with every other sweep pair too), and odp/ods each recover an image/embeddedObject block by the time their own cross-variant transform or PDF-composed route lands on the wordprocessing variant. writeDocContent correctly throws DocUnsupportedError rather than silently dropping the block -- exactly the same "refuse, never approximate" contract doc-codec's write path documents throughout. This is a genuine, pre-existing content-scope boundary of doc-codec's own writer, not a wiring gap: a source whose own content happens to be plain paragraphs (markdown, rtf, svg's own near-empty drawing-to-text transform, ...) reaches doc successfully, as the sweep's remaining doc-target pairs already prove.
+const DOC_UNSUPPORTED_CONTENT_PAIRS = new Set([
+  "docx->doc",
+  "odt->doc",
+  "odp->doc",
+  "ods->doc",
+]);
 
 describe.each(
   ALL_SUPPORTED_PAIRS.map(
@@ -654,6 +752,11 @@ describe.each(
         },
         { signal: new AbortController().signal, ...options },
       );
+    // DOC_UNSUPPORTED_CONTENT_PAIRS is a genuine, pinned refusal, not a "must not throw" violation -- see that set's own comment. Asserted directly rather than folded into the catch chain below, since there is no option that could make writeDocContent accept a table/image/embeddedObject block the way { sheet }/{ page } make a csv/svg build succeed.
+    if (DOC_UNSUPPORTED_CONTENT_PAIRS.has(edgeKey(pair))) {
+      await expect(run()).rejects.toThrow(DocUnsupportedError);
+      return;
+    }
     const result = await run()
       .catch((error: unknown) => {
         if (!(error instanceof CsvSheetNotSpecifiedError)) {
