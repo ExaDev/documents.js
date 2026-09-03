@@ -64,8 +64,10 @@ export function writeDocContent(
   }
 
   const writeParagraphs = flattenSectionBlocks(section.blocks);
-  // [MS-DOC] 2.4.2 requires the Main Document's own text to end in a paragraph mark; an otherwise-empty section still needs one empty paragraph to carry it, exactly as a real producer's own blank document does.
-  if (writeParagraphs.length === 0) {
+  // The Main Document's own last character MUST be an ordinary paragraph mark ([MS-DOC]'s own "Main Document" glossary entry: "The last character in the main document MUST be a paragraph mark (Unicode 0x000D)") -- never a table's own cell/TTP mark (0x0007), even though a row-ending mark is itself a perfectly legal paragraph-boundary terminator everywhere else ([MS-DOC] 2.4.2's "Determining Paragraph Boundaries": "The character at the end character position of a paragraph MUST be a paragraph mark, an end-of-section character, a cell mark, or a TTP mark"). An otherwise-empty section and a section whose very last block is a table both leave the flattened sequence's own last terminator short of that stronger, main-document-wide requirement, so both need one trailing empty ordinary paragraph appended -- confirmed against a real producer (LibreOffice 26.2.5.2): a table it writes as a document's own last content is always followed by a genuine 0x000D, and a written .doc lacking one is not merely missing a property but is not recognised as carrying a table at all by LibreOffice's own .doc import filter (see the README's Tables section for the full finding, ExaDev/documents.js#892).
+  const lastTerminator =
+    writeParagraphs[writeParagraphs.length - 1]?.terminator;
+  if (lastTerminator !== PARAGRAPH_MARK) {
     writeParagraphs.push({
       runs: [],
       properties: {},

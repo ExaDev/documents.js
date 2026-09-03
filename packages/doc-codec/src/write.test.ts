@@ -545,6 +545,37 @@ describe("writeDocContent tables", () => {
     expect(cellText(block.rows[1]?.cells[1])).toBe("C2");
   });
 
+  it("appends a trailing empty paragraph when a table is the section's own last block, so the document's last character is a genuine paragraph mark rather than the table's own row-ending cell mark", () => {
+    // [MS-DOC]'s own "Main Document" glossary entry: "The last character in the main document MUST be a paragraph mark (Unicode 0x000D)" -- never the row-ending mark's own cell-mark character (0x0007), even though a row-ending mark is a perfectly legal paragraph-boundary terminator everywhere else. Without this, a real third-party [MS-DOC] reader (LibreOffice) does not merely lose a property -- it fails to recognise the table at all (ExaDev/documents.js#892).
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [100],
+        rows: [{ cells: [{ blocks: [paragraph([{ text: "only cell" }])] }] }],
+      },
+    ]);
+    const result = roundTrip(input);
+    const blocks = blocksOf(result);
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]?.kind).toBe("table");
+    expect(blocks[1]).toEqual({ kind: "paragraph", runs: [] });
+  });
+
+  it("does not append a trailing paragraph when the section already ends in an ordinary paragraph after a table", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [100],
+        rows: [{ cells: [{ blocks: [paragraph([{ text: "cell" }])] }] }],
+      },
+      paragraph([{ text: "after the table" }]),
+    ]);
+    const result = roundTrip(input);
+    const blocks = blocksOf(result);
+    expect(blocks).toHaveLength(2);
+    expect(blocks[1]?.kind).toBe("paragraph");
+  });
+
   it("refuses a table nested inside a table cell", () => {
     const input = document([
       {
