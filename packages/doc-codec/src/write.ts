@@ -1,4 +1,5 @@
 import {
+  hasSummaryInformationFields,
   writeCompoundFile,
   writeSummaryInformationStream,
 } from "archive-codec";
@@ -6,10 +7,7 @@ import type { ContentDocument, ContentParagraph } from "document-schema.js";
 import { SUMMARY_INFORMATION_STREAM, WORD_DOCUMENT_STREAM } from "./detect";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { buildFib } from "./fib/write";
-import {
-  hasSummaryInformationFields,
-  layoutMetadataToSummaryInformation,
-} from "./metadata";
+import { layoutMetadataToSummaryInformation } from "./metadata";
 import { encodeCharacterGrpprl } from "./prop/chp-write";
 import { FKP_PAGE_SIZE } from "./prop/fkp";
 import {

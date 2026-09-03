@@ -28,9 +28,7 @@ const BARREL_FUNCTIONS = [
   'parsePlc',
   'findLargestAtMost',
   'endsParagraph',
-  'summaryInformationToLayoutMetadata',
   'layoutMetadataToSummaryInformation',
-  'hasSummaryInformationFields',
 ];
 const BARREL_CONSTANTS = [
   'FIB_W_IDENT',
@@ -77,7 +75,7 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/detect.js', exports: ['isDocBytes', 'WORD_DOCUMENT_STREAM', 'SUMMARY_INFORMATION_STREAM'] },
     {
       path: '../dist/metadata.js',
-      exports: ['summaryInformationToLayoutMetadata', 'layoutMetadataToSummaryInformation', 'hasSummaryInformationFields'],
+      exports: ['layoutMetadataToSummaryInformation'],
     },
     { path: '../dist/fib/offsets.js', exports: ['FIB_W_IDENT', 'FIB_FC_LCB_BLOB_OFFSET'] },
     { path: '../dist/fib/fib.js', exports: ['parseFib', 'tableStreamName'] },
