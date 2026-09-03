@@ -8,7 +8,7 @@ import { parsePackage } from "../../package-io/read";
 import { childrenWithTag, decodeEntities, rootElement } from "../util";
 import { buildXlsxPackageFromContent } from "./build";
 import { readXlsxContent } from "./content";
-import { BUILTIN_NUMBER_FORMATS } from "./number-format";
+import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
 // buildXlsxPackageFromContent's own real-LibreOffice validation (`soffice --headless --convert-to ods` against a genuine built .xlsx, confirming Excel/LibreOffice actually open the file rather than merely well-formed XML) is a manual verification step, deliberately NOT wired into this vitest suite -- this package's CI runners have no LibreOffice installed (unlike documents.js's own gitignored, opt-in test:corpus project, which exists for exactly this reason: real-third-party-software checks that need a local tool this repo's CI can't assume). This suite instead verifies everything checkable in-process: the produced Package's own XML structure (parsed back through this package's own lossless parsePackage/encodePackage, never assumed), and that readXlsxContent(buildXlsxPackageFromContent(x)) round-trips the real content.
 

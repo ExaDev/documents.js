@@ -7,7 +7,7 @@ export * from "./biff/strings";
 export * from "./biff/substreams";
 export * from "./container";
 export * from "./content";
-export * from "./number-format";
+export * from "excel-number-format";
 export * from "./serial";
 export * from "./units";
 export * from "./workbook/globals";

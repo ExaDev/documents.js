@@ -13,7 +13,7 @@ import {
   readXLUnicodeString,
 } from "../biff/strings";
 import type { RecordGroup } from "../biff/substreams";
-import { BUILTIN_NUMBER_FORMATS } from "../number-format";
+import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
 // The workbook globals substream ([MS-XLS] 2.1.7.20.3): everything that belongs to the workbook rather than to one sheet -- which sheets exist and in what order, the shared string table every string cell indexes into, the number-format and cell-format tables every numeric cell's meaning depends on, and which date epoch the whole file counts serials from. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ca4c1748-8729-4a93-abb9-4602b3a01fb1
 //
