@@ -218,7 +218,8 @@ describe("readDocContent", () => {
     expect(paragraphAt(document, 0).styleId).toBe("heading 1");
   });
 
-  it("treats a cell mark as a paragraph end, since tables are not yet read as tables", () => {
+  // No sprmPFInTable is set on either paragraph here, so these cell marks sit outside any table -- the case this asserts is a bare cell-mark character still ending a paragraph on its own account (endsParagraph's own rule), not table grouping, which table/read.test.ts covers directly.
+  it("treats a cell mark outside a table as an ordinary paragraph end", () => {
     const document = readDocContent(
       buildDoc({
         paragraphs: [
