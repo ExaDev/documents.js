@@ -1,3 +1,22 @@
+## [1.1.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%401.0.0...rtf-codec%401.1.0) (2026-09-03)
+
+### Features
+
+* **rtf-codec:** apply listoverridetable's own \lfolevel level overrides ([88e5291](https://github.com/ExaDev/documents.js/commit/88e5291834804dd98f96b9a6865c6fff1f9109b1))
+* **rtf-codec:** map bookmarks onto the anchor construct vocabulary ([06c2920](https://github.com/ExaDev/documents.js/commit/06c29202f9f7deb3131d0a1bc9ff361584dd0e8f)), references [#PCDATA](https://github.com/ExaDev/documents.js/issues/PCDATA)
+* **rtf-codec:** map revision marks onto the provenance construct vocabulary ([6a0dba5](https://github.com/ExaDev/documents.js/commit/6a0dba55aa289598416c7804047d5bf26ab1ceda))
+* **rtf-codec:** read and write cell borders, shading, and both merge directions ([8beecb5](https://github.com/ExaDev/documents.js/commit/8beecb5715867cdc60f81f5d711639f2841e2111))
+* **rtf-codec:** read and write multiple sections ([fd7c8d0](https://github.com/ExaDev/documents.js/commit/fd7c8d0597b8b3653c37f8ea07a697ec77e0fa96))
+
+### Documentation
+
+* **rtf-codec:** restate the scope tables for what the codec now carries ([c90f453](https://github.com/ExaDev/documents.js/commit/c90f453f547e81c6bfe10b62b701ea4d89103259))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.5.0
+
 ## 1.0.0 (2026-09-03)
 
 ### Features

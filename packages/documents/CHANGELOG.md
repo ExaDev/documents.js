@@ -1,3 +1,12 @@
+## [2.2.5](https://github.com/ExaDev/documents.js/compare/documents%402.2.4...documents%402.2.5) (2026-09-03)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.5.0
+- Updated markdown-codec to ^6.1.4
+- Updated documents.js to ^6.3.5
+
 ## [2.2.4](https://github.com/ExaDev/documents.js/compare/documents%402.2.3...documents%402.2.4) (2026-09-03)
 
 

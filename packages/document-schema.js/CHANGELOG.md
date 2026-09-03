@@ -1,3 +1,9 @@
+## [5.5.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.4.0...document-schema.js%405.5.0) (2026-09-03)
+
+### Features
+
+* **document-schema.js:** add rtf to the residue channel's format vocabulary ([583fe1f](https://github.com/ExaDev/documents.js/commit/583fe1fef15a0422cf0acd455c9d3271f7be292d))
+
 ## [5.4.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.3.0...document-schema.js%405.4.0) (2026-09-02)
 
 ### Features
