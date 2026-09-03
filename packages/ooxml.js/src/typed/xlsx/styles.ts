@@ -1,11 +1,18 @@
 import type {
   Alignment,
+  BorderWeight,
   Color,
   ContentBorder,
   ContentCellBorders,
   ContentStrokeStyle,
 } from "document-schema.js";
-import { colorToRgbHex, rgbHexToColor } from "document-schema.js";
+import {
+  BORDER_WIDTH_PT,
+  borderWeightForWidthPt,
+  colorToRgbHex,
+  dashedBorderWeightForWidthPt,
+  rgbHexToColor,
+} from "document-schema.js";
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import type { CellNumberFormat } from "./number-format";
@@ -54,14 +61,7 @@ export interface CellStyleEntry {
   verticalAlignment?: "top" | "middle" | "bottom";
 }
 
-// xlsx's border style attribute (CT_BorderStyle, ECMA-376 Part 1 SS18.18.3) conflates a stroke's PATTERN (solid/dashed/dotted/double) with its WEIGHT (hair/thin/medium/thick), unlike ODF's separate fo:border "<length> <style> <color>" shorthand or ContentBorderSchema's own widthPt+style pair. Excel's own documented convention renders each named weight at a fixed pixel count at 96 DPI (1px = 0.75pt): hair is sub-pixel (rendered thinner than thin), thin is 1px, medium is 2px, thick is 3px. These derived point widths are the honest inverse of that convention -- named constants with a stated derivation, not arbitrary numbers.
-const BORDER_WIDTH_PT = {
-  hair: 0.5,
-  thin: 0.75,
-  medium: 1.5,
-  thick: 2.25,
-} as const;
-type BorderWeight = keyof typeof BORDER_WIDTH_PT;
+// xlsx's border style attribute (CT_BorderStyle, ECMA-376 Part 1 SS18.18.3) conflates a stroke's PATTERN (solid/dashed/dotted/double) with its WEIGHT (hair/thin/medium/thick), unlike ODF's separate fo:border "<length> <style> <color>" shorthand or ContentBorderSchema's own widthPt+style pair. The weight half of that -- the named weights, their derived point widths, and the bucketing back from a widthPt to a name -- is document-schema.js's own border-weight module, imported above: BIFF8 quantises to the identical four weights, so xls-codec needs the same mapping and the two must not drift. What stays here is xlsx's own token vocabulary, which is genuinely format-specific.
 
 // Each xlsx border-style token resolves to one weight (for widthPt) and one ContentStrokeStyle pattern. The dash-family tokens (dashDot/dashDotDot and their medium/slant variants) have no ContentStrokeStyle member that distinguishes them from a plain dashed line, so they collapse to 'dashed' rather than being dropped -- the closest faithful mapping, preserving "this edge is dashed" instead of degrading to solid. 'none' is handled by the caller (it means the edge carries no border at all) and has no entry here.
 const XLSX_BORDER_STYLE: Readonly<
@@ -81,13 +81,6 @@ const XLSX_BORDER_STYLE: Readonly<
   mediumDashDotDot: { weight: "medium", pattern: "dashed" },
   slantDashDot: { weight: "medium", pattern: "dashed" },
 };
-
-// The width-bucket midpoints between the four named weights -- (hair+thin)/2, (thin+medium)/2, (medium+thick)/2 -- so a ContentBorder with a widthPt that came from this same table round-trips back to the same named weight. A width exactly on a midpoint falls into the heavier bucket, which is the same tie-break Excel's own rendering implies.
-const BORDER_WEIGHT_UPPER_PT = {
-  hair: 0.625,
-  thin: 1.125,
-  medium: 1.875,
-} as const;
 
 // A <color> element already located by its caller (one of a <border> edge's own colour, a <patternFill>'s <fgColor>/<bgColor>, or one of a colorScale's own several <color> siblings, which readColorRgb below cannot reach since it only ever takes the FIRST child of a given tag): only the rgb attribute is mapped (8 hex digits "AARRGGBB" with a leading alpha prefix, or 6 "RRGGBB" -- the last 6 digits are the real RGB in both forms). theme/indexed/tint/auto carry real colours this reader deliberately does not resolve: theme and indexed require a separate workbook-theme/table resolution this package does not model, and silently substituting black or any other fixed colour would misreport them, so the edge/fill reads as carrying no colour instead.
 export function colorFromElement(
@@ -391,28 +384,19 @@ function signatureOfDecoration(decoration: CellFormatDecoration): string {
 }
 
 function borderToXlsxStyle(border: ContentBorder): string {
-  // The inverse of XLSX_BORDER_STYLE above: pick the xlsx style token that carries this border's pattern at the closest named weight. 'double'/'dotted'/'dashed' patterns always have a direct token; a solid border is bucketed back to hair/thin/medium/thick from its widthPt via the same midpoint boundaries the reader derives weights from.
+  // The inverse of XLSX_BORDER_STYLE above: pick the xlsx style token that carries this border's pattern at the closest named weight. 'double'/'dotted' patterns always have a direct token; 'dashed' and a solid border bucket their widthPt back to a named weight through document-schema.js's own shared quantisation, the same one the reader's widths came out of.
   switch (border.style) {
     case "double":
       return "double";
     case "dotted":
       return "dotted";
     case "dashed":
-      return border.widthPt >= BORDER_WEIGHT_UPPER_PT.thin
+      return dashedBorderWeightForWidthPt(border.widthPt) === "medium"
         ? "mediumDashed"
         : "dashed";
     case "solid":
     case undefined:
-      if (border.widthPt < BORDER_WEIGHT_UPPER_PT.hair) {
-        return "hair";
-      }
-      if (border.widthPt < BORDER_WEIGHT_UPPER_PT.thin) {
-        return "thin";
-      }
-      if (border.widthPt < BORDER_WEIGHT_UPPER_PT.medium) {
-        return "medium";
-      }
-      return "thick";
+      return borderWeightForWidthPt(border.widthPt);
   }
 }
 
