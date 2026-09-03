@@ -3,6 +3,7 @@ import {
   type ContentBlock,
   type ContentDocument,
   type ContentParagraph,
+  type ContentTableCell,
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { isDocBytes } from "./detect";
@@ -46,6 +47,19 @@ function blocksOf(result: ContentDocument): ContentBlock[] {
   const section = result.sections[0];
   if (section === undefined) throw new Error("a section must be present");
   return [...section.blocks];
+}
+
+// Joins every paragraph's own text in a cell with a comma, so a multi-paragraph cell's assertion reads as one string rather than an array comparison per paragraph.
+function cellText(cell: ContentTableCell | undefined): string {
+  if (cell === undefined) throw new Error("expected a cell");
+  return cell.blocks
+    .map((block) => {
+      if (block.kind !== "paragraph") {
+        throw new Error(`expected a paragraph block, got '${block.kind}'`);
+      }
+      return block.runs.map((run) => run.text).join("");
+    })
+    .join(",");
 }
 
 function paragraphAt(result: ContentDocument, index: number): ContentParagraph {
@@ -295,8 +309,185 @@ describe("writeDocContent", () => {
     expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
   });
 
-  it("refuses a block kind it does not yet write, such as a table", () => {
-    const input = document([{ kind: "table", rows: [], columnWidthsPt: [] }]);
+  it("refuses a block kind it does not yet write, such as an image", () => {
+    const input = document([
+      {
+        kind: "image",
+        format: "png",
+        base64: "",
+        widthPt: 10,
+        heightPt: 10,
+      },
+    ]);
+    expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
+  });
+});
+
+describe("writeDocContent tables", () => {
+  it("round-trips a simple table's rows, cells and column widths", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [100, 150],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "A1" }])] },
+              { blocks: [paragraph([{ text: "B1" }])] },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "A2" }])] },
+              { blocks: [paragraph([{ text: "B2" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(block.columnWidthsPt).toEqual([100, 150]);
+    expect(block.rows).toHaveLength(2);
+    expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual([
+      "A1",
+      "B1",
+    ]);
+    expect(block.rows[1]?.cells.map((cell) => cellText(cell))).toEqual([
+      "A2",
+      "B2",
+    ]);
+  });
+
+  it("round-trips a cell holding more than one paragraph", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [200],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  paragraph([{ text: "first" }]),
+                  paragraph([{ text: "second" }]),
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    const cell = block.rows[0]?.cells[0];
+    if (cell === undefined) throw new Error("expected a cell");
+    expect(cell.blocks).toHaveLength(2);
+    expect(cellText(cell)).toBe("first,second");
+  });
+
+  it("round-trips a table's own row height", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [100],
+        rows: [
+          {
+            cells: [{ blocks: [paragraph([{ text: "tall" }])] }],
+            heightPt: 40,
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(block.rows[0]?.heightPt).toBe(40);
+  });
+
+  it("round-trips a horizontally merged cell's colSpan, dropping the continuation cell from the output row", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50, 50],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "wide" }])], colSpan: 2 },
+              { blocks: [paragraph([{ text: "narrow" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(block.rows[0]?.cells).toHaveLength(2);
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
+    expect(block.rows[0]?.cells[1]?.colSpan).toBeUndefined();
+    expect(cellText(block.rows[0]?.cells[1])).toBe("narrow");
+  });
+
+  it("round-trips a vertically merged cell's rowSpan, with the spanned rows carrying an empty placeholder cell", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [80, 80],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "tall" }])], rowSpan: 2 },
+              { blocks: [paragraph([{ text: "top-right" }])] },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [] },
+              { blocks: [paragraph([{ text: "bottom-right" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(block.rows[0]?.cells[0]?.rowSpan).toBe(2);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("tall");
+    expect(block.rows[1]?.cells[0]?.blocks).toEqual([]);
+    expect(cellText(block.rows[1]?.cells[1])).toBe("bottom-right");
+  });
+
+  it("refuses a table nested inside a table cell", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [100],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ kind: "table", rows: [], columnWidthsPt: [] }],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
     expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
   });
 });
