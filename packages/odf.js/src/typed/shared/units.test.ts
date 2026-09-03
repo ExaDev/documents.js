@@ -56,3 +56,59 @@ describe("formatOdfLength", () => {
     expect(formatOdfLength(72, "px")).toBe("96px");
   });
 });
+
+// The ODF `length` datatype has no exponent form (see units.ts's own LENGTH_PATTERN and the OASIS grammar it encodes), but JavaScript's own Number-to-string switches into one below 1e-6 and at/above 1e21. A length that came out as "-7.1e-15pt" was therefore spec-invalid ODF that this package's own reader silently rejected -- parseOdfTransform drops a translate() whose components don't parse, and parseBox returns undefined for an unrotated frame's own svg:x/svg:y, taking the whole shape with it. See typed/odp/write-round-trip.test.ts's own near-origin rotation sweep for the end-to-end statement of that failure.
+describe("formatOdfLength: fixed-point decimal only, never exponent notation", () => {
+  const EXPONENT_MAGNITUDES = [
+    1e-7, 5.5e-8, 1e-15, -7.1e-15, 1.05e-20, 5e-324, 1e21, -1.2345e22, 1e300,
+  ];
+
+  it.each(EXPONENT_MAGNITUDES)(
+    "formats %p without an exponent, and parseOdfLength reads it back to the identical double",
+    (pt) => {
+      const formatted = formatOdfLength(pt);
+      expect(formatted).not.toMatch(/[eE]/);
+      expect(parseOdfLength(formatted)).toBe(pt);
+    },
+  );
+
+  it("leaves the plain-stringification spelling of an ordinary value untouched, trailing zeros included (there are none to trim)", () => {
+    expect(formatOdfLength(0)).toBe("0pt");
+    expect(formatOdfLength(12)).toBe("12pt");
+    expect(formatOdfLength(-4.5)).toBe("-4.5pt");
+    expect(formatOdfLength(0.000001)).toBe("0.000001pt");
+    expect(formatOdfLength(1e-7)).toBe("0.0000001pt");
+  });
+
+  it("never emits an exponent for any translate() component the rotation inverse can produce, across a full turn of angles and several frames including ones at the page origin", () => {
+    const frames = [
+      { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
+      { xPt: 0.001, yPt: 0.001, widthPt: 200, heightPt: 80 },
+      { xPt: -5, yPt: 3, widthPt: 40, heightPt: 40 },
+    ];
+    for (let deg = -360; deg <= 360; deg += 0.5) {
+      const angleRad = (-deg * Math.PI) / 180;
+      for (const frame of frames) {
+        // typed/draw/write-shapes.ts's own frameGeometryAttrs, restated here so this file tests the FORMATTER against the real value distribution rather than importing the shape writer into a units test.
+        const halfWidthPt = frame.widthPt / 2;
+        const halfHeightPt = frame.heightPt / 2;
+        const txPt =
+          frame.xPt +
+          halfWidthPt -
+          halfWidthPt * Math.cos(angleRad) -
+          halfHeightPt * Math.sin(angleRad);
+        const tyPt =
+          frame.yPt +
+          halfHeightPt -
+          halfHeightPt * Math.cos(angleRad) +
+          halfWidthPt * Math.sin(angleRad);
+        for (const pt of [txPt, tyPt]) {
+          const formatted = formatOdfLength(pt);
+          expect(formatted).not.toMatch(/[eE]/);
+          expect(parseOdfLength(formatted)).toBe(pt);
+        }
+      }
+    }
+  });
+});
