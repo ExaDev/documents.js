@@ -46,6 +46,10 @@ const FUNCTIONS = [
   'writeOdtContent',
   'normaliseOdtContent',
   'createOdfPackage',
+  // The ods writer, at the same two levels as its reader, plus the canonical form its round-trip law is stated against.
+  'writeOds',
+  'writeOdsContent',
+  'normaliseOdsContent',
   // The OpenOffice.org 1.x readers, at the same two levels, plus the package transform they are built on and the detection a caller needs to pick between these and the ODF readers above.
   'readSxw',
   'readSxwContent',
