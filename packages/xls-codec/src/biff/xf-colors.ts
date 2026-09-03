@@ -1,9 +1,15 @@
 import type {
+  BorderWeight,
   Color,
   ContentBorder,
   ContentStrokeStyle,
 } from "document-schema.js";
-import { colorToRgbHex } from "document-schema.js";
+import {
+  BORDER_WIDTH_PT,
+  borderWeightForWidthPt,
+  colorToRgbHex,
+  dashedBorderWeightForWidthPt,
+} from "document-schema.js";
 
 import type { BlockCursor } from "./cursor";
 
@@ -155,21 +161,7 @@ export function resolveIcvColor(
 
 // --- Border style <-> ContentBorder mapping, one table shared by both directions ---
 
-/** xlsx's own equivalent table (ooxml.js's typed/xlsx/styles.ts) derives identical point widths from Excel's documented 96-DPI pixel rendering of each named weight; BIFF8 names the same four weights, so this package reuses them verbatim rather than deriving a second, potentially-divergent set. */
-const BORDER_WIDTH_PT = {
-  hair: 0.5,
-  thin: 0.75,
-  medium: 1.5,
-  thick: 2.25,
-} as const;
-type BorderWeight = keyof typeof BORDER_WIDTH_PT;
-
-/** The width-bucket midpoints a widthPt buckets back into on write, so a border read from this same table round-trips to the identical named weight -- again mirroring ooxml.js's own bucketing exactly. */
-const BORDER_WEIGHT_UPPER_PT = {
-  hair: 0.625,
-  thin: 1.125,
-  medium: 1.875,
-} as const;
+// BIFF8's BorderStyle tokens name the same four weights xlsx's own CT_BorderStyle tokens do, at the same point widths, bucketed back from a widthPt the same way. That vocabulary is not this package's to own: it lives once in document-schema.js (BORDER_WIDTH_PT, borderWeightForWidthPt, dashedBorderWeightForWidthPt, imported above) and is imported by both this package and ooxml.js's typed/xlsx/styles.ts, so neither can drift from the other. What is BIFF8-specific -- which numeric token names a medium dashed stroke -- stays here, in BIFF_BORDER_STYLE and borderStyleTokenFor below.
 
 interface BorderStyleMapping {
   readonly weight: BorderWeight;
@@ -225,7 +217,15 @@ export function resolveBorderEdge(
   return result;
 }
 
-/** The inverse of resolveBorderEdge's style resolution: picks the BorderStyle token carrying a ContentBorder's own pattern at the closest named weight, bucketing a solid/dashed border's widthPt back to hair/thin/medium/thick via BORDER_WEIGHT_UPPER_PT -- the same bucketing ooxml.js's own borderToXlsxStyle performs for xlsx's string tokens. */
+/** The BorderStyle token each named weight's own plain solid stroke is spelled with. */
+const SOLID_BORDER_STYLE: Readonly<Record<BorderWeight, number>> = {
+  hair: BORDER_STYLE_HAIR,
+  thin: BORDER_STYLE_THIN,
+  medium: BORDER_STYLE_MEDIUM,
+  thick: BORDER_STYLE_THICK,
+};
+
+/** The inverse of resolveBorderEdge's style resolution: picks the BorderStyle token carrying a ContentBorder's own pattern at the closest named weight, bucketing a solid/dashed border's widthPt back to a weight through document-schema.js's own shared quantisation -- the same one resolveBorderEdge's widths came out of, and the same one ooxml.js's borderToXlsxStyle buckets xlsx's string tokens through. */
 export function borderStyleTokenFor(border: ContentBorder): number {
   switch (border.style) {
     case "double":
@@ -233,21 +233,12 @@ export function borderStyleTokenFor(border: ContentBorder): number {
     case "dotted":
       return BORDER_STYLE_DOTTED;
     case "dashed":
-      return border.widthPt >= BORDER_WEIGHT_UPPER_PT.thin
+      return dashedBorderWeightForWidthPt(border.widthPt) === "medium"
         ? BORDER_STYLE_MEDIUM_DASHED
         : BORDER_STYLE_DASHED;
     case "solid":
     case undefined:
-      if (border.widthPt < BORDER_WEIGHT_UPPER_PT.hair) {
-        return BORDER_STYLE_HAIR;
-      }
-      if (border.widthPt < BORDER_WEIGHT_UPPER_PT.thin) {
-        return BORDER_STYLE_THIN;
-      }
-      if (border.widthPt < BORDER_WEIGHT_UPPER_PT.medium) {
-        return BORDER_STYLE_MEDIUM;
-      }
-      return BORDER_STYLE_THICK;
+      return SOLID_BORDER_STYLE[borderWeightForWidthPt(border.widthPt)];
   }
 }
 
