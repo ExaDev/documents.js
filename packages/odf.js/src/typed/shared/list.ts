@@ -186,6 +186,69 @@ export function writeOdfList(
   return root;
 }
 
+// --- the write-side numId canonicalisation every list-carrying writer shares (odt's own office:text body, odp's own slide text frames) ---
+//
+// A writer's caller hands in an arbitrary ContentDocument, whose ContentListMembership.numId is an opaque, caller-chosen string with no ODF spelling of its own (see this module's own top-of-file note: ODF list identity is purely structural, never an attribute). What DOES need to be minted afresh is the KIND prefix's carry-through and a document-unique canonical label matching what re-reading the written document will produce (mintOdfListNumId's own per-encounter counter, above) -- this is that minting, factored out so every writer that groups paragraphs into text:list runs states it once rather than reinventing it per format.
+
+// The ordered/bullet half of a numId, as mintOdfListNumId above spells it. A numId carrying neither prefix names a list whose kind the source never stated, which is written as a text:list with no text:style-name at all -- and read back, again, with no prefix.
+export function listKindOf(
+  numId: string | undefined,
+): "ordered" | "bullet" | undefined {
+  if (numId === undefined) {
+    return undefined;
+  }
+  if (numId.startsWith("ordered:")) {
+    return "ordered";
+  }
+  return numId.startsWith("bullet:") ? "bullet" : undefined;
+}
+
+// The run key standing in for a membership that carries no numId of its own -- NUL, forbidden in well-formed XML 1.0 content (the same convention registry.ts's own FINGERPRINT_SEPARATOR uses), so no real numId can ever equal it.
+export const NO_NUM_ID_KEY = " ";
+
+export function canonicalNumId(
+  incoming: string | undefined,
+  ordinal: number,
+): string {
+  const kind = listKindOf(incoming);
+  return kind === undefined ? `list${ordinal}` : `${kind}:list${ordinal}`;
+}
+
+// The list-identity counter one document's plan threads: a reader mints a numId per top-level text:list encountered in document order across the WHOLE relevant scope (an odt body, an odp presentation), so a writer's own plan has to number lists the same way -- once per maximal run of consecutive list paragraphs sharing an incoming numId, never per distinct numId string (two separate runs carrying one numId are two ODF lists, and the reader will say so).
+export interface ListPlanState {
+  next: number;
+  // The incoming numId of the run currently open, and the canonical numId minted for it. Both absent between runs.
+  openNumId?: string;
+  openCanonicalNumId?: string;
+}
+
+// Advances one paragraph's list-plan state and returns the canonical numId to stamp on its membership, or undefined when `membership` itself is undefined (also closing whatever run was open). A membership carrying no incoming numId at all still opens a real run of its own (keyed on the sentinel above), mirroring how a source format that carries only a depth still names a genuine list once minted. Mint a fresh canonical numId only when the incoming key changes from the currently open run's -- consecutive paragraphs sharing one incoming numId (or both bare) extend the same run.
+export function planListMembership(
+  membership: { numId?: string; level: number } | undefined,
+  listState: ListPlanState,
+): string | undefined {
+  if (membership === undefined) {
+    closeListPlan(listState);
+    return undefined;
+  }
+  const incomingKey = membership.numId ?? NO_NUM_ID_KEY;
+  if (listState.openNumId !== incomingKey) {
+    listState.openNumId = incomingKey;
+    listState.openCanonicalNumId = canonicalNumId(
+      membership.numId,
+      listState.next,
+    );
+    listState.next += 1;
+  }
+  return listState.openCanonicalNumId;
+}
+
+// Force-closes whatever list run is currently open, for a caller that needs a run boundary the membership check alone would not catch -- a table, an image, a page break interrupting an odt section's own block flow, or a shape/container boundary no list can structurally span (an odp text-box's list is local to its own draw:frame, so a new shape must never silently continue the previous one's run even if their raw numIds happen to coincide).
+export function closeListPlan(listState: ListPlanState): void {
+  listState.openNumId = undefined;
+  listState.openCanonicalNumId = undefined;
+}
+
 export function readOdfListParagraphs(
   listElement: XmlElement,
   membership: ContentListMembership,

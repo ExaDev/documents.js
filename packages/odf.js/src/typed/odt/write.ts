@@ -4,17 +4,14 @@ import type {
   ContentImageBlock,
   ContentPageBreak,
   ContentParagraph,
-  ContentRun,
   ContentSection,
   ContentTable,
-  ContentTableCell,
   DocumentTree,
   LayoutMetadata,
   Margins,
   PageSize,
 } from "document-schema.js";
-import type { Color } from "document-schema.js";
-import { colorToRgbHex, flattenTree, rgbHexToColor } from "document-schema.js";
+import { flattenTree } from "document-schema.js";
 import type { Package } from "../../model/package";
 import type { XmlElement, XmlNode } from "../../model/node";
 import { ODF_MEDIA_TYPES } from "../../media-type";
@@ -29,14 +26,20 @@ import { el, txt } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { formatOdfLength } from "../shared/units";
 import { writeOdfMetadata } from "../shared/metadata";
-import {
-  segmentOdfParagraphRuns,
-  writeOdfParagraph,
-} from "../shared/paragraph";
+import { writeOdfParagraph } from "../shared/paragraph";
 import { writeOdfTable } from "../shared/table";
 import {
+  canonicalImage,
+  canonicalParagraph,
+  canonicalTable,
+} from "../shared/canonicalise";
+import {
   buildOdfListStyle,
+  closeListPlan,
+  listKindOf,
+  planListMembership,
   writeOdfList,
+  type ListPlanState,
   type OdfListEntry,
 } from "../shared/list";
 
@@ -85,34 +88,7 @@ interface PlannedSection {
   readonly blocks: PlannedBlock[];
 }
 
-// The list-identity counter one document's plan threads: readOdtContent mints a numId per top-level text:list encountered in document order across the WHOLE body, so the plan has to number lists the same way -- once per maximal run of consecutive list paragraphs sharing an incoming numId, across sections, never per distinct numId string (two separate runs carrying one numId are two ODF lists, and the reader will say so).
-interface ListPlanState {
-  next: number;
-  // The incoming numId of the run currently open, and the canonical numId minted for it. Both absent between runs.
-  openNumId?: string;
-  openCanonicalNumId?: string;
-}
-
-// The ordered/bullet half of a numId, as typed/shared/list.ts's own mintOdfListNumId spells it. A numId carrying neither prefix names a list whose kind the source never stated, which is written as a text:list with no text:style-name at all -- and read back, again, with no prefix.
-function listKindOf(
-  numId: string | undefined,
-): "ordered" | "bullet" | undefined {
-  if (numId === undefined) {
-    return undefined;
-  }
-  if (numId.startsWith("ordered:")) {
-    return "ordered";
-  }
-  return numId.startsWith("bullet:") ? "bullet" : undefined;
-}
-
-// The run key standing in for a membership that carries no numId of its own -- NUL, forbidden in well-formed XML 1.0 content, so no real numId can ever equal it.
-const NO_NUM_ID_KEY = " ";
-
-function canonicalNumId(incoming: string | undefined, ordinal: number): string {
-  const kind = listKindOf(incoming);
-  return kind === undefined ? `list${ordinal}` : `${kind}:list${ordinal}`;
-}
+// The list-identity counter one document's plan threads: readOdtContent mints a numId per top-level text:list encountered in document order across the WHOLE body, so the plan has to number lists the same way -- once per maximal run of consecutive list paragraphs sharing an incoming numId, across sections, never per distinct numId string (two separate runs carrying one numId are two ODF lists, and the reader will say so). ListPlanState/planListMembership/closeListPlan/listKindOf/canonicalNumId are shared with typed/odp/write.ts (typed/shared/list.ts's own top-of-file note on the write-side canonicalisation both formats need identically) rather than redeclared here.
 
 function unsupported(what: string, where: string): Error {
   return new Error(
@@ -145,82 +121,7 @@ function assertWritableBlock(
   }
 }
 
-// One paragraph in the exact shape reading the written document back produces: runs segmented into what ODF's inline content model can carry, list membership renumbered onto the reader's own minted identity, and every field the format has no spelling for dropped. styleId is the interesting one -- a heading's identity is STRUCTURAL in ODF (a text:h carrying text:outline-level), so readParagraphOrHeading always re-derives it as "Heading{level}" and it survives exactly; every other paragraph's styleId is a producer's own style name, and this writer's producer names are the automatic styles it mints, so an incoming one cannot survive and is dropped rather than pretended about. ODF states every colour as six hex digits (its own text:color datatype -- see typed/shared/color.ts), so a Color component that is not a whole 1/255 step cannot be carried: 0.9 is written as "e6" and read back as 230/255. Round-tripping through document-schema.js's own hex pair IS that quantisation, stated once here rather than approximated with an epsilon comparison in a test.
-function canonicalColor(color: Color): Color {
-  return rgbHexToColor(colorToRgbHex(color));
-}
-
-// One run carrying only the fields it actually states. The reader builds every run with all seven formatting fields present and most of them undefined (typed/shared/paragraph.ts's runFromText), while a hand-built document states only what it means -- the same run, spelled two ways. The canonical form is the spelled-only one, so the two are comparable at all.
-function canonicalRun(run: ContentRun): ContentRun {
-  const canonical: ContentRun = { text: run.text };
-  if (run.bold !== undefined) {
-    canonical.bold = run.bold;
-  }
-  if (run.italic !== undefined) {
-    canonical.italic = run.italic;
-  }
-  if (run.underline !== undefined) {
-    canonical.underline = run.underline;
-  }
-  if (run.strike !== undefined) {
-    canonical.strike = run.strike;
-  }
-  if (run.fontFamily !== undefined) {
-    canonical.fontFamily = run.fontFamily;
-  }
-  if (run.sizePt !== undefined) {
-    canonical.sizePt = run.sizePt;
-  }
-  if (run.color !== undefined) {
-    canonical.color = canonicalColor(run.color);
-  }
-  if (run.hyperlink !== undefined) {
-    canonical.hyperlink = run.hyperlink;
-  }
-  return canonical;
-}
-
-function canonicalParagraph(
-  paragraph: ContentParagraph,
-  listNumId: string | undefined,
-): ContentParagraph {
-  const canonical: ContentParagraph = {
-    kind: "paragraph",
-    runs: segmentOdfParagraphRuns(paragraph.runs).map(canonicalRun),
-  };
-  if (paragraph.headingLevel !== undefined) {
-    canonical.headingLevel = paragraph.headingLevel;
-    canonical.styleId = `Heading${paragraph.headingLevel}`;
-  }
-  if (paragraph.alignment !== undefined) {
-    canonical.alignment = paragraph.alignment;
-  }
-  if (listNumId !== undefined && paragraph.list !== undefined) {
-    canonical.list = { numId: listNumId, level: paragraph.list.level };
-  }
-  if (paragraph.spacingBeforePt !== undefined) {
-    canonical.spacingBeforePt = paragraph.spacingBeforePt;
-  }
-  if (paragraph.spacingAfterPt !== undefined) {
-    canonical.spacingAfterPt = paragraph.spacingAfterPt;
-  }
-  if (paragraph.lineSpacing !== undefined) {
-    canonical.lineSpacing = paragraph.lineSpacing;
-  }
-  if (paragraph.indentLeftPt !== undefined) {
-    canonical.indentLeftPt = paragraph.indentLeftPt;
-  }
-  if (paragraph.indentFirstLinePt !== undefined) {
-    canonical.indentFirstLinePt = paragraph.indentFirstLinePt;
-  }
-  if (paragraph.pageBreakBefore !== undefined) {
-    canonical.pageBreakBefore = paragraph.pageBreakBefore;
-  }
-  if (paragraph.pageBreakAfter !== undefined) {
-    canonical.pageBreakAfter = paragraph.pageBreakAfter;
-  }
-  return canonical;
-}
+// canonicalParagraph (headingLevel/alignment/list/spacing/indent/pageBreak, run segmentation and colour quantisation) now lives in typed/shared/canonicalise.ts, reused verbatim by typed/odp/write.ts for a shape's own text paragraphs and a table nested inside a shape -- see that module's own top-of-file note.
 
 function emptyAnchorParagraph(pageBreakBefore: boolean): ContentParagraph {
   return pageBreakBefore
@@ -253,8 +154,7 @@ function planSection(
 
   // A list run closes the moment anything that is not one of its own paragraphs is emitted. An anchored image does NOT close it: the image hangs off the paragraph it follows, inside that paragraph's own list item, so the list element itself is uninterrupted -- which is exactly how the reader sees it on the way back.
   const closeListRun = (): void => {
-    listState.openNumId = undefined;
-    listState.openCanonicalNumId = undefined;
+    closeListPlan(listState);
   };
 
   const flushPendingPageBreak = (): void => {
@@ -284,25 +184,9 @@ function planSection(
       continue;
     }
     if (block.kind === "paragraph") {
-      const membership = block.list;
-      if (membership === undefined) {
-        closeListRun();
-      } else {
-        // A membership with no numId at all (ContentListMembershipSchema makes it optional, for a source format carrying only a depth) still names a real list here -- it just names one whose identity the source never stated, so it gets its own run key and its own minted numId on the way back in, exactly as any other list does.
-        const incomingKey = membership.numId ?? NO_NUM_ID_KEY;
-        if (listState.openNumId !== incomingKey) {
-          listState.openNumId = incomingKey;
-          listState.openCanonicalNumId = canonicalNumId(
-            membership.numId,
-            listState.next,
-          );
-          listState.next += 1;
-        }
-      }
-      const paragraph = canonicalParagraph(
-        block,
-        membership === undefined ? undefined : listState.openCanonicalNumId,
-      );
+      // A membership with no numId at all (ContentListMembershipSchema makes it optional, for a source format carrying only a depth) still names a real list here -- it just names one whose identity the source never stated, so it gets its own run key and its own minted numId on the way back in, exactly as any other list does. planListMembership (typed/shared/list.ts) owns this canonicalisation.
+      const canonicalId = planListMembership(block.list, listState);
+      const paragraph = canonicalParagraph(block, canonicalId);
       pushParagraph(
         pendingPageBreak ? { ...paragraph, pageBreakBefore: true } : paragraph,
       );
@@ -341,93 +225,8 @@ function planDocument(sections: readonly ContentSection[]): PlannedSection[] {
 }
 
 // --- the canonical form: what reading this writer's own output back produces --------------------------------------
-
-function canonicalCell(
-  cell: ContentTableCell,
-  covered: boolean,
-): ContentTableCell {
-  // A covered grid position is a table:covered-table-cell in ODF, which carries no content, no span and no style of its own -- so whatever an incoming placeholder happened to hold, reading one back yields exactly an empty cell.
-  if (covered) {
-    return { blocks: [] };
-  }
-  const canonical: ContentTableCell = {
-    blocks: cell.blocks.map((block) => {
-      if (block.kind !== "paragraph") {
-        throw unsupported(`a "${block.kind}" block`, "a table cell");
-      }
-      assertWritableParagraph(block);
-      return canonicalParagraph(block, undefined);
-    }),
-  };
-  if (cell.colSpan !== undefined) {
-    canonical.colSpan = cell.colSpan;
-  }
-  if (cell.rowSpan !== undefined) {
-    canonical.rowSpan = cell.rowSpan;
-  }
-  if (cell.background !== undefined) {
-    canonical.background = canonicalColor(cell.background);
-  }
-  if (cell.borders !== undefined) {
-    // An absent border style is written as "solid", which is what ContentBorderSchema already documents an absent style to mean -- so it comes back stated rather than absent.
-    const borders: NonNullable<ContentTableCell["borders"]> = {};
-    for (const edge of ["left", "right", "top", "bottom"] as const) {
-      const border = cell.borders[edge];
-      if (border !== undefined) {
-        borders[edge] = {
-          color: canonicalColor(border.color),
-          widthPt: border.widthPt,
-          style: border.style ?? "solid",
-        };
-      }
-    }
-    canonical.borders = borders;
-  }
-  return canonical;
-}
-
-function canonicalTable(table: ContentTable): ContentTable {
-  const covered = new Set<string>();
-  return {
-    kind: "table",
-    columnWidthsPt: [...table.columnWidthsPt],
-    rows: table.rows.map((row, rowIndex) => {
-      const cells = row.cells.map((cell, columnIndex) => {
-        const key = `${rowIndex},${columnIndex}`;
-        const isCovered = covered.has(key);
-        if (!isCovered) {
-          const colSpan = cell.colSpan ?? 1;
-          const rowSpan = cell.rowSpan ?? 1;
-          for (let r = rowIndex; r < rowIndex + rowSpan; r += 1) {
-            for (let c = columnIndex; c < columnIndex + colSpan; c += 1) {
-              if (r !== rowIndex || c !== columnIndex) {
-                covered.add(`${r},${c}`);
-              }
-            }
-          }
-        }
-        return canonicalCell(cell, isCovered);
-      });
-      return row.heightPt === undefined
-        ? { cells }
-        : { cells, heightPt: row.heightPt };
-    }),
-  };
-}
-
-function canonicalImage(image: ContentImageBlock): ContentImageBlock {
-  const canonical: ContentImageBlock = {
-    kind: "image",
-    format: image.format,
-    base64: image.base64,
-    widthPt: image.widthPt,
-    heightPt: image.heightPt,
-  };
-  if (image.altText !== undefined) {
-    canonical.altText = image.altText;
-  }
-  return canonical;
-}
+//
+// canonicalTable/canonicalImage now live in typed/shared/canonicalise.ts, reused verbatim rather than restated: writeOdfTable is the one table writer/reader pair every caller in this package shares (odt's own top-level tables, or one nested inside an odp/odg shape), and an image part is copied byte-for-byte regardless of which writer placed it.
 
 function canonicalMetadata(metadata: LayoutMetadata): LayoutMetadata {
   const canonical: LayoutMetadata = {};
