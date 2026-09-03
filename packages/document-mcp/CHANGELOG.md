@@ -1,3 +1,22 @@
+## [4.2.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.1.7...document-mcp%404.2.0) (2026-09-03)
+
+### Features
+
+* **document-mcp:** infer rtf/csv/svg extensions in DocumentInput path resolution ([3212ca1](https://github.com/ExaDev/documents.js/commit/3212ca154112f0d27267f3d5edd9d99c83d93011))
+
+### Bug Fixes
+
+* **document-mcp:** cover rtf in outline_document format-fixture test ([d6781bc](https://github.com/ExaDev/documents.js/commit/d6781bc194e9ef328fa7d847aaeddd852ed08256))
+
+### Documentation
+
+* **document-mcp:** list rtf, csv, and svg in the convert_document tool description ([ee61ea6](https://github.com/ExaDev/documents.js/commit/ee61ea62da2634bad5d8ff089015a6e0ced95d8b))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.3.0
+
 ## [4.1.7](https://github.com/ExaDev/documents.js/compare/document-mcp%404.1.6...document-mcp%404.1.7) (2026-09-02)
 
 

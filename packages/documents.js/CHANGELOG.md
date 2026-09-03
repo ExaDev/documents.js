@@ -1,3 +1,25 @@
+## [6.3.0](https://github.com/ExaDev/documents.js/compare/documents.js%406.2.2...documents.js%406.3.0) (2026-09-03)
+
+### Features
+
+* **documents.js:** add rtfToPdf/pdfToRtf named conversion forwarders ([6de1d6e](https://github.com/ExaDev/documents.js/commit/6de1d6eed5e1a2d51862c111871ce8626e3cfe33))
+* **documents.js:** re-export rtf-codec's read/write pair at the public barrel ([cec6ff3](https://github.com/ExaDev/documents.js/commit/cec6ff3eed9cb108ea4eab5c374295a4bcb23b40))
+* **documents.js:** wire rtf into the DocumentFormat enum and composition engine ([0dceccf](https://github.com/ExaDev/documents.js/commit/0dceccf9f39e61b069b67d730488eb327906d010)), closes [#847](https://github.com/ExaDev/documents.js/issues/847), references [#843](https://github.com/ExaDev/documents.js/issues/843)
+
+### Bug Fixes
+
+* **documents.js:** narrow rtfBytesFromLatin1's return type in test fixtures ([04bcb71](https://github.com/ExaDev/documents.js/commit/04bcb71598cd47e18ecb02394677d6ed4a6bb4c1))
+
+### Build System
+
+* **documents.js:** depend on rtf-codec ([da194a9](https://github.com/ExaDev/documents.js/commit/da194a9ffe82587c8707a3286388c6a1b1b40dc9))
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.6.0
+- Updated rtf-codec to ^1.0.0
+
 ## [6.2.2](https://github.com/ExaDev/documents.js/compare/documents.js%406.2.1...documents.js%406.2.2) (2026-09-02)
 
 
