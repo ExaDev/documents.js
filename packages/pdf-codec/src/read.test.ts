@@ -10,6 +10,7 @@ import {
   pagelessPdf,
   pdfWithForeignHiddenAnnotationPdf,
   rotatedPagePdf,
+  symbolFontProgramPdf,
   twoPagesFirstWithoutResourcesPdf,
   unsupportedSecurityHandlerPdf,
   withInfoDictPdf,
@@ -35,6 +36,11 @@ import {
   PdfPasswordRequiredError,
 } from "./diagnostics";
 import { normalizeRotation, pageRotationTransform, readPdf } from "./read";
+import {
+  buildCmapTable,
+  buildPostV2Table,
+  buildSfnt,
+} from "./test-support/sfnt";
 import { decodePdfString } from "./pdf-text";
 
 function textLayoutItems(
@@ -51,6 +57,31 @@ describe("readPdf: basic structure", () => {
     expect(page).toMatchObject({ widthPt: 200, heightPt: 100 });
     const [item] = page!.items;
     expect(item).toMatchObject({ kind: "text", text: "Hello" });
+  });
+
+  it("extracts a symbol-encoded glyph as the character its embedded font program says it draws", () => {
+    // The whole point of reading a font's built-in encoding, end to end (ExaDev/documents.js#834): code 0x57 is "W" in WinAnsi, and this page's font subset draws an ohm sign there. Nothing outside the embedded program says so, so a reader that skips it produces a wrong character no consumer can detect.
+    const program = buildSfnt(
+      new Map([
+        [
+          "cmap",
+          buildCmapTable([
+            {
+              platformId: 3,
+              encodingId: 0,
+              format: 4,
+              mappings: new Map([[0xf057, 3]]),
+            },
+          ]),
+        ],
+        ["post", buildPostV2Table(["", "", "", "Omega"])],
+      ]),
+    );
+    const doc = readPdf(symbolFontProgramPdf(program, 0x57));
+    expect(doc.pages[0]?.items[0]).toMatchObject({
+      kind: "text",
+      text: "Ω", // U+2126 OHM SIGN, the Adobe Glyph List's mapping for the glyph name "Omega"
+    });
   });
 
   it("resolves the font family from /BaseFont", () => {

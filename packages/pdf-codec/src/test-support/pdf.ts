@@ -266,6 +266,36 @@ export function rotatedPagePdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
+// A page drawing one glyph from a symbol-encoded font subset: a TrueType program embedded specifically to render an ohm sign, at whatever character code its producer picked, with nothing in the font dictionary saying so -- no /ToUnicode, no /Encoding, no /Differences, and a /BaseFont name ("CIDFont+F3") that identifies no standard face. The character's real identity is stated only inside the embedded program, so a reader that does not open it decodes the code through WinAnsi and yields a plausible but wrong Latin letter. The program bytes are supplied by the caller (see test-support/sfnt.ts's own builders) rather than being hardcoded here, so one fixture covers every shape of program worth reading.
+export function symbolFontProgramPdf(
+  program: Uint8Array<ArrayBuffer>,
+  code: number,
+): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header("1.4");
+  b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  b.object(
+    3,
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 7 0 R >>",
+  );
+  b.object(
+    4,
+    "<< /Type /Font /Subtype /TrueType /BaseFont /CIDFont+F3 /FirstChar 0 /LastChar 255 /FontDescriptor 5 0 R >>",
+  );
+  b.object(
+    5,
+    "<< /Type /FontDescriptor /FontName /CIDFont+F3 /Flags 4 /FontFile2 6 0 R >>",
+  );
+  b.stream(6, "<< >>", program);
+  b.stream(
+    7,
+    "<< >>",
+    enc(`BT /F1 12 Tf 10 50 Td <${code.toString(16).padStart(2, "0")}> Tj ET`),
+  );
+  b.classicXrefAndTrailer(7, "/Root 1 0 R");
+  return b.bytes();
+}
+
 // A /MediaBox whose origin isn't (0,0) -- our own writer never produces one (see write.ts's own module doc), but real producers occasionally do; placement must be computed relative to the MediaBox's own origin, not assumed to be (0,0). The text sits at (60, 60), inside the box, so it survives the crop-box visibility filter (the box IS the visible region even without a declared /CropBox).
 export function nonZeroOriginMediaBoxPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");

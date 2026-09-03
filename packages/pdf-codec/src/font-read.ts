@@ -1,10 +1,13 @@
 import { widthOfCode } from "./afm-widths";
+import type { BuiltinEncoding } from "./builtin-encoding";
+import { readFontProgramEncoding } from "./builtin-encoding";
 import { parseToUnicodeCMap } from "./cmap";
 import type { ToUnicodeCMap } from "./cmap";
 import type { PdfDiagnosticSink } from "./diagnostics";
 import { decodeStream } from "./filters";
 import {
   glyphNameToUnicode,
+  namedEncodingGlyphName,
   symbolGlyphName,
   winAnsiGlyphName,
   zapfDingbatsGlyphName,
@@ -13,7 +16,7 @@ import { resolveStandardFont } from "./fonts";
 import { styleFromBaseFontName } from "./font-style";
 import type { FontMetricsPort, PdfObjectResolver } from "./interpret";
 import type { PdfDict, PdfObject } from "./objects";
-import { asArray, asName, asNumber, dictGet } from "./objects";
+import { asArray, asName, asNumber, dictGet, isName } from "./objects";
 
 // Resolves a /Font resource dict into everything the read pipeline needs: a glyph-width table (for interpret.ts's FontMetricsPort, so text positions advance correctly) and Unicode decoding (for turning an ExtractedTextRun's raw show-string bytes into real text, once interpretation is done). Two font shapes are handled -- simple (1-byte codes: /Type1, /TrueType, /MMType1) and composite Type0/Identity-H (2-byte codes, the dominant shape Word/PowerPoint/Chrome actually emit) -- everything else (predefined non-Identity CMaps, Type3) degrades to a best-effort width/decode with a diagnostic rather than throwing.
 
@@ -74,15 +77,26 @@ function builtinSymbolGlyphNameLookup(
   return undefined;
 }
 
-function glyphNameToUnicodeWithUniFallback(name: string): number | undefined {
-  const direct = glyphNameToUnicode(name);
-  if (direct !== undefined) {
-    return direct;
+// The embedded font program a /FontDescriptor carries, whichever of the three keys it is under: /FontFile (Type 1), /FontFile2 (TrueType), /FontFile3 (CFF, or a whole sfnt under /Subtype /OpenType). The bytes themselves say which shape they are, so the key they arrived under is not consulted -- a producer that files a TrueType program under /FontFile3 (a real and not especially rare malformation) is still read correctly.
+function readFontProgram(
+  descriptor: PdfDict | undefined,
+  context: FontReadContext,
+): BuiltinEncoding | undefined {
+  if (descriptor === undefined) {
+    return undefined;
   }
-  const uniMatch = /^uni([0-9A-Fa-f]{4,6})$/.exec(name);
-  return uniMatch?.[1] !== undefined
-    ? Number.parseInt(uniMatch[1], 16)
-    : undefined;
+  for (const key of ["FontFile2", "FontFile3", "FontFile"]) {
+    const stream = context.resolver.resolve(dictGet(descriptor, key));
+    if (stream?.kind !== "stream") {
+      continue;
+    }
+    const decoded = decodeStream(stream.raw, stream.dict, context.sink);
+    const encoding = readFontProgramEncoding(decoded.bytes);
+    if (encoding !== undefined) {
+      return encoding;
+    }
+  }
+  return undefined;
 }
 
 // A simple font's /Encoding /Differences array: a code number followed by a run of glyph names, each assigned to consecutive codes starting there, until the next number resets the position (ISO 32000-1 9.6.6.2).
@@ -160,10 +174,11 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
       ? dictGet(encodingDict, "BaseEncoding")
       : encodingObj,
   );
-  if (
-    baseEncodingName !== undefined &&
-    baseEncodingName !== "WinAnsiEncoding"
-  ) {
+  const namedBaseGlyphName =
+    baseEncodingName !== undefined
+      ? namedEncodingGlyphName(baseEncodingName)
+      : undefined;
+  if (baseEncodingName !== undefined && namedBaseGlyphName === undefined) {
     context.sink({
       code: "char/encoding-approximated",
       severity: "info",
@@ -175,10 +190,44 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
       ? asArray(dictGet(encodingDict, "Differences"))
       : undefined,
   );
+  const programEncoding = readFontProgram(descriptor, context);
 
-  // The name source for a code neither /ToUnicode nor /Differences resolves. A font whose /BaseFont is literally one of the two standard-14 symbol faces always falls back to that face's own fixed built-in encoding (ISO 32000-1 9.6.6.2 -- WinAnsi/MacRoman/StandardEncoding are never valid for Symbol or ZapfDingbats, whether or not /FontDescriptor sets the Symbolic flag). Any other font that IS flagged Symbolic has some other, unknown built-in encoding this codec cannot resolve without parsing its embedded font program (see font-read.ts's own header comment) -- guessing WinAnsi there would silently substitute a plausible-looking but wrong Latin letter, so it stays unmapped instead, same as buildCompositeFont already does for a missing /ToUnicode. Only a non-symbolic (or Flags-less) font falls back to WinAnsi, matching ISO 32000-1's own default for a Type1/TrueType font's built-in encoding.
-  const fallbackGlyphName: (code: number) => string | undefined =
-    builtinGlyphName ?? (symbolic ? () => undefined : winAnsiGlyphName);
+  // What a code neither /ToUnicode nor /Differences resolves falls back to, in order. A font whose /BaseFont is literally one of the two standard-14 symbol faces, and any font flagged Symbolic, is encoded by its own font program rather than by any of the standard tables (ISO 32000-1 9.6.6.2 -- WinAnsi/MacRoman/StandardEncoding are never valid for Symbol or ZapfDingbats, and 9.6.6.4 has a symbolic TrueType font's /Encoding ignored outright), so the embedded program is consulted first and the two fixed standard-14 symbol tables next. An ordinary text font is the other way round: an explicitly named base encoding is the font dictionary stating what its codes mean, and only a font that states nothing falls through to its own program, then to WinAnsi -- ISO 32000-1's own default for a Type1/TrueType built-in encoding. Where every source is silent the code stays unmapped rather than being guessed at, since a plausible-looking wrong Latin letter is worse than a visible replacement character.
+  const symbolEncoded = symbolic || builtinGlyphName !== undefined;
+  const byGlyphName =
+    (source: (code: number) => string | undefined) =>
+    (code: number): number | undefined => {
+      const name = source(code);
+      return name === undefined ? undefined : glyphNameToUnicode(name);
+    };
+  const fromProgram = (code: number): number | undefined =>
+    programEncoding?.codeToUnicode(code);
+  const namedBase =
+    namedBaseGlyphName === undefined
+      ? undefined
+      : byGlyphName(namedBaseGlyphName);
+  const resolvers = [
+    byGlyphName((code: number) => differencesMap.get(code)),
+    ...(symbolEncoded
+      ? [
+          fromProgram,
+          builtinGlyphName === undefined
+            ? undefined
+            : byGlyphName(builtinGlyphName),
+          namedBase,
+        ]
+      : [namedBase, fromProgram, byGlyphName(winAnsiGlyphName)]),
+  ].filter((resolver) => resolver !== undefined);
+
+  const unicodeForCode = (code: number): number | undefined => {
+    for (const resolve of resolvers) {
+      const unicode = resolve(code);
+      if (unicode !== undefined) {
+        return unicode;
+      }
+    }
+    return undefined;
+  };
 
   const decodeToUnicode = (codes: Uint8Array<ArrayBuffer>): string => {
     let out = "";
@@ -189,13 +238,9 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
         out += viaToUnicode;
         continue;
       }
-      const name = differencesMap.get(code) ?? fallbackGlyphName(code);
-      const unicode =
-        name !== undefined
-          ? glyphNameToUnicodeWithUniFallback(name)
-          : undefined;
+      const unicode = unicodeForCode(code);
       if (unicode !== undefined) {
-        out += String.fromCharCode(unicode);
+        out += String.fromCodePoint(unicode);
         continue;
       }
       unmapped++;
@@ -292,6 +337,18 @@ function buildCompositeFont(
   const widthOf = (cid: number): number => widthMap.get(cid) ?? dw;
 
   const toUnicode = readToUnicodeCMap(fontDict, context);
+  // With Identity-H and the default /CIDToGIDMap, a CID is the embedded program's own glyph ID, so the program itself can say what a glyph is when the font dictionary carries no /ToUnicode CMap (or an incomplete one) -- through the glyph's own name, or by reading the program's Unicode mapping backwards. Any other /Encoding or a /CIDToGIDMap stream breaks that identity, and the program is not consulted at all rather than being read against the wrong glyph.
+  const cidToGidMap =
+    descendantDict !== undefined
+      ? dictGet(descendantDict, "CIDToGIDMap")
+      : undefined;
+  const cidIsGlyphId =
+    isName(dictGet(fontDict, "Encoding"), "Identity-H") &&
+    (cidToGidMap === undefined || isName(cidToGidMap, "Identity"));
+  const programEncoding = cidIsGlyphId
+    ? readFontProgram(descriptor, context)
+    : undefined;
+
   const decodeToUnicode = (codes: Uint8Array<ArrayBuffer>): string => {
     let out = "";
     let glyphCount = 0;
@@ -302,6 +359,11 @@ function buildCompositeFont(
       const mapped = toUnicode?.lookup(cid);
       if (mapped !== undefined) {
         out += mapped;
+        continue;
+      }
+      const fromProgram = programEncoding?.glyphIdToUnicode(cid);
+      if (fromProgram !== undefined) {
+        out += String.fromCodePoint(fromProgram);
         continue;
       }
       unmapped++;
