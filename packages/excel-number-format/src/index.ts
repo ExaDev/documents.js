@@ -1,0 +1,2 @@
+// excel-number-format: the tokenizing classifier for Excel's number-format mini-language (ECMA-376 Part 1 SS18.8.30, which [MS-XLS] 2.4.126 defers to for BIFF8's own format codes) -- deciding whether a numeric cell is really a percentage, a currency amount, a date, a time of day, an elapsed duration, or a plain number. Extracted from ooxml.js and xls-codec, which had each implemented this classifier independently (ExaDev/documents.js#848); both now depend on this package instead.
+export * from "./number-format";
