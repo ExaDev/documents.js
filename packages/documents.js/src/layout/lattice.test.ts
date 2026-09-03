@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutItem, LayoutRect } from "pdf-codec";
-import { detectGridLattice, extractLineCandidates } from "./lattice";
+import {
+  detectGridLattice,
+  extractLineCandidates,
+  findCellRegions,
+} from "./lattice";
 
 const BLACK = { r: 0, g: 0, b: 0 };
 
@@ -111,5 +115,30 @@ describe("detectGridLattice: rect-drawn lattices", () => {
       rect({ xPt: 100, yPt: 0, widthPt: 100, heightPt: 100 }),
     ];
     expect(detectGridLattice(items)).toBeUndefined();
+  });
+});
+
+// A real NGED specification's page (novus-power/hive#1397) crashed pdfToMarkdown with "Maximum call stack size exceeded" -- not from recursion, but from Math.min(...cells.map(...))/Math.max(...cells.map(...)) spreading a merged region's cell list into a function call, which throws once the array exceeds the JS engine's own argument-count limit (V8's is roughly 65536-125000 depending on version). A page whose line detection turns up a dense or malformed grid can merge tens of thousands of atomic cells into one region with no drawn boundary between them.
+describe("findCellRegions: a merged region far larger than the JS engine's argument-count limit", () => {
+  it("computes the region's bounds without spreading the cell list into Math.min/max", () => {
+    const rowCount = 200_000;
+    // Two columns, kept apart by one fully-drawn divider at position 1; every one of the 200,000 interior row dividers is undrawn, so each column merges top-to-bottom into a single region of 200,000 cells -- two regions, each far past the argument-count limit a naive Math.min(...cells) would hit. Every line needs its own distinct position: two dividers sharing a position give bestRunCoverageRatio a zero-length span, which it treats as fully covered regardless of ranges.
+    const rowLines = Array.from({ length: rowCount + 1 }, (_, i) => ({
+      position: i,
+      ranges: [],
+      items: [],
+    }));
+    const columnLines = [
+      { position: 0, ranges: [], items: [] },
+      { position: 1, ranges: [{ startPt: -1e12, endPt: 1e12 }], items: [] },
+      { position: 2, ranges: [], items: [] },
+    ];
+
+    const regions = findCellRegions(rowLines, columnLines);
+
+    expect(regions).toEqual([
+      { rowStart: 0, rowEnd: rowCount, colStart: 0, colEnd: 1 },
+      { rowStart: 0, rowEnd: rowCount, colStart: 1, colEnd: 2 },
+    ]);
   });
 });
