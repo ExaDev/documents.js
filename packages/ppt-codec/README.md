@@ -2,13 +2,13 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/ppt-codec) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/ppt-codec) [![npm version](https://img.shields.io/npm/v/ppt-codec)](https://www.npmjs.com/package/ppt-codec) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> A hand-written reader for the PowerPoint 97-2003 binary file format (`.ppt`, [MS-PPT]), producing the same `document-schema.js` presentation content model `ooxml.js`'s pptx support and `odf.js`'s odp support both target. Worker-isomorphic: the same code runs under Node and inside a Cloudflare Workers isolate.
+> A hand-written reader and writer for the PowerPoint 97-2003 binary file format (`.ppt`, [MS-PPT]), producing and consuming the same `document-schema.js` presentation content model `ooxml.js`'s pptx support and `odf.js`'s odp support both target. Worker-isomorphic: the same code runs under Node and inside a Cloudflare Workers isolate.
 
 Created for [documents.js#817](https://github.com/ExaDev/documents.js/issues/817), part of the legacy-binary-formats epic [#85](https://github.com/ExaDev/documents.js/issues/85). Nothing in the ecosystem read a pre-2007 PowerPoint file: `ooxml.js` reads the XML-based pptx that replaced it, and the two formats share no structure at all beyond both being containers.
 
 ## Status
 
-**Under active development. The read path for slide text and geometry is built and tested; there is no write path.** What that means concretely is set out in [What it reads](#what-it-reads) and [What it does not read yet](#what-it-does-not-read-yet) below — both lists are exhaustive rather than illustrative, so a caller can tell from this page alone whether the format's own feature it cares about is covered.
+**Under active development. The read path for slide text and geometry is built and tested. A narrower write path now exists too: one slide per input slide, with plain text-box shapes (basic character formatting, no images/tables/masters/layouts) — genuinely conformant [MS-PPT], verified by writing then reading every fixture back through this package's own reader, but not full read/write parity.** What that means concretely is set out in [What it reads](#what-it-reads)/[What it does not read yet](#what-it-does-not-read-yet) and [What it writes](#what-it-writes)/[What it does not write yet](#what-it-does-not-write-yet) below — every one of those four lists is exhaustive rather than illustrative, so a caller can tell from this page alone whether the format's own feature it cares about is covered.
 
 ## Why the format is shaped the way it is
 
@@ -59,6 +59,22 @@ for (const slide of slides) {
 
 `readPptStreams(currentUserStream, powerPointDocumentStream)` is the same read one level down, for a caller that already holds the two streams — the compound file beneath them is `archive-codec`'s business, and separating the two is what lets every record-level behaviour be tested without a container around it.
 
+## Writing a document
+
+```ts
+import { writePpt, writePptContent } from "ppt-codec";
+
+// The tree form: a document-schema.js DocumentTree in, real .ppt bytes out.
+const pptBytes = writePpt(tree);
+
+// The flat form: metadata plus ContentSlide[] in -- metadata is accepted for
+// symmetry with readPptContent's own return shape but is not written anywhere
+// (see What it does not write yet).
+const bytes = writePptContent({ metadata: {}, slides });
+```
+
+`writePptStreams(document)` is the same write one level down, returning the two [MS-PPT] streams without wrapping them in a compound file — the mirror of `readPptStreams`, for a caller assembling its own container. Every function throws `PptUnsupportedContentError` (not `PptFormatError`, which is reserved for malformed bytes on the read side) when asked to write content outside this writer's scope: a document that is not a presentation, or slides that do not all share one size (`[MS-PPT]`'s `DocumentAtom` states exactly one slide size for the whole presentation). A block kind this writer does not represent (an image, a table, a construct marker) is not an error — it is silently excluded from the written text body, the same documented-gap convention [What it does not read yet](#what-it-does-not-read-yet) already uses for the reader's own unsupported constructs.
+
 ## What it reads
 
 The whole path from a file's first byte to a slide's text, record by record:
@@ -80,7 +96,6 @@ Geometry is converted from master units (1/576 inch) to points on the way out, s
 
 Each of these is a real construct of the format that this package currently ignores or cannot represent — not a claim that it does not exist:
 
-- **Writing.** There is no write path at all: this package reads `.ppt` and does not produce it.
 - **Encrypted documents.** Recognised and refused by name (`PptEncryptedError`) rather than misparsed, but not decrypted.
 - **Speaker notes.** Every slide's `notes` is `""`. Notes live in their own `NotesContainer` persist objects reached through the document's notes list, which is not yet walked.
 - **Document metadata.** `metadata` is always `{}`. Document properties live in the compound file's own `SummaryInformation` stream ([MS-OSHARED]), not in any [MS-PPT] record.
@@ -94,6 +109,42 @@ Each of these is a real construct of the format that this package currently igno
 - **Alignment values the shared schema has no name for.** `Tx_ALIGNDistributed`, `Tx_ALIGNThaiDistributed` and `Tx_ALIGNJustifyLow` map to no alignment rather than being rounded to `justify`.
 - **The soft line break.** U+000B inside a paragraph is converted to a newline, an inference from the spec's own worked examples rather than a rule it states; the specification publishes no table of the special characters a text body may hold.
 
+## What it writes
+
+The whole path from a `ContentSlide[]` to a real `.ppt` file's bytes, mirroring the read-side table above in the opposite direction:
+
+| Layer           | Records                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Container       | The `Current User` and `PowerPoint Document` streams, wrapped in a real [MS-CFB] compound file through `archive-codec`'s conformant writer.                                                                                                                                                                                                                                |
+| Record framing  | The generic 8-byte `RecordHeader`, atom and container builders — `record/write.ts`, shared by every writer module below and by this package's own test fixtures.                                                                                                                                                                                                           |
+| Edit resolution | A single-edit persist layer: one `CurrentUserAtom` pointing at one `UserEditAtom` pointing at one `PersistDirectoryAtom` whose entries name the document container's and every slide container's stream offset — never an incremental append, since nothing about this writer's own output needs a second generation of any object.                                        |
+| Document        | `DocumentContainer` → `DocumentAtom` (one slide size, in master units, taken from the input's own first slide and required to match every other slide — see below), an `Environment`/`FontCollectionContainer` built from every distinct `fontFamily` a run names, and a `SlideListWithTextContainer` carrying one `SlidePersistAtom` per slide with no placeholder texts. |
+| Slides          | One `SlideContainer` per input slide, each holding its own `DrawingContainer`.                                                                                                                                                                                                                                                                                             |
+| Drawing         | `OfficeArtDgContainer` → one `OfficeArtSpgrContainer` (the patriarch group every real drawing carries) → one plain `OfficeArtSpContainer` per shape, each anchored in slide coordinates via a 32-bit `OfficeArtClientAnchor` (`RectStruct`, never the 16-bit `SmallRectStruct`) — no grouping, no `OfficeArtChildAnchor` nesting.                                          |
+| Text            | Every shape carries its own text directly on its `OfficeArtClientTextbox` (`TextHeaderAtom` + a UTF-16 `TextCharsAtom`) rather than through the `OutlineTextRefAtom` placeholder indirection into the slide list — a plain text box is all this writer produces, so there is no separate placeholder text to route through the document's own slide list.                  |
+| Formatting      | `StyleTextPropAtom`: one `TextPFRun` per paragraph (indent level, alignment) and one `TextCFRun` per character run (bold, italic, underline, a font-collection reference, size in points, and a literal sRGB `ColorIndexStruct` colour), fields written in the identical spec-declared order `readTextPFException`/`readTextCFException` parse them in.                    |
+
+Geometry is converted from points to master units on the way in, rounding to the nearest whole master unit (1/576 inch) — the format's own smallest unit of length.
+
+Verification is a direct round trip through this package's own reader (`write.test.ts`, `content-write.test.ts`, `text/style-write.test.ts`): write real records, read them back through `readPptContent`/`readPpt`, and assert the recovered content equals what was written. This proves the writer's bytes are genuinely conformant [MS-PPT] rather than merely internally self-consistent, since the reader was built and tested independently, against the specification alone, before any writer existed.
+
+## What it does not write yet
+
+Each of these is either a real construct this writer deliberately does not attempt (a smaller, genuinely correct core rather than a larger, unreliable one — see the two tables above for exactly what it does write), or a `ContentShape`/`ContentParagraph`/`ContentRun` field this writer's own OfficeArt shape tree has nowhere to carry:
+
+- **Images, tables, and OLE embeddings.** A shape whose blocks include an `image`, `table`, or `embeddedObject` block silently drops that block from the written text body — see [Writing a document](#writing-a-document) — rather than attempting a picture, table, or OLE object shape.
+- **Shapes with no text.** Written with a client anchor and no `OfficeArtClientTextbox` at all, matching how the reader represents one (`blocks: []`); nothing is lost, since there was nothing to write.
+- **Grouped shapes, rotation, and any coordinate system beyond a plain `OfficeArtClientAnchor`.** Every shape this writer emits is an ungrouped, unrotated rectangle in slide coordinates; `ContentShape.rotationDeg` is not written, and there is no `OfficeArtChildAnchor`/`OfficeArtFSPGR` group nesting.
+- **Per-shape text insets, autofit, and paint order.** `ContentShape.insetLeftPt`/`insetTopPt`/`insetRightPt`/`insetBottomPt`, `fontScale`, `lineSpacingReduction`, and `paintOrder` have no `OfficeArtFOPT` property table to land in, since this writer does not build one.
+- **Masters, layouts, and scheme colours.** No `MainMaster`, no `MasterListWithTextContainer`, and no `SlideSchemeColorSchemeAtom`; every character run's colour must already be a literal, and every paragraph's formatting is exactly what the paragraph itself states.
+- **Speaker notes and document metadata.** `PptDocument.metadata` is accepted (for symmetry with `readPptContent`'s own return shape) but never written anywhere; a slide's `notes` is likewise accepted and dropped, since neither `NotesContainer` persist objects nor the compound file's own `SummaryInformation` stream are built.
+- **Hyperlinks, bullets, spacing, margins, and list numbering identity.** `ContentRun.hyperlink`, `ContentParagraph.list.numId`/`checked`/`itemId`, `spacingBeforePt`/`spacingAfterPt`/`lineSpacing`/`indentLeftPt`/`indentFirstLinePt`, and `pageBreakBefore`/`pageBreakAfter` have no [MS-PPT] field this writer populates; only `alignment` and `list.level` (as a `TextPFException` indent level) round-trip.
+- **`strike`, `sourcePath`, `source`, and `frames`.** `ContentRun.strike` has no `TextCFException` bit this writer sets (the format's own `CFMasks`/`CFStyle` carry no strikethrough bit at all — a real gap in [MS-PPT], not a scope choice); the three fidelity/positioning fields are round-trip-irrelevant to a fresh write and are never populated.
+- **Construct markers.** A `constructStart`/`constructEnd` pair (or any other non-`paragraph` block kind) is excluded from the written text body exactly like an image or table block, per [Writing a document](#writing-a-document).
+- **Alignment values the shared schema has no name for.** The mirror of the read-side gap: `Tx_ALIGNDistributed`, `Tx_ALIGNThaiDistributed`, and `Tx_ALIGNJustifyLow` are never written, since `Alignment` has no member naming them.
+- **Fractional character sizes.** `ContentRun.sizePt` is rounded to the nearest whole point, since `TextCFException`'s size field is a plain 16-bit integer.
+- **Fonts, tables, animations, transitions, comments, and the metacharacter atoms.** Nothing here is written for the same reason none of it is read yet — see the corresponding entries in [What it does not read yet](#what-it-does-not-read-yet).
+
 ## Architecture
 
 Every module is importable by package-relative path as well as through the barrel — `tsdown` builds one dist file per src module (`root: 'src'`, the layout every sibling codec ships), and `package.json`'s `./*` exports wildcard maps each subpath onto it:
@@ -103,37 +154,47 @@ import { readRecordAt } from "ppt-codec/record/tree";
 import { readStyleTextPropAtom } from "ppt-codec/text/style";
 ```
 
-| Module                   | What it owns                                                                                                         |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `record/header`          | The generic 8-byte record header and the container/atom distinction.                                                 |
-| `record/types`           | The `RecordType` values this reader dispatches on, plus the [MS-ODRAW] types the drawing walk crosses into.          |
-| `record/tree`            | Offset-addressed records, sibling sequences, child walks, typed-descendant search.                                   |
-| `stream/current-user`    | `CurrentUserAtom`: where the live edit is, and whether the file is encrypted.                                        |
-| `stream/persist`         | `UserEditAtom`, `PersistDirectoryAtom`, and the persist directory the edit chain builds.                             |
-| `document/document-atom` | `DocumentAtom`: slide and notes sizes, master persist references.                                                    |
-| `document/fonts`         | The font collection, resolved to typeface names a `FontIndexRef` indexes.                                            |
-| `document/slide-list`    | `SlideListWithTextContainer`: each slide's persist reference and its placeholder texts.                              |
-| `drawing/shapes`         | The OfficeArt shape tree, flattened, with every anchor resolved into slide coordinates through its enclosing groups. |
-| `text/atoms`             | The two text-body spellings, the text-type enumeration, and the paragraph split.                                     |
-| `text/style`             | `StyleTextPropAtom`'s two run arrays and their mask-driven exception structures.                                     |
-| `content`                | The mapping of PowerPoint's character-counted runs onto the schema's paragraph-owned runs.                           |
-| `read`                   | The whole pipeline, and the `readPpt`/`readPptContent`/`readPptStreams` surface.                                     |
-| `units`                  | Master units to points.                                                                                              |
-| `errors`                 | `PptFormatError` for malformed input, `PptEncryptedError` for well-formed input this package cannot decrypt.         |
+| Module                         | What it owns                                                                                                                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `record/header`                | The generic 8-byte record header and the container/atom distinction.                                                                                                                                               |
+| `record/types`                 | The `RecordType` values this reader dispatches on, plus the [MS-ODRAW] types the drawing walk crosses into.                                                                                                        |
+| `record/tree`                  | Offset-addressed records, sibling sequences, child walks, typed-descendant search.                                                                                                                                 |
+| `record/write`                 | Byte primitives and the atom/container builders every writer module below composes records from -- the write-side mirror of `record/header`/`record/tree`, and what this package's own test fixtures build on too. |
+| `stream/current-user`          | `CurrentUserAtom`: where the live edit is, and whether the file is encrypted.                                                                                                                                      |
+| `stream/current-user-write`    | Writes a real `CurrentUserAtom` pointing at the single edit this writer always produces.                                                                                                                           |
+| `stream/persist`               | `UserEditAtom`, `PersistDirectoryAtom`, and the persist directory the edit chain builds.                                                                                                                           |
+| `stream/persist-write`         | Writes a single-edit `UserEditAtom`/`PersistDirectoryAtom` pair covering the document container and every slide container.                                                                                         |
+| `document/document-atom`       | `DocumentAtom`: slide and notes sizes, master persist references.                                                                                                                                                  |
+| `document/document-atom-write` | Writes a `DocumentAtom` for the one slide size every slide must share.                                                                                                                                             |
+| `document/fonts`               | The font collection, resolved to typeface names a `FontIndexRef` indexes.                                                                                                                                          |
+| `document/fonts-write`         | Writes an `Environment`/`FontCollectionContainer` from a document's own distinct font families.                                                                                                                    |
+| `document/slide-list`          | `SlideListWithTextContainer`: each slide's persist reference and its placeholder texts.                                                                                                                            |
+| `document/slide-list-write`    | Writes a `SlideListWithTextContainer` naming each slide's persist reference, with no placeholder texts.                                                                                                            |
+| `drawing/shapes`               | The OfficeArt shape tree, flattened, with every anchor resolved into slide coordinates through its enclosing groups.                                                                                               |
+| `drawing/shapes-write`         | Writes the patriarch group and one plain, anchored `OfficeArtSpContainer` per shape.                                                                                                                               |
+| `text/atoms`                   | The two text-body spellings, the text-type enumeration, and the paragraph split.                                                                                                                                   |
+| `text/style`                   | `StyleTextPropAtom`'s two run arrays and their mask-driven exception structures.                                                                                                                                   |
+| `text/style-write`             | Writes a `StyleTextPropAtom` from the same `StyleRun`/`ParagraphProperties`/`CharacterProperties` shapes `text/style` reads into.                                                                                  |
+| `content`                      | The mapping of PowerPoint's character-counted runs onto the schema's paragraph-owned runs.                                                                                                                         |
+| `content-write`                | The inverse: a shape's `ContentBlock[]` to the flat character-counted text body and `StyleTextProps` `text/style-write` needs.                                                                                     |
+| `read`                         | The whole read pipeline, and the `readPpt`/`readPptContent`/`readPptStreams` surface.                                                                                                                              |
+| `write`                        | The whole write pipeline, and the `writePpt`/`writePptContent`/`writePptStreams` surface.                                                                                                                          |
+| `units`                        | Master units to points, and points to master units.                                                                                                                                                                |
+| `errors`                       | `PptFormatError` for malformed input, `PptEncryptedError` for well-formed input this package cannot decrypt, `PptUnsupportedContentError` for well-formed content this package's writer cannot express.            |
 
 ### Every fixture is built from the specification, not captured
 
-There is no `.ppt` file anywhere in this package's tests. Every fixture is assembled byte by byte from [MS-PPT]'s own field-layout tables, through the builders in `src/test-support/` — including a whole synthetic presentation and a minimal [MS-CFB] writer, so the end-to-end suite exercises the real offset arithmetic (the persist directory, the edit chain, every cross-stream reference) rather than a stubbed one. That is deliberate: a fixture built from the spec's field tables states what the parser is being held to, whereas a captured file would only state what one producer happened to emit, and could not be reduced to the single record under test.
+There is no `.ppt` file anywhere in this package's tests. Every read-path fixture is assembled byte by byte from [MS-PPT]'s own field-layout tables, through the builders in `src/test-support/` — including a whole synthetic presentation and a minimal [MS-CFB] writer kept separate from `record/write.ts`'s real one, so the end-to-end suite exercises the real offset arithmetic (the persist directory, the edit chain, every cross-stream reference) rather than a stubbed one. That is deliberate: a fixture built from the spec's field tables states what the parser is being held to, whereas a captured file would only state what one producer happened to emit, and could not be reduced to the single record under test. The write path's own tests (`write.test.ts`, `content-write.test.ts`, `text/style-write.test.ts`) invert this: rather than hand-building bytes to feed the reader, they hand-build `ContentDocument`/`ContentBlock` values, write real records from them through `record/write.ts`, and read those bytes back through the unmodified reader — the same "build from the spec, not a captured file" discipline, applied to the writer's own output instead of a hand-assembled fixture.
 
 ### What it deliberately does not depend on
 
-The [MS-CFB] container beneath the format is the one piece not hand-written again: `archive-codec` already owns bounded compound-file reading for the family, and a second implementation here would be exactly the duplication that package's extraction exists to prevent. Everything above it — the record tree, the persist layer, the OfficeArt walk, the text and formatting model — is hand-written against the published specification, the same bet every sibling codec here makes against a heavyweight format library.
+The [MS-CFB] container beneath the format is the one piece not hand-written again, in either direction: `archive-codec` already owns bounded compound-file reading and conformant compound-file writing for the family, and a second implementation here would be exactly the duplication that package's extraction exists to prevent. Everything above it — the record tree, the persist layer, the OfficeArt walk, the text and formatting model, and their write-side mirrors — is hand-written against the published specification, the same bet every sibling codec here makes against a heavyweight format library.
 
 ## Conventions
 
 - Worker-isomorphic (see the [family-wide convention](../../README.md#conventions)): runtime `src/` must not import `node:*`, a bare Node builtin, or use the `Buffer` global — enforced by a `no-restricted-imports`/`no-restricted-globals` ESLint rule and exercised in CI by running a suite inside an actual `workerd` isolate (`pnpm test:workers`). Test files under `src/**/*.test.ts` and `src/test-support/` are exempt and may use Node APIs for fixtures.
 - Only `src/index.ts` may be named `index.*` — a custom ESLint rule (`local/no-non-barrel-index`) rejects any other module using an `index` basename, since that would be a hidden entry point the `exports` map in `package.json` doesn't advertise.
-- Every structural failure throws `PptFormatError` rather than degrading: a malformed file fails whole, never returning a partial slide list that looks complete.
+- Every structural failure throws `PptFormatError` rather than degrading: a malformed file fails whole, never returning a partial slide list that looks complete. On the write side, content this writer cannot express throws `PptUnsupportedContentError` rather than silently substituting or dropping it — except a block kind outside this writer's scope (an image, a table, a construct marker), which is excluded from the written text body by design and documented as such, the same convention the reader already applies to its own unsupported constructs.
 
 ## Specification references
 
@@ -151,7 +212,7 @@ Every field layout in this package is taken from a specification page, cited in 
 - [[MS-PPT] 2.9.76: OfficeArtClientTextbox](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/f50070dd-a4dc-4edd-a446-c4fcc5c80ace), [TextHeaderAtom](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/08d31a66-0750-4009-b416-49f2871cd178), [TextCharsAtom](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/a3c5c8d5-e530-4167-a242-7743bc99aeac), [TextBytesAtom](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/80aae34b-2699-43fa-9e6a-c560ae790cd7)
 - [[MS-PPT]: StyleTextPropAtom](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/a9a5fa71-238d-491e-acc7-fa1fffd5f100), [TextPFException](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c15a13b3-db2c-4b50-a7e6-08045581a663), [PFMasks](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/2a02831a-088b-44e7-84c9-c185ab314a71), [TextCFException](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c75024a2-14cb-4d7d-9964-bdab2fcd9d93), [CFMasks](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/bbca8581-d011-4293-a375-b209523cf962), [CFStyle](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/3ea010b9-0ef9-4c05-9982-618130ca66cd), [ColorIndexStruct](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/5d6b0509-f3c7-435f-9bf4-6f1fc5f8293c)
 - [[MS-ODRAW]: Office Drawing Binary File Format](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/8560795e-7759-4745-838f-f7f2ef2f1872) — [OfficeArtSpContainer](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/16194cb9-b4b0-476c-9678-a6ac1f06b034), [OfficeArtFSP](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/8a7e7be3-0582-4461-9400-29d7eda8497d), [OfficeArtFSPGR](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/82d2d6a1-3a7a-4d15-9803-33145a76545a), [OfficeArtChildAnchor](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/33a44593-02df-4684-ab35-5a7c4a9bcaac)
-- [[MS-CFB]: Compound File Binary File Format](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/53989ce4-7b05-4f8d-829b-d08d6148375b) — the container, read through `archive-codec`
+- [[MS-CFB]: Compound File Binary File Format](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/53989ce4-7b05-4f8d-829b-d08d6148375b) — the container, read and written through `archive-codec`
 
 ## Install
 
