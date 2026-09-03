@@ -14,7 +14,7 @@ import {
   type TableCellMergeToWrite,
 } from "./tap-write";
 
-// The inverse of table/read.ts: a section's own ContentBlock list to the flat sequence of paragraphs writeDocContent's own text-layout pass consumes, expanding each ContentTable into its real [MS-DOC] physical-cell stream -- a horizontally-merged cell's colSpan becomes one real cell plus (colSpan - 1) synthetic continuation cells, each ending in its own cell mark exactly as [MS-DOC] 2.4.3 requires; a vertical-merge continuation cell (the shared schema's own `{blocks: []}` convention, mirroring ooxml.js's docx reader) becomes a single empty paragraph. Every physical cell's own grpprl carries sprmPFInTable; the row's own trailing mark additionally carries sprmPFTtp plus the row's whole TAP (tap-write.ts's encodeTableRowGrpprl).
+// The inverse of table/read.ts: a section's own ContentBlock list to the flat sequence of paragraphs writeDocContent's own text-layout pass consumes, expanding each ContentTable into its real [MS-DOC] physical-cell stream -- a horizontally-merged cell's colSpan becomes one real cell plus (colSpan - 1) synthetic continuation cells, each ending in its own cell mark exactly as [MS-DOC] 2.4.3 requires. A vertical-merge continuation cell is never inferred from a bare `{blocks: []}` alone -- a genuinely blank cell has the identical shape -- so flattenTable tracks which columns carry a vertical merge actually in progress (an `active` map keyed by column position, walked top to bottom exactly as ooxml.js's own buildTable tracks its identical `active` map), and only a `{blocks: []}` cell landing on a column with a merge genuinely active there becomes a continuation; every other cell, blank or not, is ordinary. The same map supplies a continuation's own physical column span from the anchor's recorded span, since the continuation cell's own (typically absent) colSpan is never the source of truth for it. Every physical cell's own grpprl carries sprmPFInTable; the row's own trailing mark additionally carries sprmPFTtp plus the row's whole TAP (tap-write.ts's encodeTableRowGrpprl).
 
 /** sprmPFInTable (0x2416): a Bool8, "MUST be 1 any time the table depth is greater than zero". */
 const SPRM_P_F_IN_TABLE = 0x2416;
@@ -126,32 +126,58 @@ function columnBoundariesTwips(columnWidthsPt: readonly number[]): number[] {
   return boundaries;
 }
 
-// Expands one output row's own cells (colSpan-anchored, vertical continuations already present as `{blocks: []}`) into the row's real physical-cell stream, one WriteParagraph group and one TableCellMergeToWrite per physical cell.
+/** A vertical merge genuinely in progress at a given column: the anchor's own physical column span (so a continuation's column count comes from the anchor, never from the continuation cell's own usually-absent colSpan), and how many further rows it still covers. */
+interface ActiveVerticalMerge {
+  span: number;
+  remaining: number;
+}
+
+// Expands one output row's own cells (colSpan-anchored; a vertical continuation is a bare `{blocks: []}`, disambiguated from a genuinely blank cell by whether `active` shows a merge actually in progress at this column -- see this module's own top-of-file note) into the row's real physical-cell stream, one WriteParagraph group and one TableCellMergeToWrite per physical cell. Mutates `active` as it walks the row, exactly as ooxml.js's own buildTable does for the identical disambiguation.
 function flattenRow(
   cells: readonly ContentTableCell[],
   columnCount: number,
+  active: Map<number, ActiveVerticalMerge>,
 ): { paragraphs: WriteParagraph[]; merges: TableCellMergeToWrite[] } {
   const paragraphs: WriteParagraph[] = [];
   const merges: TableCellMergeToWrite[] = [];
+  let column = 0;
   for (const cell of cells) {
-    const colSpan = cell.colSpan ?? 1;
-    let vertMerge: TableCellMergeToWrite["vertMerge"] = 0;
-    if (cell.blocks.length === 0) {
+    const covered = active.get(column);
+    const isContinuation =
+      cell.blocks.length === 0 &&
+      covered !== undefined &&
+      covered.remaining > 0;
+
+    let span: number;
+    let vertMerge: TableCellMergeToWrite["vertMerge"];
+    let blocks: readonly ContentBlock[];
+    if (isContinuation) {
+      covered.remaining -= 1;
+      span = covered.span;
       vertMerge = 1;
-    } else if ((cell.rowSpan ?? 1) > 1) {
-      vertMerge = 3;
+      blocks = [];
+    } else {
+      span = cell.colSpan ?? 1;
+      const rowSpan = cell.rowSpan ?? 1;
+      vertMerge = rowSpan > 1 ? 3 : 0;
+      if (rowSpan > 1) {
+        active.set(column, { span, remaining: rowSpan - 1 });
+      }
+      blocks = cell.blocks;
     }
-    paragraphs.push(...cellParagraphs(cell.blocks));
-    merges.push({ horzMerge: colSpan > 1 ? 2 : 0, vertMerge });
-    for (let extra = 1; extra < colSpan; extra += 1) {
+
+    paragraphs.push(...cellParagraphs(blocks));
+    merges.push({ horzMerge: span > 1 ? 2 : 0, vertMerge });
+    for (let extra = 1; extra < span; extra += 1) {
       paragraphs.push({
         runs: [],
         properties: {},
         extraGrpprl: inTableGrpprl(),
         terminator: CELL_MARK,
       });
-      merges.push({ horzMerge: 1, vertMerge: 0 });
+      merges.push({ horzMerge: 1, vertMerge });
     }
+    column += span;
   }
   if (merges.length !== columnCount) {
     throw new DocFormatError(
@@ -169,9 +195,10 @@ function flattenTable(table: ContentTable): WriteParagraph[] {
     );
   }
   const boundaries = columnBoundariesTwips(table.columnWidthsPt);
+  const active = new Map<number, ActiveVerticalMerge>();
   const output: WriteParagraph[] = [];
   for (const row of table.rows) {
-    const { paragraphs, merges } = flattenRow(row.cells, columnCount);
+    const { paragraphs, merges } = flattenRow(row.cells, columnCount, active);
     output.push(...paragraphs);
     output.push({
       runs: [],
