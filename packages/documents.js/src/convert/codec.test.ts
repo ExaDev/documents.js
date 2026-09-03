@@ -9,6 +9,7 @@ import { openOdp } from "../edit/odp/editor";
 import { openOds } from "../edit/ods/editor";
 import { openOdt } from "../edit/odt/editor";
 import { createPptx, openPptx } from "../edit/pptx/editor";
+import { readRtfContent, rtfBytesFromLatin1 } from "rtf-codec";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
 import { richMarkdownText } from "../test-support/markdown";
 import { minimalOdgBytes } from "../test-support/odg";
@@ -29,6 +30,7 @@ import {
   odsPdfCodec,
   odtPdfCodec,
   pptxPdfCodec,
+  rtfPdfCodec,
   xlsxCsvCodec,
   xlsxPdfCodec,
 } from "./codec";
@@ -273,6 +275,47 @@ describe("xlsxPdfCodec", () => {
   it("rejects encode input with no %PDF- header before ever reaching pdfToXlsx", () => {
     expect(() =>
       z.encode(xlsxPdfCodec, new TextEncoder().encode("not a pdf")),
+    ).toThrow(z.core.$ZodError);
+  });
+});
+
+describe("rtfPdfCodec", () => {
+  it("z.decode produces valid PDF bytes from rtf bytes", () => {
+    const rtfBytes = rtfBytesFromLatin1(
+      "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}\\fs24 Hello, world.\\par}",
+    );
+    const pdfBytes = z.decode(rtfPdfCodec, rtfBytes);
+    expect(pdfHeader(pdfBytes)).toBe("%PDF-");
+  });
+
+  it("z.encode then z.decode round-trips the source text, like rtfToPdf/pdfToRtf", () => {
+    const rtfBytes = rtfBytesFromLatin1(
+      "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}\\fs24 Hello, world.\\par}",
+    );
+    const pdfBytes = z.decode(rtfPdfCodec, rtfBytes);
+    const roundTrippedRtfBytes = z.encode(rtfPdfCodec, pdfBytes);
+    const content = readRtfContent(roundTrippedRtfBytes).document;
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const text = content.sections
+      .flatMap((section) => section.blocks)
+      .filter((block) => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs)
+      .map((run) => run.text)
+      .join("");
+    expect(text).toContain("Hello, world.");
+  });
+
+  it("rejects decode input with no '{\\rtf' header before ever reaching rtfToPdf", () => {
+    expect(() =>
+      z.decode(rtfPdfCodec, new TextEncoder().encode("not an rtf")),
+    ).toThrow(z.core.$ZodError);
+  });
+
+  it("rejects encode input with no %PDF- header before ever reaching pdfToRtf", () => {
+    expect(() =>
+      z.encode(rtfPdfCodec, new TextEncoder().encode("not a pdf")),
     ).toThrow(z.core.$ZodError);
   });
 });

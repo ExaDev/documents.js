@@ -12,6 +12,7 @@ import {
   SvgBytesSchema,
   XlsxBytesSchema,
 } from "../model/bytes";
+import { RtfBytesSchema } from "rtf-codec";
 import {
   csvToMarkdown,
   csvToOds,
@@ -36,6 +37,7 @@ import {
   odtToPdf,
   pptxToOdp,
   pptxToPdf,
+  rtfToPdf,
   svgToOdg,
   svgToPdf,
   xlsxToCsv,
@@ -53,6 +55,7 @@ import {
   pdfToOds,
   pdfToOdt,
   pdfToPptx,
+  pdfToRtf,
   pdfToSvg,
   pdfToXlsx,
 } from "./from-pdf";
@@ -92,6 +95,12 @@ export const odgPdfCodec = z.codec(OdgBytesSchema, PdfBytesSchema, {
 export const xlsxPdfCodec = z.codec(XlsxBytesSchema, PdfBytesSchema, {
   decode: (xlsxBytes) => xlsxToPdf(xlsxBytes),
   encode: (pdfBytes) => pdfToXlsx(pdfBytes),
+});
+
+// rtf bytes <-> PDF bytes: a schema-validated z.codec() pair over rtfToPdf/pdfToRtf (convert.ts), the same shape as xlsxPdfCodec above -- rtf has no layout engine of its own either, so it composes a same-variant docx bridge with the docx<->pdf layout pair internally rather than laying rtf out directly. Still the no-options form only, and still subject to the same "not round-trip-lossless" caveat every PDF-pivot codec carries.
+export const rtfPdfCodec = z.codec(RtfBytesSchema, PdfBytesSchema, {
+  decode: (rtfBytes) => rtfToPdf(rtfBytes),
+  encode: (pdfBytes) => pdfToRtf(pdfBytes),
 });
 
 // markdown bytes <-> PDF bytes: a schema-validated z.codec() pair over markdownToPdf/pdfToMarkdown (convert.ts), which -- unlike xlsxPdfCodec above -- DOES lay markdown out directly (markdownToPdf reuses convertWordprocessingToLayout unmodified, the same engine docxPdfCodec/odtPdfCodec above feed). Still the no-options form only, and still fully subject to the "not round-trip-lossless" caveat every PDF-pivot codec carries -- more so than any other codec in this file, in fact: pdfToMarkdown is the single lossiest conversion in the whole package (see convert.ts's own top-of-file comment and the README's Fidelity section).
