@@ -240,6 +240,12 @@ function buildFormatFixtures(): Record<
     odt: { bytes: odtBytes, kind: "wordprocessing" },
     pdf: { bytes: buildMultiPagePdf(), kind: "wordprocessing" },
     pptx: { bytes: pptxBytes, kind: "presentation" },
+    rtf: {
+      bytes: new TextEncoder().encode(
+        "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}\\pard\\plain A paragraph of ordinary body text.\\par}",
+      ),
+      kind: "wordprocessing",
+    },
     svg: { bytes: odgToSvg(singlePageOdgBytes), kind: "drawing" },
     xlsx: { bytes: xlsxBytes, kind: "spreadsheet" },
   };
