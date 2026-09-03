@@ -53,6 +53,10 @@ import { decodeSvgText, encodeSvgText } from "../svg/text";
 import { readSvgContent } from "../svg/read";
 import { buildSvgText } from "../svg/write";
 import { readRtfContent, rtfBytesFromLatin1, writeRtfContent } from "rtf-codec";
+import { readDocContent, writeDocContent } from "doc-codec";
+import { readXlsContent, writeXlsContent } from "xls-codec";
+import { readPptContent } from "../ppt/read";
+import { writePptContent } from "../ppt/write";
 import { readWpdContent } from "wpd-codec";
 import { requireArrayBufferBytes } from "../model/bytes";
 import type { CellTypeInferenceSink } from "../layout/cell-typing";
@@ -106,7 +110,7 @@ export interface UnifiedConversionOptions {
 
 // --- Registry: declarative per-format primitive wiring -----------------------------------------
 
-// The eleven read-and-write content formats this engine routes between (pdf is the layout pivot, reached via toPdf/fromPdf edges; odf is special, excluded entirely -- see the module doc). A format here can be either end of a conversion, which is what the read/build pair in its FORMAT_NODES entry means; the read-only formats that can only ever be a SOURCE are ReadOnlyContentFormat below.
+// The fourteen read-and-write content formats this engine routes between (pdf is the layout pivot, reached via toPdf/fromPdf edges; odf is special, excluded entirely -- see the module doc). A format here can be either end of a conversion, which is what the read/build pair in its FORMAT_NODES entry means; the read-only formats that can only ever be a SOURCE are ReadOnlyContentFormat below.
 export type ContentFormat =
   | "docx"
   | "pptx"
@@ -118,7 +122,10 @@ export type ContentFormat =
   | "svg"
   | "csv"
   | "markdown"
-  | "rtf";
+  | "rtf"
+  | "doc"
+  | "xls"
+  | "ppt";
 
 // The explicit, typed list of content formats, kept in sync with FORMAT_NODES' own keys. Used for iteration in the graph builder in place of `Object.keys(FORMAT_NODES)` (which returns `string[]` and would need a cast back to ContentFormat), so the registry stays cast-free end to end.
 const CONTENT_FORMATS: readonly ContentFormat[] = [
@@ -133,6 +140,9 @@ const CONTENT_FORMATS: readonly ContentFormat[] = [
   "csv",
   "markdown",
   "rtf",
+  "doc",
+  "xls",
+  "ppt",
 ];
 
 // The four ContentDocument variants a layout engine exists for. 'formula' is the fifth ContentVariant member but has no layout engine of its own (odfToPdf renders through writePdf's formula positioning, not a ContentDocument -> LayoutDocument pass), so it is excluded from this engine's layout/reconstruct registries.
@@ -155,12 +165,12 @@ interface PackageFormatNode {
   readonly hasSourcePackage: true;
 }
 
-// The plain-text half of the union: markdown, csv, svg, and rtf all decode straight from bytes to a string and read/build through their own text-level codecs -- no zip package, no font embedding, no source-package concept at all. family names the text dialect so a format can never be a member of both halves. build takes options because csv's build consumes { delimiter, sheet } and svg's build consumes { page, onSvgDiagnostic } from UnifiedConversionOptions; markdown's and rtf's build ignore them.
+// The plain-text half of the union: markdown, csv, svg, rtf, doc, xls, and ppt all decode straight from bytes to a string and read/build through their own text-level codecs -- no zip package, no font embedding, no source-package concept at all. family names the text dialect so a format can never be a member of both halves. build takes options because csv's build consumes { delimiter, sheet } and svg's build consumes { page, onSvgDiagnostic } from UnifiedConversionOptions; markdown's, rtf's, doc's, xls's, and ppt's build ignore them.
 //
-// rtf is the one member whose decode/encode are not a genuine text conversion: rtf-codec's readRtfContent/writeRtfContent operate on raw bytes directly (RTF is byte-oriented, not UTF-8 text -- a \binN run can carry arbitrary raw picture bytes, so unlike markdown/csv/svg there is no well-formed-UTF-8 decode this format's own bytes always survive). Widening decode/read/build/encode's shared TMiddle type to accommodate that honestly (a second FormatNode variant, or a generic TextFormatNode<TMiddle>) breaks executeBridge's and executeToPdf's generic "decode then read" dispatch over the whole ContentFormat space: FORMAT_NODES[format] for a non-literal format widens to the union of every member's node type, and calling a union of methods whose parameter types differ per member (string here, Uint8Array there) requires the argument to satisfy every member's parameter type at once, which TypeScript correctly rejects. So rtf's decode/encode instead wrap and unwrap the identical lossless byte<->code-unit mapping rtf-codec's own rtfBytesFromLatin1 both names and partly implements -- "the one string form that genuinely still holds bytes" per that function's own doc comment, and precisely the form readRtfContent already accepts directly (it takes `Uint8Array | string`, unwrapping a string through this exact function internally) -- so this is a sanctioned, lossless representation rtf-codec itself anticipates, not a workaround invented here.
+// rtf/doc/xls/ppt are the four members whose decode/encode are not a genuine text conversion: their own read/write pairs (rtf-codec's readRtfContent/writeRtfContent; doc-codec's readDocContent/writeDocContent; xls-codec's readXlsContent/writeXlsContent; this package's own src/ppt/read.ts+write.ts wrapping ppt-codec's readPptContent/writePptContent) all operate on raw bytes directly -- none of the four is UTF-8 text (rtf's \binN run can carry arbitrary raw picture bytes; the other three are genuinely binary containers, [MS-DOC]/BIFF8/[MS-PPT] each wrapped in an [MS-CFB] compound file), so unlike markdown/csv/svg there is no well-formed-UTF-8 decode any of their own bytes always survive. Widening decode/read/build/encode's shared TMiddle type to accommodate that honestly (a second FormatNode variant, or a generic TextFormatNode<TMiddle>) breaks executeBridge's and executeToPdf's generic "decode then read" dispatch over the whole ContentFormat space: FORMAT_NODES[format] for a non-literal format widens to the union of every member's node type, and calling a union of methods whose parameter types differ per member (string here, Uint8Array there) requires the argument to satisfy every member's parameter type at once, which TypeScript correctly rejects. So each of the four instead wraps and unwraps the identical lossless byte<->code-unit mapping bytesToLatin1/latin1ToBytes below implement -- "the one string form that genuinely still holds bytes" per rtf-codec's own rtfBytesFromLatin1 doc comment (the function rtf's own encode leg still calls directly, since rtf-codec already exports it; doc/xls/ppt have no such export of their own, hence the local generic pair) -- a sanctioned, lossless representation, not a workaround invented here.
 interface TextFormatNode {
   readonly variant: LayoutVariant;
-  readonly family: "markdown" | "csv" | "svg" | "rtf";
+  readonly family: "markdown" | "csv" | "svg" | "rtf" | "doc" | "xls" | "ppt";
   readonly decode: (bytes: Uint8Array<ArrayBuffer>) => string;
   readonly read: (
     text: string,
@@ -185,7 +195,7 @@ export function isTextFormatNode(node: FormatNode): node is TextFormatNode {
 //
 // Some formats in this family have a genuine, tested reader and no writer at all -- not "no writer yet" as an omission, but as a deliberate scope decision, because a half-correct writer for a format nobody can round-trip against is worse than none (wpd-codec's own Scope section states exactly that for WordPerfect). Such a format is a real conversion SOURCE and can never be a target, and that asymmetry is the thing this engine had no way to express: FORMAT_NODES' read/build pair says a format does both, and the graph builder's edges are all bidirectional.
 //
-// A read-only format is therefore a second kind of node with its own registry and its own DIRECTED edges. Nothing points at one, so the pathfinder can never route TO a read-only format: reachability does the work, and no target-side guard is needed anywhere. What makes it generic rather than a wpd-shaped hole is that adding another read-only format (doc-codec, ppt-codec, and xls-codec are the ones this workspace already has, each unwired for the identical reason) is one union member plus one registry entry -- the graph builder, the executors, and the plan runner all already handle the whole set.
+// A read-only format is therefore a second kind of node with its own registry and its own DIRECTED edges. Nothing points at one, so the pathfinder can never route TO a read-only format: reachability does the work, and no target-side guard is needed anywhere. wpd is the one member here today -- doc-codec, xls-codec, and ppt-codec, once unwired for the identical reason, have each since gained a real writer and joined FORMAT_NODES as full read-and-write members instead (capability.ts's own FORMAT_CAPABILITIES.doc/.xls/.ppt), so this type is not a growing enumeration so much as a holding area for whichever format genuinely has no writer at a given moment.
 //
 // odf is deliberately NOT modelled this way even though it too has a reader and no writer. It reads into the 'formula' variant, which has no layout engine, no reconstructor, and no second format to bridge to -- so a read-only odf node would have zero outgoing edges and route nothing. Its one real edge, odf -> pdf, goes through src/mathml's own formula positioning rather than any executor here, which is why it stays local.ts's special case (see this module's own top comment).
 export type ReadOnlyContentFormat = "wpd";
@@ -242,9 +252,9 @@ function readSourceContent(
   return { content: node.read(pkg, options), variant: node.variant };
 }
 
-// The bytes -> latin1-string half of the round trip FORMAT_NODES.rtf's decode/build use (see TextFormatNode's own comment on why this exists): each byte becomes exactly one UTF-16 code unit 0x00-0xFF, the inverse of rtf-codec's own rtfBytesFromLatin1. Chunked at 8192 bytes per String.fromCharCode call, mirroring rtf-codec's own internal asciiStringFromBytes (src/bytes.ts, not part of that package's public surface) -- spreading an unbounded byte array as call arguments in one shot risks "Maximum call stack size exceeded" well before a real .rtf file's own DEFAULT_MAX_INPUT_BYTES (64 MiB, mostly hex-encoded picture payload) is reached.
+// The bytes -> latin1-string half of the round trip every byte-oriented FORMAT_NODES member (rtf, doc, xls, ppt) uses for decode/build (see TextFormatNode's own comment on why this exists): each byte becomes exactly one UTF-16 code unit 0x00-0xFF, the inverse of latin1ToBytes below. Chunked at 8192 bytes per String.fromCharCode call, mirroring rtf-codec's own internal asciiStringFromBytes (src/bytes.ts, not part of that package's public surface) -- spreading an unbounded byte array as call arguments in one shot risks "Maximum call stack size exceeded" well before a real legacy binary file's own size limit is reached.
 const LATIN1_CHUNK_SIZE = 8192;
-function rtfBytesToLatin1(bytes: Uint8Array): string {
+function bytesToLatin1(bytes: Uint8Array): string {
   let text = "";
   for (let start = 0; start < bytes.length; start += LATIN1_CHUNK_SIZE) {
     text += String.fromCharCode(
@@ -252,6 +262,21 @@ function rtfBytesToLatin1(bytes: Uint8Array): string {
     );
   }
   return text;
+}
+
+// The inverse, for doc/xls/ppt's own encode leg: a code unit above U+00FF proves the string was decoded through a multi-byte encoding rather than genuinely still holding bytes, so this throws rather than truncating -- the identical contract rtf-codec's own rtfBytesFromLatin1 states in its doc comment (that function still serves rtf's own encode leg directly, since rtf-codec already exports it publicly; doc-codec/xls-codec/ppt-codec have no equivalent export of their own, which is what this local counterpart is for). Always called here on a string this same module's own bytesToLatin1 just produced, so the throw path is an internal-invariant guard in practice, never a caller-facing validation failure.
+function latin1ToBytes(text: string): Uint8Array<ArrayBuffer> {
+  const bytes = new Uint8Array(text.length);
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code > 0xff) {
+      throw new TypeError(
+        `latin1ToBytes: character at index ${String(index)} is U+${code.toString(16).toUpperCase().padStart(4, "0")}, above U+00FF -- this string no longer holds the file's original bytes`,
+      );
+    }
+    bytes[index] = code;
+  }
+  return bytes;
 }
 
 // The single source of truth for "which primitives does each format use". read/build closures thread their own per-format option subset internally: docx and pptx read/build both pull onMathDiagnostic (mirroring readDocxContent's/readPptxContent's own `{ onMathDiagnostic }` and buildDocxPackage's/buildPptxPackage's own option -- ExaDev/documents.js#563 gave pptx the identical OMML degrade-diagnostic channel docx already had), markdown read pulls signal/images (mirroring readMarkdownContent's ReadMarkdownOptions), csv read pulls delimiter/onCellTypeInference and csv build pulls delimiter/sheet (mirroring readCsvContent's ReadCsvContentOptions and buildCsvText's BuildCsvTextOptions), svg read pulls onSvgDiagnostic and svg build pulls page/onSvgDiagnostic (mirroring readSvgContent's ReadSvgContentOptions and buildSvgText's BuildSvgTextOptions), and every other format's read/build accept and ignore the thread. docxToPdf's openDocx(bytes).toPackage() and decodeOoxmlPackage(bytes) produce the identical Package (openDocx wraps decodeOoxmlPackage and toPackage returns it unmutated), so decode uses the package codec directly for uniformity -- byte-identical to docxToPdf at every downstream call site.
@@ -376,17 +401,63 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
   rtf: {
     variant: "wordprocessing",
     family: "rtf",
-    decode: (bytes) => rtfBytesToLatin1(bytes),
+    decode: (bytes) => bytesToLatin1(bytes),
     read: (text, options) =>
       readRtfContent(text, { signal: options?.signal }).document,
-    build: (content) => rtfBytesToLatin1(writeRtfContent(content)),
+    build: (content) => bytesToLatin1(writeRtfContent(content)),
     // rtfBytesFromLatin1's declared return type is the bare Uint8Array (Uint8Array<ArrayBufferLike>, admitting a SharedArrayBuffer-backed view), one step broader than FormatNode's own Uint8Array<ArrayBuffer> convention -- requireArrayBufferBytes narrows it with a real runtime check rather than a cast, exactly as every other write-side boundary in this package already does for a builder's returned bytes (see that function's own doc comment in model/bytes.ts).
     encode: (text) => requireArrayBufferBytes(rtfBytesFromLatin1(text)),
     hasSourcePackage: false,
   },
+  // doc reads/writes a real wordprocessing ContentDocument directly (doc-codec's readDocContent/writeDocContent), so it same-variant bridges to docx/odt/markdown/rtf at cost 1 -- but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.doc), so it is deliberately absent from LAYOUT_CAPABLE below: doc <-> pdf routes through one of those bridges plus that format's own toPdf/fromPdf edge, never a direct doc <-> LayoutDocument pipeline. readDocContent/writeDocContent take no options at all (doc-codec has no loop of its own to hook a signal into and no diagnostic sink), so read checks the signal once via throwIfAborted before decoding -- the identical no-loop-format shape docx/pptx/odt get from CONTENT_READERS' own convention -- and build ignores options entirely.
+  doc: {
+    variant: "wordprocessing",
+    family: "doc",
+    decode: (bytes) => bytesToLatin1(bytes),
+    read: (text, options) => {
+      throwIfAborted(options?.signal);
+      return readDocContent(latin1ToBytes(text));
+    },
+    build: (content) => bytesToLatin1(writeDocContent(content)),
+    encode: (text) => latin1ToBytes(text),
+    hasSourcePackage: false,
+  },
+  // xls reads/writes a real spreadsheet ContentDocument directly (xls-codec's readXlsContent/writeXlsContent, over XlsContentDocument -- a plain Extract<ContentDocument, {kind:'spreadsheet'}>, fully interchangeable with the shared type at this boundary), so it same-variant bridges to xlsx/ods/csv at cost 1 -- but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.xls), so it follows xlsx/csv's own routing exactly: xls <-> pdf goes through the ods bridge + ods's own layout engine. writeXlsContent's own parameter type is the narrowed XlsContentDocument rather than the bare ContentDocument doc-codec's writeDocContent accepts, so build narrows with a real runtime check (matching this module's own TRANSFORMS narrowing convention) rather than a cast -- a throw here is an internal-invariant guard, since executeBridge only ever calls build after confirming the content's variant already matches this node's own.
+  xls: {
+    variant: "spreadsheet",
+    family: "xls",
+    decode: (bytes) => bytesToLatin1(bytes),
+    read: (text, options) => {
+      throwIfAborted(options?.signal);
+      return readXlsContent(latin1ToBytes(text));
+    },
+    build: (content) => {
+      if (content.kind !== "spreadsheet") {
+        throw new Error(
+          "FORMAT_NODES.xls.build: expected a spreadsheet ContentDocument",
+        );
+      }
+      return bytesToLatin1(writeXlsContent(content));
+    },
+    encode: (text) => latin1ToBytes(text),
+    hasSourcePackage: false,
+  },
+  // ppt reads/writes a real presentation ContentDocument, but only via this package's own src/ppt/read.ts+write.ts adapter -- ppt-codec's own readPptContent/writePptContent operate on the flat { metadata, slides } shape (mirroring ooxml.js's/odf.js's own upstream flat readers), not the full envelope, exactly as CONTENT_READERS.ppt (src/codecs/read.ts) and DOCUMENT_FORMAT_CODECS.ppt (src/codecs/registry.ts) both go through the identical adapter rather than calling ppt-codec directly. So it same-variant bridges to pptx/odp at cost 1 -- but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.ppt), so it follows rtf/doc's own routing exactly: ppt <-> pdf goes through a same-variant bridge plus that format's own toPdf/fromPdf edge.
+  ppt: {
+    variant: "presentation",
+    family: "ppt",
+    decode: (bytes) => bytesToLatin1(bytes),
+    read: (text, options) => {
+      throwIfAborted(options?.signal);
+      return readPptContent(latin1ToBytes(text));
+    },
+    build: (content) => bytesToLatin1(writePptContent(content)),
+    encode: (text) => latin1ToBytes(text),
+    hasSourcePackage: false,
+  },
 };
 
-// The formats that have a direct layout-engine path to/from PDF (convertXToLayout + writePdf). xlsx and csv are deliberately absent: neither has a layout engine of its own, so the pathfinder routes each <-> pdf through ods instead (e.g. csv -> ods bridge, then ods -> pdf toPdf), reproducing the composed route xlsxToPdf/pdfToXlsx already hard-code in convert.ts. rtf is absent for the identical reason, routed through a same-variant bridge to docx/odt/markdown instead. svg is present: its read half produces a drawing ContentDocument whose page geometry comes from the svg root's own viewBox/width/height, and convertDrawingToLayout renders it unmodified. Exported because composition-to-pdf.ts's executeToPdf is the executor that enforces it.
+// The formats that have a direct layout-engine path to/from PDF (convertXToLayout + writePdf). xlsx and csv are deliberately absent: neither has a layout engine of its own, so the pathfinder routes each <-> pdf through ods instead (e.g. csv -> ods bridge, then ods -> pdf toPdf), reproducing the composed route xlsxToPdf/pdfToXlsx already hard-code in convert.ts. rtf is absent for the identical reason, routed through a same-variant bridge to docx/odt/markdown instead -- and doc/xls/ppt join it there for the same reason again: none of the three legacy binary codecs has a layout engine of its own, so each routes through a same-variant bridge (doc to docx/odt/markdown/rtf, xls to ods, ppt to pptx/odp) plus that bridge target's own toPdf/fromPdf edge. svg is present: its read half produces a drawing ContentDocument whose page geometry comes from the svg root's own viewBox/width/height, and convertDrawingToLayout renders it unmodified. Exported because composition-to-pdf.ts's executeToPdf is the executor that enforces it.
 //
 // wpd is present, and being read-only is exactly why. For a read-and-write format the entry is a judgement between two working routes -- rtf reaches pdf through a docx bridge at a cost the hand-written rtfToPdf already accepted -- but for a read-only one there is no reverse direction to keep symmetrical, and the only question left is markdown's own: does its read produce a ContentDocument the variant's layout engine consumes unmodified? readWpdContent produces a wordprocessing document that convertWordprocessingToLayout renders exactly as it renders docx's, so routing wpd -> pdf through a docx bridge instead would build and re-read an OOXML package for nothing, losing whatever that builder cannot express on the way through.
 export const LAYOUT_CAPABLE: ReadonlySet<SourceContentFormat> =
@@ -647,7 +718,7 @@ function buildCompositionGraph(): ReadonlyMap<
 const COMPOSITION_GRAPH: ReadonlyMap<DocumentFormat, readonly GraphEdge[]> =
   buildCompositionGraph();
 
-// Standard Dijkstra over the small (<= 12-node) composition graph. Returns the ordered node path from source to target, or undefined if source === target or target is unreachable.
+// Standard Dijkstra over the small (<= 16-node) composition graph. Returns the ordered node path from source to target, or undefined if source === target or target is unreachable.
 function shortestPath(
   source: DocumentFormat,
   target: DocumentFormat,
@@ -722,7 +793,7 @@ export function resolveCompositionPlan(
   return { hops };
 }
 
-// Narrows a DocumentFormat to the ContentFormat union (the eleven formats with a FORMAT_NODES entry) -- the type every hop's TARGET must be, since a target is built and encoded. pdf, odf, and every read-only format are excluded: pdf is the layout pivot reached only via toPdf/fromPdf edges, odf is the special-case format this engine does not route at all, and a read-only format has no build half to be a target with.
+// Narrows a DocumentFormat to the ContentFormat union (the fourteen formats with a FORMAT_NODES entry) -- the type every hop's TARGET must be, since a target is built and encoded. pdf, odf, and every read-only format are excluded: pdf is the layout pivot reached only via toPdf/fromPdf edges, odf is the special-case format this engine does not route at all, and a read-only format has no build half to be a target with.
 function isContentFormat(format: DocumentFormat): format is ContentFormat {
   return (
     format !== "pdf" && format !== "odf" && !isReadOnlyContentFormat(format)
