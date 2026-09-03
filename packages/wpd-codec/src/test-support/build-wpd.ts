@@ -115,6 +115,61 @@ export function fontDescriptorPacket(typeface: string): WpdPacketSpec {
   return { packetType: 0x55, bytes };
 }
 
+// A word (short) as its two little-endian document-area bytes.
+export function word(value: number): number[] {
+  return [value & 0xff, (value >>> 8) & 0xff];
+}
+
+// An End-of-Line group function (0xD0) carrying embedded subfunctions. The group's own non-deletable region is not the subfunction list directly: it opens with "[size of deletable subfunction data]", then the deletable subfunctions, then the non-deletable ones -- so this builder writes a zero-length deletable half and the given records after it.
+export function eolFunction(options: {
+  readonly subgroup: number;
+  readonly embedded?: readonly number[];
+}): number[] {
+  return variableFunction({
+    group: 0xd0,
+    subgroup: options.subgroup,
+    nonDeletable: [...word(0), ...(options.embedded ?? [])],
+  });
+}
+
+// One embedded subfunction, gated by its own code at both ends the way every multi-byte function is.
+export function embeddedSubfunction(
+  code: number,
+  payload: readonly number[],
+): number[] {
+  return [code, ...payload, code];
+}
+
+// An Extended Document Summary packet (type 0x12): one "[size] [tag] [type] [name] [data]" group per field, with the name written as the bare null terminator the SDK's "optional" name reduces to.
+export function summaryPacket(
+  fields: readonly {
+    readonly tag: number;
+    readonly type: number;
+    readonly data: readonly number[];
+  }[],
+): WpdPacketSpec {
+  const groups = fields.flatMap((field) => {
+    const nameTerminator = word(0);
+    const size = 6 + nameTerminator.length + field.data.length;
+    return [
+      ...word(size),
+      ...word(field.tag),
+      ...word(field.type),
+      ...nameTerminator,
+      ...field.data,
+    ];
+  });
+  return { packetType: 0x12, bytes: new Uint8Array(groups) };
+}
+
+// A null-terminated WP word string of ASCII (character set 0), the shape every text field in a packet takes.
+export function wordString(value: string): number[] {
+  return [
+    ...[...value].flatMap((character) => word(character.charCodeAt(0))),
+    ...word(0),
+  ];
+}
+
 // The ASCII characters of a string as document-area bytes. Only characters the single-byte range carries literally (33 through 127) go through unchanged: a space is the Soft Space function 0x80, not byte 0x20, which is the international shorthand for the sharp s.
 export function text(value: string): number[] {
   return [...value].map((character) => {
