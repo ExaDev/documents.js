@@ -353,6 +353,75 @@ describe("readSheetRecords formula cells", () => {
 
     expect(cells[0]?.value).toEqual({ kind: "string", value: "" });
   });
+
+  it("recovers the formula's own text from its compiled Ptg token stream", () => {
+    // A1+B1: PtgRef(A1) PtgRef(B1) PtgAdd, [MS-XLS] 2.5.198.84/2.5.198.26.
+    const rgce = [
+      0x44,
+      ...u16(0),
+      ...u16(0xc000),
+      0x44,
+      ...u16(0),
+      ...u16(0xc001),
+      0x03,
+    ];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 2),
+        ...f64(3),
+        ...u16(0),
+        ...u32(0),
+        ...u16(rgce.length),
+        ...rgce,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBe("A1+B1");
+  });
+
+  it("leaves formula absent for a token this reader does not resolve", () => {
+    // PtgExp ([MS-XLS] 2.5.198.58), a shared formula's own placeholder -- the cached value is still read correctly, only the text stays absent.
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        ...f64(4),
+        ...u16(0),
+        ...u32(0),
+        ...u16(5),
+        0x01,
+        ...u16(0),
+        ...u16(0),
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 4 });
+  });
+
+  it("resolves a 3D reference using the formulaSheets context readSheetRecords is given", () => {
+    // PtgRef3d (value class, [MS-XLS] 2.5.198.85): opcode 0x5A, ixti, then a row and column field.
+    const rgce = [0x5a, ...u16(0), ...u16(0), ...u16(0xc000)];
+    const formulaSheets = {
+      sheets: [{ name: "Sheet1" }, { name: "Data" }],
+      sheetRanges: [{ firstSheetIndex: 1, lastSheetIndex: 1 }],
+    };
+    const cells = readSheetRecords(
+      groupsOf(
+        record(RECORD_FORMULA, [
+          ...cell(0, 0),
+          ...f64(1),
+          ...u16(0),
+          ...u32(0),
+          ...u16(rgce.length),
+          ...rgce,
+        ]),
+      ),
+      [],
+      formulaSheets,
+    ).cells;
+
+    expect(cells[0]?.formula).toBe("Data!A1");
+  });
 });
 
 describe("readSheetRecords grid geometry", () => {

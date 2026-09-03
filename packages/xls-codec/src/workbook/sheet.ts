@@ -1,5 +1,6 @@
 import { BlockCursor } from "../biff/cursor";
 import { errorTextOf } from "../biff/errors";
+import { parseFormulaText, type FormulaSheetContext } from "../biff/ptg";
 import {
   RECORD_ARRAY,
   RECORD_BLANK,
@@ -53,8 +54,10 @@ export interface RawCell {
   /** The cell's own ixfe ([MS-XLS] 2.5.168): an index into the globals substream's XF table. */
   readonly xfIndex: number;
   readonly value: RawCellValue;
-  /** True when the value is a Formula record's CACHED result rather than a literal. The formula expression itself is not read: BIFF8 stores it as a compiled Ptg token stream, not as text. */
+  /** True when the value is a Formula record's CACHED result rather than a literal. */
   readonly fromFormula: boolean;
+  /** The formula's own text, recovered from its compiled Ptg token stream ([MS-XLS] 2.5.198), when every token in it is one this reader resolves -- absent for a shared-formula member, an array formula, a defined-name or natural-language reference, or a 3D reference into a genuinely external workbook (see biff/ptg.ts). */
+  readonly formula?: string;
 }
 
 export interface RawRow {
@@ -108,10 +111,17 @@ const MUL_FIXED_BYTES = 6;
 const MULRK_ENTRY_BYTES = 6;
 const MULBLANK_ENTRY_BYTES = 2;
 
+/** No sheets and no resolvable 3D references -- the default a caller with nothing formula-relevant to offer (every existing test fixture that predates formula-text recovery) gets, so a 3D reference simply fails to resolve rather than throwing on an absent context. */
+const EMPTY_FORMULA_SHEET_CONTEXT: FormulaSheetContext = {
+  sheets: [],
+  sheetRanges: [],
+};
+
 /** Reads one worksheet substream's records. */
 export function readSheetRecords(
   records: readonly RecordGroup[],
   sharedStrings: readonly string[],
+  formulaSheets: FormulaSheetContext = EMPTY_FORMULA_SHEET_CONTEXT,
 ): RawSheet {
   const cells: RawCell[] = [];
   const rows: RawRow[] = [];
@@ -167,7 +177,9 @@ export function readSheetRecords(
         break;
       case RECORD_FORMULA:
         // A Formula whose cached result is a string is followed by a String record carrying it, so the formula reader is given whichever record that turns out to be.
-        cells.push(readFormula(record, stringResultAfter(records, index)));
+        cells.push(
+          readFormula(record, stringResultAfter(records, index), formulaSheets),
+        );
         break;
       default:
         // Every other record a worksheet substream carries -- the window settings, the page setup, the drawing objects, the row-block index -- is not read yet.
@@ -416,32 +428,35 @@ function readLabel(record: RecordGroup): RawCell {
   };
 }
 
+/** The Formula record's own flags field ([MS-XLS] 2.4.127) and calculation cache, between the cached value and the compiled expression -- neither read for its own content; see the two-byte and four-byte skips in readFormula. */
+const FORMULA_FLAGS_BYTES = 2;
+const FORMULA_CALC_CACHE_BYTES = 4;
+
 /**
- * Formula ([MS-XLS] 2.4.127): a Cell, an eight-byte FormulaValue, flags, a calculation cache, then the compiled expression.
+ * Formula ([MS-XLS] 2.4.127): a Cell, an eight-byte FormulaValue, flags, a calculation cache, then a CellParsedFormula -- a two-byte cce followed by exactly that many bytes of compiled Ptg tokens ([MS-XLS] 2.5.198.3).
  *
- * Only the cached VALUE is read. The expression is a CellParsedFormula -- a compiled Ptg token stream rather than text -- and turning one back into a formula string means implementing the whole Ptg vocabulary plus shared-formula and external-reference resolution, which is its own substantial piece of work. So the cell's displayed value is correct and its `formula` field stays absent, rather than a plausible-looking expression being invented for it.
+ * Both the cached value and the expression are read: the value from the FormulaValue exactly as before, and the expression by handing the token bytes to biff/ptg.ts's parseFormulaText, which resolves the whole Ptg vocabulary this reader supports and returns undefined for the constructs it does not (a shared formula, an array formula, a defined name, a natural-language reference, a genuinely external 3D reference -- see that module's own boundary). `formula` is attached only when it resolves; a cell it does not resolve for keeps exactly the behaviour this reader always had, its cached value present and `formula` absent.
  */
 function readFormula(
   record: RecordGroup,
   next: RecordGroup | undefined,
+  formulaSheets: FormulaSheetContext,
 ): RawCell {
   const cursor = new BlockCursor(record.blocks);
   const header = readCellHeader(cursor);
   const bytes = cursor.take(8);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const tagged = view.getUint16(6, true) === FORMULA_VALUE_TAGGED;
-  if (!tagged) {
-    return {
-      ...header,
-      value: { kind: "number", value: view.getFloat64(0, true) },
-      fromFormula: true,
-    };
-  }
-  return {
-    ...header,
-    value: taggedFormulaValue(view, next),
-    fromFormula: true,
-  };
+  const value = tagged
+    ? taggedFormulaValue(view, next)
+    : { kind: "number" as const, value: view.getFloat64(0, true) };
+  cursor.skip(FORMULA_FLAGS_BYTES);
+  cursor.skip(FORMULA_CALC_CACHE_BYTES);
+  const cce = cursor.u16();
+  const formula = parseFormulaText(cursor.take(cce), formulaSheets);
+  return formula === undefined
+    ? { ...header, value, fromFormula: true }
+    : { ...header, value, fromFormula: true, formula };
 }
 
 /** The non-numeric readings of a FormulaValue ([MS-XLS] 2.5.133), selected by its first byte. */
