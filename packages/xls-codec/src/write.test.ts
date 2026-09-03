@@ -337,7 +337,8 @@ describe("writeXlsContent", () => {
   describe("cell decoration", () => {
     const red = rgbHexToColor("ff0000");
     const blue = rgbHexToColor("0000ff");
-    const teal = rgbHexToColor("008080"); // not one of the fixed default table's own 64 entries
+    // Coral: genuinely absent from the fixed default table, so a workbook using it can only be written by minting a real Palette record. Checked against xf-colors.ts's own DEFAULT_PALETTE_TABLE rather than assumed -- teal (008080), the obvious candidate, is in fact one of that table's own entries, so a test built on it would have exercised the no-Palette fast path while claiming the opposite.
+    const coral = rgbHexToColor("ff7f50");
 
     it("round-trips a solid background colour", () => {
       const bytes = writeXlsContent(
@@ -417,12 +418,12 @@ describe("writeXlsContent", () => {
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
-            cell(0, 0, { kind: "string", value: "x" }, { background: teal }),
+            cell(0, 0, { kind: "string", value: "x" }, { background: coral }),
           ]),
         ]),
       );
       expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
-        teal,
+        coral,
       );
     });
 
