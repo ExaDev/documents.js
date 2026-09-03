@@ -943,7 +943,7 @@ Read as **row → column**. `✓` lossless, `~` bounded, `✗` lossy, `✗✗` s
 | **wpd**       | →    | →    | →    | →   | →   | →   | →   | →   | –   | →        | →   | →   | →   | →   | →   | —   | →   |
 | **pdf**       | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | ✗   | –   | ✗✗       | ✗   | ✗   | ✗   | ✗   | ✗   | –   | —   |
 
-208 of 272 directional pairs are routable. The shared `ContentDocument` model is the hub, not PDF — twenty bridges bypass PDF entirely.
+208 of 272 directional pairs are routable. The shared `ContentDocument` model is the hub, not PDF — 112 of those 208 directional pairs (61 counted as an undirected format relationship, since most run both ways; ten don't, all of them `wpd`'s own outbound-only routes) resolve to a route whose every hop is a bridge, never touching PDF at all, confirmed by walking `resolveCompositionPlan` over every pair and checking no hop's executor is `toPdf`/`fromPdf`.
 
 **X → PDF** is a genuine layout render: positioned text, images, tables, lists, vector primitives, styled through the full cascade. It is a faithful visual approximation, not pixel-identical — closeness depends on font availability.
 
