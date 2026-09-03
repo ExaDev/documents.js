@@ -242,6 +242,18 @@ export {
 } from "./typed/draw/shapes";
 export type { DrawPageContent } from "./typed/draw/shapes";
 
+// The write-side mirror of the shape reader above: one ContentShape -> the draw:frame element readDrawFrame reads back, shared between odp (typed/odp/write.ts, below) and a future odg writer -- see that module's own top-of-file note for the exact split.
+export {
+  createDrawShapeWriteState,
+  planShapeContent,
+  writeDrawFrame,
+  writeDrawShapes,
+} from "./typed/draw/write-shapes";
+export type {
+  DrawShapeWriteState,
+  ShapeContentPlan,
+} from "./typed/draw/write-shapes";
+
 export { readDrawObjectReference } from "./typed/draw/embedded";
 export type {
   EmbeddedDrawObject,
@@ -253,6 +265,14 @@ export type {
 // The *Content names belong to the flat reader beneath each package-native function -- see the README's migration table for the full old-to-new name mapping. readOdfFormulaMathMl is the rawest reader in the formula ladder, the MathML-plus-StarMath reader with no pivot shaping at all, unchanged in behaviour: a caller typing "readOdfFormula" wants the format's primary reader, not its rawest one, which is why the bare name belongs to the package-native function instead. ---
 export { readOdp, readOdpContent } from "./typed/odp/read";
 export type { OdpDocument } from "./typed/odp/read";
+
+// The odp WRITER, the inverse of the two readers above and this package's third content writer (typed/odt/write.ts's own top-of-file note states the shared design philosophy; typed/odp/write.ts's own top-of-file note states what's genuinely new for a presentation). writeOdp takes the DocumentTree readOdp returns, writeOdpContent the flat ContentDocument readOdpContent returns, and both produce a real .odp Package. normaliseOdpContent states the one canonical form a written-and-reread document equals.
+export {
+  normaliseOdpContent,
+  writeOdp,
+  writeOdpContent,
+} from "./typed/odp/write";
+export type { OdpWriteOptions } from "./typed/odp/write";
 
 export { readOdt, readOdtContent } from "./typed/odt/read";
 export type {
