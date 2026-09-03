@@ -17,13 +17,24 @@ const BARREL_FUNCTIONS = [
   'readCompoundFile',
   'writeCompoundFile',
   'readOlePackage',
+  'readPropertySetStream',
+  'writePropertySetStream',
+  'readSummaryInformation',
+  'writeSummaryInformationStream',
 ];
-const BARREL_CONSTANTS = ['MAX_WALK_DEPTH', 'MAX_WALK_TOTAL_BYTES', 'MAX_CFB_TOTAL_STREAM_BYTES'];
+const BARREL_CONSTANTS = [
+  'MAX_WALK_DEPTH',
+  'MAX_WALK_TOTAL_BYTES',
+  'MAX_CFB_TOTAL_STREAM_BYTES',
+  'FMTID_SUMMARY_INFORMATION',
+];
 const BARREL_CLASSES = [
   'ArchiveWalkLimitError',
   'CompoundFileFormatError',
   'CompoundFileWriteError',
   'OlePackageFormatError',
+  'PropertySetFormatError',
+  'PropertySetWriteError',
 ];
 
 describe('dist/ barrel exports are present in both builds', () => {
@@ -59,6 +70,12 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/cfb/read.js', exports: ['readCompoundFile', 'MAX_CFB_TOTAL_STREAM_BYTES'] },
     { path: '../dist/cfb/write.js', exports: ['writeCompoundFile', 'CompoundFileWriteError'] },
     { path: '../dist/cfb/ole-package.js', exports: ['readOlePackage'] },
+    { path: '../dist/oleps/read.js', exports: ['readPropertySetStream', 'PropertySetFormatError'] },
+    { path: '../dist/oleps/write.js', exports: ['writePropertySetStream', 'PropertySetWriteError'] },
+    {
+      path: '../dist/oleps/summary-information.js',
+      exports: ['readSummaryInformation', 'writeSummaryInformationStream', 'FMTID_SUMMARY_INFORMATION'],
+    },
     { path: '../dist/magic.js', exports: [] },
   ];
 
@@ -113,5 +130,19 @@ describe('dist/ end-to-end: both builds round-trip a real archive', () => {
     const cjsStreams = cjs.readCompoundFile(cjs.writeCompoundFile([['Large', large]].map(([path, bytes]) => ({ path, bytes }))));
     expect(cjsStreams.map((entry) => entry.path)).toEqual(['Large']);
     expect(cjsStreams[0]?.bytes).toEqual(large);
+  });
+
+  it('writeSummaryInformationStream -> readSummaryInformation agrees across ESM and CJS', () => {
+    // The property-set half of the same end-to-end check: a writer whose stream only its own build can parse back would pass every deep-import check above and still be broken.
+    const metadata = { title: 'Smoke title', author: 'archive-codec', keywords: ['a', 'b'] };
+    const esmRead = esm.readSummaryInformation(esm.writeSummaryInformationStream(metadata));
+    expect(esmRead.title).toBe(metadata.title);
+    expect(esmRead.author).toBe(metadata.author);
+    expect(esmRead.keywords).toEqual(metadata.keywords);
+
+    const cjsRead = cjs.readSummaryInformation(cjs.writeSummaryInformationStream(metadata));
+    expect(cjsRead.title).toBe(metadata.title);
+    expect(cjsRead.author).toBe(metadata.author);
+    expect(cjsRead.keywords).toEqual(metadata.keywords);
   });
 });
