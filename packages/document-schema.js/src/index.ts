@@ -1,4 +1,5 @@
 export * from "./color";
+export * from "./border-weight";
 export * from "./geometry";
 export * from "./style";
 export * from "./metadata";
