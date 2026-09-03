@@ -1,4 +1,5 @@
 import {
+  hasSummaryInformationFields,
   writeCompoundFile,
   writeSummaryInformationStream,
 } from "archive-codec";
@@ -15,10 +16,7 @@ import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 import { BiffWriteError } from "./biff/write-errors";
 import type { XlsContentDocument } from "./content";
 import { SUMMARY_INFORMATION_STREAM } from "./container";
-import {
-  hasSummaryInformationFields,
-  layoutMetadataToSummaryInformation,
-} from "./metadata";
+import { layoutMetadataToSummaryInformation } from "./metadata";
 import {
   buildWorkbookGlobals,
   GENERAL_CELL_XF_INDEX,

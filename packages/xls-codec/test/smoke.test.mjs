@@ -26,9 +26,7 @@ const BARREL_FUNCTIONS = [
   'twipsToPoints',
   'columnWidthToPoints',
   'readWorkbookStreams',
-  'summaryInformationToLayoutMetadata',
   'layoutMetadataToSummaryInformation',
-  'hasSummaryInformationFields',
   'isXlsFile',
   'readXlsContent',
   'readXls',
@@ -85,7 +83,7 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/content.js', exports: ['readXlsContent', 'readXls'] },
     {
       path: '../dist/metadata.js',
-      exports: ['summaryInformationToLayoutMetadata', 'layoutMetadataToSummaryInformation', 'hasSummaryInformationFields'],
+      exports: ['layoutMetadataToSummaryInformation'],
     },
   ];
 
