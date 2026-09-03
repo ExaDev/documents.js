@@ -10,6 +10,10 @@ import { openOds } from "../edit/ods/editor";
 import { openOdt } from "../edit/odt/editor";
 import { createPptx, openPptx } from "../edit/pptx/editor";
 import { readRtfContent, rtfBytesFromLatin1 } from "rtf-codec";
+import { readDocContent, writeDocContent } from "doc-codec";
+import { readXlsContent, writeXlsContent } from "xls-codec";
+import { readPptContent } from "../ppt/read";
+import { writePptContent } from "../ppt/write";
 import { requireArrayBufferBytes } from "../model/bytes";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
 import { richMarkdownText } from "../test-support/markdown";
@@ -21,6 +25,7 @@ import { odsToXlsx } from "./convert";
 import {
   csvMarkdownCodec,
   csvPdfCodec,
+  docPdfCodec,
   docxPdfCodec,
   markdownDocxCodec,
   markdownOdtCodec,
@@ -30,8 +35,10 @@ import {
   odsCsvCodec,
   odsPdfCodec,
   odtPdfCodec,
+  pptPdfCodec,
   pptxPdfCodec,
   rtfPdfCodec,
+  xlsPdfCodec,
   xlsxCsvCodec,
   xlsxPdfCodec,
 } from "./codec";
@@ -321,6 +328,174 @@ describe("rtfPdfCodec", () => {
   it("rejects encode input with no %PDF- header before ever reaching pdfToRtf", () => {
     expect(() =>
       z.encode(rtfPdfCodec, new TextEncoder().encode("not a pdf")),
+    ).toThrow(z.core.$ZodError);
+  });
+});
+
+function sampleDocBytes(text: string): Uint8Array<ArrayBuffer> {
+  return writeDocContent({
+    kind: "wordprocessing",
+    metadata: {},
+    sections: [
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        blocks: [{ kind: "paragraph", runs: [{ text }] }],
+      },
+    ],
+  });
+}
+
+describe("docPdfCodec", () => {
+  it("z.decode produces valid PDF bytes from doc bytes", () => {
+    const pdfBytes = z.decode(docPdfCodec, sampleDocBytes("Hello, world."));
+    expect(pdfHeader(pdfBytes)).toBe("%PDF-");
+  });
+
+  it("z.encode then z.decode round-trips the source text, like docToPdf/pdfToDoc", () => {
+    const pdfBytes = z.decode(docPdfCodec, sampleDocBytes("Hello, world."));
+    const roundTrippedDocBytes = z.encode(docPdfCodec, pdfBytes);
+    const content = readDocContent(roundTrippedDocBytes);
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const text = content.sections
+      .flatMap((section) => section.blocks)
+      .filter((block) => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs)
+      .map((run) => run.text)
+      .join("");
+    expect(text).toContain("Hello, world.");
+  });
+
+  it("rejects decode input with no [MS-DOC] compound-file signature before ever reaching docToPdf", () => {
+    expect(() =>
+      z.decode(docPdfCodec, new TextEncoder().encode("not a doc")),
+    ).toThrow(z.core.$ZodError);
+  });
+
+  it("rejects encode input with no %PDF- header before ever reaching pdfToDoc", () => {
+    expect(() =>
+      z.encode(docPdfCodec, new TextEncoder().encode("not a pdf")),
+    ).toThrow(z.core.$ZodError);
+  });
+});
+
+function sampleXlsBytes(cellText: string): Uint8Array<ArrayBuffer> {
+  return writeXlsContent({
+    kind: "spreadsheet",
+    metadata: {},
+    sheets: [
+      {
+        name: "Sheet1",
+        cells: [
+          {
+            row: 0,
+            column: 0,
+            value: { kind: "string", value: cellText },
+            displayText: cellText,
+          },
+        ],
+        columns: [],
+        rows: [],
+        images: [],
+        printSettings: {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 50.4 },
+          gridlines: false,
+          headers: false,
+          pageOrder: "downThenOver",
+        },
+      },
+    ],
+  });
+}
+
+describe("xlsPdfCodec", () => {
+  it("z.decode produces valid PDF bytes from xls bytes", () => {
+    const pdfBytes = z.decode(xlsPdfCodec, sampleXlsBytes("Hello, world."));
+    expect(pdfHeader(pdfBytes)).toBe("%PDF-");
+  });
+
+  it("z.encode then z.decode round-trips the source cell text, like xlsToPdf/pdfToXls", () => {
+    const pdfBytes = z.decode(xlsPdfCodec, sampleXlsBytes("Hello, world."));
+    const roundTrippedXlsBytes = z.encode(xlsPdfCodec, pdfBytes);
+    const content = readXlsContent(roundTrippedXlsBytes);
+    const text = content.sheets
+      .flatMap((sheet) => sheet.cells)
+      .map((cell) => cell.displayText)
+      .join(" ");
+    expect(text).toContain("Hello, world.");
+  });
+
+  it("rejects decode input with no [MS-XLS] compound-file signature before ever reaching xlsToPdf", () => {
+    expect(() =>
+      z.decode(xlsPdfCodec, new TextEncoder().encode("not an xls")),
+    ).toThrow(z.core.$ZodError);
+  });
+
+  it("rejects encode input with no %PDF- header before ever reaching pdfToXls", () => {
+    expect(() =>
+      z.encode(xlsPdfCodec, new TextEncoder().encode("not a pdf")),
+    ).toThrow(z.core.$ZodError);
+  });
+});
+
+function samplePptBytes(text: string): Uint8Array<ArrayBuffer> {
+  return writePptContent({
+    kind: "presentation",
+    metadata: {},
+    slides: [
+      {
+        size: { widthPt: 720, heightPt: 540 },
+        notes: "",
+        shapes: [
+          {
+            frame: { xPt: 72, yPt: 36, widthPt: 360, heightPt: 180 },
+            insetLeftPt: 0,
+            insetTopPt: 0,
+            insetRightPt: 0,
+            insetBottomPt: 0,
+            blocks: [{ kind: "paragraph", runs: [{ text }] }],
+          },
+        ],
+      },
+    ],
+  });
+}
+
+describe("pptPdfCodec", () => {
+  it("z.decode produces valid PDF bytes from ppt bytes", () => {
+    const pdfBytes = z.decode(pptPdfCodec, samplePptBytes("Hello, world."));
+    expect(pdfHeader(pdfBytes)).toBe("%PDF-");
+  });
+
+  it("z.encode then z.decode round-trips the source slide text, like pptToPdf/pdfToPpt", () => {
+    const pdfBytes = z.decode(pptPdfCodec, samplePptBytes("Hello, world."));
+    const roundTrippedPptBytes = z.encode(pptPdfCodec, pdfBytes);
+    const content = readPptContent(roundTrippedPptBytes);
+    if (content.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const text = content.slides
+      .flatMap((slide) => slide.shapes)
+      .flatMap((shape) => shape.blocks)
+      .filter((block) => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs)
+      .map((run) => run.text)
+      .join("");
+    expect(text).toContain("Hello, world.");
+  });
+
+  it("rejects decode input with no [MS-PPT] compound-file signature before ever reaching pptToPdf", () => {
+    expect(() =>
+      z.decode(pptPdfCodec, new TextEncoder().encode("not a ppt")),
+    ).toThrow(z.core.$ZodError);
+  });
+
+  it("rejects encode input with no %PDF- header before ever reaching pdfToPpt", () => {
+    expect(() =>
+      z.encode(pptPdfCodec, new TextEncoder().encode("not a pdf")),
     ).toThrow(z.core.$ZodError);
   });
 });
