@@ -1,4 +1,7 @@
-import { writeCompoundFile } from "archive-codec";
+import {
+  writeCompoundFile,
+  writeSummaryInformationStream,
+} from "archive-codec";
 import type {
   ContentDocument,
   ContentSheet,
@@ -11,6 +14,11 @@ import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
 import { BiffWriteError } from "./biff/write-errors";
 import type { XlsContentDocument } from "./content";
+import { SUMMARY_INFORMATION_STREAM } from "./container";
+import {
+  hasSummaryInformationFields,
+  layoutMetadataToSummaryInformation,
+} from "./metadata";
 import {
   buildWorkbookGlobals,
   GENERAL_CELL_XF_INDEX,
@@ -288,7 +296,17 @@ export function writeXlsContent(
   content: XlsContentDocument,
 ): Uint8Array<ArrayBuffer> {
   const stream = buildWorkbookStream(content);
-  return writeCompoundFile([{ path: WORKBOOK_STREAM_NAME, bytes: stream }]);
+  const streams = [{ path: WORKBOOK_STREAM_NAME, bytes: stream }];
+  // Only when there is something SummaryInformation can actually hold: an input whose metadata carries nothing beyond creator/producer/language (or nothing at all) should read back exactly as it would with no stream present, not force an empty-but-present one into existence.
+  if (hasSummaryInformationFields(content.metadata)) {
+    streams.push({
+      path: SUMMARY_INFORMATION_STREAM,
+      bytes: writeSummaryInformationStream(
+        layoutMetadataToSummaryInformation(content.metadata),
+      ),
+    });
+  }
+  return writeCompoundFile(streams);
 }
 
 /** Writes a DocumentTree of kind 'spreadsheet' to real .xls bytes, flattening it to a ContentDocument first -- the counterpart of content.ts's readXls. */

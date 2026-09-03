@@ -13,6 +13,7 @@ export * from "./biff/write-errors";
 export * from "./biff/xf-writer";
 export * from "./container";
 export * from "./content";
+export * from "./metadata";
 export * from "excel-number-format";
 export * from "./serial";
 export * from "./units";

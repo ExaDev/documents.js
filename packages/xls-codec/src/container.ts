@@ -16,14 +16,23 @@ const WORKBOOK_STREAM = "Workbook";
 /** BIFF5 and BIFF7 workbooks name their stream "Book" instead. Recognised only to say so in an error, never read: those are different formats record-for-record, not older spellings of this one. */
 const LEGACY_WORKBOOK_STREAM = "Book";
 
+/** The [MS-OLEPS] Property Set Stream a .xls's title/author/dates live in when present ([MS-OSHARED] 2.3.3.2.2) -- a genuinely optional stream, unlike Workbook, since a valid BIFF8 workbook need not carry document properties at all. */
+export const SUMMARY_INFORMATION_STREAM = "\x05SummaryInformation";
+
+export interface WorkbookStreams {
+  readonly workbook: Uint8Array<ArrayBuffer>;
+  /** The raw "\x05SummaryInformation" stream bytes, or undefined when the container carries none. */
+  readonly metadata: Uint8Array<ArrayBuffer> | undefined;
+}
+
 /**
- * Extracts the BIFF8 record stream from a .xls file's compound-file container.
+ * Extracts the BIFF8 record stream, and the optional metadata stream beside it, from a .xls file's compound-file container.
  *
  * Throws rather than returning undefined for anything that is not a readable BIFF8 workbook: a caller wanting a soft answer asks isXlsFile first.
  */
-export function readWorkbookStream(
+export function readWorkbookStreams(
   bytes: Uint8Array<ArrayBuffer>,
-): Uint8Array<ArrayBuffer> {
+): WorkbookStreams {
   if (!isCompoundFile(bytes)) {
     throw new BiffFormatError(
       "not a compound file: a .xls workbook is a [MS-CFB] container holding a 'Workbook' stream",
@@ -32,7 +41,10 @@ export function readWorkbookStream(
   const streams = readWorkbookContainer(bytes);
   const workbook = streams.find((stream) => stream.path === WORKBOOK_STREAM);
   if (workbook !== undefined) {
-    return workbook.bytes;
+    const metadata = streams.find(
+      (stream) => stream.path === SUMMARY_INFORMATION_STREAM,
+    );
+    return { workbook: workbook.bytes, metadata: metadata?.bytes };
   }
   if (streams.some((stream) => stream.path === LEGACY_WORKBOOK_STREAM)) {
     throw new BiffFormatError(
@@ -77,7 +89,7 @@ export function isXlsFile(bytes: Uint8Array<ArrayBuffer>): boolean {
       (stream) => stream.path === WORKBOOK_STREAM,
     );
   } catch {
-    // A container too malformed to enumerate is not a workbook this package can read, which is exactly what this predicate reports. The caller that wants the reason calls readWorkbookStream and catches its error.
+    // A container too malformed to enumerate is not a workbook this package can read, which is exactly what this predicate reports. The caller that wants the reason calls readWorkbookStreams and catches its error.
     return false;
   }
 }

@@ -1,3 +1,4 @@
+import { readSummaryInformation } from "archive-codec";
 import type {
   ContentCellValue,
   ContentDocument,
@@ -17,7 +18,8 @@ import {
   splitSubstreams,
   type Substream,
 } from "./biff/substreams";
-import { readWorkbookStream } from "./container";
+import { readWorkbookStreams } from "./container";
+import { summaryInformationToLayoutMetadata } from "./metadata";
 import { classifyNumberFormat } from "excel-number-format";
 import {
   serialToIsoDate,
@@ -82,9 +84,8 @@ const DEFAULT_PRINT_SETTINGS: ContentSheetPrintSettings = {
 export function readXlsContent(
   bytes: Uint8Array<ArrayBuffer>,
 ): XlsContentDocument {
-  const substreams = splitSubstreams(
-    groupRecords(readRecords(readWorkbookStream(bytes))),
-  );
+  const { workbook, metadata } = readWorkbookStreams(bytes);
+  const substreams = splitSubstreams(groupRecords(readRecords(workbook)));
   const globalsSubstream = substreams[0];
   if (globalsSubstream === undefined) {
     throw new BiffFormatError(
@@ -101,7 +102,15 @@ export function readXlsContent(
   const sheets = globals.sheets
     .filter((entry) => entry.sheetType === SHEET_TYPE_WORKSHEET)
     .map((entry) => readSheet(entry, substreams, globals));
-  return { kind: "spreadsheet", metadata: {}, sheets };
+  // Absent when the container carries no "\x05SummaryInformation" stream at all -- a valid BIFF8 workbook need not have one -- and mapped from it through summaryInformationToLayoutMetadata (see src/metadata.ts) otherwise.
+  return {
+    kind: "spreadsheet",
+    metadata:
+      metadata === undefined
+        ? {}
+        : summaryInformationToLayoutMetadata(readSummaryInformation(metadata)),
+    sheets,
+  };
 }
 
 /** The tree-form read: readXlsContent composed with the schema's own structural transform, exactly as ooxml.js's readXlsx wraps readXlsxContent. */

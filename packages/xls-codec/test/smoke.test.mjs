@@ -25,7 +25,10 @@ const BARREL_FUNCTIONS = [
   'serialToIsoDateTime',
   'twipsToPoints',
   'columnWidthToPoints',
-  'readWorkbookStream',
+  'readWorkbookStreams',
+  'summaryInformationToLayoutMetadata',
+  'layoutMetadataToSummaryInformation',
+  'hasSummaryInformationFields',
   'isXlsFile',
   'readXlsContent',
   'readXls',
@@ -37,6 +40,7 @@ const BARREL_CONSTANTS = [
   'MAX_RECORD_DATA_SIZE',
   'BIFF8_VERSION',
   'BUILTIN_NUMBER_FORMATS',
+  'SUMMARY_INFORMATION_STREAM',
 ];
 const BARREL_CLASSES = ['BiffFormatError', 'BlockCursor'];
 
@@ -77,8 +81,12 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/workbook/sheet.js', exports: ['readSheetRecords'] },
     { path: '../dist/serial.js', exports: ['serialToIsoDate'] },
     { path: '../dist/units.js', exports: ['twipsToPoints'] },
-    { path: '../dist/container.js', exports: ['readWorkbookStream', 'isXlsFile'] },
+    { path: '../dist/container.js', exports: ['readWorkbookStreams', 'isXlsFile', 'SUMMARY_INFORMATION_STREAM'] },
     { path: '../dist/content.js', exports: ['readXlsContent', 'readXls'] },
+    {
+      path: '../dist/metadata.js',
+      exports: ['summaryInformationToLayoutMetadata', 'layoutMetadataToSummaryInformation', 'hasSummaryInformationFields'],
+    },
   ];
 
   for (const module of DEEP_MODULES) {
