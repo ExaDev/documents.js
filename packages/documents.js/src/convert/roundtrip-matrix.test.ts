@@ -727,13 +727,8 @@ const ALL_SUPPORTED_PAIRS = createLocalDocumentConverter().conversions;
 // svg -> csv and svg -> markdown are the one pair family whose honest output is EMPTY: svg's read scope is vector graphics only (text is out of scope by design, reported as svg/text-unsupported), and neither csv nor markdown has any vector vocabulary, so there is literally nothing these two targets can carry. The conversion still runs and still produces a valid zero-record csv / zero-block markdown -- pinned here as the pair's own expected result, with every text-carrying source keeping the non-empty requirement unchanged.
 const EMPTY_OUTPUT_PAIRS = new Set(["svg->csv", "svg->markdown"]);
 
-// doc's own writer is scoped to a single section of plain paragraphs (see doc-codec's README scope note): no tables, images, numbering, or embedded objects. Every one of these four sweep sources routes REAL, richer-than-plain-paragraph content at doc through its own fixtureBytes -- docx/odt carry a table (their own minimalDocxBytes/minimalOdtBytes fixtures, shared with every other sweep pair too), and odp/ods each recover an image/embeddedObject block by the time their own cross-variant transform or PDF-composed route lands on the wordprocessing variant. writeDocContent correctly throws DocUnsupportedError rather than silently dropping the block -- exactly the same "refuse, never approximate" contract doc-codec's write path documents throughout. This is a genuine, pre-existing content-scope boundary of doc-codec's own writer, not a wiring gap: a source whose own content happens to be plain paragraphs (markdown, rtf, svg's own near-empty drawing-to-text transform, ...) reaches doc successfully, as the sweep's remaining doc-target pairs already prove.
-const DOC_UNSUPPORTED_CONTENT_PAIRS = new Set([
-  "docx->doc",
-  "odt->doc",
-  "odp->doc",
-  "ods->doc",
-]);
+// doc's own writer covers a single section of plain paragraphs and tables (see doc-codec's README scope note): no images, numbering, or embedded objects. odp/ods each recover an image/embeddedObject block by the time their own cross-variant transform or PDF-composed route lands on the wordprocessing variant -- content doc's writer genuinely cannot express, so writeDocContent correctly throws DocUnsupportedError rather than silently dropping the block, exactly the same "refuse, never approximate" contract doc-codec's write path documents throughout. docx/odt's own sweep fixtures (minimalDocxBytes/minimalOdtBytes, shared with every other sweep pair too) carry a table, which doc's writer now expresses natively, so those two pairs reach doc successfully like every other doc-target pair whose source content stays within a table/paragraph's own vocabulary (markdown, rtf, svg's own near-empty drawing-to-text transform, ...). This is a genuine, pre-existing content-scope boundary of doc-codec's own writer, not a wiring gap.
+const DOC_UNSUPPORTED_CONTENT_PAIRS = new Set(["odp->doc", "ods->doc"]);
 
 describe.each(
   ALL_SUPPORTED_PAIRS.map(

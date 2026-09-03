@@ -212,7 +212,7 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
     expect(codec.read(rebuiltBytes)).toEqual(content);
   });
 
-  // doc-codec's own writer covers a single wordprocessing section, character/paragraph formatting only (no tables, images, or numbering -- see that package's README scope note), so this fixture is deliberately plain: one heading paragraph and one bold run, exercising exactly what writeDocContent can express. doc-codec always reads back metadata as {} regardless of what was written (readDocContent's own scope note), so -- like rtf above -- no withReferenceTimestamps normalisation is needed, but for the opposite reason: there is no timestamp field for either side to disagree on.
+  // doc-codec's own writer covers a single wordprocessing section, character/paragraph formatting, and tables (no images or numbering -- see that package's README scope note), so this fixture is deliberately plain: one heading paragraph and one bold run, exercising exactly what writeDocContent can express -- a table exercises real content-scope boundaries elsewhere (doc-codec's own write.test.ts), not this registry-wiring round trip. doc-codec always reads back metadata as {} regardless of what was written (readDocContent's own scope note), so -- like rtf above -- no withReferenceTimestamps normalisation is needed, but for the opposite reason: there is no timestamp field for either side to disagree on.
   it("doc: read -> write -> read round-trips the ContentDocument", () => {
     const codec = requireContentCodec("doc");
     const content: ContentDocument = {
