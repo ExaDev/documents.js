@@ -26,6 +26,7 @@ minimumReleaseAgeExclude:
   - document-schema.js
   - documents.js
   - epub-codec
+  - excel-number-format
   - markdown-codec
   - odf.js
   - ooxml.js
