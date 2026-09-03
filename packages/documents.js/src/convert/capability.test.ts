@@ -16,7 +16,7 @@ describe("FORMAT_CAPABILITIES", () => {
     }
 
     expect(new Set(byVariant.get("wordprocessing"))).toEqual(
-      new Set(["docx", "odt", "markdown"]),
+      new Set(["docx", "odt", "markdown", "rtf"]),
     );
     expect(new Set(byVariant.get("presentation"))).toEqual(
       new Set(["pptx", "odp"]),
@@ -39,6 +39,11 @@ describe("FORMAT_CAPABILITIES", () => {
   it("marks svg as the drawing family's plain-text member with its own layout path (a sibling of odg, not an ods-style composed member)", () => {
     expect(FORMAT_CAPABILITIES.svg.variant).toBe("drawing");
     expect(FORMAT_CAPABILITIES.svg.hasLayoutPath).toBe(true);
+  });
+
+  it("marks rtf as the wordprocessing family's plain-text member with no layout path of its own (an xlsx/csv-style composed member, not an svg-style one)", () => {
+    expect(FORMAT_CAPABILITIES.rtf.variant).toBe("wordprocessing");
+    expect(FORMAT_CAPABILITIES.rtf.hasLayoutPath).toBe(false);
   });
 
   it("has no undefined-variant format other than pdf and odf reporting a layout path", () => {
@@ -140,6 +145,39 @@ describe("resolveCompositionPlan", () => {
     expect(plan!.hops[0]!.executor).toBe("bridge");
     expect(plan!.hops[0]!.from).toBe("svg");
     expect(plan!.hops[0]!.to).toBe("odg");
+  });
+
+  it("routes rtf -> docx as a single same-variant bridge hop (never through PDF)", () => {
+    // rtf shares the wordprocessing variant with docx/odt/markdown, so the pathfinder prefers the cost-1 bridge over any PDF route, exactly like docx -> odt above.
+    const plan = resolveCompositionPlan("rtf", "docx");
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe("bridge");
+    expect(plan!.hops[0]!.from).toBe("rtf");
+    expect(plan!.hops[0]!.to).toBe("docx");
+  });
+
+  it("composes rtf -> pdf through docx (bridge then toPdf), since rtf has no layout engine of its own", () => {
+    const plan = resolveCompositionPlan("rtf", "pdf");
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(["bridge", "toPdf"]);
+    expect(plan!.hops[0]!.from).toBe("rtf");
+    expect(plan!.hops[1]!.to).toBe("pdf");
+  });
+
+  it("composes pdf -> rtf through docx (fromPdf then bridge)", () => {
+    const plan = resolveCompositionPlan("pdf", "rtf");
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(["fromPdf", "bridge"]);
+    expect(plan!.hops[1]!.to).toBe("rtf");
+  });
+
+  it("returns undefined for rtf <-> csv and rtf <-> xlsx -- the one pair family genuinely outside the pathfinder's 3-hop cap", () => {
+    // Unlike xlsx/csv <-> markdown (three hops: bridge to ods, toPdf, fromPdf), reaching csv/xlsx from rtf needs a fourth hop first (rtf has no toPdf/fromPdf edge of its own): rtf -> {docx|odt|markdown} (bridge) -> pdf (toPdf) -> ods (fromPdf) -> {csv|xlsx} (bridge). That is one hop past resolveCompositionPlan's own cap, so these four pairs are the one place this format's routing genuinely falls short of full connectivity -- an honest "unsupported", not a wiring gap.
+    expect(resolveCompositionPlan("rtf", "csv")).toBeUndefined();
+    expect(resolveCompositionPlan("csv", "rtf")).toBeUndefined();
+    expect(resolveCompositionPlan("rtf", "xlsx")).toBeUndefined();
+    expect(resolveCompositionPlan("xlsx", "rtf")).toBeUndefined();
   });
 
   it("composes csv -> markdown through ods and pdf (three hops), mirroring the xlsx -> markdown last-resort route", () => {

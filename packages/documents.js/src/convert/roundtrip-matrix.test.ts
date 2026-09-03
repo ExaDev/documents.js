@@ -10,6 +10,8 @@ import { openOdp } from "../edit/odp/editor";
 import { createOdt, openOdt } from "../edit/odt/editor";
 import { openPptx } from "../edit/pptx/editor";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
+import { rtfBytesFromLatin1 } from "rtf-codec";
+import { requireArrayBufferBytes } from "../model/bytes";
 import { readOdgContent } from "../odf/odg/read";
 import { readOdsContent } from "../odf/ods/read";
 import { encodeSvgText } from "../svg/text";
@@ -569,6 +571,16 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
       return encodeMarkdownText("# Heading\n\nA paragraph of text.");
     case "csv":
       return encodeCsvText("Name,Amount\nWidget,42.5\nGadget,7\n");
+    case "rtf":
+      // Hand-authored literal RTF source, matching this switch's own markdown/csv cases rather than generating it through writeRtfContent (the very write path several sweep pairs exercise) -- a heading-styled paragraph and a plain paragraph, minimal but real enough that every rtf-sourced sweep pair carries recognisable text through.
+      return requireArrayBufferBytes(
+        rtfBytesFromLatin1(
+          "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}" +
+            "{\\stylesheet{\\s1\\outlinelevel0 heading 1;}}" +
+            "\\pard\\s1\\fs32 Heading\\par" +
+            "\\pard\\fs24 A paragraph of text.\\par}",
+        ),
+      );
     case "odf":
       return odfFormulaBytes(FRACTION_FORMULA);
     case "pdf":
@@ -577,6 +589,7 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
   }
 }
 
+// No default branch, matching fixtureBytes above: a DocumentFormat member with no case here is a compile error ("not all code paths return a value"), not a silent fall-through to a default result -- confirmed directly by adding "rtf" to DocumentFormatSchema before this case existed, per this file's own TDD note (this switch, unlike fixtureBytes, previously carried a `default: return false;` that would have masked exactly that failure at every rtf-targeted sweep pair with a wrong-but-not-red "output isn't valid" result instead of a compile error, so the default was removed as part of adding the rtf case rather than merely added alongside it).
 function isValidOutput(
   format: DocumentFormat,
   bytes: Uint8Array<ArrayBuffer>,
@@ -602,7 +615,13 @@ function isValidOutput(
       return bytes.length > 0;
     case "svg":
       return new TextDecoder().decode(bytes).includes("<svg");
-    default:
+    case "rtf":
+      // The <File> production's own magic bytes -- rtf-codec's RtfBytesSchema checks the identical signature.
+      return (
+        new TextDecoder("latin1").decode(bytes.subarray(0, 5)) === "{\\rtf"
+      );
+    case "odf":
+      // odf has no content.write and is never a sweep target -- ALL_SUPPORTED_PAIRS is derived from the port's own conversions, which excludes every odf-target pair (see local.ts's own odf/pdf special case). Present here only so the switch is exhaustive over every DocumentFormat member, matching fixtureBytes' own coverage.
       return false;
   }
 }

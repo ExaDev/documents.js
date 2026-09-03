@@ -8,10 +8,18 @@ import type { DocumentFormat } from "../convert/port";
 import { throwIfAborted } from "../ports/abort";
 import type { LayoutDocument } from "pdf-codec";
 
-// Every format whose own ContentDocument setDocumentMetadata can patch a metadata field on and rebuild from scratch through -- the eight formats sharing the readXContent -> buildXPackage round trip. xlsx joined this set once DOCUMENT_FORMAT_CODECS.xlsx.content gained a real read/write pair (src/codecs/registry.ts): it now fits the identical shape docx/pptx/odt/odp/ods/odg/markdown already share, so there is no reason left to special-case it out. Deliberately does NOT include 'pdf': a PDF's metadata is patched directly on its own LayoutDocument (see setDocumentMetadata below), never through this ContentDocument rebuild path at all. Nor 'csv': a csv round trip technically exists through the registry codec, but RFC 4180 text has no metadata container at all -- a rebuild would "succeed" and silently drop the override -- so classifyWritePath rejects it explicitly below with that reason rather than letting it fall through to the generic format-mismatch message. Nor 'svg': its round trip technically exists too, but this package's SVG metadata surface is the root <title> element alone (mapped to/from metadata.title), so every other override would be silently dropped by the rebuild -- rejected below for the identical reason.
+// Every format whose own ContentDocument setDocumentMetadata can patch a metadata field on and rebuild from scratch through -- the nine formats sharing the readXContent -> buildXPackage round trip. xlsx joined this set once DOCUMENT_FORMAT_CODECS.xlsx.content gained a real read/write pair (src/codecs/registry.ts): it now fits the identical shape docx/pptx/odt/odp/ods/odg/markdown already share, so there is no reason left to special-case it out. rtf joined the same way: readRtfContent/writeRtfContent round-trip title/author/subject/keywords through RTF's own \info group (rtf-codec's README Scope table), so a source/target of 'rtf' rebuilds through DOCUMENT_FORMAT_CODECS.rtf.content exactly like every other member here. Deliberately does NOT include 'pdf': a PDF's metadata is patched directly on its own LayoutDocument (see setDocumentMetadata below), never through this ContentDocument rebuild path at all. Nor 'csv': a csv round trip technically exists through the registry codec, but RFC 4180 text has no metadata container at all -- a rebuild would "succeed" and silently drop the override -- so classifyWritePath rejects it explicitly below with that reason rather than letting it fall through to the generic format-mismatch message. Nor 'svg': its round trip technically exists too, but this package's SVG metadata surface is the root <title> element alone (mapped to/from metadata.title), so every other override would be silently dropped by the rebuild -- rejected below for the identical reason.
 const REBUILD_FORMATS: Readonly<
   Record<
-    "docx" | "pptx" | "odt" | "odp" | "ods" | "odg" | "markdown" | "xlsx",
+    | "docx"
+    | "pptx"
+    | "odt"
+    | "odp"
+    | "ods"
+    | "odg"
+    | "markdown"
+    | "xlsx"
+    | "rtf",
     true
   >
 > = {
@@ -23,6 +31,7 @@ const REBUILD_FORMATS: Readonly<
   odg: true,
   markdown: true,
   xlsx: true,
+  rtf: true,
 };
 
 type RebuildFormat = keyof typeof REBUILD_FORMATS;
@@ -133,7 +142,7 @@ export interface SetDocumentMetadataOptions {
   readonly images?: MarkdownImageResolver;
 }
 
-// Patches a document's own title/author/subject/keywords, leaving every other field and every other flag as-is. Two write paths: a pdf source/target patches the metadata directly on the parsed PDF (writePdf), with no layout engine involved at all -- genuinely lossless for everything else on the page. Every other supported format (docx, pptx, xlsx, odt, odp, ods, odg, markdown) rebuilds a fresh package from that format's own ContentDocument -- see classifyWritePath's own comment for exactly what that costs for docx specifically. Overrides are applied via mergeMetadata: a field omitted from `overrides` is left exactly as the source document already had it.
+// Patches a document's own title/author/subject/keywords, leaving every other field and every other flag as-is. Two write paths: a pdf source/target patches the metadata directly on the parsed PDF (writePdf), with no layout engine involved at all -- genuinely lossless for everything else on the page. Every other supported format (docx, pptx, xlsx, odt, odp, ods, odg, markdown, rtf) rebuilds a fresh package from that format's own ContentDocument -- see classifyWritePath's own comment for exactly what that costs for docx specifically. Overrides are applied via mergeMetadata: a field omitted from `overrides` is left exactly as the source document already had it.
 export function setDocumentMetadata(
   sourceFormat: DocumentFormat,
   targetFormat: DocumentFormat,
