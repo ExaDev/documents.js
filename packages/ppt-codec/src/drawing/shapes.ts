@@ -95,24 +95,21 @@ function readClientAnchor(record: PptRecord): ShapeRect {
   );
 }
 
-function readSpid(shape: PptRecord): number {
+interface ShapeProperties {
+  readonly spid: number;
+  readonly flags: number;
+}
+
+// [MS-ODRAW] 2.2.14 makes shapeProp a required field of every OfficeArtSpContainer, so a container without a readable one is malformed rather than a shape with unknown identity -- read as one pair so neither half can be answered while the other fails.
+function readShapeProperties(shape: PptRecord): ShapeProperties {
   const fsp = findChild(childRecords(shape), OfficeArtFSP);
   if (fsp === undefined || fsp.data.length < 8) {
     throw new PptFormatError(
-      `OfficeArtSpContainer at offset ${shape.offset} has no readable OfficeArtFSP, so the shape has no identity`,
+      `OfficeArtSpContainer at offset ${shape.offset} has no readable OfficeArtFSP, so the shape has neither an identity nor its flags`,
     );
   }
   const view = new DataView(fsp.data.buffer, fsp.data.byteOffset, 8);
-  return view.getUint32(0, true);
-}
-
-function readFspFlags(shape: PptRecord): number {
-  const fsp = findChild(childRecords(shape), OfficeArtFSP);
-  if (fsp === undefined || fsp.data.length < 8) {
-    return 0;
-  }
-  const view = new DataView(fsp.data.buffer, fsp.data.byteOffset, 8);
-  return view.getUint32(4, true);
+  return { spid: view.getUint32(0, true), flags: view.getUint32(4, true) };
 }
 
 // A shape's rectangle in slide coordinates. A client anchor is absolute and needs no transform; a child anchor is stated in the enclosing group's coordinate system and is mapped through it.
@@ -134,7 +131,8 @@ function resolveAnchor(
 
 // Composes the transform a group's children are read through: their coordinates run in the space the group's OfficeArtFSPGR declares, and the group's own anchor says where that space lands in the parent's. The patriarch -- every drawing's outermost group -- is the exception the spec's structure creates rather than an assumption: it declares a degenerate coordinate system and no anchor, because its children are already in slide coordinates.
 function groupTransform(groupShape: PptRecord, parent: Transform): Transform {
-  if ((readFspFlags(groupShape) & FSP_PATRIARCH) !== 0) {
+  const { spid, flags } = readShapeProperties(groupShape);
+  if ((flags & FSP_PATRIARCH) !== 0) {
     return parent;
   }
   const children = childRecords(groupShape);
@@ -142,7 +140,7 @@ function groupTransform(groupShape: PptRecord, parent: Transform): Transform {
   const anchor = resolveAnchor(groupShape, parent);
   if (fspgr === undefined || anchor === undefined) {
     throw new PptFormatError(
-      `group shape ${readSpid(groupShape)} lacks ${fspgr === undefined ? "an OfficeArtFSPGR coordinate system" : "an anchor"}, so its children's coordinates cannot be placed on the slide`,
+      `group shape ${spid} lacks ${fspgr === undefined ? "an OfficeArtFSPGR coordinate system" : "an anchor"}, so its children's coordinates cannot be placed on the slide`,
     );
   }
   const space = readRectFields(fspgr, 4, "left-top");
@@ -150,7 +148,7 @@ function groupTransform(groupShape: PptRecord, parent: Transform): Transform {
   const spaceHeight = space.bottom - space.top;
   if (spaceWidth === 0 || spaceHeight === 0) {
     throw new PptFormatError(
-      `group shape ${readSpid(groupShape)} declares a coordinate system of zero ${spaceWidth === 0 ? "width" : "height"}, which no child coordinate can be scaled through`,
+      `group shape ${spid} declares a coordinate system of zero ${spaceWidth === 0 ? "width" : "height"}, which no child coordinate can be scaled through`,
     );
   }
   const scaleX = (anchor.right - anchor.left) / spaceWidth;
@@ -168,13 +166,13 @@ function collectShape(
   transform: Transform,
   into: PptShape[],
 ): void {
-  const flags = readFspFlags(shape);
+  const { spid, flags } = readShapeProperties(shape);
   // A deleted shape's content is retained in the file but is not part of the drawing; a group's own placeholder shape carries the group's geometry rather than content, and is consumed by groupTransform instead.
   if ((flags & FSP_DELETED) !== 0 || (flags & FSP_GROUP) !== 0) {
     return;
   }
   into.push({
-    spid: readSpid(shape),
+    spid,
     anchor: resolveAnchor(shape, transform),
     clientTextbox: findChild(childRecords(shape), OfficeArtClientTextbox),
   });
