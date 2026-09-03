@@ -5,9 +5,12 @@ import type {
   ContentDocument,
   ContentParagraph,
   ContentRun,
+  ContentTableCell,
+  ContentTableRow,
   DocumentTree,
+  LayoutMetadata,
 } from "document-schema.js";
-import { assembleTree, PAGE_SIZE_LETTER } from "document-schema.js";
+import { assembleTree } from "document-schema.js";
 import { uint16At } from "./bytes/view";
 import {
   openWpdDocument,
@@ -18,6 +21,10 @@ import {
   packetByPrefixId,
   readTypefaceName,
 } from "./container/prefix";
+import {
+  PACKET_TYPE_EXTENDED_DOCUMENT_SUMMARY,
+  readDocumentSummary,
+} from "./container/summary";
 import {
   NOOP_WPD_DIAGNOSTIC_SINK,
   WpdDiagnosticCodes,
@@ -42,11 +49,55 @@ import {
   subfunctionForSingleByteEol,
   type WpdEolMapping,
 } from "./stream/eol";
+import {
+  COLUMN_GROUP,
+  COLUMN_LEFT_MARGIN_SET,
+  COLUMN_RIGHT_MARGIN_SET,
+  DEFAULT_MARGIN_PT,
+  DEFAULT_PAGE_HEIGHT_PT,
+  DEFAULT_PAGE_WIDTH_PT,
+  PAGE_BOTTOM_MARGIN_SET,
+  PAGE_FORM,
+  PAGE_GROUP,
+  PAGE_TOP_MARGIN_SET,
+  readMarginPt,
+  readPageForm,
+} from "./stream/page";
+import {
+  DISPLAY_NUMBER_GROUP,
+  isParagraphNumberDisplayOff,
+  isParagraphNumberDisplayOn,
+  isStyleScopeCloser,
+  isStyleScopeOpener,
+  readDisplayNumberLevel,
+  readSystemStyleNumber,
+  STYLE_GROUP,
+  styleSemanticsFor,
+  type WpdStyleSemantics,
+} from "./stream/style";
+import {
+  CELL_FILL_COLORS_SUBFUNCTION,
+  CELL_INFORMATION_SUBFUNCTION,
+  CELL_SPANNING_SUBFUNCTION,
+  CHARACTER_DEFINE_TABLE_END,
+  CHARACTER_TABLE_COLUMN,
+  CHARACTER_TABLE_DEFINITION,
+  findEmbeddedSubfunction,
+  readCellFill,
+  readCellInformation,
+  readCellSpanning,
+  readEmbeddedSubfunctions,
+  readRowInformation,
+  readTableColumnWidthPt,
+  ROW_INFORMATION_SUBFUNCTION,
+} from "./stream/table";
 import { tokeniseDocumentArea, type WpdToken } from "./stream/tokenise";
 
 // -- Document area to ContentDocument --
 //
 // The document area is a flat stream of characters and function codes, so building a document out of it is a fold: characters accumulate into the current run, an attribute or font change closes that run and opens another, and an end-of-line function closes the current paragraph. Nothing here is recursive and nothing looks ahead, which is what makes a hand-written reader tractable for this format at all.
+//
+// The fold has exactly one nesting concept, and it is not recursion: a table redirects where paragraphs land. While a table definition is open, a closed paragraph joins the cell currently being built rather than the section's own block list -- and a table's cells hold blocks, which is as deep as this format's own grid model goes.
 //
 // What each function code means comes from the specification's own tables, not from inference -- most importantly the "Conversion/Search mappings" column of the End-of-Line group (src/stream/eol.ts), which states outright which codes a converting application should turn into a space and which into a hard return.
 
@@ -64,7 +115,12 @@ const HARD_END_OF_CENTER_ALIGN = 0x89;
 const START_OF_TEXT_TO_SKIP = 0x8d;
 const END_OF_TEXT_TO_SKIP = 0x8e;
 
-// Variable-length groups and the subgroups this reader interprets.
+// Variable-length groups and the subgroups this reader interprets. The groups it recognises without interpreting -- boxes, notes, page furniture, cross-references, merge codes -- are named here too, so each can be reported through the diagnostic sink rather than passed over in silence.
+const CROSS_REFERENCE_GROUP = 0xd5;
+const HEADER_FOOTER_GROUP = 0xd6;
+const FOOTNOTE_ENDNOTE_GROUP = 0xd7;
+const MERGE_GROUP = 0xde;
+const BOX_GROUP = 0xdf;
 const PARAGRAPH_GROUP = 0xd3;
 const PARAGRAPH_SET_JUSTIFICATION = 0x05;
 const CHARACTER_GROUP = 0xd4;
@@ -91,11 +147,41 @@ const THREE_THOUSAND_SIX_HUNDREDTHS_PER_POINT = 50;
 // The colour byte range the SDK states for RGB: "Each color takes one byte with a range from 0 to 255 (0xFF) where 255 is 100%." The shared schema's Color is 0..1, so each component divides by 255.
 const COLOR_COMPONENT_MAX = 255;
 
-// WordPerfect's own default page for a US-English installation, and the margins the SDK's generic prefix leaves a document with: US Letter, one inch on every side. Used because this reader does not yet interpret the Page group (0xD1), where a document that overrides either states it -- see the README's Remaining scope. A default stated once and named is honest; a page size invented per document would not be.
-const DEFAULT_MARGIN_PT = 72;
+// A span count of one covers only the cell stating it, which is what every unmerged cell says, so it carries no merge at all and the shared schema's colSpan/rowSpan stay absent.
+const NO_SPAN = 1;
 
 export interface ReadWpdOptions {
   readonly sink?: WpdDiagnosticSink;
+}
+
+// The page geometry the document states, one field per function that states it. Each stays undefined until its own function appears, so a document overriding only its top margin keeps the WordPerfect default for the other four rather than for none of them.
+interface PageState {
+  widthPt: number | undefined;
+  heightPt: number | undefined;
+  topPt: number | undefined;
+  rightPt: number | undefined;
+  bottomPt: number | undefined;
+  leftPt: number | undefined;
+  changeReported: boolean;
+}
+
+// The cell attributes an End-of-Line function's own embedded subfunctions state about the cell it closes.
+interface CellAttributes {
+  readonly alignment: Alignment | undefined;
+  readonly background: Color | undefined;
+  readonly columnSpan: number;
+  readonly rowSpan: number;
+  readonly covered: boolean;
+}
+
+// A table under construction. `definingColumns` is true between Table Definition and Define Table End, the window in which Table Column functions state the grid's widths and no content can appear.
+interface TableState {
+  readonly columnWidthsPt: number[];
+  readonly rows: ContentTableRow[];
+  cells: ContentTableCell[];
+  cellBlocks: ContentBlock[];
+  definingColumns: boolean;
+  rowHeightPt: number | undefined;
 }
 
 interface ReaderState {
@@ -110,7 +196,16 @@ interface ReaderState {
   alignment: Alignment | undefined;
   // "The surrounded text is passed over by the formatter and is not displayed", per the Start/End of Text to Skip pair. Nested pairs are possible, so this is a depth rather than a flag.
   skipDepth: number;
-  tableReported: boolean;
+  // The style scopes currently open, innermost last. A scope with no structural meaning is still pushed, so its own closing code pops it rather than the one enclosing it.
+  readonly styleScopes: (WpdStyleSemantics | undefined)[];
+  // The structural facts of the paragraph currently accumulating, captured when its first character arrives rather than when it closes: a heading's style region ends at the style's own End Off code, which in a real document sits BEFORE the hard return that ends the paragraph, so reading the scope stack at flush time would find it already popped.
+  pendingHeadingLevel: number | undefined;
+  pendingListLevel: number | undefined;
+  // Depth of open Paragraph Number Display pairs, whose rendered digits are suppressed in favour of the list membership that regenerates them.
+  numberDisplayDepth: number;
+  page: PageState;
+  table: TableState | undefined;
+  readonly reported: Set<string>;
 }
 
 function sameAttributes(a: WpdRunAttributes, b: WpdRunAttributes): boolean {
@@ -120,6 +215,20 @@ function sameAttributes(a: WpdRunAttributes, b: WpdRunAttributes): boolean {
     a.underline === b.underline &&
     a.strike === b.strike
   );
+}
+
+// Reports a diagnostic at most once per document. Every code below names a whole class of construct rather than one occurrence of it, so a document with two hundred boxes should say so once rather than two hundred times.
+function reportOnce(
+  state: ReaderState,
+  sink: WpdDiagnosticSink,
+  code: string,
+  message: string,
+): void {
+  if (state.reported.has(code)) {
+    return;
+  }
+  state.reported.add(code);
+  sink({ code, message });
 }
 
 function buildRun(state: ReaderState): ContentRun {
@@ -145,6 +254,11 @@ function flushRun(state: ReaderState): void {
   state.text = "";
 }
 
+// Where a closed block belongs: a table's current cell while one is open, the section's own list otherwise.
+function targetBlocks(state: ReaderState): ContentBlock[] {
+  return state.table === undefined ? state.blocks : state.table.cellBlocks;
+}
+
 // Closes the current paragraph. Called for every hard return, so a document with two consecutive hard returns genuinely produces an empty paragraph between them -- that blank line is content the author typed, not an artefact.
 function flushParagraph(state: ReaderState): void {
   flushRun(state);
@@ -152,21 +266,188 @@ function flushParagraph(state: ReaderState): void {
     kind: "paragraph",
     runs: state.runs.splice(0, state.runs.length),
     ...(state.alignment === undefined ? {} : { alignment: state.alignment }),
+    ...(state.pendingHeadingLevel === undefined
+      ? {}
+      : { headingLevel: state.pendingHeadingLevel }),
+    ...(state.pendingListLevel === undefined
+      ? {}
+      : { list: { level: state.pendingListLevel } }),
   };
-  state.blocks.push(paragraph);
+  state.pendingHeadingLevel = undefined;
+  state.pendingListLevel = undefined;
+  targetBlocks(state).push(paragraph);
+}
+
+// Closes the current paragraph only when it holds something. Used at every boundary that is a container edge rather than a line break -- a cell end, a row end, the end of the stream -- where an unconditional flush would fabricate a blank paragraph the author never typed.
+function flushParagraphIfContent(state: ReaderState): void {
+  if (state.text.length === 0 && state.runs.length === 0) {
+    return;
+  }
+  flushParagraph(state);
+}
+
+// The innermost open style scope that says something structural. An enclosing Global On naming the document's Normal style does not override a heading style opened inside it, and a scope with no meaning at all is transparent.
+function effectiveStyle(state: ReaderState): WpdStyleSemantics | undefined {
+  for (let index = state.styleScopes.length - 1; index >= 0; index -= 1) {
+    const scope = state.styleScopes[index];
+    if (scope !== undefined) {
+      return scope;
+    }
+  }
+  return undefined;
 }
 
 function appendText(state: ReaderState, text: string): void {
-  if (state.skipDepth > 0) {
+  if (state.skipDepth > 0 || state.numberDisplayDepth > 0) {
     return;
+  }
+  // The paragraph's structural facts are captured at its first character, not at its close -- see ReaderState.pendingHeadingLevel.
+  if (
+    state.pendingHeadingLevel === undefined &&
+    state.pendingListLevel === undefined
+  ) {
+    const style = effectiveStyle(state);
+    if (style !== undefined) {
+      state.pendingHeadingLevel = style.headingLevel;
+      state.pendingListLevel = style.listLevel;
+    }
   }
   state.text += text;
 }
 
-// Applies whatever the End-of-Line group's conversion table says this code means. The table is shared by the single-byte spelling (0xB4-0xCF) and the multi-byte one (group 0xD0), because the specification states the two are interchangeable.
+// -- Tables --
+
+// Reads the cell attributes an End-of-Line function carries for the cell it closes, out of its own embedded subfunction list.
+function readCellAttributes(
+  state: ReaderState,
+  nonDeletable: Uint8Array,
+  sink: WpdDiagnosticSink,
+): { attributes: CellAttributes; rowHeightPt: number | undefined } {
+  const { subfunctions, truncated } = readEmbeddedSubfunctions(nonDeletable);
+  if (truncated) {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.TableAttributesTruncated,
+      "A cell's embedded attribute list held a record of undocumented length, so the attributes after it were not read.",
+    );
+  }
+
+  const information = findEmbeddedSubfunction(
+    subfunctions,
+    CELL_INFORMATION_SUBFUNCTION,
+  );
+  const spanning = findEmbeddedSubfunction(
+    subfunctions,
+    CELL_SPANNING_SUBFUNCTION,
+  );
+  const fill = findEmbeddedSubfunction(
+    subfunctions,
+    CELL_FILL_COLORS_SUBFUNCTION,
+  );
+  const row = findEmbeddedSubfunction(
+    subfunctions,
+    ROW_INFORMATION_SUBFUNCTION,
+  );
+
+  const cellSpanning =
+    spanning === undefined ? undefined : readCellSpanning(spanning);
+  const cellFill = fill === undefined ? undefined : readCellFill(fill);
+  if (cellFill?.blended === true) {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.CellFillBlended,
+      "A cell is filled with a shaded blend of two colours; its background colour is used and the blend is not reproduced.",
+    );
+  }
+
+  return {
+    attributes: {
+      alignment:
+        information === undefined
+          ? undefined
+          : readCellInformation(information)?.alignment,
+      background: cellFill?.background,
+      columnSpan: cellSpanning?.columnSpan ?? NO_SPAN,
+      rowSpan: cellSpanning?.rowSpan ?? NO_SPAN,
+      covered:
+        cellSpanning?.coveredFromLeft === true ||
+        cellSpanning?.coveredFromAbove === true,
+    },
+    rowHeightPt:
+      row === undefined ? undefined : readRowInformation(row)?.heightPt,
+  };
+}
+
+// Closes the cell currently being built and appends it to the row under construction. A cell the spanning subfunction marks as covered by a neighbour's merge is dropped instead: the shared schema states a merged region as one entry carrying colSpan/rowSpan with no entry at all at the positions it covers, so emitting one would double-count the region.
+function closeCell(
+  state: ReaderState,
+  table: TableState,
+  attributes: CellAttributes,
+): void {
+  flushParagraphIfContent(state);
+  const blocks = table.cellBlocks;
+  table.cellBlocks = [];
+  if (attributes.covered) {
+    return;
+  }
+  // A cell states its own justification ("bit 1: 1 = use cell justification"), and the shared schema carries alignment on the paragraph rather than the cell -- so the cell's statement lands on the paragraphs it holds, overriding the document-level justification they were built with. A cell whose flag leaves justification inherited states nothing, and its paragraphs keep what they had.
+  if (attributes.alignment !== undefined) {
+    for (const block of blocks) {
+      if (block.kind === "paragraph") {
+        block.alignment = attributes.alignment;
+      }
+    }
+  }
+  const cell: ContentTableCell = {
+    blocks,
+    ...(attributes.columnSpan > NO_SPAN
+      ? { colSpan: attributes.columnSpan }
+      : {}),
+    ...(attributes.rowSpan > NO_SPAN ? { rowSpan: attributes.rowSpan } : {}),
+    ...(attributes.background === undefined
+      ? {}
+      : { background: attributes.background }),
+  };
+  table.cells.push(cell);
+}
+
+function closeRow(table: TableState): void {
+  if (table.cells.length === 0) {
+    return;
+  }
+  const row: ContentTableRow = {
+    cells: table.cells,
+    ...(table.rowHeightPt === undefined ? {} : { heightPt: table.rowHeightPt }),
+  };
+  table.cells = [];
+  table.rowHeightPt = undefined;
+  table.rows.push(row);
+}
+
+// Closes the table and appends it to whatever block list encloses it. A table with no rows at all -- a definition the document never filled -- is dropped rather than emitted as an empty grid.
+function closeTable(state: ReaderState): void {
+  const table = state.table;
+  if (table === undefined) {
+    return;
+  }
+  state.table = undefined;
+  if (table.rows.length === 0) {
+    return;
+  }
+  targetBlocks(state).push({
+    kind: "table",
+    rows: table.rows,
+    columnWidthsPt: table.columnWidthsPt,
+  });
+}
+
+// Applies whatever the End-of-Line group's conversion table says this code means. The table is shared by the single-byte spelling (0xB4-0xCF) and the multi-byte one (group 0xD0), because the specification states the two are interchangeable. `nonDeletable` is the multi-byte spelling's own payload, which is where a table's per-cell attributes ride; the single-byte spelling carries none, so it passes an empty view.
 function applyEolMapping(
   state: ReaderState,
   mapping: WpdEolMapping,
+  nonDeletable: Uint8Array,
   sink: WpdDiagnosticSink,
 ): void {
   switch (mapping) {
@@ -180,31 +461,59 @@ function applyEolMapping(
       return;
     case "hardEndOfColumn":
       // The shared content schema has no column-break block: ContentSection.breakType describes how a section begins, not a break inside one. Ending the paragraph keeps the text on either side apart, which is the part that matters for content, and the diagnostic records what was lost.
-      sink({
-        code: WpdDiagnosticCodes.ColumnBreakFlattened,
-        message: "A column break became a paragraph break.",
-      });
+      reportOnce(
+        state,
+        sink,
+        WpdDiagnosticCodes.ColumnBreakFlattened,
+        "A column break became a paragraph break.",
+      );
       flushParagraph(state);
       return;
     case "hardEndOfPage":
       flushParagraph(state);
-      state.blocks.push({ kind: "pageBreak" });
+      targetBlocks(state).push({ kind: "pageBreak" });
       return;
     case "tableCell":
     case "tableRow":
     case "hardTableRow":
-    case "tableOff":
-      // Tables are out of this reader's scope (see the README). Every cell and row boundary still ends a paragraph, so a table's text survives in reading order rather than running together into one string; only the grid is lost. Reported once per document rather than once per cell.
-      if (!state.tableReported) {
-        state.tableReported = true;
-        sink({
-          code: WpdDiagnosticCodes.TableFlattened,
-          message:
-            "This document contains a table; its cells and rows became paragraphs, and the table structure was not reconstructed.",
-        });
+    case "tableOff": {
+      const table = state.table;
+      if (table === undefined) {
+        // A cell or row boundary with no definition open has no grid to belong to. Ending the paragraph keeps the text on either side apart, so nothing is lost but the structure that was never stated.
+        reportOnce(
+          state,
+          sink,
+          WpdDiagnosticCodes.TableFlattened,
+          "A table cell or row boundary appeared with no table definition open; its text became a paragraph.",
+        );
+        flushParagraph(state);
+        return;
       }
-      flushParagraph(state);
+      const { attributes, rowHeightPt } = readCellAttributes(
+        state,
+        nonDeletable,
+        sink,
+      );
+      if (rowHeightPt !== undefined) {
+        table.rowHeightPt = rowHeightPt;
+      }
+      // A cell boundary always closes a cell, even an empty one -- a blank cell in the middle of a row is real content the grid has a position for. Table Off is the exception: a document that already ended its last row with a row code leaves nothing open, so closing a cell there would append a spurious empty one. Both spellings occur, and the difference is exactly whether anything is still accumulating.
+      const cellIsOpen =
+        state.text.length > 0 ||
+        state.runs.length > 0 ||
+        table.cellBlocks.length > 0;
+      if (mapping !== "tableOff" || cellIsOpen) {
+        closeCell(state, table, attributes);
+      }
+      if (mapping === "tableCell") {
+        return;
+      }
+      closeRow(table);
+      if (mapping === "tableOff") {
+        closeTable(state);
+      }
       return;
+    }
   }
 }
 
@@ -216,7 +525,7 @@ function applySingleByteFunction(
   if (isSingleByteEol(code)) {
     const mapping = eolMappingForSubfunction(subfunctionForSingleByteEol(code));
     if (mapping !== undefined) {
-      applyEolMapping(state, mapping, sink);
+      applyEolMapping(state, mapping, new Uint8Array(0), sink);
     }
     return;
   }
@@ -290,34 +599,156 @@ function applyFontFaceChange(
   state.fontFamily = typeface;
 }
 
-function applyVariableFunction(
+// Records one page-geometry statement. The first statement of each dimension wins: ContentSection carries one page geometry, so a document that changes its page size or a margin partway through has more geometry than the flat model has room for, and the document's own opening statement is the one every page shares until it changes.
+function setPageDimension(
+  state: ReaderState,
+  field: keyof Omit<PageState, "changeReported">,
+  value: number,
+  sink: WpdDiagnosticSink,
+): void {
+  const current = state.page[field];
+  if (current === undefined) {
+    state.page[field] = value;
+    return;
+  }
+  if (current !== value && !state.page.changeReported) {
+    state.page.changeReported = true;
+    sink({
+      code: WpdDiagnosticCodes.PageGeometryChanged,
+      message:
+        "This document changes its page size or margins partway through; the section carries the geometry the document opens with.",
+    });
+  }
+}
+
+function applyPageGroup(
+  state: ReaderState,
+  token: Extract<WpdToken, { kind: "variableFunction" }>,
+  sink: WpdDiagnosticSink,
+): void {
+  if (token.subgroup === PAGE_FORM) {
+    const form = readPageForm(token.nonDeletable);
+    if (form === undefined) {
+      return;
+    }
+    if (form.landscape) {
+      reportOnce(
+        state,
+        sink,
+        WpdDiagnosticCodes.LandscapeOrientationUnmapped,
+        "The document's form declares a landscape orientation; the form's own stated width and length are used as written, since a page size carries no orientation.",
+      );
+    }
+    setPageDimension(state, "widthPt", form.widthPt, sink);
+    setPageDimension(state, "heightPt", form.heightPt, sink);
+    return;
+  }
+  const margin = readMarginPt(token.nonDeletable);
+  if (margin === undefined) {
+    return;
+  }
+  if (token.subgroup === PAGE_TOP_MARGIN_SET) {
+    setPageDimension(state, "topPt", margin, sink);
+  } else if (token.subgroup === PAGE_BOTTOM_MARGIN_SET) {
+    setPageDimension(state, "bottomPt", margin, sink);
+  }
+}
+
+function applyColumnGroup(
+  state: ReaderState,
+  token: Extract<WpdToken, { kind: "variableFunction" }>,
+  sink: WpdDiagnosticSink,
+): void {
+  const margin = readMarginPt(token.nonDeletable);
+  if (margin === undefined) {
+    return;
+  }
+  if (token.subgroup === COLUMN_LEFT_MARGIN_SET) {
+    setPageDimension(state, "leftPt", margin, sink);
+  } else if (token.subgroup === COLUMN_RIGHT_MARGIN_SET) {
+    setPageDimension(state, "rightPt", margin, sink);
+  }
+}
+
+function applyStyleGroup(
+  state: ReaderState,
+  token: Extract<WpdToken, { kind: "variableFunction" }>,
+): void {
+  if (isStyleScopeOpener(token.subgroup)) {
+    const systemStyleNumber = readSystemStyleNumber(token.nonDeletable);
+    state.styleScopes.push(
+      systemStyleNumber === undefined
+        ? undefined
+        : styleSemanticsFor(systemStyleNumber),
+    );
+    return;
+  }
+  if (isStyleScopeCloser(token.subgroup)) {
+    // A closer with nothing open is a stream whose style codes do not pair -- possible in a document edited by a third-party writer. Popping nothing is the harmless reading; the alternative, treating it as an error, would refuse a document whose text is entirely readable.
+    state.styleScopes.pop();
+  }
+}
+
+function applyDisplayNumberGroup(
+  state: ReaderState,
+  token: Extract<WpdToken, { kind: "variableFunction" }>,
+  sink: WpdDiagnosticSink,
+): void {
+  if (isParagraphNumberDisplayOn(token.subgroup)) {
+    const level = readDisplayNumberLevel(token.nonDeletable);
+    if (level !== undefined && state.pendingListLevel === undefined) {
+      state.pendingListLevel = level;
+    }
+    state.numberDisplayDepth += 1;
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.OutlineNumberRegenerated,
+      "An outline number's rendered digits were replaced by the list membership that regenerates them.",
+    );
+    return;
+  }
+  if (isParagraphNumberDisplayOff(token.subgroup)) {
+    state.numberDisplayDepth = Math.max(0, state.numberDisplayDepth - 1);
+  }
+}
+
+function applyCharacterGroup(
   state: ReaderState,
   token: Extract<WpdToken, { kind: "variableFunction" }>,
   container: WpdDocumentContainer,
   sink: WpdDiagnosticSink,
 ): void {
-  if (token.group === EOL_GROUP) {
-    const mapping = eolMappingForSubfunction(token.subgroup);
-    if (mapping !== undefined) {
-      applyEolMapping(state, mapping, sink);
-    }
-    return;
-  }
-  if (
-    token.group === PARAGRAPH_GROUP &&
-    token.subgroup === PARAGRAPH_SET_JUSTIFICATION
-  ) {
-    const mode = token.nonDeletable[0];
-    if (mode !== undefined) {
-      // A justification change applies from here on, so it lands on the paragraph currently being built and every later one until the next change.
-      state.alignment = JUSTIFICATION[mode];
-    }
-    return;
-  }
-  if (token.group !== CHARACTER_GROUP) {
-    return;
-  }
   switch (token.subgroup) {
+    case CHARACTER_TABLE_DEFINITION:
+      // A table inside a table has no spelling in this format -- the definition function is not recursive -- so an open table is closed before a new one opens rather than nesting one grid inside another cell.
+      closeTable(state);
+      flushParagraphIfContent(state);
+      state.table = {
+        columnWidthsPt: [],
+        rows: [],
+        cells: [],
+        cellBlocks: [],
+        definingColumns: true,
+        rowHeightPt: undefined,
+      };
+      return;
+    case CHARACTER_TABLE_COLUMN: {
+      const table = state.table;
+      if (!table?.definingColumns) {
+        return;
+      }
+      const widthPt = readTableColumnWidthPt(token.nonDeletable);
+      if (widthPt !== undefined) {
+        table.columnWidthsPt.push(widthPt);
+      }
+      return;
+    }
+    case CHARACTER_DEFINE_TABLE_END:
+      if (state.table !== undefined) {
+        state.table.definingColumns = false;
+      }
+      return;
     case CHARACTER_FONT_FACE_CHANGE:
       applyFontFaceChange(state, token.prefixIds, container, sink);
       return;
@@ -349,6 +780,91 @@ function applyVariableFunction(
       };
       return;
     }
+    default:
+      return;
+  }
+}
+
+function applyVariableFunction(
+  state: ReaderState,
+  token: Extract<WpdToken, { kind: "variableFunction" }>,
+  container: WpdDocumentContainer,
+  sink: WpdDiagnosticSink,
+): void {
+  switch (token.group) {
+    case EOL_GROUP: {
+      const mapping = eolMappingForSubfunction(token.subgroup);
+      if (mapping !== undefined) {
+        applyEolMapping(state, mapping, token.nonDeletable, sink);
+      }
+      return;
+    }
+    case PAGE_GROUP:
+      applyPageGroup(state, token, sink);
+      return;
+    case COLUMN_GROUP:
+      applyColumnGroup(state, token, sink);
+      return;
+    case PARAGRAPH_GROUP: {
+      if (token.subgroup !== PARAGRAPH_SET_JUSTIFICATION) {
+        return;
+      }
+      const mode = token.nonDeletable[0];
+      if (mode !== undefined) {
+        // A justification change applies from here on, so it lands on the paragraph currently being built and every later one until the next change.
+        state.alignment = JUSTIFICATION[mode];
+      }
+      return;
+    }
+    case CHARACTER_GROUP:
+      applyCharacterGroup(state, token, container, sink);
+      return;
+    case STYLE_GROUP:
+      applyStyleGroup(state, token);
+      return;
+    case DISPLAY_NUMBER_GROUP:
+      applyDisplayNumberGroup(state, token, sink);
+      return;
+    case CROSS_REFERENCE_GROUP:
+      reportOnce(
+        state,
+        sink,
+        WpdDiagnosticCodes.CrossReferenceFlattened,
+        "This document contains a cross-reference; its displayed text survives as ordinary text, and the reference's own target binding does not.",
+      );
+      return;
+    case HEADER_FOOTER_GROUP:
+      reportOnce(
+        state,
+        sink,
+        WpdDiagnosticCodes.HeaderFooterDropped,
+        "This document declares a header, footer, or watermark, which the flat content model has no page-furniture position for.",
+      );
+      return;
+    case FOOTNOTE_ENDNOTE_GROUP:
+      reportOnce(
+        state,
+        sink,
+        WpdDiagnosticCodes.NoteDropped,
+        "This document contains a footnote or endnote; its text lives in a prefix packet the flat content model has nowhere to put.",
+      );
+      return;
+    case MERGE_GROUP:
+      reportOnce(
+        state,
+        sink,
+        WpdDiagnosticCodes.MergeCodeDropped,
+        "This document contains merge codes, which are a form-letter template's placeholders rather than text.",
+      );
+      return;
+    case BOX_GROUP:
+      reportOnce(
+        state,
+        sink,
+        WpdDiagnosticCodes.BoxDropped,
+        "This document contains a box -- a figure, text box, equation, or graphic -- whose contents were not read.",
+      );
+      return;
     default:
       return;
   }
@@ -403,11 +919,16 @@ function applyFixedFunction(
   state.attributes = next;
 }
 
+interface FoldResult {
+  readonly blocks: ContentBlock[];
+  readonly page: PageState;
+}
+
 function foldTokens(
   tokens: readonly WpdToken[],
   container: WpdDocumentContainer,
   sink: WpdDiagnosticSink,
-): ContentBlock[] {
+): FoldResult {
   const state: ReaderState = {
     blocks: [],
     runs: [],
@@ -419,7 +940,21 @@ function foldTokens(
     color: undefined,
     alignment: undefined,
     skipDepth: 0,
-    tableReported: false,
+    styleScopes: [],
+    pendingHeadingLevel: undefined,
+    pendingListLevel: undefined,
+    numberDisplayDepth: 0,
+    page: {
+      widthPt: undefined,
+      heightPt: undefined,
+      topPt: undefined,
+      rightPt: undefined,
+      bottomPt: undefined,
+      leftPt: undefined,
+      changeReported: false,
+    },
+    table: undefined,
+    reported: new Set<string>(),
   };
 
   for (const token of tokens) {
@@ -454,7 +989,21 @@ function foldTokens(
   if (state.runs.length > 0) {
     flushParagraph(state);
   }
-  return state.blocks;
+  // A table the stream ends inside was never closed by a Table Off code. Its rows are real content, so it is closed here rather than discarded.
+  if (state.table !== undefined) {
+    closeRow(state.table);
+    closeTable(state);
+  }
+  return { blocks: state.blocks, page: state.page };
+}
+
+// The document's own metadata, from the Extended Document Summary prefix packet. A document that carries no summary packet gets an empty envelope -- the honest answer, rather than fields invented from the file's structure.
+function readMetadata(container: WpdDocumentContainer): LayoutMetadata {
+  const packet = container.packets.find(
+    (candidate) =>
+      candidate.packetType === PACKET_TYPE_EXTENDED_DOCUMENT_SUMMARY,
+  );
+  return packet === undefined ? {} : readDocumentSummary(packet.bytes);
 }
 
 // Reads a WordPerfect 6.x-X6 document into the shared flat ContentDocument. Accepts both containers: a bare WordPerfect file and one wrapped in an OLE compound file's PerfectOffice_MAIN stream.
@@ -469,19 +1018,21 @@ export function readWpdContent(
     container.documentAreaOffset,
     container.documentAreaEnd,
   );
-  const blocks = foldTokens(tokens, container, sink);
+  const { blocks, page } = foldTokens(tokens, container, sink);
   return {
     kind: "wordprocessing",
-    // Document metadata lives in prefix packets this reader does not yet interpret (see the README's Remaining scope), so an empty envelope is the honest answer rather than fields invented from the file's structure.
-    metadata: {},
+    metadata: readMetadata(container),
     sections: [
       {
-        pageSize: PAGE_SIZE_LETTER,
+        pageSize: {
+          widthPt: page.widthPt ?? DEFAULT_PAGE_WIDTH_PT,
+          heightPt: page.heightPt ?? DEFAULT_PAGE_HEIGHT_PT,
+        },
         margins: {
-          topPt: DEFAULT_MARGIN_PT,
-          rightPt: DEFAULT_MARGIN_PT,
-          bottomPt: DEFAULT_MARGIN_PT,
-          leftPt: DEFAULT_MARGIN_PT,
+          topPt: page.topPt ?? DEFAULT_MARGIN_PT,
+          rightPt: page.rightPt ?? DEFAULT_MARGIN_PT,
+          bottomPt: page.bottomPt ?? DEFAULT_MARGIN_PT,
+          leftPt: page.leftPt ?? DEFAULT_MARGIN_PT,
         },
         blocks,
       },
