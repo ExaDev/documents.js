@@ -15,6 +15,7 @@ body:
       options:
         - archive-codec
         - byte-codec
+        - doc-codec
         - document-cli
         - document-compute.js
         - document-mcp
@@ -22,10 +23,14 @@ body:
         - document-schema.js
         - documents
         - documents.js
+        - epub-codec
         - markdown-codec
         - odf.js
         - ooxml.js
         - pdf-codec
+        - ppt-codec
+        - rtf-codec
+        - wpd-codec
         - xls-codec
     validations:
       required: true
