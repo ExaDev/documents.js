@@ -395,7 +395,7 @@ jobs:
       # ExaSpot, unlike the org-wide 'exadev' App the release job uses, is installed specifically on novus-power/hive (a different org from ExaDev) rather than org-wide -- owner has to be given explicitly since the App's own installation context otherwise defaults to this workflow's own repository owner (ExaDev), not novus-power.
       - name: Generate a token for cross-org dispatch to novus-power/hive
         id: app-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: "4816274"
           private-key: ${{ secrets.HIVE_DISPATCH_APP_PRIVATE_KEY }}
