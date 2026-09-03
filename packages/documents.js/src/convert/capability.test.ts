@@ -16,7 +16,7 @@ describe("FORMAT_CAPABILITIES", () => {
     }
 
     expect(new Set(byVariant.get("wordprocessing"))).toEqual(
-      new Set(["docx", "odt", "markdown", "rtf"]),
+      new Set(["docx", "odt", "markdown", "rtf", "wpd"]),
     );
     expect(new Set(byVariant.get("presentation"))).toEqual(
       new Set(["pptx", "odp"]),

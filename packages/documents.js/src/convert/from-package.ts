@@ -28,6 +28,7 @@ import {
 } from "../layout/shared";
 import { DOCUMENT_FORMAT_CODECS } from "../codecs/registry";
 import { requireArrayBufferBytes } from "../model/bytes";
+import { READ_ONLY_FORMATS } from "./capability";
 import type { DocumentFormat } from "./port";
 import type {
   LayoutDocument,
@@ -52,15 +53,16 @@ export function buildDocumentBytes(
     }
     return writePdf(layoutDocumentFromPackage(pkg));
   }
-  if (target === "odf") {
+  // A read-only format (capability.ts's READ_ONLY_FORMATS) has no writer at all, so naming one as a target is a caller error with a real answer rather than a registry gap: 'odf' (a standalone formula document) has no ContentDocument-to-formula path anywhere in the family, and 'wpd' has none because wpd-codec deliberately ships no writer. One check covers both, and covers whichever read-only format joins them next.
+  if (READ_ONLY_FORMATS.has(target)) {
     throw new Error(
-      "'odf' (a standalone formula document) cannot be built from a DocumentTree -- there is no ContentDocument-to-odf builder",
+      `'${target}' is a read-only format: it cannot be built from a DocumentTree, because there is no ContentDocument-to-${target} builder`,
     );
   }
   const content = DOCUMENT_FORMAT_CODECS[target].content;
   if (!content?.write) {
     throw new Error(
-      `DocumentFormat '${target}' has no content.write codec in DOCUMENT_FORMAT_CODECS, and is not 'pdf'/'odf' -- this is an internal invariant violation, not a caller error`,
+      `DocumentFormat '${target}' has no content.write codec in DOCUMENT_FORMAT_CODECS, is not 'pdf', and is not read-only -- this is an internal invariant violation, not a caller error`,
     );
   }
   return requireArrayBufferBytes(content.write(flattenTree(pkg)));

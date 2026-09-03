@@ -28,6 +28,7 @@ import {
 import { minimalOdtBytes } from "../test-support/odt";
 import { minimalDocxBytes } from "../test-support/docx";
 import { minimalPptxBytes } from "../test-support/pptx";
+import { minimalWpdBytes } from "../test-support/wpd";
 import {
   csvToOds,
   docxToMarkdown,
@@ -583,6 +584,8 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
       );
     case "odf":
       return odfFormulaBytes(FRACTION_FORMULA);
+    case "wpd":
+      return minimalWpdBytes();
     case "pdf":
       // Generate a minimal PDF from a docx so the sweep has real PDF bytes for every pdf-sourced pair.
       return docxToPdf(minimalDocxBytes());
@@ -622,6 +625,9 @@ function isValidOutput(
       );
     case "odf":
       // odf has no content.write and is never a sweep target -- ALL_SUPPORTED_PAIRS is derived from the port's own conversions, which excludes every odf-target pair (see local.ts's own odf/pdf special case). Present here only so the switch is exhaustive over every DocumentFormat member, matching fixtureBytes' own coverage.
+      return false;
+    case "wpd":
+      // wpd is read-only (READ_ONLY_FORMATS) and is never a sweep target for the identical reason odf above is not -- ALL_SUPPORTED_PAIRS excludes every wpd-target pair since wpd-codec ships no writer. Present here only for the same exhaustiveness reason as odf's own case.
       return false;
   }
 }

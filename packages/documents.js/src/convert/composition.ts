@@ -53,6 +53,7 @@ import { decodeSvgText, encodeSvgText } from "../svg/text";
 import { readSvgContent } from "../svg/read";
 import { buildSvgText } from "../svg/write";
 import { readRtfContent, rtfBytesFromLatin1, writeRtfContent } from "rtf-codec";
+import { readWpdContent } from "wpd-codec";
 import { requireArrayBufferBytes } from "../model/bytes";
 import type { CellTypeInferenceSink } from "../layout/cell-typing";
 import {
@@ -105,7 +106,7 @@ export interface UnifiedConversionOptions {
 
 // --- Registry: declarative per-format primitive wiring -----------------------------------------
 
-// The eleven content formats this engine routes between (pdf is the layout pivot, reached via toPdf/fromPdf edges; odf is special, excluded entirely -- see the module doc).
+// The eleven read-and-write content formats this engine routes between (pdf is the layout pivot, reached via toPdf/fromPdf edges; odf is special, excluded entirely -- see the module doc). A format here can be either end of a conversion, which is what the read/build pair in its FORMAT_NODES entry means; the read-only formats that can only ever be a SOURCE are ReadOnlyContentFormat below.
 export type ContentFormat =
   | "docx"
   | "pptx"
@@ -178,6 +179,67 @@ export type FormatNode = PackageFormatNode | TextFormatNode;
 // Narrowing on the boolean-literal hasSourcePackage discriminant (not on family), so the text half stays open to further plain-text families without touching any executor: TypeScript narrows a discriminated union on literal true/false just as it does on string literals. Exported because composition-to-pdf.ts's executeToPdf branches through the same narrowing.
 export function isTextFormatNode(node: FormatNode): node is TextFormatNode {
   return !node.hasSourcePackage;
+}
+
+// --- Read-only formats: a source that can never be a target -------------------------------------
+//
+// Some formats in this family have a genuine, tested reader and no writer at all -- not "no writer yet" as an omission, but as a deliberate scope decision, because a half-correct writer for a format nobody can round-trip against is worse than none (wpd-codec's own Scope section states exactly that for WordPerfect). Such a format is a real conversion SOURCE and can never be a target, and that asymmetry is the thing this engine had no way to express: FORMAT_NODES' read/build pair says a format does both, and the graph builder's edges are all bidirectional.
+//
+// A read-only format is therefore a second kind of node with its own registry and its own DIRECTED edges. Nothing points at one, so the pathfinder can never route TO a read-only format: reachability does the work, and no target-side guard is needed anywhere. What makes it generic rather than a wpd-shaped hole is that adding another read-only format (doc-codec, ppt-codec, and xls-codec are the ones this workspace already has, each unwired for the identical reason) is one union member plus one registry entry -- the graph builder, the executors, and the plan runner all already handle the whole set.
+//
+// odf is deliberately NOT modelled this way even though it too has a reader and no writer. It reads into the 'formula' variant, which has no layout engine, no reconstructor, and no second format to bridge to -- so a read-only odf node would have zero outgoing edges and route nothing. Its one real edge, odf -> pdf, goes through src/mathml's own formula positioning rather than any executor here, which is why it stays local.ts's special case (see this module's own top comment).
+export type ReadOnlyContentFormat = "wpd";
+
+// The explicit, typed list, kept in sync with READ_ONLY_FORMAT_NODES' own keys for the same reason CONTENT_FORMATS is: iterating `Object.keys` would return `string[]` and need a cast back.
+const READ_ONLY_CONTENT_FORMATS: readonly ReadOnlyContentFormat[] = ["wpd"];
+
+// A source-only node. Deliberately not a third member of the FormatNode union: it has no build/encode half at all, so widening that union would make every executor's target-side call site branch on a case that can never occur there, and the "no decode step" shape below would have to be faked with an identity decode. `read` takes bytes directly because a read-only codec has no round trip to keep symmetrical -- there is no encode to be the inverse of a decode, so the intermediate representation that split exists for (a Package, a text string) has nothing to hold.
+export interface ReadOnlyFormatNode {
+  readonly variant: LayoutVariant;
+  readonly read: (
+    bytes: Uint8Array<ArrayBuffer>,
+    options?: UnifiedConversionOptions,
+  ) => ContentDocument;
+}
+
+// wpd reads WordPerfect 6.x-X6 into the wordprocessing ContentDocument variant (wpd-codec's readWpdContent), so it bridges to docx/odt/markdown/rtf at cost 1 and rides the wordprocessing layout engine to pdf directly -- markdown's own justification for a layout path, since convertWordprocessingToLayout consumes what it reads unmodified. read passes only signal through; readWpdContent's own ReadWpdOptions carries a WpdDiagnosticSink too, but UnifiedConversionOptions declares no field for it, matching csv/svg/rtf's own precedent of surfacing only the options this shared shape already has room for.
+export const READ_ONLY_FORMAT_NODES: Readonly<
+  Record<ReadOnlyContentFormat, ReadOnlyFormatNode>
+> = {
+  wpd: {
+    variant: "wordprocessing",
+    read: (bytes) => readWpdContent(bytes),
+  },
+};
+
+// Every format this engine can read FROM: the read-and-write ones plus the read-only ones. This is the type a bridge's or a toPdf hop's SOURCE is, where its target stays the narrower ContentFormat.
+export type SourceContentFormat = ContentFormat | ReadOnlyContentFormat;
+
+export function isReadOnlyContentFormat(
+  format: DocumentFormat,
+): format is ReadOnlyContentFormat {
+  return (READ_ONLY_CONTENT_FORMATS as readonly DocumentFormat[]).includes(
+    format,
+  );
+}
+
+// Decodes and reads whichever kind of source node this format has, so an executor states the "get a ContentDocument out of these bytes" step once rather than branching on node kind at every call site. The read-and-write half keeps its decode/read split (the package or text intermediate its own encode is the inverse of); the read-only half has none.
+function readSourceContent(
+  format: SourceContentFormat,
+  bytes: Uint8Array<ArrayBuffer>,
+  options: UnifiedConversionOptions | undefined,
+): { readonly content: ContentDocument; readonly variant: LayoutVariant } {
+  if (isReadOnlyContentFormat(format)) {
+    const node = READ_ONLY_FORMAT_NODES[format];
+    return { content: node.read(bytes, options), variant: node.variant };
+  }
+  const node = FORMAT_NODES[format];
+  if (isTextFormatNode(node)) {
+    const text = node.decode(bytes);
+    return { content: node.read(text, options), variant: node.variant };
+  }
+  const pkg = node.decode(bytes);
+  return { content: node.read(pkg, options), variant: node.variant };
 }
 
 // The bytes -> latin1-string half of the round trip FORMAT_NODES.rtf's decode/build use (see TextFormatNode's own comment on why this exists): each byte becomes exactly one UTF-16 code unit 0x00-0xFF, the inverse of rtf-codec's own rtfBytesFromLatin1. Chunked at 8192 bytes per String.fromCharCode call, mirroring rtf-codec's own internal asciiStringFromBytes (src/bytes.ts, not part of that package's public surface) -- spreading an unbounded byte array as call arguments in one shot risks "Maximum call stack size exceeded" well before a real .rtf file's own DEFAULT_MAX_INPUT_BYTES (64 MiB, mostly hex-encoded picture payload) is reached.
@@ -325,8 +387,10 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
 };
 
 // The formats that have a direct layout-engine path to/from PDF (convertXToLayout + writePdf). xlsx and csv are deliberately absent: neither has a layout engine of its own, so the pathfinder routes each <-> pdf through ods instead (e.g. csv -> ods bridge, then ods -> pdf toPdf), reproducing the composed route xlsxToPdf/pdfToXlsx already hard-code in convert.ts. rtf is absent for the identical reason, routed through a same-variant bridge to docx/odt/markdown instead. svg is present: its read half produces a drawing ContentDocument whose page geometry comes from the svg root's own viewBox/width/height, and convertDrawingToLayout renders it unmodified. Exported because composition-to-pdf.ts's executeToPdf is the executor that enforces it.
-export const LAYOUT_CAPABLE: ReadonlySet<ContentFormat> =
-  new Set<ContentFormat>([
+//
+// wpd is present, and being read-only is exactly why. For a read-and-write format the entry is a judgement between two working routes -- rtf reaches pdf through a docx bridge at a cost the hand-written rtfToPdf already accepted -- but for a read-only one there is no reverse direction to keep symmetrical, and the only question left is markdown's own: does its read produce a ContentDocument the variant's layout engine consumes unmodified? readWpdContent produces a wordprocessing document that convertWordprocessingToLayout renders exactly as it renders docx's, so routing wpd -> pdf through a docx bridge instead would build and re-read an OOXML package for nothing, losing whatever that builder cannot express on the way through.
+export const LAYOUT_CAPABLE: ReadonlySet<SourceContentFormat> =
+  new Set<SourceContentFormat>([
     "docx",
     "pptx",
     "odt",
@@ -335,6 +399,7 @@ export const LAYOUT_CAPABLE: ReadonlySet<ContentFormat> =
     "odg",
     "svg",
     "markdown",
+    "wpd",
   ]);
 
 // Cross-variant transforms keyed by `${fromVariant}->${toVariant}`. Each wrapper narrows its input with a runtime kind guard so the underlying transform receives its exact concrete variant type -- the same "no cast, narrow at the boundary" discipline every read/build closure above follows. Today wordprocessing <-> presentation and drawing <-> presentation transforms exist (src/convert/variant-bridges.ts); the pathfinder derives its cross-variant edges from this object's keys, so adding a transform here is the single change needed to teach both the pathfinder and the bridge executor a new variant crossing.
@@ -392,34 +457,30 @@ const RECONSTRUCTORS: Readonly<
 
 // decode(source) -> read(source) -> [optional cross-variant transform] -> build(target) -> encode(target), reproducing the exact sequence and option-threading of convert.ts's bridge functions (odtToDocx/docxToOdt/markdownToDocx/docxToPptx). onMathDiagnostic reaches the docx reader and builder only (via the registry closures); images reach the markdown reader only; throwIfAborted frames the read and build stages exactly as the hand-written bridges do. The pathfinder only proposes a bridge hop when source and target either share a variant (same-variant direct copy) or have a TRANSFORMS entry between their variants (cross-variant semantic transform), so a missing transform here is a pathfinder bug, not a runtime hazard.
 export function executeBridge(
-  source: ContentFormat,
+  source: SourceContentFormat,
   target: ContentFormat,
   bytes: Uint8Array<ArrayBuffer>,
   options?: UnifiedConversionOptions,
 ): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
-  const sourceNode = FORMAT_NODES[source];
   const targetNode = FORMAT_NODES[target];
 
-  // Decode + read the source, branching on hasSourcePackage so the package (SourcePackage) and text (string) decoded shapes stay concrete.
-  let content: ContentDocument;
-  if (isTextFormatNode(sourceNode)) {
-    const text = sourceNode.decode(bytes);
-    content = sourceNode.read(text, options);
-  } else {
-    const pkg = sourceNode.decode(bytes);
-    content = sourceNode.read(pkg, options);
-  }
-  if (content.kind !== sourceNode.variant) {
+  // Read the source through whichever kind of node it has -- readSourceContent states the read-and-write half's decode/read split and the read-only half's bytes-straight-to-content shape once, so a bridge's SOURCE may be either while its target stays a read-and-write format by type.
+  const { content, variant: sourceVariant } = readSourceContent(
+    source,
+    bytes,
+    options,
+  );
+  if (content.kind !== sourceVariant) {
     throw new Error(
-      `executeBridge: ${source} read returned a non-${sourceNode.variant} ContentDocument`,
+      `executeBridge: ${source} read returned a non-${sourceVariant} ContentDocument`,
     );
   }
 
   // Cross-variant bridges apply the semantic transform between read and build (docx -> pptx, odt -> odp, ...). Same-variant bridges copy the content straight through.
   let buildContent: ContentDocument = content;
-  if (sourceNode.variant !== targetNode.variant) {
-    const key = `${sourceNode.variant}->${targetNode.variant}`;
+  if (sourceVariant !== targetNode.variant) {
+    const key = `${sourceVariant}->${targetNode.variant}`;
     const transform = TRANSFORMS[key];
     if (transform === undefined) {
       throw new Error(`executeBridge: no transform registered for ${key}`);
@@ -564,6 +625,22 @@ function buildCompositionGraph(): ReadonlyMap<
     }
   }
 
+  // Read-only formats (see ReadOnlyContentFormat above) get the same three edge kinds at the same three costs, but DIRECTED -- out of the read-only node only. That single asymmetry is the whole mechanism: with nothing pointing at one, Dijkstra can never reach a read-only format as a target, so "a source that can never be a target" is a property of the graph's shape rather than a rule some resolver has to remember to apply.
+  for (const source of READ_ONLY_CONTENT_FORMATS) {
+    const variant = READ_ONLY_FORMAT_NODES[source].variant;
+    for (const target of CONTENT_FORMATS) {
+      const targetVariant = FORMAT_NODES[target].variant;
+      if (targetVariant === variant) {
+        addDirected(source, target, 1);
+      } else if (TRANSFORMS[`${variant}->${targetVariant}`] !== undefined) {
+        addDirected(source, target, 2);
+      }
+    }
+    if (LAYOUT_CAPABLE.has(source)) {
+      addDirected(source, "pdf", 3);
+    }
+  }
+
   return adj;
 }
 
@@ -645,15 +722,24 @@ export function resolveCompositionPlan(
   return { hops };
 }
 
-// Narrows a DocumentFormat to the ContentFormat union (the eleven formats with a FORMAT_NODES entry). pdf and odf are excluded: pdf is the layout pivot reached only via toPdf/fromPdf edges, and odf is the special-case format this engine does not route at all. Used by runCompositionPlan to narrow a hop's DocumentFormat endpoints to the ContentFormat the executors are typed against.
+// Narrows a DocumentFormat to the ContentFormat union (the eleven formats with a FORMAT_NODES entry) -- the type every hop's TARGET must be, since a target is built and encoded. pdf, odf, and every read-only format are excluded: pdf is the layout pivot reached only via toPdf/fromPdf edges, odf is the special-case format this engine does not route at all, and a read-only format has no build half to be a target with.
 function isContentFormat(format: DocumentFormat): format is ContentFormat {
-  return format !== "pdf" && format !== "odf";
+  return (
+    format !== "pdf" && format !== "odf" && !isReadOnlyContentFormat(format)
+  );
+}
+
+// The same narrowing for a hop's SOURCE, which may additionally be a read-only format. Used by runCompositionPlan for the `from` endpoint of a bridge or toPdf hop, where isContentFormat covers the `to`.
+function isSourceContentFormat(
+  format: DocumentFormat,
+): format is SourceContentFormat {
+  return isContentFormat(format) || isReadOnlyContentFormat(format);
 }
 
 // The executor binding a plan runner dispatches through. bridge and fromPdf are always present (both live in this module); toPdf is bound only by composition-to-pdf.ts's full convertDocument, because the executor that renders a PDF is exactly the half of the engine a read-only caller must not reach. A plan needing a toPdf hop against a binding that carries none fails loudly below -- for the read-only entry that state is unreachable by construction (pdf as a source never routes back through pdf; Dijkstra never revisits a node), so the throw is an internal-invariant guard, not a caller-facing branch.
 export interface CompositionExecutorBinding {
   readonly bridge: (
-    source: ContentFormat,
+    source: SourceContentFormat,
     target: ContentFormat,
     bytes: Uint8Array<ArrayBuffer>,
     options?: UnifiedConversionOptions,
@@ -664,7 +750,7 @@ export interface CompositionExecutorBinding {
     options?: UnifiedConversionOptions,
   ) => Uint8Array<ArrayBuffer>;
   readonly toPdf?: (
-    source: ContentFormat,
+    source: SourceContentFormat,
     bytes: Uint8Array<ArrayBuffer>,
     options?: UnifiedConversionOptions,
   ) => Uint8Array<ArrayBuffer>;
@@ -693,7 +779,7 @@ export function runCompositionPlan(
         ? undefined
         : { ...options, onDocument: undefined };
     if (hop.executor === "toPdf") {
-      if (!isContentFormat(hop.from)) {
+      if (!isSourceContentFormat(hop.from)) {
         throw new Error(
           `runCompositionPlan: toPdf source '${hop.from}' is not a content format`,
         );
@@ -713,7 +799,7 @@ export function runCompositionPlan(
       }
       current = executors.fromPdf(hop.to, current, hopOptions);
     } else {
-      if (!isContentFormat(hop.from) || !isContentFormat(hop.to)) {
+      if (!isSourceContentFormat(hop.from) || !isContentFormat(hop.to)) {
         throw new Error(
           `runCompositionPlan: bridge endpoints '${hop.from}' -> '${hop.to}' are not both content formats`,
         );

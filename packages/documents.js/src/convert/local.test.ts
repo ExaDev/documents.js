@@ -39,7 +39,7 @@ describe("createLocalDocumentConverter: shape", () => {
     const converter = createLocalDocumentConverter();
     // 7, not 6: ConversionResult.package changed TYPE to the tree-form DocumentTree of document-schema.js 4.0.0 (children carry the decomposed group tree plus the minted styles table, where it previously carried the flat { content, pages } envelope) -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
     expect(converter.contractVersion).toBe(7);
-    // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats within the 3-hop cap, plus the special-case odf -> pdf pair -- 129 pairs total, sorted by source then target for determinism. csv joins as a full spreadsheet-variant member: same-variant bridges to ods/xlsx directly, everything else composed through the identical ods pivot xlsx uses. svg joins as the drawing family's plain-text member the same way: a same-variant bridge to odg directly plus its own pdf layout pair, everything else composed through those two edges. rtf joins the wordprocessing family the same way again -- same-variant bridges to docx/odt/markdown, everything else composed through those plus each target's own pdf layout pair -- except rtf<->csv and rtf<->xlsx, the one pair family the pathfinder genuinely cannot route: reaching either needs rtf -> {docx|odt|markdown} (bridge) -> pdf (toPdf) -> ods (fromPdf) -> {csv|xlsx} (bridge), four hops, one more than resolveCompositionPlan's own cap allows (the bound stated on that function: "the most any real route needs... xlsx -> markdown... three hops"). This is the pathfinder correctly reporting "unsupported" for a genuinely-too-indirect pair, not a gap in this wiring -- rtf has no toPdf/fromPdf edge of its own (capability.ts's own FORMAT_CAPABILITIES.rtf) the way markdown does, so it costs one more hop than markdown needs for the identical csv/xlsx pairs.
+    // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats within the 3-hop cap, plus the special-case odf -> pdf pair -- 141 pairs total, sorted by source then target for determinism. csv joins as a full spreadsheet-variant member: same-variant bridges to ods/xlsx directly, everything else composed through the identical ods pivot xlsx uses. svg joins as the drawing family's plain-text member the same way: a same-variant bridge to odg directly plus its own pdf layout pair, everything else composed through those two edges. rtf joins the wordprocessing family the same way again -- same-variant bridges to docx/odt/markdown, everything else composed through those plus each target's own pdf layout pair -- except rtf<->csv and rtf<->xlsx, the one pair family the pathfinder genuinely cannot route: reaching either needs rtf -> {docx|odt|markdown} (bridge) -> pdf (toPdf) -> ods (fromPdf) -> {csv|xlsx} (bridge), four hops, one more than resolveCompositionPlan's own cap allows (the bound stated on that function: "the most any real route needs... xlsx -> markdown... three hops"). This is the pathfinder correctly reporting "unsupported" for a genuinely-too-indirect pair, not a gap in this wiring -- rtf has no toPdf/fromPdf edge of its own (capability.ts's own FORMAT_CAPABILITIES.rtf) the way markdown does, so it costs one more hop than markdown needs for the identical csv/xlsx pairs. wpd joins as the wordprocessing family's read-only member (see composition.ts's own ReadOnlyContentFormat): a directed edge to every other member of this table at the identical cost a read-and-write wordprocessing member would carry, but only ever as a source -- there is no reverse direction to list, since wpd-codec ships no writer at all.
     expect(converter.conversions).toEqual([
       { source: "csv", target: "docx" },
       { source: "csv", target: "markdown" },
@@ -160,6 +160,18 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "svg", target: "pptx" },
       { source: "svg", target: "rtf" },
       { source: "svg", target: "xlsx" },
+      { source: "wpd", target: "csv" },
+      { source: "wpd", target: "docx" },
+      { source: "wpd", target: "markdown" },
+      { source: "wpd", target: "odg" },
+      { source: "wpd", target: "odp" },
+      { source: "wpd", target: "ods" },
+      { source: "wpd", target: "odt" },
+      { source: "wpd", target: "pdf" },
+      { source: "wpd", target: "pptx" },
+      { source: "wpd", target: "rtf" },
+      { source: "wpd", target: "svg" },
+      { source: "wpd", target: "xlsx" },
       { source: "xlsx", target: "csv" },
       { source: "xlsx", target: "docx" },
       { source: "xlsx", target: "markdown" },
