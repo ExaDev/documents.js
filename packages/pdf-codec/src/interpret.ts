@@ -165,29 +165,32 @@ const FALLBACK_GLYPH_WIDTH_PER_1000 = 500;
 // ISO 32000-1 Table 52: the graphics state's own line width parameter defaults to 1.0 (user-space units) until a `w` operator sets it explicitly.
 const DEFAULT_LINE_WIDTH_PT = 1;
 
+// ISO 32000-1 Table 52 lists the text state parameters -- the font and size a Tf selects, plus Tc/Tw/Tz/TL/Ts -- among the device-independent graphics state parameters, so they belong here rather than beside the text matrix: `q` saves them and `Q` restores them exactly as it does the CTM or the fill colour, and a form XObject invoked by `Do` inherits them exactly as it inherits the CTM (8.10.2). Only the text matrix and text line matrix are excluded, and they live in TextObjectState below. Modelling the two as one record is what makes both facts structural rather than something each operator has to remember.
 interface GraphicsState {
   readonly ctm: Matrix;
   readonly fillColor: LayoutColor;
   readonly strokeColor: LayoutColor;
   readonly lineWidth: number;
+  readonly fontResourceName: string | undefined;
+  readonly fontSizePt: number;
+  readonly charSpace: number;
+  readonly wordSpace: number;
+  readonly horizScale: number; // Tz / 100
+  readonly leading: number;
+  readonly rise: number;
 }
 
-interface TextState {
+// The text matrix and text line matrix: text OBJECT state (ISO 32000-1 9.4.1), not graphics state. They exist only between BT and ET, are reset to identity by every BT, and are the one part of the text machinery `Q` must not restore -- so they sit outside GraphicsState and outside the q/Q stack entirely.
+interface TextObjectState {
   tm: Matrix;
   tlm: Matrix;
-  fontResourceName: string | undefined;
-  fontSizePt: number;
-  charSpace: number;
-  wordSpace: number;
-  horizScale: number; // Tz / 100
-  leading: number;
-  rise: number;
 }
 
-function defaultTextState(): TextState {
+function initialTextParameters(): Omit<
+  GraphicsState,
+  "ctm" | "fillColor" | "strokeColor" | "lineWidth"
+> {
   return {
-    tm: IDENTITY_MATRIX,
-    tlm: IDENTITY_MATRIX,
     fontResourceName: undefined,
     fontSizePt: 0,
     charSpace: 0,
@@ -198,16 +201,20 @@ function defaultTextState(): TextState {
   };
 }
 
-function computeTrm(ctm: Matrix, ts: TextState): Matrix {
+function defaultTextObjectState(): TextObjectState {
+  return { tm: IDENTITY_MATRIX, tlm: IDENTITY_MATRIX };
+}
+
+function computeTrm(gs: GraphicsState, text: TextObjectState): Matrix {
   const fontMatrix: Matrix = [
-    ts.fontSizePt * ts.horizScale,
+    gs.fontSizePt * gs.horizScale,
     0,
     0,
-    ts.fontSizePt,
+    gs.fontSizePt,
     0,
-    ts.rise,
+    gs.rise,
   ];
-  return multiplyMatrices(multiplyMatrices(fontMatrix, ts.tm), ctm);
+  return multiplyMatrices(multiplyMatrices(fontMatrix, text.tm), gs.ctm);
 }
 
 function numAt(operands: readonly PdfObject[], index: number): number {
@@ -637,6 +644,7 @@ export function interpretContentStream(
     fillColor: COLOR_BLACK,
     strokeColor: COLOR_BLACK,
     lineWidth: DEFAULT_LINE_WIDTH_PT,
+    ...initialTextParameters(),
   };
   runContentStream(bytes, resources, initialState, context, items, 0, []);
   return items;
@@ -678,7 +686,7 @@ function runContentStream(
   const operations = readContentStream(bytes, context.sink);
   const gsStack: GraphicsState[] = [];
   let gs = initialState;
-  let ts = defaultTextState();
+  let text = defaultTextObjectState();
   let pathSubpaths: MutableSubpath[] = [];
   let currentSubpath: MutableSubpath | undefined;
 
@@ -810,13 +818,14 @@ function runContentStream(
   };
 
   const advanceThroughString = (codes: Uint8Array<ArrayBuffer>): void => {
-    if (ts.fontResourceName === undefined) {
+    const fontResourceName = gs.fontResourceName;
+    if (fontResourceName === undefined) {
       return;
     }
     let offset = 0;
     while (offset < codes.length) {
       const glyph = context.fontMetrics.glyphAdvance(
-        ts.fontResourceName,
+        fontResourceName,
         resources,
         codes,
         offset,
@@ -825,27 +834,28 @@ function runContentStream(
         context.sink({
           code: "pdf/font-not-resolved",
           severity: "warning",
-          message: `could not resolve font resource /${ts.fontResourceName} to compute a glyph advance; assuming a fallback width`,
+          message: `could not resolve font resource /${fontResourceName} to compute a glyph advance; assuming a fallback width`,
         });
       }
       const widthPer1000 = glyph?.widthPer1000 ?? FALLBACK_GLYPH_WIDTH_PER_1000;
       const byteLength = glyph?.byteLengthConsumed ?? 1;
       const isSingleByteSpace = byteLength === 1 && codes[offset] === 0x20;
       const tx =
-        ((widthPer1000 / 1000) * ts.fontSizePt +
-          ts.charSpace +
-          (isSingleByteSpace ? ts.wordSpace : 0)) *
-        ts.horizScale;
-      ts.tm = multiplyMatrices(translationMatrix(tx, 0), ts.tm);
+        ((widthPer1000 / 1000) * gs.fontSizePt +
+          gs.charSpace +
+          (isSingleByteSpace ? gs.wordSpace : 0)) *
+        gs.horizScale;
+      text.tm = multiplyMatrices(translationMatrix(tx, 0), text.tm);
       offset += byteLength;
     }
   };
 
   const showTextArray = (elements: readonly PdfObject[]): void => {
-    if (ts.fontResourceName === undefined) {
+    const fontResourceName = gs.fontResourceName;
+    if (fontResourceName === undefined) {
       return;
     }
-    const startMatrix = computeTrm(gs.ctm, ts);
+    const startMatrix = computeTrm(gs, text);
     const chunks: Uint8Array<ArrayBuffer>[] = [];
     let totalLength = 0;
     for (const el of elements) {
@@ -854,8 +864,8 @@ function runContentStream(
         totalLength += el.bytes.length;
         advanceThroughString(el.bytes);
       } else if (el.kind === "number") {
-        const adjustment = -(el.value / 1000) * ts.fontSizePt * ts.horizScale;
-        ts.tm = multiplyMatrices(translationMatrix(adjustment, 0), ts.tm);
+        const adjustment = -(el.value / 1000) * gs.fontSizePt * gs.horizScale;
+        text.tm = multiplyMatrices(translationMatrix(adjustment, 0), text.tm);
       }
     }
     if (totalLength === 0) {
@@ -867,15 +877,15 @@ function runContentStream(
       combined.set(chunk, at);
       at += chunk.length;
     }
-    const endMatrix = computeTrm(gs.ctm, ts);
+    const endMatrix = computeTrm(gs, text);
     pushItem({
       kind: "text",
       codes: combined,
-      fontResourceName: ts.fontResourceName,
+      fontResourceName,
       resources,
       startMatrix,
       endMatrix,
-      sizePt: ts.fontSizePt,
+      sizePt: gs.fontSizePt,
       color: gs.fillColor,
     });
   };
@@ -885,8 +895,8 @@ function runContentStream(
   };
 
   const nextLine = (): void => {
-    ts.tlm = multiplyMatrices(translationMatrix(0, -ts.leading), ts.tlm);
-    ts.tm = ts.tlm;
+    text.tlm = multiplyMatrices(translationMatrix(0, -gs.leading), text.tlm);
+    text.tm = text.tlm;
   };
 
   const handleDo = (name: string | undefined): void => {
@@ -940,6 +950,7 @@ function runContentStream(
         context.resolver.resolveDict(dictGet(xobj.dict, "Resources")) ??
         resources;
       const decoded = decodeStream(xobj.raw, xobj.dict, context.sink);
+      // ISO 32000-1 8.10.2: the form executes in the graphics state in effect at this Do, as if nested inline inside an implicit q/Q -- so the whole state travels inward, the text parameters (a font a preceding Tf already selected, spacing, scaling) among them, and a form whose own content omits a redundant Tf still draws in the caller's font. The recursed call binds its own `gs` local, so nothing the form changes travels back out; the text matrix is not carried because it is text object state the form's own BT resets regardless.
       const formState: GraphicsState = {
         ...gs,
         ctm: multiplyMatrices(formMatrix, gs.ctm),
@@ -980,6 +991,7 @@ function runContentStream(
     const { operands, operator } = token.operation;
     switch (operator) {
       case "q":
+        // One push covers every saved parameter, the text state included, because GraphicsState holds them all -- see its own comment for why that is the spec's own division rather than a convenience. An unbalanced Q with nothing to pop leaves the state as it stands, the most content a malformed stream can still be read with.
         gsStack.push(gs);
         break;
       case "Q":
@@ -1140,46 +1152,49 @@ function runContentStream(
         emitPaint(operator);
         break;
       case "BT":
-        // ISO 32000-1 9.4.1: BT resets only the text matrix and text line matrix to identity. Every other text-state parameter (font, size, char/word spacing, horizontal scaling, leading, rise) belongs to the graphics state and persists across text objects -- a full defaultTextState() reset here was silently discarding a font selected by an earlier Tf, so any text object that omits a redundant Tf (the common case for a same-font paragraph continuation) fed showTextArray/advanceThroughString a `fontResourceName: undefined` and both early-return with zero items.
-        ts = { ...ts, tm: IDENTITY_MATRIX, tlm: IDENTITY_MATRIX };
+        // ISO 32000-1 9.4.1: BT resets the text matrix and text line matrix to identity, and nothing else. Every other text-state parameter (font, size, char/word spacing, horizontal scaling, leading, rise) is a graphics state parameter that persists across text objects, so resetting the text object state here is now exactly the whole reset the spec asks for.
+        text = defaultTextObjectState();
         break;
       case "Tf":
-        ts.fontResourceName = asName(operands[0]);
-        ts.fontSizePt = numAt(operands, 1);
+        gs = {
+          ...gs,
+          fontResourceName: asName(operands[0]),
+          fontSizePt: numAt(operands, 1),
+        };
         break;
       case "Tc":
-        ts.charSpace = numAt(operands, 0);
+        gs = { ...gs, charSpace: numAt(operands, 0) };
         break;
       case "Tw":
-        ts.wordSpace = numAt(operands, 0);
+        gs = { ...gs, wordSpace: numAt(operands, 0) };
         break;
       case "Tz":
-        ts.horizScale = numAt(operands, 0) / 100;
+        gs = { ...gs, horizScale: numAt(operands, 0) / 100 };
         break;
       case "TL":
-        ts.leading = numAt(operands, 0);
+        gs = { ...gs, leading: numAt(operands, 0) };
         break;
       case "Ts":
-        ts.rise = numAt(operands, 0);
+        gs = { ...gs, rise: numAt(operands, 0) };
         break;
       case "Td":
-        ts.tlm = multiplyMatrices(
+        text.tlm = multiplyMatrices(
           translationMatrix(numAt(operands, 0), numAt(operands, 1)),
-          ts.tlm,
+          text.tlm,
         );
-        ts.tm = ts.tlm;
+        text.tm = text.tlm;
         break;
       case "TD":
-        ts.leading = -numAt(operands, 1);
-        ts.tlm = multiplyMatrices(
+        gs = { ...gs, leading: -numAt(operands, 1) };
+        text.tlm = multiplyMatrices(
           translationMatrix(numAt(operands, 0), numAt(operands, 1)),
-          ts.tlm,
+          text.tlm,
         );
-        ts.tm = ts.tlm;
+        text.tm = text.tlm;
         break;
       case "Tm":
-        ts.tlm = matrixFromOperands(operands);
-        ts.tm = ts.tlm;
+        text.tlm = matrixFromOperands(operands);
+        text.tm = text.tlm;
         break;
       case "T*":
         nextLine();
@@ -1200,8 +1215,11 @@ function runContentStream(
         break;
       }
       case '"': {
-        ts.wordSpace = numAt(operands, 0);
-        ts.charSpace = numAt(operands, 1);
+        gs = {
+          ...gs,
+          wordSpace: numAt(operands, 0),
+          charSpace: numAt(operands, 1),
+        };
         nextLine();
         const str = operands[2];
         if (str?.kind === "string") {
