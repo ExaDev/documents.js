@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { PptFormatError } from "../errors";
-import { atom, concatBytes, container, u32le } from "../test-support/records";
 import { RECORD_HEADER_SIZE } from "./header";
+import {
+  concatBytes,
+  u32le,
+  writeAtom as atom,
+  writeContainer as container,
+} from "./write";
 import {
   childRecords,
   findChild,

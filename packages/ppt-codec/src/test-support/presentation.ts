@@ -23,20 +23,20 @@ import {
   RT_UserEditAtom,
   SLIDE_LIST_INSTANCE_SLIDES,
 } from "../record/types";
-import { CURRENT_USER_HEADER_TOKEN_PLAIN } from "../stream/current-user";
-import { TEXT_TYPE_BODY, TEXT_TYPE_TITLE } from "../text/atoms";
 import {
   asciiBytes,
-  atom,
   concatBytes,
-  container,
   i16le,
   i32le,
   u8,
   u16le,
   u32le,
   utf16le,
-} from "./records";
+  writeAtom as atom,
+  writeContainer as container,
+} from "../record/write";
+import { CURRENT_USER_HEADER_TOKEN_PLAIN } from "../stream/current-user";
+import { TEXT_TYPE_BODY, TEXT_TYPE_TITLE } from "../text/atoms";
 
 // A whole synthetic presentation: the two [MS-PPT] streams of a one-slide document carrying a title placeholder (whose text lives in the document's slide list, reached by an OutlineTextRefAtom) and a plain text box (whose text lives on the shape). Assembled from the same record builders the per-record suites use, so the end-to-end test exercises the real offset arithmetic -- the persist directory, the edit chain, and every cross-stream reference -- rather than a stubbed one.
 

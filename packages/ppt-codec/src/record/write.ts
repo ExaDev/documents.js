@@ -1,6 +1,8 @@
-import { CONTAINER_REC_VER, RECORD_HEADER_SIZE } from "../record/header";
+import { CONTAINER_REC_VER, RECORD_HEADER_SIZE } from "./header";
 
-// Byte builders for the unit suites: every fixture in this package is a hand-constructed record tree assembled from [MS-PPT] 2.3.1's own header layout, not a captured binary. That is deliberate -- a fixture built from the spec's field tables states what the parser is being held to, whereas a real .ppt file would only state what one producer happened to emit, and could not be reduced to the single record under test.
+// The write-side mirror of record/header.ts and record/tree.ts: byte primitives and the atom/container builders every writer module in this package composes records from. [MS-PPT] 2.3.1 RecordHeader: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/df201194-0cd0-4dfb-bf10-eea353d8eabc
+//
+// Every test fixture in this package used to hand-build its own copy of these builders under src/test-support/records.ts; that module is gone now and every test imports writeAtom/writeContainer (aliased to the shorter atom/container names it always used) directly from here instead, so a fixture and a genuinely written file are assembled by identical code with no second copy to drift.
 
 export function concatBytes(
   ...parts: readonly Uint8Array<ArrayBuffer>[]
@@ -43,7 +45,7 @@ export function i32le(value: number): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-// Each byte is one character's code unit, the way [MS-PPT]'s TextBytesAtom and PrintableAnsiString both store text. Written as an indexed loop rather than a spread or split, which would decompose by code point or UTF-16 unit and mean something different for text outside the ASCII range these fixtures use.
+// Each byte is one character's code unit, the way [MS-PPT]'s PrintableAnsiString stores text -- an indexed loop rather than a spread or split, which would decompose by code point or UTF-16 unit and mean something different for text outside the ASCII range this function is used for (the writer's own hardcoded producer user name).
 export function asciiBytes(text: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(text.length);
   for (let i = 0; i < text.length; i++) {
@@ -61,7 +63,7 @@ export function utf16le(text: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-interface HeaderOptions {
+export interface RecordWriteOptions {
   readonly recVer?: number;
   readonly recInstance?: number;
 }
@@ -81,10 +83,10 @@ function recordHeaderBytes(
 }
 
 // An atom record: an 8-byte header whose recLen is the payload's own length, followed by the payload.
-export function atom(
+export function writeAtom(
   recType: number,
   data: Uint8Array<ArrayBuffer>,
-  options: HeaderOptions = {},
+  options: RecordWriteOptions = {},
 ): Uint8Array<ArrayBuffer> {
   const { recVer = 0x0, recInstance = 0x000 } = options;
   return concatBytes(
@@ -94,10 +96,10 @@ export function atom(
 }
 
 // A container record: recVer 0xF, and a recLen covering every child's header plus data.
-export function container(
+export function writeContainer(
   recType: number,
   children: readonly Uint8Array<ArrayBuffer>[],
-  options: Omit<HeaderOptions, "recVer"> = {},
+  options: Omit<RecordWriteOptions, "recVer"> = {},
 ): Uint8Array<ArrayBuffer> {
   const { recInstance = 0x000 } = options;
   const body = concatBytes(...children);

@@ -13,13 +13,13 @@ import {
 } from "../record/types";
 import {
   asciiBytes,
-  atom,
   concatBytes,
-  container,
   i16le,
   i32le,
   u32le,
-} from "../test-support/records";
+  writeAtom as atom,
+  writeContainer as container,
+} from "../record/write";
 import { readDrawingShapes } from "./shapes";
 
 // OfficeArtFSPGR ([MS-ODRAW] 2.2.38): recVer 0x1, recLen 0x10, then xLeft/yTop/xRight/yBottom as signed 32-bit integers. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/82d2d6a1-3a7a-4d15-9803-33145a76545a
