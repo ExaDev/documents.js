@@ -41,6 +41,10 @@ export {
   readTypefaceName,
   WPD_INDEX_RECORD_SIZE,
 } from "./container/prefix";
+export {
+  PACKET_TYPE_EXTENDED_DOCUMENT_SUMMARY,
+  readDocumentSummary,
+} from "./container/summary";
 
 export type {
   WpdCharacterToken,
@@ -80,3 +84,57 @@ export {
   LAST_CHARACTER,
   UNMAPPED_CHARACTER,
 } from "./stream/characters";
+
+// The construct layers a consumer needs to read a WordPerfect file's own structure rather than only the document it folds into: the units every dimension is stated in, the page-geometry and style groups, and the table grid with the per-cell attributes that ride inside its End-of-Line boundaries.
+export { POINTS_PER_INCH, pointsFromWpu, WPU_PER_INCH } from "./stream/units";
+export type { WpdPageForm } from "./stream/page";
+export {
+  COLUMN_GROUP,
+  COLUMN_LEFT_MARGIN_SET,
+  COLUMN_RIGHT_MARGIN_SET,
+  DEFAULT_MARGIN_PT,
+  DEFAULT_PAGE_HEIGHT_PT,
+  DEFAULT_PAGE_WIDTH_PT,
+  PAGE_BOTTOM_MARGIN_SET,
+  PAGE_FORM,
+  PAGE_GROUP,
+  PAGE_TOP_MARGIN_SET,
+  readMarginPt,
+  readPageForm,
+} from "./stream/page";
+export type { WpdStyleSemantics } from "./stream/style";
+export {
+  DISPLAY_NUMBER_GROUP,
+  isParagraphNumberDisplayOff,
+  isParagraphNumberDisplayOn,
+  isStyleScopeCloser,
+  isStyleScopeOpener,
+  readDisplayNumberLevel,
+  readSystemStyleNumber,
+  STYLE_GROUP,
+  styleSemanticsFor,
+} from "./stream/style";
+export type {
+  WpdCellFill,
+  WpdCellInformation,
+  WpdCellSpanning,
+  WpdEmbeddedSubfunction,
+  WpdEmbeddedSubfunctions,
+  WpdRowInformation,
+} from "./stream/table";
+export {
+  CELL_FILL_COLORS_SUBFUNCTION,
+  CELL_INFORMATION_SUBFUNCTION,
+  CELL_SPANNING_SUBFUNCTION,
+  CHARACTER_DEFINE_TABLE_END,
+  CHARACTER_TABLE_COLUMN,
+  CHARACTER_TABLE_DEFINITION,
+  findEmbeddedSubfunction,
+  readCellFill,
+  readCellInformation,
+  readCellSpanning,
+  readEmbeddedSubfunctions,
+  readRowInformation,
+  readTableColumnWidthPt,
+  ROW_INFORMATION_SUBFUNCTION,
+} from "./stream/table";
