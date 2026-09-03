@@ -1,3 +1,10 @@
+## [6.2.1](https://github.com/ExaDev/documents.js/compare/odf.js%406.2.0...odf.js%406.2.1) (2026-09-03)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.5.0
+
 ## [6.2.0](https://github.com/ExaDev/documents.js/compare/odf.js%406.1.3...odf.js%406.2.0) (2026-09-02)
 
 ### Features

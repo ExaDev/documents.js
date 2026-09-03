@@ -1,6 +1,6 @@
 {
   "name": "document-cli",
-  "version": "5.2.4",
+  "version": "5.2.5",
   "description": "CLI and interactive Ink TUI for documents.js: every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/csv/svg/markdown/rtf conversion, bridge, and editor as a scriptable command or a terminal app.",
   "type": "module",
   "repository": {
@@ -90,9 +90,9 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "commander": "^15.0.0",
-    "document-outline.js": "^3.2.1",
-    "document-schema.js": "^5.4.0",
-    "documents.js": "^6.3.4",
+    "document-outline.js": "^3.2.2",
+    "document-schema.js": "^5.5.0",
+    "documents.js": "^6.3.5",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
     "react": "^19.2.8"
@@ -106,7 +106,7 @@
     "eslint": "^10.8.0",
     "husky": "^9.1.7",
     "ink-testing-library": "^4.0.0",
-    "odf.js": "^6.2.0",
+    "odf.js": "^6.2.1",
     "publint": "^0.3.22",
     "semantic-release": "^25.0.8",
     "tsdown": "^0.22.14",

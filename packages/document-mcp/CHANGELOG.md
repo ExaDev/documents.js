@@ -1,3 +1,12 @@
+## [4.2.5](https://github.com/ExaDev/documents.js/compare/document-mcp%404.2.4...document-mcp%404.2.5) (2026-09-03)
+
+
+### Dependencies
+
+- Updated document-outline.js to ^3.2.2
+- Updated odf.js to ^6.2.1
+- Updated documents.js to ^6.3.5
+
 ## [4.2.4](https://github.com/ExaDev/documents.js/compare/document-mcp%404.2.3...document-mcp%404.2.4) (2026-09-03)
 
 

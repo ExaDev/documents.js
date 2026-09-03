@@ -1,3 +1,19 @@
+## [6.3.5](https://github.com/ExaDev/documents.js/compare/documents.js%406.3.4...documents.js%406.3.5) (2026-09-03)
+
+### Documentation
+
+* **rtf-codec:** restate the scope tables for what the codec now carries ([c90f453](https://github.com/ExaDev/documents.js/commit/c90f453f547e81c6bfe10b62b701ea4d89103259))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.5.0
+- Updated markdown-codec to ^6.1.4
+- Updated odf.js to ^6.2.1
+- Updated ooxml.js to ^6.3.3
+- Updated pdf-codec to ^3.6.2
+- Updated rtf-codec to ^1.1.0
+
 ## [6.3.4](https://github.com/ExaDev/documents.js/compare/documents.js%406.3.3...documents.js%406.3.4) (2026-09-03)
 
 

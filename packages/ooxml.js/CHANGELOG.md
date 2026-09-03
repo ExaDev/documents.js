@@ -1,3 +1,10 @@
+## [6.3.3](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.3.2...ooxml.js%406.3.3) (2026-09-03)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.5.0
+
 ## [6.3.2](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.3.1...ooxml.js%406.3.2) (2026-09-03)
 
 

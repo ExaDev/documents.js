@@ -196,7 +196,7 @@ importers:
         specifier: ^1.3.0
         version: link:../archive-codec
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
     devDependencies:
       '@arethetypeswrong/cli':
@@ -236,13 +236,13 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       document-outline.js:
-        specifier: ^3.2.1
+        specifier: ^3.2.2
         version: link:../document-outline.js
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^6.3.4
+        specifier: ^6.3.5
         version: link:../documents.js
       ink:
         specifier: ^7.1.1
@@ -279,7 +279,7 @@ importers:
         specifier: ^4.0.0
         version: 4.0.0(@types/react@19.2.18)
       odf.js:
-        specifier: ^6.2.0
+        specifier: ^6.2.1
         version: link:../odf.js
       publint:
         specifier: ^0.3.22
@@ -306,7 +306,7 @@ importers:
   packages/document-compute.js:
     dependencies:
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
     devDependencies:
       '@arethetypeswrong/cli':
@@ -319,7 +319,7 @@ importers:
         specifier: ^26.1.2
         version: 26.2.0
       documents.js:
-        specifier: ^6.3.4
+        specifier: ^6.3.5
         version: link:../documents.js
       eslint:
         specifier: ^10.8.0
@@ -328,7 +328,7 @@ importers:
         specifier: ^9.1.7
         version: 9.1.7
       markdown-codec:
-        specifier: ^6.1.3
+        specifier: ^6.1.4
         version: link:../markdown-codec
       publint:
         specifier: ^0.3.21
@@ -352,10 +352,10 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       document-outline.js:
-        specifier: ^3.2.1
+        specifier: ^3.2.2
         version: link:../document-outline.js
       documents.js:
-        specifier: ^6.3.4
+        specifier: ^6.3.5
         version: link:../documents.js
       zod:
         specifier: ^4.2.0
@@ -383,7 +383,7 @@ importers:
         specifier: ^9.1.7
         version: 9.1.7
       odf.js:
-        specifier: ^6.2.0
+        specifier: ^6.2.1
         version: link:../odf.js
       publint:
         specifier: ^0.3.22
@@ -407,7 +407,7 @@ importers:
   packages/document-outline.js:
     dependencies:
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
       zod:
         specifier: ^4.4.3
@@ -538,13 +538,13 @@ importers:
         specifier: ^4.4.0
         version: 4.4.0(dexie@4.4.5)(react@19.2.8)
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^6.3.4
+        specifier: ^6.3.5
         version: link:../documents.js
       markdown-codec:
-        specifier: ^6.1.3
+        specifier: ^6.1.4
         version: link:../markdown-codec
       react:
         specifier: ^19.2.8
@@ -632,25 +632,25 @@ importers:
         specifier: ^1.2.0
         version: link:../byte-codec
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
       markdown-codec:
-        specifier: ^6.1.3
+        specifier: ^6.1.4
         version: link:../markdown-codec
       odf.js:
-        specifier: ^6.2.0
+        specifier: ^6.2.1
         version: link:../odf.js
       ooxml.js:
-        specifier: ^6.3.2
+        specifier: ^6.3.3
         version: link:../ooxml.js
       pdf-codec:
-        specifier: ^3.6.1
+        specifier: ^3.6.2
         version: link:../pdf-codec
       rtf-codec:
-        specifier: ^1.0.0
+        specifier: ^1.1.0
         version: link:../rtf-codec
       temml:
         specifier: 0.13.4
@@ -699,7 +699,7 @@ importers:
   packages/epub-codec:
     dependencies:
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: ^5.10.1
@@ -745,7 +745,7 @@ importers:
   packages/markdown-codec:
     dependencies:
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
       zod:
         specifier: ^4.4.3
@@ -791,7 +791,7 @@ importers:
   packages/odf.js:
     dependencies:
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: ^5.10.1
@@ -849,7 +849,7 @@ importers:
         specifier: ^1.3.0
         version: link:../archive-codec
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: ^5.10.1
@@ -907,7 +907,7 @@ importers:
         specifier: ^1.2.0
         version: link:../byte-codec
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
       fflate:
         specifier: ^0.8.3
@@ -962,7 +962,7 @@ importers:
         specifier: ^1.3.0
         version: link:../archive-codec
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
     devDependencies:
       '@arethetypeswrong/cli':
@@ -999,7 +999,7 @@ importers:
   packages/rtf-codec:
     dependencies:
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
       zod:
         specifier: ^4.4.3
@@ -1048,7 +1048,7 @@ importers:
         specifier: ^1.3.0
         version: link:../archive-codec
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
       zod:
         specifier: ^4.4.3
@@ -1097,7 +1097,7 @@ importers:
         specifier: ^1.3.0
         version: link:../archive-codec
       document-schema.js:
-        specifier: ^5.4.0
+        specifier: ^5.5.0
         version: link:../document-schema.js
     devDependencies:
       '@arethetypeswrong/cli':
