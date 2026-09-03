@@ -15,14 +15,14 @@ import {
 } from "../record/types";
 import {
   asciiBytes,
-  atom,
   concatBytes,
-  container,
   i32le,
   u16le,
   u32le,
   utf16le,
-} from "../test-support/records";
+  writeAtom as atom,
+  writeContainer as container,
+} from "../record/write";
 import { readDocumentAtom } from "./document-atom";
 import { readFontNames } from "./fonts";
 import { readSlideListWithText } from "./slide-list";

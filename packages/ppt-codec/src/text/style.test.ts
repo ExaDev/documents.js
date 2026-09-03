@@ -3,13 +3,13 @@ import { PptFormatError } from "../errors";
 import { readRecordAt } from "../record/tree";
 import { RT_StyleTextPropAtom } from "../record/types";
 import {
-  atom,
   concatBytes,
   i16le,
   u8,
   u16le,
   u32le,
-} from "../test-support/records";
+  writeAtom as atom,
+} from "../record/write";
 import { ALIGN_CENTER, ALIGN_RIGHT, readStyleTextPropAtom } from "./style";
 
 // Mask bit positions written as raw shifts here, straight from the spec's own bit tables, rather than imported from the implementation: a test asserting against the constants the parser reads would pass even if both were wrong together. PFMasks ([MS-PPT] 2.9.x): https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/2a02831a-088b-44e7-84c9-c185ab314a71

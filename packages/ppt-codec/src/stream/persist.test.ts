@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { PptFormatError } from "../errors";
 import { readRecordAt } from "../record/tree";
 import { RT_PersistDirectoryAtom, RT_UserEditAtom } from "../record/types";
-import { atom, concatBytes, u8, u16le, u32le } from "../test-support/records";
+import {
+  concatBytes,
+  u8,
+  u16le,
+  u32le,
+  writeAtom as atom,
+} from "../record/write";
 import {
   buildPersistDirectory,
   readPersistDirectoryAtom,
