@@ -41,6 +41,11 @@ const PROPERTIES_ELEMENT_TAG: Readonly<Record<Ooo1PropertyType, string>> = {
   chart: "style:chart-properties",
 };
 
+// Every element name style:properties can split INTO -- computed once from PROPERTIES_ELEMENT_TAG's own values rather than restated, so a fifteenth property family added there is recognised here for free. This is also the WRITE direction's own recognition set (see mergeStyleProperties below): no legitimate ODF element other than these fourteen carries this tag family, so testing membership in this set is a safe, context-free way to find "the typed properties children of a style container" without needing to know which container family produced them.
+const ALL_PROPERTIES_ELEMENT_TAGS: ReadonlySet<string> = new Set(
+  Object.values(PROPERTIES_ELEMENT_TAG),
+);
+
 // Which property families a style's own style:family value splits into, in the order they are tried. Transcribed from LibreOffice's aPropTypes table (StyleOOoTContext.cxx), including its own choice to give a list-level style only style:list-level-properties and a data (number) style only style:text-properties.
 const PROPERTY_TYPES_BY_FAMILY: ReadonlyMap<
   string,
@@ -465,4 +470,41 @@ export function splitStyleProperties(
     });
   }
   return out;
+}
+
+// --- the write direction: ODF's family of typed style:*-properties elements -> one style:properties -----------------
+//
+// The exact inverse of splitStyleProperties above, and simpler than it in one genuine way: the split needs a container's own candidate family list to decide WHICH typed element an attribute becomes, but the merge needs no such list at all. ALL_PROPERTIES_ELEMENT_TAGS is a closed, unambiguous set -- no legitimate ODF element other than these fourteen ever carries this tag family, in any container -- so recognising "these are a style's typed properties children" is a context-free membership test, and merging them back into one style:properties needs nothing more than concatenating their attributes and children in encounter order. Order carries no ODF semantics (neither this package's own readers nor any real producer's own reader depends on attribute or child order), so it is not reconstructed to match whatever an original OpenOffice.org 1.x document might once have had.
+export function mergeStyleProperties(children: readonly XmlNode[]): {
+  readonly merged: XmlElement | undefined;
+  readonly rest: XmlNode[];
+} {
+  const attributes: Attribute[] = [];
+  const propertyChildren: XmlNode[] = [];
+  const rest: XmlNode[] = [];
+  let found = false;
+  for (const child of children) {
+    if (
+      child.type === "element" &&
+      ALL_PROPERTIES_ELEMENT_TAGS.has(child.tag)
+    ) {
+      found = true;
+      attributes.push(...child.attributes);
+      propertyChildren.push(...child.children);
+      continue;
+    }
+    rest.push(child);
+  }
+  if (!found) {
+    return { merged: undefined, rest: [...children] };
+  }
+  return {
+    merged: {
+      type: "element",
+      tag: "style:properties",
+      attributes,
+      children: propertyChildren,
+    },
+    rest,
+  };
 }
