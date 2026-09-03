@@ -192,12 +192,17 @@ describe("readPropertySetStream", () => {
     });
   });
 
-  it("throws PropertySetFormatError for a VT_LPSTR under a CodePage this reader does not decode", () => {
+  it("skips a VT_LPSTR under a CodePage this reader does not decode, rather than throwing", () => {
     const bytes = propertySetStream(FMTID_SUMMARY_INFORMATION, [
       { pid: 1, value: { type: "VT_I2", value: 932 } }, // Shift-JIS -- neither CP_WINUNICODE nor windows-1252
       { pid: 2, value: { type: "VT_LPSTR", value: "x" } },
     ]);
-    expect(() => readPropertySetStream(bytes)).toThrow(PropertySetFormatError);
+    const propertySet = readPropertySetStream(bytes);
+    expect(propertySet.properties.has(2)).toBe(false);
+    expect(propertySet.properties.get(1)).toEqual({
+      type: "VT_I2",
+      value: 932,
+    });
   });
 
   it("throws PropertySetFormatError for a ByteOrder field other than 0xFFFE", () => {
@@ -224,14 +229,40 @@ describe("readPropertySetStream", () => {
     expect(() => readPropertySetStream(bytes)).toThrow(PropertySetFormatError);
   });
 
-  it("throws PropertySetFormatError for a property type this reader does not decode", () => {
+  it("skips a property type this reader does not decode, rather than throwing", () => {
     const bytes = propertySetStream(FMTID_SUMMARY_INFORMATION, [
       { pid: 2, value: { type: "VT_I4", value: 1 } },
     ]);
     const view = new DataView(bytes.buffer);
     // The dictionary/value pair are already well-formed for VT_I4; corrupt the Type field alone to an unsupported code (VT_BOOL, 0x000B) without touching the value bytes.
     view.setUint16(48 + 8 + 8, 0x000b, true);
-    expect(() => readPropertySetStream(bytes)).toThrow(PropertySetFormatError);
+    const propertySet = readPropertySetStream(bytes);
+    expect(propertySet.properties.has(2)).toBe(false);
+  });
+
+  it("returns every decodable property when an undecodable one (e.g. a VT_CF thumbnail) sits among them, rather than aborting the whole read", () => {
+    // PIDSI_THUMBNAIL (PID 0x11) is VT_CF in a real SummaryInformation stream, a type this reader does not decode -- Word/Excel/PowerPoint write one whenever "save preview picture" is on. Built as VT_I4 (the test-support encoder has no VT_CF case) then the Type field alone is corrupted to VT_CF's real code, 0x0047, leaving PID 2's own decodable property untouched -- the exact scenario the HIGH-severity review finding names: an unsupported type must not abort a read that also carries properties this reader can decode.
+    const bytes = propertySetStream(FMTID_SUMMARY_INFORMATION, [
+      { pid: 2, value: { type: "VT_LPWSTR", value: "Joe's document" } },
+      { pid: 0x11, value: { type: "VT_I4", value: 0 } },
+      { pid: 4, value: { type: "VT_LPWSTR", value: "Joe" } },
+    ]);
+    const view = new DataView(bytes.buffer);
+    // PID 0x11 is the dictionary's second entry (index 1); read its own relativeOffset back out rather than hand-deriving the byte length of PID 2's preceding VT_LPWSTR value.
+    const HEADER_SIZE = 48;
+    const dictionaryEntryOffset = HEADER_SIZE + 8 + 1 * 8;
+    const relativeOffset = view.getUint32(dictionaryEntryOffset + 4, true);
+    view.setUint16(HEADER_SIZE + relativeOffset, 0x0047, true); // VT_CF
+    const propertySet = readPropertySetStream(bytes);
+    expect(propertySet.properties.get(2)).toEqual({
+      type: "VT_LPWSTR",
+      value: "Joe's document",
+    });
+    expect(propertySet.properties.get(4)).toEqual({
+      type: "VT_LPWSTR",
+      value: "Joe",
+    });
+    expect(propertySet.properties.has(0x11)).toBe(false);
   });
 
   it("throws PropertySetFormatError when a stream is shorter than the fixed header", () => {
