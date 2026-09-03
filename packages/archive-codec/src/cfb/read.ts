@@ -28,7 +28,7 @@ export class CompoundFileFormatError extends Error {
   }
 }
 
-// One extracted stream: its path is the slash-joined names of the storages enclosing it plus its own name, root-relative with no leading slash (a root-level stream's path is just its name -- the OLE packaging's "Package" stream reads back as 'Package').
+// One named stream: its path is the slash-joined names of the storages enclosing it plus its own name, root-relative with no leading slash (a root-level stream's path is just its name -- the OLE packaging's "Package" stream reads back as 'Package'). This is the package's compound-file vocabulary in both directions, not the reader's alone: writeCompoundFile (src/cfb/write.ts) takes the same array this returns, so re-writing what was read is a well-typed round trip rather than a translation between two shapes.
 export interface CompoundFileStream {
   readonly path: string;
   readonly bytes: Uint8Array<ArrayBuffer>;
