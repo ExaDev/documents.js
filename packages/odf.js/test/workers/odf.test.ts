@@ -9,6 +9,7 @@ import {
   readSxw,
   readSxwContent,
   writeOdtContent,
+  writeSxwContent,
   zipPackage,
   type ZipEntry,
 } from '../../src';
@@ -123,5 +124,40 @@ describe('odf.js OpenOffice.org 1.x reading under the Cloudflare Workers runtime
     const documentPackage = readSxw(pkg);
     expect(documentPackage.kind).toBe('wordprocessing');
     expect(flattenTree(documentPackage)).toEqual({ kind: 'wordprocessing', ...content });
+  });
+});
+
+// The .sxw WRITE path's own runtime check, mirroring the odt writer's above: writeSxwContent is writeOdtContent's own output run through transformToOoo1Package (src/ooo1/transform.ts), pure tree rewriting over the parsed content -- Map/Set/string operations only, no new Node-only API beyond what writeOdtContent already exercises -- but it is the check that says so rather than assumes it.
+describe('odf.js sxw writing under the Cloudflare Workers runtime', () => {
+  it('writes a real .sxw and reads it back through readSxwContent, with no Node fs, Buffer, or process', () => {
+    const document: ContentDocument = {
+      kind: 'wordprocessing',
+      metadata: { title: 'Worker written' },
+      sections: [
+        {
+          pageSize: { widthPt: 595.28, heightPt: 841.89 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            { kind: 'paragraph', headingLevel: 1, styleId: 'Heading1', runs: [{ text: 'Title' }] },
+            { kind: 'paragraph', runs: [{ text: 'plain ' }, { text: 'bold', bold: true }] },
+            {
+              kind: 'paragraph',
+              runs: [{ text: 'item' }],
+              list: { numId: 'bullet:list1', level: 0 },
+            },
+          ],
+        },
+      ],
+    };
+
+    const pkg = writeSxwContent(document);
+    expect(pkg.parts.mimetype).toBeUndefined();
+    const bytes = encodePackage(pkg);
+    expect(bytes.byteLength).toBeGreaterThan(0);
+
+    const { metadata, sections } = readSxwContent(decodePackage(bytes));
+    expect(normaliseOdtContent({ kind: 'wordprocessing', metadata, sections })).toEqual(
+      normaliseOdtContent(document),
+    );
   });
 });
