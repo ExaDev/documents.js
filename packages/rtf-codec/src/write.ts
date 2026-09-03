@@ -16,12 +16,18 @@ import {
   type ContentTable,
   type Color,
   type DocumentTree,
+  type ProvenanceChange,
+  type ProvenanceDescriptor,
   type RunConstructExtent,
   clampHeadingLevel,
   colorToRgbHex,
   flattenTree,
 } from "document-schema.js";
-import { bookmarkResidueControlWords, isBookmarkAnchor } from "./constructs";
+import {
+  bookmarkResidueControlWords,
+  dttmFromIso,
+  isBookmarkAnchor,
+} from "./constructs";
 import { base64ToBytes, bytesToHex } from "./base64";
 import {
   RtfDiagnosticCodes,
@@ -86,7 +92,11 @@ interface DocumentTables {
   readonly headingStyles: Map<number, number>;
   // Opaque numId to its \lsN index, alongside what the list actually is.
   readonly lists: Map<string, { index: number; definition: ListDefinition }>;
+  // Revision author name to the index \revauthN and its siblings carry. Index 0 is reserved for the "Unknown" placeholder every real producer's table opens with, so a minted author is always non-zero -- which is also what makes the reader's own 0-based indexing land on a real name.
+  readonly revisionAuthors: Map<string, number>;
 }
+
+const UNKNOWN_REVISION_AUTHOR = "Unknown";
 
 const DEFAULT_FONT_NAME = "Times New Roman";
 
@@ -98,6 +108,19 @@ function collectTables(document: ContentDocument): DocumentTables {
     string,
     { index: number; definition: ListDefinition }
   >();
+  const revisionAuthors = new Map<string, number>([
+    [UNKNOWN_REVISION_AUTHOR, 0],
+  ]);
+
+  const noteDescriptor = (descriptor: ConstructDescriptor): void => {
+    if (descriptor.kind !== "provenance") {
+      return;
+    }
+    const author = descriptor.author;
+    if (author !== undefined && !revisionAuthors.has(author)) {
+      revisionAuthors.set(author, revisionAuthors.size);
+    }
+  };
 
   const noteRun = (run: ContentRun): void => {
     if (run.fontFamily !== undefined && !fonts.has(run.fontFamily)) {
@@ -113,9 +136,16 @@ function collectTables(document: ContentDocument): DocumentTables {
   };
 
   const noteBlock = (block: ContentBlock): void => {
+    if (block.kind === "constructStart") {
+      noteDescriptor(block.descriptor);
+      return;
+    }
     if (block.kind === "paragraph") {
       for (const run of block.runs) {
         noteRun(run);
+      }
+      for (const extent of block.constructs ?? []) {
+        noteDescriptor(extent.descriptor);
       }
       if (block.headingLevel !== undefined) {
         const level = clampHeadingLevel(block.headingLevel);
@@ -155,7 +185,7 @@ function collectTables(document: ContentDocument): DocumentTables {
       }
     }
   }
-  return { fonts, colors, headingStyles, lists };
+  return { fonts, colors, headingStyles, lists, revisionAuthors };
 }
 
 // RTF's own three reserved characters, plus the two line breaks a writer must not emit raw inside text (a bare CR/LF is ignored by a reader, but a backslash-CR is a \par, so escaping the pair keeps text meaning text). Everything else printable-ASCII passes through; everything else at all becomes a \uN escape with a '?' fallback.
@@ -204,6 +234,36 @@ function bookmarkStartGroup(descriptor: ConstructDescriptor): string {
   }
   const residue = bookmarkResidueControlWords(descriptor);
   return `{\\*\\bkmkstart${residue} ${escapeText(descriptor.name)}}`;
+}
+
+// Each ProvenanceChange's own <chrev> spelling. formatChange is the one with no flag of its own -- "\crauthN ... Note This keyword is used to indicate formatting revisions, such as bold, italic" -- so its author control word is what states that the run carries one at all.
+const CHREV_CONTROL_WORDS: Readonly<
+  Record<ProvenanceChange, { flag: string; author: string; date: string }>
+> = {
+  insertion: { flag: "\\revised", author: "revauth", date: "revdttm" },
+  deletion: { flag: "\\deleted", author: "revauthdel", date: "revdttmdel" },
+  moveFrom: { flag: "\\mvf", author: "mvauth", date: "mvdate" },
+  moveTo: { flag: "\\mvt", author: "mvauth", date: "mvdate" },
+  formatChange: { flag: "", author: "crauth", date: "crdate" },
+};
+
+// The provenance descriptors whose half-open range covers this run index. A point extent (startRun === endRun) covers no run, so it names a boundary rather than any text and contributes no character property.
+function revisionsCovering(
+  extents: readonly RunConstructExtent[],
+  index: number,
+): ProvenanceDescriptor[] {
+  return extents
+    .filter(
+      (extent) =>
+        extent.descriptor.kind === "provenance" &&
+        extent.startRun <= index &&
+        index < extent.endRun,
+    )
+    .map((extent) => extent.descriptor)
+    .filter(
+      (descriptor): descriptor is ProvenanceDescriptor =>
+        descriptor.kind === "provenance",
+    );
 }
 
 function nameOf(descriptor: ConstructDescriptor): string {
@@ -258,6 +318,7 @@ class RtfWriter {
     this.writeColorTable();
     this.writeStyleSheet();
     this.writeListTables();
+    this.writeRevisionTable();
     this.writeInfoGroup(document);
     this.line("");
   }
@@ -340,6 +401,20 @@ class RtfWriter {
       this.raw(
         `{\\listoverride\\listid${String(1000 + entry.index)}\\listoverridecount0\\ls${String(entry.index)}}`,
       );
+    }
+    this.raw("}");
+  }
+
+  // "\*\revtbl -- This group consists of subgroups that each identify the author of a revision in the document, as in {Author1;}". Written only when a revision actually names an author, since the table with nothing but its own "Unknown" placeholder states nothing.
+  private writeRevisionTable(): void {
+    if (this.tables.revisionAuthors.size <= 1) {
+      return;
+    }
+    this.raw("{\\*\\revtbl");
+    for (const [author] of [...this.tables.revisionAuthors].sort(
+      (left, right) => left[1] - right[1],
+    )) {
+      this.raw(`{${escapeText(author)};}`);
     }
     this.raw("}");
   }
@@ -464,9 +539,12 @@ class RtfWriter {
     const bookmarks = (paragraph.constructs ?? []).filter((extent) =>
       isBookmarkAnchor(extent.descriptor),
     );
+    const revisions = (paragraph.constructs ?? []).filter(
+      (extent) => extent.descriptor.kind === "provenance",
+    );
     for (const [index, run] of paragraph.runs.entries()) {
       this.writeRunBoundaries(bookmarks, index);
-      this.writeRun(run);
+      this.writeRun(run, revisionsCovering(revisions, index));
     }
     this.writeRunBoundaries(bookmarks, paragraph.runs.length);
     if (!inTable) {
@@ -553,8 +631,12 @@ class RtfWriter {
     return out;
   }
 
-  private writeRun(run: ContentRun): void {
-    const properties = this.runProperties(run);
+  private writeRun(
+    run: ContentRun,
+    revisions: readonly ProvenanceDescriptor[] = [],
+  ): void {
+    const properties =
+      this.runProperties(run) + this.revisionProperties(revisions);
     const body = `${properties}${properties.length > 0 ? " " : ""}${escapeText(run.text)}`;
     if (run.hyperlink === undefined) {
       this.raw(`{${body}}`);
@@ -564,6 +646,34 @@ class RtfWriter {
     this.raw(
       `{\\field{\\*\\fldinst{HYPERLINK "${escapeText(run.hyperlink)}"}}{\\fldrslt{${body}}}}`,
     );
+  }
+
+  // The <chrev> control words for every revision covering this run. Each run is already written inside its own group, so the properties turn themselves off at the closing brace exactly as \b and \i do -- there is no "off" spelling to emit.
+  private revisionProperties(
+    revisions: readonly ProvenanceDescriptor[],
+  ): string {
+    let out = "";
+    for (const descriptor of revisions) {
+      const author = descriptor.author;
+      const authorIndex =
+        author === undefined
+          ? undefined
+          : this.tables.revisionAuthors.get(author);
+      const dttm =
+        descriptor.dateIso === undefined
+          ? undefined
+          : dttmFromIso(descriptor.dateIso);
+      const words = CHREV_CONTROL_WORDS[descriptor.change];
+      out += words.flag;
+      if (authorIndex !== undefined) {
+        out += `\\${words.author}${String(authorIndex)}`;
+      }
+      // A dateIso this writer cannot pack produces no control word at all: a zero DTTM is itself the claim "no time recorded", which is not the same as a date that failed to parse.
+      if (dttm !== undefined) {
+        out += `\\${words.date}${String(dttm)}`;
+      }
+    }
+    return out;
   }
 
   private runProperties(run: ContentRun): string {
