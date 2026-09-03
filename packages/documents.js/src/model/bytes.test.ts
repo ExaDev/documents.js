@@ -1,7 +1,11 @@
 import { ODF_MEDIA_TYPES, zipPackage } from "odf.js";
 import { describe, expect, it } from "vitest";
+import { writeDocContent } from "doc-codec";
+import { writeXlsContent } from "xls-codec";
+import { writePptContent } from "../ppt/write";
 import {
   CsvBytesSchema,
+  DocBytesSchema,
   DocxBytesSchema,
   MarkdownBytesSchema,
   OdgBytesSchema,
@@ -9,7 +13,9 @@ import {
   OdsBytesSchema,
   OdtBytesSchema,
   PdfBytesSchema,
+  PptBytesSchema,
   PptxBytesSchema,
+  XlsBytesSchema,
 } from "./bytes";
 
 const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
@@ -30,6 +36,66 @@ const odsBytes = odfBytes(ODF_MEDIA_TYPES.ods);
 const odpBytes = odfBytes(ODF_MEDIA_TYPES.odp);
 const odgBytes = odfBytes(ODF_MEDIA_TYPES.odg);
 
+// Real [MS-CFB] compound files, built through each legacy codec's own writer rather than hand-assembled -- the same fixture-independence convention src/convert/convert.test.ts already follows for doc/xls/ppt.
+const docBytes = writeDocContent({
+  kind: "wordprocessing",
+  metadata: {},
+  sections: [
+    {
+      pageSize: { widthPt: 612, heightPt: 792 },
+      margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+      blocks: [{ kind: "paragraph", runs: [{ text: "Hello, world." }] }],
+    },
+  ],
+});
+const xlsBytes = writeXlsContent({
+  kind: "spreadsheet",
+  metadata: {},
+  sheets: [
+    {
+      name: "Sheet1",
+      cells: [
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "Hello, world." },
+          displayText: "Hello, world.",
+        },
+      ],
+      columns: [],
+      rows: [],
+      images: [],
+      printSettings: {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 50.4 },
+        gridlines: false,
+        headers: false,
+        pageOrder: "downThenOver",
+      },
+    },
+  ],
+});
+const pptBytes = writePptContent({
+  kind: "presentation",
+  metadata: {},
+  slides: [
+    {
+      size: { widthPt: 720, heightPt: 540 },
+      notes: "",
+      shapes: [
+        {
+          frame: { xPt: 72, yPt: 36, widthPt: 360, heightPt: 180 },
+          insetLeftPt: 0,
+          insetTopPt: 0,
+          insetRightPt: 0,
+          insetBottomPt: 0,
+          blocks: [{ kind: "paragraph", runs: [{ text: "Hello, world." }] }],
+        },
+      ],
+    },
+  ],
+});
+
 describe("bytes", () => {
   it("DocxBytesSchema and PptxBytesSchema accept ZIP-signed bytes", () => {
     expect(DocxBytesSchema.parse(zipBytes)).toBe(zipBytes);
@@ -48,6 +114,34 @@ describe("bytes", () => {
   it("PdfBytesSchema rejects bytes with no %PDF- header", () => {
     expect(PdfBytesSchema.safeParse(garbage).success).toBe(false);
     expect(PdfBytesSchema.safeParse(zipBytes).success).toBe(false);
+  });
+
+  it("DocBytesSchema, XlsBytesSchema, and PptBytesSchema each accept their own real [MS-CFB] compound file", () => {
+    expect(DocBytesSchema.parse(docBytes)).toBe(docBytes);
+    expect(XlsBytesSchema.parse(xlsBytes)).toBe(xlsBytes);
+    expect(PptBytesSchema.parse(pptBytes)).toBe(pptBytes);
+  });
+
+  it("DocBytesSchema, XlsBytesSchema, and PptBytesSchema reject non-compound-file bytes", () => {
+    expect(DocBytesSchema.safeParse(garbage).success).toBe(false);
+    expect(XlsBytesSchema.safeParse(garbage).success).toBe(false);
+    expect(PptBytesSchema.safeParse(garbage).success).toBe(false);
+    // Neither a ZIP-signed docx/pptx nor a %PDF- PDF is an [MS-CFB] compound file, so all three reject both too.
+    expect(DocBytesSchema.safeParse(zipBytes).success).toBe(false);
+    expect(XlsBytesSchema.safeParse(zipBytes).success).toBe(false);
+    expect(PptBytesSchema.safeParse(zipBytes).success).toBe(false);
+    expect(DocBytesSchema.safeParse(pdfBytes).success).toBe(false);
+    expect(XlsBytesSchema.safeParse(pdfBytes).success).toBe(false);
+    expect(PptBytesSchema.safeParse(pdfBytes).success).toBe(false);
+  });
+
+  it("DocBytesSchema, XlsBytesSchema, and PptBytesSchema each reject the other two's own compound file, since each checks for a different mandated stream", () => {
+    expect(DocBytesSchema.safeParse(xlsBytes).success).toBe(false);
+    expect(DocBytesSchema.safeParse(pptBytes).success).toBe(false);
+    expect(XlsBytesSchema.safeParse(docBytes).success).toBe(false);
+    expect(XlsBytesSchema.safeParse(pptBytes).success).toBe(false);
+    expect(PptBytesSchema.safeParse(docBytes).success).toBe(false);
+    expect(PptBytesSchema.safeParse(xlsBytes).success).toBe(false);
   });
 
   it("OdtBytesSchema, OdsBytesSchema, OdpBytesSchema, and OdgBytesSchema each accept their own real media type", () => {

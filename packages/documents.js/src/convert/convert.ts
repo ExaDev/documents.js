@@ -459,6 +459,36 @@ export function rtfToPdf(
   return convertDocument("rtf", "pdf", bytes, options);
 }
 
+// doc bytes -> PDF bytes: doc has no layout engine of its own either (capability.ts's own FORMAT_CAPABILITIES.doc), so convertDocument's pathfinder resolves this the same shape as rtf above -- [doc -> docx bridge, docx -> pdf toPdf]. The reverse direction (pdfToDoc) lives in from-pdf.ts with the rest of the pdf-sourced family.
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function docToPdf(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: DocumentToPdfOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocument("doc", "pdf", bytes, options);
+}
+
+// xls bytes -> PDF bytes: xls has no layout engine of its own either, so convertDocument's pathfinder resolves this the same shape as xlsx above -- [xls -> ods bridge, ods -> pdf toPdf]. The reverse direction (pdfToXls) lives in from-pdf.ts with the rest of the pdf-sourced family.
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function xlsToPdf(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: DocumentToPdfOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocument("xls", "pdf", bytes, options);
+}
+
+// ppt bytes -> PDF bytes: ppt has no layout engine of its own either, so convertDocument's pathfinder resolves this as [ppt -> pptx bridge, pptx -> pdf toPdf] rather than a direct toPdf hop. The reverse direction (pdfToPpt) lives in from-pdf.ts with the rest of the pdf-sourced family.
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function pptToPdf(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: DocumentToPdfOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocument("ppt", "pdf", bytes, options);
+}
+
 // xlsx <-> markdown: xlsx and markdown share no ContentDocument variant (spreadsheet vs wordprocessing), so convertDocument's pathfinder resolves this as [xlsx -> ods, ods -> pdf, pdf -> markdown] -- three hops, both legs' lossiness inherited in full (the single lossiest path in the package). onDocument reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention.
 
 // Forwards to convertDocument (src/convert/composition.ts).

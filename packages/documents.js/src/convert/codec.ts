@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   CsvBytesSchema,
+  DocBytesSchema,
   DocxBytesSchema,
   MarkdownBytesSchema,
   OdgBytesSchema,
@@ -8,8 +9,10 @@ import {
   OdsBytesSchema,
   OdtBytesSchema,
   PdfBytesSchema,
+  PptBytesSchema,
   PptxBytesSchema,
   SvgBytesSchema,
+  XlsBytesSchema,
   XlsxBytesSchema,
 } from "../model/bytes";
 import { RtfBytesSchema } from "rtf-codec";
@@ -18,6 +21,7 @@ import {
   csvToOds,
   csvToPdf,
   csvToXlsx,
+  docToPdf,
   docxToMarkdown,
   docxToOdt,
   docxToPdf,
@@ -35,11 +39,13 @@ import {
   odtToDocx,
   odtToMarkdown,
   odtToPdf,
+  pptToPdf,
   pptxToOdp,
   pptxToPdf,
   rtfToPdf,
   svgToOdg,
   svgToPdf,
+  xlsToPdf,
   xlsxToCsv,
   xlsxToOds,
   xlsxToPdf,
@@ -48,15 +54,18 @@ import {
 } from "./convert";
 import {
   pdfToCsv,
+  pdfToDoc,
   pdfToDocx,
   pdfToMarkdown,
   pdfToOdg,
   pdfToOdp,
   pdfToOds,
   pdfToOdt,
+  pdfToPpt,
   pdfToPptx,
   pdfToRtf,
   pdfToSvg,
+  pdfToXls,
   pdfToXlsx,
 } from "./from-pdf";
 
@@ -101,6 +110,24 @@ export const xlsxPdfCodec = z.codec(XlsxBytesSchema, PdfBytesSchema, {
 export const rtfPdfCodec = z.codec(RtfBytesSchema, PdfBytesSchema, {
   decode: (rtfBytes) => rtfToPdf(rtfBytes),
   encode: (pdfBytes) => pdfToRtf(pdfBytes),
+});
+
+// doc bytes <-> PDF bytes: a schema-validated z.codec() pair over docToPdf/pdfToDoc (convert.ts), the same shape as rtfPdfCodec above -- doc-codec has no layout engine of its own either, so it composes a same-variant docx bridge with the docx<->pdf layout pair internally. DocBytesSchema is doc-codec's own isDocBytes wrapped as a Zod refinement (model/bytes.ts), since doc-codec exports no Zod schema of its own the way rtf-codec's RtfBytesSchema is. Still the no-options form only, and still subject to the same "not round-trip-lossless" caveat every PDF-pivot codec carries.
+export const docPdfCodec = z.codec(DocBytesSchema, PdfBytesSchema, {
+  decode: (docBytes) => docToPdf(docBytes),
+  encode: (pdfBytes) => pdfToDoc(pdfBytes),
+});
+
+// xls bytes <-> PDF bytes: a schema-validated z.codec() pair over xlsToPdf/pdfToXls (convert.ts), the same shape as xlsxPdfCodec above -- xls-codec has no layout engine of its own either, so it composes a same-variant ods bridge with the ods<->pdf layout pair internally. XlsBytesSchema is xls-codec's own isXlsFile wrapped as a Zod refinement (model/bytes.ts).
+export const xlsPdfCodec = z.codec(XlsBytesSchema, PdfBytesSchema, {
+  decode: (xlsBytes) => xlsToPdf(xlsBytes),
+  encode: (pdfBytes) => pdfToXls(pdfBytes),
+});
+
+// ppt bytes <-> PDF bytes: a schema-validated z.codec() pair over pptToPdf/pdfToPpt (convert.ts), the same shape as rtfPdfCodec/docPdfCodec above -- ppt-codec has no layout engine of its own either, so it composes a same-variant pptx bridge with the pptx<->pdf layout pair internally. PptBytesSchema has no isPptBytes-shaped export to build on (ppt-codec ships no detector of its own, unlike doc-codec/xls-codec), so model/bytes.ts builds the equivalent check locally from archive-codec's compound-file reader plus ppt-codec's own stream-name constants.
+export const pptPdfCodec = z.codec(PptBytesSchema, PdfBytesSchema, {
+  decode: (pptBytes) => pptToPdf(pptBytes),
+  encode: (pdfBytes) => pdfToPpt(pdfBytes),
 });
 
 // markdown bytes <-> PDF bytes: a schema-validated z.codec() pair over markdownToPdf/pdfToMarkdown (convert.ts), which -- unlike xlsxPdfCodec above -- DOES lay markdown out directly (markdownToPdf reuses convertWordprocessingToLayout unmodified, the same engine docxPdfCodec/odtPdfCodec above feed). Still the no-options form only, and still fully subject to the "not round-trip-lossless" caveat every PDF-pivot codec carries -- more so than any other codec in this file, in fact: pdfToMarkdown is the single lossiest conversion in the whole package (see convert.ts's own top-of-file comment and the README's Fidelity section).

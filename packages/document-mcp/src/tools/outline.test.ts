@@ -13,6 +13,9 @@ import {
   encodeMarkdownText,
   odgToSvg,
   odsToXlsx,
+  writeDocContent,
+  writePptContent,
+  writeXlsContent,
 } from "documents.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createServer } from "../server";
@@ -230,16 +233,85 @@ function buildFormatFixtures(): Record<
     return odsToXlsx(editor.toBytes());
   })();
 
+  // doc/xls/ppt have no live-view editor the way docx/odt/pptx/odp above do -- both codecs' own writers take a plain ContentDocument literal directly, matching this file's own inline-construction convention for the formats that need one.
+  const docBytes = writeDocContent({
+    kind: "wordprocessing",
+    metadata: {},
+    sections: [
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        blocks: [
+          {
+            kind: "paragraph",
+            runs: [{ text: "A paragraph of ordinary body text." }],
+          },
+        ],
+      },
+    ],
+  });
+
+  const xlsBytes = writeXlsContent({
+    kind: "spreadsheet",
+    metadata: {},
+    sheets: [
+      {
+        name: "Sheet1",
+        cells: [
+          {
+            row: 0,
+            column: 0,
+            value: { kind: "string", value: "A cell." },
+            displayText: "A cell.",
+          },
+        ],
+        columns: [],
+        rows: [],
+        images: [],
+        printSettings: {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 50.4 },
+          gridlines: false,
+          headers: false,
+          pageOrder: "downThenOver",
+        },
+      },
+    ],
+  });
+
+  const pptBytes = writePptContent({
+    kind: "presentation",
+    metadata: {},
+    slides: [
+      {
+        size: { widthPt: 720, heightPt: 540 },
+        notes: "",
+        shapes: [
+          {
+            frame: SHAPE_FRAME,
+            insetLeftPt: 0,
+            insetTopPt: 0,
+            insetRightPt: 0,
+            insetBottomPt: 0,
+            blocks: [{ kind: "paragraph", runs: [{ text: "Slide text." }] }],
+          },
+        ],
+      },
+    ],
+  });
+
   return {
     csv: {
       bytes: new TextEncoder().encode("Name,Age\nAlice,30\n"),
       kind: "spreadsheet",
     },
+    doc: { bytes: docBytes, kind: "wordprocessing" },
     docx: { bytes: docxBytes, kind: "wordprocessing" },
     odf: { bytes: odfFormulaBytes(), kind: "formula" },
     odp: { bytes: odpBytes, kind: "presentation" },
     odt: { bytes: odtBytes, kind: "wordprocessing" },
     pdf: { bytes: buildMultiPagePdf(), kind: "wordprocessing" },
+    ppt: { bytes: pptBytes, kind: "presentation" },
     pptx: { bytes: pptxBytes, kind: "presentation" },
     rtf: {
       bytes: new TextEncoder().encode(
@@ -249,6 +321,7 @@ function buildFormatFixtures(): Record<
     },
     svg: { bytes: odgToSvg(singlePageOdgBytes), kind: "drawing" },
     wpd: { bytes: wpdFixtureBytes(), kind: "wordprocessing" },
+    xls: { bytes: xlsBytes, kind: "spreadsheet" },
     xlsx: { bytes: xlsxBytes, kind: "spreadsheet" },
   };
 }

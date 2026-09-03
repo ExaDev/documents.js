@@ -166,3 +166,27 @@ export function pdfToRtf(
 ): Uint8Array<ArrayBuffer> {
   return convertDocumentFromPdf("rtf", bytes, options);
 }
+
+// pdf bytes -> doc bytes: the reverse of docToPdf (convert.ts) -- doc has no fromPdf edge of its own, so the pathfinder resolves this as [pdf -> docx fromPdf, docx -> doc bridge], the identical two-hop shape pdfToRtf above has.
+export function pdfToDoc(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: PdfToDocumentOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocumentFromPdf("doc", bytes, options);
+}
+
+// pdf bytes -> xls bytes: the reverse of xlsToPdf (convert.ts) -- the pathfinder resolves this as [pdf -> ods fromPdf, ods -> xls bridge], the identical shape pdfToXlsx above has.
+export function pdfToXls(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: PdfToDocumentOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocumentFromPdf("xls", bytes, options);
+}
+
+// pdf bytes -> ppt bytes: the reverse of pptToPdf (convert.ts) -- ppt has no fromPdf edge of its own, so the pathfinder resolves this as [pdf -> pptx fromPdf, pptx -> ppt bridge] rather than a single hop.
+export function pdfToPpt(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: PdfToDocumentOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocumentFromPdf("ppt", bytes, options);
+}

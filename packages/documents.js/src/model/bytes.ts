@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { ODF_MEDIA_TYPES } from "odf.js";
+import { isDocBytes } from "doc-codec";
+import { isXlsFile } from "xls-codec";
+import { CURRENT_USER_STREAM, POWERPOINT_DOCUMENT_STREAM } from "ppt-codec";
+import { isCompoundFile, readCompoundFile } from "archive-codec";
 
 // 'PK\x03\x04' -- the ZIP local-file-header signature (ISO/IEC 21320-1 / APPNOTE 4.3.7). Both docx and pptx are OPC packages, i.e. ZIP archives, so this is the fastest and most reliable way to reject a non-package input before any XML parsing is attempted.
 const ZIP_LOCAL_FILE_HEADER = [0x50, 0x4b, 0x03, 0x04];
@@ -165,6 +169,44 @@ export const OdgBytesSchema = odfBytesSchema("odg", [
   ODF_MEDIA_TYPES.odg,
   ODF_MEDIA_TYPES.otg,
 ]);
+
+// The three legacy binary formats (doc/xls/ppt) are each a real [MS-CFB] compound file, a genuinely stronger signature than docx/pptx/xlsx's own bare ZIP check above: a compound file's directory names its own streams, so a schema can check for the exact stream(s) [MS-DOC]/[MS-XLS]/[MS-PPT] each mandate rather than merely "this is some container". doc-codec's own isDocBytes and xls-codec's own isXlsFile already do exactly that (the "WordDocument" stream's own FIB signature; the "Workbook" stream's presence) and are reused directly rather than reimplemented, matching this file's own "don't restate a check a sibling package already exports" convention. ppt-codec exports no such detector of its own, so PptBytesSchema below builds the equivalent check locally from archive-codec's isCompoundFile/readCompoundFile plus ppt-codec's own CURRENT_USER_STREAM/POWERPOINT_DOCUMENT_STREAM name constants -- the same two streams readPptContent itself requires (src/ppt/read.ts).
+export const DocBytesSchema = z
+  .instanceof(Uint8Array)
+  .refine((bytes) => isArrayBufferBacked(bytes) && isDocBytes(bytes), {
+    message:
+      "not a valid doc file: not an [MS-CFB] compound file holding a 'WordDocument' stream with the [MS-DOC] FIB signature",
+  });
+
+export const XlsBytesSchema = z
+  .instanceof(Uint8Array)
+  .refine((bytes) => isArrayBufferBacked(bytes) && isXlsFile(bytes), {
+    message:
+      "not a valid xls file: not an [MS-CFB] compound file holding a 'Workbook' stream",
+  });
+
+function isPptBytes(bytes: Uint8Array<ArrayBuffer>): boolean {
+  if (!isCompoundFile(bytes)) {
+    return false;
+  }
+  try {
+    const streams = readCompoundFile(bytes);
+    return (
+      streams.some((stream) => stream.path === CURRENT_USER_STREAM) &&
+      streams.some((stream) => stream.path === POWERPOINT_DOCUMENT_STREAM)
+    );
+  } catch {
+    // A container too malformed to enumerate is not a workbook this schema can vouch for -- mirrors xls-codec's own isXlsFile catch clause.
+    return false;
+  }
+}
+
+export const PptBytesSchema = z
+  .instanceof(Uint8Array)
+  .refine((bytes) => isArrayBufferBacked(bytes) && isPptBytes(bytes), {
+    message:
+      "not a valid ppt file: not an [MS-CFB] compound file holding both a 'Current User' and a 'PowerPoint Document' stream",
+  });
 
 // MarkdownBytesSchema is architecturally different from every schema above: it is the one schema in this file asserting nothing about FORMAT STRUCTURE at all. Docx/pptx/xlsx check the generic ZIP local-file-header signature; PDF checks its own %PDF- magic header; odt/ods/odp/odg check ODF's own declared mimetype entry, byte for byte. Markdown is plain text with no header, no magic bytes, and no reserved byte sequence of its own -- CommonMark's own grammar has no "this is not markdown" rejection path at all (a genuinely unparseable line just becomes an ordinary paragraph), so there is no format-level check to write here, ever. The one thing actually worth validating at the bytes boundary is well-formed UTF-8, matching markdown-codec's own MarkdownBytesSchema (that package's src/codec.ts) exactly, so a malformed byte sequence is caught here, at the schema, rather than surfacing later as silently-mangled U+FFFD replacement characters deep inside readMarkdownContent's own output.
 function isWellFormedUtf8Text(bytes: Uint8Array): boolean {
