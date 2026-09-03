@@ -873,7 +873,7 @@ function readRtfDetail(
           severity: "warning",
           message:
             "a closing brace appeared with no group open; the extra brace is ignored",
-          offset: index,
+          tokenIndex: index,
         });
       }
       index += 1;

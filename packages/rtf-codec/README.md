@@ -106,7 +106,7 @@ On the way out, **every non-ASCII character leaves as `\uN`** with a one-charact
 | Groups, destinations, `{\*` ignorable destinations       | Yes — per the spec's own reader conventions                                                                                                         |
 | Control words, control symbols, `\'hh`, `\binN`          | Yes                                                                                                                                                 |
 | `\uN` / `\ucN` with ANSI fallback skipping, `\upr`/`\ud` | Yes                                                                                                                                                 |
-| Code pages                                               | `\ansi`/`\mac`/`\pc`/`\pca`, `\ansicpgN`, per-font `\cpgN`/`\fcharsetN`; 24 single-byte pages plus UTF-8                                            |
+| Code pages                                               | `\ansi`/`\mac`/`\pc`/`\pca`, `\ansicpgN`, per-font `\cpgN`/`\fcharsetN`; the Windows, OEM and Macintosh single-byte pages, plus UTF-8               |
 | `\fonttbl`                                               | Face name, family keyword, per-font code page                                                                                                       |
 | `\colortbl`                                              | RGB, including a theme colour's own literal RGB; index 0 is the auto colour                                                                         |
 | `\stylesheet`                                            | Paragraph style names and heading levels (`\outlinelevelN` or a built-in `heading N` name)                                                          |

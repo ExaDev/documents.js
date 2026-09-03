@@ -11,8 +11,8 @@ export interface RtfDiagnostic {
   readonly code: string;
   readonly severity: RtfDiagnosticSeverity;
   readonly message: string;
-  // 0-based byte offset into the input the diagnostic applies to, when the stage producing it has one to hand. A write-side diagnostic has no input offset and omits it.
-  readonly offset?: number;
+  // Where in the token stream the fault was noticed: a 0-based index into the tokens src/tokenize.ts produced, when the stage reporting it has one to hand. A token index rather than a byte offset because that is what the reader actually holds -- the tokenizer emits text in runs and does not carry each token's own input position, so a byte offset here would have to be invented. A write-side diagnostic has no input position at all and omits it.
+  readonly tokenIndex?: number;
 }
 
 export type RtfDiagnosticSink = (diagnostic: RtfDiagnostic) => void;
