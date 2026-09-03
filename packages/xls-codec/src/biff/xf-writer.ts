@@ -2,20 +2,23 @@ import { RecordBuilder } from "./builder";
 import {
   RECORD_FONT,
   RECORD_FORMAT,
+  RECORD_PALETTE,
   RECORD_STYLE,
   RECORD_XF,
 } from "./record-types";
 import { writeRecord } from "./record-writer";
 import { writeXLUnicodeString } from "./string-writer";
 import { BiffWriteError } from "./write-errors";
+import {
+  longRgbBytesOf,
+  packXfDecorationWords,
+  type XfDecorationFields,
+} from "./xf-colors";
+import type { Color } from "document-schema.js";
 
-// The formatting record family this writer emits: Font ([MS-XLS] 2.4.122), Format ([MS-XLS] 2.4.126), XF ([MS-XLS] 2.4.353) with its trailing CellXF ([MS-XLS] 2.4.353's own "Data" field, fStyle=0) or StyleXF (fStyle=1) payload, and Style ([MS-XLS] 2.4.269).
+// The formatting record family this writer emits: Font ([MS-XLS] 2.4.122), Format ([MS-XLS] 2.4.126), XF ([MS-XLS] 2.4.353) with its trailing CellXF ([MS-XLS] 2.4.353's own "Data" field, fStyle=0) or StyleXF (fStyle=1) payload, Style ([MS-XLS] 2.4.269), and Palette ([MS-XLS] 2.4.204).
 //
-// Cell decoration -- fill, borders, alignment -- is not modelled from document-schema.js's own ContentSheetCell fields: this writer's own reader does not read a cell's CellXF payload back (see xls-codec's README, "Cell decoration" under read-side gaps), so writing real values here would be unverifiable by round trip and is out of scope, matching the read side's own documented boundary. Every CellXF/StyleXF field below is instead a spec-legal, decoration-free default -- general alignment, bottom vertical alignment, no border, no fill -- which a real Excel file with a genuinely undecorated cell also carries. The two "Automatic" colour index constants below (icvFore/icvBack) are the ones a real Excel-written undecorated XF uses for a fill it does not apply.
-
-/** IcvXF's two "Automatic" special values ([MS-XLS] 2.5.161-adjacent colour-index convention): the foreground/background pair a real Excel file writes on an XF with no explicit fill. */
-const ICV_AUTOMATIC_FOREGROUND = 0x40;
-const ICV_AUTOMATIC_BACKGROUND = 0x41;
+// A cell XF's own fill/border decoration is modelled from document-schema.js's ContentSheetCell.background/borders: this writer's own reader now reads a cell's CellXF payload back (workbook/globals.ts's readCellFormat), so a real decoration round-trips -- see xls-codec's README, "Cell decoration". Alignment and per-cell fonts remain out of scope (the reader still does not read either back), so every CellXF/StyleXF field below still defaults to the same spec-legal, decoration-free values for anything writeCellXfRecord's caller does not supply: general alignment, bottom vertical alignment, no border, no fill -- exactly what a genuinely undecorated Excel-written cell also carries. The bit-level packing of the trailing payload's border/fill words lives in xf-colors.ts, shared with workbook/globals.ts's own unpacking of the identical layout on read.
 
 /** VertAlign ([MS-XLS] 2.5.339-adjacent enumeration): bottom vertical alignment, the default this package's own schema documents for an absent `verticalAlignment`. */
 const VERT_ALIGN_BOTTOM = 0x02;
@@ -44,53 +47,8 @@ function packAlignmentPrefix(): number {
   );
 }
 
-/** Packs the shared "no border" word: dgLeft/dgRight/dgTop/dgBottom = 0 (BorderStyle none), icvLeft/icvRight = 0 (unspecified, legal only alongside dg*=0), grbitDiag = 0 (no diagonal border). Identical bit layout in CellXF and StyleXF. */
-function packBorderWord(): number {
-  const dgLeft = 0;
-  const dgRight = 0;
-  const dgTop = 0;
-  const dgBottom = 0;
-  const icvLeft = 0;
-  const icvRight = 0;
-  const grbitDiag = 0;
-  return (
-    (dgLeft & 0xf) |
-    ((dgRight & 0xf) << 4) |
-    ((dgTop & 0xf) << 8) |
-    ((dgBottom & 0xf) << 12) |
-    ((icvLeft & 0x7f) << 16) |
-    ((icvRight & 0x7f) << 23) |
-    ((grbitDiag & 0x3) << 30)
-  );
-}
-
-/** Packs the shared "no diagonal, no fill pattern" word: icvTop/icvBottom/icvDiag = 0, dgDiag = 0 (no diagonal border), the shape-specific bit (fHasXFExt for CellXF, reserved2 for StyleXF) = 0, fls = 0 (no fill pattern). */
-function packFillPatternWord(): number {
-  const icvTop = 0;
-  const icvBottom = 0;
-  const icvDiag = 0;
-  const dgDiag = 0;
-  const shapeSpecificBit = 0;
-  const fls = 0;
-  return (
-    (icvTop & 0x7f) |
-    ((icvBottom & 0x7f) << 7) |
-    ((icvDiag & 0x7f) << 14) |
-    ((dgDiag & 0xf) << 21) |
-    ((shapeSpecificBit & 0x1) << 25) |
-    ((fls & 0x3f) << 26)
-  );
-}
-
-/** Packs the shared fill-colour halfword: icvFore/icvBack at the "Automatic" defaults a real undecorated XF carries, with the shape-specific trailing bits (fsxButton+reserved3 for CellXF, reserved3 for StyleXF) at 0. */
-function packFillColourWord(): number {
-  return (
-    (ICV_AUTOMATIC_FOREGROUND & 0x7f) | ((ICV_AUTOMATIC_BACKGROUND & 0x7f) << 7)
-  );
-}
-
-/** CellXF ([MS-XLS] section under XF, fStyle=0's own "Data" payload): 14 bytes -- undecorated alignment/border/fill defaults, with every fAtr* bit set so the format is explicit rather than inherited from its parent style XF. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/671c8577-901f-4215-9ebf-6f5890e5896d */
-function packCellXf(): Uint8Array<ArrayBuffer> {
+/** CellXF ([MS-XLS] section under XF, fStyle=0's own "Data" payload): 14 bytes -- alignment defaults plus whatever border/fill decoration is given (undecorated when omitted), with every fAtr* bit set so the format is explicit rather than inherited from its parent style XF. The border/fill words themselves are packed by xf-colors.ts's packXfDecorationWords, shared with workbook/globals.ts's inverse unpacking on read. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/671c8577-901f-4215-9ebf-6f5890e5896d */
+function packCellXf(decoration?: XfDecorationFields): Uint8Array<ArrayBuffer> {
   const fAtrNum = 1;
   const fAtrFnt = 1;
   const fAtrAlc = 1;
@@ -105,22 +63,24 @@ function packCellXf(): Uint8Array<ArrayBuffer> {
     ((fAtrBdr & 0x1) << 29) |
     ((fAtrPat & 0x1) << 30) |
     ((fAtrProt & 0x1) << 31);
+  const { word2, word3, word4 } = packXfDecorationWords(decoration);
   return new RecordBuilder()
     .u32(word1)
-    .u32(packBorderWord())
-    .u32(packFillPatternWord())
-    .u16(packFillColourWord())
+    .u32(word2)
+    .u32(word3)
+    .u16(word4)
     .build();
 }
 
-/** StyleXF ([MS-XLS] 2.4.353's fStyle=1 "Data" payload): 14 bytes, the same undecorated defaults with the trailing byte of word1 unused rather than carrying fAtr* flags. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/38cad019-5977-49bf-a55a-6e2e9feaca74 */
+/** StyleXF ([MS-XLS] 2.4.353's fStyle=1 "Data" payload): 14 bytes, the same undecorated defaults with the trailing byte of word1 unused rather than carrying fAtr* flags. Never carries real decoration -- the fifteen built-in cell styles this writer emits (BUILTIN_STYLES in globals-writer.ts) are templates a cell XF's own ixfParent points at, not something a cell's own decoration is written onto. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/38cad019-5977-49bf-a55a-6e2e9feaca74 */
 function packStyleXf(): Uint8Array<ArrayBuffer> {
   const word1 = packAlignmentPrefix(); // top 8 bits (the "unused" byte) stay 0
+  const { word2, word3, word4 } = packXfDecorationWords();
   return new RecordBuilder()
     .u32(word1)
-    .u32(packBorderWord())
-    .u32(packFillPatternWord())
-    .u16(packFillColourWord())
+    .u32(word2)
+    .u32(word3)
+    .u16(word4)
     .build();
 }
 
@@ -144,16 +104,17 @@ function packXfFlags(options: {
 /** ixfParent's own "no inheritance" spelling for a cell style XF ([MS-XLS] 2.4.353: "If fStyle equals 1, this field SHOULD equal 0xFFF"). */
 const STYLE_XF_NO_PARENT = 0xfff;
 
-/** Writes one cell-format XF record (fStyle=0): ifnt/ifmt as given, ixfParent pointing at the Normal cell-style XF (index 0), an undecorated CellXF payload. Twenty bytes total ([MS-XLS] 2.4.353). */
+/** Writes one cell-format XF record (fStyle=0): ifnt/ifmt as given, ixfParent pointing at the Normal cell-style XF (index 0), a CellXF payload carrying `decoration`'s own fill/border fields -- an undecorated payload (the same bytes this always wrote before decoration existed) when omitted. Twenty bytes total ([MS-XLS] 2.4.353). */
 export function writeCellXfRecord(options: {
   readonly fontIndex: number;
   readonly formatId: number;
+  readonly decoration?: XfDecorationFields;
 }): Uint8Array<ArrayBuffer> {
   const data = new RecordBuilder()
     .u16(options.fontIndex)
     .u16(options.formatId)
     .u16(packXfFlags({ fStyle: false, ixfParent: 0 }))
-    .bytes(packCellXf())
+    .bytes(packCellXf(options.decoration))
     .build();
   return writeRecord(RECORD_XF, data);
 }
@@ -240,4 +201,16 @@ export function writeFormatRecord(
     .bytes(writeXLUnicodeString(code))
     .build();
   return writeRecord(RECORD_FORMAT, data);
+}
+
+/** Palette ([MS-XLS] 2.4.204): ccv (MUST be 56) then that many LongRGB colour entries -- write.ts's own colour-interning pass decides whether a workbook needs this record at all, and hands it exactly 56 colours (icv 8 first) when it does. */
+export function writePaletteRecord(
+  colors: readonly Color[],
+): Uint8Array<ArrayBuffer> {
+  const builder = new RecordBuilder().u16(colors.length);
+  for (const color of colors) {
+    const [r, g, b, reserved] = longRgbBytesOf(color);
+    builder.u8(r).u8(g).u8(b).u8(reserved);
+  }
+  return writeRecord(RECORD_PALETTE, builder.build());
 }

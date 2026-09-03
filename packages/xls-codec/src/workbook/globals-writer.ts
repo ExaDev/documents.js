@@ -1,3 +1,5 @@
+import type { Color } from "document-schema.js";
+
 import { writeBofData } from "../biff/bof-writer";
 import { RecordBuilder } from "../biff/builder";
 import {
@@ -12,10 +14,12 @@ import {
   writeRichExtendedString,
   writeShortXLUnicodeString,
 } from "../biff/string-writer";
+import type { XfDecorationFields } from "../biff/xf-colors";
 import {
   writeCellXfRecord,
   writeFontRecord,
   writeFormatRecord,
+  writePaletteRecord,
   writeStyleRecord,
   writeStyleXfRecord,
 } from "../biff/xf-writer";
@@ -60,6 +64,12 @@ const BUILTIN_STYLES: readonly BuiltinStyle[] = [
 /** [MS-XLS] 2.1.7.20.3's own XFS production requires at least sixteen XF records before any cell can reference one: BUILTIN_STYLES.length built-in cell styles, then at least one cell XF -- the "General, no declared format" one every workbook needs unconditionally, written immediately after them. Derived from BUILTIN_STYLES's own length rather than restated as a literal, so the two can never drift apart. */
 export const GENERAL_CELL_XF_INDEX = BUILTIN_STYLES.length;
 
+/** One cell XF beyond the implicit General one at GENERAL_CELL_XF_INDEX: the number-format identifier it displays through, and -- when the cell it serves carries a background or borders -- the fill/border fields its CellXF payload packs. Undefined decoration writes the same undecorated defaults this writer always wrote before decoration existed. */
+export interface CellXfPlanEntry {
+  readonly formatId: number;
+  readonly decoration?: XfDecorationFields;
+}
+
 export interface WorkbookGlobalsPlan {
   readonly sheetNames: readonly string[];
   /** Custom number-format codes needing their own Format record, each with the identifier already assigned to it (always >= 164, [MS-XLS] 2.4.126's own custom-identifier floor). A code equal to one of the built-in table's own strings needs no Format record here -- number-format.ts's BUILTIN_NUMBER_FORMATS already covers ids 0-49 for both this package's reader and any other. */
@@ -67,12 +77,14 @@ export interface WorkbookGlobalsPlan {
     readonly id: number;
     readonly code: string;
   }[];
-  /** The formatId of every cell XF beyond the implicit General one at GENERAL_CELL_XF_INDEX, in the order their XF records are written: index GENERAL_CELL_XF_INDEX + 1 + i names formatId cellXfFormatIds[i]. */
-  readonly cellXfFormatIds: readonly number[];
+  /** Every cell XF beyond the implicit General one at GENERAL_CELL_XF_INDEX, in the order their XF records are written: index GENERAL_CELL_XF_INDEX + 1 + i is entry cellXfEntries[i]. write.ts's own cell-format interning pass assigns one entry to every distinct (number format, decoration) combination the workbook's cells actually use. */
+  readonly cellXfEntries: readonly CellXfPlanEntry[];
   /** The shared string table, in SST order -- a LabelSst cell's own isst indexes into this array. */
   readonly sharedStrings: readonly string[];
   /** SST's own cstTotal: the total number of string-cell references across the whole workbook, not just the unique count. Not read by this package's own reader (which discards the field), but a real conformant value rather than a placeholder. */
   readonly sharedStringTotalCount: number;
+  /** The workbook's own custom colour table (56 entries, icv 8 first), when write.ts's own palette-interning pass decided the workbook needs one -- undefined when every decoration colour the workbook's cells use already matches the fixed default table, in which case no Palette record is written at all and those colours resolve through the default table instead ([MS-XLS] "Icv"'s own documented fallback). */
+  readonly paletteColors?: readonly Color[];
 }
 
 export interface WorkbookGlobalsBuild {
@@ -138,8 +150,14 @@ export function buildWorkbookGlobals(
       formatId: GENERAL_FORMAT_ID,
     }),
   );
-  for (const formatId of plan.cellXfFormatIds) {
-    push(writeCellXfRecord({ fontIndex: NORMAL_FONT_INDEX, formatId }));
+  for (const entry of plan.cellXfEntries) {
+    push(
+      writeCellXfRecord({
+        fontIndex: NORMAL_FONT_INDEX,
+        formatId: entry.formatId,
+        decoration: entry.decoration,
+      }),
+    );
   }
 
   BUILTIN_STYLES.forEach((builtin, index) => {
@@ -151,6 +169,11 @@ export function buildWorkbookGlobals(
       }),
     );
   });
+
+  // [MS-XLS] 2.1.7.20.3's own FORMATTING production places Palette immediately after STYLES (Font* Format* XFS STYLES [TABLESTYLES] [Palette] [ClrtClient]) -- written only when write.ts's own palette-interning pass decided the workbook genuinely needs a custom colour table.
+  if (plan.paletteColors !== undefined) {
+    push(writePaletteRecord(plan.paletteColors));
+  }
 
   // [MS-XLS] 2.1.7.20.3's own WORKBOOKCONTENT production orders BUNDLESHEET (the BoundSheet8 entries) ahead of SHAREDSTRINGS (the SST); this writer follows that order even though its own reader -- and Excel's -- accepts either.
   const lbPlyPosOffsets: number[] = [];
