@@ -32,3 +32,25 @@ export function columnWidthToPoints(coldx: number): number {
   );
   return (pixels / PIXELS_PER_INCH) * POINTS_PER_INCH;
 }
+
+/** A Row record's own height field ([MS-XLS] 2.4.221 miyRw), in twips, rounded to the nearest whole twip and clamped to the field's own documented range (2-8192). The inverse of twipsToPoints, and exact for it: twipsToPoints(pointsToTwips(pt)) === pt for any pt this function does not clamp, since twips-per-point is an integer. */
+export function pointsToTwips(points: number): number {
+  const MIN_ROW_HEIGHT_TWIPS = 2;
+  const MAX_ROW_HEIGHT_TWIPS = 8192;
+  const twips = Math.round(points * TWIPS_PER_POINT);
+  return Math.min(Math.max(twips, MIN_ROW_HEIGHT_TWIPS), MAX_ROW_HEIGHT_TWIPS);
+}
+
+/**
+ * The inverse of columnWidthToPoints: the smallest ColInfo coldx whose own forward pixel-quantized width is at least as wide as the given points. Because columnWidthToPoints truncates to a whole pixel, no coldx reproduces an arbitrary points value exactly; this picks the smallest coldx that rounds UP to (rather than under) the requested width, so a column written from a given widthPt and read back through columnWidthToPoints never comes back narrower than what was asked for -- the same "honestly approximate" contract columnWidthToPoints's own comment already documents for the read direction.
+ *
+ * Derived directly from columnWidthToPoints's own forward formula: pixels(coldx) = floor((coldx + digitWidthAllowance) * MAX_DIGIT_WIDTH_PX / 256). Solving for the smallest coldx with pixels(coldx) >= targetPixels gives coldx = ceil(targetPixels * 256 / MAX_DIGIT_WIDTH_PX) - digitWidthAllowance.
+ */
+export function pointsToColumnWidth(points: number): number {
+  const digitWidthAllowance = Math.trunc(128 / MAX_DIGIT_WIDTH_PX);
+  const targetPixels = Math.round((points / POINTS_PER_INCH) * PIXELS_PER_INCH);
+  const coldx = Math.ceil(
+    (targetPixels * 256) / MAX_DIGIT_WIDTH_PX - digitWidthAllowance,
+  );
+  return Math.max(coldx, 0);
+}
