@@ -18,7 +18,7 @@ import {
   type Substream,
 } from "./biff/substreams";
 import { readWorkbookStream } from "./container";
-import { classifyNumberFormat } from "./number-format";
+import { classifyNumberFormat } from "excel-number-format";
 import {
   serialToIsoDate,
   serialToIsoDateTime,
