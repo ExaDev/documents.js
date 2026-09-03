@@ -37,7 +37,7 @@ Each converts one document format to and from the shared schema, built on `docum
 | [`markdown-codec`](packages/markdown-codec/README.md) | CommonMark+GFM to and from the shared content schema.                                                                                                                |
 | [`pdf-codec`](packages/pdf-codec/README.md)           | Parses arbitrary real-world PDFs and generates new ones, also depending on `byte-codec`.                                                                             |
 | [`epub-codec`](packages/epub-codec/README.md)         | Flowable EPUB 2/3 to and from the shared content schema; writes EPUB 3 only.                                                                                         |
-| [`wpd-codec`](packages/wpd-codec/README.md)           | WordPerfect 6.x-X6 (`.wpd`) to the shared content schema; read-only, and under active development.                                                                    |
+| [`wpd-codec`](packages/wpd-codec/README.md)           | WordPerfect 6.x-X6 (`.wpd`) to the shared content schema; read-only, and under active development.                                                                   |
 
 ### Conversion engine
 
