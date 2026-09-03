@@ -1140,7 +1140,8 @@ function runContentStream(
         emitPaint(operator);
         break;
       case "BT":
-        ts = defaultTextState();
+        // ISO 32000-1 9.4.1: BT resets only the text matrix and text line matrix to identity. Every other text-state parameter (font, size, char/word spacing, horizontal scaling, leading, rise) belongs to the graphics state and persists across text objects -- a full defaultTextState() reset here was silently discarding a font selected by an earlier Tf, so any text object that omits a redundant Tf (the common case for a same-font paragraph continuation) fed showTextArray/advanceThroughString a `fontResourceName: undefined` and both early-return with zero items.
+        ts = { ...ts, tm: IDENTITY_MATRIX, tlm: IDENTITY_MATRIX };
         break;
       case "Tf":
         ts.fontResourceName = asName(operands[0]);

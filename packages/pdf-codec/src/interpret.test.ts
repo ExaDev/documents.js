@@ -178,6 +178,27 @@ describe("interpretContentStream: text", () => {
       true,
     );
   });
+
+  it("keeps the font selected by an earlier Tf across a new BT with no Tf of its own", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 12 Tf 0 0 Td (First) Tj ET BT 0 -20 Td (Second) Tj ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toHaveLength(2);
+    const [first, second] = items;
+    if (first?.kind !== "text" || second?.kind !== "text") {
+      throw new Error("expected two text items");
+    }
+    expect(first.fontResourceName).toBe("F1");
+    expect(second.fontResourceName).toBe("F1");
+    expect(Array.from(second.codes)).toEqual(Array.from(textBytes("Second")));
+  });
 });
 
 describe("interpretContentStream: axis-aligned rectangles", () => {
