@@ -220,6 +220,48 @@ describe("reconstructWordprocessing: heading inference from font size", () => {
     ]);
   });
 
+  // ExaDev/documents.js#868: a heading-styled paragraph whose only content is whitespace -- an editorial spacer in a Word-authored specification, or a decorative leader drawn as a stretched space -- carries a real, large font size (a genuine visible Tj, not the empty string convertText already drops before a LayoutText exists) but no text of its own. Classifying it as a heading purely from that font size produced exactly the reported symptom: a bare '#'-'######' marker with nothing after it once markdown-codec's own '#'.repeat(level) + text renders a whitespace-only run.
+  it("does not classify a whitespace-only item as a heading, however large its font", () => {
+    const pg = page(612, 792, [
+      text({ text: "The Title", xPt: 50, yPt: 740, widthPt: 90, sizePt: 28 }),
+      text({ text: "body line one", xPt: 50, yPt: 700, widthPt: 80 }),
+      // A lone space at a heading-sized font, positioned as its own paragraph far below the body text -- the same shape a spacer/leader run takes once clustered.
+      text({ text: " ", xPt: 50, yPt: 500, widthPt: 20, sizePt: 22 }),
+      text({ text: "trailing body", xPt: 50, yPt: 460, widthPt: 80 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    // The blank paragraph survives (its whitespace run is real content to preserve), just not as a heading.
+    expect(paras.map((p) => p.styleId)).toEqual([
+      "Heading1",
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(paras.map((p) => p.headingLevel)).toEqual([
+      1,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  // A blank item's own font size must not seed a phantom heading bucket either -- it would otherwise shift a real heading's rank (a genuine Heading1 misranked to Heading2 because a spacer's own unrelated size claimed rank 1), the census-side counterpart to the per-paragraph check above. Three body lines (matching the "assigns Heading1/Heading2 by rank" fixture above) give the real 12pt body size a genuine majority over any single-occurrence size, so modeOf's own tie-break can't accidentally pick the blank spacer's or the title's size as the body size instead.
+  it("excludes a whitespace-only item's font size from the heading-size census entirely", () => {
+    const pg = page(612, 792, [
+      // A blank spacer at 40pt, well above every real heading size present -- if the census counted it, it would claim Heading1 and demote "The Title" to Heading2.
+      text({ text: " ", xPt: 50, yPt: 760, widthPt: 20, sizePt: 40 }),
+      text({ text: "The Title", xPt: 50, yPt: 740, widthPt: 90, sizePt: 28 }),
+      text({ text: "body line one", xPt: 50, yPt: 700, widthPt: 80 }),
+      text({ text: "body line two", xPt: 50, yPt: 688, widthPt: 80 }),
+      text({ text: "body line three", xPt: 50, yPt: 676, widthPt: 80 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    const title = paras.find((p) => p.runs.some((r) => r.text === "The Title"));
+    expect(title?.headingLevel).toBe(1);
+  });
+
   it("leaves body text at the modal size as an ordinary paragraph, however bold", () => {
     const pg = page(612, 792, [
       text({
