@@ -23,6 +23,8 @@ export const RECORD_XF = 0x00e0;
 export const RECORD_FONT = 0x0031;
 /** Which of the two date epochs this workbook's serials count from ([MS-XLS] 2.4.77). */
 export const RECORD_DATE1904 = 0x0022;
+/** Present only in an encrypted workbook, where every record after it is ciphertext ([MS-XLS] 2.4.117). */
+export const RECORD_FILEPASS = 0x002f;
 
 // --- Worksheet substream ---
 
