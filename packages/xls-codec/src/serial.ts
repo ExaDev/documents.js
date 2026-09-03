@@ -1,8 +1,8 @@
-// BIFF8 stores every date and time as a bare serial number -- a day count plus a fraction of a day -- with nothing in the cell itself saying it is temporal at all; that lives entirely in the number format its XF points at (see number-format.ts). This module converts one into the canonical ISO spellings document-schema.js's own ContentCellValue fixes for its three temporal variants: 'date' is YYYY-MM-DD, 'time' is a 24-hour zero-padded HH:MM:SS wall-clock time of day, and 'dateTime' is YYYY-MM-DDTHH:MM:SS.
+// BIFF8 stores every date and time as a bare serial number -- a day count plus a fraction of a day -- with nothing in the cell itself saying it is temporal at all; that lives entirely in the number format its XF points at (see number-format.ts). This module converts one into the canonical ISO spellings document-schema.js's own ContentCellValue fixes for its three temporal variants: 'date' is YYYY-MM-DD, 'time' is a 24-hour zero-padded HH:MM:SS wall-clock time of day, and 'dateTime' is YYYY-MM-DDTHH:MM:SS -- and, since the writer added in xls-codec#815, the other direction as well: isoDateToSerial/isoTimeToSerial/isoDateTimeToSerial turn one of those ISO strings back into the serial a Number record carries.
 //
-// The read direction only. ooxml.js's typed/xlsx/serial.ts additionally inverts these for its writer; this package has no write path yet, and an inverse with no caller would be untested code pretending to be a feature.
-//
-// Which epoch a workbook's serials count from is read from the file's own Date1904 record ([MS-XLS] 2.4.77) rather than assumed: getting it wrong shifts every date in the workbook by 1462 days. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/4a5e900a-0eb0-4355-8fc1-81aab8f46e8b
+// Which epoch a workbook's serials count from is read from the file's own Date1904 record ([MS-XLS] 2.4.77) rather than assumed: getting it wrong shifts every date in the workbook by 1462 days. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/4a5e900a-0eb0-4355-8fc1-81aab8f46e8b The writer always emits the 1900 system and never writes a Date1904 record: that is this reader's own default when the record is absent, so a workbook this package writes and reads back agrees with itself without needing to state the epoch explicitly.
+
+import { BiffWriteError } from "./biff/write-errors";
 
 const MS_PER_DAY = 86_400_000;
 const MS_PER_HOUR = 3_600_000;
@@ -97,4 +97,82 @@ export function serialToIsoDateTime(
   return date === undefined
     ? undefined
     : `${date}T${isoTimeOfMsWithinDay(msWithinDay)}`;
+}
+
+// --- The write direction: an ISO string back to the serial a Number record carries. ---
+
+const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ISO_TIME_PATTERN = /^(\d{2}):(\d{2}):(\d{2})$/;
+
+/** The calendar day count a real date maps to, inverting isoDateOfDayCount: below the 1900 system's phantom leap day (1900-02-29) the day count is a plain offset from 1899-12-31; on or after it, one day is added to skip over the phantom date the calendar never had. The date1904 system has no such adjustment -- 1904 genuinely was a leap year, so its serial 0 origin needs no correction. */
+function isoDateToDayCount(isoDate: string, date1904: boolean): number {
+  const match = ISO_DATE_PATTERN.exec(isoDate);
+  if (match === null) {
+    throw new BiffWriteError(
+      `date value ${JSON.stringify(isoDate)} is not an ISO 8601 calendar date (YYYY-MM-DD), which is the only spelling document-schema.js's 'date' cell value permits`,
+    );
+  }
+  const [, year, month, day] = match;
+  const utcMs = Date.UTC(Number(year), Number(month) - 1, Number(day));
+  if (date1904) {
+    return Math.round((utcMs - ORIGIN_1904_UTC_MS) / MS_PER_DAY);
+  }
+  const daysBelowPhantom = Math.round(
+    (utcMs - ORIGIN_1900_BELOW_PHANTOM_UTC_MS) / MS_PER_DAY,
+  );
+  const days =
+    daysBelowPhantom < PHANTOM_LEAP_DAY_SERIAL
+      ? daysBelowPhantom
+      : daysBelowPhantom + 1;
+  if (days < 0) {
+    // date1904 is always false here: the true branch above already returned. 1899-12-31 is therefore the only epoch this throw can ever be describing.
+    throw new BiffWriteError(
+      `date value ${JSON.stringify(isoDate)} is before the epoch a BIFF8 serial can represent (1899-12-31)`,
+    );
+  }
+  return days;
+}
+
+/** The fraction-of-a-day a wall-clock time maps to, inverting isoTimeOfMsWithinDay. Exact for any whole-second HH:MM:SS input, which is the only shape document-schema.js's 'time'/'dateTime' cell values permit. */
+function isoTimeToDayFraction(isoTime: string): number {
+  const match = ISO_TIME_PATTERN.exec(isoTime);
+  if (match === null) {
+    throw new BiffWriteError(
+      `time value ${JSON.stringify(isoTime)} is not an ISO 8601 wall-clock time (HH:MM:SS), which is the only spelling document-schema.js's 'time'/'dateTime' cell values permit`,
+    );
+  }
+  const [, hours, minutes, seconds] = match;
+  const msWithinDay =
+    Number(hours) * MS_PER_HOUR +
+    Number(minutes) * MS_PER_MINUTE +
+    Number(seconds) * MS_PER_SECOND;
+  return msWithinDay / MS_PER_DAY;
+}
+
+export function isoDateToSerial(isoDate: string, date1904: boolean): number {
+  return isoDateToDayCount(isoDate, date1904);
+}
+
+export function isoTimeToSerial(isoTime: string): number {
+  return isoTimeToDayFraction(isoTime);
+}
+
+/**
+ * A combined ISO date-time back to its serial. Accepts a trailing fractional-seconds part and/or a 'Z'/offset suffix -- document-schema.js's own wire contract permits both when the source genuinely carried one -- but a BIFF8 serial has no timezone concept at all (see the read direction's own comment above), so any offset is dropped rather than applied: the wall-clock digits are taken as written, exactly as they would be typed into Excel directly.
+ */
+export function isoDateTimeToSerial(
+  isoDateTime: string,
+  date1904: boolean,
+): number {
+  const separatorIndex = isoDateTime.indexOf("T");
+  if (separatorIndex !== 10) {
+    throw new BiffWriteError(
+      `dateTime value ${JSON.stringify(isoDateTime)} is not an ISO 8601 combined date and time (YYYY-MM-DDTHH:MM:SS), which is the only spelling document-schema.js's 'dateTime' cell value permits`,
+    );
+  }
+  const datePart = isoDateTime.slice(0, separatorIndex);
+  const timeRemainder = isoDateTime.slice(separatorIndex + 1);
+  // Drop a trailing offset ('Z', or '+HH:MM'/'-HH:MM' after the time-of-day digits) and any fractional-seconds part, keeping only the HH:MM:SS the ISO_TIME_PATTERN above expects.
+  const timePart = timeRemainder.slice(0, 8);
+  return isoDateToDayCount(datePart, date1904) + isoTimeToDayFraction(timePart);
 }

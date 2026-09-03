@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { BiffWriteError } from "./biff/write-errors";
 import {
+  isoDateTimeToSerial,
+  isoDateToSerial,
+  isoTimeToSerial,
   serialToIsoDate,
   serialToIsoDateTime,
   serialToIsoTime,
@@ -96,5 +100,103 @@ describe("serialToIsoDateTime", () => {
 
   it("refuses a serial whose date half names no real day", () => {
     expect(serialToIsoDateTime(60.5, false)).toBeUndefined();
+  });
+});
+
+// The write direction: every serialToIsoX case above inverted, so writing a date and reading it back through this package's own reader agrees with itself.
+
+describe("isoDateToSerial", () => {
+  it("writes the first day of the 1900 system as serial 1", () => {
+    expect(isoDateToSerial("1900-01-01", false)).toBe(1);
+  });
+
+  it("writes the first day of the 1904 system as serial 0", () => {
+    expect(isoDateToSerial("1904-01-01", true)).toBe(0);
+  });
+
+  it("counts correctly below the phantom leap day", () => {
+    expect(isoDateToSerial("1900-02-28", false)).toBe(59);
+  });
+
+  it("skips the phantom leap day when counting on or after it", () => {
+    // 1900-03-01 is serial 61, not 60: the phantom Feb 29 1900 has no serial of its own to land on.
+    expect(isoDateToSerial("1900-03-01", false)).toBe(61);
+  });
+
+  it("writes a modern date in the 1900 system", () => {
+    expect(isoDateToSerial("2024-01-01", false)).toBe(45292);
+  });
+
+  it("offsets the same calendar date by 1462 days in the 1904 system", () => {
+    expect(isoDateToSerial("2024-01-01", true)).toBe(45292 - 1462);
+  });
+
+  it("round-trips through serialToIsoDate for a real modern date", () => {
+    const serial = isoDateToSerial("2026-09-03", false);
+    expect(serialToIsoDate(serial, false)).toBe("2026-09-03");
+  });
+
+  it("round-trips a date below the phantom leap day", () => {
+    const serial = isoDateToSerial("1900-01-15", false);
+    expect(serialToIsoDate(serial, false)).toBe("1900-01-15");
+  });
+
+  it("refuses a date before the 1900 epoch", () => {
+    expect(() => isoDateToSerial("1899-12-01", false)).toThrow(BiffWriteError);
+  });
+
+  it("refuses a malformed date string", () => {
+    expect(() => isoDateToSerial("not-a-date", false)).toThrow(BiffWriteError);
+  });
+});
+
+describe("isoTimeToSerial", () => {
+  it("writes midnight as serial 0", () => {
+    expect(isoTimeToSerial("00:00:00")).toBe(0);
+  });
+
+  it("writes midday as a half-day fraction", () => {
+    expect(isoTimeToSerial("12:00:00")).toBe(0.5);
+  });
+
+  it("round-trips through serialToIsoTime for an arbitrary whole-second time", () => {
+    expect(serialToIsoTime(isoTimeToSerial("14:30:00"))).toBe("14:30:00");
+    expect(serialToIsoTime(isoTimeToSerial("23:59:59"))).toBe("23:59:59");
+    expect(serialToIsoTime(isoTimeToSerial("00:00:01"))).toBe("00:00:01");
+  });
+
+  it("refuses a malformed time string", () => {
+    expect(() => isoTimeToSerial("14:30")).toThrow(BiffWriteError);
+  });
+});
+
+describe("isoDateTimeToSerial", () => {
+  it("joins the date and time halves back into one serial", () => {
+    expect(isoDateTimeToSerial("2024-01-01T12:00:00", false)).toBe(45292.5);
+  });
+
+  it("round-trips through serialToIsoDateTime for a real modern date-time", () => {
+    const serial = isoDateTimeToSerial("2026-09-03T13:45:30", false);
+    expect(serialToIsoDateTime(serial, false)).toBe("2026-09-03T13:45:30");
+  });
+
+  it("drops a trailing 'Z' offset, keeping the wall-clock digits as written", () => {
+    expect(isoDateTimeToSerial("2024-01-01T12:00:00Z", false)).toBe(45292.5);
+  });
+
+  it("drops a trailing numeric offset, keeping the wall-clock digits as written", () => {
+    expect(isoDateTimeToSerial("2024-01-01T12:00:00+05:00", false)).toBe(
+      45292.5,
+    );
+  });
+
+  it("drops a fractional-seconds part", () => {
+    expect(isoDateTimeToSerial("2024-01-01T12:00:00.500", false)).toBe(45292.5);
+  });
+
+  it("refuses a string with no 'T' separator at the expected position", () => {
+    expect(() => isoDateTimeToSerial("2024-01-01 12:00:00", false)).toThrow(
+      BiffWriteError,
+    );
   });
 });
