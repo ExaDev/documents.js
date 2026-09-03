@@ -7,6 +7,7 @@
 // EVERY NON-ASCII CHARACTER LEAVES AS \uN. RTF's own advice is to emit "\uN followed by the best ANSI representation it can manage. Often a question mark is used if no reasonable ANSI character exists", and that is exactly what this writer does, with \uc1 declared once so the fallback is one character. It deliberately does NOT try to find a code page that could carry a given character as a \'hh byte: the output is then pure 7-bit ASCII whatever the input contained, which is the property that makes it safe to transmit and trivially diffable, and it costs nothing a reader can see -- a conforming reader takes \uN and discards the fallback. A character outside the Basic Multilingual Plane is emitted as its two UTF-16 code units, which is what "\uN ... represents the Unicode character value expressed as a decimal number" means for a format whose parameter is a signed 16-bit integer, and matches the spec's own instruction that "Unicode values greater than 32767 are expressed as negative numbers".
 
 import {
+  type ConstructDescriptor,
   type ContentBlock,
   type ContentDocument,
   type ContentParagraph,
@@ -15,10 +16,12 @@ import {
   type ContentTable,
   type Color,
   type DocumentTree,
+  type RunConstructExtent,
   clampHeadingLevel,
   colorToRgbHex,
   flattenTree,
 } from "document-schema.js";
+import { bookmarkResidueControlWords, isBookmarkAnchor } from "./constructs";
 import { base64ToBytes, bytesToHex } from "./base64";
 import {
   RtfDiagnosticCodes,
@@ -194,8 +197,41 @@ function escapeText(text: string): string {
   return out;
 }
 
+// The <bookstart> group: `'{\*' \bkmkstart (\bkmkcolfN? & \bkmkcollN?) #PCDATA '}'`, with the column controls "used within the \*\bkmkstart destination following the \bkmkstart control" -- which is exactly where a restored rtf residue value's own control words go, and why they precede the space that delimits the name.
+function bookmarkStartGroup(descriptor: ConstructDescriptor): string {
+  if (!isBookmarkAnchor(descriptor)) {
+    return "";
+  }
+  const residue = bookmarkResidueControlWords(descriptor);
+  return `{\\*\\bkmkstart${residue} ${escapeText(descriptor.name)}}`;
+}
+
+function nameOf(descriptor: ConstructDescriptor): string {
+  return isBookmarkAnchor(descriptor) ? descriptor.name : "";
+}
+
+// Why a given descriptor kind has no RTF spelling, stated per kind rather than as one generic sentence, because the reasons genuinely differ: two of them are format gaps this package could close and two are gaps in RTF itself.
+function describeConstructGap(descriptor: ConstructDescriptor): string {
+  switch (descriptor.kind) {
+    case "contentControl":
+      return "structured-document-tag equivalent; its own \\*\\formfield production is a narrower construct this writer does not yet mint";
+    case "provenance":
+      return "block-scoped revision mark: its <chrev> production is a character property, so a tracked change reaches RTF only as a run-level extent";
+    case "anchor":
+      return `spelling for a '${descriptor.anchorType}' anchor, whose body would need the note or annotation destination this reader does not place`;
+    case "field":
+      return "block-scoped field: a field is a character-stream construct, written from a run's own hyperlink rather than from a block marker";
+    case "link":
+      return "block-scoped link; an external target rides ContentRun.hyperlink instead";
+    default:
+      return "equivalent construct";
+  }
+}
+
 class RtfWriter {
   private out = "";
+  // One entry per open block-scoped construct, holding the bookmark name whose {\*\bkmkend ...} the matching close must write, or undefined for a construct with no RTF spelling. Tracked even for the undefined case so the two halves of a marker pair stay in step.
+  private readonly openConstructs: (string | undefined)[] = [];
 
   constructor(
     private readonly tables: DocumentTables,
@@ -384,15 +420,35 @@ class RtfWriter {
         });
         return;
       case "constructStart":
+        this.openConstruct(block.descriptor);
+        return;
       case "constructEnd":
-        this.sink({
-          code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
-          severity: "warning",
-          message: `a ${block.kind} boundary marker is dropped; this writer emits no RTF construct for the fidelity-construct vocabulary`,
-        });
+        this.closeConstruct();
         return;
       default:
         return;
+    }
+  }
+
+  // A block-scoped construct's open marker. Only a bookmark anchor has an RTF spelling; every other descriptor kind degrades, but its extent is still tracked so the matching close knows there is nothing to write for it -- a marker pair is balanced by position, and losing track of one half would strand the other.
+  private openConstruct(descriptor: ConstructDescriptor): void {
+    if (!isBookmarkAnchor(descriptor)) {
+      this.sink({
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        severity: "warning",
+        message: `a ${descriptor.kind} construct is dropped: RTF has no ${describeConstructGap(descriptor)}`,
+      });
+      this.openConstructs.push(undefined);
+      return;
+    }
+    this.openConstructs.push(descriptor.name);
+    this.line(bookmarkStartGroup(descriptor));
+  }
+
+  private closeConstruct(): void {
+    const name = this.openConstructs.pop();
+    if (name !== undefined) {
+      this.line(`{\\*\\bkmkend ${escapeText(name)}}`);
     }
   }
 
@@ -404,11 +460,37 @@ class RtfWriter {
     }
     this.raw(this.paragraphProperties(paragraph));
     this.raw(" ");
-    for (const run of paragraph.runs) {
+    // A run-scoped construct is a boundary between runs, not a property of one, so its two halves are emitted at the run positions its half-open range names. Closes at a position run before opens, matching the block-marker rule: an extent ending where another begins must not enclose it.
+    const bookmarks = (paragraph.constructs ?? []).filter((extent) =>
+      isBookmarkAnchor(extent.descriptor),
+    );
+    for (const [index, run] of paragraph.runs.entries()) {
+      this.writeRunBoundaries(bookmarks, index);
       this.writeRun(run);
     }
+    this.writeRunBoundaries(bookmarks, paragraph.runs.length);
     if (!inTable) {
       this.line("\\par");
+    }
+  }
+
+  private writeRunBoundaries(
+    extents: readonly RunConstructExtent[],
+    position: number,
+  ): void {
+    for (const extent of extents) {
+      if (extent.endRun === position && extent.startRun !== position) {
+        this.raw(`{\\*\\bkmkend ${escapeText(nameOf(extent.descriptor))}}`);
+      }
+    }
+    for (const extent of extents) {
+      if (extent.startRun === position) {
+        this.raw(bookmarkStartGroup(extent.descriptor));
+        // A point anchor -- startRun === endRun -- opens and closes at the same boundary, so its end is written here rather than waiting for a later position that never differs.
+        if (extent.endRun === position) {
+          this.raw(`{\\*\\bkmkend ${escapeText(nameOf(extent.descriptor))}}`);
+        }
+      }
     }
   }
 

@@ -101,6 +101,12 @@ describe("every read-side diagnostic code is reachable", () => {
     ).toContain(RtfDiagnosticCodes.TABLE_COLUMN_WIDTH_INVALID);
   });
 
+  it("rtf/bookmark-unpaired", () => {
+    expect(
+      readCodes(`${HEADER}\\pard x{\\*\\bkmkstart never}y\\par}`),
+    ).toContain(RtfDiagnosticCodes.BOOKMARK_UNPAIRED);
+  });
+
   it("rtf/section-break-unrepresented", () => {
     expect(
       readCodes(`${HEADER}\\pard A\\par\\sect\\sectd\\sbkcol\\pard B\\par}`),
@@ -120,8 +126,13 @@ describe("every write-side diagnostic code is reachable", () => {
       writeCodes(
         wordprocessing([
           {
+            // A bookmark anchor is written as a real {\*\bkmkstart ...} pair now, so the fixture for the unrepresented tier names a kind RTF genuinely has no spelling for.
             kind: "constructStart",
-            descriptor: { kind: "anchor", anchorType: "bookmark", name: "b" },
+            descriptor: {
+              kind: "contentControl",
+              controlType: "richText",
+              tag: "T",
+            },
           },
           { kind: "constructEnd" },
         ]),
