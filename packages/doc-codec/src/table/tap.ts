@@ -1,12 +1,14 @@
 import { readInt16LE, readUint16LE, readUint8 } from "../bytes";
 import { SGC, type Prl } from "../prop/sprm";
 
-// Table row properties (TAP), [MS-DOC] 2.4.3 (Overview of Tables) and 2.6.4 (Table Properties) -- the row-ending mark's own grpprl carries sgc-5 (table) sprms alongside the ordinary sgc-1 (paragraph) sprms pap.ts already folds. Of the roughly seventy table sprms 2.6.4 names, this reader acts on exactly three: sprmTDefTable, which alone carries the row's own column boundaries and every physical cell's horizontal/vertical merge state (via TC80.tcgrf -- [MS-DOC] 2.9.341's TC80, 2.9.339's TCGRF); sprmTMerge, an ItcFirstLim range this package's own writer additionally emits for a horizontal merge because TC80.tcgrf.horzMerge alone -- though genuinely spec-conformant -- was verified against a real, independent [MS-DOC] implementation (LibreOffice) not to be honoured for horizontal merging (its own vertMerge from the identical TC80 array was), so a real producer's own choice of mechanism is read here too, folded on top of whatever sprmTDefTable already established; and sprmTDyaRowHeight, the row's own height. Every other sgc-5 sprm -- borders, shading, table style, absolute position, cell padding, and the rest -- is a genuine TAP layer this package does not implement; see the README's own scope note for what that leaves unread.
+// Table row properties (TAP), [MS-DOC] 2.4.3 (Overview of Tables) and 2.6.4 (Table Properties) -- the row-ending mark's own grpprl carries sgc-5 (table) sprms alongside the ordinary sgc-1 (paragraph) sprms pap.ts already folds. Of the roughly seventy table sprms 2.6.4 names, this reader acts on exactly four: sprmTDefTable, which alone carries the row's own column boundaries and every physical cell's horizontal/vertical merge state (via TC80.tcgrf -- [MS-DOC] 2.9.341's TC80, 2.9.339's TCGRF); sprmTMerge, an ItcFirstLim range this package's own writer additionally emits for a horizontal merge because TC80.tcgrf.horzMerge alone -- though genuinely spec-conformant -- was verified against a real, independent [MS-DOC] implementation (LibreOffice) not to be honoured for horizontal merging (its own vertMerge from the identical TC80 array was), so a real producer's own choice of mechanism is read here too, folded on top of whatever sprmTDefTable already established; sprmTVertMerge, the incremental per-cell equivalent for a vertical merge (this package's own writer states a vertical merge only through TC80.tcgrf, but a real producer may equally state it incrementally, the same asymmetry sprmTMerge exists to cover on the horizontal side); and sprmTDyaRowHeight, the row's own height. Every other sgc-5 sprm -- borders, shading, table style, absolute position, cell padding, and the rest -- is a genuine TAP layer this package does not implement; see the README's own scope note for what that leaves unread.
 
 const SPRM_T_DEF_TABLE = 0xd608;
 const SPRM_T_DYA_ROW_HEIGHT = 0x9407;
 /** sprmTMerge: an ItcFirstLim naming a range of cells to horizontally merge, the first cell becoming the anchor -- the mechanism a real Word producer actually uses for a horizontal merge (see tap-write.ts's own note on why this reader also honours it, not only TC80.tcgrf.horzMerge). */
 const SPRM_T_MERGE = 0x5624;
+/** sprmTVertMerge (0xD62B): a VertMergeOperand naming one cell (itc) and its own VerticalMergeFlag, the incremental per-cell equivalent of sprmTMerge for a vertical merge. */
+const SPRM_T_VERT_MERGE = 0xd62b;
 
 const TWIPS_PER_POINT = 20;
 /** TC80's own fixed size, [MS-DOC] 2.9.341: tcgrf (2) + wWidth (2) + brcTop/brcLeft/brcBottom/brcRight (4 each). */
@@ -91,6 +93,21 @@ export function applyTableSprms(
               vertMerge: cell.vertMerge,
             };
           }),
+        };
+        break;
+      }
+      case SPRM_T_VERT_MERGE: {
+        // VertMergeOperand: cb (MUST be 2, not read here since operandSize already used it to size the operand), itc (the one cell this Prl names), vertMergeFlags (VerticalMergeFlag -- fvmClear 0, fvmMerge 1, fvmRestart 3). Applies on top of whatever sprmTDefTable established, exactly like sprmTMerge; a definition-less grpprl has nothing to fold onto.
+        if (into.definition === undefined) break;
+        const itc = readUint8(prl.operand, 1);
+        const vertMergeFlags = readUint8(prl.operand, 2);
+        into.definition = {
+          columnBoundariesTwips: into.definition.columnBoundariesTwips,
+          cells: into.definition.cells.map((cell, index) =>
+            index === itc
+              ? { horzMerge: cell.horzMerge, vertMerge: vertMergeFlags }
+              : cell,
+          ),
         };
         break;
       }
