@@ -498,6 +498,26 @@ describe("writeXlsContent", () => {
       ).toBe(false);
       expect(readXlsContent(bytes).metadata).toEqual({});
     });
+
+    it("throws a BiffWriteError, not a raw RangeError, for a malformed createdIso", () => {
+      const input: XlsContentDocument = {
+        ...document([
+          sheet("Sheet1", [cell(0, 0, { kind: "number", value: 1 })]),
+        ]),
+        metadata: { createdIso: "not-a-real-date" },
+      };
+      expect(() => writeXlsContent(input)).toThrow(BiffWriteError);
+    });
+
+    it("throws a BiffWriteError, not a raw RangeError, for a malformed modifiedIso", () => {
+      const input: XlsContentDocument = {
+        ...document([
+          sheet("Sheet1", [cell(0, 0, { kind: "number", value: 1 })]),
+        ]),
+        metadata: { modifiedIso: "not-a-real-date" },
+      };
+      expect(() => writeXlsContent(input)).toThrow(BiffWriteError);
+    });
   });
 });
 
