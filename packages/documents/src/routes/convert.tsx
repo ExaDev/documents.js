@@ -54,7 +54,7 @@ function isSheetFormat(format: string | null): boolean {
 }
 
 function isWordProcessingFormat(format: string | null): boolean {
-  return format === "docx" || format === "odt";
+  return format === "docx" || format === "odt" || format === "rtf";
 }
 
 // svg reads as a drawing-kind ContentDocument (readSvgContent), so it previews through the same pages/shapes/vectors renderer as odg.
