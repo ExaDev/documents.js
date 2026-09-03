@@ -242,7 +242,7 @@ importers:
         specifier: ^5.5.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^6.3.5
+        specifier: ^6.3.6
         version: link:../documents.js
       ink:
         specifier: ^7.1.1
@@ -319,7 +319,7 @@ importers:
         specifier: ^26.1.2
         version: 26.2.0
       documents.js:
-        specifier: ^6.3.5
+        specifier: ^6.3.6
         version: link:../documents.js
       eslint:
         specifier: ^10.8.0
@@ -355,7 +355,7 @@ importers:
         specifier: ^3.2.2
         version: link:../document-outline.js
       documents.js:
-        specifier: ^6.3.5
+        specifier: ^6.3.6
         version: link:../documents.js
       zod:
         specifier: ^4.2.0
@@ -541,7 +541,7 @@ importers:
         specifier: ^5.5.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^6.3.5
+        specifier: ^6.3.6
         version: link:../documents.js
       markdown-codec:
         specifier: ^6.1.4
