@@ -13,7 +13,9 @@
 import {
   assembleTree,
   type Alignment,
+  type AnchorDescriptor,
   type Color,
+  type ConstructDescriptor,
   type ContentBlock,
   type ContentDocument,
   type ContentImageBlock,
@@ -27,7 +29,9 @@ import {
   type LayoutMetadata,
   type Margins,
   type PageSize,
+  type RunConstructExtent,
 } from "document-schema.js";
+import { bookmarkAnchorDescriptor } from "./constructs";
 import { bytesToBase64, hexToBytes } from "./base64";
 import { appendBytes, asciiStringFromBytes, rtfBytesFromLatin1 } from "./bytes";
 import { decodeCodepageBytes } from "./codepage";
@@ -73,7 +77,9 @@ type DestinationKind =
   | "picture" // hex or binary picture payload
   | "fieldInstruction" // a field's instruction text, parsed rather than shown
   | "listText" // the flat rendering of a list number, which a numbering-aware reader must ignore
-  | "unicodeWrapper"; // \upr, whose ANSI half is discarded and whose \ud half is read
+  | "unicodeWrapper" // \upr, whose ANSI half is discarded and whose \ud half is read
+  | "bookmarkStart" // {\*\bkmkstart ...}, whose text is the bookmark's own name
+  | "bookmarkEnd"; // {\*\bkmkend ...}, likewise
 
 const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   // Transparent wrappers whose content is ordinary body flow.
@@ -110,8 +116,9 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["atndate", "skip"],
   ["atnparent", "skip"],
   ["atnicn", "skip"],
-  ["bkmkstart", "skip"],
-  ["bkmkend", "skip"],
+  // The bookmark halves, whose #PCDATA is the name the two are matched by (RTF 1.9.1, "Bookmarks").
+  ["bkmkstart", "bookmarkStart"],
+  ["bkmkend", "bookmarkEnd"],
   ["object", "skip"],
   ["objdata", "skip"],
   ["objclass", "skip"],
@@ -283,6 +290,13 @@ interface FieldState {
   instruction: string;
 }
 
+// One {\*\bkmkstart ...} or {\*\bkmkend ...} group under construction: its #PCDATA name, plus the start half's optional table-column range.
+interface BookmarkState {
+  name: string;
+  columnFirst: number | undefined;
+  columnLast: number | undefined;
+}
+
 interface GroupState {
   destination: DestinationKind;
   uc: number;
@@ -290,6 +304,7 @@ interface GroupState {
   para: ParagraphState;
   field: FieldState | undefined;
   picture: PictureState | undefined;
+  bookmark: BookmarkState | undefined;
   // Whether this group is a \upr wrapper's own child that must be discarded (the ANSI half). Set on the wrapper; consulted when a child group opens.
   inUnicodeWrapper: boolean;
 }
@@ -333,6 +348,7 @@ function cloneGroupState(state: GroupState): GroupState {
     para: { ...state.para },
     field: state.field,
     picture: state.picture,
+    bookmark: state.bookmark,
     inUnicodeWrapper: state.inUnicodeWrapper,
   };
 }
@@ -411,6 +427,56 @@ function skipUnicodeFallback(
   return { index, textOffset };
 }
 
+// A bookmark start held open until its end arrives, at which point the pair's own scope decides its encoding. `blockIndex` is filled in when the paragraph the start sits in takes its place in a block list, and stays undefined for a pair that opens and closes inside one paragraph.
+interface OpenBookmark {
+  readonly descriptor: AnchorDescriptor;
+  readonly paragraphSerial: number;
+  readonly runIndex: number;
+  readonly inTable: boolean;
+  blockIndex: number | undefined;
+}
+
+// A construct spanning whole blocks of one list, before its marker pair is spliced in. Half-open, matching RunConstructExtent's own convention: blocks startIndex..endIndex-1 are the extent.
+interface BlockConstructExtent {
+  readonly descriptor: ConstructDescriptor;
+  readonly startIndex: number;
+  readonly endIndex: number;
+}
+
+// Splices each extent's constructStart/constructEnd pair into one block list, the flat form's own encoding of a block-scoped construct. Outermost first at a shared boundary -- longer extents open earlier and close later -- so bracket matching re-derives the same nesting document-schema.js's decompose() will promote back into groups.
+function insertConstructMarkers(
+  blocks: readonly ContentBlock[],
+  extents: readonly BlockConstructExtent[],
+): ContentBlock[] {
+  if (extents.length === 0) {
+    return [...blocks];
+  }
+  const ordered = [...extents].sort(
+    (left, right) =>
+      left.startIndex - right.startIndex || right.endIndex - left.endIndex,
+  );
+  const closing = [...ordered].reverse();
+  const out: ContentBlock[] = [];
+  for (let index = 0; index <= blocks.length; index += 1) {
+    // Closes first, then opens, so an extent ending where another begins does not enclose it -- and closes run innermost-first (the reverse of the outermost-first open order), which is the only sequence that leaves the brackets balanced.
+    for (const extent of closing) {
+      if (extent.endIndex === index) {
+        out.push({ kind: "constructEnd" });
+      }
+    }
+    for (const extent of ordered) {
+      if (extent.startIndex === index) {
+        out.push({ kind: "constructStart", descriptor: extent.descriptor });
+      }
+    }
+    const block = blocks[index];
+    if (block !== undefined) {
+      out.push(block);
+    }
+  }
+  return out;
+}
+
 class ContentBuilder {
   private readonly sections: ContentSection[] = [];
   private blocks: ContentBlock[] = [];
@@ -424,11 +490,65 @@ class ContentBuilder {
   private cellBlocks: ContentBlock[] = [];
   private pendingCellRights: number[] = [];
   private rowLeftTwips = 0;
+  // Bookmark bookkeeping. A bookmark's two halves are matched by name and may bracket a sub-sequence of one paragraph's runs or a run of whole paragraphs, and document-schema.js gives those two scopes two different encodings -- a RunConstructExtent on the paragraph, or a constructStart/constructEnd marker pair in the block list. Which one applies is not knowable when the start is seen, only when its end arrives, so a start is held open here and resolved then.
+  private paragraphSerial = 0;
+  private readonly openBookmarks = new Map<string, OpenBookmark>();
+  // Extents whose two halves landed in different paragraphs of the same block list, waiting for that list to be finalised. Two lists, because a table cell's blocks and a section's blocks are separate bracket scopes and a pair may not straddle them.
+  private sectionBlockExtents: BlockConstructExtent[] = [];
+  private cellBlockExtents: BlockConstructExtent[] = [];
+  private pendingRunConstructs: RunConstructExtent[] = [];
+  // Bookmarks whose end half arrived in the paragraph currently accumulating, having started in an earlier one -- resolvable only once that paragraph's own block index is known.
+  private closingBookmarks: OpenBookmark[] = [];
 
   constructor(
     private readonly header: RtfHeader,
     private readonly sink: RtfDiagnosticSink,
   ) {}
+
+  // "{\*\bkmkstart ...}" -- flushing first so the bookmark's boundary is a run boundary, which is what makes the extent expressible at all.
+  startBookmark(bookmark: BookmarkState, para: ParagraphState): void {
+    this.flushRun();
+    const name = bookmark.name;
+    if (name.length === 0) {
+      return;
+    }
+    this.openBookmarks.set(name, {
+      descriptor: bookmarkAnchorDescriptor(
+        name,
+        bookmark.columnFirst === undefined && bookmark.columnLast === undefined
+          ? undefined
+          : { first: bookmark.columnFirst, last: bookmark.columnLast },
+      ),
+      paragraphSerial: this.paragraphSerial,
+      runIndex: this.runs.length,
+      inTable: para.inTable,
+      blockIndex: undefined,
+    });
+  }
+
+  // "{\*\bkmkend ...}". "Each bookmark start should have a matching bookmark end; however, the bookmark start and the bookmark end may be in any order" -- an end naming a bookmark no start opened is therefore reported rather than treated as an error, since the pairing is by name and not by nesting.
+  endBookmark(name: string): void {
+    this.flushRun();
+    const open = this.openBookmarks.get(name);
+    if (open === undefined) {
+      this.sink({
+        code: RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+        severity: "warning",
+        message: `a \\bkmkend named '${name}' has no matching \\bkmkstart, so no anchor construct is produced for it`,
+      });
+      return;
+    }
+    this.openBookmarks.delete(name);
+    if (open.paragraphSerial === this.paragraphSerial) {
+      this.pendingRunConstructs.push({
+        descriptor: open.descriptor,
+        startRun: open.runIndex,
+        endRun: this.runs.length,
+      });
+      return;
+    }
+    this.closingBookmarks.push(open);
+  }
 
   appendText(
     text: string,
@@ -474,8 +594,65 @@ class ContentBuilder {
     if (!para.inTable) {
       this.closeTable();
     }
+    const blockIndex = target.length;
     target.push(this.buildParagraph(para));
     this.runs = [];
+    this.resolveBookmarkPositions(para, blockIndex);
+    this.paragraphSerial += 1;
+  }
+
+  // Once a paragraph has taken its place in a block list, every bookmark that opened inside it learns that index (so a pair closing later knows where to bracket from), and every pair whose end landed in it becomes a block extent. Both are deferred to here rather than recorded at the marker, because closeTable() above can push a table between the marker and the paragraph and shift the index the marker would have guessed.
+  private resolveBookmarkPositions(
+    para: ParagraphState,
+    blockIndex: number,
+  ): void {
+    for (const open of this.openBookmarks.values()) {
+      if (
+        open.blockIndex === undefined &&
+        open.paragraphSerial === this.paragraphSerial
+      ) {
+        open.blockIndex = blockIndex;
+      }
+    }
+    this.flushClosingBookmarks(para.inTable, blockIndex + 1);
+  }
+
+  // Turns every bookmark whose end half has arrived into a block extent ending at `endIndex`. Called once per closed paragraph, and again when a block list is finalised -- a bookmark whose {\*\bkmkend ...} follows the list's last \par has no later paragraph to be resolved against, so without the second call it would silently vanish.
+  private flushClosingBookmarks(inTable: boolean, endIndex: number): void {
+    if (this.closingBookmarks.length === 0) {
+      return;
+    }
+    const target = inTable ? this.cellBlockExtents : this.sectionBlockExtents;
+    for (const closing of this.closingBookmarks) {
+      if (closing.inTable !== inTable) {
+        // The pair straddles a table cell's wall, which document-schema.js states as a ratified drop rather than a shape to repair: "each block list is its own bracket scope and cross-list pairing is ids again".
+        this.sink({
+          code: RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+          severity: "warning",
+          message: `the bookmark '${closing.descriptor.name}' spans a table cell boundary; a construct extent cannot straddle two block lists, so no anchor construct is produced for it`,
+        });
+        continue;
+      }
+      target.push({
+        descriptor: closing.descriptor,
+        // A start with no block index of its own opened after the last paragraph of its own scope closed, so the extent covers only the block the end sits in.
+        startIndex: closing.blockIndex ?? Math.max(0, endIndex - 1),
+        endIndex,
+      });
+    }
+    this.closingBookmarks = [];
+  }
+
+  // The run-scoped extents this paragraph carries, in document order by where each starts, dropping any whose range does not name runs this paragraph actually has -- the well-formedness bound document-schema.js's own findRunConstructFault states (0 <= startRun <= endRun <= runs.length) and deliberately does not enforce in the schema.
+  private takeRunConstructs(): RunConstructExtent[] {
+    const extents = this.pendingRunConstructs.filter(
+      (extent) => extent.endRun <= this.runs.length,
+    );
+    this.pendingRunConstructs = [];
+    return extents.sort(
+      (left, right) =>
+        left.startRun - right.startRun || left.endRun - right.endRun,
+    );
   }
 
   private buildParagraph(para: ParagraphState): ContentParagraph {
@@ -487,7 +664,12 @@ class ContentBuilder {
       para.outlineLevel === undefined
         ? style?.headingLevel
         : para.outlineLevel + 1;
-    const paragraph: ContentParagraph = { kind: "paragraph", runs: this.runs };
+    const constructs = this.takeRunConstructs();
+    const paragraph: ContentParagraph = {
+      kind: "paragraph",
+      runs: this.runs,
+      ...(constructs.length === 0 ? {} : { constructs }),
+    };
     const withStyle =
       style?.name === undefined || style.name.length === 0
         ? paragraph
@@ -563,8 +745,12 @@ class ContentBuilder {
 
   endCell(para: ParagraphState): void {
     this.endParagraph(para, false);
-    this.rowCells.push({ blocks: this.cellBlocks });
+    this.flushClosingBookmarks(true, this.cellBlocks.length);
+    this.rowCells.push({
+      blocks: insertConstructMarkers(this.cellBlocks, this.cellBlockExtents),
+    });
     this.cellBlocks = [];
+    this.cellBlockExtents = [];
   }
 
   endRow(para: ParagraphState): void {
@@ -636,7 +822,15 @@ class ContentBuilder {
   endSection(section: SectionState, para: ParagraphState): void {
     this.endParagraph(para, false);
     this.closeTable();
-    if (this.blocks.length === 0 && this.sections.length > 0) {
+    this.flushClosingBookmarks(false, this.blocks.length);
+    this.reportUnclosedBookmarks();
+    const blocks = insertConstructMarkers(
+      this.blocks,
+      this.sectionBlockExtents,
+    );
+    this.sectionBlockExtents = [];
+    if (blocks.length === 0 && this.sections.length > 0) {
+      this.blocks = [];
       return;
     }
     this.sections.push({
@@ -644,9 +838,21 @@ class ContentBuilder {
       ...(section.breakType === undefined
         ? {}
         : { breakType: section.breakType }),
-      blocks: this.blocks,
+      blocks,
     });
     this.blocks = [];
+  }
+
+  // A section's block list is the outermost bracket scope this reader builds, so a bookmark still open when one ends never closes at all. The spec requires that "each bookmark start should have a matching bookmark end"; one that has none names an extent with no end, which neither encoding can state, so it is reported and dropped rather than silently extended to the end of the document.
+  private reportUnclosedBookmarks(): void {
+    for (const open of this.openBookmarks.values()) {
+      this.sink({
+        code: RtfDiagnosticCodes.BOOKMARK_UNPAIRED,
+        severity: "warning",
+        message: `the bookmark '${open.descriptor.name}' has no matching \\bkmkend within its own block flow, so no anchor construct is produced for it`,
+      });
+    }
+    this.openBookmarks.clear();
   }
 
   finish(
@@ -832,6 +1038,7 @@ function readRtfDetail(
     para: defaultParagraphState(),
     field: undefined,
     picture: undefined,
+    bookmark: undefined,
     inUnicodeWrapper: false,
   };
   const stack: GroupState[] = [root];
@@ -869,6 +1076,16 @@ function readRtfDetail(
     }
     if (state.destination === "fieldInstruction" && state.field !== undefined) {
       state.field.instruction += text;
+      return;
+    }
+    if (
+      (state.destination === "bookmarkStart" ||
+        state.destination === "bookmarkEnd") &&
+      state.bookmark !== undefined
+    ) {
+      // The bookmark's own #PCDATA is its name, and the two halves are "matched with the bookmark tag".
+      state.bookmark.name += text;
+      return;
     }
     // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText" and "unicodeWrapper" discard.
   };
@@ -934,6 +1151,13 @@ function readRtfDetail(
         if (kind === "picture") {
           child.picture = defaultPictureState();
         }
+        if (kind === "bookmarkStart" || kind === "bookmarkEnd") {
+          child.bookmark = {
+            name: "",
+            columnFirst: undefined,
+            columnLast: undefined,
+          };
+        }
         index = head.contentStart;
       } else {
         index += 1;
@@ -950,6 +1174,18 @@ function readRtfDetail(
         const image = buildPicture(state.picture, sink);
         if (image !== undefined) {
           builder.addBlock(image);
+        }
+      }
+      if (state.bookmark !== undefined) {
+        // The name is complete only now: it is the destination's own text, so the closing brace is the first point at which the whole of it has been read.
+        const bookmark = {
+          ...state.bookmark,
+          name: state.bookmark.name.trim(),
+        };
+        if (state.destination === "bookmarkStart") {
+          builder.startBookmark(bookmark, state.para);
+        } else if (state.destination === "bookmarkEnd") {
+          builder.endBookmark(bookmark.name);
         }
       }
       if (stack.length > 1) {
@@ -1345,6 +1581,16 @@ function applyControlWord(
   const picture = state.picture;
   if (state.destination === "picture" && picture !== undefined) {
     applyPictureControlWord(name, param, picture);
+    return;
+  }
+  const bookmark = state.bookmark;
+  if (bookmark !== undefined && state.destination === "bookmarkStart") {
+    // "\bkmkcolfN is used to denote the first column of a table covered by a bookmark ... \bkmkcollN is used to denote the last column. ... These controls are used within the \*\bkmkstart destination following the \bkmkstart control." Nothing else inside a bookmark destination means anything to this reader: its content is a name, not formatted text, so a stray character or paragraph word there is ignored rather than applied to the surrounding run.
+    if (name === "bkmkcolf") bookmark.columnFirst = param;
+    else if (name === "bkmkcoll") bookmark.columnLast = param;
+    return;
+  }
+  if (state.destination === "bookmarkEnd") {
     return;
   }
   if (applyCharacterControlWord(name, param, state, header)) {
