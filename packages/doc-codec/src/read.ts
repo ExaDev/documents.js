@@ -110,6 +110,7 @@ export function readDocContent(
     chpxTable,
     papxTable,
     styles,
+    characterProperties: new Map(),
   });
 
   return {
@@ -130,6 +131,8 @@ interface ReadContext {
   readonly chpxTable: PropertyBinTable;
   readonly papxTable: PropertyBinTable;
   readonly styles: StyleSheet | undefined;
+  // Character properties already folded out of one Chpx, keyed by that Chpx's own position and length in the WordDocument stream. It belongs to the whole read rather than to one paragraph because a Chpx routinely spans many paragraphs -- a document in one font is one exception covering all of it -- so a per-paragraph cache would re-parse the same grpprl once per paragraph and never hit.
+  readonly characterProperties: Map<string, CharacterProperties>;
 }
 
 // Splits the logical text stream into paragraphs at the marks [MS-DOC] 2.4.2 names as paragraph ends, and each paragraph into runs at the boundaries of the character-formatting exceptions covering it.
@@ -251,7 +254,6 @@ function buildRuns(
   context: ReadContext,
 ): ContentRun[] {
   const runs: ContentRun[] = [];
-  const resolved = new Map<string, CharacterProperties>();
   let currentKey: string | undefined;
   let currentText = "";
   let currentProperties: CharacterProperties = {};
@@ -301,13 +303,13 @@ function buildRuns(
     if (key !== currentKey) {
       flush();
       currentKey = key;
-      let properties = resolved.get(key);
+      let properties = context.characterProperties.get(key);
       if (properties === undefined) {
         properties = {};
         if (grpprl !== undefined) {
           applyCharacterSprms(readGrpprl(grpprl), properties);
         }
-        resolved.set(key, properties);
+        context.characterProperties.set(key, properties);
       }
       currentProperties = properties;
     }
