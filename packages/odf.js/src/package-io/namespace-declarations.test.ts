@@ -4,7 +4,11 @@ import type {
   ContentDocument,
   ContentShape,
 } from "document-schema.js";
-import { PAGE_SIZE_A4, SLIDE_SIZE_WIDESCREEN } from "document-schema.js";
+import {
+  PAGE_SIZE_A4,
+  SLIDE_SIZE_WIDESCREEN,
+  rgbHexToColor,
+} from "document-schema.js";
 import type { Package } from "../model/package";
 import type { XmlElement, XmlNode } from "../model/node";
 import { rootElement } from "../xml/query";
@@ -122,8 +126,14 @@ const TABLE_BLOCK = {
         {
           blocks: [{ kind: "paragraph", runs: [{ text: "Merged" }] }],
           colSpan: 2,
-          background: "#DDEEFF",
-          borders: { top: { style: "solid", widthPt: 1, color: "#112233" } },
+          background: rgbHexToColor("#DDEEFF"),
+          borders: {
+            top: {
+              style: "solid",
+              widthPt: 1,
+              color: rgbHexToColor("#112233"),
+            },
+          },
         },
       ],
     },
@@ -180,11 +190,15 @@ const SPREADSHEET: ContentDocument = {
           column: 0,
           value: { kind: "string", value: "Header" },
           displayText: "Header",
-          background: "#FFEECC",
+          background: rgbHexToColor("#FFEECC"),
           alignment: "center",
           verticalAlignment: "middle",
           borders: {
-            bottom: { style: "double", widthPt: 2, color: "#334455" },
+            bottom: {
+              style: "double",
+              widthPt: 2,
+              color: rgbHexToColor("#334455"),
+            },
           },
           colSpan: 2,
         },
