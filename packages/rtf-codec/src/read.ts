@@ -133,6 +133,44 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["fname", "skip"],
 ]);
 
+// Destinations whose content is deliberately skipped WITHOUT a diagnostic, because nothing a caller could act on is actually lost by skipping them: each either duplicates information this reader already took from somewhere else, or is a sub-part of a destination that reports on its own behalf. Warning about these would bury the drops that do matter under noise a real Word document generates on every paragraph.
+//
+//  - \pn/\pnseclvl are Word 6/95 paragraph numbering, superseded by the \lsN/\ilvlN this reader does read.
+//  - \nonshppict is by definition the copy Word itself will not read ("Specifies that Word 97 through Word 2002 has written a {\pict destination that it will not read on input"), sitting beside the \*\shppict this reader does take.
+//  - \falt, \panose and \fname are <fontinfo> sub-productions the header parser already consumed.
+//  - \atn*, \objclass/\objname/\objdata and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct.
+//  - The footnote and endnote separators are page furniture with no content of their own, and \xe/\tc/\tcn are index and table-of-contents entry markers whose text is derivable from the document they mark.
+const SILENT_SKIP_DESTINATIONS: ReadonlySet<string> = new Set([
+  "pn",
+  "pnseclvl",
+  "nonshppict",
+  "falt",
+  "panose",
+  "fname",
+  "atnid",
+  "atnauthor",
+  "atnref",
+  "atndate",
+  "atnparent",
+  "atnicn",
+  "objclass",
+  "objname",
+  "objdata",
+  "shpinst",
+  "shptxt",
+  "ftnsep",
+  "ftnsepc",
+  "ftncn",
+  "aftnsep",
+  "aftnsepc",
+  "aftncn",
+  "template",
+  "comment",
+  "xe",
+  "tc",
+  "tcn",
+]);
+
 // The <spec> production's own characters -- "Special Characters" in the specification -- as the text each one contributes. A control word not in this table and not otherwise handled is ignored, which is what the spec requires of any unrecognised control word.
 const SPECIAL_CHARACTER_TEXT: ReadonlyMap<string, string> = new Map([
   ["tab", "\t"],
@@ -816,7 +854,10 @@ function readRtfDetail(
             severity: "info",
             message: `the ignorable destination \\${head.destination} is not recognised and its content is discarded, as the specification requires`,
           });
-        } else if (known === "skip") {
+        } else if (
+          known === "skip" &&
+          !SILENT_SKIP_DESTINATIONS.has(head.destination)
+        ) {
           // A destination this reader recognises and still discards: a note, an annotation, page furniture, an embedded object. Reported rather than dropped silently, because a reader that says nothing about a construct it decided not to place is indistinguishable from one that never saw it -- and in a format whose readers are REQUIRED to ignore what they do not recognise, that distinction is the only thing a caller has.
           sink({
             code: RtfDiagnosticCodes.CONTENT_DESTINATION_SKIPPED,

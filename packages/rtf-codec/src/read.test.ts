@@ -529,6 +529,21 @@ describe("fields and destinations", () => {
     ).toBe(false);
   });
 
+  it("stays silent about a legacy destination that duplicates what it already read", () => {
+    // {\*\pn ...} is Word 6/95 paragraph numbering, superseded by the \lsN/\ilvlN this reader takes, and a real Word document carries one per numbered paragraph -- reporting it would bury the drops that matter.
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\pntext 1.\\tab}{\\*\\pn\\pnlvlbody\\pnstart1\\pndec}Item\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.CONTENT_DESTINATION_SKIPPED,
+      ),
+    ).toBe(false);
+  });
+
   it("reads on past an unbalanced closing brace and reports it", () => {
     const { diagnostics } = readRtfContent(
       bytes(`${HEADER}\\pard text\\par}}`),
