@@ -49,12 +49,25 @@ const ARABIC_LEVEL_TEXT = "\\'02\\'00.";
 // The document code page the writer declares. cp1252 is what \ansi itself means in practice and what every consumer handles; nothing depends on it beyond the ASCII range, since the writer emits no byte above 0x7F.
 const OUTPUT_CODEPAGE = 1252;
 
+// The inverse of the reader's own SECTION_BREAK_TYPES. `nextPage` is deliberately absent rather than mapped to \sbkpage: \sbkpage is RTF's own default, so restating it would emit a control word carrying no information -- exactly the reason ContentSection.breakType spells that case as an absent key.
+const SECTION_BREAK_CONTROL_WORDS: ReadonlyMap<string, string> = new Map([
+  ["continuous", "\\sbknone"],
+  ["evenPage", "\\sbkeven"],
+  ["oddPage", "\\sbkodd"],
+]);
+
 const ALIGNMENT_CONTROL_WORDS: ReadonlyMap<string, string> = new Map([
   ["left", "\\ql"],
   ["center", "\\qc"],
   ["right", "\\qr"],
   ["justify", "\\qj"],
 ]);
+
+// The one arm of ContentDocument's discriminated union RTF can express -- named once rather than re-narrowed at each site, since writeRtfContent throws RtfUnsupportedDocumentKindError for every other kind before a writer is constructed at all.
+type WordprocessingDocument = Extract<
+  ContentDocument,
+  { kind: "wordprocessing" }
+>;
 
 interface ListDefinition {
   readonly type: RtfListType;
@@ -202,8 +215,9 @@ class RtfWriter {
     return this.out;
   }
 
-  writeHeader(document: ContentDocument): void {
+  writeHeader(document: WordprocessingDocument): void {
     this.raw(`{\\rtf1\\ansi\\ansicpg${String(OUTPUT_CODEPAGE)}\\deff0\\uc1`);
+    this.writeDocumentGeometry(document);
     this.writeFontTable();
     this.writeColorTable();
     this.writeStyleSheet();
@@ -294,7 +308,7 @@ class RtfWriter {
     this.raw("}");
   }
 
-  private writeInfoGroup(document: ContentDocument): void {
+  private writeInfoGroup(document: WordprocessingDocument): void {
     const { title, author, subject, keywords } = document.metadata;
     const fields: string[] = [];
     if (title !== undefined) fields.push(`{\\title ${escapeText(title)}}`);
@@ -309,17 +323,35 @@ class RtfWriter {
     }
   }
 
+  // The document-level page geometry, stated once in the header from the first section's own. RTF states geometry twice -- \paperwN/\marglN for the document, \pgwsxnN/\marglsxnN per section (RTF 1.9.1, "Document Formatting Properties" and "Section Formatting Properties") -- and a reader that understands neither the section family nor multiple sections still lays the document out on the right paper this way.
+  writeDocumentGeometry(document: WordprocessingDocument): void {
+    const first = document.sections[0];
+    if (first === undefined) {
+      return;
+    }
+    this.raw(
+      `\\paperw${String(pointsToTwips(first.pageSize.widthPt))}` +
+        `\\paperh${String(pointsToTwips(first.pageSize.heightPt))}` +
+        `\\margl${String(pointsToTwips(first.margins.leftPt))}` +
+        `\\margr${String(pointsToTwips(first.margins.rightPt))}` +
+        `\\margt${String(pointsToTwips(first.margins.topPt))}` +
+        `\\margb${String(pointsToTwips(first.margins.bottomPt))}`,
+    );
+  }
+
   writeSection(section: ContentSection, isFirst: boolean): void {
     if (!isFirst) {
+      // "\sect End of section and paragraph." The break kind belongs to the section it starts, so it is written after the \sect that opens it, alongside the rest of that section's <secfmt>.
       this.line("\\sect");
     }
     this.line(
-      `\\sectd\\paperw${String(pointsToTwips(section.pageSize.widthPt))}` +
-        `\\paperh${String(pointsToTwips(section.pageSize.heightPt))}` +
-        `\\margl${String(pointsToTwips(section.margins.leftPt))}` +
-        `\\margr${String(pointsToTwips(section.margins.rightPt))}` +
-        `\\margt${String(pointsToTwips(section.margins.topPt))}` +
-        `\\margb${String(pointsToTwips(section.margins.bottomPt))}`,
+      `\\sectd${SECTION_BREAK_CONTROL_WORDS.get(section.breakType ?? "") ?? ""}` +
+        `\\pgwsxn${String(pointsToTwips(section.pageSize.widthPt))}` +
+        `\\pghsxn${String(pointsToTwips(section.pageSize.heightPt))}` +
+        `\\marglsxn${String(pointsToTwips(section.margins.leftPt))}` +
+        `\\margrsxn${String(pointsToTwips(section.margins.rightPt))}` +
+        `\\margtsxn${String(pointsToTwips(section.margins.topPt))}` +
+        `\\margbsxn${String(pointsToTwips(section.margins.bottomPt))}`,
     );
     this.writeBlocks(section.blocks);
   }

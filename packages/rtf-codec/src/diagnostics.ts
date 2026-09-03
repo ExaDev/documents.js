@@ -34,6 +34,7 @@ export const RtfDiagnosticCodes = {
   TABLE_ROW_WITHOUT_DEFINITION: "rtf/table-row-without-definition",
   TABLE_COLUMN_WIDTH_INVALID: "rtf/table-column-width-invalid",
   NESTED_TABLE_FLATTENED: "rtf/nested-table-flattened",
+  SECTION_BREAK_UNREPRESENTED: "rtf/section-break-unrepresented",
   // Write side: a ContentDocument fact RTF's own vocabulary cannot state, or that this writer does not yet state.
   CONSTRUCT_UNREPRESENTED: "rtf/construct-unrepresented",
   EMBEDDED_OBJECT_DROPPED: "rtf/embedded-object-dropped",
