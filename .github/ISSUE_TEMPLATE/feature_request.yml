@@ -26,6 +26,7 @@ body:
         - odf.js
         - ooxml.js
         - pdf-codec
+        - xls-codec
     validations:
       required: true
 

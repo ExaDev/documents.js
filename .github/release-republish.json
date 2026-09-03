@@ -44,5 +44,9 @@
   "pdf-codec": {
     "githubPackages": "pdf-codec",
     "aliases": ["pdf-codec.js", "pdf-parser.js"]
+  },
+  "xls-codec": {
+    "githubPackages": "xls-codec",
+    "aliases": []
   }
 }
