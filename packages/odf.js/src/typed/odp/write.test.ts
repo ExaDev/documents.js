@@ -464,3 +464,36 @@ describe("writeOdpContent: speaker notes", () => {
     expect(paragraphs).toHaveLength(2);
   });
 });
+
+// ContentShape.paintOrder -> draw:z-index, the one spelling ODF has for a stacking order independent of document position, and the one typed/draw/shapes.ts's own paintOrderKey already reads back. See typed/draw/write-shapes.ts's odfZIndexOf for why a paintOrder ODF cannot spell writes no attribute at all rather than a rounded approximation.
+describe("writeOdpContent: shape paint order", () => {
+  it("writes a shape's paintOrder as draw:z-index", () => {
+    const pkg = writeOdpContent(
+      documentOf([slide([shape({ paintOrder: 7 }), shape({ paintOrder: 2 })])]),
+    );
+    const frames = childrenWithTag(pagesOf(pkg)[0]!, "draw:frame");
+    expect(frames.map((frame) => attrValue(frame, "draw:z-index"))).toEqual([
+      "7",
+      "2",
+    ]);
+  });
+
+  it("writes no draw:z-index at all for a shape with no paintOrder, leaving the reader's own document-encounter order to say it", () => {
+    const pkg = writeOdpContent(documentOf([slide([shape()])]));
+    const frame = childrenWithTag(pagesOf(pkg)[0]!, "draw:frame")[0]!;
+    expect(attrValue(frame, "draw:z-index")).toBeUndefined();
+  });
+
+  it("writes no draw:z-index for a paintOrder ODF's own xsd:nonNegativeInteger cannot spell, rather than rounding it onto a neighbouring shape's order", () => {
+    const pkg = writeOdpContent(
+      documentOf([
+        slide([shape({ paintOrder: 1.5 }), shape({ paintOrder: -1 })]),
+      ]),
+    );
+    const frames = childrenWithTag(pagesOf(pkg)[0]!, "draw:frame");
+    expect(frames.map((frame) => attrValue(frame, "draw:z-index"))).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+});
