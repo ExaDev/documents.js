@@ -61,17 +61,21 @@ function readTdefTableOperand(operand: Uint8Array): TableRowDefinition {
   return { columnBoundariesTwips, cells };
 }
 
-// Folds a row-ending mark's own grpprl into its TAP, the same last-Prl-wins convention pap.ts's applyParagraphSprms uses for paragraph sprms.
+// Folds a row-ending mark's own grpprl into its TAP, the same last-Prl-wins convention pap.ts's applyParagraphSprms uses for paragraph sprms. sprmTDefTable is resolved in its own first pass, before sprmTMerge/sprmTVertMerge are folded on top in a second: neither means anything until a column layout exists to fold it onto, and nothing in [MS-DOC] guarantees a real producer's own row mark writes them in any particular relative order within the grpprl, so the fold genuinely does not depend on which comes first rather than merely claiming not to.
 export function applyTableSprms(
   prls: readonly Prl[],
   into: TableRowProperties,
 ): TableRowProperties {
   for (const prl of prls) {
+    if (prl.sprm.sgc === SGC.table && prl.sprm.value === SPRM_T_DEF_TABLE) {
+      into.definition = readTdefTableOperand(prl.operand);
+    }
+  }
+  for (const prl of prls) {
     if (prl.sprm.sgc !== SGC.table) continue;
     switch (prl.sprm.value) {
       case SPRM_T_DEF_TABLE:
-        into.definition = readTdefTableOperand(prl.operand);
-        break;
+        break; // Already resolved above.
       case SPRM_T_DYA_ROW_HEIGHT: {
         // YAS: positive is "at least", negative is "exact" (the absolute value in either case); the shared schema's heightPt carries no such distinction, so both fold to the same plain height.
         const dyaRowHeight = readInt16LE(prl.operand, 0);
@@ -80,7 +84,7 @@ export function applyTableSprms(
         break;
       }
       case SPRM_T_MERGE: {
-        // Applies on top of whatever sprmTDefTable already established (this reader's own writer always orders sprmTMerge after sprmTDefTable, and the fold here honours that same last-Prl-wins precedence regardless of order): the first cell in [itcFirst, itcLim) becomes the merge's anchor, every following cell in the range a continuation.
+        // Applies on top of whatever sprmTDefTable established: the first cell in [itcFirst, itcLim) becomes the merge's anchor, every following cell in the range a continuation. Absent a definition at all (no sprmTDefTable anywhere in this grpprl), there is nothing to fold onto.
         if (into.definition === undefined) break;
         const itcFirst = readUint8(prl.operand, 0);
         const itcLim = readUint8(prl.operand, 1);
