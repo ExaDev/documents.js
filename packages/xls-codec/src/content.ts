@@ -216,7 +216,14 @@ function mapCell(
   cell: RawCell,
   globals: WorkbookGlobals,
 ): ContentSheetCell | undefined {
-  if (cell.value.kind === "blank" && !hasDecoration(globals, cell.xfIndex)) {
+  // Resolved before the blank check, because whether a blank cell is worth carrying is exactly the question of whether these two find anything. Resolved rather than read off the XF's raw fields, so a decoration this reader declines to express -- a fill pattern beyond solid, an unrecognised BorderStyle token, an icv with no fixed RGB value -- counts as none here too.
+  const background = backgroundOf(globals, cell.xfIndex);
+  const borders = bordersOf(globals, cell.xfIndex);
+  if (
+    cell.value.kind === "blank" &&
+    background === undefined &&
+    borders === undefined
+  ) {
     return undefined;
   }
   const formatCode = formatCodeOf(globals, cell.xfIndex);
@@ -233,23 +240,13 @@ function mapCell(
   if (cell.formula !== undefined) {
     mapped.formula = cell.formula;
   }
-  const background = backgroundOf(globals, cell.xfIndex);
   if (background !== undefined) {
     mapped.background = background;
   }
-  const borders = bordersOf(globals, cell.xfIndex);
   if (borders !== undefined) {
     mapped.borders = borders;
   }
   return mapped;
-}
-
-/** Whether an XF resolves to any decoration this reader can express -- a background, or a border on at least one side. Asked of a Blank/MulBlank record's own XF, since a blank cell is worth carrying only when its formatting is something to show; asked through backgroundOf/bordersOf rather than off the raw fields, so a decoration those two decline to resolve (a non-solid fill pattern, an unrecognised BorderStyle token, an icv with no fixed RGB value) counts as no decoration here too. */
-function hasDecoration(globals: WorkbookGlobals, xfIndex: number): boolean {
-  return (
-    backgroundOf(globals, xfIndex) !== undefined ||
-    bordersOf(globals, xfIndex) !== undefined
-  );
 }
 
 /**
