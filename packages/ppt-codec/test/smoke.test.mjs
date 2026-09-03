@@ -19,9 +19,7 @@ const BARREL_FUNCTIONS = [
   "readTextBody",
   "buildParagraphs",
   "masterUnitsToPoints",
-  "summaryInformationToLayoutMetadata",
   "layoutMetadataToSummaryInformation",
-  "hasSummaryInformationFields",
 ];
 const BARREL_CONSTANTS = [
   "RECORD_HEADER_SIZE",
@@ -62,7 +60,7 @@ describe("dist/ deep imports resolve for every advertised module, in both builds
     { path: "../dist/read.js", exports: ["readPpt", "readPptContent"] },
     {
       path: "../dist/metadata.js",
-      exports: ["summaryInformationToLayoutMetadata", "layoutMetadataToSummaryInformation", "hasSummaryInformationFields"],
+      exports: ["layoutMetadataToSummaryInformation"],
     },
     { path: "../dist/content.js", exports: ["buildParagraphs"] },
     { path: "../dist/units.js", exports: ["masterUnitsToPoints"] },

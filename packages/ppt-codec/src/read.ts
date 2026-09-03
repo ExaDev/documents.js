@@ -1,4 +1,8 @@
-import { readCompoundFile, readSummaryInformation } from "archive-codec";
+import {
+  readCompoundFile,
+  readSummaryInformation,
+  summaryInformationToLayoutMetadata,
+} from "archive-codec";
 import {
   type ContentBlock,
   type ContentDocument,
@@ -10,7 +14,6 @@ import {
   assembleTree,
 } from "document-schema.js";
 import { buildParagraphs } from "./content";
-import { summaryInformationToLayoutMetadata } from "./metadata";
 import { readDocumentAtom } from "./document/document-atom";
 import { readFontNames } from "./document/fonts";
 import {

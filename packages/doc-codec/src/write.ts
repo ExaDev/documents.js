@@ -3,7 +3,7 @@ import {
   writeCompoundFile,
   writeSummaryInformationStream,
 } from "archive-codec";
-import type { ContentDocument, ContentParagraph } from "document-schema.js";
+import type { ContentDocument } from "document-schema.js";
 import { SUMMARY_INFORMATION_STREAM, WORD_DOCUMENT_STREAM } from "./detect";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { buildFib } from "./fib/write";
