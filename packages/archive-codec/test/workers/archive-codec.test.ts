@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   ArchiveWalkLimitError,
   CompoundFileFormatError,
+  CompoundFileWriteError,
   detectArchiveFormat,
   isCompoundFile,
   isZipArchive,
   readCompoundFile,
   readOlePackage,
   unzipPackage,
+  writeCompoundFile,
   zipPackage,
   walkArchive,
 } from '../../src';
@@ -81,10 +83,31 @@ describe('archive-codec under the Cloudflare Workers runtime', () => {
     expect(unwrapped.fileBytes).toEqual(fileBytes);
   });
 
+  it('writes a compound file and reads it back inside the isolate', () => {
+    // The writer is the same kind of pure integer-and-DataView work over one allocation the reader is -- one Uint8Array, one DataView, no Buffer and no fs -- so it belongs to this package's Worker-isomorphic half too. Both allocation paths run here: 'Current User' is under the 4096-byte cutoff so it lands in the mini stream, 'PowerPoint Document' above it so it takes FAT-chained sectors, and a nested storage covers the directory tree's second level.
+    const currentUser = encode('a small stream, mini-FAT resident');
+    const document = new Uint8Array(9000).fill(0x50);
+    const built = writeCompoundFile([
+      { path: 'PowerPoint Document', bytes: document },
+      { path: 'Current User', bytes: currentUser },
+      { path: 'ObjectPool/Package', bytes: encode('nested') },
+    ]);
+    expect(isCompoundFile(built)).toBe(true);
+    expect(detectArchiveFormat(built)).toBe('cfb');
+    const streams = readCompoundFile(built);
+    expect(streams.map((s) => s.path).sort()).toEqual(['Current User', 'ObjectPool/Package', 'PowerPoint Document']);
+    expect(streams.find((s) => s.path === 'Current User')?.bytes).toEqual(currentUser);
+    expect(streams.find((s) => s.path === 'PowerPoint Document')?.bytes).toEqual(document);
+  });
+
+  it('throws the named write error inside the isolate for a request that cannot be written', () => {
+    expect(() => writeCompoundFile([{ path: 'bad:name', bytes: encode('x') }])).toThrow(CompoundFileWriteError);
+  });
+
   it('throws the named compound-file error inside the isolate for corrupt structure', () => {
     const bytes = compoundFile([{ path: 'A', bytes: encode('x'.repeat(4500)) }]);
     const view = new DataView(bytes.buffer);
     view.setUint32(512 + 2 * 4, 2, true); // the stream's first data sector points at itself: a cyclic FAT chain
-    expect(() => readCompoundFile(bytes)).toThrowError(CompoundFileFormatError);
+    expect(() => readCompoundFile(bytes)).toThrow(CompoundFileFormatError);
   });
 });
