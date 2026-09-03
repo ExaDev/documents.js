@@ -556,6 +556,28 @@ describe("fields and destinations", () => {
   });
 });
 
+describe("byte runs larger than an argument list", () => {
+  // A single paragraph whose text is one uninterrupted byte run far past the argument-count ceiling a spread call has (V8 throws RangeError somewhere around 65k-125k arguments). Bare CR/LF does not break a run -- the tokenizer skips those bytes and keeps accumulating -- so a real long paragraph reaches this size easily, and nothing smaller than a fixture this size catches it.
+  const LONG_RUN_LENGTH = 300_000;
+
+  it("reads a text run far longer than a spread call could carry", () => {
+    const long = "a".repeat(LONG_RUN_LENGTH);
+    const paragraph = paragraphsOf(`${HEADER}\\pard ${long}\\par}`)[0];
+    expect(paragraph?.runs.map((run) => run.text).join("")).toHaveLength(
+      LONG_RUN_LENGTH,
+    );
+  });
+
+  it("reads a picture payload far longer than a spread call could carry", () => {
+    // A PNG header followed by enough filler hex to push the payload past the same ceiling; only its size matters here, not its decodability.
+    const hex = `89504e470d0a1a0a${"00".repeat(LONG_RUN_LENGTH / 2)}`;
+    const image = blocksOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720 ${hex}}\\par}`,
+    ).find((block): block is ContentImageBlock => block.kind === "image");
+    expect(image?.base64.startsWith("iVBORw0KGgo")).toBe(true);
+  });
+});
+
 describe("the tree-form entry point", () => {
   it("assembles the same content into a DocumentTree whose root is a wordprocessing package", () => {
     const { documentPackage } = readRtf(
