@@ -1,6 +1,5 @@
 import { readCompoundFile } from "archive-codec";
 import type {
-  ContentBlock,
   ContentDocument,
   ContentParagraph,
   ContentRun,
@@ -14,9 +13,10 @@ import { parseFib, tableStreamName, type Fib } from "./fib/fib";
 import { applyCharacterSprms, type CharacterProperties } from "./prop/chp";
 import { PropertyBinTable } from "./prop/fkp";
 import { applyParagraphSprms, type ParagraphProperties } from "./prop/pap";
-import { readGrpprl } from "./prop/sprm";
+import { readGrpprl, type Prl } from "./prop/sprm";
 import { parseFontTable } from "./style/fonts";
 import { headingLevelFromIstd, parseStsh, type StyleSheet } from "./style/stsh";
+import { assembleBlocks } from "./table/read";
 import { readTextRange } from "./text/characters";
 import { parseClx } from "./text/piece-table";
 import {
@@ -24,13 +24,14 @@ import {
   FIELD_END,
   FIELD_SEPARATOR,
   LINE_BREAK,
+  PARAGRAPH_MARK,
   endsParagraph,
   isAnchorOnly,
 } from "./text/special";
 
-// The top-level read: a .doc's bytes to a ContentDocument. Every step below is one of [MS-DOC]'s own algorithms, in the order the specification chains them -- the compound-file container gives the WordDocument and Table streams, the FIB gives the offsets, the piece table turns character positions into bytes, and the two bin tables turn byte offsets into formatting.
+// The top-level read: a .doc's bytes to a ContentDocument. Every step below is one of [MS-DOC]'s own algorithms, in the order the specification chains them -- the compound-file container gives the WordDocument and Table streams, the FIB gives the offsets, the piece table turns character positions into bytes, and the two bin tables turn byte offsets into formatting. readParagraphs itself only ever produces flat ParagraphEntry values (one per paragraph/cell/row mark, whatever its own table depth); table/read.ts's assembleBlocks is what folds a contiguous run of table-depth paragraphs into a real ContentTable, so this module carries no table-specific logic of its own.
 //
-// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no tables, no images, no footnotes/headers/endnotes, no section geometry, no numbering definitions, no style-inherited formatting, no writing, and no decryption. Each of those is a genuine layer of the format, and each is absent rather than approximated.
+// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images, no footnotes/headers/endnotes, no section geometry, no numbering definitions, no style-inherited formatting, and no decryption. Each of those is a genuine layer of the format, and each is absent rather than approximated. Tables are read, but only at depth 1 -- a table nested inside a table cell is refused (table/read.ts) rather than mis-read.
 
 /** The page geometry every section is given, because this reader does not yet read a document's own. US Letter with one-inch margins is Word's own default for a new document; a document that states otherwise is not yet consulted, so this is a placeholder the schema requires rather than a fact read from the file. */
 const DEFAULT_PAGE_SIZE: PageSize = { widthPt: 612, heightPt: 792 };
@@ -118,13 +119,14 @@ export function readDocContent(
   // The main document is the first subdocument: it starts at character position 0 and runs for ccpText characters, with the footnote, header, comment, endnote and textbox subdocuments following it in the order FibRgLw97 declares them. Only the main document is converted here; the rest are left for the subdocument support the README's scope section describes as absent.
   const range = readTextRange(wordDocument, pieceTable, 0, fib.ccpText);
 
-  const blocks = readParagraphs(range.text, range.fcs, {
+  const entries = readParagraphs(range.text, range.fcs, {
     chpxTable,
     papxTable,
     styles,
     fonts,
     characterProperties: new Map(),
   });
+  const blocks = assembleBlocks(entries);
 
   return {
     kind: "wordprocessing",
@@ -150,13 +152,22 @@ interface ReadContext {
   readonly characterProperties: Map<string, CharacterProperties>;
 }
 
+/** One paragraph/cell/row-ending mark, still flat -- table/read.ts's assembleBlocks is what folds a run of these into a real ContentTable. `properties` and `grpprl` are carried alongside the already-built `paragraph` because table grouping needs sprmPFInTable/sprmPFTtp/sprmPItap (properties) and, on a row's own mark, its table-defining sgc-5 sprms (grpprl) -- neither of which survives onto a plain ContentParagraph. */
+export interface ParagraphEntry {
+  readonly paragraph: ContentParagraph;
+  readonly properties: ParagraphProperties;
+  readonly grpprl: readonly Prl[];
+  /** The character that terminated this paragraph in the text stream: PARAGRAPH_MARK, CELL_MARK, or SECTION_MARK. */
+  readonly terminator: number;
+}
+
 // Splits the logical text stream into paragraphs at the marks [MS-DOC] 2.4.2 names as paragraph ends, and each paragraph into runs at the boundaries of the character-formatting exceptions covering it.
 function readParagraphs(
   text: string,
   fcs: readonly number[],
   context: ReadContext,
-): ContentBlock[] {
-  const blocks: ContentBlock[] = [];
+): ParagraphEntry[] {
+  const entries: ParagraphEntry[] = [];
   let start = 0;
   for (let index = 0; index < text.length; index += 1) {
     const code = text.charCodeAt(index);
@@ -168,17 +179,18 @@ function readParagraphs(
         `character ${index} has no byte offset, so its paragraph's properties cannot be located`,
       );
     }
-    blocks.push(
+    entries.push(
       buildParagraph(
         text.slice(start, index),
         fcs.slice(start, index),
         markFc,
+        code,
         context,
       ),
     );
     start = index + 1;
   }
-  // A document whose last character is not a paragraph mark is malformed by [MS-DOC]'s own account, but its trailing text is real and the honest thing is to keep it rather than drop content on a technicality. Its properties are located from its first character instead of a mark it does not have.
+  // A document whose last character is not a paragraph mark is malformed by [MS-DOC]'s own account, but its trailing text is real and the honest thing is to keep it rather than drop content on a technicality. Its properties are located from its first character instead of a mark it does not have; PARAGRAPH_MARK stands in for the terminator this trailing text does not have.
   if (start < text.length) {
     const firstFc = fcs[start];
     if (firstFc === undefined) {
@@ -186,32 +198,45 @@ function readParagraphs(
         `character ${start} has no byte offset, so the trailing paragraph's properties cannot be located`,
       );
     }
-    blocks.push(
-      buildParagraph(text.slice(start), fcs.slice(start), firstFc, context),
+    entries.push(
+      buildParagraph(
+        text.slice(start),
+        fcs.slice(start),
+        firstFc,
+        PARAGRAPH_MARK,
+        context,
+      ),
     );
   }
-  return blocks;
+  return entries;
 }
 
 function buildParagraph(
   text: string,
   fcs: readonly number[],
   propertyFc: number,
+  terminator: number,
   context: ReadContext,
-): ContentParagraph {
+): ParagraphEntry {
   const papx = context.papxTable.papx(propertyFc);
   const properties: ParagraphProperties = {};
+  const grpprl = papx !== undefined ? readGrpprl(papx.grpprl) : [];
   if (papx !== undefined) {
     // The istd comes from the GrpPrlAndIstd's own field, and a sprmPIstd inside the grpprl can then replace it -- so it is seeded first and the fold is allowed to overwrite it.
     properties.istd = papx.istd;
-    applyParagraphSprms(readGrpprl(papx.grpprl), properties);
+    applyParagraphSprms(grpprl, properties);
   }
 
   const paragraph: ContentParagraph = {
     kind: "paragraph",
     runs: buildRuns(text, fcs, context),
   };
-  return { ...paragraph, ...paragraphAttributes(properties, context) };
+  return {
+    paragraph: { ...paragraph, ...paragraphAttributes(properties, context) },
+    properties,
+    grpprl,
+    terminator,
+  };
 }
 
 function paragraphAttributes(
