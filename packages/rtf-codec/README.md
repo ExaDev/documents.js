@@ -179,7 +179,7 @@ Two places would have been tempting to write with a Node-only shortcut, and the 
 
 ## Not yet wired into the conversion engine
 
-This package is a standalone codec. It is not yet registered in `documents.js`'s `DOCUMENT_FORMAT_CODECS` registry or its format pathfinder, so `rtf` is not yet a source or target for `convertDocument`, the CLI, the MCP server, or the web UI. That wiring touches the format enum, the capability table, the pathfinder's own node table, and several exhaustive conversion-matrix tests, and is deliberately a separate change — exactly as `epub-codec`'s own engine wiring was.
+This package is a standalone codec. It is not yet registered in `documents.js`'s `DOCUMENT_FORMAT_CODECS` registry or its format pathfinder, so `rtf` is not yet a source or target for `convertDocument`, the CLI, the MCP server, or the web UI. That wiring touches the format enum, the capability table, the pathfinder's own node table, and several exhaustive conversion-matrix tests, and is deliberately a separate change — exactly as `epub-codec`'s own engine wiring was. Tracked in [ExaDev/documents.js#847](https://github.com/ExaDev/documents.js/issues/847).
 
 ## Build, test, and lint
 
