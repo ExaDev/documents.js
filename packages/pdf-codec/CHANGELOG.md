@@ -1,3 +1,9 @@
+## [3.6.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.6.0...pdf-codec%403.6.1) (2026-09-03)
+
+### Tests
+
+* **pdf-codec:** cover BT's identity reset and a full readPdf pass for [#851](https://github.com/ExaDev/documents.js/issues/851) ([380d38d](https://github.com/ExaDev/documents.js/commit/380d38d92a078c9829ce99b4a8483289f3086d73))
+
 ## [3.6.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.5.4...pdf-codec%403.6.0) (2026-09-03)
 
 ### Features
