@@ -1,0 +1,98 @@
+{
+  "name": "rtf-codec",
+  "version": "1.0.0",
+  "description": "Hand-written Rich Text Format (RTF 1.9.1) reader and writer against the shared document-schema.js content pivot.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ExaDev/documents.js.git",
+    "directory": "packages/rtf-codec"
+  },
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/rtf-codec",
+  "bugs": {
+    "url": "https://github.com/ExaDev/documents.js/issues"
+  },
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/index.d.ts",
+        "require": "./dist/index.d.cts"
+      },
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./*": {
+      "types": {
+        "import": "./dist/*.d.ts",
+        "require": "./dist/*.d.cts"
+      },
+      "import": "./dist/*.js",
+      "require": "./dist/*.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run _build",
+    "_build": "tsdown",
+    "prepublishOnly": "pnpm run lint && pnpm run typecheck && tsdown && publint && attw --pack",
+    "lint": "turbo run _lint",
+    "_lint": "eslint . --fix --cache --max-warnings 0",
+    "typecheck": "turbo run _typecheck _typecheck:node _typecheck:attw",
+    "_typecheck": "tsc -p tsconfig.json",
+    "_typecheck:node": "tsc -p tsconfig.node.json",
+    "_typecheck:attw": "attw --pack",
+    "test": "turbo run _test",
+    "_test": "vitest run --project unit",
+    "test:workers": "turbo run _test:workers",
+    "_test:workers": "vitest run --config vitest.workers.config.ts",
+    "test:watch": "vitest --project unit",
+    "test:coverage": "turbo run _test:coverage",
+    "_test:coverage": "vitest run --project unit --coverage",
+    "test:smoke": "turbo run _test:smoke",
+    "_test:smoke": "vitest run --project smoke",
+    "prepare": "husky",
+    "release": "semantic-release"
+  },
+  "keywords": [
+    "rtf",
+    "rich-text-format",
+    "codec",
+    "round-trip",
+    "zod",
+    "wordprocessing"
+  ],
+  "license": "MIT",
+  "packageManager": "pnpm@11.6.0",
+  "dependencies": {
+    "document-schema.js": "^5.4.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@cloudflare/vitest-pool-workers": "^0.21.2",
+    "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.8.0",
+    "husky": "^9.1.7",
+    "publint": "^0.3.21",
+    "semantic-release": "^25.0.8",
+    "tsdown": "^0.22.13",
+    "turbo": "^2.10.8",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

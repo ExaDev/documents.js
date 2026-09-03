@@ -30,6 +30,7 @@ minimumReleaseAgeExclude:
   - odf.js
   - ooxml.js
   - pdf-codec
+  - rtf-codec
   - wpd-codec
   - xls-codec
   - "@exadev/eslint-config"

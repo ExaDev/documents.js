@@ -953,6 +953,52 @@ importers:
         specifier: ^4.1.10
         version: 4.1.11(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
 
+  packages/rtf-codec:
+    dependencies:
+      document-schema.js:
+        specifier: ^5.4.0
+        version: link:../document-schema.js
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@arethetypeswrong/cli':
+        specifier: ^0.18.5
+        version: 0.18.5
+      '@cloudflare/vitest-pool-workers':
+        specifier: ^0.21.2
+        version: 0.21.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.2.0
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.11(vitest@4.1.11)
+      eslint:
+        specifier: ^10.8.0
+        version: 10.8.1(jiti@2.7.0)
+      husky:
+        specifier: ^9.1.7
+        version: 9.1.7
+      publint:
+        specifier: ^0.3.21
+        version: 0.3.24
+      semantic-release:
+        specifier: ^25.0.8
+        version: 25.0.9(typescript@6.0.3)
+      tsdown:
+        specifier: ^0.22.13
+        version: 0.22.14(@arethetypeswrong/core@0.18.5)(oxc-resolver@11.24.2)(publint@0.3.24)(typescript@6.0.3)
+      turbo:
+        specifier: ^2.10.8
+        version: 2.10.11
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.11(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
+
   packages/wpd-codec:
     dependencies:
       archive-codec:
