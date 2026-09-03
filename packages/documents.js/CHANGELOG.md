@@ -1,3 +1,9 @@
+## [6.3.1](https://github.com/ExaDev/documents.js/compare/documents.js%406.3.0...documents.js%406.3.1) (2026-09-03)
+
+### Documentation
+
+* **documents.js:** fix Fidelity table drift and add rtf's row/column ([1e707ad](https://github.com/ExaDev/documents.js/commit/1e707ad02e2d95638bdfc852f4f09302711e052f))
+
 ## [6.3.0](https://github.com/ExaDev/documents.js/compare/documents.js%406.2.2...documents.js%406.3.0) (2026-09-03)
 
 ### Features
