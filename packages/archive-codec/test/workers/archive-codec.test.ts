@@ -8,8 +8,10 @@ import {
   isZipArchive,
   readCompoundFile,
   readOlePackage,
+  readSummaryInformation,
   unzipPackage,
   writeCompoundFile,
+  writeSummaryInformationStream,
   zipPackage,
   walkArchive,
 } from '../../src';
@@ -109,5 +111,27 @@ describe('archive-codec under the Cloudflare Workers runtime', () => {
     const view = new DataView(bytes.buffer);
     view.setUint32(512 + 2 * 4, 2, true); // the stream's first data sector points at itself: a cyclic FAT chain
     expect(() => readCompoundFile(bytes)).toThrow(CompoundFileFormatError);
+  });
+
+  it('writes and reads back a SummaryInformation property set inside the isolate', () => {
+    // The [MS-OLEPS] path leans on TextDecoder('windows-1252'), TextDecoder('utf-16le'), and BigInt FILETIME arithmetic -- none of them Node-only, but genuinely worth proving under workerd rather than assumed, the same way the CFB and OLE Package paths above are.
+    const metadata = {
+      title: 'Workers isolate title',
+      author: 'archive-codec',
+      keywords: ['a', 'b'],
+      createdIso: '2024-06-15T10:30:00.000Z',
+    };
+    const streamBytes = writeSummaryInformationStream(metadata);
+    const cfb = writeCompoundFile([{ path: '\x05SummaryInformation', bytes: streamBytes }]);
+    const streams = readCompoundFile(cfb);
+    const stream = streams.find((s) => s.path === '\x05SummaryInformation');
+    if (stream === undefined) {
+      throw new Error('expected a \\x05SummaryInformation stream');
+    }
+    const read = readSummaryInformation(stream.bytes);
+    expect(read.title).toBe(metadata.title);
+    expect(read.author).toBe(metadata.author);
+    expect(read.keywords).toEqual(metadata.keywords);
+    expect(read.createdIso).toBe(metadata.createdIso);
   });
 });
