@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/documents.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/documents.js) [![npm version](https://img.shields.io/npm/v/documents.js)](https://www.npmjs.com/package/documents.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> Converts between any two compatible document formats through a shared content/layout pivot. docx, pptx, odt, odp, ods, odg, xlsx, csv (TSV is the same format with a tab delimiter), svg, markdown, and rtf all read into and build from the same shared `ContentDocument` model (reported to callers as the tree-form `DocumentTree`), with PDF — reached through pdf-codec's own `LayoutDocument` view — as the one format every variant can reach. A composition engine (`convertDocument`) routes 129 (source, target) pairs across the eleven content formats and PDF, including twenty-two PDF-pivot round trips (the eight layout-engine formats, plus xlsx and csv composing through ods, and rtf composing through docx/odt/markdown), twenty-four cross-format bridge functions (same-variant direct copies, cross-variant semantic transforms, and PDF-composed), plus special-case conversions for `.odm` master documents, `.odb` database front-ends (HSQLDB and Firebird, four storage tiers), standalone `.odf` formula documents, and a bounded SQL/rpt-formula engine for `.odb` reports. Also includes: read-and-write live-view editors for all six editable formats, docx comment/footnote/header-footer exposure via `readDocxExtras`, real font resolution (source-embedded faces ahead of caller-supplied, vendored substitutes, and the standard 14), a hand-written MathML typesetting engine with embedded-font PDF rendering and a matching MathML ⇄ OMML translator, LaTeX lowering into the schema's two-layer semantic math core (pinned temml parser, symbol tables from prose, a coherence lint), and a fully hand-written PDF codec. Built on [ooxml.js](../ooxml.js/README.md), [odf.js](../odf.js/README.md), [pdf-codec](../pdf-codec/README.md), [markdown-codec](../markdown-codec/README.md), [rtf-codec](../rtf-codec/README.md), and [document-schema.js](../document-schema.js/README.md).
+> Converts between any two compatible document formats through a shared content/layout pivot. docx, pptx, odt, odp, ods, odg, xlsx, csv (TSV is the same format with a tab delimiter), svg, markdown, and rtf all read into and build from the same shared `ContentDocument` model (reported to callers as the tree-form `DocumentTree`), with PDF — reached through pdf-codec's own `LayoutDocument` view — as the one format every variant can reach; wpd (WordPerfect 6.x-X6) reads into the same wordprocessing variant as a read-only source, routable everywhere the others are but never buildable as a target, since wpd-codec ships no writer. A composition engine (`convertDocument`) routes 141 (source, target) pairs across the twelve content formats and PDF, including twenty-two PDF-pivot round trips (the eight layout-engine formats, plus xlsx and csv composing through ods, and rtf composing through docx/odt/markdown), twenty-four cross-format bridge functions (same-variant direct copies, cross-variant semantic transforms, and PDF-composed), twelve one-way wpd-sourced routes, plus special-case conversions for `.odm` master documents, `.odb` database front-ends (HSQLDB and Firebird, four storage tiers), standalone `.odf` formula documents, and a bounded SQL/rpt-formula engine for `.odb` reports. Also includes: read-and-write live-view editors for all six editable formats, docx comment/footnote/header-footer exposure via `readDocxExtras`, real font resolution (source-embedded faces ahead of caller-supplied, vendored substitutes, and the standard 14), a hand-written MathML typesetting engine with embedded-font PDF rendering and a matching MathML ⇄ OMML translator, LaTeX lowering into the schema's two-layer semantic math core (pinned temml parser, symbol tables from prose, a coherence lint), and a fully hand-written PDF codec. Built on [ooxml.js](../ooxml.js/README.md), [odf.js](../odf.js/README.md), [pdf-codec](../pdf-codec/README.md), [markdown-codec](../markdown-codec/README.md), [rtf-codec](../rtf-codec/README.md), [wpd-codec](../wpd-codec/README.md), and [document-schema.js](../document-schema.js/README.md).
 
 `documents.js` extends `ooxml.js` in two directions `ooxml.js` deliberately does not cover: full PDF support (parsing and generating, via `pdf-codec`), and a read-**and-write** manipulation API for docx/pptx content — `ooxml.js`'s own typed readers are one-way. The PDF codec is hand-written against ISO 32000-1, with no external PDF library as a dependency — see [Fidelity](#fidelity) and pdf-codec's own README for the honest trade-off (not as robust against adversarial PDFs as a 15+-year-hardened library; fully auditable and dependency-free instead). `src/mathml/` (the MathML typesetting engine) stays in this package and is hand-written too, for the same supply-chain reason. The one deliberate exception on the math side is the LaTeX parser: `src/latex/` lowers LaTeX into the schema's semantic core over a pinned exact-version [temml](https://temml.org) dependency — see [LaTeX lowering into the semantic core](#latex-lowering-into-the-semantic-core) for why a LaTeX grammar is the one component not worth hand-writing and what the pin guarantees.
 
@@ -14,6 +14,7 @@ graph TD
     pdfcodec("pdf-codec")
     mdcodec("markdown-codec")
     rtfcodec("rtf-codec")
+    wpdcodec("wpd-codec")
     bytecodec("byte-codec")
     documents("documents.js")
     mcp("document-mcp")
@@ -24,12 +25,14 @@ graph TD
     schema --> pdfcodec
     schema --> mdcodec
     schema --> rtfcodec
+    schema --> wpdcodec
     schema --> documents
     ooxml --> documents
     odf --> documents
     pdfcodec --> documents
     mdcodec --> documents
     rtfcodec --> documents
+    wpdcodec --> documents
     bytecodec --> pdfcodec
     bytecodec --> documents
     documents --> mcp
@@ -44,6 +47,7 @@ graph TD
     click pdfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/pdf-codec" "pdf-codec"
     click mdcodec "https://github.com/ExaDev/documents.js/tree/main/packages/markdown-codec" "markdown-codec"
     click rtfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/rtf-codec" "rtf-codec"
+    click wpdcodec "https://github.com/ExaDev/documents.js/tree/main/packages/wpd-codec" "wpd-codec"
     click bytecodec "https://github.com/ExaDev/documents.js/tree/main/packages/byte-codec" "byte-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
     click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
@@ -76,7 +80,7 @@ npm install documents.js document-schema.js
 
 ### The generic entry point: `convertDocument`
 
-A single function, `convertDocument`, sits behind every named conversion and reaches every pair the composition engine can route — all 129 supported (source, target) combinations. The named functions below are thin one-line forwarders to it; they remain the ergonomic layer for a caller who wants a fixed pair and autocomplete discovery, while `convertDocument` is the first-class entry point for a caller working from a runtime format pair (CLI, MCP tool, matrix enumeration).
+A single function, `convertDocument`, sits behind every named conversion and reaches every pair the composition engine can route — all 141 supported (source, target) combinations. The named functions below are thin one-line forwarders to it; they remain the ergonomic layer for a caller who wants a fixed pair and autocomplete discovery, while `convertDocument` is the first-class entry point for a caller working from a runtime format pair (CLI, MCP tool, matrix enumeration).
 
 ```ts
 import { convertDocument } from "documents.js";
@@ -196,14 +200,14 @@ const { document, diagnostics } = await converter.convert(
 );
 ```
 
-`DocumentFormat` includes `docx`/`pptx`/`xlsx`/`odt`/`odp`/`ods`/`odg`/`svg`/`odf`/`csv`/`markdown`/`rtf`/`pdf` — thirteen members. The port's `conversions` list is derived from `resolveCompositionPlan` plus the `odf`→`pdf` special case — 129 pairs total. `DocumentFormat` is inferred from `DocumentFormatSchema` (a real Zod schema); `DOCUMENT_FORMATS` is exported as a plain array derived from the same schema:
+`DocumentFormat` includes `docx`/`pptx`/`xlsx`/`odt`/`odp`/`ods`/`odg`/`svg`/`odf`/`csv`/`markdown`/`rtf`/`wpd`/`pdf` — fourteen members, `wpd` the one read-only member: it appears as a source in `conversions` but never as a target, since wpd-codec ships no writer. The port's `conversions` list is derived from `resolveCompositionPlan` plus the `odf`→`pdf` special case — 141 pairs total. `DocumentFormat` is inferred from `DocumentFormatSchema` (a real Zod schema); `DOCUMENT_FORMATS` is exported as a plain array derived from the same schema:
 
 The port also exposes `contractVersion: number`, bumped only when `DocumentConverter`'s own contract shape changes — a new field on `ConversionResult` a caller might need to branch on, or a new `ConversionOptions` field an implementation is now expected to honour — never when the `conversions` table simply grows with more supported source/target pairs (that's discoverable at runtime via `conversions` itself). It is currently `7`: the bump from `6` reflects `ConversionResult.package` changing type to the tree-form `DocumentTree` described below, which a caller reading that field must now flatten rather than read directly.
 
 ```ts
 import { DOCUMENT_FORMATS, DocumentFormatSchema } from "documents.js";
 
-console.log(DOCUMENT_FORMATS); // ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'svg', 'odf', 'csv', 'markdown', 'rtf', 'pdf']
+console.log(DOCUMENT_FORMATS); // ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'svg', 'odf', 'csv', 'markdown', 'rtf', 'wpd', 'pdf']
 DocumentFormatSchema.parse(userSuppliedFormat); // throws a ZodError for anything outside that list
 ```
 
@@ -770,7 +774,7 @@ The package is layered from generic primitives outward to the two conversion dir
 - **`src/metadata/`** — cross-format metadata read/write via `DOCUMENT_FORMAT_CODECS`.
 - **`src/package-codec.ts`** — `decodeDocumentPackage`/`encodeDocumentPackage`/`decodeOdbPackage`.
 
-Dependency direction is downward and checkable. Seven external dependencies each own a distinct concern: `ooxml.js` (docx/pptx/xlsx), `odf.js` (odt/ods/odp/odg), `document-schema.js` (shared schemas + port contracts), `pdf-codec` (PDF codec + text-layout/font primitives), `byte-codec` (byte/image utilities), `markdown-codec` (markdown), `rtf-codec` (rtf). No `PdfObject`/`PdfDict`/`PdfStream` type appears anywhere in this package.
+Dependency direction is downward and checkable. Eight external dependencies each own a distinct concern: `ooxml.js` (docx/pptx/xlsx), `odf.js` (odt/ods/odp/odg), `document-schema.js` (shared schemas + port contracts), `pdf-codec` (PDF codec + text-layout/font primitives), `byte-codec` (byte/image utilities), `markdown-codec` (markdown), `rtf-codec` (rtf), `wpd-codec` (wpd, read-only). No `PdfObject`/`PdfDict`/`PdfStream` type appears anywhere in this package.
 
 ## Build, test, and lint
 
@@ -883,25 +887,26 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
 ## Fidelity
 
-Read as **row → column**. `✓` lossless, `~` bounded, `✗` lossy, `✗✗` severe, `→` one-way, `–` no conversion. `.odm`/`.odb` sit outside this table. `rtf` is wired into the composition engine and bidirectionally routable to every other format here except `csv`/`xlsx` (one hop past the pathfinder's own 3-hop cap) and `odf` (excluded from routing entirely — see below). Every cell below is derived from `resolveCompositionPlan`'s actual resolved route for that pair (hop count and hop kind — same-variant bridge, cross-variant transform, or PDF pivot), not hand-reasoned: the pathfinder generates the full cross-product of same-variant and cross-variant-transform edges, so a pair can be routable even with no named convenience function for it (e.g. `odp → docx`, `odt → pptx`).
+Read as **row → column**. `✓` lossless, `~` bounded, `✗` lossy, `✗✗` severe, `→` one-way, `–` no conversion. `.odm`/`.odb` sit outside this table. `rtf` is wired into the composition engine and bidirectionally routable to every other format here except `csv`/`xlsx` (one hop past the pathfinder's own 3-hop cap) and `odf` (excluded from routing entirely — see below). `wpd` is wired in as a read-only source (see composition.ts's own `ReadOnlyContentFormat`): routable to every other format here except `odf`, exactly like `rtf`'s reach, but every one of its cells is `→` rather than a fidelity grade, since a read-only format has no reverse direction to compare against and no column of its own — nothing ever routes to `wpd`, wpd-codec having no writer at all. Every cell below is derived from `resolveCompositionPlan`'s actual resolved route for that pair (hop count and hop kind — same-variant bridge, cross-variant transform, or PDF pivot), not hand-reasoned: the pathfinder generates the full cross-product of same-variant and cross-variant-transform edges, so a pair can be routable even with no named convenience function for it (e.g. `odp → docx`, `odt → pptx`).
 
-| ↓ from \ to → | docx | pptx | xlsx | odt | odp | ods | odg | svg | odf | markdown | csv | rtf | pdf |
-| ------------- | ---- | ---- | ---- | --- | --- | --- | --- | --- | --- | -------- | --- | --- | --- |
-| **docx**      | —    | ~    | ✗    | ✓   | ~   | ✗   | ✗   | ✗   | –   | ✗        | ✗   | ✗   | ~   |
-| **pptx**      | ~    | —    | ✗    | ~   | ✓   | ✗   | ~   | ~   | –   | ~        | ✗   | ~   | ~   |
-| **xlsx**      | ✗    | ✗    | —    | ✗   | ✗   | ~   | ✗   | ✗   | –   | ✗✗       | ~   | –   | ~   |
-| **odt**       | ✓    | ~    | ✗    | —   | ~   | ✗   | ✗   | ✗   | –   | ✗        | ✗   | ✗   | ~   |
-| **odp**       | ~    | ✓    | ✗    | ~   | —   | ✗   | ~   | ~   | –   | ~        | ✗   | ~   | ~   |
-| **ods**       | ✗    | ✗    | ~    | ✗   | ✗   | —   | ✗   | ✗   | –   | ✗✗       | ~   | ✗   | ~   |
-| **odg**       | ✗    | ~    | ✗    | ✗   | ~   | ✗   | —   | ✓   | –   | ✗        | ✗   | ✗   | ~   |
-| **svg**       | ✗    | ~    | ✗    | ✗   | ~   | ✗   | ✓   | —   | –   | ✗✗       | ✗✗  | ✗   | ~   |
-| **odf**       | –    | –    | –    | –   | –   | –   | –   | –   | —   | –        | –   | –   | →   |
-| **markdown**  | ~    | ~    | ✗✗   | ~   | ~   | ✗   | ✗   | ✗✗  | –   | —        | ✗✗  | ~   | ~   |
-| **csv**       | ✗    | ✗    | ✓    | ✗   | ✗   | ✓   | ✗   | ✗   | –   | ✗✗       | —   | –   | ~   |
-| **rtf**       | ~    | ~    | –    | ~   | ~   | ✗   | ✗   | ✗   | –   | ✗        | –   | —   | ~   |
-| **pdf**       | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | ✗   | –   | ✗✗       | ✗   | ✗   | —   |
+| ↓ from \ to → | docx | pptx | xlsx | odt | odp | ods | odg | svg | odf | markdown | csv | rtf | wpd | pdf |
+| ------------- | ---- | ---- | ---- | --- | --- | --- | --- | --- | --- | -------- | --- | --- | --- | --- |
+| **docx**      | —    | ~    | ✗    | ✓   | ~   | ✗   | ✗   | ✗   | –   | ✗        | ✗   | ✗   | –   | ~   |
+| **pptx**      | ~    | —    | ✗    | ~   | ✓   | ✗   | ~   | ~   | –   | ~        | ✗   | ~   | –   | ~   |
+| **xlsx**      | ✗    | ✗    | —    | ✗   | ✗   | ~   | ✗   | ✗   | –   | ✗✗       | ~   | –   | –   | ~   |
+| **odt**       | ✓    | ~    | ✗    | —   | ~   | ✗   | ✗   | ✗   | –   | ✗        | ✗   | ✗   | –   | ~   |
+| **odp**       | ~    | ✓    | ✗    | ~   | —   | ✗   | ~   | ~   | –   | ~        | ✗   | ~   | –   | ~   |
+| **ods**       | ✗    | ✗    | ~    | ✗   | ✗   | —   | ✗   | ✗   | –   | ✗✗       | ~   | ✗   | –   | ~   |
+| **odg**       | ✗    | ~    | ✗    | ✗   | ~   | ✗   | —   | ✓   | –   | ✗        | ✗   | ✗   | –   | ~   |
+| **svg**       | ✗    | ~    | ✗    | ✗   | ~   | ✗   | ✓   | —   | –   | ✗✗       | ✗✗  | ✗   | –   | ~   |
+| **odf**       | –    | –    | –    | –   | –   | –   | –   | –   | —   | –        | –   | –   | –   | →   |
+| **markdown**  | ~    | ~    | ✗✗   | ~   | ~   | ✗   | ✗   | ✗✗  | –   | —        | ✗✗  | ~   | –   | ~   |
+| **csv**       | ✗    | ✗    | ✓    | ✗   | ✗   | ✓   | ✗   | ✗   | –   | ✗✗       | —   | –   | –   | ~   |
+| **rtf**       | ~    | ~    | –    | ~   | ~   | ✗   | ✗   | ✗   | –   | ✗        | –   | —   | –   | ~   |
+| **wpd**       | →    | →    | →    | →   | →   | →   | →   | →   | –   | →        | →   | →   | —   | →   |
+| **pdf**       | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | ✗   | –   | ✗✗       | ✗   | ✗   | –   | —   |
 
-129 of 156 directional pairs are routable. The shared `ContentDocument` model is the hub, not PDF — twenty bridges bypass PDF entirely.
+141 of 182 directional pairs are routable. The shared `ContentDocument` model is the hub, not PDF — twenty bridges bypass PDF entirely.
 
 **X → PDF** is a genuine layout render: positioned text, images, tables, lists, vector primitives, styled through the full cascade. It is a faithful visual approximation, not pixel-identical — closeness depends on font availability.
 
@@ -922,6 +927,8 @@ Read as **row → column**. `✓` lossless, `~` bounded, `✗` lossy, `✗✗` s
 **The markdown and rtf bridge pairs into/out of markdown** bypass PDF too, but markdown's grammar has no construct for colour/font/size/alignment — `docxToMarkdown`/`odtToMarkdown` and rtf → markdown all drop them (format-boundary loss, not approximation). rtf carries all four natively (unlike markdown), so `markdown → rtf` loses nothing markdown had, the same asymmetry `markdown → docx`/`markdown → odt` already show.
 
 **Every wordprocessing-family format (docx/odt/markdown/rtf) bridges to every presentation-family format (pptx/odp), and every drawing-family format (odg/svg) bridges to every presentation-family format too, through a semantic transform** — not just the two hand-written convenience pairs (docx⇄pptx, odt⇄odp): the pathfinder generates the full cross-product from the same two transform functions (`wordprocessingToPresentation`/`presentationToWordprocessing`, `drawingToPresentation`/`presentationToDrawing`), so e.g. `odp → docx` and `odt → pptx` are real routable pairs with no named function of their own. Slide boundaries are heuristic, but blocks survive intact. A wordprocessing format reaching a drawing format (or vice versa) chains two such transforms through presentation as a hub (e.g. `docx → pptx → odg`) with no PDF pivot at all — cheaper than a PDF round trip, but compounding two structural transforms is more lossy than one, hence those cells' `✗` rather than `~`.
+
+**`wpd`'s whole row is `→`, never a fidelity grade, because it is read-only.** wpd-codec has a real reader and no writer at all (a deliberate scope decision, not an omission — see that package's own Scope), so there is no reverse conversion to measure loss against the way every other pair in this table can be. `wpd → docx`/`wpd → odt`/`wpd → markdown`/`wpd → rtf` are same-variant bridges at cost 1; `wpd → pptx`/`wpd → odp` are cross-variant transforms at cost 2; `wpd → pdf` is a direct layout-engine pass, the same edge markdown's own `hasLayoutPath` justifies; everything else composes through one of those. `wpd → odf` is the one cell excluded, matching every other row: nothing routes to `odf`.
 
 **`.odb` extraction** is genuine verified data extraction across all four tiers, differing by what each storage shape carries. BLOB content recovers byte-for-byte. No reverse direction.
 
