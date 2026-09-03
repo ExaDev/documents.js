@@ -313,7 +313,7 @@ export {
 } from "./typed/shared/forms";
 export type { OdbFormDefinition, OdbFormControl } from "./typed/shared/forms";
 
-// --- OpenOffice.org 1.x / StarOffice 6-7, the pre-OASIS ancestor ODF 1.0 was based on. Read-only, and read through the ODF readers above rather than beside them: transformOoo1Package rewrites a .sxw/.sxc/.sxi/.sxd package into the ODF shape those readers already understand, so every construct they know how to read works on an OpenOffice.org 1.x document too. See src/ooo1/transform.ts for what actually differs between the two vocabularies. ---
+// --- OpenOffice.org 1.x / StarOffice 6-7, the pre-OASIS ancestor ODF 1.0 was based on. Read through the ODF readers above rather than beside them: transformOoo1Package rewrites a .sxw/.sxc/.sxi/.sxd package into the ODF shape those readers already understand, so every construct they know how to read works on an OpenOffice.org 1.x document too. .sxw and .sxc also write, the same way: transformToOoo1Package rewrites a real ODF Package (writeOdt's/writeOds's own output) into genuine OpenOffice.org 1.x XML; .sxi/.sxd remain read-only, since this package's typed layer has no writeOdp/writeOdg yet. See src/ooo1/transform.ts for what actually differs between the two vocabularies. ---
 export {
   OOO1_NAMESPACES,
   OOO1_MEDIA_TYPES,
@@ -338,8 +338,8 @@ export {
   readSxdContent,
 } from "./ooo1/read";
 
-// The .sxw writer -- the OpenOffice.org 1.x / StarOffice 6-7 counterpart to writeOdt/writeOdtContent above, built on them: writeOdt/writeOdtContent produce a real ODF Package, and transformToOoo1Package (this format's own inverse of transformOoo1Package, the same module the readers above run) rewrites it into genuine OpenOffice.org 1.x XML. See src/ooo1/write.ts for the full scope statement -- .sxc/.sxi/.sxd have no writer yet, since this package's typed layer has no writeOds/writeOdp/writeOdg for one to be built on.
-export { writeSxw, writeSxwContent } from "./ooo1/write";
+// The .sxw and .sxc writers -- the OpenOffice.org 1.x / StarOffice 6-7 counterparts to writeOdt/writeOdtContent and writeOds/writeOdsContent above, built on them: those produce a real ODF Package, and transformToOoo1Package (this format's own inverse of transformOoo1Package, the same module the readers above run) rewrites it into genuine OpenOffice.org 1.x XML. See src/ooo1/write.ts for the full scope statement -- .sxi/.sxd have no writer yet, since this package's typed layer has no writeOdp/writeOdg for one to be built on.
+export { writeSxw, writeSxwContent, writeSxc, writeSxcContent } from "./ooo1/write";
 
 export { readOdbReport } from "./typed/odb/report";
 export type {
