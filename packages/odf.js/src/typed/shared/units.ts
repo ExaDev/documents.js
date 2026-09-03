@@ -58,8 +58,36 @@ export function parseOdfLength(value: string): number | undefined {
   return Number(numeric) * unitToPtFactor(unit);
 }
 
-// The reverse of parseOdfLength: formats a point value as an ODF length string in the given unit (default "pt", matching this package's own writers' always-pt convention). No rounding is applied -- the conversion is an exact IEEE-754 division, so the result may carry more decimal places than a human would type by hand (real LibreOffice output does the same, e.g. "0.423cm" for a value that didn't originate in cm); a caller that wants a specific display precision is responsible for rounding the input pt value itself before calling this.
+// JavaScript's own Number-to-string switches to EXPONENT notation outside a fixed magnitude window (below 1e-6, or at/above 1e21) -- `${-7.1e-15}` is "-7.1e-15", not "-0.0000000000000071". The ODF `length` datatype has NO exponent form at all (see LENGTH_PATTERN above, and the OASIS grammar it encodes), so a bare template-literal stringification silently emits spec-invalid ODF for any small-magnitude length. That is not a theoretical range: a rotated shape's own draw:transform translate() components are trig-derived (typed/draw/write-shapes.ts's frameGeometryAttrs), so a shape rotated about a point near the page origin routinely lands a component at 1e-15-ish rounding dust rather than a clean 0. The consequence on the way back in is silent and total: parseOdfTransform drops a translate() whose components don't parse (so the shape moves to the pivot), and parseBox returns undefined for an unrotated frame whose svg:x/svg:y don't parse (so readDrawFrame drops the shape entirely).
+//
+// The fix belongs here, on the write side, not in LENGTH_PATTERN: widening the reader to accept an exponent would make this package read its own invalid output back correctly while every other ODF consumer still saw a length outside the datatype. expandExponential below re-positions the decimal point in the digits Number-to-string ALREADY chose (the shortest round-tripping representation), so it is an exact re-spelling rather than a rounding step -- and since those digits never carry a trailing fractional zero, neither does the result, matching the plain-stringification style of every ordinary value.
+function expandExponential(text: string): string {
+  const match = /^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(text);
+  if (match === null) {
+    return text;
+  }
+  const [, sign, integerDigits, fractionDigits, exponent] = match;
+  if (
+    sign === undefined ||
+    integerDigits === undefined ||
+    exponent === undefined
+  ) {
+    return text;
+  }
+  const digits = `${integerDigits}${fractionDigits ?? ""}`;
+  // Where the decimal point lands within `digits` once the exponent is applied: left of every digit (a pure fraction needing leading zeros), right of every digit (an integer needing trailing zeros), or between two of them.
+  const pointIndex = integerDigits.length + Number(exponent);
+  if (pointIndex <= 0) {
+    return `${sign}0.${"0".repeat(-pointIndex)}${digits}`;
+  }
+  if (pointIndex >= digits.length) {
+    return `${sign}${digits}${"0".repeat(pointIndex - digits.length)}`;
+  }
+  return `${sign}${digits.slice(0, pointIndex)}.${digits.slice(pointIndex)}`;
+}
+
+// The reverse of parseOdfLength: formats a point value as an ODF length string in the given unit (default "pt", matching this package's own writers' always-pt convention). No rounding is applied -- the conversion is an exact IEEE-754 division, so the result may carry more decimal places than a human would type by hand (real LibreOffice output does the same, e.g. "0.423cm" for a value that didn't originate in cm); a caller that wants a specific display precision is responsible for rounding the input pt value itself before calling this. The output is always fixed-point decimal, never exponent notation -- see expandExponential above for why that is a correctness requirement rather than a formatting preference.
 export function formatOdfLength(pt: number, unit: LengthUnit = "pt"): string {
   const value = pt / unitToPtFactor(unit);
-  return `${value}${unit}`;
+  return `${expandExponential(`${value}`)}${unit}`;
 }

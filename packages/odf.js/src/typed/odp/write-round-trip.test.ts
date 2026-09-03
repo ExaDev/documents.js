@@ -368,3 +368,50 @@ describe("writeOdpContent: rotated shape geometry, within floating-point toleran
     expect(written.slides[0]!.shapes[0]!.rotationDeg).toBeUndefined();
   });
 });
+
+// The regression suite for the one class of length a plain number-to-string spells in EXPONENT notation, which the ODF `length` datatype has no form for (typed/shared/units.ts's own LENGTH_PATTERN and formatOdfLength note). The failure it pins is silent and total rather than approximate, which is why it needs a sweep rather than a single case: parseOdfTransform drops a translate() whose components don't parse, so a rotated shape lands at its own pivot instead of its frame; parseBox returns undefined for an unrotated frame whose svg:x/svg:y don't parse, so readDrawFrame returns undefined and the shape VANISHES from the slide entirely.
+//
+// The values that reach that magnitude are ordinary, not contrived: frameGeometryAttrs's translate() components are trig-derived, so a frame whose own centre sits at or near the page origin cancels to 1e-15-ish rounding dust rather than a clean zero at most angles. The sweep below crosses every quadrant boundary and both signs of each component, against frames at the origin, straddling it, and well away from it.
+describe("writeOdpContent: rotated geometry near the page origin", () => {
+  const ANGLES_DEG = [
+    -270, -180, -135, -90, -45, -30, -1, 0.0001, 1, 30, 45, 90, 135, 180, 270,
+  ];
+  const FRAMES = [
+    { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 }, // centre at (50,50) -- the classic cancelling case at 90/180/270.
+    { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
+    { xPt: -50, yPt: -50, widthPt: 100, heightPt: 100 }, // centre exactly ON the origin.
+    { xPt: -0.5, yPt: -0.5, widthPt: 1, heightPt: 1 },
+    { xPt: 0.0001, yPt: 0.0001, widthPt: 200, heightPt: 80 },
+    { xPt: 36, yPt: 48, widthPt: 400, heightPt: 120 }, // an ordinary, far-from-origin frame, as the control.
+    { xPt: 720.05, yPt: 405.05, widthPt: 0.1, heightPt: 0.1 },
+  ];
+
+  it.each(ANGLES_DEG)(
+    "keeps every frame's own shape and geometry through a real write-then-read at %p degrees",
+    (rotationDeg) => {
+      const document = documentOf([
+        slide(FRAMES.map((frame) => shape({ frame, rotationDeg }))),
+      ]);
+      const written = roundTrip(document);
+      const writtenShapes = written.slides[0]!.shapes;
+      // The whole-shape loss first: an unparseable svg:x/svg:y or transform drops the frame from the read entirely, so a length count mismatch IS the bug, not a symptom of one.
+      expect(writtenShapes).toHaveLength(FRAMES.length);
+      FRAMES.forEach((frame, index) => {
+        const writtenShape = writtenShapes[index]!;
+        expect(writtenShape.frame.xPt).toBeCloseTo(frame.xPt, 6);
+        expect(writtenShape.frame.yPt).toBeCloseTo(frame.yPt, 6);
+        expect(writtenShape.frame.widthPt).toBeCloseTo(frame.widthPt, 6);
+        expect(writtenShape.frame.heightPt).toBeCloseTo(frame.heightPt, 6);
+        expect(writtenShape.rotationDeg ?? 0).toBeCloseTo(rotationDeg, 9);
+      });
+    },
+  );
+
+  it("keeps an UNROTATED frame whose own svg:x/svg:y are small enough to reach exponent notation", () => {
+    const tiny = { xPt: 1e-9, yPt: -7.1e-15, widthPt: 200, heightPt: 80 };
+    const written = roundTrip(documentOf([slide([shape({ frame: tiny })])]));
+    const writtenShapes = written.slides[0]!.shapes;
+    expect(writtenShapes).toHaveLength(1);
+    expect(writtenShapes[0]!.frame).toEqual(tiny);
+  });
+});
