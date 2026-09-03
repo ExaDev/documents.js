@@ -68,6 +68,21 @@ export interface RtfListEntry {
   readonly levels: readonly RtfListLevel[];
 }
 
+// What one <lfolevel> group states about the level at its own position. Both halves optional and independently meaningful: `level` is a whole-level replacement (the \listoverrideformatN case, whose nested <listlevel> already carries its own \levelstartatN), `startAt` on its own is a start-at override leaving the list's own \levelnfcN standing (the \listoverridestartat-without-format case).
+interface RtfListLevelOverride {
+  readonly level?: RtfListLevel;
+  readonly startAt?: number;
+}
+
+// One \listoverride entry, before its levels are folded onto the \list it names.
+interface RtfListOverride {
+  readonly listId: number;
+  readonly levelOverrides: readonly RtfListLevelOverride[];
+}
+
+// What a <listlevel> means with nothing said: "\levelnfcN Specifies the number type for the level" with 0 the arabic scheme, and a start-at of 1. Used for a level an override restates that its \list never declared.
+const DEFAULT_LIST_LEVEL: RtfListLevel = { numberFormat: 0, startAt: 1 };
+
 export interface RtfPageGeometry {
   readonly paperWidthTwips: number;
   readonly paperHeightTwips: number;
@@ -446,12 +461,14 @@ function readListLevel(
   return { numberFormat, startAt };
 }
 
-// "Each list override contains the \listidN of one of the lists in the List table" and its own \lsN, "a 1-based index into this table" that paragraphs actually carry. Resolving the indirection here means the body reader deals in \lsN alone.
+// "Each list override contains the \listidN of one of the lists in the List table" and its own \lsN, "The (1-based) index of this \listoverride in the \listoverride table", which paragraphs actually carry. Resolving the indirection here means the body reader deals in \lsN alone.
+//
+// <listoverride> is `'{' \listoverride & \listidN & \listoverridecountN & \lsN <lfolevel>? '}'`, where \listoverridecountN is the "Number of list override levels within this list override (0, 1 or 9)" -- so an override is not merely a pointer at a list: it may restate that list's levels. The <lfolevel> groups are read positionally, the i-th overriding level i, because nothing inside one names the level it applies to.
 function parseListOverrideTable(
   tokens: readonly RtfToken[],
   contentStart: number,
   end: number,
-  overrides: Map<number, number>,
+  overrides: Map<number, RtfListOverride>,
 ): void {
   for (let index = contentStart; index < end; index += 1) {
     const token = tokens[index];
@@ -461,10 +478,15 @@ function parseListOverrideTable(
     const entryEnd = Math.min(matchingGroupEnd(tokens, index), end);
     let listId: number | undefined;
     let overrideIndex: number | undefined;
+    const levelOverrides: RtfListLevelOverride[] = [];
     for (let inner = index + 1; inner < entryEnd; inner += 1) {
       const child = tokens[inner];
       if (child?.kind === "groupStart") {
-        inner = Math.min(matchingGroupEnd(tokens, inner), entryEnd);
+        const childEnd = Math.min(matchingGroupEnd(tokens, inner), entryEnd);
+        if (groupHead(tokens, inner).destination === "lfolevel") {
+          levelOverrides.push(readLevelOverride(tokens, inner, childEnd));
+        }
+        inner = childEnd;
         continue;
       }
       if (child?.kind !== "controlWord" || child.param === undefined) {
@@ -474,10 +496,68 @@ function parseListOverrideTable(
       else if (child.name === "ls") overrideIndex = child.param;
     }
     if (listId !== undefined && overrideIndex !== undefined) {
-      overrides.set(overrideIndex, listId);
+      overrides.set(overrideIndex, { listId, levelOverrides });
     }
     index = entryEnd;
   }
+}
+
+// One <lfolevel>: `'{' \lfolevel \listoverrideformatN? \listoverridestartat? <listlevel> '}'`.
+//
+// The two flags decide both WHAT is overridden and WHERE its payload sits, which the spec states outright: "If the format flag (\listoverrideformatN) is given, the \lfolevel should also contain a list level (<listlevel>). If the start-at flag (\listoverridestartat) is given, a start-at value must be provided. If the start-at is overridden but the format is not, then a \levelstartatN should be provided in the <lfolevel> itself. If both the start-at and the format are overridden, put the \levelstartatN inside the <listlevel> contained in the <lfolevel>."
+//
+// So a nested {\listlevel ...} is read as a whole-level replacement (which already carries its own \levelstartatN in the both-overridden case), and a bare \levelstartatN directly inside the \lfolevel is read as a start-at-only override that leaves the list's own \levelnfcN standing. The flags themselves are not required to be present for the payload to be honoured: a producer that emits the payload without its flag has still said what it meant, and the spec's own robustness advice is to survive that rather than discard a stated value.
+function readLevelOverride(
+  tokens: readonly RtfToken[],
+  start: number,
+  end: number,
+): RtfListLevelOverride {
+  let level: RtfListLevel | undefined;
+  let startAt: number | undefined;
+  for (let index = start + 1; index < end; index += 1) {
+    const token = tokens[index];
+    if (token === undefined) break;
+    if (token.kind === "groupStart") {
+      const inner = Math.min(matchingGroupEnd(tokens, index), end);
+      if (groupHead(tokens, index).destination === "listlevel") {
+        level = readListLevel(tokens, index, inner);
+      }
+      index = inner;
+      continue;
+    }
+    if (
+      token.kind === "controlWord" &&
+      token.name === "levelstartat" &&
+      token.param !== undefined
+    ) {
+      startAt = token.param;
+    }
+  }
+  return {
+    ...(level === undefined ? {} : { level }),
+    ...(startAt === undefined ? {} : { startAt }),
+  };
+}
+
+// Applies one override's own <lfolevel> groups onto the levels of the \list it names, producing the entry a paragraph's \lsN resolves to.
+//
+// A level an override restates but the list never declared is kept rather than dropped: \listoverridecount9 over a \listsimple list (which declares one level) is a real and legal shape, and truncating to the list's own level count would silently discard eight stated start-at values. Such a level takes the arabic \levelnfc0 default, which is what a level carrying a start-at but no number format means.
+function applyListOverride(
+  list: RtfListEntry,
+  levelOverrides: readonly RtfListLevelOverride[],
+): RtfListEntry {
+  if (levelOverrides.length === 0) {
+    return list;
+  }
+  const levels: RtfListLevel[] = [...list.levels];
+  for (const [index, override] of levelOverrides.entries()) {
+    const base = override.level ?? levels[index] ?? DEFAULT_LIST_LEVEL;
+    levels[index] =
+      override.level === undefined && override.startAt !== undefined
+        ? { ...base, startAt: override.startAt }
+        : base;
+  }
+  return { levels };
 }
 
 function parseInfoGroup(
@@ -529,7 +609,7 @@ export function readRtfHeader(
   const colors: (Color | undefined)[] = [];
   const styles = new Map<number, RtfStyleEntry>();
   const listsById = new Map<number, RtfListEntry>();
-  const overrides = new Map<number, number>();
+  const overrides = new Map<number, RtfListOverride>();
   const page: MutablePageGeometry = {
     paperWidthTwips: DEFAULT_PAPER_WIDTH_TWIPS,
     paperHeightTwips: DEFAULT_PAPER_HEIGHT_TWIPS,
@@ -651,10 +731,13 @@ export function readRtfHeader(
   }
 
   const lists = new Map<number, RtfListEntry>();
-  for (const [overrideIndex, listId] of overrides) {
-    const list = listsById.get(listId);
+  for (const [overrideIndex, override] of overrides) {
+    const list = listsById.get(override.listId);
     if (list !== undefined) {
-      lists.set(overrideIndex, list);
+      lists.set(
+        overrideIndex,
+        applyListOverride(list, override.levelOverrides),
+      );
     }
   }
 
