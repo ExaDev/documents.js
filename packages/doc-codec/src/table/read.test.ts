@@ -330,4 +330,57 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
       ),
     ).toThrow(DocFormatError);
   });
+
+  // The genuine third-party encoding ExaDev/documents.js#895 fixed: two rows with no TCGRF.horzMerge/sprmTMerge signal anywhere, but each declaring its own, differently-shaped rgdxaCenter -- row one's own narrower, wider physical cell states a horizontal merge purely as a real per-row column layout, exactly as a genuine LibreOffice-authored .doc does (see the README's own third-party verification finding). This exercises table/read.ts's own column-grid union directly, independently of write.ts's round trips against this package's own writer.
+  it("reconstructs colSpan from a row's own narrower, wider physical cells against a second row's fuller column layout, with no merge flag anywhere", () => {
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 2000, 3000], [unmerged, unmerged]),
+    ];
+    const rowTwoGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000, 3000], [unmerged, unmerged, unmerged]),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "wide" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "narrow" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowOneGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "a" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [{ text: "b" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [{ text: "c" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [], grpprl: rowTwoGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.rows).toHaveLength(2);
+    const rowOneCells = block.rows[0]?.cells ?? [];
+    expect(rowOneCells).toHaveLength(2);
+    expect(rowOneCells[0]?.colSpan).toBe(2);
+    expect(cellText(rowOneCells[0])).toBe("wide");
+    expect(rowOneCells[1]?.colSpan).toBeUndefined();
+    expect(cellText(rowOneCells[1])).toBe("narrow");
+    const rowTwoCells = block.rows[1]?.cells ?? [];
+    expect(rowTwoCells).toHaveLength(3);
+    expect(rowTwoCells.map((cell) => cell.colSpan)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(rowTwoCells.map((cell) => cellText(cell))).toEqual(["a", "b", "c"]);
+  });
 });
