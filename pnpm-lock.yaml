@@ -649,6 +649,9 @@ importers:
       pdf-codec:
         specifier: ^3.5.4
         version: link:../pdf-codec
+      rtf-codec:
+        specifier: ^1.0.0
+        version: link:../rtf-codec
       temml:
         specifier: 0.13.4
         version: 0.13.4
