@@ -23,6 +23,7 @@ import {
   readMarkdownContent,
   readPptxContent,
   readPdf,
+  readRtfContent,
   readSvgContent,
   readXlsxContent,
   setDocumentMetadata,
@@ -283,6 +284,7 @@ function readContentForFormat(
     return readMarkdownContent(new TextDecoder().decode(bytes));
   if (format === "csv") return readCsvContent(new TextDecoder().decode(bytes));
   if (format === "svg") return readSvgContent(new TextDecoder().decode(bytes));
+  if (format === "rtf") return readRtfContent(bytes).document;
   if (format === "pdf") throw new Error("PDF has no standalone content reader");
   const pkg = decodeDocumentPackage(format, bytes);
   switch (format) {
