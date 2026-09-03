@@ -1,3 +1,8 @@
+import {
+  readCompoundFile,
+  writeCompoundFile,
+  writeSummaryInformationStream,
+} from "archive-codec";
 import { ContentDocumentSchema, DocumentTreeSchema } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 
@@ -105,6 +110,20 @@ function workbookStream(options: {
 /** Wraps a workbook stream in the compound-file container a real .xls carries it in. */
 function xlsFile(stream: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   return compoundFile([{ path: "Workbook", bytes: stream }]);
+}
+
+/** Adds a real "\x05SummaryInformation" stream beside an .xls file's existing streams -- composed with archive-codec's own writeSummaryInformationStream/writeCompoundFile rather than by extending xlsFile, which stays a pure BIFF8-only fixture builder. */
+function withSummaryInformation(
+  xls: Uint8Array<ArrayBuffer>,
+  metadata: Parameters<typeof writeSummaryInformationStream>[0],
+): Uint8Array<ArrayBuffer> {
+  return writeCompoundFile([
+    ...readCompoundFile(xls),
+    {
+      path: "\x05SummaryInformation",
+      bytes: writeSummaryInformationStream(metadata),
+    },
+  ]);
 }
 
 /** The fifteen style XFs a real file writes before its first cell XF, so a cell's own ixfe of 15 lands on the first cell format -- which is what [MS-XLS] 2.5.168 requires of an ixfe. */
@@ -459,6 +478,40 @@ describe("readXlsContent", () => {
     expect(() =>
       readXlsContent(new Uint8Array([0x50, 0x4b, 0x03, 0x04])),
     ).toThrow(BiffFormatError);
+  });
+
+  describe("metadata", () => {
+    it('reads title/author/dates from a real "\\x05SummaryInformation" stream', () => {
+      const bytes = withSummaryInformation(
+        xlsFile(
+          workbookStream({
+            globals: xfTable(0),
+            sheets: [{ name: "Sheet1", records: [] }],
+          }),
+        ),
+        {
+          title: "Budget",
+          author: "Cornelius",
+          createdIso: "2024-05-01T00:00:00.000Z",
+        },
+      );
+      const content = readXlsContent(bytes);
+      expect(content.metadata).toEqual({
+        title: "Budget",
+        author: "Cornelius",
+        createdIso: "2024-05-01T00:00:00.000Z",
+      });
+    });
+
+    it('reads {} when the container carries no "\\x05SummaryInformation" stream', () => {
+      const bytes = xlsFile(
+        workbookStream({
+          globals: xfTable(0),
+          sheets: [{ name: "Sheet1", records: [] }],
+        }),
+      );
+      expect(readXlsContent(bytes).metadata).toEqual({});
+    });
   });
 });
 

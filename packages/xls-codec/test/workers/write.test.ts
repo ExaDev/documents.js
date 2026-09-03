@@ -78,4 +78,14 @@ describe("xls-codec write path inside workerd", () => {
       value: "2026-09-03",
     });
   });
+
+  it('round-trips document metadata through a real "\\x05SummaryInformation" stream, with no Node-only API', () => {
+    const input: XlsContentDocument = {
+      ...document(),
+      metadata: { title: "Workers isolate title", author: "xls-codec" },
+    };
+    const metadataBytes = writeXlsContent(input);
+    const content = readXlsContent(metadataBytes);
+    expect(content.metadata).toEqual(input.metadata);
+  });
 });
