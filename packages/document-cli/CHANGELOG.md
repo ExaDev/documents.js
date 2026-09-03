@@ -1,3 +1,20 @@
+## [5.2.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.1.7...document-cli%405.2.0) (2026-09-03)
+
+### Features
+
+* **document-cli:** open rtf documents as a read-only PDF preview in the TUI ([8c13ae5](https://github.com/ExaDev/documents.js/commit/8c13ae57bc46782399939c733ff1301c9482340d))
+* **document-cli:** recognize .rtf via extension inference and format lookup ([490532a](https://github.com/ExaDev/documents.js/commit/490532a57342cdafcfa67140a4a40aa9d8ff1ad1))
+
+### Documentation
+
+* **document-cli:** document rtf support in the package description and README ([8f894fe](https://github.com/ExaDev/documents.js/commit/8f894fe436d0eddad6499f4392ded15a099694c1))
+* **document-cli:** list rtf and the pre-existing xlsx gap in command help text ([4973d5a](https://github.com/ExaDev/documents.js/commit/4973d5a7048a8293b45d582e28623e1c7394067e))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.3.0
+
 ## [5.1.7](https://github.com/ExaDev/documents.js/compare/document-cli%405.1.6...document-cli%405.1.7) (2026-09-02)
 
 

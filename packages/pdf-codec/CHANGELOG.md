@@ -1,3 +1,23 @@
+## [3.6.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.5.4...pdf-codec%403.6.0) (2026-09-03)
+
+### Features
+
+* **pdf-codec:** add the MacRoman and Standard encoding tables ([c41b3f9](https://github.com/ExaDev/documents.js/commit/c41b3f95f74bf45aab1133a98d5f085442d95cba))
+* **pdf-codec:** expose every cmap subtable, and read format 0 ([656ffd2](https://github.com/ExaDev/documents.js/commit/656ffd22850542e6b1aff007f95f5c1811dce16f))
+* **pdf-codec:** read a font's built-in encoding from its embedded program ([5a7ee19](https://github.com/ExaDev/documents.js/commit/5a7ee199742a474a20d7ef472cd1171b88652e73))
+* **pdf-codec:** read glyph names out of a font's post table ([291070b](https://github.com/ExaDev/documents.js/commit/291070b38ab7157f0de4f5cadd023a5c9daffae1))
+* **pdf-codec:** resolve a CFF SID to the glyph name it stands for ([5ad15ab](https://github.com/ExaDev/documents.js/commit/5ad15ab035f8ac04248dc6f9e79dda18730ee6e1))
+
+### Bug Fixes
+
+* **pdf-codec:** decode a glyph through the font's own built-in encoding ([844e185](https://github.com/ExaDev/documents.js/commit/844e1851654adc7bae2ce115087f4f894094e955)), closes [#834](https://github.com/ExaDev/documents.js/issues/834)
+* **pdf-codec:** hold the text state parameters in the graphics state ([7efccd7](https://github.com/ExaDev/documents.js/commit/7efccd7cfd9b0da9d0e2cc75ed5a8ece9e2a3206))
+* **pdf-codec:** keep the selected font across a BT with no Tf of its own ([0fd14da](https://github.com/ExaDev/documents.js/commit/0fd14da54211401fabe61017527d22df75d82042)), closes [#851](https://github.com/ExaDev/documents.js/issues/851)
+
+### Performance Improvements
+
+* **pdf-codec:** open an embedded font program only when a code needs it ([0245330](https://github.com/ExaDev/documents.js/commit/0245330e03f0de59b5a9ed89123ceb1297467b39))
+
 ## [3.5.4](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.5.3...pdf-codec%403.5.4) (2026-09-02)
 
 ### Miscellaneous Chores

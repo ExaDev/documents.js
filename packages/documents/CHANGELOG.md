@@ -1,3 +1,19 @@
+## [2.2.0](https://github.com/ExaDev/documents.js/compare/documents%402.1.7...documents%402.2.0) (2026-09-03)
+
+### Features
+
+* **documents:** preview rtf documents via the word-processing panel ([734c6b0](https://github.com/ExaDev/documents.js/commit/734c6b033e6d63b0ea9623192801dce67e6d1466))
+* **documents:** recognize .rtf files by extension in the web UI ([88158f6](https://github.com/ExaDev/documents.js/commit/88158f64506967c5602d1ca4605bc469f234a082))
+
+### Bug Fixes
+
+* **documents:** read rtf content directly from bytes in web UI router ([825c680](https://github.com/ExaDev/documents.js/commit/825c68006121b0b7329af317342ce5fdf8bc7f34))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.3.0
+
 ## [2.1.7](https://github.com/ExaDev/documents.js/compare/documents%402.1.6...documents%402.1.7) (2026-09-02)
 
 
