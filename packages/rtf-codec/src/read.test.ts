@@ -332,6 +332,36 @@ describe("lists", () => {
     expect(paragraph?.list?.level).toBe(2);
   });
 
+  it("carries a \\lfolevel start-at override through to the paragraph's own numId", () => {
+    // The same \list102 both overrides name, restarted at 5 by \ls3's own \lfolevel while \ls2 leaves it at 1 -- so the override table, not the list table, is what tells the two apart.
+    const tables =
+      "{\\*\\listtable" +
+      "{\\list\\listtemplateid2\\listsimple{\\listlevel\\levelnfc0\\leveljc0\\levelstartat1{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}\\listid102}" +
+      "}{\\*\\listoverridetable" +
+      "{\\listoverride\\listid102\\listoverridecount0\\ls2}" +
+      "{\\listoverride\\listid102\\listoverridecount1{\\lfolevel\\listoverridestartat\\levelstartat5}\\ls3}" +
+      "}";
+    const paragraphs = paragraphsOf(
+      `${HEADER}${tables}\\pard\\ls2\\ilvl0 First\\par\\pard\\ls3\\ilvl0 Restarted\\par}`,
+    );
+    expect(paragraphs[0]?.list?.numId).toBe("rtf2:ordered");
+    expect(paragraphs[1]?.list?.numId).toBe("rtf3:ordered@5");
+  });
+
+  it("carries a \\lfolevel format override, so an override can turn a numbered list bulleted", () => {
+    const tables =
+      "{\\*\\listtable" +
+      "{\\list\\listtemplateid2\\listsimple{\\listlevel\\levelnfc0\\leveljc0\\levelstartat1{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}\\listid102}" +
+      "}{\\*\\listoverridetable" +
+      "{\\listoverride\\listid102\\listoverridecount1{\\lfolevel\\listoverrideformat1" +
+      "{\\listlevel\\levelnfc23\\leveljc0\\levelstartat1{\\leveltext \\'01\\u183 ?;}{\\levelnumbers;}}" +
+      "}\\ls1}}";
+    const paragraph = paragraphsOf(
+      `${HEADER}${tables}\\pard\\ls1\\ilvl0 Item\\par}`,
+    )[0];
+    expect(paragraph?.list?.numId).toBe("rtf1:bullet");
+  });
+
   it("discards a {\\listtext ...} group, which a numbering-aware reader must ignore", () => {
     const paragraph = paragraphsOf(
       `${HEADER}${LIST_TABLES}\\pard\\ls1\\ilvl0{\\listtext\\f0 \\'b7\\tab}Item\\par}`,

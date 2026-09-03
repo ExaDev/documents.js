@@ -141,6 +141,85 @@ describe("list and list override tables", () => {
   });
 });
 
+// <lfolevel> is `'{' \lfolevel \listoverrideformatN? \listoverridestartat? <listlevel> '}'`, and the spec states exactly which of the two flags puts what where: "If the format flag (\listoverrideformatN) is given, the \lfolevel should also contain a list level (<listlevel>). If the start-at flag (\listoverridestartat) is given, a start-at value must be provided. If the start-at is overridden but the format is not, then a \levelstartatN should be provided in the <lfolevel> itself. If both the start-at and the format are overridden, put the \levelstartatN inside the <listlevel> contained in the <lfolevel>." (RTF 1.9.1, "List Override Table")
+describe("list override levels", () => {
+  // One arabic list starting at 1, so every override below is visibly a departure from it rather than a restatement.
+  const ARABIC_LIST =
+    "{\\*\\listtable{\\list\\listtemplateid1\\listsimple" +
+    "{\\listlevel\\levelnfc0\\leveljc0\\levelstartat1{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}" +
+    "\\listid101}}";
+
+  function listsFor(
+    overrideTable: string,
+  ): ReturnType<typeof headerOf>["lists"] {
+    return headerOf(
+      `{\\rtf1${ARABIC_LIST}{\\*\\listoverridetable${overrideTable}}}`,
+    ).lists;
+  }
+
+  it("applies a start-at-only override from the \\levelstartatN inside the \\lfolevel itself", () => {
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount1" +
+        "{\\lfolevel\\listoverridestartat\\levelstartat7}\\ls1}",
+    );
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(7);
+    // The format is not overridden, so the list's own \levelnfcN survives.
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(0);
+  });
+
+  it("replaces the whole level when \\listoverrideformatN gives a nested <listlevel>", () => {
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount1" +
+        "{\\lfolevel\\listoverrideformat1" +
+        "{\\listlevel\\levelnfc23\\leveljc0\\levelstartat1{\\leveltext \\'01\\u183 ?;}{\\levelnumbers;}}" +
+        "}\\ls1}",
+    );
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(23);
+  });
+
+  it("takes the start-at from inside the nested <listlevel> when both flags are given", () => {
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount1" +
+        "{\\lfolevel\\listoverrideformat1\\listoverridestartat" +
+        "{\\listlevel\\levelnfc0\\leveljc0\\levelstartat42{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}" +
+        "}\\ls1}",
+    );
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(42);
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(0);
+  });
+
+  it("applies each \\lfolevel to the level at its own position, the nine-level shape \\listoverridecount9 states", () => {
+    const levels = Array.from(
+      { length: 9 },
+      (_unused, level) =>
+        `{\\lfolevel\\listoverridestartat\\levelstartat${String(level + 1)}}`,
+    ).join("");
+    const lists = listsFor(
+      `{\\listoverride\\listid101\\listoverridecount9${levels}\\ls1}`,
+    );
+    expect(lists.get(1)?.levels[3]?.startAt).toBe(4);
+    // A level the list itself never defined still gains the override's own start-at, so a nine-level override over a \listsimple list is not silently truncated to the one level the list declared.
+    expect(lists.get(1)?.levels[8]?.startAt).toBe(9);
+  });
+
+  it("leaves the list's own levels alone for \\listoverridecount0, which declares no \\lfolevel at all", () => {
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount0\\ls1}",
+    );
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(1);
+    expect(lists.get(1)?.levels[0]?.numberFormat).toBe(0);
+  });
+
+  it("keeps two overrides of one list independent, since each \\lsN is its own entry", () => {
+    const lists = listsFor(
+      "{\\listoverride\\listid101\\listoverridecount1{\\lfolevel\\listoverridestartat\\levelstartat5}\\ls1}" +
+        "{\\listoverride\\listid101\\listoverridecount0\\ls2}",
+    );
+    expect(lists.get(1)?.levels[0]?.startAt).toBe(5);
+    expect(lists.get(2)?.levels[0]?.startAt).toBe(1);
+  });
+});
+
 describe("document properties", () => {
   it("reads the document character set keyword and \\ansicpgN override", () => {
     const header = headerOf("{\\rtf1\\mac\\ansicpg10000\\deff0}");
