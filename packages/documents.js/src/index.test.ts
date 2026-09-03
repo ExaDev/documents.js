@@ -8,7 +8,9 @@ import {
   encodeDocumentPackage,
   encodePackage,
   odsToXlsx,
+  readRtfContent,
   readXlsxContent,
+  writeRtfContent,
 } from "./index";
 import { richOdsBytes } from "./test-support/ods";
 
@@ -91,5 +93,63 @@ describe("readXlsxContent / buildXlsxPackage re-export", () => {
     );
     expect(formulaCell?.formula).toBe("A1");
     expect(formulaCell?.value).toEqual({ kind: "number", value: 7 });
+  });
+});
+
+// readRtfContent/writeRtfContent are rtf-codec's own ContentDocument read/write pair, re-exported directly from this package's public surface (src/index.ts) -- rtf, like xlsx, needs no documents.js-local wrapper, since rtf-codec's own functions already read/write a real wordprocessing ContentDocument with no extra transformation this package would layer on. Exercised exactly as a real consumer of the 'documents.js' package would, through the public barrel, never by importing 'rtf-codec' directly.
+describe("readRtfContent / writeRtfContent re-export", () => {
+  it("reads a hand-authored RTF fixture into a wordprocessing ContentDocument", () => {
+    const rtfBytes = new TextEncoder().encode(
+      "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}" +
+        "\\pard\\fs24 Hello, {\\b world}.\\par}",
+    );
+
+    const content = readRtfContent(rtfBytes).document;
+
+    expect(content.kind).toBe("wordprocessing");
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const text = content.sections
+      .flatMap((section) => section.blocks)
+      .filter((block) => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs)
+      .map((run) => run.text)
+      .join("");
+    expect(text).toBe("Hello, world.");
+  });
+
+  it("writes a wordprocessing ContentDocument to real RTF bytes and reads its own content back through the same re-export", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "Round trip" }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const bytes = writeRtfContent(document);
+    const roundTripped = readRtfContent(bytes).document;
+
+    expect(roundTripped.kind).toBe("wordprocessing");
+    if (roundTripped.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const text = roundTripped.sections
+      .flatMap((section) => section.blocks)
+      .filter((block) => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs)
+      .map((run) => run.text)
+      .join("");
+    expect(text).toBe("Round trip");
   });
 });

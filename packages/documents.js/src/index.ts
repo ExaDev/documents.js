@@ -544,6 +544,8 @@ export type {
   SvgDiagnosticCode,
   SvgDiagnosticSink,
 } from "./svg/diagnostics";
+// rtf has no documents.js-local wrapper either, for the identical reason xlsx above does not: rtf-codec's own readRtfContent/writeRtfContent already read/write a real wordprocessing ContentDocument directly, with no extra transformation this package would need to layer on (unlike markdown, which runs its own math-lowering pass over what markdown-codec hands back) -- so both are re-exported as-is here, the same read/write pair CONTENT_READERS.rtf (src/codecs/read.ts) and DOCUMENT_FORMAT_CODECS.rtf (src/codecs/registry.ts) already use internally, now reachable without going through either. Unlike markdown/csv/svg, rtf takes bytes directly rather than decoded text -- RTF is byte-oriented, not UTF-8 text (a \binN run can carry arbitrary raw picture bytes) -- so there is no decodeRtfText/encodeRtfText byte<->text boundary to export alongside it.
+export { readRtfContent, writeRtfContent } from "rtf-codec";
 // The one-way ContentDocument -> Markdown text renderer covering all five ContentDocument kinds, not just 'wordprocessing' -- buildMarkdownText/markdown-codec's writeMarkdownContent above throw MarkdownUnsupportedDocumentKindError for the other four. renderContentDocumentToMarkdown delegates straight to buildMarkdownText for 'wordprocessing' and otherwise flattens slides/sheets/drawing pages/a bare formula into the same ContentBlock vocabulary first, reporting every degrade decision through its own onDiagnostic option (see src/markdown/render.ts's own module comment).
 export type {
   MarkdownRenderDiagnostic,
