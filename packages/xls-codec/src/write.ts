@@ -41,7 +41,7 @@ import {
   buildWorksheetSubstream,
   type SheetWriteContext,
 } from "./workbook/sheet-writer";
-import { writesCellRecord } from "./written-cells";
+import { cellCarriesDecoration, writesCellRecord } from "./written-cells";
 
 // The BIFF8 write path: a ContentDocument (or DocumentTree) of kind 'spreadsheet' back to real .xls bytes -- a genuine [MS-XLS] Workbook stream wrapped in a genuine [MS-CFB] compound file via archive-codec's writeCompoundFile. The counterpart of content.ts's readXlsContent/readXls, and of ooxml.js's own writeXlsx.
 //
@@ -273,12 +273,12 @@ function resolveWriteEdge(
   return { style: borderStyleTokenFor(border), icv: icvOf(border.color) };
 }
 
-/** A cell's own decoration, resolved into the raw XfDecorationFields the CellXF payload packs -- undefined for a cell with neither a background nor any border, so it shares the workbook's plain undecorated XF exactly as it did before decoration existed. */
+/** A cell's own decoration, resolved into the raw XfDecorationFields the CellXF payload packs -- undefined for a cell with neither a background nor any border, so it shares the workbook's plain undecorated XF exactly as it did before decoration existed. The "has decoration at all" question is written-cells.ts's, since the writer's own record-emission predicate turns on the identical answer. */
 function resolveDecorationForCell(
   cell: ContentSheetCell,
   icvOf: (color: Color) => number,
 ): XfDecorationFields | undefined {
-  if (cell.background === undefined && cell.borders === undefined) {
+  if (!cellCarriesDecoration(cell)) {
     return undefined;
   }
   return {
