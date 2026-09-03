@@ -472,6 +472,78 @@ describe("writeDocContent tables", () => {
     expect(cellText(block.rows[1]?.cells[1])).toBe("bottom-right");
   });
 
+  it("writes a genuinely blank cell as blank, not as a vertical-merge continuation of the cell above it", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [80, 80],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "A1" }])] },
+              { blocks: [paragraph([{ text: "B1" }])] },
+            ],
+          },
+          {
+            cells: [{ blocks: [] }, { blocks: [paragraph([{ text: "B2" }])] }],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    // The cell above a genuinely blank cell must not come back claiming a rowSpan it never had -- that would be exactly the "blank cell silently mis-written as a vertical-merge continuation" defect.
+    expect(block.rows[0]?.cells[0]?.rowSpan).toBeUndefined();
+    expect(cellText(block.rows[0]?.cells[0])).toBe("A1");
+    // Unlike a vertical-merge continuation (which the reader normalises back to `blocks: []` regardless of its own paragraph content, since a continuation's content is never rendered), an ordinary blank cell keeps the single empty paragraph [MS-DOC] requires every physical cell to carry -- the closest a lossless round trip of "no blocks" can reach.
+    expect(block.rows[1]?.cells[0]?.blocks).toEqual([
+      { kind: "paragraph", runs: [] },
+    ]);
+    expect(block.rows[1]?.cells[0]?.colSpan).toBeUndefined();
+    expect(cellText(block.rows[1]?.cells[1])).toBe("B2");
+  });
+
+  it("round-trips a cell merged both horizontally and vertically", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50, 50],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [paragraph([{ text: "anchor" }])],
+                colSpan: 2,
+                rowSpan: 2,
+              },
+              { blocks: [paragraph([{ text: "C1" }])] },
+            ],
+          },
+          {
+            cells: [{ blocks: [] }, { blocks: [paragraph([{ text: "C2" }])] }],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(block.rows[0]?.cells[0]?.rowSpan).toBe(2);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("anchor");
+    expect(cellText(block.rows[0]?.cells[1])).toBe("C1");
+    // The row below carries one schema cell for the whole 2-wide vertical continuation, not two -- its own colSpan records the physical width it still covers.
+    expect(block.rows[1]?.cells).toHaveLength(2);
+    expect(block.rows[1]?.cells[0]?.blocks).toEqual([]);
+    expect(block.rows[1]?.cells[0]?.colSpan).toBe(2);
+    expect(cellText(block.rows[1]?.cells[1])).toBe("C2");
+  });
+
   it("refuses a table nested inside a table cell", () => {
     const input = document([
       {
