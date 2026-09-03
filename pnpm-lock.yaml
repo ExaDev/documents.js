@@ -403,6 +403,9 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.11(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
+      wpd-codec:
+        specifier: ^1.0.1
+        version: link:../wpd-codec
 
   packages/document-outline.js:
     dependencies:
@@ -655,6 +658,9 @@ importers:
       temml:
         specifier: 0.13.4
         version: 0.13.4
+      wpd-codec:
+        specifier: workspace:^
+        version: link:../wpd-codec
       zod:
         specifier: ^4.4.3
         version: 4.4.3
