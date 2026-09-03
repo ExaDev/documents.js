@@ -223,6 +223,14 @@ describe("writeOdpContent: shape geometry", () => {
     expect(attrValue(frame, "draw:name")).toBe("Title Placeholder");
   });
 
+  it("escapes an XML special character in draw:name, storing the entity form in the attribute", () => {
+    const pkg = writeOdpContent(
+      documentOf([slide([shape({ name: "Q&A <draft>" })])]),
+    );
+    const frame = childrenWithTag(pagesOf(pkg)[0]!, "draw:frame")[0]!;
+    expect(attrValue(frame, "draw:name")).toBe("Q&amp;A &lt;draft&gt;");
+  });
+
   // The ODF `length` datatype has no exponent form at all (typed/shared/units.ts's own LENGTH_PATTERN), so an svg:*/translate() component in JavaScript's own exponent spelling is invalid ODF that this package's reader silently discards -- taking the translate(), or the whole shape, with it. A frame sitting at the page origin is the ordinary way to reach that magnitude: the rotation inverse's own terms cancel to trig rounding dust rather than to a clean zero. This exact case (a 100x100 frame at the origin, rotated 270 degrees) writes translate(7.105427357601002e-15pt ...) without the fix.
   it("writes no exponent-notation length for a rotated frame at the page origin, where the translate() components cancel to rounding dust", () => {
     const pkg = writeOdpContent(
