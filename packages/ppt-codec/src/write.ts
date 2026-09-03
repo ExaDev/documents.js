@@ -1,4 +1,5 @@
 import {
+  hasSummaryInformationFields,
   writeCompoundFile,
   writeSummaryInformationStream,
 } from "archive-codec";
@@ -17,10 +18,7 @@ import {
 } from "./document/slide-list-write";
 import { writeSlideDrawing } from "./drawing/shapes-write";
 import { PptUnsupportedContentError } from "./errors";
-import {
-  hasSummaryInformationFields,
-  layoutMetadataToSummaryInformation,
-} from "./metadata";
+import { layoutMetadataToSummaryInformation } from "./metadata";
 import {
   CURRENT_USER_STREAM,
   POWERPOINT_DOCUMENT_STREAM,
