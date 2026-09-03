@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/odf.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/odf.js) [![npm version](https://img.shields.io/npm/v/odf.js)](https://www.npmjs.com/package/odf.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> A hand-written, dependency-minimal codec for the OpenDocument Format (ODF — OASIS/ISO 26300): `.odt`/`.ods`/`.odp`/`.odg`/`.odf`/`.odb`/`.odm` and their template variants, built on [Zod 4](https://zod.dev) codecs — plus read support for the pre-OASIS OpenOffice.org 1.x / StarOffice 6-7 documents ODF was based on (`.sxw`/`.sxc`/`.sxi`/`.sxd`).
+> A hand-written, dependency-minimal codec for the OpenDocument Format (ODF — OASIS/ISO 26300): `.odt`/`.ods`/`.odp`/`.odg`/`.odf`/`.odb`/`.odm` and their template variants, built on [Zod 4](https://zod.dev) codecs — plus read support for the pre-OASIS OpenOffice.org 1.x / StarOffice 6-7 documents ODF was based on (`.sxw`/`.sxc`/`.sxi`/`.sxd`), with a real `.sxw` writer alongside it.
 
 `odf.js` is the ODF sibling of [`ooxml.js`](../ooxml.js/README.md), mirroring its architecture: a lossless ZIP-of-XML core that round-trips any package byte-for-content-faithful, with typed readers layered on top. Two ODF-specific differences shape the design: ODF has no relationship mechanism (inter-part references are direct paths, with an exhaustive `META-INF/manifest.xml`), and ODF has no inline/direct formatting — every formatting difference must be a named "automatic style," so `odf.js` owns a style-interning subsystem (`src/styles/`) with no OOXML equivalent.
 
@@ -64,7 +64,8 @@ Under active development. Built and shipped:
 - **`readOdm`** — resolves a `.odm` master document into an ordered list of chapter references (`{ name, href, filterName? }`); chapters are genuinely external `.odt` files by ODF design, never cached.
 - **`readOdbInventory`** — resolves a `.odb` into connection info, table names, query definitions (`{ name, command, escapeProcessing? }` with real SQL text), and form/report `{ name, href }` pairs. A sub-document directory is named after an opaque _persistent_ name (`forms/Obj11`), not the user-visible name.
 - **`readOdbForm`/`readOdbReport`** — extract one sub-document's _static structure_, executing nothing: a form's control tree and data bindings, or a report's band stack, recursive group tree, bound fields, and computed expressions.
-- **OpenOffice.org 1.x / StarOffice 6-7 reading** (`readSxw`/`readSxc`/`readSxi`/`readSxd` and their `*Content` siblings, plus `transformOoo1Package` and `isOoo1Package`) — the pre-OASIS ancestor ODF 1.0 was based on, read through the ODF readers above rather than beside them. See [Reading an OpenOffice.org 1.x document](#reading-an-openofficeorg-1x-document). **Read only:** there is no `.sxw` writer, and the inverse transform an OpenOffice.org 1.x writer would need has no OpenOffice.org-shaped target to write into.
+- **OpenOffice.org 1.x / StarOffice 6-7 reading** (`readSxw`/`readSxc`/`readSxi`/`readSxd` and their `*Content` siblings, plus `transformOoo1Package` and `isOoo1Package`) — the pre-OASIS ancestor ODF 1.0 was based on, read through the ODF readers above rather than beside them. See [Reading and writing an OpenOffice.org 1.x document](#reading-and-writing-an-openofficeorg-1x-document).
+- **OpenOffice.org 1.x writing** (`writeSxw`/`writeSxwContent`, plus `transformToOoo1Package`, the read-side transform's own inverse) — `.sxw` only, built on `writeOdt`/`writeOdtContent`: `.sxc`/`.sxi`/`.sxd` have no writer yet, since this package's typed layer has no `writeOds`/`writeOdp`/`writeOdg` for one to be built on.
 - **The odt writer, at the same two levels** — `writeOdt` takes the `DocumentTree` `readOdt` returns and `writeOdtContent` the flat `ContentDocument` `readOdtContent` returns, and both produce a real `.odt` `Package` (`encodePackage` turns it into bytes). Paragraphs, headings, runs with character formatting and hyperlinks, whitespace, lists, tables, images, explicit page breaks, per-section page geometry, and `meta.xml` all round-trip; the fidelity constructs and embedded objects are refused by name rather than silently dropped. See [Writing a document](#writing-a-document).
 
 Not yet built: writers for `.ods`/`.odp`/`.odg` (the odt writer is the first slice), a write path for the fidelity constructs, live-view editors, and the `.odb` database-table-export subsystem. A general-purpose SQL query engine for rendering a Report against its data is **deliberately not attempted** — building even a bounded SQL engine means reimplementing HSQLDB's/Firebird's query semantics, a materially different undertaking from decoding their file formats, with unreviewed licensing questions. Gated on the requesting engineer's explicit sign-off.
@@ -210,7 +211,7 @@ syncManifest(pkg); // rebuilds manifest.xml to exactly match pkg's current parts
 readMimetype(pkg); // 'application/vnd.oasis.opendocument.text'
 ```
 
-### Reading an OpenOffice.org 1.x document
+### Reading and writing an OpenOffice.org 1.x document
 
 `.sxw`/`.sxc`/`.sxi`/`.sxd` (and their `.stw`/`.stc`/`.sti`/`.std` template counterparts) are OpenOffice.org 1.x / StarOffice 6-7 documents — the format OASIS based ODF 1.0 directly on. They read through the same functions as their ODF successors, one reader per format, at the same two levels:
 
@@ -232,7 +233,20 @@ None of these is a second reader. Each is `readOdt`/`readOds`/`readOdp`/`readOdg
 
 `transformOoo1Package` is exported for a caller that wants the transformed `Package` rather than a read of it, and returns anything that is not an OpenOffice.org 1.x package unchanged; `isOoo1Package` is the same detection on its own, decided by the namespace URIs the package's parts declare rather than by a file extension or a manifest media type. `OOO1_NAMESPACES`, `OOO1_MEDIA_TYPES`, `ooo1MediaTypeForExtension` and `odfMediaTypeForOoo1MediaType` expose the format's own namespace and media-type tables.
 
-**Read only.** There is no `.sxw` writer, and the asymmetry is not specific to this format: this package's typed layer is read-only for ODF as well, so there is no ODF content writer for an inverse transform to target. See [What differs between the two vocabularies](#what-differs-between-the-two-vocabularies) for what the transform covers, and its own module comment (`src/ooo1/transform.ts`) for the full list.
+`.sxw` has a real writer, built the same way the reader is — as a transform either side of the ODF writer, not a second writer of its own:
+
+```ts
+import { writeSxw, writeSxwContent, encodePackage } from "odf.js";
+
+const pkg = writeSxw(document); // a wordprocessing DocumentTree -> a real .sxw Package
+const bytes = encodePackage(pkg); // Package -> bytes
+
+const pkgFromContent = writeSxwContent(contentDocument); // the flat ContentDocument level, same shape writeOdtContent returns
+```
+
+`writeSxw`/`writeSxwContent` call `writeOdt`/`writeOdtContent` to build a real ODF `.odt` `Package`, then run it through `transformToOoo1Package` — `transformOoo1Package`'s own inverse, reversing every rename and restructure the read-side transform documents (namespace URIs, the `office:class` genre wrap/unwrap, the `style:properties` typed-family split/merge, the `draw:frame` wrap/unwrap, the renamed elements and attributes, the `"inch"`/`"in"` unit spelling, and the package-level mimetype/manifest handling) against the same LibreOffice transformer source and OpenOffice.org DTD the forward direction is grounded against. The result genuinely declares OpenOffice.org 1.x namespace URIs, carries no `mimetype` part, and reads back correctly through the ordinary `readSxw`/`readSxwContent` — `readSxw(writeSxw(document))` recovers `document` up to the exact same canonical form `normaliseOdtContent` already states for `writeOdt`, since `writeSxwContent` is `writeOdtContent`'s own output run one transform further. What `writeOdt` refuses (the fidelity constructs — fields, bookmarks, notes, annotations, tracked changes, divisions, index wrappers, forms — and embedded objects), `writeSxw` refuses too, for the same reason: a document that silently lost semantic content would be worse than one this writer declined to produce at all.
+
+`.sxc`/`.sxi`/`.sxd` have no writer yet — this package's typed layer has no `writeOds`/`writeOdp`/`writeOdg` for one to be built on; only `.odt`/`.sxw` do. See [What differs between the two vocabularies](#what-differs-between-the-two-vocabularies) for what the transform covers, and its own module comment (`src/ooo1/transform.ts`) for the full list, including the reverse direction's own note (`transformToOoo1Package`) on the package-wide context (a document's `office:class`, a list's ordered/bullet kind) the reverse needs that the forward direction never did.
 
 ### What differs between the two vocabularies
 
@@ -274,7 +288,7 @@ Layered from a lossless core outward, mirroring `ooxml.js`:
 - **`src/typed/draw/`** — the shared `draw:frame`/`draw:g`/vector shape vocabulary and `readDrawImageBlock` (`shapes.ts`), plus `embedded.ts` (`readDrawObjectReference`, `readEmbeddedObjectDocument`, `readOdfChartContent` — the shared embedded-object reference resolver and the central kind→reader dispatch table).
 - **`src/typed/formula/`, `odm/`** — `readOdfFormula`/`readOdfFormulaContent`/`readOdfFormulaMathMl` and `readOdm`.
 - **`src/typed/odb/`** — `readOdbInventory`, `readOdbForm`/`readOdbReport`, `resolveOdbComponent`, `subDocumentPackage`.
-- **`src/ooo1/`** — the OpenOffice.org 1.x variant reader: `ns.ts` (the pre-OASIS namespace and `application/vnd.sun.xml.*` media-type tables plus package detection), `properties.ts` (the `style:properties` split), `transform.ts` (the whole package rewrite), `read.ts` (`readSxw`/`readSxc`/`readSxi`/`readSxd`). Sits _beside_ `typed/`, not inside it: it adds no reader of its own, it feeds the ones already there.
+- **`src/ooo1/`** — the OpenOffice.org 1.x variant reader and writer: `ns.ts` (the pre-OASIS namespace and `application/vnd.sun.xml.*` media-type tables plus package detection, in both directions), `properties.ts` (the `style:properties` split, and `mergeStyleProperties`, its own inverse), `transform.ts` (the whole package rewrite, `transformOoo1Package` and its inverse `transformToOoo1Package`), `read.ts` (`readSxw`/`readSxc`/`readSxi`/`readSxd`), `write.ts` (`writeSxw`/`writeSxwContent`). Sits _beside_ `typed/`, not inside it: it adds no reader or writer of its own for the ODF content model, it feeds `writeOdt`'s output into `transformToOoo1Package` and the ODF readers' input through `transformOoo1Package`.
 
 ## Conventions
 
