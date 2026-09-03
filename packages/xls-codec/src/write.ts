@@ -41,6 +41,7 @@ import {
   buildWorksheetSubstream,
   type SheetWriteContext,
 } from "./workbook/sheet-writer";
+import { writesCellRecord } from "./written-cells";
 
 // The BIFF8 write path: a ContentDocument (or DocumentTree) of kind 'spreadsheet' back to real .xls bytes -- a genuine [MS-XLS] Workbook stream wrapped in a genuine [MS-CFB] compound file via archive-codec's writeCompoundFile. The counterpart of content.ts's readXlsContent/readXls, and of ooxml.js's own writeXlsx.
 //
@@ -145,7 +146,7 @@ function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
 
   for (const sheet of sheets) {
     for (const cell of sheet.cells) {
-      if (cell.value.kind === "empty") {
+      if (!writesCellRecord(cell)) {
         continue;
       }
       resolve(formatCodeForCell(cell));
@@ -189,6 +190,10 @@ function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
   };
   for (const sheet of sheets) {
     for (const cell of sheet.cells) {
+      // Only cells that actually become records, so the scan can never allocate a palette slot to a colour the XF pass below then never writes -- see written-cells.ts on why every pass shares one predicate.
+      if (!writesCellRecord(cell)) {
+        continue;
+      }
       record(cell.background);
       record(cell.borders?.left?.color);
       record(cell.borders?.right?.color);
@@ -342,7 +347,7 @@ function buildCellXfPlan(
 
   for (const sheet of sheets) {
     for (const cell of sheet.cells) {
-      if (cell.value.kind === "empty") {
+      if (!writesCellRecord(cell)) {
         continue;
       }
       xfIndexForCell(cell);
