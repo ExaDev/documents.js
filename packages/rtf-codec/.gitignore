@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+coverage/
+test/corpus/
+.eslintcache
+.turbo/
