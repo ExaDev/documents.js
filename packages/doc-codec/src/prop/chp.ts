@@ -1,5 +1,5 @@
 import type { Color } from "document-schema.js";
-import { readUint16LE, readUint8 } from "../bytes";
+import { readInt16LE, readUint16LE, readUint8 } from "../bytes";
 import { DocFormatError } from "../errors";
 import { SGC, type Prl } from "./sprm";
 
@@ -21,6 +21,8 @@ const SPRM_C_ISTD = 0x4a30;
 const SPRM_C_ICO = 0x2a42;
 /** sprmCCv: a COLORREF, the richer colour sprm that supersedes sprmCIco where both appear. */
 const SPRM_C_CV = 0x6870;
+/** sprmCRgFtc0: a 2-byte signed index into the font table (SttbfFfn) naming the font used "only if the conditions for using [sprmCRgFtc1/sprmCRgFtc2/sprmCFtcBi] do not apply" -- the default (non-East-Asian, non-complex-script) font, which is the only one this package reads or writes. */
+const SPRM_C_RG_FTC_0 = 0x4a4f;
 
 /** ToggleOperand, [MS-DOC] 2.9.336. 0x80 and 0x81 are relative to the style's own value rather than absolute. */
 const TOGGLE_OFF = 0x00;
@@ -38,6 +40,7 @@ export interface CharacterProperties {
   strike?: boolean;
   sizePt?: number;
   color?: Color;
+  fontFamily?: string;
   /** The istd of a character style applied by sprmCIstd, carried so a caller can resolve the style's own name. */
   istd?: number;
 }
@@ -118,6 +121,8 @@ function colorRefColor(operand: Uint8Array): Color | undefined {
 export function applyCharacterSprms(
   prls: readonly Prl[],
   into: CharacterProperties,
+  // The font table (SttbfFfn, see ../style/fonts.ts) sprmCRgFtc0's operand indexes into. Threaded through rather than resolved by the caller after the fact, because folding is the one place every character sprm's precedence rule (last Prl wins) is already applied -- resolving fontFamily anywhere else would need this same in-order walk repeated.
+  fonts?: readonly string[],
 ): CharacterProperties {
   for (const prl of prls) {
     if (prl.sprm.sgc !== SGC.character) continue;
@@ -146,6 +151,12 @@ export function applyCharacterSprms(
       case SPRM_C_CV:
         into.color = colorRefColor(prl.operand);
         break;
+      case SPRM_C_RG_FTC_0: {
+        const index = readInt16LE(prl.operand, 0);
+        const name = fonts?.[index];
+        if (name !== undefined) into.fontFamily = name;
+        break;
+      }
       default:
         // Every other character sprm is a property this reader does not convert. Left alone rather than recorded: the package's scope is stated once, in its README, not restated as a per-property diagnostic on every run of every document.
         break;
