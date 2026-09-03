@@ -4,22 +4,37 @@ import {
   writeSummaryInformationStream,
 } from "archive-codec";
 import type {
+  Color,
+  ContentBorder,
   ContentDocument,
   ContentSheet,
   ContentSheetCell,
   DocumentTree,
 } from "document-schema.js";
-import { flattenTree } from "document-schema.js";
+import { colorToRgbHex, flattenTree } from "document-schema.js";
 
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
 import { BiffWriteError } from "./biff/write-errors";
+import {
+  BORDER_STYLE_NONE,
+  borderStyleTokenFor,
+  DEFAULT_PALETTE_HEX_TO_ICV,
+  FILL_PATTERN_NONE,
+  FILL_PATTERN_SOLID,
+  ICV_AUTOMATIC_FOREGROUND,
+  PALETTE_BASE_ICV,
+  PALETTE_ENTRY_COUNT,
+  type XfBorderEdge,
+  type XfDecorationFields,
+} from "./biff/xf-colors";
 import type { XlsContentDocument } from "./content";
 import { SUMMARY_INFORMATION_STREAM } from "./container";
 import { layoutMetadataToSummaryInformation } from "./metadata";
 import {
   buildWorkbookGlobals,
   GENERAL_CELL_XF_INDEX,
+  type CellXfPlanEntry,
   type WorkbookGlobalsPlan,
 } from "./workbook/globals-writer";
 import {
@@ -29,9 +44,9 @@ import {
 
 // The BIFF8 write path: a ContentDocument (or DocumentTree) of kind 'spreadsheet' back to real .xls bytes -- a genuine [MS-XLS] Workbook stream wrapped in a genuine [MS-CFB] compound file via archive-codec's writeCompoundFile. The counterpart of content.ts's readXlsContent/readXls, and of ooxml.js's own writeXlsx.
 //
-// Two things are workbook-wide rather than per-sheet, so they are resolved in one pass over every sheet before any record is written: the number-format table (a cell's own numberFormatCode, or a representative default for its value kind when absent, maps onto a shared BIFF8 format identifier and XF index the same code reuses everywhere it appears) and the shared string table (every distinct string value, in first-encountered order, referenced by index from a LabelSst cell in any sheet). Building each once and threading the result into every sheet's own writer is what keeps two cells in different sheets sharing the identical string or format from minting two redundant table entries.
+// Three things are workbook-wide rather than per-sheet, so they are resolved in one pass over every sheet before any record is written: the number-format table (a cell's own numberFormatCode, or a representative default for its value kind when absent, maps onto a shared BIFF8 format identifier the same code reuses everywhere it appears), the colour table (every distinct background/border colour a cell uses, resolved to an icv against the fixed default palette or, when a colour genuinely isn't in it, a real Palette record this pass mints), and the shared string table (every distinct string value, in first-encountered order, referenced by index from a LabelSst cell in any sheet). A fourth pass, buildCellXfPlan, then interns the (number format, decoration) PAIR every cell resolves to into its own cell XF index -- two cells sharing both a format and a decoration share one XF record, mirroring how ooxml.js's own CellFormatTable dedupes an xlsx <xf> on the identical pair. Building each of these once and threading the result into every sheet's own writer is what keeps two cells in different sheets sharing the identical string, format, or decoration from minting redundant table entries.
 //
-// See this package's README for the writer's own scope: what it covers (numeric/percentage/currency/date/time/dateTime/boolean/error/string cell values, merged ranges, row heights, column widths, custom and built-in number formats) and what it deliberately does not (formulas, cell decoration, images, comments, data validation, conditional formatting, print settings, and a long tail of BIFF8 records that carry UI/interoperability state rather than document content).
+// See this package's README for the writer's own scope: what it covers (numeric/percentage/currency/date/time/dateTime/boolean/error/string cell values, merged ranges, row heights, column widths, custom and built-in number formats, and now cell background fill and per-side borders) and what it deliberately does not (formulas, alignment, per-cell fonts, images, comments, data validation, conditional formatting, print settings, and a long tail of BIFF8 records that carry UI/interoperability state rather than document content).
 
 const WORKBOOK_STREAM_NAME = "Workbook";
 
@@ -93,24 +108,17 @@ interface FormatPlan {
     readonly id: number;
     readonly code: string;
   }[];
-  readonly cellXfFormatIds: readonly number[];
   readonly formatIdOf: (code: string) => number;
-  readonly xfIndexOf: (formatId: number) => number;
 }
 
-/** Scans every sheet's cells once, assigning each distinct number-format code a formatId (reusing a built-in id for a code matching one of excel-number-format's own BUILTIN_NUMBER_FORMATS strings exactly, minting a new custom id from FIRST_CUSTOM_FORMAT_ID otherwise) and each distinct formatId a cell XF index (formatId 0 always resolves to GENERAL_CELL_XF_INDEX, the workbook's own unconditional "General" cell format). */
+/** Scans every sheet's cells once, assigning each distinct number-format code a formatId: reusing a built-in id for a code matching one of excel-number-format's own BUILTIN_NUMBER_FORMATS strings exactly, minting a new custom id from FIRST_CUSTOM_FORMAT_ID otherwise. Cell XF index assignment is a separate, later pass (buildCellXfPlan below) -- a formatId alone no longer determines a cell's XF index once decoration exists, since two cells sharing a format but differing in background/borders need two distinct XFs. */
 function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
   const codeToFormatId = new Map<string, number>();
   const builtinIdByCode = new Map<string, number>(
     Array.from(BUILTIN_NUMBER_FORMATS, ([id, code]) => [code, id]),
   );
   const customFormats: { id: number; code: string }[] = [];
-  const cellXfFormatIds: number[] = [];
-  const formatIdToXfIndex = new Map<number, number>([
-    [GENERAL_FORMAT_ID, GENERAL_CELL_XF_INDEX],
-  ]);
   let nextCustomId = FIRST_CUSTOM_FORMAT_ID;
-  let nextXfIndex = GENERAL_CELL_XF_INDEX + 1;
 
   const resolve = (code: string): number => {
     const existing = codeToFormatId.get(code);
@@ -132,11 +140,6 @@ function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
       customFormats.push({ id: formatId, code });
     }
     codeToFormatId.set(code, formatId);
-    if (!formatIdToXfIndex.has(formatId)) {
-      formatIdToXfIndex.set(formatId, nextXfIndex);
-      cellXfFormatIds.push(formatId);
-      nextXfIndex += 1;
-    }
     return formatId;
   };
 
@@ -151,7 +154,6 @@ function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
 
   return {
     customFormats,
-    cellXfFormatIds,
     formatIdOf: (code: string): number => {
       const id = codeToFormatId.get(code);
       if (id === undefined) {
@@ -161,16 +163,193 @@ function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
       }
       return id;
     },
-    xfIndexOf: (formatId: number): number => {
-      const index = formatIdToXfIndex.get(formatId);
-      if (index === undefined) {
-        throw new BiffWriteError(
-          `internal error: formatId ${formatId} was not assigned a cell XF index during the workbook-wide format scan`,
-        );
-      }
-      return index;
-    },
   };
+}
+
+// --- Cell decoration: the workbook-wide colour table, and the (format, decoration) -> XF-index interning that carries it ---
+
+interface PalettePlan {
+  /** The workbook's own custom colour table (56 entries, icv 8 first), or undefined when every distinct decoration colour the workbook's cells use already matches the fixed default table -- in which case no Palette record is needed at all, and icvOf resolves every colour straight through that default table. */
+  readonly paletteColors: readonly Color[] | undefined;
+  /** The icv (7-bit colour-table index) a decoration colour resolves to -- into `paletteColors` when defined, into the fixed default table otherwise. Every colour this is called with must already have been registered during the workbook-wide colour scan below. */
+  readonly icvOf: (color: Color) => number;
+}
+
+/** Scans every sheet's cells once for the distinct fill/border colours the workbook actually uses (background, and each present border side's own colour), then decides whether they all already have a home in the fixed default table (no Palette record needed) or whether at least one genuinely custom colour forces a real one -- in which case every distinct colour, not just the non-default ones, is allocated its own dedicated slot, so the whole 56-entry table is self-consistent and every reference resolves through it rather than a mix of "the file's own table" and "the implicit default". */
+function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
+  const colorByHex = new Map<string, Color>();
+  const record = (color: Color | undefined): void => {
+    if (color === undefined) {
+      return;
+    }
+    const hex = colorToRgbHex(color);
+    if (!colorByHex.has(hex)) {
+      colorByHex.set(hex, color);
+    }
+  };
+  for (const sheet of sheets) {
+    for (const cell of sheet.cells) {
+      record(cell.background);
+      record(cell.borders?.left?.color);
+      record(cell.borders?.right?.color);
+      record(cell.borders?.top?.color);
+      record(cell.borders?.bottom?.color);
+    }
+  }
+
+  const missing = (hex: string): never => {
+    throw new BiffWriteError(
+      `internal error: colour ${hex} was not registered during the workbook-wide palette scan`,
+    );
+  };
+
+  if (colorByHex.size === 0) {
+    return {
+      paletteColors: undefined,
+      icvOf: (color) => missing(colorToRgbHex(color)),
+    };
+  }
+
+  // Fast path: does every distinct colour already match the fixed default table exactly? If so, no Palette record is needed at all.
+  const defaultIcvByHex = new Map<string, number>();
+  let needsCustomPalette = false;
+  for (const hex of colorByHex.keys()) {
+    const icv = DEFAULT_PALETTE_HEX_TO_ICV.get(hex);
+    if (icv === undefined) {
+      needsCustomPalette = true;
+      break;
+    }
+    defaultIcvByHex.set(hex, icv);
+  }
+  if (!needsCustomPalette) {
+    return {
+      paletteColors: undefined,
+      icvOf: (color) =>
+        defaultIcvByHex.get(colorToRgbHex(color)) ??
+        missing(colorToRgbHex(color)),
+    };
+  }
+
+  // Slow path: at least one colour needs a genuinely custom entry. Allocate every distinct colour -- not just the non-default ones -- into fresh slots in first-use order, so the record this writes is fully self-consistent.
+  if (colorByHex.size > PALETTE_ENTRY_COUNT) {
+    throw new BiffWriteError(
+      `workbook needs ${colorByHex.size} distinct decoration colours, more than the ${PALETTE_ENTRY_COUNT} entries [MS-XLS] 2.4.204's own Palette record can hold`,
+    );
+  }
+  const icvByHex = new Map<string, number>();
+  const paletteColors: Color[] = [];
+  let nextIcv = PALETTE_BASE_ICV;
+  for (const [hex, color] of colorByHex) {
+    icvByHex.set(hex, nextIcv);
+    paletteColors.push(color);
+    nextIcv += 1;
+  }
+  // Unused trailing slots are never referenced by any XF this writer emits -- their exact content is immaterial, and black is as good a filler as any -- but the record still declares the full, spec-required 56 entries rather than a short one.
+  while (paletteColors.length < PALETTE_ENTRY_COUNT) {
+    paletteColors.push({ r: 0, g: 0, b: 0 });
+  }
+
+  return {
+    paletteColors,
+    icvOf: (color) =>
+      icvByHex.get(colorToRgbHex(color)) ?? missing(colorToRgbHex(color)),
+  };
+}
+
+const UNDECORATED_EDGE: XfBorderEdge = { style: BORDER_STYLE_NONE, icv: 0 };
+
+function resolveWriteEdge(
+  border: ContentBorder | undefined,
+  icvOf: (color: Color) => number,
+): XfBorderEdge {
+  if (border === undefined) {
+    return UNDECORATED_EDGE;
+  }
+  return { style: borderStyleTokenFor(border), icv: icvOf(border.color) };
+}
+
+/** A cell's own decoration, resolved into the raw XfDecorationFields the CellXF payload packs -- undefined for a cell with neither a background nor any border, so it shares the workbook's plain undecorated XF exactly as it did before decoration existed. */
+function resolveDecorationForCell(
+  cell: ContentSheetCell,
+  icvOf: (color: Color) => number,
+): XfDecorationFields | undefined {
+  if (cell.background === undefined && cell.borders === undefined) {
+    return undefined;
+  }
+  return {
+    fillPattern:
+      cell.background === undefined ? FILL_PATTERN_NONE : FILL_PATTERN_SOLID,
+    fillForegroundIcv:
+      cell.background === undefined
+        ? ICV_AUTOMATIC_FOREGROUND
+        : icvOf(cell.background),
+    left: resolveWriteEdge(cell.borders?.left, icvOf),
+    right: resolveWriteEdge(cell.borders?.right, icvOf),
+    top: resolveWriteEdge(cell.borders?.top, icvOf),
+    bottom: resolveWriteEdge(cell.borders?.bottom, icvOf),
+  };
+}
+
+/** A deterministic signature for one cell XF's own (formatId, decoration) pair, so two cells sharing both share one XF record -- the interning key buildCellXfPlan below dedupes on, mirroring how CellFormatTable in ooxml.js's typed/xlsx/styles.ts dedupes an <xf> on (number format, decoration) together rather than on format alone. */
+function signatureOfCellXf(
+  formatId: number,
+  decoration: XfDecorationFields | undefined,
+): string {
+  if (decoration === undefined) {
+    return `f${formatId}`;
+  }
+  return (
+    `f${formatId}` +
+    `|p${decoration.fillPattern}:${decoration.fillForegroundIcv}` +
+    `|l${decoration.left.style}:${decoration.left.icv}` +
+    `|r${decoration.right.style}:${decoration.right.icv}` +
+    `|t${decoration.top.style}:${decoration.top.icv}` +
+    `|b${decoration.bottom.style}:${decoration.bottom.icv}`
+  );
+}
+
+interface CellXfPlan {
+  readonly cellXfEntries: readonly CellXfPlanEntry[];
+  readonly xfIndexForCell: (cell: ContentSheetCell) => number;
+}
+
+/** Scans every sheet's cells once, interning each distinct (number format, decoration) combination into its own cell XF index -- a cell with General formatting and no decoration resolves to the workbook's own implicit GENERAL_CELL_XF_INDEX with no new XF record at all, exactly as before; every other combination mints one XF record the first time it is seen and is reused by every later cell sharing it. */
+function buildCellXfPlan(
+  sheets: readonly ContentSheet[],
+  formatPlan: FormatPlan,
+  palettePlan: PalettePlan,
+): CellXfPlan {
+  const cellXfEntries: CellXfPlanEntry[] = [];
+  const xfIndexBySignature = new Map<string, number>([
+    [signatureOfCellXf(GENERAL_FORMAT_ID, undefined), GENERAL_CELL_XF_INDEX],
+  ]);
+  let nextXfIndex = GENERAL_CELL_XF_INDEX + 1;
+
+  const xfIndexForCell = (cell: ContentSheetCell): number => {
+    const formatId = formatPlan.formatIdOf(formatCodeForCell(cell));
+    const decoration = resolveDecorationForCell(cell, palettePlan.icvOf);
+    const signature = signatureOfCellXf(formatId, decoration);
+    const existing = xfIndexBySignature.get(signature);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const index = nextXfIndex;
+    nextXfIndex += 1;
+    cellXfEntries.push({ formatId, decoration });
+    xfIndexBySignature.set(signature, index);
+    return index;
+  };
+
+  for (const sheet of sheets) {
+    for (const cell of sheet.cells) {
+      if (cell.value.kind === "empty") {
+        continue;
+      }
+      xfIndexForCell(cell);
+    }
+  }
+
+  return { cellXfEntries, xfIndexForCell };
 }
 
 interface SstPlan {
@@ -252,19 +431,21 @@ function buildWorkbookStream(
 
   const formatPlan = buildFormatPlan(content.sheets);
   const sstPlan = buildSstPlan(content.sheets);
+  const palettePlan = buildPalettePlan(content.sheets);
+  const cellXfPlan = buildCellXfPlan(content.sheets, formatPlan, palettePlan);
 
   const globalsPlan: WorkbookGlobalsPlan = {
     sheetNames: content.sheets.map((sheet) => sheet.name),
     customFormats: formatPlan.customFormats,
-    cellXfFormatIds: formatPlan.cellXfFormatIds,
+    cellXfEntries: cellXfPlan.cellXfEntries,
     sharedStrings: sstPlan.strings,
     sharedStringTotalCount: sstPlan.totalCount,
+    paletteColors: palettePlan.paletteColors,
   };
   const globals = buildWorkbookGlobals(globalsPlan);
 
   const sheetContext: SheetWriteContext = {
-    formatIdForCell: (cell) => formatPlan.formatIdOf(formatCodeForCell(cell)),
-    xfIndexForFormatId: (formatId) => formatPlan.xfIndexOf(formatId),
+    xfIndexForCell: cellXfPlan.xfIndexForCell,
     sstIndexFor: (text) => sstPlan.indexOf(text),
   };
 
