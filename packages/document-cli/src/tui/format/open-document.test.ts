@@ -108,6 +108,37 @@ describe("openDocumentAtPath for .csv and .svg", () => {
   });
 });
 
+describe("openDocumentAtPath for .rtf", () => {
+  it("opens read-only as a converted PDF preview, exactly like an xlsx", async () => {
+    const path = join(workspace, "letter.rtf");
+    const bytes = new TextEncoder().encode(
+      "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}\\pard Hello world.\\par}",
+    );
+    await writeFile(path, bytes);
+
+    const doc = await openDocumentAtPath(path);
+    if (doc.format !== "rtf") {
+      throw new Error(`expected an open rtf document, got ${doc.format}`);
+    }
+    expect(doc.path).toBe(path);
+    expect(doc.layout.pages.length).toBeGreaterThan(0);
+    expect(doc.bytes).toStrictEqual(bytes);
+  });
+
+  it("cannot be written back to disk -- it is read-only, the same group as .odb/.xlsx/.csv/.svg", async () => {
+    const path = join(workspace, "letter.rtf");
+    await writeFile(
+      path,
+      new TextEncoder().encode("{\\rtf1\\ansi\\pard Hello.\\par}"),
+    );
+    const doc = await openDocumentAtPath(path);
+
+    await expect(
+      saveDocumentTo(doc, join(workspace, "copy.rtf")),
+    ).rejects.toThrow(/read-only/);
+  });
+});
+
 describe("openDocumentAtPath / saveDocumentTo for .md", () => {
   it("opens a real markdown file into a structured MarkdownEditor, edits it through the shared paragraph-family actions, and saves back out as valid, re-parseable markdown containing the edit", async () => {
     const path = join(workspace, "notes.md");
