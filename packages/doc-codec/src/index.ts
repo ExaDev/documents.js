@@ -6,6 +6,7 @@ export * from "./detect";
 export * from "./fib/offsets";
 export * from "./fib/fib";
 export * from "./fib/write";
+export * from "./metadata";
 export * from "./text/piece-table";
 export * from "./text/piece-table-write";
 export * from "./text/characters";

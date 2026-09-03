@@ -104,4 +104,21 @@ describe("doc-codec under the Cloudflare Workers runtime", () => {
     ]);
     expect(table.lastCp).toBe(14);
   });
+
+  it("round-trips document metadata through a real \"\\x05SummaryInformation\" stream, with no Node-only API", () => {
+    const input: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: { title: "Workers isolate title", author: "doc-codec" },
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [{ kind: "paragraph", runs: [{ text: "Hello." }] }],
+        },
+      ],
+    };
+    const bytes = writeDocContent(input);
+    const result = readDocContent(bytes);
+    expect(result.metadata).toEqual(input.metadata);
+  });
 });

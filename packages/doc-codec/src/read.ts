@@ -1,4 +1,4 @@
-import { readCompoundFile } from "archive-codec";
+import { readCompoundFile, readSummaryInformation } from "archive-codec";
 import type {
   ContentDocument,
   ContentParagraph,
@@ -7,9 +7,10 @@ import type {
   PageSize,
 } from "document-schema.js";
 import { slice } from "./bytes";
-import { WORD_DOCUMENT_STREAM } from "./detect";
+import { SUMMARY_INFORMATION_STREAM, WORD_DOCUMENT_STREAM } from "./detect";
 import { DocFormatError } from "./errors";
 import { parseFib, tableStreamName, type Fib } from "./fib/fib";
+import { summaryInformationToLayoutMetadata } from "./metadata";
 import { applyCharacterSprms, type CharacterProperties } from "./prop/chp";
 import { PropertyBinTable } from "./prop/fkp";
 import { applyParagraphSprms, type ParagraphProperties } from "./prop/pap";
@@ -46,9 +47,11 @@ export interface DocStreams {
   readonly wordDocument: Uint8Array;
   readonly table: Uint8Array;
   readonly fib: Fib;
+  /** The raw "\x05SummaryInformation" stream bytes, or undefined when the container carries none -- a valid, spec-conformant Word Binary File need not carry document properties at all. */
+  readonly metadata: Uint8Array<ArrayBuffer> | undefined;
 }
 
-// Pulls the two streams every later step reads from, and the FIB that says which of "1Table" and "0Table" is the one in play. Both names always exist as candidates in the container; only the one FibBase.fWhichTblStm selects holds the structures the FIB's offsets address, and reading the other yields offsets into unrelated bytes.
+// Pulls the two streams every later step reads from, the FIB that says which of "1Table" and "0Table" is the one in play, and the optional metadata stream. Both WordDocument and Table names always exist as candidates in the container; only the one FibBase.fWhichTblStm selects holds the structures the FIB's offsets address, and reading the other yields offsets into unrelated bytes.
 export function readDocStreams(bytes: Uint8Array<ArrayBuffer>): DocStreams {
   const streams = readCompoundFile(bytes);
   const wordDocument = streams.find(
@@ -67,13 +70,21 @@ export function readDocStreams(bytes: Uint8Array<ArrayBuffer>): DocStreams {
       `FibBase.fWhichTblStm selects the "${wanted}" stream, which this compound file does not contain`,
     );
   }
-  return { wordDocument: wordDocument.bytes, table: table.bytes, fib };
+  const metadata = streams.find(
+    (stream) => stream.path === SUMMARY_INFORMATION_STREAM,
+  );
+  return {
+    wordDocument: wordDocument.bytes,
+    table: table.bytes,
+    fib,
+    metadata: metadata?.bytes,
+  };
 }
 
 export function readDocContent(
   bytes: Uint8Array<ArrayBuffer>,
 ): ContentDocument {
-  const { wordDocument, table, fib } = readDocStreams(bytes);
+  const { wordDocument, table, fib, metadata } = readDocStreams(bytes);
 
   const pieceTable = parseClx(
     slice(table, fib.fcClx, fib.lcbClx, "Clx in the Table stream"),
@@ -130,8 +141,11 @@ export function readDocContent(
 
   return {
     kind: "wordprocessing",
-    // Empty rather than populated from the SummaryInformation property-set streams: those are [MS-OLEPS] property sets rather than [MS-DOC] structures, and this package does not read them yet. An absent title is honest; a fabricated one is not.
-    metadata: {},
+    // Absent when the container carries no "\x05SummaryInformation" stream at all -- a valid, spec-conformant Word Binary File need not have one -- and mapped from it through summaryInformationToLayoutMetadata (see src/metadata.ts) otherwise.
+    metadata:
+      metadata === undefined
+        ? {}
+        : summaryInformationToLayoutMetadata(readSummaryInformation(metadata)),
     sections: [
       {
         pageSize: DEFAULT_PAGE_SIZE,
