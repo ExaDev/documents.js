@@ -20,6 +20,7 @@ import {
 } from "../biff/strings";
 import type { RecordGroup } from "../biff/substreams";
 import {
+  PALETTE_ENTRY_COUNT,
   readLongRgbColor,
   unpackXfDecoration,
   type XfDecorationFields,
@@ -257,10 +258,19 @@ function readCellFormat(record: RecordGroup): CellFormat {
   };
 }
 
-/** Palette ([MS-XLS] 2.4.204): a signed colour count (a real file always declares 56) then that many LongRGB entries -- the write-side mirror is xf-writer.ts's own writePaletteRecord. */
+/**
+ * Palette ([MS-XLS] 2.4.204): ccv, a signed colour count the spec states "MUST be 56", then that many LongRGB entries -- the write-side mirror is xf-writer.ts's own writePaletteRecord.
+ *
+ * A ccv that is not 56 is refused rather than honoured. This reader resolves every icv 8-63 positionally through this table, so a short (or zero, or negative) one does not degrade gracefully: every colour past its end silently becomes unresolvable, and a workbook's fills and borders all vanish at once with nothing to say why. A file declaring a count its own spec forbids is malformed, and saying so is the only honest answer.
+ */
 function readPalette(record: RecordGroup): readonly Color[] {
   const cursor = new BlockCursor(record.blocks);
   const count = cursor.i16();
+  if (count !== PALETTE_ENTRY_COUNT) {
+    throw new BiffFormatError(
+      `Palette declares ${count} colour entries, but [MS-XLS] 2.4.204's own ccv field MUST be ${PALETTE_ENTRY_COUNT}`,
+    );
+  }
   const colors: Color[] = [];
   for (let index = 0; index < count; index += 1) {
     colors.push(readLongRgbColor(cursor));
