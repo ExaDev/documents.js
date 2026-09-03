@@ -272,7 +272,7 @@ function union(parents: number[], a: number, b: number): void {
 }
 
 // Two atomic cells with no drawn stroke between them are the same real cell (a merged colSpan/rowSpan region), so this unions every adjacent pair the geometry doesn't actually separate, then reads off the resulting regions. A region that doesn't reduce to a clean rectangle -- an L-shaped or otherwise non-rectangular union, which no table cell can express -- means the detected boundaries don't actually describe a consistent grid, so the whole lattice is rejected rather than guessed at (this module's own "unambiguously a grid" bar); so is a lattice whose every interior boundary turned out undrawn, collapsing the whole rectangle into one cell with no real internal structure at all.
-function findCellRegions(
+export function findCellRegions(
   rowLines: readonly AxisLine[],
   columnLines: readonly AxisLine[],
 ): TableRegion[] | undefined {
@@ -325,10 +325,19 @@ function findCellRegions(
   }
   const regions: TableRegion[] = [];
   for (const cells of cellsByRoot.values()) {
-    const rowStart = Math.min(...cells.map((c) => c.row));
-    const rowEnd = Math.max(...cells.map((c) => c.row)) + 1;
-    const colStart = Math.min(...cells.map((c) => c.col));
-    const colEnd = Math.max(...cells.map((c) => c.col)) + 1;
+    // A manual reduce, not Math.min/max(...cells.map(...)): spreading a large array into a function call throws "Maximum call stack size exceeded" once it exceeds the JS engine's argument-count limit (V8's is roughly 65536), and a merged region can grow arbitrarily large when a page's line detection turns up a dense or malformed grid.
+    let rowStart = cells[0]!.row;
+    let rowEnd = cells[0]!.row;
+    let colStart = cells[0]!.col;
+    let colEnd = cells[0]!.col;
+    for (const cell of cells) {
+      rowStart = Math.min(rowStart, cell.row);
+      rowEnd = Math.max(rowEnd, cell.row);
+      colStart = Math.min(colStart, cell.col);
+      colEnd = Math.max(colEnd, cell.col);
+    }
+    rowEnd += 1;
+    colEnd += 1;
     if (cells.length !== (rowEnd - rowStart) * (colEnd - colStart)) {
       return undefined;
     }
