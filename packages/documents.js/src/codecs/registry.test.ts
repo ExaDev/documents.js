@@ -26,7 +26,8 @@ function requireContentCodec(
     | "odg"
     | "markdown"
     | "xlsx"
-    | "csv",
+    | "csv"
+    | "rtf",
 ) {
   const content = DOCUMENT_FORMAT_CODECS[format].content;
   if (!content?.write) {
@@ -184,6 +185,22 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
       ).toBeLessThanOrEqual(XLSX_COLUMN_WIDTH_TOLERANCE_PT);
     }
   });
+
+  // Hand-authored literal RTF source, matching this suite's own csv/markdown fixtures rather than generating it through writeRtfContent (the very function under test here) -- a heading-styled paragraph, a bold run, and a plain paragraph, exercising the font/colour/heading tables writeRtfContent mints on write. rtf-codec's writer is deterministic and its \info group carries only title/author/subject/keywords (no created/modified timestamps to mint), so -- unlike docx/ods above -- this round trip needs no withReferenceTimestamps normalisation.
+  it("rtf: read -> write -> read round-trips the ContentDocument", () => {
+    const codec = requireContentCodec("rtf");
+    const rtfBytes = new TextEncoder().encode(
+      "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}" +
+        "{\\stylesheet{\\s1\\outlinelevel0 heading 1;}}" +
+        "\\pard\\s1\\fs32 Report Title\\par" +
+        "\\pard\\fs24 Plain paragraph with {\\b bold text}.\\par}",
+    );
+    const content = codec.read(rtfBytes);
+    expect(containsText(content, "Report Title")).toBe(true);
+    expect(containsText(content, "bold text")).toBe(true);
+    const rebuiltBytes = codec.write!(content);
+    expect(codec.read(rebuiltBytes)).toEqual(content);
+  });
 });
 
 describe("DOCUMENT_FORMAT_CODECS: odf has a content.read but genuinely no content.write", () => {
@@ -216,5 +233,12 @@ describe("DOCUMENT_FORMAT_CODECS: csv has a content codec, no layout codec", () 
   it("csv has a content entry and no layout entry", () => {
     expect(DOCUMENT_FORMAT_CODECS.csv.content).toBeDefined();
     expect(DOCUMENT_FORMAT_CODECS.csv.layout).toBeUndefined();
+  });
+});
+
+describe("DOCUMENT_FORMAT_CODECS: rtf has a content codec, no layout codec", () => {
+  it("rtf has a content entry and no layout entry", () => {
+    expect(DOCUMENT_FORMAT_CODECS.rtf.content).toBeDefined();
+    expect(DOCUMENT_FORMAT_CODECS.rtf.layout).toBeUndefined();
   });
 });

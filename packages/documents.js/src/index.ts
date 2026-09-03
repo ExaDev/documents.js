@@ -204,6 +204,8 @@ export {
   SvgBytesSchema,
   XlsxBytesSchema,
 } from "./model/bytes";
+// RtfBytesSchema is rtf-codec's own schema, re-exported directly from that package rather than routed through src/model/bytes.ts -- RTF has a real magic-byte header ('{\rtf'), so it needs no well-formed-UTF-8 fallback the way markdown/csv do, and rtf-codec already exports the exact check.
+export { RtfBytesSchema } from "rtf-codec";
 
 // --- The live-view read+write editors: a real manipulation API for docx/pptx content, since ooxml.js's own typed readers explicitly forbid write-back. ---
 export type { CreateEmptyDocxPackageOptions } from "./edit/docx/scaffold";

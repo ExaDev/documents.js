@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/documents.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/documents.js) [![npm version](https://img.shields.io/npm/v/documents.js)](https://www.npmjs.com/package/documents.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> Converts between any two compatible document formats through a shared content/layout pivot. docx, pptx, odt, odp, ods, odg, xlsx, csv (TSV is the same format with a tab delimiter), svg, and markdown all read into and build from the same shared `ContentDocument` model (reported to callers as the tree-form `DocumentTree`), with PDF — reached through pdf-codec's own `LayoutDocument` view — as the one format every variant can reach. A composition engine (`convertDocument`) routes 111 (source, target) pairs across the ten content formats and PDF, including twenty PDF-pivot round trips (the eight layout-engine formats, plus xlsx and csv composing through ods), twenty-four cross-format bridge functions (same-variant direct copies, cross-variant semantic transforms, and PDF-composed), plus special-case conversions for `.odm` master documents, `.odb` database front-ends (HSQLDB and Firebird, four storage tiers), standalone `.odf` formula documents, and a bounded SQL/rpt-formula engine for `.odb` reports. Also includes: read-and-write live-view editors for all six editable formats, docx comment/footnote/header-footer exposure via `readDocxExtras`, real font resolution (source-embedded faces ahead of caller-supplied, vendored substitutes, and the standard 14), a hand-written MathML typesetting engine with embedded-font PDF rendering and a matching MathML ⇄ OMML translator, LaTeX lowering into the schema's two-layer semantic math core (pinned temml parser, symbol tables from prose, a coherence lint), and a fully hand-written PDF codec. Built on [ooxml.js](../ooxml.js/README.md), [odf.js](../odf.js/README.md), [pdf-codec](../pdf-codec/README.md), [markdown-codec](../markdown-codec/README.md), and [document-schema.js](../document-schema.js/README.md).
+> Converts between any two compatible document formats through a shared content/layout pivot. docx, pptx, odt, odp, ods, odg, xlsx, csv (TSV is the same format with a tab delimiter), svg, markdown, and rtf all read into and build from the same shared `ContentDocument` model (reported to callers as the tree-form `DocumentTree`), with PDF — reached through pdf-codec's own `LayoutDocument` view — as the one format every variant can reach. A composition engine (`convertDocument`) routes 129 (source, target) pairs across the eleven content formats and PDF, including twenty-two PDF-pivot round trips (the eight layout-engine formats, plus xlsx and csv composing through ods, and rtf composing through docx/odt/markdown), twenty-four cross-format bridge functions (same-variant direct copies, cross-variant semantic transforms, and PDF-composed), plus special-case conversions for `.odm` master documents, `.odb` database front-ends (HSQLDB and Firebird, four storage tiers), standalone `.odf` formula documents, and a bounded SQL/rpt-formula engine for `.odb` reports. Also includes: read-and-write live-view editors for all six editable formats, docx comment/footnote/header-footer exposure via `readDocxExtras`, real font resolution (source-embedded faces ahead of caller-supplied, vendored substitutes, and the standard 14), a hand-written MathML typesetting engine with embedded-font PDF rendering and a matching MathML ⇄ OMML translator, LaTeX lowering into the schema's two-layer semantic math core (pinned temml parser, symbol tables from prose, a coherence lint), and a fully hand-written PDF codec. Built on [ooxml.js](../ooxml.js/README.md), [odf.js](../odf.js/README.md), [pdf-codec](../pdf-codec/README.md), [markdown-codec](../markdown-codec/README.md), [rtf-codec](../rtf-codec/README.md), and [document-schema.js](../document-schema.js/README.md).
 
 `documents.js` extends `ooxml.js` in two directions `ooxml.js` deliberately does not cover: full PDF support (parsing and generating, via `pdf-codec`), and a read-**and-write** manipulation API for docx/pptx content — `ooxml.js`'s own typed readers are one-way. The PDF codec is hand-written against ISO 32000-1, with no external PDF library as a dependency — see [Fidelity](#fidelity) and pdf-codec's own README for the honest trade-off (not as robust against adversarial PDFs as a 15+-year-hardened library; fully auditable and dependency-free instead). `src/mathml/` (the MathML typesetting engine) stays in this package and is hand-written too, for the same supply-chain reason. The one deliberate exception on the math side is the LaTeX parser: `src/latex/` lowers LaTeX into the schema's semantic core over a pinned exact-version [temml](https://temml.org) dependency — see [LaTeX lowering into the semantic core](#latex-lowering-into-the-semantic-core) for why a LaTeX grammar is the one component not worth hand-writing and what the pin guarantees.
 
@@ -13,6 +13,7 @@ graph TD
     odf("odf.js")
     pdfcodec("pdf-codec")
     mdcodec("markdown-codec")
+    rtfcodec("rtf-codec")
     bytecodec("byte-codec")
     documents("documents.js")
     mcp("document-mcp")
@@ -22,11 +23,13 @@ graph TD
     schema --> odf
     schema --> pdfcodec
     schema --> mdcodec
+    schema --> rtfcodec
     schema --> documents
     ooxml --> documents
     odf --> documents
     pdfcodec --> documents
     mdcodec --> documents
+    rtfcodec --> documents
     bytecodec --> pdfcodec
     bytecodec --> documents
     documents --> mcp
@@ -40,6 +43,7 @@ graph TD
     click odf "https://github.com/ExaDev/documents.js/tree/main/packages/odf.js" "odf.js"
     click pdfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/pdf-codec" "pdf-codec"
     click mdcodec "https://github.com/ExaDev/documents.js/tree/main/packages/markdown-codec" "markdown-codec"
+    click rtfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/rtf-codec" "rtf-codec"
     click bytecodec "https://github.com/ExaDev/documents.js/tree/main/packages/byte-codec" "byte-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
     click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
@@ -72,7 +76,7 @@ npm install documents.js document-schema.js
 
 ### The generic entry point: `convertDocument`
 
-A single function, `convertDocument`, sits behind every named conversion and reaches every pair the composition engine can route — all 111 supported (source, target) combinations. The named functions below are thin one-line forwarders to it; they remain the ergonomic layer for a caller who wants a fixed pair and autocomplete discovery, while `convertDocument` is the first-class entry point for a caller working from a runtime format pair (CLI, MCP tool, matrix enumeration).
+A single function, `convertDocument`, sits behind every named conversion and reaches every pair the composition engine can route — all 129 supported (source, target) combinations. The named functions below are thin one-line forwarders to it; they remain the ergonomic layer for a caller who wants a fixed pair and autocomplete discovery, while `convertDocument` is the first-class entry point for a caller working from a runtime format pair (CLI, MCP tool, matrix enumeration).
 
 ```ts
 import { convertDocument } from "documents.js";
@@ -187,14 +191,14 @@ const { document, diagnostics } = await converter.convert(
 );
 ```
 
-`DocumentFormat` includes `docx`/`pptx`/`xlsx`/`odt`/`odp`/`ods`/`odg`/`svg`/`odf`/`csv`/`markdown`/`pdf` — twelve members. The port's `conversions` list is derived from `resolveCompositionPlan` plus the `odf`→`pdf` special case — 111 pairs total. `DocumentFormat` is inferred from `DocumentFormatSchema` (a real Zod schema); `DOCUMENT_FORMATS` is exported as a plain array derived from the same schema:
+`DocumentFormat` includes `docx`/`pptx`/`xlsx`/`odt`/`odp`/`ods`/`odg`/`svg`/`odf`/`csv`/`markdown`/`rtf`/`pdf` — thirteen members. The port's `conversions` list is derived from `resolveCompositionPlan` plus the `odf`→`pdf` special case — 129 pairs total. `DocumentFormat` is inferred from `DocumentFormatSchema` (a real Zod schema); `DOCUMENT_FORMATS` is exported as a plain array derived from the same schema:
 
 The port also exposes `contractVersion: number`, bumped only when `DocumentConverter`'s own contract shape changes — a new field on `ConversionResult` a caller might need to branch on, or a new `ConversionOptions` field an implementation is now expected to honour — never when the `conversions` table simply grows with more supported source/target pairs (that's discoverable at runtime via `conversions` itself). It is currently `7`: the bump from `6` reflects `ConversionResult.package` changing type to the tree-form `DocumentTree` described below, which a caller reading that field must now flatten rather than read directly.
 
 ```ts
 import { DOCUMENT_FORMATS, DocumentFormatSchema } from "documents.js";
 
-console.log(DOCUMENT_FORMATS); // ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'svg', 'odf', 'csv', 'markdown', 'pdf']
+console.log(DOCUMENT_FORMATS); // ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'svg', 'odf', 'csv', 'markdown', 'rtf', 'pdf']
 DocumentFormatSchema.parse(userSuppliedFormat); // throws a ZodError for anything outside that list
 ```
 
@@ -761,7 +765,7 @@ The package is layered from generic primitives outward to the two conversion dir
 - **`src/metadata/`** — cross-format metadata read/write via `DOCUMENT_FORMAT_CODECS`.
 - **`src/package-codec.ts`** — `decodeDocumentPackage`/`encodeDocumentPackage`/`decodeOdbPackage`.
 
-Dependency direction is downward and checkable. Six external dependencies each own a distinct concern: `ooxml.js` (docx/pptx/xlsx), `odf.js` (odt/ods/odp/odg), `document-schema.js` (shared schemas + port contracts), `pdf-codec` (PDF codec + text-layout/font primitives), `byte-codec` (byte/image utilities), `markdown-codec` (markdown). No `PdfObject`/`PdfDict`/`PdfStream` type appears anywhere in this package.
+Dependency direction is downward and checkable. Seven external dependencies each own a distinct concern: `ooxml.js` (docx/pptx/xlsx), `odf.js` (odt/ods/odp/odg), `document-schema.js` (shared schemas + port contracts), `pdf-codec` (PDF codec + text-layout/font primitives), `byte-codec` (byte/image utilities), `markdown-codec` (markdown), `rtf-codec` (rtf). No `PdfObject`/`PdfDict`/`PdfStream` type appears anywhere in this package.
 
 ## Build, test, and lint
 
@@ -874,7 +878,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
 ## Fidelity
 
-Read as **row → column**. `✓` lossless, `~` bounded, `✗` lossy, `✗✗` severe, `→` one-way, `–` no conversion. `.odm`/`.odb` sit outside this table.
+Read as **row → column**. `✓` lossless, `~` bounded, `✗` lossy, `✗✗` severe, `→` one-way, `–` no conversion. `.odm`/`.odb` sit outside this table. `rtf` is wired into the composition engine — bidirectionally routable to every other format here except `csv`/`xlsx` (one hop past the pathfinder's own 3-hop cap) and `odf` (which has almost no conversions with anything) — but is not yet reflected in the table below: extending it surfaced pre-existing drift between a few of the table's own cells and what the pathfinder actually routes, so both need a real per-pair audit rather than another prose edit — tracked in [ExaDev/documents.js#853](https://github.com/ExaDev/documents.js/issues/853).
 
 | ↓ from \ to → | docx | pptx | xlsx | odt | odp | ods | odg | svg | odf | markdown | csv | pdf |
 | ------------- | ---- | ---- | ---- | --- | --- | --- | --- | --- | --- | -------- | --- | --- |
