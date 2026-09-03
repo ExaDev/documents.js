@@ -309,7 +309,7 @@ describe("readOdtContent: minimal.odt (real LibreOffice output, default/unmodifi
 });
 
 describe("readOdtContent: master pages after the first, and header/footer content (synthetic packages built to the OASIS grammar)", () => {
-  // Every package below carries content.xml + styles.xml with two style:master-page elements: "Standard" (A4 portrait) and "Landscape" (A4 landscape), matching the shape a real Writer document's own mid-document page-style switch produces. The fixtures are programmatic per the issue's own stated gate: real-producer verification for these rows is outstanding (shared with the corpus gate).
+  // Every package below carries content.xml + styles.xml with two style:master-page elements: "Standard" (A4 portrait) and "Landscape" (A4 landscape), matching the shape a real Writer document's own mid-document page-style switch produces. The fixtures are programmatic, but the one detail they used to get wrong is now producer-verified: style:master-page-name is an attribute of the style:style ELEMENT, not of its style:paragraph-properties child. A controlled LibreOffice round trip settles it -- a flat-ODF document carrying it on style:style renders two pages at the two master pages' own sizes and survives a re-save verbatim, while the identical document carrying it on style:paragraph-properties renders one page and has the attribute stripped on re-save -- and it agrees with this package's own recorded real-LibreOffice style:style attribute set (styles/properties.test.ts) and with the ods reader's equivalent lookup.
   function masterPage(
     name: string,
     pageLayoutName: string,
@@ -378,15 +378,11 @@ describe("readOdtContent: master pages after the first, and header/footer conten
   });
 
   it("splits a second section at a paragraph whose style switches master page, with that master page's geometry and breakType nextPage", () => {
-    const switchStyle = el(
-      "style:style",
-      { "style:name": "LandscapePara", "style:family": "paragraph" },
-      [
-        el("style:paragraph-properties", {
-          "style:master-page-name": "Landscape",
-        }),
-      ],
-    );
+    const switchStyle = el("style:style", {
+      "style:name": "LandscapePara",
+      "style:family": "paragraph",
+      "style:master-page-name": "Landscape",
+    });
     const pkg = packageWith(
       [
         el("text:p", {}, [txt("portrait")]),
@@ -412,15 +408,11 @@ describe("readOdtContent: master pages after the first, and header/footer conten
   });
 
   it("starts the document on the master page the first paragraph names, without an empty leading section", () => {
-    const switchStyle = el(
-      "style:style",
-      { "style:name": "LandscapePara", "style:family": "paragraph" },
-      [
-        el("style:paragraph-properties", {
-          "style:master-page-name": "Landscape",
-        }),
-      ],
-    );
+    const switchStyle = el("style:style", {
+      "style:name": "LandscapePara",
+      "style:family": "paragraph",
+      "style:master-page-name": "Landscape",
+    });
     const pkg = packageWith(
       [
         el("text:p", { "text:style-name": "LandscapePara" }, [
@@ -436,15 +428,11 @@ describe("readOdtContent: master pages after the first, and header/footer conten
   });
 
   it("survives the package boundary: the split sections, geometry, and breakType all flatten back out of readOdt's tree exactly", () => {
-    const switchStyle = el(
-      "style:style",
-      { "style:name": "LandscapePara", "style:family": "paragraph" },
-      [
-        el("style:paragraph-properties", {
-          "style:master-page-name": "Landscape",
-        }),
-      ],
-    );
+    const switchStyle = el("style:style", {
+      "style:name": "LandscapePara",
+      "style:family": "paragraph",
+      "style:master-page-name": "Landscape",
+    });
     const pkg = packageWith(
       [
         el("text:p", {}, [txt("portrait")]),
@@ -463,15 +451,11 @@ describe("readOdtContent: master pages after the first, and header/footer conten
   });
 
   it("drops a construct extent that spans the master-page switch, keeping each section's own markers balanced", () => {
-    const switchStyle = el(
-      "style:style",
-      { "style:name": "LandscapePara", "style:family": "paragraph" },
-      [
-        el("style:paragraph-properties", {
-          "style:master-page-name": "Landscape",
-        }),
-      ],
-    );
+    const switchStyle = el("style:style", {
+      "style:name": "LandscapePara",
+      "style:family": "paragraph",
+      "style:master-page-name": "Landscape",
+    });
     const pkg = packageWith(
       [
         el("text:section", { "text:name": "SpansSwitch" }, [

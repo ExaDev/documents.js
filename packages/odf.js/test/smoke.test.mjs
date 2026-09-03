@@ -41,6 +41,11 @@ const FUNCTIONS = [
   'readOdfFormula',
   'readOdfFormulaContent',
   'readOdfFormulaMathMl',
+  // The odt writer, at the same two levels as its reader, plus the canonical form its round-trip law is stated against and the package scaffold it builds on.
+  'writeOdt',
+  'writeOdtContent',
+  'normaliseOdtContent',
+  'createOdfPackage',
   // The OpenOffice.org 1.x readers, at the same two levels, plus the package transform they are built on and the detection a caller needs to pick between these and the ODF readers above.
   'readSxw',
   'readSxwContent',

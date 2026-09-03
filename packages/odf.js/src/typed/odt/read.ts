@@ -123,7 +123,7 @@ const AUTOMATIC_STYLE_PARTS = [CONTENT_PART, "styles.xml"] as const;
 
 // text:h identity in the office:text walk is the shared readParagraphOrHeading (typed/shared/paragraph.ts, imported above) -- the same heading-identity step that module's own table-cell walk now applies, so a heading reads identically at body level and inside a table cell. List membership is never set alongside it: the shared walker (typed/shared/list.ts's readOdfListParagraphs) attaches it for paragraphs it reads inside a text:list, since ODF list membership is purely structural (which text:list/text:list-item this element is nested inside), never an attribute on the paragraph element itself the way docx's w:numPr is.
 
-// A paragraph's effective master page: the most specific style in its resolved "paragraph" chain whose own style:paragraph-properties carries style:master-page-name (the ODF attribute that switches the page style from the paragraph it is applied to -- OASIS OpenDocument part 3, section 19.501; it lives on style:paragraph-properties, never on the paragraph element itself, because ODF has no direct formatting). The chain is walked root-first so a nearer link's name overrides a further one's, exactly as cascade property resolution does. Memoised per style name in the walk state: the same style name repeats across a document's paragraphs, and each resolution is a full two-part style-container scan.
+// A paragraph's effective master page: the most specific style in its resolved "paragraph" chain that carries style:master-page-name -- the ODF attribute that switches the page style from the paragraph it is applied to. It is an attribute of the style:style ELEMENT ITSELF, never of its style:paragraph-properties child, and never of the paragraph element (ODF has no direct formatting). Three independent pieces of ground truth agree on that placement: this package's own recorded real-LibreOffice style:style attribute set (styles/properties.ts's RISKY_STYLE_ELEMENT_ATTRS and the real-output fixture in its test suite), the ods reader's own equivalent lookup on a table's style:style (typed/ods/read.ts), and a controlled LibreOffice round trip -- a flat-ODF document carrying the attribute on style:style renders two pages at the two master pages' own sizes and survives a re-save verbatim, while the identical document carrying it on style:paragraph-properties renders one page and has the attribute stripped outright on re-save. The chain is walked root-first so a nearer link's name overrides a further one's, exactly as cascade property resolution does, and inheritance through style:parent-style-name is real rather than assumed: the same round trip confirms LibreOffice applies a switch a paragraph reaches only through its parent style. Memoised per style name in the walk state: the same style name repeats across a document's paragraphs, and each resolution is a full two-part style-container scan.
 function resolveParagraphMasterPageName(
   element: XmlElement,
   pkg: Package,
@@ -136,14 +136,7 @@ function resolveParagraphMasterPageName(
   let resolved: string | undefined;
   for (const style of resolveStyleElementChain(styleName, "paragraph", pkg)
     .elements) {
-    const properties = findChildElement(
-      style.children,
-      "style:paragraph-properties",
-    );
-    const name =
-      properties === undefined
-        ? undefined
-        : attrValue(properties, "style:master-page-name");
+    const name = attrValue(style, "style:master-page-name");
     if (name !== undefined) {
       resolved = name;
     }

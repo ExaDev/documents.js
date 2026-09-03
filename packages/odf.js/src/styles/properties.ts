@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { AlignmentSchema, ColorSchema } from "document-schema.js";
 import type { Attribute, XmlElement } from "../model/node";
-import { encodeXmlText } from "../xml/entities";
+import { decodeXmlText, encodeXmlText } from "../xml/entities";
 import { parseOdfLength, formatOdfLength } from "../typed/shared/units";
 import { parseOdfColor, formatOdfColor } from "../typed/shared/color";
 
@@ -210,7 +210,8 @@ export function parseTextProperties(element: XmlElement): ParsedProperties {
 
   const fontFamily = attrs.get(ATTR.fontFamily);
   if (fontFamily !== undefined) {
-    properties.fontFamily = fontFamily;
+    // Entity-decoded, because this package's lossless model stores every attribute value exactly as it appears in the source XML (see xml/entities.ts) and a font family routinely carries one: real LibreOffice output writes a family whose name contains a space as fo:font-family="&apos;Liberation Sans&apos;". The bag is a plain-text property bag -- textPropertiesToAttributes re-encodes on the way out, so leaving it encoded here would make the parse and build directions disagree, double-encoding the family on every write/read cycle and stopping an adopted style from ever fingerprint-matching an interned request for the same family.
+    properties.fontFamily = decodeXmlText(fontFamily);
   }
 
   const fontSize = attrs.get(ATTR.fontSize);

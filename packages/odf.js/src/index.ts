@@ -147,7 +147,10 @@ export {
   measureOdfNodeLength,
   sumOdfNodeLength,
   decodeOdfText,
+  segmentOdfText,
+  buildOdfInlineNodes,
 } from "./typed/shared/text";
+export type { OdfTextSegment, OdfTextSegmentKind } from "./typed/shared/text";
 
 export {
   resolveStyle,
@@ -160,21 +163,43 @@ export type {
   StyleElementChainResult,
 } from "./typed/shared/cascade";
 
-export { readOdfMetadata, META_PART } from "./typed/shared/metadata";
+export {
+  readOdfMetadata,
+  writeOdfMetadata,
+  buildOdfMetaNodes,
+  META_PART,
+} from "./typed/shared/metadata";
 
-export { readOdfParagraph } from "./typed/shared/paragraph";
+export {
+  readOdfParagraph,
+  writeOdfParagraph,
+  segmentOdfParagraphRuns,
+  odfRunProperties,
+  odfParagraphProperties,
+} from "./typed/shared/paragraph";
+export type { OdfParagraphWriteOptions } from "./typed/shared/paragraph";
 
 export {
   mintOdfListNumId,
   readOdfListParagraphs,
   resolveOdfListKind,
+  writeOdfList,
+  buildOdfListStyle,
 } from "./typed/shared/list";
 export type {
   OdfListIdState,
   OdfListParagraphReader,
+  OdfListEntry,
 } from "./typed/shared/list";
 
-export { readOdfTable } from "./typed/shared/table";
+export { readOdfTable, writeOdfTable } from "./typed/shared/table";
+
+// The empty-package scaffold every typed writer starts from -- the mimetype part plus the content.xml/styles.xml roots with their own containers already at the schema positions the format requires. Exported beside the lossless package-io pair above because a caller assembling a package by hand needs the same starting point writeOdt does.
+export {
+  createOdfPackage,
+  odfPartContainer,
+  DEFAULT_ODF_VERSION,
+} from "./package-io/scaffold";
 
 export {
   parseOdfTransform,
@@ -236,6 +261,14 @@ export type {
   OdtHeaderFooterPart,
   OdtHeaderFooterVariant,
 } from "./typed/odt/read";
+
+// The odt WRITER, the inverse of the two readers above and this package's first content writer: writeOdt takes the DocumentTree readOdt returns, writeOdtContent the flat ContentDocument readOdtContent returns, and both produce a real .odt Package (encodePackage turns it into bytes). normaliseOdtContent states the one canonical form a written-and-reread document equals -- what ODF's own content model can carry -- and is the shape the round-trip law is stated against.
+export {
+  writeOdt,
+  writeOdtContent,
+  normaliseOdtContent,
+} from "./typed/odt/write";
+export type { OdtWriteOptions } from "./typed/odt/write";
 
 export { readOdg, readOdgContent } from "./typed/odg/read";
 export type { OdgDocument } from "./typed/odg/read";

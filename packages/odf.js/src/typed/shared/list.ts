@@ -10,6 +10,9 @@ import {
   childrenWithTag,
   attrValue,
 } from "../../xml/query";
+import { el } from "../../xml/fragment";
+import { encodeXmlText } from "../../xml/entities";
+import { formatOdfLength } from "./units";
 
 // The text:list walker every reader that meets list-structured ODF text shares -- the odt reader (office:text body content) and the odp reader (draw:text-box content inside slide text frames). A text:list means the same thing in both homes: a purely STRUCTURAL container whose own items are its own XML children, never a reference into a shared numbering part. This module therefore owns the whole ContentParagraph.list mapping for both readers: the numId identity convention (below), the ordered-vs-bullet kind prefix resolved from the referenced text:list-style, and the structural item/nesting walk itself.
 //
@@ -88,6 +91,100 @@ export function mintOdfListNumId(
 
 // Reads one text:list element's own paragraph content into a flat, document-ordered ContentParagraph list: each text:list-item's own text:p/text:h children (read through the caller-supplied `readParagraph` callback, which owns every reader-specific concern -- odt's text:h heading-identity override, odp's plain readOdfParagraph) carry the given `membership` attached by THIS walker, never by the callback, since ODF list membership is purely structural (which text:list/text:list-item the paragraph is nested inside), never an attribute on the paragraph element itself the way docx's w:numPr is. A nested text:list (found inside a text:list-item, per the OASIS nesting content model) recurses at level + 1 under the SAME numId -- see this module's own top-of-file note on why nesting never mints a new numId. Items are not wrapped in any block of their own, matching ContentBlock's flat discriminated-union shape. A list item containing a table or further block content beyond a nested list is legal ODF but vanishingly rare and outside this walker's scope, matching the list-membership-only mandate both callers were built against.
 export type OdfListParagraphReader = (element: XmlElement) => ContentParagraph;
+
+// --- the write direction: a run of list-member paragraphs -> the text:list tree readOdfListParagraphs reads back ---
+//
+// ODF list membership is purely structural, so writing it is purely structural too: a paragraph's `list.level` decides how deep inside nested text:list/text:list-item containers its element sits, and nothing about the paragraph element itself records that it belongs to a list. The kind half of the numId (the ordered:/bullet: prefix the reader mints) is stated the only way ODF states it -- a text:list-style whose own level-1 child is a text:list-level-style-number or a text:list-level-style-bullet, referenced by the outermost text:list's text:style-name.
+
+// ODF defines ten list levels, and real producers declare a marker for every one of them so an item at any depth has something to render. Declaring only the levels a given list happens to use would leave a consumer no marker the moment anything nests deeper.
+const ODF_LIST_LEVELS = 10;
+// LibreOffice's own default list indent step, 0.635cm, stated in this package's own always-pt output unit.
+const LIST_INDENT_STEP_PT = 18;
+// U+2022 BULLET -- the character every real producer's default unordered list uses.
+const LIST_BULLET_CHARACTER = "•";
+
+// Builds one text:list-style: ten levels of the given kind, each indented one step deeper than the last. This is the ONLY place the ordered-versus-bullet fact is expressible in ODF, which is why the reader resolves the kind from exactly here (see resolveOdfListKind above) rather than from anything on the list or its paragraphs.
+export function buildOdfListStyle(
+  styleName: string,
+  kind: "ordered" | "bullet",
+): XmlElement {
+  const levels: XmlElement[] = [];
+  for (let level = 1; level <= ODF_LIST_LEVELS; level += 1) {
+    const properties = el("style:list-level-properties", {
+      "text:space-before": formatOdfLength(level * LIST_INDENT_STEP_PT),
+      "text:min-label-width": formatOdfLength(LIST_INDENT_STEP_PT),
+    });
+    levels.push(
+      kind === "ordered"
+        ? el(
+            "text:list-level-style-number",
+            {
+              "text:level": String(level),
+              "style:num-suffix": ".",
+              "style:num-format": "1",
+            },
+            [properties],
+          )
+        : el(
+            "text:list-level-style-bullet",
+            {
+              "text:level": String(level),
+              "text:bullet-char": LIST_BULLET_CHARACTER,
+            },
+            [properties],
+          ),
+    );
+  }
+  return el(
+    "text:list-style",
+    { "style:name": encodeXmlText(styleName) },
+    levels,
+  );
+}
+
+// One already-written paragraph element plus the nesting depth its own membership named.
+export interface OdfListEntry {
+  readonly level: number;
+  readonly element: XmlElement;
+}
+
+// Builds the text:list tree for one list: every entry becomes its own text:list-item at its own depth, with a deeper entry's item living inside a nested text:list inside the enclosing list's most recent item -- the exact structure readOdfListParagraphs walks back out. An entry that jumps more than one level deeper than its predecessor (a level-2 item directly after a level-0 one, which a pivot document may legitimately carry) opens the intervening lists inside empty items, since ODF has no way to state a nesting depth without the containers that produce it; reading that back yields the same paragraphs at the same levels, because an empty item contributes none.
+export function writeOdfList(
+  entries: readonly OdfListEntry[],
+  styleName: string | undefined,
+): XmlElement {
+  const root = el(
+    "text:list",
+    styleName === undefined
+      ? {}
+      : { "text:style-name": encodeXmlText(styleName) },
+  );
+  const openLists: XmlElement[] = [root];
+  for (const entry of entries) {
+    const level = Math.max(0, Math.trunc(entry.level));
+    while (openLists.length - 1 > level) {
+      openLists.pop();
+    }
+    while (openLists.length - 1 < level) {
+      const enclosing = openLists[openLists.length - 1]!;
+      const lastChild = enclosing.children[enclosing.children.length - 1];
+      let host: XmlElement;
+      if (lastChild?.type === "element" && lastChild.tag === "text:list-item") {
+        host = lastChild;
+      } else {
+        host = el("text:list-item");
+        enclosing.children.push(host);
+      }
+      const nested = el("text:list");
+      host.children.push(nested);
+      openLists.push(nested);
+    }
+    openLists[openLists.length - 1]!.children.push(
+      el("text:list-item", {}, [entry.element]),
+    );
+  }
+  return root;
+}
 
 export function readOdfListParagraphs(
   listElement: XmlElement,

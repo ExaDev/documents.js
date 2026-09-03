@@ -6,12 +6,21 @@ import type {
   ProvenanceDescriptor,
   RunConstructExtent,
 } from "document-schema.js";
-import type { XmlElement } from "../../model/node";
+import type { XmlElement, XmlNode } from "../../model/node";
 import type { Package } from "../../model/package";
 import type { StyleProperties } from "../../styles/properties";
+import type { StyleRegistry } from "../../styles/registry";
+import { canonicalPropertiesString } from "../../styles/serialize";
 import { attrValue, childrenWithTag, findChildElement } from "../../xml/query";
-import { decodeXmlText } from "../../xml/entities";
-import { getOdfSpaceCount, decodeOdfText, isOdfFieldElement } from "./text";
+import { decodeXmlText, encodeXmlText } from "../../xml/entities";
+import { el } from "../../xml/fragment";
+import {
+  getOdfSpaceCount,
+  decodeOdfText,
+  isOdfFieldElement,
+  buildOdfInlineNodes,
+  segmentOdfText,
+} from "./text";
 import { resolveStyle } from "./cascade";
 import {
   mintOdfListNumId,
@@ -132,7 +141,9 @@ function collectRuns(
       collectRuns(node, spanProperties, pkg, out, walk, hyperlinkTarget);
     } else if (node.tag === "text:a") {
       // A text:a is an inline hyperlink: its xlink:href is the link target, its children (text, text:span, text:s/tab/line-break, even a nested text:a) are the link's visible content. Threading the href as hyperlinkTarget through the recursion lets a text:span inside the link still resolve its own "text"-family formatting AND carry the hyperlink on every run it emits -- mirroring ooxml.js's own docx reader, which threads the resolved w:hyperlink target through w:ins/w:fldSimple recursion and stamps { ...run, hyperlink: target } on every leaf run. A text:a with no xlink:href is malformed (ODF makes href mandatory) but its visible text still reads; an enclosing text:a's own target is inherited in that case so an inner link's text is not lost.
-      const href = attrValue(node, "xlink:href");
+      // Entity-decoded, like every other text this reader projects out of the lossless model: a real href routinely carries an ampersand between query parameters, which the source XML spells &amp;. ContentRun.hyperlink is a resolved URI, not a fragment of XML, and leaving it encoded would also make the write direction double-encode it on every cycle.
+      const rawHref = attrValue(node, "xlink:href");
+      const href = rawHref === undefined ? undefined : decodeXmlText(rawHref);
       collectRuns(
         node,
         baseProperties,
@@ -516,4 +527,246 @@ export function readParagraphOrHeading(
     paragraph.headingLevel = outlineLevel;
   }
   return paragraph;
+}
+
+// --- the write direction: a ContentParagraph -> the text:p/text:h element readOdfParagraph reads back ---
+//
+// The inverse of everything above, and deliberately its module neighbour for the same reason text.ts carries both directions of the inline content model: the two halves have to agree about which ODF spelling carries which pivot fact, and that agreement is easiest to keep when one module states both. ODF has no direct formatting at all, so where the reader resolves a style-name reference through the cascade, the writer INTERNS the formatting it finds into a named automatic style (styles/registry.ts) and references that -- the same StyleRegistry the read side's adoption rules are written against, never a second minting mechanism beside it.
+
+// A ContentRun's own formatting as the property bag StyleRegistry interns. hyperlink is not part of it: a hyperlink is a text:a wrapper element in ODF, never a style property (see writeOdfParagraphChildren below).
+export function odfRunProperties(run: ContentRun): StyleProperties {
+  const properties: StyleProperties = {};
+  if (run.bold !== undefined) {
+    properties.bold = run.bold;
+  }
+  if (run.italic !== undefined) {
+    properties.italic = run.italic;
+  }
+  if (run.underline !== undefined) {
+    properties.underline = run.underline;
+  }
+  if (run.strike !== undefined) {
+    properties.strike = run.strike;
+  }
+  if (run.fontFamily !== undefined) {
+    properties.fontFamily = run.fontFamily;
+  }
+  if (run.sizePt !== undefined) {
+    properties.sizePt = run.sizePt;
+  }
+  if (run.color !== undefined) {
+    properties.color = run.color;
+  }
+  return properties;
+}
+
+// A ContentParagraph's own paragraph-level formatting as the same property bag. The heading identity (headingLevel) is deliberately absent: it is structural in ODF -- a text:h element carrying text:outline-level -- not a style property, which is exactly why a heading's styleId survives a write/read round trip when nothing else's does.
+export function odfParagraphProperties(
+  paragraph: ContentParagraph,
+): StyleProperties {
+  const properties: StyleProperties = {};
+  if (paragraph.alignment !== undefined) {
+    properties.alignment = paragraph.alignment;
+  }
+  if (paragraph.spacingBeforePt !== undefined) {
+    properties.spacingBeforePt = paragraph.spacingBeforePt;
+  }
+  if (paragraph.spacingAfterPt !== undefined) {
+    properties.spacingAfterPt = paragraph.spacingAfterPt;
+  }
+  if (paragraph.lineSpacing !== undefined) {
+    properties.lineSpacing = paragraph.lineSpacing;
+  }
+  if (paragraph.indentLeftPt !== undefined) {
+    properties.indentLeftPt = paragraph.indentLeftPt;
+  }
+  if (paragraph.indentFirstLinePt !== undefined) {
+    properties.indentFirstLinePt = paragraph.indentFirstLinePt;
+  }
+  if (paragraph.pageBreakBefore !== undefined) {
+    properties.pageBreakBefore = paragraph.pageBreakBefore;
+  }
+  if (paragraph.pageBreakAfter !== undefined) {
+    properties.pageBreakAfter = paragraph.pageBreakAfter;
+  }
+  return properties;
+}
+
+const KEY_SEPARATOR = " "; // NUL -- forbidden outright in well-formed XML 1.0 content, so it can never appear inside a canonical property string or a real hyperlink target (registry.ts's own fingerprint separator makes the same choice for the same reason).
+
+// Two runs share a formatting key exactly when a single text:span (or a single bare text node) can carry both -- identical resolved formatting AND identical hyperlink target. Built from styles/serialize.ts's own canonical property string rather than JSON.stringify, so key equality means exactly what style interning means by it.
+function runFormattingKey(run: ContentRun): string {
+  const hyperlink =
+    run.hyperlink === undefined ? "" : `link${KEY_SEPARATOR}${run.hyperlink}`;
+  return `${canonicalPropertiesString(odfRunProperties(run))}${KEY_SEPARATOR}${hyperlink}`;
+}
+
+// The canonical run list an ODF paragraph can actually carry, and therefore exactly what reading a written paragraph back produces. Three normalisations, each forced by ODF's own inline content model rather than chosen here:
+// 1. A zero-length run has no spelling at all -- there is no empty text node in a serialized document -- so it is dropped.
+// 2. Adjacent runs whose formatting is identical are one text node or one text:span; two of them would serialize as one and read back as one, so they are merged here rather than left to be silently merged later.
+// 3. A tab, a hard line break, and a collapsing space run are ELEMENTS (text:tab, text:line-break, text:s), so a run whose text contains one is split at it -- the reader emits one run per node it meets, and no ODF spelling exists that would keep "a\tb" a single run.
+// Exported because the write path's own round-trip law is stated against it: reading back what writeOdt produced yields this list, not the caller's original one, whenever the original was not already canonical.
+export function segmentOdfParagraphRuns(
+  runs: readonly ContentRun[],
+): ContentRun[] {
+  const merged: ContentRun[] = [];
+  for (const run of runs) {
+    if (run.text.length === 0) {
+      continue;
+    }
+    const previous = merged[merged.length - 1];
+    if (
+      previous !== undefined &&
+      runFormattingKey(previous) === runFormattingKey(run)
+    ) {
+      merged[merged.length - 1] = {
+        ...previous,
+        text: previous.text + run.text,
+      };
+      continue;
+    }
+    merged.push(run);
+  }
+
+  const canonical: ContentRun[] = [];
+  for (const [index, run] of merged.entries()) {
+    const previousText = merged[index - 1]?.text;
+    const nextText = merged[index + 1]?.text;
+    const protectLeading =
+      previousText === undefined || previousText.endsWith(" ");
+    const protectTrailing = nextText === undefined || nextText.startsWith(" ");
+    for (const segment of segmentOdfText(
+      run.text,
+      protectLeading,
+      protectTrailing,
+    )) {
+      canonical.push({ ...run, text: segment.text });
+    }
+  }
+  return canonical;
+}
+
+// The inline nodes for canonical runs [from, to), grouped so each maximal stretch of consecutive runs sharing one resolved formatting is ONE text:span rather than one per run: a span is the formatting unit, and two adjacent spans referencing the same style say exactly what one does while saying it twice. Runs with no formatting at all contribute bare nodes -- ODF producers never wrap unformatted text in an empty span, and doing so would make every plain paragraph mint a style that states nothing. Whitespace protection is computed against each run's true neighbours in the whole paragraph, never against the group's own edges, since a space at a group boundary is still interior to the paragraph.
+function writeOdfFormattedRunNodes(
+  canonical: readonly ContentRun[],
+  from: number,
+  to: number,
+  registry: StyleRegistry,
+): XmlNode[] {
+  const nodes: XmlNode[] = [];
+  let index = from;
+  while (index < to) {
+    const properties = odfRunProperties(canonical[index]!);
+    const key = canonicalPropertiesString(properties);
+    let end = index + 1;
+    while (
+      end < to &&
+      canonicalPropertiesString(odfRunProperties(canonical[end]!)) === key
+    ) {
+      end += 1;
+    }
+    const inner: XmlNode[] = [];
+    for (let position = index; position < end; position += 1) {
+      const previousText = canonical[position - 1]?.text;
+      const nextText = canonical[position + 1]?.text;
+      inner.push(
+        ...buildOdfInlineNodes(
+          segmentOdfText(
+            canonical[position]!.text,
+            previousText === undefined || previousText.endsWith(" "),
+            nextText === undefined || nextText.startsWith(" "),
+          ),
+        ),
+      );
+    }
+    if (Object.keys(properties).length === 0) {
+      nodes.push(...inner);
+    } else {
+      nodes.push(
+        el(
+          "text:span",
+          {
+            "text:style-name": encodeXmlText(
+              registry.intern({ properties, family: "text" }),
+            ),
+          },
+          inner,
+        ),
+      );
+    }
+    index = end;
+  }
+  return nodes;
+}
+
+// A paragraph's own inline children: each maximal stretch of consecutive runs sharing one hyperlink target wrapped in a single text:a, with the formatting grouping above running inside it. Grouping rather than one text:a per run matches how the reader threads a link's target down through whatever spans sit inside it, so a link whose text changes formatting part-way is one anchor, not several.
+function writeOdfParagraphChildren(
+  runs: readonly ContentRun[],
+  registry: StyleRegistry,
+): XmlNode[] {
+  const canonical = segmentOdfParagraphRuns(runs);
+  const children: XmlNode[] = [];
+  let index = 0;
+  while (index < canonical.length) {
+    const target = canonical[index]!.hyperlink;
+    let end = index + 1;
+    while (end < canonical.length && canonical[end]!.hyperlink === target) {
+      end += 1;
+    }
+    const nodes = writeOdfFormattedRunNodes(canonical, index, end, registry);
+    if (target === undefined) {
+      children.push(...nodes);
+    } else {
+      children.push(
+        el(
+          "text:a",
+          { "xlink:type": "simple", "xlink:href": encodeXmlText(target) },
+          nodes,
+        ),
+      );
+    }
+    index = end;
+  }
+  return children;
+}
+
+export interface OdfParagraphWriteOptions {
+  // The named style this paragraph's formatting hangs off: written as style:parent-style-name on the minted automatic style, or -- when the paragraph carries no direct formatting for an automatic style to hold -- as the paragraph's own text:style-name. The odt writer uses it for a section's page-style switch, which ODF states as a style:master-page-name on a paragraph style and nowhere else.
+  readonly parentStyleName?: string;
+  // Nodes appended after the paragraph's own inline content -- the anchored draw:frame elements an image block contributes, which ODF anchors inside a paragraph rather than beside one.
+  readonly trailingNodes?: readonly XmlNode[];
+}
+
+// Writes one ContentParagraph as the text:p (or, for a paragraph carrying a headingLevel, text:h) element readOdfParagraph reads back. Every formatting difference becomes an interned automatic style, since ODF has no other way to state one.
+export function writeOdfParagraph(
+  paragraph: ContentParagraph,
+  registry: StyleRegistry,
+  options: OdfParagraphWriteOptions = {},
+): XmlElement {
+  const properties = odfParagraphProperties(paragraph);
+  const attributes: Record<string, string> = {};
+  if (Object.keys(properties).length > 0) {
+    attributes["text:style-name"] = encodeXmlText(
+      registry.intern({
+        properties,
+        family: "paragraph",
+        ...(options.parentStyleName === undefined
+          ? {}
+          : { parentStyleName: options.parentStyleName }),
+      }),
+    );
+  } else if (options.parentStyleName !== undefined) {
+    attributes["text:style-name"] = encodeXmlText(options.parentStyleName);
+  }
+  if (paragraph.headingLevel !== undefined) {
+    attributes["text:outline-level"] = String(paragraph.headingLevel);
+  }
+  return el(
+    paragraph.headingLevel === undefined ? "text:p" : "text:h",
+    attributes,
+    [
+      ...writeOdfParagraphChildren(paragraph.runs, registry),
+      ...(options.trailingNodes ?? []),
+    ],
+  );
 }

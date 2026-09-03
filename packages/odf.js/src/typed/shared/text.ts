@@ -1,5 +1,6 @@
 import type { XmlElement, XmlNode } from "../../model/node";
-import { decodeXmlText } from "../../xml/entities";
+import { decodeXmlText, encodeXmlText } from "../../xml/entities";
+import { el, txt } from "../../xml/fragment";
 import { attrValue } from "../../xml/query";
 
 // ODF paragraph/heading text content is not a plain string the way a docx run's w:t is: real whitespace collapses HTML-style in XML text-node content, so ODF represents a run of N literal space characters as <text:s text:c="N"/> (an ELEMENT, not text), a tab as <text:tab/>, and a hard line break as <text:line-break/> -- all three occupy real character positions in the paragraph's flat content model but carry no text-node value at all. A naive walk that only concatenates XmlText nodes silently drops every one of these, corrupting whitespace on read -- flagged during this package's own design work as the single most likely silent-corruption bug in the whole port.
@@ -148,4 +149,99 @@ export function decodeOdfText(container: XmlElement): string {
     text += decodeOdfNode(child);
   }
   return text;
+}
+
+// --- the write direction: a plain string -> the same inline node shapes every function above reads ---
+//
+// The exact inverse of decodeOdfText, and the reason it lives beside it rather than in a writer module of its own: the two must agree, character for character, about which node shape carries which character, and the surest way to keep them agreeing is to state both in the one module that already owns the question. A writer that emitted a literal run of spaces instead of a text:s would produce a document whose own text silently changes the moment any conforming ODF consumer applies the format's whitespace rules -- the exact silent-corruption bug this module's top-of-file note flags on the read side, mirrored.
+//
+// ODF (OASIS OpenDocument v1.3 part 3, section 2.3.5, "White Space Processing and EOL Handling") applies XSLT's own white-space stripping to paragraph content: a sequence of white-space characters collapses to a single space, and a leading or trailing sequence within the paragraph is removed outright. Exactly three positions therefore need the explicit text:s spelling, and the rest of a paragraph's spaces are safe as literal text -- which is what keeps the common case (ordinary prose, single spaces between words) one text node rather than a node per word:
+// - a run of TWO OR MORE spaces anywhere, since every space after the first would collapse away;
+// - a run of spaces at the very start of the paragraph's content, since a leading sequence is removed;
+// - a run of spaces at the very end of it, for the same reason.
+// A tab and a hard line break have no textual spelling at all -- they are text:tab and text:line-break elements -- so each is always its own node.
+
+export type OdfTextSegmentKind = "text" | "space" | "tab" | "lineBreak";
+
+// One piece of a run's text that maps to exactly one ODF inline node: a text node ('text'), a text:s space run ('space', whose `text` is the literal spaces it stands for), a text:tab, or a text:line-break. A caller segmenting a whole paragraph's runs needs this granularity because the reader produces one ContentRun per node it meets -- so the segments are also precisely the runs that reading the written paragraph back will yield.
+export interface OdfTextSegment {
+  readonly kind: OdfTextSegmentKind;
+  readonly text: string;
+}
+
+const SPACE = " ";
+const TAB = "\t";
+const LINE_BREAK = "\n";
+
+// Splits one string into the maximal pieces ODF's own inline content model can carry, per the three text:s positions documented above. `protectLeading`/`protectTrailing` say whether a space run at this string's own start/end needs the explicit spelling, and a caller writing a paragraph's runs sets each for two reasons at once: the string genuinely begins/ends the paragraph (the leading/trailing rule above), or the adjacent run's own text ends/begins with a space of its own (which would make the two, spelled literally on either side of a text:span boundary, one collapsing sequence). A single space at a run boundary whose neighbour does not also end in one is left literal, matching what real producers emit -- LibreOffice writes `hello <text:span>world</text:span>`, not a text:s before the span.
+export function segmentOdfText(
+  text: string,
+  protectLeading: boolean,
+  protectTrailing: boolean,
+): OdfTextSegment[] {
+  const segments: OdfTextSegment[] = [];
+  let plain = "";
+  const flushPlain = (): void => {
+    if (plain.length > 0) {
+      segments.push({ kind: "text", text: plain });
+      plain = "";
+    }
+  };
+
+  let index = 0;
+  while (index < text.length) {
+    const character = text[index]!;
+    if (character === TAB || character === LINE_BREAK) {
+      flushPlain();
+      segments.push({
+        kind: character === TAB ? "tab" : "lineBreak",
+        text: character,
+      });
+      index += 1;
+      continue;
+    }
+    if (character !== SPACE) {
+      plain += character;
+      index += 1;
+      continue;
+    }
+    let end = index;
+    while (end < text.length && text[end] === SPACE) {
+      end += 1;
+    }
+    const spaces = text.slice(index, end);
+    const collapses =
+      spaces.length > 1 ||
+      (index === 0 && protectLeading) ||
+      (end === text.length && protectTrailing);
+    if (collapses) {
+      flushPlain();
+      segments.push({ kind: "space", text: spaces });
+    } else {
+      plain += spaces;
+    }
+    index = end;
+  }
+  flushPlain();
+  return segments;
+}
+
+// Builds the inline nodes one segment list means: a text node (entity-encoded, since this package's model stores every string exactly as it appears in the source XML -- see xml/entities.ts), a text:s carrying its own text:c count when it stands for more than one space, a text:tab, a text:line-break.
+export function buildOdfInlineNodes(
+  segments: readonly OdfTextSegment[],
+): XmlNode[] {
+  return segments.map((segment) => {
+    switch (segment.kind) {
+      case "text":
+        return txt(encodeXmlText(segment.text));
+      case "space":
+        return segment.text.length === 1
+          ? el("text:s")
+          : el("text:s", { "text:c": String(segment.text.length) });
+      case "tab":
+        return el("text:tab");
+      case "lineBreak":
+        return el("text:line-break");
+    }
+  });
 }
