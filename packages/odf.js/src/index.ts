@@ -276,6 +276,14 @@ export type { OdgDocument } from "./typed/odg/read";
 export { readOds, readOdsContent } from "./typed/ods/read";
 export type { OdsDocument } from "./typed/ods/read";
 
+// The ods WRITER, the inverse of the two readers above and this package's second content writer (typed/odt/write.ts's own top-of-file note states the shared design philosophy): writeOds takes the DocumentTree readOds returns, writeOdsContent the flat ContentDocument readOdsContent returns, and both produce a real .ods Package. normaliseOdsContent states the one canonical form a written-and-reread document equals -- including the forced normalisations readOdsContent's own established behaviour (not this writer's own choices) imposes: a value-less, formula-less, text-less cell vanishes entirely, columns/rows densify to one entry per position, and a 'time' cell's ISO clock value becomes the raw xsd:duration string the reader has not yet been updated to convert back.
+export {
+  writeOds,
+  writeOdsContent,
+  normaliseOdsContent,
+} from "./typed/ods/write";
+export type { OdsWriteOptions } from "./typed/ods/write";
+
 export {
   readOdfFormula,
   readOdfFormulaContent,
