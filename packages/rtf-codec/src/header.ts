@@ -101,6 +101,8 @@ export interface RtfHeader {
   readonly styles: ReadonlyMap<number, RtfStyleEntry>;
   // Keyed by \lsN -- the list override index a paragraph actually carries -- with the indirection through \listoverride's \listidN to the \list already resolved, so a body reader never sees the two tables separately.
   readonly lists: ReadonlyMap<number, RtfListEntry>;
+  // The \*\revtbl authors, in table order, which \revauthN and its siblings index into.
+  readonly revisionAuthors: readonly string[];
   readonly page: RtfPageGeometry;
   readonly metadata: LayoutMetadata;
   // Where the body starts: the index just past the last header table, so src/read.ts can skip what has already been read here. Header tables are recognised by destination, not position, so this is the highest such index seen rather than an assumption about ordering.
@@ -560,6 +562,31 @@ function applyListOverride(
   return { levels };
 }
 
+// "\*\revtbl -- This group consists of subgroups that each identify the author of a revision in the document, as in {Author1;}" (RTF 1.9.1, "Revision Marks"). Read in table order, because \revauthN and its siblings are each "Index into revision table. The content of the Nth group in the revision table is considered to be the author of that revision."
+//
+// The index is read 0-based. The spec's own "Nth group" wording does not say which base it means, and neither source consulted settles it -- but the table's conventional first entry is the "Unknown" placeholder that no real \revauthN names, which only sits at an index a document reaches under the 0-based reading. An index naming no entry produces no author at all rather than a wrong one (see src/constructs.ts), so the failure mode of the ambiguity is an absent name, never a misattributed change.
+//
+// A revision conflict is stored as one group of the form "CurrentAuthor\'00\'<length>PreviousAuthor\'00 PreviousRevisionTime". Only the leading current author is taken: everything from the first NUL onward is the conflict's own encoded history, which no ProvenanceDescriptor field carries.
+function parseRevisionTable(
+  tokens: readonly RtfToken[],
+  contentStart: number,
+  end: number,
+  codepage: number,
+  authors: string[],
+  sink: RtfDiagnosticSink,
+): void {
+  for (let index = contentStart; index < end; index += 1) {
+    if (tokens[index]?.kind !== "groupStart") {
+      continue;
+    }
+    const entryEnd = Math.min(matchingGroupEnd(tokens, index), end);
+    const value = collectPlainText(tokens, index + 1, entryEnd, codepage, sink);
+    // The conflict form separates its parts with a literal NUL byte (\'00), never whitespace: an author name contains spaces routinely, so splitting on anything else would truncate "A. Reviewer" to "A.".
+    authors.push(value.split("\u0000")[0]?.trim() ?? "");
+    index = entryEnd;
+  }
+}
+
 function parseInfoGroup(
   tokens: readonly RtfToken[],
   contentStart: number,
@@ -610,6 +637,7 @@ export function readRtfHeader(
   const styles = new Map<number, RtfStyleEntry>();
   const listsById = new Map<number, RtfListEntry>();
   const overrides = new Map<number, RtfListOverride>();
+  const revisionAuthors: string[] = [];
   const page: MutablePageGeometry = {
     paperWidthTwips: DEFAULT_PAPER_WIDTH_TWIPS,
     paperHeightTwips: DEFAULT_PAPER_HEIGHT_TWIPS,
@@ -709,6 +737,16 @@ export function readRtfHeader(
       case "listoverridetable":
         parseListOverrideTable(tokens, head.contentStart, groupEnd, overrides);
         break;
+      case "revtbl":
+        parseRevisionTable(
+          tokens,
+          head.contentStart,
+          groupEnd,
+          codepage,
+          revisionAuthors,
+          sink,
+        );
+        break;
       case "info":
         metadata = parseInfoGroup(
           tokens,
@@ -748,6 +786,7 @@ export function readRtfHeader(
     colors,
     styles,
     lists,
+    revisionAuthors,
     page,
     metadata,
     bodyStartIndex,

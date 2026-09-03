@@ -31,7 +31,13 @@ import {
   type PageSize,
   type RunConstructExtent,
 } from "document-schema.js";
-import { bookmarkAnchorDescriptor } from "./constructs";
+import {
+  bookmarkAnchorDescriptor,
+  coalesceRunConstructs,
+  NO_REVISION,
+  provenanceDescriptors,
+  type RevisionState,
+} from "./constructs";
 import { bytesToBase64, hexToBytes } from "./base64";
 import { appendBytes, asciiStringFromBytes, rtfBytesFromLatin1 } from "./bytes";
 import { decodeCodepageBytes } from "./codepage";
@@ -230,6 +236,8 @@ interface CharacterState {
   fontIndex: number | undefined;
   sizeHalfPoints: number;
   colorIndex: number | undefined;
+  // The <chrev> production, which is a character property like every field above it and so is scoped to the group the same way.
+  revision: RevisionState;
 }
 
 interface ParagraphState {
@@ -319,6 +327,7 @@ function defaultCharacterState(): CharacterState {
     fontIndex: undefined,
     sizeHalfPoints: DEFAULT_FONT_SIZE_HALF_POINTS,
     colorIndex: undefined,
+    revision: NO_REVISION,
   };
 }
 
@@ -371,6 +380,8 @@ function runKey(
       ? ""
       : `${String(color.r)},${String(color.g)},${String(color.b)}`,
     hyperlink ?? "",
+    // A revision boundary is a run boundary: two stretches of text differing only in who inserted them are two runs, because the extent that names the insertion has to start and end somewhere.
+    JSON.stringify(char.revision),
   ].join("|");
 }
 
@@ -484,6 +495,9 @@ class ContentBuilder {
   private pendingRunKey: string | undefined;
   private pendingRunText = "";
   private pendingRunFields: Omit<ContentRun, "text"> = {};
+  // The provenance descriptors each pushed run carries, positionally parallel to `runs` -- coalesced into the fewest run extents that say the same thing when the paragraph closes, so a revision spanning several formatting runs is one extent rather than one per run.
+  private runProvenance: ConstructDescriptor[][] = [];
+  private pendingRunProvenance: ConstructDescriptor[] = [];
   private tableRows: ContentTableRow[] = [];
   private tableColumnRights: number[] = [];
   private rowCells: ContentTableCell[] = [];
@@ -571,6 +585,10 @@ class ContentBuilder {
       this.flushRun();
       this.pendingRunKey = key;
       this.pendingRunFields = buildRunFields(char, fontName, color, hyperlink);
+      this.pendingRunProvenance = provenanceDescriptors(
+        char.revision,
+        this.header.revisionAuthors,
+      );
     }
     this.pendingRunText += text;
   }
@@ -578,10 +596,12 @@ class ContentBuilder {
   private flushRun(): void {
     if (this.pendingRunText.length > 0) {
       this.runs.push({ ...this.pendingRunFields, text: this.pendingRunText });
+      this.runProvenance.push(this.pendingRunProvenance);
     }
     this.pendingRunText = "";
     this.pendingRunKey = undefined;
     this.pendingRunFields = {};
+    this.pendingRunProvenance = [];
   }
 
   // Closes the paragraph currently accumulating. `force` distinguishes an explicit \par (which always produces a paragraph, empty ones included -- an empty paragraph is real content in a wordprocessing document) from an implicit boundary such as a \cell or the end of the document, which produces nothing when nothing has accumulated.
@@ -597,6 +617,7 @@ class ContentBuilder {
     const blockIndex = target.length;
     target.push(this.buildParagraph(para));
     this.runs = [];
+    this.runProvenance = [];
     this.resolveBookmarkPositions(para, blockIndex);
     this.paragraphSerial += 1;
   }
@@ -645,10 +666,12 @@ class ContentBuilder {
 
   // The run-scoped extents this paragraph carries, in document order by where each starts, dropping any whose range does not name runs this paragraph actually has -- the well-formedness bound document-schema.js's own findRunConstructFault states (0 <= startRun <= endRun <= runs.length) and deliberately does not enforce in the schema.
   private takeRunConstructs(): RunConstructExtent[] {
-    const extents = this.pendingRunConstructs.filter(
-      (extent) => extent.endRun <= this.runs.length,
-    );
+    const extents = [
+      ...this.pendingRunConstructs,
+      ...coalesceRunConstructs(this.runProvenance),
+    ].filter((extent) => extent.endRun <= this.runs.length);
     this.pendingRunConstructs = [];
+    this.runProvenance = [];
     return extents.sort(
       (left, right) =>
         left.startRun - right.startRun || left.endRun - right.endRun,
@@ -1394,6 +1417,55 @@ function applyCharacterControlWord(
       return true;
     case "uc":
       if (param !== undefined && param >= 0) state.uc = param;
+      return true;
+    // The <chrev> production. Each writes the revision half of the character state, which rides the group stack with the rest of it.
+    case "revised":
+      state.char.revision = {
+        ...state.char.revision,
+        revised: toggleValue(param),
+      };
+      return true;
+    case "revauth":
+      state.char.revision = { ...state.char.revision, revisedAuthor: param };
+      return true;
+    case "revdttm":
+      state.char.revision = { ...state.char.revision, revisedDateTime: param };
+      return true;
+    case "deleted":
+      state.char.revision = {
+        ...state.char.revision,
+        deleted: toggleValue(param),
+      };
+      return true;
+    case "revauthdel":
+      state.char.revision = { ...state.char.revision, deletedAuthor: param };
+      return true;
+    case "revdttmdel":
+      state.char.revision = { ...state.char.revision, deletedDateTime: param };
+      return true;
+    case "mvf":
+      state.char.revision = {
+        ...state.char.revision,
+        moved: toggleValue(param) ? "moveFrom" : undefined,
+      };
+      return true;
+    case "mvt":
+      state.char.revision = {
+        ...state.char.revision,
+        moved: toggleValue(param) ? "moveTo" : undefined,
+      };
+      return true;
+    case "mvauth":
+      state.char.revision = { ...state.char.revision, movedAuthor: param };
+      return true;
+    case "mvdate":
+      state.char.revision = { ...state.char.revision, movedDateTime: param };
+      return true;
+    case "crauth":
+      state.char.revision = { ...state.char.revision, formatAuthor: param };
+      return true;
+    case "crdate":
+      state.char.revision = { ...state.char.revision, formatDateTime: param };
       return true;
     default:
       // Underline is a family of control words rather than one: "\ul* Continuous underline. \ul0 turns off all underlining" plus a dozen styled variants (\uld, \uldash, \ulth, \ulwave, ...), all of which ContentRun expresses as the one boolean it carries. \ulc (underline colour) is deliberately not one of them.

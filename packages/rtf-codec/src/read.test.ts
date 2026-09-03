@@ -761,6 +761,136 @@ describe("bookmarks", () => {
   });
 });
 
+// RTF 1.9.1, "Character Revision Mark Properties": <chrev> is `\revised? \revauthN? \revdttmN? \crauthN? \crdateN? \deleted? \revauthdelN? \revdttmdelN? \mvf? \mvt? \mvauthN? \mvdateN?`, and every one of them is a character property -- so a tracked change is a run-scoped extent, never a block marker.
+describe("revision marks", () => {
+  // "\*\revtbl -- This group consists of subgroups that each identify the author of a revision in the document, as in {Author1;}."
+  const REVTBL = "{\\*\\revtbl{Unknown;}{A. Reviewer;}{B. Editor;}}";
+  // 1 January 2024, 09:30, packed into the DTTM bit field the spec tabulates: minute 30, hour 9, day 1, month 1, year 2024-1900 = 124.
+  const DTTM_2024_01_01_0930 =
+    30 | (9 << 6) | (1 << 11) | (1 << 16) | (124 << 20);
+
+  it("reads \\revised as an insertion whose author resolves through the revision table", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard kept \\revised\\revauth1\\revdttm${String(DTTM_2024_01_01_0930)} added\\revised0  more\\par}`,
+    )[0];
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "provenance",
+      change: "insertion",
+      author: "A. Reviewer",
+      dateIso: "2024-01-01T09:30:00",
+    });
+    expect(
+      paragraph?.runs
+        .slice(extent?.startRun ?? 0, extent?.endRun ?? 0)
+        .map((run) => run.text)
+        .join(""),
+      // The single space after \revdttmN is that control word's own delimiter, not text, so the inserted run begins at 'added'.
+    ).toBe("added");
+  });
+
+  it("carries deleted text rather than dropping it, which is the whole point of the provenance kind", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard kept \\deleted\\revauthdel2 gone\\deleted0  kept\\par}`,
+    )[0];
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe(
+      "kept gone kept",
+    );
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "provenance",
+      change: "deletion",
+      author: "B. Editor",
+    });
+  });
+
+  it("reads \\mvf and \\mvt as the move pair", () => {
+    const first = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\mvf\\mvauth1 moved out\\par}`,
+    )[0];
+    const second = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\mvt\\mvauth1 moved in\\par}`,
+    )[0];
+    expect(first?.constructs?.[0]?.descriptor).toMatchObject({
+      kind: "provenance",
+      change: "moveFrom",
+    });
+    expect(second?.constructs?.[0]?.descriptor).toMatchObject({
+      kind: "provenance",
+      change: "moveTo",
+    });
+  });
+
+  it("reads \\crauthN as a format change, the one revision with no flag of its own", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\crauth2\\crdate${String(DTTM_2024_01_01_0930)}\\b restyled\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      kind: "provenance",
+      change: "formatChange",
+      author: "B. Editor",
+    });
+  });
+
+  it("carries one extent per change kind when a run is both inserted and format-changed", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\revised\\revauth1\\crauth2 both\\par}`,
+    )[0];
+    expect(
+      paragraph?.constructs?.map((extent) =>
+        extent.descriptor.kind === "provenance"
+          ? extent.descriptor.change
+          : undefined,
+      ),
+    ).toEqual(["insertion", "formatChange"]);
+  });
+
+  it("coalesces adjacent runs carrying the same revision into one extent", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\revised\\revauth1 one\\b two\\b0 three\\par}`,
+    )[0];
+    expect(paragraph?.runs).toHaveLength(3);
+    expect(paragraph?.constructs).toHaveLength(1);
+    expect(paragraph?.constructs?.[0]).toMatchObject({
+      startRun: 0,
+      endRun: 3,
+    });
+  });
+
+  it("omits the author when the index names no revision table entry, rather than inventing one", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\revised\\revauth9 orphan\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "provenance",
+      change: "insertion",
+    });
+  });
+
+  it("omits the date for a zero \\revdttmN, which records no time rather than the year 1900", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard \\revised\\revauth1\\revdttm0 undated\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "provenance",
+      change: "insertion",
+      author: "A. Reviewer",
+    });
+  });
+
+  it("scopes a revision to its group, as every other character property is scoped", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}${REVTBL}\\pard plain {\\revised\\revauth1 inserted} plain again\\par}`,
+    )[0];
+    const extent = paragraph?.constructs?.[0];
+    expect(
+      paragraph?.runs
+        .slice(extent?.startRun ?? 0, extent?.endRun ?? 0)
+        .map((run) => run.text)
+        .join(""),
+    ).toBe("inserted");
+  });
+});
+
 describe("the tree-form entry point", () => {
   it("assembles the same content into a DocumentTree whose root is a wordprocessing package", () => {
     const { documentPackage } = readRtf(
