@@ -10,6 +10,7 @@ export * from "./document/slide-list-write";
 export * from "./drawing/shapes";
 export * from "./drawing/shapes-write";
 export * from "./errors";
+export * from "./metadata";
 export * from "./read";
 export * from "./record/header";
 export * from "./record/tree";

@@ -1,4 +1,4 @@
-import { readCompoundFile } from "archive-codec";
+import { readCompoundFile, readSummaryInformation } from "archive-codec";
 import {
   type ContentBlock,
   type ContentDocument,
@@ -10,6 +10,7 @@ import {
   assembleTree,
 } from "document-schema.js";
 import { buildParagraphs } from "./content";
+import { summaryInformationToLayoutMetadata } from "./metadata";
 import { readDocumentAtom } from "./document/document-atom";
 import { readFontNames } from "./document/fonts";
 import {
@@ -41,6 +42,9 @@ import { POINTS_PER_INCH, masterUnitsToPoints } from "./units";
 // [MS-PPT] 2.1.1/2.1.2: both stream names are mandated exactly, including the space.
 export const CURRENT_USER_STREAM = "Current User";
 export const POWERPOINT_DOCUMENT_STREAM = "PowerPoint Document";
+
+/** The [MS-OLEPS] Property Set Stream a .ppt's title/author/dates live in when present ([MS-OSHARED] 2.3.3.2.2) -- a genuinely optional stream, unlike the two above, since a valid PowerPoint binary document need not carry document properties at all. */
+export const SUMMARY_INFORMATION_STREAM = "\x05SummaryInformation";
 
 // PowerPoint's own default text insets: 0.1 inch left and right, 0.05 inch top and bottom -- the same figures ECMA-376 later wrote into a:bodyPr's defaults, and the ones ooxml.js applies to a pptx shape stating none. A per-shape override lives in the shape's OfficeArtFOPT text properties, which this reader does not yet read; see the README's scope note.
 const DEFAULT_INSET_LEFT_RIGHT_PT = 0.1 * POINTS_PER_INCH;
@@ -216,7 +220,7 @@ export function readPptStreams(
     slideList === undefined ? [] : readSlideListWithText(slideList);
 
   return {
-    // Document properties live in the compound file's own SummaryInformation stream ([MS-OSHARED]), not in any [MS-PPT] record, so nothing read here can populate them yet. See the README's scope note.
+    // Document properties live in the compound file's own "\x05SummaryInformation" stream ([MS-OSHARED]), not in any [MS-PPT] record -- genuinely outside what a caller holding only these two streams can supply. readPptContent, one level up, is where a container-level caller gets the real value: it looks the stream up itself and overrides this field when one is present.
     metadata: {},
     slides: persists.map((persist) =>
       readSlide(powerPointDocumentStream, directory, persist, size, fontNames),
@@ -224,13 +228,25 @@ export function readPptStreams(
   };
 }
 
-// Reads a .ppt file's bytes into the flat metadata + slides form.
+// Reads a .ppt file's bytes into the flat metadata + slides form. readPptStreams below is the pure record-level read (metadata always {}, since it has no container to look a SummaryInformation stream up in); this wraps it with the one container-level fact readPptStreams cannot know -- whether the compound file also carries a "\x05SummaryInformation" stream -- mapped onto LayoutMetadata through summaryInformationToLayoutMetadata (see src/metadata.ts) when present.
 export function readPptContent(bytes: Uint8Array<ArrayBuffer>): PptDocument {
   const streams = readCompoundFile(bytes);
-  return readPptStreams(
+  const document = readPptStreams(
     requireStream(streams, CURRENT_USER_STREAM),
     requireStream(streams, POWERPOINT_DOCUMENT_STREAM),
   );
+  const metadataStream = streams.find(
+    (stream) => stream.path === SUMMARY_INFORMATION_STREAM,
+  );
+  if (metadataStream === undefined) {
+    return document;
+  }
+  return {
+    ...document,
+    metadata: summaryInformationToLayoutMetadata(
+      readSummaryInformation(metadataStream.bytes),
+    ),
+  };
 }
 
 // Reads a .ppt file's bytes into the shared tree form, the same DocumentTree ooxml.js's readPptx and odf.js's readOdp produce for their own presentation formats.

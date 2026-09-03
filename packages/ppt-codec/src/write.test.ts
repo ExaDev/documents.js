@@ -1,3 +1,4 @@
+import { readCompoundFile } from "archive-codec";
 import {
   ContentDocumentSchema,
   DocumentTreeSchema,
@@ -512,6 +513,33 @@ describe("writePptContent / readPptContent round trip", () => {
       ],
     };
     expect(() => writePptContent(document)).toThrow(PptUnsupportedContentError);
+  });
+
+  describe("metadata", () => {
+    it('round-trips title/subject/author/keywords/dates through a real "\\x05SummaryInformation" stream', () => {
+      const document = {
+        metadata: {
+          title: "Quarterly review",
+          subject: "Finance",
+          author: "Joe",
+          keywords: ["finance", "quarterly"],
+          createdIso: "2024-01-15T09:00:00.000Z",
+          modifiedIso: "2024-03-20T14:30:00.000Z",
+        },
+        slides: [slide()],
+      };
+      const bytes = writePptContent(document);
+      expect(readPptContent(bytes).metadata).toEqual(document.metadata);
+    });
+
+    it('writes no "\\x05SummaryInformation" stream at all when metadata carries nothing that stream can hold', () => {
+      const bytes = writePptContent({ metadata: {}, slides: [slide()] });
+      const streams = readCompoundFile(bytes);
+      expect(
+        streams.some((stream) => stream.path === "\x05SummaryInformation"),
+      ).toBe(false);
+      expect(readPptContent(bytes).metadata).toEqual({});
+    });
   });
 });
 
