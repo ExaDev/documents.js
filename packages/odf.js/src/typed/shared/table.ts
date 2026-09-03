@@ -77,14 +77,14 @@ function resolveRowHeightPt(
 // BORDERS/ALIGNMENT/VERTICAL-ALIGNMENT (added alongside background for document-schema.js 2.0.0's Release A, which gave ContentTableCell a `borders` field and ContentSheetCell its own `borders`/`alignment`/`verticalAlignment` fields): fo:border and its four per-edge siblings (fo:border-left/right/top/bottom) share ODF's fixed-order XSL-FO border shorthand -- exactly THREE space-separated tokens, "<length> <border-style> <color>", in that fixed order (this is XSL-FO's own <border> shorthand, not CSS's permutation-tolerant one; e.g. `fo:border="0.05pt solid #000000"`). A border-style token of "none"/"hidden" means the edge genuinely carries NO border at all -- distinct from the attribute being absent entirely, which means "say nothing about this edge, whatever a less specific link in the style chain already set stays in effect" -- so an explicit override can clear an inherited edge, not just add one. A border-style ODF allows but ContentBorderSchema's own vocabulary has no member for (groove/ridge/inset/outset) still yields a real border -- width and colour are both genuine values read straight off the attribute -- just with `style` left unset (ContentBorderSchema's own documented "absent means 'solid'" default), the same "read what's real, leave what doesn't map unmapped rather than fabricating or discarding" precedent typed/draw/shapes.ts's own readOdfFillAndStroke already established for draw:stroke. style:vertical-align is enumerated to "top"/"middle"/"bottom"/"automatic" per the OASIS schema; "automatic" has no member in ContentSheetCell's own three-value verticalAlignment enum, so it is left unread (undefined) rather than guessed at. fo:text-align on a table-cell style's OWN style:paragraph-properties child (confirmed as real, valid structure against real LibreOffice 26.2 output -- style:default-style style:family="table-cell" in a genuine .ods's styles.xml carries a style:paragraph-properties child directly, setting the cell's own default paragraph formatting) is that same four-value vocabulary properties.ts's parseParagraphProperties already restricts to (left/center/right/justify) -- anything else (ODF's own "start"/"end" logical values included) is left unread rather than guessed at.
 const BORDER_STYLE_MAP: Readonly<Partial<Record<string, ContentStrokeStyle>>> =
   { solid: "solid", dashed: "dashed", dotted: "dotted", double: "double" };
-type BorderEdgeKey = "left" | "right" | "top" | "bottom";
-const BORDER_EDGE_KEYS: readonly BorderEdgeKey[] = [
+export type BorderEdgeKey = "left" | "right" | "top" | "bottom";
+export const BORDER_EDGE_KEYS: readonly BorderEdgeKey[] = [
   "left",
   "right",
   "top",
   "bottom",
 ];
-const BORDER_EDGE_ATTRS: Readonly<Record<BorderEdgeKey, string>> = {
+export const BORDER_EDGE_ATTRS: Readonly<Record<BorderEdgeKey, string>> = {
   left: "fo:border-left",
   right: "fo:border-right",
   top: "fo:border-top",
@@ -357,8 +357,8 @@ function tableRowStyle(
   });
 }
 
-// One border edge in ODF's own fixed-order XSL-FO shorthand -- exactly three space-separated tokens, "<length> <border-style> <color>", the same grammar parseBorderEdge above reads. An absent ContentBorder.style is written as "solid", which is what ContentBorderSchema already documents an absent style to mean, so the value written says what the value read says.
-function formatBorderEdge(border: ContentBorder): string {
+// One border edge in ODF's own fixed-order XSL-FO shorthand -- exactly three space-separated tokens, "<length> <border-style> <color>", the same grammar parseBorderEdge above reads. An absent ContentBorder.style is written as "solid", which is what ContentBorderSchema already documents an absent style to mean, so the value written says what the value read says. Exported for typed/ods/write.ts, which writes the identical fo:border-*/style:table-cell-properties shorthand for ContentSheetCell.borders -- the same XSL-FO grammar, on a different content leaf, so the formatting is shared rather than duplicated.
+export function formatBorderEdge(border: ContentBorder): string {
   return `${formatOdfLength(border.widthPt)} ${border.style ?? "solid"} ${formatOdfColor(border.color)}`;
 }
 
