@@ -1,7 +1,7 @@
 {
   "name": "ppt-codec",
   "version": "1.0.2",
-  "description": "Hand-written PowerPoint 97-2003 binary (.ppt, [MS-PPT]) reader against the shared document-schema.js content pivot.",
+  "description": "Hand-written PowerPoint 97-2003 binary (.ppt, [MS-PPT]) reader and writer against the shared document-schema.js content pivot.",
   "type": "module",
   "repository": {
     "type": "git",

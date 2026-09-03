@@ -13,3 +13,11 @@ export class PptEncryptedError extends Error {
     this.name = "PptEncryptedError";
   }
 }
+
+// Thrown on the write path when the caller's content asks for something ppt-codec's writer cannot express: a document that is not a presentation, slides that do not share the one slide size [MS-PPT]'s DocumentAtom states for the whole presentation, or similar. Distinct from both errors above -- the input is neither malformed bytes (PptFormatError) nor an unreadable-but-valid file (PptEncryptedError), it is well-formed content whose shape sits outside this writer's deliberately narrower scope, documented in the README's write-scope section. A block kind the writer does not represent (an image, a table, a construct marker) is not this error: it is silently dropped from the written text body, the same documented-gap convention the reader already uses for its own unsupported constructs.
+export class PptUnsupportedContentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PptUnsupportedContentError";
+  }
+}
