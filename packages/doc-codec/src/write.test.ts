@@ -414,7 +414,49 @@ describe("writeDocContent tables", () => {
     expect(block.rows[0]?.heightPt).toBe(40);
   });
 
-  it("round-trips a horizontally merged cell's colSpan, dropping the continuation cell from the output row", () => {
+  it("round-trips a horizontally merged cell's colSpan via the merged row's own narrower, wider physical cells", () => {
+    // A real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read TCGRF.horzMerge/sprmTMerge at all for a horizontal merge -- it states one purely through a merged row's own physical cell layout: fewer, wider cells than an unmerged row in the same table (ExaDev/documents.js#895). This writer now matches that encoding, so the merged row genuinely has 2 physical cells here, not 3 -- the reader recovers colSpan by comparing this row's own boundaries against the second, unmerged row's, which is what reveals that the table has 3 conceptual columns at all (see the dedicated "narrows columnWidthsPt" test below for what happens when no row ever reveals that boundary).
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50, 50],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "wide" }])], colSpan: 2 },
+              { blocks: [paragraph([{ text: "narrow" }])] },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "A2" }])] },
+              { blocks: [paragraph([{ text: "B2" }])] },
+              { blocks: [paragraph([{ text: "C2" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.rows[0]?.cells).toHaveLength(2);
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
+    expect(block.rows[0]?.cells[1]?.colSpan).toBeUndefined();
+    expect(cellText(block.rows[0]?.cells[1])).toBe("narrow");
+    expect(block.rows[1]?.cells.map((cell) => cellText(cell))).toEqual([
+      "A2",
+      "B2",
+      "C2",
+    ]);
+  });
+
+  it("narrows columnWidthsPt to what the physical bytes can actually support when no row in the table ever states the boundary a merge crosses", () => {
+    // [MS-DOC]'s own physical model (see the previous test's note) states a table's column grid entirely through the boundaries each row's own TDefTableOperand declares. When literally every row merges across the identical span -- as a single-row table with one merged cell necessarily does, having no other row to compare against -- the boundary between what were nominally 2 of the table's 3 declared columns is never physically written anywhere, so it cannot be recovered on read: this is a genuine limitation of the format's own physical encoding, not an approximation this reader chooses to make (see the README's own note on this).
     const input = document([
       {
         kind: "table",
@@ -434,10 +476,11 @@ describe("writeDocContent tables", () => {
     if (block?.kind !== "table") {
       throw new Error("expected a table block");
     }
+    // Only 2 physical columns are ever written -- one 100pt (the merged pair's combined width) and one 50pt -- so that is genuinely all a reader can recover, not the original 3x50pt grid.
+    expect(block.columnWidthsPt).toEqual([100, 50]);
     expect(block.rows[0]?.cells).toHaveLength(2);
-    expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(block.rows[0]?.cells[0]?.colSpan).toBeUndefined();
     expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
-    expect(block.rows[0]?.cells[1]?.colSpan).toBeUndefined();
     expect(cellText(block.rows[0]?.cells[1])).toBe("narrow");
   });
 
@@ -526,6 +569,14 @@ describe("writeDocContent tables", () => {
           {
             cells: [{ blocks: [] }, { blocks: [paragraph([{ text: "C2" }])] }],
           },
+          // Neither row above ever states the boundary between the anchor's own 2 merged columns, since both merge across it identically -- a third, wholly unmerged row is what reveals the table genuinely has 3 columns (see this describe block's own "narrows columnWidthsPt" test for what happens without one).
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "A3" }])] },
+              { blocks: [paragraph([{ text: "B3" }])] },
+              { blocks: [paragraph([{ text: "C3" }])] },
+            ],
+          },
         ],
       },
     ]);
@@ -534,6 +585,7 @@ describe("writeDocContent tables", () => {
     if (block?.kind !== "table") {
       throw new Error("expected a table block");
     }
+    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(block.rows[0]?.cells[0]?.rowSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("anchor");
@@ -543,6 +595,11 @@ describe("writeDocContent tables", () => {
     expect(block.rows[1]?.cells[0]?.blocks).toEqual([]);
     expect(block.rows[1]?.cells[0]?.colSpan).toBe(2);
     expect(cellText(block.rows[1]?.cells[1])).toBe("C2");
+    expect(block.rows[2]?.cells.map((cell) => cellText(cell))).toEqual([
+      "A3",
+      "B3",
+      "C3",
+    ]);
   });
 
   it("appends a trailing empty paragraph when a table is the section's own last block, so the document's last character is a genuine paragraph mark rather than the table's own row-ending cell mark", () => {
