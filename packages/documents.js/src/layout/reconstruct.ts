@@ -450,6 +450,8 @@ function structureHeadingLevel(
 // PDF has no semantic headings, so reconstructing one is inference, and relative font size against the document's modal body size is the signal -- the same category of heuristic the paragraph clustering above already applies to baseline spacing. The level is assigned by RANK, not by absolute ratio: every distinct size sitting at least HEADING_MIN_SIZE_DELTA_PT above the modal body size is a heading size, ranked largest-first into Heading1, Heading2, ... Ranking is what inverts this package's own write side exactly (the layout engine renders Heading1..4 at 28/22/18/14pt against a 12pt body, so '# Title / ## Section' round-trips its levels back), and it generalises honestly to foreign PDFs, where "the largest text is the title, the next largest are sections" is the well-worn reading. Sizes within the delta of the body -- including this package's own Heading5 (12pt) and Heading6 (11pt) render sizes -- carry no signal and stay paragraphs: a size a document's body itself can have is not evidence of anything.
 //
 // The census runs over every text item in the document, table text included: a paragraph's own dominant size must land on a census bucket to be classified, and the modal body size is strengthened, not skewed, by table text at body size. A document whose only text is headings degenerates to "the modal size is the heading size", classifying nothing -- the conservative failure.
+//
+// A blank item -- one whose recovered text is entirely whitespace -- carries a real font size (a genuine visible-mode Tj at that size, unlike an empty string, which convertText in pdf-codec's own read.ts already drops before a LayoutText is ever built) but no content of its own to be a heading OF: a spacer run, a leader space, an editorial artifact left in a Word-authored specification (a heading-styled paragraph whose only content is a lone space, kept for pagination rather than a title). Counting it toward the census or a paragraph's dominant size would classify a blank paragraph as a heading purely from its font size, producing exactly the "bare '#' with nothing after it" ExaDev/documents.js#868 reports -- so both the census and the per-paragraph lookup below exclude it, the same way an invisible or absent glyph already never reaches this stage at all.
 
 // The smallest gap between the modal body size and a size that counts as heading-sized. 2pt admits the layout engine's own Heading4 (14pt against a 12pt body) with no margin to spare and excludes sub-point rounding jitter and nominal "slightly larger" text (13pt), which is genuinely indistinguishable from emphasis.
 const HEADING_MIN_SIZE_DELTA_PT = 2;
@@ -457,11 +459,15 @@ const HEADING_MIN_SIZE_DELTA_PT = 2;
 // ATX's own ceiling: six '#' levels. A document with more than six distinct heading sizes clamps the deepest ones here rather than inventing deeper levels markdown cannot spell (markdown-codec's emitter clamps through document-schema.js's own clampHeadingLevel for the same reason).
 const MAX_HEADING_LEVEL = 6;
 
+function hasVisibleText(text: string): boolean {
+  return text.trim().length > 0;
+}
+
 function headingSizeLevels(doc: LayoutDocument): ReadonlyMap<number, number> {
   const sizes: number[] = [];
   for (const page of doc.pages) {
     for (const item of page.items) {
-      if (item.kind === "text") {
+      if (item.kind === "text" && hasVisibleText(item.text)) {
         sizes.push(item.sizePt);
       }
     }
@@ -486,14 +492,17 @@ function headingSizeLevels(doc: LayoutDocument): ReadonlyMap<number, number> {
   return levels;
 }
 
-// A clustered paragraph's dominant size, bucketed the same way the census buckets -- the key its heading level (if any) is looked up by.
+// A clustered paragraph's dominant size, bucketed the same way the census buckets -- the key its heading level (if any) is looked up by. Blank items are excluded here too, matching headingSizeLevels' own census: a paragraph whose only items are blank (an editorial spacer, never real content) has no items left to take a mode over, modeOf([], ...) returns 0, and 0pt never lands in the heading-bucket map -- the same "no signal, stays a paragraph" outcome an all-body-size paragraph already gets, rather than inheriting a blank item's own heading-sized font.
 function headingLevelOf(
   paragraph: TextParagraph,
   levels: ReadonlyMap<number, number>,
 ): number | undefined {
   return levels.get(
     modeOf(
-      paragraph.lines.flatMap((line) => line.items.map((item) => item.sizePt)),
+      paragraph.lines
+        .flatMap((line) => line.items)
+        .filter((item) => hasVisibleText(item.text))
+        .map((item) => item.sizePt),
       0.5,
     ),
   );
