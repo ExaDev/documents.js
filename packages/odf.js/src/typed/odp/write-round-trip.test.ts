@@ -415,3 +415,12 @@ describe("writeOdpContent: rotated geometry near the page origin", () => {
     expect(writtenShapes[0]!.frame).toEqual(tiny);
   });
 });
+
+describe("writeOdpContent: a shape name carrying XML special characters", () => {
+  it("round-trips an ampersand and angle brackets without leaving the name entity-escaped", () => {
+    const name = "Q&A <draft> \"quoted\" 'single'";
+    const written = roundTrip(documentOf([slide([shape({ name })])]));
+    expect(written.slides[0]!.shapes[0]!.name).toBe(name);
+    expectRoundTrip(documentOf([slide([shape({ name })])]));
+  });
+});

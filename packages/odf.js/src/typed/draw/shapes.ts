@@ -11,6 +11,7 @@ import type {
 import type { XmlElement, XmlNode } from "../../model/node";
 import type { Package } from "../../model/package";
 import { attrValue, childrenWithTag, elementsWithTag } from "../../xml/query";
+import { decodeXmlText } from "../../xml/entities";
 import { base64ToBytes } from "../../util/base64";
 import { sniffImageFormat } from "../../image/sniff";
 import { resolveStyleElementChain } from "../shared/cascade";
@@ -89,6 +90,12 @@ function readFrameInsets(frame: XmlElement, pkg: Package): FrameInsets {
     };
   }
   return insets;
+}
+
+// A shape's own draw:name, decoded. odf.js parses with processEntities:false (xml/parse.ts), so an attribute value in this package's model is stored exactly as it appears in the source XML -- a shape named `Q&A <draft>` is the literal five-character-entity string `Q&amp;A &lt;draft&gt;` here, and projecting that into a plain ContentShape.name without decoding hands every consumer an escaped string it has no way to know is escaped. Every other plain-text projection in this reader family already decodes (svg:title/svg:desc via decodeOdfText, a form control's label via forms.ts, meta.xml's own fields via metadata.ts); an attribute value takes xml/entities.ts's decodeXmlText directly rather than decodeOdfText, since text:s/text:tab/text:line-break are element-level spellings that cannot occur inside an attribute at all.
+function readDrawName(element: XmlElement): string | undefined {
+  const raw = attrValue(element, "draw:name");
+  return raw === undefined ? undefined : decodeXmlText(raw);
 }
 
 // A draw:frame's own alternative text: svg:title (ODF's short title) preferred, svg:desc (its long description) used when a frame carries only the latter -- both are plain-text DIRECT CHILD ELEMENTS of draw:frame itself, not attributes, confirmed against real LibreOffice 26.2 output (a Calc image whose UNO Title/Description properties were both set round-trips as `<svg:title>...</svg:title><svg:desc>...</svg:desc>` siblings of the frame's own draw:image). ContentImageBlockSchema models exactly one altText string, so the two are collapsed with title first: LibreOffice's own HTML export writes svg:title into `alt=`, making it the closer match, and a frame carrying only a description still has genuine alternative text worth surfacing rather than dropping. Decoded via text.ts's own decodeOdfText (not a bare text-node concatenation) for the same reason every other ODF text getter in this package uses it -- a title/description containing a run of literal spaces or a tab is stored as text:s/text:tab elements.
@@ -196,7 +203,7 @@ export function readDrawFrame(
   }
   const geometry = composeOdfGroupTransform(groupFunctions, ownGeometry);
   return {
-    name: attrValue(frame, "draw:name"),
+    name: readDrawName(frame),
     frame: geometry.frame,
     rotationDeg: geometry.rotationDeg,
     ...readFrameInsets(frame, pkg),
@@ -541,7 +548,7 @@ function readCustomShapeAsTextShape(
     "draw:enhanced-geometry",
   )[0];
   return {
-    name: attrValue(element, "draw:name"),
+    name: readDrawName(element),
     frame: geometry.frame,
     rotationDeg: geometry.rotationDeg,
     ...readFrameInsets(element, pkg),
