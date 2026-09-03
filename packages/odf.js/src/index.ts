@@ -243,16 +243,9 @@ export {
 export type { DrawPageContent } from "./typed/draw/shapes";
 
 // The write-side mirror of the shape reader above: one ContentShape -> the draw:frame element readDrawFrame reads back, shared between odp (typed/odp/write.ts, below) and a future odg writer -- see that module's own top-of-file note for the exact split.
-export {
-  createDrawShapeWriteState,
-  planShapeContent,
-  writeDrawFrame,
-  writeDrawShapes,
-} from "./typed/draw/write-shapes";
-export type {
-  DrawShapeWriteState,
-  ShapeContentPlan,
-} from "./typed/draw/write-shapes";
+//
+// createDrawShapeWriteState, DrawShapeWriteState, and planShapeContent are deliberately NOT re-exported here, and neither is ShapeContentPlan, which only planShapeContent produces: they are the seam odp's own writer and a future odg writer hold between THEMSELVES (the state constructor takes a StyleRegistry plus the raw XmlElement container automatic styles get appended to -- this package's own internal plumbing), and no consumer outside this package exists for them. They stay ordinary exports of their own module, which is all an in-package caller needs; putting them on the published surface would freeze that plumbing into the package's public API ahead of any concrete requirement for it, and every later change to it into a breaking one.
+export { writeDrawFrame, writeDrawShapes } from "./typed/draw/write-shapes";
 
 export { readDrawObjectReference } from "./typed/draw/embedded";
 export type {
