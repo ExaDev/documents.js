@@ -7,6 +7,10 @@
     "githubPackages": "byte-codec",
     "aliases": ["document-bytes"]
   },
+  "doc-codec": {
+    "githubPackages": "doc-codec",
+    "aliases": []
+  },
   "document-cli": {
     "aliases": ["doculi"]
   },
@@ -44,6 +48,18 @@
   "pdf-codec": {
     "githubPackages": "pdf-codec",
     "aliases": ["pdf-codec.js", "pdf-parser.js"]
+  },
+  "ppt-codec": {
+    "githubPackages": "ppt-codec",
+    "aliases": []
+  },
+  "rtf-codec": {
+    "githubPackages": "rtf-codec",
+    "aliases": []
+  },
+  "wpd-codec": {
+    "githubPackages": "wpd-codec",
+    "aliases": []
   },
   "xls-codec": {
     "githubPackages": "xls-codec",
