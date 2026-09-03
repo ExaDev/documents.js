@@ -19,6 +19,9 @@ const BARREL_FUNCTIONS = [
   "readTextBody",
   "buildParagraphs",
   "masterUnitsToPoints",
+  "summaryInformationToLayoutMetadata",
+  "layoutMetadataToSummaryInformation",
+  "hasSummaryInformationFields",
 ];
 const BARREL_CONSTANTS = [
   "RECORD_HEADER_SIZE",
@@ -26,6 +29,7 @@ const BARREL_CONSTANTS = [
   "MASTER_UNITS_PER_POINT",
   "CURRENT_USER_STREAM",
   "POWERPOINT_DOCUMENT_STREAM",
+  "SUMMARY_INFORMATION_STREAM",
 ];
 const BARREL_CLASSES = ["PptFormatError", "PptEncryptedError"];
 
@@ -56,6 +60,10 @@ describe("dist/ barrel exports are present in both builds", () => {
 describe("dist/ deep imports resolve for every advertised module, in both builds", () => {
   const DEEP_MODULES = [
     { path: "../dist/read.js", exports: ["readPpt", "readPptContent"] },
+    {
+      path: "../dist/metadata.js",
+      exports: ["summaryInformationToLayoutMetadata", "layoutMetadataToSummaryInformation", "hasSummaryInformationFields"],
+    },
     { path: "../dist/content.js", exports: ["buildParagraphs"] },
     { path: "../dist/units.js", exports: ["masterUnitsToPoints"] },
     { path: "../dist/errors.js", exports: ["PptFormatError"] },

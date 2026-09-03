@@ -1,3 +1,4 @@
+import { writeSummaryInformationStream } from "archive-codec";
 import {
   ContentDocumentSchema,
   DocumentTreeSchema,
@@ -8,6 +9,7 @@ import { PptEncryptedError, PptFormatError } from "./errors";
 import {
   CURRENT_USER_STREAM,
   POWERPOINT_DOCUMENT_STREAM,
+  SUMMARY_INFORMATION_STREAM,
   readPpt,
   readPptContent,
   readPptStreams,
@@ -23,6 +25,23 @@ function pptFile(
   return compoundFile([
     { name: CURRENT_USER_STREAM, bytes: currentUserStream },
     { name: POWERPOINT_DOCUMENT_STREAM, bytes: powerPointDocumentStream },
+  ]);
+}
+
+/** The same synthetic presentation pptFile builds, with a real "\x05SummaryInformation" stream added beside it -- composed with archive-codec's own writeSummaryInformationStream rather than by extending test-support/compound-file.ts, which stays a pure [MS-CFB]-only fixture builder. */
+function pptFileWithMetadata(
+  metadata: Parameters<typeof writeSummaryInformationStream>[0],
+  options: Parameters<typeof syntheticPresentation>[0] = {},
+): Uint8Array<ArrayBuffer> {
+  const { currentUserStream, powerPointDocumentStream } =
+    syntheticPresentation(options);
+  return compoundFile([
+    { name: CURRENT_USER_STREAM, bytes: currentUserStream },
+    { name: POWERPOINT_DOCUMENT_STREAM, bytes: powerPointDocumentStream },
+    {
+      name: SUMMARY_INFORMATION_STREAM,
+      bytes: writeSummaryInformationStream(metadata),
+    },
   ]);
 }
 
@@ -107,7 +126,7 @@ describe("readPptContent", () => {
     ]);
   });
 
-  it("reports an empty metadata record, since document properties live outside every [MS-PPT] record", () => {
+  it('reports an empty metadata record when the container carries no "\\x05SummaryInformation" stream', () => {
     expect(readPptContent(pptFile()).metadata).toEqual({});
   });
 
@@ -117,6 +136,21 @@ describe("readPptContent", () => {
       { name: CURRENT_USER_STREAM, bytes: currentUserStream },
     ]);
     expect(() => readPptContent(bytes)).toThrow(PptFormatError);
+  });
+
+  describe("metadata", () => {
+    it('reads title/author/dates from a real "\\x05SummaryInformation" stream', () => {
+      const bytes = pptFileWithMetadata({
+        title: "Quarterly review",
+        author: "Cornelius",
+        createdIso: "2024-05-01T00:00:00.000Z",
+      });
+      expect(readPptContent(bytes).metadata).toEqual({
+        title: "Quarterly review",
+        author: "Cornelius",
+        createdIso: "2024-05-01T00:00:00.000Z",
+      });
+    });
   });
 });
 

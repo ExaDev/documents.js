@@ -67,9 +67,9 @@ import { writePpt, writePptContent } from "ppt-codec";
 // The tree form: a document-schema.js DocumentTree in, real .ppt bytes out.
 const pptBytes = writePpt(tree);
 
-// The flat form: metadata plus ContentSlide[] in -- metadata is accepted for
-// symmetry with readPptContent's own return shape but is not written anywhere
-// (see What it does not write yet).
+// The flat form: metadata plus ContentSlide[] in -- title/author/dates are
+// written to a real "\x05SummaryInformation" stream when metadata carries
+// any of them (see Metadata).
 const bytes = writePptContent({ metadata: {}, slides });
 ```
 
@@ -97,8 +97,8 @@ Geometry is converted from master units (1/576 inch) to points on the way out, s
 Each of these is a real construct of the format that this package currently ignores or cannot represent — not a claim that it does not exist:
 
 - **Encrypted documents.** Recognised and refused by name (`PptEncryptedError`) rather than misparsed, but not decrypted.
+- **`DocumentSummaryInformation`'s extended and user-defined properties** (company, manager, custom properties) — a genuinely different stream from the one [Metadata](#metadata) covers, not attempted at all.
 - **Speaker notes.** Every slide's `notes` is `""`. Notes live in their own `NotesContainer` persist objects reached through the document's notes list, which is not yet walked.
-- **Document metadata.** `metadata` is always `{}`. Document properties live in the compound file's own `SummaryInformation` stream ([MS-OSHARED]), not in any [MS-PPT] record.
 - **Master and layout inheritance.** A run that states no size, typeface, or weight inherits it from the master's `TextMasterStyleAtom`; this reader reports such a property as absent rather than resolving the cascade, so a run's formatting is what the slide itself states and no more.
 - **Scheme colours.** A `ColorIndexStruct` naming a colour-scheme slot (rather than a literal sRGB value) yields no colour, because resolving it needs the slide's `SlideSchemeColorSchemeAtom`.
 - **Per-shape text insets.** Every shape reports PowerPoint's own defaults (0.1 inch left and right, 0.05 inch top and bottom); a per-shape override lives in the shape's `OfficeArtFOPT` property table, which is not read.
@@ -137,13 +137,28 @@ Each of these is either a real construct this writer deliberately does not attem
 - **Grouped shapes, rotation, and any coordinate system beyond a plain `OfficeArtClientAnchor`.** Every shape this writer emits is an ungrouped, unrotated rectangle in slide coordinates; `ContentShape.rotationDeg` is not written, and there is no `OfficeArtChildAnchor`/`OfficeArtFSPGR` group nesting.
 - **Per-shape text insets, autofit, and paint order.** `ContentShape.insetLeftPt`/`insetTopPt`/`insetRightPt`/`insetBottomPt`, `fontScale`, `lineSpacingReduction`, and `paintOrder` have no `OfficeArtFOPT` property table to land in, since this writer does not build one.
 - **Masters, layouts, and scheme colours.** No `MainMaster`, no `MasterListWithTextContainer`, and no `SlideSchemeColorSchemeAtom`; every character run's colour must already be a literal, and every paragraph's formatting is exactly what the paragraph itself states.
-- **Speaker notes and document metadata.** `PptDocument.metadata` is accepted (for symmetry with `readPptContent`'s own return shape) but never written anywhere; a slide's `notes` is likewise accepted and dropped, since neither `NotesContainer` persist objects nor the compound file's own `SummaryInformation` stream are built.
+- **Speaker notes.** `notes` is accepted on a `ContentSlide` and dropped, since `NotesContainer` persist objects are not built. Document metadata is a different story now — see [Metadata](#metadata).
 - **Hyperlinks, bullets, spacing, margins, and list numbering identity.** `ContentRun.hyperlink`, `ContentParagraph.list.numId`/`checked`/`itemId`, `spacingBeforePt`/`spacingAfterPt`/`lineSpacing`/`indentLeftPt`/`indentFirstLinePt`, and `pageBreakBefore`/`pageBreakAfter` have no [MS-PPT] field this writer populates; only `alignment` and `list.level` (as a `TextPFException` indent level) round-trip.
 - **`strike`, `sourcePath`, `source`, and `frames`.** `ContentRun.strike` has no `TextCFException` bit this writer sets (the format's own `CFMasks`/`CFStyle` carry no strikethrough bit at all — a real gap in [MS-PPT], not a scope choice); the three fidelity/positioning fields are round-trip-irrelevant to a fresh write and are never populated.
 - **Construct markers.** A `constructStart`/`constructEnd` pair (or any other non-`paragraph` block kind) is excluded from the written text body exactly like an image or table block, per [Writing a document](#writing-a-document).
 - **Alignment values the shared schema has no name for.** The mirror of the read-side gap: `Tx_ALIGNDistributed`, `Tx_ALIGNThaiDistributed`, and `Tx_ALIGNJustifyLow` are never written, since `Alignment` has no member naming them.
 - **Fractional character sizes.** `ContentRun.sizePt` is rounded to the nearest whole point, since `TextCFException`'s size field is a plain 16-bit integer.
 - **Fonts, tables, animations, transitions, comments, and the metacharacter atoms.** Nothing here is written for the same reason none of it is read yet — see the corresponding entries in [What it does not read yet](#what-it-does-not-read-yet).
+
+## Metadata
+
+A `.ppt`'s title, author, and dates do not live in any [MS-PPT] record at all — they live in a `"\x05SummaryInformation"` stream, a genuinely different format ([MS-OLEPS] Property Set Streams, [MS-OSHARED] 2.3.3.2.2's own naming of the specific properties Office uses) that happens to sit beside `Current User`/`PowerPoint Document` in the same [MS-CFB] compound file. `readPptContent` reads that stream when present (`archive-codec`'s `readSummaryInformation`, since the property-set format itself is zero document-format knowledge, exactly as the [MS-CFB] container it sits inside is) and maps it onto `document-schema.js`'s `LayoutMetadata` (`src/metadata.ts`'s `summaryInformationToLayoutMetadata`); `writePptContent` does the inverse (`layoutMetadataToSummaryInformation`), including a `"\x05SummaryInformation"` stream in its `writeCompoundFile` call only when the input's metadata actually carries something that stream can hold — an input whose metadata is `{}`, or carries only fields the mapping below has no destination for, produces no stream at all, matching what an absent-metadata read already returns.
+
+`readPptStreams`/`writePptStreams`, the record-level split one layer below, do not touch this at all: they take or return only the two required [MS-PPT] streams, with no compound file to look a third stream up in. `readPptContent`/`writePptContent` are where the container-level fact lives.
+
+The mapping is not 1:1, and each gap is permanent rather than a remaining TODO:
+
+| Direction                           | Fields covered                                                                         | Gap                                                                                                                                                                                                                             |
+| ----------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SummaryInformation → LayoutMetadata | `title`, `subject`, `author`, `keywords`, `createdIso`, `lastSavedIso` → `modifiedIso` | `comments` and `lastPrintedIso` have no LayoutMetadata field to land in — no other codec in the family has a "last printed" or free-text "comments" concept, so these are read from the stream but never reach a `PptDocument`. |
+| LayoutMetadata → SummaryInformation | the same six fields, in reverse                                                        | `creator`, `producer`, and `language` have no SummaryInformation equivalent: `producer` is a PDF-only concept in this schema, and `creator`/`language` are not among the fields the stream this package writes covers.          |
+
+Only the fixed SummaryInformation property set is read or written — the sibling `"\x05DocumentSummaryInformation"` stream (company, manager, and custom user-defined properties, [MS-OLEPS]'s two-property-set spelling) is not attempted at all, an explicit scope boundary `archive-codec`'s own `oleps` support shares.
 
 ## Architecture
 
@@ -177,6 +192,7 @@ import { readStyleTextPropAtom } from "ppt-codec/text/style";
 | `text/style-write`             | Writes a `StyleTextPropAtom` from the same `StyleRun`/`ParagraphProperties`/`CharacterProperties` shapes `text/style` reads into.                                                                                  |
 | `content`                      | The mapping of PowerPoint's character-counted runs onto the schema's paragraph-owned runs.                                                                                                                         |
 | `content-write`                | The inverse: a shape's `ContentBlock[]` to the flat character-counted text body and `StyleTextProps` `text/style-write` needs.                                                                                     |
+| `metadata`                     | Maps `archive-codec`'s `SummaryInformationProperties` to and from `LayoutMetadata` — read and write together, since both directions share one field mapping (see [Metadata](#metadata)).                           |
 | `read`                         | The whole read pipeline, and the `readPpt`/`readPptContent`/`readPptStreams` surface.                                                                                                                              |
 | `write`                        | The whole write pipeline, and the `writePpt`/`writePptContent`/`writePptStreams` surface.                                                                                                                          |
 | `units`                        | Master units to points, and points to master units.                                                                                                                                                                |
