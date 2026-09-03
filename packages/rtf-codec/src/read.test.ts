@@ -578,6 +578,70 @@ describe("byte runs larger than an argument list", () => {
   });
 });
 
+// RTF 1.9.1, "Section Text": <section> is `<secfmt>* <hdrftr>? <para>+ (\sect <section>)?` -- a section's own formatting precedes its paragraphs and \sect ends it, so the properties in force when a \sect arrives are the ones belonging to the section that just closed.
+describe("sections", () => {
+  it("starts a new ContentSection at each \\sect rather than collapsing the document to one", () => {
+    const sections = sectionsOf(
+      `${HEADER}\\sectd\\pard First.\\par\\sect\\sectd\\pard Second.\\par}`,
+    );
+    expect(sections).toHaveLength(2);
+    expect(
+      sections.map((section) =>
+        section.blocks
+          .filter(
+            (block): block is ContentParagraph => block.kind === "paragraph",
+          )
+          .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+          .join(""),
+      ),
+    ).toEqual(["First.", "Second."]);
+  });
+
+  it("carries each section's own \\pgwsxnN/\\pghsxnN/\\marg*sxnN geometry rather than the document's", () => {
+    const sections = sectionsOf(
+      "{\\rtf1\\ansi\\paperw12240\\paperh15840\\margl1440\\margr1440\\margt1440\\margb1440" +
+        "\\sectd\\pard Portrait.\\par\\sect" +
+        "\\sectd\\pgwsxn15840\\pghsxn12240\\marglsxn720\\margrsxn720\\margtsxn720\\margbsxn720\\pard Landscape.\\par}",
+    );
+    expect(sections[0]?.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
+    expect(sections[0]?.margins.leftPt).toBe(72);
+    expect(sections[1]?.pageSize).toEqual({ widthPt: 792, heightPt: 612 });
+    expect(sections[1]?.margins).toEqual({
+      topPt: 36,
+      rightPt: 36,
+      bottomPt: 36,
+      leftPt: 36,
+    });
+  });
+
+  it("reads the \\sbk* break vocabulary onto ContentSection.breakType", () => {
+    const sections = sectionsOf(
+      `${HEADER}\\sectd\\pard A\\par\\sect\\sectd\\sbknone\\pard B\\par\\sect\\sectd\\sbkodd\\pard C\\par}`,
+    );
+    expect(sections.map((section) => section.breakType)).toEqual([
+      undefined,
+      "continuous",
+      "oddPage",
+    ]);
+  });
+
+  it("reports \\sbkcol, whose column break ContentSection.breakType has no member for", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\sectd\\pard A\\par\\sect\\sectd\\sbkcol\\pard B\\par}`),
+    );
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      RtfDiagnosticCodes.SECTION_BREAK_UNREPRESENTED,
+    );
+  });
+
+  it("keeps section properties across a \\sect that does not restate them, since only \\sectd resets", () => {
+    const sections = sectionsOf(
+      `${HEADER}\\sectd\\pgwsxn15840\\pghsxn12240\\pard A\\par\\sect\\pard B\\par}`,
+    );
+    expect(sections[1]?.pageSize).toEqual({ widthPt: 792, heightPt: 612 });
+  });
+});
+
 describe("the tree-form entry point", () => {
   it("assembles the same content into a DocumentTree whose root is a wordprocessing package", () => {
     const { documentPackage } = readRtf(

@@ -101,6 +101,12 @@ describe("every read-side diagnostic code is reachable", () => {
     ).toContain(RtfDiagnosticCodes.TABLE_COLUMN_WIDTH_INVALID);
   });
 
+  it("rtf/section-break-unrepresented", () => {
+    expect(
+      readCodes(`${HEADER}\\pard A\\par\\sect\\sectd\\sbkcol\\pard B\\par}`),
+    ).toContain(RtfDiagnosticCodes.SECTION_BREAK_UNREPRESENTED);
+  });
+
   it("rtf/nested-table-flattened", () => {
     expect(readCodes(`${HEADER}\\pard\\intbl inner\\nestcell\\par}`)).toContain(
       RtfDiagnosticCodes.NESTED_TABLE_FLATTENED,

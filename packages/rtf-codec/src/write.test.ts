@@ -428,4 +428,52 @@ describe("round trip through this package's own reader", () => {
     expect(section?.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
     expect(section?.margins).toEqual(LETTER_SECTION.margins);
   });
+
+  it("round-trips several sections, each keeping its own geometry and break kind", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          ...LETTER_SECTION,
+          blocks: [{ kind: "paragraph", runs: [{ text: "Portrait" }] }],
+        },
+        {
+          pageSize: { widthPt: 792, heightPt: 612 },
+          margins: { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 },
+          breakType: "oddPage",
+          blocks: [{ kind: "paragraph", runs: [{ text: "Landscape" }] }],
+        },
+      ],
+    };
+    const back = roundTrip(document);
+    const sections = back.kind === "wordprocessing" ? back.sections : [];
+    expect(sections).toHaveLength(2);
+    expect(sections[0]?.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
+    expect(sections[1]?.pageSize).toEqual({ widthPt: 792, heightPt: 612 });
+    expect(sections[1]?.margins.leftPt).toBe(36);
+    expect(sections[1]?.breakType).toBe("oddPage");
+  });
+
+  it("states each section's geometry with the section-scoped \\pgwsxnN family, not the document-level \\paperwN", () => {
+    const out = write({
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          ...LETTER_SECTION,
+          blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
+        },
+        {
+          pageSize: { widthPt: 792, heightPt: 612 },
+          margins: { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 },
+          blocks: [{ kind: "paragraph", runs: [{ text: "B" }] }],
+        },
+      ],
+    });
+    expect(out).toContain("\\pgwsxn15840\\pghsxn12240");
+    expect(out).toContain("\\marglsxn720");
+    // The document-level geometry is stated once, in the header, from the first section -- not restated per section.
+    expect(out.match(/\\paperw/g)).toHaveLength(1);
+  });
 });
