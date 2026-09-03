@@ -1,0 +1,6 @@
+{
+  // A no-op Worker whose only purpose is to host wpd-codec's source as the module graph the workers test suite (test/workers/**) imports against under the real workerd runtime -- there is no fetch handler to exercise, only the library's own readWpdContent running inside a Cloudflare Workers isolate to prove the reader carries zero Node-only API usage.
+  "name": "wpd-codec-workers-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-09-23",
+}
