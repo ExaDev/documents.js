@@ -21,6 +21,9 @@ const BARREL_FUNCTIONS = [
   'writePropertySetStream',
   'readSummaryInformation',
   'writeSummaryInformationStream',
+  'summaryInformationToLayoutMetadata',
+  'layoutMetadataToSummaryInformation',
+  'hasSummaryInformationFields',
 ];
 const BARREL_CONSTANTS = [
   'MAX_WALK_DEPTH',
@@ -75,6 +78,10 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     {
       path: '../dist/oleps/summary-information.js',
       exports: ['readSummaryInformation', 'writeSummaryInformationStream', 'FMTID_SUMMARY_INFORMATION'],
+    },
+    {
+      path: '../dist/oleps/layout-metadata.js',
+      exports: ['summaryInformationToLayoutMetadata', 'layoutMetadataToSummaryInformation', 'hasSummaryInformationFields'],
     },
     { path: '../dist/magic.js', exports: [] },
   ];
