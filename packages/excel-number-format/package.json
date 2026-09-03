@@ -1,0 +1,82 @@
+{
+  "name": "excel-number-format",
+  "version": "1.0.0",
+  "description": "A tokenizing classifier for Excel's number-format mini-language (ECMA-376 Part 1 SS18.8.30, which BIFF8's [MS-XLS] 2.4.126 defers to) -- deciding whether a numeric cell is a percentage, a currency amount, a date, a time of day, an elapsed duration, or a plain number. Shared by ooxml.js and xls-codec, the excel-number-format package for the documents.js family.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ExaDev/documents.js.git",
+    "directory": "packages/excel-number-format"
+  },
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/excel-number-format",
+  "bugs": {
+    "url": "https://github.com/ExaDev/documents.js/issues"
+  },
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/index.d.ts",
+        "require": "./dist/index.d.cts"
+      },
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./*": {
+      "types": {
+        "import": "./dist/*.d.ts",
+        "require": "./dist/*.d.cts"
+      },
+      "import": "./dist/*.js",
+      "require": "./dist/*.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run _build",
+    "_build": "tsdown",
+    "prepublishOnly": "pnpm run lint && pnpm run typecheck && tsdown && publint && attw --pack",
+    "lint": "turbo run _lint",
+    "_lint": "eslint . --fix --cache --max-warnings 0",
+    "lint:check": "eslint . --max-warnings 0",
+    "typecheck": "turbo run _typecheck _typecheck:attw",
+    "_typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "_typecheck:attw": "attw --pack",
+    "test": "turbo run _test",
+    "_test": "vitest run",
+    "test:watch": "vitest",
+    "test:workers": "turbo run _test:workers",
+    "_test:workers": "vitest run --config vitest.workers.config.ts",
+    "prepare": "husky"
+  },
+  "packageManager": "pnpm@11.6.0",
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@cloudflare/vitest-pool-workers": "^0.20.1",
+    "@types/node": "^26.1.2",
+    "eslint": "^10.8.0",
+    "husky": "^9.1.7",
+    "publint": "^0.3.21",
+    "tsdown": "^0.22.13",
+    "turbo": "^2.10.8",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "lint-staged": {
+    "*.ts": "eslint --fix"
+  }
+}
