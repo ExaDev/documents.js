@@ -61,8 +61,17 @@ export const RECORD_LABELSST = 0x00fd;
 export const RECORD_LABEL = 0x0204;
 /** A cell holding a formula, its cached result, and its parsed expression ([MS-XLS] 2.4.127). */
 export const RECORD_FORMULA = 0x0006;
-/** The string result of the Formula record immediately preceding it ([MS-XLS] 2.4.268). */
+/** The string result of the Formula record preceding it ([MS-XLS] 2.4.268). */
 export const RECORD_STRING = 0x0207;
+
+// The three records the FORMULA production of [MS-XLS] 2.1.7.20.6 permits between a Formula and its String result: `FORMULA = [Uncalced] Formula [Array / Table / ShrFmla / SUB] [String *Continue]`. None is read, but each has to be recognised so a formula's string result is still found when one sits in between.
+
+/** The expression of an array formula, following the Formula record of its top-left cell ([MS-XLS] 2.4.4). */
+export const RECORD_ARRAY = 0x0221;
+/** A data-table definition following a Formula record ([MS-XLS] 2.4.334). */
+export const RECORD_TABLE = 0x0236;
+/** The shared expression a run of Formula records refers to ([MS-XLS] 2.4.260). */
+export const RECORD_SHRFMLA = 0x04bc;
 
 // --- BOF document types ([MS-XLS] 2.4.21's own dt field) ---
 
