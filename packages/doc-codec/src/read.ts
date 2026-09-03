@@ -1,4 +1,8 @@
-import { readCompoundFile, readSummaryInformation } from "archive-codec";
+import {
+  readCompoundFile,
+  readSummaryInformation,
+  summaryInformationToLayoutMetadata,
+} from "archive-codec";
 import type {
   ContentDocument,
   ContentParagraph,
@@ -10,7 +14,6 @@ import { slice } from "./bytes";
 import { SUMMARY_INFORMATION_STREAM, WORD_DOCUMENT_STREAM } from "./detect";
 import { DocFormatError } from "./errors";
 import { parseFib, tableStreamName, type Fib } from "./fib/fib";
-import { summaryInformationToLayoutMetadata } from "./metadata";
 import { applyCharacterSprms, type CharacterProperties } from "./prop/chp";
 import { PropertyBinTable } from "./prop/fkp";
 import { applyParagraphSprms, type ParagraphProperties } from "./prop/pap";
