@@ -68,4 +68,13 @@ describe("ppt-codec under the Cloudflare Workers runtime", () => {
       { kind: "paragraph", runs: [{ text: "Written in the isolate" }] },
     ]);
   });
+
+  it('round-trips document metadata through a real "\\x05SummaryInformation" stream, with no Node-only API', () => {
+    const document = {
+      metadata: { title: "Workers isolate title", author: "ppt-codec" },
+      slides: [{ size: { widthPt: 720, heightPt: 540 }, notes: "", shapes: [] }],
+    };
+    const written = readPptContent(writePptContent(document));
+    expect(written.metadata).toEqual(document.metadata);
+  });
 });

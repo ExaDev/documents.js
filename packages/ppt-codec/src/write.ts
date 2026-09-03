@@ -1,4 +1,7 @@
-import { writeCompoundFile } from "archive-codec";
+import {
+  writeCompoundFile,
+  writeSummaryInformationStream,
+} from "archive-codec";
 import {
   type ContentSlide,
   type DocumentTree,
@@ -15,8 +18,13 @@ import {
 import { writeSlideDrawing } from "./drawing/shapes-write";
 import { PptUnsupportedContentError } from "./errors";
 import {
+  hasSummaryInformationFields,
+  layoutMetadataToSummaryInformation,
+} from "./metadata";
+import {
   CURRENT_USER_STREAM,
   POWERPOINT_DOCUMENT_STREAM,
+  SUMMARY_INFORMATION_STREAM,
   type PptDocument,
 } from "./read";
 import { RT_Document, RT_Slide } from "./record/types";
@@ -138,10 +146,20 @@ export function writePptContent(
 ): Uint8Array<ArrayBuffer> {
   const { currentUserStream, powerPointDocumentStream } =
     writePptStreams(document);
-  return writeCompoundFile([
+  const streams = [
     { path: CURRENT_USER_STREAM, bytes: currentUserStream },
     { path: POWERPOINT_DOCUMENT_STREAM, bytes: powerPointDocumentStream },
-  ]);
+  ];
+  // Only when there is something SummaryInformation can actually hold: an input whose metadata carries nothing beyond creator/producer/language (or nothing at all) should read back exactly as it would with no stream present, not force an empty-but-present one into existence.
+  if (hasSummaryInformationFields(document.metadata)) {
+    streams.push({
+      path: SUMMARY_INFORMATION_STREAM,
+      bytes: writeSummaryInformationStream(
+        layoutMetadataToSummaryInformation(document.metadata),
+      ),
+    });
+  }
+  return writeCompoundFile(streams);
 }
 
 // Writes a presentation DocumentTree to .ppt bytes, the mirror of readPpt. Throws PptUnsupportedContentError for a tree of any other kind: this writer covers presentations only, the same kind readPpt itself always produces.
