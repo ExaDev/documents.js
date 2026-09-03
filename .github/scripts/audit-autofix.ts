@@ -18,6 +18,22 @@ export interface AuditReport {
   advisories: Record<string, AuditAdvisory>;
 }
 
+// npm's own error envelope: what `pnpm audit --json` prints verbatim when the registry's bulk advisory endpoint itself fails (a timeout, a 5xx, a rate limit) rather than pnpm failing to talk to it at all -- confirmed directly against a real timeout ("The operation was aborted due to timeout", code 23) from registry.npmjs.org/-/npm/v1/security/advisories/bulk. This is not the same failure as a genuinely unexpected JSON shape: it is valid, well-formed JSON from npm's own API describing a real upstream outage, and treating it identically to a parsing bug in this script produces a misleading "did not match the expected shape" error on every advisory-service hiccup, org-wide, across every open PR.
+export interface AuditServiceError {
+  error: { code: number; message: string };
+}
+
+export function isAuditServiceError(
+  value: unknown,
+): value is AuditServiceError {
+  if (!isRecord(value)) return false;
+  if (!("error" in value) || !isRecord(value.error)) return false;
+  return (
+    typeof value.error.code === "number" &&
+    typeof value.error.message === "string"
+  );
+}
+
 interface Candidate {
   advisories: AuditAdvisory[];
   overrideKey: string;
@@ -71,7 +87,11 @@ export function minimumReleaseAgeMinutes(workspaceYamlText: string): number {
   return parsed.minimumReleaseAge;
 }
 
-function runAudit(): AuditReport {
+// Retries only npm's own service-error envelope (isAuditServiceError), never a genuinely unexpected shape -- an outage is worth waiting out, a real parsing mismatch is not, and conflating the two would silently retry past an actual bug in this script's own expectations. registry.npmjs.org's advisory-bulk endpoint has been observed recovering within a couple of minutes of a timeout, so three attempts a minute apart covers a real transient blip without turning a genuine, sustained outage into a ten-minute CI job.
+const AUDIT_SERVICE_ERROR_ATTEMPTS = 3;
+const AUDIT_SERVICE_ERROR_RETRY_DELAY_SECONDS = 60;
+
+function runAuditOnce(): unknown {
   const result = spawnSync(
     "pnpm",
     ["audit", "--audit-level", auditLevel, "--json"],
@@ -84,13 +104,39 @@ function runAudit(): AuditReport {
       `pnpm audit produced no stdout (spawn error: ${String(result.error)}, stderr: ${result.stderr})`,
     );
   }
-  const parsed: unknown = JSON.parse(result.stdout);
-  if (!isAuditReport(parsed)) {
+  return JSON.parse(result.stdout);
+}
+
+// spawnSync's own blocking `sleep` rather than a Promise-based delay: main() and every runAudit() call site in this file are synchronous by design (see main's own comment on why), so an async retry loop would mean threading a Promise chain through the whole script for one call site.
+function blockingSleepSeconds(seconds: number): void {
+  spawnSync("sleep", [String(seconds)]);
+}
+
+function runAudit(): AuditReport {
+  for (let attempt = 1; attempt <= AUDIT_SERVICE_ERROR_ATTEMPTS; attempt++) {
+    const parsed = runAuditOnce();
+    if (isAuditReport(parsed)) {
+      return parsed;
+    }
+    if (isAuditServiceError(parsed)) {
+      if (attempt < AUDIT_SERVICE_ERROR_ATTEMPTS) {
+        console.log(
+          `npm's audit advisory service returned an error (code ${String(parsed.error.code)}: ${parsed.error.message}) on attempt ${String(attempt)}/${String(AUDIT_SERVICE_ERROR_ATTEMPTS)}; retrying in ${String(AUDIT_SERVICE_ERROR_RETRY_DELAY_SECONDS)}s`,
+        );
+        blockingSleepSeconds(AUDIT_SERVICE_ERROR_RETRY_DELAY_SECONDS);
+        continue;
+      }
+      throw new Error(
+        `npm's audit advisory service is unavailable after ${String(AUDIT_SERVICE_ERROR_ATTEMPTS)} attempts (code ${String(parsed.error.code)}: ${parsed.error.message}) -- this is an upstream outage, not a defect in this script's own expectations; re-run once the service recovers`,
+      );
+    }
     throw new Error(
       "pnpm audit --json output did not match the expected shape",
     );
   }
-  return parsed;
+  throw new Error(
+    "internal defect: runAudit's retry loop exited without returning or throwing",
+  );
 }
 
 function githubAdvisoryIdsIn(report: AuditReport): Set<string> {
