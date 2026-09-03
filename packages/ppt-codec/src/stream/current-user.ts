@@ -10,9 +10,9 @@ export const CURRENT_USER_HEADER_TOKEN_PLAIN = 0xe391c05f;
 export const CURRENT_USER_HEADER_TOKEN_ENCRYPTED = 0xf3d1c4df;
 
 // [MS-PPT] 2.3.2 size: "It MUST be 0x00000014." -- the 20 bytes from size through unused, the portion preceding the variable-length ansiUserName.
-const CURRENT_USER_FIXED_SIZE = 0x00000014;
-// [MS-PPT] 2.3.2 docFileVersion: "It MUST be 0x03F4."
-const CURRENT_USER_DOC_FILE_VERSION = 0x03f4;
+export const CURRENT_USER_FIXED_SIZE = 0x00000014;
+// [MS-PPT] 2.3.2 docFileVersion: "It MUST be 0x03F4." Exported so stream/current-user-write.ts's writeCurrentUserAtom stamps the identical mandated value this reader checks for, rather than a second copy of the same constant.
+export const CURRENT_USER_DOC_FILE_VERSION = 0x03f4;
 
 export interface CurrentUser {
   readonly offsetToCurrentEdit: number;

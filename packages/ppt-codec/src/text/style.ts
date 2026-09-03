@@ -13,55 +13,55 @@ export const ALIGN_DISTRIBUTED = 0x0004;
 export const ALIGN_THAI_DISTRIBUTED = 0x0005;
 export const ALIGN_JUSTIFY_LOW = 0x0006;
 
-// PFMasks bit positions, in the spec's own A-to-Z order. Each bit says whether its field is present in the TextPFException that follows -- never what the field's value is.
-const PF_HAS_BULLET = 1 << 0;
-const PF_BULLET_HAS_FONT = 1 << 1;
-const PF_BULLET_HAS_COLOR = 1 << 2;
-const PF_BULLET_HAS_SIZE = 1 << 3;
-const PF_BULLET_FONT = 1 << 4;
-const PF_BULLET_COLOR = 1 << 5;
-const PF_BULLET_SIZE = 1 << 6;
-const PF_BULLET_CHAR = 1 << 7;
-const PF_LEFT_MARGIN = 1 << 8;
-const PF_INDENT = 1 << 10;
-const PF_ALIGN = 1 << 11;
-const PF_LINE_SPACING = 1 << 12;
-const PF_SPACE_BEFORE = 1 << 13;
-const PF_SPACE_AFTER = 1 << 14;
-const PF_DEFAULT_TAB_SIZE = 1 << 15;
-const PF_FONT_ALIGN = 1 << 16;
-const PF_CHAR_WRAP = 1 << 17;
-const PF_WORD_WRAP = 1 << 18;
-const PF_OVERFLOW = 1 << 19;
-const PF_TAB_STOPS = 1 << 20;
-const PF_TEXT_DIRECTION = 1 << 21;
+// PFMasks bit positions, in the spec's own A-to-Z order. Each bit says whether its field is present in the TextPFException that follows -- never what the field's value is. Exported (rather than kept private to this module) because style-write.ts's writeTextPFException sets the identical bits when serialising a property back to bytes -- one definition read and written by both directions rather than a second copy that could drift from this one.
+export const PF_HAS_BULLET = 1 << 0;
+export const PF_BULLET_HAS_FONT = 1 << 1;
+export const PF_BULLET_HAS_COLOR = 1 << 2;
+export const PF_BULLET_HAS_SIZE = 1 << 3;
+export const PF_BULLET_FONT = 1 << 4;
+export const PF_BULLET_COLOR = 1 << 5;
+export const PF_BULLET_SIZE = 1 << 6;
+export const PF_BULLET_CHAR = 1 << 7;
+export const PF_LEFT_MARGIN = 1 << 8;
+export const PF_INDENT = 1 << 10;
+export const PF_ALIGN = 1 << 11;
+export const PF_LINE_SPACING = 1 << 12;
+export const PF_SPACE_BEFORE = 1 << 13;
+export const PF_SPACE_AFTER = 1 << 14;
+export const PF_DEFAULT_TAB_SIZE = 1 << 15;
+export const PF_FONT_ALIGN = 1 << 16;
+export const PF_CHAR_WRAP = 1 << 17;
+export const PF_WORD_WRAP = 1 << 18;
+export const PF_OVERFLOW = 1 << 19;
+export const PF_TAB_STOPS = 1 << 20;
+export const PF_TEXT_DIRECTION = 1 << 21;
 
-// CFMasks bit positions, in the spec's own A-to-Z order. fHasStyle occupies bits 10-13 and unused4 bits 14-15, which is why the typeface group starts at bit 16 rather than 14.
-const CF_BOLD = 1 << 0;
-const CF_ITALIC = 1 << 1;
-const CF_UNDERLINE = 1 << 2;
-const CF_SHADOW = 1 << 4;
-const CF_FEHINT = 1 << 5;
-const CF_KUMI = 1 << 7;
-const CF_EMBOSS = 1 << 9;
-const CF_HAS_STYLE = 0xf << 10;
-const CF_TYPEFACE = 1 << 16;
-const CF_SIZE = 1 << 17;
-const CF_COLOR = 1 << 18;
-const CF_POSITION = 1 << 19;
-const CF_OLD_EA_TYPEFACE = 1 << 21;
-const CF_ANSI_TYPEFACE = 1 << 22;
-const CF_SYMBOL_TYPEFACE = 1 << 23;
+// CFMasks bit positions, in the spec's own A-to-Z order. fHasStyle occupies bits 10-13 and unused4 bits 14-15, which is why the typeface group starts at bit 16 rather than 14. Exported for the same reason the PFMasks bits above are: style-write.ts's writeTextCFException is the write-side mirror of readTextCFException and sets these identical bits.
+export const CF_BOLD = 1 << 0;
+export const CF_ITALIC = 1 << 1;
+export const CF_UNDERLINE = 1 << 2;
+export const CF_SHADOW = 1 << 4;
+export const CF_FEHINT = 1 << 5;
+export const CF_KUMI = 1 << 7;
+export const CF_EMBOSS = 1 << 9;
+export const CF_HAS_STYLE = 0xf << 10;
+export const CF_TYPEFACE = 1 << 16;
+export const CF_SIZE = 1 << 17;
+export const CF_COLOR = 1 << 18;
+export const CF_POSITION = 1 << 19;
+export const CF_OLD_EA_TYPEFACE = 1 << 21;
+export const CF_ANSI_TYPEFACE = 1 << 22;
+export const CF_SYMBOL_TYPEFACE = 1 << 23;
 
-// CFStyle value bits, which share the low ten positions of CFMasks by construction -- the mask says a property is stated, the style says what it is.
-const STYLE_BOLD = 1 << 0;
-const STYLE_ITALIC = 1 << 1;
-const STYLE_UNDERLINE = 1 << 2;
-const STYLE_SHADOW = 1 << 4;
-const STYLE_EMBOSS = 1 << 9;
+// CFStyle value bits, which share the low ten positions of CFMasks by construction -- the mask says a property is stated, the style says what it is. Exported for the same reason the mask bits above are.
+export const STYLE_BOLD = 1 << 0;
+export const STYLE_ITALIC = 1 << 1;
+export const STYLE_UNDERLINE = 1 << 2;
+export const STYLE_SHADOW = 1 << 4;
+export const STYLE_EMBOSS = 1 << 9;
 
-// ColorIndexStruct.index: the one value meaning the struct's red/green/blue bytes are a literal colour rather than a slot in the slide's colour scheme. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/5d6b0509-f3c7-435f-9bf4-6f1fc5f8293c
-const COLOR_INDEX_SRGB = 0xfe;
+// ColorIndexStruct.index: the one value meaning the struct's red/green/blue bytes are a literal colour rather than a slot in the slide's colour scheme. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/5d6b0509-f3c7-435f-9bf4-6f1fc5f8293c Exported so style-write.ts's writeColorIndexStruct writes the identical sentinel readColorIndexStruct below checks for.
+export const COLOR_INDEX_SRGB = 0xfe;
 
 export interface RgbColor {
   readonly red: number;
