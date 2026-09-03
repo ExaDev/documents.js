@@ -67,6 +67,7 @@
   },
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
+    "document-schema.js": "^5.5.0",
     "fflate": "^0.8.2"
   },
   "devDependencies": {

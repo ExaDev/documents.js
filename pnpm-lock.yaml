@@ -118,6 +118,9 @@ importers:
 
   packages/archive-codec:
     dependencies:
+      document-schema.js:
+        specifier: ^5.5.0
+        version: link:../document-schema.js
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
