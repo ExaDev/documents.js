@@ -27,6 +27,9 @@ const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   md: "markdown",
   pdf: "pdf",
   rtf: "rtf",
+  doc: "doc",
+  xls: "xls",
+  ppt: "ppt",
 };
 
 // Reads the extension after the last '.' in the final path segment. Returns undefined for no recognised extension, an unrecognised one, or a path with none at all -- callers decide how to react to an unresolved format, this module only classifies.

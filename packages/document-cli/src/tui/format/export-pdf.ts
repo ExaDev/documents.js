@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import {
   convertDocument,
   csvToPdf,
+  docToPdf,
   docxToPdf,
   encodeMarkdownText,
   markdownToPdf,
@@ -9,9 +10,11 @@ import {
   odpToPdf,
   odsToPdf,
   odtToPdf,
+  pptToPdf,
   pptxToPdf,
   rtfToPdf,
   svgToPdf,
+  xlsToPdf,
   xlsxToPdf,
   type DocumentToPdfOptions,
   type ProvidedFont,
@@ -106,6 +109,22 @@ export async function exportToPdf(
       openDocument.bytes,
       pdfOptions,
     );
+    await writeFile(destinationPath, pdfBytes);
+    return;
+  }
+  // doc, xls, and ppt are the identical no-editor story one format family over: each has its own named to-Pdf function (docToPdf/xlsToPdf/pptToPdf, the same shape rtfToPdf has), re-converted here from the original bytes captured at open time with this call's own real fonts/diagnostics options.
+  if (openDocument.format === "doc") {
+    const pdfBytes = docToPdf(openDocument.bytes, pdfOptions);
+    await writeFile(destinationPath, pdfBytes);
+    return;
+  }
+  if (openDocument.format === "xls") {
+    const pdfBytes = xlsToPdf(openDocument.bytes, pdfOptions);
+    await writeFile(destinationPath, pdfBytes);
+    return;
+  }
+  if (openDocument.format === "ppt") {
+    const pdfBytes = pptToPdf(openDocument.bytes, pdfOptions);
     await writeFile(destinationPath, pdfBytes);
     return;
   }
