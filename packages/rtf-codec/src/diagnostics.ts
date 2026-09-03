@@ -40,7 +40,6 @@ export const RtfDiagnosticCodes = {
   CONSTRUCT_UNREPRESENTED: "rtf/construct-unrepresented",
   EMBEDDED_OBJECT_DROPPED: "rtf/embedded-object-dropped",
   PACKAGE_TABLE_DROPPED: "rtf/package-table-dropped",
-  CELL_BORDER_DROPPED: "rtf/cell-border-dropped",
 } as const;
 
 // The throw tier: input this package cannot meaningfully process at all, regardless of what a diagnostic sink could report about it. Carries the same `code` vocabulary as RtfDiagnostic so a caller can distinguish failure reasons programmatically, not just by message text.

@@ -891,6 +891,74 @@ describe("revision marks", () => {
   });
 });
 
+// RTF 1.9.1, "Table Definitions": <celldef> is the run of properties before each \cellxN, and <brdr> is `<brdrk> \brdrwN? \brspN? \brdrcfN?` -- the same border production paragraph borders use, so a cell's side is named by \clbrdrt/l/b/r and described by what follows it.
+describe("table cell formatting", () => {
+  it("reads each side's own \\clbrdr* border with its style, width and colour", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0` +
+        "\\clbrdrt\\brdrs\\brdrw15\\brdrcf2\\clbrdrb\\brdrdot\\brdrw30\\brdrcf1\\cellx1440" +
+        "\\pard\\intbl A\\cell\\row\\pard x\\par}",
+    );
+    const borders = table.rows[0]?.cells[0]?.borders;
+    // No `style` key: ContentBorder's own "absent means 'solid'" already says what \brdrs says, and restating a default carries no information.
+    expect(borders?.top).toEqual({
+      color: { r: 1, g: 0, b: 0 },
+      widthPt: 0.75,
+    });
+    expect(borders?.bottom).toEqual({
+      color: { r: 0, g: 0, b: 0 },
+      widthPt: 1.5,
+      style: "dotted",
+    });
+    expect(borders?.left).toBeUndefined();
+  });
+
+  it("treats \\brdrnone and \\brdrnil as no border rather than a zero-width one", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clbrdrt\\brdrnone\\clbrdrl\\brdrnil\\cellx1440` +
+        "\\pard\\intbl A\\cell\\row\\pard x\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.borders).toBeUndefined();
+  });
+
+  it("reads \\clcbpatN as the cell's background colour", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clcbpat2\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
+  });
+
+  it("derives rowSpan from \\clvmgf and the \\clvmrg cells beneath it", () => {
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\clvmgf\\cellx1440\\cellx2880\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row" +
+        "\\trowd\\trleft0\\clvmrg\\cellx1440\\cellx2880\\pard\\intbl\\cell\\pard\\intbl C\\cell\\row" +
+        "\\pard x\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.rowSpan).toBe(2);
+    // The continuation cell stays in the row with no blocks of its own, matching how every other codec in this family states a covered cell.
+    expect(table.rows[1]?.cells[0]?.blocks).toEqual([]);
+    expect(table.rows[1]?.cells[0]?.rowSpan).toBeUndefined();
+  });
+
+  it("derives colSpan from \\clmgf and the \\clmrg cells beside it", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clmgf\\cellx1440\\clmrg\\cellx2880\\cellx4320` +
+        "\\pard\\intbl A\\cell\\pard\\intbl\\cell\\pard\\intbl C\\cell\\row\\pard x\\par}",
+    );
+    expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
+  });
+
+  it("leaves a plain cell carrying no borders, background, or span fields at all", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]).toEqual({
+      blocks: [{ kind: "paragraph", runs: [{ text: "A", sizePt: 12 }] }],
+    });
+  });
+});
+
 describe("the tree-form entry point", () => {
   it("assembles the same content into a DocumentTree whose root is a wordprocessing package", () => {
     const { documentPackage } = readRtf(
