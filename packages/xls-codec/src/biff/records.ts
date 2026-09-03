@@ -8,6 +8,8 @@ import { MAX_RECORD_DATA_SIZE } from "./record-types";
 export interface BiffRecord {
   readonly type: number;
   readonly data: Uint8Array<ArrayBuffer>;
+  /** The record's own start offset in the stream. Carried because BoundSheet8's lbPlyPos ([MS-XLS] 2.4.28) addresses a sheet's substream by the byte offset of its BOF, so matching a sheet to its records means knowing where each record began. */
+  readonly offset: number;
 }
 
 /** Thrown when a byte sequence cannot be read as the structure [MS-XLS] specifies, at any level from the record framing up to a record's own fields. */
@@ -55,7 +57,11 @@ export function readRecords(
         `record 0x${type.toString(16)} at offset ${offset} declares ${size} bytes of data, running past the end of the ${stream.length}-byte stream`,
       );
     }
-    records.push({ type, data: stream.slice(dataStart, dataStart + size) });
+    records.push({
+      type,
+      data: stream.slice(dataStart, dataStart + size),
+      offset,
+    });
     offset = dataStart + size;
   }
   return records;
