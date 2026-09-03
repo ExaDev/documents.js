@@ -5,8 +5,10 @@ import {
   isCompoundFile,
   isZipArchive,
   readCompoundFile,
+  readSummaryInformation,
   unzipPackage,
   writeCompoundFile,
+  writeSummaryInformationStream,
   zipPackage,
   walkArchive,
 } from "./index";
@@ -48,5 +50,24 @@ describe("archive-codec barrel smoke", () => {
     expect(() => walkArchive(bytes, { maxTotalBytes: 8 })).toThrow(
       ArchiveWalkLimitError,
     );
+  });
+
+  it("exposes the SummaryInformation property-set surface, composed with the compound-file surface", () => {
+    const summaryStream = writeSummaryInformationStream({
+      title: "Barrel smoke",
+      author: "archive-codec",
+    });
+    const bytes = writeCompoundFile([
+      { path: "\x05SummaryInformation", bytes: summaryStream },
+    ]);
+    const stream = readCompoundFile(bytes).find(
+      (s) => s.path === "\x05SummaryInformation",
+    );
+    if (stream === undefined) {
+      throw new Error("expected a \\x05SummaryInformation stream");
+    }
+    const metadata = readSummaryInformation(stream.bytes);
+    expect(metadata.title).toBe("Barrel smoke");
+    expect(metadata.author).toBe("archive-codec");
   });
 });
