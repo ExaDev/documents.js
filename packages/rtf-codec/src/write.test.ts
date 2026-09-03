@@ -715,6 +715,75 @@ describe("round trip through this package's own reader", () => {
     expect(out).not.toContain("\\revdttm");
   });
 
+  it("round-trips a cell's borders, background, and both merge directions", () => {
+    const document = wordprocessing([
+      {
+        kind: "table",
+        columnWidthsPt: [72, 72, 72],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
+                rowSpan: 2,
+                background: { r: 1, g: 1, b: 0 },
+                borders: {
+                  top: { color: { r: 1, g: 0, b: 0 }, widthPt: 1.5 },
+                  bottom: {
+                    color: { r: 0, g: 0, b: 1 },
+                    widthPt: 0.75,
+                    style: "dashed",
+                  },
+                },
+              },
+              // colSpan 2 means this one cell occupies the second and third grid columns, so the row has two cells across three columns -- the covered column has no cell of its own, exactly as a gridSpan'd w:tc does not.
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "B" }] }],
+                colSpan: 2,
+              },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "C" }] }] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "D" }] }] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const out = write(document);
+    expect(out).toContain("\\clvmgf");
+    expect(out).toContain("\\clvmrg");
+    expect(out).toContain("\\clmgf");
+    expect(out).toContain("\\clmrg");
+    expect(out).toContain("\\clbrdrt\\brdrs\\brdrw30");
+    expect(out).toContain("\\clbrdrb\\brdrdash\\brdrw15");
+    expect(out).toContain("\\clcbpat");
+
+    const back = roundTrip(document);
+    const table = (
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks : []
+    )?.find((block) => block.kind === "table");
+    const anchor =
+      table?.kind === "table" ? table.rows[0]?.cells[0] : undefined;
+    expect(anchor?.rowSpan).toBe(2);
+    expect(anchor?.background).toEqual({ r: 1, g: 1, b: 0 });
+    expect(anchor?.borders?.top).toEqual({
+      color: { r: 1, g: 0, b: 0 },
+      widthPt: 1.5,
+    });
+    expect(anchor?.borders?.bottom).toEqual({
+      color: { r: 0, g: 0, b: 1 },
+      widthPt: 0.75,
+      style: "dashed",
+    });
+    expect(
+      table?.kind === "table" ? table.rows[0]?.cells[1]?.colSpan : undefined,
+    ).toBe(2);
+  });
+
   it("round-trips several sections, each keeping its own geometry and break kind", () => {
     const document: ContentDocument = {
       kind: "wordprocessing",

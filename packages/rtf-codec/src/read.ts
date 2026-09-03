@@ -16,7 +16,9 @@ import {
   type AnchorDescriptor,
   type Color,
   type ConstructDescriptor,
+  type ContentBorder,
   type ContentBlock,
+  type ContentCellBorders,
   type ContentDocument,
   type ContentImageBlock,
   type ContentParagraph,
@@ -31,6 +33,13 @@ import {
   type PageSize,
   type RunConstructExtent,
 } from "document-schema.js";
+import {
+  applyCellDefinitionControlWord,
+  newPendingCell,
+  resolveBorder,
+  type CellBorderSide,
+  type PendingCell,
+} from "./cell-format";
 import {
   bookmarkAnchorDescriptor,
   coalesceRunConstructs,
@@ -488,6 +497,27 @@ function insertConstructMarkers(
   return out;
 }
 
+// One row as read: its cells alongside the <celldef> run that preceded each \cellxN, kept together because a span is only derivable once every row of the table is known.
+interface RawTableRow {
+  readonly cells: ContentTableCell[];
+  readonly definitions: readonly PendingCell[];
+}
+
+// How many grid columns the cell at `index` occupies: one, plus each immediately following cell flagged \clmrg. "\clmgf The first cell in a range of table cells to be merged" / "\clmrg Contents of the table cell are merged with those of the preceding cell", so the count is the length of the continuation run rather than a stored number.
+function horizontalSpanAt(
+  definitions: readonly PendingCell[],
+  index: number,
+): number {
+  if (definitions[index]?.horizontalMergeFirst !== true) {
+    return 1;
+  }
+  let span = 1;
+  while (definitions[index + span]?.horizontalMergeContinuation === true) {
+    span += 1;
+  }
+  return span;
+}
+
 class ContentBuilder {
   private readonly sections: ContentSection[] = [];
   private blocks: ContentBlock[] = [];
@@ -498,11 +528,14 @@ class ContentBuilder {
   // The provenance descriptors each pushed run carries, positionally parallel to `runs` -- coalesced into the fewest run extents that say the same thing when the paragraph closes, so a revision spanning several formatting runs is one extent rather than one per run.
   private runProvenance: ConstructDescriptor[][] = [];
   private pendingRunProvenance: ConstructDescriptor[] = [];
-  private tableRows: ContentTableRow[] = [];
+  // Rows as read, each keeping its own <celldef> run beside its cells so the spans can be derived once the whole table is known.
+  private tableRows: RawTableRow[] = [];
   private tableColumnRights: number[] = [];
   private rowCells: ContentTableCell[] = [];
   private cellBlocks: ContentBlock[] = [];
   private pendingCellRights: number[] = [];
+  private pendingCellDefinitions: PendingCell[] = [];
+  private pendingCell: PendingCell = newPendingCell();
   private rowLeftTwips = 0;
   // Bookmark bookkeeping. A bookmark's two halves are matched by name and may bracket a sub-sequence of one paragraph's runs or a run of whole paragraphs, and document-schema.js gives those two scopes two different encodings -- a RunConstructExtent on the paragraph, or a constructStart/constructEnd marker pair in the block list. Which one applies is not knowable when the start is seen, only when its end arrives, so a start is held open here and resolved then.
   private paragraphSerial = 0;
@@ -755,6 +788,8 @@ class ContentBuilder {
 
   startRowDefinition(): void {
     this.pendingCellRights = [];
+    this.pendingCellDefinitions = [];
+    this.pendingCell = newPendingCell();
     this.rowLeftTwips = 0;
   }
 
@@ -762,8 +797,16 @@ class ContentBuilder {
     this.rowLeftTwips = twips;
   }
 
+  // Every control word of the <celldef> currently accumulating. Returns whether it was one, so the caller falls through for everything else.
+  applyCellDefinition(name: string, param: number | undefined): boolean {
+    return applyCellDefinitionControlWord(name, param, this.pendingCell);
+  }
+
+  // "\cellxN Defines the right boundary of a cell" -- and, being the last member of <celldef>, closes the definition that preceded it.
   addCellBoundary(rightTwips: number): void {
     this.pendingCellRights.push(rightTwips);
+    this.pendingCellDefinitions.push(this.pendingCell);
+    this.pendingCell = newPendingCell();
   }
 
   endCell(para: ParagraphState): void {
@@ -788,7 +831,10 @@ class ContentBuilder {
       });
       return;
     }
-    this.tableRows.push({ cells: this.rowCells });
+    this.tableRows.push({
+      cells: this.rowCells,
+      definitions: this.pendingCellDefinitions,
+    });
     if (this.tableColumnRights.length === 0) {
       this.tableColumnRights = [...this.pendingCellRights];
     }
@@ -799,16 +845,107 @@ class ContentBuilder {
     if (this.tableRows.length === 0) {
       return;
     }
+    const rows = this.resolveRows();
+    // Grid columns, not cells: a horizontally merged anchor stands for several columns, so counting cells would lose one width per merge. The row definition's own \cellxN boundaries are the other lower bound, since a row can end before the definition's last boundary.
     const columnCount = Math.max(
-      ...this.tableRows.map((row) => row.cells.length),
+      this.tableColumnRights.length,
+      ...rows.map((row) =>
+        row.cells.reduce((total, cell) => total + (cell.colSpan ?? 1), 0),
+      ),
     );
     this.blocks.push({
       kind: "table",
-      rows: this.tableRows,
+      rows,
       columnWidthsPt: this.columnWidths(columnCount),
     } satisfies ContentTable);
     this.tableRows = [];
     this.tableColumnRights = [];
+  }
+
+  // Folds each row's own <celldef> run onto its cells, resolving the two merge families the way every other codec in this family states them: the anchor carries the span and each covered cell stays in the row with no blocks of its own.
+  //
+  // Neither span count is stored by RTF -- \clvmgf/\clvmrg and \clmgf/\clmrg are flags, not counts -- so both are derived by scanning forward for the continuation flags, exactly as ooxml.js derives rowSpan from w:vMerge.
+  private resolveRows(): ContentTableRow[] {
+    const rows = this.tableRows;
+    // A cell's column position accounts for the horizontal spans before it, so a vertical merge below lines up with the column its anchor actually occupies rather than with an ordinal that shifts.
+    const columnIndices = rows.map((row) => {
+      const indices: number[] = [];
+      let column = 0;
+      for (const [index] of row.cells.entries()) {
+        indices.push(column);
+        column += horizontalSpanAt(row.definitions, index);
+      }
+      return indices;
+    });
+    return rows.map((row, rowIndex) => ({
+      // A horizontally merged continuation has no cell of its own in the content model -- the anchor's colSpan already accounts for the columns it swallows, exactly as one w:tc with a gridSpan does. A vertical continuation is the opposite case and keeps its slot, since its row genuinely has a cell there.
+      cells: row.cells
+        .map((cell, cellIndex) => ({ cell, cellIndex }))
+        .filter(
+          ({ cellIndex }) =>
+            row.definitions[cellIndex]?.horizontalMergeContinuation !== true,
+        )
+        .map(({ cell, cellIndex }): ContentTableCell => {
+          const definition = row.definitions[cellIndex];
+          if (definition?.verticalMergeContinuation === true) {
+            return { blocks: [] };
+          }
+          const colSpan = horizontalSpanAt(row.definitions, cellIndex);
+          const column = columnIndices[rowIndex]?.[cellIndex];
+          let rowSpan = 1;
+          if (definition?.verticalMergeFirst === true && column !== undefined) {
+            for (let next = rowIndex + 1; next < rows.length; next += 1) {
+              const matchIndex = columnIndices[next]?.indexOf(column) ?? -1;
+              const match =
+                matchIndex === -1
+                  ? undefined
+                  : rows[next]?.definitions[matchIndex];
+              if (match?.verticalMergeContinuation !== true) {
+                break;
+              }
+              rowSpan += 1;
+            }
+          }
+          const borders = this.resolveBorders(definition);
+          const background =
+            definition?.backgroundIndex === undefined
+              ? undefined
+              : this.header.colors[definition.backgroundIndex];
+          return {
+            blocks: cell.blocks,
+            ...(colSpan > 1 ? { colSpan } : {}),
+            ...(rowSpan > 1 ? { rowSpan } : {}),
+            ...(background === undefined ? {} : { background }),
+            ...(borders === undefined ? {} : { borders }),
+          };
+        }),
+    }));
+  }
+
+  private resolveBorders(
+    definition: PendingCell | undefined,
+  ): ContentCellBorders | undefined {
+    if (definition === undefined) {
+      return undefined;
+    }
+    const colorAt = (index: number): Color | undefined =>
+      this.header.colors[index];
+    const sides: [CellBorderSide, ContentBorder | undefined][] = (
+      ["top", "left", "bottom", "right"] as const
+    ).map((side) => {
+      const pending = definition.borders[side];
+      return [
+        side,
+        pending === undefined ? undefined : resolveBorder(pending, colorAt),
+      ];
+    });
+    const present = sides.filter(
+      (entry): entry is [CellBorderSide, ContentBorder] =>
+        entry[1] !== undefined,
+    );
+    return present.length === 0
+      ? undefined
+      : Object.fromEntries(present as [string, ContentBorder][]);
   }
 
   // \cellxN states "the right boundary of a cell, including its half of the space between cells" as a cumulative offset, so a column's width is the difference between consecutive boundaries, with the row's own \trleftN as the first left edge. A boundary sequence that is not increasing is malformed -- it would produce a zero or negative width, which ContentTable's own schema refuses -- so the whole derivation is replaced by an even split of the section's text width, reported rather than silently substituted.
@@ -1666,6 +1803,10 @@ function applyControlWord(
     return;
   }
   if (applyCharacterControlWord(name, param, state, header)) {
+    return;
+  }
+  // The <celldef> run comes before the paragraph dispatch: several of its members share a prefix with paragraph border words, and a cell definition's own side is the narrower reading whenever one is open.
+  if (builder.applyCellDefinition(name, param)) {
     return;
   }
   if (applyParagraphControlWord(name, param, state)) {

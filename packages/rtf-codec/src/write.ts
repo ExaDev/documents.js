@@ -14,6 +14,7 @@ import {
   type ContentRun,
   type ContentSection,
   type ContentTable,
+  type ContentTableCell,
   type Color,
   type DocumentTree,
   type ProvenanceChange,
@@ -23,6 +24,7 @@ import {
   colorToRgbHex,
   flattenTree,
 } from "document-schema.js";
+import { borderControlWords } from "./cell-format";
 import {
   bookmarkResidueControlWords,
   dttmFromIso,
@@ -122,17 +124,22 @@ function collectTables(document: ContentDocument): DocumentTables {
     }
   };
 
+  const noteColor = (color: Color | undefined): void => {
+    if (color === undefined) {
+      return;
+    }
+    const hex = colorToRgbHex(color);
+    if (!colors.has(hex)) {
+      // +1 because index 0 is the auto colour the table's own leading semicolon reserves.
+      colors.set(hex, colors.size + 1);
+    }
+  };
+
   const noteRun = (run: ContentRun): void => {
     if (run.fontFamily !== undefined && !fonts.has(run.fontFamily)) {
       fonts.set(run.fontFamily, fonts.size);
     }
-    if (run.color !== undefined) {
-      const hex = colorToRgbHex(run.color);
-      if (!colors.has(hex)) {
-        // +1 because index 0 is the auto colour the table's own leading semicolon reserves.
-        colors.set(hex, colors.size + 1);
-      }
-    }
+    noteColor(run.color);
   };
 
   const noteBlock = (block: ContentBlock): void => {
@@ -170,6 +177,11 @@ function collectTables(document: ContentDocument): DocumentTables {
     if (block.kind === "table") {
       for (const row of block.rows) {
         for (const cell of row.cells) {
+          // A cell's own colours reference the same \colortbl the runs do, so they must be minted here or a \clcbpatN/\brdrcfN would name an index the table never defines.
+          noteColor(cell.background);
+          for (const side of CELL_BORDER_ORDER) {
+            noteColor(cell.borders?.[side]?.color);
+          }
           for (const inner of cell.blocks) {
             noteBlock(inner);
           }
@@ -264,6 +276,26 @@ function revisionsCovering(
       (descriptor): descriptor is ProvenanceDescriptor =>
         descriptor.kind === "provenance",
     );
+}
+
+// The order <celldef> states its four sides in.
+const CELL_BORDER_ORDER = ["top", "left", "bottom", "right"] as const;
+
+// Which [row][cell] positions a rowSpan above them covers, so each can be written with \clvmrg. A covered cell is still a cell in its row -- that is the shape every reader in this family produces and consumes -- so this marks positions rather than removing them.
+function verticalMergeCoverage(table: ContentTable): boolean[][] {
+  const covered = table.rows.map((row) => row.cells.map(() => false));
+  for (const [rowIndex, row] of table.rows.entries()) {
+    for (const [cellIndex, cell] of row.cells.entries()) {
+      const rowSpan = cell.rowSpan ?? 1;
+      for (let next = 1; next < rowSpan; next += 1) {
+        const target = covered[rowIndex + next];
+        if (target !== undefined && cellIndex < target.length) {
+          target[cellIndex] = true;
+        }
+      }
+    }
+  }
+  return covered;
 }
 
 function nameOf(descriptor: ConstructDescriptor): string {
@@ -704,34 +736,87 @@ class RtfWriter {
   }
 
   private writeTable(table: ContentTable): void {
-    for (const row of table.rows) {
+    // Which cells a vertical merge covers, derived once for the whole table: RTF states a continuation with \clvmrg on the covered cell itself, while ContentTableCell states the span on its anchor, so the covered positions have to be computed before any row is written.
+    const covered = verticalMergeCoverage(table);
+    for (const [rowIndex, row] of table.rows.entries()) {
       // "\cellxN Defines the right boundary of a cell", cumulative from the row's own left edge, so the boundaries are a running total of the column widths.
+      //
+      // A horizontally merged cell occupies one slot in the content model but several grid columns in RTF, and each column needs its own \cellxN and its own \cell mark -- the anchor carrying \clmgf and each continuation \clmrg. So one cell here can produce several of both.
       let right = 0;
-      const boundaries: number[] = [];
-      for (let column = 0; column < row.cells.length; column += 1) {
-        right += pointsToTwips(table.columnWidthsPt[column] ?? 0);
-        boundaries.push(right);
+      let column = 0;
+      const definitions: string[] = [];
+      const marks: { cell: ContentTableCell; empty: boolean }[] = [];
+      for (const [cellIndex, cell] of row.cells.entries()) {
+        const colSpan = cell.colSpan ?? 1;
+        for (let offset = 0; offset < colSpan; offset += 1) {
+          right += pointsToTwips(table.columnWidthsPt[column] ?? 0);
+          column += 1;
+          definitions.push(
+            this.cellDefinition(
+              cell,
+              covered[rowIndex]?.[cellIndex] === true,
+              colSpan > 1
+                ? offset === 0
+                  ? "mergeFirst"
+                  : "mergeContinuation"
+                : "single",
+              right,
+            ),
+          );
+          marks.push({ cell, empty: offset > 0 });
+        }
       }
-      const rowDefinition = `\\trowd\\trgaph108\\trleft0${boundaries
-        .map((boundary) => `\\cellx${String(boundary)}`)
-        .join("")}`;
+      const rowDefinition = `\\trowd\\trgaph108\\trleft0${definitions.join("")}`;
       // Word 2002 onward writes the row properties both before and after the row, which the spec explicitly calls out as the shape a reader should not assume otherwise; emitting both makes the output readable by either kind of reader.
       this.line(rowDefinition);
-      for (const cell of row.cells) {
-        if (cell.borders !== undefined || cell.background !== undefined) {
-          this.sink({
-            code: RtfDiagnosticCodes.CELL_BORDER_DROPPED,
-            severity: "info",
-            message:
-              "a table cell's borders or background are dropped; this writer emits cell boundaries only",
-          });
-        }
-        this.writeCellBlocks(cell.blocks);
+      for (const mark of marks) {
+        this.writeCellBlocks(mark.empty ? [] : mark.cell.blocks);
         this.raw("\\cell");
       }
       this.line(`${rowDefinition}\\row`);
     }
     this.line("\\pard");
+  }
+
+  // One <celldef>: the cell's merge flags, borders and shading, closed by its own \cellxN. Written in the grammar's own order so a reader walking it left to right sees each border's side before the <brdr> describing it.
+  private cellDefinition(
+    cell: ContentTableCell,
+    isVerticalContinuation: boolean,
+    horizontal: "single" | "mergeFirst" | "mergeContinuation",
+    rightTwips: number,
+  ): string {
+    let out = "";
+    if (isVerticalContinuation) {
+      out += "\\clvmrg";
+    } else if ((cell.rowSpan ?? 1) > 1) {
+      out += "\\clvmgf";
+    }
+    if (horizontal === "mergeFirst") {
+      out += "\\clmgf";
+    } else if (horizontal === "mergeContinuation") {
+      // A continuation column states only that it is merged into the one before it; the borders and shading belong to the anchor, and restating them here would double-draw the merged cell's own edges.
+      return `${out}\\clmrg\\cellx${String(rightTwips)}`;
+    }
+    const borders = cell.borders;
+    if (borders !== undefined) {
+      for (const side of CELL_BORDER_ORDER) {
+        const border = borders[side];
+        if (border !== undefined) {
+          out += borderControlWords(
+            side,
+            border,
+            colorIndexOf(border.color, this.tables.colors),
+          );
+        }
+      }
+    }
+    if (cell.background !== undefined) {
+      const index = colorIndexOf(cell.background, this.tables.colors);
+      if (index !== undefined) {
+        out += `\\clcbpat${String(index)}`;
+      }
+    }
+    return `${out}\\cellx${String(rightTwips)}`;
   }
 
   private writeCellBlocks(blocks: readonly ContentBlock[]): void {

@@ -155,29 +155,6 @@ describe("every write-side diagnostic code is reachable", () => {
     ).toContain(RtfDiagnosticCodes.EMBEDDED_OBJECT_DROPPED);
   });
 
-  it("rtf/cell-border-dropped", () => {
-    expect(
-      writeCodes(
-        wordprocessing([
-          {
-            kind: "table",
-            columnWidthsPt: [72],
-            rows: [
-              {
-                cells: [
-                  {
-                    blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
-                    background: { r: 1, g: 1, b: 0 },
-                  },
-                ],
-              },
-            ],
-          },
-        ]),
-      ),
-    ).toContain(RtfDiagnosticCodes.CELL_BORDER_DROPPED);
-  });
-
   it("rtf/package-table-dropped", () => {
     const documentPackage: DocumentTree = {
       kind: "wordprocessing",
