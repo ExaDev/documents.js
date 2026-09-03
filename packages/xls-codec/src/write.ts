@@ -318,7 +318,11 @@ interface CellXfPlan {
   readonly xfIndexForCell: (cell: ContentSheetCell) => number;
 }
 
-/** Scans every sheet's cells once, interning each distinct (number format, decoration) combination into its own cell XF index -- a cell with General formatting and no decoration resolves to the workbook's own implicit GENERAL_CELL_XF_INDEX with no new XF record at all, exactly as before; every other combination mints one XF record the first time it is seen and is reused by every later cell sharing it. */
+/**
+ * Scans every sheet's cells once, interning each distinct (number format, decoration) combination into its own cell XF index -- a cell with General formatting and no decoration resolves to the workbook's own implicit GENERAL_CELL_XF_INDEX with no new XF record at all, exactly as before; every other combination mints one XF record the first time it is seen and is reused by every later cell sharing it.
+ *
+ * The returned xfIndexForCell only ever LOOKS UP -- it cannot mint an entry, and refuses a signature this scan never saw. buildWorkbookGlobals is handed cellXfEntries before any sheet's records are built, so an entry minted later than this scan would be one no XF record was written for, and the cell record naming its index would point past the end of the workbook's XF table. Nothing about the resulting bytes says so: a reader resolves that index to whatever XF happens to sit there, or to none, and the cell's format is silently wrong either way. Refusing the lookup is the only place that divergence can still be caught.
+ */
 function buildCellXfPlan(
   sheets: readonly ContentSheet[],
   formatPlan: FormatPlan,
@@ -330,31 +334,42 @@ function buildCellXfPlan(
   ]);
   let nextXfIndex = GENERAL_CELL_XF_INDEX + 1;
 
-  const xfIndexForCell = (cell: ContentSheetCell): number => {
-    const formatId = formatPlan.formatIdOf(formatCodeForCell(cell));
-    const decoration = resolveDecorationForCell(cell, palettePlan.icvOf);
-    const signature = signatureOfCellXf(formatId, decoration);
-    const existing = xfIndexBySignature.get(signature);
-    if (existing !== undefined) {
-      return existing;
-    }
-    const index = nextXfIndex;
-    nextXfIndex += 1;
-    cellXfEntries.push({ formatId, decoration });
-    xfIndexBySignature.set(signature, index);
-    return index;
-  };
+  const signatureOf = (cell: ContentSheetCell): string =>
+    signatureOfCellXf(
+      formatPlan.formatIdOf(formatCodeForCell(cell)),
+      resolveDecorationForCell(cell, palettePlan.icvOf),
+    );
 
   for (const sheet of sheets) {
     for (const cell of sheet.cells) {
       if (!writesCellRecord(cell)) {
         continue;
       }
-      xfIndexForCell(cell);
+      const formatId = formatPlan.formatIdOf(formatCodeForCell(cell));
+      const decoration = resolveDecorationForCell(cell, palettePlan.icvOf);
+      const signature = signatureOfCellXf(formatId, decoration);
+      if (xfIndexBySignature.has(signature)) {
+        continue;
+      }
+      xfIndexBySignature.set(signature, nextXfIndex);
+      nextXfIndex += 1;
+      cellXfEntries.push({ formatId, decoration });
     }
   }
 
-  return { cellXfEntries, xfIndexForCell };
+  return {
+    cellXfEntries,
+    xfIndexForCell: (cell: ContentSheetCell): number => {
+      const signature = signatureOf(cell);
+      const index = xfIndexBySignature.get(signature);
+      if (index === undefined) {
+        throw new BiffWriteError(
+          `internal error: the cell at row ${cell.row}, column ${cell.column} resolves to cell-XF signature ${JSON.stringify(signature)}, which the workbook-wide cell-format scan never saw -- the writer's own "does this cell get a record" predicate and its XF-interning pass disagree about this cell`,
+        );
+      }
+      return index;
+    },
+  };
 }
 
 interface SstPlan {
