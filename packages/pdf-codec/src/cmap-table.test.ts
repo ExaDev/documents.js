@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCmapLookup } from "./cmap-table";
+import { buildCmapLookup, readCmapSubtables } from "./cmap-table";
 import type { SfntFont } from "./sfnt";
 import { parseSfnt } from "./sfnt";
 import { caladeaRegularBytes, carlitoRegularBytes } from "./test-support/fonts";
@@ -140,12 +140,68 @@ describe("degrading on an unusable cmap", () => {
     expect(buildCmapLookup(withoutCmap)).toBeUndefined();
   });
 
-  it("returns undefined for a font whose only subtable is in a format this module does not read", () => {
-    // Format 0 (byte encoding table): the original 1-byte Macintosh mapping, deliberately unread.
+  it("returns undefined for a font whose only subtable is a format 0 byte encoding table", () => {
+    // Format 0 is read by this module (readCmapSubtables exposes it, for a symbol font whose whole encoding fits in one byte), but it is never a Unicode lookup: its 256 codes are a font's own 8-bit encoding, not code points, so buildCmapLookup does not select one.
     const format0 = new Uint8Array(262);
     new DataView(format0.buffer).setUint16(2, format0.length);
     expect(
       buildCmapLookup(parse(buildFontWithCmapSubtable(1, 0, format0))),
     ).toBeUndefined();
+  });
+});
+
+describe("readCmapSubtables", () => {
+  it("exposes every subtable of a real vendored font with the platform and encoding it is keyed by", () => {
+    // Carlito ships three subtables: (0, 3) and (3, 1) in format 4, plus a (1, 0) in format 6 -- read out of the .ttf by a standalone script, independently of this module.
+    expect(
+      readCmapSubtables(parse(carlitoRegularBytes())).map((subtable) => [
+        subtable.platformId,
+        subtable.encodingId,
+        subtable.format,
+      ]),
+    ).toEqual([
+      [0, 3, 4],
+      [1, 0, 6],
+      [3, 1, 4],
+    ]);
+  });
+
+  it("reads a format 0 subtable, which buildCmapLookup declines to treat as Unicode", () => {
+    const format0 = new Uint8Array(262);
+    const view = new DataView(format0.buffer);
+    view.setUint16(2, format0.length);
+    format0[6 + 0x57] = 42;
+    const [subtable] = readCmapSubtables(
+      parse(buildFontWithCmapSubtable(3, 0, format0)),
+    );
+    expect(subtable?.lookup(0x57)).toBe(42);
+    expect(subtable?.lookup(0x58)).toBeUndefined(); // glyph 0 means "no glyph", not glyph .notdef
+  });
+
+  it("enumerates a subtable's own mappings, which is what inverting one needs", () => {
+    const format0 = new Uint8Array(262);
+    new DataView(format0.buffer).setUint16(2, format0.length);
+    format0[6 + 0x41] = 7;
+    format0[6 + 0x42] = 9;
+    const [subtable] = readCmapSubtables(
+      parse(buildFontWithCmapSubtable(3, 0, format0)),
+    );
+    const visited: [number, number][] = [];
+    subtable?.forEachMapping((code, glyphId) => visited.push([code, glyphId]));
+    expect(visited).toEqual([
+      [0x41, 7],
+      [0x42, 9],
+    ]);
+  });
+
+  it("enumerates a real font's format 4 subtable consistently with its own lookups", () => {
+    const [, , windows] = readCmapSubtables(parse(carlitoRegularBytes()));
+    expect(windows).toBeDefined();
+    let checked = 0;
+    windows!.forEachMapping((code, glyphId) => {
+      expect(windows!.lookup(code)).toBe(glyphId);
+      checked++;
+    });
+    expect(checked).toBeGreaterThan(0);
   });
 });
