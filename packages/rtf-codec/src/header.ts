@@ -14,6 +14,7 @@ import {
   DOCUMENT_CHARSET_CODEPAGES,
   decodeCodepageBytes,
 } from "./codepage";
+import { appendBytes } from "./bytes";
 import type { RtfDiagnosticSink } from "./diagnostics";
 import { groupHead, matchingGroupEnd } from "./group";
 import type { RtfToken } from "./tokenize";
@@ -150,7 +151,7 @@ function collectPlainText(
       continue;
     }
     if (token.kind === "text") {
-      pending.push(...token.bytes);
+      appendBytes(pending, token.bytes);
       continue;
     }
     if (token.kind === "hex") {

@@ -29,7 +29,7 @@ import {
   type PageSize,
 } from "document-schema.js";
 import { bytesToBase64, hexToBytes } from "./base64";
-import { rtfBytesFromLatin1 } from "./bytes";
+import { appendBytes, asciiStringFromBytes, rtfBytesFromLatin1 } from "./bytes";
 import { decodeCodepageBytes } from "./codepage";
 import {
   RtfDiagnosticCodes,
@@ -926,9 +926,9 @@ function readRtfDetail(
       const slice =
         textOffset === 0 ? token.bytes : token.bytes.subarray(textOffset);
       if (state.destination === "picture" && state.picture !== undefined) {
-        state.picture.hex += String.fromCharCode(...slice);
+        state.picture.hex += asciiStringFromBytes(slice);
       } else {
-        pendingBytes.push(...slice);
+        appendBytes(pendingBytes, slice);
       }
       index += 1;
       textOffset = 0;
@@ -937,7 +937,7 @@ function readRtfDetail(
 
     if (token.kind === "binary") {
       if (state.destination === "picture" && state.picture !== undefined) {
-        state.picture.binary.push(...token.bytes);
+        appendBytes(state.picture.binary, token.bytes);
       }
       index += 1;
       continue;
