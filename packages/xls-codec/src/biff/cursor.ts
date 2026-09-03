@@ -83,6 +83,11 @@ export class BlockCursor {
     return this.u32() | 0;
   }
 
+  /** A signed 16-bit integer, sign-extended by shifting the raw value out of and back into the low 16 bits -- what XTI's itabFirst/itabLast ([MS-XLS] 2.5.344) and a handful of other structures carry. */
+  i16(): number {
+    return (this.u16() << 16) >> 16;
+  }
+
   /** An Xnum ([MS-XLS] 2.5.342): a little-endian IEEE 754 double. */
   f64(): number {
     const raw = this.take(8);

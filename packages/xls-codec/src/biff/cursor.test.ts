@@ -25,6 +25,13 @@ describe("BlockCursor", () => {
     expect(cursor.i32()).toBe(-1);
   });
 
+  it("reads a signed 16-bit integer", () => {
+    const cursor = new BlockCursor([bytes(0xff, 0xff, 0x02, 0x00)]);
+
+    expect(cursor.i16()).toBe(-1);
+    expect(cursor.i16()).toBe(2);
+  });
+
   it("reads an Xnum as an IEEE 754 double", () => {
     // [MS-XLS] 2.5.342: Xnum is a 64-bit binary floating-point number. 1.5 is 0x3FF8000000000000, little-endian on the wire.
     const cursor = new BlockCursor([
