@@ -173,7 +173,8 @@ function buildRows(
         span += 1;
       }
       if (cell.vertMerge === VERT_MERGE_CONTINUATION) {
-        cells.push({ blocks: [] });
+        // A vertical continuation combined with a horizontal merge in the same row still spans `span` physical columns -- carry it as colSpan so a later write (whose own active-merge tracking otherwise trusts the anchor's span, never a continuation's own) still has it if this row is ever read back on its own.
+        cells.push({ blocks: [], colSpan: span > 1 ? span : undefined });
       } else {
         let rowSpan = 1;
         for (let r = rowIndex + 1; r < rawRows.length; r += 1) {
