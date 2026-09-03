@@ -1,13 +1,29 @@
 import type { SfntFont } from "./sfnt";
-import { hasBytes, sfntTableBytes, u16, u32 } from "./sfnt";
+import { hasBytes, sfntTableBytes, u8, u16, u32 } from "./sfnt";
 
 // A Unicode code point -> glyph ID lookup built from a font's own 'cmap' table (ISO/IEC 14496-22 clause 5.1). Three subtable formats are parsed: 4 (segmented, BMP-only, uint16 glyph IDs), 12 (segmented coverage, full Unicode range, uint32 glyph IDs), and 6 (a single contiguous trimmed range) -- the two formats every mainstream font tool emits for a font meant to cover the supplementary-plane Mathematical Alphanumeric Symbols block, plus the small trimmed format some subsetting tools emit for a font reduced to one narrow character range, which a font extracted from a source document may well be. Format 12 is preferred whenever present (it alone can map a code point above U+FFFF, which most of this package's own mathvariant-mapped characters are); format 4 is the fallback for a font that only ships BMP coverage, and format 6 the last resort.
 //
 // Every structural read below is bounds-checked, and any font whose 'cmap' is missing, truncated, or carries no subtable in a format this module reads yields `undefined` rather than throwing: this module's input is no longer only the one trusted vendored math font it was written for, and a font embedded in an arbitrary source document must degrade to "no glyph mapping available" rather than abort the conversion around it.
 export type CmapLookup = (codePoint: number) => number | undefined;
 
+// One readable subtable, kept alongside the platform/encoding pair that says what its codes actually are. That pairing is the whole point of exposing subtables individually rather than only the best Unicode one: a (3, 1) subtable is keyed by Unicode, but a (3, 0) subtable is keyed by a symbolic font's own character codes and a (1, 0) subtable by Mac OS Roman ones, and reading either of the latter as though it were Unicode is how a symbol font's glyphs end up identified as the wrong characters.
+export interface CmapSubtable {
+  readonly platformId: number;
+  readonly encodingId: number;
+  readonly format: number;
+  readonly lookup: CmapLookup;
+  // Visits every code this subtable maps, in no particular order. Used to invert a subtable (glyph ID -> code), which has no direct form in any of these formats.
+  forEachMapping(visit: (code: number, glyphId: number) => void): void;
+}
+
+interface ParsedSubtable {
+  readonly lookup: CmapLookup;
+  forEachMapping(visit: (code: number, glyphId: number) => void): void;
+}
+
 const CMAP_HEADER_SIZE = 4;
 const SUBTABLE_RECORD_SIZE = 8;
+const MAX_UNICODE_CODE_POINT = 0x10ffff;
 
 interface Format4Segment {
   readonly startCode: number;
@@ -22,7 +38,7 @@ const FORMAT_4_HEADER_SIZE = 14; // format, length, language, segCountX2, search
 function parseFormat4(
   bytes: Uint8Array<ArrayBuffer>,
   subtableOffset: number,
-): CmapLookup | undefined {
+): ParsedSubtable | undefined {
   if (!hasBytes(bytes, subtableOffset, FORMAT_4_HEADER_SIZE)) {
     return undefined;
   }
@@ -53,7 +69,7 @@ function parseFormat4(
     });
   }
 
-  return (codePoint: number): number | undefined => {
+  const lookup = (codePoint: number): number | undefined => {
     if (codePoint > 0xffff) {
       return undefined;
     }
@@ -76,6 +92,22 @@ function parseFormat4(
     }
     return undefined;
   };
+
+  return {
+    lookup,
+    forEachMapping(visit) {
+      for (const segment of segments) {
+        // 0xFFFF is the mandatory terminating segment's own end code, and maps nothing.
+        const end = Math.min(segment.endCode, 0xfffe);
+        for (let code = segment.startCode; code <= end; code++) {
+          const glyphId = lookup(code);
+          if (glyphId !== undefined && glyphId !== 0) {
+            visit(code, glyphId);
+          }
+        }
+      }
+    },
+  };
 }
 
 interface Format12Group {
@@ -90,7 +122,7 @@ const FORMAT_12_GROUP_SIZE = 12;
 function parseFormat12(
   bytes: Uint8Array<ArrayBuffer>,
   subtableOffset: number,
-): CmapLookup | undefined {
+): ParsedSubtable | undefined {
   if (!hasBytes(bytes, subtableOffset, FORMAT_12_HEADER_SIZE)) {
     return undefined;
   }
@@ -108,13 +140,58 @@ function parseFormat12(
       startGlyphId: u32(bytes, recordOffset + 8),
     });
   }
-  return (codePoint: number): number | undefined => {
-    for (const group of groups) {
-      if (codePoint >= group.startCharCode && codePoint <= group.endCharCode) {
-        return group.startGlyphId + (codePoint - group.startCharCode);
+  return {
+    lookup(codePoint: number): number | undefined {
+      for (const group of groups) {
+        if (
+          codePoint >= group.startCharCode &&
+          codePoint <= group.endCharCode
+        ) {
+          return group.startGlyphId + (codePoint - group.startCharCode);
+        }
       }
-    }
+      return undefined;
+    },
+    forEachMapping(visit) {
+      for (const group of groups) {
+        // A group's declared end is clamped to the last Unicode code point: the field is a uint32, so a malformed font can name a range far larger than the code space it is indexing.
+        const end = Math.min(group.endCharCode, MAX_UNICODE_CODE_POINT);
+        for (let code = group.startCharCode; code <= end; code++) {
+          visit(code, group.startGlyphId + (code - group.startCharCode));
+        }
+      }
+    },
+  };
+}
+
+const FORMAT_0_SIZE = 262; // format, length, language, then a fixed 256-byte glyph-ID array
+
+// Format 0 ("byte encoding table"): one glyph ID per code 0..255. The oldest and simplest subtable format, and still what a symbol font's own (3, 0) or (1, 0) subtable often is, since such a font's whole encoding fits in a single byte.
+function parseFormat0(
+  bytes: Uint8Array<ArrayBuffer>,
+  subtableOffset: number,
+): ParsedSubtable | undefined {
+  if (!hasBytes(bytes, subtableOffset, FORMAT_0_SIZE)) {
     return undefined;
+  }
+  const glyphIdArrayOffset = subtableOffset + 6;
+  const lookup = (codePoint: number): number | undefined => {
+    if (codePoint < 0 || codePoint > 0xff) {
+      return undefined;
+    }
+    const glyphId = u8(bytes, glyphIdArrayOffset + codePoint);
+    return glyphId === 0 ? undefined : glyphId;
+  };
+  return {
+    lookup,
+    forEachMapping(visit) {
+      for (let code = 0; code <= 0xff; code++) {
+        const glyphId = lookup(code);
+        if (glyphId !== undefined) {
+          visit(code, glyphId);
+        }
+      }
+    },
   };
 }
 
@@ -124,7 +201,7 @@ const FORMAT_6_HEADER_SIZE = 10; // format, length, language, firstCode, entryCo
 function parseFormat6(
   bytes: Uint8Array<ArrayBuffer>,
   subtableOffset: number,
-): CmapLookup | undefined {
+): ParsedSubtable | undefined {
   if (!hasBytes(bytes, subtableOffset, FORMAT_6_HEADER_SIZE)) {
     return undefined;
   }
@@ -134,13 +211,25 @@ function parseFormat6(
   if (!hasBytes(bytes, glyphIdArrayOffset, entryCount * 2)) {
     return undefined;
   }
-  return (codePoint: number): number | undefined => {
+  const lookup = (codePoint: number): number | undefined => {
     const index = codePoint - firstCode;
     if (index < 0 || index >= entryCount) {
       return undefined;
     }
     const glyphId = u16(bytes, glyphIdArrayOffset + index * 2);
     return glyphId === 0 ? undefined : glyphId;
+  };
+  return {
+    lookup,
+    forEachMapping(visit) {
+      for (let index = 0; index < entryCount; index++) {
+        const code = firstCode + index;
+        const glyphId = lookup(code);
+        if (glyphId !== undefined) {
+          visit(code, glyphId);
+        }
+      }
+    },
   };
 }
 
@@ -152,7 +241,7 @@ interface CmapSubtableRecord {
 }
 
 // Ranks the subtables this module can read, best first: (3, 10) Windows/UCS-4 format 12, (0, *) Unicode format 12, any format 12, (3, 1) Windows/BMP format 4, any format 4, then format 6.
-function preferenceRank(subtable: CmapSubtableRecord): number {
+function preferenceRank(subtable: CmapSubtable): number {
   if (subtable.format === 12) {
     if (subtable.platformId === 3 && subtable.encodingId === 10) {
       return 0;
@@ -168,48 +257,65 @@ function preferenceRank(subtable: CmapSubtableRecord): number {
   return 5; // format 6
 }
 
-// Picks the best available cmap subtable and returns a lookup function, or `undefined` if the font has no readable 'cmap' at all -- a font with no usable character-to-glyph mapping is one the caller must degrade around (skip the glyph, substitute another font), not one worth aborting a whole conversion over.
-export function buildCmapLookup(font: SfntFont): CmapLookup | undefined {
+function parseSubtable(
+  bytes: Uint8Array<ArrayBuffer>,
+  record: CmapSubtableRecord,
+): ParsedSubtable | undefined {
+  if (record.format === 12) {
+    return parseFormat12(bytes, record.offset);
+  }
+  if (record.format === 4) {
+    return parseFormat4(bytes, record.offset);
+  }
+  if (record.format === 6) {
+    return parseFormat6(bytes, record.offset);
+  }
+  return record.format === 0 ? parseFormat0(bytes, record.offset) : undefined;
+}
+
+// Every readable subtable of a font's own 'cmap', each still carrying the platform and encoding IDs that say what its codes mean. Subtables in a format this module does not read, and ones whose bytes are truncated, are dropped individually rather than costing the caller the whole table.
+export function readCmapSubtables(font: SfntFont): readonly CmapSubtable[] {
   const cmapBytes = sfntTableBytes(font, "cmap");
   if (cmapBytes === undefined || !hasBytes(cmapBytes, 0, CMAP_HEADER_SIZE)) {
-    return undefined;
+    return [];
   }
   const numTables = u16(cmapBytes, 2);
   if (
     !hasBytes(cmapBytes, CMAP_HEADER_SIZE, numTables * SUBTABLE_RECORD_SIZE)
   ) {
-    return undefined;
+    return [];
   }
 
-  const subtables: CmapSubtableRecord[] = [];
+  const subtables: CmapSubtable[] = [];
   for (let i = 0; i < numTables; i++) {
     const recordOffset = CMAP_HEADER_SIZE + i * SUBTABLE_RECORD_SIZE;
     const offset = u32(cmapBytes, recordOffset + 4);
     if (!hasBytes(cmapBytes, offset, 2)) {
       continue; // a subtable record pointing past the table: skip it, another record may still be readable
     }
-    subtables.push({
+    const record: CmapSubtableRecord = {
       platformId: u16(cmapBytes, recordOffset),
       encodingId: u16(cmapBytes, recordOffset + 2),
       offset,
       format: u16(cmapBytes, offset),
-    });
-  }
-
-  const candidates = subtables
-    .filter((s) => s.format === 4 || s.format === 6 || s.format === 12)
-    .sort((a, b) => preferenceRank(a) - preferenceRank(b));
-  // Walk in preference order rather than taking only the best: a font whose preferred subtable turns out to be truncated can still be driven by a lower-ranked one that is intact.
-  for (const candidate of candidates) {
-    const lookup =
-      candidate.format === 12
-        ? parseFormat12(cmapBytes, candidate.offset)
-        : candidate.format === 4
-          ? parseFormat4(cmapBytes, candidate.offset)
-          : parseFormat6(cmapBytes, candidate.offset);
-    if (lookup !== undefined) {
-      return lookup;
+    };
+    const parsed = parseSubtable(cmapBytes, record);
+    if (parsed !== undefined) {
+      subtables.push({
+        platformId: record.platformId,
+        encodingId: record.encodingId,
+        format: record.format,
+        ...parsed,
+      });
     }
   }
-  return undefined;
+  return subtables;
+}
+
+// Picks the best available Unicode-keyed cmap subtable and returns a lookup function, or `undefined` if the font has no readable 'cmap' at all -- a font with no usable character-to-glyph mapping is one the caller must degrade around (skip the glyph, substitute another font), not one worth aborting a whole conversion over.
+export function buildCmapLookup(font: SfntFont): CmapLookup | undefined {
+  const candidates = readCmapSubtables(font)
+    .filter((s) => s.format === 4 || s.format === 6 || s.format === 12)
+    .sort((a, b) => preferenceRank(a) - preferenceRank(b));
+  return candidates[0]?.lookup;
 }
