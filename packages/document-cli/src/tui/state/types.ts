@@ -176,7 +176,15 @@ export interface SvgOpenDocument {
   readonly path: string;
 }
 
-// The seven formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx`/`csv`/`svg` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` -- see PdfOpenDocument's own doc comment. `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one -- editing and saving a PDF in place needs no conversion step at all.
+// rtf mirrors csv/svg: no editor (rtf is tokenised text with no XmlElement tree and no readRtfContent-shaped live view wired into this TUI's editor screens), but a genuine `rtfToPdf` conversion, opened read-only as its own `readPdf` result through the shared pdf screen family.
+export interface RtfOpenDocument {
+  readonly format: "rtf";
+  readonly layout: LayoutDocument;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly path: string;
+}
+
+// The seven formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx`/`csv`/`svg`/`rtf` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` -- see PdfOpenDocument's own doc comment. `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one -- editing and saving a PDF in place needs no conversion step at all.
 export type EditableOpenDocument =
   | DocxOpenDocument
   | PptxOpenDocument
@@ -194,7 +202,8 @@ export type OpenDocument =
   | OdbOpenDocument
   | XlsxOpenDocument
   | CsvOpenDocument
-  | SvgOpenDocument;
+  | SvgOpenDocument
+  | RtfOpenDocument;
 
 export type EditableFormat = EditableOpenDocument["format"];
 
@@ -380,6 +389,7 @@ export function rootScreenForFormat(format: OpenDocumentFormat): Screen {
     case "xlsx":
     case "csv":
     case "svg":
+    case "rtf":
       return { kind: "pdfPageList" };
   }
 }
