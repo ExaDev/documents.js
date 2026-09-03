@@ -255,8 +255,10 @@ function buildRuns(
   let currentKey: string | undefined;
   let currentText = "";
   let currentProperties: CharacterProperties = {};
-  // Field state, per [MS-DOC] 2.8.25's field characters: everything between a begin (0x13) and a separator (0x14) is the field's instruction rather than its displayed result, and a field with no separator displays nothing at all. Depth is tracked because fields nest.
-  let fieldDepth = 0;
+  // Field state, per [MS-DOC] 2.8.25's field characters: everything between a begin (0x13) and a separator (0x14) is the field's instruction rather than its displayed result, and a field with no separator displays nothing at all.
+  //
+  // A stack rather than a depth counter, because fields nest and the enclosing field's own state has to survive the inner one. A nested field appears inside the OUTER field's instruction as often as inside its result, so on reaching the inner field's end, whether text resumes depends on which side of its own separator the outer field had reached -- a counter cannot express that, and would resume in instruction mode (dropping real text) whenever an inner field closed inside an outer field's result.
+  const enclosingInstruction: boolean[] = [];
   let inInstruction = false;
 
   const flush = (): void => {
@@ -270,7 +272,7 @@ function buildRuns(
     const code = text.charCodeAt(index);
     if (code === FIELD_BEGIN) {
       flush();
-      fieldDepth += 1;
+      enclosingInstruction.push(inInstruction);
       inInstruction = true;
       continue;
     }
@@ -279,8 +281,8 @@ function buildRuns(
       continue;
     }
     if (code === FIELD_END) {
-      fieldDepth = Math.max(0, fieldDepth - 1);
-      inInstruction = fieldDepth > 0;
+      // An unmatched end -- one the text carries with no begin before it -- pops nothing and leaves the state alone rather than flipping it, so malformed field nesting cannot swallow the rest of the paragraph.
+      inInstruction = enclosingInstruction.pop() ?? inInstruction;
       continue;
     }
     if (inInstruction || isAnchorOnly(code)) continue;

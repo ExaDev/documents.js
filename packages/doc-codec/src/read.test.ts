@@ -232,6 +232,28 @@ describe("readDocContent", () => {
     expect(text).not.toContain("HYPERLINK");
   });
 
+  // A nested field inside an OUTER field's RESULT is the case a depth counter gets wrong: when the inner field ends, the outer field is still past its own separator, so its remaining text is result text and must survive.
+  it("resumes the enclosing field's result after a nested field closes inside it", () => {
+    const begin = String.fromCharCode(FIELD_BEGIN);
+    const separator = String.fromCharCode(FIELD_SEPARATOR);
+    const end = String.fromCharCode(FIELD_END);
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [
+              {
+                text: `${begin} OUTER ${separator}before ${begin} INNER ${separator}inner${end} after${end}`,
+              },
+              { text: " tail." },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(textOf(paragraphAt(document, 0))).toBe("before inner after tail.");
+  });
+
   it("keeps a line break inside a paragraph as a newline rather than a control character", () => {
     const document = readDocContent(
       buildDoc({
