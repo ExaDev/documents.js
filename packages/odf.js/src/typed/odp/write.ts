@@ -32,6 +32,7 @@ import {
 } from "../shared/canonicalise";
 import {
   createDrawShapeWriteState,
+  odfZIndexOf,
   planShapeContent,
   writeDrawShapes,
 } from "../draw/write-shapes";
@@ -84,8 +85,15 @@ function canonicalMetadata(metadata: LayoutMetadata): LayoutMetadata {
 // One ContentShape in the exact shape reading the written document back produces: geometry/insets/name pass through verbatim (see this module's own top-of-file note on rotationDeg's floating-point caveat specifically), and `blocks` is rebuilt from whichever of the three content kinds planShapeContent (typed/draw/write-shapes.ts) resolves the INPUT's own blocks to -- the identical validation and list-numId canonicalisation the writer itself runs, so this function and writeDrawFrame can never disagree about which shapes are writable at all.
 //
 // THE ONE FORCED FACT THIS FUNCTION RESTATES RATHER THAN PASSING THROUGH: an image's own widthPt/heightPt become the ENCLOSING SHAPE's frame widthPt/heightPt, never the input image block's own values. ODF's draw:image has no size of its own at all -- it is a bare content reference inside a draw:frame, and the frame's own svg:width/svg:height IS the rendered size (typed/draw/shapes.ts's own readDrawImageBlock note: "The image renders at the FRAME's own resolved size, not the source image's native pixel dimensions"). A caller-supplied image block whose width/height genuinely differ from its enclosing shape's frame is therefore not a smaller round trip, it is describing something ODF cannot express -- the frame wins, silently overriding the block's own stated size, exactly as reading the written document back will.
+//
+// PAINT ORDER is always present on the way back, never optional: readDrawFrame's own walker stamps every shape it reads (typed/draw/shapes.ts's paintOrderKey), so this canonical form states the same value. A paintOrder ODF can spell (a non-negative integer -- see typed/draw/write-shapes.ts's odfZIndexOf, which this reads the answer off rather than re-deriving) is written as draw:z-index and comes back exactly; anything else -- absent, negative, or fractional -- writes no attribute and comes back as the shape's own DOCUMENT-ENCOUNTER index, which for this writer's output is simply its position in its slide's own shapes array (this writer emits one top-level draw:frame per shape, in array order, and the reader's counter is per-slide and counts exactly those).
+//
+// THE THREE FIELDS THIS FUNCTION DROPS, each named rather than left silent, matching typed/odt/write.ts's own normaliseOdtContent convention:
+// - fontScale / lineSpacingReduction are DrawingML's own a:normAutofit percentages -- the font-shrink factor PowerPoint COMPUTED to make overflowing text fit, stored in the file (ooxml.js's src/typed/pptx/read.ts reads both). ODF stores no such computed factor anywhere: its own autofit vocabulary (draw:fit-to-size on the shape's graphic properties) is a MODE flag, saying that a consumer should shrink text to fit, not by how much. Writing it would therefore invent a fact the input never stated (a mode, from a factor) while still losing the factor, and this package's own reader reads nothing back from it -- so the loss is stated here instead of approximated. A real pptx -> odp conversion drops autofit shrink state, and this is the line that says so.
+// - `sourcePath` and `source` are dropped for the reasons odt's own writer already gives for the identical fields: sourcePath is a READER's own diagnostic path (the writer has no document to have read it from), and residue is quarantined, opaque text belonging to whichever format produced it -- re-emitting it into a different document would be actively wrong rather than merely incomplete. Not a gap this writer introduces; existing, consistent precedent.
 function canonicalShape(
   shape: ContentShape,
+  documentIndex: number,
   listState: ListPlanState,
 ): ContentShape {
   const content = planShapeContent(shape.blocks, listState);
@@ -109,6 +117,7 @@ function canonicalShape(
     insetTopPt: shape.insetTopPt,
     insetRightPt: shape.insetRightPt,
     insetBottomPt: shape.insetBottomPt,
+    paintOrder: odfZIndexOf(shape.paintOrder) ?? documentIndex,
     blocks,
   };
   if (shape.name !== undefined) {
@@ -127,7 +136,9 @@ function canonicalSlide(
 ): ContentSlide {
   return {
     size: slide.size,
-    shapes: slide.shapes.map((shape) => canonicalShape(shape, listState)),
+    shapes: slide.shapes.map((shape, index) =>
+      canonicalShape(shape, index, listState),
+    ),
     notes: slide.notes,
   };
 }

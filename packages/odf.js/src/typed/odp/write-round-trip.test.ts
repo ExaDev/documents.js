@@ -424,3 +424,46 @@ describe("writeOdpContent: a shape name carrying XML special characters", () => 
     expectRoundTrip(documentOf([slide([shape({ name })])]));
   });
 });
+
+// paintOrder is the one ContentShape field the reader ALWAYS populates (typed/draw/shapes.ts's own paintOrderKey stamps every frame it walks), so the writer dropping it was a real, live loss for any odp -> odp or odg -> odp conversion. See typed/odp/write.ts's canonicalShape note for the exact canonical form, and typed/draw/write-shapes.ts's odfZIndexOf for what ODF can and cannot spell.
+describe("writeOdpContent: shape paint order", () => {
+  it("round-trips an explicit paintOrder that disagrees with document order", () => {
+    const document = documentOf([
+      slide([
+        shape({
+          paintOrder: 9,
+          frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+        }),
+        shape({
+          paintOrder: 4,
+          frame: { xPt: 120, yPt: 0, widthPt: 100, heightPt: 50 },
+        }),
+      ]),
+    ]);
+    const written = roundTrip(document);
+    expect(written.slides[0]!.shapes.map((s) => s.paintOrder)).toEqual([9, 4]);
+    expectRoundTrip(document);
+  });
+
+  it("gives a shape with no paintOrder the reader's own document-encounter order, per slide", () => {
+    const document = documentOf([
+      slide([shape(), shape(), shape()]),
+      slide([shape(), shape()]),
+    ]);
+    const written = roundTrip(document);
+    expect(written.slides[0]!.shapes.map((s) => s.paintOrder)).toEqual([
+      0, 1, 2,
+    ]);
+    expect(written.slides[1]!.shapes.map((s) => s.paintOrder)).toEqual([0, 1]);
+    expectRoundTrip(document);
+  });
+
+  it("falls back to document-encounter order for a paintOrder ODF cannot spell, rather than rounding it", () => {
+    const document = documentOf([
+      slide([shape({ paintOrder: 1.5 }), shape({ paintOrder: -3 })]),
+    ]);
+    const written = roundTrip(document);
+    expect(written.slides[0]!.shapes.map((s) => s.paintOrder)).toEqual([0, 1]);
+    expectRoundTrip(document);
+  });
+});
