@@ -540,6 +540,26 @@ describe("writePptContent / readPptContent round trip", () => {
       ).toBe(false);
       expect(readPptContent(bytes).metadata).toEqual({});
     });
+
+    it("throws a PptUnsupportedContentError, not a raw RangeError, for a malformed createdIso", () => {
+      const document = {
+        metadata: { createdIso: "not-a-real-date" },
+        slides: [slide()],
+      };
+      expect(() => writePptContent(document)).toThrow(
+        PptUnsupportedContentError,
+      );
+    });
+
+    it("throws a PptUnsupportedContentError, not a raw RangeError, for a malformed modifiedIso", () => {
+      const document = {
+        metadata: { modifiedIso: "not-a-real-date" },
+        slides: [slide()],
+      };
+      expect(() => writePptContent(document)).toThrow(
+        PptUnsupportedContentError,
+      );
+    });
   });
 });
 
