@@ -23,6 +23,7 @@ import {
   readOdbReports,
   readOdbTables,
   readPdf,
+  rtfToPdf,
   svgToPdf,
   xlsxToPdf,
 } from "documents.js";
@@ -106,6 +107,9 @@ export async function openDocumentAtPath(
       return { format, layout: readPdf(csvToPdf(bytes)), bytes, path };
     case "svg":
       return { format, layout: readPdf(svgToPdf(bytes)), bytes, path };
+    // rtf mirrors xlsx/csv/svg exactly: no live-view editor and no readRtfContent-shaped content reader wired into this TUI's editor screens, but a real rtfToPdf conversion -- opened read-only through the identical to-Pdf-then-readPdf shape.
+    case "rtf":
+      return { format, layout: readPdf(rtfToPdf(bytes)), bytes, path };
     case "odf":
       throw new Error(
         "A standalone .odf formula document has no editor; convert it to PDF (odfToPdf) instead",
@@ -147,7 +151,8 @@ export async function saveDocumentTo(
     openDocument.format === "odb" ||
     openDocument.format === "xlsx" ||
     openDocument.format === "csv" ||
-    openDocument.format === "svg"
+    openDocument.format === "svg" ||
+    openDocument.format === "rtf"
   ) {
     throw new Error(
       `A ${openDocument.format} document is opened read-only and cannot be written back`,

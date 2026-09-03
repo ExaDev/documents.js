@@ -169,6 +169,8 @@ function documentWithPath(doc: OpenDocument, path: string): OpenDocument {
       return { format: "csv", layout: doc.layout, bytes: doc.bytes, path };
     case "svg":
       return { format: "svg", layout: doc.layout, bytes: doc.bytes, path };
+    case "rtf":
+      return { format: "rtf", layout: doc.layout, bytes: doc.bytes, path };
   }
 }
 
@@ -804,10 +806,11 @@ export function appReducer(state: AppState, action: Action): AppState {
           stack: [rootScreenForFormat(action.doc.format)],
         },
         "info",
-        // xlsx, csv, and svg have no editor to open at all -- action.doc is already a read-only PDF-preview conversion by the time it reaches here (see format/open-document.ts) -- so these are the formats whose "opened" message doubles as pointing the way to the one thing that can actually be done with them next.
+        // xlsx, csv, svg, and rtf have no editor to open at all -- action.doc is already a read-only PDF-preview conversion by the time it reaches here (see format/open-document.ts) -- so these are the formats whose "opened" message doubles as pointing the way to the one thing that can actually be done with them next.
         action.doc.format === "xlsx" ||
           action.doc.format === "csv" ||
-          action.doc.format === "svg"
+          action.doc.format === "svg" ||
+          action.doc.format === "rtf"
           ? `Opened ${action.path} as a read-only PDF preview -- press ':' then 'export pdf' to save it as a real PDF`
           : `Opened ${action.path}`,
       );
@@ -2037,7 +2040,8 @@ export function appReducer(state: AppState, action: Action): AppState {
         doc.format === "odb" ||
         doc.format === "xlsx" ||
         doc.format === "csv" ||
-        doc.format === "svg"
+        doc.format === "svg" ||
+        doc.format === "rtf"
       ) {
         return withStatus(
           state,
