@@ -158,3 +158,11 @@ export function pdfToXlsx(
 ): Uint8Array<ArrayBuffer> {
   return convertDocumentFromPdf("xlsx", bytes, options);
 }
+
+// pdf bytes -> rtf bytes: the reverse of rtfToPdf (convert.ts) -- rtf has no fromPdf edge of its own, so the pathfinder resolves this as [pdf -> docx fromPdf, docx -> rtf bridge] rather than a single hop, the identical two-hop shape pdfToXlsx above has.
+export function pdfToRtf(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: PdfToDocumentOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocumentFromPdf("rtf", bytes, options);
+}

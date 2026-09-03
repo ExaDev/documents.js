@@ -21,6 +21,7 @@ const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { readOdgContent } from "../odf/odg/read";
 import { readDocxContent } from "../ooxml/docx/read";
 import { readOdsContent } from "../odf/ods/read";
+import { readRtfContent, rtfBytesFromLatin1 } from "rtf-codec";
 import { createStandardFontMeasurer, readPdf } from "pdf-codec";
 import { MarkdownInvalidUtf8Error } from "markdown-codec";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
@@ -46,6 +47,7 @@ import {
   odsToXlsx,
   odtToPdf,
   pptxToPdf,
+  rtfToPdf,
   xlsxToPdf,
 } from "./convert";
 import {
@@ -56,6 +58,7 @@ import {
   pdfToOds,
   pdfToOdt,
   pdfToPptx,
+  pdfToRtf,
   pdfToXlsx,
 } from "./from-pdf";
 import type {
@@ -917,6 +920,43 @@ describe("xlsxToPdf / pdfToXlsx", () => {
     controller.abort();
     expect(() => xlsxToPdf(xlsxBytes, { signal: controller.signal })).toThrow();
     expect(() => pdfToXlsx(pdfBytes, { signal: controller.signal })).toThrow();
+  });
+});
+
+describe("rtfToPdf / pdfToRtf", () => {
+  // rtfToPdf/pdfToRtf have no layout engine or reconstruction algorithm of their own (see convert.ts's own module comment on this pair) -- each composes the existing rtf<->docx same-variant bridge with the existing docx<->pdf layout edge, the identical shape xlsxToPdf/pdfToXlsx has via ods. The starting bytes here are a hand-authored literal RTF source, matching this suite's own fixture-independence convention rather than generating it through writeRtfContent (the very function this pair's own bridge hop calls internally).
+  it("round-trips real rtf bytes through rtfToPdf then pdfToRtf recovering the source text", () => {
+    const rtfBytes = rtfBytesFromLatin1(
+      "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}\\fs24 Hello, world.\\par}",
+    );
+
+    const pdfBytes = rtfToPdf(rtfBytes);
+    expect(pdfHeader(pdfBytes)).toBe("%PDF-");
+
+    const roundTrippedBytes = pdfToRtf(pdfBytes);
+    const roundTripped = readRtfContent(roundTrippedBytes).document; // reread via rtf-codec's own real readRtfContent parser, not this package's own writer echoing its input back
+    expect(roundTripped.kind).toBe("wordprocessing");
+    if (roundTripped.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const text = roundTripped.sections
+      .flatMap((section) => section.blocks)
+      .filter((block) => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs)
+      .map((run) => run.text)
+      .join("");
+    expect(text).toContain("Hello, world.");
+  });
+
+  it("throws when the signal is already aborted, on both hops", () => {
+    const rtfBytes = rtfBytesFromLatin1(
+      "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}\\fs24 Hello, world.\\par}",
+    );
+    const pdfBytes = rtfToPdf(rtfBytes);
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => rtfToPdf(rtfBytes, { signal: controller.signal })).toThrow();
+    expect(() => pdfToRtf(pdfBytes, { signal: controller.signal })).toThrow();
   });
 });
 

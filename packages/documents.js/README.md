@@ -95,7 +95,7 @@ const odtBytes = convertDocument("docx", "odt", docxBytes, {
 
 ### PDF-pivot conversions
 
-The sixteen round-trip ergonomic conversions between the formats with their own layout engine and PDF (docx/pptx/odt/odp/ods/odg/markdown/svg ⇄ PDF, all round-tripping both ways), plus `xlsxToPdf`/`pdfToXlsx` and `csvToPdf`/`pdfToCsv` (each composing its ods bridge with the ods⇄pdf layout pair internally — neither xlsx nor csv has a layout engine of its own):
+The sixteen round-trip ergonomic conversions between the formats with their own layout engine and PDF (docx/pptx/odt/odp/ods/odg/markdown/svg ⇄ PDF, all round-tripping both ways), plus `xlsxToPdf`/`pdfToXlsx` and `csvToPdf`/`pdfToCsv` (each composing its ods bridge with the ods⇄pdf layout pair internally — neither xlsx nor csv has a layout engine of its own), and `rtfToPdf`/`pdfToRtf` (composing a docx bridge with the docx⇄pdf layout pair internally, for the identical reason — rtf-codec has no layout engine of its own either):
 
 ```ts
 import {
@@ -114,9 +114,11 @@ import {
   pdfToOds,
   pdfToOdt,
   pdfToPptx,
+  pdfToRtf,
   pdfToSvg,
   pdfToXlsx,
   pptxToPdf,
+  rtfToPdf,
   svgToPdf,
   xlsxToPdf,
 } from "documents.js";
@@ -150,6 +152,9 @@ const csvBytes2 = pdfToCsv(pdfFromCsv); // composes pdfToOds -> odsToCsv interna
 
 const pdfFromSvg = svgToPdf(svgBytes); // reads the six shape primitives into a drawing ContentDocument, then the same drawing layout engine odgToPdf feeds renders it
 const svgBytes2 = pdfToSvg(pdfFromSvg); // readPdf -> reconstructDrawing -> buildSvgText: vector geometry recovers near-1:1, while recovered text boxes sit outside the svg writer's vector-only scope (reported per shape, never silently dropped)
+
+const pdfFromRtf = rtfToPdf(rtfBytes); // composes an rtf -> docx bridge -> docx -> pdf toPdf internally
+const rtfBytes2 = pdfToRtf(pdfFromRtf); // composes pdf -> docx fromPdf -> docx -> rtf internally
 ```
 
 Each accepts an optional `signal` (`AbortSignal`) and either `onSubstitution` (X → PDF, called per character not representable in a standard-14 font) or `sink` (PDF → X, called per recoverable parse diagnostic). Every X → PDF conversion additionally accepts `fonts` (extra `ProvidedFont` faces) and `onFontSubstitution` (per family+weight+style that resolved to something else). Neither is needed for the common case — see [Fonts](#fonts).
@@ -492,7 +497,7 @@ const layout = readPdf(pdfBytes); // -> LayoutDocument: pages of positioned text
 const bytes = writePdf(layout);
 ```
 
-The eleven PDF round trips and sixteen PDF-bypassing bridge directions are also available as schema-validated [`z.codec()`](https://zod.dev) pairs (`pdfCodec`, `docxPdfCodec`, `pptxPdfCodec`, `odtPdfCodec`, `odpPdfCodec`, `odsPdfCodec`, `odgPdfCodec`, `svgPdfCodec`, `xlsxPdfCodec`, `csvPdfCodec`, `markdownPdfCodec`, `odtDocxCodec`, `odpPptxCodec`, `odsXlsxCodec`, `odsCsvCodec`, `xlsxCsvCodec`, `odgSvgCodec`, `markdownDocxCodec`, `markdownOdtCodec`) — the no-options form, adding automatic two-way schema validation. The two PDF-composed pairs have codec forms too (`xlsxMarkdownCodec`, `csvMarkdownCodec`):
+The twelve PDF round trips and sixteen PDF-bypassing bridge directions are also available as schema-validated [`z.codec()`](https://zod.dev) pairs (`pdfCodec`, `docxPdfCodec`, `pptxPdfCodec`, `odtPdfCodec`, `odpPdfCodec`, `odsPdfCodec`, `odgPdfCodec`, `svgPdfCodec`, `xlsxPdfCodec`, `csvPdfCodec`, `markdownPdfCodec`, `rtfPdfCodec`, `odtDocxCodec`, `odpPptxCodec`, `odsXlsxCodec`, `odsCsvCodec`, `xlsxCsvCodec`, `odgSvgCodec`, `markdownDocxCodec`, `markdownOdtCodec`) — the no-options form, adding automatic two-way schema validation. The two PDF-composed pairs have codec forms too (`xlsxMarkdownCodec`, `csvMarkdownCodec`):
 
 ```ts
 import { z } from "zod";
