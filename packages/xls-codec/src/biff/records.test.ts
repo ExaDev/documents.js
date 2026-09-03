@@ -30,7 +30,7 @@ describe("readRecords", () => {
     const stream = bytes(...record(RECORD_BOF, [0x00, 0x06, 0x05, 0x00]));
 
     expect(readRecords(stream)).toEqual([
-      { type: RECORD_BOF, data: bytes(0x00, 0x06, 0x05, 0x00) },
+      { type: RECORD_BOF, data: bytes(0x00, 0x06, 0x05, 0x00), offset: 0 },
     ]);
   });
 
@@ -49,8 +49,18 @@ describe("readRecords", () => {
   it("reads a zero-length record, which the framing explicitly permits", () => {
     // [MS-XLS] 2.1.4: "The record size MUST be greater than or equal to 0". EOF is exactly this case in every real file.
     expect(readRecords(bytes(...record(RECORD_EOF, [])))).toEqual([
-      { type: RECORD_EOF, data: bytes() },
+      { type: RECORD_EOF, data: bytes(), offset: 0 },
     ]);
+  });
+
+  it("reports each record's own start offset in the stream", () => {
+    // BoundSheet8's lbPlyPos addresses a sheet's substream by the byte offset of its BOF, so a reader has to know where each record began.
+    const stream = bytes(
+      ...record(RECORD_BOF, [0x00, 0x06]),
+      ...record(RECORD_EOF, []),
+    );
+
+    expect(readRecords(stream).map((entry) => entry.offset)).toEqual([0, 6]);
   });
 
   it("keeps a Continue record as its own entry rather than merging it", () => {
@@ -61,8 +71,8 @@ describe("readRecords", () => {
     );
 
     expect(readRecords(stream)).toEqual([
-      { type: RECORD_SST, data: bytes(0x01) },
-      { type: RECORD_CONTINUE, data: bytes(0x02) },
+      { type: RECORD_SST, data: bytes(0x01), offset: 0 },
+      { type: RECORD_CONTINUE, data: bytes(0x02), offset: 5 },
     ]);
   });
 
