@@ -7,6 +7,7 @@ import {
   inertOverrideKeys,
   isAuditAdvisory,
   isAuditReport,
+  isAuditServiceError,
   minimumReleaseAgeMinutes,
   resolvedVersionsFromLockfileText,
   withOverrides,
@@ -61,6 +62,29 @@ describe("audit report guards", () => {
   it("rejects a report whose advisories are not all well-formed", () => {
     expect(isAuditReport({ advisories: { a: advisory(), b: 42 } })).toBe(false);
     expect(isAuditReport({ advisories: { a: advisory() } })).toBe(true);
+  });
+});
+
+describe("isAuditServiceError", () => {
+  it("accepts npm's own real error envelope, reproduced against a live timeout", () => {
+    // registry.npmjs.org/-/npm/v1/security/advisories/bulk's own shape when it times out -- captured verbatim from a real `pnpm audit --json` run against this workspace during an outage, not invented.
+    expect(
+      isAuditServiceError({
+        error: {
+          code: 23,
+          message: "The operation was aborted due to timeout",
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects a well-formed report", () => {
+    expect(isAuditServiceError({ advisories: { a: advisory() } })).toBe(false);
+  });
+
+  it("rejects an error envelope missing a numeric code or string message", () => {
+    expect(isAuditServiceError({ error: { message: "no code" } })).toBe(false);
+    expect(isAuditServiceError({ error: { code: 23 } })).toBe(false);
   });
 });
 
