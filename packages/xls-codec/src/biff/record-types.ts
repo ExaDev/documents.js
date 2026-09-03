@@ -27,6 +27,10 @@ export const RECORD_DATE1904 = 0x0022;
 export const RECORD_STYLE = 0x0293;
 /** Present only in an encrypted workbook, where every record after it is ciphertext ([MS-XLS] 2.4.117). */
 export const RECORD_FILEPASS = 0x002f;
+/** A collection of XTI structures resolving a formula's ixti to a sheet range, for a 3D reference ([MS-XLS] 2.4.106). */
+export const RECORD_EXTERNSHEET = 0x0017;
+/** The beginning of a supporting-link's own record collection: another workbook, a DDE/OLE data source, an add-in, or -- the one case this reader resolves -- this same workbook, self-referencing ([MS-XLS] 2.4.271). */
+export const RECORD_SUPBOOK = 0x01ae;
 
 // --- Worksheet substream ---
 
