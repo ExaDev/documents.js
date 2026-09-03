@@ -1,17 +1,21 @@
+import { ContentDocumentSchema, DocumentTreeSchema } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 
 import {
   BOF_TYPE_WORKBOOK,
   BOF_TYPE_WORKSHEET,
   RECORD_BOF,
+  RECORD_BOOLERR,
   RECORD_BOUNDSHEET8,
   RECORD_DATE1904,
   RECORD_EOF,
   RECORD_FILEPASS,
   RECORD_FORMAT,
+  RECORD_COLINFO,
   RECORD_LABELSST,
   RECORD_MERGECELLS,
   RECORD_NUMBER,
+  RECORD_ROW,
   RECORD_SST,
   RECORD_XF,
 } from "./biff/record-types";
@@ -452,6 +456,85 @@ describe("readXlsContent", () => {
     expect(() =>
       readXlsContent(new Uint8Array([0x50, 0x4b, 0x03, 0x04])),
     ).toThrow(BiffFormatError);
+  });
+});
+
+describe("readXlsContent schema conformance", () => {
+  // The strongest single check in this suite: the reader's output is parsed by document-schema.js's OWN validator rather than compared against hand-written expectations. A field this package populates with a shape the schema does not accept -- a zero widthPt where the schema requires a positive number, a cell value kind spelled BIFF8's way rather than the schema's, a required print-settings field left off -- fails here even when every value-level assertion above passes.
+  const bytes = xlsFile(
+    workbookStream({
+      globals: [
+        record(RECORD_DATE1904, u16(0)),
+        record(RECORD_FORMAT, [...u16(164), ...xlUnicodeString("yyyy-mm-dd")]),
+        ...xfTable(164, 10, 0),
+        record(RECORD_SST, [
+          ...u32(1),
+          ...u32(1),
+          ...richExtendedString("Text"),
+        ]),
+      ],
+      sheets: [
+        {
+          name: "Sheet1",
+          records: [
+            record(RECORD_NUMBER, [...cell(0, 0, 15), ...f64(45292)]),
+            record(RECORD_NUMBER, [...cell(1, 0, 16), ...f64(0.5)]),
+            record(RECORD_LABELSST, [...cell(2, 0, 17), ...u32(0)]),
+            record(RECORD_BOOLERR, [...cell(3, 0, 17), 0x01, 0x00]),
+            record(RECORD_BOOLERR, [...cell(4, 0, 17), 0x07, 0x01]),
+            record(RECORD_ROW, [
+              ...u16(0),
+              ...u16(0),
+              ...u16(1),
+              ...u16(300),
+              ...u16(0),
+              ...u16(0),
+              0x40,
+              0x01,
+              ...u16(0),
+            ]),
+            record(RECORD_COLINFO, [
+              ...u16(0),
+              ...u16(1),
+              ...u16(2560),
+              ...u16(15),
+              ...u16(0),
+              ...u16(0),
+            ]),
+            record(RECORD_MERGECELLS, [
+              ...u16(1),
+              ...u16(6),
+              ...u16(7),
+              ...u16(0),
+              ...u16(1),
+            ]),
+          ],
+        },
+      ],
+    }),
+  );
+
+  it("produces a document the schema's own validator accepts", () => {
+    expect(() =>
+      ContentDocumentSchema.parse(readXlsContent(bytes)),
+    ).not.toThrow();
+  });
+
+  it("produces a tree the schema's own validator accepts", () => {
+    expect(() => DocumentTreeSchema.parse(readXls(bytes))).not.toThrow();
+  });
+
+  it("covers every value kind the reader can emit in that document", () => {
+    // Guards the check above from silently narrowing: if a future edit stops this fixture exercising a kind, this fails rather than the conformance test quietly proving less.
+    const kinds = new Set(
+      (readXlsContent(bytes).sheets[0]?.cells ?? []).map(
+        (entry) => entry.value.kind,
+      ),
+    );
+
+    expect(kinds).toEqual(
+      new Set(["date", "percentage", "string", "boolean", "error", "empty"]),
+    );
   });
 });
 
