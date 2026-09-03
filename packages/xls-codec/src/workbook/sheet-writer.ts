@@ -29,6 +29,7 @@ import {
   isoTimeToSerial,
 } from "../serial";
 import { pointsToColumnWidth, pointsToTwips } from "../units";
+import { writesCellRecord } from "../written-cells";
 import { GENERAL_CELL_XF_INDEX } from "./globals-writer";
 
 // The worksheet substream ([MS-XLS] 2.1.7.20.5), write side: the grid geometry and cell table for one sheet, the counterpart of workbook/sheet.ts's own readSheetRecords. See xls-codec's README for exactly which worksheet-substream records this writer emits (Dimensions, ColInfo, Row, the value-cell family, MergeCells) and which it deliberately omits (Window2, the calc-state/print-settings record family, Index/DBCell) -- real content, not per-window UI state or a lookup optimisation this reader (or any reader) does not require to find a cell.
@@ -278,9 +279,7 @@ export function buildWorksheetSubstream(
     checkedCellPosition(cell);
   }
 
-  const writtenCells = sheet.cells.filter(
-    (cell) => cell.value.kind !== "empty",
-  );
+  const writtenCells = sheet.cells.filter(writesCellRecord);
 
   const cellsByRow = new Map<number, ContentSheetCell[]>();
   for (const cell of writtenCells) {
