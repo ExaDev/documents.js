@@ -1,9 +1,12 @@
 import { BlockCursor } from "../biff/cursor";
+import type { SheetRange } from "../biff/ptg";
 import {
   RECORD_BOUNDSHEET8,
   RECORD_DATE1904,
+  RECORD_EXTERNSHEET,
   RECORD_FORMAT,
   RECORD_SST,
+  RECORD_SUPBOOK,
   RECORD_XF,
 } from "../biff/record-types";
 import { BiffFormatError } from "../biff/records";
@@ -53,6 +56,12 @@ export interface WorkbookGlobals {
   readonly numberFormats: ReadonlyMap<number, string>;
   /** Whether serials count from the 1904 epoch rather than the 1900 one ([MS-XLS] 2.4.77). */
   readonly date1904: boolean;
+  /**
+   * A PtgRef3d/PtgArea3d's own ixti, resolved to the sheet range it names -- one entry per XTI in the EXTERNSHEET record's rgXTI array, in that array's own order (an ixti is an index into it).
+   *
+   * An entry is undefined when this reader does not resolve it: the XTI's own SupBook is not this same, self-referencing workbook (a genuine external-workbook, DDE, OLE, or add-in reference -- [MS-XLS] 2.4.271's own cch table, `0x0401` being the one this reader treats as resolvable), or its itabFirst/itabLast do not name a real sheet (`-1`, "sheet could not be found"). A formula whose 3D reference lands on an undefined entry is left with `formula` absent for that cell, exactly like the other unsupported-token cases -- this reader never resolves a genuinely external workbook's own sheet names, since that needs the external workbook's own bytes, not this one's.
+   */
+  readonly sheetRanges: readonly (SheetRange | undefined)[];
 }
 
 /** [MS-XLS] 2.4.28's own hsState values; 0x01 is Hidden and 0x02 Very Hidden. */
@@ -72,8 +81,11 @@ export function readWorkbookGlobals(
   const sheets: SheetEntry[] = [];
   const cellFormats: CellFormat[] = [];
   const customFormats = new Map<number, string>();
+  // SupBook records ([MS-XLS] 2.4.271) precede the single EXTERNSHEET record that resolves against them, but this reader does not lean on that ordering: every SupBook is collected here, in arrival order, and EXTERNSHEET is resolved against the finished collection once the whole substream has been walked.
+  const supBookSelfReferencing: boolean[] = [];
   let sharedStrings: readonly string[] = [];
   let date1904 = false;
+  let externSheet: RecordGroup | undefined;
 
   for (const record of records) {
     switch (record.type) {
@@ -94,8 +106,14 @@ export function readWorkbookGlobals(
       case RECORD_DATE1904:
         date1904 = readDate1904(record);
         break;
+      case RECORD_SUPBOOK:
+        supBookSelfReferencing.push(isSelfReferencingSupBook(record));
+        break;
+      case RECORD_EXTERNSHEET:
+        externSheet = record;
+        break;
       default:
-        // Every other record in the globals substream -- the window settings, the palette, the theme, the drawing group, the external-workbook references -- carries nothing this reader acts on yet.
+        // Every other record in the globals substream -- the window settings, the palette, the theme, the drawing group -- carries nothing this reader acts on yet.
         break;
     }
   }
@@ -106,7 +124,53 @@ export function readWorkbookGlobals(
     numberFormats.set(id, code);
   }
 
-  return { sheets, sharedStrings, cellFormats, numberFormats, date1904 };
+  const sheetRanges =
+    externSheet === undefined
+      ? []
+      : readSheetRanges(externSheet, supBookSelfReferencing);
+
+  return {
+    sheets,
+    sharedStrings,
+    cellFormats,
+    numberFormats,
+    date1904,
+    sheetRanges,
+  };
+}
+
+/** [MS-XLS] 2.4.271's own cch table: a SupBook whose cch is exactly this value is a self-referencing supporting link -- this workbook itself -- rather than another workbook, a DDE/OLE data source, or an add-in. This is the only kind of supporting link a 3D reference resolves through here; every other kind genuinely needs bytes from outside this file. */
+const SUPBOOK_SELF_REFERENCING_CCH = 0x0401;
+
+/** SupBook ([MS-XLS] 2.4.271): a two-byte ctab then a two-byte cch. Only cch is read here -- ctab is undefined for a self-referencing SupBook and unused for every other kind this reader does not resolve, and the virtPath/rgst payload that would follow for a non-self-referencing link is never reached. */
+function isSelfReferencingSupBook(record: RecordGroup): boolean {
+  const cursor = new BlockCursor(record.blocks);
+  cursor.skip(2); // ctab
+  return cursor.u16() === SUPBOOK_SELF_REFERENCING_CCH;
+}
+
+/** ExternSheet ([MS-XLS] 2.4.106): a two-byte cXTI then that many XTI structures ([MS-XLS] 2.5.344) -- a two-byte iSupBook and two signed 16-bit sheet-scope bounds each. iSupBook indexes the SupBook collection positionally, in the order those records appeared. */
+function readSheetRanges(
+  record: RecordGroup,
+  supBookSelfReferencing: readonly boolean[],
+): readonly (SheetRange | undefined)[] {
+  const cursor = new BlockCursor(record.blocks);
+  const count = cursor.u16();
+  const ranges: (SheetRange | undefined)[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const iSupBook = cursor.u16();
+    const itabFirst = cursor.i16();
+    const itabLast = cursor.i16();
+    // itabFirst/itabLast are only ever a real sheet index (>= 0) for a resolvable reference: -1 is [MS-XLS]'s own "the sheet could not be found", and -2 is a workbook-level scope with no single first/last sheet to name.
+    ranges.push(
+      (supBookSelfReferencing[iSupBook] ?? false) &&
+        itabFirst >= 0 &&
+        itabLast >= 0
+        ? { firstSheetIndex: itabFirst, lastSheetIndex: itabLast }
+        : undefined,
+    );
+  }
+  return ranges;
 }
 
 /** BoundSheet8 ([MS-XLS] 2.4.28): a four-byte stream position, a byte of hidden state, a byte of sheet type, then the name as a ShortXLUnicodeString. */

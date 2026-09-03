@@ -4,8 +4,10 @@ import {
   RECORD_BOUNDSHEET8,
   RECORD_CONTINUE,
   RECORD_DATE1904,
+  RECORD_EXTERNSHEET,
   RECORD_FORMAT,
   RECORD_SST,
+  RECORD_SUPBOOK,
   RECORD_XF,
 } from "../biff/record-types";
 import { BiffFormatError, readRecords } from "../biff/records";
@@ -229,6 +231,65 @@ describe("readWorkbookGlobals", () => {
     );
 
     expect(globals.date1904).toBe(true);
+  });
+
+  it("resolves a 3D reference's ixti to a sheet range through a self-referencing SupBook", () => {
+    // [MS-XLS] 2.4.271: cch 0x0401 marks a SupBook as self-referencing -- this workbook itself -- so its EXTERNSHEET XTI's itabFirst/itabLast name real BoundSheet8 indices directly.
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [...u16(3), ...u16(0x0401)]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0), // iSupBook
+          ...u16(1), // itabFirst
+          ...u16(2), // itabLast
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { firstSheetIndex: 1, lastSheetIndex: 2 },
+    ]);
+  });
+
+  it("does not resolve an ixti whose SupBook is a genuinely external workbook", () => {
+    // A SupBook naming an external workbook carries a real cch (its virtPath's own length), never 0x0401 -- this reader resolves only the self-referencing case.
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [...u16(2), ...u16(0x0001), 0x00]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([undefined]);
+  });
+
+  it("does not resolve an XTI whose sheet could not be found", () => {
+    // [MS-XLS] 2.5.344: -1 is itabFirst/itabLast's own "the sheet could not be found" sentinel.
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [...u16(1), ...u16(0x0401)]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          0xff,
+          0xff, // itabFirst = -1
+          0xff,
+          0xff, // itabLast = -1
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([undefined]);
+  });
+
+  it("defaults sheetRanges to empty when the substream carries no EXTERNSHEET record", () => {
+    expect(readWorkbookGlobals(groupsOf()).sheetRanges).toEqual([]);
   });
 });
 
