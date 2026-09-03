@@ -193,6 +193,7 @@ export { DEFAULT_LAYOUT_FONT } from "document-schema.js";
 // Magic-byte-validated Uint8Array schemas, so a caller passing the wrong format -- to these functions directly, or as the input/output schema half of a z.codec() below -- gets a clear Zod validation error instead of a confusing failure three layers down. The Odt/Ods/Odp/Odg schemas check the package's actual declared media type (see src/model/bytes.ts), a stronger check than Docx/PptxBytesSchema's generic ZIP-signature check. MarkdownBytesSchema and CsvBytesSchema are architecturally different from every other schema here -- each checks only well-formed UTF-8, since markdown and csv are plain text with no magic bytes or format-level header of their own to check (see src/model/bytes.ts's own comment). SvgBytesSchema sits in between: svg is plain text too, but it has a recognisable root element, so its schema additionally requires the decoded text to contain an <svg tag.
 export {
   CsvBytesSchema,
+  DocBytesSchema,
   DocxBytesSchema,
   MarkdownBytesSchema,
   OdgBytesSchema,
@@ -200,11 +201,13 @@ export {
   OdsBytesSchema,
   OdtBytesSchema,
   PdfBytesSchema,
+  PptBytesSchema,
   PptxBytesSchema,
   SvgBytesSchema,
+  XlsBytesSchema,
   XlsxBytesSchema,
 } from "./model/bytes";
-// RtfBytesSchema is rtf-codec's own schema, re-exported directly from that package rather than routed through src/model/bytes.ts -- RTF has a real magic-byte header ('{\rtf'), so it needs no well-formed-UTF-8 fallback the way markdown/csv do, and rtf-codec already exports the exact check.
+// RtfBytesSchema is rtf-codec's own schema, re-exported directly from that package rather than routed through src/model/bytes.ts -- RTF has a real magic-byte header ('{\rtf'), so it needs no well-formed-UTF-8 fallback the way markdown/csv do, and rtf-codec already exports the exact check. DocBytesSchema/XlsBytesSchema/PptBytesSchema above have no such upstream export to re-export instead -- doc-codec's isDocBytes and xls-codec's isXlsFile are plain boolean detectors, not Zod schemas, and ppt-codec ships no detector at all -- so all three are built locally in src/model/bytes.ts, matching that module's own Docx/Pptx/XlsxBytesSchema precedent (a real magic-byte check the format's own package doesn't already expose as a schema).
 export { RtfBytesSchema } from "rtf-codec";
 
 // --- The live-view read+write editors: a real manipulation API for docx/pptx content, since ooxml.js's own typed readers explicitly forbid write-back. ---
@@ -620,7 +623,7 @@ export { inferCellValue } from "./layout/cell-typing";
 export type { GridLattice } from "./layout/lattice";
 export { detectGridLattice } from "./layout/lattice";
 
-// --- The ergonomic X <-> PDF conversions (docx/pptx/odt/odp/ods/odg/xlsx/markdown/csv/svg/rtf <-> PDF, all round-trip both ways). xlsx<->pdf and csv<->pdf each compose their same-variant ods bridge with the ods<->pdf layout pair internally -- neither xlsx nor csv has a layout engine of its own -- but both are real, direct, single-call conversion pairs from a caller's own point of view. rtf<->pdf composes a same-variant docx bridge with the docx<->pdf layout pair the identical way, since rtf-codec has no layout engine of its own either. The csv pairs intersect convert.ts's own CsvReadOptions (delimiter, onCellTypeInference) / CsvWriteOptions (delimiter, sheet) into the shared options type each already uses -- the two option groups every csv-sourced/csv-targeted conversion consumes -- and the svg pairs intersect SvgReadOptions (onSvgDiagnostic) / SvgWriteOptions (page, onSvgDiagnostic) the same way. markdown<->pdf (markdownToPdf/pdfToMarkdown) DOES lay markdown out directly, reusing convertWordprocessingToLayout/reconstructWordprocessing completely unmodified -- but pdfToMarkdown is the single lossiest conversion in the whole package (see convert.ts's own top-of-file comment and the README's Fidelity section). svg<->pdf lays out directly too (the same convertDrawingToLayout/reconstructDrawing pair odg feeds), with the reader's scope limits as its only lossiness. ---
+// --- The ergonomic X <-> PDF conversions (docx/pptx/odt/odp/ods/odg/xlsx/markdown/csv/svg/rtf/doc/xls/ppt <-> PDF, all round-trip both ways). xlsx<->pdf and csv<->pdf each compose their same-variant ods bridge with the ods<->pdf layout pair internally -- neither xlsx nor csv has a layout engine of its own -- but both are real, direct, single-call conversion pairs from a caller's own point of view. rtf<->pdf and doc<->pdf compose a same-variant docx bridge with the docx<->pdf layout pair the identical way, xls<->pdf composes an ods bridge the same way xlsx does, and ppt<->pdf composes a pptx bridge the same way again -- none of the four legacy/plain-text formats has a layout engine of its own. The csv pairs intersect convert.ts's own CsvReadOptions (delimiter, onCellTypeInference) / CsvWriteOptions (delimiter, sheet) into the shared options type each already uses -- the two option groups every csv-sourced/csv-targeted conversion consumes -- and the svg pairs intersect SvgReadOptions (onSvgDiagnostic) / SvgWriteOptions (page, onSvgDiagnostic) the same way. markdown<->pdf (markdownToPdf/pdfToMarkdown) DOES lay markdown out directly, reusing convertWordprocessingToLayout/reconstructWordprocessing completely unmodified -- but pdfToMarkdown is the single lossiest conversion in the whole package (see convert.ts's own top-of-file comment and the README's Fidelity section). svg<->pdf lays out directly too (the same convertDrawingToLayout/reconstructDrawing pair odg feeds), with the reader's scope limits as its only lossiness. ---
 export type {
   CsvReadOptions,
   CsvWriteOptions,
@@ -631,46 +634,55 @@ export type {
 export type { PdfToDocumentOptions } from "./convert/from-pdf";
 export {
   csvToPdf,
+  docToPdf,
   docxToPdf,
   markdownToPdf,
   odgToPdf,
   odpToPdf,
   odsToPdf,
   odtToPdf,
+  pptToPdf,
   pptxToPdf,
   rtfToPdf,
   svgToPdf,
+  xlsToPdf,
   xlsxToPdf,
 } from "./convert/convert";
 export {
   pdfToCsv,
+  pdfToDoc,
   pdfToDocx,
   pdfToMarkdown,
   pdfToOdg,
   pdfToOdp,
   pdfToOds,
   pdfToOdt,
+  pdfToPpt,
   pdfToPptx,
   pdfToRtf,
   pdfToSvg,
+  pdfToXls,
   pdfToXlsx,
 } from "./convert/from-pdf";
 
 // --- odf (a standalone ODF formula document) -> PDF: not one of the round-trip conversions above (there is no pdfToOdf -- see convert.ts's own module comment on odfToPdf for why: recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem, not a geometry-reconstruction one). Renders via src/mathml's layoutFormula and the embedded STIX Two Math font, the same pipeline the odt/odp embedded-formula paths use. ---
 export { odfToPdf } from "./convert/convert";
 
-// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg/xlsx/markdown/csv/svg bytes <-> PDF bytes), the no-extra-options form -- use the named conversion functions directly for cancellation, diagnostics, the csv delimiter/sheet options, or the svg page/onSvgDiagnostic options.
+// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg/xlsx/markdown/csv/svg/rtf/doc/xls/ppt bytes <-> PDF bytes), the no-extra-options form -- use the named conversion functions directly for cancellation, diagnostics, the csv delimiter/sheet options, or the svg page/onSvgDiagnostic options.
 export {
   csvPdfCodec,
+  docPdfCodec,
   docxPdfCodec,
   markdownPdfCodec,
   odgPdfCodec,
   odpPdfCodec,
   odsPdfCodec,
   odtPdfCodec,
+  pptPdfCodec,
   pptxPdfCodec,
   rtfPdfCodec,
   svgPdfCodec,
+  xlsPdfCodec,
   xlsxPdfCodec,
 } from "./convert/codec";
 

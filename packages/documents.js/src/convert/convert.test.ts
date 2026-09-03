@@ -22,6 +22,10 @@ import { readOdgContent } from "../odf/odg/read";
 import { readDocxContent } from "../ooxml/docx/read";
 import { readOdsContent } from "../odf/ods/read";
 import { readRtfContent, rtfBytesFromLatin1 } from "rtf-codec";
+import { readDocContent, writeDocContent } from "doc-codec";
+import { readXlsContent, writeXlsContent } from "xls-codec";
+import { readPptContent } from "../ppt/read";
+import { writePptContent } from "../ppt/write";
 import { requireArrayBufferBytes } from "../model/bytes";
 import { createStandardFontMeasurer, readPdf } from "pdf-codec";
 import { MarkdownInvalidUtf8Error } from "markdown-codec";
@@ -37,6 +41,7 @@ import {
 } from "../test-support/ods";
 import { minimalOdtBytes } from "../test-support/odt";
 import {
+  docToPdf,
   docxToPdf,
   inlineOdmSectionToContentSection,
   markdownToPdf,
@@ -47,19 +52,24 @@ import {
   odsToPdf,
   odsToXlsx,
   odtToPdf,
+  pptToPdf,
   pptxToPdf,
   rtfToPdf,
+  xlsToPdf,
   xlsxToPdf,
 } from "./convert";
 import {
+  pdfToDoc,
   pdfToDocx,
   pdfToMarkdown,
   pdfToOdg,
   pdfToOdp,
   pdfToOds,
   pdfToOdt,
+  pdfToPpt,
   pdfToPptx,
   pdfToRtf,
+  pdfToXls,
   pdfToXlsx,
 } from "./from-pdf";
 import type {
@@ -962,6 +972,173 @@ describe("rtfToPdf / pdfToRtf", () => {
     controller.abort();
     expect(() => rtfToPdf(rtfBytes, { signal: controller.signal })).toThrow();
     expect(() => pdfToRtf(pdfBytes, { signal: controller.signal })).toThrow();
+  });
+});
+
+describe("docToPdf / pdfToDoc", () => {
+  // docToPdf/pdfToDoc have no layout engine or reconstruction algorithm of their own (see convert.ts's own module comment on this pair) -- each composes the existing doc<->docx same-variant bridge with the existing docx<->pdf layout edge, the identical shape rtfToPdf/pdfToRtf has. The starting bytes are built through doc-codec's own writeDocContent directly, matching this suite's own fixture-independence convention -- doc-codec's writer covers a single wordprocessing section of plain paragraphs only (see that package's README scope note).
+  function sampleDocBytes(text: string): Uint8Array<ArrayBuffer> {
+    return writeDocContent({
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [{ kind: "paragraph", runs: [{ text }] }],
+        },
+      ],
+    });
+  }
+
+  it("round-trips real doc bytes through docToPdf then pdfToDoc recovering the source text", () => {
+    const docBytes = sampleDocBytes("Hello, world.");
+
+    const pdfBytes = docToPdf(docBytes);
+    expect(pdfHeader(pdfBytes)).toBe("%PDF-");
+
+    const roundTrippedBytes = pdfToDoc(pdfBytes);
+    const roundTripped = readDocContent(roundTrippedBytes); // reread via doc-codec's own real readDocContent parser, not this package's own writer echoing its input back
+    expect(roundTripped.kind).toBe("wordprocessing");
+    if (roundTripped.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const text = roundTripped.sections
+      .flatMap((section) => section.blocks)
+      .filter((block) => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs)
+      .map((run) => run.text)
+      .join("");
+    expect(text).toContain("Hello, world.");
+  });
+
+  it("throws when the signal is already aborted, on both hops", () => {
+    const docBytes = sampleDocBytes("Hello, world.");
+    const pdfBytes = docToPdf(docBytes);
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => docToPdf(docBytes, { signal: controller.signal })).toThrow();
+    expect(() => pdfToDoc(pdfBytes, { signal: controller.signal })).toThrow();
+  });
+});
+
+describe("xlsToPdf / pdfToXls", () => {
+  // xlsToPdf/pdfToXls have no layout engine of their own -- each composes the existing xls<->ods same-variant bridge with the existing ods<->pdf layout edge, the identical shape xlsxToPdf/pdfToXlsx has. The starting bytes are built through xls-codec's own writeXlsContent directly, matching docToPdf's own fixture-independence convention above.
+  function sampleXlsBytes(cellText: string): Uint8Array<ArrayBuffer> {
+    return writeXlsContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [
+            {
+              row: 0,
+              column: 0,
+              value: { kind: "string", value: cellText },
+              displayText: cellText,
+            },
+          ],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: {
+              topPt: 54,
+              rightPt: 50.4,
+              bottomPt: 54,
+              leftPt: 50.4,
+            },
+            gridlines: false,
+            headers: false,
+            pageOrder: "downThenOver",
+          },
+        },
+      ],
+    });
+  }
+
+  it("round-trips real xls bytes through xlsToPdf then pdfToXls recovering the source cell text", () => {
+    const xlsBytes = sampleXlsBytes("Hello, world.");
+
+    const pdfBytes = xlsToPdf(xlsBytes);
+    expect(pdfHeader(pdfBytes)).toBe("%PDF-");
+
+    const roundTrippedBytes = pdfToXls(pdfBytes);
+    const roundTripped = readXlsContent(roundTrippedBytes); // reread via xls-codec's own real readXlsContent parser
+    expect(roundTripped.kind).toBe("spreadsheet");
+    const text = roundTripped.sheets
+      .flatMap((sheet) => sheet.cells)
+      .map((cell) => cell.displayText)
+      .join(" ");
+    expect(text).toContain("Hello, world.");
+  });
+
+  it("throws when the signal is already aborted, on both hops", () => {
+    const xlsBytes = sampleXlsBytes("Hello, world.");
+    const pdfBytes = xlsToPdf(xlsBytes);
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => xlsToPdf(xlsBytes, { signal: controller.signal })).toThrow();
+    expect(() => pdfToXls(pdfBytes, { signal: controller.signal })).toThrow();
+  });
+});
+
+describe("pptToPdf / pdfToPpt", () => {
+  // pptToPdf/pdfToPpt have no layout engine of their own -- each composes the existing ppt<->pptx same-variant bridge with the existing pptx<->pdf layout edge, the identical shape rtfToPdf/docToPdf has one variant over. The starting bytes are built through this package's own src/ppt/write.ts (ppt-codec's own writePptContent, wrapped -- see that module's own comment), matching docToPdf's own fixture-independence convention above.
+  function samplePptBytes(text: string): Uint8Array<ArrayBuffer> {
+    return writePptContent({
+      kind: "presentation",
+      metadata: {},
+      slides: [
+        {
+          size: { widthPt: 720, heightPt: 540 },
+          notes: "",
+          shapes: [
+            {
+              frame: { xPt: 72, yPt: 36, widthPt: 360, heightPt: 180 },
+              insetLeftPt: 0,
+              insetTopPt: 0,
+              insetRightPt: 0,
+              insetBottomPt: 0,
+              blocks: [{ kind: "paragraph", runs: [{ text }] }],
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  it("round-trips real ppt bytes through pptToPdf then pdfToPpt recovering the source slide text", () => {
+    const pptBytes = samplePptBytes("Hello, world.");
+
+    const pdfBytes = pptToPdf(pptBytes);
+    expect(pdfHeader(pdfBytes)).toBe("%PDF-");
+
+    const roundTrippedBytes = pdfToPpt(pdfBytes);
+    const roundTripped = readPptContent(roundTrippedBytes); // reread via src/ppt/read.ts's own real adapter over ppt-codec's readPptContent
+    expect(roundTripped.kind).toBe("presentation");
+    if (roundTripped.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const text = roundTripped.slides
+      .flatMap((slide) => slide.shapes)
+      .flatMap((shape) => shape.blocks)
+      .filter((block) => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs)
+      .map((run) => run.text)
+      .join("");
+    expect(text).toContain("Hello, world.");
+  });
+
+  it("throws when the signal is already aborted, on both hops", () => {
+    const pptBytes = samplePptBytes("Hello, world.");
+    const pdfBytes = pptToPdf(pptBytes);
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => pptToPdf(pptBytes, { signal: controller.signal })).toThrow();
+    expect(() => pdfToPpt(pdfBytes, { signal: controller.signal })).toThrow();
   });
 });
 

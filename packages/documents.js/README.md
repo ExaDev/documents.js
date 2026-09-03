@@ -117,11 +117,12 @@ const odtBytes = convertDocument("docx", "odt", docxBytes, {
 
 ### PDF-pivot conversions
 
-The sixteen round-trip ergonomic conversions between the formats with their own layout engine and PDF (docx/pptx/odt/odp/ods/odg/markdown/svg ⇄ PDF, all round-tripping both ways), plus `xlsxToPdf`/`pdfToXlsx` and `csvToPdf`/`pdfToCsv` (each composing its ods bridge with the ods⇄pdf layout pair internally — neither xlsx nor csv has a layout engine of its own), and `rtfToPdf`/`pdfToRtf` (composing a docx bridge with the docx⇄pdf layout pair internally, for the identical reason — rtf-codec has no layout engine of its own either):
+The sixteen round-trip ergonomic conversions between the formats with their own layout engine and PDF (docx/pptx/odt/odp/ods/odg/markdown/svg ⇄ PDF, all round-tripping both ways), plus `xlsxToPdf`/`pdfToXlsx` and `csvToPdf`/`pdfToCsv` (each composing its ods bridge with the ods⇄pdf layout pair internally — neither xlsx nor csv has a layout engine of its own), and `rtfToPdf`/`pdfToRtf`, `docToPdf`/`pdfToDoc`, `xlsToPdf`/`pdfToXls`, `pptToPdf`/`pdfToPpt` (each composing a same-variant bridge — doc/rtf through docx, xls through ods, ppt through pptx — with that bridge target's own layout pair internally, for the identical reason: none of the four has a layout engine of its own):
 
 ```ts
 import {
   csvToPdf,
+  docToPdf,
   docxToPdf,
   markdownToPdf,
   odgToPdf,
@@ -129,19 +130,24 @@ import {
   odsToPdf,
   odtToPdf,
   pdfToCsv,
+  pdfToDoc,
   pdfToDocx,
   pdfToMarkdown,
   pdfToOdg,
   pdfToOdp,
   pdfToOds,
   pdfToOdt,
+  pdfToPpt,
   pdfToPptx,
   pdfToRtf,
   pdfToSvg,
+  pdfToXls,
   pdfToXlsx,
+  pptToPdf,
   pptxToPdf,
   rtfToPdf,
   svgToPdf,
+  xlsToPdf,
   xlsxToPdf,
 } from "documents.js";
 
@@ -177,6 +183,15 @@ const svgBytes2 = pdfToSvg(pdfFromSvg); // readPdf -> reconstructDrawing -> buil
 
 const pdfFromRtf = rtfToPdf(rtfBytes); // composes an rtf -> docx bridge -> docx -> pdf toPdf internally
 const rtfBytes2 = pdfToRtf(pdfFromRtf); // composes pdf -> docx fromPdf -> docx -> rtf internally
+
+const pdfFromDoc = docToPdf(docBytes); // composes a doc -> docx bridge -> docx -> pdf toPdf internally
+const docBytes2 = pdfToDoc(pdfFromDoc); // composes pdf -> docx fromPdf -> docx -> doc internally
+
+const pdfFromXls = xlsToPdf(xlsBytes); // composes an xls -> ods bridge -> ods -> pdf toPdf internally
+const xlsBytes2 = pdfToXls(pdfFromXls); // composes pdf -> ods fromPdf -> ods -> xls internally
+
+const pdfFromPpt = pptToPdf(pptBytes); // composes a ppt -> pptx bridge -> pptx -> pdf toPdf internally
+const pptBytes2 = pdfToPpt(pdfFromPpt); // composes pdf -> pptx fromPdf -> pptx -> ppt internally
 ```
 
 Each accepts an optional `signal` (`AbortSignal`) and either `onSubstitution` (X → PDF, called per character not representable in a standard-14 font) or `sink` (PDF → X, called per recoverable parse diagnostic). Every X → PDF conversion additionally accepts `fonts` (extra `ProvidedFont` faces) and `onFontSubstitution` (per family+weight+style that resolved to something else). Neither is needed for the common case — see [Fonts](#fonts).
@@ -519,7 +534,7 @@ const layout = readPdf(pdfBytes); // -> LayoutDocument: pages of positioned text
 const bytes = writePdf(layout);
 ```
 
-The twelve PDF round trips and sixteen PDF-bypassing bridge directions are also available as schema-validated [`z.codec()`](https://zod.dev) pairs (`pdfCodec`, `docxPdfCodec`, `pptxPdfCodec`, `odtPdfCodec`, `odpPdfCodec`, `odsPdfCodec`, `odgPdfCodec`, `svgPdfCodec`, `xlsxPdfCodec`, `csvPdfCodec`, `markdownPdfCodec`, `rtfPdfCodec`, `odtDocxCodec`, `odpPptxCodec`, `odsXlsxCodec`, `odsCsvCodec`, `xlsxCsvCodec`, `odgSvgCodec`, `markdownDocxCodec`, `markdownOdtCodec`) — the no-options form, adding automatic two-way schema validation. The two PDF-composed pairs have codec forms too (`xlsxMarkdownCodec`, `csvMarkdownCodec`):
+The fifteen PDF round trips and sixteen PDF-bypassing bridge directions are also available as schema-validated [`z.codec()`](https://zod.dev) pairs (`pdfCodec`, `docxPdfCodec`, `pptxPdfCodec`, `odtPdfCodec`, `odpPdfCodec`, `odsPdfCodec`, `odgPdfCodec`, `svgPdfCodec`, `xlsxPdfCodec`, `csvPdfCodec`, `markdownPdfCodec`, `rtfPdfCodec`, `docPdfCodec`, `xlsPdfCodec`, `pptPdfCodec`, `odtDocxCodec`, `odpPptxCodec`, `odsXlsxCodec`, `odsCsvCodec`, `xlsxCsvCodec`, `odgSvgCodec`, `markdownDocxCodec`, `markdownOdtCodec`) — the no-options form, adding automatic two-way schema validation. The two PDF-composed pairs have codec forms too (`xlsxMarkdownCodec`, `csvMarkdownCodec`):
 
 ```ts
 import { z } from "zod";
