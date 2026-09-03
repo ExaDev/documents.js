@@ -1,3 +1,9 @@
+## [6.3.3](https://github.com/ExaDev/documents.js/compare/documents.js%406.3.2...documents.js%406.3.3) (2026-09-03)
+
+### Bug Fixes
+
+* **documents.js:** compute a merged table region's bounds without spreading ([bf4fb52](https://github.com/ExaDev/documents.js/commit/bf4fb528478365da9da462465d950f90dee19aa4)), references [novus-power/hive#1397](https://github.com/novus-power/hive/issues/1397)
+
 ## [6.3.2](https://github.com/ExaDev/documents.js/compare/documents.js%406.3.1...documents.js%406.3.2) (2026-09-03)
 
 
