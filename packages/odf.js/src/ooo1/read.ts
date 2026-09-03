@@ -17,7 +17,7 @@ import { readOdg, readOdgContent, type OdgDocument } from "../typed/odg/read";
 //
 // Each format has the same two levels its ODF counterpart has: the bare name returns document-schema.js's DocumentTree, and the *Content sibling beneath it returns the flat ContentDocument-level shape. See this package's README for the distinction.
 //
-// What these readers do NOT do is write. This package's typed layer is read-only for ODF too, so there is no ODF content writer for an inverse transform to target; adding one is a much larger piece of work than this reader, and it belongs to ODF first rather than to its predecessor.
+// What these readers do NOT do is write. Their own writing counterpart lives in write.ts (writeSxw/writeSxwContent, writeSxc/writeSxcContent), built on transform.ts's own inverse direction and this package's ODF-native writers (writeOdt, writeOds) -- .sxi/.sxd have no writer yet, since odf.js has no writeOdp/writeOdg for their own inverse transform to target.
 
 // A .sxw or .stw (OpenOffice.org 1.x Writer) package as a flat OdtDocument.
 export function readSxwContent(
