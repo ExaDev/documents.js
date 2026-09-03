@@ -1,3 +1,14 @@
+## [6.4.0](https://github.com/ExaDev/documents.js/compare/documents.js%406.3.6...documents.js%406.4.0) (2026-09-03)
+
+### Features
+
+* **documents.js:** re-export readWpdContent from the public barrel ([43cddaa](https://github.com/ExaDev/documents.js/commit/43cddaa3cc55d6ff7c94a94d994ad3abfa777170))
+* **documents.js:** wire wpd-codec into the composition engine as a read-only source ([97aac94](https://github.com/ExaDev/documents.js/commit/97aac946d898aca3d92a11275850ffeeb0a177a4))
+
+### Documentation
+
+* **documents.js:** document wpd as a routable read-only conversion source ([9aca684](https://github.com/ExaDev/documents.js/commit/9aca684cf42242330a87ee15f2b96c279751ee38))
+
 ## [6.3.6](https://github.com/ExaDev/documents.js/compare/documents.js%406.3.5...documents.js%406.3.6) (2026-09-03)
 
 ### Bug Fixes

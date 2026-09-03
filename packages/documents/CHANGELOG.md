@@ -1,3 +1,14 @@
+## [2.3.0](https://github.com/ExaDev/documents.js/compare/documents%402.2.6...documents%402.3.0) (2026-09-03)
+
+### Features
+
+* **documents:** support wpd as a preview source in the web UI ([d1e83ab](https://github.com/ExaDev/documents.js/commit/d1e83ab861f684bd49edb4b155f89d654b815e1f))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.4.0
+
 ## [2.2.6](https://github.com/ExaDev/documents.js/compare/documents%402.2.5...documents%402.2.6) (2026-09-03)
 
 

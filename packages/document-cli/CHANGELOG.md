@@ -1,3 +1,18 @@
+## [5.3.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.2.6...document-cli%405.3.0) (2026-09-03)
+
+### Features
+
+* **document-cli:** open .wpd documents as a read-only PDF preview ([d1ad22a](https://github.com/ExaDev/documents.js/commit/d1ad22a7a5441c6a41947742aee48734ebeea47f))
+
+### Documentation
+
+* **document-cli:** document wpd support across commands and the TUI ([42719d5](https://github.com/ExaDev/documents.js/commit/42719d5a6947f86f7002e675c37d74eea804339a))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.4.0
+
 ## [5.2.6](https://github.com/ExaDev/documents.js/compare/document-cli%405.2.5...document-cli%405.2.6) (2026-09-03)
 
 
