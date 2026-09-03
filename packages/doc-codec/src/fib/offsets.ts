@@ -46,6 +46,9 @@ export const FC_LCB_VALUE_INDEX = {
   lcbPlcfBteChpx: 25,
   fcPlcfBtePapx: 26,
   lcbPlcfBtePapx: 27,
+  // FibRgFcLcb97's 16th fc/lcb pair, counted forward from fcStshfOrig at pair 0: fcPlcffndRef, fcPlcffndTxt, fcPlcfandRef, fcPlcfandTxt, fcPlcfSed, fcPlcPad, fcPlcfPhe, fcSttbfGlsy, fcPlcfGlsy, fcPlcfHdd, fcPlcfBteChpx, fcPlcfBtePapx, fcPlcfSea, then fcSttbfFfn -- pair 15, value index 30.
+  fcSttbfFfn: 30,
+  lcbSttbfFfn: 31,
   fcClx: 66,
   lcbClx: 67,
 } as const;

@@ -1,0 +1,243 @@
+import { writeCompoundFile } from "archive-codec";
+import type { ContentDocument, ContentParagraph } from "document-schema.js";
+import { WORD_DOCUMENT_STREAM } from "./detect";
+import { DocFormatError, DocUnsupportedError } from "./errors";
+import { buildFib } from "./fib/write";
+import { encodeCharacterGrpprl } from "./prop/chp-write";
+import { FKP_PAGE_SIZE } from "./prop/fkp";
+import {
+  buildChpxPages,
+  buildPapxPages,
+  buildPropertyBinTable,
+  firstFcOfPage,
+  type ChpxRunToWrite,
+  type PapxParagraphToWrite,
+} from "./prop/fkp-write";
+import { encodeParagraphGrpprl } from "./prop/pap-write";
+import { buildFontTable } from "./style/fonts";
+import { buildEmptyStsh } from "./style/stsh";
+import { buildTextClx } from "./text/piece-table-write";
+import { PARAGRAPH_MARK } from "./text/special";
+
+// The top-level write: a wordprocessing ContentDocument to real [MS-DOC] bytes, wrapped in a real [MS-CFB] compound file. Every step below inverts one of read.ts's own -- the text stream is laid out and the paragraph/character formatting encoded into grpprls first (write.ts, prop/chp-write.ts, prop/pap-write.ts), then packed into the piece table, the two property bin tables and their formatted disk pages, an empty-but-conformant style sheet, and (when a run names one) a font table (text/piece-table-write.ts, prop/fkp-write.ts, style/stsh.ts, style/fonts.ts) -- the identical structures readDocContent (read.ts) consumes, so a document this writer produces is verified by reading it back through this package's own reader rather than by inspecting its bytes in isolation.
+//
+// What this writer does NOT do is stated in full in the README's own scope section, not only here: no tables, no images, no footnotes/headers/endnotes, no section geometry beyond refusing more than one section, no numbering, no paragraph styles (every paragraph is istd 0, "Normal", with every property carried as a direct exception), and no hyperlinks or fields. Each is a genuine layer of the format this writer does not implement; none is silently approximated.
+
+/** Where the text is written in the WordDocument stream: past the FIB (which needs under 900 bytes for the fields this writer populates), on a page boundary though not required to be. */
+const TEXT_FC = 0x400;
+/** This writer only ever emits 16-bit (uncompressed) text -- see text/piece-table-write.ts. */
+const BYTES_PER_CHARACTER = 2;
+
+interface FormattedRun {
+  readonly text: string;
+  /** Empty means no direct character formatting at all. */
+  readonly grpprl: readonly number[];
+}
+
+interface FormattedParagraph {
+  readonly runs: readonly FormattedRun[];
+  readonly grpprl: readonly number[];
+}
+
+export function writeDocContent(
+  document: ContentDocument,
+): Uint8Array<ArrayBuffer> {
+  if (document.kind !== "wordprocessing") {
+    throw new DocUnsupportedError(
+      `doc-codec writes wordprocessing documents only; got a '${document.kind}' document`,
+    );
+  }
+  if (document.sections.length !== 1) {
+    throw new DocUnsupportedError(
+      `doc-codec's reader never distinguishes more than one section within a document (see README's "Section properties" scope note): writeDocContent refuses ${document.sections.length} sections rather than silently merging their content into what would read back as one`,
+    );
+  }
+  const [section] = document.sections;
+  if (section === undefined) {
+    throw new DocFormatError("a wordprocessing document must carry a section");
+  }
+
+  const paragraphs: ContentParagraph[] = [];
+  for (const block of section.blocks) {
+    if (block.kind !== "paragraph") {
+      throw new DocUnsupportedError(
+        `doc-codec's writer does not yet support '${block.kind}' blocks (see README's scope note)`,
+      );
+    }
+    paragraphs.push(block);
+  }
+  // [MS-DOC] 2.4.2 requires the Main Document's own text to end in a paragraph mark; an otherwise-empty section still needs one empty paragraph to carry it, exactly as a real producer's own blank document does.
+  if (paragraphs.length === 0) {
+    paragraphs.push({ kind: "paragraph", runs: [] });
+  }
+
+  // 1. Assign every distinct font name its own font-table index, in first-use order.
+  const fontNames: string[] = [];
+  const fontIndexByName = new Map<string, number>();
+  const fontIndexOf = (name: string): number => {
+    const existing = fontIndexByName.get(name);
+    if (existing !== undefined) return existing;
+    const index = fontNames.length;
+    fontNames.push(name);
+    fontIndexByName.set(name, index);
+    return index;
+  };
+
+  // 2. Encode every run's and paragraph's own direct formatting up front: a run's byte-identical grpprl is what decides whether it merges with its neighbour into one Chpx exception below, so the encoding has to exist before the text stream is laid out.
+  const formatted: FormattedParagraph[] = paragraphs.map((paragraph) => ({
+    runs: paragraph.runs.map((run) => ({
+      text: run.text,
+      grpprl: encodeCharacterGrpprl(run, fontIndexOf),
+    })),
+    grpprl: encodeParagraphGrpprl(paragraph),
+  }));
+
+  // 3. Lay out the logical text stream: every run's characters, each paragraph closed by its own mark. Adjacent stretches with byte-identical formatting merge into one Chpx exception -- what a real producer writes, and what read.ts's own buildRuns must already split back apart at every paragraph boundary regardless of how many paragraphs one exception spans.
+  let text = "";
+  const paragraphStarts: number[] = [];
+  const chpxRuns: {
+    start: number;
+    end: number;
+    grpprl: readonly number[] | undefined;
+  }[] = [];
+  for (const paragraph of formatted) {
+    paragraphStarts.push(text.length);
+    for (const run of paragraph.runs) {
+      const runStart = text.length;
+      text += run.text;
+      if (text.length > runStart) {
+        chpxRuns.push({
+          start: runStart,
+          end: text.length,
+          grpprl: run.grpprl.length > 0 ? run.grpprl : undefined,
+        });
+      }
+    }
+    text += String.fromCharCode(PARAGRAPH_MARK);
+    // The mark shares the paragraph's own last run's formatting, matching what a real producer writes (test-support/doc.ts's buildDoc makes the identical choice, for the identical reason): extending that run keeps the Chpx's own ranges contiguous instead of adding a second, separately-tracked one-character exception.
+    const lastRun = chpxRuns[chpxRuns.length - 1];
+    if (lastRun?.end === text.length - 1) {
+      lastRun.end = text.length;
+    } else {
+      chpxRuns.push({
+        start: text.length - 1,
+        end: text.length,
+        grpprl: undefined,
+      });
+    }
+  }
+
+  const mergedChpxRuns: typeof chpxRuns = [];
+  for (const run of chpxRuns) {
+    const previous = mergedChpxRuns[mergedChpxRuns.length - 1];
+    if (
+      previous?.end === run.start &&
+      sameGrpprl(previous.grpprl, run.grpprl)
+    ) {
+      previous.end = run.end;
+      continue;
+    }
+    mergedChpxRuns.push({ ...run });
+  }
+
+  // 4. Place the text, then the character- and paragraph-formatting pages immediately after it.
+  const characterFc = (cp: number): number =>
+    TEXT_FC + cp * BYTES_PER_CHARACTER;
+  const textFcLim = characterFc(text.length);
+  const chpxPageStart = Math.ceil(textFcLim / FKP_PAGE_SIZE);
+
+  const chpxRunSpecs: ChpxRunToWrite[] = mergedChpxRuns.map((run) => ({
+    fc: characterFc(run.start),
+    grpprl: run.grpprl,
+  }));
+  const chpxPages = buildChpxPages(chpxRunSpecs, textFcLim);
+
+  const papxPageStart = chpxPageStart + chpxPages.length;
+  const papxParagraphSpecs: PapxParagraphToWrite[] = formatted.map(
+    (paragraph, index) => {
+      const start = paragraphStarts[index];
+      if (start === undefined) {
+        throw new DocFormatError(
+          "internal defect: writeDocContent lost a paragraph's own start position",
+        );
+      }
+      return { fc: characterFc(start), istd: 0, grpprl: paragraph.grpprl };
+    },
+  );
+  const papxPages = buildPapxPages(papxParagraphSpecs, textFcLim);
+
+  const wordDocument = new Uint8Array(
+    (papxPageStart + papxPages.length) * FKP_PAGE_SIZE,
+  );
+  const wordView = new DataView(wordDocument.buffer);
+  for (let index = 0; index < text.length; index += 1) {
+    wordView.setUint16(characterFc(index), text.charCodeAt(index), true);
+  }
+  chpxPages.forEach((page, index) => {
+    wordDocument.set(page, (chpxPageStart + index) * FKP_PAGE_SIZE);
+  });
+  papxPages.forEach((page, index) => {
+    wordDocument.set(page, (papxPageStart + index) * FKP_PAGE_SIZE);
+  });
+
+  // 5. The Table stream: the Clx, the two bin tables (keyed on each page's own first fc, read back out of the page itself so the key and the page's content can never disagree), an empty-but-conformant style sheet, and, when at least one run names a font, the font table.
+  const clx = buildTextClx(text.length, TEXT_FC);
+  const chpxBinTable = buildPropertyBinTable(
+    [...chpxPages.map(firstFcOfPage), textFcLim],
+    chpxPages.map((_, index) => chpxPageStart + index),
+  );
+  const papxBinTable = buildPropertyBinTable(
+    [...papxPages.map(firstFcOfPage), textFcLim],
+    papxPages.map((_, index) => papxPageStart + index),
+  );
+  const stsh = buildEmptyStsh();
+  const fontTable =
+    fontNames.length > 0 ? buildFontTable(fontNames) : undefined;
+
+  let cursor = 0;
+  const place = (bytes: Uint8Array): number => {
+    const offset = cursor;
+    cursor += bytes.length;
+    return offset;
+  };
+  const fcClx = place(clx);
+  const fcPlcfBteChpx = place(chpxBinTable);
+  const fcPlcfBtePapx = place(papxBinTable);
+  const fcStshf = place(stsh);
+  const fcSttbfFfn = fontTable !== undefined ? place(fontTable) : 0;
+  const table = new Uint8Array(cursor);
+  table.set(clx, fcClx);
+  table.set(chpxBinTable, fcPlcfBteChpx);
+  table.set(papxBinTable, fcPlcfBtePapx);
+  table.set(stsh, fcStshf);
+  if (fontTable !== undefined) table.set(fontTable, fcSttbfFfn);
+
+  const fib = buildFib({
+    ccpText: text.length,
+    cbMac: wordDocument.length,
+    fcClx,
+    lcbClx: clx.length,
+    fcPlcfBteChpx,
+    lcbPlcfBteChpx: chpxBinTable.length,
+    fcPlcfBtePapx,
+    lcbPlcfBtePapx: papxBinTable.length,
+    fcStshf,
+    lcbStshf: stsh.length,
+    fcSttbfFfn,
+    lcbSttbfFfn: fontTable?.length ?? 0,
+  });
+  wordDocument.set(fib, 0);
+
+  return writeCompoundFile([
+    { path: WORD_DOCUMENT_STREAM, bytes: wordDocument },
+    { path: "1Table", bytes: table },
+  ]);
+}
+
+function sameGrpprl(
+  a: readonly number[] | undefined,
+  b: readonly number[] | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.length === b.length && a.every((byte, index) => byte === b[index]);
+}
