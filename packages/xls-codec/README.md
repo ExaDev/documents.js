@@ -19,7 +19,7 @@ Under active development, **read-only**. Built and shipped:
 
 ### Not built yet
 
-**The write path**, which is the substantial one. A conformant workbook has to emit a `BOF` history block, a complete `XF`/`Font`/`Format` table with the fifteen mandatory style records preceding any cell format, an `Index`/`DBCell` row-block lookup structure whose file offsets must agree with where the records actually land, and a compound-file _writer_ (`archive-codec` reads [MS-CFB] but does not write it). Shipping a plausible-looking writer that produced files Excel rejects would be worse than shipping none. Tracked on [#815](https://github.com/ExaDev/documents.js/issues/815).
+**The write path**, which is the substantial one. A conformant workbook has to emit a `BOF` history block, a complete `XF`/`Font`/`Format` table with the fifteen mandatory style records preceding any cell format, an `Index`/`DBCell` row-block lookup structure whose file offsets must agree with where the records actually land, and a compound file to put the resulting `Workbook` stream into. The container half is no longer missing — [`archive-codec`](../archive-codec/README.md)'s `writeCompoundFile` writes [MS-CFB] as well as reading it — so what remains here is the BIFF8 record emission itself. Shipping a plausible-looking writer that produced files Excel rejects would be worse than shipping none. Tracked on [#815](https://github.com/ExaDev/documents.js/issues/815).
 
 Read-side gaps, each deliberate rather than overlooked:
 
