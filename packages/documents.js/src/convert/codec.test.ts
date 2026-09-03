@@ -10,6 +10,7 @@ import { openOds } from "../edit/ods/editor";
 import { openOdt } from "../edit/odt/editor";
 import { createPptx, openPptx } from "../edit/pptx/editor";
 import { readRtfContent, rtfBytesFromLatin1 } from "rtf-codec";
+import { requireArrayBufferBytes } from "../model/bytes";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
 import { richMarkdownText } from "../test-support/markdown";
 import { minimalOdgBytes } from "../test-support/odg";
@@ -281,16 +282,20 @@ describe("xlsxPdfCodec", () => {
 
 describe("rtfPdfCodec", () => {
   it("z.decode produces valid PDF bytes from rtf bytes", () => {
-    const rtfBytes = rtfBytesFromLatin1(
-      "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}\\fs24 Hello, world.\\par}",
+    const rtfBytes = requireArrayBufferBytes(
+      rtfBytesFromLatin1(
+        "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}\\fs24 Hello, world.\\par}",
+      ),
     );
     const pdfBytes = z.decode(rtfPdfCodec, rtfBytes);
     expect(pdfHeader(pdfBytes)).toBe("%PDF-");
   });
 
   it("z.encode then z.decode round-trips the source text, like rtfToPdf/pdfToRtf", () => {
-    const rtfBytes = rtfBytesFromLatin1(
-      "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}\\fs24 Hello, world.\\par}",
+    const rtfBytes = requireArrayBufferBytes(
+      rtfBytesFromLatin1(
+        "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}\\fs24 Hello, world.\\par}",
+      ),
     );
     const pdfBytes = z.decode(rtfPdfCodec, rtfBytes);
     const roundTrippedRtfBytes = z.encode(rtfPdfCodec, pdfBytes);
