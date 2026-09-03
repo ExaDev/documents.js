@@ -102,6 +102,8 @@ export {
   readMarginPt,
   readPageForm,
 } from "./stream/page";
+export type { WpdTabEffect } from "./stream/tab";
+export { TAB_GROUP, tabEffectFor } from "./stream/tab";
 export type { WpdStyleSemantics } from "./stream/style";
 export {
   DISPLAY_NUMBER_GROUP,

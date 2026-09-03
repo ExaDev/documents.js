@@ -29,6 +29,7 @@ const COLUMN_GROUP = 0xd2;
 const CHARACTER_GROUP = 0xd4;
 const STYLE_GROUP = 0xdd;
 const DISPLAY_NUMBER_GROUP = 0xda;
+const TAB_GROUP = 0xe0;
 
 // The End-of-Line subfunctions that bound a table's content: "10 (0x0A) Table Cell", "11 (0x0B) Table Row and Cell", "17 (0x11) Table Off".
 const EOL_TABLE_CELL = 10;
@@ -524,6 +525,65 @@ describe("outline numbering", () => {
     const paragraph = paragraphsOf(document)[0];
     expect(paragraph?.runs.map((run) => run.text).join("")).toBe("page 7");
     expect(paragraph?.list).toBeUndefined();
+  });
+});
+
+describe("tabs", () => {
+  // The Tab group has no subfunction catalogue: the byte in the subfunction position is the tab definition itself, whose top five bits name the type. Dropping the group ran real documents' columns together, which is a text loss rather than a formatting one.
+  it("advances to a tab stop as a tab character", () => {
+    const document = readDocumentArea([
+      ...text("Name"),
+      ...variableFunction({ group: TAB_GROUP, subgroup: 0b00010 << 3 }),
+      ...text("Country"),
+    ]);
+    expect(
+      paragraphsOf(document)[0]
+        ?.runs.map((run) => run.text)
+        .join(""),
+    ).toBe("Name\tCountry");
+  });
+
+  // Centre-on-margins is the missing half of the construct the single-byte End of Center Align function already ends.
+  it("centres the line a centring code begins", () => {
+    const document = readDocumentArea([
+      ...variableFunction({ group: TAB_GROUP, subgroup: 0b01000 << 3 }),
+      ...text("Title"),
+      HARD_EOL,
+      ...text("Body"),
+    ]);
+    expect(paragraphsOf(document).map((p) => p.alignment)).toEqual([
+      "center",
+      undefined,
+    ]);
+  });
+
+  it("right-aligns the line a flush-right code begins", () => {
+    const document = readDocumentArea([
+      ...variableFunction({ group: TAB_GROUP, subgroup: 0b10000 << 3 }),
+      ...text("Date"),
+      HARD_EOL,
+    ]);
+    expect(paragraphsOf(document)[0]?.alignment).toBe("right");
+  });
+
+  // A line-scoped centring code applies to the line it sits in; Set Justification Mode applies from where it sits onwards, so the narrower one wins for that paragraph and the wider one resumes after it.
+  it("lets a line-scoped alignment outrank the document justification for its own paragraph", () => {
+    const document = readDocumentArea([
+      ...variableFunction({
+        group: 0xd3,
+        subgroup: 0x05,
+        nonDeletable: [3],
+      }),
+      ...variableFunction({ group: TAB_GROUP, subgroup: 0b01000 << 3 }),
+      ...text("centred"),
+      HARD_EOL,
+      ...text("right"),
+      HARD_EOL,
+    ]);
+    expect(paragraphsOf(document).map((p) => p.alignment)).toEqual([
+      "center",
+      "right",
+    ]);
   });
 });
 

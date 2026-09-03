@@ -91,6 +91,7 @@ import {
   readTableColumnWidthPt,
   ROW_INFORMATION_SUBFUNCTION,
 } from "./stream/table";
+import { tabEffectFor, TAB_GROUP } from "./stream/tab";
 import { tokeniseDocumentArea, type WpdToken } from "./stream/tokenise";
 
 // -- Document area to ContentDocument --
@@ -201,6 +202,8 @@ interface ReaderState {
   // The structural facts of the paragraph currently accumulating, captured when its first character arrives rather than when it closes: a heading's style region ends at the style's own End Off code, which in a real document sits BEFORE the hard return that ends the paragraph, so reading the scope stack at flush time would find it already popped.
   pendingHeadingLevel: number | undefined;
   pendingListLevel: number | undefined;
+  // A line-scoped alignment a Tab group centring or flush-right code began, which outranks the document-level justification for the paragraph it sits in and clears when that paragraph closes.
+  pendingAlignment: Alignment | undefined;
   // Depth of open Paragraph Number Display pairs, whose rendered digits are suppressed in favour of the list membership that regenerates them.
   numberDisplayDepth: number;
   page: PageState;
@@ -262,10 +265,12 @@ function targetBlocks(state: ReaderState): ContentBlock[] {
 // Closes the current paragraph. Called for every hard return, so a document with two consecutive hard returns genuinely produces an empty paragraph between them -- that blank line is content the author typed, not an artefact.
 function flushParagraph(state: ReaderState): void {
   flushRun(state);
+  // A line-scoped centring or flush-right code outranks the document-level justification: the Tab group code that begins one applies to the line it sits in, where Set Justification Mode applies from where it sits onwards.
+  const alignment = state.pendingAlignment ?? state.alignment;
   const paragraph: ContentParagraph = {
     kind: "paragraph",
     runs: state.runs.splice(0, state.runs.length),
-    ...(state.alignment === undefined ? {} : { alignment: state.alignment }),
+    ...(alignment === undefined ? {} : { alignment }),
     ...(state.pendingHeadingLevel === undefined
       ? {}
       : { headingLevel: state.pendingHeadingLevel }),
@@ -275,6 +280,7 @@ function flushParagraph(state: ReaderState): void {
   };
   state.pendingHeadingLevel = undefined;
   state.pendingListLevel = undefined;
+  state.pendingAlignment = undefined;
   targetBlocks(state).push(paragraph);
 }
 
@@ -819,6 +825,19 @@ function applyVariableFunction(
     case CHARACTER_GROUP:
       applyCharacterGroup(state, token, container, sink);
       return;
+    case TAB_GROUP: {
+      // This group has no subfunction catalogue: the byte in the subfunction position IS the tab definition (see src/stream/tab.ts).
+      const effect = tabEffectFor(token.subgroup);
+      if (effect === undefined) {
+        return;
+      }
+      if (effect.kind === "tab") {
+        appendText(state, "\t");
+      } else {
+        state.pendingAlignment = effect.alignment;
+      }
+      return;
+    }
     case STYLE_GROUP:
       applyStyleGroup(state, token);
       return;
@@ -943,6 +962,7 @@ function foldTokens(
     styleScopes: [],
     pendingHeadingLevel: undefined,
     pendingListLevel: undefined,
+    pendingAlignment: undefined,
     numberDisplayDepth: 0,
     page: {
       widthPt: undefined,
