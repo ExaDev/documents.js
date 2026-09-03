@@ -310,7 +310,8 @@ describe("readWpdContent", () => {
     ]);
   });
 
-  it("flattens a table into paragraphs and says so", () => {
+  // A cell or row boundary with no Table Definition open has no grid to belong to, which a stray code left behind by an edit can produce. The text on either side still survives as paragraphs, in reading order.
+  it("flattens an orphaned cell boundary into paragraphs and says so", () => {
     const diagnostics: WpdDiagnostic[] = [];
     const document = readWpdContent(
       buildWpdFile([...text("cell"), 0xc6, ...text("next"), 0xbf]),
