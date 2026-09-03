@@ -15,10 +15,16 @@ const BARREL_FUNCTIONS = [
   'walkArchive',
   'isCompoundFile',
   'readCompoundFile',
+  'writeCompoundFile',
   'readOlePackage',
 ];
 const BARREL_CONSTANTS = ['MAX_WALK_DEPTH', 'MAX_WALK_TOTAL_BYTES', 'MAX_CFB_TOTAL_STREAM_BYTES'];
-const BARREL_CLASSES = ['ArchiveWalkLimitError', 'CompoundFileFormatError', 'OlePackageFormatError'];
+const BARREL_CLASSES = [
+  'ArchiveWalkLimitError',
+  'CompoundFileFormatError',
+  'CompoundFileWriteError',
+  'OlePackageFormatError',
+];
 
 describe('dist/ barrel exports are present in both builds', () => {
   for (const name of BARREL_FUNCTIONS) {
@@ -51,6 +57,7 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/zip/walk.js', exports: ['walkArchive', 'MAX_WALK_DEPTH'] },
     { path: '../dist/cfb/detect.js', exports: ['isCompoundFile'] },
     { path: '../dist/cfb/read.js', exports: ['readCompoundFile', 'MAX_CFB_TOTAL_STREAM_BYTES'] },
+    { path: '../dist/cfb/write.js', exports: ['writeCompoundFile', 'CompoundFileWriteError'] },
     { path: '../dist/cfb/ole-package.js', exports: ['readOlePackage'] },
     { path: '../dist/magic.js', exports: [] },
   ];
@@ -85,5 +92,26 @@ describe('dist/ end-to-end: both builds round-trip a real archive', () => {
     expect(cjsEntries.map((entry) => entry.path)).toEqual(['nested/inner.txt']);
     expect(cjsEntries[0]?.bytes).toEqual(content);
     expect(cjs.detectArchiveFormat(zipBytes)).toBe('zip');
+  });
+
+  it('writeCompoundFile -> isCompoundFile/detectArchiveFormat -> readCompoundFile agrees across ESM and CJS', () => {
+    // The compound-file half of the same end-to-end check, and the one that needs both directions built: a writer whose output only its own build can read would pass every deep-import check above and still be broken.
+    const small = new TextEncoder().encode('smoke stream for archive-codec');
+    const large = new Uint8Array(5000).fill(0x41);
+    const built = esm.writeCompoundFile([
+      { path: 'Storage/Small', bytes: small },
+      { path: 'Large', bytes: large },
+    ]);
+    expect(esm.isCompoundFile(built)).toBe(true);
+    expect(esm.detectArchiveFormat(built)).toBe('cfb');
+    expect(esm.isZipArchive(built)).toBe(false);
+
+    const esmStreams = esm.readCompoundFile(built);
+    expect(esmStreams.map((entry) => entry.path).sort()).toEqual(['Large', 'Storage/Small']);
+    expect(esmStreams.find((entry) => entry.path === 'Storage/Small')?.bytes).toEqual(small);
+
+    const cjsStreams = cjs.readCompoundFile(cjs.writeCompoundFile([['Large', large]].map(([path, bytes]) => ({ path, bytes }))));
+    expect(cjsStreams.map((entry) => entry.path)).toEqual(['Large']);
+    expect(cjsStreams[0]?.bytes).toEqual(large);
   });
 });
