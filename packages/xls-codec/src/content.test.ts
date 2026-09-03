@@ -22,6 +22,7 @@ import {
   RECORD_LABELSST,
   RECORD_MERGECELLS,
   RECORD_NUMBER,
+  RECORD_PALETTE,
   RECORD_ROW,
   RECORD_SST,
   RECORD_SUPBOOK,
@@ -33,6 +34,7 @@ import { readXls, readXlsContent } from "./content";
 import {
   bofData,
   cell,
+  cellXfTrailer,
   concat,
   f64,
   record,
@@ -41,6 +43,7 @@ import {
   u16,
   u32,
   xlUnicodeString,
+  type XfTestDecoration,
 } from "./test-support/biff";
 import { compoundFile } from "./test-support/cfb";
 
@@ -126,15 +129,49 @@ function withSummaryInformation(
   ]);
 }
 
-/** The fifteen style XFs a real file writes before its first cell XF, so a cell's own ixfe of 15 lands on the first cell format -- which is what [MS-XLS] 2.5.168 requires of an ixfe. */
+/** The fifteen style XFs a real file writes before its first cell XF, so a cell's own ixfe of 15 lands on the first cell format -- which is what [MS-XLS] 2.5.168 requires of an ixfe. Every cell XF here carries an undecorated trailing payload; xfTableWithDecoration below is the sibling a decoration test builds its own cell XF through instead. */
 function xfTable(...cellFormats: readonly number[]): Uint8Array<ArrayBuffer>[] {
   const styles = Array.from({ length: 15 }, () =>
-    record(RECORD_XF, [...u16(0), ...u16(0), ...u16(0x0004), ...u16(0)]),
+    record(RECORD_XF, [
+      ...u16(0),
+      ...u16(0),
+      ...u16(0x0004),
+      ...cellXfTrailer(),
+    ]),
   );
   const cells = cellFormats.map((formatId) =>
-    record(RECORD_XF, [...u16(0), ...u16(formatId), ...u16(0), ...u16(0)]),
+    record(RECORD_XF, [
+      ...u16(0),
+      ...u16(formatId),
+      ...u16(0),
+      ...cellXfTrailer(),
+    ]),
   );
   return [...styles, ...cells];
+}
+
+/** As xfTable, but the single cell XF this builds carries the given decoration rather than an undecorated payload -- for a test exercising background/borders. */
+function xfTableWithDecoration(
+  formatId: number,
+  decoration: XfTestDecoration,
+): Uint8Array<ArrayBuffer>[] {
+  const styles = Array.from({ length: 15 }, () =>
+    record(RECORD_XF, [
+      ...u16(0),
+      ...u16(0),
+      ...u16(0x0004),
+      ...cellXfTrailer(),
+    ]),
+  );
+  return [
+    ...styles,
+    record(RECORD_XF, [
+      ...u16(0),
+      ...u16(formatId),
+      ...u16(0),
+      ...cellXfTrailer(decoration),
+    ]),
+  ];
 }
 
 describe("readXlsContent", () => {
@@ -478,6 +515,95 @@ describe("readXlsContent", () => {
     expect(() =>
       readXlsContent(new Uint8Array([0x50, 0x4b, 0x03, 0x04])),
     ).toThrow(BiffFormatError);
+  });
+
+  describe("cell decoration", () => {
+    /** A single populated cell (icv 10, the default palette's own duplicate of Red -- [MS-XLS] "Icv"'s own default-red/green/blue table) so a decoration test only needs to build the globals substream's own XF table, not a whole worksheet's cell records. */
+    function decoratedCellDocument(
+      decoration: XfTestDecoration,
+      globalsExtra: readonly Uint8Array<ArrayBuffer>[] = [],
+    ): Uint8Array<ArrayBuffer> {
+      return xlsFile(
+        workbookStream({
+          globals: [...xfTableWithDecoration(0, decoration), ...globalsExtra],
+          sheets: [
+            {
+              name: "Sheet1",
+              records: [record(RECORD_NUMBER, [...cell(0, 0, 15), ...f64(1)])],
+            },
+          ],
+        }),
+      );
+    }
+
+    it("reads a solid fill's own foreground colour as background, through the default palette", () => {
+      // icv 10: the default table's own duplicate of Red (rgColor[2], [MS-XLS] "Icv") -- resolvable with no Palette record present at all.
+      const bytes = decoratedCellDocument({
+        fillPattern: 1,
+        fillForegroundIcv: 10,
+      });
+      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.background).toEqual({
+        r: 1,
+        g: 0,
+        b: 0,
+      });
+    });
+
+    it("does not map a background for a fill pattern beyond solid", () => {
+      // fls=2 is 50% gray ([MS-XLS] FillPattern) -- a real information-loss case this package deliberately does not approximate as its foreground colour; see the README's own "Cell decoration" note.
+      const bytes = decoratedCellDocument({
+        fillPattern: 2,
+        fillForegroundIcv: 10,
+      });
+      expect(
+        readXlsContent(bytes).sheets[0]?.cells[0]?.background,
+      ).toBeUndefined();
+    });
+
+    it("reads per-side border style and colour from the CellXF payload", () => {
+      // style 1 = THIN (solid, thin weight); style 3 = DASHED (dashed pattern, thin weight) -- [MS-XLS] BorderStyle.
+      const bytes = decoratedCellDocument({
+        left: { style: 1, icv: 12 }, // icv 12: default Blue
+        top: { style: 3, icv: 11 }, // icv 11: default Green
+      });
+      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.borders).toEqual({
+        left: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.75 },
+        top: { color: { r: 0, g: 1, b: 0 }, widthPt: 0.75, style: "dashed" },
+      });
+    });
+
+    it("leaves borders undefined for a cell with no border on any side", () => {
+      const bytes = decoratedCellDocument({
+        fillPattern: 1,
+        fillForegroundIcv: 10,
+      });
+      expect(
+        readXlsContent(bytes).sheets[0]?.cells[0]?.borders,
+      ).toBeUndefined();
+    });
+
+    it("resolves a fill/border colour through a real Palette record when one is present", () => {
+      // A custom colour at icv 8 (rgColor[0]) that does NOT match the default table's own entry there (black) -- proving this reads the file's own Palette rather than falling back to the default.
+      const customOrange = [0xff, 0x80, 0x00, 0x00];
+      const paletteEntries = [
+        customOrange,
+        ...Array.from({ length: 55 }, () => [0x00, 0x00, 0x00, 0x00]),
+      ];
+      const bytes = decoratedCellDocument(
+        { fillPattern: 1, fillForegroundIcv: 8 },
+        [
+          record(RECORD_PALETTE, [
+            ...u16(paletteEntries.length),
+            ...paletteEntries.flat(),
+          ]),
+        ],
+      );
+      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.background).toEqual({
+        r: 1,
+        g: 128 / 255,
+        b: 0,
+      });
+    });
   });
 
   describe("metadata", () => {
