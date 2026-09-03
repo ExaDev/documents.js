@@ -114,3 +114,47 @@ export function rkDouble(value: number, times100 = false): number[] {
 export function cell(row: number, column: number, xfIndex = 15): number[] {
   return [...u16(row), ...u16(column), ...u16(xfIndex)];
 }
+
+/** One border edge's own raw fields, for cellXfTrailer below -- a BorderStyle line-style token (0 = no border) and a 7-bit icv colour index. */
+export interface XfTestBorderEdge {
+  readonly style: number;
+  readonly icv: number;
+}
+
+/** The decoration fields cellXfTrailer packs, in the same shape src/biff/xf-colors.ts's own XfDecorationFields carries -- kept as a separate, independently-written literal here rather than imported, so a test asserting against this fixture's own bytes is checking the reader's understanding of the spec, not agreement with the writer's packing code (see this module's own top comment). */
+export interface XfTestDecoration {
+  readonly fillPattern?: number;
+  readonly fillForegroundIcv?: number;
+  readonly left?: XfTestBorderEdge;
+  readonly right?: XfTestBorderEdge;
+  readonly top?: XfTestBorderEdge;
+  readonly bottom?: XfTestBorderEdge;
+}
+
+const NO_EDGE: XfTestBorderEdge = { style: 0, icv: 0 };
+
+/** IcvXF's own "default foreground colour" special value (icv 0x40) -- a literal taken directly from [MS-XLS]'s Icv table, the value a genuinely undecorated real Excel-written XF carries in icvFore. Kept as its own literal here rather than imported from src/biff/xf-colors.ts, for the same reason the rest of this fixture builder is independently written (see this module's own top comment). */
+const ICV_DEFAULT_FOREGROUND = 0x40;
+
+/** An XF record's own trailing CellXF/StyleXF "Data" payload ([MS-XLS] 2.4.353), 14 bytes: a leading alignment word (always the schema's own General/Bottom/no-wrap default here, since this package's reader does not act on alignment), then the border word, fill-pattern word, and fill-colour word `decoration` packs -- no borders and no fill pattern when omitted, with icvFore at its own real-file default (0x40, "Automatic") unless the caller states one -- a legal payload every XF record needs regardless of whether a test cares about decoration. */
+export function cellXfTrailer(decoration: XfTestDecoration = {}): number[] {
+  const left = decoration.left ?? NO_EDGE;
+  const right = decoration.right ?? NO_EDGE;
+  const top = decoration.top ?? NO_EDGE;
+  const bottom = decoration.bottom ?? NO_EDGE;
+  const word1 = 0;
+  const word2 =
+    (left.style & 0xf) |
+    ((right.style & 0xf) << 4) |
+    ((top.style & 0xf) << 8) |
+    ((bottom.style & 0xf) << 12) |
+    ((left.icv & 0x7f) << 16) |
+    ((right.icv & 0x7f) << 23);
+  const word3 =
+    (top.icv & 0x7f) |
+    ((bottom.icv & 0x7f) << 7) |
+    (((decoration.fillPattern ?? 0) & 0x3f) << 26);
+  // icvBack (bits 7-13) is always 0 here -- unused by this package's own resolveFillBackground ("only icvFore is rendered" for a solid fill), so no test needs it non-zero.
+  const word4 = (decoration.fillForegroundIcv ?? ICV_DEFAULT_FOREGROUND) & 0x7f;
+  return [...u32(word1), ...u32(word2), ...u32(word3), ...u16(word4)];
+}

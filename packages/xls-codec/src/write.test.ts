@@ -9,6 +9,7 @@ import {
   ContentDocumentSchema,
   DocumentTreeSchema,
   PAGE_SIZE_LETTER,
+  rgbHexToColor,
 } from "document-schema.js";
 import { isCompoundFile, readCompoundFile } from "archive-codec";
 import { describe, expect, it } from "vitest";
@@ -331,6 +332,134 @@ describe("writeXlsContent", () => {
     expect(findCell(content, 0, 0, 0)?.numberFormatCode).toBe("0.0");
     expect(findCell(content, 0, 0, 1)?.numberFormatCode).toBe("0.0");
     expect(findCell(content, 0, 0, 2)?.numberFormatCode).toBe("0.00");
+  });
+
+  describe("cell decoration", () => {
+    const red = rgbHexToColor("ff0000");
+    const blue = rgbHexToColor("0000ff");
+    const teal = rgbHexToColor("008080"); // not one of the fixed default table's own 64 entries
+
+    it("round-trips a solid background colour", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "string", value: "x" }, { background: red }),
+          ]),
+        ]),
+      );
+      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(red);
+    });
+
+    it("round-trips per-side borders, including a non-default style and colour", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(
+              0,
+              0,
+              { kind: "string", value: "x" },
+              {
+                borders: {
+                  left: { color: blue, widthPt: 0.75 },
+                  top: {
+                    color: red,
+                    widthPt: 0.75,
+                    style: "dashed",
+                  },
+                },
+              },
+            ),
+          ]),
+        ]),
+      );
+      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.borders).toEqual({
+        left: { color: blue, widthPt: 0.75 },
+        top: { color: red, widthPt: 0.75, style: "dashed" },
+      });
+    });
+
+    it("round-trips both a background and borders on the same cell", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(
+              0,
+              0,
+              { kind: "number", value: 1 },
+              {
+                background: red,
+                borders: { bottom: { color: blue, widthPt: 1.5 } },
+              },
+            ),
+          ]),
+        ]),
+      );
+      const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
+      expect(readBack?.background).toEqual(red);
+      expect(readBack?.borders).toEqual({
+        bottom: { color: blue, widthPt: 1.5 },
+      });
+    });
+
+    it("writes no Palette record when every decoration colour already matches the fixed default table", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "string", value: "x" }, { background: red }),
+          ]),
+        ]),
+      );
+      // red (255,0,0) is icv 10 in the fixed default table -- resolvable with no Palette record present, and readXlsContent must still recover it correctly through that fallback.
+      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(red);
+    });
+
+    it("writes a real Palette record and round-trips a colour outside the fixed default table", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "string", value: "x" }, { background: teal }),
+          ]),
+        ]),
+      );
+      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
+        teal,
+      );
+    });
+
+    it("reuses one XF entry for two cells sharing the identical decoration, and mints a separate one for a cell with none", () => {
+      // Not directly observable from the read side (mirroring the equivalent number-format dedup test above), but a real regression here would show up as a wrong background/borders on one of the three cells.
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "number", value: 1 }, { background: red }),
+            cell(0, 1, { kind: "number", value: 2 }, { background: red }),
+            cell(0, 2, { kind: "number", value: 3 }),
+          ]),
+        ]),
+      );
+      const content = readXlsContent(bytes);
+      expect(findCell(content, 0, 0, 0)?.background).toEqual(red);
+      expect(findCell(content, 0, 0, 1)?.background).toEqual(red);
+      expect(findCell(content, 0, 0, 2)?.background).toBeUndefined();
+    });
+
+    it("refuses a workbook needing more distinct decoration colours than a Palette record can hold", () => {
+      const cells: ContentSheetCell[] = [];
+      for (let index = 0; index < 60; index += 1) {
+        const hex = index.toString(16).padStart(6, "0");
+        cells.push(
+          cell(
+            0,
+            index,
+            { kind: "number", value: index },
+            { background: rgbHexToColor(hex) },
+          ),
+        );
+      }
+      expect(() => writeXlsContent(document([sheet("Sheet1", cells)]))).toThrow(
+        BiffWriteError,
+      );
+    });
   });
 
   it("round-trips a merged range whose anchor carries a real value", () => {
