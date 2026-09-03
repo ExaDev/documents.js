@@ -7,9 +7,10 @@ import type {
 } from "document-schema.js";
 import { flattenTree } from "document-schema.js";
 
+import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
+
 import { BiffWriteError } from "./biff/write-errors";
 import type { XlsContentDocument } from "./content";
-import { BUILTIN_NUMBER_FORMATS } from "./number-format";
 import {
   buildWorkbookGlobals,
   GENERAL_CELL_XF_INDEX,
@@ -49,7 +50,7 @@ function builtinCode(id: number): string {
   return code;
 }
 
-/** The default format identifier a value kind resolves to when its own cell carries no numberFormatCode -- chosen so number-format.ts's classifyNumberFormat, run against the resulting code on the way back in, reclassifies to the identical kind. A plain number/string/boolean/error needs no distinguishing code at all: General classifies as 'number', which is exactly the fallback content.ts's own resolveValue already takes for a numeric cell with no format. */
+/** The default format identifier a value kind resolves to when its own cell carries no numberFormatCode -- chosen so excel-number-format's classifyNumberFormat, run against the resulting code on the way back in, reclassifies to the identical kind. A plain number/string/boolean/error needs no distinguishing code at all: General classifies as 'number', which is exactly the fallback content.ts's own resolveValue already takes for a numeric cell with no format. */
 function defaultFormatIdForKind(
   kind: ContentSheetCell["value"]["kind"],
 ): number {
@@ -91,7 +92,7 @@ interface FormatPlan {
   readonly xfIndexOf: (formatId: number) => number;
 }
 
-/** Scans every sheet's cells once, assigning each distinct number-format code a formatId (reusing a built-in id for a code matching one of number-format.ts's own BUILTIN_NUMBER_FORMATS strings exactly, minting a new custom id from FIRST_CUSTOM_FORMAT_ID otherwise) and each distinct formatId a cell XF index (formatId 0 always resolves to GENERAL_CELL_XF_INDEX, the workbook's own unconditional "General" cell format). */
+/** Scans every sheet's cells once, assigning each distinct number-format code a formatId (reusing a built-in id for a code matching one of excel-number-format's own BUILTIN_NUMBER_FORMATS strings exactly, minting a new custom id from FIRST_CUSTOM_FORMAT_ID otherwise) and each distinct formatId a cell XF index (formatId 0 always resolves to GENERAL_CELL_XF_INDEX, the workbook's own unconditional "General" cell format). */
 function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
   const codeToFormatId = new Map<string, number>();
   const builtinIdByCode = new Map<string, number>(
