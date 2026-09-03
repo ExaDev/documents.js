@@ -29,6 +29,7 @@ minimumReleaseAgeExclude:
   - odf.js
   - ooxml.js
   - pdf-codec
+  - wpd-codec
   - "@exadev/eslint-config"
   - "@exadev/semantic-release-workspace"
 
