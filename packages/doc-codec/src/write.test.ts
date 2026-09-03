@@ -1,3 +1,4 @@
+import { readCompoundFile } from "archive-codec";
 import {
   ContentDocumentSchema,
   type ContentBlock,
@@ -561,5 +562,50 @@ describe("writeDocContent tables", () => {
       },
     ]);
     expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
+  });
+
+  describe("metadata", () => {
+    it('round-trips title/subject/author/keywords/dates through a real "\\x05SummaryInformation" stream', () => {
+      const input: ContentDocument = {
+        ...document([paragraph([{ text: "Hello." }])]),
+        metadata: {
+          title: "Quarterly report",
+          subject: "Finance",
+          author: "Joe",
+          keywords: ["finance", "quarterly"],
+          createdIso: "2024-01-15T09:00:00.000Z",
+          modifiedIso: "2024-03-20T14:30:00.000Z",
+        },
+      };
+      const result = roundTrip(input);
+      expect(result.metadata).toEqual(input.metadata);
+    });
+
+    it('writes no "\\x05SummaryInformation" stream at all when metadata carries nothing that stream can hold', () => {
+      const input = document([paragraph([{ text: "Hello." }])]);
+      const bytes = writeDocContent(input);
+      const streams = readCompoundFile(bytes);
+      expect(
+        streams.some((stream) => stream.path === "\x05SummaryInformation"),
+      ).toBe(false);
+      expect(readDocContent(bytes).metadata).toEqual({});
+    });
+
+    it("drops creator/producer/language, which SummaryInformation cannot hold, without writing an empty stream for them alone", () => {
+      const input: ContentDocument = {
+        ...document([paragraph([{ text: "Hello." }])]),
+        metadata: {
+          creator: "Some Tool",
+          producer: "Some Producer",
+          language: "en-GB",
+        },
+      };
+      const bytes = writeDocContent(input);
+      const streams = readCompoundFile(bytes);
+      expect(
+        streams.some((stream) => stream.path === "\x05SummaryInformation"),
+      ).toBe(false);
+      expect(readDocContent(bytes).metadata).toEqual({});
+    });
   });
 });

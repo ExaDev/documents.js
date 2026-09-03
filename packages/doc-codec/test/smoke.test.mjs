@@ -28,6 +28,9 @@ const BARREL_FUNCTIONS = [
   'parsePlc',
   'findLargestAtMost',
   'endsParagraph',
+  'summaryInformationToLayoutMetadata',
+  'layoutMetadataToSummaryInformation',
+  'hasSummaryInformationFields',
 ];
 const BARREL_CONSTANTS = [
   'FIB_W_IDENT',
@@ -36,6 +39,7 @@ const BARREL_CONSTANTS = [
   'COMPRESSED_CHARACTER_MAP',
   'PARAGRAPH_MARK',
   'WORD_DOCUMENT_STREAM',
+  'SUMMARY_INFORMATION_STREAM',
   'SGC',
   'STK',
 ];
@@ -70,7 +74,11 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/errors.js', exports: ['DocFormatError', 'DocUnsupportedError'] },
     { path: '../dist/bytes.js', exports: ['readUint16LE', 'slice'] },
     { path: '../dist/plc.js', exports: ['parsePlc', 'findLargestAtMost'] },
-    { path: '../dist/detect.js', exports: ['isDocBytes', 'WORD_DOCUMENT_STREAM'] },
+    { path: '../dist/detect.js', exports: ['isDocBytes', 'WORD_DOCUMENT_STREAM', 'SUMMARY_INFORMATION_STREAM'] },
+    {
+      path: '../dist/metadata.js',
+      exports: ['summaryInformationToLayoutMetadata', 'layoutMetadataToSummaryInformation', 'hasSummaryInformationFields'],
+    },
     { path: '../dist/fib/offsets.js', exports: ['FIB_W_IDENT', 'FIB_FC_LCB_BLOB_OFFSET'] },
     { path: '../dist/fib/fib.js', exports: ['parseFib', 'tableStreamName'] },
     { path: '../dist/text/piece-table.js', exports: ['parseClx', 'characterOffset'] },

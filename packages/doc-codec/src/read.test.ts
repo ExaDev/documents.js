@@ -1,3 +1,8 @@
+import {
+  readCompoundFile,
+  writeCompoundFile,
+  writeSummaryInformationStream,
+} from "archive-codec";
 import { ContentDocumentSchema } from "document-schema.js";
 import type { ContentBlock, ContentParagraph } from "document-schema.js";
 import { describe, expect, it } from "vitest";
@@ -356,5 +361,43 @@ describe("isDocBytes", () => {
         ]),
       ),
     ).toBe(false);
+  });
+});
+
+describe("metadata", () => {
+  // A real "\x05SummaryInformation" stream added beside the WordDocument/1Table streams a real producer would already have written -- composed here with archive-codec's own writeSummaryInformationStream/writeCompoundFile rather than by extending test-support/doc.ts's buildDoc, which stays a pure [MS-DOC]-only fixture builder.
+  function withSummaryInformation(
+    doc: Uint8Array<ArrayBuffer>,
+    metadata: Parameters<typeof writeSummaryInformationStream>[0],
+  ): Uint8Array<ArrayBuffer> {
+    return writeCompoundFile([
+      ...readCompoundFile(doc),
+      {
+        path: "\x05SummaryInformation",
+        bytes: writeSummaryInformationStream(metadata),
+      },
+    ]);
+  }
+
+  it('reads title/author/dates from a real "\\x05SummaryInformation" stream', () => {
+    const doc = withSummaryInformation(
+      buildDoc({ paragraphs: [{ runs: [{ text: "Hello." }] }] }),
+      {
+        title: "Meeting notes",
+        author: "Cornelius",
+        createdIso: "2024-05-01T00:00:00.000Z",
+      },
+    );
+    const result = readDocContent(doc);
+    expect(result.metadata).toEqual({
+      title: "Meeting notes",
+      author: "Cornelius",
+      createdIso: "2024-05-01T00:00:00.000Z",
+    });
+  });
+
+  it('reads {} when the container carries no "\\x05SummaryInformation" stream', () => {
+    const doc = buildDoc({ paragraphs: [{ runs: [{ text: "Hello." }] }] });
+    expect(readDocContent(doc).metadata).toEqual({});
   });
 });

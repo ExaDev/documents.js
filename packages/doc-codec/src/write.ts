@@ -1,8 +1,15 @@
-import { writeCompoundFile } from "archive-codec";
-import type { ContentDocument } from "document-schema.js";
-import { WORD_DOCUMENT_STREAM } from "./detect";
+import {
+  writeCompoundFile,
+  writeSummaryInformationStream,
+} from "archive-codec";
+import type { ContentDocument, ContentParagraph } from "document-schema.js";
+import { SUMMARY_INFORMATION_STREAM, WORD_DOCUMENT_STREAM } from "./detect";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { buildFib } from "./fib/write";
+import {
+  hasSummaryInformationFields,
+  layoutMetadataToSummaryInformation,
+} from "./metadata";
 import { encodeCharacterGrpprl } from "./prop/chp-write";
 import { FKP_PAGE_SIZE } from "./prop/fkp";
 import {
@@ -228,10 +235,20 @@ export function writeDocContent(
   });
   wordDocument.set(fib, 0);
 
-  return writeCompoundFile([
+  const streams = [
     { path: WORD_DOCUMENT_STREAM, bytes: wordDocument },
     { path: "1Table", bytes: table },
-  ]);
+  ];
+  // Only when there is something SummaryInformation can actually hold: an input whose metadata carries nothing beyond creator/producer/language (or nothing at all) should read back exactly as it would with no stream present, not force an empty-but-present one into existence.
+  if (hasSummaryInformationFields(document.metadata)) {
+    streams.push({
+      path: SUMMARY_INFORMATION_STREAM,
+      bytes: writeSummaryInformationStream(
+        layoutMetadataToSummaryInformation(document.metadata),
+      ),
+    });
+  }
+  return writeCompoundFile(streams);
 }
 
 function sameGrpprl(
