@@ -588,6 +588,133 @@ describe("round trip through this package's own reader", () => {
     expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
   });
 
+  it("writes a run-level provenance extent as the <chrev> character properties, minting a \\*\\revtbl for its author", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "kept " }, { text: "added" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "provenance",
+                change: "insertion",
+                author: "A. Reviewer",
+                dateIso: "2024-01-01T09:30:00",
+              },
+              startRun: 1,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\revtbl");
+    expect(out).toContain("A. Reviewer;");
+    expect(out).toContain("\\revised");
+    // 30 | (9 << 6) | (1 << 11) | (1 << 16) | (124 << 20) -- the DTTM bit field the spec tabulates.
+    const dttm = 30 | (9 << 6) | (1 << 11) | (1 << 16) | (124 << 20);
+    expect(out).toContain(`\\revdttm${String(dttm)}`);
+  });
+
+  it("round-trips every provenance change kind back onto the same runs", () => {
+    for (const change of [
+      "insertion",
+      "deletion",
+      "moveFrom",
+      "moveTo",
+      "formatChange",
+    ] as const) {
+      const back = roundTrip(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "a" }, { text: "b" }],
+            constructs: [
+              {
+                descriptor: { kind: "provenance", change, author: "R" },
+                startRun: 1,
+                endRun: 2,
+              },
+            ],
+          },
+        ]),
+      );
+      const block =
+        back.kind === "wordprocessing"
+          ? back.sections[0]?.blocks[0]
+          : undefined;
+      const paragraph = block?.kind === "paragraph" ? block : undefined;
+      expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+        kind: "provenance",
+        change,
+        author: "R",
+      });
+      expect(
+        paragraph?.runs
+          .slice(
+            paragraph.constructs?.[0]?.startRun ?? 0,
+            paragraph.constructs?.[0]?.endRun ?? 0,
+          )
+          .map((run) => run.text)
+          .join(""),
+      ).toBe("b");
+    }
+  });
+
+  it("round-trips a deletion's own text, which the provenance kind exists to carry", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "kept " }, { text: "gone" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "provenance",
+                change: "deletion",
+                author: "R",
+              },
+              startRun: 1,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    expect(
+      block?.kind === "paragraph"
+        ? block.runs.map((run) => run.text).join("")
+        : undefined,
+    ).toBe("kept gone");
+  });
+
+  it("omits \\revdttmN entirely for a dateIso it cannot pack, rather than writing a zero one", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "provenance",
+                change: "insertion",
+                dateIso: "not a date",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\revised");
+    expect(out).not.toContain("\\revdttm");
+  });
+
   it("round-trips several sections, each keeping its own geometry and break kind", () => {
     const document: ContentDocument = {
       kind: "wordprocessing",
