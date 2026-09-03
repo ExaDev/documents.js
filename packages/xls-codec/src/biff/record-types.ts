@@ -23,6 +23,8 @@ export const RECORD_XF = 0x00e0;
 export const RECORD_FONT = 0x0031;
 /** Which of the two date epochs this workbook's serials count from ([MS-XLS] 2.4.77). */
 export const RECORD_DATE1904 = 0x0022;
+/** Names one of the fifteen built-in cell-style XF records the writer emits before any cell XF ([MS-XLS] 2.4.269). Not read: this reader's XF table is flat and does not distinguish a cell style from a cell format. */
+export const RECORD_STYLE = 0x0293;
 /** Present only in an encrypted workbook, where every record after it is ciphertext ([MS-XLS] 2.4.117). */
 export const RECORD_FILEPASS = 0x002f;
 
