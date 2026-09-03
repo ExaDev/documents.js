@@ -46,7 +46,7 @@ Each deliberate rather than overlooked:
 - **Not read at all:** charts, drawings and images, cell comments (`Note`/`Txo`), data validation, conditional formatting, and defined names (`Lbl`).
 - **Encrypted workbooks** are refused rather than mis-read: a `FilePass` record means every record after it is ciphertext.
 
-This package is also not yet wired into `documents.js`'s conversion registry — it stands alone. Tracked on [#815](https://github.com/ExaDev/documents.js/issues/815).
+This package is wired into `documents.js`'s conversion registry (`xlsToPdf`/`pdfToXls`, `convertDocument("xls", ...)`, and every same-variant spreadsheet bridge) — see that package's own README Fidelity table for exactly which pairs route and which don't. Remaining read+write scope gaps (formulas, cell decoration, print settings, metadata) are tracked on [#815](https://github.com/ExaDev/documents.js/issues/815).
 
 ## Getting started
 
