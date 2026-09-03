@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import {
+  convertDocument,
   createDocx,
   createOdg,
   createOdp,
@@ -110,6 +111,14 @@ export async function openDocumentAtPath(
     // rtf mirrors xlsx/csv/svg exactly: no live-view editor and no readRtfContent-shaped content reader wired into this TUI's editor screens, but a real rtfToPdf conversion -- opened read-only through the identical to-Pdf-then-readPdf shape.
     case "rtf":
       return { format, layout: readPdf(rtfToPdf(bytes)), bytes, path };
+    // wpd mirrors rtf, but through convertDocument rather than a named wpdToPdf -- see WpdOpenDocument's own doc comment on why there is no named function for this one edge.
+    case "wpd":
+      return {
+        format,
+        layout: readPdf(convertDocument("wpd", "pdf", bytes)),
+        bytes,
+        path,
+      };
     case "odf":
       throw new Error(
         "A standalone .odf formula document has no editor; convert it to PDF (odfToPdf) instead",
@@ -152,7 +161,8 @@ export async function saveDocumentTo(
     openDocument.format === "xlsx" ||
     openDocument.format === "csv" ||
     openDocument.format === "svg" ||
-    openDocument.format === "rtf"
+    openDocument.format === "rtf" ||
+    openDocument.format === "wpd"
   ) {
     throw new Error(
       `A ${openDocument.format} document is opened read-only and cannot be written back`,
