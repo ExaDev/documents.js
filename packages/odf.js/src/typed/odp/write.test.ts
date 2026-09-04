@@ -265,10 +265,23 @@ describe("writeOdpContent: shape geometry", () => {
 });
 
 describe("writeOdpContent: shape insets", () => {
-  it("writes no draw:style-name at all when every inset is zero", () => {
+  it("still mints a graphic-family style when every inset is zero, stating explicit no-fill/no-stroke", () => {
     const pkg = writeOdpContent(documentOf([slide([shape()])]));
     const frame = childrenWithTag(pagesOf(pkg)[0]!, "draw:frame")[0]!;
-    expect(attrValue(frame, "draw:style-name")).toBeUndefined();
+    const styleName = attrValue(frame, "draw:style-name");
+    expect(styleName).toBeDefined();
+    const contentAutomaticStyles = findChildElement(
+      partRoot(pkg, "content.xml").children,
+      "office:automatic-styles",
+    );
+    if (contentAutomaticStyles === undefined) {
+      throw new Error("expected content.xml office:automatic-styles");
+    }
+    const style = styleNamed(contentAutomaticStyles, styleName!, "graphic");
+    const properties = childrenWithTag(style, "style:graphic-properties")[0]!;
+    expect(attrValue(properties, "draw:fill")).toBe("none");
+    expect(attrValue(properties, "draw:stroke")).toBe("none");
+    expect(attrValue(properties, "fo:padding-left")).toBeUndefined();
   });
 
   it("interns a graphic-family style carrying fo:padding-* when an inset is non-zero", () => {
