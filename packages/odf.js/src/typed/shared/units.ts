@@ -86,8 +86,12 @@ function expandExponential(text: string): string {
   return `${sign}${digits.slice(0, pointIndex)}.${digits.slice(pointIndex)}`;
 }
 
+// The same fixed-point decimal spelling formatOdfLength below produces, without a unit suffix -- for the ODF values that are a bare NUMBER rather than a length. There are two in this package's own write path, both in a vector primitive's geometry (typed/shared/path.ts): svg:viewBox's four user-space numbers, and svg:d's own path coordinates. svg:viewBox has no exponent form at all (parseOdfViewBox's own pattern encodes the four-number grammar it accepts), so the identical silent-invalidity hazard expandExponential above exists to close for lengths applies verbatim there; svg:d's own number grammar does admit an exponent, but writing one spelling for every number this package emits closes the hazard once rather than per attribute, and keeps a path's coordinates spelled the same way as the svg:viewBox they are scaled against.
+export function formatOdfNumber(value: number): string {
+  return expandExponential(`${value}`);
+}
+
 // The reverse of parseOdfLength: formats a point value as an ODF length string in the given unit (default "pt", matching this package's own writers' always-pt convention). No rounding is applied -- the conversion is an exact IEEE-754 division, so the result may carry more decimal places than a human would type by hand (real LibreOffice output does the same, e.g. "0.423cm" for a value that didn't originate in cm); a caller that wants a specific display precision is responsible for rounding the input pt value itself before calling this. The output is always fixed-point decimal, never exponent notation -- see expandExponential above for why that is a correctness requirement rather than a formatting preference.
 export function formatOdfLength(pt: number, unit: LengthUnit = "pt"): string {
-  const value = pt / unitToPtFactor(unit);
-  return `${expandExponential(`${value}`)}${unit}`;
+  return `${formatOdfNumber(pt / unitToPtFactor(unit))}${unit}`;
 }
