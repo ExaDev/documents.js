@@ -50,6 +50,11 @@ export function icoColor(value: number): Color | undefined {
   };
 }
 
+/** icoColor's own decorative counterpart: an out-of-range Ico value resolves to undefined (the same "no concrete colour" spelling 0x00/cvAuto already carries) rather than throwing. icoColor's hard bound stays exactly as it is for a run's sprmCIco, where an out-of-range value states a specific, load-bearing colour this reader must not silently drop -- but Brc80.ico and Shd80's icoFore/icoBack (table/decoration.ts) are cosmetic fields already reached through a chain of automatic-colour fallbacks of their own (borderFrom's own AUTOMATIC_BORDER_COLOR, readShd80's own undefined return for an unrecognised pattern), so one out-of-range byte in a single cell's border or fill should not abort reading the entire document the way it correctly does for a run's own explicit, load-bearing colour. */
+export function decorativeIcoColor(value: number): Color | undefined {
+  return value >= ICO_PALETTE.length ? undefined : icoColor(value);
+}
+
 /**
  * The Ico value whose own colour is closest to `color`, by squared distance in sRGB, over the sixteen entries that name a concrete colour -- 0x00 (cvAuto) is never returned, since it names none. Ties resolve to the lower Ico, which makes the answer depend only on the colour asked about and not on iteration order (it also settles 0x0C/0x0D, the one duplicated pair in the published palette, on 0x0C).
  *

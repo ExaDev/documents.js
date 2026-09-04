@@ -8,6 +8,7 @@ import { readUint16LE, readUint8 } from "../bytes";
 import {
   autoColorRefBytes,
   colorRefBytes,
+  decorativeIcoColor,
   icoColor,
   nearestIco,
   readColorRef,
@@ -129,7 +130,7 @@ function allBitsSet(
   return true;
 }
 
-/** One TC80 border field: a Brc80MayBeNil ([MS-DOC] 2.9.18) -- a Brc80 whose all-bits-set value "specifies that the region in question has no border". Returns undefined for that sentinel, for brcType 0x00 ("No border", the spelling LibreOffice writes instead), and for any brcType outside the cell-border range BRC_TYPE_STYLE covers. */
+/** One TC80 border field: a Brc80MayBeNil ([MS-DOC] 2.9.18) -- a Brc80 whose all-bits-set value "specifies that the region in question has no border". Returns undefined for that sentinel, for brcType 0x00 ("No border", the spelling LibreOffice writes instead), and for any brcType outside the cell-border range BRC_TYPE_STYLE covers. An ico outside the palette's own bound resolves through decorativeIcoColor to the automatic-colour fallback (borderFrom's own AUTOMATIC_BORDER_COLOR) rather than aborting the whole document read over one cosmetic byte -- see decorativeIcoColor's own note in color.ts. */
 export function readBrc80(
   bytes: Uint8Array,
   offset: number,
@@ -140,7 +141,7 @@ export function readBrc80(
   return borderFrom(
     readUint8(bytes, offset),
     brcType,
-    icoColor(readUint8(bytes, offset + 2)),
+    decorativeIcoColor(readUint8(bytes, offset + 2)),
   );
 }
 
@@ -242,14 +243,14 @@ export function writeShd(background: Color | undefined): number[] {
 /** Shd80Nil, [MS-DOC] 2.9.241: icoFore 0x1F, icoBack 0x1F, ipat 0x3F -- every bit set, "specifies that no shading is applied", and explicitly exempt from the Ico and Ipat bounds the fields otherwise carry. */
 const SHD80_NIL = 0xffff;
 
-/** One Shd80 ([MS-DOC] 2.9.241) as a flat background colour: the same ipatAuto/ipatSolid reading readShd applies, over the Ico palette rather than COLORREFs. This is the Word 97-era spelling of cell shading, superseded by Shd but still written -- alongside it -- by a real producer, so a file carrying only this one still reads. Never written by this package, which states shading through Shd alone. */
+/** One Shd80 ([MS-DOC] 2.9.241) as a flat background colour: the same ipatAuto/ipatSolid reading readShd applies, over the Ico palette rather than COLORREFs. This is the Word 97-era spelling of cell shading, superseded by Shd but still written -- alongside it -- by a real producer, so a file carrying only this one still reads. Never written by this package, which states shading through Shd alone. icoFore/icoBack are each a 5-bit field, so a value the 17-entry palette cannot hold is a real possibility rather than a format-level impossibility; decorativeIcoColor resolves that case to no background instead of aborting the whole document read. */
 export function readShd80(value: number): Color | undefined {
   if (value === SHD80_NIL) return undefined;
   const icoFore = value & 0x1f;
   const icoBack = (value >> 5) & 0x1f;
   const ipat = (value >> 10) & 0x3f;
-  if (ipat === IPAT_AUTO) return icoColor(icoBack);
-  if (ipat === IPAT_SOLID) return icoColor(icoFore);
+  if (ipat === IPAT_AUTO) return decorativeIcoColor(icoBack);
+  if (ipat === IPAT_SOLID) return decorativeIcoColor(icoFore);
   return undefined;
 }
 
