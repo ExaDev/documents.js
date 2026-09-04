@@ -696,6 +696,16 @@ describe("readSheetRecords print settings", () => {
     expect(sheet.print.printHeaders).toBe(false);
   });
 
+  it("reads PrintGrid's fPrintGrid bit alone, ignoring the 15 bits [MS-XLS] 2.4.202 documents as undefined", () => {
+    // Unlike PrintRowCol's own genuinely 16-bit Boolean field, PrintGrid packs its one real bit into a 16-bit record with 15 undefined bits alongside it -- a bare `!== 0` test would read any of them set as gridlines-on.
+    const sheet = readSheetRecords(
+      groupsOf(record(RECORD_PRINTGRID, u16(0xfffe))),
+      [],
+    );
+
+    expect(sheet.print.printGridlines).toBe(false);
+  });
+
   it("reads WsBool's fFitToPage bit and no other", () => {
     // Field G of [MS-XLS] 2.4.351's single 16-bit field, the ninth bit. 0x04c1 is the value a real LibreOffice-written non-fit-to-page sheet carries; 0x05c1 is the same sheet with fit-to-page on.
     expect(
