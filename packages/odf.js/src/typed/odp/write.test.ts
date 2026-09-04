@@ -478,13 +478,13 @@ describe("writeOdpContent: shape paint order", () => {
     ]);
   });
 
-  it("writes no draw:z-index at all for a shape with no paintOrder, leaving the reader's own document-encounter order to say it", () => {
+  it("writes draw:z-index as the shape's own document-encounter index for a shape with no paintOrder, never omitting the attribute", () => {
     const pkg = writeOdpContent(documentOf([slide([shape()])]));
     const frame = childrenWithTag(pagesOf(pkg)[0]!, "draw:frame")[0]!;
-    expect(attrValue(frame, "draw:z-index")).toBeUndefined();
+    expect(attrValue(frame, "draw:z-index")).toBe("0");
   });
 
-  it("writes no draw:z-index for a paintOrder ODF's own xsd:nonNegativeInteger cannot spell, rather than rounding it onto a neighbouring shape's order", () => {
+  it("writes draw:z-index as each shape's own document-encounter index for a paintOrder ODF's own xsd:nonNegativeInteger cannot spell, rather than rounding it onto a neighbouring shape's order", () => {
     const pkg = writeOdpContent(
       documentOf([
         slide([shape({ paintOrder: 1.5 }), shape({ paintOrder: -1 })]),
@@ -492,17 +492,17 @@ describe("writeOdpContent: shape paint order", () => {
     );
     const frames = childrenWithTag(pagesOf(pkg)[0]!, "draw:frame");
     expect(frames.map((frame) => attrValue(frame, "draw:z-index"))).toEqual([
-      undefined,
-      undefined,
+      "0",
+      "1",
     ]);
   });
 
   // Number.isInteger(1e21) is true, and String(1e21) is "1e+21" -- an integer beyond Number.isSafeInteger's 2^53 bound reaches JavaScript's own exponent-notation threshold before it reaches any bound xsd:nonNegativeInteger itself states, the exact failure class formatOdfLength's own expandExponential exists to close for lengths. odfZIndexOf must refuse one rather than writing a draw:z-index no XML integer datatype can spell.
-  it("writes no draw:z-index for a paintOrder beyond Number.isSafeInteger's own bound, rather than emitting exponent notation", () => {
+  it("writes draw:z-index as the shape's own document-encounter index for a paintOrder beyond Number.isSafeInteger's own bound, rather than emitting exponent notation", () => {
     const pkg = writeOdpContent(
       documentOf([slide([shape({ paintOrder: 1e21 })])]),
     );
     const frame = childrenWithTag(pagesOf(pkg)[0]!, "draw:frame")[0]!;
-    expect(attrValue(frame, "draw:z-index")).toBeUndefined();
+    expect(attrValue(frame, "draw:z-index")).toBe("0");
   });
 });

@@ -88,9 +88,13 @@ function vectorGraphicStyleName(
   });
 }
 
-function zIndexAttrs(paintOrder: number | undefined): Record<string, string> {
-  const zIndex = odfZIndexOf(paintOrder);
-  return zIndex === undefined ? {} : { "draw:z-index": String(zIndex) };
+// Resolves to the RESOLVED paint order -- odfZIndexOf's own value when the vector states one ODF can spell, the caller-supplied documentIndex otherwise -- and always emits draw:z-index, matching write-shapes.ts's own writeDrawFrame (see that function's and odfZIndexOf's own notes for why an item with no attribute at all reads back wrong on a real consumer whenever a sibling on the same page does carry one).
+function zIndexAttrs(
+  paintOrder: number | undefined,
+  documentIndex: number,
+): Record<string, string> {
+  const zIndex = odfZIndexOf(paintOrder) ?? documentIndex;
+  return { "draw:z-index": String(zIndex) };
 }
 
 // One ContentVector -> its own draw: element. Geometry for the three boxed variants goes through write-shapes.ts's own frameGeometryAttrs unchanged, because the reader resolves a draw:rect/draw:ellipse/draw:path through the very same resolveOdfShapeGeometry it resolves a draw:frame through (typed/draw/shapes.ts's resolveVectorGeometry) -- so their inverse is one function, not two that must be kept in step.
@@ -101,6 +105,7 @@ function zIndexAttrs(paintOrder: number | undefined): Record<string, string> {
 export function writeDrawVector(
   vector: ContentVector,
   state: DrawShapeWriteState,
+  documentIndex: number,
 ): XmlElement {
   if (vector.kind === "line") {
     const styleName = vectorGraphicStyleName(
@@ -108,7 +113,7 @@ export function writeDrawVector(
       state,
     );
     return el("draw:line", {
-      ...zIndexAttrs(vector.paintOrder),
+      ...zIndexAttrs(vector.paintOrder, documentIndex),
       "svg:x1": formatOdfLength(vector.from.xPt),
       "svg:y1": formatOdfLength(vector.from.yPt),
       "svg:x2": formatOdfLength(vector.to.xPt),
@@ -137,7 +142,7 @@ export function writeDrawVector(
       state,
     );
     return el("draw:path", {
-      ...zIndexAttrs(vector.paintOrder),
+      ...zIndexAttrs(vector.paintOrder, documentIndex),
       ...frameGeometryAttrs(vector.frame, vector.rotationDeg),
       "svg:viewBox": formatOdfViewBox(vector.frame),
       "svg:d": formatOdfPathData(vector.subpaths),
@@ -150,18 +155,21 @@ export function writeDrawVector(
     state,
   );
   return el(vector.kind === "rect" ? "draw:rect" : "draw:ellipse", {
-    ...zIndexAttrs(vector.paintOrder),
+    ...zIndexAttrs(vector.paintOrder, documentIndex),
     ...frameGeometryAttrs(vector.frame, vector.rotationDeg),
     "draw:style-name": encodeXmlText(styleName),
   });
 }
 
-// A whole page's own vector primitives, in array order -- the vector counterpart to write-shapes.ts's writeDrawShapes, and the second half of what typed/odg/write.ts places inside one draw:page.
+// A whole page's own vector primitives, in array order -- the vector counterpart to write-shapes.ts's writeDrawShapes, and the second half of what typed/odg/write.ts places inside one draw:page. `baseIndex` is the page's shapes.length: a page's document-encounter order runs its shapes array first and its vectors array second (typed/odg/write.ts's own note), so a vector's own encounter index is baseIndex plus its position in this array -- the identical arithmetic canonicalDrawVector's own caller already applies.
 export function writeDrawVectors(
   vectors: readonly ContentVector[],
   state: DrawShapeWriteState,
+  baseIndex: number,
 ): XmlElement[] {
-  return vectors.map((vector) => writeDrawVector(vector, state));
+  return vectors.map((vector, index) =>
+    writeDrawVector(vector, state, baseIndex + index),
+  );
 }
 
 // --- the canonical form: what reading a written vector back produces -------------------------------------------------
@@ -172,7 +180,7 @@ export function writeDrawVectors(
 // - a COLOUR is quantised to ODF's own six-hex-digit text:color datatype (typed/shared/canonicalise.ts's canonicalColor states that once for the whole package), so a fill or stroke colour component that is not a whole 1/255 step comes back rounded.
 // - an ABSENT stroke style becomes 'solid'. ContentStrokeStyleSchema already documents absence to mean solid, and this writer spells that as draw:stroke="solid", which the reader reads back as an explicit style -- the same collapse typed/odt/write.ts's own canonical form already applies to a table cell's absent border style.
 // - rotationDeg === 0 collapses to absent, exactly as it does for a shape: resolveOdfShapeGeometry's read side treats a net rotation of exactly zero as undefined, and frameGeometryAttrs writes no transform for it.
-// - paintOrder is always present on the way back (walkDrawPageContent stamps every vector it reads), taking the caller-supplied documentIndex whenever ODF cannot spell the input's own value -- see canonicalDrawShape's own PAINT ORDER note, which states the identical rule for a shape, and typed/odg/write.ts for what a drawing page's own encounter indices actually are.
+// - paintOrder is always present on the way back (walkDrawPageContent stamps every vector it reads), taking the caller-supplied documentIndex whenever ODF cannot spell the input's own value -- see canonicalDrawShape's own PAINT ORDER note, which states the identical rule for a shape, and typed/odg/write.ts for what a drawing page's own encounter indices actually are. zIndexAttrs above writes that same resolved value as draw:z-index unconditionally, so this canonical form and the written file can never disagree about a page whose items only partly state an ODF-spellable paintOrder.
 //
 // THE THREE FIELDS IT DROPS, each named rather than left silent: `sourcePath` (a reader's own diagnostic path, which a writer has no document to have read from), `source` (quarantined residue, opaque text belonging to whichever format produced it -- re-emitting it into a different document would be actively wrong rather than merely incomplete), and `frames` (a layout pass's own rendered-position record, which a writer running before any layout pass has none of). The identical three every other canonical form in this package drops, for the identical reasons.
 //
