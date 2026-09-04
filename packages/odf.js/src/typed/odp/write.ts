@@ -1,11 +1,8 @@
 import type {
   Box,
-  ContentBlock,
   ContentDocument,
-  ContentShape,
   ContentSlide,
   DocumentTree,
-  LayoutMetadata,
   PageSize,
 } from "document-schema.js";
 import { flattenTree, PAGE_SIZE_A4 } from "document-schema.js";
@@ -25,15 +22,10 @@ import { formatOdfLength } from "../shared/units";
 import { writeOdfMetadata } from "../shared/metadata";
 import { buildOdfInlineNodes, segmentOdfText } from "../shared/text";
 import type { ListPlanState } from "../shared/list";
+import { canonicalMetadata } from "../shared/canonicalise";
 import {
-  canonicalImage,
-  canonicalParagraph,
-  canonicalTable,
-} from "../shared/canonicalise";
-import {
+  canonicalDrawShape,
   createDrawShapeWriteState,
-  odfZIndexOf,
-  planShapeContent,
   writeDrawShapes,
 } from "../draw/write-shapes";
 
@@ -55,80 +47,7 @@ export interface OdpWriteOptions {
 //
 // Metadata, per-shape content, and a nested table/image are all canonicalised through typed/shared/canonicalise.ts, the exact same statement typed/odt/write.ts's own normaliseOdtContent already makes for those pieces -- restated here only for what genuinely differs at the presentation level.
 //
-// ONE THING THIS CANONICAL FORM DELIBERATELY DOES NOT STATE, and cannot: a ROTATED shape's own frame/rotationDeg survive a write-then-read round trip only up to ordinary IEEE-754 floating-point rounding (typed/draw/write-shapes.ts's own frameGeometryAttrs is an exact algebraic inverse of typed/shared/transform.ts's resolveOdfShapeGeometry, not an approximation, but two independent trig evaluations on each side of the round trip are not guaranteed bit-identical). canonicalShape below passes a shape's own frame/rotationDeg through VERBATIM rather than attempting to predict the exact float a real round trip will produce -- write-round-trip.test.ts's own rotated-shape cases compare geometry with an explicit numeric tolerance instead of the blanket structural-equality helper every other case uses, and this canonicaliser is what they run that comparison against on both sides.
-function canonicalMetadata(metadata: LayoutMetadata): LayoutMetadata {
-  const canonical: LayoutMetadata = {};
-  if (metadata.title !== undefined) {
-    canonical.title = metadata.title;
-  }
-  if (metadata.author !== undefined) {
-    canonical.author = metadata.author;
-  }
-  if (metadata.subject !== undefined) {
-    canonical.subject = metadata.subject;
-  }
-  if (metadata.keywords !== undefined && metadata.keywords.length > 0) {
-    canonical.keywords = [...metadata.keywords];
-  }
-  if (metadata.creator !== undefined) {
-    canonical.creator = metadata.creator;
-  }
-  if (metadata.createdIso !== undefined) {
-    canonical.createdIso = metadata.createdIso;
-  }
-  if (metadata.modifiedIso !== undefined) {
-    canonical.modifiedIso = metadata.modifiedIso;
-  }
-  return canonical;
-}
-
-// One ContentShape in the exact shape reading the written document back produces: geometry/insets/name pass through verbatim (see this module's own top-of-file note on rotationDeg's floating-point caveat specifically), and `blocks` is rebuilt from whichever of the three content kinds planShapeContent (typed/draw/write-shapes.ts) resolves the INPUT's own blocks to -- the identical validation and list-numId canonicalisation the writer itself runs, so this function and writeDrawFrame can never disagree about which shapes are writable at all.
-//
-// THE ONE FORCED FACT THIS FUNCTION RESTATES RATHER THAN PASSING THROUGH: an image's own widthPt/heightPt become the ENCLOSING SHAPE's frame widthPt/heightPt, never the input image block's own values. ODF's draw:image has no size of its own at all -- it is a bare content reference inside a draw:frame, and the frame's own svg:width/svg:height IS the rendered size (typed/draw/shapes.ts's own readDrawImageBlock note: "The image renders at the FRAME's own resolved size, not the source image's native pixel dimensions"). A caller-supplied image block whose width/height genuinely differ from its enclosing shape's frame is therefore not a smaller round trip, it is describing something ODF cannot express -- the frame wins, silently overriding the block's own stated size, exactly as reading the written document back will.
-//
-// PAINT ORDER is always present on the way back, never optional: readDrawFrame's own walker stamps every shape it reads (typed/draw/shapes.ts's paintOrderKey), so this canonical form states the same value. A paintOrder ODF can spell (a non-negative integer -- see typed/draw/write-shapes.ts's odfZIndexOf, which this reads the answer off rather than re-deriving) is written as draw:z-index and comes back exactly; anything else -- absent, negative, or fractional -- writes no attribute and comes back as the shape's own DOCUMENT-ENCOUNTER index, which for this writer's output is simply its position in its slide's own shapes array (this writer emits one top-level draw:frame per shape, in array order, and the reader's counter is per-slide and counts exactly those).
-//
-// THE FIVE FIELDS THIS FUNCTION DROPS, each named rather than left silent, matching typed/odt/write.ts's own normaliseOdtContent convention:
-// - fontScale / lineSpacingReduction are DrawingML's own a:normAutofit percentages -- the font-shrink factor PowerPoint COMPUTED to make overflowing text fit, stored in the file (ooxml.js's src/typed/pptx/read.ts reads both). ODF stores no such computed factor anywhere: its own autofit vocabulary (draw:fit-to-size on the shape's graphic properties) is a MODE flag, saying that a consumer should shrink text to fit, not by how much. Writing it would therefore invent a fact the input never stated (a mode, from a factor) while still losing the factor, and this package's own reader reads nothing back from it -- so the loss is stated here instead of approximated. A real pptx -> odp conversion drops autofit shrink state, and this is the line that says so.
-// - `sourcePath`, `source`, and `frames` are dropped for the reasons odt's own writer already gives for the identical fields (normaliseOdtContent names all three too): sourcePath is a READER's own diagnostic path (the writer has no document to have read it from), residue is quarantined, opaque text belonging to whichever format produced it -- re-emitting it into a different document would be actively wrong rather than merely incomplete -- and frames is a LAYOUT pass's own rendered-position record, which a writer that runs before any layout pass has none of to carry. Not a gap this writer introduces; existing, consistent precedent.
-function canonicalShape(
-  shape: ContentShape,
-  documentIndex: number,
-  listState: ListPlanState,
-): ContentShape {
-  const content = planShapeContent(shape.blocks, listState);
-  const blocks: ContentBlock[] =
-    content.kind === "table"
-      ? [canonicalTable(content.table)]
-      : content.kind === "image"
-        ? [
-            {
-              ...canonicalImage(content.image),
-              widthPt: shape.frame.widthPt,
-              heightPt: shape.frame.heightPt,
-            },
-          ]
-        : content.paragraphs.map((paragraph) =>
-            canonicalParagraph(paragraph, paragraph.list?.numId),
-          );
-  const canonical: ContentShape = {
-    frame: shape.frame,
-    insetLeftPt: shape.insetLeftPt,
-    insetTopPt: shape.insetTopPt,
-    insetRightPt: shape.insetRightPt,
-    insetBottomPt: shape.insetBottomPt,
-    paintOrder: odfZIndexOf(shape.paintOrder) ?? documentIndex,
-    blocks,
-  };
-  if (shape.name !== undefined) {
-    canonical.name = shape.name;
-  }
-  // rotationDeg === 0 collapses to absent, the same collapse writeDrawFrame's own frameGeometryAttrs applies on write (see typed/draw/write-shapes.ts's own note: resolveOdfShapeGeometry's read side already treats a net rotation of exactly zero as undefined).
-  if (shape.rotationDeg !== undefined && shape.rotationDeg !== 0) {
-    canonical.rotationDeg = shape.rotationDeg;
-  }
-  return canonical;
-}
+// ONE THING THIS CANONICAL FORM DELIBERATELY DOES NOT STATE, and cannot: a ROTATED shape's own frame/rotationDeg survive a write-then-read round trip only up to ordinary IEEE-754 floating-point rounding (typed/draw/write-shapes.ts's own frameGeometryAttrs is an exact algebraic inverse of typed/shared/transform.ts's resolveOdfShapeGeometry, not an approximation, but two independent trig evaluations on each side of the round trip are not guaranteed bit-identical). canonicalDrawShape (typed/draw/write-shapes.ts, shared with the odg writer) passes a shape's own frame/rotationDeg through VERBATIM rather than attempting to predict the exact float a real round trip will produce -- write-round-trip.test.ts's own rotated-shape cases compare geometry with an explicit numeric tolerance instead of the blanket structural-equality helper every other case uses, and this canonicaliser is what they run that comparison against on both sides.
 
 function canonicalSlide(
   slide: ContentSlide,
@@ -137,7 +56,7 @@ function canonicalSlide(
   return {
     size: slide.size,
     shapes: slide.shapes.map((shape, index) =>
-      canonicalShape(shape, index, listState),
+      canonicalDrawShape(shape, index, listState),
     ),
     notes: slide.notes,
   };
