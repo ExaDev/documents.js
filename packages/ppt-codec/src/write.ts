@@ -47,7 +47,9 @@ import {
 const DOCUMENT_PERSIST_ID = 1;
 const MASTER_PERSIST_ID = 2;
 const FIRST_SLIDE_PERSIST_ID = 3;
-// Real slide ids conventionally start at 256 (this package's own synthetic-presentation fixture uses the same value) -- readSlideListWithText/read.ts never interpret the slide id itself, so any distinct sequence would round-trip identically, but 256 matches what a real PowerPoint file states. Notes ids are minted from their own base so that a notes id can never collide with a slide id: the two are separate identifier spaces ([MS-PPT] 2.2.14 NotesId and 2.2.26 SlideId), and a reader matching one against the other would silently pair the wrong records.
+// Real slide ids conventionally start at 256 (this package's own synthetic-presentation fixture uses the same value) -- 256 matches what a real PowerPoint file states. Notes ids are minted from their own base so that a notes id can never collide with a slide id: the two are separate identifier spaces ([MS-PPT] 2.2.14 NotesId and 2.2.26 SlideId), and a reader matching one against the other would silently pair the wrong records.
+//
+// Since read.ts's own readNotesBySlideId keys a notes container by slideIdRef, this base also has to stay well clear of 0x80000000: [MS-PPT] 2.2.13 requires a MasterId to be at or above that value, and a real producer's own notes-master entry states its slideIdRef as (or near) a sentinel in that range rather than the spec-mandated 0x00000000 (confirmed against LibreOffice, which writes 0x80000001) -- a slide id minted up in that range would risk being mistaken for one. FIRST_SLIDE_ID + slides.length would need to exceed roughly two billion before this became reachable, which is not a bound worth guarding at runtime, but it is the reason this constant must never be changed to start anywhere near the top half of a 32-bit id space.
 const FIRST_SLIDE_ID = 256;
 const FIRST_NOTES_ID = 512;
 // [MS-PPT] 2.5.2: notesIdRef 0x00000000 means the slide has no notes slide, which is exactly what a slide whose notes are empty has.
