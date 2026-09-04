@@ -221,12 +221,14 @@ describe("readWorkbookGlobals", () => {
         fontIndex: 0,
         formatId: 0,
         isStyle: true,
+        alignment: { horizontal: undefined, vertical: undefined },
         decoration: UNDECORATED_XF_FIELDS,
       },
       {
         fontIndex: 1,
         formatId: 164,
         isStyle: false,
+        alignment: { horizontal: undefined, vertical: undefined },
         decoration: UNDECORATED_XF_FIELDS,
       },
     ]);

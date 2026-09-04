@@ -593,6 +593,143 @@ describe("writeXlsContent", () => {
     });
   });
 
+  describe("cell alignment", () => {
+    it("round-trips each horizontal alignment this package's schema can express", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "string", value: "x" }, { alignment: "left" }),
+            cell(
+              0,
+              1,
+              { kind: "string", value: "x" },
+              {
+                alignment: "center",
+              },
+            ),
+            cell(
+              0,
+              2,
+              { kind: "string", value: "x" },
+              {
+                alignment: "right",
+              },
+            ),
+            cell(
+              0,
+              3,
+              { kind: "string", value: "x" },
+              {
+                alignment: "justify",
+              },
+            ),
+          ]),
+        ]),
+      );
+      const content = readXlsContent(bytes);
+      expect(findCell(content, 0, 0, 0)?.alignment).toBe("left");
+      expect(findCell(content, 0, 0, 1)?.alignment).toBe("center");
+      expect(findCell(content, 0, 0, 2)?.alignment).toBe("right");
+      expect(findCell(content, 0, 0, 3)?.alignment).toBe("justify");
+    });
+
+    it("round-trips each vertical alignment this package's schema can express", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(
+              0,
+              0,
+              { kind: "string", value: "x" },
+              {
+                verticalAlignment: "top",
+              },
+            ),
+            cell(
+              0,
+              1,
+              { kind: "string", value: "x" },
+              {
+                verticalAlignment: "middle",
+              },
+            ),
+          ]),
+        ]),
+      );
+      const content = readXlsContent(bytes);
+      expect(findCell(content, 0, 0, 0)?.verticalAlignment).toBe("top");
+      expect(findCell(content, 0, 0, 1)?.verticalAlignment).toBe("middle");
+    });
+
+    it("leaves alignment/verticalAlignment absent for a cell that states neither, matching the value-kind default and the schema's own documented bottom default", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [cell(0, 0, { kind: "string", value: "x" })]),
+        ]),
+      );
+      const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
+      expect(readBack?.alignment).toBeUndefined();
+      expect(readBack?.verticalAlignment).toBeUndefined();
+    });
+
+    it("round-trips both alignment and decoration on the same cell", () => {
+      const red = rgbHexToColor("ff0000");
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(
+              0,
+              0,
+              { kind: "string", value: "x" },
+              { alignment: "right", verticalAlignment: "top", background: red },
+            ),
+          ]),
+        ]),
+      );
+      const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
+      expect(readBack?.alignment).toBe("right");
+      expect(readBack?.verticalAlignment).toBe("top");
+      expect(readBack?.background).toEqual(red);
+    });
+
+    it("round-trips a decorated-alignment-only empty cell through a real Blank record", () => {
+      // No value and no fill/border either -- alignment alone is what makes this cell worth a Blank record, mirroring the equivalent decoration-only empty-cell test above.
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(1, 2, { kind: "empty" }, { alignment: "center" }),
+          ]),
+        ]),
+      );
+      const readBack = findCell(readXlsContent(bytes), 0, 1, 2);
+      expect(readBack?.value).toEqual({ kind: "empty" });
+      expect(readBack?.alignment).toBe("center");
+    });
+
+    it("still writes nothing for an empty cell carrying no alignment either", () => {
+      const bytes = writeXlsContent(
+        document([sheet("Sheet1", [cell(1, 1, { kind: "empty" })])]),
+      );
+      expect(findCell(readXlsContent(bytes), 0, 1, 1)).toBeUndefined();
+    });
+
+    it("reuses one XF entry for two cells sharing the identical alignment, and mints a separate one for a cell with none", () => {
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "number", value: 1 }, { alignment: "right" }),
+            cell(0, 1, { kind: "number", value: 2 }, { alignment: "right" }),
+            cell(0, 2, { kind: "number", value: 3 }),
+          ]),
+        ]),
+      );
+      const content = readXlsContent(bytes);
+      expect(findCell(content, 0, 0, 0)?.alignment).toBe("right");
+      expect(findCell(content, 0, 0, 1)?.alignment).toBe("right");
+      expect(findCell(content, 0, 0, 2)?.alignment).toBeUndefined();
+    });
+  });
+
   it("round-trips a merged range whose anchor carries a real value", () => {
     const bytes = writeXlsContent(
       document([

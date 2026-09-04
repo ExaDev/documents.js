@@ -121,7 +121,7 @@ export interface XfTestBorderEdge {
   readonly icv: number;
 }
 
-/** The decoration fields cellXfTrailer packs, in the same shape src/biff/xf-colors.ts's own XfDecorationFields carries -- kept as a separate, independently-written literal here rather than imported, so a test asserting against this fixture's own bytes is checking the reader's understanding of the spec, not agreement with the writer's packing code (see this module's own top comment). */
+/** The decoration and alignment fields cellXfTrailer packs, in the same shape src/biff/xf-colors.ts's own XfDecorationFields/XfAlignmentFields carry -- kept as a separate, independently-written literal here rather than imported, so a test asserting against this fixture's own bytes is checking the reader's understanding of the spec, not agreement with the writer's packing code (see this module's own top comment). */
 export interface XfTestDecoration {
   readonly fillPattern?: number;
   readonly fillForegroundIcv?: number;
@@ -129,6 +129,10 @@ export interface XfTestDecoration {
   readonly right?: XfTestBorderEdge;
   readonly top?: XfTestBorderEdge;
   readonly bottom?: XfTestBorderEdge;
+  /** HorizAlign's own alc token (0-7, [MS-XLS] "HorizAlign") -- ALC_GENERAL (0) when omitted, matching a real Excel-written XF with no explicit alignment. */
+  readonly alc?: number;
+  /** VertAlign's own alcV token (0-4, [MS-XLS] "VertAlign") -- ALCV_BOTTOM (2) when omitted, matching a real Excel-written XF with no explicit vertical alignment (this package's own writer default, xf-writer.ts's packAlignmentPrefix). */
+  readonly alcV?: number;
 }
 
 const NO_EDGE: XfTestBorderEdge = { style: 0, icv: 0 };
@@ -136,13 +140,19 @@ const NO_EDGE: XfTestBorderEdge = { style: 0, icv: 0 };
 /** IcvXF's own "default foreground colour" special value (icv 0x40) -- a literal taken directly from [MS-XLS]'s Icv table, the value a genuinely undecorated real Excel-written XF carries in icvFore. Kept as its own literal here rather than imported from src/biff/xf-colors.ts, for the same reason the rest of this fixture builder is independently written (see this module's own top comment). */
 const ICV_DEFAULT_FOREGROUND = 0x40;
 
-/** An XF record's own trailing CellXF/StyleXF "Data" payload ([MS-XLS] 2.4.353), 14 bytes: a leading alignment word (always the schema's own General/Bottom/no-wrap default here, since this package's reader does not act on alignment), then the border word, fill-pattern word, and fill-colour word `decoration` packs -- no borders and no fill pattern when omitted, with icvFore at its own real-file default (0x40, "Automatic") unless the caller states one -- a legal payload every XF record needs regardless of whether a test cares about decoration. */
+/** HorizAlign's ALCGEN (general) and VertAlign's ALCVBOT (bottom) -- word1's own default alc/alcV tokens for an XF with no explicit alignment stated, matching what a real Excel-written cell also carries (xf-writer.ts's own packAlignmentPrefix default). Independently-written literals, for the same reason ICV_DEFAULT_FOREGROUND is. */
+const ALC_GENERAL_DEFAULT = 0x0;
+const ALCV_BOTTOM_DEFAULT = 0x2;
+
+/** An XF record's own trailing CellXF/StyleXF "Data" payload ([MS-XLS] 2.4.353), 14 bytes: a leading alignment word (word1's own alc/alcV tokens, General/Bottom when the caller states neither -- the identical default a real Excel-written XF with no explicit alignment carries), then the border word, fill-pattern word, and fill-colour word `decoration` packs -- no borders and no fill pattern when omitted, with icvFore at its own real-file default (0x40, "Automatic") unless the caller states one -- a legal payload every XF record needs regardless of whether a test cares about decoration or alignment. */
 export function cellXfTrailer(decoration: XfTestDecoration = {}): number[] {
   const left = decoration.left ?? NO_EDGE;
   const right = decoration.right ?? NO_EDGE;
   const top = decoration.top ?? NO_EDGE;
   const bottom = decoration.bottom ?? NO_EDGE;
-  const word1 = 0;
+  const alc = decoration.alc ?? ALC_GENERAL_DEFAULT;
+  const alcV = decoration.alcV ?? ALCV_BOTTOM_DEFAULT;
+  const word1 = (alc & 0x7) | ((alcV & 0x7) << 4);
   const word2 =
     (left.style & 0xf) |
     ((right.style & 0xf) << 4) |
