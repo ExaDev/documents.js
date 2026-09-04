@@ -9,9 +9,6 @@ import { defineConfig } from "vitest/config";
 import { BACKGROUND_COLOR, BRAND_COLOR } from "./src/design-tokens";
 import { name as packageName } from "./package.json" with { type: "json" };
 
-// GitHub Pages serves this repo at /documents/ (exadev.github.io is already the org's own Pages root, so this app can never live at the bare domain). Local dev stays at '/'.
-const base = process.env.CI ? "/documents/" : "/";
-
 // The sidebar's version link needs the real commit this build was produced from, and whether it happens to be an exact release tag -- read here rather than dry-running semantic-release, because CI's own job graph already guarantees the answer is sitting on disk by build time: the deploy job's checkout runs strictly after the release job (`needs: [..., release]`), re-fetching `ref: main` fresh, so if semantic-release just cut a release its version-bump commit and tag are already the checked-out HEAD. A dry run would only ever predict what real git state already states outright.
 function execGit(args: string[]): string {
   return execFileSync("git", args, { encoding: "utf-8" }).trim();
@@ -30,15 +27,27 @@ function tryExecGit(args: string[]): string | undefined {
 }
 
 // Handles both the HTTPS form GitHub Actions' checkout uses (optionally with embedded credentials) and the SSH form a local clone might use -- the regex searches rather than anchors from the start, so a credentials prefix before "github.com" doesn't break the match. The repo group is deliberately non-greedy over "anything" rather than "anything but a dot": a repo name is free to contain dots of its own (this workspace's own origin, ExaDev/documents.js, is exactly such a name), and the non-greedy quantifier already stops at the shortest match that still lets the optional ".git" suffix and end-of-string anchor succeed, so a real ".git" suffix is still stripped correctly either way.
-function parseGitHubRepoUrl(remoteUrl: string): string {
+function parseGitHubRepo(remoteUrl: string): { repo: string; url: string } {
   const match = /github\.com[:/]([^/]+)\/(.+?)(?:\.git)?$/.exec(remoteUrl);
   if (match === null)
     throw new Error(
       `Could not parse a GitHub owner/repo from origin remote URL: ${remoteUrl}`,
     );
   const [, owner, repo] = match;
-  return `https://github.com/${owner}/${repo}`;
+  if (owner === undefined || repo === undefined)
+    throw new Error(
+      `Could not parse a GitHub owner/repo from origin remote URL: ${remoteUrl}`,
+    );
+  return { repo, url: `https://github.com/${owner}/${repo}` };
 }
+
+const { repo: repoNameFromRemote, url: repoUrl } = parseGitHubRepo(
+  execGit(["remote", "get-url", "origin"]),
+);
+// GitHub Pages serves a project site at /<repo-name>/ (exadev.github.io is already the org's own Pages root, so this app can never live at the bare domain). GITHUB_REPOSITORY (owner/repo, set automatically by every Actions run) is the primary source, since it names the actual repository this build is running in; the git-remote-derived name above is only a fallback for a context where that env var happens to be unset. Deriving this rather than writing the path segment as a literal is deliberate: a hardcoded path silently drifts the moment the repo is renamed, and every asset the build emits then 404s once deployed, since the browser never sees the mismatch until it tries to load them. Local dev stays at '/'.
+const base = process.env.CI
+  ? `/${process.env.GITHUB_REPOSITORY?.split("/")[1] ?? repoNameFromRemote}/`
+  : "/";
 
 const commitSha = execGit(["rev-parse", "HEAD"]);
 // @exadev/semantic-release-workspace's tagFormat is '${pkg.name}@${version}' (see release-workspace.config.json and the orchestrator's own release.ts), not semantic-release's bare 'v${version}' default -- validated here so an unrelated tag some clone happens to have checked out, or a sibling package's release tag reachable from this same commit, can't be mistaken for this package's own release.
@@ -48,7 +57,6 @@ const releaseTagPattern = new RegExp(
 );
 const releaseTag =
   exactTag !== undefined && releaseTagPattern.test(exactTag) ? exactTag : null;
-const repoUrl = parseGitHubRepoUrl(execGit(["remote", "get-url", "origin"]));
 // %ct is the committer date as Unix seconds -- for a release commit this is effectively its release time (semantic-release commits, tags, and publishes the release in the same CI step), and for an ordinary commit it's simply when that commit was made. Multiplied to milliseconds for direct use with Date.now()-based relative time.
 const commitTimestampMs =
   Number(execGit(["show", "-s", "--format=%ct", "HEAD"])) * 1000;
