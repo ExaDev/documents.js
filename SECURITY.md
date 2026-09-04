@@ -21,7 +21,7 @@ These packages parse untrusted binary and text input by design — OOXML and Ope
 - Prototype pollution through a key taken from document content.
 - Anything that lets a document's bytes reach the filesystem, network, or a subprocess.
 
-`documents` (the web UI) is client-only and statically built, so its scope is the usual browser surface: XSS from document content rendered into the page, and anything that escapes the worker sandbox.
+`web` (the web UI) is client-only and statically built, so its scope is the usual browser surface: XSS from document content rendered into the page, and anything that escapes the worker sandbox.
 
 ## What is out of scope
 

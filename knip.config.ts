@@ -35,7 +35,7 @@ const config: KnipConfig = {
     // The web UI, restated in full rather than extended. knip resolves a `workspaces` key to the single most specific match and uses it verbatim -- a glob entry and an exact entry do not merge -- so every field this needs has to appear here even where it repeats the glob above.
     //
     // Its entries are genuinely different: it is a private Vite app that publishes nothing and has no exports map, so nothing is reachable through a package subpath. The real roots are the HTML document, the browser Web Worker (reached through `new Worker(new URL(...))`, which is not a static import), and the generated router tree.
-    "packages/documents": {
+    "packages/web": {
       // Only the Web Worker needs naming. knip's Vite plugin already finds index.html, src/main.tsx, the generated router tree, and vite.config.ts; the worker is reached through `new Worker(new URL(...))`, which is not a static import and so is invisible to it.
       entry: ["src/workers/documents.worker.ts"],
       project: ["src/**/*.{ts,tsx}"],
