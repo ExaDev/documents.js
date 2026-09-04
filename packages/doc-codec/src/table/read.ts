@@ -17,9 +17,16 @@ import { CELL_MARK } from "../text/special";
 
 // Groups the flat paragraph-entry sequence read.ts produces into the final ContentBlock list, folding every contiguous run of table-depth-1 paragraphs into a real ContentTable with row/cell/merge structure -- [MS-DOC] 2.4.3's own Overview of Tables model: a table is a run of paragraphs each marked sprmPFInTable, cells delimited by cell-mark (0x07) characters (a cell holding more than one paragraph ends every paragraph but its last with an ordinary 0x0D mark), and each row closed by a row-ending mark of its own (sprmPFTtp, itself a 0x07 mark) that carries the row's TAP -- its column layout and every physical cell's own horizontal/vertical merge state, resolved by tap.ts. A non-table entry passes through untouched. A run whose TAP this reader cannot resolve degrades to its own paragraphs rather than failing the whole document -- see tryAssembleTable's own note.
 //
-// Column layout is derived per row, never assumed shared: [MS-DOC] 2.6.4 permits each row of a table to declare its own independent rgdxaCenter, and a real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed to rely on exactly this for a horizontal merge -- a merged row's own TDefTableOperand simply has fewer, wider physical cells, with no TCGRF.horzMerge or sprmTMerge signal at all (ExaDev/documents.js#895; see table/write.ts's own top-of-file note for the full ground-truth finding). buildRows below reconstructs the table's shared grid as the union of every row's own column boundaries, then expresses each physical cell's own colSpan as however many of that shared grid's segments its own boundaries cover -- folding in this writer's own legacy TCGRF.horzMerge-flagged continuation cells (a spec-conformant encoding this reader still honours, in case a genuine third-party producer uses it) exactly as before. A column boundary that no row in the table ever states on its own -- every row happens to merge across it identically -- cannot be recovered from the physical bytes at all; this is a real limitation of [MS-DOC]'s own physical model, not an approximation this reader is choosing to make (see the README's own note on this).
+// Column layout is derived per row, never assumed shared: [MS-DOC] 2.6.4 permits each row of a table to declare its own independent rgdxaCenter, and a real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed to rely on exactly this for a horizontal merge -- a merged row's own TDefTableOperand simply has fewer, wider physical cells, with no TCGRF.horzMerge or sprmTMerge signal at all (ExaDev/documents.js#895; see table/write.ts's own top-of-file note for the full ground-truth finding). buildRows below reconstructs the table's shared grid as the union of every row's own column boundaries -- taken within one point rather than by exact integer equality, since rows stating the identical grid independently may legally disagree by a twip or two (see isSameColumnBoundary's own note) -- then expresses each physical cell's own colSpan as however many of that shared grid's segments its own boundaries cover -- folding in this writer's own legacy TCGRF.horzMerge-flagged continuation cells (a spec-conformant encoding this reader still honours, in case a genuine third-party producer uses it) exactly as before. A column boundary that no row in the table ever states on its own -- every row happens to merge across it identically -- cannot be recovered from the physical bytes at all; this is a real limitation of [MS-DOC]'s own physical model, not an approximation this reader is choosing to make (see the README's own note on this).
 
 const TWIPS_PER_POINT = 20;
+
+// Whether two column boundaries, stated independently by two of a table's own rows, name the same boundary of its shared grid rather than two distinct columns. The tolerance is a whole point -- TWIPS_PER_POINT itself, not a picked number: ContentTable.columnWidthsPt states the reconstructed grid in points, so a segment narrower than one point is below the smallest unit that grid can meaningfully distinguish at all.
+//
+// A real, independent [MS-DOC] implementation applies the identical fuzz to the identical computation. LibreOffice's own table model is per-row too (SwTableLine -> SwTableBox, each box carrying its own width), so it faces the same reconstruct-one-shared-grid-from-N-per-row-arrays problem this function exists for, and sw/source/filter/inc/wrtswtbl.hxx answers it with `#define COLFUZZY 20` twips: SwWriteTableCol::operator== compares two column positions as equal when they differ by at most that, and SwXMLTableColumn_Impl's own column set is an o3tl::sorted_vector ordered by that fuzzy comparator. Sweeping a single patched int16 through LibreOffice 26.2.5.2's own .doc importer confirms the threshold empirically and exactly: a second row's boundary drifting 1 to 20 twips from the first's reads back as one shared 3-column grid, 21 and beyond as 4 columns with a real table:covered-table-cell. The fuzz provably cannot swallow a legitimately narrow column either, since LibreOffice's own minimum cell width (MINLAY, 23 twips in sw/inc/swtypes.hxx, which WW8TabDesc::CalcDefaults actively widens an imported cell up to) is wider than COLFUZZY -- and CalcDefaults mutating boundaries per row during import is itself one real mechanism by which a .doc in the wild comes to carry per-row drift at all. See ExaDev/documents.js#898.
+function isSameColumnBoundary(left: number, right: number): boolean {
+  return Math.abs(left - right) <= TWIPS_PER_POINT;
+}
 
 interface RawCell {
   readonly horzMerge: number;
@@ -139,17 +146,40 @@ function tryAssembleTable(
   };
 }
 
-// The table's own shared column grid, reconstructed as the union of every row's own rgdxaCenter boundary values rather than assumed from any single row -- see this module's own top-of-file note on why a merged row's own boundaries are a genuine subset of the table's full grid, not the whole thing.
+// The table's own shared column grid, reconstructed as the union of every row's own rgdxaCenter boundary values rather than assumed from any single row -- see this module's own top-of-file note on why a merged row's own boundaries are a genuine subset of the table's full grid, not the whole thing. The union is taken within isSameColumnBoundary's own tolerance rather than by exact integer equality: [MS-DOC] states each row's boundaries independently, so two rows meaning the identical grid can differ by a twip or two without either being wrong, and an exact union would turn that drift into a phantom hairline column plus a spurious colSpan on every row (ExaDev/documents.js#898). Sorting before clustering makes the result depend only on the boundary values themselves, never on which row happened to be read first -- unlike LibreOffice's own insertion-ordered fuzzy set -- and taking each cluster's smallest member as its representative keeps the canonical array non-decreasing and anchored on the leftmost row's own left edge.
 function canonicalColumnBoundariesTwips(
   definitions: readonly TableRowDefinition[],
 ): number[] {
-  const boundaries = new Set<number>();
-  for (const definition of definitions) {
-    for (const boundary of definition.columnBoundariesTwips) {
-      boundaries.add(boundary);
+  const sorted = definitions
+    .flatMap((definition) => definition.columnBoundariesTwips)
+    .sort((left, right) => left - right);
+  const canonical: number[] = [];
+  for (const boundary of sorted) {
+    const representative = canonical[canonical.length - 1];
+    if (
+      representative === undefined ||
+      !isSameColumnBoundary(representative, boundary)
+    ) {
+      canonical.push(boundary);
     }
   }
-  return Array.from(boundaries).sort((left, right) => left - right);
+  return canonical;
+}
+
+// The index of the canonical grid boundary one row's own raw boundary belongs to. A raw boundary need not appear in the canonical array at all once boundaries are clustered, so this snaps rather than looks up. The first match is always its own cluster's: canonicalColumnBoundariesTwips opens a new canonical entry only beyond the tolerance, so consecutive canonical entries are further apart than it, and every canonical entry below the one this boundary was absorbed into is therefore further than the tolerance from it. Finding no match at all cannot happen for a boundary that went into building the grid -- which is every boundary this is ever asked about -- so it is an internal invariant, not a malformed-input case.
+function gridIndexFor(
+  canonicalBoundariesTwips: readonly number[],
+  boundary: number,
+): number {
+  const index = canonicalBoundariesTwips.findIndex((candidate) =>
+    isSameColumnBoundary(candidate, boundary),
+  );
+  if (index === -1) {
+    throw new DocFormatError(
+      `internal defect: a table row's column boundary ${String(boundary)} matches no boundary on the table's own reconstructed grid, which was built from that boundary among others`,
+    );
+  }
+  return index;
 }
 
 function columnWidthsFromBoundaries(boundaries: readonly number[]): number[] {
@@ -199,11 +229,13 @@ function logicalCellsForRow(
         "a table row's own column-boundary array has fewer entries than its physical cell count requires",
       );
     }
-    const startGridIndex = canonicalBoundariesTwips.indexOf(left);
-    const endGridIndex = canonicalBoundariesTwips.indexOf(right);
+    const startGridIndex = gridIndexFor(canonicalBoundariesTwips, left);
+    const endGridIndex = gridIndexFor(canonicalBoundariesTwips, right);
     logical.push({
       startGridIndex,
-      colSpan: endGridIndex - startGridIndex,
+      // A physical cell whose own boundaries snap to one canonical entry covers no segment of the shared grid at all. That is a legal cell, not corruption: [MS-DOC] 2.9.321 requires rgdxaCenter only to be "in non-decreasing order", so two adjacent entries may be equal (a genuine zero-width cell) or -- now that the union snaps -- within the tolerance of each other. ContentTableCell has no way to say "zero columns wide", so such a cell is carried with its content as an ordinary un-spanned cell, and the cell following it keeps its own start index rather than being displaced by a span this one never occupied.
+      colSpan:
+        endGridIndex > startGridIndex ? endGridIndex - startGridIndex : 1,
       vertMerge: cell.vertMerge,
       blocks: cell.blocks,
     });
