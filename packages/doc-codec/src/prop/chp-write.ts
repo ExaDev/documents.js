@@ -1,4 +1,5 @@
 import type { ContentRun } from "document-schema.js";
+import { colorRefBytes } from "../color";
 import { DocFormatError } from "../errors";
 
 // The inverse of chp.ts's applyCharacterSprms: a ContentRun's direct character formatting to a Chpx grpprl -- the bytes a ChpxFkp entry carries (see prop/fkp-write.ts). Each property this package's reader folds gets exactly the sprm chp.ts itself reads back, so a round trip through readDocContent(writeDocContent(x)) recovers the identical value rather than a lossy approximation through a different (but readable) encoding -- sprmCCv for colour rather than the fixed 17-entry sprmCIco palette, for instance, since sprmCCv carries the colour exactly and sprmCIco would have to snap it to the nearest palette entry.
@@ -21,7 +22,6 @@ const SPRM_C_CV = 0x6870;
 const SPRM_C_RG_FTC_0 = 0x4a4f;
 
 const HALF_POINTS_PER_POINT = 2;
-const COLOR_COMPONENT_MAX = 255;
 /** sprmCHps's own operand range: an unsigned 2-byte half-point value. */
 const MAX_HPS = 0xffff;
 
@@ -39,12 +39,6 @@ function toggle(value: boolean): number[] {
 
 function uint16(value: number): number[] {
   return [value & 0xff, (value >> 8) & 0xff];
-}
-
-function colorRef(color: { r: number; g: number; b: number }): number[] {
-  const byte = (component: number): number =>
-    Math.round(component * COLOR_COMPONENT_MAX);
-  return [byte(color.r), byte(color.g), byte(color.b), 0x00];
 }
 
 // Builds the Chpx grpprl for one run's direct formatting. Returns an empty array for a run with no formatting at all, which the caller (write.ts) treats as "no exception" -- exactly the rgb-zero case parseChpxFkp reads back as undefined.
@@ -82,7 +76,7 @@ export function encodeCharacterGrpprl(
     pushSprm(bytes, SPRM_C_HPS, uint16(halfPoints));
   }
   if (run.color !== undefined) {
-    pushSprm(bytes, SPRM_C_CV, colorRef(run.color));
+    pushSprm(bytes, SPRM_C_CV, colorRefBytes(run.color));
   }
   if (run.fontFamily !== undefined) {
     pushSprm(bytes, SPRM_C_RG_FTC_0, uint16(fontIndexOf(run.fontFamily)));

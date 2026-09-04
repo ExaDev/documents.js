@@ -1,5 +1,6 @@
 import type { Color } from "document-schema.js";
 import { readInt16LE, readUint16LE, readUint8 } from "../bytes";
+import { icoColor, readColorRef } from "../color";
 import { DocFormatError } from "../errors";
 import { SGC, type Prl } from "./sprm";
 
@@ -31,7 +32,6 @@ const TOGGLE_INHERIT_FROM_STYLE = 0x80;
 const TOGGLE_INVERT_STYLE = 0x81;
 
 const HALF_POINTS_PER_POINT = 2;
-const COLOR_COMPONENT_MAX = 255;
 
 export interface CharacterProperties {
   bold?: boolean;
@@ -44,30 +44,6 @@ export interface CharacterProperties {
   /** The istd of a character style applied by sprmCIstd, carried so a caller can resolve the style's own name. */
   istd?: number;
 }
-
-// The Ico palette, [MS-DOC] 2.9.126, reproduced exactly as published. Entry 0x00 is the one with fAuto set -- "the default color for the application" -- so it names no concrete colour and this reader leaves the run's colour unset rather than choosing black on the format's behalf.
-//
-// Entries 0x0C and 0x0D carry identical RGB values (0x80/0x00/0x80) in the published table, where the surrounding entries' pattern and every other palette of this shape would put dark red at 0x0D. That is reproduced rather than corrected: the table above is the normative statement of what the value means, and silently substituting a different colour would make this reader disagree with the specification it claims to implement on a point no test could catch. If a real-world corpus ever shows producers meaning dark red, that is the evidence to change it on.
-const ICO_PALETTE: readonly (readonly [number, number, number] | undefined)[] =
-  [
-    undefined, // 0x00, fAuto -- automatic, no concrete colour.
-    [0x00, 0x00, 0x00], // 0x01
-    [0x00, 0x00, 0xff], // 0x02
-    [0x00, 0xff, 0xff], // 0x03
-    [0x00, 0xff, 0x00], // 0x04
-    [0xff, 0x00, 0xff], // 0x05
-    [0xff, 0x00, 0x00], // 0x06
-    [0xff, 0xff, 0x00], // 0x07
-    [0xff, 0xff, 0xff], // 0x08
-    [0x00, 0x00, 0x80], // 0x09
-    [0x00, 0x80, 0x80], // 0x0A
-    [0x00, 0x80, 0x00], // 0x0B
-    [0x80, 0x00, 0x80], // 0x0C
-    [0x80, 0x00, 0x80], // 0x0D -- as published; see the note above.
-    [0x80, 0x80, 0x00], // 0x0E
-    [0x80, 0x80, 0x80], // 0x0F
-    [0xc0, 0xc0, 0xc0], // 0x10
-  ];
 
 function toggle(operand: Uint8Array, current: boolean | undefined): boolean {
   const value = readUint8(operand, 0);
@@ -87,32 +63,6 @@ function toggle(operand: Uint8Array, current: boolean | undefined): boolean {
         `ToggleOperand value 0x${value.toString(16)} is none of the four [MS-DOC] 2.9.336 defines (0x00, 0x01, 0x80, 0x81)`,
       );
   }
-}
-
-function icoColor(value: number): Color | undefined {
-  if (value >= ICO_PALETTE.length) {
-    throw new DocFormatError(
-      `Ico value 0x${value.toString(16)} is not less than 0x11, the bound [MS-DOC] 2.9.126 places on the palette`,
-    );
-  }
-  const entry = ICO_PALETTE[value];
-  if (entry === undefined) return undefined;
-  const [r, g, b] = entry;
-  return {
-    r: r / COLOR_COMPONENT_MAX,
-    g: g / COLOR_COMPONENT_MAX,
-    b: b / COLOR_COMPONENT_MAX,
-  };
-}
-
-// COLORREF, [MS-DOC] 2.9.53: red, green and blue bytes followed by fAuto, where fAuto set means the application's default colour rather than the stated components.
-function colorRefColor(operand: Uint8Array): Color | undefined {
-  if (readUint8(operand, 3) !== 0x00) return undefined;
-  return {
-    r: readUint8(operand, 0) / COLOR_COMPONENT_MAX,
-    g: readUint8(operand, 1) / COLOR_COMPONENT_MAX,
-    b: readUint8(operand, 2) / COLOR_COMPONENT_MAX,
-  };
 }
 
 // Folds a grpprl's character sprms into `into`, in order. [MS-DOC] 2.6's Applying Properties states the precedence rule the in-order fold implements directly: "it is valid for multiple Prls to modify the same property. In this event, the last Prl applied determines the value of that property."
@@ -149,7 +99,7 @@ export function applyCharacterSprms(
         into.color = icoColor(readUint8(prl.operand, 0));
         break;
       case SPRM_C_CV:
-        into.color = colorRefColor(prl.operand);
+        into.color = readColorRef(prl.operand, 0);
         break;
       case SPRM_C_RG_FTC_0: {
         const index = readInt16LE(prl.operand, 0);
