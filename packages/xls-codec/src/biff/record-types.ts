@@ -31,8 +31,10 @@ export const RECORD_FILEPASS = 0x002f;
 export const RECORD_EXTERNSHEET = 0x0017;
 /** The beginning of a supporting-link's own record collection: another workbook, a DDE/OLE data source, an add-in, or -- the one case this reader resolves -- this same workbook, self-referencing ([MS-XLS] 2.4.271). */
 export const RECORD_SUPBOOK = 0x01ae;
-/** The workbook's custom colour table ([MS-XLS] 2.4.204): a fixed 56-entry override of the default palette every icv 8-63 an XF's fill/border colour fields name resolves through when this record is absent. */
+/** The workbook's custom colour table ([MS-XLS] 2.4.188): a fixed 56-entry override of the default palette every icv 8-63 an XF's fill/border colour fields name resolves through when this record is absent. */
 export const RECORD_PALETTE = 0x0092;
+/** A defined name ([MS-XLS] 2.4.150). Read and written only for the two BUILT-IN names a sheet's print settings live in -- Print_Area and Print_Titles; see workbook/print-names.ts. */
+export const RECORD_LBL = 0x0018;
 
 // --- Worksheet substream ---
 
@@ -48,6 +50,42 @@ export const RECORD_DEFCOLWIDTH = 0x0055;
 export const RECORD_DEFAULTROWHEIGHT = 0x0225;
 /** Merged cell ranges ([MS-XLS] 2.4.168). */
 export const RECORD_MERGECELLS = 0x00e5;
+
+// --- Print settings: the worksheet substream's own GLOBALS and PAGESETUP productions ([MS-XLS] 2.1.7.20.6's Common Productions), the records a sheet's page setup lives in. `GLOBALS = CalcMode CalcCount CalcRefMode CalcIter CalcDelta CalcSaveRecalc PrintRowCol PrintGrid GridSet Guts DefaultRowHeight WsBool [Sync] [LPr] [HorizontalPageBreaks] [VerticalPageBreaks]`, and `PAGESETUP = Header Footer HCenter VCenter [LeftMargin] [RightMargin] [TopMargin] [BottomMargin] [Pls *Continue] [Setup]`. The remaining half of a sheet's print settings -- its print range and its repeated header rows/columns -- is not in the worksheet substream at all: it lives in the globals substream, as the built-in defined names RECORD_LBL above carries.
+
+/** Whether the row and column headers are printed ([MS-XLS] 2.4.203). */
+export const RECORD_PRINTROWCOL = 0x002a;
+/** Whether the gridlines are printed ([MS-XLS] 2.4.202). */
+export const RECORD_PRINTGRID = 0x002b;
+/** Sheet-level flags, of which only fFitToPage -- whether the sheet prints scaled to a page count rather than to a percentage -- is read or written ([MS-XLS] 2.4.351). */
+export const RECORD_WSBOOL = 0x0081;
+/** Explicit row page breaks ([MS-XLS] 2.4.142). */
+export const RECORD_HORIZONTALPAGEBREAKS = 0x001b;
+/** Explicit column page breaks ([MS-XLS] 2.4.343). */
+export const RECORD_VERTICALPAGEBREAKS = 0x001a;
+/** The left page margin, an Xnum of inches ([MS-XLS] 2.4.151). */
+export const RECORD_LEFTMARGIN = 0x0026;
+/** The right page margin ([MS-XLS] 2.4.219). */
+export const RECORD_RIGHTMARGIN = 0x0027;
+/** The top page margin ([MS-XLS] 2.4.328). */
+export const RECORD_TOPMARGIN = 0x0028;
+/** The bottom page margin ([MS-XLS] 2.4.27). */
+export const RECORD_BOTTOMMARGIN = 0x0029;
+/** Paper size, print scale, fit-to-page counts, page order, and orientation ([MS-XLS] 2.4.257). */
+export const RECORD_SETUP = 0x00a1;
+
+// The calculation-state records the GLOBALS production requires ahead of PrintRowCol -- written, never read, and carrying nothing this schema models. They exist here because the production makes them mandatory and a real consumer notices when they are missing: see workbook/sheet-writer.ts's own writeCalculationStateRecords for what LibreOffice does to a worksheet substream whose first record is a print setting.
+
+/** The iteration count for iterative calculation ([MS-XLS] 2.4.31). */
+export const RECORD_CALCCOUNT = 0x000c;
+/** The reference style, A1 or R1C1 ([MS-XLS] 2.4.36). */
+export const RECORD_CALCREFMODE = 0x000f;
+/** Whether iterative calculation is enabled ([MS-XLS] 2.4.33). */
+export const RECORD_CALCITER = 0x0011;
+/** The minimum value change iterative calculation continues for ([MS-XLS] 2.4.32). */
+export const RECORD_CALCDELTA = 0x0010;
+/** Whether the workbook is recalculated before saving in manual calculation mode ([MS-XLS] 2.4.37). */
+export const RECORD_CALCSAVERECALC = 0x005f;
 
 // --- The cell-value record family ([MS-XLS] 2.1.7.20.6's own CELL production) ---
 

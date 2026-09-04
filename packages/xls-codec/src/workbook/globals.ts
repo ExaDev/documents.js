@@ -26,6 +26,7 @@ import {
   type XfDecorationFields,
 } from "../biff/xf-colors";
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
+import { readPrintNames, type SheetPrintNames } from "./print-names";
 
 // The workbook globals substream ([MS-XLS] 2.1.7.20.3): everything that belongs to the workbook rather than to one sheet -- which sheets exist and in what order, the shared string table every string cell indexes into, the number-format and cell-format tables every numeric cell's meaning depends on, and which date epoch the whole file counts serials from. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ca4c1748-8729-4a93-abb9-4602b3a01fb1
 //
@@ -77,6 +78,12 @@ export interface WorkbookGlobals {
    * The workbook's own custom colour table, from a Palette record ([MS-XLS] 2.4.188) -- 56 entries, index 0 being icv 8. Undefined when the file carries no Palette record at all, which is common: a real file relying purely on the fixed default 8-colour-plus-56-entry table (this package's own `resolveIcvColor` falls back to that same default table, matching [MS-XLS] "Icv"'s own documented fallback) never needs one.
    */
   readonly palette: readonly Color[] | undefined;
+  /**
+   * The print range and repeated header bands each sheet's own built-in Print_Area/Print_Titles defined names declare, keyed by zero-based sheet index -- see workbook/print-names.ts for why a sheet's print settings are split between here and its own substream.
+   *
+   * A sheet with no entry declares neither, which is the common case: a workbook nobody has set a print area on carries no Lbl record at all.
+   */
+  readonly printNames: ReadonlyMap<number, SheetPrintNames>;
 }
 
 /** [MS-XLS] 2.4.28's own hsState values; 0x01 is Hidden and 0x02 Very Hidden. */
@@ -156,6 +163,8 @@ export function readWorkbookGlobals(
     date1904,
     sheetRanges,
     palette,
+    // Walked as its own pass over the same records rather than folded into the switch above: an Lbl's meaning depends only on the record itself, and keeping the whole built-in-print-name vocabulary in one module is what stops it leaking into this reader's general record loop.
+    printNames: readPrintNames(records),
   };
 }
 

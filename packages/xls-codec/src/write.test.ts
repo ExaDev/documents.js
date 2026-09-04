@@ -8,12 +8,19 @@ import {
   assembleTree,
   ContentDocumentSchema,
   DocumentTreeSchema,
+  PAGE_SIZE_A4,
   PAGE_SIZE_LETTER,
   rgbHexToColor,
 } from "document-schema.js";
 import { isCompoundFile, readCompoundFile } from "archive-codec";
 import { describe, expect, it } from "vitest";
 
+import {
+  RECORD_EXTERNSHEET,
+  RECORD_LBL,
+  RECORD_SUPBOOK,
+} from "./biff/record-types";
+import { readRecords } from "./biff/records";
 import { PALETTE_ENTRY_COUNT } from "./biff/xf-colors";
 import { BiffWriteError } from "./biff/write-errors";
 import type { XlsContentDocument } from "./content";
@@ -24,7 +31,7 @@ import { writeXls, writeXlsContent } from "./write";
 // Genuine .xls bytes -- a real [MS-CFB] compound file holding a real BIFF8 Workbook stream -- built by this package's own writer and read back through its own reader, the "primary verification method" this session's writers use throughout (the CFB writer, rtf-codec, wpd-codec). Every test here is a round trip: build a ContentDocument, write it, read it back, and check the read result reflects what was written -- exercising the writer against a reader whose own correctness is independently pinned by content.test.ts's hand-built byte sequences.
 
 const POINTS_PER_INCH = 72;
-/** The same "Normal" preset content.ts's own reader emits unconditionally, since print settings are outside this writer's scope (see the README) and the read direction never recovers a file's real ones. */
+/** Excel's own "Normal" preset, which is what a sheet with nothing else to say about printing carries -- and, since the reader falls back to exactly these values for a file stating none of the print records, what a round trip through this pair reproduces either way. The print-settings round trips at the end of this file are the ones that exercise real, non-default values. */
 const PRINT_SETTINGS: ContentSheetPrintSettings = {
   pageSize: PAGE_SIZE_LETTER,
   margins: {
@@ -798,5 +805,144 @@ describe("writeXls", () => {
       children: [],
     };
     expect(() => writeXls(wordTree)).toThrow(BiffWriteError);
+  });
+});
+
+describe("print settings", () => {
+  /** Every field ContentSheetPrintSettings carries, each at a value distinct from Excel's own Normal preset, so a round trip that silently fell back to that preset would fail rather than pass by coincidence. */
+  const FULL_PRINT_SETTINGS: ContentSheetPrintSettings = {
+    pageSize: {
+      widthPt: PAGE_SIZE_A4.heightPt,
+      heightPt: PAGE_SIZE_A4.widthPt,
+    },
+    margins: { topPt: 72, rightPt: 54, bottomPt: 90, leftPt: 36 },
+    printRange: { startRow: 1, startColumn: 1, endRow: 5, endColumn: 3 },
+    scalePercent: 80,
+    repeatRows: { start: 0, end: 1 },
+    repeatColumns: { start: 0, end: 0 },
+    gridlines: true,
+    headers: true,
+    pageOrder: "overThenDown",
+    manualBreaks: { rows: [10], columns: [3] },
+  };
+
+  function roundTripped(
+    settings: ContentSheetPrintSettings,
+  ): ContentSheetPrintSettings | undefined {
+    const content = document([
+      sheet("Printy", [cell(0, 0, { kind: "number", value: 1 })], {
+        printSettings: settings,
+      }),
+    ]);
+    return readXlsContent(writeXlsContent(content)).sheets[0]?.printSettings;
+  }
+
+  /** The same settings with no scalePercent and no repeatColumns -- spelled as its own literal rather than derived by deletion, so an optional field a round trip wrongly re-added shows up as an extra key rather than as a matching undefined. */
+  const WITHOUT_SCALE_AND_REPEAT_COLUMNS: ContentSheetPrintSettings = {
+    pageSize: FULL_PRINT_SETTINGS.pageSize,
+    margins: FULL_PRINT_SETTINGS.margins,
+    printRange: FULL_PRINT_SETTINGS.printRange,
+    repeatRows: FULL_PRINT_SETTINGS.repeatRows,
+    gridlines: FULL_PRINT_SETTINGS.gridlines,
+    headers: FULL_PRINT_SETTINGS.headers,
+    pageOrder: FULL_PRINT_SETTINGS.pageOrder,
+    manualBreaks: FULL_PRINT_SETTINGS.manualBreaks,
+  };
+
+  it("round-trips every field of a fully populated print setting", () => {
+    expect(roundTripped(FULL_PRINT_SETTINGS)).toEqual(FULL_PRINT_SETTINGS);
+  });
+
+  it("round-trips fit-to-page in place of a scale percentage", () => {
+    // The two are mutually exclusive in BIFF8 -- WsBool's own fFitToPage decides which of Setup's fields is live -- so a fit-to-page sheet states no scale at all, in either direction.
+    const settings: ContentSheetPrintSettings = {
+      ...WITHOUT_SCALE_AND_REPEAT_COLUMNS,
+      repeatColumns: FULL_PRINT_SETTINGS.repeatColumns,
+      fitToPages: { width: 2, height: 3 },
+    };
+    expect(roundTripped(settings)).toEqual(settings);
+  });
+
+  it("round-trips a portrait page size without transposing it", () => {
+    // A paper code names its paper in portrait and the orientation flag transposes it, so the two directions have to agree on which way round a page is.
+    const settings: ContentSheetPrintSettings = {
+      ...PRINT_SETTINGS,
+      pageSize: PAGE_SIZE_A4,
+    };
+    expect(roundTripped(settings)?.pageSize).toEqual(PAGE_SIZE_A4);
+  });
+
+  it("round-trips a sheet whose settings are exactly the Normal preset, gaining an explicit 100% scale", () => {
+    // Nothing in ContentSheetPrintSettings can say "this sheet states nothing", so the writer emits the preset's own values rather than omitting the records -- and the reader's own fallback then agrees with them.
+    //
+    // scalePercent is the one field that does not survive absent, and cannot: Setup's own iScale is a mandatory field of a mandatory record, with no spelling for "no declared scale", so a sheet written with none comes back stating the 100% (actual size) it was written as. The written file is not wrong about the document; it simply says out loud what the absent field already meant.
+    expect(roundTripped(PRINT_SETTINGS)).toEqual({
+      ...PRINT_SETTINGS,
+      scalePercent: 100,
+    });
+  });
+
+  it("round-trips a repeated row band without inventing a column band", () => {
+    // A Print_Titles name carrying one band has to come back as one band: the read side tells the two apart by shape, not by position, so a missing column band must not be reconstructed from the row band's own full-width extent.
+    const settings: ContentSheetPrintSettings = {
+      ...WITHOUT_SCALE_AND_REPEAT_COLUMNS,
+      scalePercent: FULL_PRINT_SETTINGS.scalePercent,
+    };
+    expect(roundTripped(settings)).toEqual(settings);
+  });
+
+  it("keeps each sheet's own print settings separate", () => {
+    const content = document([
+      sheet("First", [cell(0, 0, { kind: "number", value: 1 })], {
+        printSettings: FULL_PRINT_SETTINGS,
+      }),
+      sheet("Second", [cell(0, 0, { kind: "number", value: 2 })], {
+        printSettings: {
+          ...PRINT_SETTINGS,
+          printRange: { startRow: 0, startColumn: 0, endRow: 9, endColumn: 9 },
+        },
+      }),
+    ]);
+
+    const read = readXlsContent(writeXlsContent(content));
+    expect(read.sheets[0]?.printSettings).toEqual(FULL_PRINT_SETTINGS);
+    expect(read.sheets[1]?.printSettings.printRange).toEqual({
+      startRow: 0,
+      startColumn: 0,
+      endRow: 9,
+      endColumn: 9,
+    });
+    expect(read.sheets[1]?.printSettings.repeatRows).toBeUndefined();
+  });
+
+  it("refuses a page size no paper code names rather than substituting one", () => {
+    // Unlike xlsx's pageSetup element, [MS-XLS] 2.4.257's Setup record addresses paper only by code, so a size outside its own table genuinely cannot be written.
+    const content = document([
+      sheet("Odd", [cell(0, 0, { kind: "number", value: 1 })], {
+        printSettings: {
+          ...PRINT_SETTINGS,
+          pageSize: { widthPt: 500, heightPt: 500 },
+        },
+      }),
+    ]);
+
+    expect(() => writeXlsContent(content)).toThrow(BiffWriteError);
+  });
+
+  it("writes no defined name at all for a workbook declaring no print range or band", () => {
+    // The SupBook and ExternSheet a print name's own 3D reference resolves through exist only to serve one, so a workbook needing none stays as minimal as it was before print settings were written.
+    const bytes = writeXlsContent(
+      document([sheet("Plain", [cell(0, 0, { kind: "number", value: 1 })])]),
+    );
+    const stream = readCompoundFile(bytes).find(
+      (entry) => entry.path === "Workbook",
+    )?.bytes;
+    const types = [...readRecords(stream ?? new Uint8Array())].map(
+      (record) => record.type,
+    );
+
+    expect(types).not.toContain(RECORD_LBL);
+    expect(types).not.toContain(RECORD_SUPBOOK);
+    expect(types).not.toContain(RECORD_EXTERNSHEET);
   });
 });
