@@ -255,7 +255,7 @@ export function readSheetRecords(
         marginsPt.bottom = readMargin(record);
         break;
       case RECORD_PRINTGRID:
-        printGridlines = readBooleanRecord(record);
+        printGridlines = readGridlineBooleanRecord(record);
         break;
       case RECORD_PRINTROWCOL:
         printHeaders = readBooleanRecord(record);
@@ -315,9 +315,14 @@ function readMargin(record: RecordGroup): number {
   return inchesToPoints(new BlockCursor(record.blocks).f64());
 }
 
-/** PrintGrid ([MS-XLS] 2.4.202) and PrintRowCol ([MS-XLS] 2.4.203) are each a single 16-bit boolean. [MS-XLS] 2.4.203's own value table states both 0x0000 and 0x0001 as "Row and column headers are not printed", which is a typo in that table rather than two spellings of one meaning -- the record exists precisely to distinguish them, and every real producer writes 1 for printed (confirmed against LibreOffice-written BIFF8, where a sheet with header printing enabled carries 0x0001 and one without carries 0x0000). */
+/** PrintRowCol ([MS-XLS] 2.4.203): a single 16-bit `Boolean` field (2.5.14), whose whole word is the value. [MS-XLS] 2.4.203's own value table states both 0x0000 and 0x0001 as "Row and column headers are not printed", which is a typo in that table rather than two spellings of one meaning -- the record exists precisely to distinguish them, and every real producer writes 1 for printed (confirmed against LibreOffice-written BIFF8, where a sheet with header printing enabled carries 0x0001 and one without carries 0x0000). */
 function readBooleanRecord(record: RecordGroup): boolean {
   return new BlockCursor(record.blocks).u16() !== 0;
+}
+
+/** PrintGrid ([MS-XLS] 2.4.202): unlike PrintRowCol above, its 16-bit field is only ONE bit wide (`fPrintGrid`) with the remaining 15 "Undefined, and MUST be ignored" -- so a producer leaving anything in those bits would read as gridlines-on under a bare `!== 0` test. No real producer does (LibreOffice writes 0x0000/0x0001, confirmed against its own BIFF8 output), but masking to the one bit the spec actually defines is what the field's own layout says to do. */
+function readGridlineBooleanRecord(record: RecordGroup): boolean {
+  return (new BlockCursor(record.blocks).u16() & 0x0001) !== 0;
 }
 
 /**
