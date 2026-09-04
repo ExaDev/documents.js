@@ -16,6 +16,18 @@ function styleOf(
   return { paragraphRuns, characterRuns };
 }
 
+function pfProps(indentLevel: number, alignment: number | undefined) {
+  return {
+    indentLevel,
+    alignment,
+    lineSpacing: undefined,
+    spaceBefore: undefined,
+    spaceAfter: undefined,
+    leftMargin: undefined,
+    indent: undefined,
+  };
+}
+
 describe("buildParagraphs", () => {
   it("makes one paragraph per carriage-return-separated segment, each a single run when unstyled", () => {
     expect(buildParagraphs("one\rtwo", NO_STYLE, [])).toEqual([
@@ -32,7 +44,7 @@ describe("buildParagraphs", () => {
 
   it("splits a paragraph into the character runs covering it", () => {
     const style = styleOf(
-      [{ count: 12, properties: { indentLevel: 0, alignment: undefined } }],
+      [{ count: 12, properties: pfProps(0, undefined) }],
       [
         {
           count: 6,
@@ -71,7 +83,7 @@ describe("buildParagraphs", () => {
   it("keeps each paragraph's own slice of a run that spans a paragraph break", () => {
     // One character run covering the whole body, including the separator, must still produce a run per paragraph.
     const style = styleOf(
-      [{ count: 8, properties: { indentLevel: 0, alignment: undefined } }],
+      [{ count: 8, properties: pfProps(0, undefined) }],
       [
         {
           count: 8,
@@ -99,11 +111,11 @@ describe("buildParagraphs", () => {
       [
         {
           count: 4,
-          properties: { indentLevel: 0, alignment: ALIGN_CENTER },
+          properties: pfProps(0, ALIGN_CENTER),
         },
         {
           count: 4,
-          properties: { indentLevel: 2, alignment: ALIGN_JUSTIFY },
+          properties: pfProps(2, ALIGN_JUSTIFY),
         },
       ],
       [],
@@ -120,7 +132,7 @@ describe("buildParagraphs", () => {
       [
         {
           count: 4,
-          properties: { indentLevel: 0, alignment: ALIGN_DISTRIBUTED },
+          properties: pfProps(0, ALIGN_DISTRIBUTED),
         },
       ],
       [],
@@ -128,9 +140,92 @@ describe("buildParagraphs", () => {
     expect(buildParagraphs("abc", style, [])[0]?.alignment).toBeUndefined();
   });
 
+  it("converts a percentage-form ParaSpacing into the schema's line-height multiplier", () => {
+    const style = styleOf(
+      [
+        {
+          count: 3,
+          properties: { ...pfProps(0, undefined), lineSpacing: 150 },
+        },
+      ],
+      [],
+    );
+    expect(buildParagraphs("abc", style, [])[0]?.lineSpacing).toBe(1.5);
+  });
+
+  it("leaves lineSpacing undefined for an absolute-master-units ParaSpacing value", () => {
+    const style = styleOf(
+      [
+        {
+          count: 3,
+          properties: { ...pfProps(0, undefined), lineSpacing: -160 },
+        },
+      ],
+      [],
+    );
+    expect(buildParagraphs("abc", style, [])[0]?.lineSpacing).toBeUndefined();
+  });
+
+  it("converts an absolute-master-units ParaSpacing into spacingBeforePt/spacingAfterPt", () => {
+    const style = styleOf(
+      [
+        {
+          count: 3,
+          properties: {
+            ...pfProps(0, undefined),
+            spaceBefore: -80,
+            spaceAfter: -40,
+          },
+        },
+      ],
+      [],
+    );
+    const paragraph = buildParagraphs("abc", style, [])[0];
+    expect(paragraph?.spacingBeforePt).toBe(10);
+    expect(paragraph?.spacingAfterPt).toBe(5);
+  });
+
+  it("leaves spacingBeforePt/spacingAfterPt undefined for a percentage-form ParaSpacing value", () => {
+    const style = styleOf(
+      [
+        {
+          count: 3,
+          properties: {
+            ...pfProps(0, undefined),
+            spaceBefore: 200,
+            spaceAfter: 0,
+          },
+        },
+      ],
+      [],
+    );
+    const paragraph = buildParagraphs("abc", style, [])[0];
+    expect(paragraph?.spacingBeforePt).toBeUndefined();
+    expect(paragraph?.spacingAfterPt).toBeUndefined();
+  });
+
+  it("converts MarginOrIndent master units into indentLeftPt/indentFirstLinePt, including a hanging indent", () => {
+    const style = styleOf(
+      [
+        {
+          count: 3,
+          properties: {
+            ...pfProps(0, undefined),
+            leftMargin: 288,
+            indent: -144,
+          },
+        },
+      ],
+      [],
+    );
+    const paragraph = buildParagraphs("abc", style, [])[0];
+    expect(paragraph?.indentLeftPt).toBe(36);
+    expect(paragraph?.indentFirstLinePt).toBe(-18);
+  });
+
   it("resolves a run's font reference against the document's font collection", () => {
     const style = styleOf(
-      [{ count: 4, properties: { indentLevel: 0, alignment: undefined } }],
+      [{ count: 4, properties: pfProps(0, undefined) }],
       [
         {
           count: 4,
@@ -161,7 +256,7 @@ describe("buildParagraphs", () => {
 
   it("leaves the font family absent when the reference names no entry in the collection", () => {
     const style = styleOf(
-      [{ count: 4, properties: { indentLevel: 0, alignment: undefined } }],
+      [{ count: 4, properties: pfProps(0, undefined) }],
       [
         {
           count: 4,
@@ -186,7 +281,7 @@ describe("buildParagraphs", () => {
   it("falls back to one unformatted run per paragraph when the runs do not reach it", () => {
     // A style atom covering only the first characters leaves later paragraphs with no run of their own; they still need their text.
     const style = styleOf(
-      [{ count: 2, properties: { indentLevel: 0, alignment: undefined } }],
+      [{ count: 2, properties: pfProps(0, undefined) }],
       [
         {
           count: 2,
