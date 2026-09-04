@@ -335,6 +335,16 @@ describe("writeOdgContent: vector elements", () => {
     expect(transform).toBeDefined();
     expect(transform).not.toMatch(/[\d.]e[+-]?\d/i);
   });
+
+  // The rotate() ANGLE is a bare radians value with no unit suffix, distinct from the translate() lengths the test above covers -- a tiny non-zero rotationDeg (never zero, which collapses to no transform at all) drives angleRad itself into JavaScript's own exponent spelling, exactly as invalid to the ODF `length`/number grammar as an exponent-form translate() component. The same defect the odp writer's own suite pins, reached here through a vector rather than a frame.
+  it("writes no exponent-notation angle in draw:transform's rotate() for a very small non-zero rotationDeg", () => {
+    const pkg = writeOdgContent(
+      documentOf([page([rect({ rotationDeg: 1e-9 })])]),
+    );
+    const transform = attrValue(firstPageChildren(pkg)[0]!, "draw:transform");
+    expect(transform).toBeDefined();
+    expect(transform).not.toMatch(/[\d.]e[+-]?\d/i);
+  });
 });
 
 describe("writeOdgContent: fill and stroke", () => {
