@@ -20,6 +20,7 @@ import {
   readRecordSequence,
 } from "./record/tree";
 import {
+  RT_ColorSchemeAtom,
   RT_Notes,
   RT_SlideListWithText,
   SLIDE_LIST_INSTANCE_NOTES,
@@ -743,6 +744,30 @@ describe("speaker notes", () => {
     expect(readNotesContainerAtom(notesContainer).slideIdRef).toBe(
       secondSlideId,
     );
+  });
+
+  it("gives each notes slide the colour scheme its own NotesAtom says it does not inherit", () => {
+    // [MS-PPT] 2.5.6 lists a NotesContainer's slideSchemeColorSchemeAtom without the "optional" its slideNameAtom and slideProgTagsContainer carry, and makes the notes master's scheme apply only "if notesAtom.slideFlags.fMasterScheme is set". This writer leaves that bit clear, since it writes no notes master to inherit from, so the notes slide has to state a scheme of its own or name one that does not exist.
+    const { powerPointDocumentStream } = writePptStreams({
+      metadata: {},
+      slides: [slide({ notes: "Notes needing a colour scheme." })],
+    });
+    const notesContainer = requireRecord(
+      topLevelRecords(powerPointDocumentStream).find(
+        (record) => record.header.recType === RT_Notes,
+      ),
+      "NotesContainer",
+    );
+    expect(readNotesContainerAtom(notesContainer).slideFlags & 0b010).toBe(0);
+    const scheme = requireRecord(
+      childRecords(notesContainer).find(
+        (record) => record.header.recType === RT_ColorSchemeAtom,
+      ),
+      "SlideSchemeColorSchemeAtom",
+    );
+    // [MS-PPT] 2.9.51: rh.recInstance MUST be 0x001, and rh.recLen MUST be 0x00000020 -- eight four-byte ColorStructs.
+    expect(scheme.header.recInstance).toBe(0x001);
+    expect(scheme.data.length).toBe(0x20);
   });
 
   it("round-trips notes through the tree form as well as the flat one", () => {
