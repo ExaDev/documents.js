@@ -251,6 +251,17 @@ describe("writeOdpContent: shape geometry", () => {
       /^rotate\(-?[\d.]+\) translate\(-?[\d.]+pt -?[\d.]+pt\)$/,
     );
   });
+
+  // The rotate() ANGLE is a bare radians value with no unit suffix, distinct from the translate() lengths the test above covers -- a tiny non-zero rotationDeg (never zero, which collapses to no transform at all) drives angleRad itself into JavaScript's own exponent spelling (rotationDeg: 1e-9 emits rotate(-1.7453292519943295e-11) without the fix), which is exactly as invalid to the ODF `length`/number grammar as an exponent-form translate() component.
+  it("writes no exponent-notation angle in draw:transform's rotate() for a very small non-zero rotationDeg", () => {
+    const pkg = writeOdpContent(
+      documentOf([slide([shape({ rotationDeg: 1e-9 })])]),
+    );
+    const frame = childrenWithTag(pagesOf(pkg)[0]!, "draw:frame")[0]!;
+    const transform = attrValue(frame, "draw:transform");
+    expect(transform).toBeDefined();
+    expect(transform).not.toMatch(/[\d.]e[+-]?\d/i);
+  });
 });
 
 describe("writeOdpContent: shape insets", () => {
