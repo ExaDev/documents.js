@@ -266,21 +266,24 @@ const SETUP_HEADER_FOOTER_MARGIN_INCHES = 0.3;
 const SETUP_INACTIVE_FIT_PAGES = 1;
 /** Setup's own iScale when the sheet IS in fit-to-page mode: 100%, actual size, the inactive value a real producer leaves behind (confirmed against LibreOffice-written BIFF8, whose fit-to-page sheets carry exactly this). */
 const SETUP_INACTIVE_SCALE_PERCENT = 100;
+/** Setup's own iPaperSize for a page size no entry of its code table names: [MS-XLS] 2.4.257's "The value 0, or values greater than or equal to 256, specify custom printer paper sizes." */
+const SETUP_CUSTOM_PAPER_SIZE = 0;
 
 /**
  * Setup ([MS-XLS] 2.4.257): iPaperSize, iScale, iPageStart, iFitWidth, iFitHeight, the flags word, iRes, iVRes, numHdr, numFtr, iCopies.
  *
  * fNoPls is deliberately never set. It would declare this record's own paper size, scale, and orientation undefined -- exactly the three fields it exists here to carry -- and [MS-XLS] pairs it with a Pls record holding a printer driver's DEVMODE blob, which this writer has none of.
+ *
+ * A page size no code in the table names is written as SETUP_CUSTOM_PAPER_SIZE rather than as a standard paper it is not. The dimensions themselves are genuinely unwritable -- Setup addresses paper only by code, and [MS-XLS]'s own escape hatch for a size outside the table is that same Pls record -- so the choice is between saying "custom" and saying something false. Saying "custom" is what the spec's own iPaperSize table provides the value for, and it leaves a reader (this package's own included) free to fall back to its documented default instead of confidently reporting Letter for a page that is not Letter. This matters in practice rather than in theory: a spreadsheet converted from a slide deck or a drawing carries that source's own canvas as its page size, which is almost never a named paper, and refusing the conversion outright over a presentational field would lose the cells too.
  */
 function writeSetupRecord(
   settings: ContentSheetPrintSettings,
 ): Uint8Array<ArrayBuffer> {
-  const paper = paperSelectionFor(settings.pageSize);
-  if (paper === undefined) {
-    throw new BiffWriteError(
-      `sheet page size ${settings.pageSize.widthPt} x ${settings.pageSize.heightPt} pt is not one of the paper sizes [MS-XLS] 2.4.257's own iPaperSize code table names, and a Setup record can address paper only by code; a .xls cannot state this page size`,
-    );
-  }
+  const paper = paperSelectionFor(settings.pageSize) ?? {
+    code: SETUP_CUSTOM_PAPER_SIZE,
+    // With no named paper to transpose, the orientation flag is the only thing left that still says which way round the page is, so it states what the page size itself does.
+    portrait: settings.pageSize.widthPt <= settings.pageSize.heightPt,
+  };
   const fitToPages = settings.fitToPages;
   const fields: SetupFields = {
     paperCode: paper.code,
