@@ -18,6 +18,8 @@ export * from "./prop/chp";
 export * from "./prop/chp-write";
 export * from "./prop/pap";
 export * from "./prop/pap-write";
+export * from "./prop/sep";
+export * from "./prop/sep-write";
 export * from "./style/stsh";
 export * from "./style/fonts";
 export * from "./list/numbering";

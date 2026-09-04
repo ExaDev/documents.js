@@ -31,6 +31,8 @@ export interface FibWriteSpec {
   readonly cbMac: number;
   readonly fcClx: number;
   readonly lcbClx: number;
+  readonly fcPlcfSed: number;
+  readonly lcbPlcfSed: number;
   readonly fcPlcfBteChpx: number;
   readonly lcbPlcfBteChpx: number;
   readonly fcPlcfBtePapx: number;
@@ -83,6 +85,7 @@ export function buildFib(spec: FibWriteSpec): Uint8Array<ArrayBuffer> {
   );
   pair(FC_LCB_VALUE_INDEX.fcSttbfFfn, spec.fcSttbfFfn, spec.lcbSttbfFfn);
   pair(FC_LCB_VALUE_INDEX.fcClx, spec.fcClx, spec.lcbClx);
+  pair(FC_LCB_VALUE_INDEX.fcPlcfSed, spec.fcPlcfSed, spec.lcbPlcfSed);
   // cswNew (the 2 bytes at FIB_FC_LCB_BLOB_OFFSET + blobBytes) stays 0, which [MS-DOC] mandates for nFib 0x00C1 and which correctly leaves fibRgCswNew absent.
 
   if (readUint16LE(bytes, 0) !== FIB_W_IDENT) {

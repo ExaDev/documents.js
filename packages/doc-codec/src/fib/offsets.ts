@@ -42,6 +42,9 @@ export const LW_OFFSET = {
 export const FC_LCB_VALUE_INDEX = {
   fcStshf: 2,
   lcbStshf: 3,
+  // Pair 6, counted the same way as the fcSttbfFfn comment below counts pair 15: fcStshfOrig(0), fcStshf(1), fcPlcffndRef(2), fcPlcffndTxt(3), fcPlcfandRef(4), fcPlcfandTxt(5), fcPlcfSed(6).
+  fcPlcfSed: 12,
+  lcbPlcfSed: 13,
   fcPlcfBteChpx: 24,
   lcbPlcfBteChpx: 25,
   fcPlcfBtePapx: 26,
