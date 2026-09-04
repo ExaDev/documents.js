@@ -21,11 +21,40 @@ import { CELL_MARK } from "../text/special";
 
 const TWIPS_PER_POINT = 20;
 
-// Whether two column boundaries, stated independently by two of a table's own rows, name the same boundary of its shared grid rather than two distinct columns. The tolerance is a whole point -- TWIPS_PER_POINT itself, not a picked number: ContentTable.columnWidthsPt states the reconstructed grid in points, so a segment narrower than one point is below the smallest unit that grid can meaningfully distinguish at all.
+// Whether two column boundaries, stated independently by two of a table's own rows, name the same boundary of its shared grid rather than two distinct columns, within toleranceTwips -- effectiveColumnBoundaryTolerance's own result, never the bare TWIPS_PER_POINT constant, since a table that itself states a narrower real column needs a narrower fuzz (see that function's own note).
 //
-// A real, independent [MS-DOC] implementation applies the identical fuzz to the identical computation. LibreOffice's own table model is per-row too (SwTableLine -> SwTableBox, each box carrying its own width), so it faces the same reconstruct-one-shared-grid-from-N-per-row-arrays problem this function exists for, and sw/source/filter/inc/wrtswtbl.hxx answers it with `#define COLFUZZY 20` twips: SwWriteTableCol::operator== compares two column positions as equal when they differ by at most that, and SwXMLTableColumn_Impl's own column set is an o3tl::sorted_vector ordered by that fuzzy comparator. Sweeping a single patched int16 through LibreOffice 26.2.5.2's own .doc importer confirms the threshold empirically and exactly: a second row's boundary drifting 1 to 20 twips from the first's reads back as one shared 3-column grid, 21 and beyond as 4 columns with a real table:covered-table-cell. The fuzz provably cannot swallow a legitimately narrow column either, since LibreOffice's own minimum cell width (MINLAY, 23 twips in sw/inc/swtypes.hxx, which WW8TabDesc::CalcDefaults actively widens an imported cell up to) is wider than COLFUZZY -- and CalcDefaults mutating boundaries per row during import is itself one real mechanism by which a .doc in the wild comes to carry per-row drift at all. See ExaDev/documents.js#898.
-function isSameColumnBoundary(left: number, right: number): boolean {
-  return Math.abs(left - right) <= TWIPS_PER_POINT;
+// A real, independent [MS-DOC] implementation applies an analogous fuzz to an analogous computation: LibreOffice's own table model is per-row too (SwTableLine -> SwTableBox, each box carrying its own width), so its own ODF export -- the point at which it projects that per-row model onto one shared grid, sw/source/filter/xml/xmltble.cxx's SwXMLTableColumn_Impl -- faces the same reconstruct-one-shared-grid-from-N-per-row-arrays problem this function exists for, and sw/source/filter/inc/wrtswtbl.hxx answers it with `#define COLFUZZY 20` twips: SwWriteTableCol::operator== compares two column positions as equal when they differ by at most that. Round-tripping a single patched int16 through LibreOffice 26.2.5.2 (.doc import, then its own ODF export) confirms the threshold empirically and exactly: a second row's boundary drifting 1 to 20 twips from the first's reads back as one shared 3-column grid, 21 and beyond as 4 columns with a real table:covered-table-cell. See ExaDev/documents.js#898.
+function isSameColumnBoundary(
+  left: number,
+  right: number,
+  toleranceTwips: number,
+): boolean {
+  return Math.abs(left - right) <= toleranceTwips;
+}
+
+// The tolerance isSameColumnBoundary actually uses for one table, never wider than TWIPS_PER_POINT and never wide enough to fold two boundaries the SAME row states as genuinely distinct into one: this reader's own writer has no equivalent of LibreOffice's MINLAY minimum-cell-width widening, so nothing stops a real producer's own table from stating a column narrower than a point, and treating that column's own two boundaries as "the same" would silently delete it -- a real narrow column, not phantom drift, since a single row's own rgdxaCenter entries are never ambiguous about how many columns that row states. Clamping to one twip below the narrowest strictly-positive gap any row states between two of its own adjacent boundaries makes that impossible: two boundaries closer together than the tightest real column this table declares are never merged, whichever rows they came from. A zero-width gap is a legal adjacent-duplicate boundary (a genuine zero-width cell, see logicalCellsForRow's own note) rather than a column at all, and is excluded so one zero-width cell in a table does not collapse every other boundary to exact matching.
+function effectiveColumnBoundaryTolerance(
+  definitions: readonly TableRowDefinition[],
+): number {
+  let narrowestRealGapTwips: number | undefined;
+  for (const definition of definitions) {
+    const boundaries = definition.columnBoundariesTwips;
+    for (let index = 1; index < boundaries.length; index += 1) {
+      const left = boundaries[index - 1];
+      const right = boundaries[index];
+      if (left === undefined || right === undefined) continue;
+      const gap = right - left;
+      if (
+        gap > 0 &&
+        (narrowestRealGapTwips === undefined || gap < narrowestRealGapTwips)
+      ) {
+        narrowestRealGapTwips = gap;
+      }
+    }
+  }
+  return narrowestRealGapTwips === undefined
+    ? TWIPS_PER_POINT
+    : Math.min(TWIPS_PER_POINT, narrowestRealGapTwips - 1);
 }
 
 interface RawCell {
@@ -138,10 +167,20 @@ function tryAssembleTable(
     );
   }
 
-  const columnBoundariesTwips = canonicalColumnBoundariesTwips(rowDefinitions);
+  const toleranceTwips = effectiveColumnBoundaryTolerance(rowDefinitions);
+  const columnBoundariesTwips = canonicalColumnBoundariesTwips(
+    rowDefinitions,
+    toleranceTwips,
+  );
   return {
     kind: "table",
-    rows: buildRows(rawRows, rowDefinitions, columnBoundariesTwips, rowHeights),
+    rows: buildRows(
+      rawRows,
+      rowDefinitions,
+      columnBoundariesTwips,
+      rowHeights,
+      toleranceTwips,
+    ),
     columnWidthsPt: columnWidthsFromBoundaries(columnBoundariesTwips),
   };
 }
@@ -149,6 +188,7 @@ function tryAssembleTable(
 // The table's own shared column grid, reconstructed as the union of every row's own rgdxaCenter boundary values rather than assumed from any single row -- see this module's own top-of-file note on why a merged row's own boundaries are a genuine subset of the table's full grid, not the whole thing. The union is taken within isSameColumnBoundary's own tolerance rather than by exact integer equality: [MS-DOC] states each row's boundaries independently, so two rows meaning the identical grid can differ by a twip or two without either being wrong, and an exact union would turn that drift into a phantom hairline column plus a spurious colSpan on every row (ExaDev/documents.js#898). Sorting before clustering makes the result depend only on the boundary values themselves, never on which row happened to be read first -- unlike LibreOffice's own insertion-ordered fuzzy set -- and taking each cluster's smallest member as its representative keeps the canonical array non-decreasing and anchored on the leftmost row's own left edge.
 function canonicalColumnBoundariesTwips(
   definitions: readonly TableRowDefinition[],
+  toleranceTwips: number,
 ): number[] {
   const sorted = definitions
     .flatMap((definition) => definition.columnBoundariesTwips)
@@ -158,7 +198,7 @@ function canonicalColumnBoundariesTwips(
     const representative = canonical[canonical.length - 1];
     if (
       representative === undefined ||
-      !isSameColumnBoundary(representative, boundary)
+      !isSameColumnBoundary(representative, boundary, toleranceTwips)
     ) {
       canonical.push(boundary);
     }
@@ -170,9 +210,10 @@ function canonicalColumnBoundariesTwips(
 function gridIndexFor(
   canonicalBoundariesTwips: readonly number[],
   boundary: number,
+  toleranceTwips: number,
 ): number {
   const index = canonicalBoundariesTwips.findIndex((candidate) =>
-    isSameColumnBoundary(candidate, boundary),
+    isSameColumnBoundary(candidate, boundary, toleranceTwips),
   );
   if (index === -1) {
     throw new DocFormatError(
@@ -206,6 +247,7 @@ function logicalCellsForRow(
   cells: readonly RawCell[],
   rowBoundariesTwips: readonly number[],
   canonicalBoundariesTwips: readonly number[],
+  toleranceTwips: number,
 ): LogicalCell[] {
   const logical: LogicalCell[] = [];
   let physicalIndex = 0;
@@ -229,8 +271,16 @@ function logicalCellsForRow(
         "a table row's own column-boundary array has fewer entries than its physical cell count requires",
       );
     }
-    const startGridIndex = gridIndexFor(canonicalBoundariesTwips, left);
-    const endGridIndex = gridIndexFor(canonicalBoundariesTwips, right);
+    const startGridIndex = gridIndexFor(
+      canonicalBoundariesTwips,
+      left,
+      toleranceTwips,
+    );
+    const endGridIndex = gridIndexFor(
+      canonicalBoundariesTwips,
+      right,
+      toleranceTwips,
+    );
     logical.push({
       startGridIndex,
       // A physical cell whose own boundaries snap to one canonical entry covers no segment of the shared grid at all. That is a legal cell, not corruption: [MS-DOC] 2.9.321 requires rgdxaCenter only to be "in non-decreasing order", so two adjacent entries may be equal (a genuine zero-width cell) or -- now that the union snaps -- within the tolerance of each other. ContentTableCell has no way to say "zero columns wide", so such a cell is carried with its content as an ordinary un-spanned cell, and the cell following it keeps its own start index rather than being displaced by a span this one never occupied.
@@ -250,6 +300,7 @@ function buildRows(
   rowDefinitions: readonly TableRowDefinition[],
   canonicalBoundariesTwips: readonly number[],
   rowHeights: readonly (number | undefined)[],
+  toleranceTwips: number,
 ): ContentTableRow[] {
   const logicalRows = rawRows.map((row, rowIndex): LogicalCell[] => {
     const definition = rowDefinitions[rowIndex];
@@ -262,6 +313,7 @@ function buildRows(
       row,
       definition.columnBoundariesTwips,
       canonicalBoundariesTwips,
+      toleranceTwips,
     );
   });
 
