@@ -361,11 +361,13 @@ export function writeDrawFrame(
 // THE FIVE FIELDS THIS FUNCTION DROPS, each named rather than left silent, matching typed/odt/write.ts's own normaliseOdtContent convention:
 // - fontScale / lineSpacingReduction are DrawingML's own a:normAutofit percentages -- the font-shrink factor PowerPoint COMPUTED to make overflowing text fit, stored in the file (ooxml.js's src/typed/pptx/read.ts reads both). ODF stores no such computed factor anywhere: its own autofit vocabulary (draw:fit-to-size on the shape's graphic properties) is a MODE flag, saying that a consumer should shrink text to fit, not by how much. Writing it would therefore invent a fact the input never stated (a mode, from a factor) while still losing the factor, and this package's own reader reads nothing back from it -- so the loss is stated here instead of approximated. A real pptx -> odp conversion drops autofit shrink state, and this is the line that says so.
 // - `sourcePath`, `source`, and `frames` are dropped for the reasons odt's own writer already gives for the identical fields (normaliseOdtContent names all three too): sourcePath is a READER's own diagnostic path (the writer has no document to have read it from), residue is quarantined, opaque text belonging to whichever format produced it -- re-emitting it into a different document would be actively wrong rather than merely incomplete -- and frames is a LAYOUT pass's own rendered-position record, which a writer that runs before any layout pass has none of to carry. Not a gap this writer introduces; existing, consistent precedent.
+//
+// The return type states the one thing the body guarantees that ContentShape's own schema cannot: `paintOrder` is always present here, even though it is optional on the schema (a reader stamps it; a hand-built document need not). Saying so in the type is what lets typed/odg/write.ts sort by it without a fallback for a case this function makes impossible.
 export function canonicalDrawShape(
   shape: ContentShape,
   documentIndex: number,
   listState: ListPlanState,
-): ContentShape {
+): ContentShape & { paintOrder: number } {
   const content = planShapeContent(shape.blocks, listState);
   const blocks: ContentBlock[] =
     content.kind === "table"
@@ -381,7 +383,7 @@ export function canonicalDrawShape(
         : content.paragraphs.map((paragraph) =>
             canonicalParagraph(paragraph, paragraph.list?.numId),
           );
-  const canonical: ContentShape = {
+  const canonical: ContentShape & { paintOrder: number } = {
     frame: shape.frame,
     insetLeftPt: shape.insetLeftPt,
     insetTopPt: shape.insetTopPt,
