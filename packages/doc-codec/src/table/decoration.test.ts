@@ -57,6 +57,18 @@ describe("Brc80", () => {
     });
   });
 
+  it("resolves an ico past the palette's own 0x11 bound to the automatic colour, rather than aborting the whole document read", () => {
+    // ico is a full byte, so a malformed or third-party-extended file can state a value the 17-entry palette has no entry for. A run's own sprmCIco has to throw for exactly this -- a colour that is not automatic and has nowhere else to be recovered from -- but a cell border is decorative and already has an automatic-colour fallback of its own (the case above), so one out-of-range byte in one cell must not fail the entire read the way DocFormatError otherwise would.
+    expect(readBrc80(bytes([0x08, 0x01, 0x11, 0x00]), 0)).toEqual({
+      color: BLACK,
+      widthPt: 1,
+    });
+    expect(readBrc80(bytes([0x08, 0x01, 0xff, 0x00]), 0)).toEqual({
+      color: BLACK,
+      widthPt: 1,
+    });
+  });
+
   it("ignores dptSpace, fShadow and fFrame, which ContentBorder cannot express", () => {
     const withFlags = readBrc80(bytes([0x08, 0x01, 0x01, 0xff]), 0);
     const withoutFlags = readBrc80(bytes([0x08, 0x01, 0x01, 0x00]), 0);
@@ -204,6 +216,12 @@ describe("Shd80", () => {
 
   it("reads Shd80Nil -- every bit set -- as no background", () => {
     expect(readShd80(0xffff)).toBeUndefined();
+  });
+
+  it("resolves an icoFore/icoBack past the palette's own 0x11 bound to no background, rather than aborting the whole document read", () => {
+    // icoFore and icoBack are each a 5-bit field (0-31), so a value the 17-entry palette has no entry for is a real possibility this reader must not fail the whole document over -- see decoration.ts's own readBrc80 note and color.ts's decorativeIcoColor.
+    expect(readShd80(0x03e0)).toBeUndefined(); // ipatAuto (bits 10-15 = 0), icoFore 0, icoBack 0x1f (bits 5-9)
+    expect(readShd80(0x041f)).toBeUndefined(); // ipatSolid (bits 10-15 = 1), icoFore 0x1f (bits 0-4), icoBack 0
   });
 });
 
