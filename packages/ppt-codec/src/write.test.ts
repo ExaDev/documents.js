@@ -8,6 +8,7 @@ import {
   flattenTree,
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
+import { MASTER_SLIDE_ID } from "./document/master-write";
 import { readNotesContainerAtom } from "./document/notes";
 import { readNotesListWithText } from "./document/notes-list";
 import { readSlideListWithText } from "./document/slide-list";
@@ -721,6 +722,24 @@ describe("speaker notes", () => {
     ).map((persist) => persist.notesId);
     expect(notesIds).toHaveLength(slideIds.length);
     expect(notesIds.filter((id) => slideIds.includes(id))).toEqual([]);
+  });
+
+  it("keeps minted slide ids below the MasterId range readNotesBySlideId's map is keyed against", () => {
+    // read.ts's readNotesBySlideId keys its notes-by-slide map on slideIdRef, and [MS-PPT] 2.2.13 requires a MasterId -- the identifier space a main master's own slideIdRef comes from, MASTER_SLIDE_ID here -- to be at least 0x80000000. A slide id minted at or above that bound could collide with one, so every id this writer mints has to stay below it; see the comment beside FIRST_SLIDE_ID in write.ts.
+    const { powerPointDocumentStream } = writePptStreams({
+      metadata: {},
+      slides: Array.from({ length: 4 }, (_unused, index) =>
+        slide({ notes: `Notes ${index}` }),
+      ),
+    });
+    const document = readRecordAt(powerPointDocumentStream, 0);
+    const slideIds = readSlideListWithText(
+      requireRecord(
+        listWithInstance(document, SLIDE_LIST_INSTANCE_SLIDES),
+        "slide list",
+      ),
+    ).map((persist) => persist.slideId);
+    expect(Math.max(...slideIds)).toBeLessThan(MASTER_SLIDE_ID);
   });
 
   it("names each notes slide's own presentation slide in its NotesAtom", () => {
