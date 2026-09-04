@@ -396,7 +396,7 @@ const LIBREOFFICE_COLUMN_WIDTHS_PT = [116.9, 145, 220];
 const MIDDLE_COLUMN_WIDTH_TWIPS = 2900;
 /** The boundary between that table's first and second columns: the single int16 the tolerance sweep patched inside a real LibreOffice-authored file's second row, and the one a row merging those two columns omits from its own array entirely. */
 const INTERIOR_BOUNDARY_INDEX = 1;
-/** sprmTCellPaddingDefault's own documented default wWidth ([MS-DOC] 2.6.4), which is why Word writes -108 rather than 0 as an unindented table's first rgdxaCenter entry -- and so also the size of the real-world one-row leading indent the mode-2 case below uses. */
+/** Word's own default for an unindented table's first rgdxaCenter entry, confirmed against LibreOffice's WW8 importer source (a named -108 constant, "Word sets the first nCenter value to -108 when no indent is used") -- plausibly the format's own 108-twip default cell margin, sprmTCellPaddingDefault ([MS-DOC] 2.6.4), compensated for, though neither source states that link outright (see the README's own identical hedge). Also the size of the real-world one-row leading indent the mode-2 case below uses. */
 const WORD_DEFAULT_CELL_MARGIN_TWIPS = 108;
 
 function withBoundaryShifted(
@@ -455,7 +455,7 @@ function colSpansPerRow(
   return block.rows.map((row) => row.cells.map((cell) => cell.colSpan));
 }
 
-// [MS-DOC] 2.6.4 states a table's column layout per row, and 2.9.321's rgdxaCenter is a plain array of twip offsets from the page margin with no coarser quantum defined anywhere -- so two rows meaning the identical grid may legally disagree by a twip or two, and reconstructing the shared grid from them needs a tolerance rather than exact integer equality (ExaDev/documents.js#898). The threshold is one point, matching what a real, independent [MS-DOC] implementation applies to the identical per-row-boundaries-to-shared-grid problem: LibreOffice's `#define COLFUZZY 20` twips (sw/source/filter/inc/wrtswtbl.hxx), whose changeover was confirmed empirically at exactly 20/21 by sweeping a single patched int16 through LibreOffice 26.2.5.2's own .doc importer.
+// [MS-DOC] 2.6.4 states a table's column layout per row, and 2.9.321's rgdxaCenter is a plain array of twip offsets from the page margin with no coarser quantum defined anywhere -- so two rows meaning the identical grid may legally disagree by a twip or two, and reconstructing the shared grid from them needs a tolerance rather than exact integer equality (ExaDev/documents.js#898). The threshold is one point, matching what a real, independent [MS-DOC] implementation applies to the identical per-row-boundaries-to-shared-grid problem: LibreOffice's `#define COLFUZZY 20` twips (sw/source/filter/inc/wrtswtbl.hxx), applied by its own ODF export -- the point at which its per-row table model is projected onto one shared grid, not its .doc importer, which preserves per-row drift untouched -- whose changeover was confirmed empirically at exactly 20/21 by round-tripping a single patched int16 through LibreOffice 26.2.5.2's own .doc import followed by that ODF export.
 describe("readDocContent table column grids, from hand-assembled rgdxaCenter arrays", () => {
   it("reads rows stating the identical LibreOffice-authored boundary array as one shared three-column grid", () => {
     const block = readTableFromRowBoundaries([
@@ -642,5 +642,38 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
       "b",
       "c",
     ]);
+  });
+
+  // The clamp effectiveColumnBoundaryTolerance exists for: this writer has no equivalent of LibreOffice's own MINLAY minimum-cell-width widening, so nothing stops a real producer's rgdxaCenter from stating a column genuinely narrower than the tolerance's own one-point default -- and a single row's own adjacent boundaries are never ambiguous about how many columns that row states, whatever the gap between them. A single-row table with no cross-row drift at all isolates this: if the tolerance folded a real narrow column into its neighbour here, that would be exactly the same defect the drift tolerance exists to fix, applied to the wrong pair of boundaries.
+  it("keeps a genuinely narrow column intact rather than folding it into its neighbour", () => {
+    const block = readTableFromRowBoundaries([
+      {
+        boundariesTwips: [0, 1000, 1010, 3000],
+        cells: ["a", "b", "c"],
+      },
+    ]);
+    expect(block.columnWidthsPt).toEqual([50, 0.5, 99.5]);
+    expect(colSpansPerRow(block)).toEqual([[undefined, undefined, undefined]]);
+  });
+
+  it("still applies the ordinary one-point tolerance to cross-row drift when no row states a narrower real column", () => {
+    const block = readTableFromRowBoundaries([
+      { boundariesTwips: [0, 2000, 3000], cells: ["a", "b"] },
+      { boundariesTwips: [0, 2001, 3000], cells: ["a", "b"] },
+    ]);
+    expect(block.columnWidthsPt).toEqual([100, 50]);
+    expect(colSpansPerRow(block)).toEqual([
+      [undefined, undefined],
+      [undefined, undefined],
+    ]);
+  });
+
+  it("narrows the drift tolerance to below a real column any row in the same table states, rather than the fixed one-point default", () => {
+    // Row 1 states a genuine 10-twip column (0.5pt) between 1000 and 1010, so the table-wide tolerance clamps to 9 twips -- one less than that gap. Row 2's own boundary at 1025 is 15 twips from row 1's 1010, further than the clamped 9-twip tolerance but within the un-clamped one-point (20-twip) default: without the clamp this boundary would fold into 1010 and silently widen the real narrow column into whatever gap it shares with 1025. With it, 1025 stays its own boundary.
+    const block = readTableFromRowBoundaries([
+      { boundariesTwips: [0, 1000, 1010, 3000], cells: ["a", "b", "c"] },
+      { boundariesTwips: [0, 1025, 3000], cells: ["a", "b"] },
+    ]);
+    expect(block.columnWidthsPt).toEqual([50, 0.5, 0.75, 98.75]);
   });
 });
