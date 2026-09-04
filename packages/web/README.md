@@ -1,6 +1,6 @@
-# documents
+# web
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/documents) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/web) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
 > A client-only, statically-built web UI for every conversion and editing tool in the [documents.js ecosystem](../../README.md) — convert and edit docx, pptx, xlsx, odt, odp, ods, odg, csv, svg, pdf, and markdown documents entirely in the browser, with no server component.
 
@@ -51,7 +51,7 @@ The app is split into a main-thread UI and a Web Worker that holds the only code
 
 ## Gotchas
 
-- The production build is served from `/documents/` on GitHub Pages (set via `base` in `vite.config.ts` when `CI` is set) but from `/` in local dev — a build produced locally with `CI` unset will have the wrong base path if deployed as-is.
+- The production build is served from `/<repo-name>/` on GitHub Pages (`/documents.js/` today) but from `/` in local dev — `base` in `vite.config.ts` derives the path segment from `GITHUB_REPOSITORY` when `CI` is set, falling back to the name parsed from the git remote, so it never needs a hand-maintained literal and can't silently drift from the actual deploying repository. A build produced locally with `CI` unset will have the wrong base path if deployed as-is.
 - This is a PWA (`vite-plugin-pwa`, `autoUpdate`). The worker bundle (by far the largest built asset) is deliberately excluded from the Workbox precache list and instead cached at runtime on first use via a `CacheFirst` rule, so it doesn't block install or blow the default precache size budget.
 - `src/workers/documents.worker.ts` is a browser Web Worker, unrelated to Cloudflare Workers — this repo has no `wrangler` config and doesn't deploy to Cloudflare, unlike some sibling packages in the ecosystem.
 

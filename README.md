@@ -58,7 +58,7 @@ Each exposes the conversion engine through a different surface:
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`document-cli`](packages/document-cli/README.md) | CLI and interactive Ink TUI covering every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/markdown conversion, bridge, and editor as a scriptable command or a terminal app.                                                |
 | [`document-mcp`](packages/document-mcp/README.md) | MCP server exposing the conversion, `.odb`, metadata, and font tooling as MCP tools.                                                                                                                                        |
-| [`documents`](packages/documents/README.md)       | Client-only, statically-built web UI for every conversion and editing tool in the ecosystem, also depending directly on `markdown-codec`. The one package here that is never published: it deploys to GitHub Pages instead. |
+| [`web`](packages/web/README.md)                   | Client-only, statically-built web UI for every conversion and editing tool in the ecosystem, also depending directly on `markdown-codec`. The one package here that is never published: it deploys to GitHub Pages instead. |
 
 ## PDF is an equal peer, not a junction
 
@@ -93,7 +93,7 @@ Individual packages set their own build and test configuration, but as a family 
 - TypeScript with Zod 4 for schema definition and validation.
 - MIT licensing.
 - Hand-written, dependency-minimal codecs over pulling in heavyweight format libraries — see each package's own README for what it deliberately avoids depending on.
-- The foundation and format-codec packages (`byte-codec`, `document-schema.js`, `document-outline.js`, `archive-codec`, `document-compute.js`, `excel-number-format`, `ooxml.js`, `odf.js`, `markdown-codec`, `pdf-codec`, `epub-codec`, `rtf-codec`, `wpd-codec`, `doc-codec`, `xls-codec`, `ppt-codec`, `documents.js`) are Worker-isomorphic: their published `src/` must not import `node:*`/bare Node builtins or use the Node-only `Buffer` global. The `no-restricted-imports`/`no-restricted-globals` ban enforcing that is defined once in the root's `eslint.shared.ts`, which derives the module list from `node:module`'s own `builtinModules` rather than restating it; a package opts in by passing `isomorphic: true` to `packageLintConfig` rather than declaring the rule itself, and a workerd test suite proves it at runtime. The interface packages (`document-cli`, `document-mcp`, `documents`) are not held to this, since they legitimately run under Node or a browser rather than needing Worker portability.
+- The foundation and format-codec packages (`byte-codec`, `document-schema.js`, `document-outline.js`, `archive-codec`, `document-compute.js`, `excel-number-format`, `ooxml.js`, `odf.js`, `markdown-codec`, `pdf-codec`, `epub-codec`, `rtf-codec`, `wpd-codec`, `doc-codec`, `xls-codec`, `ppt-codec`, `documents.js`) are Worker-isomorphic: their published `src/` must not import `node:*`/bare Node builtins or use the Node-only `Buffer` global. The `no-restricted-imports`/`no-restricted-globals` ban enforcing that is defined once in the root's `eslint.shared.ts`, which derives the module list from `node:module`'s own `builtinModules` rather than restating it; a package opts in by passing `isomorphic: true` to `packageLintConfig` rather than declaring the rule itself, and a workerd test suite proves it at runtime. The interface packages (`document-cli`, `document-mcp`, `web`) are not held to this, since they legitimately run under Node or a browser rather than needing Worker portability.
 
 ## Working in the workspace
 
@@ -116,7 +116,7 @@ To scope a run, drive turbo directly rather than adding a filter to the scripts 
 ```sh
 pnpm exec turbo run _test --filter=pdf-codec           # one package and its dependencies
 pnpm exec turbo run _test _build --affected            # whatever the current branch changed
-pnpm exec turbo run documents#test                     # the web UI alone
+pnpm exec turbo run web#test                            # the web UI alone
 ```
 
 Each package also keeps its own scripts, so `pnpm --dir packages/odf.js test:watch` (or running the script from inside that directory) still works for focused work on a single package.
@@ -125,7 +125,7 @@ Each package also keeps its own scripts, so `pnpm --dir packages/odf.js test:wat
 
 `turbo.json` is the whole story, and two details in it are worth knowing before editing it.
 
-The tasks the root pipeline runs are the underscore-prefixed ones (`_build`, `_lint`, `_test`, …). Each package already used that convention: its public `build` script was `turbo run _build`, and `_build` held the real command. Running the public names from the root would make turbo invoke those wrapper scripts, which invoke turbo again — the recursive-call case Turborepo's own documentation warns about. The root reaches straight past the wrappers to the leaf commands, and the wrappers stay usable inside a single package. The web UI predates the convention and names its scripts plainly, so it gets package-scoped `documents#…` entries instead.
+The tasks the root pipeline runs are the underscore-prefixed ones (`_build`, `_lint`, `_test`, …). Each package already used that convention: its public `build` script was `turbo run _build`, and `_build` held the real command. Running the public names from the root would make turbo invoke those wrapper scripts, which invoke turbo again — the recursive-call case Turborepo's own documentation warns about. The root reaches straight past the wrappers to the leaf commands, and the wrappers stay usable inside a single package. The web UI predates the convention and names its scripts plainly, so it gets package-scoped `web#…` entries instead.
 
 Every task depends on `^_build` — its dependencies' builds. In the separate repositories a sibling arrived pre-built from the npm registry, so nothing needed building before a typecheck, lint, or test run. Here a sibling is a symlink into `packages/<name>`, whose `dist/` exists only once that package's own build has run, and `tsc`, type-aware ESLint, and vitest all resolve imports through it.
 

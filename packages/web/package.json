@@ -1,5 +1,5 @@
 {
-  "name": "documents",
+  "name": "web",
   "private": true,
   "version": "2.3.2",
   "type": "module",
@@ -7,9 +7,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ExaDev/documents.js.git",
-    "directory": "packages/documents"
+    "directory": "packages/web"
   },
-  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/documents",
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/web",
   "bugs": {
     "url": "https://github.com/ExaDev/documents.js/issues"
   },

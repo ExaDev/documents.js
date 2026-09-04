@@ -23,7 +23,6 @@ body:
         - document-mcp
         - document-outline.js
         - document-schema.js
-        - documents
         - documents.js
         - epub-codec
         - markdown-codec
@@ -32,6 +31,7 @@ body:
         - pdf-codec
         - ppt-codec
         - rtf-codec
+        - web
         - wpd-codec
         - xls-codec
     validations:
