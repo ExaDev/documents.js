@@ -22,7 +22,9 @@ import type { RecordGroup } from "../biff/substreams";
 import {
   PALETTE_ENTRY_COUNT,
   readLongRgbColor,
+  unpackXfAlignment,
   unpackXfDecoration,
+  type XfAlignmentFields,
   type XfDecorationFields,
 } from "../biff/xf-colors";
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
@@ -44,7 +46,7 @@ export interface SheetEntry {
   readonly bofPosition: number;
 }
 
-/** One XF record's fixed prefix ([MS-XLS] 2.4.353) plus its trailing CellXF/StyleXF payload's own fill/border fields. Alignment (the payload's own leading word) is still not carried: this package's schema mapping (content.ts) has no use for it, matching the reader's own documented scope. */
+/** One XF record's fixed prefix ([MS-XLS] 2.4.353) plus its trailing CellXF/StyleXF payload's own alignment and fill/border fields. */
 export interface CellFormat {
   /** ifnt: the index of the Font record this format uses. */
   readonly fontIndex: number;
@@ -52,6 +54,8 @@ export interface CellFormat {
   readonly formatId: number;
   /** fStyle: true when this record describes a cell STYLE rather than a cell format. */
   readonly isStyle: boolean;
+  /** The trailing payload's own leading word, resolved into document-schema.js's Alignment/verticalAlignment members directly (undefined already means what an absent ContentSheetCell.alignment/verticalAlignment means, so content.ts consumes this without a further resolution step). */
+  readonly alignment: XfAlignmentFields;
   /** The trailing payload's own fill pattern/colour and per-side border fields, raw -- resolved into document-schema.js's Color/ContentCellBorders by content.ts, through this same globals object's own `palette`. */
   readonly decoration: XfDecorationFields;
 }
@@ -249,13 +253,13 @@ function readFormat(record: RecordGroup): { id: number; code: string } {
   return { id, code: readXLUnicodeString(cursor) };
 }
 
-/** XF ([MS-XLS] 2.4.353): a font index, a number-format identifier, a flags field whose fStyle bit says whether the trailing payload is a CellXF or a StyleXF, then that 14-byte trailing payload itself -- a leading alignment/fAtr* word this reader does not act on (skipped rather than parsed: see the package README's own documented scope), then the border word, fill-pattern word, and fill-colour word xf-colors.ts's unpackXfDecoration resolves into this format's own `decoration`. CellXF and StyleXF share the identical border/fill bit layout ([MS-XLS] 2.4.353's own field table), so this reads both shapes uniformly regardless of isStyle -- a cell only ever references a CellXF entry by its own ixfe (workbook/sheet.ts's cell reading), so a StyleXF's decoration is parsed but never consulted downstream. */
+/** XF ([MS-XLS] 2.4.353): a font index, a number-format identifier, a flags field whose fStyle bit says whether the trailing payload is a CellXF or a StyleXF, then that 14-byte trailing payload itself -- the leading alignment word xf-colors.ts's unpackXfAlignment resolves into this format's own `alignment`, then the border word, fill-pattern word, and fill-colour word its unpackXfDecoration resolves into this format's own `decoration`. CellXF and StyleXF share the identical alignment/border/fill bit layout ([MS-XLS] 2.4.353's own field table), so this reads both shapes uniformly regardless of isStyle -- a cell only ever references a CellXF entry by its own ixfe (workbook/sheet.ts's cell reading), so a StyleXF's alignment/decoration are parsed but never consulted downstream. */
 function readCellFormat(record: RecordGroup): CellFormat {
   const cursor = new BlockCursor(record.blocks);
   const fontIndex = cursor.u16();
   const formatId = cursor.u16();
   const flags = cursor.u16();
-  cursor.u32(); // word1: alignment/trot/indent/fAtr* flags -- not part of this reader's schema mapping
+  const word1 = cursor.u32();
   const word2 = cursor.u32();
   const word3 = cursor.u32();
   const word4 = cursor.u16();
@@ -263,6 +267,7 @@ function readCellFormat(record: RecordGroup): CellFormat {
     fontIndex,
     formatId,
     isStyle: (flags & XF_FLAG_STYLE) !== 0,
+    alignment: unpackXfAlignment(word1),
     decoration: unpackXfDecoration(word2, word3, word4),
   };
 }

@@ -52,12 +52,12 @@ import {
   isoTimeToSerial,
 } from "../serial";
 import { pointsToColumnWidth, pointsToInches, pointsToTwips } from "../units";
-import { cellCarriesDecoration, writesCellRecord } from "../written-cells";
+import { cellCarriesFormatting, writesCellRecord } from "../written-cells";
 import { GENERAL_CELL_XF_INDEX } from "./globals-writer";
 
 // The worksheet substream ([MS-XLS] 2.1.7.20.5), write side: the page setup, grid geometry, and cell table for one sheet, the counterpart of workbook/sheet.ts's own readSheetRecords. See xls-codec's README for exactly which worksheet-substream records this writer emits (the print-settings group, Dimensions, ColInfo, Row, the value-cell family, MergeCells) and which it deliberately omits (Window2, the calc-state family, Index/DBCell) -- real content, not per-window UI state or a lookup optimisation this reader (or any reader) does not require to find a cell.
 //
-// A blank cell -- ContentCellValue's own 'empty' kind -- splits in two. One carrying no decoration is written as nothing at all, which is what round-trips: content.ts's mapCell drops an undecorated blank it reads, and applyMerges reconstructs an empty anchor for a merged range from the MergeCells record alone. One carrying a background or a border is a Blank record ([MS-XLS] 2.4.20), because its decoration exists only in the XF that record's ixfe names and there is no other record in the sheet to hang it on. written-cells.ts holds the predicate deciding which, shared with write.ts's own workbook-wide scans so the two cannot disagree.
+// A blank cell -- ContentCellValue's own 'empty' kind -- splits in two. One carrying no formatting is written as nothing at all, which is what round-trips: content.ts's mapCell drops an unformatted blank it reads, and applyMerges reconstructs an empty anchor for a merged range from the MergeCells record alone. One carrying a background, a border, or a non-default alignment is a Blank record ([MS-XLS] 2.4.20), because its formatting exists only in the XF that record's ixfe names and there is no other record in the sheet to hang it on. written-cells.ts holds the predicate deciding which, shared with write.ts's own workbook-wide scans so the two cannot disagree.
 //
 // MulBlank, RK, and MulRk stay unimplemented: unlike Blank, each is a pure compaction optimisation over information a plain Blank/Number record already carries losslessly.
 
@@ -77,7 +77,7 @@ const ROW_FLAG_UNSYNCED_BIT = 6;
 const COLINFO_FLAG_HIDDEN = 0x0001;
 
 export interface SheetWriteContext {
-  /** The XF index ([MS-XLS] 2.5.168 IXFCell) a cell's own (number format, decoration) combination resolves to -- GENERAL_CELL_XF_INDEX for a cell with General formatting and no background/borders, one of the workbook's other cell XFs otherwise. write.ts's own cell-format interning pass is what assigns and deduplicates these. */
+  /** The XF index ([MS-XLS] 2.5.168 IXFCell) a cell's own (number format, alignment, decoration) combination resolves to -- GENERAL_CELL_XF_INDEX for a cell with General formatting, general/bottom alignment, and no background/borders, one of the workbook's other cell XFs otherwise. write.ts's own cell-format interning pass is what assigns and deduplicates these. */
   xfIndexForCell(cell: ContentSheetCell): number;
   /** The shared string table index for a string cell's own text; every string a sheet writes must already be registered in the workbook-wide table before this is called. */
   sstIndexFor(text: string): number;
@@ -455,7 +455,7 @@ function cellHeader(cell: ContentSheetCell, xfIndex: number): RecordBuilder {
   return new RecordBuilder().u16(cell.row).u16(cell.column).u16(xfIndex);
 }
 
-/** One cell record, keyed by ContentCellValue's own discriminant: Number for every numeric/temporal kind ([MS-XLS] 2.4.180 -- always the full IEEE 754 double, never the packed RK encoding, which is a compaction optimisation this writer does not implement), LabelSst for a string ([MS-XLS] 2.4.149, through the workbook-wide shared string table), BoolErr for a boolean or error value ([MS-XLS] 2.4.24), and Blank for an 'empty' cell whose decoration is the only thing it carries ([MS-XLS] 2.4.20 -- a cell header and nothing else, so the XF its ixfe names is the whole content). An undecorated empty cell never reaches here at all: written-cells.ts's own predicate filters it out upstream, since there is nothing for it to say. */
+/** One cell record, keyed by ContentCellValue's own discriminant: Number for every numeric/temporal kind ([MS-XLS] 2.4.180 -- always the full IEEE 754 double, never the packed RK encoding, which is a compaction optimisation this writer does not implement), LabelSst for a string ([MS-XLS] 2.4.149, through the workbook-wide shared string table), BoolErr for a boolean or error value ([MS-XLS] 2.4.24), and Blank for an 'empty' cell whose formatting is the only thing it carries ([MS-XLS] 2.4.20 -- a cell header and nothing else, so the XF its ixfe names is the whole content). An unformatted empty cell never reaches here at all: written-cells.ts's own predicate filters it out upstream, since there is nothing for it to say. */
 function writeCellValueRecord(
   cell: ContentSheetCell,
   xfIndex: number,
@@ -517,7 +517,7 @@ function writeCellValueRecord(
       );
     }
     case "empty":
-      if (!cellCarriesDecoration(cell)) {
+      if (!cellCarriesFormatting(cell)) {
         throw new BiffWriteError(
           `internal error: writeCellValueRecord was called for the undecorated empty cell at row ${cell.row}, column ${cell.column}, which written-cells.ts's own predicate must filter out before reaching here`,
         );

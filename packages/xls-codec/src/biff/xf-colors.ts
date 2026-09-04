@@ -1,4 +1,5 @@
 import type {
+  Alignment,
   BorderWeight,
   Color,
   ContentBorder,
@@ -13,9 +14,9 @@ import {
 
 import type { BlockCursor } from "./cursor";
 
-// The colour and border/fill vocabulary an XF record's trailing CellXF/StyleXF payload carries ([MS-XLS] 2.4.353), and the workbook-wide Palette record ([MS-XLS] 2.4.188) its icv fields resolve through. This is the one place the bit layout of that trailing payload's border/fill words is packed or unpacked -- workbook/globals.ts's readCellFormat unpacks it on read, biff/xf-writer.ts's writeCellXfRecord packs it on write, and both call into the same functions here rather than each carrying an independent copy of the layout.
+// The colour, border/fill, and alignment vocabulary an XF record's trailing CellXF/StyleXF payload carries ([MS-XLS] 2.4.353), and the workbook-wide Palette record ([MS-XLS] 2.4.188) its icv fields resolve through. This is the one place the bit layout of that trailing payload's leading alignment word and its border/fill words is packed or unpacked -- workbook/globals.ts's readCellFormat unpacks it on read, biff/xf-writer.ts's writeCellXfRecord packs it on write, and both call into the same functions here rather than each carrying an independent copy of the layout.
 //
-// Deliberately out of scope: alignment (the payload's own leading word) and per-cell fonts. See xls-codec's README, "Cell decoration" -- this package has never modelled a per-cell font, matching ooxml.js's own xlsx reader, and alignment is a separate, unclaimed gap this module does not touch.
+// Deliberately still out of scope: per-cell fonts, matching ooxml.js's own xlsx reader -- this package has never modelled a per-cell font, and ContentSheetCell has no field for one.
 
 // --- FillPattern ([MS-XLS] "FillPattern" enumeration) ---
 
@@ -23,6 +24,86 @@ import type { BlockCursor } from "./cursor";
 export const FILL_PATTERN_NONE = 0x00;
 /** FLSSOLID: a solid fill, the only pattern this package maps onto ContentSheetCell.background -- "If this value is 1 ... then only icvFore is rendered" ([MS-XLS] CellXF). Every other pattern (50%/75%/25% gray, the stripe and crosshatch families, ...) is a real information-loss case this reader does not approximate: see resolveFillBackground below. */
 export const FILL_PATTERN_SOLID = 0x01;
+
+// --- HorizAlign / VertAlign ([MS-XLS] "HorizAlign"/"VertAlign" enumerations), the CellXF/StyleXF payload's own leading alc/alcV fields ---
+
+// HorizAlign (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/75e17a8f-9cd4-4b37-927e-4b0a54ef9266): ALCGEN, the "use the cell's own value-kind default" spelling, is the identical semantics to ContentSheetCell.alignment being absent, so it round-trips to and from undefined rather than a literal Alignment member that would override the default it means to request. ALCGEN(0)/ALCLEFT(1)/ALCCTR(2)/ALCRIGHT(3)/ALCJUST(5) are the five members the functions below map to or from. ALCFILL(4)/ALCCONTCTR(6)/ALCDIST(7) are real HorizAlign members with no ContentSheetCell.alignment counterpart: left unread on the way in (resolveHorizontalAlignment's own default branch), and never written on the way out (horizAlignTokenFor has no case that produces them).
+const ALC_GENERAL = 0x0;
+const ALC_LEFT = 0x1;
+const ALC_CENTER = 0x2;
+const ALC_RIGHT = 0x3;
+const ALC_JUSTIFY = 0x5;
+
+// VertAlign (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1e9eb7d3-0cd8-42a3-af1e-f523105a5e93): ALCVTOP(0)/ALCVCTR(1)/ALCVBOT(2) are the three members the functions below map to or from -- ALCVBOT is the default this package's own schema documents for an absent verticalAlignment, matching xf-writer.ts's own VERT_ALIGN_BOTTOM. ALCVJUST(3)/ALCVDIST(4) are real VertAlign members with no ContentSheetCell.verticalAlignment counterpart: left unread, the identical policy ALCFILL/ALCCONTCTR/ALCDIST get above.
+const ALCV_TOP = 0x0;
+const ALCV_CENTER = 0x1;
+const ALCV_BOTTOM = 0x2;
+
+/** alc (a CellXF/StyleXF payload's word1, bits 0-2) -> ContentSheetCell.alignment, or undefined for ALCGEN (the value-kind default this field being absent already requests) and for the three HorizAlign members (ALCFILL/ALCCONTCTR/ALCDIST) Alignment has no member for -- matching ooxml.js's readHorizontalAlignment policy of only the four direct members surviving. */
+export function resolveHorizontalAlignment(alc: number): Alignment | undefined {
+  switch (alc) {
+    case ALC_LEFT:
+      return "left";
+    case ALC_CENTER:
+      return "center";
+    case ALC_RIGHT:
+      return "right";
+    case ALC_JUSTIFY:
+      return "justify";
+    default:
+      return undefined;
+  }
+}
+
+/** ContentSheetCell.alignment -> the alc token to pack into word1 -- undefined maps to ALCGEN, the "use the value-kind default" token every genuinely unaligned cell already carried before this module modelled alignment at all. */
+export function horizAlignTokenFor(alignment: Alignment | undefined): number {
+  switch (alignment) {
+    case "left":
+      return ALC_LEFT;
+    case "center":
+      return ALC_CENTER;
+    case "right":
+      return ALC_RIGHT;
+    case "justify":
+      return ALC_JUSTIFY;
+    default:
+      return ALC_GENERAL;
+  }
+}
+
+/** alcV (word1, bits 4-6) -> ContentSheetCell.verticalAlignment, or undefined for ALCVBOT (the schema's own documented default for an absent verticalAlignment) and for the two VertAlign members (ALCVJUST/ALCVDIST) the schema has no member for -- matching ooxml.js's readVerticalAlignment policy. */
+export function resolveVerticalAlignment(
+  alcV: number,
+): "top" | "middle" | "bottom" | undefined {
+  switch (alcV) {
+    case ALCV_TOP:
+      return "top";
+    case ALCV_CENTER:
+      return "middle";
+    default:
+      return undefined;
+  }
+}
+
+/** ContentSheetCell.verticalAlignment -> the alcV token to pack into word1 -- undefined (meaning 'bottom', the schema's own documented default) and the literal 'bottom' both map to ALCVBOT, exactly what an unaligned cell already carried before this module modelled alignment at all. */
+export function vertAlignTokenFor(
+  verticalAlignment: "top" | "middle" | "bottom" | undefined,
+): number {
+  switch (verticalAlignment) {
+    case "top":
+      return ALCV_TOP;
+    case "middle":
+      return ALCV_CENTER;
+    default:
+      return ALCV_BOTTOM;
+  }
+}
+
+/** The alignment fields word1's alc/alcV carry, read or write side alike -- undefined in either field means the value-kind default (horizontal) or ALCVBOT (vertical), the identical meaning ContentSheetCell.alignment/verticalAlignment being absent already carries. */
+export interface XfAlignmentFields {
+  readonly horizontal: Alignment | undefined;
+  readonly vertical: "top" | "middle" | "bottom" | undefined;
+}
 
 // --- BorderStyle ([MS-XLS] "BorderStyle" enumeration) ---
 
@@ -277,6 +358,16 @@ export const UNDECORATED_XF_FIELDS: XfDecorationFields = {
   top: UNDECORATED_EDGE,
   bottom: UNDECORATED_EDGE,
 };
+
+/** Unpacks word1 -- the CellXF/StyleXF trailing payload's leading word ([MS-XLS] 2.4.353's own field table, cited in full in xf-writer.ts's packAlignmentPrefix) -- into the two fields this package's schema can express: alc (bits 0-2) and alcV (bits 4-6). Every other field the word carries (fWrap, fJustLast, trot, cIndent, fShrinkToFit, iReadOrder, the fAtr* inheritance flags) has no ContentSheetCell counterpart and is not read. */
+export function unpackXfAlignment(word1: number): XfAlignmentFields {
+  const alc = word1 & 0x7;
+  const alcV = (word1 >>> 4) & 0x7;
+  return {
+    horizontal: resolveHorizontalAlignment(alc),
+    vertical: resolveVerticalAlignment(alcV),
+  };
+}
 
 /** Unpacks the three raw words a CellXF/StyleXF trailing payload's border/fill fields live in ([MS-XLS] 2.4.353's own field table, cited in full in xf-writer.ts's packXfDecorationWords below) into XfDecorationFields. word2 is the 32-bit border word (dgLeft/dgRight/dgTop/dgBottom/icvLeft/icvRight/grbitDiag), word3 the 32-bit fill-pattern word (icvTop/icvBottom/icvDiag/dgDiag/fHasXFExt/fls), word4 the 16-bit fill-colour word (icvFore/icvBack/...). */
 export function unpackXfDecoration(
