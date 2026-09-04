@@ -168,7 +168,7 @@ export function writeOdgContent(
     // Shapes first, then vectors -- the emit order normaliseOdgContent's own note states in full, and the order its documentIndex arithmetic is the exact counterpart of.
     const children: XmlNode[] = [
       ...writeDrawShapes(page.shapes, listState, shapeState),
-      ...writeDrawVectors(page.vectors, shapeState),
+      ...writeDrawVectors(page.vectors, shapeState, page.shapes.length),
     ];
     drawingElement.children.push(
       el(

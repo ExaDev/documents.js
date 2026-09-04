@@ -551,14 +551,12 @@ describe("writeOdgContent: paint order", () => {
     ).toEqual(["5", "1"]);
   });
 
-  it("writes no draw:z-index for a vector with no paintOrder, leaving document order to say it", () => {
+  it("writes draw:z-index as the vector's own document-encounter index for a vector with no paintOrder, never omitting the attribute", () => {
     const pkg = writeOdgContent(documentOf([page([rect()])]));
-    expect(
-      attrValue(firstPageChildren(pkg)[0]!, "draw:z-index"),
-    ).toBeUndefined();
+    expect(attrValue(firstPageChildren(pkg)[0]!, "draw:z-index")).toBe("0");
   });
 
-  it("writes no draw:z-index for a paintOrder ODF's own xsd:nonNegativeInteger cannot spell", () => {
+  it("writes draw:z-index as each vector's own document-encounter index for a paintOrder ODF's own xsd:nonNegativeInteger cannot spell", () => {
     const pkg = writeOdgContent(
       documentOf([
         page([
@@ -572,6 +570,21 @@ describe("writeOdgContent: paint order", () => {
       firstPageChildren(pkg).map((element) =>
         attrValue(element, "draw:z-index"),
       ),
-    ).toEqual([undefined, undefined, undefined]);
+    ).toEqual(["0", "1", "2"]);
+  });
+
+  // The bug this pins: an item with no attribute at all reads back on a real consumer as APPENDED AFTER every item that does carry one, regardless of its own resolved paint order relative to them (confirmed against real LibreOffice output -- see the review that found this). A page mixing an explicit paintOrder shape with an unspelled-paintOrder vector must therefore never omit draw:z-index on either: both resolve through the identical odfZIndexOf(paintOrder) ?? documentIndex this page's own canonicalDrawShape/canonicalDrawVector already use, and BOTH are written -- one shape (index 0), one vector whose own document-encounter index is shapes.length (1) plus its position (0), so 1.
+  it("writes an explicit draw:z-index for every item on a page mixing an explicit paintOrder shape with an unspelled-paintOrder vector, spanning both arrays", () => {
+    const pkg = writeOdgContent(
+      documentOf([page([rect()], [shape({ paintOrder: 3 })])]),
+    );
+    const children = firstPageChildren(pkg);
+    expect(children.map((element) => element.tag)).toEqual([
+      "draw:frame",
+      "draw:rect",
+    ]);
+    expect(
+      children.map((element) => attrValue(element, "draw:z-index")),
+    ).toEqual(["3", "1"]);
   });
 });
