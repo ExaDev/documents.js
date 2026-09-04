@@ -14,6 +14,10 @@ import { slice } from "./bytes";
 import { SUMMARY_INFORMATION_STREAM, WORD_DOCUMENT_STREAM } from "./detect";
 import { DocFormatError } from "./errors";
 import { parseFib, tableStreamName, type Fib } from "./fib/fib";
+import {
+  readNumberingDefinitions,
+  type NumberingDefinitions,
+} from "./list/numbering";
 import { applyCharacterSprms, type CharacterProperties } from "./prop/chp";
 import { PropertyBinTable } from "./prop/fkp";
 import { applyParagraphSprms, type ParagraphProperties } from "./prop/pap";
@@ -35,7 +39,7 @@ import {
 
 // The top-level read: a .doc's bytes to a ContentDocument. Every step below is one of [MS-DOC]'s own algorithms, in the order the specification chains them -- the compound-file container gives the WordDocument and Table streams, the FIB gives the offsets, the piece table turns character positions into bytes, and the two bin tables turn byte offsets into formatting. readParagraphs itself only ever produces flat ParagraphEntry values (one per paragraph/cell/row mark, whatever its own table depth); table/read.ts's assembleBlocks is what folds a contiguous run of table-depth paragraphs into a real ContentTable, so this module carries no table-specific logic of its own.
 //
-// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images, no footnotes/headers/endnotes, no section geometry, no numbering definitions, no style-inherited formatting, and no decryption. Each of those is a genuine layer of the format, and each is absent rather than approximated. Tables are read, but only at depth 1 -- a table nested inside a table cell is refused (table/read.ts) rather than mis-read.
+// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images, no footnotes/headers/endnotes, no section geometry, no style-inherited formatting, and no decryption. Each of those is a genuine layer of the format, and each is absent rather than approximated. Tables are read, but only at depth 1 -- a table nested inside a table cell is refused (table/read.ts) rather than mis-read. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like -- see DocContent's own comment below for why that rides outside ContentDocument's shared shape.
 
 /** The page geometry every section is given, because this reader does not yet read a document's own. US Letter with one-inch margins is Word's own default for a new document; a document that states otherwise is not yet consulted, so this is a placeholder the schema requires rather than a fact read from the file. */
 const DEFAULT_PAGE_SIZE: PageSize = { widthPt: 612, heightPt: 792 };
@@ -84,9 +88,12 @@ export function readDocStreams(bytes: Uint8Array<ArrayBuffer>): DocStreams {
   };
 }
 
-export function readDocContent(
-  bytes: Uint8Array<ArrayBuffer>,
-): ContentDocument {
+/** readDocContent's own return type: a ContentDocument (kind 'wordprocessing') plus numbering -- the list-level formatting (glyph/format, level-text template, start-at value) PlfLst/PlfLfo carry, which ContentListMembership has nowhere to hold. Mirrors ooxml.js's own DocxDocument.numbering exactly in field name and NumberingDefinitions' own shape (see list/numbering.ts's top comment for why it sits outside the shared schema rather than inside ContentListMembership); unlike DocxDocument, DocContent stays a genuine ContentDocument subtype (an intersection, not a fresh shape) since readDocContent already had one return type to widen rather than two to reconcile. */
+export type DocContent = ContentDocument & {
+  readonly numbering: NumberingDefinitions;
+};
+
+export function readDocContent(bytes: Uint8Array<ArrayBuffer>): DocContent {
   const { wordDocument, table, fib, metadata } = readDocStreams(bytes);
 
   const pieceTable = parseClx(
@@ -141,6 +148,7 @@ export function readDocContent(
     characterProperties: new Map(),
   });
   const blocks = assembleBlocks(entries);
+  const numbering = readNumberingDefinitions(table, fib);
 
   return {
     kind: "wordprocessing",
@@ -156,6 +164,7 @@ export function readDocContent(
         blocks,
       },
     ],
+    numbering,
   };
 }
 

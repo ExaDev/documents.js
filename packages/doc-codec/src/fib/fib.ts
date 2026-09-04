@@ -43,6 +43,11 @@ export interface Fib {
 
   readonly fcSttbfFfn: number;
   readonly lcbSttbfFfn: number;
+
+  readonly fcPlfLst: number;
+  readonly lcbPlfLst: number;
+  readonly fcPlfLfo: number;
+  readonly lcbPlfLfo: number;
 }
 
 export function parseFib(wordDocument: Uint8Array): Fib {
@@ -116,6 +121,10 @@ export function parseFib(wordDocument: Uint8Array): Fib {
     lcbClx: fcLcb(FC_LCB_VALUE_INDEX.lcbClx),
     fcSttbfFfn: fcLcb(FC_LCB_VALUE_INDEX.fcSttbfFfn),
     lcbSttbfFfn: fcLcb(FC_LCB_VALUE_INDEX.lcbSttbfFfn),
+    fcPlfLst: fcLcb(FC_LCB_VALUE_INDEX.fcPlfLst),
+    lcbPlfLst: fcLcb(FC_LCB_VALUE_INDEX.lcbPlfLst),
+    fcPlfLfo: fcLcb(FC_LCB_VALUE_INDEX.fcPlfLfo),
+    lcbPlfLfo: fcLcb(FC_LCB_VALUE_INDEX.lcbPlfLfo),
   };
 }
 

@@ -20,5 +20,6 @@ export * from "./prop/pap";
 export * from "./prop/pap-write";
 export * from "./style/stsh";
 export * from "./style/fonts";
+export * from "./list/numbering";
 export * from "./read";
 export * from "./write";
