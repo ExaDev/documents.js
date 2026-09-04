@@ -1,4 +1,5 @@
 import type { Box, ContentPathPoint, ContentSubpath } from "document-schema.js";
+import { formatOdfNumber } from "./units";
 
 // ODF's vector-primitive geometry grammar: draw:path's own svg:d (a real SVG-path-like mini-language, verified against genuine LibreOffice 26.2 output rather than assumed identical to plain SVG -- see the notes below on where it genuinely matches and where a caller must not assume more than what was verified) and draw:polygon/draw:polyline's own draw:points (a completely SEPARATE, simpler comma/space-delimited coordinate-pair list -- NOT an svg:d string at all, confirmed empirically: a straight-line-only closed/open multi-point shape round-trips through LibreOffice's own writer as draw:polygon/draw:polyline with draw:points, never as draw:path with svg:d, regardless of which UNO shape service created it -- LibreOffice reserves draw:path/svg:d specifically for geometry containing at least one genuine Bezier curve segment).
 //
@@ -300,4 +301,38 @@ export function buildOdfSubpaths(
           },
     ),
   }));
+}
+
+// --- the write side: a ContentVector 'path' variant's own subpaths -> the svg:viewBox/svg:d pair parseOdfPathData and buildOdfSubpaths above read back -------------------------------------------------------------------------------
+//
+// THE ONE CHOICE THAT MAKES THE INVERSE EXACT RATHER THAN APPROXIMATE, and the reason these two functions are a pair rather than one: a writer is free to pick the viewBox its own coordinates are expressed in, and picking "0 0 <frame width> <frame height>" makes scaleOdfRawPoint's own scale factor (frame.widthPt / viewBox.width) exactly 1 and its minX/minY subtraction exactly zero -- so a ContentSubpath's own local-space points ARE the numbers written into svg:d, with no scaling step to round-trip through at all. A real producer's viewBox is typically a large integer range unrelated to the frame's physical size (LibreOffice writes svg:viewBox="0 0 3657 4000" for a 3.656cm-wide shape, per this file's own top-of-file note); reading such a file and writing it back re-expresses the same geometry in this writer's own convention, which is a different spelling of the identical curve rather than a loss.
+export function formatOdfViewBox(frame: Box): string {
+  return `0 0 ${formatOdfNumber(frame.widthPt)} ${formatOdfNumber(frame.heightPt)}`;
+}
+
+function formatPoint(point: ContentPathPoint): string {
+  return `${formatOdfNumber(point.xPt)},${formatOdfNumber(point.yPt)}`;
+}
+
+// Serialises subpaths into an svg:d string parseOdfPathData reads back segment for segment: one absolute "M" per subpath, an explicit absolute "L"/"C" per segment (never SVG's implicit-repeat convention, and never the H/V or relative shorthands real LibreOffice output favours -- all of them are read correctly by the parser, but writing the longest, most explicit form keeps the emitted string unambiguous for any other consumer's own parser too), and a trailing "Z" for a closed subpath only. Commas separate a point's own two numbers and spaces separate everything else -- the SVG number-list grammar treats both as optional whitespace, and parseOdfPathData's own tokenizer matches numbers and command letters directly rather than splitting on separators, so this is a readability choice, not a correctness one.
+//
+// A subpath with no segments writes as a bare "M x,y", which reads back as exactly that: a subpath with a start point and an empty segment list. An EMPTY subpath list writes as an empty string, which parseOdfPathData reads back as no subpaths at all -- the reader then treats the whole element as having no resolvable geometry and drops it, so a caller must refuse that case rather than write it (typed/draw/write-vectors.ts does).
+export function formatOdfPathData(subpaths: readonly ContentSubpath[]): string {
+  const parts: string[] = [];
+  for (const subpath of subpaths) {
+    parts.push(`M ${formatPoint(subpath.start)}`);
+    for (const segment of subpath.segments) {
+      if (segment.kind === "line") {
+        parts.push(`L ${formatPoint(segment.to)}`);
+      } else {
+        parts.push(
+          `C ${formatPoint(segment.control1)} ${formatPoint(segment.control2)} ${formatPoint(segment.to)}`,
+        );
+      }
+    }
+    if (subpath.closed) {
+      parts.push("Z");
+    }
+  }
+  return parts.join(" ");
 }
