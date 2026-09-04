@@ -1,4 +1,4 @@
-// The two geometry units a BIFF8 worksheet records its grid in, converted to the points document-schema.js's own ContentSheetRow/ContentSheetColumn use.
+// The geometry units a BIFF8 worksheet records its grid and its page setup in, converted to the points document-schema.js's own ContentSheetRow/ContentSheetColumn/ContentSheetPrintSettings use.
 
 /** Points per inch, and the pixel grid Excel's column-width formula is defined against (96 px/inch, its screen-rendering assumption). */
 const POINTS_PER_INCH = 72;
@@ -6,6 +6,9 @@ const PIXELS_PER_INCH = 96;
 
 /** A twip is a twentieth of a point; a Row record's miyRw is in twips ([MS-XLS] 2.4.221). */
 const TWIPS_PER_POINT = 20;
+
+/** The inch's own definition in millimetres, which is what turns [MS-XLS] 2.4.257's metric paper sizes into points. */
+const MILLIMETRES_PER_INCH = 25.4;
 
 /**
  * The "maximum digit width": the widest rendered width, in pixels, of the digits 0-9 in the workbook's Normal-style font, which is the unit a column width is expressed in multiples of.
@@ -17,6 +20,21 @@ const MAX_DIGIT_WIDTH_PX = 7;
 /** A Row record's height, in twips, as points. */
 export function twipsToPoints(twips: number): number {
   return twips / TWIPS_PER_POINT;
+}
+
+/** A margin record's own Xnum ([MS-XLS] 2.4.151 and its three siblings), in inches, as points. */
+export function inchesToPoints(inches: number): number {
+  return inches * POINTS_PER_INCH;
+}
+
+/** The inverse, for writing a margin back out. Exact for every value inchesToPoints produces, since the conversion is a single multiplication by an integer. */
+export function pointsToInches(points: number): number {
+  return points / POINTS_PER_INCH;
+}
+
+/** A paper size [MS-XLS] 2.4.257's own code table states in millimetres, as points. */
+export function millimetresToPoints(millimetres: number): number {
+  return (millimetres / MILLIMETRES_PER_INCH) * POINTS_PER_INCH;
 }
 
 /**

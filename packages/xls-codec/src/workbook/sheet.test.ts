@@ -3,19 +3,29 @@ import { describe, expect, it } from "vitest";
 import {
   RECORD_BLANK,
   RECORD_BOOLERR,
+  RECORD_BOTTOMMARGIN,
   RECORD_COLINFO,
   RECORD_DIMENSIONS,
   RECORD_FORMULA,
+  RECORD_HORIZONTALPAGEBREAKS,
   RECORD_LABEL,
   RECORD_LABELSST,
+  RECORD_LEFTMARGIN,
   RECORD_MERGECELLS,
   RECORD_MULBLANK,
   RECORD_MULRK,
   RECORD_NUMBER,
+  RECORD_PRINTGRID,
+  RECORD_PRINTROWCOL,
+  RECORD_RIGHTMARGIN,
   RECORD_RK,
   RECORD_ROW,
+  RECORD_SETUP,
   RECORD_SHRFMLA,
   RECORD_STRING,
+  RECORD_TOPMARGIN,
+  RECORD_VERTICALPAGEBREAKS,
+  RECORD_WSBOOL,
 } from "../biff/record-types";
 import { BiffFormatError, readRecords } from "../biff/records";
 import { groupRecords, type RecordGroup } from "../biff/substreams";
@@ -606,5 +616,155 @@ describe("readSheetRecords grid geometry", () => {
     );
 
     expect(sheet.cells).toHaveLength(1);
+  });
+});
+
+describe("readSheetRecords print settings", () => {
+  it("reads the Setup record's own paper, scale, fit-to-page counts, and flags", () => {
+    // [MS-XLS] 2.4.257: iPaperSize, iScale, iPageStart, iFitWidth, iFitHeight, the flags word, iRes, iVRes, numHdr, numFtr, iCopies. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/23642d03-de0e-4a7f-94da-c2e594020bf2
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_SETUP, [
+          ...u16(9), // iPaperSize: A4
+          ...u16(80), // iScale
+          ...u16(1), // iPageStart
+          ...u16(2), // iFitWidth
+          ...u16(3), // iFitHeight
+          ...u16(0x0001), // fLeftToRight set, fPortrait clear
+          ...u16(300), // iRes
+          ...u16(300), // iVRes
+          ...f64(0.3), // numHdr
+          ...f64(0.3), // numFtr
+          ...u16(1), // iCopies
+        ]),
+      ),
+      [],
+    );
+
+    expect(sheet.print.setup).toEqual({
+      paperCode: 9,
+      scalePercent: 80,
+      fitWidth: 2,
+      fitHeight: 3,
+      leftToRight: true,
+      portrait: false,
+      noPls: false,
+      noOrientation: false,
+    });
+  });
+
+  it("reads each of the four margin records as points", () => {
+    // Each is a single Xnum of INCHES ([MS-XLS] 2.4.151, 2.4.219, 2.4.328, 2.4.27), so half an inch reads as 36pt.
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_LEFTMARGIN, f64(0.5)),
+        record(RECORD_RIGHTMARGIN, f64(0.75)),
+        record(RECORD_TOPMARGIN, f64(1)),
+        record(RECORD_BOTTOMMARGIN, f64(1.25)),
+      ),
+      [],
+    );
+
+    expect(sheet.print.marginsPt).toEqual({
+      left: 36,
+      right: 54,
+      top: 72,
+      bottom: 90,
+    });
+  });
+
+  it("leaves a margin absent when the sheet carries no record for that side", () => {
+    // [MS-XLS] 2.1.7.20.6's PAGESETUP production brackets each margin individually, so a sheet stating one and not the others is well-formed -- and "states nothing" has to stay distinguishable from "states the default".
+    const sheet = readSheetRecords(
+      groupsOf(record(RECORD_LEFTMARGIN, f64(0.5))),
+      [],
+    );
+
+    expect(sheet.print.marginsPt).toEqual({ left: 36 });
+  });
+
+  it("reads PrintGrid and PrintRowCol as the booleans they are", () => {
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_PRINTGRID, u16(1)),
+        record(RECORD_PRINTROWCOL, u16(0)),
+      ),
+      [],
+    );
+
+    expect(sheet.print.printGridlines).toBe(true);
+    expect(sheet.print.printHeaders).toBe(false);
+  });
+
+  it("reads WsBool's fFitToPage bit and no other", () => {
+    // Field G of [MS-XLS] 2.4.351's single 16-bit field, the ninth bit. 0x04c1 is the value a real LibreOffice-written non-fit-to-page sheet carries; 0x05c1 is the same sheet with fit-to-page on.
+    expect(
+      readSheetRecords(groupsOf(record(RECORD_WSBOOL, u16(0x04c1))), []).print
+        .fitToPage,
+    ).toBe(false);
+    expect(
+      readSheetRecords(groupsOf(record(RECORD_WSBOOL, u16(0x05c1))), []).print
+        .fitToPage,
+    ).toBe(true);
+  });
+
+  it("reads both page-break records, taking each break's own index and not its extent", () => {
+    // [MS-XLS] 2.4.142/2.4.343: a count then that many six-byte structures -- a HorzBrk's row plus its colStart/colEnd, a VertBrk's col plus its rowStart/rowEnd.
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_HORIZONTALPAGEBREAKS, [
+          ...u16(2),
+          ...u16(10),
+          ...u16(0),
+          ...u16(0xff),
+          ...u16(4),
+          ...u16(0),
+          ...u16(0xff),
+        ]),
+        record(RECORD_VERTICALPAGEBREAKS, [
+          ...u16(1),
+          ...u16(3),
+          ...u16(0),
+          ...u16(0xffff),
+        ]),
+      ),
+      [],
+    );
+
+    expect(sheet.print.rowBreaks).toEqual([4, 10]);
+    expect(sheet.print.columnBreaks).toEqual([3]);
+  });
+
+  it("collapses two breaks naming the same index, which the schema models only once", () => {
+    // A BIFF8 page break carries an extent along the perpendicular axis, so one row can legitimately carry two partial breaks; ContentSheetPrintSettings names a break by index alone.
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_HORIZONTALPAGEBREAKS, [
+          ...u16(2),
+          ...u16(7),
+          ...u16(0),
+          ...u16(3),
+          ...u16(7),
+          ...u16(4),
+          ...u16(0xff),
+        ]),
+      ),
+      [],
+    );
+
+    expect(sheet.print.rowBreaks).toEqual([7]);
+  });
+
+  it("states nothing at all for a sheet carrying none of the print records", () => {
+    const sheet = readSheetRecords(
+      groupsOf(record(RECORD_BLANK, cell(0, 0))),
+      [],
+    );
+
+    expect(sheet.print).toEqual({
+      marginsPt: {},
+      rowBreaks: [],
+      columnBreaks: [],
+    });
   });
 });

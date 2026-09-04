@@ -1,30 +1,45 @@
 import { BlockCursor } from "../biff/cursor";
 import { errorTextOf } from "../biff/errors";
+import {
+  unpackSetupFlags,
+  WSBOOL_FLAG_FIT_TO_PAGE,
+  type SetupFields,
+} from "../biff/print-setup";
 import { parseFormulaText, type FormulaSheetContext } from "../biff/ptg";
 import {
   RECORD_ARRAY,
   RECORD_BLANK,
   RECORD_BOOLERR,
+  RECORD_BOTTOMMARGIN,
   RECORD_COLINFO,
   RECORD_DIMENSIONS,
   RECORD_FORMULA,
+  RECORD_HORIZONTALPAGEBREAKS,
   RECORD_LABEL,
   RECORD_LABELSST,
+  RECORD_LEFTMARGIN,
   RECORD_MERGECELLS,
   RECORD_MULBLANK,
   RECORD_MULRK,
   RECORD_NUMBER,
+  RECORD_PRINTGRID,
+  RECORD_PRINTROWCOL,
+  RECORD_RIGHTMARGIN,
   RECORD_RK,
   RECORD_ROW,
+  RECORD_SETUP,
   RECORD_SHRFMLA,
   RECORD_STRING,
   RECORD_TABLE,
+  RECORD_TOPMARGIN,
+  RECORD_VERTICALPAGEBREAKS,
+  RECORD_WSBOOL,
 } from "../biff/record-types";
 import { BiffFormatError } from "../biff/records";
 import { decodeRkNumber } from "../biff/rk";
 import { readXLUnicodeString } from "../biff/strings";
 import type { RecordGroup } from "../biff/substreams";
-import { columnWidthToPoints, twipsToPoints } from "../units";
+import { columnWidthToPoints, inchesToPoints, twipsToPoints } from "../units";
 
 // The worksheet substream ([MS-XLS] 2.1.7.20.5): the grid geometry and the cell table for one sheet. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/f41c06f2-9057-49a1-8c3f-a4a4d211fc56
 //
@@ -80,6 +95,35 @@ export interface RawRange {
   readonly endColumn: number;
 }
 
+/**
+ * The page-setup half of a sheet's print settings, as the worksheet substream's own records carry them.
+ *
+ * Every field is optional because every record behind it is: [MS-XLS] 2.1.7.20.6's PAGESETUP production makes each of the four margins and Setup itself optional, and a sheet that never had its page setup touched carries none of them. An absent field is therefore "this file states nothing here", which is a different fact from "this file states the default", and content.ts is where the distinction is resolved into the required ContentSheetPrintSettings fields.
+ *
+ * The other half -- the print range and the repeated header bands -- is not here at all, because BIFF8 does not put it in the worksheet substream; see workbook/print-names.ts.
+ */
+export interface RawPrintSettings {
+  /** The Setup record's own fields ([MS-XLS] 2.4.257). */
+  readonly setup?: SetupFields;
+  /** Each page margin in points, from its own record ([MS-XLS] 2.4.151, 2.4.219, 2.4.328, 2.4.27), which states it in inches. */
+  readonly marginsPt: {
+    readonly left?: number;
+    readonly right?: number;
+    readonly top?: number;
+    readonly bottom?: number;
+  };
+  /** PrintGrid's fPrintGrid ([MS-XLS] 2.4.202). */
+  readonly printGridlines?: boolean;
+  /** PrintRowCol's printRwCol ([MS-XLS] 2.4.203): whether the row and column headers print. */
+  readonly printHeaders?: boolean;
+  /** WsBool's fFitToPage ([MS-XLS] 2.4.351), which decides whether Setup's iScale or its iFitWidth/iFitHeight pair is the live one. */
+  readonly fitToPage?: boolean;
+  /** Zero-based row indices an explicit page break falls immediately above ([MS-XLS] 2.4.142), ascending and deduplicated. */
+  readonly rowBreaks: readonly number[];
+  /** Zero-based column indices an explicit page break falls immediately to the left of ([MS-XLS] 2.4.343). */
+  readonly columnBreaks: readonly number[];
+}
+
 /** One worksheet's records, read but not yet mapped onto the shared schema. */
 export interface RawSheet {
   readonly cells: readonly RawCell[];
@@ -88,6 +132,8 @@ export interface RawSheet {
   readonly merges: readonly RawRange[];
   /** The used range from the Dimensions record ([MS-XLS] 2.4.90), when the sheet declared one. */
   readonly usedRange?: RawRange;
+  /** The sheet's own page setup, as far as its records state it. */
+  readonly print: RawPrintSettings;
 }
 
 /** Row record flag bits, in the 32-bit field following unused1 ([MS-XLS] 2.4.221). */
@@ -128,6 +174,18 @@ export function readSheetRecords(
   const columns: RawColumn[] = [];
   const merges: RawRange[] = [];
   let usedRange: RawRange | undefined;
+  const marginsPt: {
+    left?: number;
+    right?: number;
+    top?: number;
+    bottom?: number;
+  } = {};
+  const rowBreaks: number[] = [];
+  const columnBreaks: number[] = [];
+  let setup: SetupFields | undefined;
+  let printGridlines: boolean | undefined;
+  let printHeaders: boolean | undefined;
+  let fitToPage: boolean | undefined;
 
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index];
@@ -181,15 +239,106 @@ export function readSheetRecords(
           readFormula(record, stringResultAfter(records, index), formulaSheets),
         );
         break;
+      case RECORD_SETUP:
+        setup = readSetup(record);
+        break;
+      case RECORD_LEFTMARGIN:
+        marginsPt.left = readMargin(record);
+        break;
+      case RECORD_RIGHTMARGIN:
+        marginsPt.right = readMargin(record);
+        break;
+      case RECORD_TOPMARGIN:
+        marginsPt.top = readMargin(record);
+        break;
+      case RECORD_BOTTOMMARGIN:
+        marginsPt.bottom = readMargin(record);
+        break;
+      case RECORD_PRINTGRID:
+        printGridlines = readBooleanRecord(record);
+        break;
+      case RECORD_PRINTROWCOL:
+        printHeaders = readBooleanRecord(record);
+        break;
+      case RECORD_WSBOOL:
+        fitToPage =
+          (new BlockCursor(record.blocks).u16() & WSBOOL_FLAG_FIT_TO_PAGE) !==
+          0;
+        break;
+      case RECORD_HORIZONTALPAGEBREAKS:
+        rowBreaks.push(...readPageBreaks(record));
+        break;
+      case RECORD_VERTICALPAGEBREAKS:
+        columnBreaks.push(...readPageBreaks(record));
+        break;
       default:
-        // Every other record a worksheet substream carries -- the window settings, the page setup, the drawing objects, the row-block index -- is not read yet.
+        // Every other record a worksheet substream carries -- the window settings, the drawing objects, the row-block index -- is not read yet.
         break;
     }
   }
 
+  // Spread rather than assigned field by field, so an absent record leaves its field genuinely absent rather than present-and-undefined: RawPrintSettings documents absence as "this file states nothing here", and content.ts's own fallbacks turn on exactly that.
+  const print: RawPrintSettings = {
+    marginsPt,
+    rowBreaks: ascendingDistinct(rowBreaks),
+    columnBreaks: ascendingDistinct(columnBreaks),
+    ...(setup === undefined ? {} : { setup }),
+    ...(printGridlines === undefined ? {} : { printGridlines }),
+    ...(printHeaders === undefined ? {} : { printHeaders }),
+    ...(fitToPage === undefined ? {} : { fitToPage }),
+  };
+
   return usedRange === undefined
-    ? { cells, rows, columns, merges }
-    : { cells, rows, columns, merges, usedRange };
+    ? { cells, rows, columns, merges, print }
+    : { cells, rows, columns, merges, usedRange, print };
+}
+
+/** Setup ([MS-XLS] 2.4.257): iPaperSize, iScale, iPageStart, iFitWidth, iFitHeight, a flags word, iRes, iVRes, an eight-byte header margin, an eight-byte footer margin, and iCopies. The starting page number, the two print resolutions, the header/footer margins, and the copy count are read past: ContentSheetPrintSettings has no field for any of them, and Margins models only the four page edges. */
+function readSetup(record: RecordGroup): SetupFields {
+  const cursor = new BlockCursor(record.blocks);
+  const paperCode = cursor.u16();
+  const scalePercent = cursor.u16();
+  cursor.skip(2); // iPageStart
+  const fitWidth = cursor.u16();
+  const fitHeight = cursor.u16();
+  return {
+    paperCode,
+    scalePercent,
+    fitWidth,
+    fitHeight,
+    ...unpackSetupFlags(cursor.u16()),
+  };
+}
+
+/** Any of the four margin records ([MS-XLS] 2.4.151, 2.4.219, 2.4.328, 2.4.27): a single Xnum stating that margin in inches. All four share the identical one-field layout, so one reader serves them all. */
+function readMargin(record: RecordGroup): number {
+  return inchesToPoints(new BlockCursor(record.blocks).f64());
+}
+
+/** PrintGrid ([MS-XLS] 2.4.202) and PrintRowCol ([MS-XLS] 2.4.203) are each a single 16-bit boolean. [MS-XLS] 2.4.203's own value table states both 0x0000 and 0x0001 as "Row and column headers are not printed", which is a typo in that table rather than two spellings of one meaning -- the record exists precisely to distinguish them, and every real producer writes 1 for printed (confirmed against LibreOffice-written BIFF8, where a sheet with header printing enabled carries 0x0001 and one without carries 0x0000). */
+function readBooleanRecord(record: RecordGroup): boolean {
+  return new BlockCursor(record.blocks).u16() !== 0;
+}
+
+/**
+ * HorizontalPageBreaks ([MS-XLS] 2.4.142) and VerticalPageBreaks ([MS-XLS] 2.4.343): a count then that many six-byte structures, each an index on the break's own axis followed by the start and end of the break's extent on the other one.
+ *
+ * Only the index is taken. HorzBrk's colStart/colEnd and VertBrk's rowStart/rowEnd say how far along the perpendicular axis the break runs -- a BIFF8 page break can be partial -- and ContentSheetPrintSettings.manualBreaks models a break as a whole-axis index with no extent, so a partial break is carried as a full one rather than dropped. Both structures have the identical three-field shape, so one reader serves both.
+ */
+function readPageBreaks(record: RecordGroup): number[] {
+  const cursor = new BlockCursor(record.blocks);
+  const count = cursor.u16();
+  const indices: number[] = [];
+  for (let index = 0; index < count; index += 1) {
+    indices.push(cursor.u16());
+    cursor.skip(4); // the break's extent along the other axis
+  }
+  return indices;
+}
+
+/** Page-break indices, ascending and with duplicates collapsed: two records naming the same row are one page break as far as the schema's own index-only model of a break can express. */
+function ascendingDistinct(values: readonly number[]): number[] {
+  return [...new Set(values)].sort((a, b) => a - b);
 }
 
 /**
