@@ -1,3 +1,9 @@
+## [1.2.16](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.2.15...document-compute.js%401.2.16) (2026-09-04)
+
+### Code Refactoring
+
+* rename packages/documents to packages/web ([3ce83bd](https://github.com/ExaDev/documents.js/commit/3ce83bd1f91a7b6e29a0871c46662db2e7e78b4f))
+
 ## [1.2.15](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.2.14...document-compute.js%401.2.15) (2026-09-04)
 
 
