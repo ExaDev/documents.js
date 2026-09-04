@@ -31,12 +31,22 @@ function noCharacterProperties() {
   };
 }
 
+function pfProps(indentLevel: number, alignment: number | undefined) {
+  return {
+    indentLevel,
+    alignment,
+    lineSpacing: undefined,
+    spaceBefore: undefined,
+    spaceAfter: undefined,
+    leftMargin: undefined,
+    indent: undefined,
+  };
+}
+
 describe("writeStyleTextPropAtom", () => {
   it("round-trips a paragraph run's alignment", () => {
     const style: StyleTextProps = {
-      paragraphRuns: [
-        { count: 5, properties: { indentLevel: 0, alignment: ALIGN_CENTER } },
-      ],
+      paragraphRuns: [{ count: 5, properties: pfProps(0, ALIGN_CENTER) }],
       characterRuns: [{ count: 5, properties: noCharacterProperties() }],
     };
     expect(roundTrip(style, 5).paragraphRuns).toEqual(style.paragraphRuns);
@@ -44,9 +54,7 @@ describe("writeStyleTextPropAtom", () => {
 
   it("round-trips a paragraph run stating no alignment at all", () => {
     const style: StyleTextProps = {
-      paragraphRuns: [
-        { count: 5, properties: { indentLevel: 2, alignment: undefined } },
-      ],
+      paragraphRuns: [{ count: 5, properties: pfProps(2, undefined) }],
       characterRuns: [{ count: 5, properties: noCharacterProperties() }],
     };
     expect(roundTrip(style, 5).paragraphRuns).toEqual(style.paragraphRuns);
@@ -55,8 +63,8 @@ describe("writeStyleTextPropAtom", () => {
   it("round-trips several paragraph runs covering the whole character count", () => {
     const style: StyleTextProps = {
       paragraphRuns: [
-        { count: 3, properties: { indentLevel: 0, alignment: undefined } },
-        { count: 4, properties: { indentLevel: 1, alignment: undefined } },
+        { count: 3, properties: pfProps(0, undefined) },
+        { count: 4, properties: pfProps(1, undefined) },
       ],
       characterRuns: [{ count: 7, properties: noCharacterProperties() }],
     };
@@ -65,9 +73,7 @@ describe("writeStyleTextPropAtom", () => {
 
   it("round-trips a character run's bold/italic/underline flags", () => {
     const style: StyleTextProps = {
-      paragraphRuns: [
-        { count: 4, properties: { indentLevel: 0, alignment: undefined } },
-      ],
+      paragraphRuns: [{ count: 4, properties: pfProps(0, undefined) }],
       characterRuns: [
         {
           count: 4,
@@ -89,9 +95,7 @@ describe("writeStyleTextPropAtom", () => {
 
   it("round-trips a character run stating no font-style flags at all", () => {
     const style: StyleTextProps = {
-      paragraphRuns: [
-        { count: 3, properties: { indentLevel: 0, alignment: undefined } },
-      ],
+      paragraphRuns: [{ count: 3, properties: pfProps(0, undefined) }],
       characterRuns: [
         {
           count: 3,
@@ -113,9 +117,7 @@ describe("writeStyleTextPropAtom", () => {
 
   it("round-trips a character run's font reference, size, and literal colour", () => {
     const style: StyleTextProps = {
-      paragraphRuns: [
-        { count: 3, properties: { indentLevel: 0, alignment: undefined } },
-      ],
+      paragraphRuns: [{ count: 3, properties: pfProps(0, undefined) }],
       characterRuns: [
         {
           count: 3,
@@ -137,9 +139,7 @@ describe("writeStyleTextPropAtom", () => {
 
   it("round-trips several character runs covering the whole character count", () => {
     const style: StyleTextProps = {
-      paragraphRuns: [
-        { count: 6, properties: { indentLevel: 0, alignment: undefined } },
-      ],
+      paragraphRuns: [{ count: 6, properties: pfProps(0, undefined) }],
       characterRuns: [
         {
           count: 3,
