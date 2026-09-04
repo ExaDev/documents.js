@@ -1227,7 +1227,7 @@ function rewriteManifestToOoo1(
   });
 }
 
-// An ODF-shaped Package (the output of writeOdt/writeOdtContent, writeOds/writeOdsContent, or a future writeOdp/writeOdg) into genuine OpenOffice.org 1.x XML: the whole of this direction's own support for a real .sxw/.sxc/.sxi/.sxd writer, and the counterpart ../write.ts's writeSxw and writeSxc actually call -- .sxi/.sxd have no writer yet, since odf.js has no writeOdp/writeOdg for their own inverse transform to target. A package whose "mimetype" part names an ODF media type with no OpenOffice.org 1.x predecessor (or one with no "mimetype" part at all -- already OpenOffice.org 1.x-shaped, or not a document this module can identify) is returned exactly as given, mirroring transformOoo1Package's own "not applicable, leave alone" stance on the read side.
+// An ODF-shaped Package (the output of writeOdt/writeOdtContent, writeOds/writeOdsContent, writeOdp/writeOdpContent, or writeOdg/writeOdgContent) into genuine OpenOffice.org 1.x XML: the whole of this direction's own support for a real .sxw/.sxc/.sxi/.sxd writer, and the counterpart ../write.ts's writeSxw/writeSxc/writeSxi/writeSxd all call. A package whose "mimetype" part names an ODF media type with no OpenOffice.org 1.x predecessor (or one with no "mimetype" part at all -- already OpenOffice.org 1.x-shaped, or not a document this module can identify) is returned exactly as given, mirroring transformOoo1Package's own "not applicable, leave alone" stance on the read side.
 export function transformToOoo1Package(pkg: Package): Package {
   const odfMediaType = readMimetype(pkg);
   if (odfMediaType === undefined) {
