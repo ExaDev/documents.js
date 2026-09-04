@@ -8,8 +8,25 @@ import {
   flattenTree,
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
+import { readNotesContainerAtom } from "./document/notes";
+import { readNotesListWithText } from "./document/notes-list";
+import { readSlideListWithText } from "./document/slide-list";
 import { PptUnsupportedContentError } from "./errors";
 import { readPptContent, readPpt } from "./read";
+import {
+  type PptRecord,
+  childRecords,
+  readRecordAt,
+  readRecordSequence,
+} from "./record/tree";
+import {
+  RT_Notes,
+  RT_SlideListWithText,
+  SLIDE_LIST_INSTANCE_NOTES,
+  SLIDE_LIST_INSTANCE_SLIDES,
+} from "./record/types";
+import { readCurrentUserAtom } from "./stream/current-user";
+import { buildPersistDirectory } from "./stream/persist";
 import { writePpt, writePptContent, writePptStreams } from "./write";
 
 // The primary verification method this package's own README already establishes for its record fixtures: write real records, then read them back through the package's own existing reader, and assert the recovered content equals what was written. A round trip through readPptContent proves the writer's bytes are genuinely conformant [MS-PPT] -- not merely internally self-consistent -- because the reader was built and tested entirely independently of the writer, against the specification alone.
@@ -21,6 +38,37 @@ function slide(overrides: Partial<ContentSlide> = {}): ContentSlide {
     notes: "",
     ...overrides,
   };
+}
+
+// The PowerPoint Document stream's own top-level record sequence: the document container, every slide and notes container, the persist directory and the user edit, in the order the writer laid them out.
+function topLevelRecords(streamBytes: Uint8Array<ArrayBuffer>): PptRecord[] {
+  return readRecordSequence(streamBytes, 0, streamBytes.length);
+}
+
+function recordTypesIn(streamBytes: Uint8Array<ArrayBuffer>): number[] {
+  return topLevelRecords(streamBytes).map((record) => record.header.recType);
+}
+
+// Narrows a lookup that the surrounding assertion has already established must succeed, so a test reads a record's fields without an `as` cast standing in for the check.
+function requireRecord(
+  record: PptRecord | undefined,
+  describe_: string,
+): PptRecord {
+  if (record === undefined) {
+    throw new Error(`the writer produced no ${describe_}`);
+  }
+  return record;
+}
+
+function listWithInstance(
+  documentContainer: PptRecord,
+  instance: number,
+): PptRecord | undefined {
+  return childRecords(documentContainer).find(
+    (record) =>
+      record.header.recType === RT_SlideListWithText &&
+      record.header.recInstance === instance,
+  );
 }
 
 describe("writePptContent / readPptContent round trip", () => {
@@ -560,6 +608,151 @@ describe("writePptContent / readPptContent round trip", () => {
         PptUnsupportedContentError,
       );
     });
+  });
+});
+
+describe("speaker notes", () => {
+  it("round-trips a slide's speaker notes", () => {
+    const document = {
+      metadata: {},
+      slides: [slide({ notes: "Remember to mention the budget." })],
+    };
+    const { slides } = readPptContent(writePptContent(document));
+    expect(slides[0]?.notes).toBe("Remember to mention the budget.");
+  });
+
+  it("round-trips notes carrying several paragraphs", () => {
+    const notes = "Open with the summary.\nThen the three risks.\nClose early.";
+    const { slides } = readPptContent(
+      writePptContent({ metadata: {}, slides: [slide({ notes })] }),
+    );
+    expect(slides[0]?.notes).toBe(notes);
+  });
+
+  it("keeps each slide's own notes with that slide", () => {
+    const document = {
+      metadata: {},
+      slides: [
+        slide({ notes: "Notes for the first slide." }),
+        slide({ notes: "Different notes, second slide." }),
+        slide({ notes: "Third slide, third note." }),
+      ],
+    };
+    const { slides } = readPptContent(writePptContent(document));
+    expect(slides.map((s) => s.notes)).toEqual([
+      "Notes for the first slide.",
+      "Different notes, second slide.",
+      "Third slide, third note.",
+    ]);
+  });
+
+  it("gives a slide with no notes no NotesContainer at all, rather than an empty one", () => {
+    const { powerPointDocumentStream } = writePptStreams({
+      metadata: {},
+      slides: [slide(), slide()],
+    });
+    // A fabricated empty NotesContainer would be a real notes slide that happens to say nothing -- a different fact from the absent notes slide the input actually describes, and one no round trip could tell apart from it.
+    expect(recordTypesIn(powerPointDocumentStream)).not.toContain(RT_Notes);
+  });
+
+  it("writes a NotesContainer only for the slides that carry notes", () => {
+    const { powerPointDocumentStream } = writePptStreams({
+      metadata: {},
+      slides: [
+        slide({ notes: "Only this slide has notes." }),
+        slide(),
+        slide({ notes: "And this one." }),
+      ],
+    });
+    const types = recordTypesIn(powerPointDocumentStream);
+    expect(types.filter((type) => type === RT_Notes)).toHaveLength(2);
+  });
+
+  it("reads back nothing for the slides between two that carry notes", () => {
+    const document = {
+      metadata: {},
+      slides: [slide({ notes: "First." }), slide(), slide({ notes: "Third." })],
+    };
+    const { slides } = readPptContent(writePptContent(document));
+    expect(slides.map((s) => s.notes)).toEqual(["First.", "", "Third."]);
+  });
+
+  it("keeps every persist identifier below the seed a next edit would mint from", () => {
+    // [MS-PPT] 2.3.3: persistIdSeed is the identifier a subsequent user edit would allocate, so every entry already in the directory has to sit below it. Notes slides take persist identifiers of their own after the slides', which is what makes a seed derived from the slide count alone wrong.
+    const { currentUserStream, powerPointDocumentStream } = writePptStreams({
+      metadata: {},
+      slides: [
+        slide({ notes: "First." }),
+        slide({ notes: "Second." }),
+        slide({ notes: "Third." }),
+      ],
+    });
+    const { offsetToCurrentEdit } = readCurrentUserAtom(currentUserStream);
+    const { directory, currentEdit } = buildPersistDirectory(
+      powerPointDocumentStream,
+      offsetToCurrentEdit,
+    );
+    expect(currentEdit.persistIdSeed).toBeGreaterThan(
+      Math.max(...directory.keys()),
+    );
+  });
+
+  it("gives a notes slide an identifier no slide's own identifier can collide with", () => {
+    // NotesId and SlideId are separate identifier spaces ([MS-PPT] 2.2.14 and 2.2.26). A reader pairing the two lists would mis-associate every notes slide if one writer's notes ids happened to reuse its slide ids.
+    const { powerPointDocumentStream } = writePptStreams({
+      metadata: {},
+      slides: Array.from({ length: 4 }, (_unused, index) =>
+        slide({ notes: `Notes ${index}` }),
+      ),
+    });
+    const document = readRecordAt(powerPointDocumentStream, 0);
+    const slideIds = readSlideListWithText(
+      requireRecord(
+        listWithInstance(document, SLIDE_LIST_INSTANCE_SLIDES),
+        "slide list",
+      ),
+    ).map((persist) => persist.slideId);
+    const notesIds = readNotesListWithText(
+      requireRecord(
+        listWithInstance(document, SLIDE_LIST_INSTANCE_NOTES),
+        "notes list",
+      ),
+    ).map((persist) => persist.notesId);
+    expect(notesIds).toHaveLength(slideIds.length);
+    expect(notesIds.filter((id) => slideIds.includes(id))).toEqual([]);
+  });
+
+  it("names each notes slide's own presentation slide in its NotesAtom", () => {
+    const { powerPointDocumentStream } = writePptStreams({
+      metadata: {},
+      slides: [slide(), slide({ notes: "Second slide's notes." })],
+    });
+    const document = readRecordAt(powerPointDocumentStream, 0);
+    const secondSlideId = readSlideListWithText(
+      requireRecord(
+        listWithInstance(document, SLIDE_LIST_INSTANCE_SLIDES),
+        "slide list",
+      ),
+    )[1]?.slideId;
+    const notesContainer = requireRecord(
+      topLevelRecords(powerPointDocumentStream).find(
+        (record) => record.header.recType === RT_Notes,
+      ),
+      "NotesContainer",
+    );
+    expect(readNotesContainerAtom(notesContainer).slideIdRef).toBe(
+      secondSlideId,
+    );
+  });
+
+  it("round-trips notes through the tree form as well as the flat one", () => {
+    const content: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [slide({ notes: "Notes that must survive decomposition." })],
+    };
+    const tree = assembleTree(content);
+    expect(flattenTree(readPpt(writePpt(tree)))).toEqual(flattenTree(tree));
   });
 });
 
