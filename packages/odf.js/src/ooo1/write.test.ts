@@ -225,6 +225,8 @@ describe("the sxw round-trip law", () => {
   it("holds through the tree form as well as the flat one", () => {
     const tree = assembleTree(KITCHEN_SINK);
     const pkg = decodePackage(encodePackage(writeSxw(tree)));
+    // The round trip alone cannot distinguish genuine OpenOffice.org 1.x output from writeOdt's own plain ODF passed straight through: transformOoo1Package returns anything it does not detect as OpenOffice.org 1.x unchanged, so a writeSxw that silently skipped transformToOoo1Package would still round-trip correctly here (identity composed with identity). isOoo1Package is the assertion that actually catches that -- see the "genuine OpenOffice.org 1.x XML" describe block below for the same check on writeSxwContent's own output.
+    expect(isOoo1Package(pkg)).toBe(true);
     expect(normaliseOdtContent(flattenTree(readSxw(pkg)))).toEqual(
       normaliseOdtContent(KITCHEN_SINK),
     );
@@ -796,6 +798,8 @@ describe("the sxc round-trip law", () => {
     ]);
     const tree = assembleTree(document);
     const pkg = decodePackage(encodePackage(writeSxc(tree)));
+    // See the sxw suite's own identical note above: the round trip alone cannot distinguish genuine OpenOffice.org 1.x output from writeOds's own plain ODF passed straight through.
+    expect(isOoo1Package(pkg)).toBe(true);
     expect(normaliseOdsContent(flattenTree(readSxc(pkg)))).toEqual(
       normaliseOdsContent(document),
     );
@@ -1129,6 +1133,8 @@ describe("the sxi round-trip law", () => {
     const document = presentationDocumentOf([slideOf([shapeOf()])]);
     const tree = assembleTree(document);
     const pkg = decodePackage(encodePackage(writeSxi(tree)));
+    // See the sxw suite's own identical note above: the round trip alone cannot distinguish genuine OpenOffice.org 1.x output from writeOdp's own plain ODF passed straight through.
+    expect(isOoo1Package(pkg)).toBe(true);
     expect(normaliseOdpContent(flattenTree(readSxi(pkg)))).toEqual(
       normaliseOdpContent(document),
     );
