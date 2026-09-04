@@ -228,6 +228,26 @@ describe("transformOoo1Package: style:properties splitting", () => {
     expect(out).toContain(`fo:keep-with-next="always"`);
     expect(out).toContain(`fo:keep-with-next="auto"`);
   });
+
+  // The drawing family is the one style:family value the two vocabularies spell differently, and it has to be renamed before the split runs: PROPERTY_TYPES_BY_FAMILY is keyed on ODF's own spelling, so a family left as "graphics" would fall through the classification entirely and leave the style's fill and stroke in an unsplit style:properties no reader looks at.
+  it("renames a drawing style's style:family from graphics to graphic, and splits it as a graphic style", () => {
+    const out = automaticStyles(
+      `<style:style style:name="gr1" style:family="graphics"><style:properties draw:fill="solid" draw:fill-color="#ffcc00" draw:stroke="solid" svg:stroke-color="#000000"/></style:style>`,
+    );
+    expect(out).toContain(`style:family="graphic"`);
+    expect(out).not.toContain(`style:family="graphics"`);
+    expect(out).toContain(
+      `<style:graphic-properties draw:fill="solid" draw:fill-color="#ffcc00" draw:stroke="solid" svg:stroke-color="#000000"/>`,
+    );
+  });
+
+  it("leaves every other style:family value alone, including the drawing family's presentation sibling", () => {
+    const out = automaticStyles(
+      `<style:style style:name="pr1" style:family="presentation"><style:properties draw:fill="none"/></style:style><style:style style:name="dp1" style:family="drawing-page"><style:properties draw:background-size="border"/></style:style>`,
+    );
+    expect(out).toContain(`style:family="presentation"`);
+    expect(out).toContain(`style:family="drawing-page"`);
+  });
 });
 
 describe("transformOoo1Package: text vocabulary", () => {
@@ -605,6 +625,25 @@ describe("transformToOoo1Package: style:*-properties merging", () => {
     );
     expect(out).toContain(`fo:keep-with-next="true"`);
     expect(out).toContain(`fo:keep-with-next="false"`);
+  });
+
+  // The forward rename's own inverse, and the one this direction cannot skip: a real consumer resolves a shape's draw:style-name against the plural spelling alone, so an OpenOffice.org 1.x package whose graphic styles still say "graphic" imports with every fill and stroke silently unbound (confirmed against LibreOffice 26.2 -- see the package README's own .sxd verification section).
+  it("renames a drawing style's style:family back from graphic to graphics", () => {
+    const out = automaticStylesReverse(
+      `<style:style style:name="gr1" style:family="graphic"><style:graphic-properties draw:fill="solid" draw:fill-color="#ffcc00"/></style:style>`,
+    );
+    expect(out).toContain(`style:family="graphics"`);
+    expect(out).toContain(
+      `<style:properties draw:fill="solid" draw:fill-color="#ffcc00"/>`,
+    );
+  });
+
+  it("leaves every other style:family value alone in this direction too", () => {
+    const out = automaticStylesReverse(
+      `<style:style style:name="pr1" style:family="presentation"><style:graphic-properties draw:fill="none"/></style:style><style:style style:name="T1" style:family="text"><style:text-properties fo:font-weight="bold"/></style:style>`,
+    );
+    expect(out).toContain(`style:family="presentation"`);
+    expect(out).toContain(`style:family="text"`);
   });
 });
 
