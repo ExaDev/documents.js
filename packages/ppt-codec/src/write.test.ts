@@ -218,6 +218,49 @@ describe("writePptContent / readPptContent round trip", () => {
     ]);
   });
 
+  it("round-trips a paragraph's line spacing, before/after spacing, and left margin/indent", () => {
+    const document = {
+      metadata: {},
+      slides: [
+        slide({
+          shapes: [
+            {
+              frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+              insetLeftPt: 0,
+              insetTopPt: 0,
+              insetRightPt: 0,
+              insetBottomPt: 0,
+              blocks: [
+                {
+                  kind: "paragraph" as const,
+                  runs: [{ text: "Spaced" }],
+                  lineSpacing: 1.5,
+                  spacingBeforePt: 10,
+                  spacingAfterPt: 5,
+                  indentLeftPt: 36,
+                  indentFirstLinePt: -18,
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+    };
+
+    const { slides } = readPptContent(writePptContent(document));
+    expect(slides[0]?.shapes[0]?.blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "Spaced" }],
+        lineSpacing: 1.5,
+        spacingBeforePt: 10,
+        spacingAfterPt: 5,
+        indentLeftPt: 36,
+        indentFirstLinePt: -18,
+      },
+    ]);
+  });
+
   it("round-trips several character-formatted runs within one paragraph", () => {
     const document = {
       metadata: {},

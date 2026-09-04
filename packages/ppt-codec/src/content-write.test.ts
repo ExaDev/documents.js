@@ -129,6 +129,59 @@ describe("buildTextBody", () => {
         .alignment,
     ).toBe(ALIGN_LEFT);
   });
+
+  it("converts the schema's line-height multiplier into ParaSpacing's percentage form", () => {
+    const blocks: ContentBlock[] = [
+      { kind: "paragraph", runs: [{ text: "x" }], lineSpacing: 1.5 },
+    ];
+    expect(
+      buildTextBody(blocks, noFonts).style.paragraphRuns[0]?.properties
+        .lineSpacing,
+    ).toBe(150);
+  });
+
+  it("converts spacingBeforePt/spacingAfterPt into ParaSpacing's negative absolute-master-units form", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "x" }],
+        spacingBeforePt: 10,
+        spacingAfterPt: 5,
+      },
+    ];
+    const { properties } = buildTextBody(blocks, noFonts).style
+      .paragraphRuns[0] ?? { properties: undefined };
+    expect(properties?.spaceBefore).toBe(-80);
+    expect(properties?.spaceAfter).toBe(-40);
+  });
+
+  it("converts indentLeftPt/indentFirstLinePt into MarginOrIndent master units, including a hanging indent", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "x" }],
+        indentLeftPt: 36,
+        indentFirstLinePt: -18,
+      },
+    ];
+    const { properties } = buildTextBody(blocks, noFonts).style
+      .paragraphRuns[0] ?? { properties: undefined };
+    expect(properties?.leftMargin).toBe(288);
+    expect(properties?.indent).toBe(-144);
+  });
+
+  it("leaves lineSpacing/spaceBefore/spaceAfter/leftMargin/indent undefined when a paragraph states none", () => {
+    const blocks: ContentBlock[] = [
+      { kind: "paragraph", runs: [{ text: "x" }] },
+    ];
+    const { properties } = buildTextBody(blocks, noFonts).style
+      .paragraphRuns[0] ?? { properties: undefined };
+    expect(properties?.lineSpacing).toBeUndefined();
+    expect(properties?.spaceBefore).toBeUndefined();
+    expect(properties?.spaceAfter).toBeUndefined();
+    expect(properties?.leftMargin).toBeUndefined();
+    expect(properties?.indent).toBeUndefined();
+  });
 });
 
 describe("collectFontFamilies", () => {
