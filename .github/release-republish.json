@@ -12,9 +12,17 @@
     "aliases": []
   },
   "document-cli": {
+    "githubPackages": "document-cli",
     "aliases": ["doculi"]
   },
-  "document-mcp": {},
+  "document-compute.js": {
+    "githubPackages": "document-compute.js",
+    "aliases": []
+  },
+  "document-mcp": {
+    "githubPackages": "document-mcp",
+    "aliases": []
+  },
   "document-outline.js": {
     "githubPackages": "document-outline.js",
     "aliases": []
@@ -32,6 +40,14 @@
   "documents.js": {
     "githubPackages": "documents.js",
     "aliases": ["js.documents"]
+  },
+  "epub-codec": {
+    "githubPackages": "epub-codec",
+    "aliases": []
+  },
+  "excel-number-format": {
+    "githubPackages": "excel-number-format",
+    "aliases": []
   },
   "markdown-codec": {
     "githubPackages": "markdown-codec",
