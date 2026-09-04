@@ -20,6 +20,7 @@ import {
   writeSxwContent,
   writeSxcContent,
   writeSxiContent,
+  writeSxdContent,
 } from "../ooo1/write";
 
 // THE STRUCTURAL GUARD AGAINST AN UNDECLARED NAMESPACE PREFIX, for every writer in this package at once.
@@ -371,6 +372,7 @@ describe("every emitted prefix is declared on its own part's root", () => {
     ["writeSxwContent", () => writeSxwContent(WORDPROCESSING)],
     ["writeSxcContent", () => writeSxcContent(SPREADSHEET)],
     ["writeSxiContent", () => writeSxiContent(PRESENTATION)],
+    ["writeSxdContent", () => writeSxdContent(DRAWING)],
   ])("%s", (_name, write) => {
     expect(undeclaredPrefixUses(write())).toEqual([]);
   });

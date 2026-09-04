@@ -36,7 +36,7 @@ import { canonicalDrawVector, writeDrawVectors } from "../draw/write-vectors";
 //
 // WHAT THIS FORMAT DOES NOT HAVE, so this writer is smaller than odp's rather than larger: there is no notes concept (presentation:notes is a slide's, and ContentDrawPage carries no notes field), and no fidelity-construct vocabulary of its own -- readOdgContent reads neither. The shape-level refusals still apply verbatim, since they come from typed/draw/write-shapes.ts's planShapeContent rather than from anything odp-specific: a run-level construct extent, an embedded object, a construct boundary marker, a heading or a page break inside a shape's own text, and a table or image mixed with other shape content. A page's own `source` residue (the unmapped shape kinds and vendor-extension elements typed/odg/read.ts quarantines) is dropped, the same deliberate exception every other writer here makes -- residue is opaque by construction, so re-emitting it would be actively wrong rather than merely incomplete.
 //
-// `.sxd` (the OpenOffice.org 1.x drawing format) is NOT covered by this module. It needs exactly what `.sxw`/`.sxc`/`.sxi` needed of their own ODF writers -- this writer's output run through transformToOoo1Package -- and is tracked as its own follow-up rather than built here.
+// `.sxd` (the OpenOffice.org 1.x drawing format) is not written by this module, but is written FROM it: ooo1/write.ts's own writeSxd/writeSxdContent are this writer's output run through transformToOoo1Package, exactly what `.sxw`/`.sxc`/`.sxi` are of writeOdt/writeOds/writeOdp. Every construct written here therefore reaches `.sxd` too, and every refusal above holds there unchanged.
 
 const CONTENT_PART = "content.xml";
 const STYLES_PART = "styles.xml";
