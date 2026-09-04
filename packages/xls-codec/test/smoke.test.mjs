@@ -77,6 +77,14 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/biff/substreams.js', exports: ['groupRecords', 'splitSubstreams'] },
     { path: '../dist/workbook/globals.js', exports: ['readWorkbookGlobals'] },
     { path: '../dist/workbook/sheet.js', exports: ['readSheetRecords'] },
+    {
+      path: '../dist/workbook/print-names.js',
+      exports: ['readPrintNames', 'writePrintNameRecords'],
+    },
+    {
+      path: '../dist/biff/print-setup.js',
+      exports: ['pageSizeFromSetup', 'paperSelectionFor'],
+    },
     { path: '../dist/serial.js', exports: ['serialToIsoDate'] },
     { path: '../dist/units.js', exports: ['twipsToPoints'] },
     { path: '../dist/container.js', exports: ['readWorkbookStreams', 'isXlsFile', 'SUMMARY_INFORMATION_STREAM'] },
