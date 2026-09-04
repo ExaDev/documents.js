@@ -268,6 +268,24 @@ const SETUP_INACTIVE_FIT_PAGES = 1;
 const SETUP_INACTIVE_SCALE_PERCENT = 100;
 /** Setup's own iPaperSize for a page size no entry of its code table names: [MS-XLS] 2.4.257's "The value 0, or values greater than or equal to 256, specify custom printer paper sizes." */
 const SETUP_CUSTOM_PAPER_SIZE = 0;
+/** [MS-XLS] 2.4.257's own ceiling on iFitWidth and iFitHeight: "MUST be less than or equal to 32767." */
+const SETUP_MAX_FIT_PAGES = 32767;
+/** iScale is an unsigned 16-bit percentage with no documented ceiling of its own, so the field's own width is the only bound there is. 1 is the floor: 0 is not a scaling factor, and a sub-1% one has no whole-percent spelling. */
+const SETUP_MIN_SCALE_PERCENT = 1;
+const SETUP_MAX_SCALE_PERCENT = 0xffff;
+
+/**
+ * Clamps a schema value into the range its own Setup field can hold, since `ContentSheetPrintSettings` bounds neither a scale percentage nor a fit-to-page count from above.
+ *
+ * Clamping rather than throwing, and rather than letting the value wrap: a print scale is a presentational field, and refusing a whole workbook over an absurd one would lose its cells for no gain (the same trade the paper-code case above settles the same way). Silently wrapping is the option neither of those beats -- a scale of 65540% would land in the file as 4%, which is a different intent stated confidently.
+ */
+function clampedSetupField(
+  value: number,
+  minimum: number,
+  maximum: number,
+): number {
+  return Math.min(Math.max(Math.round(value), minimum), maximum);
+}
 
 /**
  * Setup ([MS-XLS] 2.4.257): iPaperSize, iScale, iPageStart, iFitWidth, iFitHeight, the flags word, iRes, iVRes, numHdr, numFtr, iCopies.
@@ -289,10 +307,20 @@ function writeSetupRecord(
     paperCode: paper.code,
     scalePercent:
       fitToPages === undefined
-        ? Math.round(settings.scalePercent ?? SETUP_INACTIVE_SCALE_PERCENT)
+        ? clampedSetupField(
+            settings.scalePercent ?? SETUP_INACTIVE_SCALE_PERCENT,
+            SETUP_MIN_SCALE_PERCENT,
+            SETUP_MAX_SCALE_PERCENT,
+          )
         : SETUP_INACTIVE_SCALE_PERCENT,
-    fitWidth: fitToPages?.width ?? SETUP_INACTIVE_FIT_PAGES,
-    fitHeight: fitToPages?.height ?? SETUP_INACTIVE_FIT_PAGES,
+    fitWidth:
+      fitToPages === undefined
+        ? SETUP_INACTIVE_FIT_PAGES
+        : clampedSetupField(fitToPages.width, 1, SETUP_MAX_FIT_PAGES),
+    fitHeight:
+      fitToPages === undefined
+        ? SETUP_INACTIVE_FIT_PAGES
+        : clampedSetupField(fitToPages.height, 1, SETUP_MAX_FIT_PAGES),
     leftToRight: settings.pageOrder === "overThenDown",
     portrait: paper.portrait,
     noPls: false,
