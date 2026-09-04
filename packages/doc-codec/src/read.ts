@@ -21,6 +21,7 @@ import {
 import { applyCharacterSprms, type CharacterProperties } from "./prop/chp";
 import { PropertyBinTable } from "./prop/fkp";
 import { applyParagraphSprms, type ParagraphProperties } from "./prop/pap";
+import { readSectionProperties } from "./prop/sep";
 import { readGrpprl, type Prl } from "./prop/sprm";
 import { parseFontTable } from "./style/fonts";
 import { headingLevelFromIstd, parseStsh, type StyleSheet } from "./style/stsh";
@@ -39,9 +40,9 @@ import {
 
 // The top-level read: a .doc's bytes to a ContentDocument. Every step below is one of [MS-DOC]'s own algorithms, in the order the specification chains them -- the compound-file container gives the WordDocument and Table streams, the FIB gives the offsets, the piece table turns character positions into bytes, and the two bin tables turn byte offsets into formatting. readParagraphs itself only ever produces flat ParagraphEntry values (one per paragraph/cell/row mark, whatever its own table depth); table/read.ts's assembleBlocks is what folds a contiguous run of table-depth paragraphs into a real ContentTable, so this module carries no table-specific logic of its own.
 //
-// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images, no footnotes/headers/endnotes, no section geometry, no style-inherited formatting, and no decryption. Each of those is a genuine layer of the format, and each is absent rather than approximated. Tables are read, but only at depth 1 -- a table nested inside a table cell is refused (table/read.ts) rather than mis-read. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like -- see DocContent's own comment below for why that rides outside ContentDocument's shared shape.
+// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images, no footnotes/headers/endnotes, no section boundaries beyond the whole document's own page size and margins, no style-inherited formatting, and no decryption. Each of those is a genuine layer of the format, and each is absent rather than approximated. Tables are read, but only at depth 1 -- a table nested inside a table cell is refused (table/read.ts) rather than mis-read. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like -- see DocContent's own comment below for why that rides outside ContentDocument's shared shape.
 
-/** The page geometry every section is given, because this reader does not yet read a document's own. US Letter with one-inch margins is Word's own default for a new document; a document that states otherwise is not yet consulted, so this is a placeholder the schema requires rather than a fact read from the file. */
+/** Word's own default for a new document (US Letter, one-inch margins) -- what a field this reader resolves from PlcfSed/Sepx (prop/sep.ts's readSectionProperties) falls back to when the file states nothing for it, exactly as it would fall back to Word's own implementation-dependent default for that one unstated sprm. */
 const DEFAULT_PAGE_SIZE: PageSize = { widthPt: 612, heightPt: 792 };
 const DEFAULT_MARGINS: Margins = {
   topPt: 72,
@@ -149,6 +150,7 @@ export function readDocContent(bytes: Uint8Array<ArrayBuffer>): DocContent {
   });
   const blocks = assembleBlocks(entries);
   const numbering = readNumberingDefinitions(table, fib);
+  const sectionProperties = readSectionProperties(wordDocument, table, fib);
 
   return {
     kind: "wordprocessing",
@@ -159,8 +161,18 @@ export function readDocContent(bytes: Uint8Array<ArrayBuffer>): DocContent {
         : summaryInformationToLayoutMetadata(readSummaryInformation(metadata)),
     sections: [
       {
-        pageSize: DEFAULT_PAGE_SIZE,
-        margins: DEFAULT_MARGINS,
+        pageSize: {
+          widthPt: sectionProperties.pageWidthPt ?? DEFAULT_PAGE_SIZE.widthPt,
+          heightPt:
+            sectionProperties.pageHeightPt ?? DEFAULT_PAGE_SIZE.heightPt,
+        },
+        margins: {
+          leftPt: sectionProperties.marginLeftPt ?? DEFAULT_MARGINS.leftPt,
+          rightPt: sectionProperties.marginRightPt ?? DEFAULT_MARGINS.rightPt,
+          topPt: sectionProperties.marginTopPt ?? DEFAULT_MARGINS.topPt,
+          bottomPt:
+            sectionProperties.marginBottomPt ?? DEFAULT_MARGINS.bottomPt,
+        },
         blocks,
       },
     ],

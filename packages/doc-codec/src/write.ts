@@ -19,6 +19,7 @@ import {
   type PapxParagraphToWrite,
 } from "./prop/fkp-write";
 import { encodeParagraphGrpprl } from "./prop/pap-write";
+import { buildPlcfSed, buildSepx, encodeSectionGrpprl } from "./prop/sep-write";
 import { buildFontTable } from "./style/fonts";
 import { buildEmptyStsh } from "./style/stsh";
 import { flattenSectionBlocks } from "./table/write";
@@ -27,7 +28,7 @@ import { PARAGRAPH_MARK } from "./text/special";
 
 // The top-level write: a wordprocessing ContentDocument to real [MS-DOC] bytes, wrapped in a real [MS-CFB] compound file. Every step below inverts one of read.ts's own -- the text stream is laid out and the paragraph/character formatting encoded into grpprls first (write.ts, prop/chp-write.ts, prop/pap-write.ts, table/write.ts), then packed into the piece table, the two property bin tables and their formatted disk pages, an empty-but-conformant style sheet, and (when a run names one) a font table (text/piece-table-write.ts, prop/fkp-write.ts, style/stsh.ts, style/fonts.ts) -- the identical structures readDocContent (read.ts) consumes, so a document this writer produces is verified by reading it back through this package's own reader rather than by inspecting its bytes in isolation. A ContentTable block is expanded by table/write.ts's flattenSectionBlocks into the same flat paragraph sequence every other block already is, each with its own terminator (a cell/row mark's own cell-mark character rather than the ordinary paragraph mark) and extra grpprl bytes (sprmPFInTable, and on a row's own mark, sprmPFTtp plus its whole TAP) -- so table paragraphs flow through the identical Chpx/Papx paging logic below as every other paragraph, not a separate table-only path.
 //
-// What this writer does NOT do is stated in full in the README's own scope section, not only here: no images, no footnotes/headers/endnotes, no section geometry beyond refusing more than one section, no numbering, no paragraph styles (every paragraph is istd 0, "Normal", with every property carried as a direct exception), and no hyperlinks or fields. Each is a genuine layer of the format this writer does not implement; none is silently approximated. Tables are written, but only at depth 1 (see table/write.ts) and without cell shading/borders or any other TAP layer document-schema.js's own ContentTable/ContentTableCell has no field for.
+// What this writer does NOT do is stated in full in the README's own scope section, not only here: no images, no footnotes/headers/endnotes, no section boundaries beyond refusing more than one section (the one section's own page size and margins are written for real -- see below), no numbering, no paragraph styles (every paragraph is istd 0, "Normal", with every property carried as a direct exception), and no hyperlinks or fields. Each is a genuine layer of the format this writer does not implement; none is silently approximated. Tables are written, but only at depth 1 (see table/write.ts) and without cell shading/borders or any other TAP layer document-schema.js's own ContentTable/ContentTableCell has no field for.
 
 /** Where the text is written in the WordDocument stream: past the FIB (which needs under 900 bytes for the fields this writer populates), on a page boundary though not required to be. */
 const TEXT_FC = 0x400;
@@ -173,9 +174,11 @@ export function writeDocContent(
   );
   const papxPages = buildPapxPages(papxParagraphSpecs, textFcLim);
 
-  const wordDocument = new Uint8Array(
-    (papxPageStart + papxPages.length) * FKP_PAGE_SIZE,
-  );
+  // The one section's own Sepx, [MS-DOC] 2.9.279 -- not an FKP-paged structure like the Chpx/Papx pages above, so it needs no page alignment and is simply appended after them.
+  const sepx = buildSepx(encodeSectionGrpprl(section));
+  const fcSepx = (papxPageStart + papxPages.length) * FKP_PAGE_SIZE;
+
+  const wordDocument = new Uint8Array(fcSepx + sepx.length);
   const wordView = new DataView(wordDocument.buffer);
   for (let index = 0; index < text.length; index += 1) {
     wordView.setUint16(characterFc(index), text.charCodeAt(index), true);
@@ -186,6 +189,7 @@ export function writeDocContent(
   papxPages.forEach((page, index) => {
     wordDocument.set(page, (papxPageStart + index) * FKP_PAGE_SIZE);
   });
+  wordDocument.set(sepx, fcSepx);
 
   // 5. The Table stream: the Clx, the two bin tables (keyed on each page's own first fc, read back out of the page itself so the key and the page's content can never disagree), an empty-but-conformant style sheet, and, when at least one run names a font, the font table.
   const clx = buildTextClx(text.length, TEXT_FC);
@@ -200,6 +204,7 @@ export function writeDocContent(
   const stsh = buildEmptyStsh();
   const fontTable =
     fontNames.length > 0 ? buildFontTable(fontNames) : undefined;
+  const plcfSed = buildPlcfSed(text.length, fcSepx);
 
   let cursor = 0;
   const place = (bytes: Uint8Array): number => {
@@ -211,12 +216,14 @@ export function writeDocContent(
   const fcPlcfBteChpx = place(chpxBinTable);
   const fcPlcfBtePapx = place(papxBinTable);
   const fcStshf = place(stsh);
+  const fcPlcfSed = place(plcfSed);
   const fcSttbfFfn = fontTable !== undefined ? place(fontTable) : 0;
   const table = new Uint8Array(cursor);
   table.set(clx, fcClx);
   table.set(chpxBinTable, fcPlcfBteChpx);
   table.set(papxBinTable, fcPlcfBtePapx);
   table.set(stsh, fcStshf);
+  table.set(plcfSed, fcPlcfSed);
   if (fontTable !== undefined) table.set(fontTable, fcSttbfFfn);
 
   const fib = buildFib({
@@ -224,6 +231,8 @@ export function writeDocContent(
     cbMac: wordDocument.length,
     fcClx,
     lcbClx: clx.length,
+    fcPlcfSed,
+    lcbPlcfSed: plcfSed.length,
     fcPlcfBteChpx,
     lcbPlcfBteChpx: chpxBinTable.length,
     fcPlcfBtePapx,
