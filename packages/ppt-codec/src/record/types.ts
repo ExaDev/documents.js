@@ -5,6 +5,7 @@ export const RT_DocumentAtom = 0x03e9;
 export const RT_Slide = 0x03ee;
 export const RT_SlideAtom = 0x03ef;
 export const RT_Notes = 0x03f0;
+export const RT_NotesAtom = 0x03f1;
 export const RT_Environment = 0x03f2;
 // One value shared by SlidePersistAtom, MasterPersistAtom and NotesPersistAtom -- which of the three a record is, is decided by the list container holding it, not by its own type.
 export const RT_SlidePersistAtom = 0x03f3;
@@ -14,6 +15,9 @@ export const RT_DrawingGroup = 0x040b;
 export const RT_Drawing = 0x040c;
 export const RT_List = 0x07d0;
 export const RT_FontCollection = 0x07d5;
+// One value shared by SlideSchemeColorSchemeAtom and SchemeListElementColorSchemeAtom, told apart by recInstance.
+export const RT_ColorSchemeAtom = 0x07f0;
+export const RT_PlaceholderAtom = 0x0bc3;
 export const RT_OutlineTextRefAtom = 0x0f9e;
 export const RT_TextHeaderAtom = 0x0f9f;
 export const RT_TextCharsAtom = 0x0fa0;
@@ -59,3 +63,5 @@ export const OfficeArtClientTextbox = 0xf00d;
 export const OfficeArtChildAnchor = 0xf00f;
 // OfficeArtClientAnchor, host-defined -- [MS-PPT] 2.7.1 defines PowerPoint's: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/37ee18c7-3c7c-4adc-91fb-cb3b01789d72
 export const OfficeArtClientAnchor = 0xf010;
+// OfficeArtClientData, host-defined -- [MS-PPT] 2.9.72 defines PowerPoint's, whose one field this package writes is the PlaceholderAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/ac3b454d-b5ea-4da8-a57c-32fc08ed332a
+export const OfficeArtClientData = 0xf011;
