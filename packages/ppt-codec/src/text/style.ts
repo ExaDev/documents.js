@@ -72,6 +72,13 @@ export interface RgbColor {
 export interface ParagraphProperties {
   readonly indentLevel: number;
   readonly alignment: number | undefined;
+  /** ParaSpacing ([MS-PPT]), raw and unconverted: 0-13200 is a percentage of line height (value/100 = percent), negative is the absolute value in master units. content.ts's own paraSpacingToLineSpacing/paraSpacingToPoints do the schema-facing conversion -- this module stays format-level, with no document-schema.js knowledge of its own. */
+  readonly lineSpacing: number | undefined;
+  readonly spaceBefore: number | undefined;
+  readonly spaceAfter: number | undefined;
+  /** MarginOrIndent ([MS-PPT]): a signed offset in master units, no percentage form -- leftMargin is the paragraph's own left margin, indent the first line's own offset relative to it (negative for a hanging/bullet indent), the identical relationship DrawingML's later marL/indent pair states for the same binary predecessor format. */
+  readonly leftMargin: number | undefined;
+  readonly indent: number | undefined;
 }
 
 export interface CharacterProperties {
@@ -193,17 +200,15 @@ function readTextPFException(
     cursor.skip(4);
   }
   const alignment = (masks & PF_ALIGN) !== 0 ? cursor.u16() : undefined;
-  for (const mask of [
-    PF_LINE_SPACING,
-    PF_SPACE_BEFORE,
-    PF_SPACE_AFTER,
-    PF_LEFT_MARGIN,
-    PF_INDENT,
-    PF_DEFAULT_TAB_SIZE,
-  ]) {
-    if ((masks & mask) !== 0) {
-      cursor.skip(2);
-    }
+  const lineSpacing =
+    (masks & PF_LINE_SPACING) !== 0 ? cursor.i16() : undefined;
+  const spaceBefore =
+    (masks & PF_SPACE_BEFORE) !== 0 ? cursor.i16() : undefined;
+  const spaceAfter = (masks & PF_SPACE_AFTER) !== 0 ? cursor.i16() : undefined;
+  const leftMargin = (masks & PF_LEFT_MARGIN) !== 0 ? cursor.i16() : undefined;
+  const indent = (masks & PF_INDENT) !== 0 ? cursor.i16() : undefined;
+  if ((masks & PF_DEFAULT_TAB_SIZE) !== 0) {
+    cursor.skip(2);
   }
   if ((masks & PF_TAB_STOPS) !== 0) {
     // TabStops is a 2-byte count followed by count * 4 bytes ([MS-PPT] 2.9.x), the one variable-length field in the structure and so the only one whose mis-sizing desynchronises every following run.
@@ -218,7 +223,15 @@ function readTextPFException(
   if ((masks & PF_TEXT_DIRECTION) !== 0) {
     cursor.skip(2);
   }
-  return { indentLevel, alignment };
+  return {
+    indentLevel,
+    alignment,
+    lineSpacing,
+    spaceBefore,
+    spaceAfter,
+    leftMargin,
+    indent,
+  };
 }
 
 // A mask bit gates whether its property is stated at all, and the corresponding CFStyle bit gives the value. A property whose mask bit is clear stays undefined rather than becoming false: the run simply says nothing about it, and the difference matters because an unstated property inherits from the master's text style rather than defaulting off.

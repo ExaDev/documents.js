@@ -17,6 +17,7 @@ import {
   type StyleTextProps,
 } from "./text/style";
 import { LINE_BREAK, PARAGRAPH_SEPARATOR } from "./text/atoms";
+import { pointsToMasterUnits } from "./units";
 
 // The write-side mirror of content.ts: given a shape's ContentBlock list, produces the flat character-counted text body and the StyleTextProps runs [MS-PPT]'s StyleTextPropAtom carries alongside it -- the inverse of content.ts's buildParagraphs, which turns that same pairing back into ContentParagraph[]. Only 'paragraph' blocks contribute text; every other ContentBlock kind (image, table, embeddedObject, pageBreak, the two construct markers) is silently excluded from the written text body, the same documented-gap convention the reader's own README already uses for constructs it does not surface -- ppt-codec's writer covers text-box slides, not the full ContentBlock vocabulary.
 
@@ -37,6 +38,18 @@ function mapAlignmentToPpt(
     default:
       return undefined;
   }
+}
+
+/** document-schema.js's lineSpacing is always a positive multiple of single line height (the schema's own z.number().positive()), so this always writes ParaSpacing's percentage form -- there is no master-units case to choose between, unlike the read side's two-way branch. */
+function lineSpacingToParaSpacing(
+  multiple: number | undefined,
+): number | undefined {
+  return multiple === undefined ? undefined : Math.round(multiple * 100);
+}
+
+/** document-schema.js's spacingBeforePt/spacingAfterPt are always plain points, so this always writes ParaSpacing's negative (absolute master-units) form -- the percentage-of-line-height form has no point value to derive it from. */
+function pointsToParaSpacing(pt: number | undefined): number | undefined {
+  return pt === undefined ? undefined : -pointsToMasterUnits(pt);
 }
 
 function mapColorToPpt(color: Color | undefined): RgbColor | undefined {
@@ -111,6 +124,17 @@ export function buildTextBody(
       properties: {
         indentLevel: paragraph.list?.level ?? 0,
         alignment: mapAlignmentToPpt(paragraph.alignment),
+        lineSpacing: lineSpacingToParaSpacing(paragraph.lineSpacing),
+        spaceBefore: pointsToParaSpacing(paragraph.spacingBeforePt),
+        spaceAfter: pointsToParaSpacing(paragraph.spacingAfterPt),
+        leftMargin:
+          paragraph.indentLeftPt === undefined
+            ? undefined
+            : pointsToMasterUnits(paragraph.indentLeftPt),
+        indent:
+          paragraph.indentFirstLinePt === undefined
+            ? undefined
+            : pointsToMasterUnits(paragraph.indentFirstLinePt),
       },
     });
 

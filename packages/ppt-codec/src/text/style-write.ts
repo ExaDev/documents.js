@@ -10,6 +10,11 @@ import {
   COLOR_INDEX_SRGB,
   type CharacterProperties,
   PF_ALIGN,
+  PF_INDENT,
+  PF_LEFT_MARGIN,
+  PF_LINE_SPACING,
+  PF_SPACE_AFTER,
+  PF_SPACE_BEFORE,
   type ParagraphProperties,
   type RgbColor,
   STYLE_BOLD,
@@ -25,14 +30,37 @@ function writeColorIndexStruct(color: RgbColor): Uint8Array<ArrayBuffer> {
   return new Uint8Array([color.red, color.green, color.blue, COLOR_INDEX_SRGB]);
 }
 
-// A TextPFException carrying only the one field this writer ever states: textAlignment. Every other PFMasks field (bullets, margins, spacing, tab stops, wrapping, direction) is left unset, which round-trips as "the format did not say" through the reader's own undefined-on-unset-mask behaviour -- exactly the same absence a run whose writer never set the bit already produces for those fields today.
+// A TextPFException carrying textAlignment, lineSpacing/spaceBefore/spaceAfter, and leftMargin/indent -- every field this writer states, in the spec's own declared order (masks, then textAlignment, lineSpacing, spaceBefore, spaceAfter, leftMargin, indent). Every other PFMasks field (bullets, tab stops, wrapping, direction) is left unset, which round-trips as "the format did not say" through the reader's own undefined-on-unset-mask behaviour -- exactly the same absence a run whose writer never set the bit already produces for those fields today.
 function writeTextPFException(
   properties: ParagraphProperties,
 ): Uint8Array<ArrayBuffer> {
-  if (properties.alignment === undefined) {
-    return u32le(0);
+  let masks = 0;
+  const fields: Uint8Array<ArrayBuffer>[] = [];
+  if (properties.alignment !== undefined) {
+    masks |= PF_ALIGN;
+    fields.push(u16le(properties.alignment));
   }
-  return concatBytes(u32le(PF_ALIGN), u16le(properties.alignment));
+  if (properties.lineSpacing !== undefined) {
+    masks |= PF_LINE_SPACING;
+    fields.push(i16le(properties.lineSpacing));
+  }
+  if (properties.spaceBefore !== undefined) {
+    masks |= PF_SPACE_BEFORE;
+    fields.push(i16le(properties.spaceBefore));
+  }
+  if (properties.spaceAfter !== undefined) {
+    masks |= PF_SPACE_AFTER;
+    fields.push(i16le(properties.spaceAfter));
+  }
+  if (properties.leftMargin !== undefined) {
+    masks |= PF_LEFT_MARGIN;
+    fields.push(i16le(properties.leftMargin));
+  }
+  if (properties.indent !== undefined) {
+    masks |= PF_INDENT;
+    fields.push(i16le(properties.indent));
+  }
+  return concatBytes(u32le(masks), ...fields);
 }
 
 function writeTextCFException(
