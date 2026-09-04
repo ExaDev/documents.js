@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { ContentSubpath } from "document-schema.js";
 import {
   buildOdfSubpaths,
+  formatOdfPathData,
+  formatOdfViewBox,
   parseOdfPathData,
   parseOdfPointsList,
   parseOdfViewBox,
@@ -250,5 +253,163 @@ describe("scaleOdfRawPoint / buildOdfSubpaths", () => {
         ],
       },
     ]);
+  });
+});
+
+// The write side, checked as a genuine inverse rather than against a hand-copied expected string: every round-trip case below serialises subpaths, parses the result back through parseOdfPathData, scales it through buildOdfSubpaths against the very viewBox formatOdfViewBox produced, and compares against what went in. A suite that only asserted the literal svg:d text would pass just as happily for a serializer whose grammar the parser cannot actually read.
+
+describe("formatOdfViewBox", () => {
+  it("states the frame's own extent, so the scale factor buildOdfSubpaths applies is exactly 1", () => {
+    const frame = { xPt: 20, yPt: 30, widthPt: 144, heightPt: 72 };
+    expect(formatOdfViewBox(frame)).toBe("0 0 144 72");
+    expect(parseOdfViewBox(formatOdfViewBox(frame))).toEqual({
+      minX: 0,
+      minY: 0,
+      width: 144,
+      height: 72,
+    });
+  });
+
+  // A fractional extent still has to match parseOdfViewBox's own four-number grammar, which has no exponent form at all -- the same hazard formatOdfLength's own expandExponential closes for lengths, reached here through formatOdfNumber.
+  it("spells a very small extent in fixed-point decimal, never exponent notation", () => {
+    const viewBox = formatOdfViewBox({
+      xPt: 0,
+      yPt: 0,
+      widthPt: 1e-7,
+      heightPt: 2.5,
+    });
+    expect(viewBox).toBe("0 0 0.0000001 2.5");
+    expect(parseOdfViewBox(viewBox)).toEqual({
+      minX: 0,
+      minY: 0,
+      width: 1e-7,
+      height: 2.5,
+    });
+  });
+});
+
+describe("formatOdfPathData", () => {
+  const frame = { xPt: 0, yPt: 0, widthPt: 200, heightPt: 100 };
+
+  function reparse(subpaths: ContentSubpath[]): ContentSubpath[] {
+    const viewBox = parseOdfViewBox(formatOdfViewBox(frame));
+    if (viewBox === undefined) {
+      throw new Error("expected the written viewBox to parse");
+    }
+    return buildOdfSubpaths(
+      parseOdfPathData(formatOdfPathData(subpaths)),
+      viewBox,
+      frame,
+    );
+  }
+
+  it("writes one absolute moveto per subpath, an explicit L per line segment, and Z only when closed", () => {
+    expect(
+      formatOdfPathData([
+        {
+          start: { xPt: 0, yPt: 0 },
+          segments: [
+            { kind: "line", to: { xPt: 100, yPt: 0 } },
+            { kind: "line", to: { xPt: 100, yPt: 50 } },
+          ],
+          closed: true,
+        },
+        {
+          start: { xPt: 10, yPt: 10 },
+          segments: [{ kind: "line", to: { xPt: 20, yPt: 20 } }],
+          closed: false,
+        },
+      ]),
+    ).toBe("M 0,0 L 100,0 L 100,50 Z M 10,10 L 20,20");
+  });
+
+  it("writes a cubic as an absolute C with both control points before the endpoint", () => {
+    expect(
+      formatOdfPathData([
+        {
+          start: { xPt: 0, yPt: 80 },
+          segments: [
+            {
+              kind: "cubic",
+              control1: { xPt: 30, yPt: 0 },
+              control2: { xPt: 70, yPt: 0 },
+              to: { xPt: 100, yPt: 80 },
+            },
+          ],
+          closed: false,
+        },
+      ]),
+    ).toBe("M 0,80 C 30,0 70,0 100,80");
+  });
+
+  it("round-trips a closed and an open subpath mixing line and cubic segments", () => {
+    const subpaths: ContentSubpath[] = [
+      {
+        start: { xPt: 0, yPt: 0 },
+        segments: [
+          { kind: "line", to: { xPt: 60, yPt: 0 } },
+          {
+            kind: "cubic",
+            control1: { xPt: 80, yPt: 0 },
+            control2: { xPt: 80, yPt: 40 },
+            to: { xPt: 60, yPt: 40 },
+          },
+          { kind: "line", to: { xPt: 0, yPt: 40 } },
+        ],
+        closed: true,
+      },
+      {
+        start: { xPt: 120, yPt: 10 },
+        segments: [
+          {
+            kind: "cubic",
+            control1: { xPt: 140, yPt: 90 },
+            control2: { xPt: 180, yPt: -10 },
+            to: { xPt: 200, yPt: 70 },
+          },
+        ],
+        closed: false,
+      },
+    ];
+    expect(reparse(subpaths)).toEqual(subpaths);
+  });
+
+  it("round-trips negative and fractional coordinates, whose signs are their own separators", () => {
+    const subpaths: ContentSubpath[] = [
+      {
+        start: { xPt: -12.5, yPt: -0.25 },
+        segments: [{ kind: "line", to: { xPt: 0.5, yPt: -30 } }],
+        closed: false,
+      },
+    ];
+    expect(formatOdfPathData(subpaths)).toBe("M -12.5,-0.25 L 0.5,-30");
+    expect(reparse(subpaths)).toEqual(subpaths);
+  });
+
+  it("round-trips a subpath with no segments at all as a bare moveto", () => {
+    const subpaths: ContentSubpath[] = [
+      { start: { xPt: 5, yPt: 7 }, segments: [], closed: false },
+    ];
+    expect(formatOdfPathData(subpaths)).toBe("M 5,7");
+    expect(reparse(subpaths)).toEqual(subpaths);
+  });
+
+  // The one case a caller must refuse rather than write: an empty subpath list writes an empty svg:d, which parses back to no subpaths at all, and typed/draw/shapes.ts's readDrawPathVector then drops the whole element. typed/draw/write-vectors.ts refuses it by name; this pins why it has to.
+  it("writes an empty string for no subpaths, which parses back to nothing", () => {
+    expect(formatOdfPathData([])).toBe("");
+    expect(parseOdfPathData("")).toEqual([]);
+  });
+
+  // A coordinate small enough for JavaScript's own Number-to-string to switch to exponent notation is spelled in fixed-point decimal instead, for one spelling across svg:d and the svg:viewBox beside it (typed/shared/units.ts's formatOdfNumber).
+  it("spells a very small coordinate in fixed-point decimal", () => {
+    expect(
+      formatOdfPathData([
+        {
+          start: { xPt: 7.105427357601002e-15, yPt: 0 },
+          segments: [],
+          closed: false,
+        },
+      ]),
+    ).toBe("M 0.000000000000007105427357601002,0");
   });
 });
