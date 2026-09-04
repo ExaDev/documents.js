@@ -5,6 +5,7 @@ import type {
   ContentTable,
   ContentTableCell,
   ContentRun,
+  LayoutMetadata,
 } from "document-schema.js";
 import { colorToRgbHex, rgbHexToColor } from "document-schema.js";
 import { segmentOdfParagraphRuns } from "./paragraph";
@@ -172,6 +173,33 @@ export function canonicalTable(table: ContentTable): ContentTable {
         : { cells, heightPt: row.heightPt };
     }),
   };
+}
+
+// The one canonical LayoutMetadata a written-and-reread document's own metadata equals: exactly the seven fields typed/shared/metadata.ts's writeOdfMetadata puts into meta.xml and readOdfMetadata reads back, each passed through when stated and dropped when absent (an empty keywords array writes no meta:keyword elements at all, so it reads back absent rather than empty). Every other LayoutMetadata field -- `producer`, `language`, and the rest -- is dropped: none has a meta.xml spelling this package writes or reads, so carrying it would be claiming a fidelity meta.xml does not have. Shared by every content writer here rather than restated per format: what meta.xml can carry is a property of the part, not of which body element sits beside it.
+export function canonicalMetadata(metadata: LayoutMetadata): LayoutMetadata {
+  const canonical: LayoutMetadata = {};
+  if (metadata.title !== undefined) {
+    canonical.title = metadata.title;
+  }
+  if (metadata.author !== undefined) {
+    canonical.author = metadata.author;
+  }
+  if (metadata.subject !== undefined) {
+    canonical.subject = metadata.subject;
+  }
+  if (metadata.keywords !== undefined && metadata.keywords.length > 0) {
+    canonical.keywords = [...metadata.keywords];
+  }
+  if (metadata.creator !== undefined) {
+    canonical.creator = metadata.creator;
+  }
+  if (metadata.createdIso !== undefined) {
+    canonical.createdIso = metadata.createdIso;
+  }
+  if (metadata.modifiedIso !== undefined) {
+    canonical.modifiedIso = metadata.modifiedIso;
+  }
+  return canonical;
 }
 
 // The one canonical ContentImageBlock a written-and-reread image equals: format/base64/size/altText survive verbatim (an image part is copied byte-for-byte into the package, never re-encoded), and every other field (sourcePath, source, frames -- a reader's and a layout pass's own facts, never content) is dropped.

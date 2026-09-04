@@ -7,7 +7,6 @@ import type {
   ContentSection,
   ContentTable,
   DocumentTree,
-  LayoutMetadata,
   Margins,
   PageSize,
 } from "document-schema.js";
@@ -30,6 +29,7 @@ import { writeOdfParagraph } from "../shared/paragraph";
 import { writeOdfTable } from "../shared/table";
 import {
   canonicalImage,
+  canonicalMetadata,
   canonicalParagraph,
   canonicalTable,
 } from "../shared/canonicalise";
@@ -227,32 +227,6 @@ function planDocument(sections: readonly ContentSection[]): PlannedSection[] {
 // --- the canonical form: what reading this writer's own output back produces --------------------------------------
 //
 // canonicalTable/canonicalImage now live in typed/shared/canonicalise.ts, reused verbatim rather than restated: writeOdfTable is the one table writer/reader pair every caller in this package shares (odt's own top-level tables, or one nested inside an odp/odg shape), and an image part is copied byte-for-byte regardless of which writer placed it.
-
-function canonicalMetadata(metadata: LayoutMetadata): LayoutMetadata {
-  const canonical: LayoutMetadata = {};
-  if (metadata.title !== undefined) {
-    canonical.title = metadata.title;
-  }
-  if (metadata.author !== undefined) {
-    canonical.author = metadata.author;
-  }
-  if (metadata.subject !== undefined) {
-    canonical.subject = metadata.subject;
-  }
-  if (metadata.keywords !== undefined && metadata.keywords.length > 0) {
-    canonical.keywords = [...metadata.keywords];
-  }
-  if (metadata.creator !== undefined) {
-    canonical.creator = metadata.creator;
-  }
-  if (metadata.createdIso !== undefined) {
-    canonical.createdIso = metadata.createdIso;
-  }
-  if (metadata.modifiedIso !== undefined) {
-    canonical.modifiedIso = metadata.modifiedIso;
-  }
-  return canonical;
-}
 
 // The one canonical ContentDocument a written-and-reread document equals, and therefore the exact statement of what this writer preserves and what ODF (or this package's own reader) cannot carry back. Idempotent by construction -- every step below is already a fixed point of itself -- so it is a genuine equivalence, applied to both sides of the round-trip law rather than to the reader's output alone.
 //
