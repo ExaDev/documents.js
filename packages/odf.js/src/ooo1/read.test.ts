@@ -251,7 +251,8 @@ describe("readSxdContent", () => {
     return ooo1Package({
       mediaType: "application/vnd.sun.xml.draw",
       documentClass: "drawing",
-      content: `<office:automatic-styles><style:style style:name="gr1" style:family="graphic"><style:properties draw:fill="solid" draw:fill-color="#ffcc00" draw:stroke="solid" svg:stroke-color="#000000"/></style:style></office:automatic-styles><office:body><draw:page draw:name="Slide 1" draw:master-page-name="Default"><draw:rect draw:style-name="gr1" svg:x="1inch" svg:y="1inch" svg:width="2inch" svg:height="1inch"/></draw:page></office:body>`,
+      // style:family="graphics" is OpenOffice.org 1.x's own spelling of the family ODF calls "graphic" -- the transform renames it, and a fixture written with ODF's singular spelling would be testing a document this format never produces.
+      content: `<office:automatic-styles><style:style style:name="gr1" style:family="graphics"><style:properties draw:fill="solid" draw:fill-color="#ffcc00" draw:stroke="solid" svg:stroke-color="#000000"/></style:style></office:automatic-styles><office:body><draw:page draw:name="Slide 1" draw:master-page-name="Default"><draw:rect draw:style-name="gr1" svg:x="1inch" svg:y="1inch" svg:width="2inch" svg:height="1inch"/></draw:page></office:body>`,
       styles: `<office:automatic-styles><style:page-master style:name="PM1"><style:properties fo:page-width="11inch" fo:page-height="8.5inch"/></style:page-master></office:automatic-styles><office:master-styles><style:master-page style:name="Default" style:page-master-name="PM1"/></office:master-styles>`,
     });
   }
