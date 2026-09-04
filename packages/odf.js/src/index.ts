@@ -117,6 +117,7 @@ export {
   parseOdfLength,
   parseOdfLength as parseLength,
   formatOdfLength,
+  formatOdfNumber,
 } from "./typed/shared/units";
 export type { LengthUnit } from "./typed/shared/units";
 
@@ -226,6 +227,8 @@ export {
   scaleOdfRawPoint,
   buildOdfSubpaths,
   rawSubpathFromPoints,
+  formatOdfViewBox,
+  formatOdfPathData,
 } from "./typed/shared/path";
 export type {
   OdfRawPoint,
@@ -246,6 +249,9 @@ export type { DrawPageContent } from "./typed/draw/shapes";
 //
 // createDrawShapeWriteState, DrawShapeWriteState, and planShapeContent are deliberately NOT re-exported here, and neither is ShapeContentPlan, which only planShapeContent produces: they are the seam odp's own writer and a future odg writer hold between THEMSELVES (the state constructor takes a StyleRegistry plus the raw XmlElement container automatic styles get appended to -- this package's own internal plumbing), and no consumer outside this package exists for them. They stay ordinary exports of their own module, which is all an in-package caller needs; putting them on the published surface would freeze that plumbing into the package's public API ahead of any concrete requirement for it, and every later change to it into a breaking one.
 export { writeDrawFrame, writeDrawShapes } from "./typed/draw/write-shapes";
+
+// The vector-primitive half of the same write side: one ContentVector -> the draw:rect/draw:ellipse/draw:line/draw:path element typed/draw/shapes.ts's own vector readers read back. Separate from write-shapes.ts above because a ContentShape carries no vector vocabulary at all -- see that module's own writeDrawShapes note. canonicalDrawVector, like canonicalDrawShape beside it, is not re-exported: a consumer states a canonical form through normaliseOdgContent, which is what the round-trip law is actually written against.
+export { writeDrawVector, writeDrawVectors } from "./typed/draw/write-vectors";
 
 export { readDrawObjectReference } from "./typed/draw/embedded";
 export type {
@@ -285,6 +291,14 @@ export type { OdtWriteOptions } from "./typed/odt/write";
 
 export { readOdg, readOdgContent } from "./typed/odg/read";
 export type { OdgDocument } from "./typed/odg/read";
+
+// The odg WRITER, the inverse of the two readers above and this package's fourth content writer (typed/odt/write.ts's own top-of-file note states the shared design philosophy; typed/odg/write.ts's own states what a drawing adds beyond a presentation -- the vector primitives of ContentDrawPage's own second array). writeOdg takes the DocumentTree readOdg returns, writeOdgContent the flat ContentDocument readOdgContent returns, and both produce a real .odg Package. normaliseOdgContent states the one canonical form a written-and-reread document equals, including the two facts a drawing page forces that a slide does not: a page's shapes and vectors share one document-encounter counter, and both arrays come back sorted by paint order.
+export {
+  normaliseOdgContent,
+  writeOdg,
+  writeOdgContent,
+} from "./typed/odg/write";
+export type { OdgWriteOptions } from "./typed/odg/write";
 
 export { readOds, readOdsContent } from "./typed/ods/read";
 export type { OdsDocument } from "./typed/ods/read";
@@ -326,7 +340,7 @@ export {
 } from "./typed/shared/forms";
 export type { OdbFormDefinition, OdbFormControl } from "./typed/shared/forms";
 
-// --- OpenOffice.org 1.x / StarOffice 6-7, the pre-OASIS ancestor ODF 1.0 was based on. Read through the ODF readers above rather than beside them: transformOoo1Package rewrites a .sxw/.sxc/.sxi/.sxd package into the ODF shape those readers already understand, so every construct they know how to read works on an OpenOffice.org 1.x document too. .sxw and .sxc also write, the same way: transformToOoo1Package rewrites a real ODF Package (writeOdt's/writeOds's own output) into genuine OpenOffice.org 1.x XML; .sxi/.sxd remain read-only, since this package's typed layer has no writeOdp/writeOdg yet. See src/ooo1/transform.ts for what actually differs between the two vocabularies. ---
+// --- OpenOffice.org 1.x / StarOffice 6-7, the pre-OASIS ancestor ODF 1.0 was based on. Read through the ODF readers above rather than beside them: transformOoo1Package rewrites a .sxw/.sxc/.sxi/.sxd package into the ODF shape those readers already understand, so every construct they know how to read works on an OpenOffice.org 1.x document too. .sxw, .sxc, and .sxi also write, the same way: transformToOoo1Package rewrites a real ODF Package (writeOdt's/writeOds's/writeOdp's own output) into genuine OpenOffice.org 1.x XML; .sxd remains read-only, as its own tracked follow-up -- writeOdg now exists for one to be built on, but wrapping it is separate work. See src/ooo1/transform.ts for what actually differs between the two vocabularies. ---
 export {
   OOO1_NAMESPACES,
   OOO1_MEDIA_TYPES,
@@ -351,7 +365,7 @@ export {
   readSxdContent,
 } from "./ooo1/read";
 
-// The .sxw, .sxc, and .sxi writers -- the OpenOffice.org 1.x / StarOffice 6-7 counterparts to writeOdt/writeOdtContent, writeOds/writeOdsContent, and writeOdp/writeOdpContent above, built on them: those produce a real ODF Package, and transformToOoo1Package (this format's own inverse of transformOoo1Package, the same module the readers above run) rewrites it into genuine OpenOffice.org 1.x XML. See src/ooo1/write.ts for the full scope statement -- .sxd has no writer yet, since this package's typed layer has no writeOdg for one to be built on.
+// The .sxw, .sxc, and .sxi writers -- the OpenOffice.org 1.x / StarOffice 6-7 counterparts to writeOdt/writeOdtContent, writeOds/writeOdsContent, and writeOdp/writeOdpContent above, built on them: those produce a real ODF Package, and transformToOoo1Package (this format's own inverse of transformOoo1Package, the same module the readers above run) rewrites it into genuine OpenOffice.org 1.x XML. See src/ooo1/write.ts for the full scope statement -- .sxd has no writer yet, tracked separately now that writeOdg exists for one to wrap.
 export {
   writeSxw,
   writeSxwContent,
