@@ -4,12 +4,18 @@ import {
   type ContentBlock,
   type ContentDocument,
   type ContentParagraph,
+  type ContentTable,
   type ContentTableCell,
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
+import { slice } from "./bytes";
 import { isDocBytes } from "./detect";
 import { DocFormatError, DocUnsupportedError } from "./errors";
-import { readDocContent } from "./read";
+import { PropertyBinTable } from "./prop/fkp";
+import { readGrpprl } from "./prop/sprm";
+import { readDocContent, readDocStreams } from "./read";
+import { readTextRange } from "./text/characters";
+import { parseClx } from "./text/piece-table";
 import { writeDocContent } from "./write";
 
 // Verifies writeDocContent by reading its own output back through this package's own reader (readDocContent) -- the round trip this session's own writer packages (archive-codec's CFB writer, odf.js's typed writer) are all verified the same way, and the standing convention this task itself names. This round trip alone cannot prove third-party conformance, though: ExaDev/documents.js#892 is the confirmed counterexample -- a table passed this exact suite for the whole time LibreOffice's own .doc import filter rejected it outright, because readDocContent tolerated a document whose Main Document text did not end in the ordinary paragraph mark [MS-DOC] requires. Byte-level and real-reader verification for the table writer specifically lives in the README's own "Third-party verification" paragraph and its accompanying LibreOffice checks, not here.
@@ -70,6 +76,39 @@ function paragraphAt(result: ContentDocument, index: number): ContentParagraph {
     throw new Error(`block ${index} is a ${block.kind}, not a paragraph`);
   }
   return block;
+}
+
+function tableAt(result: ContentDocument, index: number): ContentTable {
+  const block = blocksOf(result)[index];
+  if (block === undefined) throw new Error(`no block at index ${index}`);
+  if (block.kind !== "table") {
+    throw new Error(`block ${index} is a ${block.kind}, not a table`);
+  }
+  return block;
+}
+
+/** The one cell a single-cell, single-row table round-trips to -- the shape most decoration assertions below want, since a border or fill is a per-cell fact and needs no other cell to state it. */
+function onlyCell(result: ContentDocument): ContentTableCell {
+  const cell = tableAt(result, 0).rows[0]?.cells[0];
+  if (cell === undefined) throw new Error("expected one cell");
+  return cell;
+}
+
+/** Whether any paragraph in a written document carries a Prl with this sprm opcode. Walked through this package's own grpprl primitives rather than scanned for the two opcode bytes anywhere in the stream, which would match the identical pair occurring inside some other sprm's operand and report an opcode that is not there. */
+function containsSprm(bytes: Uint8Array<ArrayBuffer>, opcode: number): boolean {
+  const { wordDocument, table, fib } = readDocStreams(bytes);
+  const pieceTable = parseClx(slice(table, fib.fcClx, fib.lcbClx, "Clx"));
+  const range = readTextRange(wordDocument, pieceTable, 0, fib.ccpText);
+  const papxTable = new PropertyBinTable(
+    wordDocument,
+    slice(table, fib.fcPlcfBtePapx, fib.lcbPlcfBtePapx, "PlcBtePapx"),
+    "PlcBtePapx",
+  );
+  return range.fcs.some((fc) => {
+    const papx = papxTable.papx(fc);
+    if (papx === undefined) return false;
+    return readGrpprl(papx.grpprl).some((prl) => prl.sprm.value === opcode);
+  });
 }
 
 describe("writeDocContent", () => {
@@ -650,6 +689,190 @@ describe("writeDocContent tables", () => {
       },
     ]);
     expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
+  });
+
+  // ContentTableCell.background and .borders, through TC80's own four Brc80 fields, the sprmTSetBrc exact-colour layer beside them, and the row's own sprmTDefTableShd array (src/table/decoration.ts). Every case here was additionally checked against real LibreOffice 26.2.5.2 output in both directions -- see the README's own "Third-party verification" paragraph for exactly which sub-cases that covered and which it did not.
+  describe("cell decoration", () => {
+    // A single-cell table carrying whatever decoration a test wants to state, so each assertion below is about the decoration alone rather than about cell structure it re-establishes every time.
+    const decorated = (cell: Partial<ContentTableCell>): ContentDocument =>
+      document([
+        {
+          kind: "table",
+          columnWidthsPt: [120],
+          rows: [
+            { cells: [{ blocks: [paragraph([{ text: "x" }])], ...cell }] },
+          ],
+        },
+      ]);
+
+    it("round-trips a cell's background fill", () => {
+      const result = roundTrip(decorated({ background: { r: 1, g: 1, b: 0 } }));
+      expect(onlyCell(result).background).toEqual({ r: 1, g: 1, b: 0 });
+    });
+
+    it("round-trips a background colour the Ico palette cannot state, through Shd's own exact COLORREFs", () => {
+      // #4C7FBF is deliberately nowhere near a palette entry: Shd carries cvFore/cvBack as full COLORREFs, so unlike a Brc80 border there is no palette step to lose it at.
+      const background = { r: 0x4c / 255, g: 0x7f / 255, b: 0xbf / 255 };
+      const result = roundTrip(decorated({ background }));
+      expect(onlyCell(result).background).toEqual(background);
+    });
+
+    it("round-trips all four borders, each with its own style, width and colour", () => {
+      const borders = {
+        top: { color: { r: 1, g: 0, b: 0 }, widthPt: 0.5 },
+        left: { color: { r: 0, g: 0, b: 1 }, widthPt: 1, style: "dashed" },
+        bottom: { color: { r: 0, g: 0x80 / 255, b: 0 }, widthPt: 2.5 },
+        // 0x80/255 rather than a round 0.5: every colour in this schema is written as a byte, so a component that is not itself a whole byte comes back rounded, exactly as a run's own sprmCCv colour already does.
+        right: {
+          color: { r: 0x80 / 255, g: 0, b: 0x80 / 255 },
+          widthPt: 1.5,
+          style: "dotted",
+        },
+      } as const;
+      const result = roundTrip(decorated({ borders }));
+      expect(onlyCell(result).borders).toEqual(borders);
+    });
+
+    it("round-trips a cell bordered on some sides but not others, leaving the unbordered sides absent", () => {
+      const result = roundTrip(
+        decorated({
+          borders: {
+            top: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+            bottom: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+          },
+        }),
+      );
+      const cellBorders = onlyCell(result).borders;
+      expect(cellBorders?.top).toEqual({
+        color: { r: 0, g: 0, b: 0 },
+        widthPt: 1,
+      });
+      expect(cellBorders?.bottom).toEqual({
+        color: { r: 0, g: 0, b: 0 },
+        widthPt: 1,
+      });
+      expect(cellBorders?.left).toBeUndefined();
+      expect(cellBorders?.right).toBeUndefined();
+    });
+
+    it("emits no decoration at all for a cell that states none", () => {
+      const result = roundTrip(decorated({}));
+      const cell = onlyCell(result);
+      expect(cell.background).toBeUndefined();
+      expect(cell.borders).toBeUndefined();
+    });
+
+    it("round-trips a border colour the Ico palette cannot state, through the sprmTSetBrc layer beside TC80's own Brc80", () => {
+      // #336699 is not a palette entry, so Brc80.ico alone would snap it to the nearest one; recovering it exactly proves the sprmTSetBrc override is both written and folded back on read.
+      const color = { r: 0x33 / 255, g: 0x66 / 255, b: 0x99 / 255 };
+      const result = roundTrip(
+        decorated({ borders: { top: { color, widthPt: 1 } } }),
+      );
+      expect(onlyCell(result).borders?.top).toEqual({ color, widthPt: 1 });
+    });
+
+    it("round-trips a border colour the Ico palette states exactly, without needing the sprmTSetBrc layer at all", () => {
+      const color = { r: 1, g: 1, b: 0 }; // Ico 0x07, yellow.
+      const result = roundTrip(
+        decorated({ borders: { right: { color, widthPt: 0.75 } } }),
+      );
+      expect(onlyCell(result).borders?.right).toEqual({ color, widthPt: 0.75 });
+      // The exact-colour override is emitted only where the palette genuinely cannot hold the colour, so this table's row mark carries no sprmTSetBrc (0xD62F) opcode anywhere in it.
+      const bytes = writeDocContent(
+        decorated({ borders: { right: { color, widthPt: 0.75 } } }),
+      );
+      expect(containsSprm(bytes, 0xd62f)).toBe(false);
+    });
+
+    it("round-trips a border width in the 1/8-point steps [MS-DOC]'s own dptLineWidth states", () => {
+      const color = { r: 0, g: 0, b: 0 };
+      const result = roundTrip(
+        decorated({ borders: { top: { color, widthPt: 3.125 } } }),
+      );
+      expect(onlyCell(result).borders?.top?.widthPt).toBe(3.125);
+    });
+
+    it("refuses a border wider than the single-byte dptLineWidth can state, rather than silently writing a thinner one", () => {
+      expect(() =>
+        writeDocContent(
+          decorated({
+            borders: { top: { color: { r: 0, g: 0, b: 0 }, widthPt: 40 } },
+          }),
+        ),
+      ).toThrow(DocFormatError);
+    });
+
+    it("round-trips decoration on a cell that is also horizontally merged", () => {
+      const input = document([
+        {
+          kind: "table",
+          columnWidthsPt: [80, 80],
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [paragraph([{ text: "wide" }])],
+                  colSpan: 2,
+                  background: { r: 0, g: 1, b: 1 },
+                  borders: {
+                    bottom: { color: { r: 1, g: 0, b: 0 }, widthPt: 1.5 },
+                  },
+                },
+              ],
+            },
+            {
+              cells: [
+                { blocks: [paragraph([{ text: "a" }])] },
+                { blocks: [paragraph([{ text: "b" }])] },
+              ],
+            },
+          ],
+        },
+      ]);
+      const anchor = tableAt(roundTrip(input), 0).rows[0]?.cells[0];
+      expect(anchor?.colSpan).toBe(2);
+      expect(anchor?.background).toEqual({ r: 0, g: 1, b: 1 });
+      expect(anchor?.borders?.bottom).toEqual({
+        color: { r: 1, g: 0, b: 0 },
+        widthPt: 1.5,
+      });
+    });
+
+    it("keeps each cell's decoration its own across a row of differently decorated cells", () => {
+      const input = document([
+        {
+          kind: "table",
+          columnWidthsPt: [60, 60, 60],
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [paragraph([{ text: "fill" }])],
+                  background: { r: 1, g: 1, b: 0 },
+                },
+                {
+                  blocks: [paragraph([{ text: "border" }])],
+                  borders: {
+                    left: { color: { r: 0, g: 0, b: 1 }, widthPt: 1 },
+                  },
+                },
+                { blocks: [paragraph([{ text: "bare" }])] },
+              ],
+            },
+          ],
+        },
+      ]);
+      const cells = tableAt(roundTrip(input), 0).rows[0]?.cells;
+      expect(cells?.[0]?.background).toEqual({ r: 1, g: 1, b: 0 });
+      expect(cells?.[0]?.borders).toBeUndefined();
+      expect(cells?.[1]?.background).toBeUndefined();
+      expect(cells?.[1]?.borders?.left).toEqual({
+        color: { r: 0, g: 0, b: 1 },
+        widthPt: 1,
+      });
+      expect(cells?.[2]?.background).toBeUndefined();
+      expect(cells?.[2]?.borders).toBeUndefined();
+    });
   });
 
   describe("metadata", () => {

@@ -7,9 +7,9 @@ import type {
 } from "document-schema.js";
 import { DocFormatError, DocUnsupportedError } from "../errors";
 import { CELL_MARK, PARAGRAPH_MARK } from "../text/special";
-import { encodeTableRowGrpprl, type TableCellMergeToWrite } from "./tap-write";
+import { encodeTableRowGrpprl, type TableCellToWrite } from "./tap-write";
 
-// The inverse of table/read.ts: a section's own ContentBlock list to the flat sequence of paragraphs writeDocContent's own text-layout pass consumes, expanding each ContentTable into its real [MS-DOC] physical-cell stream. Each ContentTableCell -- real content or a vertical-merge continuation's own `{blocks: []}` -- becomes exactly ONE physical cell, ending in its own cell mark exactly as [MS-DOC] 2.4.3 requires: a horizontally-merged (colSpan > 1) cell is never expanded into extra synthetic continuation cells, because a real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read a horizontal merge back from TCGRF.horzMerge/sprmTMerge continuation cells at all -- it states one purely as a row's own narrower, wider physical-cell layout (ExaDev/documents.js#895; see tap-write.ts's own top-of-file note for the full ground-truth finding). flattenRow instead merges the table-wide column grid's own boundaries across a cell's colSpan to compute that one physical cell's width, so the row's own rgdxaCenter genuinely has fewer entries than the table's full column count whenever a merge is present, matching the merge-encoding strategy LibreOffice's own writer uses -- not its bytes, which differ throughout (this writer's own grpprl and TC80 border encoding remain unrelated to LibreOffice's own producer choices; only the row-boundary shape a merge takes is now aligned). A vertical-merge continuation cell is never inferred from a bare `{blocks: []}` alone -- a genuinely blank cell has the identical shape -- so flattenTable tracks which columns carry a vertical merge actually in progress (an `active` map keyed by column position, walked top to bottom exactly as ooxml.js's own buildTable tracks its identical `active` map), and only a `{blocks: []}` cell landing on a column with a merge genuinely active there becomes a continuation; every other cell, blank or not, is ordinary. The same map supplies a continuation's own physical column span from the anchor's recorded span, since the continuation cell's own (typically absent) colSpan is never the source of truth for it. Every physical cell's own grpprl carries sprmPFInTable; the row's own trailing mark additionally carries sprmPFTtp plus the row's whole TAP (tap-write.ts's encodeTableRowGrpprl).
+// The inverse of table/read.ts: a section's own ContentBlock list to the flat sequence of paragraphs writeDocContent's own text-layout pass consumes, expanding each ContentTable into its real [MS-DOC] physical-cell stream. Each ContentTableCell -- real content or a vertical-merge continuation's own `{blocks: []}` -- becomes exactly ONE physical cell, ending in its own cell mark exactly as [MS-DOC] 2.4.3 requires: a horizontally-merged (colSpan > 1) cell is never expanded into extra synthetic continuation cells, because a real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read a horizontal merge back from TCGRF.horzMerge/sprmTMerge continuation cells at all -- it states one purely as a row's own narrower, wider physical-cell layout (ExaDev/documents.js#895; see tap-write.ts's own top-of-file note for the full ground-truth finding). flattenRow instead merges the table-wide column grid's own boundaries across a cell's colSpan to compute that one physical cell's width, so the row's own rgdxaCenter genuinely has fewer entries than the table's full column count whenever a merge is present, matching the merge-encoding strategy LibreOffice's own writer uses -- not its bytes, which still differ in what the row mark carries beyond the facts both state (this writer emits no cell padding, cell spacing or table-style sprm, and no legacy Shd80 array). Each ContentTableCell's own background and borders ride along to tap-write.ts, which states them the same two ways that implementation does -- TC80's own Brc80 fields plus a sprmTSetBrc for a colour the Brc80 palette cannot hold, and a sprmTDefTableShd array of one Shd per cell. A vertical-merge continuation cell is never inferred from a bare `{blocks: []}` alone -- a genuinely blank cell has the identical shape -- so flattenTable tracks which columns carry a vertical merge actually in progress (an `active` map keyed by column position, walked top to bottom exactly as ooxml.js's own buildTable tracks its identical `active` map), and only a `{blocks: []}` cell landing on a column with a merge genuinely active there becomes a continuation; every other cell, blank or not, is ordinary. The same map supplies a continuation's own physical column span from the anchor's recorded span, since the continuation cell's own (typically absent) colSpan is never the source of truth for it. Every physical cell's own grpprl carries sprmPFInTable; the row's own trailing mark additionally carries sprmPFTtp plus the row's whole TAP (tap-write.ts's encodeTableRowGrpprl).
 
 /** sprmPFInTable (0x2416): a Bool8, "MUST be 1 any time the table depth is greater than zero". */
 const SPRM_P_F_IN_TABLE = 0x2416;
@@ -53,12 +53,12 @@ function inTableGrpprl(): number[] {
 // The row's own trailing mark: sprmPFInTable (every table paragraph carries it), sprmPFTtp (marking this one as the row's own Table Terminating Paragraph mark), then the row's whole TAP (sprmTDefTable, and a row height if it has one) -- no separate horizontal-merge signal, since flattenRow's own physical-cell boundaries already state a merge the way a real [MS-DOC] producer does (see this module's own top-of-file note).
 function rowMarkExtraGrpprl(
   boundaries: readonly number[],
-  merges: readonly TableCellMergeToWrite[],
+  cellsToWrite: readonly TableCellToWrite[],
   heightPt: number | undefined,
 ): number[] {
   const bytes = inTableGrpprl();
   pushSprm(bytes, SPRM_P_F_TTP, [0x01]);
-  bytes.push(...encodeTableRowGrpprl(boundaries, merges, heightPt));
+  bytes.push(...encodeTableRowGrpprl(boundaries, cellsToWrite, heightPt));
   return bytes;
 }
 
@@ -113,11 +113,11 @@ function flattenRow(
   active: Map<number, ActiveVerticalMerge>,
 ): {
   paragraphs: WriteParagraph[];
-  merges: TableCellMergeToWrite[];
+  cellsToWrite: TableCellToWrite[];
   rowBoundariesTwips: number[];
 } {
   const paragraphs: WriteParagraph[] = [];
-  const merges: TableCellMergeToWrite[] = [];
+  const cellsToWrite: TableCellToWrite[] = [];
   const firstBoundary = boundaries[0];
   if (firstBoundary === undefined) {
     throw new DocFormatError(
@@ -134,7 +134,7 @@ function flattenRow(
       covered.remaining > 0;
 
     let span: number;
-    let vertMerge: TableCellMergeToWrite["vertMerge"];
+    let vertMerge: TableCellToWrite["vertMerge"];
     let blocks: readonly ContentBlock[];
     if (isContinuation) {
       covered.remaining -= 1;
@@ -152,7 +152,12 @@ function flattenRow(
     }
 
     paragraphs.push(...cellParagraphs(blocks));
-    merges.push({ vertMerge });
+    // A vertical-merge continuation states no decoration of its own: [MS-DOC] renders the anchor's, and table/read.ts drops a continuation's own on the way in for the same reason, so writing this cell's (typically absent) background/borders would be inventing a fact the round trip cannot preserve.
+    cellsToWrite.push(
+      isContinuation
+        ? { vertMerge }
+        : { vertMerge, borders: cell.borders, background: cell.background },
+    );
     column += span;
     const rightBoundary = boundaries[column];
     if (rightBoundary === undefined) {
@@ -167,7 +172,7 @@ function flattenRow(
       `a table row's own cells cover ${column} columns (via colSpan), but the table declares ${columnCount} in columnWidthsPt`,
     );
   }
-  return { paragraphs, merges, rowBoundariesTwips };
+  return { paragraphs, cellsToWrite, rowBoundariesTwips };
 }
 
 function flattenTable(table: ContentTable): WriteParagraph[] {
@@ -181,7 +186,7 @@ function flattenTable(table: ContentTable): WriteParagraph[] {
   const active = new Map<number, ActiveVerticalMerge>();
   const output: WriteParagraph[] = [];
   for (const row of table.rows) {
-    const { paragraphs, merges, rowBoundariesTwips } = flattenRow(
+    const { paragraphs, cellsToWrite, rowBoundariesTwips } = flattenRow(
       row.cells,
       columnCount,
       boundaries,
@@ -191,7 +196,11 @@ function flattenTable(table: ContentTable): WriteParagraph[] {
     output.push({
       runs: [],
       properties: {},
-      extraGrpprl: rowMarkExtraGrpprl(rowBoundariesTwips, merges, row.heightPt),
+      extraGrpprl: rowMarkExtraGrpprl(
+        rowBoundariesTwips,
+        cellsToWrite,
+        row.heightPt,
+      ),
       terminator: CELL_MARK,
     });
   }

@@ -1,5 +1,7 @@
 import type {
+  Color,
   ContentBlock,
+  ContentCellBorders,
   ContentParagraph,
   ContentTable,
   ContentTableCell,
@@ -60,6 +62,8 @@ function effectiveColumnBoundaryTolerance(
 interface RawCell {
   readonly horzMerge: number;
   readonly vertMerge: number;
+  readonly borders: ContentCellBorders | undefined;
+  readonly background: Color | undefined;
   readonly blocks: ContentBlock[];
 }
 
@@ -143,6 +147,8 @@ function tryAssembleTable(
           return {
             horzMerge: merge.horzMerge,
             vertMerge: merge.vertMerge,
+            borders: merge.borders,
+            background: merge.background,
             blocks: cell.blocks,
           };
         }),
@@ -239,6 +245,8 @@ interface LogicalCell {
   readonly startGridIndex: number;
   readonly colSpan: number;
   readonly vertMerge: number;
+  readonly borders: ContentCellBorders | undefined;
+  readonly background: Color | undefined;
   readonly blocks: ContentBlock[];
 }
 
@@ -287,6 +295,9 @@ function logicalCellsForRow(
       colSpan:
         endGridIndex > startGridIndex ? endGridIndex - startGridIndex : 1,
       vertMerge: cell.vertMerge,
+      // A horizontal-merge group's decoration is the anchor's own: [MS-DOC] renders a continuation cell's contents and formatting not at all ("its contents and formatting are not applied", sprmTMerge), so the anchor's Brc80s and Shd are what the merged region actually shows.
+      borders: cell.borders,
+      background: cell.background,
       blocks: cell.blocks,
     });
     physicalIndex += consumed;
@@ -322,7 +333,7 @@ function buildRows(
     for (const cell of row) {
       const colSpan = cell.colSpan > 1 ? cell.colSpan : undefined;
       if (cell.vertMerge === VERT_MERGE_CONTINUATION) {
-        // A vertical continuation combined with a horizontal merge in the same row still carries its own colSpan, so a later write (whose own active-merge tracking otherwise trusts the anchor's span, never a continuation's own) still has it if this row is ever read back on its own.
+        // A vertical continuation combined with a horizontal merge in the same row still carries its own colSpan, so a later write (whose own active-merge tracking otherwise trusts the anchor's span, never a continuation's own) still has it if this row is ever read back on its own. Its own decoration is deliberately dropped rather than carried: the merged region renders the anchor's, and a continuation cell is `{blocks: []}` by the shared schema's own convention -- giving it a background or borders would make it indistinguishable from a real, decorated, genuinely blank cell on the way back out.
         cells.push({ blocks: [], colSpan });
         continue;
       }
@@ -338,6 +349,8 @@ function buildRows(
         blocks: cell.blocks,
         colSpan,
         rowSpan: rowSpan > 1 ? rowSpan : undefined,
+        background: cell.background,
+        borders: cell.borders,
       });
     }
     const heightPt = rowHeights[rowIndex];
