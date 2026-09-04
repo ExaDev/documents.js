@@ -623,7 +623,7 @@ jobs:
 
   deploy-site:
     name: Build and deploy the web UI to Pages
-    # After release, so the deploy is built from the release commit the orchestrator just pushed (it bumps packages/documents/package.json and tags it). For a commit that releases nothing, no new tag is created and this builds the current tip of main.
+    # After release, so the deploy is built from the release commit the orchestrator just pushed (it bumps packages/web/package.json and tags it). For a commit that releases nothing, no new tag is created and this builds the current tip of main.
     needs:
       [commitlint, lint, typecheck, test, test-workers, test-smoke, release]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -666,6 +666,6 @@ jobs:
           done
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: packages/documents/dist
+          path: packages/web/dist
       - id: deployment
         uses: actions/deploy-pages@v5

@@ -13,7 +13,7 @@
 
   // Every task name is the underscore-prefixed one each package already used for its real command (`_build` runs tsdown; the package's own `build` script was `turbo run _build`). Running the public names from here instead would make turbo invoke those wrapper scripts, which invoke turbo again -- the recursive-call case Turborepo's own docs warn against ("You should only define these commands in the root package.json"). The wrapper scripts stay in place and stay usable for a single package, but the root pipeline reaches straight past them to the leaf commands.
   //
-  // The web UI (`documents`) needs different inputs/outputs/cache settings from the generic _build/_typecheck/etc (a vite.config.ts, a CI-only base-path env var, an uncacheable build since it stamps the commit SHA at build time) -- it uses the same underscore-prefixed task names as every other package via package-scoped overrides below, so a single `turbo run _build` still reaches it; only the settings differ, not the name. It is a leaf: nothing in the workspace depends on it.
+  // The web UI (`web`) needs different inputs/outputs/cache settings from the generic _build/_typecheck/etc (a vite.config.ts, a CI-only base-path env var, an uncacheable build since it stamps the commit SHA at build time) -- it uses the same underscore-prefixed task names as every other package via package-scoped overrides below, so a single `turbo run _build` still reaches it; only the settings differ, not the name. It is a leaf: nothing in the workspace depends on it.
   //
   // Every task depends on `^_build`, its dependencies' builds. In the separate repositories a sibling arrived pre-built from the registry, so typecheck, lint, and test needed nothing built first; here a sibling is a workspace symlink whose dist/ exists only once its own build has run, and tsc, type-aware eslint, and vitest all resolve imports through it.
   "tasks": {
@@ -34,7 +34,7 @@
       "inputs": ["$TURBO_DEFAULT$", "tsconfig.json", "tsconfig.node.json"],
       "outputs": []
     },
-    // attw --pack inspects the package's own dist/ against its own package.json exports map, so it depends on this package's own _build (which also builds every sibling `_build` depends on) rather than `^_build` -- the only task here that needs its own build rather than its dependencies'. Previously a raw shell loop in ci.yml's Typecheck job (`pnpm --recursive --filter='!documents' exec attw --pack`), preceded by an explicit `pnpm build` purely to give it a dist/ to inspect; both re-ran uncached on every push regardless of what changed. A package that doesn't publish (`documents`) has no `_typecheck:attw` script, so turbo silently skips it here the same way it already skips packages missing `_test:corpus`.
+    // attw --pack inspects the package's own dist/ against its own package.json exports map, so it depends on this package's own _build (which also builds every sibling `_build` depends on) rather than `^_build` -- the only task here that needs its own build rather than its dependencies'. Previously a raw shell loop in ci.yml's Typecheck job (`pnpm --recursive --filter='!documents' exec attw --pack`), preceded by an explicit `pnpm build` purely to give it a dist/ to inspect; both re-ran uncached on every push regardless of what changed. A package that doesn't publish (`web`) has no `_typecheck:attw` script, so turbo silently skips it here the same way it already skips packages missing `_test:corpus`.
     "_typecheck:attw": {
       "dependsOn": ["_build"],
       "inputs": ["package.json"],
@@ -113,7 +113,7 @@
       "outputs": []
     },
 
-    "documents#_build": {
+    "web#_build": {
       "dependsOn": ["^_build"],
       "inputs": [
         "src/**",
@@ -124,18 +124,18 @@
         "tsconfig.worker.json",
         "package.json"
       ],
-      // CI switches the app's base path to /documents/ for Pages; strict env mode would strip it and silently produce a build with root-relative asset paths that 404 once deployed.
-      "env": ["CI"],
-      // Uncacheable on purpose. vite.config.ts embeds the HEAD commit SHA, its exact release tag, and its commit timestamp into the bundle by shelling out to git at config-load time. None of that is a declared input and none of it can be -- so on a commit that leaves packages/documents/** untouched, a cache replay would deploy a bundle stamped with the previous commit's identity. A vite build per deploy is cheaper than shipping wrong version metadata.
+      // CI switches the app's base path to /<repo-name>/ (derived from GITHUB_REPOSITORY) for Pages; strict env mode would strip it and silently produce a build with root-relative asset paths that 404 once deployed.
+      "env": ["CI", "GITHUB_REPOSITORY"],
+      // Uncacheable on purpose. vite.config.ts embeds the HEAD commit SHA, its exact release tag, and its commit timestamp into the bundle by shelling out to git at config-load time. None of that is a declared input and none of it can be -- so on a commit that leaves packages/web/** untouched, a cache replay would deploy a bundle stamped with the previous commit's identity. A vite build per deploy is cheaper than shipping wrong version metadata.
       "cache": false,
       "outputs": ["dist/**"]
     },
-    "documents#_lint": {
+    "web#_lint": {
       "dependsOn": ["^_build"],
       "inputs": ["$TURBO_DEFAULT$", "eslint.config.ts"],
       "outputs": [".eslintcache"]
     },
-    "documents#_typecheck": {
+    "web#_typecheck": {
       "dependsOn": ["^_build"],
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -145,12 +145,12 @@
       ],
       "outputs": []
     },
-    "documents#_test": {
+    "web#_test": {
       "dependsOn": ["^_build"],
       "inputs": ["src/**", "vite.config.ts", "package.json"],
       "outputs": []
     },
-    "documents#_test:coverage": {
+    "web#_test:coverage": {
       "dependsOn": ["^_build"],
       "inputs": ["src/**", "vite.config.ts", "package.json"],
       "outputs": ["coverage/**"]
