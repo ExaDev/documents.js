@@ -16,6 +16,8 @@ import {
 import { buildParagraphs } from "./content";
 import { readDocumentAtom } from "./document/document-atom";
 import { readFontNames } from "./document/fonts";
+import { readNotesListWithText } from "./document/notes-list";
+import { readNotesContainerAtom, readNotesText } from "./document/notes";
 import {
   type SlidePersist,
   readSlideListWithText,
@@ -32,6 +34,7 @@ import {
   RT_Slide,
   RT_SlideListWithText,
   RT_StyleTextPropAtom,
+  SLIDE_LIST_INSTANCE_NOTES,
   SLIDE_LIST_INSTANCE_SLIDES,
 } from "./record/types";
 import { readCurrentUserAtom } from "./stream/current-user";
@@ -49,9 +52,9 @@ export const POWERPOINT_DOCUMENT_STREAM = "PowerPoint Document";
 /** The [MS-OLEPS] Property Set Stream a .ppt's title/author/dates live in when present ([MS-OSHARED] 2.3.3.2.2) -- a genuinely optional stream, unlike the two above, since a valid PowerPoint binary document need not carry document properties at all. */
 export const SUMMARY_INFORMATION_STREAM = "\x05SummaryInformation";
 
-// PowerPoint's own default text insets: 0.1 inch left and right, 0.05 inch top and bottom -- the same figures ECMA-376 later wrote into a:bodyPr's defaults, and the ones ooxml.js applies to a pptx shape stating none. A per-shape override lives in the shape's OfficeArtFOPT text properties, which this reader does not yet read; see the README's scope note.
-const DEFAULT_INSET_LEFT_RIGHT_PT = 0.1 * POINTS_PER_INCH;
-const DEFAULT_INSET_TOP_BOTTOM_PT = 0.05 * POINTS_PER_INCH;
+// PowerPoint's own default text insets: 0.1 inch left and right, 0.05 inch top and bottom -- the same figures ECMA-376 later wrote into a:bodyPr's defaults, and the ones ooxml.js applies to a pptx shape stating none. A per-shape override lives in the shape's OfficeArtFOPT text properties, which this reader does not yet read; see the README's scope note. Exported because the write side needs them too: ContentShape requires all four insets, and a shape the writer builds for itself (a notes body, a master placeholder) has to state the same defaults a read of that shape would report rather than invent its own.
+export const DEFAULT_INSET_LEFT_RIGHT_PT = 0.1 * POINTS_PER_INCH;
+export const DEFAULT_INSET_TOP_BOTTOM_PT = 0.05 * POINTS_PER_INCH;
 
 const NO_STYLE: StyleTextProps = { paragraphRuns: [], characterRuns: [] };
 
@@ -125,12 +128,38 @@ function blocksFor(
   return buildParagraphs(text, style, fontNames);
 }
 
+// Every notes slide's text, keyed by the slideId of the presentation slide it belongs to. [MS-PPT] 3.5.3 makes this the association: "A notes slide is associated with its presentation slide by means of the slideIdRef field in the NotesContainer record", and it explicitly warns that the notes list's own order is not meaningful, so the mapping has to be built from each container's own atom rather than by pairing the two lists positionally. A NotesContainer naming the notes master states slideIdRef 0x00000000, which no presentation slide's own slideId can be, so such an entry simply matches nothing.
+function readNotesBySlideId(
+  streamBytes: Uint8Array<ArrayBuffer>,
+  directory: ReadonlyMap<number, number>,
+  notesList: PptRecord | undefined,
+): Map<number, string> {
+  const notes = new Map<number, string>();
+  if (notesList === undefined) {
+    return notes;
+  }
+  for (const persist of readNotesListWithText(notesList)) {
+    const notesContainer = resolvePersistObject(
+      streamBytes,
+      directory,
+      persist.persistIdRef,
+      `NotesPersistAtom for notes slide ${persist.notesId}`,
+    );
+    notes.set(
+      readNotesContainerAtom(notesContainer).slideIdRef,
+      readNotesText(notesContainer),
+    );
+  }
+  return notes;
+}
+
 function readSlide(
   streamBytes: Uint8Array<ArrayBuffer>,
   directory: ReadonlyMap<number, number>,
   persist: SlidePersist,
   size: PageSize,
   fontNames: readonly string[],
+  notes: string,
 ): ContentSlide {
   const slideContainer = resolvePersistObject(
     streamBytes,
@@ -166,8 +195,8 @@ function readSlide(
       blocks: blocksFor(shape.clientTextbox, persist, fontNames),
     });
   }
-  // Speaker notes live in their own NotesContainer persist objects, reached through the document's notes list rather than the slide; reading them is not yet implemented, and "" is what the schema requires of a slide with none. See the README's scope note.
-  return { size, shapes, notes: "" };
+  // Speaker notes live in their own NotesContainer persist objects, reached through the document's notes list rather than through the slide, and are resolved to this slide by readNotesBySlideId above. A slide with no notes slide of its own reads as "", which is what the schema requires of a slide with none.
+  return { size, shapes, notes };
 }
 
 // Reads the two [MS-PPT] streams directly, for a caller that already holds them. The compound file below this is archive-codec's business, and separating the two keeps every record-level behaviour testable without a container around it.
@@ -214,19 +243,33 @@ export function readPptStreams(
   const fontNames = environment === undefined ? [] : readFontNames(environment);
 
   // The master, slide and notes lists all carry RT_SlideListWithText and differ only by recInstance, so matching on the record type alone would find whichever came first -- the master list.
-  const slideList = children.find(
-    (record) =>
-      record.header.recType === RT_SlideListWithText &&
-      record.header.recInstance === SLIDE_LIST_INSTANCE_SLIDES,
-  );
+  const listWithInstance = (instance: number): PptRecord | undefined =>
+    children.find(
+      (record) =>
+        record.header.recType === RT_SlideListWithText &&
+        record.header.recInstance === instance,
+    );
+  const slideList = listWithInstance(SLIDE_LIST_INSTANCE_SLIDES);
   const persists =
     slideList === undefined ? [] : readSlideListWithText(slideList);
+  const notesBySlideId = readNotesBySlideId(
+    powerPointDocumentStream,
+    directory,
+    listWithInstance(SLIDE_LIST_INSTANCE_NOTES),
+  );
 
   return {
     // Document properties live in the compound file's own "\x05SummaryInformation" stream ([MS-OSHARED]), not in any [MS-PPT] record -- genuinely outside what a caller holding only these two streams can supply. readPptContent, one level up, is where a container-level caller gets the real value: it looks the stream up itself and overrides this field when one is present.
     metadata: {},
     slides: persists.map((persist) =>
-      readSlide(powerPointDocumentStream, directory, persist, size, fontNames),
+      readSlide(
+        powerPointDocumentStream,
+        directory,
+        persist,
+        size,
+        fontNames,
+        notesBySlideId.get(persist.slideId) ?? "",
+      ),
     ),
   };
 }

@@ -138,6 +138,38 @@ describe("readPptContent", () => {
     expect(() => readPptContent(bytes)).toThrow(PptFormatError);
   });
 
+  describe("speaker notes", () => {
+    it("resolves a slide's notes through the notes list and its own persist object", () => {
+      const bytes = pptFile({ notesText: "Mention the budget revision." });
+      expect(readPptContent(bytes).slides[0]?.notes).toBe(
+        "Mention the budget revision.",
+      );
+    });
+
+    it("splits the notes' stored carriage returns into newline-separated paragraphs", () => {
+      const bytes = pptFile({ notesText: "Open here\rThen close" });
+      expect(readPptContent(bytes).slides[0]?.notes).toBe(
+        "Open here\nThen close",
+      );
+    });
+
+    it("reports no notes for a presentation carrying no notes list at all", () => {
+      expect(readPptContent(pptFile()).slides[0]?.notes).toBe("");
+    });
+
+    it("keeps a notes slide's own text out of the slide's shapes", () => {
+      // The failure this guards against is the one real LibreOffice verification caught in odf.js's own odp writer: notes landing on the visible slide rather than in the notes container.
+      const bytes = pptFile({ notesText: "Never shown on the slide." });
+      const [slide] = readPptContent(bytes).slides;
+      const shapeText = slide?.shapes.flatMap((shape) =>
+        shape.blocks.flatMap((block) =>
+          block.kind === "paragraph" ? block.runs.map((run) => run.text) : [],
+        ),
+      );
+      expect(shapeText).not.toContain("Never shown on the slide.");
+    });
+  });
+
   describe("metadata", () => {
     it('reads title/author/dates from a real "\\x05SummaryInformation" stream', () => {
       const bytes = pptFileWithMetadata({
