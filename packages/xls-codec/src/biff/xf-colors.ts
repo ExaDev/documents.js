@@ -13,7 +13,7 @@ import {
 
 import type { BlockCursor } from "./cursor";
 
-// The colour and border/fill vocabulary an XF record's trailing CellXF/StyleXF payload carries ([MS-XLS] 2.4.353), and the workbook-wide Palette record ([MS-XLS] 2.4.204) its icv fields resolve through. This is the one place the bit layout of that trailing payload's border/fill words is packed or unpacked -- workbook/globals.ts's readCellFormat unpacks it on read, biff/xf-writer.ts's writeCellXfRecord packs it on write, and both call into the same functions here rather than each carrying an independent copy of the layout.
+// The colour and border/fill vocabulary an XF record's trailing CellXF/StyleXF payload carries ([MS-XLS] 2.4.353), and the workbook-wide Palette record ([MS-XLS] 2.4.188) its icv fields resolve through. This is the one place the bit layout of that trailing payload's border/fill words is packed or unpacked -- workbook/globals.ts's readCellFormat unpacks it on read, biff/xf-writer.ts's writeCellXfRecord packs it on write, and both call into the same functions here rather than each carrying an independent copy of the layout.
 //
 // Deliberately out of scope: alignment (the payload's own leading word) and per-cell fonts. See xls-codec's README, "Cell decoration" -- this package has never modelled a per-cell font, matching ooxml.js's own xlsx reader, and alignment is a separate, unclaimed gap this module does not touch.
 
@@ -67,7 +67,7 @@ const FIXED_COLOR_TABLE: readonly Color[] = [
 
 /** icv 8-63's own base offset: icv 8 is rgColor[0] of a Palette record (or the default table's own entry 0) -- [MS-XLS] "Icv"'s own colour-table layout. */
 export const PALETTE_BASE_ICV = 0x08;
-/** A Palette record's own fixed entry count ([MS-XLS] 2.4.204: "The value MUST be 56"). */
+/** A Palette record's own fixed entry count ([MS-XLS] 2.4.188: "The value MUST be 56"). */
 export const PALETTE_ENTRY_COUNT = 56;
 
 /** The 56-entry default colour table icv 8-63 resolve through when no Palette record is present ([MS-XLS] "Icv"'s own default-red/green/blue columns), in icv order (index 0 = icv 8). Entries 0-7 duplicate the eight fixed colours above at their own icv+8 position -- the reason this package's writer allocates a fixed colour there rather than at icv 0-7 directly. */
