@@ -28,6 +28,33 @@ const RED_TEXT = [0x42, 0x2a, 0x06]; // sprmCIco, palette entry 6.
 const CENTRED = [0x61, 0x24, 0x01]; // sprmPJc, logical centre.
 const SPACE_BEFORE_12PT = [0x13, 0xa4, 0xf0, 0x00]; // sprmPDyaBefore, 240 twips.
 const PAGE_BREAK_BEFORE = [0x07, 0x24, 0x01]; // sprmPFPageBreakBefore, Bool8 true.
+// A section grpprl stating a page 600x800pt with a 90/54/45/36pt left/right/top/bottom margin -- one Prl per sprm, none of them the format's own default value, so a test reading them back proves the real field rather than coincidentally matching a fallback.
+const SECTION_GEOMETRY = [
+  0x1f,
+  0xb0,
+  0xe0,
+  0x2e, // sprmSXaPage, 12000 twips (600pt).
+  0x20,
+  0xb0,
+  0x80,
+  0x3e, // sprmSYaPage, 16000 twips (800pt).
+  0x21,
+  0xb0,
+  0x08,
+  0x07, // sprmSDxaLeft, 1800 twips (90pt).
+  0x22,
+  0xb0,
+  0x38,
+  0x04, // sprmSDxaRight, 1080 twips (54pt).
+  0x23,
+  0x90,
+  0x84,
+  0x03, // sprmSDyaTop, 900 twips (45pt).
+  0x24,
+  0x90,
+  0xd0,
+  0x02, // sprmSDyaBottom, 720 twips (36pt).
+];
 
 function paragraphs(
   document: ReturnType<typeof readDocContent>,
@@ -178,6 +205,31 @@ describe("readDocContent", () => {
     });
   });
 
+  it("reads a fixed (negative YAS) top/bottom margin as its absolute size, the same as a minimum one", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [{ runs: [{ text: "text" }] }],
+        sectionGrpprl: [
+          0x23,
+          0x90,
+          0x30,
+          0xfd, // sprmSDyaTop, -720 twips fixed (36pt).
+          0x24,
+          0x90,
+          0x60,
+          0xfa, // sprmSDyaBottom, -1440 twips fixed (72pt).
+        ],
+      }),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads as a wordprocessing document");
+    }
+    const section = document.sections[0];
+    if (section === undefined) throw new Error("a section must be present");
+    expect(section.margins.topPt).toBe(36);
+    expect(section.margins.bottomPt).toBe(72);
+  });
+
   it("reads paragraph alignment, spacing and page breaks from the PAPX exception", () => {
     const document = readDocContent(
       buildDoc({
@@ -191,6 +243,45 @@ describe("readDocContent", () => {
     expect(paragraphAt(document, 0).alignment).toBe("center");
     expect(paragraphAt(document, 1).spacingBeforePt).toBe(12);
     expect(paragraphAt(document, 2).pageBreakBefore).toBe(true);
+  });
+
+  it("reads a section's own page size and margins from its Sepx", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [{ runs: [{ text: "text" }] }],
+        sectionGrpprl: SECTION_GEOMETRY,
+      }),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads as a wordprocessing document");
+    }
+    const section = document.sections[0];
+    if (section === undefined) throw new Error("a section must be present");
+    expect(section.pageSize).toEqual({ widthPt: 600, heightPt: 800 });
+    expect(section.margins).toEqual({
+      leftPt: 90,
+      rightPt: 54,
+      topPt: 45,
+      bottomPt: 36,
+    });
+  });
+
+  it("falls back to Word's own new-document default when the file carries no PlcfSed at all", () => {
+    const document = readDocContent(
+      buildDoc({ paragraphs: [{ runs: [{ text: "text" }] }] }),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads as a wordprocessing document");
+    }
+    const section = document.sections[0];
+    if (section === undefined) throw new Error("a section must be present");
+    expect(section.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
+    expect(section.margins).toEqual({
+      leftPt: 72,
+      rightPt: 72,
+      topPt: 72,
+      bottomPt: 72,
+    });
   });
 
   it("derives a heading level from the paragraph style index, as sprmPIstd's own rule states", () => {

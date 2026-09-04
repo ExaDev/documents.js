@@ -39,6 +39,8 @@ export interface DocSpec {
   /** Splits the text across this many pieces rather than one, exercising a logical stream assembled from discontiguous byte ranges. */
   readonly pieces?: number;
   readonly styles?: readonly DocStyleSpec[];
+  /** The one section's own Sepx grpprl -- absent produces no PlcfSed at all, exercising the reader's own fallback to its page-geometry defaults exactly as a real file with no section properties would. */
+  readonly sectionGrpprl?: readonly number[];
 }
 
 // Two grpprls are the same exception when both are absent or their bytes match, which is what decides whether adjacent stretches merge into one ChpxFkp run.
@@ -110,7 +112,13 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   const firstFreePage = Math.ceil((TEXT_FC + textByteLength) / FKP_PAGE_SIZE);
 
   const papxPage = firstFreePage + 1;
-  const wordDocument = new Uint8Array((papxPage + 1) * FKP_PAGE_SIZE);
+  // The Sepx, when the spec wants one, sits right after the Papx page -- not itself an FKP-paged structure, so it needs no page alignment of its own.
+  const sepx =
+    spec.sectionGrpprl === undefined
+      ? undefined
+      : buildSepxBytes(spec.sectionGrpprl);
+  const fcSepx = (papxPage + 1) * FKP_PAGE_SIZE;
+  const wordDocument = new Uint8Array(fcSepx + (sepx?.length ?? 0));
   const wordView = new DataView(wordDocument.buffer);
   for (let index = 0; index < text.length; index += 1) {
     const code = text.charCodeAt(index);
@@ -148,8 +156,11 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
     ),
     papxPage * FKP_PAGE_SIZE,
   );
+  if (sepx !== undefined) {
+    wordDocument.set(sepx, fcSepx);
+  }
 
-  // 3. The Table stream: the Clx, the two bin tables, and the style sheet, each at an offset the FIB then names.
+  // 3. The Table stream: the Clx, the two bin tables, the style sheet, and (when the spec wants a section) the PlcfSed, each at an offset the FIB then names.
   const clx = buildClx(text.length, spec.pieces ?? 1, compressed, characterFc);
   const plcBteChpx = buildBinTable(
     [TEXT_FC, characterFc(text.length)],
@@ -160,8 +171,16 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
     [papxPage],
   );
   const stsh = buildStsh(spec.styles ?? []);
+  const plcfSed =
+    sepx === undefined ? undefined : buildPlcfSedBytes(text.length, fcSepx);
 
-  const tableParts = [clx, plcBteChpx, plcBtePapx, stsh];
+  const tableParts = [
+    clx,
+    plcBteChpx,
+    plcBtePapx,
+    stsh,
+    ...(plcfSed === undefined ? [] : [plcfSed]),
+  ];
   const tableOffsets: number[] = [];
   let tableLength = 0;
   for (const part of tableParts) {
@@ -192,6 +211,9 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
     lcbPlcfBtePapx: plcBtePapx.length,
     fcStshf: offsetOf(3),
     lcbStshf: stsh.length,
+    ...(plcfSed === undefined
+      ? {}
+      : { fcPlcfSed: offsetOf(4), lcbPlcfSed: plcfSed.length }),
   });
   wordDocument.set(fib, 0);
 
@@ -199,6 +221,28 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
     { path: "WordDocument", bytes: wordDocument },
     { path: "1Table", bytes: table },
   ]);
+}
+
+// Sepx, [MS-DOC] 2.9.279: a 2-byte cb (grpprl's own length) followed by the grpprl itself. Built independently of prop/sep-write.ts's own buildSepx, for the same reason the sprm byte sequences at the top of read.test.ts are hand-encoded rather than built through prop/sep-write.ts's encodeSectionGrpprl: a fixture sharing code with the module under test would let a bug in one hide behind the same bug in the other.
+function buildSepxBytes(grpprl: readonly number[]): Uint8Array {
+  return new Uint8Array([
+    grpprl.length & 0xff,
+    (grpprl.length >> 8) & 0xff,
+    ...grpprl,
+  ]);
+}
+
+// A one-section PlcfSed: two CPs (0 and ccpText) bracketing a single 12-byte Sed ([MS-DOC] 2.9.269) whose fcSepx names where buildSepxBytes' own bytes were placed in the WordDocument stream.
+function buildPlcfSedBytes(ccpText: number, fcSepx: number): Uint8Array {
+  const bytes = new Uint8Array(4 + 4 + 12);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, 0, true); // cp[0]
+  view.setUint32(4, ccpText, true); // cp[1]
+  view.setUint16(8, 0, true); // sed.fn -- ignored.
+  view.setUint32(10, fcSepx, true); // sed.fcSepx.
+  view.setUint16(14, 0, true); // sed.fnMpr -- ignored.
+  view.setUint32(16, 0xffffffff, true); // sed.fcMpr -- ignored.
+  return bytes;
 }
 
 // A Clx with no Prc array (so its first byte is the Pcdt's own 0x02) and a PlcPcd splitting the text into `pieceCount` pieces of as-equal length as divides.
