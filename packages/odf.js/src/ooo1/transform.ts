@@ -29,7 +29,7 @@ import {
 //   - Styles: one style:properties per style becomes ODF's family of typed style:*-properties elements. See ./properties.ts, which owns that split entirely.
 //   - Frames: draw:image/draw:text-box/draw:object and their siblings are bare shapes in OpenOffice.org 1.x; ODF wraps each in a draw:frame that carries the position, size and anchoring.
 //   - Lists, notes, tabs and a list of individual renames (text:ordered-list/text:unordered-list to text:list, the footnote/endnote pair to the text:note family, text:tab-stop to text:tab, office:font-decls to office:font-face-decls, style:page-master to style:page-layout, ...).
-//   - Values: lengths written in "inch" become "in", a cell's table:value-* attributes become office:value-*, and the compound style:text-underline/style:text-crossing-out attributes become ODF's style/type/width triples.
+//   - Values: lengths written in "inch" become "in", a cell's table:value-* attributes become office:value-*, a style's own style:family="graphics" becomes ODF's singular "graphic", and the compound style:text-underline/style:text-crossing-out attributes become ODF's style/type/width triples.
 //   - The package itself: the manifest's namespace and its root media type become the OASIS ones, and the "mimetype" part ODF requires -- which OpenOffice.org 1.x packages do not have at all -- is synthesised.
 //
 // What this deliberately does NOT do is claim to be a general OpenOffice.org-to-ODF converter. It targets the shape this package's readers consume; a construct no reader looks at (chart plot-area geometry, the presentation animation elements, form control implementation names) is carried through with its names updated where the rename is known and otherwise left alone, which costs nothing and quarantines as residue exactly as an unknown ODF element would.
@@ -204,7 +204,16 @@ function carriesNoLength(attributeName: string): boolean {
   return attributeName.endsWith("name") || attributeName === "xlink:href";
 }
 
+// OpenOffice.org 1.x names the drawing style family "graphics"; ODF renamed it to the singular "graphic". Taken from LibreOffice's own transformer (xmloff/source/transform/StyleOOoTContext.cxx maps XML_GRAPHICS onto XML_FAMILY_TYPE_GRAPHIC on the way in and writes XML_GRAPHIC back out), and confirmed against LibreOffice 26.2 directly: a package whose graphic automatic styles say "graphic" imports with every one of them silently unbound, so each shape falls back to the consumer's own default fill and stroke -- the same silent-inherit failure mode a missing draw:style-name causes. Scoped by attribute name alone, which is exact: style:family appears on style:style and style:default-style and nowhere else in either vocabulary. Every other family name -- including "presentation", the drawing family's sibling on a slide -- is spelled identically on both sides.
+const OOO1_GRAPHIC_STYLE_FAMILY = "graphics";
+const ODF_GRAPHIC_STYLE_FAMILY = "graphic";
+
 function normaliseAttributeValue(name: string, value: string): string {
+  if (name === "style:family") {
+    return value === OOO1_GRAPHIC_STYLE_FAMILY
+      ? ODF_GRAPHIC_STYLE_FAMILY
+      : value;
+  }
   if (carriesNoLength(name)) {
     return value;
   }
@@ -759,6 +768,12 @@ function reverseNoteBodyOrCitation(
 const PT_IN_TOKEN = /(^|\s)(-?(?:\d+(?:\.\d+)?|\.\d+))in(?=\s|$)/g;
 
 function reverseAttributeValue(name: string, value: string): string {
+  if (name === "style:family") {
+    // normaliseAttributeValue's own inverse -- see its note for why the drawing family alone needs one, and what a real consumer does with a package that skips it.
+    return value === ODF_GRAPHIC_STYLE_FAMILY
+      ? OOO1_GRAPHIC_STYLE_FAMILY
+      : value;
+  }
   if (name === "fo:keep-with-next") {
     // ODF's keyword enumeration, reversed to OpenOffice.org 1.x's own boolean; any other value (a genuinely different producer's own writing, outside what this direction's forward half ever emits) passes through unchanged rather than being guessed at.
     if (value === "always") {
