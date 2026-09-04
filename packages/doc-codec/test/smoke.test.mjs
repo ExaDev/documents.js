@@ -87,6 +87,7 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/prop/chp.js', exports: ['applyCharacterSprms'] },
     { path: '../dist/prop/pap.js', exports: ['applyParagraphSprms'] },
     { path: '../dist/style/stsh.js', exports: ['parseStsh', 'headingLevelFromIstd', 'STK'] },
+    { path: '../dist/list/numbering.js', exports: ['readNumberingDefinitions'] },
     { path: '../dist/read.js', exports: ['readDocContent', 'readDocStreams'] },
   ];
 
