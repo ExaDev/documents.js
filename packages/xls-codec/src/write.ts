@@ -238,7 +238,7 @@ function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
   // Slow path: at least one colour needs a genuinely custom entry. Allocate every distinct colour -- not just the non-default ones -- into fresh slots in first-use order, so the record this writes is fully self-consistent.
   if (colorByHex.size > PALETTE_ENTRY_COUNT) {
     throw new BiffWriteError(
-      `workbook needs ${colorByHex.size} distinct decoration colours, more than the ${PALETTE_ENTRY_COUNT} entries [MS-XLS] 2.4.204's own Palette record can hold`,
+      `workbook needs ${colorByHex.size} distinct decoration colours, more than the ${PALETTE_ENTRY_COUNT} entries [MS-XLS] 2.4.188's own Palette record can hold`,
     );
   }
   const icvByHex = new Map<string, number>();

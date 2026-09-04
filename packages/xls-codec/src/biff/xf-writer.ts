@@ -16,7 +16,7 @@ import {
 } from "./xf-colors";
 import type { Color } from "document-schema.js";
 
-// The formatting record family this writer emits: Font ([MS-XLS] 2.4.122), Format ([MS-XLS] 2.4.126), XF ([MS-XLS] 2.4.353) with its trailing CellXF ([MS-XLS] 2.4.353's own "Data" field, fStyle=0) or StyleXF (fStyle=1) payload, Style ([MS-XLS] 2.4.269), and Palette ([MS-XLS] 2.4.204).
+// The formatting record family this writer emits: Font ([MS-XLS] 2.4.122), Format ([MS-XLS] 2.4.126), XF ([MS-XLS] 2.4.353) with its trailing CellXF ([MS-XLS] 2.4.353's own "Data" field, fStyle=0) or StyleXF (fStyle=1) payload, Style ([MS-XLS] 2.4.269), and Palette ([MS-XLS] 2.4.188).
 //
 // A cell XF's own fill/border decoration is modelled from document-schema.js's ContentSheetCell.background/borders: this writer's own reader now reads a cell's CellXF payload back (workbook/globals.ts's readCellFormat), so a real decoration round-trips -- see xls-codec's README, "Cell decoration". Alignment and per-cell fonts remain out of scope (the reader still does not read either back), so every CellXF/StyleXF field below still defaults to the same spec-legal, decoration-free values for anything writeCellXfRecord's caller does not supply: general alignment, bottom vertical alignment, no border, no fill -- exactly what a genuinely undecorated Excel-written cell also carries. The bit-level packing of the trailing payload's border/fill words lives in xf-colors.ts, shared with workbook/globals.ts's own unpacking of the identical layout on read.
 
@@ -203,7 +203,7 @@ export function writeFormatRecord(
   return writeRecord(RECORD_FORMAT, data);
 }
 
-/** Palette ([MS-XLS] 2.4.204): ccv (MUST be 56) then that many LongRGB colour entries -- write.ts's own colour-interning pass decides whether a workbook needs this record at all, and hands it exactly 56 colours (icv 8 first) when it does. */
+/** Palette ([MS-XLS] 2.4.188): ccv (MUST be 56) then that many LongRGB colour entries -- write.ts's own colour-interning pass decides whether a workbook needs this record at all, and hands it exactly 56 colours (icv 8 first) when it does. */
 export function writePaletteRecord(
   colors: readonly Color[],
 ): Uint8Array<ArrayBuffer> {
