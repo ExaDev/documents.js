@@ -4,6 +4,7 @@ import {
   writeSummaryInformationStream,
 } from "archive-codec";
 import type {
+  Alignment,
   Color,
   ContentBorder,
   ContentDocument,
@@ -45,13 +46,13 @@ import {
   buildWorksheetSubstream,
   type SheetWriteContext,
 } from "./workbook/sheet-writer";
-import { cellCarriesDecoration, writesCellRecord } from "./written-cells";
+import { cellCarriesFormatting, writesCellRecord } from "./written-cells";
 
 // The BIFF8 write path: a ContentDocument (or DocumentTree) of kind 'spreadsheet' back to real .xls bytes -- a genuine [MS-XLS] Workbook stream wrapped in a genuine [MS-CFB] compound file via archive-codec's writeCompoundFile. The counterpart of content.ts's readXlsContent/readXls, and of ooxml.js's own writeXlsx.
 //
-// Three things are workbook-wide rather than per-sheet, so they are resolved in one pass over every sheet before any record is written: the number-format table (a cell's own numberFormatCode, or a representative default for its value kind when absent, maps onto a shared BIFF8 format identifier the same code reuses everywhere it appears), the colour table (every distinct background/border colour a cell uses, resolved to an icv against the fixed default palette or, when a colour genuinely isn't in it, a real Palette record this pass mints), and the shared string table (every distinct string value, in first-encountered order, referenced by index from a LabelSst cell in any sheet). A fourth pass, buildCellXfPlan, then interns the (number format, decoration) PAIR every cell resolves to into its own cell XF index -- two cells sharing both a format and a decoration share one XF record, mirroring how ooxml.js's own CellFormatTable dedupes an xlsx <xf> on the identical pair. Building each of these once and threading the result into every sheet's own writer is what keeps two cells in different sheets sharing the identical string, format, or decoration from minting redundant table entries.
+// Three things are workbook-wide rather than per-sheet, so they are resolved in one pass over every sheet before any record is written: the number-format table (a cell's own numberFormatCode, or a representative default for its value kind when absent, maps onto a shared BIFF8 format identifier the same code reuses everywhere it appears), the colour table (every distinct background/border colour a cell uses, resolved to an icv against the fixed default palette or, when a colour genuinely isn't in it, a real Palette record this pass mints), and the shared string table (every distinct string value, in first-encountered order, referenced by index from a LabelSst cell in any sheet). A fourth pass, buildCellXfPlan, then interns the (number format, alignment, decoration) TRIPLE every cell resolves to into its own cell XF index -- two cells sharing all three share one XF record, mirroring how ooxml.js's own CellFormatTable dedupes an xlsx <xf> on the identical (format, decoration) pair, widened here by one more axis. Building each of these once and threading the result into every sheet's own writer is what keeps two cells in different sheets sharing the identical string, format, alignment, or decoration from minting redundant table entries.
 //
-// See this package's README for the writer's own scope: what it covers (numeric/percentage/currency/date/time/dateTime/boolean/error/string cell values, merged ranges, row heights, column widths, custom and built-in number formats, and now cell background fill and per-side borders) and what it deliberately does not (formulas, alignment, per-cell fonts, images, comments, data validation, conditional formatting, print settings, and a long tail of BIFF8 records that carry UI/interoperability state rather than document content).
+// See this package's README for the writer's own scope: what it covers (numeric/percentage/currency/date/time/dateTime/boolean/error/string cell values, merged ranges, row heights, column widths, custom and built-in number formats, cell background fill and per-side borders, and cell alignment) and what it deliberately does not (formulas, per-cell fonts, images, comments, data validation, conditional formatting, print settings, and a long tail of BIFF8 records that carry UI/interoperability state rather than document content).
 
 const WORKBOOK_STREAM_NAME = "Workbook";
 
@@ -282,7 +283,7 @@ function resolveDecorationForCell(
   cell: ContentSheetCell,
   icvOf: (color: Color) => number,
 ): XfDecorationFields | undefined {
-  if (!cellCarriesDecoration(cell)) {
+  if (!cellCarriesFormatting(cell)) {
     return undefined;
   }
   return {
@@ -299,22 +300,24 @@ function resolveDecorationForCell(
   };
 }
 
-/** A deterministic signature for one cell XF's own (formatId, decoration) pair, so two cells sharing both share one XF record -- the interning key buildCellXfPlan below dedupes on, mirroring how CellFormatTable in ooxml.js's typed/xlsx/styles.ts dedupes an <xf> on (number format, decoration) together rather than on format alone. */
+/** A deterministic signature for one cell XF's own (formatId, alignment, verticalAlignment, decoration) tuple, so two cells sharing all four share one XF record -- the interning key buildCellXfPlan below dedupes on, mirroring how CellFormatTable in ooxml.js's typed/xlsx/styles.ts dedupes an <xf> on (number format, decoration) together rather than on format alone, widened here by the cell's own alignment. */
 function signatureOfCellXf(
   formatId: number,
+  alignment: Alignment | undefined,
+  verticalAlignment: "top" | "middle" | "bottom" | undefined,
   decoration: XfDecorationFields | undefined,
 ): string {
+  let signature = `f${formatId}|a${alignment ?? ""}|v${verticalAlignment ?? ""}`;
   if (decoration === undefined) {
-    return `f${formatId}`;
+    return signature;
   }
-  return (
-    `f${formatId}` +
+  signature +=
     `|p${decoration.fillPattern}:${decoration.fillForegroundIcv}` +
     `|l${decoration.left.style}:${decoration.left.icv}` +
     `|r${decoration.right.style}:${decoration.right.icv}` +
     `|t${decoration.top.style}:${decoration.top.icv}` +
-    `|b${decoration.bottom.style}:${decoration.bottom.icv}`
-  );
+    `|b${decoration.bottom.style}:${decoration.bottom.icv}`;
+  return signature;
 }
 
 interface CellXfPlan {
@@ -334,13 +337,18 @@ function buildCellXfPlan(
 ): CellXfPlan {
   const cellXfEntries: CellXfPlanEntry[] = [];
   const xfIndexBySignature = new Map<string, number>([
-    [signatureOfCellXf(GENERAL_FORMAT_ID, undefined), GENERAL_CELL_XF_INDEX],
+    [
+      signatureOfCellXf(GENERAL_FORMAT_ID, undefined, undefined, undefined),
+      GENERAL_CELL_XF_INDEX,
+    ],
   ]);
   let nextXfIndex = GENERAL_CELL_XF_INDEX + 1;
 
   const signatureOf = (cell: ContentSheetCell): string =>
     signatureOfCellXf(
       formatPlan.formatIdOf(formatCodeForCell(cell)),
+      cell.alignment,
+      cell.verticalAlignment,
       resolveDecorationForCell(cell, palettePlan.icvOf),
     );
 
@@ -351,13 +359,23 @@ function buildCellXfPlan(
       }
       const formatId = formatPlan.formatIdOf(formatCodeForCell(cell));
       const decoration = resolveDecorationForCell(cell, palettePlan.icvOf);
-      const signature = signatureOfCellXf(formatId, decoration);
+      const signature = signatureOfCellXf(
+        formatId,
+        cell.alignment,
+        cell.verticalAlignment,
+        decoration,
+      );
       if (xfIndexBySignature.has(signature)) {
         continue;
       }
       xfIndexBySignature.set(signature, nextXfIndex);
       nextXfIndex += 1;
-      cellXfEntries.push({ formatId, decoration });
+      cellXfEntries.push({
+        formatId,
+        alignment: cell.alignment,
+        verticalAlignment: cell.verticalAlignment,
+        decoration,
+      });
     }
   }
 

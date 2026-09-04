@@ -3,6 +3,7 @@ import {
   summaryInformationToLayoutMetadata,
 } from "archive-codec";
 import type {
+  Alignment,
   Color,
   ContentCellBorders,
   ContentCellValue,
@@ -304,13 +305,16 @@ function mapCell(
   cell: RawCell,
   globals: WorkbookGlobals,
 ): ContentSheetCell | undefined {
-  // Resolved before the blank check, because whether a blank cell is worth carrying is exactly the question of whether these two find anything. Resolved rather than read off the XF's raw fields, so a decoration this reader declines to express -- a fill pattern beyond solid, an unrecognised BorderStyle token, an icv with no fixed RGB value -- counts as none here too.
+  // Resolved before the blank check, because whether a blank cell is worth carrying is exactly the question of whether any of these find anything. Resolved rather than read off the XF's raw fields, so a decoration this reader declines to express -- a fill pattern beyond solid, an unrecognised BorderStyle token, an icv with no fixed RGB value -- counts as none here too.
   const background = backgroundOf(globals, cell.xfIndex);
   const borders = bordersOf(globals, cell.xfIndex);
+  const { alignment, verticalAlignment } = alignmentOf(globals, cell.xfIndex);
   if (
     cell.value.kind === "blank" &&
     background === undefined &&
-    borders === undefined
+    borders === undefined &&
+    alignment === undefined &&
+    verticalAlignment === undefined
   ) {
     return undefined;
   }
@@ -334,6 +338,12 @@ function mapCell(
   if (borders !== undefined) {
     mapped.borders = borders;
   }
+  if (alignment !== undefined) {
+    mapped.alignment = alignment;
+  }
+  if (verticalAlignment !== undefined) {
+    mapped.verticalAlignment = verticalAlignment;
+  }
   return mapped;
 }
 
@@ -355,6 +365,28 @@ function backgroundOf(
     format.decoration.fillForegroundIcv,
     globals.palette,
   );
+}
+
+/** A cell's own resolved horizontal/vertical alignment -- already the exact Alignment/verticalAlignment members (or undefined) globals.ts's readCellFormat resolved through xf-colors.ts's unpackXfAlignment, so this is a lookup rather than a further resolution step, mirroring backgroundOf/bordersOf's own shape. Both fields undefined for a cell whose XF resolves to no CellFormat at all (an out-of-range xfIndex), matching every other resolveXOf helper's behaviour in that case. */
+function alignmentOf(
+  globals: WorkbookGlobals,
+  xfIndex: number,
+): { alignment?: Alignment; verticalAlignment?: "top" | "middle" | "bottom" } {
+  const format = globals.cellFormats[xfIndex];
+  if (format === undefined) {
+    return {};
+  }
+  const result: {
+    alignment?: Alignment;
+    verticalAlignment?: "top" | "middle" | "bottom";
+  } = {};
+  if (format.alignment.horizontal !== undefined) {
+    result.alignment = format.alignment.horizontal;
+  }
+  if (format.alignment.vertical !== undefined) {
+    result.verticalAlignment = format.alignment.vertical;
+  }
+  return result;
 }
 
 /** A cell's own resolved per-side borders, or undefined when none of its four sides carry a border this reader resolves (no border at all, or a reserved/unrecognised BorderStyle token, or a colour this package cannot express as a fixed RGB value -- see xf-colors.ts's own resolveBorderEdge). */

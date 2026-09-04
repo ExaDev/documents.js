@@ -1,4 +1,4 @@
-import type { Color } from "document-schema.js";
+import type { Alignment, Color } from "document-schema.js";
 
 import { writeBofData } from "../biff/bof-writer";
 import { RecordBuilder } from "../biff/builder";
@@ -67,9 +67,11 @@ const BUILTIN_STYLES: readonly BuiltinStyle[] = [
 /** [MS-XLS] 2.1.7.20.3's own XFS production requires at least sixteen XF records before any cell can reference one: BUILTIN_STYLES.length built-in cell styles, then at least one cell XF -- the "General, no declared format" one every workbook needs unconditionally, written immediately after them. Derived from BUILTIN_STYLES's own length rather than restated as a literal, so the two can never drift apart. */
 export const GENERAL_CELL_XF_INDEX = BUILTIN_STYLES.length;
 
-/** One cell XF beyond the implicit General one at GENERAL_CELL_XF_INDEX: the number-format identifier it displays through, and -- when the cell it serves carries a background or borders -- the fill/border fields its CellXF payload packs. Undefined decoration writes the same undecorated defaults this writer always wrote before decoration existed. */
+/** One cell XF beyond the implicit General one at GENERAL_CELL_XF_INDEX: the number-format identifier it displays through, the cell's own horizontal/vertical alignment (general/bottom, this writer's own defaults, when omitted), and -- when the cell it serves carries a background or borders -- the fill/border fields its CellXF payload packs. Undefined decoration writes the same undecorated defaults this writer always wrote before decoration existed. */
 export interface CellXfPlanEntry {
   readonly formatId: number;
+  readonly alignment?: Alignment;
+  readonly verticalAlignment?: "top" | "middle" | "bottom";
   readonly decoration?: XfDecorationFields;
 }
 
@@ -187,6 +189,8 @@ export function buildWorkbookGlobals(
       writeCellXfRecord({
         fontIndex: NORMAL_FONT_INDEX,
         formatId: entry.formatId,
+        alignment: entry.alignment,
+        verticalAlignment: entry.verticalAlignment,
         decoration: entry.decoration,
       }),
     );
