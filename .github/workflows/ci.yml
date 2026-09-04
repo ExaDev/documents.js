@@ -596,6 +596,30 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ matrix.tag }}" --clobber "packages/${{ matrix.name }}/release-artifact/sbom.spdx.json"
+      # Surfaces the release on the org's own linked-artifacts page (Packages tab), pointing at the real npm registry location rather than only this repository's own GitHub Release assets. GITHUB_TOKEN cannot call this API: it needs the org-level "Artifact metadata" GitHub App permission, which the default Actions token has no equivalent for, so this mints a token from the documents-js app the release job already uses for its own elevated pushes.
+      - name: Generate a token for artifact metadata
+        id: artifact-metadata-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: Iv23liuX19EFyXndAmkL
+          private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
+          # Scoped down to only what this step needs, rather than inheriting every permission the documents-js app carries (contents/workflows/pull-requests/etc, needed by the release job's own use of the same app) -- least-privilege for a token that only ever calls one org-level endpoint.
+          permission-artifact-metadata: write
+      - name: Record the npm publish as a linked artifact
+        # The digest is the same tarball actions/attest signed above, hashed the same way (sha256 of the exact bytes at subject-path) -- this endpoint's own description says it attaches the record "on behalf of any artifact matching the provided digest and associated with a repository owned by the organization", which is the just-created build-provenance attestation for this tarball. github_repository is deliberately omitted: the API prefers the repository the provenance attestation itself names over this parameter.
+        env:
+          GH_TOKEN: ${{ steps.artifact-metadata-token.outputs.token }}
+        working-directory: packages/${{ matrix.name }}
+        run: |
+          DIGEST="sha256:$(sha256sum release-artifact/*.tgz | cut -d' ' -f1)"
+          gh api "orgs/${{ github.repository_owner }}/artifacts/metadata/storage-record" \
+            --method POST \
+            -f "name=${{ matrix.name }}" \
+            -f "version=${{ matrix.version }}" \
+            -f "digest=$DIGEST" \
+            -f "registry_url=https://registry.npmjs.org/" \
+            -f "repository=${{ matrix.name }}" \
+            -f "artifact_url=https://registry.npmjs.org/${{ matrix.name }}/-/${{ matrix.name }}-${{ matrix.version }}.tgz"
 
   deploy-site:
     name: Build and deploy the web UI to Pages
