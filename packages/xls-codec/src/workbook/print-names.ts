@@ -257,6 +257,15 @@ export interface PrintNamePlanEntry {
   readonly areas: readonly RawArea[];
 }
 
+/**
+ * Clamps a coordinate into BIFF8's own row/column ceiling. `ContentSheetPrintRange`/`ContentSheetRepeatRange` bound neither a start nor an end coordinate from above, and `writeArea3d` below writes each one into a 16-bit field regardless (`RecordBuilder.u16` masks with `0xffff`), so an out-of-grid coordinate would otherwise silently wrap to a plausible-looking in-grid one -- a print range asked for through row 70000 landing at row 4464, with nothing downstream to notice.
+ *
+ * Clamped rather than dropped or refused: a print range or a repeated header band is a rectangle whose intent survives shrinking to the grid's own edge -- "print through the bottom of the sheet" is genuinely what an end coordinate past the last row means once the grid is smaller than the caller assumed -- unlike a single-position page break (see sheet-writer.ts's own inGridBreaks, which drops rather than clamps for exactly that distinction).
+ */
+function clampToGrid(index: number, maxIndex: number): number {
+  return Math.min(index, maxIndex);
+}
+
 /** The Print_Area and Print_Titles entries one sheet's print settings need, or an empty list when it declares neither a print range nor a repeated band. */
 export function printNameEntriesFor(
   sheetIndex: number,
@@ -275,10 +284,16 @@ export function printNameEntriesFor(
       builtinName: BUILTIN_NAME_PRINT_AREA,
       areas: [
         {
-          rowFirst: settings.printRange.startRow,
-          rowLast: settings.printRange.endRow,
-          columnFirst: settings.printRange.startColumn,
-          columnLast: settings.printRange.endColumn,
+          rowFirst: clampToGrid(settings.printRange.startRow, MAX_ROW_INDEX),
+          rowLast: clampToGrid(settings.printRange.endRow, MAX_ROW_INDEX),
+          columnFirst: clampToGrid(
+            settings.printRange.startColumn,
+            MAX_COLUMN_INDEX,
+          ),
+          columnLast: clampToGrid(
+            settings.printRange.endColumn,
+            MAX_COLUMN_INDEX,
+          ),
         },
       ],
     });
@@ -289,14 +304,14 @@ export function printNameEntriesFor(
     titleAreas.push({
       rowFirst: 0,
       rowLast: MAX_ROW_INDEX,
-      columnFirst: settings.repeatColumns.start,
-      columnLast: settings.repeatColumns.end,
+      columnFirst: clampToGrid(settings.repeatColumns.start, MAX_COLUMN_INDEX),
+      columnLast: clampToGrid(settings.repeatColumns.end, MAX_COLUMN_INDEX),
     });
   }
   if (settings.repeatRows !== undefined) {
     titleAreas.push({
-      rowFirst: settings.repeatRows.start,
-      rowLast: settings.repeatRows.end,
+      rowFirst: clampToGrid(settings.repeatRows.start, MAX_ROW_INDEX),
+      rowLast: clampToGrid(settings.repeatRows.end, MAX_ROW_INDEX),
       columnFirst: 0,
       columnLast: MAX_COLUMN_INDEX,
     });

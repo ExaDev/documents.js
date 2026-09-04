@@ -392,6 +392,15 @@ function writePageBreaksRecord(
 }
 
 /**
+ * `manualBreaks.rows`/`.columns` is not bounded to BIFF8's own grid the way a cell's own row/column is (`writeCellRecord`'s `MAX_ROW_INDEX`/`MAX_COLUMN_INDEX` guard above throws for exactly that reason). `writePageBreaksRecord` writes each index into a 16-bit field regardless (`RecordBuilder.u16` masks with `0xffff`), so an out-of-grid break would otherwise silently wrap to a plausible-looking in-grid one -- a break asked for at row 70000 landing at row 4464 -- with nothing downstream to notice.
+ *
+ * Dropped rather than clamped: unlike a print range or a repeated header band, where clamping to the grid's own last row/column is genuinely what "to the bottom of the sheet" means once the grid shrinks under it (print-names.ts's own clampToGrid), a page break is a single position, and clamping one would insert a break at the grid's own edge the caller never asked for. Dropping states the honest thing an out-of-grid break means once BIFF8's own ceiling has been applied: no such row/column exists for it to sit at.
+ */
+function inGridBreaks(indices: readonly number[], maxIndex: number): number[] {
+  return indices.filter((index) => index <= maxIndex);
+}
+
+/**
  * Every print-settings record one sheet needs, in [MS-XLS] 2.1.7.20.6's own order.
  *
  * That order is two productions, back to back, both of which the worksheet substream places ahead of COLUMNS, Dimensions, and the cell table: `GLOBALS = ... PrintRowCol PrintGrid GridSet Guts DefaultRowHeight WsBool [Sync] [LPr] [HorizontalPageBreaks] [VerticalPageBreaks]` and `PAGESETUP = Header Footer HCenter VCenter [LeftMargin] [RightMargin] [TopMargin] [BottomMargin] [Pls *Continue] [Setup]`. The mandatory records this writer does not emit at all (the calculation-state family, GridSet, Guts, DefaultRowHeight, Header/Footer, HCenter/VCenter) are the same UI and interoperability bookkeeping it already omits everywhere else -- see this package's README -- so what remains is the optional subset that actually carries print settings, in the relative order those two productions give it.
@@ -408,25 +417,29 @@ function writePrintSettingsRecords(
     writeWsBoolRecord(settings.fitToPages !== undefined),
   ];
   const breaks = settings.manualBreaks;
-  if (breaks !== undefined && breaks.rows.length > 0) {
-    pieces.push(
-      // A row break's extent runs across every column of the sheet, so its end is the grid's own last column.
-      writePageBreaksRecord(
-        RECORD_HORIZONTALPAGEBREAKS,
-        breaks.rows,
-        MAX_COLUMN_INDEX,
-      ),
-    );
-  }
-  if (breaks !== undefined && breaks.columns.length > 0) {
-    pieces.push(
-      // A column break's extent runs down every row, so its end is the grid's own last row.
-      writePageBreaksRecord(
-        RECORD_VERTICALPAGEBREAKS,
-        breaks.columns,
-        MAX_ROW_INDEX,
-      ),
-    );
+  if (breaks !== undefined) {
+    const rowBreaks = inGridBreaks(breaks.rows, MAX_ROW_INDEX);
+    if (rowBreaks.length > 0) {
+      pieces.push(
+        // A row break's extent runs across every column of the sheet, so its end is the grid's own last column.
+        writePageBreaksRecord(
+          RECORD_HORIZONTALPAGEBREAKS,
+          rowBreaks,
+          MAX_COLUMN_INDEX,
+        ),
+      );
+    }
+    const columnBreaks = inGridBreaks(breaks.columns, MAX_COLUMN_INDEX);
+    if (columnBreaks.length > 0) {
+      pieces.push(
+        // A column break's extent runs down every row, so its end is the grid's own last row.
+        writePageBreaksRecord(
+          RECORD_VERTICALPAGEBREAKS,
+          columnBreaks,
+          MAX_ROW_INDEX,
+        ),
+      );
+    }
   }
   pieces.push(
     writeMarginRecord(RECORD_LEFTMARGIN, settings.margins.leftPt),

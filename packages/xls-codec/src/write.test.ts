@@ -948,6 +948,44 @@ describe("print settings", () => {
     ).toEqual({ width: 32767, height: 2 });
   });
 
+  it("clamps a print range and a repeated band past BIFF8's own row/column ceiling, rather than wrapping to an in-grid coordinate", () => {
+    // printRange/repeatRows/repeatColumns are bounded from above by neither ContentSheetPrintRange/ContentSheetRepeatRange nor writeArea3d's own 16-bit field -- an unclamped end row of 70000 would wrap to 4464, a plausible-looking coordinate that silently states a smaller range than asked for.
+    //
+    // repeatRows/repeatColumns both start past 0: a band clamped to first 0/last MAX_*_INDEX on the axis it already fully spans by construction would ALSO fully span the perpendicular one, making it shape-ambiguous with "the whole sheet" (see print-names.ts's own classification note) and reading back as neither band -- an existing, documented tradeoff of the shape-based discriminant, not something this clamp introduces or is responsible for working around.
+    const settings: ContentSheetPrintSettings = {
+      ...PRINT_SETTINGS,
+      printRange: {
+        startRow: 2,
+        startColumn: 2,
+        endRow: 99_999,
+        endColumn: 300,
+      },
+      repeatRows: { start: 2, end: 70_000 },
+      repeatColumns: { start: 1, end: 300 },
+    };
+    const read = roundTripped(settings);
+    expect(read?.printRange).toEqual({
+      startRow: 2,
+      startColumn: 2,
+      endRow: 0xffff,
+      endColumn: 0xff,
+    });
+    expect(read?.repeatRows).toEqual({ start: 2, end: 0xffff });
+    expect(read?.repeatColumns).toEqual({ start: 1, end: 0xff });
+  });
+
+  it("drops a manual page break past BIFF8's own row/column ceiling, rather than wrapping to an in-grid index", () => {
+    // Dropped rather than clamped, unlike a print range/repeated band above: a page break is a single position, and clamping one would insert a break at the grid's own edge nobody asked for.
+    const settings: ContentSheetPrintSettings = {
+      ...PRINT_SETTINGS,
+      manualBreaks: { rows: [10, 70_000], columns: [3, 400] },
+    };
+    expect(roundTripped(settings)?.manualBreaks).toEqual({
+      rows: [10],
+      columns: [3],
+    });
+  });
+
   it("writes no defined name at all for a workbook declaring no print range or band", () => {
     // The SupBook and ExternSheet a print name's own 3D reference resolves through exist only to serve one, so a workbook needing none stays as minimal as it was before print settings were written.
     const bytes = writeXlsContent(
