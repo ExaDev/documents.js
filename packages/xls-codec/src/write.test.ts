@@ -872,14 +872,16 @@ describe("print settings", () => {
     expect(roundTripped(settings)?.pageSize).toEqual(PAGE_SIZE_A4);
   });
 
-  it("round-trips a sheet whose settings are exactly the Normal preset, gaining an explicit 100% scale", () => {
+  it("round-trips a sheet whose settings are exactly the Normal preset", () => {
     // Nothing in ContentSheetPrintSettings can say "this sheet states nothing", so the writer emits the preset's own values rather than omitting the records -- and the reader's own fallback then agrees with them.
-    //
-    // scalePercent is the one field that does not survive absent, and cannot: Setup's own iScale is a mandatory field of a mandatory record, with no spelling for "no declared scale", so a sheet written with none comes back stating the 100% (actual size) it was written as. The written file is not wrong about the document; it simply says out loud what the absent field already meant.
-    expect(roundTripped(PRINT_SETTINGS)).toEqual({
-      ...PRINT_SETTINGS,
-      scalePercent: 100,
-    });
+    expect(roundTripped(PRINT_SETTINGS)).toEqual(PRINT_SETTINGS);
+  });
+
+  it("round-trips an explicit 100% scale onto the absence that means the same thing", () => {
+    // Setup's own iScale has no spelling for "no declared scale", so the two directions agree on one: 100% is actual size, which is exactly what carrying no scalePercent means. The sheet still prints identically, which is the only thing the field decides.
+    expect(
+      roundTripped({ ...PRINT_SETTINGS, scalePercent: 100 })?.scalePercent,
+    ).toBeUndefined();
   });
 
   it("round-trips a repeated row band without inventing a column band", () => {
@@ -915,18 +917,22 @@ describe("print settings", () => {
     expect(read.sheets[1]?.printSettings.repeatRows).toBeUndefined();
   });
 
-  it("refuses a page size no paper code names rather than substituting one", () => {
-    // Unlike xlsx's pageSetup element, [MS-XLS] 2.4.257's Setup record addresses paper only by code, so a size outside its own table genuinely cannot be written.
+  it("writes a page size no paper code names as custom, rather than as a paper it is not", () => {
+    // Unlike xlsx's pageSetup element, [MS-XLS] 2.4.257's Setup record addresses paper only by code, so the dimensions genuinely cannot be written. iPaperSize 0 is that section's own "custom printer paper sizes", which is true; substituting Letter would not be. The size therefore does not survive the round trip -- the reader falls back to its documented default -- but the sheet, its cells, and every other print setting do.
     const content = document([
       sheet("Odd", [cell(0, 0, { kind: "number", value: 1 })], {
         printSettings: {
           ...PRINT_SETTINGS,
-          pageSize: { widthPt: 500, heightPt: 500 },
+          pageSize: { widthPt: 500, heightPt: 400 },
+          gridlines: true,
         },
       }),
     ]);
 
-    expect(() => writeXlsContent(content)).toThrow(BiffWriteError);
+    const read = readXlsContent(writeXlsContent(content)).sheets[0];
+    expect(read?.printSettings.pageSize).toEqual(PAGE_SIZE_LETTER);
+    expect(read?.printSettings.gridlines).toBe(true);
+    expect(read?.cells).toHaveLength(1);
   });
 
   it("writes no defined name at all for a workbook declaring no print range or band", () => {

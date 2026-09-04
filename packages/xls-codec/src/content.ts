@@ -87,6 +87,13 @@ const DEFAULT_PRINT_SETTINGS: ContentSheetPrintSettings = {
 };
 
 /**
+ * The iScale value that says "print at actual size", which is what ContentSheetPrintSettings already means by carrying no scalePercent at all.
+ *
+ * Setup's own iScale is a mandatory field of a mandatory record, with no spelling for "this sheet declares no scale" -- so an untouched sheet still states 100. Reporting that as an explicit scalePercent would put a field on every sheet of every workbook read, carrying nothing a consumer could act on that its absence does not already say, and would mean a document written with no scale came back with one. The two spellings render identically, so collapsing them onto the absent one is lossless in both directions; a scale that is genuinely anything else is reported exactly as the file states it.
+ */
+const ACTUAL_SIZE_SCALE_PERCENT = 100;
+
+/**
  * The print settings a sheet's own records and its built-in print names state, with the Normal preset filling in what they do not.
  *
  * Two of BIFF8's own conditional rules are honoured rather than flattened. A Setup record whose fNoPls bit is set declares its own paper size and scale undefined ([MS-XLS] 2.4.257: "whether the iPaperSize, iScale, iRes, iVRes, iCopies, fNoOrient, and fPortrait data are undefined and ignored"), so neither is read from it -- the page size falls back to the preset and no scalePercent is reported, rather than a paper code the file itself disowns being resolved into a confident page size. And WsBool's own fFitToPage decides which of Setup's two mutually exclusive scaling fields is live: iFitWidth/iFitHeight when set, iScale when clear. Real producers write both regardless (confirmed against LibreOffice-written BIFF8, which carries iScale=100 alongside a real fit-to-page pair, and a real iScale alongside iFitWidth=iFitHeight=1), so reading both would report a scale and a page count that contradict each other.
@@ -121,7 +128,11 @@ function mapPrintSettings(
         height: setup.fitHeight,
       };
     }
-  } else if (usable && setup.scalePercent > 0) {
+  } else if (
+    usable &&
+    setup.scalePercent > 0 &&
+    setup.scalePercent !== ACTUAL_SIZE_SCALE_PERCENT
+  ) {
     settings.scalePercent = setup.scalePercent;
   }
 
