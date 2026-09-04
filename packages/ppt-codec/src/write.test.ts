@@ -746,6 +746,24 @@ describe("speaker notes", () => {
     );
   });
 
+  it("mints every slide id well clear of the 0x80000000 MasterId range readNotesBySlideId relies on staying unreachable", () => {
+    // read.ts's own readNotesBySlideId keys a notes container by slideIdRef, and [MS-PPT] 2.2.13 reserves 0x80000000 and above for MasterId -- a real producer's own notes-master entry can state a slideIdRef up in that range (LibreOffice writes 0x80000001) rather than the spec-mandated 0x00000000. That lookup only stays unambiguous because this writer's own slide ids (FIRST_SLIDE_ID + index, see write.ts's own note beside that constant) never reach anywhere near it. Pinned here rather than only in a comment, so a future change to the minting base or increment fails a test instead of silently drifting toward the reserved range.
+    const { powerPointDocumentStream } = writePptStreams({
+      metadata: {},
+      slides: Array.from({ length: 5 }, () => slide()),
+    });
+    const document = readRecordAt(powerPointDocumentStream, 0);
+    const slideIds = readSlideListWithText(
+      requireRecord(
+        listWithInstance(document, SLIDE_LIST_INSTANCE_SLIDES),
+        "slide list",
+      ),
+    ).map((persist) => persist.slideId);
+    for (const slideId of slideIds) {
+      expect(slideId).toBeLessThan(0x80000000);
+    }
+  });
+
   it("gives each notes slide the colour scheme its own NotesAtom says it does not inherit", () => {
     // [MS-PPT] 2.5.6 lists a NotesContainer's slideSchemeColorSchemeAtom without the "optional" its slideNameAtom and slideProgTagsContainer carry, and makes the notes master's scheme apply only "if notesAtom.slideFlags.fMasterScheme is set". This writer leaves that bit clear, since it writes no notes master to inherit from, so the notes slide has to state a scheme of its own or name one that does not exist.
     const { powerPointDocumentStream } = writePptStreams({
