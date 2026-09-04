@@ -26,6 +26,10 @@ export interface FibSpec {
   readonly lcbPlcfBtePapx?: number;
   readonly fcClx?: number;
   readonly lcbClx?: number;
+  readonly fcPlfLst?: number;
+  readonly lcbPlfLst?: number;
+  readonly fcPlfLfo?: number;
+  readonly lcbPlfLfo?: number;
   /** Overridden only to test the reader's own rejection of a wrong signature. */
   readonly wIdent?: number;
   /** The count of 64-bit values in FibRgFcLcbBlob. 0x005D is the value [MS-DOC] 2.5.1 mandates for nFib 0x00C1. */
@@ -50,6 +54,8 @@ const FC_LCB_INDEX = {
   fcPlcfBteChpx: 24,
   fcPlcfBtePapx: 26,
   fcClx: 66,
+  fcPlfLst: 146,
+  fcPlfLfo: 148,
 } as const;
 
 export function buildFib(spec: FibSpec = {}): Uint8Array<ArrayBuffer> {
@@ -105,6 +111,8 @@ export function buildFib(spec: FibSpec = {}): Uint8Array<ArrayBuffer> {
     spec.lcbPlcfBtePapx ?? 0,
   );
   pair(FC_LCB_INDEX.fcClx, spec.fcClx ?? 0, spec.lcbClx ?? 0);
+  pair(FC_LCB_INDEX.fcPlfLst, spec.fcPlfLst ?? 0, spec.lcbPlfLst ?? 0);
+  pair(FC_LCB_INDEX.fcPlfLfo, spec.fcPlfLfo ?? 0, spec.lcbPlfLfo ?? 0);
 
   return bytes;
 }

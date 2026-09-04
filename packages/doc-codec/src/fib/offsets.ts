@@ -51,6 +51,11 @@ export const FC_LCB_VALUE_INDEX = {
   lcbSttbfFfn: 31,
   fcClx: 66,
   lcbClx: 67,
+  // Counted forward the same way from fcStshfOrig at value index 0 -- confirmed against every value index above by recounting the spec's own field-by-field FibRgFcLcb97 page in full, not derived by arithmetic from a nearby pair. fcPlfLst is the 74th fc/lcb pair (value index 146), fcPlfLfo the 75th (value index 148).
+  fcPlfLst: 146,
+  lcbPlfLst: 147,
+  fcPlfLfo: 148,
+  lcbPlfLfo: 149,
 } as const;
 
 // FibBase's bit field at offset 10, [MS-DOC] 2.5.2. The spec's bit diagram lists A..M least-significant-bit first within the little-endian 16-bit value, so fDot is 0x0001 and fObfuscated 0x8000; only the four this reader acts on are named.
