@@ -187,9 +187,11 @@ export function frameGeometryAttrs(
   };
 }
 
-// --- insets: fo:padding-* on a graphic-family automatic style -----------------------------------------------------
+// --- insets and paint: fo:padding-* plus draw:fill/draw:stroke on a graphic-family automatic style ------------------
 //
-// A dimensional/decorative property styles/properties.ts deliberately does not model (see that module's own top-of-file note), so this reaches it through StyleRegistry's own propertyElements seam -- the identical pattern typed/shared/table.ts already uses for a cell's fill/border/column-width/row-height (see that module's own top-of-file note on the seam itself). Written only when at least one inset is non-zero: a shape with no draw:style-name at all reads back with every inset at ZERO_INSETS regardless (typed/draw/shapes.ts's own readFrameInsets), so an all-zero shape needs no style minted for a fact the reader already defaults to.
+// The insets are a dimensional/decorative property styles/properties.ts deliberately does not model (see that module's own top-of-file note), so this reaches them through StyleRegistry's own propertyElements seam -- the identical pattern typed/shared/table.ts already uses for a cell's fill/border/column-width/row-height (see that module's own top-of-file note on the seam itself), and typed/draw/write-vectors.ts's own vectorGraphicStyleName uses for a vector's paint.
+//
+// draw:fill="none"/draw:stroke="none" are written UNCONDITIONALLY, even for a shape with every inset at zero, for the identical reason write-vectors.ts's own top-of-file note gives for a vector: ODF's "no direct formatting" rule means the ABSENCE of a fill/stroke declaration means INHERIT to a real consumer, and a consumer's own default graphic style supplies one (LibreOffice's built-in "standard" graphic style fills solid and strokes coloured, so a draw:frame written with no draw:style-name at all renders as a filled, bordered box even though ContentShape has no fill/stroke vocabulary of its own -- confirmed against real LibreOffice output). ContentShape's schema carries no fill/stroke field to preserve either way, so stating "none" explicitly is not a round-trip fact this loses -- typed/draw/shapes.ts's own readFrameInsets never reads draw:fill/draw:stroke off a frame's style at all -- it is this writer closing the identical silent-inherit hazard write-vectors.ts already closes for a vector, for a construct the read side happens not to model as a round-trip field.
 function shapeGraphicStyleName(
   shape: {
     readonly insetLeftPt: number;
@@ -198,26 +200,26 @@ function shapeGraphicStyleName(
     readonly insetBottomPt: number;
   },
   state: DrawShapeWriteState,
-): string | undefined {
+): string {
+  const properties: Record<string, string> = {
+    "draw:fill": "none",
+    "draw:stroke": "none",
+  };
   if (
-    shape.insetLeftPt === 0 &&
-    shape.insetTopPt === 0 &&
-    shape.insetRightPt === 0 &&
-    shape.insetBottomPt === 0
+    shape.insetLeftPt !== 0 ||
+    shape.insetTopPt !== 0 ||
+    shape.insetRightPt !== 0 ||
+    shape.insetBottomPt !== 0
   ) {
-    return undefined;
+    properties["fo:padding-left"] = formatOdfLength(shape.insetLeftPt);
+    properties["fo:padding-top"] = formatOdfLength(shape.insetTopPt);
+    properties["fo:padding-right"] = formatOdfLength(shape.insetRightPt);
+    properties["fo:padding-bottom"] = formatOdfLength(shape.insetBottomPt);
   }
   return state.registry.intern({
     properties: {},
     family: "graphic",
-    propertyElements: [
-      el("style:graphic-properties", {
-        "fo:padding-left": formatOdfLength(shape.insetLeftPt),
-        "fo:padding-top": formatOdfLength(shape.insetTopPt),
-        "fo:padding-right": formatOdfLength(shape.insetRightPt),
-        "fo:padding-bottom": formatOdfLength(shape.insetBottomPt),
-      }),
-    ],
+    propertyElements: [el("style:graphic-properties", properties)],
   });
 }
 
@@ -314,7 +316,7 @@ export function odfZIndexOf(
   return paintOrder;
 }
 
-// One ContentShape -> the draw:frame element typed/draw/shapes.ts's own readDrawFrame reads back: geometry (svg:x/y/width/height, or draw:transform when rotated), an interned graphic-family style carrying the shape's own text insets (when non-zero), and exactly one of table:table/draw:text-box/draw:image as decided by planShapeContent. `listState` is the caller's own ListPlanState (typed/shared/list.ts) -- see planShapeContent's own note on why this module never decides its own threading policy. `documentIndex` is this shape's own position in its page's document-encounter order -- see odfZIndexOf's own note above for why it is written unconditionally rather than only as a fallback.
+// One ContentShape -> the draw:frame element typed/draw/shapes.ts's own readDrawFrame reads back: geometry (svg:x/y/width/height, or draw:transform when rotated), an interned graphic-family style carrying the shape's own paint (explicit no-fill/no-stroke) and text insets (when non-zero), and exactly one of table:table/draw:text-box/draw:image as decided by planShapeContent. `listState` is the caller's own ListPlanState (typed/shared/list.ts) -- see planShapeContent's own note on why this module never decides its own threading policy. `documentIndex` is this shape's own position in its page's document-encounter order -- see odfZIndexOf's own note above for why it is written unconditionally rather than only as a fallback.
 export function writeDrawFrame(
   shape: ContentShape,
   listState: ListPlanState,
@@ -329,10 +331,9 @@ export function writeDrawFrame(
   if (shape.name !== undefined) {
     attributes["draw:name"] = encodeXmlText(shape.name);
   }
-  const styleName = shapeGraphicStyleName(shape, state);
-  if (styleName !== undefined) {
-    attributes["draw:style-name"] = encodeXmlText(styleName);
-  }
+  attributes["draw:style-name"] = encodeXmlText(
+    shapeGraphicStyleName(shape, state),
+  );
 
   const content = planShapeContent(shape.blocks, listState);
   const children: XmlNode[] =
