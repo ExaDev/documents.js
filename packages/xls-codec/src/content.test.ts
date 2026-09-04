@@ -22,6 +22,7 @@ import {
   RECORD_COLINFO,
   RECORD_HORIZONTALPAGEBREAKS,
   RECORD_LABELSST,
+  RECORD_LBL,
   RECORD_LEFTMARGIN,
   RECORD_MERGECELLS,
   RECORD_NUMBER,
@@ -1037,7 +1038,7 @@ describe("readXlsContent print settings", () => {
       ...u16(area.colFirst),
       ...u16(area.colLast),
     ];
-    return record(0x0018, [
+    return record(RECORD_LBL, [
       ...u16(0x0020),
       0x00,
       0x01,
