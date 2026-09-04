@@ -74,7 +74,7 @@ export interface WorkbookGlobals {
    */
   readonly sheetRanges: readonly (SheetRange | undefined)[];
   /**
-   * The workbook's own custom colour table, from a Palette record ([MS-XLS] 2.4.204) -- 56 entries, index 0 being icv 8. Undefined when the file carries no Palette record at all, which is common: a real file relying purely on the fixed default 8-colour-plus-56-entry table (this package's own `resolveIcvColor` falls back to that same default table, matching [MS-XLS] "Icv"'s own documented fallback) never needs one.
+   * The workbook's own custom colour table, from a Palette record ([MS-XLS] 2.4.188) -- 56 entries, index 0 being icv 8. Undefined when the file carries no Palette record at all, which is common: a real file relying purely on the fixed default 8-colour-plus-56-entry table (this package's own `resolveIcvColor` falls back to that same default table, matching [MS-XLS] "Icv"'s own documented fallback) never needs one.
    */
   readonly palette: readonly Color[] | undefined;
 }
@@ -259,7 +259,7 @@ function readCellFormat(record: RecordGroup): CellFormat {
 }
 
 /**
- * Palette ([MS-XLS] 2.4.204): ccv, a signed colour count the spec states "MUST be 56", then that many LongRGB entries -- the write-side mirror is xf-writer.ts's own writePaletteRecord.
+ * Palette ([MS-XLS] 2.4.188): ccv, a signed colour count the spec states "MUST be 56", then that many LongRGB entries -- the write-side mirror is xf-writer.ts's own writePaletteRecord.
  *
  * A ccv that is not 56 is refused rather than honoured. This reader resolves every icv 8-63 positionally through this table, so a short (or zero, or negative) one does not degrade gracefully: every colour past its end silently becomes unresolvable, and a workbook's fills and borders all vanish at once with nothing to say why. A file declaring a count its own spec forbids is malformed, and saying so is the only honest answer.
  */
@@ -268,7 +268,7 @@ function readPalette(record: RecordGroup): readonly Color[] {
   const count = cursor.i16();
   if (count !== PALETTE_ENTRY_COUNT) {
     throw new BiffFormatError(
-      `Palette declares ${count} colour entries, but [MS-XLS] 2.4.204's own ccv field MUST be ${PALETTE_ENTRY_COUNT}`,
+      `Palette declares ${count} colour entries, but [MS-XLS] 2.4.188's own ccv field MUST be ${PALETTE_ENTRY_COUNT}`,
     );
   }
   const colors: Color[] = [];
