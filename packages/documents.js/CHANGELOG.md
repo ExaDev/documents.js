@@ -1,3 +1,41 @@
+## [6.5.0](https://github.com/ExaDev/documents.js/compare/documents.js%406.4.1...documents.js%406.5.0) (2026-09-04)
+
+### Features
+
+* **documents.js:** add doc/xls/ppt <-> PDF ergonomic functions and z.codec() pairs ([8b9a361](https://github.com/ExaDev/documents.js/commit/8b9a361aa136d09532425f5240e9ad77c13a6824))
+* **documents.js:** wire doc/xls/ppt into the DocumentFormat enum and composition engine ([bf7fda3](https://github.com/ExaDev/documents.js/commit/bf7fda3838336bfe57d226d88b0737dc0e797a8c)), references [#847](https://github.com/ExaDev/documents.js/issues/847) [#853](https://github.com/ExaDev/documents.js/issues/853) [#815](https://github.com/ExaDev/documents.js/issues/815) [#816](https://github.com/ExaDev/documents.js/issues/816) [#817](https://github.com/ExaDev/documents.js/issues/817) [#85](https://github.com/ExaDev/documents.js/issues/85)
+
+### Bug Fixes
+
+* **documents.js:** stop expecting doc-codec to refuse a table ([58198c4](https://github.com/ExaDev/documents.js/commit/58198c4b5e2609306497ca9ae4fda14108eadf6d))
+
+### Documentation
+
+* correct stale doc-codec table-scope claims after table support lands ([ccebaf5](https://github.com/ExaDev/documents.js/commit/ccebaf56d2896251becbd79711b931ebe527f8ed))
+* **documents.js:** add doc/xls/ppt rows and columns to the Fidelity table ([7daabfa](https://github.com/ExaDev/documents.js/commit/7daabfa4ef01f01110bb5e4237bd157dd4e1d306))
+* **documents.js:** correct the bridge-count claim in the Fidelity table's summary line ([c64beaf](https://github.com/ExaDev/documents.js/commit/c64beaf1812abd2f56fb5d2b29e7b41b6cf30a82))
+* **documents.js:** correct what the xls writer actually drops ([4812e09](https://github.com/ExaDev/documents.js/commit/4812e09ebc968db85decc94d770900e63621f216))
+* **xls-codec:** document cell alignment as built and shipped ([55493cb](https://github.com/ExaDev/documents.js/commit/55493cb4d5690c6215bb575717eea3ba163d06d3))
+
+### Tests
+
+* **documents.js:** account for doc-codec's numbering field in the doc round trip ([28905d3](https://github.com/ExaDev/documents.js/commit/28905d32b019c48e6dbcd6630b1d49ed7a183095))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.5.1
+- Updated archive-codec to ^1.4.0
+- Updated markdown-codec to ^6.1.5
+- Updated odf.js to ^6.4.0
+- Updated pdf-codec to ^3.6.3
+- Updated rtf-codec to ^1.1.1
+- Updated doc-codec to ^1.1.0
+- Updated ooxml.js to ^6.3.4
+- Updated ppt-codec to ^1.1.0
+- Updated wpd-codec to 1.1.1 (declared as `workspace:^`, resolved by pnpm at publish time)
+- Updated xls-codec to ^2.0.0
+
 ## [6.4.1](https://github.com/ExaDev/documents.js/compare/documents.js%406.4.0...documents.js%406.4.1) (2026-09-03)
 
 

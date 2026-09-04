@@ -1,3 +1,16 @@
+## [2.3.2](https://github.com/ExaDev/documents.js/compare/documents%402.3.1...documents%402.3.2) (2026-09-04)
+
+### Bug Fixes
+
+* **document-cli,documents:** handle doc/xls/ppt in exhaustive DocumentFormat switches ([2f7ef82](https://github.com/ExaDev/documents.js/commit/2f7ef824a613134c872a7c407b61dbad65b5decb))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.5.1
+- Updated markdown-codec to ^6.1.5
+- Updated documents.js to ^6.5.0
+
 ## [2.3.1](https://github.com/ExaDev/documents.js/compare/documents%402.3.0...documents%402.3.1) (2026-09-03)
 
 

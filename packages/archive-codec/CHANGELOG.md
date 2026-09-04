@@ -1,3 +1,19 @@
+## [1.4.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.3.0...archive-codec%401.4.0) (2026-09-04)
+
+### Features
+
+* **archive-codec:** add MS-OLEPS Property Set Stream read/write support ([6752d07](https://github.com/ExaDev/documents.js/commit/6752d07db60580413da5a12b82275dd74d6ded19))
+* **archive-codec:** add the LayoutMetadata <-> SummaryInformationProperties mapping ([3061c09](https://github.com/ExaDev/documents.js/commit/3061c09604286ceb8fd39706c0d42b5cd4553859))
+
+### Bug Fixes
+
+* **archive-codec:** skip undecodable property-set values instead of aborting the whole read ([d088848](https://github.com/ExaDev/documents.js/commit/d088848483b6cbf41176312be4a3b173cf8da6df))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.5.1
+
 ## [1.3.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.2.0...archive-codec%401.3.0) (2026-09-03)
 
 ### Features

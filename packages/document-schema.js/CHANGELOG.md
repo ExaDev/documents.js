@@ -1,3 +1,9 @@
+## [5.5.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.5.0...document-schema.js%405.5.1) (2026-09-04)
+
+### Code Refactoring
+
+* **document-schema.js:** host the named border-weight quantisation both Excel codecs need ([ae50b0c](https://github.com/ExaDev/documents.js/commit/ae50b0c9d7082200de7b504f41ab91b7e7809bc3))
+
 ## [5.5.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.4.0...document-schema.js%405.5.0) (2026-09-03)
 
 ### Features

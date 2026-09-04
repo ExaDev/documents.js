@@ -1,3 +1,21 @@
+## [5.3.2](https://github.com/ExaDev/documents.js/compare/document-cli%405.3.1...document-cli%405.3.2) (2026-09-04)
+
+### Bug Fixes
+
+* **document-cli,documents:** handle doc/xls/ppt in exhaustive DocumentFormat switches ([2f7ef82](https://github.com/ExaDev/documents.js/commit/2f7ef824a613134c872a7c407b61dbad65b5decb))
+
+### Documentation
+
+* **document-cli:** mention doc/xls/ppt across the README's format-support prose ([6348969](https://github.com/ExaDev/documents.js/commit/6348969ebed9310b29a2a64878c2aaf6e9101a15))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.5.1
+- Updated document-outline.js to ^3.2.3
+- Updated odf.js to ^6.4.0
+- Updated documents.js to ^6.5.0
+
 ## [5.3.1](https://github.com/ExaDev/documents.js/compare/document-cli%405.3.0...document-cli%405.3.1) (2026-09-03)
 
 
