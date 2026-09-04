@@ -184,7 +184,7 @@ describe("writeDocContent", () => {
   });
 
   it("round-trips a run's exact colour through sprmCCv, not the fixed Ico palette", () => {
-    // A colour with no exact match in [MS-DOC] 2.9.126's 17-entry Ico palette (see prop/chp.ts) still round-trips exactly, because encodeCharacterGrpprl writes sprmCCv (a literal COLORREF) rather than snapping to the nearest palette entry.
+    // A colour with no exact match in [MS-DOC] 2.9.119's 17-entry Ico palette (see prop/chp.ts) still round-trips exactly, because encodeCharacterGrpprl writes sprmCCv (a literal COLORREF) rather than snapping to the nearest palette entry.
     const input = document([
       paragraph([
         { text: "teal", color: { r: 0, g: 0x80 / 255, b: 0x7f / 255 } },

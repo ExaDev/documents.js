@@ -2,11 +2,11 @@ import type { Color } from "document-schema.js";
 import { readUint8 } from "./bytes";
 import { DocFormatError } from "./errors";
 
-// The two colour encodings [MS-DOC] uses throughout, in one place: the fixed 17-entry Ico palette ([MS-DOC] 2.9.126) and the exact 4-byte COLORREF ([MS-DOC] 2.9.53). Neither belongs to any one property family -- a run's colour states one through sprmCIco/sprmCCv (prop/chp.ts, prop/chp-write.ts), a table cell's border and shading state the same two through Brc80.ico/Brc.cv and Shd80/Shd (table/decoration.ts) -- so both live here rather than in whichever module happened to need them first.
+// The two colour encodings [MS-DOC] uses throughout, in one place: the fixed 17-entry Ico palette ([MS-DOC] 2.9.119) and the exact 4-byte COLORREF ([MS-DOC] 2.9.43). Neither belongs to any one property family -- a run's colour states one through sprmCIco/sprmCCv (prop/chp.ts, prop/chp-write.ts), a table cell's border and shading state the same two through Brc80.ico/Brc.cv and Shd80/Shd (table/decoration.ts) -- so both live here rather than in whichever module happened to need them first.
 
 const COLOR_COMPONENT_MAX = 255;
 
-// The Ico palette, [MS-DOC] 2.9.126, reproduced exactly as published. Entry 0x00 is the one with fAuto set -- "the default color for the application" -- so it names no concrete colour, and a caller decides what an automatic colour means for the property it is reading rather than this table choosing on the format's behalf.
+// The Ico palette, [MS-DOC] 2.9.119, reproduced exactly as published. Entry 0x00 is the one with fAuto set -- "the default color for the application" -- so it names no concrete colour, and a caller decides what an automatic colour means for the property it is reading rather than this table choosing on the format's behalf.
 //
 // Entries 0x0C and 0x0D carry identical RGB values (0x80/0x00/0x80) in the published table, where the surrounding entries' pattern and every other palette of this shape would put dark red at 0x0D. That is reproduced rather than corrected: the table above is the normative statement of what the value means, and silently substituting a different colour would make this reader disagree with the specification it claims to implement on a point no test could catch. If a real-world corpus ever shows producers meaning dark red, that is the evidence to change it on.
 const ICO_PALETTE: readonly (readonly [number, number, number] | undefined)[] =
@@ -37,7 +37,7 @@ const FIRST_CONCRETE_ICO = 0x01;
 export function icoColor(value: number): Color | undefined {
   if (value >= ICO_PALETTE.length) {
     throw new DocFormatError(
-      `Ico value 0x${value.toString(16)} is not less than 0x11, the bound [MS-DOC] 2.9.126 places on the palette`,
+      `Ico value 0x${value.toString(16)} is not less than 0x11, the bound [MS-DOC] 2.9.119 places on the palette`,
     );
   }
   const entry = ICO_PALETTE[value];
@@ -79,10 +79,10 @@ export function nearestIco(color: Color): number {
   return best;
 }
 
-/** COLORREF's fAuto, [MS-DOC] 2.9.53: "If fAuto is 0xFF, this COLORREF designates the default color for the application", which the specification names cvAuto. */
+/** COLORREF's fAuto, [MS-DOC] 2.9.43: "If fAuto is 0xFF, this COLORREF designates the default color for the application", which the specification names cvAuto. */
 const F_AUTO_SET = 0xff;
 
-/** COLORREF, [MS-DOC] 2.9.53: red, green and blue bytes followed by fAuto. Returns undefined for cvAuto (fAuto set), which designates the application's own default colour rather than the components beside it -- the caller decides what that means for the property it is reading. */
+/** COLORREF, [MS-DOC] 2.9.43: red, green and blue bytes followed by fAuto. Returns undefined for cvAuto (fAuto set), which designates the application's own default colour rather than the components beside it -- the caller decides what that means for the property it is reading. */
 export function readColorRef(
   bytes: Uint8Array,
   offset: number,
@@ -102,7 +102,7 @@ export function colorRefBytes(color: Color): number[] {
   return [byte(color.r), byte(color.g), byte(color.b), 0x00];
 }
 
-/** cvAuto's own four bytes, [MS-DOC] 2.9.53: components zeroed with fAuto set. Written wherever a COLORREF field exists but this package has no colour to state for it -- a Shd's own cvFore under an ipatAuto pattern, for instance. */
+/** cvAuto's own four bytes, [MS-DOC] 2.9.43: components zeroed with fAuto set. Written wherever a COLORREF field exists but this package has no colour to state for it -- a Shd's own cvFore under an ipatAuto pattern, for instance. */
 export function autoColorRefBytes(): number[] {
   return [0x00, 0x00, 0x00, F_AUTO_SET];
 }
