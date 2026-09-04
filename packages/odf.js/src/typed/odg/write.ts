@@ -44,6 +44,8 @@ const STYLES_PART = "styles.xml";
 export interface OdgWriteOptions {
   // The ODF version stamped on each part's office:version and on the manifest. Defaults to the current standard.
   readonly version?: string;
+  // Stamps the package as a document template (ODF_MEDIA_TYPES.otg) rather than a regular document (ODF_MEDIA_TYPES.odg) -- the "mimetype" part and the manifest root entry syncManifest derives from it, both of which createOdfPackage/syncManifest already key off whatever media type is passed in. Nothing else about the writer's own output changes: ODF makes no other structural distinction between a document and its template. Defaults to false.
+  readonly template?: boolean;
 }
 
 // --- the canonical form: what reading this writer's own output back produces ----------------------------------------
@@ -123,7 +125,11 @@ export function writeOdgContent(
   }
   const version = options.version ?? DEFAULT_ODF_VERSION;
   const drawingElement = el("office:drawing");
-  const pkg = createOdfPackage(ODF_MEDIA_TYPES.odg, drawingElement, version);
+  const pkg = createOdfPackage(
+    options.template ? ODF_MEDIA_TYPES.otg : ODF_MEDIA_TYPES.odg,
+    drawingElement,
+    version,
+  );
 
   const registry = StyleRegistry.forPart(pkg, CONTENT_PART, {
     otherPart: { pkg, partPath: STYLES_PART },

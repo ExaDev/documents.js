@@ -41,6 +41,8 @@ const STYLES_PART = "styles.xml";
 export interface OdpWriteOptions {
   // The ODF version stamped on each part's office:version and on the manifest. Defaults to the current standard.
   readonly version?: string;
+  // Stamps the package as a document template (ODF_MEDIA_TYPES.otp) rather than a regular document (ODF_MEDIA_TYPES.odp) -- the "mimetype" part and the manifest root entry syncManifest derives from it, both of which createOdfPackage/syncManifest already key off whatever media type is passed in. Nothing else about the writer's own output changes: ODF makes no other structural distinction between a document and its template. Defaults to false.
+  readonly template?: boolean;
 }
 
 // --- the canonical form: what reading this writer's own output back produces ----------------------------------------
@@ -176,7 +178,7 @@ export function writeOdpContent(
   const version = options.version ?? DEFAULT_ODF_VERSION;
   const presentationElement = el("office:presentation");
   const pkg = createOdfPackage(
-    ODF_MEDIA_TYPES.odp,
+    options.template ? ODF_MEDIA_TYPES.otp : ODF_MEDIA_TYPES.odp,
     presentationElement,
     version,
   );

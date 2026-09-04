@@ -26,6 +26,7 @@ import {
   findChildElement,
 } from "../xml/query";
 import { readMimetype } from "../mimetype";
+import { readManifest } from "../manifest";
 import { normaliseOdtContent } from "../typed/odt/write";
 import { normaliseOdsContent } from "../typed/ods/write";
 import { normaliseOdpContent } from "../typed/odp/write";
@@ -297,6 +298,17 @@ describe("writeSxwContent produces genuine OpenOffice.org 1.x XML, not merely so
       documentOf([{ kind: "paragraph", runs: [{ text: "x" }] }]),
     );
     expect(isOoo1Package(pkg)).toBe(true);
+  });
+
+  it("declares the .stw template media type in the manifest root entry when template is requested -- derived from writeOdtContent's own template option through ooo1MediaTypeForOdfMediaType, with no template-specific code of its own", () => {
+    const pkg = writeSxwContent(
+      documentOf([{ kind: "paragraph", runs: [{ text: "x" }] }]),
+      { template: true },
+    );
+    expect(
+      readManifest(pkg).entries.find((entry) => entry.fullPath === "/")
+        ?.mediaType,
+    ).toBe("application/vnd.sun.xml.writer.template");
   });
 
   it("declares the OpenOffice.org 1.x namespace URIs, not the OASIS ones", () => {
@@ -857,6 +869,16 @@ describe("writeSxcContent produces genuine OpenOffice.org 1.x XML, not merely so
     expect(isOoo1Package(pkg)).toBe(true);
   });
 
+  it("declares the .stc template media type in the manifest root entry when template is requested", () => {
+    const pkg = writeSxcContent(sheetDocumentOf([sheetOf("Sheet1", [])]), {
+      template: true,
+    });
+    expect(
+      readManifest(pkg).entries.find((entry) => entry.fullPath === "/")
+        ?.mediaType,
+    ).toBe("application/vnd.sun.xml.calc.template");
+  });
+
   it("declares the OpenOffice.org 1.x namespace URIs and office:class='spreadsheet'", () => {
     const { root } = sheetContentRootOf(
       writeSxcContent(sheetDocumentOf([sheetOf("Sheet1", [])])),
@@ -1170,6 +1192,17 @@ describe("writeSxiContent produces genuine OpenOffice.org 1.x XML, not merely so
   it("is itself detected as an OpenOffice.org 1.x package", () => {
     const pkg = writeSxiContent(presentationDocumentOf([slideOf([shapeOf()])]));
     expect(isOoo1Package(pkg)).toBe(true);
+  });
+
+  it("declares the .sti template media type in the manifest root entry when template is requested", () => {
+    const pkg = writeSxiContent(
+      presentationDocumentOf([slideOf([shapeOf()])]),
+      { template: true },
+    );
+    expect(
+      readManifest(pkg).entries.find((entry) => entry.fullPath === "/")
+        ?.mediaType,
+    ).toBe("application/vnd.sun.xml.impress.template");
   });
 
   it("declares the OpenOffice.org 1.x namespace URIs and office:class='presentation'", () => {
@@ -1522,6 +1555,16 @@ describe("writeSxdContent produces genuine OpenOffice.org 1.x XML, not merely so
   it("is itself detected as an OpenOffice.org 1.x package", () => {
     const pkg = writeSxdContent(drawingDocumentOf([drawPageOf([RECT])]));
     expect(isOoo1Package(pkg)).toBe(true);
+  });
+
+  it("declares the .std template media type in the manifest root entry when template is requested", () => {
+    const pkg = writeSxdContent(drawingDocumentOf([drawPageOf([RECT])]), {
+      template: true,
+    });
+    expect(
+      readManifest(pkg).entries.find((entry) => entry.fullPath === "/")
+        ?.mediaType,
+    ).toBe("application/vnd.sun.xml.draw.template");
   });
 
   it("declares the OpenOffice.org 1.x namespace URIs and office:class='drawing'", () => {

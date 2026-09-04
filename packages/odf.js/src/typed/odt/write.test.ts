@@ -184,6 +184,21 @@ describe("writeOdtContent: package structure", () => {
       "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0",
     );
   });
+
+  it("stamps the template media type, in both the mimetype part and the manifest root entry, when template is requested", () => {
+    const template = writeOdtContent(
+      documentOf([{ kind: "paragraph", runs: [{ text: "Body" }] }]),
+      { template: true },
+    );
+    assertMimetypeEntryLayout(
+      encodePackage(template),
+      "application/vnd.oasis.opendocument.text-template",
+    );
+    expect(
+      readManifest(template).entries.find((entry) => entry.fullPath === "/")
+        ?.mediaType,
+    ).toBe("application/vnd.oasis.opendocument.text-template");
+  });
 });
 
 describe("writeOdtContent: paragraphs and runs", () => {
