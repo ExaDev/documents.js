@@ -19,18 +19,18 @@ import {
 //
 // Borders are written twice, deliberately, matching what that same implementation writes for the identical input: TC80's own Brc80 fields carry every border with its colour snapped to [MS-DOC]'s fixed Ico palette, and a sprmTSetBrc carries the exact COLORREF for whichever borders that palette cannot state. Emitting the second layer only where it changes something is what keeps an ordinary black-bordered table's row mark the same size it would be without it, which matters because a PapxInFkp's whole GrpPrlAndIstd has to fit in 510 bytes (prop/fkp-write.ts) -- see this package's README for the column counts that bound.
 
-/** sprmTDefTable, [MS-DOC] 2.6.4 (0xD608). */
+/** sprmTDefTable, [MS-DOC] 2.6.3 (0xD608). */
 const SPRM_T_DEF_TABLE = 0xd608;
 /** sprmTDyaRowHeight (0x9407). */
 const SPRM_T_DYA_ROW_HEIGHT = 0x9407;
-/** sprmTDefTableShd (0xD612): a DefTableShdOperand ([MS-DOC] 2.9.74) shading cells 1-22 of the row, then sprmTDefTableShd2nd (0xD616) for 23-44 and sprmTDefTableShd3rd (0xD60C) for 45-63. Three sprms rather than one because a DefTableShdOperand's own cb is a single byte and its rgShd "MUST NOT exceed 22 elements", which is exactly why [MS-DOC] splits a row's shading across three opcodes at all. */
+/** sprmTDefTableShd (0xD612): a DefTableShdOperand ([MS-DOC] 2.9.53) shading cells 1-22 of the row, then sprmTDefTableShd2nd (0xD616) for 23-44 and sprmTDefTableShd3rd (0xD60C) for 45-63. Three sprms rather than one because a DefTableShdOperand's own cb is a single byte and its rgShd "MUST NOT exceed 22 elements", which is exactly why [MS-DOC] splits a row's shading across three opcodes at all. */
 const SPRM_T_DEF_TABLE_SHD = 0xd612;
 const SPRM_T_DEF_TABLE_SHD_2ND = 0xd616;
 const SPRM_T_DEF_TABLE_SHD_3RD = 0xd60c;
-/** sprmTSetBrc (0xD62F): a TableBrcOperand ([MS-DOC] 2.9.290) restating one cell's borders on the named sides with an exact COLORREF. */
+/** sprmTSetBrc (0xD62F): a TableBrcOperand ([MS-DOC] 2.9.305) restating one cell's borders on the named sides with an exact COLORREF. */
 const SPRM_T_SET_BRC = 0xd62f;
 
-/** The three DefTableShdOperand sprms in cell order, each with the cell index its own rgShd starts at -- [MS-DOC] 2.6.4's own "Cells 1 - 22 ... cells 23 - 44 ... cells 45 - 63", one-based there and zero-based here. */
+/** The three DefTableShdOperand sprms in cell order, each with the cell index its own rgShd starts at -- [MS-DOC] 2.6.3's own "Cells 1 - 22 ... cells 23 - 44 ... cells 45 - 63", one-based there and zero-based here. */
 const SHD_ARRAYS: readonly {
   readonly opcode: number;
   readonly first: number;
@@ -39,7 +39,7 @@ const SHD_ARRAYS: readonly {
   { opcode: SPRM_T_DEF_TABLE_SHD_2ND, first: 22 },
   { opcode: SPRM_T_DEF_TABLE_SHD_3RD, first: 44 },
 ];
-/** A DefTableShdOperand's own rgShd bound, [MS-DOC] 2.9.74: "The number of elements is equal to cb / 10 and MUST NOT exceed 22." */
+/** A DefTableShdOperand's own rgShd bound, [MS-DOC] 2.9.53: "The number of elements is equal to cb / 10 and MUST NOT exceed 22." */
 const MAX_SHD_PER_ARRAY = 22;
 
 const TWIPS_PER_POINT = 20;
@@ -48,7 +48,7 @@ const MAX_COLUMNS = 63;
 /** sprmPDyaBefore/After's unsigned 2-byte operand range, reused here for XAS column boundaries (also an unsigned 2-byte field in practice for the non-negative widths this writer produces). */
 const MIN_INT16 = -0x8000;
 const MAX_INT16 = 0x7fff;
-/** TableBrcOperand.cb, [MS-DOC] 2.9.290: "This value MUST be 11" -- the ItcFirstLim (2), bordersToApply (1) and Brc (8) that follow it. */
+/** TableBrcOperand.cb, [MS-DOC] 2.9.305: "This value MUST be 11" -- the ItcFirstLim (2), bordersToApply (1) and Brc (8) that follow it. */
 const TABLE_BRC_OPERAND_CB = 11;
 
 export interface TableCellToWrite {

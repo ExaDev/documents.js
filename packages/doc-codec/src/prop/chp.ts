@@ -18,7 +18,7 @@ const SPRM_C_KUL = 0x2a3e;
 const SPRM_C_HPS = 0x4a43;
 /** sprmCIstd: the istd of a character style to apply. */
 const SPRM_C_ISTD = 0x4a30;
-/** sprmCIco: an Ico value, an index into [MS-DOC] 2.9.126's fixed 17-entry palette. */
+/** sprmCIco: an Ico value, an index into [MS-DOC] 2.9.119's fixed 17-entry palette. */
 const SPRM_C_ICO = 0x2a42;
 /** sprmCCv: a COLORREF, the richer colour sprm that supersedes sprmCIco where both appear. */
 const SPRM_C_CV = 0x6870;

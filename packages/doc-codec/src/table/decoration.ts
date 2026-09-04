@@ -17,15 +17,15 @@ import { DocFormatError } from "../errors";
 
 // A table cell's own border and background-shading encodings, read and written in one place -- the role xls-codec's biff/xf-colors.ts plays for BIFF8's own CellXF payload, and for the same reason: table/tap.ts unpacks these on the read side and table/tap-write.ts packs them on the write side, so a bit layout either of them got wrong on its own would round-trip through this package undetected while disagreeing with every other [MS-DOC] implementation.
 //
-// [MS-DOC] states a cell's borders in two places at once, and this module handles both because a real, independent implementation writes both. TC80 ([MS-DOC] 2.9.341) carries four Brc80MayBeNil fields ([MS-DOC] 2.9.18, a Brc80 -- 2.9.17) whose colour is an Ico palette index, so a border colour outside that fixed 17-entry palette cannot be stated there at all; sprmTSetBrc (0xD62F, a TableBrcOperand -- [MS-DOC] 2.9.290) states the same border for a named cell range with a full 8-byte Brc ([MS-DOC] 2.9.16) carrying an exact COLORREF. LibreOffice 26.2.5.2 writes both for every bordered cell, with the Brc80's own ico snapped to the palette and the Brc's cv exact -- confirmed by converting a hand-authored .fodt table through `soffice --headless --convert-to doc` and parsing the resulting row mark's raw grpprl with this package's own primitives: a 0.5pt solid #ff0000 top border came back as TC80.brcTop = `04 01 06 00` (Brc80: dptLineWidth 4, brcType 0x01 single, ico 0x06 red) alongside sprmTSetBrc `0b 01 02 01 ff 00 00 00 04 01 00 00` (TableBrcOperand: cells [1,2), bordersToApply 0x01 top, Brc cv = exact #ff0000). This package reads both -- sprmTSetBrc folding onto TC80's own layer, exactly as sprmTMerge/sprmTVertMerge already fold onto sprmTDefTable's -- and writes both, emitting the sprmTSetBrc precision layer only where the palette genuinely cannot state the colour (see borderNeedsExactColor).
+// [MS-DOC] states a cell's borders in two places at once, and this module handles both because a real, independent implementation writes both. TC80 ([MS-DOC] 2.9.313) carries four Brc80MayBeNil fields ([MS-DOC] 2.9.18, a Brc80 -- 2.9.17) whose colour is an Ico palette index, so a border colour outside that fixed 17-entry palette cannot be stated there at all; sprmTSetBrc (0xD62F, a TableBrcOperand -- [MS-DOC] 2.9.305) states the same border for a named cell range with a full 8-byte Brc ([MS-DOC] 2.9.16) carrying an exact COLORREF. LibreOffice 26.2.5.2 writes both for every bordered cell, with the Brc80's own ico snapped to the palette and the Brc's cv exact -- confirmed by converting a hand-authored .fodt table through `soffice --headless --convert-to doc` and parsing the resulting row mark's raw grpprl with this package's own primitives: a 0.5pt solid #ff0000 top border came back as TC80.brcTop = `04 01 06 00` (Brc80: dptLineWidth 4, brcType 0x01 single, ico 0x06 red) alongside sprmTSetBrc `0b 01 02 01 ff 00 00 00 04 01 00 00` (TableBrcOperand: cells [1,2), bordersToApply 0x01 top, Brc cv = exact #ff0000). This package reads both -- sprmTSetBrc folding onto TC80's own layer, exactly as sprmTMerge/sprmTVertMerge already fold onto sprmTDefTable's -- and writes both, emitting the sprmTSetBrc precision layer only where the palette genuinely cannot state the colour (see borderNeedsExactColor).
 //
-// Shading has no TC80 field at all. It rides its own row-level sprms carrying one Shd ([MS-DOC] 2.9.240) per cell -- cvFore, cvBack, and an Ipat pattern index ([MS-DOC] 2.9.135) -- which is why the "TC80's own ... shading fields" this package's README once described as unread never existed to read.
+// Shading has no TC80 field at all. It rides its own row-level sprms carrying one Shd ([MS-DOC] 2.9.247) per cell -- cvFore, cvBack, and an Ipat pattern index ([MS-DOC] 2.9.121) -- which is why the "TC80's own ... shading fields" this package's README once described as unread never existed to read.
 
-/** The four sides of a cell, in the order TC80 declares them ([MS-DOC] 2.9.341: brcTop, brcLeft, brcBottom, brcRight). Used as the iteration order for both directions, so a side can never be read from one offset and written to another. */
+/** The four sides of a cell, in the order TC80 declares them ([MS-DOC] 2.9.313: brcTop, brcLeft, brcBottom, brcRight). Used as the iteration order for both directions, so a side can never be read from one offset and written to another. */
 export const CELL_BORDER_SIDES = ["top", "left", "bottom", "right"] as const;
 export type CellBorderSide = (typeof CELL_BORDER_SIDES)[number];
 
-/** TableBrcOperand.bordersToApply, [MS-DOC] 2.9.290: which edges one operand formats, as the bitwise OR of any subset. Only the four rectangular sides are listed -- 0x10/0x20 are the two diagonals, which ContentCellBorders has no member for and this package neither reads nor writes. */
+/** TableBrcOperand.bordersToApply, [MS-DOC] 2.9.305: which edges one operand formats, as the bitwise OR of any subset. Only the four rectangular sides are listed -- 0x10/0x20 are the two diagonals, which ContentCellBorders has no member for and this package neither reads nor writes. */
 export const BORDERS_TO_APPLY: Readonly<Record<CellBorderSide, number>> = {
   top: 0x01,
   left: 0x02,
@@ -37,12 +37,12 @@ export const BORDERS_TO_APPLY: Readonly<Record<CellBorderSide, number>> = {
 export const BRC80_SIZE = 4;
 /** Brc's own fixed size, [MS-DOC] 2.9.16: cv (4) + dptLineWidth (1) + brcType (1) + dptSpace/fShadow/fFrame/fReserved (2). */
 export const BRC_SIZE = 8;
-/** Shd's own fixed size, [MS-DOC] 2.9.240: cvFore (4) + cvBack (4) + ipat (2). */
+/** Shd's own fixed size, [MS-DOC] 2.9.247: cvFore (4) + cvBack (4) + ipat (2). */
 export const SHD_SIZE = 10;
-/** Shd80's own fixed size, [MS-DOC] 2.9.241: one 16-bit word packing icoFore (5 bits), icoBack (5 bits) and ipat (6 bits). */
+/** Shd80's own fixed size, [MS-DOC] 2.9.248: one 16-bit word packing icoFore (5 bits), icoBack (5 bits) and ipat (6 bits). */
 export const SHD80_SIZE = 2;
 
-/** BrcType 0x00, [MS-DOC] 2.9.19: "No border." Distinct from the Brc80MayBeNil/BrcMayBeNil all-bits-set sentinel, and the spelling a real producer (LibreOffice) uses for an undecorated cell -- both mean the same thing and both are read as no border. */
+/** BrcType 0x00, [MS-DOC] 2.9.22: "No border." Distinct from the Brc80MayBeNil/BrcMayBeNil all-bits-set sentinel, and the spelling a real producer (LibreOffice) uses for an undecorated cell -- both mean the same thing and both are read as no border. */
 const BRC_TYPE_NONE = 0x00;
 const BRC_TYPE_SINGLE = 0x01;
 const BRC_TYPE_DOUBLE = 0x03;
@@ -50,11 +50,11 @@ const BRC_TYPE_DOTTED = 0x06;
 const BRC_TYPE_DASHED = 0x07;
 
 /**
- * Every BrcType [MS-DOC] 2.9.19 defines for a cell border (0x00 through 0x1B), mapped onto the four members ContentStrokeStyle has. Values 0x02 and 0x04 are absent from the published enumeration entirely and so have no entry here; 0x00 is handled by the caller before this table is consulted.
+ * Every BrcType [MS-DOC] 2.9.22 defines for a cell border (0x00 through 0x1B), mapped onto the four members ContentStrokeStyle has. Values 0x02 and 0x04 are absent from the published enumeration entirely and so have no entry here; 0x00 is handled by the caller before this table is consulted.
  *
  * Three families collapse, each stated rather than silently folded -- the same deliberate narrowing xls-codec's own BIFF_BORDER_STYLE makes for BIFF8's dash tokens. The dash family (dotDash 0x08, dotDotDash 0x09, dashSmallGap 0x16, dashDotStroked 0x17) collapses to 'dashed', since ContentStrokeStyle names one dashed pattern rather than a vocabulary of them. Every genuinely multi-line border collapses to 'double': the triple line (0x0A), the nine thinThick/thickThin gap variants (0x0B-0x13), the double wave (0x15), the two three-dimensional borders (0x18/0x19), and outset/inset (0x1A/0x1B, which Brc80 forbids but Brc permits). And the single wavy line (0x14) collapses to 'solid', being one continuous stroke.
  *
- * Values from 0x40 to 0xE3 are the art/image page borders, which [MS-DOC] 2.9.19 permits only "if they describe a page border" -- never a cell border -- so they have no entry and read as no border at all rather than as an invented approximation of a picture. 0xFF ("This MUST be ignored") is likewise absent.
+ * Values from 0x40 to 0xE3 are the art/image page borders, which [MS-DOC] 2.9.22 permits only "if they describe a page border" -- never a cell border -- so they have no entry and read as no border at all rather than as an invented approximation of a picture. 0xFF ("This MUST be ignored") is likewise absent.
  */
 const BRC_TYPE_STYLE: Readonly<Record<number, ContentStrokeStyle>> = {
   [BRC_TYPE_SINGLE]: "solid",
@@ -145,7 +145,7 @@ export function readBrc80(
   );
 }
 
-/** The eight bytes of one TableBrcOperand.brc field: a BrcMayBeNil ([MS-DOC] 2.9.15) -- "If the last four bytes are 0xFFFFFFFF, the BrcMayBeNil is a NilBrc that specifies that the table cells in question have no border", otherwise a Brc ([MS-DOC] 2.9.16) whose own cv states the colour exactly. */
+/** The eight bytes of one TableBrcOperand.brc field: a BrcMayBeNil ([MS-DOC] 2.9.20) -- "If the last four bytes are 0xFFFFFFFF, the BrcMayBeNil is a NilBrc that specifies that the table cells in question have no border", otherwise a Brc ([MS-DOC] 2.9.16) whose own cv states the colour exactly. */
 export function readBrc(
   bytes: Uint8Array,
   offset: number,
@@ -209,17 +209,17 @@ export function borderNeedsExactColor(border: ContentBorder): boolean {
   );
 }
 
-/** ipatAuto, [MS-DOC] 2.9.135: "Clear, ST_Shd: clear" -- the pattern under which a cell simply shows its own cvBack, which is how both Word and LibreOffice spell a flat background colour, and the only pattern this package writes. */
+/** ipatAuto, [MS-DOC] 2.9.121: "Clear, ST_Shd: clear" -- the pattern under which a cell simply shows its own cvBack, which is how both Word and LibreOffice spell a flat background colour, and the only pattern this package writes. */
 const IPAT_AUTO = 0x0000;
-/** ipatSolid, [MS-DOC] 2.9.135: "Solid ST_Shd: solid" -- the cell is filled entirely with cvFore. */
+/** ipatSolid, [MS-DOC] 2.9.121: "Solid ST_Shd: solid" -- the cell is filled entirely with cvFore. */
 const IPAT_SOLID = 0x0001;
 
 /**
- * One Shd ([MS-DOC] 2.9.240) as a flat background colour, or undefined where it states none.
+ * One Shd ([MS-DOC] 2.9.247) as a flat background colour, or undefined where it states none.
  *
  * Only the two patterns that genuinely produce a flat fill resolve: ipatAuto, under which the cell shows cvBack (ECMA-376's own `clear` shading with a fill colour, which is what a real producer writes for a plain cell background), and ipatSolid, under which it shows cvFore. Every other Ipat -- the fourteen percentage fills, the stripe and crosshatch families, and ipatNil -- is a genuine pattern that Color cannot express, and reads as no background rather than as one of its two colours: reporting a 50% grey crosshatch as its own foreground colour would misstate what the cell actually shows. This is the same deliberate judgment xls-codec makes for BIFF8's own FillPattern enumeration, for the same reason, and it costs nothing on a round trip because this package's own writer emits ipatAuto and nothing else.
  *
- * A cvAuto colour under either pattern is likewise no background: it designates the application's own default, which for a cell background is "not shaded" rather than a colour to state. ShdAuto and ShdNil -- the two special values [MS-DOC] 2.9.240 names for "no shading is applied" -- both fall out of exactly that, with no separate check: each is a pair of cvAuto colours under ipatAuto.
+ * A cvAuto colour under either pattern is likewise no background: it designates the application's own default, which for a cell background is "not shaded" rather than a colour to state. ShdAuto and ShdNil -- the two special values [MS-DOC] 2.9.247 names for "no shading is applied" -- both fall out of exactly that, with no separate check: each is a pair of cvAuto colours under ipatAuto.
  */
 export function readShd(bytes: Uint8Array, offset: number): Color | undefined {
   const ipat = readUint16LE(bytes, offset + 8);
@@ -228,7 +228,7 @@ export function readShd(bytes: Uint8Array, offset: number): Color | undefined {
   return undefined;
 }
 
-/** One Shd's own ten bytes: cvFore left automatic and the background stated as cvBack under ipatAuto, which is exactly how LibreOffice 26.2.5.2 writes a cell fill (confirmed against its own `.doc` output: a #ffff00 cell came back as cvFore cvAuto, cvBack `ff ff 00 00`, ipat 0x0000). An absent background writes ShdAuto -- the all-automatic value [MS-DOC] 2.9.240 defines as "no shading is applied" -- so an undecorated cell inside a row that has decorated ones still states its own lack of shading rather than inheriting a neighbour's. */
+/** One Shd's own ten bytes: cvFore left automatic and the background stated as cvBack under ipatAuto, which is exactly how LibreOffice 26.2.5.2 writes a cell fill (confirmed against its own `.doc` output: a #ffff00 cell came back as cvFore cvAuto, cvBack `ff ff 00 00`, ipat 0x0000). An absent background writes ShdAuto -- the all-automatic value [MS-DOC] 2.9.247 defines as "no shading is applied" -- so an undecorated cell inside a row that has decorated ones still states its own lack of shading rather than inheriting a neighbour's. */
 export function writeShd(background: Color | undefined): number[] {
   return [
     ...autoColorRefBytes(),
@@ -240,10 +240,10 @@ export function writeShd(background: Color | undefined): number[] {
   ];
 }
 
-/** Shd80Nil, [MS-DOC] 2.9.241: icoFore 0x1F, icoBack 0x1F, ipat 0x3F -- every bit set, "specifies that no shading is applied", and explicitly exempt from the Ico and Ipat bounds the fields otherwise carry. */
+/** Shd80Nil, [MS-DOC] 2.9.248: icoFore 0x1F, icoBack 0x1F, ipat 0x3F -- every bit set, "specifies that no shading is applied", and explicitly exempt from the Ico and Ipat bounds the fields otherwise carry. */
 const SHD80_NIL = 0xffff;
 
-/** One Shd80 ([MS-DOC] 2.9.241) as a flat background colour: the same ipatAuto/ipatSolid reading readShd applies, over the Ico palette rather than COLORREFs. This is the Word 97-era spelling of cell shading, superseded by Shd but still written -- alongside it -- by a real producer, so a file carrying only this one still reads. Never written by this package, which states shading through Shd alone. icoFore/icoBack are each a 5-bit field, so a value the 17-entry palette cannot hold is a real possibility rather than a format-level impossibility; decorativeIcoColor resolves that case to no background instead of aborting the whole document read. */
+/** One Shd80 ([MS-DOC] 2.9.248) as a flat background colour: the same ipatAuto/ipatSolid reading readShd applies, over the Ico palette rather than COLORREFs. This is the Word 97-era spelling of cell shading, superseded by Shd but still written -- alongside it -- by a real producer, so a file carrying only this one still reads. Never written by this package, which states shading through Shd alone. icoFore/icoBack are each a 5-bit field, so a value the 17-entry palette cannot hold is a real possibility rather than a format-level impossibility; decorativeIcoColor resolves that case to no background instead of aborting the whole document read. */
 export function readShd80(value: number): Color | undefined {
   if (value === SHD80_NIL) return undefined;
   const icoFore = value & 0x1f;

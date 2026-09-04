@@ -19,9 +19,9 @@ import {
   type CellBorderSide,
 } from "./decoration";
 
-// Table row properties (TAP), [MS-DOC] 2.4.3 (Overview of Tables) and 2.6.4 (Table Properties) -- the row-ending mark's own grpprl carries sgc-5 (table) sprms alongside the ordinary sgc-1 (paragraph) sprms pap.ts already folds. Of the roughly seventy table sprms 2.6.4 names, this reader acts on the following, in two groups.
+// Table row properties (TAP), [MS-DOC] 2.4.3 (Overview of Tables) and 2.6.3 (Table Properties) -- the row-ending mark's own grpprl carries sgc-5 (table) sprms alongside the ordinary sgc-1 (paragraph) sprms pap.ts already folds. Of the roughly seventy table sprms 2.6.3 names, this reader acts on the following, in two groups.
 //
-// Structure and merge state: sprmTDefTable, which alone carries the row's own column boundaries, every physical cell's horizontal/vertical merge state (via TC80.tcgrf -- [MS-DOC] 2.9.341's TC80, 2.9.339's TCGRF) and every physical cell's own four Brc80 borders, and which this package's own writer now uses for a horizontal merge too, purely through a merged row's own narrower, wider physical cells rather than any TCGRF/sprmTMerge flag (ExaDev/documents.js#895; see table/write.ts's own top-of-file note); sprmTMerge, an ItcFirstLim range this reader still folds on top of sprmTDefTable's own column layout in case a genuine third-party producer states a horizontal merge that way instead -- a spec-conformant encoding, and the one a real, independent [MS-DOC] implementation (LibreOffice) was verified NOT to honour on its own read side either (its own vertMerge from the identical TC80 array was honoured, but not horzMerge), which is exactly why this package's own writer no longer emits it; sprmTVertMerge, the incremental per-cell equivalent for a vertical merge (this package's own writer states a vertical merge only through TC80.tcgrf, but a real producer may equally state it incrementally, the same asymmetry sprmTMerge exists to cover on the horizontal side); and sprmTDyaRowHeight, the row's own height.
+// Structure and merge state: sprmTDefTable, which alone carries the row's own column boundaries, every physical cell's horizontal/vertical merge state (via TC80.tcgrf -- [MS-DOC] 2.9.313's TC80, 2.9.317's TCGRF) and every physical cell's own four Brc80 borders, and which this package's own writer now uses for a horizontal merge too, purely through a merged row's own narrower, wider physical cells rather than any TCGRF/sprmTMerge flag (ExaDev/documents.js#895; see table/write.ts's own top-of-file note); sprmTMerge, an ItcFirstLim range this reader still folds on top of sprmTDefTable's own column layout in case a genuine third-party producer states a horizontal merge that way instead -- a spec-conformant encoding, and the one a real, independent [MS-DOC] implementation (LibreOffice) was verified NOT to honour on its own read side either (its own vertMerge from the identical TC80 array was honoured, but not horzMerge), which is exactly why this package's own writer no longer emits it; sprmTVertMerge, the incremental per-cell equivalent for a vertical merge (this package's own writer states a vertical merge only through TC80.tcgrf, but a real producer may equally state it incrementally, the same asymmetry sprmTMerge exists to cover on the horizontal side); and sprmTDyaRowHeight, the row's own height.
 //
 // Cell decoration: sprmTSetBrc, whose TableBrcOperand restates a named cell range's borders with an exact COLORREF rather than TC80's own palette-indexed Brc80, and which therefore folds on top of sprmTDefTable's border layer exactly as sprmTMerge folds on top of its merge layer; and the row's background shading, which has no TC80 field at all and rides its own sprms instead -- sprmTDefTableShd/2nd/3rd and their sprmTDefTableShdRaw counterparts (one Shd per cell, covering cells 1-22, 23-44 and 45-63 respectively), sprmTDefTableShd80 (the Word 97-era Shd80 spelling of the same array), and sprmTSetShd/sprmTSetShdOdd (a TableShadeOperand naming one cell range). Every one of these was confirmed against real LibreOffice 26.2.5.2 output rather than implemented from the specification alone; see table/decoration.ts's own top-of-file note for the captured bytes.
 //
@@ -33,26 +33,26 @@ const SPRM_T_DYA_ROW_HEIGHT = 0x9407;
 const SPRM_T_MERGE = 0x5624;
 /** sprmTVertMerge (0xD62B): a VertMergeOperand naming one cell (itc) and its own VerticalMergeFlag, the incremental per-cell equivalent of sprmTMerge for a vertical merge. */
 const SPRM_T_VERT_MERGE = 0xd62b;
-/** sprmTSetBrc (0xD62F): a TableBrcOperand ([MS-DOC] 2.9.290) restating one cell range's borders on the named sides, with an exact COLORREF rather than TC80's own Ico index. */
+/** sprmTSetBrc (0xD62F): a TableBrcOperand ([MS-DOC] 2.9.305) restating one cell range's borders on the named sides, with an exact COLORREF rather than TC80's own Ico index. */
 const SPRM_T_SET_BRC = 0xd62f;
-/** sprmTDefTableShd80 (0xD609): a DefTableShd80Operand ([MS-DOC] 2.9.75), the Word 97-era array of one Shd80 per cell starting at the row's first. */
+/** sprmTDefTableShd80 (0xD609): a DefTableShd80Operand ([MS-DOC] 2.9.52), the Word 97-era array of one Shd80 per cell starting at the row's first. */
 const SPRM_T_DEF_TABLE_SHD80 = 0xd609;
-/** sprmTDefTableShd3rd (0xD60C): a DefTableShdOperand ([MS-DOC] 2.9.74) shading cells 45-63 -- index 44 onward. */
+/** sprmTDefTableShd3rd (0xD60C): a DefTableShdOperand ([MS-DOC] 2.9.53) shading cells 45-63 -- index 44 onward. */
 const SPRM_T_DEF_TABLE_SHD_3RD = 0xd60c;
 /** sprmTDefTableShd (0xD612): a DefTableShdOperand shading cells 1-22 -- index 0 onward. */
 const SPRM_T_DEF_TABLE_SHD = 0xd612;
 /** sprmTDefTableShd2nd (0xD616): a DefTableShdOperand shading cells 23-44 -- index 22 onward. */
 const SPRM_T_DEF_TABLE_SHD_2ND = 0xd616;
-/** sprmTSetShd (0xD62D): a TableShadeOperand ([MS-DOC] 2.9.291) shading one ItcFirstLim cell range. */
+/** sprmTSetShd (0xD62D): a TableShadeOperand ([MS-DOC] 2.9.308) shading one ItcFirstLim cell range. */
 const SPRM_T_SET_SHD = 0xd62d;
-/** sprmTSetShdOdd (0xD62E): the same TableShadeOperand, applied to every other cell of the range starting at itcFirst -- [MS-DOC] 2.6.4's own worked example, "if the set of cells is 0 through 5, then this sets the background shading for cells 0, 2 and 4". */
+/** sprmTSetShdOdd (0xD62E): the same TableShadeOperand, applied to every other cell of the range starting at itcFirst -- [MS-DOC] 2.6.3's own worked example, "if the set of cells is 0 through 5, then this sets the background shading for cells 0, 2 and 4". */
 const SPRM_T_SET_SHD_ODD = 0xd62e;
 /** sprmTDefTableShdRaw/Raw2nd/Raw3rd (0xD670-0xD672): the same three DefTableShdOperand arrays, differing from the sprms above only in how ShdNil is treated inside a table style -- which this package neither reads nor writes, so all six resolve identically here. A real producer (LibreOffice) writes both families for the same row. */
 const SPRM_T_DEF_TABLE_SHD_RAW = 0xd670;
 const SPRM_T_DEF_TABLE_SHD_RAW_2ND = 0xd671;
 const SPRM_T_DEF_TABLE_SHD_RAW_3RD = 0xd672;
 
-/** The first cell index each of the three DefTableShdOperand sprms shades, [MS-DOC] 2.6.4: "Cells 1 - 22 are shaded by sprmTDefTableShd, and cells 23 - 44 are shaded by sprmTDefTableShd2nd" and 45-63 by the third -- one-based there, so zero-based here. */
+/** The first cell index each of the three DefTableShdOperand sprms shades, [MS-DOC] 2.6.3: "Cells 1 - 22 are shaded by sprmTDefTableShd, and cells 23 - 44 are shaded by sprmTDefTableShd2nd" and 45-63 by the third -- one-based there, so zero-based here. */
 const SHD_ARRAY_FIRST_CELL: Readonly<Record<number, number>> = {
   [SPRM_T_DEF_TABLE_SHD]: 0,
   [SPRM_T_DEF_TABLE_SHD_RAW]: 0,
@@ -63,12 +63,12 @@ const SHD_ARRAY_FIRST_CELL: Readonly<Record<number, number>> = {
 };
 
 const TWIPS_PER_POINT = 20;
-/** TC80's own fixed size, [MS-DOC] 2.9.341: tcgrf (2) + wWidth (2) + brcTop/brcLeft/brcBottom/brcRight (4 each). */
+/** TC80's own fixed size, [MS-DOC] 2.9.313: tcgrf (2) + wWidth (2) + brcTop/brcLeft/brcBottom/brcRight (4 each). */
 const TC80_SIZE = 20;
 /** The offset of TC80's own first border field, brcTop, past tcgrf and wWidth. The four follow it back to back in CELL_BORDER_SIDES order. */
 const TC80_BORDERS_OFFSET = 4;
 
-/** TCGRF.horzMerge, [MS-DOC] 2.9.339: 0 not merged, 1 a continuation cell (contributes its layout region, its own contents are not rendered), 2 or 3 the first cell of a horizontally merged set. */
+/** TCGRF.horzMerge, [MS-DOC] 2.9.317: 0 not merged, 1 a continuation cell (contributes its layout region, its own contents are not rendered), 2 or 3 the first cell of a horizontally merged set. */
 export const HORZ_MERGE_CONTINUATION = 1;
 /** VerticalMergeFlag's fvmMerge: TCGRF.vertMerge continuation (fvmClear=0, fvmMerge=1, fvmRestart=3 -- 2 is not a defined member). */
 export const VERT_MERGE_CONTINUATION = 1;
@@ -181,7 +181,7 @@ function withBackground(
   };
 }
 
-/** Applies a DefTableShdOperand's ([MS-DOC] 2.9.74) rgShd array from `firstCell` onward. The array carries "only ... elements necessary to define all shaded cells in the row", so cells past its end keep whatever an earlier sprm left them -- an entry that is present and states ShdAuto/ShdNil genuinely clears its own cell, which is how a real producer's full-length array turns a row's unshaded cells back off. */
+/** Applies a DefTableShdOperand's ([MS-DOC] 2.9.53) rgShd array from `firstCell` onward. The array carries "only ... elements necessary to define all shaded cells in the row", so cells past its end keep whatever an earlier sprm left them -- an entry that is present and states ShdAuto/ShdNil genuinely clears its own cell, which is how a real producer's full-length array turns a row's unshaded cells back off. */
 function applyShdArray(
   definition: TableRowDefinition,
   operand: Uint8Array,
@@ -198,7 +198,7 @@ function applyShdArray(
   });
 }
 
-/** Applies a TableShadeOperand ([MS-DOC] 2.9.291): cb, an ItcFirstLim naming the range, then one Shd for every cell in it. `step` is 1 for sprmTSetShd and 2 for sprmTSetShdOdd, whose own range covers every other cell from itcFirst. */
+/** Applies a TableShadeOperand ([MS-DOC] 2.9.308): cb, an ItcFirstLim naming the range, then a single Shd applied to every cell the range covers -- not one Shd per cell. `step` is 1 for sprmTSetShd and 2 for sprmTSetShdOdd, whose own range covers every other cell from itcFirst. */
 function applyTableShade(
   definition: TableRowDefinition,
   operand: Uint8Array,
