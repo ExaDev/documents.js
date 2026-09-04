@@ -15,13 +15,13 @@ function le16(value: number): number[] {
   return [value & 0xff, (value >> 8) & 0xff];
 }
 
-// TC80, [MS-DOC] 2.9.341: tcgrf (2 bytes -- horzMerge in bits 0-1, vertMerge in bits 5-6, per TCGRF 2.9.339) + wWidth (2, unused by this reader) + four Brc80 border fields (4 bytes each), each written as Brc80MayBeNil ("no border", all bits set).
+// TC80, [MS-DOC] 2.9.313: tcgrf (2 bytes -- horzMerge in bits 0-1, vertMerge in bits 5-6, per TCGRF 2.9.317) + wWidth (2, unused by this reader) + four Brc80 border fields (4 bytes each), each written as Brc80MayBeNil ("no border", all bits set).
 function tc80(horzMerge: number, vertMerge: number): number[] {
   const tcgrf = (horzMerge & 0x3) | ((vertMerge & 0x3) << 5);
   return [...le16(tcgrf), 0x00, 0x00, ...new Array<number>(16).fill(0xff)];
 }
 
-// sprmTDefTable, [MS-DOC] 2.6.4 (0xD608): TDefTableOperand's own cb (2 bytes -- "the number of bytes used by the remainder of this structure, incremented by 1"), NumberOfColumns, rgdxaCenter (NumberOfColumns + 1 signed 2-byte boundaries), then one TC80 per column.
+// sprmTDefTable, [MS-DOC] 2.6.3 (0xD608): TDefTableOperand's own cb (2 bytes -- "the number of bytes used by the remainder of this structure, incremented by 1"), NumberOfColumns, rgdxaCenter (NumberOfColumns + 1 signed 2-byte boundaries), then one TC80 per column.
 function sprmTDefTable(
   columnBoundariesTwips: readonly number[],
   cells: readonly { horzMerge: number; vertMerge: number }[],
@@ -35,7 +35,7 @@ function sprmTDefTable(
   return [0x08, 0xd6, ...le16(cb), ...remainder];
 }
 
-// sprmTMerge, [MS-DOC] 2.6.4 (0x5624): an ItcFirstLim range naming the physical cells to horizontally merge, the first becoming the anchor -- a spec-conformant mechanism this reader still honours for a genuine third-party producer's row, even though this package's own writer states a horizontal merge purely through a merged row's own narrower, wider physical cells instead (see tap.ts's own note and ExaDev/documents.js#895).
+// sprmTMerge, [MS-DOC] 2.6.3 (0x5624): an ItcFirstLim range naming the physical cells to horizontally merge, the first becoming the anchor -- a spec-conformant mechanism this reader still honours for a genuine third-party producer's row, even though this package's own writer states a horizontal merge purely through a merged row's own narrower, wider physical cells instead (see tap.ts's own note and ExaDev/documents.js#895).
 function sprmTMerge(itcFirst: number, itcLim: number): number[] {
   return [0x24, 0x56, itcFirst, itcLim];
 }
@@ -45,7 +45,7 @@ function sprmPItap(depth: number): number[] {
   return [0x49, 0x66, depth & 0xff, 0, 0, 0];
 }
 
-// sprmTVertMerge, [MS-DOC] 2.6.4 (0xD62B): a VertMergeOperand naming one cell (itc) and its own VerticalMergeFlag -- the incremental per-cell mechanism for a vertical merge, the vertical analogue of sprmTMerge.
+// sprmTVertMerge, [MS-DOC] 2.6.3 (0xD62B): a VertMergeOperand naming one cell (itc) and its own VerticalMergeFlag -- the incremental per-cell mechanism for a vertical merge, the vertical analogue of sprmTMerge.
 function sprmTVertMerge(itc: number, vertMergeFlags: number): number[] {
   return [0x2b, 0xd6, 0x02, itc, vertMergeFlags];
 }
@@ -396,7 +396,7 @@ const LIBREOFFICE_COLUMN_WIDTHS_PT = [116.9, 145, 220];
 const MIDDLE_COLUMN_WIDTH_TWIPS = 2900;
 /** The boundary between that table's first and second columns: the single int16 the tolerance sweep patched inside a real LibreOffice-authored file's second row, and the one a row merging those two columns omits from its own array entirely. */
 const INTERIOR_BOUNDARY_INDEX = 1;
-/** Word's own default for an unindented table's first rgdxaCenter entry, confirmed against LibreOffice's WW8 importer source (a named -108 constant, "Word sets the first nCenter value to -108 when no indent is used") -- plausibly the format's own 108-twip default cell margin, sprmTCellPaddingDefault ([MS-DOC] 2.6.4), compensated for, though neither source states that link outright (see the README's own identical hedge). Also the size of the real-world one-row leading indent the mode-2 case below uses. */
+/** Word's own default for an unindented table's first rgdxaCenter entry, confirmed against LibreOffice's WW8 importer source (a named -108 constant, "Word sets the first nCenter value to -108 when no indent is used") -- plausibly the format's own 108-twip default cell margin, sprmTCellPaddingDefault ([MS-DOC] 2.6.3), compensated for, though neither source states that link outright (see the README's own identical hedge). Also the size of the real-world one-row leading indent the mode-2 case below uses. */
 const WORD_DEFAULT_CELL_MARGIN_TWIPS = 108;
 
 function withBoundaryShifted(
@@ -455,7 +455,7 @@ function colSpansPerRow(
   return block.rows.map((row) => row.cells.map((cell) => cell.colSpan));
 }
 
-// [MS-DOC] 2.6.4 states a table's column layout per row, and 2.9.321's rgdxaCenter is a plain array of twip offsets from the page margin with no coarser quantum defined anywhere -- so two rows meaning the identical grid may legally disagree by a twip or two, and reconstructing the shared grid from them needs a tolerance rather than exact integer equality (ExaDev/documents.js#898). The threshold is one point, matching what a real, independent [MS-DOC] implementation applies to the identical per-row-boundaries-to-shared-grid problem: LibreOffice's `#define COLFUZZY 20` twips (sw/source/filter/inc/wrtswtbl.hxx), applied by its own ODF export -- the point at which its per-row table model is projected onto one shared grid, not its .doc importer, which preserves per-row drift untouched -- whose changeover was confirmed empirically at exactly 20/21 by round-tripping a single patched int16 through LibreOffice 26.2.5.2's own .doc import followed by that ODF export.
+// [MS-DOC] 2.6.3 states a table's column layout per row, and 2.9.321's rgdxaCenter is a plain array of twip offsets from the page margin with no coarser quantum defined anywhere -- so two rows meaning the identical grid may legally disagree by a twip or two, and reconstructing the shared grid from them needs a tolerance rather than exact integer equality (ExaDev/documents.js#898). The threshold is one point, matching what a real, independent [MS-DOC] implementation applies to the identical per-row-boundaries-to-shared-grid problem: LibreOffice's `#define COLFUZZY 20` twips (sw/source/filter/inc/wrtswtbl.hxx), applied by its own ODF export -- the point at which its per-row table model is projected onto one shared grid, not its .doc importer, which preserves per-row drift untouched -- whose changeover was confirmed empirically at exactly 20/21 by round-tripping a single patched int16 through LibreOffice 26.2.5.2's own .doc import followed by that ODF export.
 describe("readDocContent table column grids, from hand-assembled rgdxaCenter arrays", () => {
   it("reads rows stating the identical LibreOffice-authored boundary array as one shared three-column grid", () => {
     const block = readTableFromRowBoundaries([
@@ -569,7 +569,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
     ]);
   });
 
-  // A leading indent that only ONE row carries is not drift and is not absorbed: sprmTWidthBefore ([MS-DOC] 2.6.4) makes a per-row leading indent a first-class construct, and rgdxaCenter's own first entry is "the horizontal position of the logical left edge of the table, as indented from the logical left page margin" (2.9.321) -- so rows disagreeing about it genuinely occupy different horizontal extents. The reconstructed grid honestly carries the extra boundary, with the rows that begin further left spanning both segments. LibreOffice 26.2.5.2 reads the identical bytes into the identical shape: four columns, a table:number-columns-spanned="2" anchor and a real table:covered-table-cell on those rows.
+  // A leading indent that only ONE row carries is not drift and is not absorbed: sprmTWidthBefore ([MS-DOC] 2.6.3) makes a per-row leading indent a first-class construct, and rgdxaCenter's own first entry is "the horizontal position of the logical left edge of the table, as indented from the logical left page margin" (2.9.321) -- so rows disagreeing about it genuinely occupy different horizontal extents. The reconstructed grid honestly carries the extra boundary, with the rows that begin further left spanning both segments. LibreOffice 26.2.5.2 reads the identical bytes into the identical shape: four columns, a table:number-columns-spanned="2" anchor and a real table:covered-table-cell on those rows.
   it("keeps a leading indent only one row states as a real boundary, spanning it on the rows that begin further left", () => {
     const block = readTableFromRowBoundaries([
       {
