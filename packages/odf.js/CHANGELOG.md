@@ -1,3 +1,77 @@
+## [6.4.0](https://github.com/ExaDev/documents.js/compare/odf.js%406.3.0...odf.js%406.4.0) (2026-09-04)
+
+### Features
+
+* **odf.js:** add a real .sxc writer for OpenOffice.org 1.x ([d54271b](https://github.com/ExaDev/documents.js/commit/d54271bb1a8892a1e85a86a76e7f7cbdfece3979))
+* **odf.js:** add a real .sxi writer for OpenOffice.org 1.x presentations ([693d59f](https://github.com/ExaDev/documents.js/commit/693d59fc4a5f4ffbde2b742fee166d92e36fb992))
+* **odf.js:** add the shared draw-shape writer for odp/odg ([6094c63](https://github.com/ExaDev/documents.js/commit/6094c633038a2f2bffc637fa812ea3cbb62fad15))
+* **odf.js:** add writeOdp/writeOdpContent, a real .odp writer ([989b210](https://github.com/ExaDev/documents.js/commit/989b2105657cf62ab6963d0aaa8d974110f3ef81))
+* **odf.js:** add writeOdsContent/writeOds, the genuine inverse of the ods reader ([3e45986](https://github.com/ExaDev/documents.js/commit/3e459861d4b9ccbbe4d63946ac081b6024ba8156))
+* **odf.js:** add writeSxw/writeSxwContent, a real .sxw writer ([c54f6bd](https://github.com/ExaDev/documents.js/commit/c54f6bd2e1303c6a468efedb3c5f3718ef59abb1))
+* **odf.js:** reverse the OpenOffice.org 1.x transform into an ODF-to-OOo1 rewrite ([f2b2535](https://github.com/ExaDev/documents.js/commit/f2b25359b3edc9a31bb5cafb759b282a6de43b34))
+* **odf.js:** serialise a path's own subpaths into svg:d and svg:viewBox ([5b43224](https://github.com/ExaDev/documents.js/commit/5b4322443836e12abdaed496955482bfb23a93dc))
+* **odf.js:** write .odg packages from the drawing content arm ([a078382](https://github.com/ExaDev/documents.js/commit/a078382af0372e57e0449ba1b9bed46958f35c0a))
+* **odf.js:** write .ott/.ots/.otp/.otg templates, and their .stw/.stc/.sti/.std counterparts ([e50af49](https://github.com/ExaDev/documents.js/commit/e50af49721fb943535f2fe6d8535ce93db863f51))
+* **odf.js:** write .sxd through writeOdg and the OpenOffice.org 1.x transform ([b55d43c](https://github.com/ExaDev/documents.js/commit/b55d43c8366d20d2394e22cd921423b580bd8d13))
+* **odf.js:** write a shape's paint order as draw:z-index ([92608cb](https://github.com/ExaDev/documents.js/commit/92608cb4abbcb3394ce024369c4573093dc6736d))
+* **odf.js:** write ContentVector rect/ellipse/line/path as draw: elements ([8b38551](https://github.com/ExaDev/documents.js/commit/8b385514c66a2f8e4a8dfed97fba95b67c0966b3))
+
+### Bug Fixes
+
+* **odf.js:** declare the presentation namespace prefix on every written part ([b07e712](https://github.com/ExaDev/documents.js/commit/b07e7122aaaa84a9c04f1290c3d969f9fbf80cc4))
+* **odf.js:** decode XML entities in a shape's draw:name ([ec6abf2](https://github.com/ExaDev/documents.js/commit/ec6abf226a20b292718a085e18650060e7f202ad))
+* **odf.js:** expand a drawing shape's rotate() angle out of exponent notation ([3b4c78e](https://github.com/ExaDev/documents.js/commit/3b4c78e5a0dad270274dd7754087e047d7ac76b0))
+* **odf.js:** format an ODF length as fixed-point decimal, never exponent notation ([dd3e63b](https://github.com/ExaDev/documents.js/commit/dd3e63b850430f8932b6ac75a590baef89f9bfca))
+* **odf.js:** mint a text-in-a-frame shape's own graphic style unconditionally ([05430a8](https://github.com/ExaDev/documents.js/commit/05430a8bddda90b3e854b9cef1f5f573d1d8e56c))
+* **odf.js:** refuse a paintOrder beyond Number.isSafeInteger's own bound ([a988a61](https://github.com/ExaDev/documents.js/commit/a988a61e16643024b991f97a15d907272e6ae9ec))
+* **odf.js:** rename a drawing style's family between the graphics and graphic spellings ([6551c71](https://github.com/ExaDev/documents.js/commit/6551c710b997a78f80b0355b241df6633d9f4d77))
+* **odf.js:** write draw:z-index unconditionally on every drawing shape and vector ([5a467b0](https://github.com/ExaDev/documents.js/commit/5a467b0454a95e6c7dae72bdbf06ef7092fb20ac))
+
+### Code Refactoring
+
+* **odf.js:** export border-formatting and column/row default constants for reuse ([fc515db](https://github.com/ExaDev/documents.js/commit/fc515db8bdf9bc8d0624782cb62beb1e03315617))
+* **odf.js:** keep the draw-shape write seam out of the published surface ([ee763d5](https://github.com/ExaDev/documents.js/commit/ee763d5db9303382f3b5e3d2b37dabd0af5b9966))
+* **odf.js:** move the metadata and draw-shape canonical forms beside what they describe ([8eedaee](https://github.com/ExaDev/documents.js/commit/8eedaee048be1bf53be6807f7940d2df0a44bf95))
+* **odf.js:** share write-side list-numId planning and canonical-form helpers ([d3e4c65](https://github.com/ExaDev/documents.js/commit/d3e4c65304c9892c7b35ace68f7dbdc951e765dd))
+* **odf.js:** state a canonicalised shape's and vector's paint order as required ([fedc9d3](https://github.com/ExaDev/documents.js/commit/fedc9d37518e3e56e4e7c29236ee8a09c151f778))
+
+### Documentation
+
+* **odf.js:** document .odg write support ([71bdddc](https://github.com/ExaDev/documents.js/commit/71bdddc5ac61156433f4ac1cf334cbed24e38f57))
+* **odf.js:** document odp write support and the LibreOffice verification ([4984c6a](https://github.com/ExaDev/documents.js/commit/4984c6aee85d01d8250728327d8c134459f15382))
+* **odf.js:** document the .sxc writer ([6ae314f](https://github.com/ExaDev/documents.js/commit/6ae314f337261fac7f279ee47a77aaef53aebb4d))
+* **odf.js:** document the .sxd writer and what its LibreOffice verification found ([3fc0453](https://github.com/ExaDev/documents.js/commit/3fc0453a9fc36adbee6bcb516529c58e123a3fad))
+* **odf.js:** document the .sxi writer ([a8705a2](https://github.com/ExaDev/documents.js/commit/a8705a2801b57ee5a1f83d630fe64d29bbfe7111))
+* **odf.js:** document the .sxw writer and fix the now-stale read-only claim ([380846d](https://github.com/ExaDev/documents.js/commit/380846d932006d4ef089f1365b43858656384fd3))
+* **odf.js:** document the ods writer's real scope in the README ([9152ada](https://github.com/ExaDev/documents.js/commit/9152ada174dee95c815f82308a8f31b2dcd8601b))
+* **odf.js:** name all five fields canonicalShape drops, not four of them ([29670de](https://github.com/ExaDev/documents.js/commit/29670de7a858e30425d09507087ac3e57dd42f11))
+* **odf.js:** state that a .sx* writer produces its base media type, never its .st* template ([89d4685](https://github.com/ExaDev/documents.js/commit/89d4685cae05cb603ca9af5b86bc81440089d555))
+* **odf.js:** state what the LibreOffice flat-XML check actually establishes ([2081e23](https://github.com/ExaDev/documents.js/commit/2081e23f8a790deed48b44dfd56717ba742e6f9f))
+* **odf.js:** update ooo1 module comments now that a real writer exists ([897393b](https://github.com/ExaDev/documents.js/commit/897393bbdd49bb14def607190e7d13354d8467c7))
+
+### Styles
+
+* **odf.js:** wrap the .sxc barrel export across multiple lines ([7b1556b](https://github.com/ExaDev/documents.js/commit/7b1556b2f95b1a236c958cae818d8894090e597c))
+
+### Tests
+
+* **odf.js:** assert the OpenOffice.org 1.x writers' tree-form output is genuinely OOo1x ([0a34a3d](https://github.com/ExaDev/documents.js/commit/0a34a3d43e769875000a0b80ba4774c777dd7015))
+* **odf.js:** audit the odg and sxi writers' namespace prefixes too ([7ceede2](https://github.com/ExaDev/documents.js/commit/7ceede25578d73a1f34b820ebb1f140bf1a7b050))
+* **odf.js:** check the svg:d serializer against the parser it inverts ([37572cf](https://github.com/ExaDev/documents.js/commit/37572cfeb5528ad76b9b7511e0509c8da65b4b78))
+* **odf.js:** construct the namespace audit's own fixture colours as Color objects ([19b43ad](https://github.com/ExaDev/documents.js/commit/19b43ad6a638486ba9c4c9015c6800215e59d8e6))
+* **odf.js:** cover transformToOoo1Package and the .sxw round-trip law ([29808c9](https://github.com/ExaDev/documents.js/commit/29808c9213616e72fdbf95ca5e800aa34f053eb7))
+* **odf.js:** cover writeOdsContent's XML shapes and its round-trip law ([498c9cb](https://github.com/ExaDev/documents.js/commit/498c9cbeaab30d73f3df5c35224d51ac4f19a32f))
+* **odf.js:** pin the odg custom-shape draw:name decode against a mutation ([42c469b](https://github.com/ExaDev/documents.js/commit/42c469ba79fe9d9133a8373f53f043abceb4ef77))
+* **odf.js:** pin the odg writer's XML shapes and its round-trip law ([b49c46c](https://github.com/ExaDev/documents.js/commit/b49c46c2072d4d601e261cb1871e6172b7c1e730))
+* **odf.js:** verify the .sxc writer round-trips through the unmodified reader ([c60766a](https://github.com/ExaDev/documents.js/commit/c60766a62b98a2899c49c5c335a45f2b9e857398))
+* **odf.js:** verify the .sxi writer round-trips through the unmodified reader ([c1b568e](https://github.com/ExaDev/documents.js/commit/c1b568eab11355d3a0295c679e31054264bd008a))
+* **odf.js:** verify writeOdp's XML shapes and its own round-trip law ([98232db](https://github.com/ExaDev/documents.js/commit/98232db1974ecdd6e7c512e4ee083b7d6baeea98))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.5.1
+
 ## [6.3.0](https://github.com/ExaDev/documents.js/compare/odf.js%406.2.1...odf.js%406.3.0) (2026-09-03)
 
 ### Features

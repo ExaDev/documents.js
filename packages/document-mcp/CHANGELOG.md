@@ -1,3 +1,17 @@
+## [4.4.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.3.1...document-mcp%404.4.0) (2026-09-04)
+
+### Features
+
+* **documents.js:** add doc/xls/ppt <-> PDF ergonomic functions and z.codec() pairs ([8b9a361](https://github.com/ExaDev/documents.js/commit/8b9a361aa136d09532425f5240e9ad77c13a6824))
+
+
+### Dependencies
+
+- Updated document-outline.js to ^3.2.3
+- Updated odf.js to ^6.4.0
+- Updated wpd-codec to ^1.1.1
+- Updated documents.js to ^6.5.0
+
 ## [4.3.1](https://github.com/ExaDev/documents.js/compare/document-mcp%404.3.0...document-mcp%404.3.1) (2026-09-03)
 
 

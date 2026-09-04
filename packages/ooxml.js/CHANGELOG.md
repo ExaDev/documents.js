@@ -1,3 +1,17 @@
+## [6.3.4](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.3.3...ooxml.js%406.3.4) (2026-09-04)
+
+### Code Refactoring
+
+* **ooxml.js,xls-codec:** consume the shared excel-number-format classifier ([8b6cab4](https://github.com/ExaDev/documents.js/commit/8b6cab443a7e2c18ae8057c48c4448f67310c80c))
+* **ooxml.js:** resolve xlsx border weights through the shared quantisation ([579e11a](https://github.com/ExaDev/documents.js/commit/579e11ac2dfb7742de3a5634800209ae0bea4601))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.5.1
+- Updated excel-number-format to ^1.0.0
+- Updated archive-codec to ^1.4.0
+
 ## [6.3.3](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.3.2...ooxml.js%406.3.3) (2026-09-03)
 
 
