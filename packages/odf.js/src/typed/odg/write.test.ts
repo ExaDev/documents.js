@@ -163,6 +163,19 @@ describe("writeOdgContent: package structure", () => {
       writeOdgContent({ kind: "presentation", metadata: {}, slides: [] }),
     ).toThrow(/expected a 'drawing' document, got 'presentation'/);
   });
+
+  it("declares the template media type, in both the mimetype part and the manifest root entry, when template is requested", () => {
+    const template = writeOdgContent(documentOf([page([rect()])]), {
+      template: true,
+    });
+    expect(readMimetype(template)).toBe(
+      "application/vnd.oasis.opendocument.graphics-template",
+    );
+    expect(
+      readManifest(template).entries.find((entry) => entry.fullPath === "/")
+        ?.mediaType,
+    ).toBe("application/vnd.oasis.opendocument.graphics-template");
+  });
 });
 
 describe("writeOdgContent: page geometry", () => {

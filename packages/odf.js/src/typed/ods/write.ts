@@ -53,6 +53,8 @@ const PICTURES_DIRECTORY = "Pictures";
 export interface OdsWriteOptions {
   // The ODF version stamped on each part's office:version and on the manifest. Defaults to the current standard.
   readonly version?: string;
+  // Stamps the package as a document template (ODF_MEDIA_TYPES.ots) rather than a regular document (ODF_MEDIA_TYPES.ods) -- the "mimetype" part and the manifest root entry syncManifest derives from it, both of which createOdfPackage/syncManifest already key off whatever media type is passed in. Nothing else about the writer's own output changes: ODF makes no other structural distinction between a document and its template. Defaults to false.
+  readonly template?: boolean;
 }
 
 function unsupported(what: string, where: string): Error {
@@ -1044,7 +1046,7 @@ export function writeOdsContent(
   const version = options.version ?? DEFAULT_ODF_VERSION;
   const spreadsheetElement = el("office:spreadsheet");
   const pkg = createOdfPackage(
-    ODF_MEDIA_TYPES.ods,
+    options.template ? ODF_MEDIA_TYPES.ots : ODF_MEDIA_TYPES.ods,
     spreadsheetElement,
     version,
   );

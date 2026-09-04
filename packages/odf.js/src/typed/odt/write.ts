@@ -59,6 +59,8 @@ const PICTURES_DIRECTORY = "Pictures";
 export interface OdtWriteOptions {
   // The ODF version stamped on each part's office:version and on the manifest. Defaults to the current standard.
   readonly version?: string;
+  // Stamps the package as a document template (ODF_MEDIA_TYPES.ott) rather than a regular document (ODF_MEDIA_TYPES.odt) -- the "mimetype" part and the manifest root entry syncManifest derives from it, both of which createOdfPackage/syncManifest already key off whatever media type is passed in. Nothing else about the writer's own output changes: ODF makes no other structural distinction between a document and its template. Defaults to false.
+  readonly template?: boolean;
 }
 
 // --- the block plan: one description of an .odt's block flow, shared by the writer and the normaliser -------------
@@ -467,7 +469,11 @@ export function writeOdtContent(
   }
   const version = options.version ?? DEFAULT_ODF_VERSION;
   const textElement = el("office:text");
-  const pkg = createOdfPackage(ODF_MEDIA_TYPES.odt, textElement, version);
+  const pkg = createOdfPackage(
+    options.template ? ODF_MEDIA_TYPES.ott : ODF_MEDIA_TYPES.odt,
+    textElement,
+    version,
+  );
 
   const state: OdtWriteState = {
     pkg,
