@@ -1,3 +1,13 @@
+## [2.3.2](https://github.com/ExaDev/documents.js/compare/web%402.3.1...web%402.3.2) (2026-09-04)
+
+### Bug Fixes
+
+* **web:** derive the GitHub Pages base path from GITHUB_REPOSITORY ([89e635f](https://github.com/ExaDev/documents.js/commit/89e635f9df9912efa120001a62319bbb3f005799))
+
+### Code Refactoring
+
+* rename packages/documents to packages/web ([3ce83bd](https://github.com/ExaDev/documents.js/commit/3ce83bd1f91a7b6e29a0871c46662db2e7e78b4f))
+
 ## [2.3.2](https://github.com/ExaDev/documents.js/compare/documents%402.3.1...documents%402.3.2) (2026-09-04)
 
 ### Bug Fixes
