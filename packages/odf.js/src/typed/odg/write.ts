@@ -1,8 +1,6 @@
 import type {
   ContentDocument,
   ContentDrawPage,
-  ContentShape,
-  ContentVector,
   DocumentTree,
   PageSize,
 } from "document-schema.js";
@@ -57,22 +55,22 @@ export interface OdgWriteOptions {
 // 1. DOCUMENT-ENCOUNTER ORDER SPANS BOTH ARRAYS. The reader walks a draw:page's children ONCE, with a single monotonic counter, stamping every shape and every vector it meets; an element carrying no draw:z-index takes its own position in that one walk. This writer emits a page's shapes first (one draw:frame each, in `shapes` array order) and then its vectors (in `vectors` array order), so a shape's encounter index is its index in `shapes` and a vector's is `shapes.length` plus its index in `vectors` -- which is exactly what this function passes as each item's `documentIndex`. The shapes-before-vectors emit order is this writer's own choice and is stated rather than implied: ContentDrawPage's two arrays carry no interleaving information beyond paintOrder itself, so a page whose items state no paint order at all has no cross-array order for a writer to preserve, and one has to be picked. Any item that DOES state an ODF-spellable paintOrder carries a real draw:z-index and is therefore ordered by that, not by where it was emitted -- which is what makes the choice a tiebreak for the unspelled case rather than a reordering of a stated one.
 //
 // 2. BOTH ARRAYS COME BACK SORTED BY PAINT ORDER. readDrawPageContent's own byPaintOrder sorts each of its two output arrays before returning them (a stable sort, so equal keys keep their walk order), which is the one structural difference between this canonical form and odp's: walkDrawShapes stamps a paint order but never reorders, because a slide has no sibling vectors array for the value to be comparable across. A drawing page does, so the reader sorts -- and a document whose input arrays are not already in paint order therefore comes back reordered, exactly as stated here.
-function sortByPaintOrder<T extends { readonly paintOrder?: number }>(
+// A stable sort by the resolved paint order canonicalDrawShape/canonicalDrawVector have already decided -- read off their own output rather than re-derived here, so this function and the writer can never disagree about what an item's paint order actually is. Both canonicalisers state a required `paintOrder` in their return type precisely so this needs no fallback for an absence they make impossible.
+function sortByPaintOrder<T extends { readonly paintOrder: number }>(
   items: readonly T[],
 ): T[] {
-  return items
-    .slice()
-    .sort((a, b) => (a.paintOrder ?? 0) - (b.paintOrder ?? 0));
+  return items.slice().sort((a, b) => a.paintOrder - b.paintOrder);
 }
 
+// Canonicalisation runs in EMIT order and the sort happens after it, never the other way round: canonicalDrawShape runs the same planShapeContent the writer itself runs, which mints a text box's list identities off the shared ListPlanState, and the reader reproduces those identities by walking the written document in document order. Sorting a page's shapes into paint order before canonicalising them would renumber every list on any page whose paint order disagrees with its array order.
 function canonicalPage(
   page: ContentDrawPage,
   listState: ListPlanState,
 ): ContentDrawPage {
-  const shapes: ContentShape[] = page.shapes.map((shape, index) =>
+  const shapes = page.shapes.map((shape, index) =>
     canonicalDrawShape(shape, index, listState),
   );
-  const vectors: ContentVector[] = page.vectors.map((vector, index) =>
+  const vectors = page.vectors.map((vector, index) =>
     canonicalDrawVector(vector, page.shapes.length + index),
   );
   return {
