@@ -810,6 +810,29 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     });
   });
 
+  // readCustomShapeAsTextShape's own draw:name read goes through readDrawName, not a bare attrValue -- a second call site of the same fix draw:frame's own readDrawFrame already had (S3, ExaDev/documents.js#900), pinned here since mutating this call site back to attrValue left the whole odf.js suite green.
+  it("decodes an unrecognised preset's own draw:name the same way draw:frame does", () => {
+    const shape = el(
+      "draw:custom-shape",
+      {
+        "draw:name": "Q&amp;A &lt;draft&gt;",
+        "svg:x": "0pt",
+        "svg:y": "0pt",
+        "svg:width": "50pt",
+        "svg:height": "30pt",
+      },
+      [
+        el("text:p", {}, [txt("Hello")]),
+        el("draw:enhanced-geometry", {
+          "svg:viewBox": "0 0 21600 21600",
+          "draw:type": "smiley",
+        }),
+      ],
+    );
+    const { shapes } = readDrawPageContent([shape], { parts: {} });
+    expect(shapes[0]?.name).toBe("Q&A <draft>");
+  });
+
   it("an unrecognised preset's whole draw:enhanced-geometry element quarantines in the salvaged text shape's residue, so the preset definition survives beside the approximation", () => {
     const shape = el(
       "draw:custom-shape",
