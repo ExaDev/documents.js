@@ -935,6 +935,19 @@ describe("print settings", () => {
     expect(read?.cells).toHaveLength(1);
   });
 
+  it("clamps a scale and a fit-to-page count past what their own Setup fields can hold", () => {
+    // ContentSheetPrintSettings bounds neither from above, and Setup's own fields are 16-bit -- so an unclamped value would wrap and state a different intent confidently. [MS-XLS] 2.4.257 caps iFitWidth/iFitHeight at 32767; iScale has only its field's own width.
+    expect(
+      roundTripped({ ...PRINT_SETTINGS, scalePercent: 200_000 })?.scalePercent,
+    ).toBe(0xffff);
+    expect(
+      roundTripped({
+        ...PRINT_SETTINGS,
+        fitToPages: { width: 100_000, height: 2 },
+      })?.fitToPages,
+    ).toEqual({ width: 32767, height: 2 });
+  });
+
   it("writes no defined name at all for a workbook declaring no print range or band", () => {
     // The SupBook and ExternSheet a print name's own 3D reference resolves through exist only to serve one, so a workbook needing none stays as minimal as it was before print settings were written.
     const bytes = writeXlsContent(
