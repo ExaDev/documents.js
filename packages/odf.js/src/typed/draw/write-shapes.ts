@@ -11,7 +11,7 @@ import type { Package } from "../../model/package";
 import { el, txt } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { type StyleRegistry } from "../../styles/registry";
-import { formatOdfLength } from "../shared/units";
+import { formatOdfLength, formatOdfNumber } from "../shared/units";
 import { writeOdfParagraph } from "../shared/paragraph";
 import { writeOdfTable } from "../shared/table";
 import {
@@ -183,7 +183,7 @@ export function frameGeometryAttrs(
   return {
     "svg:width": formatOdfLength(frame.widthPt),
     "svg:height": formatOdfLength(frame.heightPt),
-    "draw:transform": `rotate(${angleRad}) translate(${formatOdfLength(txPt)} ${formatOdfLength(tyPt)})`,
+    "draw:transform": `rotate(${formatOdfNumber(angleRad)}) translate(${formatOdfLength(txPt)} ${formatOdfLength(tyPt)})`,
   };
 }
 
