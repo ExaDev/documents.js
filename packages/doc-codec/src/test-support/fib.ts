@@ -26,6 +26,8 @@ export interface FibSpec {
   readonly lcbPlcfBtePapx?: number;
   readonly fcClx?: number;
   readonly lcbClx?: number;
+  readonly fcPlcfSed?: number;
+  readonly lcbPlcfSed?: number;
   readonly fcPlfLst?: number;
   readonly lcbPlfLst?: number;
   readonly fcPlfLfo?: number;
@@ -54,6 +56,7 @@ const FC_LCB_INDEX = {
   fcPlcfBteChpx: 24,
   fcPlcfBtePapx: 26,
   fcClx: 66,
+  fcPlcfSed: 12,
   fcPlfLst: 146,
   fcPlfLfo: 148,
 } as const;
@@ -111,6 +114,7 @@ export function buildFib(spec: FibSpec = {}): Uint8Array<ArrayBuffer> {
     spec.lcbPlcfBtePapx ?? 0,
   );
   pair(FC_LCB_INDEX.fcClx, spec.fcClx ?? 0, spec.lcbClx ?? 0);
+  pair(FC_LCB_INDEX.fcPlcfSed, spec.fcPlcfSed ?? 0, spec.lcbPlcfSed ?? 0);
   pair(FC_LCB_INDEX.fcPlfLst, spec.fcPlfLst ?? 0, spec.lcbPlfLst ?? 0);
   pair(FC_LCB_INDEX.fcPlfLfo, spec.fcPlfLfo ?? 0, spec.lcbPlfLfo ?? 0);
 
