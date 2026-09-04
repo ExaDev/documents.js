@@ -244,6 +244,33 @@ describe("writeDocContent", () => {
     expect(paragraphAt(result, 4).pageBreakBefore).toBe(true);
   });
 
+  it("round-trips a section's own page size and margins", () => {
+    const input: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 600, heightPt: 800 },
+          margins: { leftPt: 90, rightPt: 54, topPt: 45, bottomPt: 36 },
+          blocks: [paragraph([{ text: "text" }])],
+        },
+      ],
+    };
+    const result = roundTrip(input);
+    if (result.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    const section = result.sections[0];
+    if (section === undefined) throw new Error("a section must be present");
+    expect(section.pageSize).toEqual({ widthPt: 600, heightPt: 800 });
+    expect(section.margins).toEqual({
+      leftPt: 90,
+      rightPt: 54,
+      topPt: 45,
+      bottomPt: 36,
+    });
+  });
+
   it("round-trips every ST_Jc alignment value this package converts", () => {
     const input = document([
       paragraph([{ text: "l" }], { alignment: "left" }),

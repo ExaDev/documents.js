@@ -86,6 +86,7 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/prop/fkp.js', exports: ['parseChpxFkp', 'parsePapxFkp', 'FKP_PAGE_SIZE'] },
     { path: '../dist/prop/chp.js', exports: ['applyCharacterSprms'] },
     { path: '../dist/prop/pap.js', exports: ['applyParagraphSprms'] },
+    { path: '../dist/prop/sep.js', exports: ['readSectionProperties'] },
     { path: '../dist/style/stsh.js', exports: ['parseStsh', 'headingLevelFromIstd', 'STK'] },
     { path: '../dist/list/numbering.js', exports: ['readNumberingDefinitions'] },
     { path: '../dist/read.js', exports: ['readDocContent', 'readDocStreams'] },
