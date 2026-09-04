@@ -125,6 +125,19 @@ describe("writeOdpContent: package structure", () => {
   it("writes one draw:page for one slide", () => {
     expect(pagesOf(pkg)).toHaveLength(1);
   });
+
+  it("declares the template media type, in both the mimetype part and the manifest root entry, when template is requested", () => {
+    const template = writeOdpContent(documentOf([slide([shape()])]), {
+      template: true,
+    });
+    expect(readMimetype(template)).toBe(
+      "application/vnd.oasis.opendocument.presentation-template",
+    );
+    expect(
+      readManifest(template).entries.find((entry) => entry.fullPath === "/")
+        ?.mediaType,
+    ).toBe("application/vnd.oasis.opendocument.presentation-template");
+  });
 });
 
 describe("writeOdpContent: slide page geometry", () => {

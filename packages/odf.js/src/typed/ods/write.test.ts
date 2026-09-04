@@ -13,6 +13,8 @@ import {
   findChildElement,
   rootElement,
 } from "../../xml/query";
+import { readManifest } from "../../manifest";
+import { readMimetype } from "../../mimetype";
 import { writeOdsContent } from "./write";
 
 // The write side's XML-shape suite: what writeOdsContent actually emits, construct by construct -- the sibling suite (write-round-trip.test.ts) proves the output reads back as the document it came from; this one proves the output is the ODF a real consumer expects, which a round trip through this package's own reader cannot (a writer and reader that agreed on the same wrong spelling would round-trip perfectly and open nowhere). This mirrors typed/odt/write.test.ts's own stated split of responsibility.
@@ -109,6 +111,28 @@ function masterStyles(pkg: Package): XmlElement {
   }
   return container;
 }
+
+describe("writeOdsContent: package structure", () => {
+  it("declares the spreadsheet media type", () => {
+    const pkg = writeOdsContent(documentOf([sheetOf([])]));
+    expect(readMimetype(pkg)).toBe(
+      "application/vnd.oasis.opendocument.spreadsheet",
+    );
+  });
+
+  it("declares the template media type, in both the mimetype part and the manifest root entry, when template is requested", () => {
+    const template = writeOdsContent(documentOf([sheetOf([])]), {
+      template: true,
+    });
+    expect(readMimetype(template)).toBe(
+      "application/vnd.oasis.opendocument.spreadsheet-template",
+    );
+    expect(
+      readManifest(template).entries.find((entry) => entry.fullPath === "/")
+        ?.mediaType,
+    ).toBe("application/vnd.oasis.opendocument.spreadsheet-template");
+  });
+});
 
 describe("writeOdsContent XML shapes", () => {
   it("writes a plain number cell as office:value-type='float' with office:value", () => {
