@@ -177,10 +177,12 @@ export function writeDrawVectors(
 // THE THREE FIELDS IT DROPS, each named rather than left silent: `sourcePath` (a reader's own diagnostic path, which a writer has no document to have read from), `source` (quarantined residue, opaque text belonging to whichever format produced it -- re-emitting it into a different document would be actively wrong rather than merely incomplete), and `frames` (a layout pass's own rendered-position record, which a writer running before any layout pass has none of). The identical three every other canonical form in this package drops, for the identical reasons.
 //
 // NOTHING ELSE IS DROPPED: rect and ellipse declare frame/rotationDeg/fill/stroke/paintOrder and nothing more; line declares from/to/stroke/paintOrder; path adds subpaths and fillRule. Every one of them is carried above, which is why this list names three fields rather than the "and whatever else" a partial statement would need.
+//
+// The return type states what ContentVector's own schema cannot, exactly as canonicalDrawShape's does: `paintOrder` is always present here even though the schema leaves it optional, which is what lets typed/odg/write.ts sort by it without a fallback for a case this function makes impossible.
 export function canonicalDrawVector(
   vector: ContentVector,
   documentIndex: number,
-): ContentVector {
+): ContentVector & { paintOrder: number } {
   const paintOrder = odfZIndexOf(vector.paintOrder) ?? documentIndex;
   if (vector.kind === "line") {
     return {
