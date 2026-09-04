@@ -293,13 +293,13 @@ function writeShapeImage(
 //
 // draw:z-index is the ONE spelling ODF has for a shape's stacking order independent of its position in the document, and typed/draw/shapes.ts's own paintOrderKey already reads it back (see that module's own PAINT ORDER note for the schema citation -- xsd:nonNegativeInteger, valid on draw:frame -- and for the empirical finding that real LibreOffice output never emits it, relying on document order alone, which its own reader falls back to). Writing it is therefore not a new convention this module invents: typed/ods/write.ts's own anchored-drawing frames already carry one, and the odp/odg reader already resolves one.
 //
-// A paintOrder ODF cannot spell -- negative, or fractional (ContentShapeSchema declares a plain z.number() deliberately, "to allow fractional insertion between two existing values later") -- is NOT approximated by rounding it to a neighbouring integer: that would silently reorder a shape past a sibling, changing what the document renders as. The attribute is omitted instead, and the reader's own document-encounter fallback then supplies this shape's position in its page's own shape order, which is exactly what an unspelled paint order means. typed/odp/write.ts's canonicalShape states that fallback as part of its canonical form, reading it back off THIS function so the two can never disagree.
+// A paintOrder ODF cannot spell -- negative, fractional (ContentShapeSchema declares a plain z.number() deliberately, "to allow fractional insertion between two existing values later"), or too large to round-trip through JavaScript's own shortest-round-trip String() without switching to exponent notation (Number.isSafeInteger's own 2^53 bound, well under xsd:nonNegativeInteger's own unbounded range but the largest this codec's String(zIndex) call below can spell without repeating the exact "e" defect formatOdfLength's own expandExponential was written to close, see that function's own note) -- is NOT approximated by rounding it to a neighbouring integer: that would silently reorder a shape past a sibling, changing what the document renders as. The attribute is omitted instead, and the reader's own document-encounter fallback then supplies this shape's position in its page's own shape order, which is exactly what an unspelled paint order means. typed/odp/write.ts's canonicalShape states that fallback as part of its canonical form, reading it back off THIS function so the two can never disagree.
 export function odfZIndexOf(
   paintOrder: number | undefined,
 ): number | undefined {
   if (
     paintOrder === undefined ||
-    !Number.isInteger(paintOrder) ||
+    !Number.isSafeInteger(paintOrder) ||
     paintOrder < 0
   ) {
     return undefined;

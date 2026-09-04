@@ -496,4 +496,13 @@ describe("writeOdpContent: shape paint order", () => {
       undefined,
     ]);
   });
+
+  // Number.isInteger(1e21) is true, and String(1e21) is "1e+21" -- an integer beyond Number.isSafeInteger's 2^53 bound reaches JavaScript's own exponent-notation threshold before it reaches any bound xsd:nonNegativeInteger itself states, the exact failure class formatOdfLength's own expandExponential exists to close for lengths. odfZIndexOf must refuse one rather than writing a draw:z-index no XML integer datatype can spell.
+  it("writes no draw:z-index for a paintOrder beyond Number.isSafeInteger's own bound, rather than emitting exponent notation", () => {
+    const pkg = writeOdpContent(
+      documentOf([slide([shape({ paintOrder: 1e21 })])]),
+    );
+    const frame = childrenWithTag(pagesOf(pkg)[0]!, "draw:frame")[0]!;
+    expect(attrValue(frame, "draw:z-index")).toBeUndefined();
+  });
 });
