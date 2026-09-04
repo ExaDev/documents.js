@@ -13,6 +13,14 @@ import { collectFontFamilies } from "./content-write";
 import { writeDocumentAtom } from "./document/document-atom-write";
 import { writeEnvironment } from "./document/fonts-write";
 import {
+  writeMainMaster,
+  writeMasterListWithText,
+  writeSlideAtomForSlide,
+} from "./document/master-write";
+import type { NotesPersist } from "./document/notes-list";
+import { writeNotesListWithText } from "./document/notes-list-write";
+import { writeNotesContainer } from "./document/notes-write";
+import {
   type SlidePersistRef,
   writeSlideListWithText,
 } from "./document/slide-list-write";
@@ -33,11 +41,17 @@ import {
   writeUserEditAtom,
 } from "./stream/persist-write";
 
-// The write path, the mirror image of read.ts: a presentation's ContentSlide[] mapped onto [MS-PPT] records (document container, slide list, one slide container per slide, each slide's drawing and text), a single-edit persist layer over them (stream/persist-write.ts), and the two [MS-CFB] streams archive-codec's writeCompoundFile wraps into real .ppt bytes. Deliberately narrower than the read path's own coverage -- see the package README's write-scope section for exactly what a written file carries and what it does not.
+// The write path, the mirror image of read.ts: a presentation's ContentSlide[] mapped onto [MS-PPT] records (document container, master and slide lists, one main master, one slide container per slide with its drawing and text, and one notes container per slide that has speaker notes), a single-edit persist layer over them (stream/persist-write.ts), and the two [MS-CFB] streams archive-codec's writeCompoundFile wraps into real .ppt bytes. Deliberately narrower than the read path's own coverage -- see the package README's write-scope section for exactly what a written file carries and what it does not.
 
-// [MS-PPT] persist identifiers this writer mints: 1 always names the document; slides follow contiguously from 2. Real slide ids conventionally start at 256 (this package's own synthetic-presentation fixture uses the same value) -- readSlideListWithText/read.ts never interpret the slide id itself, so any distinct sequence would round-trip identically, but 256 matches what a real PowerPoint file states.
+// [MS-PPT] persist identifiers this writer mints, in the order the stream lays them out: 1 names the document, 2 the one main master, slides follow contiguously from 3, and each notes slide that exists takes the next identifier after the last slide's.
 const DOCUMENT_PERSIST_ID = 1;
+const MASTER_PERSIST_ID = 2;
+const FIRST_SLIDE_PERSIST_ID = 3;
+// Real slide ids conventionally start at 256 (this package's own synthetic-presentation fixture uses the same value) -- readSlideListWithText/read.ts never interpret the slide id itself, so any distinct sequence would round-trip identically, but 256 matches what a real PowerPoint file states. Notes ids are minted from their own base so that a notes id can never collide with a slide id: the two are separate identifier spaces ([MS-PPT] 2.2.14 NotesId and 2.2.26 SlideId), and a reader matching one against the other would silently pair the wrong records.
 const FIRST_SLIDE_ID = 256;
+const FIRST_NOTES_ID = 512;
+// [MS-PPT] 2.5.2: notesIdRef 0x00000000 means the slide has no notes slide, which is exactly what a slide whose notes are empty has.
+const NO_NOTES_ID_REF = 0;
 const DEFAULT_SLIDE_SIZE: PageSize = { widthPt: 720, heightPt: 540 };
 
 function requireOneSlideSize(slides: readonly ContentSlide[]): PageSize {
@@ -55,11 +69,16 @@ function requireOneSlideSize(slides: readonly ContentSlide[]): PageSize {
   return first;
 }
 
+// [MS-PPT] 2.5.1 orders a SlideContainer's children, and its slideAtom is the first of them. It states the master this slide follows and -- when the slide has speaker notes -- the notes slide those notes live in, which is the link a real consumer actually follows to find them (see document/master-write.ts).
 function writeSlideContainer(
   shapes: ContentSlide["shapes"],
+  notesIdRef: number,
   fontIndexOf: (family: string) => number,
 ): Uint8Array<ArrayBuffer> {
-  return writeContainer(RT_Slide, [writeSlideDrawing(shapes, fontIndexOf)]);
+  return writeContainer(RT_Slide, [
+    writeSlideAtomForSlide(notesIdRef),
+    writeSlideDrawing(shapes, fontIndexOf),
+  ]);
 }
 
 // Streams a caller already holds two [MS-PPT] artifacts for -- the same split readPptStreams exposes on the way in, so a caller assembling its own container can bypass writePptContent's archive-codec dependency entirely.
@@ -83,35 +102,85 @@ export function writePptStreams(document: PptDocument): {
     return index;
   };
 
-  const slidePersistRefs: SlidePersistRef[] = slides.map((slide, index) => ({
-    persistIdRef: DOCUMENT_PERSIST_ID + 1 + index,
+  const slidePersistRefs: SlidePersistRef[] = slides.map((_slide, index) => ({
+    persistIdRef: FIRST_SLIDE_PERSIST_ID + index,
     slideId: FIRST_SLIDE_ID + index,
   }));
+
+  // Only a slide that actually carries notes gets a NotesContainer, and only such a slide's own SlideAtom names one. A slide with no notes is left with no notes slide at all rather than an empty one: readNotesBySlideId then finds nothing for it and read.ts reports "", which is exactly what an absent notes slide means -- whereas an empty NotesContainer would be a real notes slide that happens to say nothing, a different fact, and one no round trip could tell apart from the notes the caller never wrote.
+  const notesPersists: NotesPersist[] = [];
+  const notesContainers: Uint8Array<ArrayBuffer>[] = [];
+  const notesIdRefs = slides.map((slide, index) => {
+    if (slide.notes.length === 0) {
+      return NO_NOTES_ID_REF;
+    }
+    const notesId = FIRST_NOTES_ID + notesPersists.length;
+    notesPersists.push({
+      persistIdRef:
+        FIRST_SLIDE_PERSIST_ID + slides.length + notesPersists.length,
+      notesId,
+    });
+    notesContainers.push(
+      writeNotesContainer(
+        FIRST_SLIDE_ID + index,
+        slide.notes,
+        size,
+        fontIndexOf,
+      ),
+    );
+    return notesId;
+  });
 
   const environment = writeEnvironment(fontNames);
   const documentChildren = [writeDocumentAtom(size)];
   if (environment !== undefined) {
     documentChildren.push(environment);
   }
+  documentChildren.push(writeMasterListWithText(MASTER_PERSIST_ID));
   documentChildren.push(writeSlideListWithText(slidePersistRefs));
+  // Omitted entirely when no slide has notes, rather than written empty: the reader treats an absent notes list and an empty one identically, and a real producer states no list when there is nothing to list.
+  if (notesPersists.length > 0) {
+    documentChildren.push(writeNotesListWithText(notesPersists));
+  }
   const documentContainer = writeContainer(RT_Document, documentChildren);
 
-  const slideContainers = slides.map((slide) =>
-    writeSlideContainer(slide.shapes, fontIndexOf),
-  );
-
-  const persistEntries = [{ persistId: DOCUMENT_PERSIST_ID, offset: 0 }];
-  let offset = documentContainer.length;
-  slideContainers.forEach((container, index) => {
+  // Every persist object in the order it is laid out in the stream, so the persist directory's offsets and the stream itself are derived from one list rather than from two that could disagree.
+  const persistObjects: {
+    readonly persistId: number;
+    readonly bytes: Uint8Array<ArrayBuffer>;
+  }[] = [
+    { persistId: DOCUMENT_PERSIST_ID, bytes: documentContainer },
+    { persistId: MASTER_PERSIST_ID, bytes: writeMainMaster(size, fontIndexOf) },
+  ];
+  slides.forEach((slide, index) => {
     const ref = slidePersistRefs[index];
-    if (ref === undefined) {
+    const notesIdRef = notesIdRefs[index];
+    if (ref === undefined || notesIdRef === undefined) {
       throw new PptUnsupportedContentError(
-        "internal error: slide container count does not match slide persist reference count",
+        "internal error: slide persist reference missing for a slide being written",
       );
     }
-    persistEntries.push({ persistId: ref.persistIdRef, offset });
-    offset += container.length;
+    persistObjects.push({
+      persistId: ref.persistIdRef,
+      bytes: writeSlideContainer(slide.shapes, notesIdRef, fontIndexOf),
+    });
   });
+  notesPersists.forEach((persist, index) => {
+    const bytes = notesContainers[index];
+    if (bytes === undefined) {
+      throw new PptUnsupportedContentError(
+        "internal error: notes container missing for a notes persist reference",
+      );
+    }
+    persistObjects.push({ persistId: persist.persistIdRef, bytes });
+  });
+
+  const persistEntries: { persistId: number; offset: number }[] = [];
+  let offset = 0;
+  for (const object of persistObjects) {
+    persistEntries.push({ persistId: object.persistId, offset });
+    offset += object.bytes.length;
+  }
   const persistDirectoryOffset = offset;
   const persistDirectory = writePersistDirectoryAtom(persistEntries);
 
@@ -122,7 +191,9 @@ export function writePptStreams(document: PptDocument): {
     offsetLastEdit: 0,
     offsetPersistDirectory: persistDirectoryOffset,
     docPersistIdRef: DOCUMENT_PERSIST_ID,
-    persistIdSeed: DOCUMENT_PERSIST_ID + slides.length + 1,
+    // [MS-PPT] 2.3.3: persistIdSeed is the identifier a next edit would mint, so it has to stay above every identifier already in the directory -- derived from the entries themselves rather than from the slide count, which stopped being the whole story once the master and the notes slides began taking persist identifiers of their own.
+    persistIdSeed:
+      Math.max(...persistEntries.map((entry) => entry.persistId)) + 1,
   });
 
   const currentUserAtom = writeCurrentUserAtom(userEditOffset);
@@ -130,8 +201,7 @@ export function writePptStreams(document: PptDocument): {
   return {
     currentUserStream: currentUserAtom,
     powerPointDocumentStream: concatBytes(
-      documentContainer,
-      ...slideContainers,
+      ...persistObjects.map((object) => object.bytes),
       persistDirectory,
       userEdit,
     ),

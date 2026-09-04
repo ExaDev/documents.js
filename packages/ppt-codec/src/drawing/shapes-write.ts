@@ -91,6 +91,7 @@ function writeShape(
   spid: number,
   shape: ContentShape,
   fontIndexOf: (family: string) => number,
+  clientData: Uint8Array<ArrayBuffer> | undefined,
 ): Uint8Array<ArrayBuffer> {
   const clientTextbox = writeClientTextbox(shape, fontIndexOf);
   const children = [
@@ -102,6 +103,10 @@ function writeShape(
       shape.frame.heightPt,
     ),
   ];
+  // [MS-ODRAW] 2.2.14 orders an OfficeArtSpContainer's children, and OfficeArtClientData precedes OfficeArtClientTextbox.
+  if (clientData !== undefined) {
+    children.push(clientData);
+  }
   if (clientTextbox !== undefined) {
     children.push(clientTextbox);
   }
@@ -116,13 +121,23 @@ function writePatriarch(): Uint8Array<ArrayBuffer> {
   ]);
 }
 
-// One slide's whole DrawingContainer: a single OfficeArtDgContainer holding one OfficeArtSpgrContainer (the patriarch group plus every content shape as its siblings) -- the same shape readDrawingShapes' top-level walk expects (one OfficeArtSpgrContainer collected via collectGroup, IDENTITY transform).
-export function writeSlideDrawing(
-  shapes: readonly ContentShape[],
+// A shape plus the host-defined OfficeArtClientData record it carries. The plain-text-box shapes this writer emits for a slide carry none, which is why writeSlideDrawing takes bare ContentShapes; a main master's placeholder shapes carry one holding their PlaceholderAtom, which is the only thing that makes them placeholders at all (document/master-write.ts).
+export interface DrawingShape {
+  readonly shape: ContentShape;
+  readonly clientData: Uint8Array<ArrayBuffer> | undefined;
+}
+
+function writeDrawing(
+  shapes: readonly DrawingShape[],
   fontIndexOf: (family: string) => number,
 ): Uint8Array<ArrayBuffer> {
-  const shapeContainers = shapes.map((shape, index) =>
-    writeShape(FIRST_CONTENT_SPID + index, shape, fontIndexOf),
+  const shapeContainers = shapes.map((entry, index) =>
+    writeShape(
+      FIRST_CONTENT_SPID + index,
+      entry.shape,
+      fontIndexOf,
+      entry.clientData,
+    ),
   );
   return writeContainer(RT_Drawing, [
     writeContainer(OfficeArtDgContainer, [
@@ -132,4 +147,23 @@ export function writeSlideDrawing(
       ]),
     ]),
   ]);
+}
+
+// One slide's whole DrawingContainer: a single OfficeArtDgContainer holding one OfficeArtSpgrContainer (the patriarch group plus every content shape as its siblings) -- the same shape readDrawingShapes' top-level walk expects (one OfficeArtSpgrContainer collected via collectGroup, IDENTITY transform).
+export function writeSlideDrawing(
+  shapes: readonly ContentShape[],
+  fontIndexOf: (family: string) => number,
+): Uint8Array<ArrayBuffer> {
+  return writeDrawing(
+    shapes.map((shape) => ({ shape, clientData: undefined })),
+    fontIndexOf,
+  );
+}
+
+// The same drawing, for shapes that additionally carry host-defined client data -- a main master's placeholders, whose PlaceholderAtom rides an OfficeArtClientData record.
+export function writeDrawingWithClientData(
+  shapes: readonly DrawingShape[],
+  fontIndexOf: (family: string) => number,
+): Uint8Array<ArrayBuffer> {
+  return writeDrawing(shapes, fontIndexOf);
 }
