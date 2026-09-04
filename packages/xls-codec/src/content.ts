@@ -16,6 +16,7 @@ import type {
 } from "document-schema.js";
 import { assembleTree, PAGE_SIZE_LETTER } from "document-schema.js";
 
+import { pageSizeFromSetup } from "./biff/print-setup";
 import { BOF_TYPE_WORKSHEET, RECORD_FILEPASS } from "./biff/record-types";
 import { BiffFormatError, readRecords } from "./biff/records";
 import {
@@ -37,11 +38,14 @@ import {
   type SheetEntry,
   type WorkbookGlobals,
 } from "./workbook/globals";
+import type { SheetPrintNames } from "./workbook/print-names";
 import {
   readSheetRecords,
   type RawCell,
+  type RawPrintSettings,
   type RawSheet,
 } from "./workbook/sheet";
+import { inchesToPoints } from "./units";
 
 // The join between the BIFF8 record readers and document-schema.js's own spreadsheet vocabulary.
 //
@@ -63,23 +67,82 @@ export type XlsContentDocument = Extract<
 const SHEET_TYPE_WORKSHEET = 0x00;
 
 /**
- * Print settings this package emits rather than reads.
+ * Excel's own "Normal" page-setup preset, the per-field fallback for a print setting the file states nothing about.
  *
- * ContentSheetPrintSettings makes pageSize, margins, gridlines, headers, and pageOrder REQUIRED, so a sheet cannot be produced without them, and BIFF8 spreads the real values across the Setup, LeftMargin/RightMargin/TopMargin/BottomMargin, PrintGrid, and PrintRowCol records plus a paper-size code table. None of those is read yet, so these are Excel's own documented "Normal" preset -- the same constants ooxml.js falls back to for an xlsx carrying no pageMargins element -- and they are honest defaults rather than the file's own settings. Reading the real ones is tracked as remaining scope rather than guessed at from unverified field offsets.
+ * ContentSheetPrintSettings makes pageSize, margins, gridlines, headers, and pageOrder REQUIRED, while [MS-XLS] 2.1.7.20.6's own PAGESETUP production makes every record behind them optional -- so a sheet whose page setup was never touched genuinely carries no Setup and no margin records, and something has to stand in. These are the values Excel itself calls Normal (top/bottom 0.75in, left/right 0.7in, on Letter paper, gridlines and row/column headers not printed, pages down-then-over), and the identical constants ooxml.js falls back to for an xlsx carrying no pageMargins element -- so the same untouched sheet reads the same either way.
+ *
+ * Each field falls back independently: a sheet that declares a left margin and nothing else keeps its real left margin and takes the preset for the other three, rather than the whole preset displacing the one value the file actually stated.
  */
-const POINTS_PER_INCH = 72;
 const DEFAULT_PRINT_SETTINGS: ContentSheetPrintSettings = {
   pageSize: PAGE_SIZE_LETTER,
   margins: {
-    topPt: 0.75 * POINTS_PER_INCH,
-    rightPt: 0.7 * POINTS_PER_INCH,
-    bottomPt: 0.75 * POINTS_PER_INCH,
-    leftPt: 0.7 * POINTS_PER_INCH,
+    topPt: inchesToPoints(0.75),
+    rightPt: inchesToPoints(0.7),
+    bottomPt: inchesToPoints(0.75),
+    leftPt: inchesToPoints(0.7),
   },
   gridlines: false,
   headers: false,
   pageOrder: "downThenOver",
 };
+
+/**
+ * The print settings a sheet's own records and its built-in print names state, with the Normal preset filling in what they do not.
+ *
+ * Two of BIFF8's own conditional rules are honoured rather than flattened. A Setup record whose fNoPls bit is set declares its own paper size and scale undefined ([MS-XLS] 2.4.257: "whether the iPaperSize, iScale, iRes, iVRes, iCopies, fNoOrient, and fPortrait data are undefined and ignored"), so neither is read from it -- the page size falls back to the preset and no scalePercent is reported, rather than a paper code the file itself disowns being resolved into a confident page size. And WsBool's own fFitToPage decides which of Setup's two mutually exclusive scaling fields is live: iFitWidth/iFitHeight when set, iScale when clear. Real producers write both regardless (confirmed against LibreOffice-written BIFF8, which carries iScale=100 alongside a real fit-to-page pair, and a real iScale alongside iFitWidth=iFitHeight=1), so reading both would report a scale and a page count that contradict each other.
+ */
+function mapPrintSettings(
+  raw: RawPrintSettings,
+  names: SheetPrintNames | undefined,
+): ContentSheetPrintSettings {
+  const setup = raw.setup;
+  const usable = setup !== undefined && !setup.noPls;
+  const settings: ContentSheetPrintSettings = {
+    pageSize:
+      (usable ? pageSizeFromSetup(setup) : undefined) ??
+      DEFAULT_PRINT_SETTINGS.pageSize,
+    margins: {
+      topPt: raw.marginsPt.top ?? DEFAULT_PRINT_SETTINGS.margins.topPt,
+      rightPt: raw.marginsPt.right ?? DEFAULT_PRINT_SETTINGS.margins.rightPt,
+      bottomPt: raw.marginsPt.bottom ?? DEFAULT_PRINT_SETTINGS.margins.bottomPt,
+      leftPt: raw.marginsPt.left ?? DEFAULT_PRINT_SETTINGS.margins.leftPt,
+    },
+    gridlines: raw.printGridlines ?? DEFAULT_PRINT_SETTINGS.gridlines,
+    headers: raw.printHeaders ?? DEFAULT_PRINT_SETTINGS.headers,
+    // fLeftToRight is not conditioned on fNoPls: [MS-XLS] 2.4.257 lists exactly which fields that bit invalidates, and the page order is not among them.
+    pageOrder: setup?.leftToRight === true ? "overThenDown" : "downThenOver",
+  };
+
+  if (setup !== undefined && raw.fitToPage === true) {
+    // 0 is [MS-XLS] 2.4.257's own "use as many pages as necessary to print the columns/rows in the sheet", an auto setting ContentSheetPrintSettings.fitToPages cannot express -- both its counts are required and positive. A fit-to-page sheet with an auto axis therefore reports no fitToPages at all rather than a fabricated 1, which would claim the sheet is pinned to a single page along an axis the file left free.
+    if (setup.fitWidth > 0 && setup.fitHeight > 0) {
+      settings.fitToPages = {
+        width: setup.fitWidth,
+        height: setup.fitHeight,
+      };
+    }
+  } else if (usable && setup.scalePercent > 0) {
+    settings.scalePercent = setup.scalePercent;
+  }
+
+  if (raw.rowBreaks.length > 0 || raw.columnBreaks.length > 0) {
+    settings.manualBreaks = {
+      rows: [...raw.rowBreaks],
+      columns: [...raw.columnBreaks],
+    };
+  }
+
+  if (names?.printRange !== undefined) {
+    settings.printRange = names.printRange;
+  }
+  if (names?.repeatRows !== undefined) {
+    settings.repeatRows = names.repeatRows;
+  }
+  if (names?.repeatColumns !== undefined) {
+    settings.repeatColumns = names.repeatColumns;
+  }
+  return settings;
+}
 
 /**
  * Reads a .xls file's bytes into a ContentDocument.
@@ -104,9 +167,13 @@ export function readXlsContent(
     );
   }
   const globals = readWorkbookGlobals(globalsSubstream.records);
+  // Indexed before filtering, not after: a print name's own itab is a position in the FULL BoundSheet8 collection, so a workbook whose first sheet is a chart would mis-key every print name if the index came from the filtered list.
   const sheets = globals.sheets
-    .filter((entry) => entry.sheetType === SHEET_TYPE_WORKSHEET)
-    .map((entry) => readSheet(entry, substreams, globals));
+    .map((entry, sheetIndex) => ({ entry, sheetIndex }))
+    .filter(({ entry }) => entry.sheetType === SHEET_TYPE_WORKSHEET)
+    .map(({ entry, sheetIndex }) =>
+      readSheet(entry, sheetIndex, substreams, globals),
+    );
   // Absent when the container carries no "\x05SummaryInformation" stream at all -- a valid BIFF8 workbook need not have one -- and mapped from it through summaryInformationToLayoutMetadata (see src/metadata.ts) otherwise.
   return {
     kind: "spreadsheet",
@@ -130,6 +197,7 @@ export function readXls(bytes: Uint8Array<ArrayBuffer>): DocumentTree {
  */
 function readSheet(
   entry: SheetEntry,
+  sheetIndex: number,
   substreams: readonly Substream[],
   globals: WorkbookGlobals,
 ): ContentSheet {
@@ -138,9 +206,14 @@ function readSheet(
       candidate.offset === entry.bofPosition &&
       candidate.documentType === BOF_TYPE_WORKSHEET,
   );
+  const emptyPrint: RawPrintSettings = {
+    marginsPt: {},
+    rowBreaks: [],
+    columnBreaks: [],
+  };
   const raw: RawSheet =
     substream === undefined
-      ? { cells: [], rows: [], columns: [], merges: [] }
+      ? { cells: [], rows: [], columns: [], merges: [], print: emptyPrint }
       : readSheetRecords(substream.records, globals.sharedStrings, {
           sheets: globals.sheets,
           sheetRanges: globals.sheetRanges,
@@ -151,7 +224,11 @@ function readSheet(
     columns: mapColumns(raw),
     rows: mapRows(raw),
     images: [],
-    printSettings: DEFAULT_PRINT_SETTINGS,
+    // The sheet index a print name is scoped to is its BoundSheet8 position -- the index into globals.sheets, before the worksheet-only filter readXlsContent applies -- not its position among the sheets that survive that filter.
+    printSettings: mapPrintSettings(
+      raw.print,
+      globals.printNames.get(sheetIndex),
+    ),
   };
 }
 

@@ -3,6 +3,7 @@ import type {
   ContentSheet,
   ContentSheetCell,
   ContentSheetColumn,
+  ContentSheetPrintSettings,
   ContentSheetRow,
 } from "document-schema.js";
 
@@ -10,17 +11,38 @@ import { writeBofData } from "../biff/bof-writer";
 import { RecordBuilder } from "../biff/builder";
 import { errorCodeOf } from "../biff/errors";
 import {
+  packSetupFlags,
+  paperSelectionFor,
+  WSBOOL_FLAG_FIT_TO_PAGE,
+  type SetupFields,
+} from "../biff/print-setup";
+import {
   BOF_TYPE_WORKSHEET,
   RECORD_BLANK,
   RECORD_BOF,
   RECORD_BOOLERR,
+  RECORD_BOTTOMMARGIN,
+  RECORD_CALCCOUNT,
+  RECORD_CALCDELTA,
+  RECORD_CALCITER,
+  RECORD_CALCREFMODE,
+  RECORD_CALCSAVERECALC,
   RECORD_COLINFO,
   RECORD_DIMENSIONS,
   RECORD_EOF,
+  RECORD_HORIZONTALPAGEBREAKS,
   RECORD_LABELSST,
+  RECORD_LEFTMARGIN,
   RECORD_MERGECELLS,
   RECORD_NUMBER,
+  RECORD_PRINTGRID,
+  RECORD_PRINTROWCOL,
+  RECORD_RIGHTMARGIN,
   RECORD_ROW,
+  RECORD_SETUP,
+  RECORD_TOPMARGIN,
+  RECORD_VERTICALPAGEBREAKS,
+  RECORD_WSBOOL,
 } from "../biff/record-types";
 import { concatRecords, writeRecord } from "../biff/record-writer";
 import { BiffWriteError } from "../biff/write-errors";
@@ -29,11 +51,11 @@ import {
   isoDateToSerial,
   isoTimeToSerial,
 } from "../serial";
-import { pointsToColumnWidth, pointsToTwips } from "../units";
+import { pointsToColumnWidth, pointsToInches, pointsToTwips } from "../units";
 import { cellCarriesDecoration, writesCellRecord } from "../written-cells";
 import { GENERAL_CELL_XF_INDEX } from "./globals-writer";
 
-// The worksheet substream ([MS-XLS] 2.1.7.20.5), write side: the grid geometry and cell table for one sheet, the counterpart of workbook/sheet.ts's own readSheetRecords. See xls-codec's README for exactly which worksheet-substream records this writer emits (Dimensions, ColInfo, Row, the value-cell family, MergeCells) and which it deliberately omits (Window2, the calc-state/print-settings record family, Index/DBCell) -- real content, not per-window UI state or a lookup optimisation this reader (or any reader) does not require to find a cell.
+// The worksheet substream ([MS-XLS] 2.1.7.20.5), write side: the page setup, grid geometry, and cell table for one sheet, the counterpart of workbook/sheet.ts's own readSheetRecords. See xls-codec's README for exactly which worksheet-substream records this writer emits (the print-settings group, Dimensions, ColInfo, Row, the value-cell family, MergeCells) and which it deliberately omits (Window2, the calc-state family, Index/DBCell) -- real content, not per-window UI state or a lookup optimisation this reader (or any reader) does not require to find a cell.
 //
 // A blank cell -- ContentCellValue's own 'empty' kind -- splits in two. One carrying no decoration is written as nothing at all, which is what round-trips: content.ts's mapCell drops an undecorated blank it reads, and applyMerges reconstructs an empty anchor for a merged range from the MergeCells record alone. One carrying a background or a border is a Blank record ([MS-XLS] 2.4.20), because its decoration exists only in the XF that record's ixfe names and there is no other record in the sheet to hang it on. written-cells.ts holds the predicate deciding which, shared with write.ts's own workbook-wide scans so the two cannot disagree.
 //
@@ -201,6 +223,190 @@ function writeMergeCellsRecord(
   return writeRecord(RECORD_MERGECELLS, builder.build());
 }
 
+// --- Print settings ---
+
+/** CalcCount's own cIter ([MS-XLS] 2.4.31): "MUST be greater than or equal to one and less than or equal to 32767". Excel's own default iteration limit, and what a real LibreOffice-written BIFF8 carries. */
+const CALC_ITERATION_LIMIT = 100;
+/** CalcDelta's own numDelta ([MS-XLS] 2.4.32): Excel's own default minimum change for iterative calculation to continue. */
+const CALC_ITERATION_DELTA = 0.001;
+
+/**
+ * The calculation-state records [MS-XLS] 2.1.7.20.6's GLOBALS production requires ahead of PrintRowCol, none of which carries anything document-schema.js models.
+ *
+ * They are written for two reasons, one of them empirical. The grammar makes them mandatory -- `GLOBALS = CalcMode CalcCount CalcRefMode CalcIter CalcDelta CalcSaveRecalc PrintRowCol PrintGrid GridSet Guts DefaultRowHeight WsBool ...`, with no brackets on any of them -- so a substream that opens straight with a print setting is not a conformant worksheet at all. And LibreOffice's own BIFF8 importer silently discards whichever page-settings record comes FIRST in a worksheet substream: with PrintRowCol in that slot, a `.xls` this writer produced with row and column headers enabled opened in LibreOffice with them off, while every other print setting in the same file came through correctly. Moving any other record into that slot fixes it, which is what these do -- verified by writing the same workbook with and without them and re-reading each through `soffice --convert-to fods`.
+ *
+ * The values are Excel's own defaults (automatic recalculation, A1 references, iteration off), matching what a real LibreOffice-written file carries for a workbook nobody has changed the calculation settings of. CalcMode is deliberately not among them: the production names it, but LibreOffice does not write one into a worksheet substream either, and the records below already satisfy the constraint this comment exists for.
+ */
+function writeCalculationStateRecords(): Uint8Array<ArrayBuffer>[] {
+  return [
+    writeRecord(
+      RECORD_CALCCOUNT,
+      new RecordBuilder().u16(CALC_ITERATION_LIMIT).build(),
+    ),
+    // fRefA1 ([MS-XLS] 2.4.36): 1 is A1 reference style, which is what biff/ptg.ts's own formula-text reader assumes when it rebuilds a reference.
+    writeRecord(RECORD_CALCREFMODE, new RecordBuilder().u16(1).build()),
+    // vfIter ([MS-XLS] 2.4.33): iterative calculation disabled.
+    writeRecord(RECORD_CALCITER, new RecordBuilder().u16(0).build()),
+    writeRecord(
+      RECORD_CALCDELTA,
+      new RecordBuilder().f64(CALC_ITERATION_DELTA).build(),
+    ),
+    // fSaveRecalc ([MS-XLS] 2.4.37): recalculate before saving, Excel's own default.
+    writeRecord(RECORD_CALCSAVERECALC, new RecordBuilder().u16(1).build()),
+  ];
+}
+
+/** Setup's own iRes/iVRes ([MS-XLS] 2.4.257), a printer resolution in DPI. 300 is what a real LibreOffice-written BIFF8 carries and a sane default for a writer with no printer to ask; the field is undefined whenever fNoPls is set, which this writer never sets, so it must carry something real. */
+const SETUP_PRINT_RESOLUTION_DPI = 300;
+/** Setup's own iCopies: one copy, the only sensible value for a file that is not being sent to a printer right now. */
+const SETUP_COPIES = 1;
+/** Setup's own numHdr/numFtr ([MS-XLS] 2.4.257), the header and footer margins in inches. Excel's own Normal preset value; Margins has no header/footer field for a real one to come from, and content.ts's read side discards these for the same reason. */
+const SETUP_HEADER_FOOTER_MARGIN_INCHES = 0.3;
+/** Setup's own iFitWidth/iFitHeight when the sheet is not in fit-to-page mode at all. Written rather than left at 0 because 0 means "as many pages as necessary" -- a real value a reader must not see while fFitToPage is clear and mistake for an intent the sheet never had. */
+const SETUP_INACTIVE_FIT_PAGES = 1;
+/** Setup's own iScale when the sheet IS in fit-to-page mode: 100%, actual size, the inactive value a real producer leaves behind (confirmed against LibreOffice-written BIFF8, whose fit-to-page sheets carry exactly this). */
+const SETUP_INACTIVE_SCALE_PERCENT = 100;
+
+/**
+ * Setup ([MS-XLS] 2.4.257): iPaperSize, iScale, iPageStart, iFitWidth, iFitHeight, the flags word, iRes, iVRes, numHdr, numFtr, iCopies.
+ *
+ * fNoPls is deliberately never set. It would declare this record's own paper size, scale, and orientation undefined -- exactly the three fields it exists here to carry -- and [MS-XLS] pairs it with a Pls record holding a printer driver's DEVMODE blob, which this writer has none of.
+ */
+function writeSetupRecord(
+  settings: ContentSheetPrintSettings,
+): Uint8Array<ArrayBuffer> {
+  const paper = paperSelectionFor(settings.pageSize);
+  if (paper === undefined) {
+    throw new BiffWriteError(
+      `sheet page size ${settings.pageSize.widthPt} x ${settings.pageSize.heightPt} pt is not one of the paper sizes [MS-XLS] 2.4.257's own iPaperSize code table names, and a Setup record can address paper only by code; a .xls cannot state this page size`,
+    );
+  }
+  const fitToPages = settings.fitToPages;
+  const fields: SetupFields = {
+    paperCode: paper.code,
+    scalePercent:
+      fitToPages === undefined
+        ? Math.round(settings.scalePercent ?? SETUP_INACTIVE_SCALE_PERCENT)
+        : SETUP_INACTIVE_SCALE_PERCENT,
+    fitWidth: fitToPages?.width ?? SETUP_INACTIVE_FIT_PAGES,
+    fitHeight: fitToPages?.height ?? SETUP_INACTIVE_FIT_PAGES,
+    leftToRight: settings.pageOrder === "overThenDown",
+    portrait: paper.portrait,
+    noPls: false,
+    // fNoOrient clear, so fPortrait above is what selects the orientation -- setting it would make [MS-XLS] 2.4.257's own "Pages are printed using portrait mode" override it and silently lose every landscape page.
+    noOrientation: false,
+  };
+  const data = new RecordBuilder()
+    .u16(fields.paperCode)
+    .u16(fields.scalePercent)
+    .u16(0) // iPageStart: ignored, since fUsePage is clear
+    .u16(fields.fitWidth)
+    .u16(fields.fitHeight)
+    .u16(packSetupFlags(fields))
+    .u16(SETUP_PRINT_RESOLUTION_DPI)
+    .u16(SETUP_PRINT_RESOLUTION_DPI)
+    .f64(SETUP_HEADER_FOOTER_MARGIN_INCHES)
+    .f64(SETUP_HEADER_FOOTER_MARGIN_INCHES)
+    .u16(SETUP_COPIES)
+    .build();
+  return writeRecord(RECORD_SETUP, data);
+}
+
+/** Any of the four margin records ([MS-XLS] 2.4.151, 2.4.219, 2.4.328, 2.4.27): a single Xnum stating that margin in inches. All four share one field layout, so one writer serves them all -- the mirror of workbook/sheet.ts's own single readMargin. */
+function writeMarginRecord(
+  recordType: number,
+  points: number,
+): Uint8Array<ArrayBuffer> {
+  return writeRecord(
+    recordType,
+    new RecordBuilder().f64(pointsToInches(points)).build(),
+  );
+}
+
+/** PrintGrid ([MS-XLS] 2.4.202) and PrintRowCol ([MS-XLS] 2.4.203), each a single 16-bit boolean. */
+function writeBooleanRecord(
+  recordType: number,
+  value: boolean,
+): Uint8Array<ArrayBuffer> {
+  return writeRecord(
+    recordType,
+    new RecordBuilder().u16(value ? 1 : 0).build(),
+  );
+}
+
+/** WsBool ([MS-XLS] 2.4.351). Only fFitToPage is set from real data; every other bit is written clear, which is what a sheet with no outline, no dialog behaviour, no synchronised scrolling, and no transition formula handling means -- and is exactly the set of facts ContentSheet carries nothing about. */
+function writeWsBoolRecord(fitToPage: boolean): Uint8Array<ArrayBuffer> {
+  return writeRecord(
+    RECORD_WSBOOL,
+    new RecordBuilder().u16(fitToPage ? WSBOOL_FLAG_FIT_TO_PAGE : 0).build(),
+  );
+}
+
+/**
+ * HorizontalPageBreaks ([MS-XLS] 2.4.142) or VerticalPageBreaks ([MS-XLS] 2.4.343): a count then that many six-byte structures, each the break's own index followed by the start and end of its extent along the other axis.
+ *
+ * Both structures share that three-field shape, so one writer serves both -- the extent's own end differs, which is what `extentEnd` carries: ContentSheetPrintSettings models a break as a whole-axis index with no extent, so every break written here runs the full width or height of BIFF8's own grid. Written in ascending index order, which is the sort [MS-XLS] requires of both arrays; the caller's own indices are sorted first rather than assumed sorted.
+ */
+function writePageBreaksRecord(
+  recordType: number,
+  indices: readonly number[],
+  extentEnd: number,
+): Uint8Array<ArrayBuffer> {
+  const sorted = [...new Set(indices)].sort((a, b) => a - b);
+  const builder = new RecordBuilder().u16(sorted.length);
+  for (const index of sorted) {
+    builder.u16(index).u16(0).u16(extentEnd);
+  }
+  return writeRecord(recordType, builder.build());
+}
+
+/**
+ * Every print-settings record one sheet needs, in [MS-XLS] 2.1.7.20.6's own order.
+ *
+ * That order is two productions, back to back, both of which the worksheet substream places ahead of COLUMNS, Dimensions, and the cell table: `GLOBALS = ... PrintRowCol PrintGrid GridSet Guts DefaultRowHeight WsBool [Sync] [LPr] [HorizontalPageBreaks] [VerticalPageBreaks]` and `PAGESETUP = Header Footer HCenter VCenter [LeftMargin] [RightMargin] [TopMargin] [BottomMargin] [Pls *Continue] [Setup]`. The mandatory records this writer does not emit at all (the calculation-state family, GridSet, Guts, DefaultRowHeight, Header/Footer, HCenter/VCenter) are the same UI and interoperability bookkeeping it already omits everywhere else -- see this package's README -- so what remains is the optional subset that actually carries print settings, in the relative order those two productions give it.
+ *
+ * Every record here is written unconditionally, including for a sheet whose settings are exactly the Normal preset. A print setting has no "absent" spelling in ContentSheetPrintSettings -- gridlines, headers, page order, page size, and all four margins are required fields -- so there is no way to tell a sheet that asked for the preset from one that never stated anything, and writing the values out is what makes the round trip exact either way.
+ */
+function writePrintSettingsRecords(
+  settings: ContentSheetPrintSettings,
+): Uint8Array<ArrayBuffer>[] {
+  const pieces: Uint8Array<ArrayBuffer>[] = [
+    ...writeCalculationStateRecords(),
+    writeBooleanRecord(RECORD_PRINTROWCOL, settings.headers),
+    writeBooleanRecord(RECORD_PRINTGRID, settings.gridlines),
+    writeWsBoolRecord(settings.fitToPages !== undefined),
+  ];
+  const breaks = settings.manualBreaks;
+  if (breaks !== undefined && breaks.rows.length > 0) {
+    pieces.push(
+      // A row break's extent runs across every column of the sheet, so its end is the grid's own last column.
+      writePageBreaksRecord(
+        RECORD_HORIZONTALPAGEBREAKS,
+        breaks.rows,
+        MAX_COLUMN_INDEX,
+      ),
+    );
+  }
+  if (breaks !== undefined && breaks.columns.length > 0) {
+    pieces.push(
+      // A column break's extent runs down every row, so its end is the grid's own last row.
+      writePageBreaksRecord(
+        RECORD_VERTICALPAGEBREAKS,
+        breaks.columns,
+        MAX_ROW_INDEX,
+      ),
+    );
+  }
+  pieces.push(
+    writeMarginRecord(RECORD_LEFTMARGIN, settings.margins.leftPt),
+    writeMarginRecord(RECORD_RIGHTMARGIN, settings.margins.rightPt),
+    writeMarginRecord(RECORD_TOPMARGIN, settings.margins.topPt),
+    writeMarginRecord(RECORD_BOTTOMMARGIN, settings.margins.bottomPt),
+    writeSetupRecord(settings),
+  );
+  return pieces;
+}
+
 function cellHeader(cell: ContentSheetCell, xfIndex: number): RecordBuilder {
   return new RecordBuilder().u16(cell.row).u16(cell.column).u16(xfIndex);
 }
@@ -276,7 +482,7 @@ function writeCellValueRecord(
   }
 }
 
-/** Builds one worksheet's own substream: BOF, Dimensions, ColInfo per column, Row + value-cell records per populated or declared row (in ascending row then column order), MergeCells if the sheet declares any, EOF. */
+/** Builds one worksheet's own substream: BOF, the print-settings records, Dimensions, ColInfo per column, Row + value-cell records per populated or declared row (in ascending row then column order), MergeCells if the sheet declares any, EOF. */
 export function buildWorksheetSubstream(
   sheet: ContentSheet,
   ctx: SheetWriteContext,
@@ -309,6 +515,7 @@ export function buildWorksheetSubstream(
 
   const pieces: Uint8Array<ArrayBuffer>[] = [
     writeRecord(RECORD_BOF, writeBofData(BOF_TYPE_WORKSHEET)),
+    ...writePrintSettingsRecords(sheet.printSettings),
     writeDimensionsRecord(writtenCells),
   ];
 

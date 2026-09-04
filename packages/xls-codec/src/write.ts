@@ -38,6 +38,10 @@ import {
   type WorkbookGlobalsPlan,
 } from "./workbook/globals-writer";
 import {
+  printNameEntriesFor,
+  type PrintNamePlanEntry,
+} from "./workbook/print-names";
+import {
   buildWorksheetSubstream,
   type SheetWriteContext,
 } from "./workbook/sheet-writer";
@@ -410,6 +414,19 @@ function buildSstPlan(sheets: readonly ContentSheet[]): SstPlan {
   };
 }
 
+/**
+ * The built-in Print_Area/Print_Titles defined names every sheet's own print settings need, across the whole workbook.
+ *
+ * Workbook-wide rather than per-sheet because that is where BIFF8 puts them: an Lbl lives in the globals substream and names its sheet through its own itab, so a sheet's print RANGE is written nowhere near the sheet's own records. The ixti each name's PtgArea3d refers to is the sheet's own index, matching the one-XTI-per-sheet ExternSheet record globals-writer.ts writes alongside them.
+ */
+function buildPrintNamePlan(
+  sheets: readonly ContentSheet[],
+): PrintNamePlanEntry[] {
+  return sheets.flatMap((sheet, sheetIndex) =>
+    printNameEntriesFor(sheetIndex, sheetIndex, sheet.printSettings),
+  );
+}
+
 /** Patches a BoundSheet8's own lbPlyPos field in place: a 4-byte little-endian integer at a byte offset globals-writer.ts already reported, once the real value -- where that sheet's own substream landed in the finished workbook stream -- is known. */
 function patchBoundSheetOffsets(
   globalsBytes: Uint8Array<ArrayBuffer>,
@@ -461,6 +478,7 @@ function buildWorkbookStream(
     sharedStrings: sstPlan.strings,
     sharedStringTotalCount: sstPlan.totalCount,
     paletteColors: palettePlan.paletteColors,
+    printNames: buildPrintNamePlan(content.sheets),
   };
   const globals = buildWorkbookGlobals(globalsPlan);
 

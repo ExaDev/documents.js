@@ -7,7 +7,9 @@ import {
   RECORD_BOF,
   RECORD_BOUNDSHEET8,
   RECORD_EOF,
+  RECORD_EXTERNSHEET,
   RECORD_SST,
+  RECORD_SUPBOOK,
 } from "../biff/record-types";
 import { concatRecords, writeRecord } from "../biff/record-writer";
 import {
@@ -23,6 +25,7 @@ import {
   writeStyleRecord,
   writeStyleXfRecord,
 } from "../biff/xf-writer";
+import { writePrintNameRecords, type PrintNamePlanEntry } from "./print-names";
 
 // The workbook globals substream ([MS-XLS] 2.1.7.20.3), write side: everything belonging to the workbook rather than to one sheet -- the font, format, and cell-style/cell-format XF tables every cell's own formatting resolves through, the shared string table, and the BoundSheet8 entry naming each sheet's own substream. Grouped and ordered to satisfy [MS-XLS] 2.1.7.20.3's own FORMATTING production (Font*, Format*, XFS, STYLES) ahead of the BoundSheet8 entries and the closing EOF -- see this package's README for exactly which globals-substream records this writer emits and which it deliberately omits (Window1, CodePage, the interface/calc-state record family, and so on: real content, not UI or interoperability bookkeeping).
 //
@@ -85,6 +88,8 @@ export interface WorkbookGlobalsPlan {
   readonly sharedStringTotalCount: number;
   /** The workbook's own custom colour table (56 entries, icv 8 first), when write.ts's own palette-interning pass decided the workbook needs one -- undefined when every decoration colour the workbook's cells use already matches the fixed default table, in which case no Palette record is written at all and those colours resolve through the default table instead ([MS-XLS] "Icv"'s own documented fallback). */
   readonly paletteColors?: readonly Color[];
+  /** The built-in Print_Area/Print_Titles defined names the workbook's sheets declare, one Lbl record each. Empty when no sheet declares a print range or a repeated header band, in which case no SupBook, ExternSheet, or Lbl record is written at all -- exactly like Palette above, a workbook that needs none stays as minimal as it always was. */
+  readonly printNames: readonly PrintNamePlanEntry[];
 }
 
 export interface WorkbookGlobalsBuild {
@@ -104,6 +109,33 @@ function writeBoundSheet8Placeholder(name: string): Uint8Array<ArrayBuffer> {
     .bytes(writeShortXLUnicodeString(name))
     .build();
   return writeRecord(RECORD_BOUNDSHEET8, data);
+}
+
+/** [MS-XLS] 2.4.271's own cch table: the value a self-referencing SupBook -- this workbook itself, rather than another workbook, a DDE/OLE data source, or an add-in -- carries in place of a virtual path. The one kind of supporting link this package writes, and the one kind workbook/globals.ts's own reader resolves a 3D reference through. */
+const SUPBOOK_SELF_REFERENCING_CCH = 0x0401;
+
+/** SupBook ([MS-XLS] 2.4.271), self-referencing: a two-byte sheet count then that cch sentinel, and nothing else -- the virtPath/rgst payload a real external link would carry has no meaning for a link that names this same workbook. */
+function writeSupBookRecord(sheetCount: number): Uint8Array<ArrayBuffer> {
+  return writeRecord(
+    RECORD_SUPBOOK,
+    new RecordBuilder()
+      .u16(sheetCount)
+      .u16(SUPBOOK_SELF_REFERENCING_CCH)
+      .build(),
+  );
+}
+
+/**
+ * ExternSheet ([MS-XLS] 2.4.106): a two-byte cXTI then that many XTI structures ([MS-XLS] 2.5.344), each an iSupBook and a signed itabFirst/itabLast sheet-scope pair -- the write-side mirror of workbook/globals.ts's own readSheetRanges.
+ *
+ * One XTI per sheet, each scoped to that one sheet and pointing at the single self-referencing SupBook above, so a print name's own PtgArea3d can name its sheet by using that sheet's index as its ixti. The 3D reference machinery exists here purely because [MS-XLS] gives a defined name no other way to say which sheet its range is on.
+ */
+function writeExternSheetRecord(sheetCount: number): Uint8Array<ArrayBuffer> {
+  const builder = new RecordBuilder().u16(sheetCount);
+  for (let sheetIndex = 0; sheetIndex < sheetCount; sheetIndex += 1) {
+    builder.u16(0).u16(sheetIndex).u16(sheetIndex);
+  }
+  return writeRecord(RECORD_EXTERNSHEET, builder.build());
 }
 
 /** SST ([MS-XLS] 2.4.265): a total reference count, a unique-string count, then that many XLUnicodeRichExtendedStrings, packed with no offsets -- the write-side mirror of workbook/globals.ts's own readSharedStrings. */
@@ -182,6 +214,15 @@ export function buildWorkbookGlobals(
     const recordHeaderBytes = 4; // [MS-XLS] 2.1.4: a two-byte type then a two-byte size, before lbPlyPos, the record's own first field
     lbPlyPosOffsets.push(recordStart + recordHeaderBytes);
     push(writeBoundSheet8Placeholder(name));
+  }
+
+  // [MS-XLS] 2.1.7.20.3's own WORKBOOKCONTENT production places `*SUPBOOK *LBL` between the BoundSheet8 entries and SHAREDSTRINGS, with `SUPBOOK = SupBook [*ExternName *(XCT *CRN)] [ExternSheet] *Continue` -- so the supporting link and its ExternSheet come first, then the defined names whose 3D references resolve through it. Written only when there is a print name to write: a workbook with no print range and no repeated header band needs no defined name, and therefore no supporting link for one to reference.
+  if (plan.printNames.length > 0) {
+    push(writeSupBookRecord(plan.sheetNames.length));
+    push(writeExternSheetRecord(plan.sheetNames.length));
+    for (const record of writePrintNameRecords(plan.printNames)) {
+      push(record);
+    }
   }
 
   if (plan.sharedStrings.length > 0) {

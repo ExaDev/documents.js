@@ -20,13 +20,20 @@ import {
   RECORD_FORMAT,
   RECORD_FORMULA,
   RECORD_COLINFO,
+  RECORD_HORIZONTALPAGEBREAKS,
   RECORD_LABELSST,
+  RECORD_LEFTMARGIN,
   RECORD_MERGECELLS,
   RECORD_NUMBER,
   RECORD_PALETTE,
+  RECORD_PRINTGRID,
+  RECORD_PRINTROWCOL,
   RECORD_ROW,
+  RECORD_SETUP,
   RECORD_SST,
   RECORD_SUPBOOK,
+  RECORD_VERTICALPAGEBREAKS,
+  RECORD_WSBOOL,
   RECORD_XF,
 } from "./biff/record-types";
 import { BiffFormatError } from "./biff/records";
@@ -985,5 +992,229 @@ describe("isXlsFile", () => {
 
   it("rejects bytes too short to carry a container header", () => {
     expect(isXlsFile(new Uint8Array([0xd0]))).toBe(false);
+  });
+});
+
+describe("readXlsContent print settings", () => {
+  /** A Setup record ([MS-XLS] 2.4.257) with iPageStart, iRes, iVRes, numHdr, numFtr, and iCopies at values a real producer writes -- none of which this reader acts on. */
+  function setupRecord(fields: {
+    paperCode: number;
+    scalePercent: number;
+    fitWidth: number;
+    fitHeight: number;
+    grbit: number;
+  }): Uint8Array<ArrayBuffer> {
+    return record(RECORD_SETUP, [
+      ...u16(fields.paperCode),
+      ...u16(fields.scalePercent),
+      ...u16(0),
+      ...u16(fields.fitWidth),
+      ...u16(fields.fitHeight),
+      ...u16(fields.grbit),
+      ...u16(300),
+      ...u16(300),
+      ...f64(0.3),
+      ...f64(0.3),
+      ...u16(1),
+    ]);
+  }
+
+  /** The built-in Print_Area Lbl ([MS-XLS] 2.4.150) for one sheet: fBuiltin, cch 1, the one-based itab, name character 0x06, then a PtgArea3d naming the range. */
+  function printAreaRecord(
+    itab: number,
+    area: {
+      rowFirst: number;
+      rowLast: number;
+      colFirst: number;
+      colLast: number;
+    },
+  ): Uint8Array<ArrayBuffer> {
+    const rgce = [
+      0x3b,
+      ...u16(0),
+      ...u16(area.rowFirst),
+      ...u16(area.rowLast),
+      ...u16(area.colFirst),
+      ...u16(area.colLast),
+    ];
+    return record(0x0018, [
+      ...u16(0x0020),
+      0x00,
+      0x01,
+      ...u16(rgce.length),
+      ...u16(0),
+      ...u16(itab),
+      ...u32(0),
+      0x00,
+      0x06,
+      ...rgce,
+    ]);
+  }
+
+  function printSettingsOf(
+    sheetRecords: readonly Uint8Array<ArrayBuffer>[],
+    globals: readonly Uint8Array<ArrayBuffer>[] = [],
+  ) {
+    const bytes = xlsFile(
+      workbookStream({
+        globals: [...xfTable(0), ...globals],
+        sheets: [{ name: "Sheet1", records: [...sheetRecords] }],
+      }),
+    );
+    return readXlsContent(bytes).sheets[0]?.printSettings;
+  }
+
+  it("falls back to Excel's own Normal preset for a sheet stating nothing", () => {
+    // Every record behind these is optional in [MS-XLS] 2.1.7.20.6's own PAGESETUP production, and a sheet nobody has set a page setup on carries none of them.
+    expect(printSettingsOf([])).toEqual({
+      pageSize: { widthPt: 612, heightPt: 792 },
+      margins: { topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 50.4 },
+      gridlines: false,
+      headers: false,
+      pageOrder: "downThenOver",
+    });
+  });
+
+  it("falls back per field, keeping the one margin a sheet does state", () => {
+    expect(
+      printSettingsOf([record(RECORD_LEFTMARGIN, f64(1))])?.margins,
+    ).toEqual({ topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 72 });
+  });
+
+  it("resolves the page size, scale, gridlines, headers, and page order a sheet does state", () => {
+    expect(
+      printSettingsOf([
+        setupRecord({
+          paperCode: 9,
+          scalePercent: 80,
+          fitWidth: 1,
+          fitHeight: 1,
+          grbit: 0x0001, // fLeftToRight set, fPortrait clear
+        }),
+        record(RECORD_PRINTGRID, u16(1)),
+        record(RECORD_PRINTROWCOL, u16(1)),
+      ]),
+    ).toMatchObject({
+      pageSize: { widthPt: 841.89, heightPt: 595.28 },
+      gridlines: true,
+      headers: true,
+      pageOrder: "overThenDown",
+      scalePercent: 80,
+    });
+  });
+
+  it("reads no paper size and no scale from a Setup record that disowns both", () => {
+    // [MS-XLS] 2.4.257's own fNoPls: "whether the iPaperSize, iScale, iRes, iVRes, iCopies, fNoOrient, and fPortrait data are undefined and ignored".
+    const settings = printSettingsOf([
+      setupRecord({
+        paperCode: 9,
+        scalePercent: 80,
+        fitWidth: 1,
+        fitHeight: 1,
+        grbit: 0x0004, // fNoPls
+      }),
+    ]);
+
+    expect(settings?.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
+    expect(settings?.scalePercent).toBeUndefined();
+  });
+
+  it("takes the fit-to-page counts, not the scale, when WsBool says fit-to-page", () => {
+    // A real producer writes both regardless of which is live, so reading both would report a scale and a page count that contradict each other.
+    const settings = printSettingsOf([
+      record(RECORD_WSBOOL, u16(0x0100)),
+      setupRecord({
+        paperCode: 1,
+        scalePercent: 80,
+        fitWidth: 2,
+        fitHeight: 3,
+        grbit: 0x0002,
+      }),
+    ]);
+
+    expect(settings?.fitToPages).toEqual({ width: 2, height: 3 });
+    expect(settings?.scalePercent).toBeUndefined();
+  });
+
+  it("reports no fit-to-page at all when either count is the spec's own auto value", () => {
+    // [MS-XLS] 2.4.257: "The value 0 means use as many pages as necessary" -- an auto setting ContentSheetPrintSettings cannot express, both its counts being required and positive. A fabricated 1 would claim the sheet is pinned to one page along an axis the file left free.
+    const settings = printSettingsOf([
+      record(RECORD_WSBOOL, u16(0x0100)),
+      setupRecord({
+        paperCode: 1,
+        scalePercent: 100,
+        fitWidth: 1,
+        fitHeight: 0,
+        grbit: 0x0002,
+      }),
+    ]);
+
+    expect(settings?.fitToPages).toBeUndefined();
+    expect(settings?.scalePercent).toBeUndefined();
+  });
+
+  it("reads both page-break records into manualBreaks", () => {
+    expect(
+      printSettingsOf([
+        record(RECORD_HORIZONTALPAGEBREAKS, [
+          ...u16(1),
+          ...u16(12),
+          ...u16(0),
+          ...u16(0xff),
+        ]),
+        record(RECORD_VERTICALPAGEBREAKS, [
+          ...u16(1),
+          ...u16(5),
+          ...u16(0),
+          ...u16(0xffff),
+        ]),
+      ])?.manualBreaks,
+    ).toEqual({ rows: [12], columns: [5] });
+  });
+
+  it("reads the print range from the globals substream's own built-in defined name", () => {
+    expect(
+      printSettingsOf(
+        [],
+        [
+          printAreaRecord(1, {
+            rowFirst: 1,
+            rowLast: 5,
+            colFirst: 1,
+            colLast: 3,
+          }),
+        ],
+      )?.printRange,
+    ).toEqual({ startRow: 1, startColumn: 1, endRow: 5, endColumn: 3 });
+  });
+
+  it("scopes a print name by its own BoundSheet8 position, not by position among the worksheets", () => {
+    // A print name's itab counts every sheet, including the chart sheets readXlsContent filters out before mapping.
+    const bytes = xlsFile(
+      workbookStream({
+        globals: [
+          ...xfTable(0),
+          printAreaRecord(2, {
+            rowFirst: 3,
+            rowLast: 4,
+            colFirst: 0,
+            colLast: 1,
+          }),
+        ],
+        sheets: [
+          { name: "Chart", records: [], sheetType: 0x02 },
+          { name: "Data", records: [] },
+        ],
+      }),
+    );
+
+    const document = readXlsContent(bytes);
+    expect(document.sheets).toHaveLength(1);
+    expect(document.sheets[0]?.printSettings.printRange).toEqual({
+      startRow: 3,
+      startColumn: 0,
+      endRow: 4,
+      endColumn: 1,
+    });
   });
 });
