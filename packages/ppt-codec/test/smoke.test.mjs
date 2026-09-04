@@ -76,6 +76,14 @@ describe("dist/ deep imports resolve for every advertised module, in both builds
       path: "../dist/document/slide-list.js",
       exports: ["readSlideListWithText"],
     },
+    {
+      path: "../dist/document/notes.js",
+      exports: ["readNotesContainerAtom", "readNotesText"],
+    },
+    {
+      path: "../dist/document/notes-list.js",
+      exports: ["readNotesListWithText"],
+    },
     { path: "../dist/drawing/shapes.js", exports: ["readDrawingShapes"] },
     { path: "../dist/text/atoms.js", exports: ["readTextBody"] },
     { path: "../dist/text/style.js", exports: ["readStyleTextPropAtom"] },

@@ -12,6 +12,7 @@ import {
   writeContainer,
 } from "../record/write";
 import { RT_Notes, RT_NotesAtom } from "../record/types";
+import { writeSlideSchemeColorSchemeAtom } from "./color-scheme-write";
 
 // The write-side mirror of document/notes.ts: one NotesContainer per slide that actually has speaker notes, each carrying the NotesAtom naming its own slide and a DrawingContainer holding the notes text. The drawing is built by the same writeSlideDrawing every presentation slide's own drawing goes through, because a notes slide's text really is stored the same way a plain slide text box's is -- a shape's own OfficeArtClientTextbox holding a TextHeaderAtom, a TextCharsAtom and a StyleTextPropAtom, with no placeholder linkage and no OutlineTextRefAtom indirection. That this is what a real producer writes was confirmed against LibreOffice's own `soffice --convert-to ppt` output rather than assumed: its notes body is an un-placeholdered text box, not a PT_NotesBody placeholder. [MS-PPT] 2.5.6 NotesContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/50bfc0f7-c101-4c32-8754-6ca59772b785 [MS-PPT] 2.5.7 NotesAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/9bb3e352-1014-477b-b286-cd43127c3b74
 
@@ -56,6 +57,7 @@ export function writeNotesAtom(slideIdRef: number): Uint8Array<ArrayBuffer> {
   );
 }
 
+// [MS-PPT] 2.5.6 states a NotesContainer's children in order: the NotesAtom, the drawing, then a slideSchemeColorSchemeAtom that -- unlike the slideNameAtom and slideProgTagsContainer after it -- the grammar does not mark optional. It is written rather than omitted because the two records have to agree: 2.5.6 makes the notes master's scheme apply "if notesAtom.slideFlags.fMasterScheme is set", and writeNotesAtom leaves that bit clear (no notes master exists to inherit from), so a notes slide carrying no scheme of its own would state that it uses a scheme it does not have.
 export function writeNotesContainer(
   slideIdRef: number,
   notes: string,
@@ -65,5 +67,6 @@ export function writeNotesContainer(
   return writeContainer(RT_Notes, [
     writeNotesAtom(slideIdRef),
     writeSlideDrawing([notesBodyShape(notes, notesPageSize)], fontIndexOf),
+    writeSlideSchemeColorSchemeAtom(),
   ]);
 }

@@ -1,5 +1,6 @@
 import type { ContentShape, PageSize } from "document-schema.js";
 import { writeDrawingWithClientData } from "../drawing/shapes-write";
+import { writeSlideSchemeColorSchemeAtom } from "./color-scheme-write";
 import {
   DEFAULT_INSET_LEFT_RIGHT_PT,
   DEFAULT_INSET_TOP_BOTTOM_PT,
@@ -15,7 +16,6 @@ import {
 } from "../record/write";
 import {
   OfficeArtClientData,
-  RT_ColorSchemeAtom,
   RT_MainMaster,
   RT_PlaceholderAtom,
   RT_SlideAtom,
@@ -166,30 +166,6 @@ export function writeSlideAtomForSlide(
   });
 }
 
-// [MS-PPT] 2.9.51 SlideSchemeColorSchemeAtom: recVer 0x0, recInstance 0x001, recLen 0x20, eight ColorStructs of red/green/blue/unused. The eight slots are, in the spec's own order, background, text, shadow, title text, fill, accent, accent-and-hyperlink and accent-and-followed-hyperlink -- PowerPoint's own default light scheme, since this writer has no scheme of its own to state and every slide it writes inherits this one.
-const DEFAULT_SCHEME_COLORS: readonly (readonly [number, number, number])[] = [
-  [0xff, 0xff, 0xff], // background
-  [0x00, 0x00, 0x00], // text
-  [0x80, 0x80, 0x80], // shadow
-  [0x00, 0x00, 0x00], // title text
-  [0xbb, 0xe0, 0xe3], // fill
-  [0x33, 0x33, 0x99], // accent
-  [0x00, 0x00, 0xcc], // accent and hyperlink
-  [0x80, 0x00, 0x80], // accent and followed hyperlink
-];
-
-function writeColorSchemeAtom(): Uint8Array<ArrayBuffer> {
-  return writeAtom(
-    RT_ColorSchemeAtom,
-    concatBytes(
-      ...DEFAULT_SCHEME_COLORS.map(
-        ([red, green, blue]) => new Uint8Array([red, green, blue, 0]),
-      ),
-    ),
-    { recInstance: 0x001 },
-  );
-}
-
 // [MS-PPT] 2.9.31 TextMasterStyleAtom: rh.recInstance is the TextTypeEnum member the formatting applies to, and cLevels "MUST be less than or equal to 0x0005" with each level present if and only if cLevels exceeds its index -- so cLevels 0x0000 is a complete record stating no level of its own, which is exactly this master's position: it overrides nothing, and every level falls through to the DocumentTextInfoContainer's own styles as 2.9.31 specifies. 2.5.3 requires at least a title (0x000) and a body (0x001) item, plus a notes (0x002) item for the master the first MasterPersistAtom names -- which this master always is, being the only one.
 function writeTextMasterStyleAtom(textType: number): Uint8Array<ArrayBuffer> {
   return writeAtom(RT_TextMasterStyleAtom, u16le(0), {
@@ -235,7 +211,7 @@ export function writeMainMaster(
     writeTextMasterStyleAtom(TEXT_TYPE_BODY),
     writeTextMasterStyleAtom(TEXT_TYPE_NOTES),
     writeDrawingWithClientData(placeholders, fontIndexOf),
-    writeColorSchemeAtom(),
+    writeSlideSchemeColorSchemeAtom(),
   ]);
 }
 
