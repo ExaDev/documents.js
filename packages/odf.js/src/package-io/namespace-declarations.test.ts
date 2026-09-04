@@ -15,7 +15,12 @@ import { rootElement } from "../xml/query";
 import { writeOdtContent } from "../typed/odt/write";
 import { writeOdsContent } from "../typed/ods/write";
 import { writeOdpContent } from "../typed/odp/write";
-import { writeSxwContent, writeSxcContent } from "../ooo1/write";
+import { writeOdgContent } from "../typed/odg/write";
+import {
+  writeSxwContent,
+  writeSxcContent,
+  writeSxiContent,
+} from "../ooo1/write";
 
 // THE STRUCTURAL GUARD AGAINST AN UNDECLARED NAMESPACE PREFIX, for every writer in this package at once.
 //
@@ -299,13 +304,73 @@ const PRESENTATION: ContentDocument = {
   ],
 };
 
+// The drawing exercises what only a .odg page carries: every vector-primitive kind, each with the fill/stroke/fill-rule vocabulary typed/draw/write-vectors.ts mints a graphic style for, alongside a shape so both halves of a draw:page are covered in one pass.
+const DRAWING: ContentDocument = {
+  kind: "drawing",
+  metadata: { title: "Namespace audit" },
+  pages: [
+    {
+      size: PAGE_SIZE_A4,
+      shapes: [shape({ name: "Caption" }, [IMAGE_BLOCK])],
+      vectors: [
+        {
+          kind: "rect",
+          frame: { xPt: 20, yPt: 20, widthPt: 80, heightPt: 40 },
+          fill: rgbHexToColor("#DDEEFF"),
+          stroke: {
+            color: rgbHexToColor("#112233"),
+            widthPt: 1,
+            style: "dashed",
+          },
+          paintOrder: 4,
+        },
+        {
+          kind: "ellipse",
+          frame: { xPt: 120, yPt: 20, widthPt: 80, heightPt: 40 },
+          rotationDeg: 15,
+          fill: rgbHexToColor("#FFEECC"),
+        },
+        {
+          kind: "line",
+          from: { xPt: 20, yPt: 100 },
+          to: { xPt: 200, yPt: 140 },
+          stroke: { color: rgbHexToColor("#334455"), widthPt: 2 },
+        },
+        {
+          kind: "path",
+          frame: { xPt: 20, yPt: 180, widthPt: 160, heightPt: 90 },
+          subpaths: [
+            {
+              start: { xPt: 0, yPt: 0 },
+              segments: [
+                { kind: "line", to: { xPt: 160, yPt: 0 } },
+                {
+                  kind: "cubic",
+                  control1: { xPt: 160, yPt: 45 },
+                  control2: { xPt: 80, yPt: 90 },
+                  to: { xPt: 0, yPt: 90 },
+                },
+              ],
+              closed: true,
+            },
+          ],
+          fillRule: "evenodd",
+          fill: rgbHexToColor("#00AA44"),
+        },
+      ],
+    },
+  ],
+};
+
 describe("every emitted prefix is declared on its own part's root", () => {
   it.each([
     ["writeOdtContent", () => writeOdtContent(WORDPROCESSING)],
     ["writeOdsContent", () => writeOdsContent(SPREADSHEET)],
     ["writeOdpContent", () => writeOdpContent(PRESENTATION)],
+    ["writeOdgContent", () => writeOdgContent(DRAWING)],
     ["writeSxwContent", () => writeSxwContent(WORDPROCESSING)],
     ["writeSxcContent", () => writeSxcContent(SPREADSHEET)],
+    ["writeSxiContent", () => writeSxiContent(PRESENTATION)],
   ])("%s", (_name, write) => {
     expect(undeclaredPrefixUses(write())).toEqual([]);
   });
