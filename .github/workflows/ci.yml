@@ -640,6 +640,8 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -669,3 +671,42 @@ jobs:
           path: packages/web/dist
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  verify-deployed-site:
+    name: Verify the deployed site's own assets actually resolve
+    # A 200 on the page URL alone doesn't prove the deploy works: the HTML can serve fine while every asset it references 404s (e.g. a GitHub Pages project-site base-path mismatch, the exact bug this job exists to catch). Fetch the real deployed HTML and confirm every script/stylesheet/icon/manifest it links to actually resolves.
+    needs: [deploy-site]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch the deployed page and verify its referenced assets resolve
+        env:
+          PAGE_URL: ${{ needs.deploy-site.outputs.page_url }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$PAGE_URL" ]; then
+            echo "::error::deploy-site's page_url output was empty -- actions/deploy-pages didn't report a URL, so there is nothing to verify."
+            exit 1
+          fi
+
+          html="$(curl -sf "$PAGE_URL")"
+          origin="$(printf '%s' "$PAGE_URL" | sed -E 's#^(https?://[^/]+).*#\1#')"
+
+          # Every script src and link href (stylesheet/preload/icon/manifest) ending in one of these extensions -- the asset kinds a Vite PWA build actually emits and references from the page. Extracted paths are absolute (the build's own base config guarantees this), so they resolve against the origin alone, never by concatenating onto PAGE_URL itself -- PAGE_URL already carries the base path, so that would double it. grep exits non-zero when nothing matches; `|| true` stops that from tripping `set -e`/pipefail before the explicit empty-result check below gets a chance to report it properly.
+          assets="$(printf '%s' "$html" | grep -oE '(src|href)="[^"]+\.(js|css|svg|png|webmanifest)"' | sed -E 's/^(src|href)="//; s/"$//' | sort -u || true)"
+
+          if [ -z "$assets" ]; then
+            echo "::error::No JS/CSS/SVG/PNG/webmanifest asset references were found in the HTML at $PAGE_URL -- asset extraction itself is broken, which hides real broken-asset deploys just as effectively as not checking at all."
+            exit 1
+          fi
+
+          while IFS= read -r asset; do
+            [ -z "$asset" ] && continue
+            asset_url="${origin}${asset}"
+            if ! curl -sf -o /dev/null "$asset_url"; then
+              echo "::error::Deployed asset failed to resolve: $asset_url (referenced from $PAGE_URL)"
+              exit 1
+            fi
+          done <<< "$assets"
