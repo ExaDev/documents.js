@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DocFormatError, DocUnsupportedError } from "../errors";
 import { readDocContent } from "../read";
-import { buildDoc } from "../test-support/doc";
+import { buildDoc, type DocParagraphSpec } from "../test-support/doc";
 import { CELL_MARK } from "../text/special";
 
 // Every writeDocContent table test in write.test.ts reads back bytes this package's own writer produced -- a round trip proves the reader and writer agree with each other, not that either agrees with [MS-DOC] itself. These tests hand-assemble the sgc-5 (table) grpprl bytes straight from the specification's own field tables, independently of tap-write.ts's construction logic, so they exercise table/read.ts and table/tap.ts against bytes this package never wrote.
@@ -382,5 +382,265 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
       undefined,
     ]);
     expect(rowTwoCells.map((cell) => cellText(cell))).toEqual(["a", "b", "c"]);
+  });
+});
+
+// The tolerance the reconstruction snaps boundaries within is one point, and ContentTable.columnWidthsPt is stated in points, so every expectation below is written in points and every drift is written as a fraction of one -- restated here from the point's own definition rather than imported from table/read.ts, so the two agree only if both are right.
+const TWIPS_PER_POINT = 20;
+
+// The exact rgdxaCenter a real LibreOffice 26.2.5.2-authored three-column table states, taken from a 2.5cm/3.1cm/4.7cm .fodt converted with `soffice --headless --convert-to doc` -- widths deliberately chosen not to land on whole twips, and still byte-identical in every one of that table's rows. That is why no LibreOffice-derived fixture in this package ever exercises per-row drift: LibreOffice rounds a table's columns to twips once for the whole table, not once per row (ExaDev/documents.js#898).
+const LIBREOFFICE_ROW_BOUNDARIES = [0, 2338, 5238, 9638];
+/** The same table's columns in points, the shape a reconstruction that recognises its rows as sharing one grid produces: 2338/20, 2900/20, 4400/20. */
+const LIBREOFFICE_COLUMN_WIDTHS_PT = [116.9, 145, 220];
+/** That middle column's own width, 145pt: the distance the zero-width-cell case below pulls its right boundary back by so the two coincide. */
+const MIDDLE_COLUMN_WIDTH_TWIPS = 2900;
+/** The boundary between that table's first and second columns: the single int16 the tolerance sweep patched inside a real LibreOffice-authored file's second row, and the one a row merging those two columns omits from its own array entirely. */
+const INTERIOR_BOUNDARY_INDEX = 1;
+/** sprmTCellPaddingDefault's own documented default wWidth ([MS-DOC] 2.6.4), which is why Word writes -108 rather than 0 as an unindented table's first rgdxaCenter entry -- and so also the size of the real-world one-row leading indent the mode-2 case below uses. */
+const WORD_DEFAULT_CELL_MARGIN_TWIPS = 108;
+
+function withBoundaryShifted(
+  boundariesTwips: readonly number[],
+  index: number,
+  deltaTwips: number,
+): number[] {
+  return boundariesTwips.map((boundary, at) =>
+    at === index ? boundary + deltaTwips : boundary,
+  );
+}
+
+// Builds a whole table's paragraph sequence from nothing but each row's own rgdxaCenter array and its cells' text. No cell carries a TC80.tcgrf merge flag and no sprmTMerge or sprmTVertMerge is written, so any colSpan that comes back was reconstructed purely by comparing these boundary arrays against each other -- which is exactly what the column-grid union does, and the only thing these tests are about.
+function tableParagraphs(
+  rows: readonly {
+    boundariesTwips: readonly number[];
+    cells: readonly string[];
+  }[],
+): DocParagraphSpec[] {
+  const unmerged = { horzMerge: 0, vertMerge: 0 };
+  return rows.flatMap((row): DocParagraphSpec[] => [
+    ...row.cells.map((text): DocParagraphSpec => ({
+      runs: [{ text }],
+      grpprl: SPRM_P_F_IN_TABLE,
+      mark: CELL_MARK,
+    })),
+    {
+      runs: [],
+      grpprl: [
+        ...SPRM_P_F_IN_TABLE,
+        ...SPRM_P_F_TTP,
+        ...sprmTDefTable(
+          row.boundariesTwips,
+          row.cells.map(() => unmerged),
+        ),
+      ],
+      mark: CELL_MARK,
+    },
+  ]);
+}
+
+function readTableFromRowBoundaries(
+  rows: readonly {
+    boundariesTwips: readonly number[];
+    cells: readonly string[];
+  }[],
+) {
+  return tableBlock(
+    readDocContent(buildDoc({ paragraphs: tableParagraphs(rows) })),
+  );
+}
+
+function colSpansPerRow(
+  block: ReturnType<typeof tableBlock>,
+): (number | undefined)[][] {
+  return block.rows.map((row) => row.cells.map((cell) => cell.colSpan));
+}
+
+// [MS-DOC] 2.6.4 states a table's column layout per row, and 2.9.321's rgdxaCenter is a plain array of twip offsets from the page margin with no coarser quantum defined anywhere -- so two rows meaning the identical grid may legally disagree by a twip or two, and reconstructing the shared grid from them needs a tolerance rather than exact integer equality (ExaDev/documents.js#898). The threshold is one point, matching what a real, independent [MS-DOC] implementation applies to the identical per-row-boundaries-to-shared-grid problem: LibreOffice's `#define COLFUZZY 20` twips (sw/source/filter/inc/wrtswtbl.hxx), whose changeover was confirmed empirically at exactly 20/21 by sweeping a single patched int16 through LibreOffice 26.2.5.2's own .doc importer.
+describe("readDocContent table column grids, from hand-assembled rgdxaCenter arrays", () => {
+  it("reads rows stating the identical LibreOffice-authored boundary array as one shared three-column grid", () => {
+    const block = readTableFromRowBoundaries([
+      {
+        boundariesTwips: LIBREOFFICE_ROW_BOUNDARIES,
+        cells: ["a1", "b1", "c1"],
+      },
+      {
+        boundariesTwips: LIBREOFFICE_ROW_BOUNDARIES,
+        cells: ["a2", "b2", "c2"],
+      },
+      {
+        boundariesTwips: LIBREOFFICE_ROW_BOUNDARIES,
+        cells: ["a3", "b3", "c3"],
+      },
+    ]);
+    expect(block.columnWidthsPt).toEqual(LIBREOFFICE_COLUMN_WIDTHS_PT);
+    expect(colSpansPerRow(block)).toEqual([
+      [undefined, undefined, undefined],
+      [undefined, undefined, undefined],
+      [undefined, undefined, undefined],
+    ]);
+  });
+
+  it("reads a row whose interior boundary drifts a single twip as part of the same column grid, not a phantom hairline column", () => {
+    const block = readTableFromRowBoundaries([
+      {
+        boundariesTwips: LIBREOFFICE_ROW_BOUNDARIES,
+        cells: ["a1", "b1", "c1"],
+      },
+      {
+        boundariesTwips: withBoundaryShifted(
+          LIBREOFFICE_ROW_BOUNDARIES,
+          INTERIOR_BOUNDARY_INDEX,
+          1,
+        ),
+        cells: ["a2", "b2", "c2"],
+      },
+    ]);
+    expect(block.columnWidthsPt).toEqual(LIBREOFFICE_COLUMN_WIDTHS_PT);
+    expect(colSpansPerRow(block)).toEqual([
+      [undefined, undefined, undefined],
+      [undefined, undefined, undefined],
+    ]);
+    expect(
+      block.rows.map((row) => row.cells.map((cell) => cellText(cell))),
+    ).toEqual([
+      ["a1", "b1", "c1"],
+      ["a2", "b2", "c2"],
+    ]);
+  });
+
+  it("still collapses a boundary drifting a full point, the widest gap the tolerance absorbs", () => {
+    const block = readTableFromRowBoundaries([
+      {
+        boundariesTwips: LIBREOFFICE_ROW_BOUNDARIES,
+        cells: ["a1", "b1", "c1"],
+      },
+      {
+        boundariesTwips: withBoundaryShifted(
+          LIBREOFFICE_ROW_BOUNDARIES,
+          INTERIOR_BOUNDARY_INDEX,
+          TWIPS_PER_POINT,
+        ),
+        cells: ["a2", "b2", "c2"],
+      },
+    ]);
+    expect(block.columnWidthsPt).toEqual(LIBREOFFICE_COLUMN_WIDTHS_PT);
+    expect(colSpansPerRow(block)).toEqual([
+      [undefined, undefined, undefined],
+      [undefined, undefined, undefined],
+    ]);
+  });
+
+  // One twip past the tolerance the rows genuinely do describe different grids, and the reconstruction says so rather than absorbing the difference: the sliver between the two boundaries becomes its own column, with each row's first cell spanning whichever pair of segments its own boundaries cover. This is the same shape LibreOffice's own importer produces from the identical bytes at the identical threshold -- the tolerance moves where the split happens, it does not remove the split.
+  it("keeps a boundary drifting one point and one twip as its own column, matching where LibreOffice's own importer splits", () => {
+    const block = readTableFromRowBoundaries([
+      {
+        boundariesTwips: LIBREOFFICE_ROW_BOUNDARIES,
+        cells: ["a1", "b1", "c1"],
+      },
+      {
+        boundariesTwips: withBoundaryShifted(
+          LIBREOFFICE_ROW_BOUNDARIES,
+          INTERIOR_BOUNDARY_INDEX,
+          TWIPS_PER_POINT + 1,
+        ),
+        cells: ["a2", "b2", "c2"],
+      },
+    ]);
+    expect(block.columnWidthsPt).toEqual([116.9, 1.05, 143.95, 220]);
+    expect(colSpansPerRow(block)).toEqual([
+      [undefined, 2, undefined],
+      [2, undefined, undefined],
+    ]);
+  });
+
+  // Word writes -108 rather than 0 as an unindented table's first rgdxaCenter entry (LibreOffice's own WW8 importer carries the fact as a named comment in ww8par2.cxx's CalcDefaults), compensating for [MS-DOC]'s own 108-twip default cell margin. Every row states it, so the rows still describe one grid -- and the indent itself has nowhere to land, since ContentTable carries only rows and columnWidthsPt (see the README's own note).
+  it("reads rows sharing Word's own -108 leading offset as one grid, carrying the column widths and dropping the offset", () => {
+    const wordUnindented = LIBREOFFICE_ROW_BOUNDARIES.map(
+      (boundary) => boundary - WORD_DEFAULT_CELL_MARGIN_TWIPS,
+    );
+    const block = readTableFromRowBoundaries([
+      { boundariesTwips: wordUnindented, cells: ["a1", "b1", "c1"] },
+      { boundariesTwips: wordUnindented, cells: ["a2", "b2", "c2"] },
+    ]);
+    expect(block.columnWidthsPt).toEqual(LIBREOFFICE_COLUMN_WIDTHS_PT);
+    expect(colSpansPerRow(block)).toEqual([
+      [undefined, undefined, undefined],
+      [undefined, undefined, undefined],
+    ]);
+  });
+
+  // A leading indent that only ONE row carries is not drift and is not absorbed: sprmTWidthBefore ([MS-DOC] 2.6.4) makes a per-row leading indent a first-class construct, and rgdxaCenter's own first entry is "the horizontal position of the logical left edge of the table, as indented from the logical left page margin" (2.9.321) -- so rows disagreeing about it genuinely occupy different horizontal extents. The reconstructed grid honestly carries the extra boundary, with the rows that begin further left spanning both segments. LibreOffice 26.2.5.2 reads the identical bytes into the identical shape: four columns, a table:number-columns-spanned="2" anchor and a real table:covered-table-cell on those rows.
+  it("keeps a leading indent only one row states as a real boundary, spanning it on the rows that begin further left", () => {
+    const block = readTableFromRowBoundaries([
+      {
+        boundariesTwips: LIBREOFFICE_ROW_BOUNDARIES,
+        cells: ["a1", "b1", "c1"],
+      },
+      {
+        boundariesTwips: withBoundaryShifted(
+          LIBREOFFICE_ROW_BOUNDARIES,
+          0,
+          WORD_DEFAULT_CELL_MARGIN_TWIPS,
+        ),
+        cells: ["a2", "b2", "c2"],
+      },
+      {
+        boundariesTwips: LIBREOFFICE_ROW_BOUNDARIES,
+        cells: ["a3", "b3", "c3"],
+      },
+    ]);
+    expect(block.columnWidthsPt).toEqual([5.4, 111.5, 145, 220]);
+    expect(colSpansPerRow(block)).toEqual([
+      [2, undefined, undefined],
+      [undefined, undefined, undefined],
+      [2, undefined, undefined],
+    ]);
+  });
+
+  // The tolerance must not swallow a genuine horizontal merge, whose own boundary gap is a whole column wide rather than a twip. These are the real arrays a LibreOffice-authored table with a merged first row states (ExaDev/documents.js#895): the merged row's own rgdxaCenter is an exact subset of the unmerged rows'.
+  it("still reconstructs a horizontal merge from a real LibreOffice-authored merged row's own narrower boundary array", () => {
+    const mergedRow = LIBREOFFICE_ROW_BOUNDARIES.filter(
+      (_, index) => index !== INTERIOR_BOUNDARY_INDEX,
+    );
+    const block = readTableFromRowBoundaries([
+      { boundariesTwips: mergedRow, cells: ["merged", "c1"] },
+      {
+        boundariesTwips: LIBREOFFICE_ROW_BOUNDARIES,
+        cells: ["a2", "b2", "c2"],
+      },
+      {
+        boundariesTwips: LIBREOFFICE_ROW_BOUNDARIES,
+        cells: ["a3", "b3", "c3"],
+      },
+    ]);
+    expect(block.columnWidthsPt).toEqual(LIBREOFFICE_COLUMN_WIDTHS_PT);
+    expect(colSpansPerRow(block)).toEqual([
+      [2, undefined],
+      [undefined, undefined, undefined],
+      [undefined, undefined, undefined],
+    ]);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("merged");
+  });
+
+  // rgdxaCenter's entries "MUST be in non-decreasing order" ([MS-DOC] 2.9.321) -- equal adjacent entries, and so a genuine zero-width physical cell, are explicitly legal. Such a cell covers no segment of the reconstructed grid, and ContentTableCell has no way to say "zero columns wide", so it comes back carrying its own content as an ordinary un-spanned cell rather than as a cell claiming a span of zero.
+  it("carries a legal zero-width physical cell as an ordinary un-spanned cell rather than one spanning no columns", () => {
+    // The same table's array with its third boundary pulled back onto its second, collapsing the middle column to nothing: 0, 2338, 2338, 9638.
+    const block = readTableFromRowBoundaries([
+      {
+        boundariesTwips: withBoundaryShifted(
+          LIBREOFFICE_ROW_BOUNDARIES,
+          INTERIOR_BOUNDARY_INDEX + 1,
+          -MIDDLE_COLUMN_WIDTH_TWIPS,
+        ),
+        cells: ["a", "b", "c"],
+      },
+    ]);
+    expect(block.columnWidthsPt).toEqual([116.9, 365]);
+    expect(colSpansPerRow(block)).toEqual([[undefined, undefined, undefined]]);
+    expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
   });
 });
