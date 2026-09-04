@@ -16,6 +16,7 @@ import {
   type StyleRun,
   type StyleTextProps,
 } from "./text/style";
+import { masterUnitsToPoints } from "./units";
 
 // The mapping from [MS-PPT]'s own text model onto document-schema.js's shared content vocabulary. The two disagree structurally: PowerPoint stores a shape's text as one flat character array with formatting expressed as character-counted runs over it, while the schema stores paragraphs each holding their own runs. Turning one into the other is an intersection of two independent partitions of the same character range -- paragraphs by separator, formatting by run count -- which is why it lives here rather than inside either reader.
 
@@ -35,6 +36,27 @@ function mapAlignment(alignment: number | undefined): Alignment | undefined {
     default:
       return undefined;
   }
+}
+
+/** ParaSpacing's own percentage form (0-13200, value/100 = percent of line height) is the only one document-schema.js's lineSpacing (a plain multiple of single line height) can express -- the negative, absolute-master-units form has no multiplier to convert to without knowing the paragraph's actual rendered line height, so it maps to nothing rather than a guess. */
+function paraSpacingToLineSpacing(raw: number | undefined): number | undefined {
+  if (raw === undefined || raw < 0) {
+    return undefined;
+  }
+  return raw / 100;
+}
+
+/** ParaSpacing's own negative (absolute master-units) form is the only one document-schema.js's spacingBeforePt/spacingAfterPt (plain points) can express -- the positive percentage-of-line-height form has no point value to convert to without knowing the actual rendered line height, so it maps to nothing rather than a guess. */
+function paraSpacingToPoints(raw: number | undefined): number | undefined {
+  if (raw === undefined || raw >= 0) {
+    return undefined;
+  }
+  return masterUnitsToPoints(-raw);
+}
+
+/** MarginOrIndent is always an absolute signed master-unit offset, with no percentage form to disambiguate -- unlike ParaSpacing, every value converts cleanly. */
+function marginOrIndentToPoints(raw: number | undefined): number | undefined {
+  return raw === undefined ? undefined : masterUnitsToPoints(raw);
 }
 
 function mapColor(color: RgbColor | undefined): Color | undefined {
@@ -133,6 +155,11 @@ export function buildParagraphs(
       alignment,
       // [MS-PPT] states an indent level on every paragraph run, including level 0, which is the ordinary un-indented body text rather than a list. Only a level above zero is reported as list membership, matching how ooxml.js reads a drawing paragraph's a:pPr/@lvl.
       list: indentLevel > 0 ? { level: indentLevel } : undefined,
+      spacingBeforePt: paraSpacingToPoints(paragraphProperties?.spaceBefore),
+      spacingAfterPt: paraSpacingToPoints(paragraphProperties?.spaceAfter),
+      lineSpacing: paraSpacingToLineSpacing(paragraphProperties?.lineSpacing),
+      indentLeftPt: marginOrIndentToPoints(paragraphProperties?.leftMargin),
+      indentFirstLinePt: marginOrIndentToPoints(paragraphProperties?.indent),
     };
   });
 }
