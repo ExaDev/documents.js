@@ -12,7 +12,7 @@ import { RtfDiagnosticCodes, RtfNotAnRtfDocumentError } from "./diagnostics";
 import { bytesToHex } from "./base64";
 import { writeEmbeddedObjectData } from "./embedded-object";
 import { readRtf, readRtfContent } from "./read";
-import { bytes } from "./test-support/bytes";
+import { bytes, text } from "./test-support/bytes";
 
 // The header prefix every body fixture below shares, so each test states only the construct it is about. It is the shape a real producer emits: version, character set, font table, colour table.
 const HEADER =
@@ -626,6 +626,40 @@ describe("embedded objects", () => {
         (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
       ),
     ).toBe(false);
+  });
+
+  // \objdata's own grammar is (\binN #BDATA) | #SDATA: every test above delivers #SDATA (plain hex-digit text), which is only one of the two legal wire forms. \binN's raw-byte-run form, and repeated \'hh escapes inside the destination (an alternative RTF affords anywhere, not only in #SDATA-shaped destinations), are the other two shapes buildEmbeddedObject's own byte extraction has to handle identically -- covered here directly rather than only through hex text.
+  it("reads \\objdata delivered as a \\binN raw-byte run rather than #SDATA hex text", () => {
+    const raw = writeEmbeddedObjectData({
+      objectKind: "spreadsheet",
+      document: embedded,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+    });
+    const object = blocksOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata\\bin${String(raw.length)} ${text(raw)}}}\\par}`,
+    ).find(
+      (block): block is ContentEmbeddedObjectBlock =>
+        block.kind === "embeddedObject",
+    );
+    expect(object?.document).toEqual(embedded);
+  });
+
+  it("reads \\objdata delivered as repeated \\'hh escapes inside the destination rather than #SDATA hex text", () => {
+    const raw = writeEmbeddedObjectData({
+      objectKind: "spreadsheet",
+      document: embedded,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+    });
+    const apostropheEscaped = Array.from(raw)
+      .map((byte) => `\\'${byte.toString(16).padStart(2, "0")}`)
+      .join("");
+    const object = blocksOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata${apostropheEscaped}}}\\par}`,
+    ).find(
+      (block): block is ContentEmbeddedObjectBlock =>
+        block.kind === "embeddedObject",
+    );
+    expect(object?.document).toEqual(embedded);
   });
 });
 
