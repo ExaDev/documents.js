@@ -529,6 +529,90 @@ describe("embedded objects", () => {
       .map((p) => p.runs.map((r) => r.text).join(""))
       .join("");
     expect(text).not.toContain("fallback text");
+    // \result's own scratch rendering must not touch the paragraph "before " was already accumulating in when \object opened, nor the text "after" that continues once \object closes -- both sit in the SAME paragraph as \object itself, with no \par between them, so a fix that only stops the fallback text from appearing (without checking these) would pass even if it deleted the paragraph's real content along with it.
+    expect(text).toContain("before");
+    expect(text).toContain("after");
+  });
+
+  // The three sibling repros below all share one root cause: \result's own retraction/placement used to operate on already-closed block INDICES within whatever list state.para.inTable pointed at, which do not correspond to what \result actually contributed once its content shares a paragraph or list with text that was never its own.
+  it("preserves text accumulating in the surrounding paragraph before \\object even opened, when \\objdata decodes successfully", () => {
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard before {\\object\\objemb{\\*\\objdata ${OBJDATA_HEX}}{\\result{\\pard\\plain fallback\\par}}} after\\par}`,
+    );
+    const text = paragraphs
+      .map((paragraph) => paragraph.runs.map((run) => run.text).join(""))
+      .join("|");
+    expect(text).toContain("before");
+    expect(text).toContain("after");
+    expect(text).not.toContain("fallback");
+  });
+
+  // RTF 1.9.1's own <result> = '{' \result <para>+ '}' lets the group's own closing brace stand in for the final paragraph's \par -- a producer routinely omits it, exactly as a table cell's own \cell already stands in for one. A \result whose content never closes a block of its own (no \par anywhere inside it) must not be silently kept back once \objdata decodes: block-index retraction sees an empty range here and leaves the fallback text sitting in the shared run buffer, where it bleeds into whatever paragraph closes next.
+  it("does not leak a bare-inline \\result (no trailing \\par) into the document when \\objdata decodes successfully", () => {
+    const { document } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${OBJDATA_HEX}}{\\result inline fallback}}\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(
+      blocks.filter((block) => block.kind === "embeddedObject"),
+    ).toHaveLength(1);
+    const paragraphText = blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("");
+    expect(paragraphText).not.toContain("inline fallback");
+  });
+
+  // The identical scenario as the "before"/"after" preservation test above, one list deeper: \result sitting inside a table cell's own paragraph flow must not destroy the cell's own pre-existing text either. Table cells keep a separate block list (cellBlocks) from the section's own (blocks), so this exercises the same fix on the other of the two lists a \result can land in.
+  it("preserves a table cell's own pre-existing text around a successfully decoded \\object", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl before {\\object\\objemb{\\*\\objdata ${OBJDATA_HEX}}{\\result{\\pard\\plain fallback\\par}}} after\\cell\\row\\pard x\\par}`,
+    );
+    const cellBlocks = table.rows[0]?.cells[0]?.blocks ?? [];
+    expect(
+      cellBlocks.filter((block) => block.kind === "embeddedObject"),
+    ).toHaveLength(1);
+    const cellText = cellBlocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("|");
+    expect(cellText).toContain("before");
+    expect(cellText).toContain("after");
+    expect(cellText).not.toContain("fallback");
+  });
+
+  // RTF's own <obj> grammar allows only one \result child, but a malformed producer can still write two -- the second sibling must not silently overwrite the first's own recovered content with no diagnostic, mirroring how a second \objdata sibling is already handled just below.
+  it("keeps only the first of two \\result siblings, with a diagnostic noting the duplicate, when \\objdata cannot decode", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result{\\pard\\plain first fallback\\par}}{\\result{\\pard\\plain second fallback\\par}}}\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const paragraphText = document.sections[0]?.blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("|");
+    expect(paragraphText).toContain("first fallback");
+    expect(paragraphText).not.toContain("second fallback");
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("more than one \\result"),
+      ),
+    ).toBe(true);
   });
 
   it("degrades an \\object whose \\objdata is not this package's own payload, with a diagnostic", () => {
