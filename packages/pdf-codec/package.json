@@ -1,6 +1,6 @@
 {
   "name": "pdf-codec",
-  "version": "3.6.4",
+  "version": "3.6.5",
   "description": "Hand-written, dependency-minimal PDF codec: parses arbitrary real-world PDFs and generates new ones, built on its own codec-owned LayoutDocument item model and Zod 4 codecs.",
   "type": "module",
   "repository": {
@@ -97,7 +97,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "byte-codec": "^1.2.0",
+    "byte-codec": "^1.2.1",
     "document-schema.js": "^5.6.0",
     "fflate": "^0.8.3",
     "zod": "^4.4.3"

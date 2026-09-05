@@ -1,3 +1,14 @@
+## [1.1.2](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.1.1...ppt-codec%401.1.2) (2026-09-05)
+
+### Continuous Integration
+
+* add the missing _test:coverage script to nine packages ([bc658d0](https://github.com/ExaDev/documents.js/commit/bc658d094b6ffbd0616cc225c57d5c0595374172))
+
+
+### Dependencies
+
+- Updated archive-codec to ^1.4.2
+
 ## [1.1.1](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.1.0...ppt-codec%401.1.1) (2026-09-05)
 
 

@@ -1,3 +1,14 @@
+## [1.2.19](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.2.18...document-compute.js%401.2.19) (2026-09-05)
+
+### Continuous Integration
+
+* add the missing _test:coverage script to nine packages ([bc658d0](https://github.com/ExaDev/documents.js/commit/bc658d094b6ffbd0616cc225c57d5c0595374172))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.5.3
+
 ## [1.2.18](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.2.17...document-compute.js%401.2.18) (2026-09-05)
 
 

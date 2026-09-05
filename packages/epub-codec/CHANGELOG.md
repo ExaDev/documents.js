@@ -1,3 +1,9 @@
+## [1.0.4](https://github.com/ExaDev/documents.js/compare/epub-codec%401.0.3...epub-codec%401.0.4) (2026-09-05)
+
+### Continuous Integration
+
+* add the missing _test:coverage script to nine packages ([bc658d0](https://github.com/ExaDev/documents.js/commit/bc658d094b6ffbd0616cc225c57d5c0595374172))
+
 ## [1.0.3](https://github.com/ExaDev/documents.js/compare/epub-codec%401.0.2...epub-codec%401.0.3) (2026-09-05)
 
 ### Bug Fixes

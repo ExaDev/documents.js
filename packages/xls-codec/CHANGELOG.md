@@ -1,3 +1,15 @@
+## [2.0.2](https://github.com/ExaDev/documents.js/compare/xls-codec%402.0.1...xls-codec%402.0.2) (2026-09-05)
+
+### Continuous Integration
+
+* add the missing _test:coverage script to nine packages ([bc658d0](https://github.com/ExaDev/documents.js/commit/bc658d094b6ffbd0616cc225c57d5c0595374172))
+
+
+### Dependencies
+
+- Updated excel-number-format to ^1.0.1
+- Updated archive-codec to ^1.4.2
+
 ## [2.0.1](https://github.com/ExaDev/documents.js/compare/xls-codec%402.0.0...xls-codec%402.0.1) (2026-09-05)
 
 

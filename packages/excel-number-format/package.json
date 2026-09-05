@@ -1,6 +1,6 @@
 {
   "name": "excel-number-format",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A tokenizing classifier for Excel's number-format mini-language (ECMA-376 Part 1 SS18.8.30, which BIFF8's [MS-XLS] 2.4.126 defers to) -- deciding whether a numeric cell is a percentage, a currency amount, a date, a time of day, an elapsed duration, or a plain number. Shared by ooxml.js and xls-codec, the excel-number-format package for the documents.js family.",
   "type": "module",
   "repository": {
