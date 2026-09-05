@@ -23,5 +23,6 @@ export * from "./prop/sep-write";
 export * from "./style/stsh";
 export * from "./style/fonts";
 export * from "./list/numbering";
+export * from "./list/numbering-write";
 export * from "./read";
 export * from "./write";
