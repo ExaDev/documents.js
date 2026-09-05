@@ -791,6 +791,100 @@ describe("embedded objects", () => {
     );
     expect(object?.document).toEqual(embedded);
   });
+
+  // RTF 1.9.1's own <objdata> production is '{\*' \objdata (<objalias>? & <objsect>?) <data> '}' -- \objalias and \objsect are legal sub-groups nested directly inside \objdata's own braces, before its real payload. A reader that predicts \objdata's decode via a flat token scan (rather than the same group-aware walk the live read uses) folds those sub-groups' own bytes into the payload it scans, disagreeing with the live read about whether \objdata will decode at all -- exactly the double-render bug this test guards against.
+  it("decodes \\objdata unaffected by legal nested {\\*\\objalias ...}/{\\*\\objsect ...} sub-groups, without double-rendering \\result's own fallback content", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\objdata{\\*\\objalias Sheet1}{\\*\\objsect 1}${OBJDATA_HEX}}{\\result{\\pard\\plain should not appear\\par}}}\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    const object = blocks.find(
+      (block): block is ContentEmbeddedObjectBlock =>
+        block.kind === "embeddedObject",
+    );
+    expect(object?.document).toEqual(embedded);
+    expect(
+      blocks.filter((block) => block.kind === "embeddedObject"),
+    ).toHaveLength(1);
+    const paragraphText = blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("");
+    expect(paragraphText).not.toContain("should not appear");
+    // \objalias and \objsect are ordinary, spec-legal sub-productions of \objdata -- recognised destinations, not unrecognised ones this reader happens to tolerate.
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.UNKNOWN_DESTINATION_SKIPPED,
+      ),
+    ).toBe(false);
+    expect(
+      diagnostics.some(
+        (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+      ),
+    ).toBe(false);
+  });
+
+  // \object's own group can legally close having found neither an \objdata nor a \result child at all (a producer that wrote only the informational \objw/\objh size hint and nothing else) -- a distinct, otherwise-silent construct substitution from either "objdata exists but fails to decode" (buildEmbeddedObject's own diagnostic) or "no objdata, but result recovers instead" (the sibling test above), and previously the only one of the three that produced no diagnostic at all.
+  it("reports a diagnostic when an \\object has neither \\objdata nor \\result content at all", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard before {\\object\\objemb\\objw2000\\objh1000} after\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(blocks.some((block) => block.kind === "embeddedObject")).toBe(false);
+    const paragraphText = blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .map((paragraph) => paragraph.runs.map((run) => run.text).join(""))
+      .join("|");
+    expect(paragraphText).toContain("before");
+    expect(paragraphText).toContain("after");
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("neither \\objdata nor \\result"),
+      ),
+    ).toBe(true);
+  });
+
+  // RTF's own <obj> grammar allows only one \objdata child; a malformed producer writing two must not decode both into two identical blocks.
+  it("recovers only one embeddedObject block from two \\objdata siblings, with a diagnostic noting the duplicate", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${OBJDATA_HEX}}{\\*\\objdata ${OBJDATA_HEX}}}\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(
+      blocks.filter((block) => block.kind === "embeddedObject"),
+    ).toHaveLength(1);
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("more than one \\objdata"),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("fields and destinations", () => {

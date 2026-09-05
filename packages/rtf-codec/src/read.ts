@@ -143,7 +143,11 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["objdata", "objectData"],
   ["objclass", "skip"],
   ["objname", "skip"],
-  // \result is \object's own fallback rendering for a reader that cannot decode \object at all -- this reader always attempts \objdata first and prefers it, exactly as Word itself does, so this table's own "skip" is only the default. The group-start handler below overrides it to "body" precisely when the sibling \objdata this \result belongs to has already failed to decode (state.object.decoded is false), so a genuine decode failure recovers \result's own content (ordinary RTF paragraphs, per the spec's <result> = '{' \result <para>+ '}') instead of discarding it.
+  // \objalias and \objsect are the two optional sub-groups \objdata's own grammar allows before its <data> ("<objdata> = '{\*' \objdata (<objalias>? & <objsect>?) <data> '}'"); \objtime is \object's own linked-object update timestamp. All three are informational sub-parts this reader has no position for, exactly like \objclass/\objname above -- listing them here (rather than leaving them as unrecognised ignorable destinations) keeps ordinary, spec-legal \object content from tripping UNKNOWN_DESTINATION_SKIPPED.
+  ["objalias", "skip"],
+  ["objsect", "skip"],
+  ["objtime", "skip"],
+  // \result is \object's own fallback rendering for a reader that cannot decode \object at all -- this reader always attempts \objdata first and prefers it, exactly as Word itself does, so this table's own "skip" is only the default: the group-start handler below overrides it to "body" unconditionally, rendering \result's content provisionally every time its group is seen (see ObjectState's own comment for why), and \object's own group-end handling retracts it again if \objdata does decode.
   ["result", "skip"],
   ["do", "skip"],
   ["shp", "skip"],
@@ -167,7 +171,7 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
 //  - \pn/\pnseclvl are Word 6/95 paragraph numbering, superseded by the \lsN/\ilvlN this reader does read.
 //  - \nonshppict is by definition the copy Word itself will not read ("Specifies that Word 97 through Word 2002 has written a {\pict destination that it will not read on input"), sitting beside the \*\shppict this reader does take.
 //  - \falt, \panose and \fname are <fontinfo> sub-productions the header parser already consumed.
-//  - \atn*, \objclass/\objname/\result and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct (\objdata is no longer here -- it is real payload now, handled and reported on its own terms by buildEmbeddedObject; \result is silent here too even on the degrade path where it is read as body content, since buildEmbeddedObject's own EMBEDDED_OBJECT_UNREADABLE diagnostic already reported the object once).
+//  - \atn*, \objclass/\objname/\objalias/\objsect/\objtime/\result and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct (\objdata is no longer here -- it is real payload now, handled and reported on its own terms by buildEmbeddedObject; \result is silent here too even on the degrade path where it is read as body content, since \object's own group-end handling reports the object once, either via buildEmbeddedObject's own diagnostic on a decode failure or its own "no \objdata"/"no \objdata and no \result" diagnostic otherwise).
 //  - The footnote and endnote separators are page furniture with no content of their own, and \xe/\tc/\tcn are index and table-of-contents entry markers whose text is derivable from the document they mark.
 const SILENT_SKIP_DESTINATIONS: ReadonlySet<string> = new Set([
   "pn",
@@ -184,6 +188,9 @@ const SILENT_SKIP_DESTINATIONS: ReadonlySet<string> = new Set([
   "atnicn",
   "objclass",
   "objname",
+  "objalias",
+  "objsect",
+  "objtime",
   "result",
   "shpinst",
   "shptxt",
@@ -320,11 +327,25 @@ interface ObjectDataState {
   binary: number[];
 }
 
-// One \object destination's own state, shared by reference across the whole {\object ...} group and every child destination nested inside it (\objdata, \result, and the informational \*\objclass/\*\objname sub-groups) -- the same "shared by reference" pattern FieldState already establishes for \fldinst/\fldrslt, so \result's own group can see whether its sibling \objdata already decoded without either needing to know the other's stack depth. `decoded` is resolved by a lookahead at \object's own group-start (below), before either \objdata or \result is actually read, precisely because RTF 1.9.1's own <obj> grammar orders <objdata> before <result> but does not require it: a lenient reader that decided \result's fate from whichever sibling it happened to encounter first would double-render an \object whose producer wrote them the other way around. widthTwips/heightTwips capture \objwN/\objhN (the size hint RTF 1.9.1 says a producer supplies "to maintain backward compatibility" for a reader that cannot decode \objdata at all): this reader's own reconstruction never needs them when \objdata decodes, but the degrade path folds them into its diagnostic message instead of discarding them silently.
+// One \object destination's own state, shared by reference across the whole {\object ...} group and every child destination nested inside it (\objdata, \result, and the informational \*\objclass/\*\objname sub-groups) -- the same "shared by reference" pattern FieldState already establishes for \fldinst/\fldrslt, so \result's own group can see whether its sibling \objdata already decoded without either needing to know the other's stack depth.
+//
+// RTF 1.9.1's own <obj> grammar orders <objdata> before <result> but does not require it, so which sibling a producer wrote first cannot be known when \result's own group is seen -- an earlier version of this reader resolved that with a lookahead, re-walking \objdata's own token range ahead of time to predict `decoded` before either sibling was actually read. That lookahead had to re-derive, on its own, every rule the real single-pass read below already applies -- and did so wrongly for a spec-legal \objdata carrying a nested {\*\objalias ...} or {\*\objsect ...} sub-group (RTF 1.9.1: `<objdata> = '{\*' \objdata (<objalias>? & <objsect>?) <data> '}'`), folding those sub-groups' own bytes into the payload it scanned while the real read correctly skips them -- so the two disagreed about whether \objdata would decode, and \result's fate was decided by whichever of them ran. Predicting the outcome in advance is not the only way to avoid double-rendering: `decoded` here is instead resolved by the SAME live read that will decide it anyway, and \result's own content is rendered provisionally the moment its group is seen (see the group-start handling below) rather than gated on a prediction, then retracted after the fact -- at \object's own group end, once every child has actually been read and `decoded` is thus final -- if \objdata went on to decode successfully, wherever in the token stream that turned out to be. This closes the whole category of lookahead-vs-real-parse disagreement rather than keeping a second implementation of the same decode in sync with the first.
+//
+// widthTwips/heightTwips capture \objwN/\objhN (the size hint RTF 1.9.1 says a producer supplies "to maintain backward compatibility" for a reader that cannot decode \objdata at all): this reader's own reconstruction never needs them when \objdata decodes, but the degrade path folds them into its diagnostic message instead of discarding them silently.
 interface ObjectState {
   decoded: boolean;
-  // Whether an {\*\objdata ...} child exists anywhere in this \object's own group at all, regardless of whether it decodes -- distinct from `decoded`, since an \object whose \objdata genuinely fails to decode already reports that failure on its own terms (buildEmbeddedObject's own EMBEDDED_OBJECT_UNREADABLE), while an \object with no \objdata child at all is a different, otherwise-silent construct substitution the \result-fallback handler below reports separately. Resolved by the same lookahead that resolves `decoded`.
+  // Whether an {\*\objdata ...} child has actually been read (not merely predicted) anywhere in this \object's own group, regardless of whether it goes on to decode -- distinct from `decoded`, since an \object whose \objdata genuinely fails to decode already reports that failure on its own terms (buildEmbeddedObject's own EMBEDDED_OBJECT_UNREADABLE), while an \object with no \objdata child at all is a different, otherwise-silent construct substitution that \object's own group-end handling below reports separately. Set the moment an \objdata child's group is actually entered, which is also what lets a second \objdata sibling (RTF's own grammar allows only one, but a malformed producer can still write two) be recognised as a duplicate and skipped rather than decoded twice into two identical blocks.
   objectDataSeen: boolean;
+  // Whether an {\result ...} child has actually been read anywhere in this \object's own group -- distinct from whether its content was ultimately kept or retracted, since \object's own group-end diagnostic (below) needs to say which of \objdata/\result, if either, this \object actually had.
+  resultSeen: boolean;
+  // Recorded once \result's own group closes: exactly which blocks its provisionally-rendered fallback content contributed, and to which list (the open table cell's own, or the section's) -- resolved at \object's own group end, once `decoded` is finally known either way, by retracting this range if \objdata did go on to decode. Undefined until \result's group has actually closed, and left undefined forever if this \object has no \result child at all.
+  resultRange:
+    | {
+        readonly inTable: boolean;
+        readonly start: number;
+        readonly end: number;
+      }
+    | undefined;
   widthTwips: number | undefined;
   heightTwips: number | undefined;
 }
@@ -345,6 +366,10 @@ interface GroupState {
   picture: PictureState | undefined;
   objectData: ObjectDataState | undefined;
   object: ObjectState | undefined;
+  // Set only on the one GroupState created directly for a \result destination's own group -- the enclosing \object's shared state to report the rendered range back to when this group closes, and where (which list, and how many blocks it already held) rendering began. Deliberately NOT carried forward by cloneGroupState the way `object` is: a plain nested group inside \result's own content (every test fixture's `{\result{\pard\plain ...\par}}` has one) must not re-trigger this group's own finalisation a second time when IT closes, so only the direct child gets this field and every descendant clones it back to undefined.
+  resultOf: ObjectState | undefined;
+  resultOpenAt:
+    { readonly inTable: boolean; readonly start: number } | undefined;
   bookmark: BookmarkState | undefined;
   // Whether this group is a \upr wrapper's own child that must be discarded (the ANSI half). Set on the wrapper; consulted when a child group opens.
   inUnicodeWrapper: boolean;
@@ -392,6 +417,8 @@ function cloneGroupState(state: GroupState): GroupState {
     picture: state.picture,
     objectData: state.objectData,
     object: state.object,
+    resultOf: undefined,
+    resultOpenAt: undefined,
     bookmark: state.bookmark,
     inUnicodeWrapper: state.inUnicodeWrapper,
   };
@@ -1005,6 +1032,17 @@ class ContentBuilder {
     this.blocks.push(block);
   }
 
+  // How many blocks the relevant list (the open table cell's own, or the section's) currently holds -- used only to mark where \result's own provisionally-rendered fallback paragraphs begin and end, so \object's own group end can retract them if \objdata goes on to decode. Never call this expecting it to reflect a paragraph still accumulating in `runs`/`pendingRunText`: only a closed paragraph (via endParagraph) actually lands in the list this counts.
+  blockCount(inTable: boolean): number {
+    return inTable ? this.cellBlocks.length : this.blocks.length;
+  }
+
+  // Discards exactly the blocks \result provisionally rendered, once \objdata's own real decode has gone on to succeed elsewhere in the same \object group -- the retraction half of the deferred-resolution design described on ObjectState. Bookmark extents recorded against absolute indices while \result's content was still standing (a bookmark straddling the removed range, or opening inside it and closing after) are not renumbered here: \result's own fallback preview is not expected to carry a real document's bookmarks, so this is accepted as a known gap rather than solved, matching the same "not defended against" posture the rest of this reader takes toward inputs it does not expect to see in practice.
+  removeBlockRange(inTable: boolean, start: number, end: number): void {
+    const target = inTable ? this.cellBlocks : this.blocks;
+    target.splice(start, end - start);
+  }
+
   endSection(section: SectionState, para: ParagraphState): void {
     this.endParagraph(para, false);
     this.closeTable();
@@ -1205,54 +1243,11 @@ function objectSizeHintClause(object: ObjectState | undefined): string {
   return "";
 }
 
-// The hex-or-binary payload an ObjectDataState (or a lookahead's own scanObjectDataTokens result of the identical shape) carries, as real bytes -- shared by buildEmbeddedObject's own live read and the \object group-start handler's lookahead below, which both need the identical extraction.
+// The hex-or-binary payload an ObjectDataState carries, as real bytes.
 function objectDataBytes(objectData: ObjectDataState): Uint8Array<ArrayBuffer> {
   return objectData.binary.length > 0
     ? Uint8Array.from(objectData.binary)
     : hexToBytes(objectData.hex);
-}
-
-// A read-only walk of one {\*\objdata ...} destination's own token range, collecting the identical hex-or-binary payload the main loop's live "text"/"binary"/"hex" token handling further down would. \objdata's content is pure (\binN #BDATA) | #SDATA per RTF 1.9.1's own <objdata> production -- no control words and no nested groups of its own -- so a flat scan reproduces the same bytes without replaying the whole state machine. Used only for the \object group-start handler's own lookahead below; the main loop still does its own live accumulation for the actual read.
-function scanObjectDataTokens(
-  tokens: readonly RtfToken[],
-  contentStart: number,
-  end: number,
-): ObjectDataState {
-  const objectData: ObjectDataState = { hex: "", binary: [] };
-  for (let index = contentStart; index < end; index += 1) {
-    const token = tokens[index];
-    if (token?.kind === "text") {
-      objectData.hex += asciiStringFromBytes(token.bytes);
-    } else if (token?.kind === "binary") {
-      appendBytes(objectData.binary, token.bytes);
-    } else if (token?.kind === "hex") {
-      objectData.binary.push(token.byte);
-    }
-  }
-  return objectData;
-}
-
-// Looks for one direct child destination within `parentStart`..`parentEnd` (the parent's own groupStart/groupEnd token indices), skipping whole sibling subtrees that do not match rather than descending into them -- \objdata is only ever a direct child of \object per RTF 1.9.1's own <obj> grammar, so a match nested inside some other sibling (e.g. inside \result's own content) is not this destination's \objdata and must not be found. Used by the \object group-start handler below to look ahead at its own \objdata before any of \object's children are actually read.
-function findChildDestinationGroup(
-  tokens: readonly RtfToken[],
-  parentStart: number,
-  parentEnd: number,
-  destination: string,
-): { readonly contentStart: number; readonly end: number } | undefined {
-  let index = parentStart + 1;
-  while (index < parentEnd) {
-    if (tokens[index]?.kind === "groupStart") {
-      const head = groupHead(tokens, index);
-      const end = matchingGroupEnd(tokens, index);
-      if (head.destination === destination) {
-        return { contentStart: head.contentStart, end };
-      }
-      index = end + 1;
-      continue;
-    }
-    index += 1;
-  }
-  return undefined;
 }
 
 // Turns {\*\objdata ...}'s collected payload back into a ContentEmbeddedObjectBlock, or reports why it cannot and returns undefined -- the object-destination counterpart of buildPicture above. "no payload" and "not this package's own payload" are the two distinct failure shapes (matching buildPicture's own "no format" vs "no size" split): the first never reaches readEmbeddedObjectData at all, and the second is every way a real, foreign OLE object (or simply malformed \objdata) legitimately fails to parse as one. `object` is the enclosing \object's own state, consulted only for its \objw/\objh size hint on the degrade path -- readEmbeddedObjectData never needs it, since a decoded payload carries its own frame.
@@ -1323,6 +1318,8 @@ function readRtfDetail(
     picture: undefined,
     objectData: undefined,
     object: undefined,
+    resultOf: undefined,
+    resultOpenAt: undefined,
     bookmark: undefined,
     inUnicodeWrapper: false,
   };
@@ -1394,28 +1391,38 @@ function readRtfDetail(
         head.destination !== undefined &&
         HEADER_DESTINATIONS.has(head.destination);
       const wrapperChild = state.inUnicodeWrapper;
-      // \result is \object's own fallback rendering for a reader that cannot decode \objdata at all -- this reader always prefers \objdata, so \result is read as ordinary body paragraphs only when \objdata will not (or does not) decode. state.object is the enclosing \object's own shared-by-reference state, and objectState.decoded here is a lookahead's own pre-resolved verdict (see the \object group-start handling further down), not merely "has \objdata already been read" -- if it were the latter, an \object whose producer wrote \result before \objdata (both orders are legal RTF) would render both the cached preview and the real decoded object, since \objdata's own success would not yet be known at this point in the token stream. Resolving it ahead of time here means this check is correct regardless of which sibling the source lists first.
+      // \result is \object's own fallback rendering for a reader that cannot decode \objdata at all -- this reader always prefers \objdata, so \result's content is retracted (see \object's own group-end handling further down) whenever \objdata does decode. objectState is the enclosing \object's own shared-by-reference state; see ObjectState's own comment for why \result is rendered provisionally here rather than gated on a lookahead's prediction.
       const objectState = state.object;
-      const isResultFallback =
-        head.destination === "result" &&
-        objectState !== undefined &&
-        !objectState.decoded;
-      // An \object with no \objdata child at all is a different construct substitution from one whose \objdata merely fails to decode (buildEmbeddedObject already reports that on its own terms): \result's fallback content silently taking \objdata's place is exactly the kind of substitution SILENT_SKIP_DESTINATIONS's own policy comment warns against, so it is signalled here rather than left to speak for itself.
-      if (isResultFallback && !objectState.objectDataSeen) {
+      const isResultDestination =
+        head.destination === "result" && objectState !== undefined;
+      if (objectState !== undefined && isResultDestination) {
+        // Recorded regardless of whether this \result is ultimately kept or retracted: \object's own group-end diagnostic (below) needs to know whether a \result existed at all, distinctly from whether \objdata did.
+        objectState.resultSeen = true;
+      }
+      // RTF's own <obj> grammar allows only one \objdata child, but a malformed producer can still write two -- recognised here (rather than left to decode twice into two identical embeddedObject blocks) by objectDataSeen already being true from the first one.
+      const isObjectDataDestination =
+        head.destination === "objdata" && known === "objectData";
+      const isDuplicateObjectData =
+        isObjectDataDestination && objectState?.objectDataSeen === true;
+      if (isDuplicateObjectData) {
         sink({
           code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
           severity: "warning",
           message:
-            "an \\object destination has no \\objdata payload at all; its \\result fallback content is used in its place",
+            "an \\object destination has more than one \\objdata child, which RTF's own grammar does not allow; only the first is decoded and this one is discarded",
         });
+      } else if (isObjectDataDestination && objectState !== undefined) {
+        objectState.objectDataSeen = true;
       }
       // The ANSI half of a {\upr {ansi} {\*\ud unicode}} pair is discarded and the \ud half read, which is exactly what the spec says a Unicode-aware reader must do: the \upr destination "does not use the \* keyword; this forces the old RTF readers to pick up the ANSI representation and discard the Unicode one".
       const kind: DestinationKind =
         isHeaderTable || (wrapperChild && head.destination !== "ud")
           ? "skip"
-          : isResultFallback
-            ? "body"
-            : (known ?? (head.ignorable ? "skip" : state.destination));
+          : isDuplicateObjectData
+            ? "skip"
+            : isResultDestination
+              ? "body"
+              : (known ?? (head.ignorable ? "skip" : state.destination));
       if (head.destination !== undefined && !isHeaderTable) {
         if (head.ignorable && known === undefined) {
           sink({
@@ -1457,28 +1464,12 @@ function readRtfDetail(
           child.objectData = { hex: "", binary: [] };
         }
         if (kind === "object") {
-          // A lookahead over this \object's own group, resolved before any of its children (\objdata, \result) are actually read: whether an \objdata child exists at all, and, if so, whether its payload will decode. `index` here is still \object's own groupStart token, unmoved since the top of this iteration, so matchingGroupEnd(tokens, index) is \object's own matching close.
-          const objectGroupEnd = matchingGroupEnd(tokens, index);
-          const objectDataRange = findChildDestinationGroup(
-            tokens,
-            index,
-            objectGroupEnd,
-            "objdata",
-          );
-          const decoded =
-            objectDataRange !== undefined &&
-            readEmbeddedObjectData(
-              objectDataBytes(
-                scanObjectDataTokens(
-                  tokens,
-                  objectDataRange.contentStart,
-                  objectDataRange.end,
-                ),
-              ),
-            ) !== undefined;
+          // Freshly resolved here as the group is actually entered, not predicted ahead of time -- \objdata and \result (below) each report into this same shared state as they are actually read, and \object's own group-end handling (further down) reads it back once every child has been.
           child.object = {
-            decoded,
-            objectDataSeen: objectDataRange !== undefined,
+            decoded: false,
+            objectDataSeen: false,
+            resultSeen: false,
+            resultRange: undefined,
             widthTwips: undefined,
             heightTwips: undefined,
           };
@@ -1493,6 +1484,15 @@ function readRtfDetail(
         index = head.contentStart;
       } else {
         index += 1;
+      }
+      if (objectState !== undefined && isResultDestination) {
+        // \result's content is always rendered provisionally as ordinary body paragraphs -- see ObjectState's own comment -- landing wherever the paragraph state active here already resolves to (the open table cell's own blocks, or the section's). Retracted at \object's own group end if \objdata's real decode succeeds, wherever in the token stream that turns out to happen; left standing otherwise. `object` is cleared on this child (rather than inherited, as cloneGroupState would otherwise carry it forward by reference) so that a malformed \objdata nested inside \result's own fallback content -- not itself wrapped in its own \object, which real RTF never does but a hostile or corrupt file could -- decodes or fails entirely on its own terms, without marking THIS \object decoded and so without retracting real content that happened to render alongside it.
+        child.resultOf = objectState;
+        child.resultOpenAt = {
+          inTable: state.para.inTable,
+          start: builder.blockCount(state.para.inTable),
+        };
+        child.object = undefined;
       }
       stack.push(child);
       state = child;
@@ -1519,10 +1519,39 @@ function readRtfDetail(
         );
         if (embedded !== undefined) {
           builder.addBlock(embedded);
-          // Marks the enclosing \object's shared state so its sibling \result (read next, per <obj>'s own <objdata> <result> order) is skipped rather than read as a fallback -- this reader always prefers the real decoded object over \object's own cached appearance, exactly as Word itself does.
+          // Marks the enclosing \object's shared state so \object's own group-end handling below retracts \result's fallback content instead of leaving it standing alongside the real decoded object -- this reader always prefers the real object over \object's own cached appearance, exactly as Word itself does.
           if (state.object !== undefined) {
             state.object.decoded = true;
           }
+        }
+      }
+      if (state.resultOf !== undefined && state.resultOpenAt !== undefined) {
+        // \result's own group has fully rendered its provisional fallback paragraphs by now (every \par it contained has already closed a real paragraph into whichever list state.para.inTable pointed at). Recorded, not yet acted on: \object's own group-end handling further up the stack retracts this range if \objdata's real decode went on to succeed, and this \result's own group-end cannot know that outcome when \result comes first in the source -- \objdata may not even have been read yet.
+        state.resultOf.resultRange = {
+          inTable: state.resultOpenAt.inTable,
+          start: state.resultOpenAt.start,
+          end: builder.blockCount(state.resultOpenAt.inTable),
+        };
+      }
+      if (state.destination === "object" && state.object !== undefined) {
+        // Every child \objdata/\result this \object's own group can legally contain has, by construction, already closed by the time \object's own closing brace is reached -- so `decoded`, `objectDataSeen` and `resultRange` are all final here, regardless of which sibling the source actually listed first.
+        const objectState = state.object;
+        if (objectState.decoded && objectState.resultRange !== undefined) {
+          builder.removeBlockRange(
+            objectState.resultRange.inTable,
+            objectState.resultRange.start,
+            objectState.resultRange.end,
+          );
+        }
+        // An \object whose \objdata genuinely exists but fails to decode already reports that failure on its own terms (buildEmbeddedObject's own EMBEDDED_OBJECT_UNREADABLE, above) -- this diagnostic is only for the two cases where NOTHING already said so: no \objdata at all, with \result's content used in its place, or no \objdata AND no \result, where the whole construct is silently dropped.
+        if (!objectState.objectDataSeen) {
+          sink({
+            code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+            severity: "warning",
+            message: objectState.resultSeen
+              ? "an \\object destination has no \\objdata payload at all; its \\result fallback content is used in its place"
+              : "an \\object destination has neither \\objdata nor \\result content; the whole construct is dropped",
+          });
         }
       }
       if (state.bookmark !== undefined) {
