@@ -522,7 +522,7 @@ describe("body constructs", () => {
         },
       ]),
     );
-    expect(out).toContain("\\ffhaslistbox");
+    expect(out).toContain("\\ffhaslistbox1");
     expect(out).not.toContain("\\ffdefres");
     expect(out).not.toContain("\\ffres");
     expectBalancedBraces(out);
@@ -546,7 +546,7 @@ describe("body constructs", () => {
       ]),
     );
     expect(out).toContain("\\fftype2");
-    expect(out).toContain("\\ffhaslistbox");
+    expect(out).toContain("\\ffhaslistbox1");
     // FFData.wDef "MUST be less than the number of items in the dropdown list box" -- with zero items there is no valid index, so this writer mints none at all rather than an invalid \ffdefres0.
     expect(out).not.toContain("\\ffdefres");
     expect(out).not.toContain("\\ffres");
@@ -574,7 +574,7 @@ describe("body constructs", () => {
       ]),
     );
     expect(out).toContain("\\fftype2");
-    expect(out).toContain("\\ffhaslistbox");
+    expect(out).toContain("\\ffhaslistbox1");
     // 0 is not less than 0 items, so an empty array is exactly as invalid a target for \ffdefres0 as no array at all.
     expect(out).not.toContain("\\ffdefres");
     expect(out).not.toContain("\\ffres");
@@ -602,7 +602,7 @@ describe("body constructs", () => {
         },
       ]),
     );
-    expect(out).toContain("\\ffhaslistbox");
+    expect(out).toContain("\\ffhaslistbox1");
     // The regression this guards: an earlier version of this writer's `indexOf` returning -1 for an unmatched value was indistinguishable from -1 for "no value recorded at all", so it minted \ffdefres0 either way -- silently picking "Hello" for a document that actually recorded "Bonjour". Neither \ffres nor \ffdefres should exist at all for this shape.
     expect(out).not.toContain("\\ffdefres");
     expect(out).not.toContain("\\ffres");
