@@ -12,7 +12,7 @@ import type { Fib } from "../fib/fib";
 //
 // NumberingDefinitions is deliberately a separate, top-level structure returned alongside ContentDocument rather than folded into ContentListMembership itself -- the identical reasoning and shape ooxml.js's own typed/docx/numbering.ts states for word/numbering.xml's abstractNum/num tables: (1) ContentListMembership is document-schema.js's own schema, shared verbatim across every codec -- widening it with a doc-codec-specific numbering-definition payload would leak this package's own model into a schema the sibling packages also depend on; (2) a definition is a genuinely document-level resource referenced by listId, not a per-paragraph one, so a keyed-map-once, referenced-by-id-many-times shape avoids every paragraph sharing a listId carrying an identical copy of its full level table. NumberingLevel.format/text deliberately reuse ooxml.js's own vocabulary -- MSONFC's own values ([MS-OSHARED] 2.2.1.3) are individually documented as "mapped to the ST_NumberFormat... equivalents", so format is the identical ECMA-376 string ("decimal", "upperRoman", "bullet", ...) ooxml.js's NumberingLevel.format already carries, and text is the identical '%1.'-style placeholder convention -- so a consumer that already knows how to render one already knows how to render the other.
 //
-// READ-ONLY, matching ooxml.js's own docx writer: word/numbering.xml is read into DocxDocument.numberingDefinitions but never written back (typed/docx/write.ts's own stated scope), and writeDocContent does not attempt to write PlfLst/PlfLfo either -- encoding a level's own grpprlPapx/grpprlChpx Prl streams back out is a materially separate task or, per the sibling package's own precedent, not attempted at all.
+// THIS MODULE stays read-only, but writeDocContent no longer stops at reading: list/numbering-write.ts is this module's own inverse, deriving a NumberingDefinitions-shaped structure from the document's own paragraphs (ContentListMembership carries no full level table of its own, only numId/level/format per paragraph -- see that module's own top comment for how it reconstructs one) and encoding it into real PlfLst/PlfLfo bytes. ooxml.js's own docx writer is unaffected and still does not write word/numbering.xml back (typed/docx/write.ts's own stated scope) -- that is a separate package's separate decision, not something this change touches. What list/numbering-write.ts does NOT do, matching this reader's own gaps below: a level's own grpprlPapx/grpprlChpx Prl streams are always written empty (cb 0), since NumberingLevel carries no per-level direct formatting to encode back out -- there was never anything decoded here for a writer to round-trip.
 //
 // WHAT THIS DOES NOT RESOLVE, each a genuine layer of the format rather than an oversight: LFOLVL overrides (PlfLfo's own rgLfoData, [MS-DOC] "LFOData"/"LFOLVL") -- an LFO can restate one or more of its LSTF's own levels with different formatting, and this reader always resolves straight through to the LSTF's own LVL, ignoring any override the LFO itself carries; grpprlPapx/grpprlChpx (a level's own paragraph/character formatting Prl streams) -- parsed past by length, never decoded, since ContentListMembership has nowhere to carry per-level indent/font direct formatting; and legal numbering (LVLF.fLegal), which overrides an inherited placeholder's own format rather than the level's own -- text still carries the placeholder verbatim, uninterpreted by fLegal.
 
@@ -24,7 +24,8 @@ const LFO_SIZE = 16;
 const LSTF_FLAG_SIMPLE_LIST = 0x01;
 
 /** MSONFC ([MS-OSHARED] 2.2.1.3), mapped to its own documented ST_NumberFormat equivalent -- the identical vocabulary ooxml.js's NumberingLevel.format carries verbatim from word/numbering.xml's own w:numFmt/@w:val. Every member through msonfcUCRus (0x3B) is a real numbered/lettered/ideograph format; 0x17 (msonfcBullet) is handled separately below since PlfLfo also treats it as the "no number sequence, but has bullets" case LVLF's own field text calls out by name. */
-const NUMBER_FORMAT_BY_NFC: Readonly<Record<number, string>> = {
+// Exported so numbering-write.ts can invert it (numbering-write.ts's own top comment) rather than hand-maintaining a second, independently-drifting copy of the same MSONFC vocabulary.
+export const NUMBER_FORMAT_BY_NFC: Readonly<Record<number, string>> = {
   0x00: "decimal",
   0x01: "upperRoman",
   0x02: "lowerRoman",
@@ -86,8 +87,11 @@ const NUMBER_FORMAT_BY_NFC: Readonly<Record<number, string>> = {
   0x3a: "russianLower",
   0x3b: "russianUpper",
 };
-/** MSONFC's own "Specifies that the sequence will not display any numbering" sentinel -- not itself an ST_NumberFormat value, so this reader's own spelling for it ("none") is a deliberate literal rather than a value MSONFC's table states. */
-const NFC_NONE = 0xff;
+/** MSONFC's own "Specifies that the sequence will not display any numbering" sentinel -- not itself an ST_NumberFormat value, so this reader's own spelling for it ("none") is a deliberate literal rather than a value MSONFC's table states. Exported so numbering-write.ts can state the identical sentinel by hand for a "none"-format level, since it falls outside NUMBER_FORMAT_BY_NFC's own invertible table (see that module's own NFC_BY_FORMAT). */
+export const NFC_NONE = 0xff;
+
+/** LVLF's own info byte ([MS-DOC] 2.9.148), bit 3: fNoRestart -- "Specifies whether this level does not restart its numbering sequence when a level with a lower ilvl is encountered", the identical "restarts when a more significant level is encountered" default NumberingLevel.restart's own field comment already describes. The low two bits (0x01/0x02) are jc's own 2-bit justification field, not flag bits at all -- neither this reader nor NumberingLevel decodes jc, so only this one bit of the whole info byte is ever consulted. Exported so numbering-write.ts can state the identical bit rather than hand-maintaining a second, independently-drifting copy (this module's own top comment: the writer already does this for NUMBER_FORMAT_BY_NFC). */
+export const LVLF_FLAG_NO_RESTART = 0x08;
 
 function numberFormatFor(nfc: number): string {
   if (nfc === NFC_NONE) {
@@ -195,7 +199,7 @@ function readLvl(bytes: Uint8Array, offset: number): ParsedLvl {
   const iStartAt = readInt32LE(bytes, offset);
   const nfc = readUint8(bytes, offset + 4);
   const flags = readUint8(bytes, offset + 5);
-  const fNoRestart = (flags & 0x02) !== 0;
+  const fNoRestart = (flags & LVLF_FLAG_NO_RESTART) !== 0;
   const rgbxchNums = readRgbxchNums(bytes, offset + 6);
   const cbGrpprlChpx = readUint8(bytes, offset + 24);
   const cbGrpprlPapx = readUint8(bytes, offset + 25);

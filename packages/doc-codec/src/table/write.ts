@@ -35,11 +35,13 @@ export interface WriteParagraph {
     ContentParagraph,
     | "alignment"
     | "indentLeftPt"
+    | "indentRightPt"
     | "indentFirstLinePt"
     | "spacingBeforePt"
     | "spacingAfterPt"
     | "lineSpacing"
     | "pageBreakBefore"
+    | "list"
   >;
   /** Extra grpprl bytes appended after encodeParagraphGrpprl's own output -- sprmPFInTable on every table paragraph, plus sprmPFTtp and the row's own TAP on a row's trailing mark. */
   readonly extraGrpprl: readonly number[];

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildFib } from "../test-support/fib";
 import { parseFib } from "../fib/fib";
-import { readNumberingDefinitions } from "./numbering";
+import { LVLF_FLAG_NO_RESTART, readNumberingDefinitions } from "./numbering";
 
 // Hand-built PlfLst/PlfLfo byte sequences, assembled directly from [MS-DOC] 2.9.226 (PlfLst)/2.9.191 (LSTF)/2.9.196 (LVL)/2.9.148 (LVLF)/2.9.343 (Xst)/2.9.225 (PlfLfo)/2.9.181 (LFO)'s own field tables, independently of numbering.ts's own reader -- so a test asserting against these bytes is checking the reader's understanding of the spec, not agreement with a second copy of the same layout (the identical convention table/decoration.test.ts states for its own hand-built Brc80/Shd80 fixtures).
 
@@ -73,7 +73,7 @@ function buildLvl(spec: LvlSpec): number[] {
     rgbxchNumsPadded.push(0);
   }
   const fNoRestart = spec.restart !== undefined;
-  const flags = fNoRestart ? 0x02 : 0x00;
+  const flags = fNoRestart ? LVLF_FLAG_NO_RESTART : 0x00;
   const lvlf = [
     ...i32(spec.startAt ?? 1),
     spec.nfc,

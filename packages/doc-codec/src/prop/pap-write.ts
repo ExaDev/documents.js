@@ -7,9 +7,10 @@ import { DocFormatError } from "../errors";
 
 /** sprmPJc: a 1-byte logical justification. */
 const SPRM_P_JC = 0x2461;
-/** sprmPDxaLeft / sprmPDxaLeft1: 2-byte signed twips. There is no writer-side counterpart for sprmPDxaRight (indent from the right margin): pap.ts's own reader folds it into a ParagraphProperties.indentRightPt field, but ContentParagraphSchema (document-schema.js) carries no such field for any writer to round-trip -- the right-indent value the reader computes is simply not part of the shared schema's paragraph vocabulary. */
+/** sprmPDxaLeft / sprmPDxaLeft1 / sprmPDxaRight: 2-byte signed twips. */
 const SPRM_P_DXA_LEFT = 0x845e;
 const SPRM_P_DXA_LEFT1 = 0x8460;
+const SPRM_P_DXA_RIGHT = 0x845d;
 /** sprmPDyaBefore / sprmPDyaAfter: 2-byte unsigned twips. */
 const SPRM_P_DYA_BEFORE = 0xa413;
 const SPRM_P_DYA_AFTER = 0xa414;
@@ -17,6 +18,13 @@ const SPRM_P_DYA_AFTER = 0xa414;
 const SPRM_P_DYA_LINE = 0x6412;
 /** sprmPFPageBreakBefore: a 1-byte Bool8. */
 const SPRM_P_F_PAGE_BREAK_BEFORE = 0x2407;
+/** sprmPIlfo: a 2-byte signed one-based index into PlfLfo.rgLfo -- which list membership names. 0x0000 is prop/pap.ts's own ILFO_NOT_IN_LIST sentinel ("This paragraph is not in a list"), restated here rather than imported for the same reason every other opcode in this file is: this module's exports are coupled to the specification's own field table, not to a sibling module's private reader constants. */
+const SPRM_P_ILFO = 0x460b;
+const ILFO_NOT_IN_LIST = 0x0000;
+/** sprmPIlvl: a 1-byte zero-based list level. */
+const SPRM_P_ILVL = 0x260a;
+/** sprmPIlvl's own 0..8 range: a non-simple list's LSTF always carries exactly nine LVLs ([MS-DOC] 2.9.148), so a level outside it names a depth this format cannot express at all. */
+const MAX_LIST_LEVEL = 8;
 
 const TWIPS_PER_POINT = 20;
 const LSPD_MULTIPLE_DIVISOR = 240;
@@ -68,17 +76,22 @@ function pointsToTwips(pt: number): number {
 }
 
 // Builds the PapxInFkp grpprl for one paragraph's direct formatting (excluding istd, which write.ts's caller places in GrpPrlAndIstd's own field rather than as a sprm -- see prop/fkp-write.ts). Returns an empty array for a paragraph with no direct formatting at all.
+//
+// `ilfoOf` resolves a paragraph's own ContentListMembership.numId to the one-based ilfo write.ts's own list/numbering-write.ts minted for it (every distinct numId in the document, in first-occurrence order -- see that module's own top comment) -- required whenever ANY paragraph in the call's document carries `list`, even one whose own numId this particular paragraph does not use, since the caller mints the whole map once up front. A paragraph whose `list` names a level but no numId (document-schema.js's own "a source format carries only a depth" case, e.g. an OOXML drawing paragraph's a:pPr/@lvl) writes neither sprm: [MS-DOC] has no way to state a list level without a list to belong to, so this is a genuine, permanent format gap rather than something to approximate -- the identical silent-drop precedent this writer already applies to hyperlinks and fields (see the README's own Writing scope table).
 export function encodeParagraphGrpprl(
   paragraph: Pick<
     ContentParagraph,
     | "alignment"
     | "indentLeftPt"
+    | "indentRightPt"
     | "indentFirstLinePt"
     | "spacingBeforePt"
     | "spacingAfterPt"
     | "lineSpacing"
     | "pageBreakBefore"
+    | "list"
   >,
+  ilfoOf: (numId: string) => number,
 ): number[] {
   const bytes: number[] = [];
   if (paragraph.alignment !== undefined) {
@@ -89,6 +102,13 @@ export function encodeParagraphGrpprl(
       bytes,
       SPRM_P_DXA_LEFT,
       int16(pointsToTwips(paragraph.indentLeftPt), "paragraph indentLeftPt"),
+    );
+  }
+  if (paragraph.indentRightPt !== undefined) {
+    pushSprm(
+      bytes,
+      SPRM_P_DXA_RIGHT,
+      int16(pointsToTwips(paragraph.indentRightPt), "paragraph indentRightPt"),
     );
   }
   if (paragraph.indentFirstLinePt !== undefined) {
@@ -136,6 +156,28 @@ export function encodeParagraphGrpprl(
   }
   if (paragraph.pageBreakBefore === true) {
     pushSprm(bytes, SPRM_P_F_PAGE_BREAK_BEFORE, [0x01]);
+  }
+  // Every paragraph states its own list membership explicitly -- either a real ilvl/ilfo pair, or an explicit "not in a list" zero pair -- rather than writing the sprms only when list membership is present. Omitting them for a non-list paragraph was the earlier shape of this code, and it is a real, verified-reproducible bug: this package's own reader defaults an unstated ilvl/ilfo to 0 fresh per paragraph (prop/pap.ts starts every ParagraphProperties from an empty object), but a real consumer does not -- confirmed directly against a real LibreOffice-authored .doc round trip -- it carries the PREVIOUSLY-SEEN ilfo/ilvl forward across any paragraph whose own grpprl doesn't explicitly restate or clear them, treating "sprm absent" as "no change" rather than "reset to none". So a plain paragraph immediately following a list item was silently absorbed into that list by a real consumer, even though this package's own round trip read it back correctly (the identical shape of self-blind-spot ExaDev/documents.js#892 was: a lenient reader tolerating bytes a real, stricter consumer does not). Explicitly zeroing both sprms on every non-list paragraph is the verified fix: it states "no list" rather than "no change", which is the only spelling that stops the carry-forward.
+  if (paragraph.list?.numId !== undefined) {
+    if (paragraph.list.level > MAX_LIST_LEVEL) {
+      throw new DocFormatError(
+        `paragraph list level ${paragraph.list.level} is outside the 0..${MAX_LIST_LEVEL} range a non-simple LSTF's fixed nine LVLs can address`,
+      );
+    }
+    // sprmPIlvl is written before sprmPIlfo -- not because [MS-DOC] itself states an ordering constraint here (it doesn't: nothing in the spec's own sprm field tables requires one Prl to precede the other), but because a real consumer's own list-formatting code does, confirmed directly against a real LibreOffice-authored .doc's own paragraph grpprl, which always states level before id. A real consumer applies a paragraph's list membership at the moment it sees the id sprm, using whatever level the grpprl has already set by that point, so id-before-level silently flattens every level back to 0 on read by any consumer but this package's own. This package's own reader cannot catch a regression here: prop/pap.ts folds sprms by last-Prl-wins regardless of the order they arrived in, so a round trip through this package alone reads back correctly either way -- the identical shape of self-blind-spot bug ExaDev/documents.js#892 was (a lenient reader tolerating bytes a real, stricter consumer rejects), just for an sprm's own operand order rather than a missing trailing byte.
+    pushSprm(bytes, SPRM_P_ILVL, [paragraph.list.level]);
+    pushSprm(
+      bytes,
+      SPRM_P_ILFO,
+      int16(ilfoOf(paragraph.list.numId), "paragraph list ilfo"),
+    );
+  } else {
+    pushSprm(bytes, SPRM_P_ILVL, [0]);
+    pushSprm(
+      bytes,
+      SPRM_P_ILFO,
+      int16(ILFO_NOT_IN_LIST, "paragraph list ilfo"),
+    );
   }
   return bytes;
 }
