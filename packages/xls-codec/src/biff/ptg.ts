@@ -9,7 +9,7 @@ import { readShortXLUnicodeString, readXLUnicodeString } from "./strings";
 //
 // The tokens are postfix (reverse Polish): an operand token pushes a value, an operator or function token pops however many operands it needs and pushes the combined result. This module carries that same shape one level up -- an OPERAND STACK of already-formatted text, each entry tagged with the precedence of whatever built it -- so a binary operator or function call is always "pop N, join, push" and the only real complexity is deciding when a child needs literal parentheses around it before it can sit inside its parent's text. That decision is precedence comparison, not a special case: wrap the left child when its own precedence is lower than the operator being applied, wrap the right child when its precedence is lower than OR EQUAL to it. The equal case on the right is what reproduces `a-(b-c)` correctly (and, for a commutative operator, only ever fires when the postfix stream itself demanded that grouping -- which happens only when the formula's own author wrote explicit parentheses, since a bare `a+b+c` always compiles left-nested) -- so this one rule is correct for every operator here regardless of its true associativity, and this module never needs to know what that associativity actually is.
 //
-// A shared formula's PtgExp and an array constant's PtgArray are now resolved rather than aborting the parse -- see readPtgExpBase (joined against a ShrFmla/Array record by workbook/sheet.ts's collectFormulaGroups), the ParseFormulaOptions.relativeTo-driven PtgRefN/PtgAreaN expansion, and the ParseFormulaOptions.rgcb-driven PtgArray/PtgExtraArray handling below. What remains unrecognised -- a data table's PtgTbl, a defined name's PtgName/PtgNameX, a natural-language "Elf" reference, a genuinely external workbook's 3D reference -- still aborts the whole parse rather than guessing: parseFormulaText returns undefined, and the caller leaves ContentSheetCell.formula absent for that cell exactly as it already does for a cell this reader cannot map at all. A BiffFormatError from a cursor read past the end of rgce is not caught here: cce already bounds a well-formed token stream exactly, so a cursor genuinely running past it means this module misjudged a token's own byte width, which is a bug worth failing loudly on rather than silently discarding.
+// A shared formula's PtgExp, an array constant's PtgArray, and a genuinely external 3D reference are now resolved rather than aborting the parse -- see readPtgExpBase (joined against a ShrFmla/Array record by workbook/sheet.ts's collectFormulaGroups), the ParseFormulaOptions.rgcb-driven PtgArray/PtgExtraArray handling below, and FormulaSheetContext.sheetRanges' ExternalSheetLabel case respectively. What remains unrecognised -- a data table's PtgTbl, a defined name's PtgName/PtgNameX, a natural-language "Elf" reference -- still aborts the whole parse rather than guessing: parseFormulaText returns undefined, and the caller leaves ContentSheetCell.formula absent for that cell exactly as it already does for a cell this reader cannot map at all. A BiffFormatError from a cursor read past the end of rgce is not caught here: cce already bounds a well-formed token stream exactly, so a cursor genuinely running past it means this module misjudged a token's own byte width, which is a bug worth failing loudly on rather than silently discarding.
 
 /** A 3D reference's sheet scope, resolved from its ixti through EXTERNSHEET and a self-referencing SupBook ([MS-XLS] 2.4.271, 2.4.106, 2.5.344): the first and last sheet of the reference, both direct BoundSheet8 indices into FormulaSheetContext.sheets. A single-sheet 3D reference has `firstSheetIndex === lastSheetIndex`. Defined here rather than alongside the globals reader that produces it, since resolving it into reference text is what this module exists to do. */
 export interface SheetRange {
@@ -17,10 +17,21 @@ export interface SheetRange {
   readonly lastSheetIndex: number;
 }
 
-/** What a 3D reference's own ixti resolves against: the workbook's sheets in BoundSheet8 order (only the name is needed here), and each ixti's own resolved sheet range (undefined where this reader does not resolve it -- see WorkbookGlobals.sheetRanges, which this type's own sheetRanges field matches field-for-field). */
+/**
+ * A 3D reference's sheet-prefix label, already fully formatted by workbook/globals.ts, for an ixti this reader cannot resolve into a plain SheetRange -- a genuinely external workbook (label carries `[workbook]sheet` or `[workbook]first:last`, the workbook name itself a diagnostic placeholder when this reader's own deliberately partial VirtualPath decoding cannot isolate one) or a supporting link of a kind this reader never resolves a sheet name from at all (add-in, DDE/OLE, same-sheet, unused, or an unresolved sheet index -- label then carries a bracketed `#REF!(reason)` diagnostic outright). Kept as a single pre-formatted string rather than a further structured shape, since resolveSheetLabel below only ever needs the finished label text and every other consumer of a 3D reference's sheet name is upstream of this module (see WorkbookGlobals.sheetRanges, which this type's own sheetRanges field matches field-for-field).
+ *
+ * No `kind` tag: SheetRange's two fields are both required and this type's own `label` field is required too, so the two shapes are already mutually exclusive by construction and a plain `"label" in candidate` check discriminates them.
+ */
+export interface ExternalSheetLabel {
+  readonly label: string;
+}
+
+/** What a 3D reference's own ixti resolves against: the workbook's sheets in BoundSheet8 order (only the name is needed here), and each ixti's own resolved sheet scope (undefined where this reader has nothing at all to say about it -- see WorkbookGlobals.sheetRanges, which this type's own sheetRanges field matches field-for-field). */
 export interface FormulaSheetContext {
   readonly sheets: readonly { readonly name: string }[];
-  readonly sheetRanges: readonly (SheetRange | undefined)[];
+  readonly sheetRanges: readonly (
+    SheetRange | ExternalSheetLabel | undefined
+  )[];
 }
 
 /** One already-formatted operand on the stack, carrying the precedence of the operator that produced it (or PRECEDENCE_ATOMIC for a literal, a reference, or a function call) so its parent can decide whether it needs wrapping in literal parentheses. */
@@ -318,7 +329,7 @@ function quoteSheetLabel(label: string): string {
     : `'${label.replaceAll("'", "''")}'`;
 }
 
-/** The `'Sheet'!` or `'First:Last'!` prefix a 3D reference's own ixti resolves to, or undefined when this reader does not resolve it (see WorkbookGlobals.sheetRanges) -- an unresolved ixti aborts the whole formula's parse, the same as any other unsupported token. */
+/** The `'Sheet'!`, `'First:Last'!`, `'[Book]Sheet'!`, or `'#REF!(reason)'!` prefix a 3D reference's own ixti resolves to, or undefined only when this reader has nothing at all to say about it (an ixti past the end of EXTERNSHEET's own array) -- see WorkbookGlobals.sheetRanges. An external or otherwise-unresolved reference no longer aborts the whole formula's parse the way a genuinely unresolvable ixti still does: ExternalSheetLabel always carries a fully-formatted label, diagnostic placeholder included, so the formula stays present with whatever this reader could recover. */
 function resolveSheetLabel(
   ixti: number,
   context: FormulaSheetContext,
@@ -326,6 +337,9 @@ function resolveSheetLabel(
   const range = context.sheetRanges[ixti];
   if (range === undefined) {
     return undefined;
+  }
+  if ("label" in range) {
+    return `${quoteSheetLabel(range.label)}!`;
   }
   const first = context.sheets[range.firstSheetIndex]?.name;
   const last = context.sheets[range.lastSheetIndex]?.name;
@@ -409,7 +423,7 @@ const PTG_ATTR_SPACE_SEMI = 0x41;
 const PTG_ATTR_TRAILING_BYTES = 2;
 
 /**
- * Parses a Formula record's compiled expression into the text a spreadsheet application would show, or returns undefined for a token this reader does not resolve -- a defined name, a natural-language reference, a data table, or a 3D reference into a genuinely external workbook (see the module comment for the full list). The caller leaves ContentSheetCell.formula absent in that case, exactly as for any other unsupported construct.
+ * Parses a Formula record's compiled expression into the text a spreadsheet application would show, or returns undefined for a token this reader does not resolve -- a defined name, a natural-language reference, or a data table (see the module comment for the full list). The caller leaves ContentSheetCell.formula absent in that case, exactly as for any other unsupported construct.
  *
  * `rgce` is the formula's own token bytes, already sliced to their declared length (CellParsedFormula.cce/SharedParsedFormula.cce/ArrayParsedFormula.cce) by the caller -- this function reads exactly that many bytes and nothing past them.
  */

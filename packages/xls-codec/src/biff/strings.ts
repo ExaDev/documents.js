@@ -69,6 +69,21 @@ export function readXLUnicodeString(cursor: BlockCursor): string {
   );
 }
 
+/** An XLUnicodeStringNoCch ([MS-XLS] 2.5.295): a flags byte then the characters, with no character-count field of its own -- the containing structure states the count separately (SupBook's own `cch`, for its `virtPath` field), so the caller supplies it here rather than this function reading a fresh prefix. */
+export function readXLUnicodeStringNoCch(
+  cursor: BlockCursor,
+  count: number,
+): string {
+  const startBlock = cursor.blockPosition();
+  const flags = cursor.u8();
+  return readCharacters(
+    cursor,
+    count,
+    (flags & FLAG_HIGH_BYTE) !== 0,
+    startBlock,
+  );
+}
+
 /** A ShortXLUnicodeString ([MS-XLS] 2.5.240): as above, with a one-byte character count. */
 export function readShortXLUnicodeString(cursor: BlockCursor): string {
   const startBlock = cursor.blockPosition();

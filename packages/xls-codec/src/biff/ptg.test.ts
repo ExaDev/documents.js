@@ -333,6 +333,16 @@ describe("parseFormulaText", () => {
     const rgce = bytes(...ptgRef(0, 0), ...ptgRef(0, 1)); // two operands, no combining operator
     expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
   });
+
+  it("resolves a 3D reference through an ExternalSheetLabel, quoting the whole bracketed label", () => {
+    // workbook/globals.ts hands this module an already-formatted label for a genuinely external workbook (or a diagnostic placeholder) rather than a plain SheetRange -- resolveSheetLabel's own quoting applies uniformly regardless of which one it is.
+    const context: FormulaSheetContext = {
+      sheets: [],
+      sheetRanges: [{ label: "[Budget.xlsx]Sheet1" }],
+    };
+    const rgce = bytes(0x5a, ...u16(0), ...ptgRef(0, 0).slice(1));
+    expect(parseFormulaText(rgce, context)).toBe("'[Budget.xlsx]Sheet1'!A1");
+  });
 });
 
 describe("parseFormulaText shared-formula relative tokens (PtgRefN/PtgAreaN)", () => {
