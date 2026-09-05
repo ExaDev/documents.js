@@ -252,6 +252,24 @@ function buildFixturePackage(): Package {
       el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("D")])])]),
     ]),
   ]);
+  const cellNonNumericWidth = el("a:tc", {}, [
+    el("a:tcPr", {}, [
+      el("a:lnL", { w: "abc" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]), // @w is not a number at all -- not just zero
+      el("a:lnR", { w: "12700" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "FF00FF" })]),
+      ]),
+    ]),
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("E")])])]),
+    ]),
+  ]);
+  const cellF = el("a:tc", {}, [
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("F")])])]),
+    ]),
+  ]);
   const tbl = el("a:tbl", {}, [
     el("a:tblGrid", {}, [
       el("a:gridCol", { w: "1270000" }),
@@ -260,6 +278,7 @@ function buildFixturePackage(): Package {
     el("a:tr", { h: "457200" }, [mergedCell, continuationCell]),
     el("a:tr", {}, [cellA, cellB]),
     el("a:tr", {}, [cellAllEdgesUnresolvable, cellZeroWidthAndUnknownDash]),
+    el("a:tr", {}, [cellNonNumericWidth, cellF]),
   ]);
   const tableFrame = el("p:graphicFrame", {}, [
     el("p:nvGraphicFramePr", {}, [el("p:cNvPr", { id: "5", name: "Table 1" })]),
@@ -733,6 +752,15 @@ describe("readPptxContent: tables", () => {
     const table = asTable(tableShape?.blocks[0]);
     expect(table.rows[2]?.cells[1]?.borders).toEqual({
       right: { color: { r: 0, g: 0, b: 1 }, widthPt: 1, style: "solid" },
+    });
+  });
+
+  it("treats a genuinely non-numeric @w (not just zero) as an unresolvable edge, leaving the cell's other edges readable", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[3]?.cells[0]?.borders).toEqual({
+      right: { color: { r: 1, g: 0, b: 1 }, widthPt: 1 },
     });
   });
 });
