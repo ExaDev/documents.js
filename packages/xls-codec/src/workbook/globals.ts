@@ -269,6 +269,8 @@ function diagnosticLabel(reason: string): string {
 
 /**
  * One XTI's own scope resolved against its SupBook -- a plain SheetRange when the SupBook is this same, self-referencing workbook and both sheet indices are real ([MS-XLS] 2.5.344's own `-1` "could not be found" and `-2` "workbook-level" sentinels aside), otherwise an ExternalSheetLabel carrying whatever this reader could recover (an external workbook's own file name and sheet name(s), when the SupBook resolves that far) or a diagnostic placeholder, for a supporting-link kind or a sheet index this reader does not resolve a name from at all.
+ *
+ * The SupBook's own kind is checked before the `-2` sentinel, not after: [MS-XLS] 2.5.344's itabFirst/itabLast table produces `-2` for a same-sheet, add-in, DDE, and OLE supporting link alike (none of them names a sheet at all), so treating every `-2` as a generic "workbook-level reference" before asking what kind of SupBook it belongs to would overwrite each of those already-specific `unresolvable` diagnostics with a less useful, wrong one. `-2` only means "workbook-level" for the two kinds that otherwise resolve a real sheet scope -- self and external-workbook -- so the sentinel is scoped to those.
  */
 function resolveXti(
   supBook: SupBookInfo | undefined,
@@ -276,27 +278,44 @@ function resolveXti(
   itabLast: number,
 ): SheetRange | ExternalSheetLabel {
   if (supBook === undefined) {
-    return { label: diagnosticLabel("supporting link index out of range") };
+    return {
+      label: diagnosticLabel("supporting link index out of range"),
+      diagnostic: true,
+    };
+  }
+  if (supBook.kind === "unresolvable") {
+    return { label: diagnosticLabel(supBook.diagnostic), diagnostic: true };
   }
   if (itabFirst === -2 || itabLast === -2) {
-    return { label: diagnosticLabel("workbook-level reference") };
+    return {
+      label: diagnosticLabel("workbook-level reference"),
+      diagnostic: true,
+    };
   }
   if (supBook.kind === "self") {
     return itabFirst >= 0 && itabLast >= 0
       ? { firstSheetIndex: itabFirst, lastSheetIndex: itabLast }
-      : { label: diagnosticLabel("sheet not found") };
+      : { label: diagnosticLabel("sheet not found"), diagnostic: true };
   }
-  if (supBook.kind === "unresolvable") {
-    return { label: diagnosticLabel(supBook.diagnostic) };
-  }
-  const bookLabel = supBook.fileName ?? "EXTERNAL";
   const first = itabFirst >= 0 ? supBook.sheetNames[itabFirst] : undefined;
   const last = itabLast >= 0 ? supBook.sheetNames[itabLast] : undefined;
   if (first === undefined || last === undefined) {
-    return { label: `[${bookLabel}]${diagnosticLabel("sheet not found")}` };
+    const bookLabel = supBook.fileName ?? "EXTERNAL";
+    return {
+      label: `[${bookLabel}]${diagnosticLabel("sheet not found")}`,
+      diagnostic: true,
+    };
+  }
+  if (supBook.fileName === undefined) {
+    // The sheet name(s) are real, recovered data, but the workbook's own name is not -- "EXTERNAL" is this reader's own placeholder rather than anything the file actually said, so the label as a whole is still not safe to treat as real formula text.
+    return {
+      label: `[EXTERNAL]${first === last ? first : `${first}:${last}`}`,
+      diagnostic: true,
+    };
   }
   return {
-    label: `[${bookLabel}]${first === last ? first : `${first}:${last}`}`,
+    label: `[${supBook.fileName}]${first === last ? first : `${first}:${last}`}`,
+    diagnostic: false,
   };
 }
 
