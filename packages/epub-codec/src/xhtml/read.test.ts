@@ -1482,6 +1482,53 @@ describe("pre / code blocks", () => {
       },
     ]);
   });
+
+  it("keeps a footnote reference construct carried by inline content inside a <pre>, rather than discarding it silently", () => {
+    const blocks = read(
+      body(
+        '<pre>see<a epub:type="noteref" href="#fn1">1</a></pre>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [
+        { text: "see", fontFamily: "Courier New" },
+        { text: "1", fontFamily: "Courier New" },
+      ],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
+
+  it("keeps a footnote reference construct nested inside a wrapping element inside a <pre>, and leaves surrounding non-footnote text merged into its own run", () => {
+    const blocks = read(
+      body(
+        '<pre>before <span>middle</span> see<a epub:type="noteref" href="#fn1">1</a> after</pre>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [
+        { text: "before middle see", fontFamily: "Courier New" },
+        { text: "1", fontFamily: "Courier New" },
+        { text: " after", fontFamily: "Courier New" },
+      ],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
 });
 
 describe("hr", () => {
