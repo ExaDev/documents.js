@@ -276,6 +276,89 @@ describe("writeXhtmlBody", () => {
     expect(roundTrip(blocks)).toEqual(blocks);
   });
 
+  // ExaDev/documents.js#994's round-10 regression: writeRunRangeNodes's own while loop only iterated while there was at least one run left (`index < runs.length`), so a paragraph with zero runs never reached its own construct extents at all -- the read side already recovers a bare footnote-reference anchor sitting alone between two block siblings (readContainerChildren's own segment flush) as exactly this shape (runs: [], one construct extent with startRun === endRun === 0), but the writer silently dropped the construct on write, producing an empty <p></p> and orphaning the footnote body it once pointed at.
+  it("writes and re-reads a bare footnote reference construct sitting alone between two paragraphs, with no runs of its own", () => {
+    const blocks: ContentBlock[] = [
+      { kind: "paragraph", runs: [{ text: "Before" }] },
+      {
+        kind: "paragraph",
+        runs: [],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 0,
+            endRun: 0,
+          },
+        ],
+      },
+      { kind: "paragraph", runs: [{ text: "After" }] },
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+      },
+      { kind: "paragraph", runs: [{ text: "Note body." }] },
+      { kind: "constructEnd" },
+    ];
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  // The identical writer gap also orphaned a table caption whose only content is a footnote reference: readTableCaption's own construct check (src/xhtml/read.ts) recovers `<caption><a epub:type="noteref" href="#fn1"></a></caption>` as this same runs: [], construct-only shape, read immediately before the table -- the writer's bug was in the shared run-range walk, not anything caption-specific, so this proves the fix holds for that read shape too rather than only the bare-segment one above.
+  it("writes and re-reads a bare footnote reference construct in a paragraph sitting immediately before a table, matching a caption's own read shape", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 0,
+            endRun: 0,
+          },
+        ],
+      },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+      },
+      { kind: "paragraph", runs: [{ text: "Note body." }] },
+      { kind: "constructEnd" },
+    ];
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  // A pre-existing bug in the same writer function, made more reachable by this round's own point-anchor-producing read fixes above: a point anchor (startRun === endRun, "a point anchor at the boundary before run startRun" per document-schema.js's own RunConstructExtent) sitting strictly inside a paragraph's run sequence -- not just at its very start -- used to advance the write loop past the run at that same index without ever rendering it, silently deleting that run's own text rather than merely failing to wrap it in the anchor.
+  it("writes and re-reads a point-anchor footnote reference sitting between two runs, preserving the run at that index", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "See" }, { text: "1." }],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 1,
+            endRun: 1,
+          },
+        ],
+      },
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+      },
+      { kind: "paragraph", runs: [{ text: "Note body." }] },
+      { kind: "constructEnd" },
+    ];
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
   it("writes an image using the registered manifest href", () => {
     const xml = write([
       {

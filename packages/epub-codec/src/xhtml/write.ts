@@ -272,6 +272,8 @@ function isFootnoteExtent(
 }
 
 // The run-range walk shared by writeRunsToNodes and its <pre> twin writePreRunsToNodes below: both need to walk one paragraph's own runs in order, recognising wherever a footnote-reference construct extent starts and bracketing that extent's own run range in an <a epub:type="noteref">, and both differ only in HOW a run (or an extent's own range of them) becomes XML nodes -- writeRunsToNodes wraps a run in its own formatting elements and splits an embedded newline into a <br/>, while writePreRunsToNodes emits a run's text verbatim with neither -- so the extent-finding loop itself is written once here and parameterised over that one difference, rather than duplicated with the same footnote-matching logic copied into both.
+//
+// The walk bounds itself with `index <= runs.length`, not `<`, and treats a point anchor (document-schema.js's own RunConstructExtent: startRun === endRun, "a point anchor at the boundary before run startRun") as consuming no run at all, for two reasons that share one root cause. First, a point anchor can sit at the boundary past the last real run -- a construct-only paragraph (zero runs, one footnote reference with startRun === endRun === 0) has runs.length === 0, so an index bound of `< runs.length` would never let the loop body run even once, silently dropping the extent along with the empty anchor markup it should still produce. Second, a point anchor sitting strictly inside the run sequence marks a boundary, not a range: renderExtentRange over its own empty rangeRuns correctly emits an empty <a>, but the run actually sitting at that same index is a separate run the anchor does not wrap and must still be rendered in its own right -- treating the point extent as "consuming" that index (as if it were an ordinary non-empty extent advancing past its own endRun) would silently delete that run's text instead of merely failing to wrap it.
 function writeRunRangeNodes(
   runs: readonly ContentRun[],
   constructs: readonly RunConstructExtent[] | undefined,
@@ -281,7 +283,7 @@ function writeRunRangeNodes(
   const footnoteExtents = (constructs ?? []).filter(isFootnoteExtent);
   const out: XmlNode[] = [];
   let index = 0;
-  while (index < runs.length) {
+  while (index <= runs.length) {
     const extent = footnoteExtents.find((e) => e.startRun === index);
     if (extent !== undefined) {
       const rangeRuns = runs.slice(extent.startRun, extent.endRun);
@@ -292,8 +294,11 @@ function writeRunRangeNodes(
           renderExtentRange(rangeRuns),
         ),
       );
-      index = Math.max(extent.endRun, index + 1);
-      continue;
+      if (extent.endRun > extent.startRun) {
+        index = extent.endRun;
+        continue;
+      }
+      // A point anchor: fall through to render the run sitting at this same index (if any) as its own node, since the anchor's own empty range consumed nothing.
     }
     const run = runs[index];
     if (run !== undefined) {
