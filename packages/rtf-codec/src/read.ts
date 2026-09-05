@@ -1412,7 +1412,7 @@ function readRtfDetail(
           child.field.formField = {
             name: "",
             helpText: "",
-            ownHelp: true,
+            ownHelp: false,
             defaultText: "",
             listItems: [],
             resultIndex: undefined,
