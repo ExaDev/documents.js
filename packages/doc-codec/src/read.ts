@@ -312,6 +312,9 @@ function paragraphAttributes(
   if (properties.indentLeftPt !== undefined) {
     attributes.indentLeftPt = properties.indentLeftPt;
   }
+  if (properties.indentRightPt !== undefined) {
+    attributes.indentRightPt = properties.indentRightPt;
+  }
   if (properties.indentFirstLinePt !== undefined) {
     attributes.indentFirstLinePt = properties.indentFirstLinePt;
   }
