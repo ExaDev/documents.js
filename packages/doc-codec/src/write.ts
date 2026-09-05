@@ -7,6 +7,7 @@ import type { ContentDocument } from "document-schema.js";
 import { SUMMARY_INFORMATION_STREAM, WORD_DOCUMENT_STREAM } from "./detect";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { buildFib } from "./fib/write";
+import { buildNumberingTables, gatherListUsage } from "./list/numbering-write";
 import { layoutMetadataToSummaryInformation } from "./metadata";
 import { encodeCharacterGrpprl } from "./prop/chp-write";
 import { FKP_PAGE_SIZE } from "./prop/fkp";
@@ -98,13 +99,31 @@ export function writeDocContent(
     return index;
   };
 
+  // 1b. Gather every distinct numId the document's paragraphs use into a real NumberingDefinitions (list/numbering-write.ts's own gatherListUsage), minting the one-based ilfo each numId writes as its own sprmPIlfo -- one map built once up front, since a paragraph using numId "3" needs to resolve to the identical ilfo regardless of which other numIds the rest of the document also uses.
+  const listUsage = gatherListUsage(
+    writeParagraphs.map((entry) => entry.properties.list),
+  );
+  const ilfoOf = (numId: string): number => {
+    const ilfo = listUsage.ilfoByNumId.get(numId);
+    if (ilfo === undefined) {
+      throw new DocFormatError(
+        `internal defect: writeDocContent's own list-usage map has no ilfo minted for numId ${JSON.stringify(numId)}`,
+      );
+    }
+    return ilfo;
+  };
+  const numberingTables = buildNumberingTables(listUsage.definitions);
+
   // 2. Encode every run's and paragraph's own direct formatting up front: a run's byte-identical grpprl is what decides whether it merges with its neighbour into one Chpx exception below, so the encoding has to exist before the text stream is laid out. A table paragraph's own extraGrpprl (sprmPFInTable, and on a row's own mark, sprmPFTtp plus its TAP) is appended after its ordinary direct formatting -- table/write.ts already ordered the two so a later table sprm never has to fight an earlier paragraph one for the same property.
   const formatted: FormattedParagraph[] = writeParagraphs.map((entry) => ({
     runs: entry.runs.map((run) => ({
       text: run.text,
       grpprl: encodeCharacterGrpprl(run, fontIndexOf),
     })),
-    grpprl: [...encodeParagraphGrpprl(entry.properties), ...entry.extraGrpprl],
+    grpprl: [
+      ...encodeParagraphGrpprl(entry.properties, ilfoOf),
+      ...entry.extraGrpprl,
+    ],
   }));
 
   // 3. Lay out the logical text stream: every run's characters, each paragraph closed by its own mark -- an ordinary paragraph mark, or, for a table cell/row mark, its own cell mark (writeParagraphs' own terminator). Adjacent stretches with byte-identical formatting merge into one Chpx exception -- what a real producer writes, and what read.ts's own buildRuns must already split back apart at every paragraph boundary regardless of how many paragraphs one exception spans.
@@ -200,7 +219,7 @@ export function writeDocContent(
   });
   wordDocument.set(sepx, fcSepx);
 
-  // 5. The Table stream: the Clx, the two bin tables (keyed on each page's own first fc, read back out of the page itself so the key and the page's content can never disagree), an empty-but-conformant style sheet, and, when at least one run names a font, the font table.
+  // 5. The Table stream: the Clx, the two bin tables (keyed on each page's own first fc, read back out of the page itself so the key and the page's content can never disagree), an empty-but-conformant style sheet, when at least one run names a font the font table, and, when the document uses at least one list, the numbering tables (PlfLst/PlfLfo).
   const clx = buildTextClx(text.length, TEXT_FC);
   const chpxBinTable = buildPropertyBinTable(
     [...chpxPages.map(firstFcOfPage), textFcLim],
@@ -227,6 +246,10 @@ export function writeDocContent(
   const fcStshf = place(stsh);
   const fcPlcfSed = place(plcfSed);
   const fcSttbfFfn = fontTable !== undefined ? place(fontTable) : 0;
+  const fcPlfLst =
+    numberingTables !== undefined ? place(numberingTables.plfLst) : 0;
+  const fcPlfLfo =
+    numberingTables !== undefined ? place(numberingTables.plfLfo) : 0;
   const table = new Uint8Array(cursor);
   table.set(clx, fcClx);
   table.set(chpxBinTable, fcPlcfBteChpx);
@@ -234,6 +257,10 @@ export function writeDocContent(
   table.set(stsh, fcStshf);
   table.set(plcfSed, fcPlcfSed);
   if (fontTable !== undefined) table.set(fontTable, fcSttbfFfn);
+  if (numberingTables !== undefined) {
+    table.set(numberingTables.plfLst, fcPlfLst);
+    table.set(numberingTables.plfLfo, fcPlfLfo);
+  }
 
   const fib = buildFib({
     ccpText: text.length,
@@ -250,6 +277,10 @@ export function writeDocContent(
     lcbStshf: stsh.length,
     fcSttbfFfn,
     lcbSttbfFfn: fontTable?.length ?? 0,
+    fcPlfLst,
+    lcbPlfLst: numberingTables?.lcbPlfLst ?? 0,
+    fcPlfLfo,
+    lcbPlfLfo: numberingTables?.plfLfo.length ?? 0,
   });
   wordDocument.set(fib, 0);
 

@@ -42,6 +42,11 @@ export interface FibWriteSpec {
   /** 0/0 when the document uses no font table (see write.ts). */
   readonly fcSttbfFfn: number;
   readonly lcbSttbfFfn: number;
+  /** 0/0 when the document uses no lists at all (see write.ts and list/numbering-write.ts) -- matching what list/numbering.ts's own readNumberingDefinitions treats as "no lists" on the read side. */
+  readonly fcPlfLst: number;
+  readonly lcbPlfLst: number;
+  readonly fcPlfLfo: number;
+  readonly lcbPlfLfo: number;
 }
 
 export function buildFib(spec: FibWriteSpec): Uint8Array<ArrayBuffer> {
@@ -86,6 +91,8 @@ export function buildFib(spec: FibWriteSpec): Uint8Array<ArrayBuffer> {
   pair(FC_LCB_VALUE_INDEX.fcSttbfFfn, spec.fcSttbfFfn, spec.lcbSttbfFfn);
   pair(FC_LCB_VALUE_INDEX.fcClx, spec.fcClx, spec.lcbClx);
   pair(FC_LCB_VALUE_INDEX.fcPlcfSed, spec.fcPlcfSed, spec.lcbPlcfSed);
+  pair(FC_LCB_VALUE_INDEX.fcPlfLst, spec.fcPlfLst, spec.lcbPlfLst);
+  pair(FC_LCB_VALUE_INDEX.fcPlfLfo, spec.fcPlfLfo, spec.lcbPlfLfo);
   // cswNew (the 2 bytes at FIB_FC_LCB_BLOB_OFFSET + blobBytes) stays 0, which [MS-DOC] mandates for nFib 0x00C1 and which correctly leaves fibRgCswNew absent.
 
   if (readUint16LE(bytes, 0) !== FIB_W_IDENT) {

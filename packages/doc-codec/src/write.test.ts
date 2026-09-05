@@ -405,6 +405,109 @@ describe("writeDocContent", () => {
   });
 });
 
+describe("writeDocContent numbering", () => {
+  it("writes a multi-level numbered list and reads back every level's own format and text", () => {
+    const input = document([
+      paragraph([{ text: "first" }], {
+        list: { numId: "1", level: 0, format: "decimal" },
+      }),
+      paragraph([{ text: "nested" }], {
+        list: { numId: "1", level: 1, format: "upperRoman" },
+      }),
+      paragraph([{ text: "second" }], {
+        list: { numId: "1", level: 0, format: "decimal" },
+      }),
+    ]);
+    const bytes = writeDocContent(input);
+    const result = readDocContent(bytes);
+    expect(paragraphAt(result, 0).list).toEqual({ numId: "1", level: 0 });
+    expect(paragraphAt(result, 1).list).toEqual({ numId: "1", level: 1 });
+    expect(paragraphAt(result, 2).list).toEqual({ numId: "1", level: 0 });
+    expect(result.numbering["1"]?.levels["0"]).toMatchObject({
+      format: "decimal",
+      text: "%1.",
+    });
+    expect(result.numbering["1"]?.levels["1"]).toMatchObject({
+      format: "upperRoman",
+      text: "%2.",
+    });
+  });
+
+  it("writes a bulleted list and reads back its glyph rather than a numbered placeholder", () => {
+    const input = document([
+      paragraph([{ text: "one" }], {
+        list: { numId: "1", level: 0, format: "bullet" },
+      }),
+      paragraph([{ text: "two" }], {
+        list: { numId: "1", level: 0, format: "bullet" },
+      }),
+    ]);
+    const bytes = writeDocContent(input);
+    const result = readDocContent(bytes);
+    expect(result.numbering["1"]?.levels["0"]?.format).toBe("bullet");
+    expect(result.numbering["1"]?.levels["0"]?.text).toBe("•");
+  });
+
+  it("mints a separate ilfo per distinct numId, in first-occurrence order", () => {
+    const input = document([
+      paragraph([{ text: "a" }], {
+        list: { numId: "5", level: 0, format: "decimal" },
+      }),
+      paragraph([{ text: "b" }], {
+        list: { numId: "9", level: 0, format: "lowerLetter" },
+      }),
+    ]);
+    const bytes = writeDocContent(input);
+    const result = readDocContent(bytes);
+    // Neither original numId ("5"/"9") survives: [MS-DOC] addresses a list by a one-based ilfo, not an opaque identifier, so this package's own writer renumbers to whichever ilfo it mints -- see list/numbering-write.ts's own top comment.
+    expect(paragraphAt(result, 0).list).toEqual({ numId: "1", level: 0 });
+    expect(paragraphAt(result, 1).list).toEqual({ numId: "2", level: 0 });
+    expect(result.numbering["1"]?.levels["0"]?.format).toBe("decimal");
+    expect(result.numbering["2"]?.levels["0"]?.format).toBe("lowerLetter");
+  });
+
+  it("writes no numbering tables at all when no paragraph belongs to a list", () => {
+    const bytes = writeDocContent(document([paragraph([{ text: "plain" }])]));
+    const result = readDocContent(bytes);
+    expect(result.numbering).toEqual({});
+  });
+
+  it("round-trips a list membership inside a table cell", () => {
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [200],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  paragraph([{ text: "cell item" }], {
+                    list: { numId: "1", level: 0, format: "decimal" },
+                  }),
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const bytes = writeDocContent(input);
+    const result = readDocContent(bytes);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    const cell = block.rows[0]?.cells[0];
+    const cellParagraph = cell?.blocks[0];
+    if (cellParagraph?.kind !== "paragraph") {
+      throw new Error("expected a paragraph inside the cell");
+    }
+    expect(cellParagraph.list).toEqual({ numId: "1", level: 0 });
+    expect(result.numbering["1"]?.levels["0"]?.format).toBe("decimal");
+  });
+});
+
 describe("writeDocContent tables", () => {
   it("round-trips a simple table's rows, cells and column widths", () => {
     const input = document([
