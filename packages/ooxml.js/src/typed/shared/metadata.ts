@@ -21,6 +21,14 @@ export type DocumentMetadata = z.infer<typeof DocumentMetadataSchema>;
 const CORE_PROPERTIES_PATH = "docProps/core.xml";
 const APP_PROPERTIES_PATH = "docProps/app.xml";
 
+// The namespace URIs the two prefixes patchCoreProperties/setElementText might newly introduce onto a source document actually resolve to -- the identical values documents.js's own addCoreProperties declares when building a core.xml part from scratch. This module never creates a dcterms:-prefixed element (dcterms:created/modified are read-only here), so dcterms/xsi are deliberately not in this table.
+const CORE_PROPERTIES_NAMESPACE_URI_FOR_PREFIX: Readonly<
+  Record<string, string>
+> = {
+  cp: "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+  dc: "http://purl.org/dc/elements/1.1/",
+};
+
 function firstElementText(
   root: XmlElement | undefined,
   tag: string,
@@ -76,7 +84,30 @@ export interface CorePropertiesOverrides {
   readonly keywords?: readonly string[];
 }
 
-// Replaces (or creates) one direct child element's sole text content, in place -- the live-view mutation primitive patchCoreProperties below is built from. Every other child of `parent`, and every attribute already on the matched element, is left exactly as it was.
+// The namespace prefix a tag is qualified with ("dc:title" -> "dc"), or undefined for an unprefixed tag.
+function namespacePrefixOf(tag: string): string | undefined {
+  const colonIndex = tag.indexOf(":");
+  return colonIndex === -1 ? undefined : tag.slice(0, colonIndex);
+}
+
+// Ensures `root` declares the xmlns binding a newly appended element's prefix needs. A legally-minimal docProps/core.xml declaring only the cp namespace (every core-properties child is optional, so a real producer writing only cp:keywords has no reason to ever declare dc) would otherwise gain an unbound dc:title/dc:creator/dc:subject child -- a fatal XML namespace well-formedness error real consumers (Word, LibreOffice) reject outright. Only called from the "create a new element" branch below: an EXISTING element's prefix was already legally bound by whatever produced the source document, so patching its text alone never needs this. Idempotent -- patching two dc-prefixed fields that both need creating (title and author, say) declares xmlns:dc once, not twice.
+function ensureNamespaceDeclared(root: XmlElement, tag: string): void {
+  const prefix = namespacePrefixOf(tag);
+  if (prefix === undefined) {
+    return;
+  }
+  const uri = CORE_PROPERTIES_NAMESPACE_URI_FOR_PREFIX[prefix];
+  if (uri === undefined) {
+    return;
+  }
+  const attrName = `xmlns:${prefix}`;
+  if (root.attributes.some((a) => a.name === attrName)) {
+    return;
+  }
+  root.attributes.push({ name: attrName, value: uri });
+}
+
+// Replaces (or creates) one direct child element's sole text content, in place -- the live-view mutation primitive patchCoreProperties below is built from. Every other child of `parent`, and every attribute already on the matched element, is left exactly as it was. `parent` is always the coreProperties root itself in this module's own callers, so a newly created element's namespace is declared directly on it -- see ensureNamespaceDeclared above.
 function setElementText(parent: XmlElement, tag: string, value: string): void {
   const existing = childrenWithTag(parent, tag)[0];
   const textNode = txt(encodeXmlText(value));
@@ -84,6 +115,7 @@ function setElementText(parent: XmlElement, tag: string, value: string): void {
     existing.children = [textNode];
     return;
   }
+  ensureNamespaceDeclared(parent, tag);
   parent.children.push(el(tag, {}, [textNode]));
 }
 
