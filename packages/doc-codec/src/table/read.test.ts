@@ -879,6 +879,85 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       bottom: RED,
     });
   });
+
+  it("gives a vertically merged anchor the table's real bottom border when its own merge chain -- not the anchor's own physical row -- reaches the table's last row", () => {
+    // Column 0 is vertically merged across all three rows (restart in row 0, continuation in rows 1 and 2); column 1 is plain in every row, purely to give the table a real second column. Every row states the identical six-side cascade, so brcBottom only ever reaches a cell whose own visual bottom edge is genuinely the table's last row -- which, for the anchor, is row 2, not the anchor's own row 0.
+    const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
+    const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const boundaries = [0, 1000, 2000];
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [restart, plain]),
+      ...tableBordersSprm,
+    ];
+    const rowTwoGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [continuation, plain]),
+      ...tableBordersSprm,
+    ];
+    const rowThreeGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [continuation, plain]),
+      ...tableBordersSprm,
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "top" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "right-1" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowOneGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          {
+            runs: [{ text: "right-2" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowTwoGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          {
+            runs: [{ text: "right-3" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowThreeGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(3);
+    const anchor = block.rows[0]?.cells[0];
+    // The merge structure itself: a 3-row rowSpan, anchored in row 0.
+    expect(anchor?.rowSpan).toBe(3);
+    expect(cellText(anchor)).toBe("top");
+    // The anchor's own row (0) is not the table's last row, so its top edge is still the ordinary first-row border -- unaffected by this fix. Its bottom edge, though, IS the table's real bottom edge, because the merge chain it anchors reaches row 2 -- the table's actual last row -- even though row 0 itself is not that row. Before this fix, a merge anchor sitting in a non-final row always got the row cascade's insideHorizontal on its bottom side instead.
+    expect(anchor?.borders).toEqual({
+      top: TOP,
+      left: LEFT,
+      right: INSIDE_V,
+      bottom: BOTTOM,
+    });
+    // The continuation cell physically sitting in the table's last row carries no decoration of its own -- the shared schema's own convention for a vertical-merge continuation -- so the table's real bottom border is carried by the anchor above, not duplicated here.
+    expect(block.rows[2]?.cells[0]?.blocks).toEqual([]);
+    // The plain, unmerged column still cascades ordinarily: row 2 is genuinely its own last row too.
+    expect(block.rows[2]?.cells[1]?.borders).toEqual({
+      top: INSIDE_H,
+      left: INSIDE_V,
+      right: RIGHT,
+      bottom: BOTTOM,
+    });
+  });
 });
 
 // The tolerance the reconstruction snaps boundaries within is one point, and ContentTable.columnWidthsPt is stated in points, so every expectation below is written in points and every drift is written as a fraction of one -- restated here from the point's own definition rather than imported from table/read.ts, so the two agree only if both are right.
