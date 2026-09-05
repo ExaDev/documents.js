@@ -101,9 +101,9 @@ function detectPalette(image: RawImage): PaletteEncoding | undefined {
   if (alpha === undefined) {
     return { indices, palette };
   }
-  // A tRNS chunk is written whenever the source image carried an alpha plane at all, regardless of whether every value turns out opaque -- matching how colour types 4/6 always carry their alpha plane regardless of its actual values, so `image.alpha !== undefined` round-trips back to a defined (if all-255) alpha array rather than silently vanishing. Trailing fully-opaque entries are trimmed from the written chunk: decodePng already treats a palette index at or beyond the tRNS chunk's length as fully opaque, so this keeps the chunk minimal (down to zero bytes, when nothing is actually transparent) without losing information.
+  // A tRNS chunk is written whenever the source image carried an alpha plane at all, regardless of whether every value turns out opaque -- matching how colour types 4/6 always carry their alpha plane regardless of its actual values, so `image.alpha !== undefined` round-trips back to a defined (if all-255) alpha array rather than silently vanishing. Trailing fully-opaque entries are trimmed from the written chunk: decodePng already treats a palette index at or beyond the tRNS chunk's length as fully opaque, so this keeps the chunk minimal without losing information. The trim never goes below one entry -- a zero-length tRNS chunk is not a valid PNG chunk (strict decoders including libpng reject it outright), whereas a single-entry chunk validly states that one alpha value and lets every other palette entry default to 255, which is exactly what the fully-opaque case needs.
   let trnsLength = paletteAlpha.length;
-  while (trnsLength > 0 && paletteAlpha[trnsLength - 1] === 255) {
+  while (trnsLength > 1 && paletteAlpha[trnsLength - 1] === 255) {
     trnsLength--;
   }
   return {
