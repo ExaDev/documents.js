@@ -279,7 +279,7 @@ const SERAR_ERR = 0x10;
 /** The eight bytes of payload/padding following a SerAr element's own one-byte type tag ([MS-XLS] 69ff31ac): SerNil skips all eight as pure padding, while SerBool and SerErr each consume one real payload byte first and then skip the remaining seven (SERAR_FIXED_PAYLOAD_BYTES - 1). */
 const SERAR_FIXED_PAYLOAD_BYTES = 8;
 
-/** One SerAr element ([MS-XLS] 69ff31ac) from a PtgExtraArray's `array` field, as the literal text an array-constant token in that position would show -- undefined for a type tag this reader does not recognise, or an error code [MS-XLS] does not define, in which case the caller aborts the whole PtgArray rather than fabricating a placeholder value. */
+/** One SerAr element ([MS-XLS] 69ff31ac) from a PtgExtraArray's `array` field, as the literal text an array-constant token in that position would show -- undefined for a type tag this reader does not recognise, an error code [MS-XLS] does not define, or a SerNil element, in which case the caller aborts the whole PtgArray rather than fabricating a placeholder value. SerNil joins those other two rather than rendering as an empty string: Excel's own array-constant grammar has no way to retype an empty position between two commas (`{1,,3}` is not valid input a spreadsheet application would accept back), and this reader never writes text into `formula` that Excel itself would reject -- see documents.js's own write paths, which take a formula as literal, verbatim text with no further validation. */
 function readArrayElementText(cursor: BlockCursor): string | undefined {
   const type = cursor.u8();
   switch (type) {
@@ -299,7 +299,7 @@ function readArrayElementText(cursor: BlockCursor): string | undefined {
     }
     case SERAR_NIL:
       cursor.skip(SERAR_FIXED_PAYLOAD_BYTES);
-      return "";
+      return undefined;
     default:
       return undefined;
   }
