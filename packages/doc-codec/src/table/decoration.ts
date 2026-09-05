@@ -99,6 +99,9 @@ const MIN_DPT_LINE_WIDTH = 2;
 /** dptLineWidth is a single byte, so 255 eighths (31.875pt) is the widest border the format can state at all. */
 const MAX_DPT_LINE_WIDTH = 0xff;
 
+/** For BrcType 0x03 (ECMA-376 ST_Border 'double') specifically, dptLineWidth states the width of one of the border's two lines, with the gap between them the same width again, rather than the border's own total rendered width -- neither [MS-DOC] nor [ECMA-376] says so in words, but LibreOffice's own WW8 border-width conversion (editeng/source/items/borderline.cxx: BorderWidthImpl for SvxBorderLineStyle::DOUBLE splits a total width into three equal 1/3 shares for line/gap/line on import, and ConvertBorderWidthToWord divides a total width by 3 on export) states it in code, and this package's own measurements agree with that split exactly: a dptLineWidth of 5 read from a genuine LibreOffice-authored file tripled to 15 eighths (1.875pt) is what LibreOffice's own re-export calls the identical border ~1.8pt double (the small remaining gap is LibreOffice's own twip-rounding on the way through its internal representation, not a further disagreement), and writing a 2pt double border under the pre-fix formula (dptLineWidth 16, i.e. widthPt taken as the field directly) came back from LibreOffice as 6pt double -- 16 read as a single line's width and tripled is exactly 6pt. Scoped to the literal 0x03 value rather than every brcType BRC_TYPE_STYLE collapses onto 'double': the other multi-line families (triple, the thinThick/thickThin gap variants, doubleWave, the two three-dimensional borders, outset/inset) are visually asymmetric constructions with no evidence their own dptLineWidth-to-rendered-width ratio is this same clean third, and ContentStrokeStyle's own collapse of all of them already documents that distinction as lost. */
+const DOUBLE_BORDER_WIDTH_MULTIPLIER = 3;
+
 /** The colour a border with no colour of its own resolves to. [MS-DOC]'s automatic colour (Ico 0x00, or a COLORREF with fAuto set) "designates the default color for the application" and names no components, but ContentBorder.color is required, so a border stating one has to resolve to something. Black is what an automatic border renders as against a default background, and resolving to it keeps the border itself -- which genuinely exists and genuinely renders -- rather than dropping the border outright to avoid stating a colour for it. */
 const AUTOMATIC_BORDER_COLOR: Color = { r: 0, g: 0, b: 0 };
 
@@ -109,9 +112,14 @@ function borderFrom(
 ): ContentBorder | undefined {
   const style = BRC_TYPE_STYLE[brcType];
   if (style === undefined) return undefined;
+  const lineWidthEighths = Math.max(dptLineWidth, MIN_DPT_LINE_WIDTH);
+  const widthEighths =
+    brcType === BRC_TYPE_DOUBLE
+      ? lineWidthEighths * DOUBLE_BORDER_WIDTH_MULTIPLIER
+      : lineWidthEighths;
   const border: ContentBorder = {
     color: color ?? AUTOMATIC_BORDER_COLOR,
-    widthPt: Math.max(dptLineWidth, MIN_DPT_LINE_WIDTH) / EIGHTHS_PER_POINT,
+    widthPt: widthEighths / EIGHTHS_PER_POINT,
   };
   // ContentBorderSchema's own convention: an absent style means 'solid', so stating it explicitly would be noise on the overwhelmingly common case.
   if (style !== "solid") border.style = style;
@@ -163,12 +171,16 @@ export function readBrc(
 /** Brc80MayBeNil's own no-border value, [MS-DOC] 2.9.18: "When all bits are set (0xFFFFFFFF when interpreted as a 4-byte unsigned integer), this structure specifies that the region in question has no border." */
 const NIL_BRC80: readonly number[] = [0xff, 0xff, 0xff, 0xff];
 
-/** dptLineWidth for a border of `widthPt`, in the 1/8-point increments [MS-DOC] states it in. Refuses a width the single-byte field cannot hold rather than silently clamping it to a thinner border than the caller asked for, matching how every other out-of-range operand in this writer is handled. */
-function dptLineWidthFor(widthPt: number): number {
-  const eighths = Math.round(widthPt * EIGHTHS_PER_POINT);
+/** dptLineWidth for a border of `widthPt` rendered as `brcType`, in the 1/8-point increments [MS-DOC] states it in. For BRC_TYPE_DOUBLE, `widthPt` is the border's own total rendered width and the field holds one third of it (see DOUBLE_BORDER_WIDTH_MULTIPLIER's own note); every other brcType states `widthPt` directly. Refuses a width the single-byte field cannot hold rather than silently clamping it to a thinner border than the caller asked for, matching how every other out-of-range operand in this writer is handled. */
+function dptLineWidthFor(widthPt: number, brcType: number): number {
+  const multiplier =
+    brcType === BRC_TYPE_DOUBLE ? DOUBLE_BORDER_WIDTH_MULTIPLIER : 1;
+  const eighths = Math.round((widthPt / multiplier) * EIGHTHS_PER_POINT);
   if (eighths < MIN_DPT_LINE_WIDTH || eighths > MAX_DPT_LINE_WIDTH) {
+    const minPt = (MIN_DPT_LINE_WIDTH / EIGHTHS_PER_POINT) * multiplier;
+    const maxPt = (MAX_DPT_LINE_WIDTH / EIGHTHS_PER_POINT) * multiplier;
     throw new DocFormatError(
-      `a table cell border is ${widthPt}pt, outside the ${MIN_DPT_LINE_WIDTH / EIGHTHS_PER_POINT}..${MAX_DPT_LINE_WIDTH / EIGHTHS_PER_POINT}pt range [MS-DOC]'s own single-byte dptLineWidth can state in 1/8-point increments`,
+      `a table cell border is ${widthPt}pt, outside the ${minPt}..${maxPt}pt range [MS-DOC]'s own single-byte dptLineWidth can state in 1/8-point increments${brcType === BRC_TYPE_DOUBLE ? " of one line's own width, a double border's field being one third of its total rendered width" : ""}`,
     );
   }
   return eighths;
@@ -177,9 +189,10 @@ function dptLineWidthFor(widthPt: number): number {
 /** One TC80 border field's own four bytes: the Brc80MayBeNil no-border sentinel for an absent border, otherwise a real Brc80 whose colour is the nearest Ico the fixed palette offers (see color.ts's nearestIco, and borderNeedsExactColor for how the exact colour still reaches the file). dptSpace, fShadow and fFrame are always zero -- ContentBorder models none of the three, so writing anything else would be inventing a fact the input never stated. */
 export function writeBrc80(border: ContentBorder | undefined): number[] {
   if (border === undefined) return [...NIL_BRC80];
+  const brcType = STYLE_BRC_TYPE[border.style ?? "solid"];
   return [
-    dptLineWidthFor(border.widthPt),
-    STYLE_BRC_TYPE[border.style ?? "solid"],
+    dptLineWidthFor(border.widthPt, brcType),
+    brcType,
     nearestIco(border.color),
     0x00,
   ];
@@ -187,10 +200,11 @@ export function writeBrc80(border: ContentBorder | undefined): number[] {
 
 /** One TableBrcOperand.brc field's own eight bytes: a real Brc carrying the border's colour exactly, as a COLORREF rather than a palette index. Only ever called for a border that exists, since a TableBrcOperand naming no sides is never emitted at all. */
 export function writeBrc(border: ContentBorder): number[] {
+  const brcType = STYLE_BRC_TYPE[border.style ?? "solid"];
   return [
     ...colorRefBytes(border.color),
-    dptLineWidthFor(border.widthPt),
-    STYLE_BRC_TYPE[border.style ?? "solid"],
+    dptLineWidthFor(border.widthPt, brcType),
+    brcType,
     0x00,
     0x00,
   ];
