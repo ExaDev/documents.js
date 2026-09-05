@@ -27,6 +27,18 @@ function doc(blocks: readonly ContentBlock[]): ContentDocument {
   };
 }
 
+// The document's own first block's leaf text, concatenated across every run -- used where a round trip is expected to preserve CONTENT but not necessarily the exact run boundaries (entity decoding does not re-merge adjacent plain-text runs on a reparse, since src/lower/inline.ts deliberately attempts no adjacent-run merging of its own).
+function leafText(source: ContentDocument): string {
+  if (source.kind !== "wordprocessing") {
+    throw new Error("expected a wordprocessing ContentDocument");
+  }
+  const block = source.sections[0]?.blocks[0];
+  if (block?.kind !== "paragraph") {
+    throw new Error(`expected a paragraph block, got ${block?.kind}`);
+  }
+  return block.runs.map((run) => run.text).join("");
+}
+
 describe("headings", () => {
   it("emits a Heading{N} styleId as ATX by default", () => {
     expect(
@@ -55,6 +67,56 @@ describe("headings", () => {
         { headingStyle: "setext" },
       ),
     ).toBe("### foo");
+  });
+
+  it("promotes a level-1/2 heading whose own runs embed a soft-break line break to setext, overriding the configured ATX style, since ATX has no way to hold one (ExaDev/documents.js#940)", () => {
+    const collector = createDiagnosticCollector();
+    const softBreakRuns = [
+      { text: "foo" },
+      { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+      { text: "bar" },
+    ];
+    expect(
+      emitMarkdown(
+        doc([{ kind: "paragraph", runs: softBreakRuns, styleId: "Heading2" }]),
+        { sink: collector.sink },
+      ),
+    ).toBe("foo\nbar\n---");
+    expect(
+      collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+    ).toBe(false);
+  });
+
+  it("collapses an embedded soft-break line break to a space with a diagnostic for a level 3-6 heading, which has no setext fallback", () => {
+    const collector = createDiagnosticCollector();
+    const softBreakRuns = [
+      { text: "foo" },
+      { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+      { text: "bar" },
+    ];
+    expect(
+      emitMarkdown(
+        doc([{ kind: "paragraph", runs: softBreakRuns, styleId: "Heading3" }]),
+        { sink: collector.sink },
+      ),
+    ).toBe("### foo bar");
+    expect(
+      collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+    ).toBe(true);
+  });
+
+  it("promotes a level-1/2 heading whose own runs embed a hard-break literal newline to setext too, with the backslash-escape spelling reflected in the underline length", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "foo" }, { text: "\n" }, { text: "bar" }],
+            styleId: "Heading1",
+          },
+        ]),
+      ),
+    ).toBe("foo\\\nbar\n====");
   });
 });
 
@@ -1431,6 +1493,31 @@ describe("round trip through src/lower", () => {
     const second = lowerMarkdown(markdown);
     expect(second).toEqual(first);
     expect(markdown).not.toContain("\\(");
+  });
+
+  it("re-emits a soft line break as a literal newline, restoring cmark's own soft-break convention rather than collapsing it to a space (ExaDev/documents.js#940)", () => {
+    const source = "foo\nbar";
+    const first = lowerMarkdown(source);
+    const markdown = emitMarkdown(first);
+    expect(markdown).toBe(source);
+    const second = lowerMarkdown(markdown);
+    expect(second).toEqual(first);
+  });
+
+  it("keeps a soft line break bracketed by emphasis as one nested wrap across the line break, not two independently-wrapped spans", () => {
+    const source = "**foo\nbar**";
+    const first = lowerMarkdown(source);
+    const markdown = emitMarkdown(first);
+    expect(markdown).toBe(source);
+    expect(lowerMarkdown(markdown)).toEqual(first);
+  });
+
+  it("does not swallow a &nbsp;-derived character sitting at a paragraph's own edge as insignificant trim padding (ExaDev/documents.js#940)", () => {
+    const source = "&nbsp; &amp; foo";
+    const first = lowerMarkdown(source);
+    const markdown = emitMarkdown(first);
+    expect(markdown.charCodeAt(0)).toBe(0x00a0);
+    expect(leafText(lowerMarkdown(markdown))).toBe(leafText(first));
   });
 });
 
