@@ -46,6 +46,27 @@ describe("headings", () => {
       expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
   });
+
+  it("keeps a footnote reference construct carried by a heading's own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<h2>Title<a epub:type="noteref" href="#fn1">1</a></h2>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      headingLevel: 2,
+      runs: [{ text: "Title" }, { text: "1" }],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
 });
 
 describe("paragraphs and inline styling", () => {
