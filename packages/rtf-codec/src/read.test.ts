@@ -925,7 +925,10 @@ describe("table cell formatting", () => {
     const table = firstTable(
       `${HEADER}\\trowd\\trleft0\\clcbpat2\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
     );
-    expect(table.rows[0]?.cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(table.rows[0]?.cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
   });
 
   it("derives rowSpan from \\clvmgf and the \\clvmrg cells beneath it", () => {
