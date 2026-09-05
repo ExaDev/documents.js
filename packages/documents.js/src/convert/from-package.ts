@@ -15,6 +15,7 @@ import {
   COLOR_BLACK,
   DEFAULT_LAYOUT_FONT,
   flattenTree,
+  resolveCellFillColor,
 } from "document-schema.js";
 import { LAYOUT_FORMAT_VERSION, writePdf } from "pdf-codec";
 import { flipY } from "../model/geometry";
@@ -167,13 +168,14 @@ function emitTableCell(state: FrameWalkState, cell: ContentTableCell): void {
       continue;
     }
     if (cell.background !== undefined) {
+      // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for.
       page.items.push({
         kind: "rect",
         xPt: frame.xPt,
         yPt: frame.yPt,
         widthPt: frame.widthPt,
         heightPt: frame.heightPt,
-        fill: cell.background,
+        fill: resolveCellFillColor(cell.background),
       });
     }
     if (cell.borders !== undefined) {
@@ -258,13 +260,14 @@ function emitSheetCell(state: FrameWalkState, cell: ContentSheetCell): void {
       continue;
     }
     if (cell.background !== undefined) {
+      // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for.
       page.items.push({
         kind: "rect",
         xPt: frame.xPt,
         yPt: frame.yPt,
         widthPt: frame.widthPt,
         heightPt: frame.heightPt,
-        fill: cell.background,
+        fill: resolveCellFillColor(cell.background),
       });
     }
     if (cell.borders !== undefined) {

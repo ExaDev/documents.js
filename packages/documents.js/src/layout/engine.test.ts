@@ -292,7 +292,12 @@ describe("convertWordprocessingToLayout: tables", () => {
       rows: [
         {
           heightPt: 20,
-          cells: [{ blocks: [], background: { r: 1, g: 0, b: 0 } }],
+          cells: [
+            {
+              blocks: [],
+              background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+            },
+          ],
         },
       ],
     };
@@ -388,13 +393,13 @@ describe("convertWordprocessingToLayout: tables", () => {
           cells: [
             {
               blocks: [],
-              background: red,
+              background: { kind: "solid", color: red },
               borders: { top: { color: red, widthPt: 1 } },
               sourcePath: "sections[0].blocks[0].rows[0].cells[0]",
             },
             {
               blocks: [],
-              background: red,
+              background: { kind: "solid", color: red },
               borders: { top: { color: red, widthPt: 1 } },
             },
           ],

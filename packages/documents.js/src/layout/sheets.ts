@@ -14,7 +14,11 @@ import type {
 import { columnIndexToLetters } from "document-schema.js";
 import { layoutFormula } from "../mathml/layout";
 import type { Color as LayoutColor } from "document-schema.js";
-import { COLOR_BLACK, rgbHexToColor } from "document-schema.js";
+import {
+  COLOR_BLACK,
+  resolveCellFillColor,
+  rgbHexToColor,
+} from "document-schema.js";
 import type { Alignment } from "document-schema.js";
 import { DEFAULT_LAYOUT_FONT } from "document-schema.js";
 import { flipY } from "../model/geometry";
@@ -503,13 +507,14 @@ function renderCellBackground(
     return;
   }
   const flipped = flipY(frameYDown, pageHeightPt);
+  // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for.
   out.push({
     kind: "rect",
     xPt: flipped.xPt,
     yPt: flipped.yPt,
     widthPt: flipped.widthPt,
     heightPt: flipped.heightPt,
-    fill: cell.background,
+    fill: resolveCellFillColor(cell.background),
     sourcePath: cell.sourcePath,
   });
 }
