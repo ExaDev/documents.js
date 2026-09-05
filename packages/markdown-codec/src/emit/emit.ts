@@ -149,22 +149,48 @@ function isQuotableStyle(styleId: string | undefined): boolean {
   );
 }
 
-// Every styleId with its own unambiguous single-line-or-explicitly-closed boundary, one a reparse recognises regardless of what precedes or follows it, per CommonMark's "these constructs interrupt a paragraph" rules -- a heading, a fenced code block, a thematic break, preformatted HTML, a display-math block. Deliberately NOT QUOTABLE_STYLE_IDS: QUOTE_STYLE_ID sits in that set because renderParagraph applies a '> ' prefix to it, but renderListRegion below never calls renderParagraph -- every list block, Quote-styled or not, renders through the prefix-free renderParagraphBody -- so a Quote-styled block inside a list carries no boundary of its own at all and is exactly as ambiguous as a plain paragraph.
-const SELF_DELIMITING_STYLE_IDS: ReadonlySet<string> = new Set([
-  CODE_BLOCK_STYLE_ID,
-  HORIZONTAL_RULE_STYLE_ID,
-  HTML_PREFORMATTED_STYLE_ID,
-  MATH_BLOCK_STYLE_ID,
-]);
-
-function isSelfDelimitingStyle(styleId: string | undefined): boolean {
-  if (styleId === undefined) {
+// Whether a rendered block of this styleId closes itself unambiguously -- so a non-blank line immediately following it is always scanned by a reparse as a FRESH block rather than being absorbed backward into this one as ordinary continuation text. This is the "safe as PREVIOUS" half of requiresBlankLineBefore's compound check below, and unlike canInterruptOpenParagraph it does not depend on any emit option: a fenced code block and a math block each close at their own explicit closing delimiter, a thematic break and an ATX heading are each a single complete line, and a SETEXT heading's own underline line closes it exactly as definitively -- nothing can lazily continue a heading once its underline has been read, so the setext spelling is only unsafe on the OTHER side, as something that ITSELF follows an open paragraph (see canInterruptOpenParagraph). Deliberately false for QUOTE_STYLE_ID (renders through the same prefix-free renderParagraphBody as a plain paragraph here, so carries no boundary of its own) and for HTML_PREFORMATTED_STYLE_ID (this package re-emits raw HTML as a bare literal with no record of which CommonMark HTML-block start condition produced it, and several of those seven conditions close only at a blank line -- with no closing condition of its own to fall back to, anything following without one keeps being read as more of the same literal HTML content).
+function terminatesCleanly(styleId: string | undefined): boolean {
+  if (
+    styleId === undefined ||
+    styleId === QUOTE_STYLE_ID ||
+    styleId === HTML_PREFORMATTED_STYLE_ID
+  ) {
     return false;
   }
   return (
-    SELF_DELIMITING_STYLE_IDS.has(styleId) ||
+    styleId === CODE_BLOCK_STYLE_ID ||
+    styleId === MATH_BLOCK_STYLE_ID ||
+    styleId === HORIZONTAL_RULE_STYLE_ID ||
     parseHeadingStyleId(styleId) !== undefined
   );
+}
+
+// Whether a rendered block of this styleId can safely open right where an OPEN (non-terminated) paragraph left off, per CommonMark's own "these constructs interrupt a paragraph" rules, rather than being read as more of that paragraph's own text. This is the "safe as NEXT" half, and -- unlike terminatesCleanly -- genuinely depends on the emit options actually in force: a fenced code block and a math block always interrupt (their own opening delimiter is unambiguous either way); a thematic break interrupts UNLESS its rendered character is SETEXT_LEVEL_2_CHAR ('-'), which a reparse reads as a setext level-2 underline for the paragraph it follows instead of a fresh thematic break (context.thematicBreakChar's other two legal values, '_' and '*', are never a setext underline character and interrupt cleanly); an ATX heading always interrupts, but a SETEXT-rendered one (headingStyle 'setext', level <= MAX_SETEXT_LEVEL) is the opposite of an interrupt -- its own text line reads as more of the preceding paragraph, which the underline line then retroactively converts whole into the heading, exactly the case this function exists to catch. HTML_PREFORMATTED_STYLE_ID never interrupts: CommonMark's own HTML-block start condition 7 (a lone start/end tag on its own line) is explicitly barred from interrupting a paragraph, and this package cannot tell that condition apart from the other six that can, at the point this needs an answer, so it always assumes the unsafe one.
+function canInterruptOpenParagraph(
+  styleId: string | undefined,
+  context: EmitContext,
+): boolean {
+  if (
+    styleId === undefined ||
+    styleId === QUOTE_STYLE_ID ||
+    styleId === HTML_PREFORMATTED_STYLE_ID
+  ) {
+    return false;
+  }
+  if (styleId === CODE_BLOCK_STYLE_ID || styleId === MATH_BLOCK_STYLE_ID) {
+    return true;
+  }
+  if (styleId === HORIZONTAL_RULE_STYLE_ID) {
+    return context.thematicBreakChar !== SETEXT_LEVEL_2_CHAR;
+  }
+  const headingLevel = parseHeadingStyleId(styleId);
+  if (headingLevel !== undefined) {
+    return !(
+      context.headingStyle === "setext" && headingLevel <= MAX_SETEXT_LEVEL
+    );
+  }
+  return false;
 }
 
 function quoteDepthOf(paragraph: ContentParagraph): number {
@@ -473,18 +499,15 @@ function collectListItem(
   return { segments, next: index };
 }
 
-// Whether a paragraph immediately following `previousStyleId`, with no blank line between them, risks CommonMark's own lazy-continuation rule silently absorbing it into the PRECEDING block instead of starting a fresh one: true exactly when NEITHER side has a styleId isSelfDelimitingStyle recognises as self-delimiting (see that function -- deliberately excludes QUOTE_STYLE_ID, since a Quote-styled block renders through the same prefix-free renderParagraphBody as a plain one here and so carries no boundary of its own). `previousStyleId` of `undefined` with `previousWasNested: true` means the immediately preceding rendered unit was a nested sub-list, not a paragraph at all -- also unambiguous, since a list's own item markers are themselves a recognised block starter. Two blocks that are BOTH plain (or one/both Quote-styled) are genuinely ambiguous without a blank line: for two plain paragraphs specifically, src/lower/lower.ts's own reader can only ever produce that pair when a real source blank line separated them in the first place (two adjacent non-blank plain-text lines are read as ONE multi-line paragraph, never two), so re-inserting the blank line here is not merely safe, it is what the source actually had.
+// Whether a paragraph immediately following `previousStyleId`, with no blank line between them, risks CommonMark's own lazy-continuation rule silently absorbing it into the PRECEDING block instead of starting a fresh one. "Can this ever go wrong" and "is this construct itself safe to follow with" are different properties (see terminatesCleanly and canInterruptOpenParagraph above), and a blank line is required only when BOTH answers are unfavourable: terminatesCleanly(previousStyleId) means there is no open paragraph left for anything to absorb into, regardless of what `next` is; canInterruptOpenParagraph(next.styleId, context) means `next` starts fresh unconditionally even when `previousStyleId` IS an open paragraph. `previousStyleId` for a block immediately following a nested sub-list is that sub-list's own LAST rendered paragraph's styleId (renderListRegion below passes it through rather than treating "just finished a nested list" as blanket-safe) -- a plain paragraph ending a nested item is exactly as open as any other, and a following line at the outer item's own continuation indent is CommonMark's own lazy continuation of THAT paragraph, not something the outer item's markers make safe (spec 0.31.2 example 325 is this exact shape, and is why it requires the blank line it has). Two blocks that are BOTH plain (or one/both Quote-styled) are genuinely ambiguous without a blank line: for two plain paragraphs specifically, src/lower/lower.ts's own reader can only ever produce that pair when a real source blank line separated them in the first place (two adjacent non-blank plain-text lines are read as ONE multi-line paragraph, never two), so re-inserting the blank line here is not merely safe, it is what the source actually had.
 function requiresBlankLineBefore(
   next: ContentParagraph,
   previousStyleId: string | undefined,
-  previousWasNested: boolean,
+  context: EmitContext,
 ): boolean {
-  if (previousWasNested) {
-    return false;
-  }
   return (
-    !isSelfDelimitingStyle(previousStyleId) &&
-    !isSelfDelimitingStyle(next.styleId)
+    !terminatesCleanly(previousStyleId) &&
+    !canInterruptOpenParagraph(next.styleId, context)
   );
 }
 
@@ -519,7 +542,6 @@ function renderListRegion(
     let text = "";
     let renderedFirstLine = false;
     let previousStyleId: string | undefined;
-    let previousWasNested = false;
     for (const segment of segments) {
       if (segment.kind === "nested") {
         const nested = renderListRegion(segment.blocks, context)
@@ -527,8 +549,8 @@ function renderListRegion(
           .map((line) => (line.length === 0 ? line : `${indent}${line}`))
           .join("\n");
         text += `\n${nested}`;
-        previousStyleId = undefined;
-        previousWasNested = true;
+        // segment.blocks is the flat, in-order slice of every deeper-level paragraph this nested run rendered, regardless of how many further nesting levels it recursed through -- rendering always processes that slice front to back, so its LAST element is exactly the last content line the nested call above actually produced. Its own styleId, not blanket "just finished a nested list, always safe", is what requiresBlankLineBefore needs next.
+        previousStyleId = segment.blocks[segment.blocks.length - 1]?.styleId;
         continue;
       }
       for (const block of segment.blocks) {
@@ -544,7 +566,6 @@ function renderListRegion(
           ].join("\n");
           renderedFirstLine = true;
           previousStyleId = block.styleId;
-          previousWasNested = false;
           continue;
         }
         const rendered = renderParagraphBody(block, context)
@@ -552,11 +573,9 @@ function renderListRegion(
           .map((line) => (line.length === 0 ? line : `${indent}${line}`))
           .join("\n");
         const blank =
-          loose ||
-          requiresBlankLineBefore(block, previousStyleId, previousWasNested);
+          loose || requiresBlankLineBefore(block, previousStyleId, context);
         text += blank ? `\n\n${rendered}` : `\n${rendered}`;
         previousStyleId = block.styleId;
-        previousWasNested = false;
       }
     }
 

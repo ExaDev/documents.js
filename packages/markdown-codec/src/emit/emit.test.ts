@@ -600,6 +600,286 @@ describe("lists", () => {
     expect(afterBlock.runs.map((run) => run.text).join("")).toBe("after");
   });
 
+  it("inserts a blank line between a paragraph and a following thematic break rendered with the default '-' character, since a '---' line right after an open paragraph reads back as a setext level-2 underline rather than a fresh thematic break", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "HorizontalRule",
+        runs: [],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- a\n\n  ---");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [paragraphBlock, ruleBlock] = blocks;
+    if (
+      paragraphBlock?.kind !== "paragraph" ||
+      ruleBlock?.kind !== "paragraph"
+    ) {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(paragraphBlock.styleId).toBeUndefined();
+    expect(ruleBlock.styleId).toBe("HorizontalRule");
+  });
+
+  it("keeps a paragraph and a following thematic break TIGHT when rendered with a non-default character ('*'), which cannot be misread as a setext underline", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "HorizontalRule",
+        runs: [],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source, { thematicBreakChar: "*" });
+    expect(written).toBe("- a\n  ***");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [paragraphBlock, ruleBlock] = blocks;
+    if (
+      paragraphBlock?.kind !== "paragraph" ||
+      ruleBlock?.kind !== "paragraph"
+    ) {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(paragraphBlock.styleId).toBeUndefined();
+    expect(ruleBlock.styleId).toBe("HorizontalRule");
+  });
+
+  it("inserts a blank line between a paragraph and a following heading rendered as setext, since the heading's own text line would otherwise read as more of the preceding paragraph, with the underline retroactively converting both into one heading", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "Heading1",
+        runs: [{ text: "h" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source, { headingStyle: "setext" });
+    expect(written).toBe("- a\n\n  h\n  =");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [paragraphBlock, headingBlock] = blocks;
+    if (
+      paragraphBlock?.kind !== "paragraph" ||
+      headingBlock?.kind !== "paragraph"
+    ) {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(paragraphBlock.runs.map((run) => run.text).join("")).toBe("a");
+    expect(headingBlock.styleId).toBe("Heading1");
+    expect(headingBlock.runs.map((run) => run.text).join("")).toBe("h");
+  });
+
+  it("inserts a blank line before a plain block following an HTMLPreformatted block, since a raw HTML block only ends at a blank line and would otherwise swallow the next block as more of its own literal content", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "HTMLPreformatted",
+        runs: [{ text: "<div>x</div>" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "after" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- <div>x</div>\n\n  after");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [htmlBlock, afterBlock] = blocks;
+    if (htmlBlock?.kind !== "paragraph" || afterBlock?.kind !== "paragraph") {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(htmlBlock.styleId).toBe("HTMLPreformatted");
+    expect(afterBlock.runs.map((run) => run.text).join("")).toBe("after");
+  });
+
+  it("inserts a blank line before an HTMLPreformatted block following a plain paragraph, since a lone start/end tag on its own line (CommonMark HTML-block condition 7) cannot interrupt an open paragraph", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "HTMLPreformatted",
+        runs: [{ text: "<span>x</span>" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- a\n\n  <span>x</span>");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [paragraphBlock, spanBlock] = blocks;
+    if (
+      paragraphBlock?.kind !== "paragraph" ||
+      spanBlock?.kind !== "paragraph"
+    ) {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(paragraphBlock.runs.map((run) => run.text).join("")).toBe("a");
+    expect(spanBlock.runs.map((run) => run.text).join("")).toBe(
+      "<span>x</span>",
+    );
+  });
+
+  it("inserts a blank line resuming an outer item's own blocks after a nested sub-list whose own last block is a plain (open) paragraph, since a line at the outer continuation indent would otherwise be read as the NESTED item's own lazy continuation rather than the outer item resuming (CommonMark spec 0.31.2 example 325's own shape)", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        runs: [{ text: "foo" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "bar" }],
+        list: { numId: "md1:bullet", level: 1, itemId: "i2" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "baz" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- foo\n  - bar\n\n  baz");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(3);
+    const [fooBlock, barBlock, bazBlock] = blocks;
+    if (
+      fooBlock?.kind !== "paragraph" ||
+      barBlock?.kind !== "paragraph" ||
+      bazBlock?.kind !== "paragraph"
+    ) {
+      throw new Error("expected three paragraph blocks");
+    }
+    expect(fooBlock.runs.map((run) => run.text).join("")).toBe("foo");
+    expect(barBlock.runs.map((run) => run.text).join("")).toBe("bar");
+    expect(bazBlock.runs.map((run) => run.text).join("")).toBe("baz");
+    // "foo" and "baz" are the SAME outer item -- "baz" resumed the outer item rather than being lazily absorbed into "bar"'s own nested paragraph.
+    expect(barBlock.list?.level).toBe(1);
+    expect(bazBlock.list?.level).toBe(0);
+    expect(bazBlock.list?.itemId).toBe(fooBlock.list?.itemId);
+    expect(barBlock.list?.itemId).not.toBe(fooBlock.list?.itemId);
+  });
+
+  it("keeps a paragraph and a following ATX heading (the default heading style) TIGHT -- an ATX heading always interrupts an open paragraph, in or out of a list", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "Heading1",
+        runs: [{ text: "h" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- a\n  # h");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [paragraphBlock, headingBlock] = blocks;
+    if (
+      paragraphBlock?.kind !== "paragraph" ||
+      headingBlock?.kind !== "paragraph"
+    ) {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(paragraphBlock.runs.map((run) => run.text).join("")).toBe("a");
+    expect(headingBlock.styleId).toBe("Heading1");
+  });
+
+  it("keeps a paragraph and a following MathBlock TIGHT -- a $$ line interrupts an open paragraph exactly as a code fence does, in or out of a list", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "MathBlock",
+        runs: [{ text: "x^2" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- a\n  $$\n  x^2\n  $$");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [paragraphBlock, mathBlock] = blocks;
+    if (paragraphBlock?.kind !== "paragraph") {
+      throw new Error("expected the first block to be a paragraph");
+    }
+    expect(paragraphBlock.runs.map((run) => run.text).join("")).toBe("a");
+    expect(mathBlock?.kind).toBe("embeddedObject");
+  });
+
   it("separates loose-list siblings with a blank line and tight-list siblings with none", () => {
     const tight = emitMarkdown(
       doc([
