@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 
 // resolveJsonModule lets rolldown (via tsdown) inline this package's own declared version straight into the bundle at build time -- no runtime fs read, no import-attribute syntax that would otherwise need to differ between the ESM and CJS build outputs. Matches document-cli's own src/program.ts convention.
 import { version } from "../package.json";
+import { registerComputeFormulaTools } from "./tools/compute-formula";
 import { registerConvertTools } from "./tools/convert";
 import { registerDocxExtrasTools } from "./tools/docx-extras";
 import { registerFontTools } from "./tools/fonts";
@@ -17,6 +18,7 @@ import { registerPdfInspectTools } from "./tools/pdf-inspect";
 export function createServer(): McpServer {
   const server = new McpServer({ name: "document-mcp", version });
 
+  registerComputeFormulaTools(server);
   registerConvertTools(server);
   registerDocxExtrasTools(server);
   registerFontTools(server);
