@@ -10,7 +10,6 @@
     "src/**/*.test.ts",
     "src/test-support/**/*.ts",
     "src/global.d.ts",
-    "test/**/*.ts",
     "*.config.ts",
     "eslint.config.ts"
   ],
