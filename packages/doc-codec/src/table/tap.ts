@@ -26,7 +26,7 @@ import {
 //
 // Structure and merge state: sprmTDefTable, which alone carries the row's own column boundaries, every physical cell's horizontal/vertical merge state (via TC80.tcgrf -- [MS-DOC] 2.9.313's TC80, 2.9.317's TCGRF) and every physical cell's own four Brc80 borders, and which this package's own writer now uses for a horizontal merge too, purely through a merged row's own narrower, wider physical cells rather than any TCGRF/sprmTMerge flag (ExaDev/documents.js#895; see table/write.ts's own top-of-file note); sprmTMerge, an ItcFirstLim range this reader still folds on top of sprmTDefTable's own column layout in case a genuine third-party producer states a horizontal merge that way instead -- a spec-conformant encoding, and the one a real, independent [MS-DOC] implementation (LibreOffice) was verified NOT to honour on its own read side either (its own vertMerge from the identical TC80 array was honoured, but not horzMerge), which is exactly why this package's own writer no longer emits it; sprmTVertMerge, the incremental per-cell equivalent for a vertical merge (this package's own writer states a vertical merge only through TC80.tcgrf, but a real producer may equally state it incrementally, the same asymmetry sprmTMerge exists to cover on the horizontal side); and sprmTDyaRowHeight, the row's own height.
 //
-// Cell decoration: sprmTSetBrc, whose TableBrcOperand restates a named cell range's borders with an exact COLORREF rather than TC80's own palette-indexed Brc80, and which therefore folds on top of sprmTDefTable's border layer exactly as sprmTMerge folds on top of its merge layer; and the row's background shading, which has no TC80 field at all and rides its own sprms instead -- sprmTDefTableShd/2nd/3rd and their sprmTDefTableShdRaw counterparts (one Shd per cell, covering cells 1-22, 23-44 and 45-63 respectively), sprmTDefTableShd80 (the Word 97-era Shd80 spelling of the same array), and sprmTSetShd/sprmTSetShdOdd (a TableShadeOperand naming one cell range). Every one of these was confirmed against real LibreOffice 26.2.5.2 output rather than implemented from the specification alone; see table/decoration.ts's own top-of-file note for the captured bytes.
+// Cell decoration: sprmTSetBrc, whose TableBrcOperand restates a named cell range's borders with an exact COLORREF rather than TC80's own palette-indexed Brc80, and its own Word 97-era sibling sprmTSetBrc80 (a TableBrcOperand80 over the identical palette-indexed Brc80 field TC80 itself uses) -- both fold on top of sprmTDefTable's border layer exactly as sprmTMerge folds on top of its merge layer, and both carry the identical NilBrc(80)-clear/clearedSides handling (see applyBrcToCell's own note); and the row's background shading, which has no TC80 field at all and rides its own sprms instead -- sprmTDefTableShd/2nd/3rd and their sprmTDefTableShdRaw counterparts (one Shd per cell, covering cells 1-22, 23-44 and 45-63 respectively), sprmTDefTableShd80 (the Word 97-era Shd80 spelling of the same array), and sprmTSetShd/sprmTSetShdOdd (a TableShadeOperand naming one cell range). Every one of these was confirmed against real LibreOffice 26.2.5.2 output rather than implemented from the specification alone; see table/decoration.ts's own top-of-file note for the captured bytes.
 //
 // Row/table cascade: sprmTTableBorders/sprmTTableBorders80 (a TableBordersOperand(80), [MS-DOC] 2.9.302/2.9.303) states one border for each of the row's four physical edges plus the two "inside" edges between cells and between this row and its neighbours, and its own text is explicit that it is a fallback rather than an ordinary direct-formatting sprm: "specifies the borders for this row unless modified by other Sprms applied to the cells" -- unlike every sprm above, which folds in grpprl order (a later Prl overriding an earlier one, exactly as pap.ts's own applyParagraphSprms does), this one must never override a cell's own TC80/sprmTSetBrc border regardless of which comes first in the grpprl. Because of that, this function only captures the row's own six-field operand here, on TableRowDefinition.rowBorders, entirely unresolved onto any cell: which of the six fields reaches a given cell/side depends on that cell's position in the WHOLE table (the table's own first/last row, this row's own first/last physical cell) -- context only table/read.ts's own cross-row assembly has, which is why its applyRowLevelBorderCascade is what actually applies it, once every row is known, filling in only the sides Pass 1/2 above left unstated. sprmTSetShdTable, by contrast, carries no such "unless modified" text, so it is read as an ordinary sprm here: a SHDOperand ([MS-DOC] 2.9.249) applied to every cell in the row, folded in grpprl order like every other shading sprm above.
 //
@@ -42,6 +42,8 @@ const SPRM_T_MERGE = 0x5624;
 const SPRM_T_VERT_MERGE = 0xd62b;
 /** sprmTSetBrc (0xD62F): a TableBrcOperand ([MS-DOC] 2.9.305) restating one cell range's borders on the named sides, with an exact COLORREF rather than TC80's own Ico index. */
 const SPRM_T_SET_BRC = 0xd62f;
+/** sprmTSetBrc80 (0xD620): the Word 97-era spelling of sprmTSetBrc, a TableBrcOperand80 ([MS-DOC] 2.9.304) restating one cell range's borders with a palette-indexed Brc80MayBeNil rather than sprmTSetBrc's own exact-colour Brc -- the identical cb/ItcFirstLim/bordersToApply header, differing only in which four-byte border field follows it. A real Word-97-era producer's own NilBrc80 clear (the same all-bits-set sentinel TC80's own Brc80 fields use) reaches applyBrcToCell exactly like sprmTSetBrc's own NilBrc, recording the cleared side on clearedSides so the row-level cascade never re-fills it ([ExaDev/documents.js#945](https://github.com/ExaDev/documents.js/issues/945)). */
+const SPRM_T_SET_BRC80 = 0xd620;
 /** sprmTDefTableShd80 (0xD609): a DefTableShd80Operand ([MS-DOC] 2.9.52), the Word 97-era array of one Shd80 per cell starting at the row's first. */
 const SPRM_T_DEF_TABLE_SHD80 = 0xd609;
 /** sprmTDefTableShd3rd (0xD60C): a DefTableShdOperand ([MS-DOC] 2.9.53) shading cells 45-63 -- index 44 onward. */
@@ -92,7 +94,7 @@ export interface TableCellProperties {
   readonly vertMerge: number;
   /** The cell's own four borders, absent when it states none on any side. */
   readonly borders?: ContentCellBorders;
-  /** Sides sprmTSetBrc has explicitly named with a NilBrc -- a real "this cell has no border here" statement, distinct from a side this cell's own TAP has simply never mentioned. `borders` alone cannot carry that distinction (an absent side means the same thing either way once cellBordersFrom has dropped it), so table/read.ts's own row-level border cascade (applyRowLevelBorderCascade) consults this set too: a side listed here is never filled from the row's cascade, no matter what `borders` says. See applyBrcToCell's own note for why only sprmTSetBrc, never TC80's own Brc80 fields, can state this. */
+  /** Sides sprmTSetBrc or sprmTSetBrc80 has explicitly named with a NilBrc/NilBrc80 -- a real "this cell has no border here" statement, distinct from a side this cell's own TAP has simply never mentioned. `borders` alone cannot carry that distinction (an absent side means the same thing either way once cellBordersFrom has dropped it), so table/read.ts's own row-level border cascade (applyRowLevelBorderCascade) consults this set too: a side listed here is never filled from the row's cascade, no matter what `borders` says. See applyBrcToCell's own note for why only sprmTSetBrc/sprmTSetBrc80, never TC80's own Brc80 fields, can state this. */
   readonly clearedSides?: ReadonlySet<CellBorderSide>;
   /** The cell's own flat background colour, absent when it states no shading or states a pattern Color cannot express (see decoration.ts's readShd). */
   readonly background?: Color;
@@ -164,7 +166,7 @@ function withCells(
   };
 }
 
-/** Overlays the sides one TableBrcOperand names onto a cell's existing borders, leaving every side it does not name as TC80's own Brc80 stated it. A named side whose Brc is a NilBrc explicitly clears that side -- how a producer states "this cell has no top border" over a row-level one it would otherwise inherit -- and is recorded in `clearedSides` so table/read.ts's own row-level cascade can tell that apart from a side this cell has simply never mentioned. TC80's own Brc80 fields cannot state this distinction on their own (they are mandatory for every cell, so "no border" and "never stated" are the identical bytes -- table/read.ts's own applyRowLevelBorderCascade note); only an explicit sprmTSetBrc naming the side carries an unambiguous "clear" signal. A later sprmTSetBrc restating a real border on a previously cleared side un-clears it, matching the ordinary last-Prl-wins fold every sprm in this module already follows. */
+/** Overlays the sides one TableBrcOperand(80) names onto a cell's existing borders, leaving every side it does not name as TC80's own Brc80 stated it. Shared verbatim by both SPRM_T_SET_BRC and SPRM_T_SET_BRC80's own switch cases, since the two operands differ only in which border field their caller has already decoded (readBrc's exact Brc vs readBrc80's palette-indexed Brc80) -- by the time `border` reaches here, both are the identical ContentBorder|undefined shape. A named side whose Brc/Brc80 is a NilBrc/NilBrc80 explicitly clears that side -- how a producer states "this cell has no top border" over a row-level one it would otherwise inherit -- and is recorded in `clearedSides` so table/read.ts's own row-level cascade can tell that apart from a side this cell has simply never mentioned. TC80's own Brc80 fields cannot state this distinction on their own (they are mandatory for every cell, so "no border" and "never stated" are the identical bytes -- table/read.ts's own applyRowLevelBorderCascade note); only an explicit sprmTSetBrc/sprmTSetBrc80 naming the side carries an unambiguous "clear" signal. A later sprmTSetBrc/sprmTSetBrc80 restating a real border on a previously cleared side un-clears it, matching the ordinary last-Prl-wins fold every sprm in this module already follows. */
 function applyBrcToCell(
   cell: TableCellProperties,
   bordersToApply: number,
@@ -305,6 +307,20 @@ export function applyTableSprms(
         const itcLim = readUint8(prl.operand, 2);
         const bordersToApply = readUint8(prl.operand, 3);
         const border = readBrc(prl.operand, 4);
+        into.definition = withCells(into.definition, (cell, index) =>
+          index < itcFirst || index >= itcLim
+            ? cell
+            : applyBrcToCell(cell, bordersToApply, border),
+        );
+        break;
+      }
+      case SPRM_T_SET_BRC80: {
+        // TableBrcOperand80: cb (MUST be 7), an ItcFirstLim, a bordersToApply bitmask, then one Brc80MayBeNil for every side the mask names -- the Word 97-era sibling of sprmTSetBrc immediately above, sharing its own four-byte header and folding through the identical applyBrcToCell/clearedSides path.
+        if (into.definition === undefined) break;
+        const itcFirst = readUint8(prl.operand, 1);
+        const itcLim = readUint8(prl.operand, 2);
+        const bordersToApply = readUint8(prl.operand, 3);
+        const border = readBrc80(prl.operand, 4);
         into.definition = withCells(into.definition, (cell, index) =>
           index < itcFirst || index >= itcLim
             ? cell
