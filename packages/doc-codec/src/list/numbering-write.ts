@@ -25,8 +25,6 @@ const LSTF_RGISTD_PARA_COUNT = 9;
 /** A non-simple LSTF always carries exactly nine LVLs ([MS-DOC] 2.9.191); sprmPIlvl's own operand range this writer's caller (pap-write.ts) validates against is the same fact restated at the paragraph-property layer. */
 const MAX_LIST_LEVEL = 8;
 const LEVELS_PER_MULTI_LEVEL_LIST = 9;
-/** rgbxchNums ([MS-DOC] 2.9.148): a fixed nine-entry array, zero-terminated -- the same bound numbering.ts's own readRgbxchNums reads against, restated here for buildLevelXst's own placeholder count. */
-const MAX_PLACEHOLDERS_PER_LEVEL = 9;
 /** rgbxchNums' own 8-bit entries ([MS-DOC] 2.9.148): each names a one-based character POSITION in the level's own Xst text, not a value, and that position has to fit a single unsigned byte -- a longer literal prefix before the first placeholder pushes it past this without complaint from anything but this check, since a plain JS number[] never clamps on its own and only silently truncates mod 256 once this module's bytes become a Uint8Array. */
 const MAX_UINT8 = 0xff;
 /** The format every level this writer invents for a paragraph that leaves ContentListMembership.format unstated, and every level a multi-level list's own dense 0..8 run needs filling but no paragraph ever actually used -- an arbitrary but harmless choice, since an unused level's own appearance is never read back into a context that renders it. */
@@ -89,8 +87,11 @@ function encodeXst(text: string): number[] {
 
 const PLACEHOLDER_PATTERN = /%(\d+)/g;
 
-/** The exact inverse of numbering.ts's own readLevelText: turns a level's own '%1.'-style text (or a literal glyph string, for a format with no placeholder at all) into an Xst plus the rgbxchNums positions its placeholders occupy. A '%N' match's own N (one-based, naming the zero-based level N-1) becomes a single raw code unit at that position -- exactly what [MS-DOC]'s own Xst field text describes ("Each placeholder is an unsigned 2-byte integer that specifies the zero-based level") -- and every other character passes through literally. Driven entirely by the level's own `text` field rather than by its format: a 'bullet' or 'none' level's text ordinarily carries no '%N' pattern at all, so it round-trips unchanged with no special case needed, exactly the way readLevelText itself never branches on format either. */
-function buildLevelXst(text: string): {
+/** The exact inverse of numbering.ts's own readLevelText: turns a level's own '%1.'-style text (or a literal glyph string, for a format with no placeholder at all) into an Xst plus the rgbxchNums positions its placeholders occupy. A '%N' match's own N (one-based, naming the zero-based level N-1) becomes a single raw code unit at that position -- exactly what [MS-DOC]'s own Xst field text describes ("Each placeholder is an unsigned 2-byte integer that specifies the zero-based level") -- and every other character passes through literally. Driven entirely by the level's own `text` field rather than by its format: a 'bullet' or 'none' level's text ordinarily carries no '%N' pattern at all, so it round-trips unchanged with no special case needed, exactly the way readLevelText itself never branches on format either. `level` is this LVL's own zero-based ilvl, needed only to bound how many placeholders [MS-DOC] 2.9.148 permits this particular level to name (one plus its own zero-based index) -- passed down from buildNumberingTables' own per-level loop, the one place that index is actually known. */
+function buildLevelXst(
+  text: string,
+  level: number,
+): {
   readonly xstText: string;
   readonly positions: readonly number[];
 } {
@@ -117,9 +118,10 @@ function buildLevelXst(text: string): {
     lastIndex = match.index + match[0].length;
   }
   xstText += text.slice(lastIndex);
-  if (positions.length > MAX_PLACEHOLDERS_PER_LEVEL) {
+  const maxPlaceholders = level + 1;
+  if (positions.length > maxPlaceholders) {
     throw new DocFormatError(
-      `numbering level text ${JSON.stringify(text)} names ${positions.length} placeholders, more than rgbxchNums' own fixed ${MAX_PLACEHOLDERS_PER_LEVEL}-entry array ([MS-DOC] 2.9.148) can hold`,
+      `numbering level text ${JSON.stringify(text)} at level ${level} names ${positions.length} placeholders, more than [MS-DOC] 2.9.148's own limit of ${maxPlaceholders} (one plus this LVL's own zero-based level) permits`,
     );
   }
   return { xstText, positions };
@@ -203,14 +205,18 @@ function buildLstfBytes(lsid: number, fSimpleList: boolean): number[] {
   return lstf;
 }
 
-function buildLvlBytes(numberingLevel: NumberingLevel): number[] {
+/** `level` is this LVL's own zero-based ilvl -- the caller's own per-level loop (buildNumberingTables) is the one place that index is actually known, since NumberingLevel itself carries no field naming its own position in the definition's `levels` map. */
+function buildLvlBytes(
+  numberingLevel: NumberingLevel,
+  level: number,
+): number[] {
   const nfc = NFC_BY_FORMAT.get(numberingLevel.format);
   if (nfc === undefined) {
     throw new DocFormatError(
       `numbering level format ${JSON.stringify(numberingLevel.format)} has no [MS-OSHARED] 2.2.1.3 MSONFC mapping this writer can state -- ContentListMembership.format itself only ever carries ${JSON.stringify(CONTENT_LIST_MEMBERSHIP_FORMATS)} (document-schema.js's own six-member enum), each of which always resolves here, so this failure means a NumberingDefinitions built by hand -- bypassing gatherListUsage entirely -- named a format string outside that set and outside the wider MSONFC vocabulary this function otherwise accepts`,
     );
   }
-  const { xstText, positions } = buildLevelXst(numberingLevel.text);
+  const { xstText, positions } = buildLevelXst(numberingLevel.text, level);
   const lvlf = new Array<number>(LVLF_SIZE).fill(0);
   writeUint32LE(lvlf, 0, numberingLevel.startAt); // iStartAt.
   lvlf[4] = nfc;
@@ -272,7 +278,7 @@ export function buildNumberingTables(
           "internal defect: buildNumberingTables lost a level its own key list just named",
         );
       }
-      lvlBytes.push(...buildLvlBytes(numberingLevel));
+      lvlBytes.push(...buildLvlBytes(numberingLevel, level));
     }
     const lfo = new Array<number>(LFO_SIZE).fill(0);
     writeUint32LE(lfo, 0, ilfo); // lsid -- the same value as this list's own ilfo, which is all buildLstfBytes above needs it to link back to (numbering.ts's own readNumberingDefinitions resolves an LFO to its LSTF purely by matching lsid).

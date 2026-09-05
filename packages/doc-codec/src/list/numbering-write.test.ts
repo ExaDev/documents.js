@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DocFormatError } from "../errors";
-import type { NumberingDefinitions } from "./numbering";
+import type { NumberingDefinitions, NumberingLevel } from "./numbering";
 import { buildNumberingTables, gatherListUsage } from "./numbering-write";
 
 // Hand-built expected PlfLst/PlfLfo byte sequences, assembled directly from [MS-DOC] 2.9.226 (PlfLst)/2.9.191 (LSTF)/2.9.196 (LVL)/2.9.148 (LVLF)/2.9.343 (Xst)/2.9.225 (PlfLfo)/2.9.181 (LFO)'s own field tables, independently of numbering-write.ts's own implementation -- the identical convention numbering.test.ts states for its own reader-side fixtures (and table/decoration.test.ts for its writer-side ones), applied here to buildNumberingTables/gatherListUsage: a test asserting against these bytes is checking this module's own understanding of the spec, not agreement with a second copy of the same layout. write.test.ts's own "writeDocContent numbering" describe block already covers what a whole document does with a paragraph's own list membership through a full read-back round trip; every case here covers a real defect that a round trip through this package's own reader cannot catch, because the reader either ignores the byte in question entirely (rgistdPara) or folds it order-insensitively (an sprm's own position -- see prop/pap-write.test.ts) or reader-and-writer shared one wrong constant (fNoRestart's own bit).
@@ -174,19 +174,28 @@ describe("buildNumberingTables: level text and format", () => {
   });
 
   it("encodes a multi-placeholder custom text (ancestor-level numbering) across several rgbxchNums entries", () => {
-    const definitions: NumberingDefinitions = {
-      "1": {
-        levels: { "0": { format: "upperRoman", text: "%1.%2)", startAt: 1 } },
-      },
-    };
+    // Level 1 (one-based index 2) is the shallowest level [MS-DOC] 2.9.148 permits two placeholders on -- level 0 permits only one (see the "refuses..." test below), so this level's own two-placeholder text lives on level 1, filled out to the required dense nine-level shape.
+    const levels: Record<string, NumberingLevel> = {};
+    for (let level = 0; level < 9; level += 1) {
+      levels[String(level)] = { format: "bullet", text: "•", startAt: 1 };
+    }
+    levels["1"] = { format: "upperRoman", text: "%1.%2)", startAt: 1 };
+    const definitions: NumberingDefinitions = { "1": { levels } };
     const tables = buildNumberingTables(definitions);
     if (tables === undefined) throw new Error("expected numbering tables");
+    const level0Bytes = expectedLvl({
+      nfc: 0x17, // msonfcBullet
+      xstCodeUnits: ["•".charCodeAt(0)],
+    });
     const expectedLvlBytes = expectedLvl({
       nfc: 0x01, // msonfcUpperRoman
       rgbxchNums: [1, 3],
       xstCodeUnits: [0, ".".charCodeAt(0), 1, ")".charCodeAt(0)],
     });
-    expect([...tables.plfLst.slice(2 + 28)]).toEqual(expectedLvlBytes);
+    const offset = 2 + 28 + level0Bytes.length;
+    expect([
+      ...tables.plfLst.slice(offset, offset + expectedLvlBytes.length),
+    ]).toEqual(expectedLvlBytes);
   });
 
   it("refuses a level whose own text names more placeholders than rgbxchNums' fixed nine-entry array can hold", () => {
@@ -200,6 +209,20 @@ describe("buildNumberingTables: level text and format", () => {
     expect(() => buildNumberingTables(definitions)).toThrow(
       /names 10 placeholders/,
     );
+    expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
+  });
+
+  it("refuses a level naming more placeholders than [MS-DOC] 2.9.148 permits for its own zero-based level, even within rgbxchNums' own nine-entry array", () => {
+    // Level 0 (one-based index 1) permits at most one placeholder -- two, while still well inside the fixed nine-entry array, exceeds the tighter per-level bound this specific level actually has.
+    const definitions: NumberingDefinitions = {
+      "1": {
+        levels: { "0": { format: "decimal", text: "%1.%2)", startAt: 1 } },
+      },
+    };
+    expect(() => buildNumberingTables(definitions)).toThrow(
+      /at level 0 names 2 placeholders/,
+    );
+    expect(() => buildNumberingTables(definitions)).toThrow(/limit of 1/);
     expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
   });
 
