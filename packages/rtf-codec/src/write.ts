@@ -335,11 +335,9 @@ function formFieldPayload(
       });
       options = allOptions.slice(0, MAX_DROPDOWN_OPTIONS);
     }
-    // `descriptor.value.length === 0` is folded into the same "no selection recorded" branch as `undefined`, not into the mismatch branch below: this function's one consistent rule for every value-shaped field across every controlType branch -- `alias`, `tag`, and a plainText `value` already all treat an empty string as carrying no distinguishable value to preserve, and the checkbox branch's own `value` above now does too (see its comment) -- so an empty string here reads as "never recorded" rather than as a genuine value that then happens to match none of `options`.
+    // Deliberately NOT gated on `descriptor.value.length === 0` the way the checkbox/plainText `value` branches are: an empty string is not inherently "no value" for a dropDown the way it is for those -- `options` can genuinely contain the empty string as one of its own real, indexable entries, and when it does, `value: ''` is a fully representable, legitimate selection (index 0 is as valid an \ffres/\ffdefres target as any other). `options.indexOf` already distinguishes the two cases this branch actually needs to tell apart: an empty string matching a real empty-string option (index >= 0, a genuine selection) from an empty string matching nothing at all (index -1, falling into the diagnostic-suppression case below). Folding `.length === 0` in here as well would silently discard a real selection whenever it happens to select that entry, with no diagnostic at all -- and this reader's own writer can produce exactly that shape from real RTF bytes, so a read-then-write round trip of a document this package itself emits could otherwise lose the selection.
     const selectedIndex =
-      options === undefined ||
-      descriptor.value === undefined ||
-      descriptor.value.length === 0
+      options === undefined || descriptor.value === undefined
         ? undefined
         : options.indexOf(descriptor.value);
     if (selectedIndex !== undefined && selectedIndex !== -1) {
