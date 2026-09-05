@@ -359,7 +359,7 @@ describe("compute_formula", () => {
     expect(entry.outcome.status).toBe("no-content");
   });
 
-  // The table-cell-recursion and drawing-page arms of the same walk have no real per-format writer to round-trip through today: every table-cell writer in this package (docx/odt) and the odg drawing-page shape writer silently skip a non-paragraph/non-image block (see documents.js's own src/model/formula.test.ts, which is where those two arms are exercised directly against collectDocumentFormulas instead). This test at least proves the tool-level plumbing end to end for the one construct docx CAN carry a formula through -- a section-level embeddedObject block, structurally identical to the block a table cell would hold if any writer produced one -- via a real docx byte round trip, not a hand-built ContentDocument fed straight to the tool's own read path.
+  // The drawing-page arm of the same walk has no real per-format writer OR reader to round-trip through today: buildOdgPackage's own appendShape silently skips a non-paragraph/non-image block, and no reader in this family recovers a LibreOffice-authored formula from a drawing page's own shape either (see documents.js's own src/model/formula.test.ts, which is where that arm is exercised directly against collectDocumentFormulas instead). This test at least proves the tool-level plumbing end to end for the one construct docx CAN carry a formula through at section level -- a real docx byte round trip, not a hand-built ContentDocument fed straight to the tool's own read path. The table-cell arm gets its own genuine byte-level coverage in the next test below, through docx's own reader rather than this construction.
   it("walks a wordprocessing section's own embeddedObject block, from a real docx", async () => {
     const formula = latexToFormula("a + b", {
       source: "test:compute-formula",
@@ -395,6 +395,45 @@ describe("compute_formula", () => {
     expect(output.documentKind).toBe("wordprocessing");
     expect(output.formulaCount).toBe(1);
     expect(output.formulas[0]?.outcome.status).toBe("no-content");
+  });
+
+  // The table-cell arm DOES have a real per-format reader to round-trip through, unlike the drawing-page arm above: docx's own reader (documents.js's src/ooxml/docx/embedded-objects.ts, spliceContainerBlocks/rebuildTable) recovers a genuine Word-authored equation nested inside a table cell -- proven directly against real bytes by documents.js's own src/ooxml/docx/read.test.ts, and closing the exact coverage gap that let round-9's doc regression ("no format's writer populates a formula in either position today") ship unnoticed. Built through the low-level DocxEditor/appendOfficeMath API rather than documents.js's own ContentDocument -> docx content writer (which is the writer that silently skips a cell's non-paragraph blocks -- see documents.js's own src/model/formula.test.ts), so the second cell's paragraph carries a real m:oMath equation exactly as Word itself would author one.
+  it("walks a table cell's own blocks, recovering a real Word-authored equation nested in a table cell, from a real docx", async () => {
+    const editor = createDocx();
+    const table = editor.body.appendTable({ rows: 1, columns: 2 });
+    const plainParagraph = table.cell(0, 0).paragraphs()[0];
+    if (plainParagraph === undefined) {
+      throw new Error("expected buildCell's own default paragraph");
+    }
+    plainParagraph.appendRun({ text: "plain cell" });
+    const formula = latexToFormula("x", {
+      source: "test:compute-formula-table-cell",
+    }).formula;
+    const mathParagraph = table.cell(0, 1).paragraphs()[0];
+    if (mathParagraph === undefined) {
+      throw new Error("expected buildCell's own default paragraph");
+    }
+    mathParagraph.appendOfficeMath(formula.mathml);
+    const docxBytes = editor.toBytes();
+
+    const result = await pair.client.callTool({
+      name: "compute_formula",
+      arguments: {
+        source: { bytesBase64: bytesToBase64(docxBytes), format: "docx" },
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    const output = structuredContentOf(result);
+    expect(output.documentKind).toBe("wordprocessing");
+    // Only the second cell's equation-only paragraph is recovered -- the first cell's plain text never produces a formula entry.
+    expect(output.formulaCount).toBe(1);
+    const [entry] = output.formulas;
+    if (entry === undefined) {
+      throw new Error("expected one formula entry");
+    }
+    // Same reason as the section-level docx case above: OMML round-trips MathML only, not the documents.js-internal LaTeX/MathExpression two-layer model.
+    expect(entry.outcome.status).toBe("no-content");
   });
 
   // ExaDev/documents.js#928 round-7 review: compute_formula used to pass the OUTERMOST document's own symbolTable to every formula entry collectDocumentFormulas returned, including a formula nested inside another embedded object's own document -- wrong per document-schema.js's own content.ts ("the symbol and unit references inside resolve against the EMBEDDING document's own symbolTable field"), and dangerous specifically for units: two documents fused by nesting can register the identical unit id against two DIFFERENT conversion factors, so evaluating against the wrong table doesn't throw -- it silently returns a wrong number rather than an error. readNativeDocumentTree is mocked for this one call only (see the module-level vi.mock above) because no format codec in this family persists a symbolTable/unit registry into real document bytes yet; every other step -- flattenTree, collectDocumentFormulas, evaluateFormula, structuredContent assembly -- is this file's own real, unmocked code, reached through the identical genuine MCP callTool round trip every other test in this suite uses.
