@@ -255,6 +255,7 @@ describe("readWorkbookGlobals", () => {
     expect(globals.cellFormats[0]?.decoration).toEqual({
       fillPattern: 1,
       fillForegroundIcv: 12,
+      fillBackgroundIcv: 0x41, // Automatic -- cellXfTrailer's own default when the caller states no background icv.
       left: { style: 1, icv: 10 },
       right: { style: 0, icv: 0 },
       top: { style: 1, icv: 10 },
