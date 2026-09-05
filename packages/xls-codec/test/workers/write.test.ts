@@ -102,7 +102,7 @@ describe("xls-codec write path inside workerd", () => {
               column: 0,
               value: { kind: "string", value: "Decorated" },
               displayText: "Decorated",
-              background: { r: 1, g: 0, b: 0 },
+              background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
               borders: {
                 left: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.75 },
               },
@@ -120,7 +120,10 @@ describe("xls-codec write path inside workerd", () => {
     const cell = content.sheets[0]?.cells.find(
       (c) => c.column === 0 && c.row === 0,
     );
-    expect(cell?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(cell?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
     expect(cell?.borders).toEqual({
       left: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.75 },
     });
