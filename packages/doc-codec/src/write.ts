@@ -22,7 +22,7 @@ import { encodeParagraphGrpprl } from "./prop/pap-write";
 import { buildPlcfSed, buildSepx, encodeSectionGrpprl } from "./prop/sep-write";
 import { buildFontTable } from "./style/fonts";
 import { buildEmptyStsh } from "./style/stsh";
-import { flattenSectionBlocks } from "./table/write";
+import { flattenSectionBlocks, type WriteWarning } from "./table/write";
 import { buildTextClx } from "./text/piece-table-write";
 import { PARAGRAPH_MARK } from "./text/special";
 
@@ -46,8 +46,14 @@ interface FormattedParagraph {
   readonly grpprl: readonly number[];
 }
 
+export interface WriteDocContentOptions {
+  /** Reports a non-fatal write-time degradation -- today, only table/write.ts's own per-row lost-boundary-budget fallback (ExaDev/documents.js#1013), the same `onWarning` shape byte-codec's PNG decoder and pdf-codec already use for a recoverable, non-fatal defect. Never called for anything this writer refuses outright: those still throw DocFormatError/DocUnsupportedError exactly as before. */
+  readonly onWarning?: WriteWarning;
+}
+
 export function writeDocContent(
   document: ContentDocument,
+  options: WriteDocContentOptions = {},
 ): Uint8Array<ArrayBuffer> {
   if (document.kind !== "wordprocessing") {
     throw new DocUnsupportedError(
@@ -64,7 +70,10 @@ export function writeDocContent(
     throw new DocFormatError("a wordprocessing document must carry a section");
   }
 
-  const writeParagraphs = flattenSectionBlocks(section.blocks);
+  const writeParagraphs = flattenSectionBlocks(
+    section.blocks,
+    options.onWarning,
+  );
   // The Main Document's own last character MUST be an ordinary paragraph mark ([MS-DOC]'s own "Main Document" glossary entry: "The last character in the main document MUST be a paragraph mark (Unicode 0x000D)") -- never a table's own cell/TTP mark (0x0007), even though a row-ending mark is itself a perfectly legal paragraph-boundary terminator everywhere else ([MS-DOC] 2.4.2's "Determining Paragraph Boundaries": "The character at the end character position of a paragraph MUST be a paragraph mark, an end-of-section character, a cell mark, or a TTP mark"). An otherwise-empty section and a section whose very last block is a table both leave the flattened sequence's own last terminator short of that stronger, main-document-wide requirement, so both need one trailing empty ordinary paragraph appended -- confirmed against a real producer (LibreOffice 26.2.5.2): a table it writes as a document's own last content is always followed by a genuine 0x000D, and a written .doc lacking one is not merely missing a property but is not recognised as carrying a table at all by LibreOffice's own .doc import filter (see the README's Tables section for the full finding, ExaDev/documents.js#892).
   const lastTerminator =
     writeParagraphs[writeParagraphs.length - 1]?.terminator;
