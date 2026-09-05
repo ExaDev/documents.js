@@ -8,7 +8,9 @@ import {
   createDocx,
   createOds,
   decodeDocumentPackage,
+  decodePackage,
   odsToXlsx,
+  readDocxExtras,
   readOdsContent,
   xlsxToOds,
 } from "documents.js";
@@ -22,6 +24,7 @@ import {
   it,
 } from "vitest";
 import { createServer } from "../server";
+import { buildDocxWithExtras } from "../test-support/docx-extras-fixture";
 
 // Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callbacks in isolation -- so this proves the wiring: that `metadata_read`/`metadata_write` are registered under those names, that they reach documents.js's real readDocumentMetadata/setDocumentMetadata, and that a rejection documents.js throws (an unsupported xlsx target, say) reaches the caller as an isError result carrying documents.js's own message text verbatim. Mirrors src/tools/docx-extras.test.ts's own connection harness.
 
@@ -147,6 +150,38 @@ describe("metadata_read / metadata_write", () => {
     expect(readMetadata.keywords).toStrictEqual(["metadata", "round-trip"]);
     expect(typeof readMetadata.createdIso).toBe("string");
     expect(typeof readMetadata.modifiedIso).toBe("string");
+  });
+
+  // ExaDev/documents.js#966/#1007: metadata_write reaches documents.js's setDocumentMetadata, whose docx/docx branch patches docProps/core.xml directly on the decoded Package rather than rebuilding from a ContentDocument -- so comments, footnotes, headers/footers, and numbering definitions (everything readDocxExtras covers) survive a metadata_write call through this MCP tool too, with no special-casing needed in this package's own tool implementation.
+  it("preserves docx-extras data (comments, footnotes, headers/footers, numbering) when patching a docx's metadata", async () => {
+    const sourceBytes = buildDocxWithExtras();
+    const before = readDocxExtras(decodePackage(sourceBytes));
+    expect(before.comments.length).toBeGreaterThan(0);
+    expect(before.footnotes.length).toBeGreaterThan(0);
+    expect(before.headerFooterParts.length).toBeGreaterThan(0);
+    expect(Object.keys(before.numbering).length).toBeGreaterThan(0);
+
+    const writeResult = await pair.client.callTool({
+      name: "metadata_write",
+      arguments: {
+        source: { bytesBase64: bytesToBase64(sourceBytes), format: "docx" },
+        targetFormat: "docx",
+        setTitle: "Patched Via MCP",
+      },
+    });
+
+    expect(writeResult.isError).toBeFalsy();
+    if (
+      !isRecord(writeResult.structuredContent) ||
+      typeof writeResult.structuredContent.bytesBase64 !== "string"
+    ) {
+      throw new Error("expected an inline bytesBase64 result");
+    }
+    const patchedBytes = base64ToBytes(
+      writeResult.structuredContent.bytesBase64,
+    );
+
+    expect(readDocxExtras(decodePackage(patchedBytes))).toStrictEqual(before);
   });
 
   it("patches an xlsx file in place now that documents.js wires a real xlsx content codec, leaving its cells untouched", async () => {
