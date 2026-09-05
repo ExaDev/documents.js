@@ -66,10 +66,13 @@ interface PaletteEncoding {
   readonly trns?: Uint8Array<ArrayBuffer>; // one alpha byte per palette entry, present only when image.alpha was defined
 }
 
-// Scans a truecolour RawImage's pixels for a lossless indexed-colour (PNG colour type 3) representation: every pixel's (r, g, b, a) reduces to one of at most 256 distinct colours, addressed by a one-byte-per-pixel index into a PLTE (+ tRNS) chunk pair. Returns undefined the instant a 257th distinct colour would be needed -- colour type 3 cannot hold more entries than that -- so the caller falls back to the truecolour path, which has no such limit. Only ever called for channels === 3: PNG's palette entries are always RGB triples, so a grayscale (channels === 1) RawImage indexed this way would come back from decodePng with channels === 3, silently changing its colour space -- exactly the round-trip break this feature must not introduce.
+// Scans a truecolour RawImage's pixels for a lossless indexed-colour (PNG colour type 3) representation: every pixel's (r, g, b, a) reduces to one of at most 256 distinct colours, addressed by a one-byte-per-pixel index into a PLTE (+ tRNS) chunk pair. Returns undefined the instant a 257th distinct colour would be needed -- colour type 3 cannot hold more entries than that -- so the caller falls back to the truecolour path, which has no such limit. Also returns undefined for a zero-dimension image (an empty PLTE chunk is not a valid PNG chunk -- the format requires at least one palette entry -- and the truecolour path this falls back to has no equivalent-emptiness constraint). Only ever called for channels === 3: PNG's palette entries are always RGB triples, so a grayscale (channels === 1) RawImage indexed this way would come back from decodePng with channels === 3, silently changing its colour space -- exactly the round-trip break this feature must not introduce.
 function detectPalette(image: RawImage): PaletteEncoding | undefined {
   const { width, height, data, alpha } = image;
   const pixelCount = width * height;
+  if (pixelCount === 0) {
+    return undefined;
+  }
   const colorToIndex = new Map<number, number>();
   const indices = new Uint8Array(pixelCount);
   const paletteRgb: number[] = [];
