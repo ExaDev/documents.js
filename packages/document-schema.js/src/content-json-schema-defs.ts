@@ -1,5 +1,10 @@
-import type { z } from "zod";
+import { z } from "zod";
 import { SI_BASE_DIMENSIONS } from "./math";
+import {
+  MathMlAttributeSchema,
+  MathMlElementSchema,
+  MathMlNodeSchema,
+} from "./mathml";
 import { schemaUriFor } from "./schema-io";
 
 // The hand-authored JSON Schema $defs fragments spliced into content-document.schema.json's `override()` callback (scripts/generate-json-schemas.mjs), lifted out into their own src module rather than staying inline in that script. The reason is single-sourcing, not tidiness: this exact object needs to be reachable from two places that cannot share an import graph --
@@ -9,7 +14,7 @@ import { schemaUriFor } from "./schema-io";
 //
 // If CONTENT_DEFS stayed inline in the .mjs script, only path 1 above would work: the script imports Zod schemas exclusively from '../dist/index.js' (a build artefact that may not exist, and per eslint.config.ts/tsconfig.json is deliberately excluded from both linting and typechecking, matching test/smoke.test.mjs's own precedent) -- a test that has to import through that path would only ever run after a build, which `pnpm test` (the "unit" vitest project, run standalone in CI's own "test" job, with no build step beforehand) never guarantees. Living here instead, this is an ordinary, fully typechecked and linted src module like any other -- CONTENT_DEFS just happens to be consumed by a script as well as by the package's own test suite.
 //
-// The fragments below still cover exactly what scripts/generate-json-schemas.mjs's own top-of-file comment already explains: ContentBlockSchema, ContentEmbeddedObjectSchema, MathMlNodeSchema, and MathExpressionSchema are z.custom() predicates z.toJSONSchema() cannot introspect at all (recursion the pinned Zod version's z.lazy() can't express -- see src/content.ts's isContentBlock/isContentEmbeddedObject, src/mathml.ts's isMathMlNode, and src/math.ts's isMathExpression), so every schema reachable only through one of those four is transcribed by hand here, field-for-field, from the real Zod object definitions. The package tree added its own opaque set in the 4.0.0 major: DocumentTreeSchema's children reach the tree's per-kind group schemas (src/package-node.ts, all z.custom over recursive guards), so the whole TreeNode vocabulary -- container descriptors, anchor paragraphs, the nine group wrappers (the seven of 4.0.0 plus 4.1.0's two construct groups), and the sheet-image/vector leaves -- is transcribed here too, and the generator splices CONTENT_DEFS into document-tree.schema.json as well as content-document.schema.json so both files resolve their local #/$defs pointers without depending on each other's file layout (the one deliberate cross-file ref stays $defs.ContentEmbeddedObject(Block)'s document pointer, CONTENT_DOCUMENT_URI). Three further schemas are transcribed despite being real z.objects themselves: ContentFormulaSchema (its mathml/content fields reach the opaque MathMlNodeSchema/MathExpressionSchema nodes, exactly like ContentTableCellSchema's blocks), SymbolTableSchema (transcribed so each ContentDocument arm's symbolTable field is one named $ref rather than five inlined copies of the whole unit-registry subtree), and now StyleEntrySchema/DefinitionEntrySchema (same five-copies reason for the package arms' styles/definitions fields) -- the generator's override() replaces each with a $ref to its fragment here. Anything transcribed here that DOES have a real, non-custom, exported Zod schema counterpart is exactly what content-json-schema-defs.test.ts holds to a live z.toJSONSchema() comparison -- which is every construct descriptor fragment, since a descriptor is a plain z.strictObject reaching no opaque node; re-verify the rest (ContentTableCell/ContentTableRow/ContentTable, ContentEmbeddedObject(Block), the two block unions -- ContentBlock and the tree's marker-free TreeBlockLeaf -- the nine group wrappers, MathMlElement/MathMlNode, MathApp/MathSum/MathProd/MathMatrix/MathExpression, ContentFormula) against src/content.ts/src/package-node.ts/src/mathml.ts/src/math.ts by hand whenever those files' field shapes change, exactly as before.
+// The fragments below still cover exactly what scripts/generate-json-schemas.mjs's own top-of-file comment already explains: ContentBlockSchema, ContentEmbeddedObjectSchema, and MathExpressionSchema are z.custom() predicates z.toJSONSchema() cannot introspect at all (recursion the pinned Zod version's z.lazy() can't express -- see src/content.ts's isContentBlock/isContentEmbeddedObject and src/math.ts's isMathExpression), so every schema reachable only through one of those three is transcribed by hand here, field-for-field, from the real Zod object definitions. MathMlNodeSchema left that set in ExaDev/documents.js#937: it is a real, self-recursive z.discriminatedUnion() now (src/mathml.ts), so MATHML_JSON_DEFS below computes MathMlAttribute/MathMlElement/MathMlNode from a live z.toJSONSchema() call instead of transcribing them, and CONTENT_DEFS just spreads that in. The package tree added its own opaque set in the 4.0.0 major: DocumentTreeSchema's children reach the tree's per-kind group schemas (src/package-node.ts, all z.custom over recursive guards), so the whole TreeNode vocabulary -- container descriptors, anchor paragraphs, the nine group wrappers (the seven of 4.0.0 plus 4.1.0's two construct groups), and the sheet-image/vector leaves -- is transcribed here too, and the generator splices CONTENT_DEFS into document-tree.schema.json as well as content-document.schema.json so both files resolve their local #/$defs pointers without depending on each other's file layout (the one deliberate cross-file ref stays $defs.ContentEmbeddedObject(Block)'s document pointer, CONTENT_DOCUMENT_URI). Three further schemas are transcribed despite being real z.objects themselves: ContentFormulaSchema (its `content` field still reaches the opaque MathExpressionSchema node, exactly like ContentTableCellSchema's blocks -- its `mathml` field reaches the now-real MathMlNodeSchema, but the fragment stays hand-transcribed as a whole because of the field that doesn't), SymbolTableSchema (transcribed so each ContentDocument arm's symbolTable field is one named $ref rather than five inlined copies of the whole unit-registry subtree), and now StyleEntrySchema/DefinitionEntrySchema (same five-copies reason for the package arms' styles/definitions fields) -- the generator's override() replaces each with a $ref to its fragment here. Anything transcribed here that DOES have a real, non-custom, exported Zod schema counterpart is exactly what content-json-schema-defs.test.ts holds to a live z.toJSONSchema() comparison -- which is every construct descriptor fragment, since a descriptor is a plain z.strictObject reaching no opaque node, plus MathMlAttribute/MathMlElement/MathMlNode now that they are generated rather than transcribed; re-verify the rest (ContentTableCell/ContentTableRow/ContentTable, ContentEmbeddedObject(Block), the two block unions -- ContentBlock and the tree's marker-free TreeBlockLeaf -- the nine group wrappers, MathApp/MathSum/MathProd/MathMatrix/MathExpression, ContentFormula) against src/content.ts/src/package-node.ts/src/math.ts by hand whenever those files' field shapes change, exactly as before.
 
 type JsonSchema = z.core.JSONSchema.JSONSchema;
 
@@ -27,6 +32,40 @@ export const EMBEDDED_OBJECT_KINDS = [
 
 // The genuine cycle back to a whole ContentDocument: ContentEmbeddedObject(Block)'s own `document` field. Resolved once here since both the ContentEmbeddedObjectBlock fragment below and scripts/generate-json-schemas.mjs's own override() branch for the standalone ContentEmbeddedObjectSchema need the identical URI.
 export const CONTENT_DOCUMENT_URI = schemaUriFor("ContentDocument");
+
+// MathMlAttribute/MathMlElement/MathMlNode (src/mathml.ts), computed from a live z.toJSONSchema() call rather than transcribed by hand: MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937, so it introspects cleanly now. The `#/$defs/<id>` uri scheme matches every other cross-reference CONTENT_DEFS's own fragments use, and reproduces the identical nested-$ref shape (MathMlElement.children and MathMlNode's own element variant pointing back at each other by name rather than inlining) that content-json-schema-defs.test.ts's own live-comparison registry confirms empirically against a hand-authored fragment -- see that file's top comment for the same construction.
+const MATHML_REGISTRY = z.registry<{ id: string }>();
+MATHML_REGISTRY.add(MathMlAttributeSchema, { id: "MathMlAttribute" });
+MATHML_REGISTRY.add(MathMlElementSchema, { id: "MathMlElement" });
+MATHML_REGISTRY.add(MathMlNodeSchema, { id: "MathMlNode" });
+const { schemas: mathMlJsonSchemas } = z.toJSONSchema(MATHML_REGISTRY, {
+  uri: (id) => `#/$defs/${id}`,
+});
+
+// Strips the $schema/$id root markers z.toJSONSchema() stamps onto every registry entry (each is generated as its own standalone root) -- an artefact of generation, not a real structural difference from a fragment nested inside another schema's own $defs, matching content-json-schema-defs.test.ts's own withoutRootMarkers.
+function mathMlDef(
+  id: "MathMlAttribute" | "MathMlElement" | "MathMlNode",
+): JsonSchema {
+  const generated = mathMlJsonSchemas[id];
+  if (generated === undefined) {
+    throw new Error(
+      `z.toJSONSchema() produced no schema for registered id "${id}"`,
+    );
+  }
+  const stripped = { ...generated };
+  delete stripped.$schema;
+  delete stripped.$id;
+  return stripped;
+}
+
+const MATHML_JSON_DEFS: Record<
+  "MathMlAttribute" | "MathMlElement" | "MathMlNode",
+  JsonSchema
+> = {
+  MathMlAttribute: mathMlDef("MathMlAttribute"),
+  MathMlElement: mathMlDef("MathMlElement"),
+  MathMlNode: mathMlDef("MathMlNode"),
+};
 
 // The two binder variants (MathSum/MathProd) differ only in their kind discriminant -- one builder rather than two copies of the same twelve-line fragment, so a binder-field change lands in both or fails the hand re-verification visibly in the diff.
 function mathBinderDef(kind: "sum" | "prod"): JsonSchema {
@@ -1644,83 +1683,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["kind"],
     additionalProperties: {},
   },
-  // The MathML node tree carried by the ContentDocument 'formula' variant's own ContentFormulaSchema.mathml (src/content.ts), reached through MathMlNodeSchema -- the third z.custom() node, transcribed field-for-field from src/mathml.ts's own real Zod definitions (MathMlAttributeSchema/MathMlTextSchema/MathMlCdataSchema/MathMlCommentSchema/MathMlDeclarationSchema/MathMlPiSchema) plus the MathMlElement interface, which has no z.object() counterpart usable here for the same reason ContentTableCell doesn't: MathMlElementSchema.children is z.array(MathMlNodeSchema), so converting it drags in the opaque custom node again.
-  MathMlAttribute: {
-    type: "object",
-    properties: {
-      name: { type: "string" },
-      value: { type: "string" },
-    },
-    required: ["name", "value"],
-    additionalProperties: false,
-  },
-  MathMlElement: {
-    type: "object",
-    properties: {
-      type: { type: "string", const: "element" },
-      tag: { type: "string" },
-      attributes: { type: "array", items: { $ref: "#/$defs/MathMlAttribute" } },
-      // Recursive -- an element's children may themselves be elements -- so this points at the shared MathMlNode definition rather than inlining, exactly as ContentTableCell.blocks points at ContentBlock.
-      children: { type: "array", items: { $ref: "#/$defs/MathMlNode" } },
-    },
-    required: ["type", "tag", "attributes", "children"],
-    additionalProperties: false,
-  },
-  // MathMlNode itself (src/mathml.ts): `MathMlText | MathMlCdata | MathMlComment | MathMlDeclaration | MathMlPi | MathMlElement`, in that exact declared order. The five non-element variants are inlined here rather than each getting its own $def -- unlike MathMlElement, none of them is referenced from anywhere else or recursive, so a separate definition would buy nothing.
-  MathMlNode: {
-    oneOf: [
-      {
-        type: "object",
-        properties: {
-          type: { type: "string", const: "text" },
-          value: { type: "string" },
-        },
-        required: ["type", "value"],
-        additionalProperties: false,
-      },
-      {
-        type: "object",
-        properties: {
-          type: { type: "string", const: "cdata" },
-          value: { type: "string" },
-        },
-        required: ["type", "value"],
-        additionalProperties: false,
-      },
-      {
-        type: "object",
-        properties: {
-          type: { type: "string", const: "comment" },
-          value: { type: "string" },
-        },
-        required: ["type", "value"],
-        additionalProperties: false,
-      },
-      {
-        type: "object",
-        properties: {
-          type: { type: "string", const: "declaration" },
-          attributes: {
-            type: "array",
-            items: { $ref: "#/$defs/MathMlAttribute" },
-          },
-        },
-        required: ["type", "attributes"],
-        additionalProperties: false,
-      },
-      {
-        type: "object",
-        properties: {
-          type: { type: "string", const: "pi" },
-          target: { type: "string" },
-          content: { type: "string" },
-        },
-        required: ["type", "target", "content"],
-        additionalProperties: false,
-      },
-      { $ref: "#/$defs/MathMlElement" },
-    ],
-  },
+  // The MathML node tree carried by the ContentDocument 'formula' variant's own ContentFormulaSchema.mathml (src/content.ts) -- MathMlAttribute/MathMlElement/MathMlNode, spread in from MATHML_JSON_DEFS above rather than transcribed by hand, since MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937 and z.toJSONSchema() can introspect it directly now.
+  ...MATHML_JSON_DEFS,
   // -- The math value schemas (src/math.ts) --
   //
   // ContentFormula itself (src/content.ts): its `mathml` field reaches the opaque MathMlNodeSchema and its `content` field the opaque MathExpressionSchema, so the generator's override() replaces every occurrence with a $ref to this fragment (the ContentTableCell precedent -- a real z.object dragged opaque by one field). presentation/provenance/starMath are transcribed alongside rather than left to inline, so the whole fragment tree under `formula` lives here where the regression test can see the leaves.
