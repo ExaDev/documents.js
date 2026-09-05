@@ -1997,7 +1997,7 @@ describe("write API: insertNode / insertEdge (#935)", () => {
   });
 
   it("front-inserting against a tied PROPERTY sibling group still renumbers it into a real sequence -- verified directly rather than left as an assumption", () => {
-    // Concern #3 of the round-1 review: { at: 'start' } against a single tied PROPERTY sibling walks the orderKeyBefore(floor) path, which was already OrderKeyBudgetExhaustedError before the tie fix above (unrelated code path -- `before` is undefined here, not tied-with-`after`), so this is pre-existing rebalance behaviour, not something the tie fix changed. Documented here so it is a verified fact, not an unverified assumption.
+    // { at: 'start' } against a single tied PROPERTY sibling walks the orderKeyBefore(floor) path, which was already OrderKeyBudgetExhaustedError before the tie fix above (unrelated code path -- `before` is undefined here, not tied-with-`after`), so this is pre-existing rebalance behaviour, not something the tie fix changed. Documented here so it is a verified fact, not an unverified assumption.
     const extractMetadataScalars: ExtractionPolicy = (path) =>
       path.length === 2 && path[0] === "metadata" && path[1] === "title"
         ? "extract"
@@ -2089,7 +2089,7 @@ describe("write API: insertEdge refuses a CONTAINS cycle (#935)", () => {
     ]);
   });
 
-  it("insertNode refuses ContainsCycleError as part of the round-5 regression fix: its own fresh-mint children-wiring is now checked exactly like insertEdge's attachment, so a cycle closing through an id insertEdge already attached an edge onto BEFORE that id had a node is caught rather than silently wired -- the old node-lookup-based check could not see a cycle closing through an id with no node yet", () => {
+  it("insertNode refuses a CONTAINS cycle closing through an id that had no node when the first edge was attached, since its fresh-mint children-wiring is checked exactly like insertEdge's own attachment rather than a node-lookup-based check that could not see a cycle closing through an id with no node yet", () => {
     const leaf = insertNode(EMPTY_GRAPH, {
       kind: "paragraph",
       properties: { kind: "paragraph", runs: [{ text: "Leaf." }] },
@@ -2440,7 +2440,7 @@ describe("write API: insertEdge refuses an ambiguous before/after sibling only o
       kind: "value",
       properties: { value: "shared" },
     });
-    // Two sequential insertEdge appends of the SAME target: insertEdge's own bisection never ties two of its own siblings, so these two PROPERTY edges to v.id carry distinct orderKeys even though they share a target -- exactly the "duplicate CONTAINS/PROPERTY children with distinct orderKeys" shape #935's round-6 fix says must resolve deterministically, not throw.
+    // Two sequential insertEdge appends of the SAME target: insertEdge's own bisection never ties two of its own siblings, so these two PROPERTY edges to v.id carry distinct orderKeys even though they share a target -- exactly the "duplicate CONTAINS/PROPERTY children with distinct orderKeys" shape this module resolves deterministically, rather than refusing.
     let graph = insertEdge(v.graph, "parent", v.id, {
       kind: "PROPERTY",
       path: ["a"],
