@@ -16,6 +16,8 @@ import {
 const LSTF_SIZE = 28;
 const LVLF_SIZE = 28;
 const LFO_SIZE = 16;
+/** LFOData's own cp field ([MS-DOC] 2.9.149): "This value is undefined and MUST be ignored." 0xFFFFFFFF is the spec's own worked example for an LFOData with no LFOLVL overrides, so this writer states the identical value rather than an arbitrary one of its own. */
+const LFO_DATA_CP = 0xffffffff;
 const LSTF_FLAG_SIMPLE_LIST = 0x01;
 /** rgistdPara ([MS-DOC] 2.9.191's own LSTF field table): nine 2-byte ISTD entries, one per level, each "MUST be set to 0x0FFF to specify that this level is not linked to a style" when (as here) the writer links no per-level style cascade at all -- a genuine MUST this writer has to satisfy itself, unlike tplc/grfhic, which numbering.ts's own reader ignores outright. 0x0000 is not an available "unset" spelling: it names a real style (ISTD 0, "Normal"), so leaving the field zeroed states a link this writer never intended. */
 const LSTF_RGISTD_PARA_UNLINKED = 0x0fff;
@@ -234,6 +236,7 @@ export function buildNumberingTables(
   const lstfBytes: number[] = [];
   const lvlBytes: number[] = [];
   const rgLfoBytes: number[] = [];
+  const rgLfoDataBytes: number[] = [];
   for (const ilfo of ilfos) {
     const definition = definitions[String(ilfo)];
     if (definition === undefined) {
@@ -265,8 +268,11 @@ export function buildNumberingTables(
     }
     const lfo = new Array<number>(LFO_SIZE).fill(0);
     writeUint32LE(lfo, 0, ilfo); // lsid -- the same value as this list's own ilfo, which is all buildLstfBytes above needs it to link back to (numbering.ts's own readNumberingDefinitions resolves an LFO to its LSTF purely by matching lsid).
-    // The rest of LFO_SIZE (offset 4 onward, including clfolvl) stays 0: no rgLfoData entries follow, matching numbering.ts's own reader, which never writes -- reads -- past rgLfo either.
+    // The rest of LFO_SIZE (offset 4 onward) stays 0, including clfolvl (offset 12): this writer states no LFOLVL overrides of its own. clfolvl 0 means the LFOData that MUST still follow this LFO in rgLfoData (built below) carries an empty rgLfoLvl -- it does NOT mean the LFOData record itself is skipped. [MS-DOC] 2.9.225: "The rgLfoData array MUST contain exactly the same number of elements as the rgLfo array, and are in the same respective order" -- omitting it would leave fcPlfLfo+lcbPlfLfo landing exactly at rgLfo's own end, with nothing left for a real consumer's own list-formatting algorithm to read past it.
     rgLfoBytes.push(...lfo);
+    const lfoData = new Array<number>(4).fill(0);
+    writeUint32LE(lfoData, 0, LFO_DATA_CP); // cp -- undefined and MUST be ignored ([MS-DOC] 2.9.149); no rgLfoLvl entries follow, since clfolvl is 0 above.
+    rgLfoDataBytes.push(...lfoData);
   }
 
   const plfLstHeader: number[] = [];
@@ -275,7 +281,12 @@ export function buildNumberingTables(
 
   const plfLfoHeader: number[] = [];
   push32(plfLfoHeader, ilfos.length); // lfoMac.
-  const plfLfo = new Uint8Array([...plfLfoHeader, ...rgLfoBytes]);
+  // lfoMac + rgLfo + rgLfoData, physically contiguous and all counted in lcbPlfLfo -- unlike PlfLst's own lcbPlfLst, PlfLfo has no appended-past-the-declared-length convention, so the caller (write.ts) can derive lcbPlfLfo directly from plfLfo.length rather than tracking a second shorter figure the way lcbPlfLst needs.
+  const plfLfo = new Uint8Array([
+    ...plfLfoHeader,
+    ...rgLfoBytes,
+    ...rgLfoDataBytes,
+  ]);
 
   return {
     plfLst,

@@ -105,6 +105,25 @@ describe("buildNumberingTables: LSTF", () => {
       ...u32(1), // lfoMac
       ...u32(1), // rgLfo[0].lsid, matching this list's own ilfo/lsid
       ...new Array<number>(12).fill(0), // unused1(4) + unused2(4) + clfolvl/ibstFltAutoNum/grfhic/unused3 (1 each)
+      ...u32(0xffffffff), // rgLfoData[0].cp -- undefined/MUST-be-ignored per [MS-DOC] 2.9.149, 0xFFFFFFFF matching the spec's own worked example; no rgLfoLvl entries follow since clfolvl above is 0.
+    ]);
+  });
+
+  it("writes one LFOData entry per LFO, parallel to rgLfo -- [MS-DOC] 2.9.225's own required shape, not merely a reader convenience", () => {
+    // Confirms lcbPlfLfo (derived from plfLfo.length by write.ts) covers the appended rgLfoData too, not just rgLfo -- omitting it would leave fcPlfLfo+lcbPlfLfo landing exactly at rgLfo's own end, with nothing left for a real consumer's own list-formatting algorithm to read past it.
+    const definitions: NumberingDefinitions = {
+      "1": { levels: { "0": { format: "bullet", text: "•", startAt: 1 } } },
+      "2": { levels: { "0": { format: "decimal", text: "%1.", startAt: 1 } } },
+    };
+    const tables = buildNumberingTables(definitions);
+    if (tables === undefined) throw new Error("expected numbering tables");
+    const lfoMacBytes = 4;
+    const rgLfoBytes = 16 * 2;
+    expect(tables.plfLfo.length).toBe(lfoMacBytes + rgLfoBytes + 4 * 2);
+    const rgLfoDataOffset = lfoMacBytes + rgLfoBytes;
+    expect([...tables.plfLfo.slice(rgLfoDataOffset)]).toEqual([
+      ...u32(0xffffffff), // rgLfoData[0].cp
+      ...u32(0xffffffff), // rgLfoData[1].cp
     ]);
   });
 });
