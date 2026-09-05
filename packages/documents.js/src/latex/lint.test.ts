@@ -2,6 +2,7 @@ import {
   assembleTree,
   type ContentBlock,
   type DocumentTree,
+  type SymbolTable,
 } from "document-schema.js";
 
 import { describe, expect, it } from "vitest";
@@ -31,6 +32,25 @@ function mathBlockOf(latex: string): ContentBlock {
     { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 },
     "test:lint",
   );
+}
+
+// packageOf's own sibling for the tests below that need a symbolTable declared on the OUTER document itself -- packageOf never sets one, which is fine for every existing case above (none of them needs the outer table to be present AND different from an inner one) but wrong for these.
+function packageWithSymbolTableOf(
+  symbolTable: SymbolTable,
+  blocks: readonly ContentBlock[],
+): DocumentTree {
+  return assembleTree({
+    kind: "wordprocessing",
+    metadata: {},
+    symbolTable,
+    sections: [
+      {
+        pageSize: { widthPt: 595, heightPt: 842 },
+        margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+        blocks: [...blocks],
+      },
+    ],
+  });
 }
 
 describe("lintMathCoherence", () => {
@@ -209,6 +229,88 @@ describe("lintMathCoherence", () => {
       frame: { xPt: 0, yPt: 0, widthPt: 0, heightPt: 0 },
     };
     const pkg = packageOf([embeddingBlock]);
+    expect(lintMathCoherence(pkg)).toEqual([]);
+  });
+
+  it("resolves a DIRECTLY embedded formula object's own symbolTable, not the enclosing document's (ExaDev/documents.js#928 round-8 regression)", () => {
+    // Round-7's regression required an intermediate non-formula document wrapping the formula; this is the plainer and more common real-world shape: a formula-kind embedded object sitting straight in the document's own block flow (exactly what buildFormulaBlock produces on every odt/odp/docx/markdown read), carrying its own symbolTable directly rather than nested one level deeper. Both tables curate the identical glyph "U" under different ids -- resolving against the wrong (enclosing) table mints the wrong symbol id and falsely reports a coherence divergence for a formula that is actually coherent against its own document.
+    const outerEntries = [
+      { glyph: "U", scope: "document", id: "symbols:outer-voltage" },
+    ];
+    const ownEntries = [
+      { glyph: "U", scope: "document", id: "symbols:inner-voltage" },
+    ];
+    const { formula } = latexToFormula("U", {
+      symbolEntries: ownEntries,
+      source: "test:lint",
+    });
+    const block = buildFormulaBlock(
+      formula,
+      { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 },
+      "test:lint",
+    );
+    // block.document is statically known to be the 'formula'-kind ContentDocument buildFormulaBlock built -- no narrowing needed, unlike mathBlockOf's own callers elsewhere in this file, which declare a widened ContentBlock return type.
+    block.document.symbolTable = { symbols: ownEntries, units: [] };
+    const pkg = packageWithSymbolTableOf({ symbols: outerEntries, units: [] }, [
+      block,
+    ]);
+    expect(lintMathCoherence(pkg)).toEqual([]);
+  });
+
+  it("falls back to the outer document's symbolTable when a NESTED non-formula document declares none of its own (ExaDev/documents.js#928 round-8, fallback direction 1 of 2)", () => {
+    // The nested wordprocessing document declares no symbolTable field at all -- collectDocumentFormulas' own outward-fallback design choice means the formula inside it should still resolve "U" against the OUTER document's curation, matching this formula's own stored content (built against that same outer table). Getting the fallback wrong (leaving the nested entry's table undefined instead of inheriting outward) would make the re-lowering mint an uncurated auto-symbol id instead, diverging from the stored content and producing a false warning.
+    const outerEntries = [
+      { glyph: "U", scope: "document", id: "symbols:voltage" },
+    ];
+    const nestedFormula = latexToFormula("U", {
+      symbolEntries: outerEntries,
+      source: "test:lint",
+    }).formula;
+    const nestedBlock = buildFormulaBlock(
+      nestedFormula,
+      { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 },
+      "test:lint",
+    );
+    const embeddingBlock: ContentBlock = {
+      kind: "embeddedObject",
+      objectKind: "wordprocessing",
+      document: {
+        kind: "wordprocessing",
+        metadata: {},
+        // Deliberately no symbolTable field here -- the fallback under test.
+        sections: [
+          {
+            pageSize: { widthPt: 595, heightPt: 842 },
+            margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+            blocks: [nestedBlock],
+          },
+        ],
+      },
+      frame: { xPt: 0, yPt: 0, widthPt: 0, heightPt: 0 },
+    };
+    const pkg = packageWithSymbolTableOf({ symbols: outerEntries, units: [] }, [
+      embeddingBlock,
+    ]);
+    expect(lintMathCoherence(pkg)).toEqual([]);
+  });
+
+  it("falls back to the outer document's symbolTable when a DIRECTLY embedded formula object declares none of its own (ExaDev/documents.js#928 round-8, fallback direction 2 of 2)", () => {
+    // The ordinary case buildFormulaBlock produces on every real read: the formula-kind document carries no symbolTable of its own at all. The fix must not make this regress into an unconditionally-undefined table -- it should still fall back to the enclosing document's own curation, exactly as before the fix.
+    const outerEntries = [
+      { glyph: "U", scope: "document", id: "symbols:voltage" },
+    ];
+    const { formula } = latexToFormula("U", {
+      symbolEntries: outerEntries,
+      source: "test:lint",
+    });
+    const block = buildFormulaBlock(
+      formula,
+      { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 },
+      "test:lint",
+    );
+    const pkg = packageWithSymbolTableOf({ symbols: outerEntries, units: [] }, [
+      block,
+    ]);
     expect(lintMathCoherence(pkg)).toEqual([]);
   });
 
