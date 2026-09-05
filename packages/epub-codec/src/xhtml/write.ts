@@ -122,7 +122,7 @@ function writeHeading(group: HeadingGroupNode): XmlElement {
   return element(
     `h${String(level)}`,
     {},
-    writeRunsToNodes(group.node.runs, group.node.constructs),
+    writeParagraphAsEmbeddedNodes(group.node),
   );
 }
 
@@ -138,8 +138,7 @@ function writeList(
       ? { start: String(info.start) }
       : {};
   const liNodes = items.map((item) => {
-    const paragraph = item.node;
-    const anchorNodes = writeRunsToNodes(paragraph.runs, paragraph.constructs);
+    const anchorNodes = writeParagraphAsEmbeddedNodes(item.node);
     const nested = writeSectionChildren(item.children, context);
     return element("li", {}, [...anchorNodes, ...nested]);
   });
@@ -214,26 +213,51 @@ function isPreBlockParagraph(paragraph: ContentParagraph): boolean {
   );
 }
 
-function writeParagraph(paragraph: ContentParagraph): XmlElement {
-  if (
+// The horizontal-rule sentinel writeParagraph and writeParagraphAsEmbeddedNodes both recognise: document-schema.js has no dedicated horizontal-rule block kind, so readBlockElementInner's own "hr" case (src/xhtml/read.ts) stands one in as an empty paragraph carrying this styleId, and both write-side dispatchers must agree on exactly the same shape or a <hr> read inside one container (a section, a list item) silently stops being one when written back from another.
+function isHorizontalRuleParagraph(paragraph: ContentParagraph): boolean {
+  return (
     paragraph.styleId === HORIZONTAL_RULE_STYLE_ID &&
     paragraph.runs.length === 0
-  ) {
+  );
+}
+
+function writePreElement(paragraph: ContentParagraph): XmlElement {
+  const codeAttrs: Record<string, string> =
+    paragraph.codeLanguage === undefined
+      ? {}
+      : { class: `language-${paragraph.codeLanguage}` };
+  return element("pre", {}, [
+    element(
+      "code",
+      codeAttrs,
+      writePreRunsToNodes(paragraph.runs, paragraph.constructs),
+    ),
+  ]);
+}
+
+function writeParagraph(paragraph: ContentParagraph): XmlElement {
+  if (isHorizontalRuleParagraph(paragraph)) {
     return element("hr");
   }
   if (isPreBlockParagraph(paragraph)) {
-    const codeAttrs: Record<string, string> =
-      paragraph.codeLanguage === undefined
-        ? {}
-        : { class: `language-${paragraph.codeLanguage}` };
-    const codeNodes = writePreRunsToNodes(paragraph.runs, paragraph.constructs);
-    return element("pre", {}, [element("code", codeAttrs, codeNodes)]);
+    return writePreElement(paragraph);
   }
   return element(
     "p",
     {},
     writeRunsToNodes(paragraph.runs, paragraph.constructs),
   );
+}
+
+// The identical horizontal-rule/preformatted/ordinary-runs dispatch writeParagraph itself uses immediately above, reused by every call site that embeds a paragraph's own body directly inside a container OTHER than a fresh <p> -- a list item's own anchor content (writeList) and, defensively, a heading's own runs (writeHeading), even though a heading's phrasing-only content model makes a <pre>/<hr> heading unreachable in practice (a <pre>/<hr> is flow content, and <h1>-<h6> admit only phrasing content, so a real read can never produce one). Before this existed, writeList built its own anchor content via writeRunsToNodes alone, so a <pre> or an <hr> nested directly inside an <li> -- both ordinary, real-world HTML, since <li>'s content model is flow content -- silently lost its own block shape on write despite reading back correctly as a preformatted or horizontal-rule paragraph: the reader's own list-membership decoration (decorateParagraph) applies uniformly to every paragraph shape reached inside a list item, but the writer's list path checked none of the shapes writeParagraph itself already knew how to recognise. The horizontal-rule and preformatted cases each return their own single, already-complete block element (<hr>, <pre><code>...); the ordinary case returns the paragraph's own inline run nodes with no wrapper, since the wrapper differs by call site (a fresh <p> in writeParagraph, nothing extra when embedding directly in <li>/<hN>).
+function writeParagraphAsEmbeddedNodes(paragraph: ContentParagraph): XmlNode[] {
+  if (isHorizontalRuleParagraph(paragraph)) {
+    return [element("hr")];
+  }
+  if (isPreBlockParagraph(paragraph)) {
+    return [writePreElement(paragraph)];
+  }
+  return writeRunsToNodes(paragraph.runs, paragraph.constructs);
 }
 
 function isFootnoteExtent(
