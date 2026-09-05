@@ -1162,6 +1162,71 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       bottom: BOTTOM,
     });
   });
+
+  it("still gives a vertMerge anchor the table's real bottom border when its own chain ends before a later, ragged row drops its column", () => {
+    // ExaDev/documents.js#945's own follow-up bug: the ragged-table path above only ever checked coverage starting from the ANCHOR's own row, so a merge chain's own continuation in the very next row always counted as "coverage" and permanently blocked this path for any merged cell. Column 0 is plain throughout; column 1 is vertically merged across rows 0-1, then row 2 -- the table's own real last row -- drops column 1 entirely, exactly as the plain-cell ragged test above drops its own last column. Nothing this reader can find sits beneath the merge chain's own last row (row 1) in column 1, so the anchor's visual bottom edge IS the table's real bottom edge there, even though the anchor's own chain never reaches row 2 at all.
+    const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
+    const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const cell = (text: string): DocParagraphSpec => ({
+      runs: [{ text }],
+      grpprl: SPRM_P_F_IN_TABLE,
+      mark: CELL_MARK,
+    });
+    const rowEnd = (grpprl: readonly number[]): DocParagraphSpec => ({
+      runs: [],
+      grpprl,
+      mark: CELL_MARK,
+    });
+    const rowZeroGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [plain, restart]),
+      ...tableBordersSprm,
+    ];
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [plain, continuation]),
+      ...tableBordersSprm,
+    ];
+    const rowTwoGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000], [plain]),
+      ...tableBordersSprm,
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          cell("a0"),
+          cell("anchor"),
+          rowEnd(rowZeroGrpprl),
+          cell("a1"),
+          cell(""),
+          rowEnd(rowOneGrpprl),
+          cell("a2"),
+          rowEnd(rowTwoGrpprl),
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(3);
+    const anchor = block.rows[0]?.cells[1];
+    expect(cellText(anchor)).toBe("anchor");
+    expect(anchor?.rowSpan).toBe(2);
+    // The core assertion: before this fix, row 1's own continuation cell always counted as "coverage" for column 1 when checked from the anchor's own row (0), permanently blocking this path for a merged cell -- the anchor's bottom edge came back as insideHorizontal instead of the table's real bcBottom.
+    expect(anchor?.borders).toEqual({
+      top: TOP,
+      left: INSIDE_V,
+      right: RIGHT,
+      bottom: BOTTOM,
+    });
+    // The continuation cell physically sitting in row 1 carries no decoration of its own, exactly as every other vertMerge continuation in this file.
+    expect(block.rows[1]?.cells[1]?.blocks).toEqual([]);
+    // The plain column is genuinely unaffected: row 2 is its own real last row directly (the first path cellReachesTableBottom checks), never touching the ragged/vertMerge paths at all.
+    expect(block.rows[2]?.cells[0]?.borders?.bottom).toEqual(BOTTOM);
+  });
 });
 
 // The tolerance the reconstruction snaps boundaries within is one point, and ContentTable.columnWidthsPt is stated in points, so every expectation below is written in points and every drift is written as a fraction of one -- restated here from the point's own definition rather than imported from table/read.ts, so the two agree only if both are right.

@@ -332,13 +332,13 @@ function cellReachesTableBottom(
     left,
     toleranceTwips,
   );
-  if (
-    vertMergeChainLastRow(logicalRows, rowIndex, startGridIndex) ===
-    lastRowIndex
-  ) {
-    return true;
-  }
-  return !columnCoveredByALaterRow(logicalRows, rowIndex, startGridIndex);
+  const chainLastRow = vertMergeChainLastRow(
+    logicalRows,
+    rowIndex,
+    startGridIndex,
+  );
+  if (chainLastRow === lastRowIndex) return true;
+  return !columnCoveredByALaterRow(logicalRows, chainLastRow, startGridIndex);
 }
 
 // Whether some row strictly below rowIndex states a physical cell whose own grid span covers gridIndex at all -- a plain per-column coverage check, independent of any merge state, so a ragged table's later, narrower row (one that simply never states a cell reaching this far right) leaves an earlier row's own cell with nothing beneath it. Reached only once cellReachesTableBottom's own vertMerge-chain check has already failed: a cell whose column IS covered by some row below has an ordinary interior edge there (insideHorizontal), not the table's real bottom, however that coverage is shaped -- a plain cell, a horizontal-merge anchor spanning across it, or a vertical-merge anchor/continuation, all count equally as "something is beneath this cell."
