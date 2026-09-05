@@ -153,6 +153,16 @@ describe("Brc80", () => {
       );
     });
 
+    it("writes an ordinary sub-0.75pt double border width, like Word's own 0.5pt UI default, without refusing it", () => {
+      // 0.5pt total divided by three and rounded to the nearest eighth is 1 -- below MIN_DPT_LINE_WIDTH's general floor of 2, but not below MIN_DPT_LINE_WIDTH_DOUBLE's own floor of 1, which is what a real producer's own writer floors this same field to rather than ever refusing to state a thin double border at all.
+      expect(writeBrc80({ color: RED, widthPt: 0.5, style: "double" })[0]).toBe(
+        1,
+      );
+      expect(writeBrc({ color: RED, widthPt: 0.5, style: "double" })[4]).toBe(
+        1,
+      );
+    });
+
     it("writes and reads back a double border's own total width exactly, for a width the tripled field can state precisely", () => {
       const border: ContentBorder = {
         color: RED,
