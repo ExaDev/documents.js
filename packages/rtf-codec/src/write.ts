@@ -275,6 +275,22 @@ function formFieldPayload(
     // \ffres is what a reader (this package's own included, per FORM_FIELD_RESULT_UNDEFINED in constructs.ts) actually reads back as the checkbox's current state -- omitting it, as this writer once did, opens the box unchecked in Word regardless of `checked`, since an absent \ffres reads as 0. \ffdefres mirrors the same value: ContentControlDescriptor carries one `checked` boolean, not a separate reset default, so the field's default is the value it was minted with.
     const value = descriptor.checked === true ? "1" : "0";
     out += `\\ffres${value}\\ffdefres${value}`;
+    if (descriptor.value !== undefined) {
+      // A real, reachable case, from the identical reachability path as the plainText \ffdeftext handling above: documents.js's own PDF AcroForm-to-contentControl reconstruction spreads a checkbox widget's `/V` export-value name (e.g. 'Yes', a custom on-state string, distinct from AcroForm's own boolean derived-from-/V `checked`) onto `value` alongside `checked` (see pdf-codec's own valueFields -- `checked: value !== 'Off', ...(value !== 'Off' ? { value } : {})`). RTF's own \ffres/\ffdefres are a bare 0/1/25 state with no room for a named export value at all, so a checkbox's `value` has no RTF spelling whatsoever, unlike a dropDown's `value` (which at least sometimes matches a real \ffl entry) -- this is unconditional data loss whenever `value` is present, reported through the same sink every other unrepresentable construct in this writer uses rather than silently dropped the way an earlier version of this writer dropped it.
+      sink({
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        severity: "warning",
+        message: `a checkbox contentControl's value '${descriptor.value}' (its on-state export name) is dropped: RTF's \\ffres/\\ffdefres can only carry the field's boolean checked state, with no spelling for a named export value at all`,
+      });
+    }
+    if (descriptor.options !== undefined) {
+      // Nothing about a checkbox has a list to hold this -- `options` is the dropDown/comboBox choice list, and a producer handing this writer a checkbox descriptor that also carries one (a mis-typed reconstruction, or a shape shared with a sibling controlType upstream) has recorded data this control type cannot carry regardless of format, not merely one RTF can't spell -- reported the same way as the value case above, rather than the writer quietly reading past a field it has no use for.
+      sink({
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        severity: "warning",
+        message: `a checkbox contentControl's options list (${String(descriptor.options.length)} entries) is dropped: a checkbox has no choice list at all, in RTF or in the harmonised contentControl vocabulary itself`,
+      });
+    }
   } else if (descriptor.controlType === "dropDown") {
     // \ffhaslistbox is minted unconditionally for a dropDown, independent of whether it carries any options at all: [MS-DOC] 2.9.79 FFDataBits.fHasListBox "specifies that the form field has a list box. This value MUST be 1 if iType is iTypeDrop (2)." A dropdown with no options is still a dropdown -- there is no degenerate case in which that bit stops being true, so it cannot be gated behind `options !== undefined` the way an earlier version of this writer gated it (which then also left \ffdefres unminted for exactly that shape, a real, common one: a docx `w:dropDownList`/`w:comboBox` with no `w:listItem` children, or an ODF `form:listbox`, both currently read back by this ecosystem with no options recorded at all -- tracked as ExaDev/documents.js#1016).
     out += "\\ffhaslistbox";
@@ -313,6 +329,22 @@ function formFieldPayload(
     // [MS-DOC] 2.9.78 FFData.xstzTextDef, verbatim: "The default text of the field ... MUST exist if and only if bits.iType is iTypeTxt (0)." RTF 1.9.1's own `\ffdeftext` ("Default text for text field. This is a destination control word.") is its serialisation. This is real, reachable data: documents.js's own PDF AcroForm-to-contentControl reconstruction hands a plainText control exactly `{controlType:'plainText', value, ...}` for a real `/V` string, so a plainText descriptor's `value` is not hypothetical input. Minted only when the descriptor actually carries one -- omitted, like the dropdown branch's own "nothing to name" cases above, when no value was ever recorded, rather than mint an empty `{\*\ffdeftext}` FFData.wDef's own presence rule would technically require: this writer already diverges from that binary-structure requirement for the identical round-trip-determinism reason the dropdown branch's own wDef note above explains.
     if (descriptor.value !== undefined) {
       out += `{\\*\\ffdeftext ${escapeText(descriptor.value)}}`;
+    }
+    if (descriptor.checked !== undefined) {
+      // The identical sibling-gap shape as the checkbox branch's own dropped `options` above, mirrored: `checked` is the checkbox/radio boolean, and a plainText descriptor carrying one has recorded a fact this control type has no concept of at all -- reported rather than silently ignored, matching this function's own treatment of every other recorded-but-unrepresentable field.
+      sink({
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        severity: "warning",
+        message: `a plainText contentControl's checked state (${String(descriptor.checked)}) is dropped: a text field has no boolean checked state at all, in RTF or in the harmonised contentControl vocabulary itself`,
+      });
+    }
+    if (descriptor.options !== undefined) {
+      // Same shape again: `options` is the dropDown/comboBox choice list, and a plainText field has no list to hold it.
+      sink({
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        severity: "warning",
+        message: `a plainText contentControl's options list (${String(descriptor.options.length)} entries) is dropped: a text field has no choice list at all, in RTF or in the harmonised contentControl vocabulary itself`,
+      });
     }
   }
   // [MS-DOC] 2.9.79 FFDataBits.fProt, verbatim: "A bit that specifies whether the form field is protected and its value cannot be changed" -- RTF 1.9.1's own Form Fields table states the identical fact, "\ffprotN: 1 if this field is protected, 0 otherwise." It is a single content-protection bit, so it captures the 'content' and 'both' halves of ContentControlLock exactly (both lock the field's own value); 'container' locks only the control's own removal, a fact RTF's form-field vocabulary has no bit for at all -- a legacy form field is ordinary document text with no separate "delete the control" operation to protect in the first place -- so a 'container' lock is reported through the diagnostic sink below rather than silently folded into "unprotected". Written as the explicit `\ffprot1` form rather than a bare `\ffprot`: `\ffhaslistbox` above is a genuine bare-when-true bit with no N-parameter spelling at all, but `\ffprot` is an N-parameterised bit like `\ffres`/`\ffdefres`, and every real fixture this package's own read.test.ts carries for this bit family already writes the explicit N form -- so writing `\ffprot1` here costs one character and sidesteps outright whether an absent parameter on a bit of this family defaults to on (as it does for `\b`/`\i`) or to off (as RTF's own general reader-convention default for an unspecified numeric argument states), rather than resting the writer's own correctness on which reading is right.
