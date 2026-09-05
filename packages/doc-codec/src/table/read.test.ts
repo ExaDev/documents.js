@@ -970,11 +970,12 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       ...sprmTDefTable([0, 1000, 2000, 3000], [plain, plain, restart]),
       ...tableBordersSprm,
     ];
-    // Row 1's own rgdxaCenter has only two columns: [0, 2000] replaces colX's and col0's own separate [0, 1000, 2000] boundaries with one merged span, while the vertMerge target keeps its own width unchanged.
+    // Row 1's own rgdxaCenter has only two columns: [0, 2000] replaces colX's and col0's own separate [0, 1000, 2000] boundaries with one merged span, while the vertMerge target keeps its own width unchanged. Row 1 -- the table's own real last row -- states the identical tableBordersSprm too: this test is about grid-position resolution for the vertMerge chain, not about which row's own operand brcBottom is read from (a genuinely different bottom value per row is exercised by its own dedicated test below), so both rows agree here.
     const rowOneGrpprl = [
       ...SPRM_P_F_IN_TABLE,
       ...SPRM_P_F_TTP,
       ...sprmTDefTable([0, 2000, 3000], [plain, continuation]),
+      ...tableBordersSprm,
     ];
     const cell = (text: string): DocParagraphSpec => ({
       runs: [{ text }],
@@ -1020,6 +1021,80 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     });
     // The continuation cell physically sitting in the table's last row still carries no decoration of its own, exactly as the identical-boundaries case above already established.
     expect(block.rows[1]?.cells[1]?.blocks).toEqual([]);
+  });
+
+  it("gives a vertically merged anchor the table's real LAST ROW's own brcBottom, not its own row's, when the two rows state genuinely different bottom borders", () => {
+    // [MS-DOC] 2.9.302's own field text: a row's brcBottom "specifies the bottom border of the row, if it is the last row in the table" -- so when the anchor's own row (0) and the table's real last row (2) state genuinely DIFFERENT bottom borders, the anchor must read row 2's value, never its own row's. Column 0 is vertically merged across all three rows; column 1 is plain, purely to confirm the identical row-2 value reaches a genuinely ordinary cell too.
+    const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
+    const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const boundaries = [0, 1000, 2000];
+    const ANCHOR_ROW_BOTTOM: ContentBorder = {
+      color: { r: 1, g: 0, b: 0 },
+      widthPt: 2,
+    };
+    const TABLE_BOTTOM: ContentBorder = {
+      color: { r: 0, g: 0, b: 1 },
+      widthPt: 3,
+    };
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [restart, plain]),
+      ...sprmTTableBorders({ bottom: brc([0xff, 0x00, 0x00], 16) }),
+    ];
+    // The middle row states no sprmTTableBorders of its own at all -- it is neither the anchor's own row nor the table's real last row, so nothing should ever read a bottom border from it.
+    const rowTwoGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [continuation, plain]),
+    ];
+    const rowThreeGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [continuation, plain]),
+      ...sprmTTableBorders({ bottom: brc([0x00, 0x00, 0xff], 24) }),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "top" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "right-1" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowOneGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          {
+            runs: [{ text: "right-2" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowTwoGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          {
+            runs: [{ text: "right-3" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowThreeGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(3);
+    const anchor = block.rows[0]?.cells[0];
+    expect(anchor?.rowSpan).toBe(3);
+    // The core assertion: the anchor's own bottom border is the table's real last row's own brcBottom (blue), not its own row's (red) -- before this fix, a merge anchor always inherited its own row's bottom border, which [MS-DOC] 2.9.302's own text never licenses for a row that is not genuinely the table's last.
+    expect(anchor?.borders?.bottom).toEqual(TABLE_BOTTOM);
+    expect(anchor?.borders?.bottom).not.toEqual(ANCHOR_ROW_BOTTOM);
+    // The plain, unmerged column's own cell in the table's real last row agrees exactly -- both cells' visual bottom edge is genuinely the table's own bottom edge, so both must carry the identical value.
+    expect(block.rows[2]?.cells[1]?.borders?.bottom).toEqual(TABLE_BOTTOM);
   });
 });
 
