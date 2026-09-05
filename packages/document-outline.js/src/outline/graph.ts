@@ -682,44 +682,95 @@ export class NodeKindMismatchError extends Error {
 
 // Reconciles a fresh mint's or a dedup hit's requested `children` against the graph's already-existing CONTAINS edges from `id`: two insertNode calls can mint the identical id via different spellings of the same content -- `children` named explicitly vs. an equal-valued field folded directly into `properties` -- and only the explicit-`children` spelling ever asks insertNode to emit CONTAINS edges, so the call that finally reconciles must not have its own requested containment silently dropped just because some of it already exists (a dedup hit's own prior spelling, or a dangling edge some earlier standalone insertEdge call already attached onto this not-yet-minted id). Both insertNode call sites share this one function precisely because "what's already wired" and "what's requested" is the identical reconciliation problem either way.
 //
-// Reconciliation is by MULTIPLICITY, not set membership: `children` can legitimately repeat an id -- two identical CONTAINS children under one section is a shape this module's own projectDocumentGraph and insertEdge tests both exercise directly -- so "is this id already wired" is never a single yes/no per id, it is "how many of this id are already wired, out of how many the Nth requested occurrence still needs." Existing CONTAINS edges from `id` are counted per target BEFORE any of this reconcile's own insertions run, then consumed left-to-right against `children` in requested order: the first `existingCount` occurrences of a given id in `children` are each classified as already satisfied by one existing edge, and only the occurrences beyond that count are genuinely missing. A plain Set of already-wired ids -- this function's own prior implementation -- cannot represent "one occurrence of A is wired, a second is not": it treated every later occurrence of an already-seen id as satisfied too, silently dropping a repeated id's own extra occurrences and, since the anchor search read the same Set, sometimes anchoring a following missing child against an occurrence that was itself unwired.
+// Reconciliation is by MULTIPLICITY, not set membership: `children` can legitimately repeat an id -- two identical CONTAINS children under one section is a shape this module's own projectDocumentGraph and insertEdge tests both exercise directly -- so "is this id already wired" is never a single yes/no per id, it is "how many of this id are already wired, out of how many the Nth requested occurrence still needs." A plain Set of already-wired ids -- this function's own first implementation -- cannot represent "one occurrence of A is wired, a second is not": it treated every later occurrence of an already-seen id as satisfied too, silently dropping a repeated id's own extra occurrences.
 //
-// A missing occurrence is inserted at ITS OWN requested position, not always appended at the end: it lands immediately before the nearest LATER position in `children` this same classification pass has marked already-wired (so a run of several consecutive missing occurrences each anchor to the same following already-wired position and interleave correctly rather than piling up after it), or at the end when no later position is already wired. Only a position classified as missing is ever placed this way -- an already-wired occurrence is never moved -- so the reconciled order agrees with the order named in `children` only to the extent that the already-wired occurrences' own existing mutual order already agrees with it too. Each insertion goes through insertEdge, so it carries the identical CONTAINS-cycle check every other edge attachment in this module carries; requesting an identical `children` list twice stays the no-op past-the-first-call behaviour this module has always promised, because every position is then classified as already wired and none are inserted. Walking CONTAINS edges from `id` after reconciliation always reproduces the exact `children` list the node's own id was hashed from, including a repeated id's own multiplicity and position.
+// Classification and anchoring both work against SPECIFIC EXISTING EDGES, never a bare id value -- the second, subtler defect the first multiplicity-aware rewrite still carried. `originalSiblings` is `id`'s existing CONTAINS edges sorted once, up front, into a fixed reference list this function never mutates or reorders again; each id's own existing occurrences are grouped by their index into that fixed list, and the Nth requested occurrence of an id claims the Nth not-yet-claimed such index, if one remains. A matched position records WHICH `originalSiblings` index it resolved to, not the id it matched: anchoring a missing occurrence against "the value X" is ambiguous the instant X repeats, because a before/after lookup by id (`siblingInsertIndex`, used by `insertEdge`'s public position API) always resolves ties in orderKey order to X's EARLIEST existing edge -- the wrong occurrence whenever the intended anchor is a later one, e.g. requested `[A, X, A]` with both `A`s already wired: `X` must land between the two `A`s, but anchoring by the bare value "A" finds the FIRST `A` and inserts `X` before it instead, misplacing it at the front. Anchoring by a specific `originalSiblings` index rather than a value sidesteps this: there is only ever one edge a given index can mean.
+//
+// A missing occurrence's anchor is the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched -- the same "before the next already-wired position, or at the end" rule as before, just resolved against a fixed index rather than a value that can drift or repeat. That anchor index is translated into the anchor's CURRENT position among `id`'s live CONTAINS siblings by counting how many of this reconcile's OWN prior insertions already landed at or before the same anchor index: `originalSiblings` itself is never reordered, so every earlier insertion's own (equally fixed) anchor index is exactly how far it shifted everything from that index onward. This is what lets a run of several consecutive missing occurrences sharing one anchor interleave in requested order -- each is placed by a running numeric offset, never re-resolved by value against the by-then-mutated live sibling list.
+//
+// The insertion itself reuses insertEdge's own CONTAINS-cycle check, bisection, and rebalance-on-exhaustion primitives directly (`assertNoContainsCycle`, `boundedOrderKey`, `rebalancedInsert`) rather than calling insertEdge with a before/after position -- that position parameter is exactly the value-based lookup this function must not go through, so the same guarantees are reached by index instead of by name. Only a position classified as missing is ever placed this way -- an already-matched occurrence is never moved -- so the reconciled order agrees with the order named in `children` only to the extent that the already-wired occurrences' own existing mutual order already agrees with it too: reconciliation interleaves what is missing correctly around what already exists, it does not re-sort existing containment to match a new request. Requesting an identical `children` list twice stays the no-op past-the-first-call behaviour this module has always promised, because every position is then classified as already matched and none are inserted.
 function reconcileChildren(
   graph: PropertyGraph,
   id: string,
   children: readonly string[] | undefined,
 ): PropertyGraph {
   if (children === undefined) return graph;
-  const remainingExisting = new Map<string, number>();
-  for (const edge of graph.edges) {
-    if (edge.from === id && edge.kind === "CONTAINS") {
-      remainingExisting.set(edge.to, (remainingExisting.get(edge.to) ?? 0) + 1);
-    }
-  }
-  // One classification pass, consuming `remainingExisting` left-to-right: the Nth requested occurrence of an id claims the Nth still-unclaimed already-wired occurrence of that same id, if one remains -- every occurrence beyond an id's existing count is genuinely missing, whichever id it is.
-  const alreadyWired = children.map((childId) => {
-    const remaining = remainingExisting.get(childId) ?? 0;
-    if (remaining === 0) return false;
-    remainingExisting.set(childId, remaining - 1);
-    return true;
+
+  const byOrderKeyAsc = (a: GraphEdge, b: GraphEdge): number =>
+    a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0;
+
+  // The fixed reference list every classification and anchor below resolves against: `id`'s existing CONTAINS edges, sorted once. This array is never mutated or reordered by this function -- an index into it names one specific, unchanging existing edge for the rest of the call.
+  const originalSiblings = graph.edges
+    .filter((edge) => edge.from === id && edge.kind === "CONTAINS")
+    .sort(byOrderKeyAsc);
+
+  const occurrenceIndicesByTarget = new Map<string, number[]>();
+  originalSiblings.forEach((edge, index) => {
+    const bucket = occurrenceIndicesByTarget.get(edge.to);
+    if (bucket === undefined) occurrenceIndicesByTarget.set(edge.to, [index]);
+    else bucket.push(index);
   });
-  return children.reduce((acc, childId, index) => {
-    if (alreadyWired[index] === true) return acc;
-    const anchorIndex = alreadyWired.findIndex(
-      (wired, position) => wired && position > index,
-    );
-    return anchorIndex === -1
-      ? insertEdge(acc, id, childId)
-      : insertEdge(acc, id, childId, {
-          position: { at: "before", siblingId: children[anchorIndex]! },
-        });
+
+  // One classification pass: the Nth requested occurrence of an id claims the Nth not-yet-claimed existing edge to that id, recorded as an `originalSiblings` INDEX (a specific edge) rather than the id value -- `undefined` means genuinely missing.
+  const nextOccurrence = new Map<string, number>();
+  const matchedIndex: (number | undefined)[] = children.map((childId) => {
+    const occurrences = occurrenceIndicesByTarget.get(childId) ?? [];
+    const pointer = nextOccurrence.get(childId) ?? 0;
+    if (pointer >= occurrences.length) return undefined;
+    nextOccurrence.set(childId, pointer + 1);
+    return occurrences[pointer]!;
+  });
+
+  // A missing position's anchor: the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched.
+  const anchorFor = (position: number): number => {
+    for (let later = position + 1; later < children.length; later += 1) {
+      const candidate = matchedIndex[later];
+      if (candidate !== undefined) return candidate;
+    }
+    return originalSiblings.length;
+  };
+
+  // Every anchor index this loop has already inserted an occurrence at or before, in insertion order -- what lets each new insertion compute its own CURRENT position (its fixed anchor index, shifted right by however many earlier insertions in this same reconcile landed at or before that same index) without ever re-deriving a position from the live sibling list by value.
+  const insertedAtOrBefore: number[] = [];
+
+  return children.reduce((acc, childId, position) => {
+    if (matchedIndex[position] !== undefined) return acc; // already matched to a specific existing edge -- never moved
+    assertNoContainsCycle(acc.edges, id, childId);
+    const anchorIndex = anchorFor(position);
+    const insertIndex =
+      anchorIndex +
+      insertedAtOrBefore.filter((inserted) => inserted <= anchorIndex).length;
+    insertedAtOrBefore.push(anchorIndex);
+    const currentSiblings = acc.edges
+      .filter((edge) => edge.from === id && edge.kind === "CONTAINS")
+      .sort(byOrderKeyAsc);
+    try {
+      const orderKey = boundedOrderKey(currentSiblings, insertIndex);
+      const edge: GraphEdge = {
+        from: id,
+        to: childId,
+        kind: "CONTAINS",
+        orderKey,
+      };
+      return { nodes: acc.nodes, edges: [...acc.edges, edge] };
+    } catch (error) {
+      if (!(error instanceof OrderKeyBudgetExhaustedError)) throw error;
+      return rebalancedInsert(
+        acc,
+        id,
+        childId,
+        "CONTAINS",
+        currentSiblings,
+        insertIndex,
+        undefined,
+      );
+    }
   }, graph);
 }
 
 // Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. `kind` is deliberately excluded from the hash INPUT itself, the same reason mintValueNode's own `kind: 'value'` and entryNodeFace's graph-vocabulary kind are never folded into their hashes either: it is the graph vocabulary's word for what a node IS, asked for explicitly because this module's own mint sites decide it four different ways, not a fact about the node's content that identity should hinge on. Content identical to a node already present in `graph` dedupes to the existing node rather than minting a duplicate (addNode's own upsert-once rule) -- checked against the existing node's own `kind` first (NodeKindMismatchError above covers a genuine collision across kinds), then reconciled against its own CONTAINS edges at each child's OWN requested position (reconcileChildren above) rather than assumed to already match or simply appended, since two differently spelled calls can hash identically while only one of them declared `children` at all.
 //
-// When `children` is given for a genuinely fresh id -- one no earlier `insertEdge` call has ever pointed a dangling CONTAINS edge onto (the common case, checked by scanning `graph.edges` for `from === id` before minting anything) -- this mints one CONTAINS edge per child at `orderKeys.orderKeyForIndex(index)`, the WIDE, evenly spaced keys a fresh mint wants (exactly as projectGroup mints them for a freshly walked TreeGroup), leaving room for a later insertEdge to bisect between them without a rebalance; each of those child edges is still checked with `assertNoContainsCycle` first, exactly like insertEdge's own CONTAINS attachment, and throws `ContainsCycleError` when `to` (the child) already reaches `from` (this node's own about-to-be-minted id) -- folding the child's hash into this node's hash proves this id could never have existed before now, but says nothing about an edge some EARLIER call already pointed at this not-yet-existing id (insertEdge tolerates exactly that), so the check cannot be skipped just because this is a fresh mint. But when `graph` already carries one or more CONTAINS edges from this id -- exactly the dangling-edge shape the cycle check above exists to catch, an id named by an `insertEdge` call before any node with that id existed -- minting every child at its own bare `orderKeyForIndex(index)` regardless of what is already there is unsafe: an already-attached edge can sit at a key a fresh mint is about to hand to an unrelated sibling (an order-key TIE, the exact degenerate shape `boundedOrderKey` and `siblingInsertIndex` refuse everywhere else in this module) or can already BE the edge a fresh mint is about to re-mint (a byte-identical duplicate, violating `addEdge`'s own one-edge-per-tuple invariant on the read side). So a fresh mint with pre-existing CONTAINS edges routes every child through the identical `reconcileChildren` machinery the dedup-hit branch above already uses: a child already wired is left exactly as it is, and a genuinely new one is inserted at its own requested position via `insertEdge`'s sibling-aware bisection (or automatic rebalance), which cannot produce a tie or a duplicate by construction.
+// When `children` is given for a genuinely fresh id -- one no earlier `insertEdge` call has ever pointed a dangling CONTAINS edge onto (the common case, checked by scanning `graph.edges` for `from === id` before minting anything) -- this mints one CONTAINS edge per child at `orderKeys.orderKeyForIndex(index)`, the WIDE, evenly spaced keys a fresh mint wants (exactly as projectGroup mints them for a freshly walked TreeGroup), leaving room for a later insertEdge to bisect between them without a rebalance; each of those child edges is still checked with `assertNoContainsCycle` first, exactly like insertEdge's own CONTAINS attachment, and throws `ContainsCycleError` when `to` (the child) already reaches `from` (this node's own about-to-be-minted id) -- folding the child's hash into this node's hash proves this id could never have existed before now, but says nothing about an edge some EARLIER call already pointed at this not-yet-existing id (insertEdge tolerates exactly that), so the check cannot be skipped just because this is a fresh mint. But when `graph` already carries one or more CONTAINS edges from this id -- exactly the dangling-edge shape the cycle check above exists to catch, an id named by an `insertEdge` call before any node with that id existed -- minting every child at its own bare `orderKeyForIndex(index)` regardless of what is already there is unsafe: an already-attached edge can sit at a key a fresh mint is about to hand to an unrelated sibling (an order-key TIE, the exact degenerate shape `boundedOrderKey` and `siblingInsertIndex` refuse everywhere else in this module) or can already BE the edge a fresh mint is about to re-mint (a byte-identical duplicate, violating `addEdge`'s own one-edge-per-tuple invariant on the read side). So a fresh mint with pre-existing CONTAINS edges routes every child through the identical `reconcileChildren` machinery the dedup-hit branch above already uses: a child already wired is left exactly as it is, and a genuinely new one is inserted at its own requested position via the same bisection (or automatic rebalance) `insertEdge` itself uses, anchored to a SPECIFIC existing edge by index rather than to a bare id value, which cannot produce a tie, a duplicate, or a misplaced anchor by construction.
 export function insertNode(
   graph: PropertyGraph,
   content: InsertNodeContent,
