@@ -702,9 +702,9 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  // A selection that names an option past the 25-entry cutoff is unrepresentable for two independent reasons at once -- the cap and the (now-truncated-away) match -- and both fire their own diagnostic rather than one silently masking the other.
-  it("reports both the cap and the now-unmatched selection when a dropDown's chosen value sits past the 25-entry cutoff", () => {
-    const codes: string[] = [];
+  // A selection that names an option past the 25-entry cutoff is unrepresentable for two independent reasons at once -- the cap and the (now-truncated-away) match -- and both fire their own diagnostic rather than one silently masking the other. The second diagnostic's message must name the REAL reason (the option was truncated away) rather than claim the value never matched any option at all, since it did match one before the cap removed it.
+  it("reports both the cap and the now-unmatched selection when a dropDown's chosen value sits past the 25-entry cutoff, naming truncation as the reason rather than a false mismatch", () => {
+    const messages: string[] = [];
     const options = Array.from(
       { length: 30 },
       (_, index) => `Option ${String(index)}`,
@@ -729,14 +729,74 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) => {
+            if (
+              diagnostic.code === RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED
+            ) {
+              messages.push(diagnostic.message);
+            }
+          },
+        },
+      ),
+    );
+    expect(messages).toHaveLength(2);
+    expect(messages.some((message) => message.includes("25-entry"))).toBe(true);
+    expect(messages.some((message) => message.includes("truncated away"))).toBe(
+      true,
+    );
+    expect(
+      messages.some((message) => message.includes("does not match any")),
+    ).toBe(false);
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
+  // The genuine mismatch case, distinguished from the truncated-away case above: a value that never matched any option at all (not even before truncation) keeps the original "does not match any" message, since that IS the real reason here.
+  it("reports a genuinely unmatched dropDown value as not matching any option, even when the option list is also truncated", () => {
+    const messages: string[] = [];
+    const options = Array.from(
+      { length: 30 },
+      (_, index) => `Option ${String(index)}`,
+    );
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options,
+                  value: "Not an option at all",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        {
+          sink: (diagnostic) => {
+            if (
+              diagnostic.code === RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED
+            ) {
+              messages.push(diagnostic.message);
+            }
+          },
+        },
       ),
     );
     expect(
-      codes.filter(
-        (code) => code === RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
-      ),
-    ).toHaveLength(2);
+      messages.some((message) => message.includes("does not match any")),
+    ).toBe(true);
+    expect(messages.some((message) => message.includes("truncated away"))).toBe(
+      false,
+    );
     expect(out).not.toContain("\\ffdefres");
     expect(out).not.toContain("\\ffres");
     expectBalancedBraces(out);
