@@ -8,6 +8,7 @@ import { parsePackage } from "../../package-io/read";
 import { attr, childrenWithTag, decodeEntities, rootElement } from "../util";
 import { buildXlsxPackageFromContent } from "./build";
 import { readXlsxContent } from "./content";
+import { columnWidthCharsToPt } from "./units";
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
 // buildXlsxPackageFromContent's own real-LibreOffice validation (`soffice --headless --convert-to ods` against a genuine built .xlsx, confirming Excel/LibreOffice actually open the file rather than merely well-formed XML) is a manual verification step, deliberately NOT wired into this vitest suite -- this package's CI runners have no LibreOffice installed (unlike documents.js's own gitignored, opt-in test:corpus project, which exists for exactly this reason: real-third-party-software checks that need a local tool this repo's CI can't assume). This suite instead verifies everything checkable in-process: the produced Package's own XML structure (parsed back through this package's own lossless parsePackage/encodePackage, never assumed), and that readXlsxContent(buildXlsxPackageFromContent(x)) round-trips the real content.
@@ -274,7 +275,31 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips real conte
   });
 
   it("column widths converge to a fixed point rather than drifting on repeated read/write cycles (ExaDev/documents.js#953)", () => {
-    // pkg (write 1) came from DOCUMENT's own hand-authored, arbitrary widthPt values (100/60), which need not land on the 96dpi pixel grid columnWidthCharsToPt's own truncation works in -- so write 1 is allowed to differ from write 2 (the grid-snapping happens once, on the very first write). From write 2 onward every column width has already been through that snap, so a further read/write pair must reproduce write 2's own stored <col width> attributes exactly, not merely approximately -- proving convergence to a fixed point rather than a slower, still-ongoing drift.
+    // A dedicated document, not DOCUMENT above: DOCUMENT's own column widths (100pt/60pt) already reproduce write 2 byte-identically from write 2 onward even under the pre-fix rounding, so they would pass this assertion whether or not the fix is present and exercise nothing. These two widthPt values instead come from columnWidthCharsToPt(12.76) and columnWidthCharsToPt(9.7) -- points equivalents of two of kitchen-sink.xlsx's own real, LibreOffice-authored stored widths (see content.test.ts's dataSheetColWidthAttrs suite) -- independently re-verified to keep narrowing across multiple further write cycles under the pre-fix rounding (12.76 chars -> 12.64 -> 12.5 -> 12.36; 9.7 chars -> 9.64 -> 9.5 -> 9.36) rather than settling after the first.
+    const drifting: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Data",
+          cells: [],
+          columns: [
+            { index: 0, widthPt: columnWidthCharsToPt(12.76) },
+            { index: 1, widthPt: columnWidthCharsToPt(9.7) },
+          ],
+          rows: [],
+          images: [],
+          printSettings: {
+            pageSize: PAGE_SIZE_A4,
+            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+            gridlines: true,
+            headers: true,
+            pageOrder: "downThenOver",
+          },
+        },
+      ],
+    };
+
     function colWidthAttrs(
       source: Package,
       path: string,
@@ -290,7 +315,13 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips real conte
       return childrenWithTag(colsEl, "col").map((col) => attr(col, "width"));
     }
 
-    const secondWritePkg = buildXlsxPackageFromContent(roundTripped); // write 2
+    const firstWritePkg = buildXlsxPackageFromContent(drifting); // write 1 -- allowed to differ from write 2, since these widthPt values need not already land on the pixel grid the very first write snaps to
+    const firstRead = readXlsxContent(firstWritePkg);
+    if (firstRead.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+
+    const secondWritePkg = buildXlsxPackageFromContent(firstRead); // write 2
     const secondRead = readXlsxContent(secondWritePkg);
     if (secondRead.kind !== "spreadsheet") {
       throw new Error("expected a spreadsheet ContentDocument");
