@@ -22,10 +22,10 @@ const LSTF_FLAG_SIMPLE_LIST = 0x01;
 /** rgistdPara ([MS-DOC] 2.9.191's own LSTF field table): nine 2-byte ISTD entries, one per level, each "MUST be set to 0x0FFF to specify that this level is not linked to a style" when (as here) the writer links no per-level style cascade at all -- a genuine MUST this writer has to satisfy itself, unlike tplc/grfhic, which numbering.ts's own reader ignores outright. 0x0000 is not an available "unset" spelling: it names a real style (ISTD 0, "Normal"), so leaving the field zeroed states a link this writer never intended. */
 const LSTF_RGISTD_PARA_UNLINKED = 0x0fff;
 const LSTF_RGISTD_PARA_COUNT = 9;
-/** A non-simple LSTF always carries exactly nine LVLs ([MS-DOC] 2.9.191); sprmPIlvl's own operand range this writer's caller (pap-write.ts) validates against is the same fact restated at the paragraph-property layer. */
+/** A non-simple LSTF always carries exactly nine LVLs ([MS-DOC] 2.9.191), so no zero-based level this module writes or validates ever exceeds 8 -- two distinct fields share this same 0..8 ceiling: sprmPIlvl's own operand (this writer's caller, pap-write.ts, validates against the identical fact at the paragraph-property layer) and, below in buildLevelXst, the raw zero-based level VALUE a '%N' placeholder encodes into a level's own Xst text ([MS-DOC] 2.9.343's own Xst field text: "Each placeholder is an unsigned 2-byte integer that specifies the zero-based level"). */
 const MAX_LIST_LEVEL = 8;
 const LEVELS_PER_MULTI_LEVEL_LIST = 9;
-/** rgbxchNums' own 8-bit entries ([MS-DOC] 2.9.148): each names a one-based character POSITION in the level's own Xst text, not a value, and that position has to fit a single unsigned byte -- a longer literal prefix before the first placeholder pushes it past this without complaint from anything but this check, since a plain JS number[] never clamps on its own and only silently truncates mod 256 once this module's bytes become a Uint8Array. */
+/** rgbxchNums' own 8-bit entries ([MS-DOC] 2.9.148): each names a one-based character POSITION in the level's own Xst text, not a value, and that position has to fit a single unsigned byte -- a longer literal prefix before the first placeholder pushes it past this without complaint from anything but this check, since a plain JS number[] never clamps on its own and only silently truncates mod 256 once this module's bytes become a Uint8Array. Distinct from MAX_LIST_LEVEL above, which bounds a placeholder's own VALUE, not its character position. */
 const MAX_UINT8 = 0xff;
 /** The format every level this writer invents for a paragraph that leaves ContentListMembership.format unstated, and every level a multi-level list's own dense 0..8 run needs filling but no paragraph ever actually used -- an arbitrary but harmless choice, since an unused level's own appearance is never read back into a context that renders it. */
 const DEFAULT_FORMAT = "decimal";
@@ -111,6 +111,11 @@ function buildLevelXst(
     }
     xstText += text.slice(lastIndex, match.index);
     const levelIndex = Number(levelDigits) - 1;
+    if (levelIndex < 0 || levelIndex > MAX_LIST_LEVEL) {
+      throw new DocFormatError(
+        `numbering level text ${JSON.stringify(text)} names placeholder %${levelDigits}, which encodes to the zero-based level ${levelIndex}, outside the 0..${MAX_LIST_LEVEL} range [MS-DOC] 2.9.343's own Xst field text permits ("Each placeholder is an unsigned 2-byte integer that specifies the zero-based level") -- writing it anyway would silently wrap the value mod 65536 once String.fromCharCode encodes it, corrupting the encoded level text`,
+      );
+    }
     const position = xstText.length + 1;
     if (position > MAX_UINT8) {
       throw new DocFormatError(

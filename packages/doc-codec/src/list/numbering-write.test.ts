@@ -203,15 +203,40 @@ describe("buildNumberingTables: level text and format", () => {
   });
 
   it("refuses a level whose own text names more placeholders than rgbxchNums' fixed nine-entry array can hold", () => {
+    // Level 8 (one-based index 9) is the one level whose own per-level limit ([MS-DOC] 2.9.148's "one plus this LVL's own zero-based level") equals the fixed nine-entry array's own size exactly, so it's the one level where the array-size bound and the per-level bound name the same number -- a shallower level's own tighter per-level limit would refuse this text for a different reason first (see the "even within rgbxchNums' own nine-entry array" test below, which exercises exactly that at level 0). Ten placeholders, cycling through every valid zero-based level value (0..8, [MS-DOC] 2.9.343's own Xst range) so none of them trips the separate placeholder-VALUE check just added above -- only the count, 10 > 9, does. (Moved here from level 0's own text, which named ten SEQUENTIAL placeholders %1..%10 -- %10 itself is no longer a legal placeholder value at any level once that check exists, so this fixture has to cycle through valid values instead of counting past them.)
     const text = Array.from(
       { length: 10 },
-      (_unused, index) => `%${index + 1}`,
+      (_unused, index) => `%${(index % 9) + 1}`,
     ).join("");
-    const definitions: NumberingDefinitions = {
-      "1": { levels: { "0": { format: "decimal", text, startAt: 1 } } },
-    };
+    const levels: Record<string, NumberingLevel> = {};
+    for (let level = 0; level < 9; level += 1) {
+      levels[String(level)] = { format: "bullet", text: "•", startAt: 1 };
+    }
+    levels["8"] = { format: "decimal", text, startAt: 1 };
+    const definitions: NumberingDefinitions = { "1": { levels } };
     expect(() => buildNumberingTables(definitions)).toThrow(
       /names 10 placeholders/,
+    );
+    expect(() => buildNumberingTables(definitions)).toThrow(/limit of 9/);
+    expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
+  });
+
+  it("refuses a placeholder whose own value names a level outside [MS-DOC] 2.9.343's 0..8 range, rather than silently wrapping it mod 65536", () => {
+    const definitions: NumberingDefinitions = {
+      "1": { levels: { "0": { format: "decimal", text: "%10.", startAt: 1 } } },
+    };
+    expect(() => buildNumberingTables(definitions)).toThrow(
+      /encodes to the zero-based level 9/,
+    );
+    expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
+  });
+
+  it("refuses a placeholder naming a negative zero-based level (%0)", () => {
+    const definitions: NumberingDefinitions = {
+      "1": { levels: { "0": { format: "decimal", text: "%0.", startAt: 1 } } },
+    };
+    expect(() => buildNumberingTables(definitions)).toThrow(
+      /encodes to the zero-based level -1/,
     );
     expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
   });
