@@ -1,7 +1,9 @@
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import { describe, expect, it } from "vitest";
+import { buildXml } from "../../xml/build";
 import { el, txt } from "../../xml/fragment";
+import { rootElement } from "../util";
 import {
   hasCoreProperties,
   patchCoreProperties,
@@ -151,5 +153,107 @@ describe("patchCoreProperties", () => {
     expect(() => {
       patchCoreProperties(pkg, { title: "x" });
     }).toThrow(/no 'docProps\/core\.xml' XML part/);
+  });
+
+  // ExaDev/documents.js#1007 round 2: every core-properties child is optional, so a real producer writing only cp:keywords has no reason to ever declare the dc namespace -- a legally-minimal core.xml. Creating a dc-prefixed element into it without also declaring xmlns:dc would be a fatal namespace well-formedness error real consumers (Word, LibreOffice) reject outright.
+  it("declares the dc namespace on the root when a patch creates the first dc-prefixed element in a core.xml that only ever bound cp", () => {
+    const core = el(
+      "cp:coreProperties",
+      {
+        "xmlns:cp":
+          "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+      },
+      [el("cp:keywords", {}, [txt("existing")])],
+    );
+    const pkg = packageWith(core, undefined);
+
+    patchCoreProperties(pkg, { title: "New Title" });
+
+    const part = pkg.parts["docProps/core.xml"];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml part");
+    }
+    const root = rootElement(part);
+    if (root === undefined) {
+      throw new Error("expected a root element");
+    }
+    expect(root.attributes).toContainEqual({
+      name: "xmlns:dc",
+      value: "http://purl.org/dc/elements/1.1/",
+    });
+    const xml = buildXml(part.nodes);
+    expect(xml).toContain('xmlns:dc="http://purl.org/dc/elements/1.1/"');
+    expect(xml).toContain("<dc:title>New Title</dc:title>");
+  });
+
+  // The mirror-image gap: a core.xml declaring only dc, patched with keywords (cp:), needs xmlns:cp declared.
+  it("declares the cp namespace on the root when a patch creates the first cp-prefixed element in a core.xml that only ever bound dc", () => {
+    const core = el(
+      "cp:coreProperties",
+      { "xmlns:dc": "http://purl.org/dc/elements/1.1/" },
+      [el("dc:title", {}, [txt("Existing Title")])],
+    );
+    const pkg = packageWith(core, undefined);
+
+    patchCoreProperties(pkg, { keywords: ["alpha", "beta"] });
+
+    const part = pkg.parts["docProps/core.xml"];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml part");
+    }
+    const root = rootElement(part);
+    if (root === undefined) {
+      throw new Error("expected a root element");
+    }
+    expect(root.attributes).toContainEqual({
+      name: "xmlns:cp",
+      value:
+        "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+    });
+    const xml = buildXml(part.nodes);
+    expect(xml).toContain(
+      'xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"',
+    );
+  });
+
+  it("declares xmlns:dc only once when a patch creates two new dc-prefixed elements in the same call", () => {
+    const pkg = packageWithCore([]);
+
+    patchCoreProperties(pkg, { title: "A Title", author: "An Author" });
+
+    const part = pkg.parts["docProps/core.xml"];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml part");
+    }
+    const root = rootElement(part);
+    if (root === undefined) {
+      throw new Error("expected a root element");
+    }
+    expect(root.attributes.filter((a) => a.name === "xmlns:dc")).toHaveLength(
+      1,
+    );
+  });
+
+  it("does not add a namespace declaration when only replacing an existing element's text", () => {
+    const core = el(
+      "cp:coreProperties",
+      {
+        "xmlns:cp":
+          "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+        "xmlns:dc": "http://purl.org/dc/elements/1.1/",
+      },
+      [el("dc:title", {}, [txt("Old Title")])],
+    );
+    const pkg = packageWith(core, undefined);
+    const attributeCountBefore = (
+      rootElement(pkg.parts["docProps/core.xml"])?.attributes ?? []
+    ).length;
+
+    patchCoreProperties(pkg, { title: "New Title" });
+
+    const attributeCountAfter = (
+      rootElement(pkg.parts["docProps/core.xml"])?.attributes ?? []
+    ).length;
+    expect(attributeCountAfter).toBe(attributeCountBefore);
   });
 });
