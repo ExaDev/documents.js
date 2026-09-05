@@ -39,6 +39,7 @@ import {
 } from "../shared/units";
 import { buildXlsxPackageFromContent } from "../xlsx/build";
 import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from "./constructs";
+import { buildCellShading } from "./shading";
 
 // ContentSection[] -> Package: the write side of readDocxContent, and this package's second writer of genuinely new content after typed/xlsx/build.ts's buildXlsxPackageFromContent (whose part-scaffolding conventions this follows). It builds a complete, fresh docx package -- content types, package and document relationships, media parts, core/extended properties, and word/document.xml -- rather than editing a decoded one, so a ContentDocument that never came from a docx writes out just as well as one that did.
 //
@@ -708,13 +709,7 @@ function buildCell(
     tcPrChildren.push(el("w:vMerge"));
   }
   if (cell.background !== undefined) {
-    tcPrChildren.push(
-      el("w:shd", {
-        "w:val": "clear",
-        "w:color": "auto",
-        "w:fill": colorToRgbHex(cell.background),
-      }),
-    );
+    tcPrChildren.push(buildCellShading(cell.background));
   }
   if (cell.borders !== undefined) {
     tcPrChildren.push(buildCellBorders(cell.borders));

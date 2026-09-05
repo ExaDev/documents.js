@@ -716,7 +716,10 @@ describe("readPptxContent: tables", () => {
     const doc = readPptxContent(buildFixturePackage());
     const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
     const table = asTable(tableShape?.blocks[0]);
-    expect(table.rows[1]?.cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(table.rows[1]?.cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
   });
 
   it("reads a cell's four a:lnL/a:lnR/a:lnT/a:lnB border edges, each edge's colour, width, and preset dash pattern", () => {
