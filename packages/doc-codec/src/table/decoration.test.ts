@@ -163,6 +163,18 @@ describe("Brc80", () => {
       );
     });
 
+    it("does not round-trip a 0.5pt double border exactly -- the written dptLineWidth of 1 is below the read-side floor of 2, so it comes back 50% wider than requested", () => {
+      // A real, [MS-DOC]-consistent narrowing, not a regression: MIN_DPT_LINE_WIDTH_DOUBLE (1) is lower than MIN_DPT_LINE_WIDTH (2) purely so the writer can state a thin double border at all, but the reader applies MIN_DPT_LINE_WIDTH's own floor to every dptLineWidth regardless of brcType, per [MS-DOC]'s "values less than 2 are considered to be equivalent to 2" -- so the stored 1 reads back as 2, tripled to 0.75pt, not the 0.5pt it was written with.
+      const border: ContentBorder = {
+        color: RED,
+        widthPt: 0.5,
+        style: "double",
+      };
+      const written = writeBrc80(border);
+      expect(written[0]).toBe(1);
+      expect(readBrc80(bytes(written), 0)?.widthPt).toBe(0.75);
+    });
+
     it("writes and reads back a double border's own total width exactly, for a width the tripled field can state precisely", () => {
       const border: ContentBorder = {
         color: RED,
