@@ -792,6 +792,27 @@ describe("embedded objects", () => {
     expect(object?.document).toEqual(embedded);
   });
 
+  // \'hh is a generic RTF character escape valid anywhere in a destination's text, not only inside a destination shaped for it -- so a single \objdata payload can legitimately deliver part of its data as plain #SDATA hex-digit text and the rest as scattered \'hh escapes. Collecting the two into separate buffers and keeping only whichever one turned out non-empty would silently discard whichever source came second; this proves both survive, in order.
+  it("reads \\objdata whose payload is split between #SDATA hex text and \\'hh escapes, rather than dropping whichever came second", () => {
+    const raw = writeEmbeddedObjectData({
+      objectKind: "spreadsheet",
+      document: embedded,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+    });
+    const splitAt = Math.floor(raw.length / 2);
+    const hexHalf = bytesToHex(raw.subarray(0, splitAt));
+    const escapedHalf = Array.from(raw.subarray(splitAt))
+      .map((byte) => `\\'${byte.toString(16).padStart(2, "0")}`)
+      .join("");
+    const object = blocksOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${hexHalf}${escapedHalf}}}\\par}`,
+    ).find(
+      (block): block is ContentEmbeddedObjectBlock =>
+        block.kind === "embeddedObject",
+    );
+    expect(object?.document).toEqual(embedded);
+  });
+
   // RTF 1.9.1's own <objdata> production is '{\*' \objdata (<objalias>? & <objsect>?) <data> '}' -- \objalias and \objsect are legal sub-groups nested directly inside \objdata's own braces, before its real payload. A reader that predicts \objdata's decode via a flat token scan (rather than the same group-aware walk the live read uses) folds those sub-groups' own bytes into the payload it scans, disagreeing with the live read about whether \objdata will decode at all -- exactly the double-render bug this test guards against.
   it("decodes \\objdata unaffected by legal nested {\\*\\objalias ...}/{\\*\\objsect ...} sub-groups, without double-rendering \\result's own fallback content", () => {
     const { document, diagnostics } = readRtfContent(

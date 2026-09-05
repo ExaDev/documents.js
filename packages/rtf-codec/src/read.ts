@@ -321,10 +321,33 @@ interface FieldState {
   instruction: string;
 }
 
-// {\*\objdata ...}'s own hex-or-binary payload, captured exactly like PictureState's own hex/binary pair above (the two destinations share the identical (\binN #BDATA) | #SDATA grammar production). Unlike PictureState this carries no dimension/format fields: \object's own \objwN/\objhN are purely informational sizing for a reader that cannot decode \objdata (RTF 1.9.1, "Objects") -- captured instead on the enclosing \object's own ObjectState below -- and this reader's actual reconstruction gets objectKind/frame/document straight from the decoded payload itself -- see buildEmbeddedObject.
+// {\*\objdata ...}'s own (\binN #BDATA) | #SDATA payload, decoded into one ordered byte sequence as the token stream is actually read -- a \'hh escape is a generic RTF character escape valid anywhere in a destination's text (not only in a #SDATA-shaped one), so a real payload can legitimately interleave plain #SDATA hex-digit text with scattered \'hh escapes, and keeping two separate buffers (one for each source) would silently discard whichever one a naive "prefer binary if any, else hex" choice didn't pick. `pendingHexNibble` carries a #SDATA hex digit's value, seen without its pairing digit yet, across token boundaries, so a pair split between two "text" tokens still decodes. Unlike PictureState this carries no dimension/format fields: \object's own \objwN/\objhN are purely informational sizing for a reader that cannot decode \objdata (RTF 1.9.1, "Objects") -- captured instead on the enclosing \object's own ObjectState below -- and this reader's actual reconstruction gets objectKind/frame/document straight from the decoded payload itself -- see buildEmbeddedObject.
 interface ObjectDataState {
-  hex: string;
-  binary: number[];
+  bytes: number[];
+  pendingHexNibble: number | undefined;
+}
+
+const OBJECT_DATA_HEX_DIGITS = "0123456789abcdef";
+
+// Decodes a run of #SDATA hex-digit text directly into `objectData.bytes`, in place, preserving its actual position relative to any \binN/\'hh bytes already appended or still to come -- the streaming counterpart of base64.ts's own hexToBytes, which only ever sees one destination's payload as a single already-concatenated string. Behaves identically to hexToBytes otherwise: a non-hex character (RTF's own recommended line-wrapping whitespace) is skipped rather than rejected, and a digit left unpaired at the very end of the whole destination is simply dropped, half a byte not being a byte.
+function appendObjectDataHexText(
+  objectData: ObjectDataState,
+  text: string,
+): void {
+  let high = objectData.pendingHexNibble;
+  for (const character of text) {
+    const value = OBJECT_DATA_HEX_DIGITS.indexOf(character.toLowerCase());
+    if (value === -1) {
+      continue;
+    }
+    if (high === undefined) {
+      high = value;
+      continue;
+    }
+    objectData.bytes.push(high * 16 + value);
+    high = undefined;
+  }
+  objectData.pendingHexNibble = high;
 }
 
 // One \object destination's own state, shared by reference across the whole {\object ...} group and every child destination nested inside it (\objdata, \result, and the informational \*\objclass/\*\objname sub-groups) -- the same "shared by reference" pattern FieldState already establishes for \fldinst/\fldrslt, so \result's own group can see whether its sibling \objdata already decoded without either needing to know the other's stack depth.
@@ -1243,11 +1266,9 @@ function objectSizeHintClause(object: ObjectState | undefined): string {
   return "";
 }
 
-// The hex-or-binary payload an ObjectDataState carries, as real bytes.
+// The payload an ObjectDataState carries, as real bytes -- `bytes` is already the fully decoded, ordered sequence by the time a \objdata destination's group closes, so this is a plain conversion rather than a decode.
 function objectDataBytes(objectData: ObjectDataState): Uint8Array<ArrayBuffer> {
-  return objectData.binary.length > 0
-    ? Uint8Array.from(objectData.binary)
-    : hexToBytes(objectData.hex);
+  return Uint8Array.from(objectData.bytes);
 }
 
 // Turns {\*\objdata ...}'s collected payload back into a ContentEmbeddedObjectBlock, or reports why it cannot and returns undefined -- the object-destination counterpart of buildPicture above. "no payload" and "not this package's own payload" are the two distinct failure shapes (matching buildPicture's own "no format" vs "no size" split): the first never reaches readEmbeddedObjectData at all, and the second is every way a real, foreign OLE object (or simply malformed \objdata) legitimately fails to parse as one. `object` is the enclosing \object's own state, consulted only for its \objw/\objh size hint on the degrade path -- readEmbeddedObjectData never needs it, since a decoded payload carries its own frame.
@@ -1461,7 +1482,7 @@ function readRtfDetail(
           child.picture = defaultPictureState();
         }
         if (kind === "objectData") {
-          child.objectData = { hex: "", binary: [] };
+          child.objectData = { bytes: [], pendingHexNibble: undefined };
         }
         if (kind === "object") {
           // Freshly resolved here as the group is actually entered, not predicted ahead of time -- \objdata and \result (below) each report into this same shared state as they are actually read, and \object's own group-end handling (further down) reads it back once every child has been.
@@ -1595,7 +1616,7 @@ function readRtfDetail(
         state.destination === "objectData" &&
         state.objectData !== undefined
       ) {
-        state.objectData.hex += asciiStringFromBytes(slice);
+        appendObjectDataHexText(state.objectData, asciiStringFromBytes(slice));
       } else {
         appendBytes(pendingBytes, slice);
       }
@@ -1611,7 +1632,7 @@ function readRtfDetail(
         state.destination === "objectData" &&
         state.objectData !== undefined
       ) {
-        appendBytes(state.objectData.binary, token.bytes);
+        appendBytes(state.objectData.bytes, token.bytes);
       }
       index += 1;
       continue;
@@ -1625,7 +1646,7 @@ function readRtfDetail(
         state.destination === "objectData" &&
         state.objectData !== undefined
       ) {
-        state.objectData.binary.push(token.byte);
+        state.objectData.bytes.push(token.byte);
       } else {
         pendingBytes.push(token.byte);
       }
