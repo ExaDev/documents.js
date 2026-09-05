@@ -36,6 +36,7 @@ describe("output shape", () => {
     );
     expect(out.startsWith("{\\rtf1\\ansi")).toBe(true);
     expect(out.endsWith("}")).toBe(true);
+    expectBalancedBraces(out);
   });
 
   it("emits pure 7-bit ASCII whatever the input contained", () => {
@@ -211,6 +212,7 @@ describe("body constructs", () => {
     expect(out).toContain(
       '{\\field{\\*\\fldinst{HYPERLINK "https://example.com/"}}{\\fldrslt{',
     );
+    expectBalancedBraces(out);
   });
 
   it("writes a checkbox contentControl as a real \\*\\formfield production", () => {
@@ -243,6 +245,7 @@ describe("body constructs", () => {
     expect(out).toContain("{\\*\\ffname Check1}");
     expect(out.indexOf("before")).toBeLessThan(out.indexOf("FORMCHECKBOX"));
     expect(out.indexOf("FORMCHECKBOX")).toBeLessThan(out.indexOf("after"));
+    expectBalancedBraces(out);
   });
 
   it("writes a dropDown contentControl's options as \\*\\ffl entries", () => {
@@ -270,6 +273,7 @@ describe("body constructs", () => {
     expect(out).toContain("\\fftype2");
     expect(out).toContain("{\\*\\ffl Hello}");
     expect(out).toContain("{\\*\\ffl Guten Tag}");
+    expectBalancedBraces(out);
   });
 
   it("writes a plainText contentControl wrapping its runs in \\fldrslt", () => {
@@ -297,6 +301,7 @@ describe("body constructs", () => {
       "FORMTEXT {\\*\\formfield{\\fftype0{\\*\\ffname Text1}}}",
     );
     expect(out).toContain("{\\fldrslt {Lorem ipsum.}}}");
+    expectBalancedBraces(out);
   });
 
   it("reports a contentControl controlType RTF's own form-field vocabulary does not cover, rather than minting nothing silently -- and mints no unbalanced braces for it", () => {
@@ -388,6 +393,7 @@ describe("body constructs", () => {
     expect(out).toContain("\\intbl");
     expect(out).toContain("\\cell");
     expect(out).toContain("\\row");
+    expectBalancedBraces(out);
   });
 
   it("writes a page break as \\page", () => {
