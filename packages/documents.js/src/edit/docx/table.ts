@@ -4,8 +4,12 @@ import type {
   Color,
 } from "document-schema.js";
 import type { XmlElement, XmlNode } from "ooxml.js";
-import { attr } from "ooxml.js";
-import { colorToRgbHex, rgbHexToColor } from "document-schema.js";
+import { attr, readCellShading } from "ooxml.js";
+import {
+  colorToRgbHex,
+  resolveCellFillColor,
+  rgbHexToColor,
+} from "document-schema.js";
 import { ptToTwips, twipsToPt } from "../../model/units";
 import {
   directChildElement,
@@ -137,16 +141,11 @@ export class DocxTableCell {
     );
   }
 
-  // Cell background fill (ECMA-376 w:tcPr/w:shd) -- w:val="clear" + w:color="auto" + w:fill=RRGGBB is the form ooxml.js's own reader accepts (it reads w:fill alone, treating "auto"/"none" as no fill). The write-side inverse of readCellShading, whose ContentTableCell.background this mirrors.
+  // Cell background fill (ECMA-376 w:tcPr/w:shd), read through ooxml.js's own readCellShading -- the same w:val-based resolution readDocxContent applies to every table cell (w:val="clear" from w:fill, w:val="solid" from w:color instead, every other named pattern token from whichever of w:color/w:fill states a concrete colour) -- reduced to a single representative Color via resolveCellFillColor, since this editor's own live model carries one flat colour rather than the full ContentCellFill shape (see the write side's identical reduction in edit/docx/content.ts). Reading w:fill directly, as this getter once did, silently returned the wrong colour for a w:val="solid" cell (whose real colour lives in w:color) and no colour at all for a genuine pattern fill; delegating to readCellShading keeps this getter from re-deriving its own, easily-diverging copy of that resolution.
   get background(): Color | undefined {
     const tcPr = this.tcPrElement(false);
-    const shd =
-      tcPr === undefined ? undefined : directChildElement(tcPr, "w:shd");
-    const fill = shd === undefined ? undefined : attr(shd, "w:fill");
-    if (fill === undefined || fill === "auto" || fill === "none") {
-      return undefined;
-    }
-    return rgbHexToColor(fill);
+    const fill = readCellShading(tcPr);
+    return fill === undefined ? undefined : resolveCellFillColor(fill);
   }
 
   set background(value: Color | undefined) {
