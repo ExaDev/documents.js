@@ -35,6 +35,7 @@ export const EpubDiagnosticCodes = {
   // src/xhtml (read side: XHTML -> ContentDocument)
   IMAGE_FORMAT_UNSUPPORTED: "epub/image-format-unsupported",
   IMAGE_UNRESOLVED: "epub/image-unresolved",
+  IMAGE_NESTED_INLINE_UNSUPPORTED: "epub/image-nested-inline-unsupported",
   ELEMENT_UNMAPPED: "epub/element-unmapped",
   STYLE_RESIDUE: "epub/style-residue",
   FOOTNOTE_TARGET_UNRESOLVED: "epub/footnote-target-unresolved",
