@@ -88,6 +88,11 @@ describe("collectDocumentFormulas", () => {
       "test:formula",
       "test:formula",
     ]);
+    // Both formulas share the identical sourcePath the fixture helper stamps on every formula -- exactly the shape a real markdown-authored document produces too (a constant sourcePath, or none at all). locate is the field that still tells them apart: derived from container/index position, not from sourcePath, so the nested table-cell formula and its top-level sibling come back with genuinely distinct structural paths.
+    expect(entries.map((entry) => entry.locate)).toEqual([
+      "sections[0]/blocks[0].rows[0].cells[0]/blocks[0]",
+      "sections[0]/blocks[1]",
+    ]);
   });
 
   it("walks a presentation slide's shapes", () => {
@@ -173,6 +178,8 @@ describe("collectDocumentFormulas", () => {
     expect(entries[0]?.formula.presentation?.latex).toBe("f(x) = x^2");
     // ContentEmbeddedObject (the spreadsheet shape) carries no sourcePath field at all -- structurally, not merely because none was assigned.
     expect(entries[0]?.sourcePath).toBeUndefined();
+    // locate is derived from sheet/object position, not from sourcePath -- so a spreadsheet's formulas are still individually locatable even though this arm never has a sourcePath to fall back on.
+    expect(entries[0]?.locate).toBe("sheets[0].embeddedObjects[0]");
   });
 
   it("skips a spreadsheet's non-formula embedded objects", () => {
@@ -214,7 +221,9 @@ describe("collectDocumentFormulas", () => {
     const formula = latexToFormula("2 + 3", { source: "test:formula" }).formula;
     const document = formulaDocument(formula);
     const entries = collectDocumentFormulas(document);
-    expect(entries).toEqual([{ formula, sourcePath: undefined }]);
+    expect(entries).toEqual([
+      { formula, sourcePath: undefined, locate: "formula" },
+    ]);
   });
 
   it("returns an empty array for a document with no formulas anywhere", () => {
