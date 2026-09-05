@@ -674,6 +674,22 @@ describe("step 7: a cell's own background paints as a real LayoutRect", () => {
     });
     expect(rectItems(convert([s]).pages[0]!.items)).toHaveLength(0);
   });
+
+  it("emits no rect at all for a pattern fill that resolves to no colour, rather than a fill-less no-op one", () => {
+    // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined -- genuinely no fill, not a reason to still push a rect item that would render invisibly.
+    const s = sheet(
+      [
+        stringCell(0, 0, "A", {
+          background: { kind: "pattern", patternType: "gray125" },
+        }),
+      ],
+      {
+        columns: [{ index: 0, widthPt: 50 }],
+        rows: [{ index: 0, heightPt: 20 }],
+      },
+    );
+    expect(rectItems(convert([s]).pages[0]!.items)).toHaveLength(0);
+  });
 });
 
 describe("step 7: a cell's own borders paint as real LayoutLines, one per declared edge", () => {
