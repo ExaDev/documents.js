@@ -42,6 +42,9 @@ export const EpubDiagnosticCodes = {
   FOOTNOTE_TARGET_UNRESOLVED: "epub/footnote-target-unresolved",
   LINK_TARGET_EXTERNAL_ONLY: "epub/link-target-external-only",
   TABLE_CAPTION_UNSUPPORTED: "epub/table-caption-unsupported",
+  TABLE_DUPLICATE_CAPTION: "epub/table-duplicate-caption",
+  TABLE_ROW_CONTENT_OUTSIDE_CELL: "epub/table-row-content-outside-cell",
+  TABLE_CONTENT_UNRECOGNIZED: "epub/table-content-unrecognized",
   LIST_CONTENT_OUTSIDE_ITEM: "epub/list-content-outside-item",
   DEFINITION_LIST_CONTENT_OUTSIDE_ENTRY:
     "epub/definition-list-content-outside-entry",
