@@ -525,6 +525,35 @@ describe("lists", () => {
       );
     },
   );
+
+  it("recovers stray content before the first <li> of a NESTED list inheriting the outer <li>'s own list membership, not none, when the enclosing list is itself nested", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<ul><li>outer<ul>stray<li>inner</li></ul></li></ul>"),
+      sink,
+    );
+    // "stray" sits before the inner <ul>'s own first <li>, so it has no preceding item WITHIN that inner list to attach to -- but the inner <ul> is itself nested inside the outer <li>, so the recovered content inherits THAT membership rather than carrying none of its own, exactly as the diagnostic message now states.
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "outer" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "stray" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "inner" }],
+        list: { numId: "epub1:bullet", level: 1, itemId: "item2" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
 });
 
 describe("inert elements outside lists (script/template/style/noscript)", () => {
