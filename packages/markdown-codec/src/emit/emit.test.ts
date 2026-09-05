@@ -569,6 +569,37 @@ describe("lists", () => {
     expect(lowerMarkdown(written)).toEqual(first);
   });
 
+  it("keeps a Quote-styled block and a following plain block of the same item as two separate blocks on write-then-reparse -- Quote is NOT self-delimiting inside a list region: renderListRegion renders every block through renderParagraphBody, which never applies a '> ' prefix, so a Quote-styled block reads back identically to a plain one and the two would otherwise merge into one paragraph via CommonMark's lazy continuation", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "Quote",
+        runs: [{ text: "quoted" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "after" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- quoted\n\n  after");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [quotedBlock, afterBlock] = blocks;
+    if (quotedBlock?.kind !== "paragraph" || afterBlock?.kind !== "paragraph") {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(quotedBlock.runs.map((run) => run.text).join("")).toBe("quoted");
+    expect(afterBlock.runs.map((run) => run.text).join("")).toBe("after");
+  });
+
   it("separates loose-list siblings with a blank line and tight-list siblings with none", () => {
     const tight = emitMarkdown(
       doc([
