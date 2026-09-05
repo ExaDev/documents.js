@@ -237,6 +237,8 @@ describe("body constructs", () => {
     expect(out).toContain(
       "{\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{",
     );
+    // \fftype1 is RTF 1.5's own "Form field type: ... 1 Check box" -- without it, the minted \*\formfield data says "text field" while the sibling \*\fldinst says FORMCHECKBOX.
+    expect(out).toContain("\\fftype1");
     expect(out).toContain("\\ffdefres1");
     expect(out).toContain("{\\*\\ffname Check1}");
     expect(out.indexOf("before")).toBeLessThan(out.indexOf("FORMCHECKBOX"));
@@ -264,6 +266,8 @@ describe("body constructs", () => {
       ]),
     );
     expect(out).toContain("{\\*\\fldinst FORMDROPDOWN {\\*\\formfield{");
+    // \fftype2 is RTF 1.5's own "Form field type: ... 2 List".
+    expect(out).toContain("\\fftype2");
     expect(out).toContain("{\\*\\ffl Hello}");
     expect(out).toContain("{\\*\\ffl Guten Tag}");
   });
@@ -288,7 +292,10 @@ describe("body constructs", () => {
         },
       ]),
     );
-    expect(out).toContain("FORMTEXT {\\*\\formfield{{\\*\\ffname Text1}}}");
+    // \fftype0 is RTF 1.5's own "Form field type: 0 Text ...".
+    expect(out).toContain(
+      "FORMTEXT {\\*\\formfield{\\fftype0{\\*\\ffname Text1}}}",
+    );
     expect(out).toContain("{\\fldrslt {Lorem ipsum.}}}");
   });
 
