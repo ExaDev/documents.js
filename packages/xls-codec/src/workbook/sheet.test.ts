@@ -655,6 +655,70 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[0]?.formula).toBeUndefined();
     expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
   });
+
+  it("does not abort the whole sheet read when a ShrFmla record's own cce overruns the record", () => {
+    // A ShrFmla whose own cce claims far more rgce bytes than the record actually carries must degrade to no group recovered for this base cell, not throw out of collectFormulaGroups -- that would abort readSheetRecords before its own cell-reading loop ever runs, losing every OTHER cell on the sheet along with this one's formula text, not just this one's.
+    const ptgExpToBase = [0x01, ...u16(0), ...u16(1)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 1),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_SHRFMLA, [
+        ...u16(0), // rwFirst
+        ...u16(1), // rwLast
+        1, // colFirst
+        1, // colLast
+        0, // reserved
+        2, // cUse
+        ...u16(1000), // cce claims 1000 bytes of rgce -- far more than this record actually carries
+        0x4c,
+        ...u16(0),
+        ...u16(0xffff), // a couple of real bytes, nowhere near 1000
+      ]),
+      record(RECORD_NUMBER, [...cell(9, 9), ...f64(42)]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
+    expect(cells[1]?.value).toEqual({ kind: "number", value: 42 });
+  });
+
+  it("does not abort the whole sheet read when an Array record's own cce overruns the record", () => {
+    // The same malformed-length risk as the ShrFmla case above, on the OTHER record collectFormulaGroups reads without a bounds guard: an Array record's own cce claiming far more rgce bytes than it actually carries.
+    const ptgExpToBase = [0x01, ...u16(1), ...u16(0)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(1, 0),
+        ...f64(2),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_ARRAY, [
+        ...u16(1),
+        ...u16(2),
+        0,
+        0, // ref: rwFirst=1, rwLast=2, colFirst=0, colLast=0
+        ...u16(0), // flags word
+        ...u32(0), // unused
+        ...u16(1000), // cce claims 1000 bytes of rgce -- far more than this record actually carries
+        0x44,
+        ...u16(0),
+        ...u16(0xc000), // a couple of real bytes, nowhere near 1000
+      ]),
+      record(RECORD_NUMBER, [...cell(9, 9), ...f64(99)]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 2 });
+    expect(cells[1]?.value).toEqual({ kind: "number", value: 99 });
+  });
 });
 
 describe("readSheetRecords grid geometry", () => {
