@@ -1,7 +1,8 @@
 // Smoke test: the real built dist/bin.js runs correctly as a genuine subprocess speaking the actual MCP stdio protocol -- not an in-process InMemoryTransport pair (every src/tools/*.test.ts file already proves the in-process wiring) and not a handler function called directly. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to the "smoke" project), never part of the default `pnpm test` file set, since it requires a fresh build to mean anything. Every test here connects a real @modelcontextprotocol/client Client over a real StdioClientTransport spawning `node dist/bin.js`, matching document-cli's own test/smoke.test.mjs convention (spawn the built artifact, assert on genuine output) adapted from argv/exit-code assertions to a real JSON-RPC tools/list + tools/call round trip.
+import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { Client } from '@modelcontextprotocol/client';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { bytesToBase64, createDocx } from 'documents.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -107,5 +108,72 @@ describe('document-mcp stdio smoke test', () => {
     const salesTable = tables.find((table) => table.tableName === 'SALES');
     expect(salesTable).toBeDefined();
     expect(salesTable.rows.length).toBeGreaterThan(0);
+  });
+});
+
+// The line src/bin.ts writes to stderr once the HTTP listener is actually bound -- matched against the spawned child's real stderr output below rather than assumed, so this test fails honestly if the startup log ever stops matching what the server actually reports.
+const HTTP_LISTENING_LINE = /^document-mcp listening on http:\/\/127\.0\.0\.1:(\d+)\/mcp$/m;
+
+// Waits for the spawned document-mcp child to report its bound port on stderr, rejecting if it exits first (a real startup failure, e.g. a port already in use) or if the line never appears within the timeout.
+function waitForHttpPort(child) {
+  return new Promise((resolve, reject) => {
+    let buffer = '';
+    const onStderr = (chunk) => {
+      buffer += chunk.toString('utf8');
+      const match = HTTP_LISTENING_LINE.exec(buffer);
+      if (match) {
+        child.stderr.off('data', onStderr);
+        child.off('exit', onExit);
+        resolve(Number(match[1]));
+      }
+    };
+    const onExit = (code) => {
+      reject(new Error(`document-mcp --transport http exited before reporting a listening port (code ${code})`));
+    };
+    child.stderr.on('data', onStderr);
+    child.once('exit', onExit);
+  });
+}
+
+describe('document-mcp http smoke test', () => {
+  let child;
+  let client;
+  let port;
+
+  beforeAll(async () => {
+    // --port 0 asks the OS for a free port rather than hardcoding one, so this test cannot collide with anything else already listening on the host -- the real port is read back from the child's own startup log line via waitForHttpPort.
+    child = spawn(process.execPath, [BIN_PATH, '--transport', 'http', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    port = await waitForHttpPort(child);
+
+    const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`));
+    client = new Client({ name: 'document-mcp-http-smoke-test', version: '0.0.0' });
+    await client.connect(transport);
+  });
+
+  afterAll(async () => {
+    await client?.close();
+    child?.kill();
+  });
+
+  it('lists exactly the real registered tool set, by name, over a genuine Streamable HTTP connection', async () => {
+    const { tools } = await client.listTools();
+    expect(tools.map((tool) => tool.name).sort()).toEqual(EXPECTED_TOOL_NAMES);
+  });
+
+  it('convert_document converts a real inline docx fixture to a genuine PDF over HTTP', async () => {
+    const docxBytes = buildFixtureDocxBytes();
+
+    const convertResult = await client.callTool({
+      name: 'convert_document',
+      arguments: { source: { bytesBase64: bytesToBase64(docxBytes), format: 'docx' }, targetFormat: 'pdf' },
+    });
+    expect(convertResult.isError).toBeFalsy();
+    expect(convertResult.structuredContent.targetFormat).toBe('pdf');
+    expect(isPdfBytes(Buffer.from(convertResult.structuredContent.output.bytesBase64, 'base64'))).toBe(true);
+  });
+
+  it('requests to a path other than /mcp 404, proving the listener actually routes rather than accepting anything', async () => {
+    const response = await fetch(`http://127.0.0.1:${port}/not-mcp`);
+    expect(response.status).toBe(404);
   });
 });
