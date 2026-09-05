@@ -754,7 +754,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("writes a wide table where every row merges across the entire grid without exceeding any single row's own PapxInFkp budget (ExaDev/documents.js#992 regression)", () => {
-    // Every row here has exactly one cell spanning the whole grid, so none of the table's 23 internal boundaries is ever stated by any row -- all 23 are lost. Splitting every row at every lost boundary (this writer's own pre-fix behaviour) would make each of the 3 rows state all 24 columns physically, which alone exceeds a PapxInFkp's own 510-byte GrpPrlAndIstd ceiling (see the README's "about 22 columns" note) even though the table has rows enough to share the work; the fix must spread the 23 boundaries across the 3 rows instead of restating every one of them in every row.
+    // Every row here has exactly one cell spanning the whole grid, so none of the table's 23 internal boundaries is ever stated by any row -- all 23 are lost. Splitting every row at every lost boundary (this writer's own pre-fix behaviour) would make each of the 3 rows state all 24 columns physically, which alone exceeds a PapxInFkp's own 510-byte GrpPrlAndIstd ceiling (see the README's own 15 + 22 × columns <= 487 arithmetic, which gives 21 columns as the exact per-row ceiling) even though the table has rows enough to share the work; the fix must spread the 23 boundaries across the 3 rows instead of restating every one of them in every row.
     const columnCount = 24;
     const rowCount = 3;
     const columnWidthsPt = Array.from({ length: columnCount }, () => 20);
