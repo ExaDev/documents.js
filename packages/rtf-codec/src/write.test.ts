@@ -303,8 +303,8 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  // [MS-DOC] 2.9.78 FFData: FFDataBits.fHaslistbox MUST be 1 when iType is iTypeDrop, and wDef MUST exist when iType is iTypeChck or iTypeDrop. An earlier version of this writer minted neither for a dropdown -- a real Word reader opening the resulting field would find no default at all recorded for a list-type form field.
-  it("writes \\ffhaslistbox and \\ffdefres for a dropDown, not just its \\*\\ffl entries", () => {
+  // [MS-DOC] 2.9.78 FFData: FFDataBits.fHaslistbox MUST be 1 when iType is iTypeDrop. wDef "MUST exist if and only if" iType is iTypeChck or iTypeDrop -- a real MS-DOC production rule this codec deliberately does not always satisfy, matching real-world producer behaviour: a dropdown with options but no recorded selection has no genuine default to report, and this writer's own read.test.ts ("leaves a FORMDROPDOWN's value unset when neither \ffres nor \ffdefres is present at all") proves RTF tolerates the omission and round-trips it cleanly rather than needing a fabricated entry-0 default.
+  it("writes \\ffhaslistbox for a dropDown with options but no recorded selection, minting neither \\ffres nor \\ffdefres", () => {
     const out = write(
       wordprocessing([
         {
@@ -325,7 +325,8 @@ describe("body constructs", () => {
       ]),
     );
     expect(out).toContain("\\ffhaslistbox");
-    expect(out).toContain("\\ffdefres0");
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
     expectBalancedBraces(out);
   });
 
@@ -997,8 +998,8 @@ describe("round trip through this package's own reader", () => {
     );
   });
 
-  // A dropDown minted with no recorded selection still round-trips with `value: "Hello"` (the first option) rather than no value at all -- [MS-DOC] 2.9.78 FFData's wDef is mandatory whenever iType is iTypeDrop, so this writer mints \ffdefres0 for exactly this case (see the "writes \ffhaslistbox and \ffdefres..." test above), and the reader then reads that same \ffdefres0 back as the selected entry. RTF's own form-field model has no way to serialise "list box, no default selection" -- only "list box, default is entry N" -- so this is the correct, spec-forced fixed point, not a fidelity regression.
-  it("round-trips a dropDown contentControl's options back onto the runs it wraps, gaining the spec-mandated first-entry default", () => {
+  // A dropDown minted with no recorded selection round-trips with no `value` at all, not a fabricated first-entry default: this writer mints neither \ffres nor \ffdefres for exactly this case (see "writes \ffhaslistbox for a dropDown with options but no recorded selection" above), and the reader leaves `value` unset when it finds neither control word (see read.test.ts's "leaves a FORMDROPDOWN's value unset..."). This is the genuine stable fixed point -- writing this descriptor again reproduces byte-identical output, with nothing to drift.
+  it("round-trips a dropDown contentControl's options back onto the runs it wraps, with no fabricated default selection", () => {
     const back = roundTrip(
       wordprocessing([
         {
@@ -1026,7 +1027,6 @@ describe("round trip through this package's own reader", () => {
       kind: "contentControl",
       controlType: "dropDown",
       options: ["Hello", "Guten Tag"],
-      value: "Hello",
     });
     expect(
       paragraph?.runs
@@ -1034,6 +1034,53 @@ describe("round trip through this package's own reader", () => {
         .map((run) => run.text)
         .join(""),
     ).toBe("Guten Tag");
+  });
+
+  // The round-trip stability fix this round exists for: an unmatched value must stay unmatched across repeated write/read cycles, never drifting onto a fabricated match. Before this fix, writing an unmatched value correctly minted no \ffres/\ffdefres (signalling loss), but reading that back gave `value: undefined` -- indistinguishable from "no value was ever set" -- so a SECOND write hit the other branch and minted \ffdefres0, silently turning "value was Bonjour, now lost" into "value is now definitely Hello".
+  it("keeps a dropDown's unmatched value unmatched across two full write-read cycles, rather than drifting onto a fabricated match on the second pass", () => {
+    const original = wordprocessing([
+      {
+        kind: "paragraph",
+        runs: [{ text: "x" }],
+        constructs: [
+          {
+            descriptor: {
+              kind: "contentControl",
+              controlType: "dropDown",
+              options: ["Hello", "Guten Tag"],
+              value: "Bonjour",
+            },
+            startRun: 0,
+            endRun: 1,
+          },
+        ],
+      },
+    ]);
+    const firstPassBytes = writeRtfContent(original);
+    const firstPassDocument = readRtfContent(firstPassBytes).document;
+    const secondPassBytes = writeRtfContent(firstPassDocument);
+    const secondPassDocument = readRtfContent(secondPassBytes).document;
+
+    const descriptorOf = (document: ContentDocument) => {
+      const block =
+        document.kind === "wordprocessing"
+          ? document.sections[0]?.blocks[0]
+          : undefined;
+      const paragraph = block?.kind === "paragraph" ? block : undefined;
+      return paragraph?.constructs?.[0]?.descriptor;
+    };
+
+    // Neither pass may recover "Bonjour" (it was never a valid option) nor drift onto "Hello" (the entry-0 fabrication this round's fix removes).
+    expect(descriptorOf(firstPassDocument)).toEqual({
+      kind: "contentControl",
+      controlType: "dropDown",
+      options: ["Hello", "Guten Tag"],
+    });
+    expect(descriptorOf(secondPassDocument)).toEqual(
+      descriptorOf(firstPassDocument),
+    );
+    // The bytes themselves are the strongest form of this assertion: a true fixed point produces byte-identical RTF on the second pass, not merely an equal descriptor.
+    expect(text(secondPassBytes)).toBe(text(firstPassBytes));
   });
 
   it("round-trips a dropDown contentControl's selected value back onto the same options", () => {
