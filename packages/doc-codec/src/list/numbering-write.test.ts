@@ -241,6 +241,17 @@ describe("buildNumberingTables: level text and format", () => {
     expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
   });
 
+  it("refuses an encoded level text longer than Xst's own 2-byte cch field can state, rather than crashing array-spreading it into place", () => {
+    const text = "x".repeat(0x10000); // one more than MAX_XST_LENGTH (0xFFFF).
+    const definitions: NumberingDefinitions = {
+      "1": { levels: { "0": { format: "none", text, startAt: 1 } } },
+    };
+    expect(() => buildNumberingTables(definitions)).toThrow(
+      /encodes to 65536 UTF-16 code units/,
+    );
+    expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
+  });
+
   it("refuses a level naming more placeholders than [MS-DOC] 2.9.148 permits for its own zero-based level, even within rgbxchNums' own nine-entry array", () => {
     // Level 0 (one-based index 1) permits at most one placeholder -- two, while still well inside the fixed nine-entry array, exceeds the tighter per-level bound this specific level actually has.
     const definitions: NumberingDefinitions = {

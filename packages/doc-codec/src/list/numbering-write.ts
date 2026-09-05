@@ -27,6 +27,8 @@ const MAX_LIST_LEVEL = 8;
 const LEVELS_PER_MULTI_LEVEL_LIST = 9;
 /** rgbxchNums' own 8-bit entries ([MS-DOC] 2.9.148): each names a one-based character POSITION in the level's own Xst text, not a value, and that position has to fit a single unsigned byte -- a longer literal prefix before the first placeholder pushes it past this without complaint from anything but this check, since a plain JS number[] never clamps on its own and only silently truncates mod 256 once this module's bytes become a Uint8Array. Distinct from MAX_LIST_LEVEL above, which bounds a placeholder's own VALUE, not its character position. */
 const MAX_UINT8 = 0xff;
+/** Xst's own cch field ([MS-DOC] 2.9.343): "An unsigned integer that specifies the number of characters" -- a plain 2-byte field, so no encoded level text can state a length past this without the byte itself wrapping. Left unchecked, a large enough `text` produces an array long enough that buildNumberingTables' own `lvlBytes.push(...buildLvlBytes(...))` throws a raw "too many function arguments" RangeError instead of this module's own clean, spec-citing refusal -- spreading a huge array as individual push() arguments hits the engine's own call-argument ceiling long before a plain array of that size would be a problem on its own. */
+const MAX_XST_LENGTH = 0xffff;
 /** The format every level this writer invents for a paragraph that leaves ContentListMembership.format unstated, and every level a multi-level list's own dense 0..8 run needs filling but no paragraph ever actually used -- an arbitrary but harmless choice, since an unused level's own appearance is never read back into a context that renders it. */
 const DEFAULT_FORMAT = "decimal";
 /** The glyph this writer states for format 'bullet'. A real Word-format producer typically uses a Private Use Area code point from a symbol font (the README's own "Numbering definitions" section records LibreOffice writing U+F0B7) -- this writer uses the plain, portable Unicode bullet instead, since this is a synthesised definition rather than a captured one, and it round-trips exactly through this package's own reader either way. */
@@ -127,6 +129,11 @@ function buildLevelXst(
     lastIndex = match.index + match[0].length;
   }
   xstText += text.slice(lastIndex);
+  if (xstText.length > MAX_XST_LENGTH) {
+    throw new DocFormatError(
+      `numbering level text ${JSON.stringify(text)} encodes to ${xstText.length} UTF-16 code units, outside the 0..${MAX_XST_LENGTH} range Xst's own cch field ([MS-DOC] 2.9.343) can state`,
+    );
+  }
   const maxPlaceholders = level + 1;
   if (positions.length > maxPlaceholders) {
     throw new DocFormatError(
@@ -302,7 +309,10 @@ export function buildNumberingTables(
           "internal defect: buildNumberingTables lost a level its own key list just named",
         );
       }
-      lvlBytes.push(...buildLvlBytes(numberingLevel, level));
+      // Appended one byte at a time rather than lvlBytes.push(...buildLvlBytes(...)): a level's own Xst can be as long as MAX_XST_LENGTH permits, and spreading an array that size as individual push() arguments can exceed the JS engine's own call-argument ceiling -- an implementation-defined limit unrelated to anything this module validates -- and throw a raw RangeError ("too many function arguments") for a value MAX_XST_LENGTH's own check just finished accepting as spec-legal. A for..of loop has no such ceiling: it appends one element at a time regardless of how many there are.
+      for (const byte of buildLvlBytes(numberingLevel, level)) {
+        lvlBytes.push(byte);
+      }
     }
     const lfo = new Array<number>(LFO_SIZE).fill(0);
     writeUint32LE(lfo, 0, ilfo); // lsid -- the same value as this list's own ilfo, which is all buildLstfBytes above needs it to link back to (numbering.ts's own readNumberingDefinitions resolves an LFO to its LSTF purely by matching lsid).
