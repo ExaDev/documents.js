@@ -11,9 +11,12 @@ import {
   type StylesTable,
 } from "document-schema.js";
 import { effectivePackage } from "./effective";
+import { OrderKeyBudgetExhaustedError } from "./order-keys";
 import {
   contentHashV1,
   defaultExtractionPolicy,
+  insertEdge,
+  insertNode,
   orderKeys,
   projectDocumentGraph,
   walkPropertyGraph,
@@ -1691,5 +1694,240 @@ describe("walkPropertyGraph (#660)", () => {
       { node: nodes[1], edge: edges[0] },
       { node: nodes[2], edge: edges[1] },
     ]);
+  });
+});
+
+describe("write API: insertNode / insertEdge (#935)", () => {
+  const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
+
+  it("mints a real content-addressed id for a newly inserted node, ignoring an id-shaped field in its own content", () => {
+    const { graph, id } = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: {
+        kind: "paragraph",
+        runs: [{ text: "Inserted." }],
+        id: "caller-chosen",
+      },
+    });
+    expect(id).toMatch(/^[0-9a-f]{64}$/);
+    expect(id).not.toBe("caller-chosen");
+    const node = graph.nodes.find((candidate) => candidate.id === id)!;
+    expect(node.id).toBe(id);
+    expect(node.id).not.toBe("caller-chosen");
+    // InsertNodeContent carries no id field at all -- the supplied "id" reaches the node only as ordinary hashed content, then is shadowed on the face by the real computed value, exactly the discipline every read-side mint site already follows.
+    expect(
+      contentHashV1({
+        kind: "paragraph",
+        runs: [{ text: "Inserted." }],
+        id: "caller-chosen",
+      }),
+    ).toBe(id);
+  });
+
+  it("shadows a properties field named kind with the explicit kind parameter, the same discipline mintValueNode applies", () => {
+    const { graph, id } = insertNode(EMPTY_GRAPH, {
+      kind: "value",
+      properties: { kind: "not-a-real-graph-kind", title: "T" },
+    });
+    const node = graph.nodes.find((candidate) => candidate.id === id)!;
+    expect(node.kind).toBe("value");
+    expect(node.title).toBe("T");
+  });
+
+  it("folds children into the hash input exactly as projectGroup does: omitting children and passing an empty list mint different ids", () => {
+    const leafOnly = insertNode(EMPTY_GRAPH, {
+      kind: "section",
+      properties: { kind: "section" },
+    });
+    const emptyChildren = insertNode(EMPTY_GRAPH, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [],
+    });
+    expect(leafOnly.id).not.toBe(emptyChildren.id);
+    expect(leafOnly.id).toBe(contentHashV1({ kind: "section" }));
+    expect(emptyChildren.id).toBe(
+      contentHashV1({ kind: "section", children: [] }),
+    );
+  });
+
+  it("mints one CONTAINS edge per child at orderKeyForIndex(index), and re-inserting identical content is a no-op past the first call", () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const leafB = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const group = insertNode(leafB.graph, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leafA.id, leafB.id],
+    });
+    const childEdges = group.graph.edges.filter(
+      (edge) => edge.from === group.id && edge.kind === "CONTAINS",
+    );
+    expect(childEdges).toEqual([
+      {
+        from: group.id,
+        to: leafA.id,
+        kind: "CONTAINS",
+        orderKey: orderKeys.orderKeyForIndex(0),
+      },
+      {
+        from: group.id,
+        to: leafB.id,
+        kind: "CONTAINS",
+        orderKey: orderKeys.orderKeyForIndex(1),
+      },
+    ]);
+    // Re-inserting the identical leaf again mints the identical id and adds no second copy of the node.
+    const again = insertNode(group.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    expect(again.id).toBe(leafA.id);
+    expect(again.graph).toEqual(group.graph);
+  });
+
+  it("re-projecting after insertion is consistent: a subtree built via insertNode/insertEdge mints the identical ids and edges projectDocumentGraph mints for the equivalent DocumentTree", () => {
+    const pkg = wordprocessingPackage([
+      sectionGroup([paragraph("First."), paragraph("Second.")]),
+    ]);
+    expectSchemaValid(pkg, "consistency");
+    const real = projectDocumentGraph([{ id: "doc", package: pkg }]);
+
+    const first = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "First." }] },
+    });
+    const second = insertNode(first.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Second." }] },
+    });
+    const section = insertNode(second.graph, {
+      kind: "section",
+      properties: {
+        pageSize: { widthPt: 595, heightPt: 842 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        kind: "section",
+      },
+      children: [first.id, second.id],
+    });
+    const built = insertEdge(section.graph, "doc", section.id);
+
+    const realFirst = nodeByText(real, "First.");
+    const realSecond = nodeByText(real, "Second.");
+    const realSection = real.nodes.find((node) => node.kind === "section")!;
+
+    expect(first.id).toBe(realFirst.id);
+    expect(second.id).toBe(realSecond.id);
+    expect(section.id).toBe(realSection.id);
+
+    const realSectionContains = real.edges.filter(
+      (edge) => edge.from === realSection.id && edge.kind === "CONTAINS",
+    );
+    const builtSectionContains = built.edges.filter(
+      (edge) => edge.from === section.id && edge.kind === "CONTAINS",
+    );
+    expect(builtSectionContains).toEqual(realSectionContains);
+
+    const realRootContains = real.edges.filter(
+      (edge) => edge.from === "doc" && edge.kind === "CONTAINS",
+    );
+    const builtRootContains = built.edges.filter(
+      (edge) => edge.from === "doc" && edge.kind === "CONTAINS",
+    );
+    expect(builtRootContains).toEqual(realRootContains);
+  });
+
+  it("insertEdge rebalances the whole sibling list when bisection has no room left, rather than surfacing the exhaustion", () => {
+    const b = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const graphWithB = insertEdge(b.graph, "parent", b.id); // b lands at orderKeyForIndex(0), the scheme's own floor
+    const originalBKey = graphWithB.edges[0]!.orderKey;
+    expect(originalBKey).toBe(orderKeys.orderKeyForIndex(0));
+    // The floor genuinely has no room below it -- this is the exact exhaustion insertEdge must catch and rebalance past.
+    expect(() => orderKeys.orderKeyBefore(originalBKey)).toThrow(
+      OrderKeyBudgetExhaustedError,
+    );
+
+    const a = insertNode(graphWithB, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const rebalanced = insertEdge(a.graph, "parent", a.id, {
+      position: { at: "start" },
+    });
+
+    const contains = rebalanced.edges
+      .filter((edge) => edge.from === "parent" && edge.kind === "CONTAINS")
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1));
+    expect(contains.map((edge) => edge.to)).toEqual([a.id, b.id]);
+    // b's own edge really was rewritten, not merely left in place beneath a new one: its orderKey changed, and the pair now carries a fresh, evenly spaced renumberedOrderKeys(2) set.
+    expect(contains.find((edge) => edge.to === b.id)!.orderKey).not.toBe(
+      originalBKey,
+    );
+    expect(contains.map((edge) => edge.orderKey)).toEqual(
+      orderKeys.renumberedOrderKeys(2),
+    );
+  });
+
+  it("insertEdge: start/end/before/after mint keys that sort into the requested position, and reject a sibling id the parent does not carry", () => {
+    const a = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const b = insertNode(a.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const c = insertNode(b.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "C." }] },
+    });
+    const d = insertNode(c.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "D." }] },
+    });
+    const e = insertNode(d.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "E." }] },
+    });
+
+    let graph = insertEdge(e.graph, "parent", b.id); // default: end
+    graph = insertEdge(graph, "parent", d.id); // default: end -- b, d
+    graph = insertEdge(graph, "parent", a.id, { position: { at: "start" } }); // a, b, d
+    graph = insertEdge(graph, "parent", e.id, { position: { at: "end" } }); // a, b, d, e
+    graph = insertEdge(graph, "parent", c.id, {
+      position: { at: "after", siblingId: b.id },
+    }); // a, b, c, d, e
+
+    const ordered = graph.edges
+      .filter((edge) => edge.from === "parent" && edge.kind === "CONTAINS")
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
+      .map((edge) => edge.to);
+    expect(ordered).toEqual([a.id, b.id, c.id, d.id, e.id]);
+
+    expect(() =>
+      insertEdge(graph, "parent", a.id, {
+        position: { at: "before", siblingId: "not-a-real-sibling" },
+      }),
+    ).toThrow(
+      /sibling "not-a-real-sibling" names no existing CONTAINS edge from "parent"/,
+    );
+  });
+
+  it("insertEdge never mutates the graph handed to it", () => {
+    const leaf = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Solo." }] },
+    });
+    const before = leaf.graph;
+    insertEdge(before, "parent", leaf.id);
+    expect(before.edges).toEqual([]);
   });
 });
