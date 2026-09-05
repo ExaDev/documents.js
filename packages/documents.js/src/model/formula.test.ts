@@ -1,0 +1,239 @@
+import type {
+  ContentBlock,
+  ContentDocument,
+  ContentEmbeddedObject,
+} from "document-schema.js";
+import { describe, expect, it } from "vitest";
+import { latexToFormula } from "../latex/lower";
+import {
+  buildFormulaBlock,
+  collectDocumentFormulas,
+  formulaDocument,
+  formulaOfBlock,
+} from "./formula";
+
+// collectDocumentFormulas is the shared walk latex/lint.ts's lintMathCoherence and document-mcp's compute_formula tool both consume (ExaDev/documents.js#928's round-1 review) -- these tests exercise every ContentDocument arm directly against hand-built content, the same way src/latex/lint.test.ts already exercises table-cell recursion, rather than round-tripping through a format writer. That is a deliberate choice, not a shortcut: no writer in this package (docx/odt/pptx/odp/odg) carries a formula embeddedObject block through a table cell or a drawing page's own shape yet (each cell/shape writer's own appendCellBlock/appendShape silently skips a non-paragraph/non-image block), so a real byte-level document exercising those two arms does not exist to build. The presentation-slide-shape and spreadsheet arms DO have a real writer (buildPptxPackage's appendShape, OdsSheet.addEmbeddedObject), and are covered end-to-end through real bytes in document-mcp's own compute-formula.test.ts instead.
+
+const FRAME = { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 };
+
+// ContentSheetSchema's own images/printSettings fields are required (unlike embeddedObjects, which is optional), so every hand-built ContentSheet literal below spreads this rather than restating the boilerplate each time.
+const SHEET_DEFAULTS = {
+  images: [],
+  printSettings: {
+    pageSize: { widthPt: 595, heightPt: 842 },
+    margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+    gridlines: true,
+    headers: true,
+    pageOrder: "downThenOver",
+  },
+} as const;
+
+function formulaBlock(latex: string) {
+  return buildFormulaBlock(
+    latexToFormula(latex, { source: "test:formula" }).formula,
+    FRAME,
+    "test:formula",
+  );
+}
+
+describe("formulaOfBlock", () => {
+  it("narrows a bare ContentEmbeddedObject (no kind/sourcePath), not just the block-level wrapper", () => {
+    // A spreadsheet's cell-anchored embedded objects are exactly this shape: ContentEmbeddedObject, never wrapped in a ContentEmbeddedObjectBlock. formulaOfBlock reads only `.document`, a field the base interface already carries, so this must narrow correctly with no block wrapper present at all.
+    const bareObject: ContentEmbeddedObject = {
+      objectKind: "formula",
+      document: formulaDocument({ mathml: [] }),
+      frame: FRAME,
+    };
+    expect(formulaOfBlock(bareObject)?.mathml).toEqual([]);
+  });
+
+  it("returns undefined for a non-formula document", () => {
+    const bareObject: ContentEmbeddedObject = {
+      objectKind: "drawing",
+      document: { kind: "drawing", metadata: {}, pages: [] },
+      frame: FRAME,
+    };
+    expect(formulaOfBlock(bareObject)).toBeUndefined();
+  });
+});
+
+describe("collectDocumentFormulas", () => {
+  it("walks a wordprocessing section's block flow, including formulas nested inside table cells", () => {
+    const topLevel = formulaBlock("1 + 1");
+    const nested = formulaBlock("2 + 2");
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+          blocks: [
+            {
+              kind: "table",
+              columnWidthsPt: [100],
+              rows: [{ cells: [{ blocks: [nested] }] }],
+            } satisfies ContentBlock,
+            topLevel,
+          ],
+        },
+      ],
+    };
+    const entries = collectDocumentFormulas(document);
+    expect(entries.map((entry) => entry.formula.presentation?.latex)).toEqual([
+      "2 + 2",
+      "1 + 1",
+    ]);
+    expect(entries.map((entry) => entry.sourcePath)).toEqual([
+      "test:formula",
+      "test:formula",
+    ]);
+  });
+
+  it("walks a presentation slide's shapes", () => {
+    const document: ContentDocument = {
+      kind: "presentation",
+      metadata: {},
+      slides: [
+        {
+          size: { widthPt: 720, heightPt: 540 },
+          notes: "",
+          shapes: [
+            {
+              frame: { xPt: 0, yPt: 0, widthPt: 200, heightPt: 40 },
+              insetLeftPt: 0,
+              insetTopPt: 0,
+              insetRightPt: 0,
+              insetBottomPt: 0,
+              blocks: [formulaBlock("m \\times a")],
+            },
+          ],
+        },
+      ],
+    };
+    const entries = collectDocumentFormulas(document);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.formula.presentation?.latex).toBe("m \\times a");
+  });
+
+  it("walks a drawing page's shapes", () => {
+    const document: ContentDocument = {
+      kind: "drawing",
+      metadata: {},
+      pages: [
+        {
+          size: { widthPt: 720, heightPt: 540 },
+          shapes: [
+            {
+              frame: { xPt: 0, yPt: 0, widthPt: 200, heightPt: 40 },
+              insetLeftPt: 0,
+              insetTopPt: 0,
+              insetRightPt: 0,
+              insetBottomPt: 0,
+              blocks: [formulaBlock("x^2")],
+            },
+          ],
+          vectors: [],
+        },
+      ],
+    };
+    const entries = collectDocumentFormulas(document);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.formula.presentation?.latex).toBe("x^2");
+  });
+
+  it("walks a spreadsheet's cell-anchored embeddedObjects array -- the exact case ExaDev/documents.js#928's round-1 review found silently unwalked (formulaCount: 0 on a real .ods)", () => {
+    const document: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          ...SHEET_DEFAULTS,
+          embeddedObjects: [
+            {
+              objectKind: "formula",
+              document: formulaDocument(
+                latexToFormula("f(x) = x^2", { source: "test:formula" })
+                  .formula,
+              ),
+              frame: FRAME,
+              anchorRow: 3,
+              anchorColumn: 2,
+            },
+          ],
+        },
+      ],
+    };
+    const entries = collectDocumentFormulas(document);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.formula.presentation?.latex).toBe("f(x) = x^2");
+    // ContentEmbeddedObject (the spreadsheet shape) carries no sourcePath field at all -- structurally, not merely because none was assigned.
+    expect(entries[0]?.sourcePath).toBeUndefined();
+  });
+
+  it("skips a spreadsheet's non-formula embedded objects", () => {
+    const document: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          ...SHEET_DEFAULTS,
+          embeddedObjects: [
+            {
+              objectKind: "drawing",
+              document: { kind: "drawing", metadata: {}, pages: [] },
+              frame: FRAME,
+            },
+          ],
+        },
+      ],
+    };
+    expect(collectDocumentFormulas(document)).toEqual([]);
+  });
+
+  it("returns a sheet with no embeddedObjects array at all as an empty result, not a crash", () => {
+    const document: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        { name: "Sheet1", cells: [], columns: [], rows: [], ...SHEET_DEFAULTS },
+      ],
+    };
+    expect(collectDocumentFormulas(document)).toEqual([]);
+  });
+
+  it("treats the standalone 'formula' document kind as its own single entry, with no sourcePath (no embedding block exists at all)", () => {
+    const formula = latexToFormula("2 + 3", { source: "test:formula" }).formula;
+    const document = formulaDocument(formula);
+    const entries = collectDocumentFormulas(document);
+    expect(entries).toEqual([{ formula, sourcePath: undefined }]);
+  });
+
+  it("returns an empty array for a document with no formulas anywhere", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+          blocks: [{ kind: "paragraph", runs: [{ text: "No math here." }] }],
+        },
+      ],
+    };
+    expect(collectDocumentFormulas(document)).toEqual([]);
+  });
+
+  it("throws rather than silently returning an empty list for an unrecognised ContentDocument kind", () => {
+    const bogus = { kind: "bogus" } as unknown as ContentDocument;
+    expect(() => collectDocumentFormulas(bogus)).toThrow(/bogus/);
+  });
+});
