@@ -470,6 +470,16 @@ function readBlockquote(
   ];
 }
 
+// Whether a text node carries only inter-element whitespace -- the HTML Standard (section 3.2.5.1) requires "inter-element whitespace, comment nodes, and processing instruction nodes must be ignored when establishing whether an element's contents match the element's content model", so this content is fully conformant sitting directly inside a <ul>/<ol> and must never be collected as stray or diagnosed. This is the pretty-printed shape essentially all real-world HTML uses (a newline-plus-indent text node between each <li>), so failing to ignore it here would fire a spurious diagnostic on almost every real list.
+function isWhitespaceOnlyText(node: XmlNode): boolean {
+  return node.type === "text" && node.value.trim().length === 0;
+}
+
+// The HTML Standard's own content model for <ul>/<ol> is "Zero or more li and script-supporting elements", explicitly naming <script> and <template> as legal direct children alongside <li> -- so these are ignored the same way inter-element whitespace is (see isWhitespaceOnlyText above): no stray collection, no diagnostic, and never routed through readContainerChildren (which has no case for either tag, and readList's own document-content mapping has no use for embedded script/template content regardless).
+function isScriptSupportingElement(tag: string): boolean {
+  return tag === "script" || tag === "template";
+}
+
 function readList(element: XmlElement, state: BuildState): ContentBlock[] {
   const numId =
     state.list?.numId ??
@@ -497,6 +507,12 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
       );
       continue;
     }
+    if (isWhitespaceOnlyText(child)) {
+      continue;
+    }
+    if (child.type === "element" && isScriptSupportingElement(child.tag)) {
+      continue;
+    }
     if (child.type === "element" || child.type === "text") {
       strayNodes.push(child);
     }
@@ -507,7 +523,7 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
   return blocks;
 }
 
-// A <ul>/<ol> content model admits only <li> children -- so any other content sitting directly inside one is not valid HTML5, most commonly a <ul>/<ol> nested as a sibling rather than wrapped in its own <li> (a shape real-world producers and converters emit even though it is not conformant), but any other stray content (a bare <img>, a run of text) shares the identical malformed shape and the identical most-likely producer intent: it was meant to continue the content of the <li> immediately before it. Recovered by feeding it through the exact same readContainerChildren dispatch that <li>'s own real children already go through, under that preceding item's own list membership -- so a stray <ul>/<ol> becomes a properly nested list one level deeper sharing the enclosing numId (readBlockElementInner's own "ul"/"ol" case calls back into this function with that membership already on the state, incrementing level exactly as genuine nesting would), a stray <img> becomes its own real image block, and stray text becomes its own paragraph, rather than each needing its own hand-rolled special case. Content sitting before the very first <li> has no preceding item to attach to and is dropped, unchanged from this function's own prior behaviour -- that narrower shape is not evidenced by any real producer and has no sensible single-item owner to recover onto.
+// A <ul>/<ol> content model admits only <li> and script-supporting (<script>/<template>) children -- so any *other* content sitting directly inside one is not valid HTML5, most commonly a <ul>/<ol> nested as a sibling rather than wrapped in its own <li> (a shape real-world producers and converters emit even though it is not conformant), but any other stray content (a bare <img>, a run of text) shares the identical malformed shape and the identical most-likely producer intent: it was meant to continue the content of the <li> immediately before it. Recovered by feeding it through the exact same readContainerChildren dispatch that <li>'s own real children already go through, under that preceding item's own list membership -- so a stray <ul>/<ol> becomes a properly nested list one level deeper sharing the enclosing numId (readBlockElementInner's own "ul"/"ol" case calls back into this function with that membership already on the state, incrementing level exactly as genuine nesting would), a stray <img> becomes its own real image block, and stray text becomes its own paragraph, rather than each needing its own hand-rolled special case. Content sitting before the very first <li> has no preceding item to attach to and is dropped, unchanged from this function's own prior behaviour -- that narrower shape is not evidenced by any real producer and has no sensible single-item owner to recover onto. Inter-element whitespace and script-supporting elements never reach this function at all -- readList filters both out before they are ever collected as stray nodes, since neither is malformed content in the first place.
 function flushListStrayContent(
   nodes: readonly XmlNode[],
   previousItem: ListItemContext | undefined,

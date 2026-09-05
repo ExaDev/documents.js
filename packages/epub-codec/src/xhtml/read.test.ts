@@ -236,6 +236,82 @@ describe("lists", () => {
       },
     ]);
   });
+
+  it("ignores inter-element whitespace between <li> siblings, firing no diagnostic, for the pretty-printed shape essentially all real-world HTML uses", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul>\n  <li>a</li>\n  <li>b</li>\n</ul>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it("ignores inter-element whitespace across a multi-item indented <ol>, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<ol>\n  <li>a</li>\n  <li>b</li>\n  <li>c</li>\n</ol>"),
+      sink,
+    );
+    expect(blocks.map((b) => (b as { runs: { text: string }[] }).runs)).toEqual(
+      [[{ text: "a" }], [{ text: "b" }], [{ text: "c" }]],
+    );
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it("skips a <script> script-supporting element sitting directly inside a <ul> entirely, never leaking it into content", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<ul><li>a</li><script>var x = 1;</script><li>b</li></ul>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("skips a <template> script-supporting element sitting directly inside an <ol> entirely", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<ol><li>a</li><template><li>fake</li></template><li>b</li></ol>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:ordered", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:ordered", level: 0, itemId: "item2" },
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
 });
 
 describe("definition lists", () => {
