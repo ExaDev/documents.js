@@ -19,6 +19,7 @@ import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import type { CellNumberFormat } from "./number-format";
 import { attr, childrenWithTag, decodeEntities, rootElement } from "../util";
+import { unrecognizedFillKind } from "../shared/cell-fill";
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
 // Resolves xl/styles.xml for typed/xlsx/content.ts (read) and typed/xlsx/build.ts (write). The read side produces one entry per <cellXfs><xf> -- the array index IS the value of a cell's own s attribute -- carrying everything ContentSheetCellSchema models that lives in a cell format: the number-format CODE STRING (resolved through <numFmts>, classified by typed/xlsx/number-format.ts upstream), and the cell DECORATION (background fill, per-edge borders, horizontal/vertical alignment) added in this same widening that gave ContentSheetCell its background/borders/alignment/verticalAlignment fields. The write side is the same relationship in reverse: CellFormatTable interns the (number format, decoration) tuples a written workbook needs, ready to serialize as <numFmts>/<fills>/<borders>/<cellXfs>.
@@ -428,11 +429,6 @@ function fillSignature(fill: ContentCellFill): string {
   return fill.kind === "solid"
     ? `solid:${colorToRgbHex(fill.color)}`
     : `pattern:${fill.patternType}:${fill.foregroundColor === undefined ? "" : colorToRgbHex(fill.foregroundColor)}:${fill.backgroundColor === undefined ? "" : colorToRgbHex(fill.backgroundColor)}`;
-}
-
-/** Reads `.kind` off a ContentCellFill that has already been switched over both of its real members ('solid'/'pattern') -- TypeScript types such a value 'never' at that point, so this takes it through a deliberately widened parameter type rather than an `as` cast. A value that reaches this call anyway (a malformed object bypassing schema validation, or a stale caller shape) still carries a real, inspectable kind at runtime even though the type system says none is left to name. */
-function unrecognizedFillKind(fill: { kind?: unknown }): string {
-  return String(fill.kind);
 }
 
 // A deterministic signature for a decoration, so two cells carrying identical decoration share one xf entry. widthPt is encoded with enough precision to round-trip the named-weight widths above (0.5/0.75/1.5/2.25) without floating-point drift producing spurious distinct entries.
