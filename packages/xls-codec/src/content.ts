@@ -4,8 +4,8 @@ import {
 } from "archive-codec";
 import type {
   Alignment,
-  Color,
   ContentCellBorders,
+  ContentCellFill,
   ContentCellValue,
   ContentDocument,
   ContentSheet,
@@ -348,14 +348,14 @@ function mapCell(
 }
 
 /**
- * A cell's own resolved fill colour, or undefined for a genuinely unfilled cell AND for every fill pattern beyond solid.
+ * A cell's own resolved background fill (ExaDev/documents.js#951), or undefined for a genuinely unfilled cell and for a reserved/unrecognised FillPattern value.
  *
- * A non-solid pattern (the 50%/75%/25% gray shades, the stripe and crosshatch family [MS-XLS]'s FillPattern enumeration also names) is a deliberate, permanent gap rather than an oversight: ContentSheetCell.background models one flat colour, and approximating a striped or crosshatched fill as its own foreground colour alone would misreport what the cell actually shows -- see xls-codec's README, "Cell decoration".
+ * A solid fill resolves to a 'solid' ContentCellFill of its own foreground colour; every other named FillPattern -- the 50%/75%/25% gray shades, the stripe and crosshatch family -- resolves to a real 'pattern' fill via xf-colors.ts's own FILL_PATTERN_TO_PATTERN_TYPE, carrying whichever of the pattern's foreground/background colours actually resolve to a fixed RGB value. See xls-codec's README, "Cell decoration".
  */
 function backgroundOf(
   globals: WorkbookGlobals,
   xfIndex: number,
-): Color | undefined {
+): ContentCellFill | undefined {
   const format = globals.cellFormats[xfIndex];
   if (format === undefined) {
     return undefined;
@@ -363,6 +363,7 @@ function backgroundOf(
   return resolveFillBackground(
     format.decoration.fillPattern,
     format.decoration.fillForegroundIcv,
+    format.decoration.fillBackgroundIcv,
     globals.palette,
   );
 }

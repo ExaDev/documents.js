@@ -7,6 +7,7 @@ import type {
   Alignment,
   Color,
   ContentBorder,
+  ContentCellFill,
   ContentDocument,
   ContentSheet,
   ContentSheetCell,
@@ -23,9 +24,11 @@ import {
   DEFAULT_PALETTE_HEX_TO_ICV,
   FILL_PATTERN_NONE,
   FILL_PATTERN_SOLID,
+  ICV_AUTOMATIC_BACKGROUND,
   ICV_AUTOMATIC_FOREGROUND,
   PALETTE_BASE_ICV,
   PALETTE_ENTRY_COUNT,
+  PATTERN_TYPE_TO_FILL_PATTERN,
   type XfBorderEdge,
   type XfDecorationFields,
 } from "./biff/xf-colors";
@@ -193,13 +196,25 @@ function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
       colorByHex.set(hex, color);
     }
   };
+  const recordFill = (fill: ContentCellFill | undefined): void => {
+    if (fill === undefined) {
+      return;
+    }
+    if (fill.kind === "solid") {
+      record(fill.color);
+      return;
+    }
+    record(fill.foregroundColor);
+    record(fill.backgroundColor);
+  };
+
   for (const sheet of sheets) {
     for (const cell of sheet.cells) {
       // Only cells that actually become records, so the scan can never allocate a palette slot to a colour the XF pass below then never writes -- see written-cells.ts on why every pass shares one predicate.
       if (!writesCellRecord(cell)) {
         continue;
       }
-      record(cell.background);
+      recordFill(cell.background);
       record(cell.borders?.left?.color);
       record(cell.borders?.right?.color);
       record(cell.borders?.top?.color);
@@ -278,6 +293,47 @@ function resolveWriteEdge(
   return { style: borderStyleTokenFor(border), icv: icvOf(border.color) };
 }
 
+/** A ContentCellFill's own fillPattern/fillForegroundIcv/fillBackgroundIcv triple, resolved for whichever of 'solid'/'pattern' the cell states -- undefined input resolves to FLSNULL with both colours Automatic, matching the pre-#951 undecorated case exactly. A 'pattern' fill leaving one of its own colours unstated writes that colour Automatic too, the inverse of xf-colors.ts's own resolveFillBackground treating an unresolvable icv the same way on read. */
+function resolveFillFields(
+  fill: ContentCellFill | undefined,
+  icvOf: (color: Color) => number,
+): Pick<
+  XfDecorationFields,
+  "fillPattern" | "fillForegroundIcv" | "fillBackgroundIcv"
+> {
+  if (fill === undefined) {
+    return {
+      fillPattern: FILL_PATTERN_NONE,
+      fillForegroundIcv: ICV_AUTOMATIC_FOREGROUND,
+      fillBackgroundIcv: ICV_AUTOMATIC_BACKGROUND,
+    };
+  }
+  if (fill.kind === "solid") {
+    return {
+      fillPattern: FILL_PATTERN_SOLID,
+      fillForegroundIcv: icvOf(fill.color),
+      fillBackgroundIcv: ICV_AUTOMATIC_BACKGROUND,
+    };
+  }
+  const fillPattern = PATTERN_TYPE_TO_FILL_PATTERN.get(fill.patternType);
+  if (fillPattern === undefined) {
+    throw new BiffWriteError(
+      `xls-codec cannot write a '${fill.patternType}' cell fill: [MS-XLS]'s own FillPattern enumeration has no member for it, that pattern name belonging only to WordprocessingML's ST_Shd half of ContentCellPatternType's shared vocabulary`,
+    );
+  }
+  return {
+    fillPattern,
+    fillForegroundIcv:
+      fill.foregroundColor === undefined
+        ? ICV_AUTOMATIC_FOREGROUND
+        : icvOf(fill.foregroundColor),
+    fillBackgroundIcv:
+      fill.backgroundColor === undefined
+        ? ICV_AUTOMATIC_BACKGROUND
+        : icvOf(fill.backgroundColor),
+  };
+}
+
 /** A cell's own decoration, resolved into the raw XfDecorationFields the CellXF payload packs -- undefined for a cell with neither a background nor any border, so it shares the workbook's plain undecorated XF exactly as it did before decoration existed. The "has decoration at all" question is written-cells.ts's, since the writer's own record-emission predicate turns on the identical answer. */
 function resolveDecorationForCell(
   cell: ContentSheetCell,
@@ -287,12 +343,7 @@ function resolveDecorationForCell(
     return undefined;
   }
   return {
-    fillPattern:
-      cell.background === undefined ? FILL_PATTERN_NONE : FILL_PATTERN_SOLID,
-    fillForegroundIcv:
-      cell.background === undefined
-        ? ICV_AUTOMATIC_FOREGROUND
-        : icvOf(cell.background),
+    ...resolveFillFields(cell.background, icvOf),
     left: resolveWriteEdge(cell.borders?.left, icvOf),
     right: resolveWriteEdge(cell.borders?.right, icvOf),
     top: resolveWriteEdge(cell.borders?.top, icvOf),
@@ -312,7 +363,7 @@ function signatureOfCellXf(
     return signature;
   }
   signature +=
-    `|p${decoration.fillPattern}:${decoration.fillForegroundIcv}` +
+    `|p${decoration.fillPattern}:${decoration.fillForegroundIcv}:${decoration.fillBackgroundIcv}` +
     `|l${decoration.left.style}:${decoration.left.icv}` +
     `|r${decoration.right.style}:${decoration.right.icv}` +
     `|t${decoration.top.style}:${decoration.top.icv}` +

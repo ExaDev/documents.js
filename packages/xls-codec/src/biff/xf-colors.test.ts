@@ -15,6 +15,7 @@ import {
   DEFAULT_PALETTE_HEX_TO_ICV,
   FILL_PATTERN_NONE,
   FILL_PATTERN_SOLID,
+  ICV_AUTOMATIC_BACKGROUND,
   PALETTE_BASE_ICV,
   PALETTE_ENTRY_COUNT,
   packXfDecorationWords,
@@ -155,36 +156,84 @@ describe("resolveBorderEdge / borderStyleTokenFor", () => {
 
 describe("resolveFillBackground", () => {
   it("resolves a solid fill's own foreground colour", () => {
-    expect(resolveFillBackground(FILL_PATTERN_SOLID, 10, undefined)).toEqual({
-      r: 1,
-      g: 0,
-      b: 0,
-    });
+    expect(resolveFillBackground(FILL_PATTERN_SOLID, 10, 0, undefined)).toEqual(
+      {
+        kind: "solid",
+        color: { r: 1, g: 0, b: 0 },
+      },
+    );
   });
 
   it("resolves nothing for FLSNULL (no fill pattern)", () => {
     expect(
-      resolveFillBackground(FILL_PATTERN_NONE, 10, undefined),
+      resolveFillBackground(FILL_PATTERN_NONE, 10, 0, undefined),
     ).toBeUndefined();
   });
 
-  it("resolves nothing for a fill pattern beyond solid -- a deliberate information-loss case, not an oversight", () => {
+  it("resolves a genuine two-colour pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
     const GRAY_50_PERCENT = 0x02;
+    expect(resolveFillBackground(GRAY_50_PERCENT, 10, 11, undefined)).toEqual({
+      kind: "pattern",
+      patternType: "mediumGray",
+      foregroundColor: { r: 1, g: 0, b: 0 },
+      backgroundColor: { r: 0, g: 1, b: 0 },
+    });
+  });
+
+  it("resolves a stripe/cross pattern by its own ST_PatternType name", () => {
+    const THICK_DIAGONAL_CROSSHATCH = 0x0a;
     expect(
-      resolveFillBackground(GRAY_50_PERCENT, 10, undefined),
-    ).toBeUndefined();
+      resolveFillBackground(THICK_DIAGONAL_CROSSHATCH, 10, 11, undefined),
+    ).toEqual({
+      kind: "pattern",
+      patternType: "darkTrellis",
+      foregroundColor: { r: 1, g: 0, b: 0 },
+      backgroundColor: { r: 0, g: 1, b: 0 },
+    });
+  });
+
+  it("resolves nothing for a reserved FillPattern value beyond the named 0x00-0x12 range", () => {
+    expect(resolveFillBackground(0x13, 10, 11, undefined)).toBeUndefined();
+  });
+
+  it("leaves a pattern's own colour unstated when its icv does not resolve to a fixed RGB value", () => {
+    const GRAY_50_PERCENT = 0x02;
+    const AUTOMATIC_FOREGROUND = 0x40;
+    const result = resolveFillBackground(
+      GRAY_50_PERCENT,
+      AUTOMATIC_FOREGROUND,
+      11,
+      undefined,
+    );
+    expect(result).toEqual({
+      kind: "pattern",
+      patternType: "mediumGray",
+      backgroundColor: { r: 0, g: 1, b: 0 },
+    });
   });
 });
 
 describe("packXfDecorationWords / unpackXfDecoration", () => {
-  it("round-trips a full decoration through pack then unpack", () => {
+  it("round-trips a solid fill's decoration through pack then unpack", () => {
     const decoration = {
       fillPattern: FILL_PATTERN_SOLID,
       fillForegroundIcv: 12,
+      fillBackgroundIcv: ICV_AUTOMATIC_BACKGROUND,
       left: { style: BORDER_STYLE_THIN, icv: 10 },
       right: { style: BORDER_STYLE_MEDIUM, icv: 11 },
       top: { style: BORDER_STYLE_DOUBLE, icv: 13 },
       bottom: { style: BORDER_STYLE_NONE, icv: 0 },
+    };
+    const { word2, word3, word4 } = packXfDecorationWords(decoration);
+    expect(unpackXfDecoration(word2, word3, word4)).toEqual(decoration);
+  });
+
+  it("round-trips a genuine two-colour pattern's own foreground and background icv, both real", () => {
+    const decoration = {
+      ...UNDECORATED_XF_FIELDS,
+      fillPattern: 0x02, // FLSMEDGRAY, 50% gray.
+      fillForegroundIcv: 12,
+      fillBackgroundIcv: 13,
     };
     const { word2, word3, word4 } = packXfDecorationWords(decoration);
     expect(unpackXfDecoration(word2, word3, word4)).toEqual(decoration);
@@ -203,12 +252,24 @@ describe("packXfDecorationWords / unpackXfDecoration", () => {
     });
   });
 
-  it("forces icvFore back to Automatic when fillPattern is not solid, even if fillForegroundIcv is set", () => {
+  it("forces icvFore/icvBack back to Automatic when fillPattern is FLSNULL, even if both are set", () => {
     const { word4 } = packXfDecorationWords({
       ...UNDECORATED_XF_FIELDS,
       fillPattern: FILL_PATTERN_NONE,
       fillForegroundIcv: 30,
+      fillBackgroundIcv: 31,
     });
     expect(word4 & 0x7f).toBe(0x40);
+    expect((word4 >>> 7) & 0x7f).toBe(0x41);
+  });
+
+  it("forces icvBack back to Automatic for a solid fill, even if fillBackgroundIcv is set -- only icvFore is rendered", () => {
+    const { word4 } = packXfDecorationWords({
+      ...UNDECORATED_XF_FIELDS,
+      fillPattern: FILL_PATTERN_SOLID,
+      fillForegroundIcv: 12,
+      fillBackgroundIcv: 31,
+    });
+    expect((word4 >>> 7) & 0x7f).toBe(0x41);
   });
 });
