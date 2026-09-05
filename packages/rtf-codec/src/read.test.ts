@@ -7,7 +7,10 @@ import type {
   ContentTable,
 } from "document-schema.js";
 import { ContentDocumentSchema } from "document-schema.js";
+import type { ContentEmbeddedObjectBlock } from "document-schema.js";
 import { RtfDiagnosticCodes, RtfNotAnRtfDocumentError } from "./diagnostics";
+import { bytesToHex } from "./base64";
+import { writeEmbeddedObjectData } from "./embedded-object";
 import { readRtf, readRtfContent } from "./read";
 import { bytes } from "./test-support/bytes";
 
@@ -483,6 +486,68 @@ describe("pictures", () => {
       `${HEADER}\\pard{\\*\\shppict{\\pict\\pngblip\\picwgoal720\\pichgoal720 ${PNG_HEX}}}{\\nonshppict{\\pict\\pngblip\\picwgoal720\\pichgoal720 ${PNG_HEX}}}\\par}`,
     ).filter((block) => block.kind === "image");
     expect(images).toHaveLength(1);
+  });
+});
+
+describe("embedded objects", () => {
+  // A genuine [MS-CFB] compound file wrapping this package's own JSON envelope -- built with the same writeEmbeddedObjectData the writer uses, so this describes the read state machine's own group/destination handling (\object -> {\*\objdata ...} -> hex -> compound file -> decode) independently of write.ts's own RTF emission around it.
+  const embedded = {
+    kind: "spreadsheet" as const,
+    metadata: { title: "Embedded sheet" },
+    sheets: [],
+  };
+  const OBJDATA_HEX = bytesToHex(
+    writeEmbeddedObjectData({
+      objectKind: "spreadsheet",
+      document: embedded,
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+    }),
+  );
+
+  it("reads a real \\object's \\objdata into a ContentEmbeddedObjectBlock", () => {
+    const object = blocksOf(
+      `${HEADER}\\pard{\\object\\objemb\\objw2000\\objh1000{\\*\\objclass spreadsheet}{\\*\\objdata ${OBJDATA_HEX}}{\\result{\\pard\\plain placeholder\\par}}}\\par}`,
+    ).find(
+      (block): block is ContentEmbeddedObjectBlock =>
+        block.kind === "embeddedObject",
+    );
+    expect(object?.objectKind).toBe("spreadsheet");
+    expect(object?.frame).toEqual({
+      xPt: 0,
+      yPt: 0,
+      widthPt: 100,
+      heightPt: 50,
+    });
+    expect(object?.document).toEqual(embedded);
+  });
+
+  it("discards \\result's own fallback content rather than folding it into the surrounding paragraph", () => {
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard before {\\object\\objemb{\\*\\objdata ${OBJDATA_HEX}}{\\result{\\pard\\plain fallback text\\par}}} after\\par}`,
+    );
+    const text = paragraphs
+      .map((p) => p.runs.map((r) => r.text).join(""))
+      .join("");
+    expect(text).not.toContain("fallback text");
+  });
+
+  it("degrades an \\object whose \\objdata is not this package's own payload, with a diagnostic", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result}}\\par}`,
+      ),
+    );
+    const blocks =
+      document.kind === "wordprocessing"
+        ? (document.sections[0]?.blocks ?? [])
+        : [];
+    expect(blocks.some((block) => block.kind === "embeddedObject")).toBe(false);
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+      ),
+    ).toBe(true);
   });
 });
 
