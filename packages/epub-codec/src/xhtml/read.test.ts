@@ -562,6 +562,51 @@ describe("script-supporting elements outside lists", () => {
       },
     ]);
   });
+
+  it("does not let a heading inside an inert <template> suppress a blockquote's own division construct", () => {
+    const blocks = read(
+      body(
+        "<blockquote><template><h2>Hidden</h2></template><p>quoted</p></blockquote>",
+      ),
+    );
+    expect(blocks).toEqual([
+      { kind: "constructStart", descriptor: { kind: "division" } },
+      {
+        kind: "paragraph",
+        runs: [{ text: "quoted" }],
+        indentLeftPt: 36,
+        styleId: "Quote",
+      },
+      { kind: "constructEnd" },
+    ]);
+  });
+
+  it("does not treat an id living only inside an inert <template> as a resolvable footnote target", () => {
+    const blocks = read(
+      body(
+        '<p>See <a class="footnote" href="#fn1">1</a></p>' +
+          '<template><p id="fn1">Hidden note</p></template>',
+      ),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "See " }, { text: "1", hyperlink: "#fn1" }],
+      },
+    ]);
+  });
+
+  it("does not let a footnote-reference anchor living only inside an inert <template> mark an unrelated live element as a footnote target", () => {
+    const blocks = read(
+      body(
+        '<template><a epub:type="noteref" href="#fn1">hidden</a></template>' +
+          '<p id="fn1">Real paragraph</p>',
+      ),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Real paragraph" }] },
+    ]);
+  });
 });
 
 describe("definition lists", () => {
