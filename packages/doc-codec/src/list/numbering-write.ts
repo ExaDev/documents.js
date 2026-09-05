@@ -40,6 +40,8 @@ const CONTENT_LIST_MEMBERSHIP_FORMATS = [
   "lowerRoman",
   "upperRoman",
 ] as const;
+/** iStartAt's own [MS-DOC] 2.9.148 range: "MUST be in the range 0 to 0x7FFF, inclusive", despite the field occupying a full 4-byte slot. */
+const MAX_START_AT = 0x7fff;
 
 /** The inverse of numbering.ts's own NUMBER_FORMAT_BY_NFC, restricted to whichever of its entries a format string can actually reach -- built once by inverting the single source of truth rather than hand-maintaining a second table that could silently drift from it. Where two nfc values map to the same format string (0x00 and 0x28 both mean "decimal"), the lower one wins, because Object.entries on an object whose own keys are non-negative integer strings iterates in ascending numeric order regardless of insertion order (the one case JavaScript's own key-ordering rules give a numeric guarantee), so the first entry visited for "decimal" is 0x00. "none" is added by hand afterward: NUMBER_FORMAT_BY_NFC's own inversion never reaches it, since numbering.ts's own numberFormatFor special-cases nfc 0xFF as "none" before ever consulting that table. */
 const NFC_BY_FORMAT: ReadonlyMap<string, number> = (() => {
@@ -216,11 +218,21 @@ function buildLvlBytes(
       `numbering level format ${JSON.stringify(numberingLevel.format)} has no [MS-OSHARED] 2.2.1.3 MSONFC mapping this writer can state -- ContentListMembership.format itself only ever carries ${JSON.stringify(CONTENT_LIST_MEMBERSHIP_FORMATS)} (document-schema.js's own six-member enum), each of which always resolves here, so this failure means a NumberingDefinitions built by hand -- bypassing gatherListUsage entirely -- named a format string outside that set and outside the wider MSONFC vocabulary this function otherwise accepts`,
     );
   }
+  if (numberingLevel.startAt < 0 || numberingLevel.startAt > MAX_START_AT) {
+    throw new DocFormatError(
+      `numbering level ${level}'s own startAt ${numberingLevel.startAt} is outside the 0..${MAX_START_AT} range [MS-DOC] 2.9.148's own iStartAt permits`,
+    );
+  }
   const { xstText, positions } = buildLevelXst(numberingLevel.text, level);
   const lvlf = new Array<number>(LVLF_SIZE).fill(0);
   writeUint32LE(lvlf, 0, numberingLevel.startAt); // iStartAt.
   lvlf[4] = nfc;
   if (numberingLevel.restart !== undefined) {
+    if (numberingLevel.restart < 0 || numberingLevel.restart > level) {
+      throw new DocFormatError(
+        `numbering level ${level}'s own restart value ${numberingLevel.restart} is outside the 0..${level} range [MS-DOC] 2.9.148's own ilvlRestartLim permits -- it MUST be less than or equal to this LVL's own zero-based level`,
+      );
+    }
     lvlf[5] = LVLF_FLAG_NO_RESTART;
     lvlf[26] = numberingLevel.restart; // ilvlRestartLim, meaningful only alongside the flag above.
   }

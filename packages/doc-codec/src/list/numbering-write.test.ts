@@ -130,16 +130,20 @@ describe("buildNumberingTables: LSTF", () => {
 
 describe("buildNumberingTables: LVLF flags byte", () => {
   it("sets bit 3 (0x08) for fNoRestart, not bit 1 (0x02) -- 0x02 is jc's own bit, never decoded", () => {
-    const definitions: NumberingDefinitions = {
-      "1": {
-        levels: {
-          "0": { format: "decimal", text: "%1.", startAt: 1, restart: 2 },
-        },
-      },
-    };
+    // A dense multi-level list, since ilvlRestartLim's own [MS-DOC] 2.9.148 constraint -- it MUST be <= the level's own zero-based index -- means level 0 alone could only ever restart at 0; level 2's own restart:2 needs two shallower filler levels to exist first.
+    const levels: Record<string, NumberingLevel> = {};
+    for (let level = 0; level < 9; level += 1) {
+      levels[String(level)] = { format: "bullet", text: "•", startAt: 1 };
+    }
+    levels["2"] = { format: "bullet", text: "•", startAt: 1, restart: 2 };
+    const definitions: NumberingDefinitions = { "1": { levels } };
     const tables = buildNumberingTables(definitions);
     if (tables === undefined) throw new Error("expected numbering tables");
-    const lvlfOffset = 2 + 28; // past cLst + the one LSTF
+    const bulletLevelBytes = expectedLvl({
+      nfc: 0x17, // msonfcBullet
+      xstCodeUnits: ["•".charCodeAt(0)],
+    }).length;
+    const lvlfOffset = 2 + 28 + bulletLevelBytes * 2; // past cLst + the one LSTF + levels 0 and 1
     const flagsByte = tables.plfLst[lvlfOffset + 5];
     expect(flagsByte).toBe(0x08);
     expect(tables.plfLst[lvlfOffset + 26]).toBe(2); // ilvlRestartLim
@@ -256,6 +260,41 @@ describe("buildNumberingTables: level text and format", () => {
     };
     expect(() => buildNumberingTables(definitions)).toThrow(
       /character position 256/,
+    );
+    expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
+  });
+});
+
+describe("buildNumberingTables: iStartAt and ilvlRestartLim range validation", () => {
+  it("refuses a negative iStartAt", () => {
+    const definitions: NumberingDefinitions = {
+      "1": { levels: { "0": { format: "decimal", text: "%1.", startAt: -1 } } },
+    };
+    expect(() => buildNumberingTables(definitions)).toThrow(/startAt -1/);
+    expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
+  });
+
+  it("refuses an iStartAt beyond [MS-DOC] 2.9.148's own 0x7FFF ceiling", () => {
+    const definitions: NumberingDefinitions = {
+      "1": {
+        levels: { "0": { format: "decimal", text: "%1.", startAt: 0x8000 } },
+      },
+    };
+    expect(() => buildNumberingTables(definitions)).toThrow(/startAt 32768/);
+    expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
+  });
+
+  it("refuses an ilvlRestartLim greater than the level's own zero-based index", () => {
+    // Level 0's own maximum valid restart is 0 -- restart:1 names a level deeper than the LVL that carries it, which [MS-DOC] 2.9.148 never permits.
+    const definitions: NumberingDefinitions = {
+      "1": {
+        levels: {
+          "0": { format: "decimal", text: "%1.", startAt: 1, restart: 1 },
+        },
+      },
+    };
+    expect(() => buildNumberingTables(definitions)).toThrow(
+      /restart value 1 is outside the 0\.\.0 range/,
     );
     expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
   });
