@@ -634,6 +634,116 @@ describe("lists", () => {
     expect(a?.list?.numId).not.toBe(before?.list?.numId);
   });
 
+  it("keeps a blockquote wrapping only a nested list of its own nested inside the item even when it is that item's own LAST block, with nothing after it to look ahead to -- ExaDev/documents.js#990", () => {
+    const source = "- before\n\n  > - a\n  > - b\n";
+    const written = emitMarkdown(lowerMarkdown(source));
+    expect(written).toBe("- before\n\n  > - a\n  > - b");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const paragraphs = (reparsed.sections[0]?.blocks ?? []).filter(
+      (block) => block.kind === "paragraph",
+    );
+    const [before, a, b] = paragraphs;
+    expect(paragraphs).toHaveLength(3);
+    expect(before?.list?.itemId).toBeDefined();
+    expect(a?.list?.itemId).toBeDefined();
+    expect(b?.list?.itemId).toBeDefined();
+    expect(a?.list?.itemId).not.toBe(before?.list?.itemId);
+    expect(b?.list?.itemId).not.toBe(a?.list?.itemId);
+  });
+
+  it("keeps two constructs sitting back to back, with no paragraph directly between them, both nested inside the item they interrupt -- ExaDev/documents.js#990", () => {
+    const source = "- before\n\n  > - a\n\n  > - b\n\n  after\n";
+    const written = emitMarkdown(lowerMarkdown(source));
+    expect(written).toBe("- before\n\n  > - a\n\n  > - b\n\n  after");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const paragraphs = (reparsed.sections[0]?.blocks ?? []).filter(
+      (block) => block.kind === "paragraph",
+    );
+    const [before, a, b, after] = paragraphs;
+    expect(paragraphs).toHaveLength(4);
+    // "before" and "after" still share one outer itemId across BOTH constructs.
+    expect(before?.list?.itemId).toBeDefined();
+    expect(after?.list?.itemId).toBe(before?.list?.itemId);
+    // "a" and "b" are each their own genuinely separate, freshly-minted single-item list.
+    expect(a?.list?.itemId).toBeDefined();
+    expect(b?.list?.itemId).toBeDefined();
+    expect(a?.list?.itemId).not.toBe(before?.list?.itemId);
+    expect(b?.list?.itemId).not.toBe(a?.list?.itemId);
+  });
+
+  it("keeps a construct nested inside the item it interrupts even when a DIFFERENT list item's own paragraph follows it, rather than merging the two items or fracturing the construct out -- ExaDev/documents.js#990", () => {
+    const source = "- before\n\n  > - a\n\n- second\n";
+    const written = emitMarkdown(lowerMarkdown(source));
+    expect(written).toBe("- before\n\n  > - a\n\n- second");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const paragraphs = (reparsed.sections[0]?.blocks ?? []).filter(
+      (block) => block.kind === "paragraph",
+    );
+    const [before, a, second] = paragraphs;
+    expect(paragraphs).toHaveLength(3);
+    expect(before?.list?.itemId).toBeDefined();
+    expect(a?.list?.itemId).toBeDefined();
+    expect(a?.list?.itemId).not.toBe(before?.list?.itemId);
+    // "second" is a genuinely different, sibling item of the SAME outer list -- same numId, different itemId.
+    expect(second?.list?.itemId).toBeDefined();
+    expect(second?.list?.itemId).not.toBe(before?.list?.itemId);
+    expect(second?.list?.numId).toBe(before?.list?.numId);
+  });
+
+  it("keeps a construct nested inside a NESTED (level 1) item across a reparse, rather than fracturing it out to the outer list's own level -- ExaDev/documents.js#990", () => {
+    const source =
+      "- outer\n\n  - inner\n\n    > - a\n    > - b\n\n  - inner2\n";
+    const written = emitMarkdown(lowerMarkdown(source));
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const paragraphs = (reparsed.sections[0]?.blocks ?? []).filter(
+      (block) => block.kind === "paragraph",
+    );
+    const [outer, inner, a, b, inner2] = paragraphs;
+    expect(paragraphs).toHaveLength(5);
+    // "outer" stays level 0; "inner"/"inner2" stay level 1, siblings of the SAME nested list, never displaced to level 0 by the construct sitting between them.
+    expect(outer?.list?.level).toBe(0);
+    expect(inner?.list?.level).toBe(1);
+    expect(inner2?.list?.level).toBe(1);
+    expect(inner?.list?.numId).toBe(inner2?.list?.numId);
+    expect(inner?.list?.itemId).not.toBe(inner2?.list?.itemId);
+    // "a"/"b" are their own genuinely separate, freshly-minted list, unrelated to "inner"'s own numId.
+    expect(a?.list?.itemId).toBeDefined();
+    expect(b?.list?.itemId).toBeDefined();
+    expect(a?.list?.numId).not.toBe(inner?.list?.numId);
+  });
+
+  it("still fractures a list item around a quote wrapping ONLY a table -- a ContentTable has no ContentListMembership field of its own to carry either a direct itemId or a numId owner tag, so constructCarriesListItemId cannot recognise it -- but LIST_ITEM_BLOCK_UNLISTED already reports the underlying cause at lower time, so the loss is diagnosed rather than silent (LIST_ITEM_MULTI_BLOCK_FLATTENED stays retired: every other shape a blockquote can wrap either carries list-membership data (a paragraph, of any kind decorateParagraph produces) or is one of the three block kinds LIST_ITEM_BLOCK_UNLISTED already covers -- table, resolved image, display math)", () => {
+    const source =
+      "- before\n\n  > | a | b |\n  > | - | - |\n  > | 1 | 2 |\n\n  after\n";
+    const collector = createDiagnosticCollector();
+    const lowered = lowerMarkdown(source, { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED),
+    ).toBe(true);
+
+    const written = emitMarkdown(lowered);
+    // The diagnosed loss: with no list-membership signal anywhere inside the quote, "before" and "after" are no longer recognised as the same item -- the quote renders unindented and "after" starts a fresh item.
+    expect(written).toBe(
+      "- before\n\n> | a | b |\n> | --- | --- |\n> | 1 | 2 |\n\n- after",
+    );
+  });
+
   it("still renders a blockquote wrapping its own list as separate top-level content when it genuinely sits BETWEEN two unrelated lists, not inside either one's item -- the construct's surrounding itemId differs on both sides, so it must not be absorbed the way the in-item case above is", () => {
     const source = "- a\n- b\n\n> quote\n\n- c\n- d\n";
     const written = emitMarkdown(lowerMarkdown(source));

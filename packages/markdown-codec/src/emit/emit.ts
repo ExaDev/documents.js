@@ -3,7 +3,7 @@
 //  - "Heading{1..6}" styleId -> ATX heading, "#" repeated to the level, clamped through document-schema.js's own shared clampHeadingLevel (one heading-range clamp across the ecosystem instead of a private copy here) -- MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED when the level exceeds 6 (a markdown-produced document never carries one, but ContentDocument is a shared cross-format pivot; a paragraph from, say, odt's own unbounded readOutlineLevel can).
 //  - 'CodeBlock'/'HorizontalRule'/'HTMLPreformatted' styleId -> a fenced code block / a thematic break / literal, unescaped text. A CodeBlock paragraph's own codeLanguage re-emits as the fence's info word, with any markdown-residue remainder (src/lower/lower.ts's splitInfoString) re-emitted verbatim after it -- one space between fence and info line, the spec's own canonical spacing, which also keeps an info word that begins with the fence character from fusing into the fence itself.
 //  - a division construct pair whose wrapped paragraphs carry the quote indent (this package's own dual carry) -> one '> ' blockquote wrapper per nesting level, with the blocks' own indentLeftPt suppressed so the fact is counted once. A paragraph outside any division still recovers its quote depth from indentLeftPt alone: 'Quote' styleId, or ANY of the four styleIds below while indentLeftPt is also set, -> '> ' repeated per recovered nesting level (Math.round(indentLeftPt / QUOTE_INDENT_PT)) prefixed to every line -- the cross-format path for a document this package never produced. A paragraph with indentLeftPt set but none of these five styleIds is a genuine cross-format ambiguity this package cannot resolve (is it a quote, or just some other format's own paragraph indentation?) -- MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED; the indent is dropped, the paragraph still renders.
-//  - ContentListMembership -> a bullet/ordered/task-list item, decoded from its own numId string (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK for a numId this package never minted itself, or a depth-only membership carrying no numId at all (both fall back to a plain, tight, non-task bullet, per that module's own documented cross-format contract). A membership's own itemId groups every block sharing it back into one item's marker line plus continuation blocks (renderListRegion below), alternating with any nested sub-list content in between and with any construct (most commonly a blockquote's division pair) directly interrupting the item's own contiguous run -- ListRegionItem generalises renderListRegion/collectListItem's own input to that heterogeneous shape (plain blocks and constructs alike) precisely so a construct belonging to the running item, whether it directly shares that itemId or the item's own itemId simply resumes once the construct's extent ends (constructCarriesListItemId / itemIdResumesAfter below), stays nested inside it rather than fracturing out as separate top-level content.
+//  - ContentListMembership -> a bullet/ordered/task-list item, decoded from its own numId string (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK for a numId this package never minted itself, or a depth-only membership carrying no numId at all (both fall back to a plain, tight, non-task bullet, per that module's own documented cross-format contract). A membership's own itemId groups every block sharing it back into one item's marker line plus continuation blocks (renderListRegion below), alternating with any nested sub-list content in between and with any construct (most commonly a blockquote's division pair) directly interrupting the item's own contiguous run -- ListRegionItem generalises renderListRegion/collectListItem's own input to that heterogeneous shape (plain blocks and constructs alike) precisely so a construct belonging to the running item, whether it directly shares that itemId or (for a quote wrapping a genuinely fresh nested list of its own) carries it as that list's own numId `+owner=` suffix instead (constructCarriesListItemId below), stays nested inside it rather than fracturing out as separate top-level content.
 //  - ContentTable -> a GFM table, src/emit/table.ts.
 //  - ContentImageBlock -> a markdown image, src/emit/image.ts.
 //  - ContentRun[] -> inline text, src/emit/inline.ts.
@@ -817,31 +817,27 @@ function renderConstruct(item: ConstructItem, context: EmitContext): string {
   return body;
 }
 
-// Whether a construct's own recursive extent contains a plain block carrying the given list itemId -- ONE of the two tests renderItems' own region-collection loop below uses to decide whether a construct immediately following a list-region run genuinely belongs to the item it interrupts (absorbed into the SAME ListRegionItem run, staying nested inside that item on write) or is a genuinely separate, unrelated construct (left to render as ordinary top-level content); see itemIdResumesAfter below for the other. Matching is scoped to the SPECIFIC itemId of the item currently open, not "any list identity found inside" -- a construct's own subtree can legitimately contain an item at a DIFFERENT list level sharing no itemId with the one currently open (a fresh nested sub-list one level deeper, minted with its own itemId), and only an exact itemId match tells "genuinely this item's own content" apart from that.
+// Whether a construct's own recursive extent carries data connecting it back to the given list itemId -- the single test renderItems' own region-collection loop below uses to decide whether a construct immediately following a list-region run genuinely belongs to the item it interrupts (absorbed into the SAME ListRegionItem run, staying nested inside that item on write) or is a genuinely separate, unrelated construct (left to render as ordinary top-level content). Two shapes carry that data, both minted at lower time rather than inferred here: a plain paragraph directly inside the construct sharing this exact itemId (src/lower/lower.ts's lowerBlockquote threads the enclosing item's own membership straight through a quote's directly-wrapped paragraphs), or a plain paragraph carrying a numId whose own `+owner=` suffix (src/shared/list-id.ts) names this itemId -- the shape a quote wrapping a GENUINELY FRESH nested list of its own produces (lowerList always mints that list independently, so none of its OWN paragraphs share the enclosing item's itemId directly; the owner suffix on its numId is the only place that fact survives). ExaDev/documents.js#990's fix reads ownership from the construct's own content in every shape lowering can produce, at any nesting depth, rather than guessing from what happens to follow the construct's own extent in the block list. Matching is scoped to the SPECIFIC itemId of the item currently open, not "any list identity found inside" -- a construct's own subtree can legitimately contain an item at a DIFFERENT list level sharing no itemId with the one currently open (a fresh nested sub-list one level deeper, minted with its own itemId and its own, different owner tag or none at all), and only an exact match tells "genuinely this item's own content" apart from that.
 function constructCarriesListItemId(
   item: ConstructItem,
   itemId: string,
 ): boolean {
-  return item.children.some((child) =>
-    isConstructItem(child)
-      ? constructCarriesListItemId(child, itemId)
-      : child.block.kind === "paragraph" && child.block.list?.itemId === itemId,
-  );
-}
-
-// The OTHER of the two region-collection tests: whether the currently-open item's own itemId resumes as the very next element of `items` once this construct's own extent ends -- true for a blockquote sitting directly inside a list item that itself wraps a COMPLETELY FRESH nested list of its own (fresh numId/itemId, minted independently by src/lower/lower.ts's lowerList since a list directly inside a blockquote is always lowered as a fresh top-level list, never as a continuation of whatever item enclosed the quote -- ExaDev/documents.js#990). constructCarriesListItemId alone cannot see this case: the quote's own subtree carries no paragraph sharing the open item's itemId at all, since every paragraph inside it belongs to the nested list instead. Resumption is the other half of the same fact a genuinely UNRELATED construct never satisfies -- once a real top-level construct ends the list entirely (CommonMark closes the list item the moment content dedents past its continuation indent), nothing after it can mint a fresh block sharing an itemId a closed item already owns, so a match here is never a false positive against a real parse; only a plain paragraph can resume an item this way, since an item's own contiguous run at a given level is made of paragraphs, not of a construct immediately following another construct with no paragraph between them.
-function itemIdResumesAfter(
-  items: readonly EmitItem[],
-  afterIndex: number,
-  itemId: string,
-): boolean {
-  const next = items[afterIndex];
-  return (
-    next !== undefined &&
-    !isConstructItem(next) &&
-    next.block.kind === "paragraph" &&
-    next.block.list?.itemId === itemId
-  );
+  return item.children.some((child) => {
+    if (isConstructItem(child)) {
+      return constructCarriesListItemId(child, itemId);
+    }
+    if (child.block.kind !== "paragraph") {
+      return false;
+    }
+    const list = child.block.list;
+    if (list?.itemId === itemId) {
+      return true;
+    }
+    return (
+      list?.numId !== undefined &&
+      parseListNumId(list.numId)?.ownerItemId === itemId
+    );
+  });
 }
 
 // Whether a paragraph's own list membership is INHERITED pass-through rather than a list identity of its own -- true exactly when its itemId matches context.enclosingItemId (see that field's own comment): the paragraph sits inside a construct whose extent was absorbed into an already-open list item purely so that item could be recognised as such, not because the paragraph is itself a fresh list item. renderItems checks this before treating a .list-carrying paragraph as the start (or continuation) of a marker-bearing list region -- rendering one as a marker line would invent a bullet the source never had.
@@ -888,10 +884,7 @@ function renderItems(items: readonly EmitItem[], context: EmitContext): string {
             break;
           }
           const itemId = runningList.itemId;
-          const belongsToOpenItem =
-            constructCarriesListItemId(candidate, itemId) ||
-            itemIdResumesAfter(items, end + 1, itemId);
-          if (!belongsToOpenItem) {
+          if (!constructCarriesListItemId(candidate, itemId)) {
             break;
           }
           region.push({
