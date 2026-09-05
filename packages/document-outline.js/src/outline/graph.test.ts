@@ -1992,4 +1992,44 @@ describe("write API: insertNode / insertEdge (#935)", () => {
       tiedSiblings[1]!.path,
     ]);
   });
+
+  it("front-inserting against a tied PROPERTY sibling group still renumbers it into a real sequence -- verified directly rather than left as an assumption", () => {
+    // Concern #3 of the round-1 review: { at: 'start' } against a single tied PROPERTY sibling walks the orderKeyBefore(floor) path, which was already OrderKeyBudgetExhaustedError before the tie fix above (unrelated code path -- `before` is undefined here, not tied-with-`after`), so this is pre-existing rebalance behaviour, not something the tie fix changed. Documented here so it is a verified fact, not an unverified assumption.
+    const extractMetadataScalars: ExtractionPolicy = (path) =>
+      path.length === 2 && path[0] === "metadata" && path[1] === "title"
+        ? "extract"
+        : "inline";
+    const pkg = wordprocessingPackage([sectionGroup([paragraph("Body.")])], {
+      metadata: { title: "T" },
+    });
+    const graph = projectDocumentGraph([{ id: "doc", package: pkg }], {
+      policy: extractMetadataScalars,
+    });
+    const original = graph.edges.filter(
+      (edge) => edge.from === "doc" && edge.kind === "PROPERTY",
+    );
+    expect(original).toHaveLength(1);
+    expect(original[0]!.orderKey).toBe(orderKeys.orderKeyForIndex(0)); // the uniform floor key, carrying no real sequence
+
+    const inserted = insertNode(graph, {
+      kind: "value",
+      properties: { value: "inserted" },
+    });
+    const result = insertEdge(inserted.graph, "doc", inserted.id, {
+      kind: "PROPERTY",
+      position: { at: "start" },
+      path: ["metadata", "inserted"],
+    });
+
+    const after = result.edges.filter(
+      (edge) => edge.from === "doc" && edge.kind === "PROPERTY",
+    );
+    expect(after).toHaveLength(2);
+    // The pre-existing PROPERTY edge's orderKey really was rewritten by the rebalance -- confirmed, not assumed. Harmless here: PROPERTY/DEFINED_BY edge identity (edgeKey) is disambiguated by `path` as much as by orderKey, and this edge's own path is untouched.
+    const originalAfterInsert = after.find(
+      (edge) => edge.path === original[0]!.path,
+    )!;
+    expect(originalAfterInsert.orderKey).not.toBe(original[0]!.orderKey);
+    expect(originalAfterInsert.path).toEqual(original[0]!.path);
+  });
 });
