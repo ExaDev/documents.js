@@ -26,6 +26,7 @@ import { StyleRegistry } from "../../styles/registry";
 import { el, txt } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { formatOdfLength } from "../shared/units";
+import { imageExtension } from "../shared/image";
 import { formatOdfColor } from "../shared/color";
 import { writeOdfMetadata } from "../shared/metadata";
 import {
@@ -390,7 +391,7 @@ function writeSheetImageFrame(
   image: ContentSheetImage,
   state: OdsWriteState,
 ): XmlElement {
-  const extension = image.format === "png" ? "png" : "jpg";
+  const extension = imageExtension(image.format);
   const path = `${PICTURES_DIRECTORY}/image${state.nextImage}.${extension}`;
   state.nextImage += 1;
   state.pkg.parts[path] = { kind: "binary", base64: image.base64 };

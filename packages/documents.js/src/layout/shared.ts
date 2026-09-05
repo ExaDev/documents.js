@@ -391,6 +391,11 @@ export function registerImage(
   block: ContentImageBlock,
   images: Record<string, LayoutImageAsset>,
 ): string {
+  if (block.format === "svg" || block.format === "gif") {
+    throw new Error(
+      `registerImage: an image block in ${block.format} format cannot be laid out to PDF -- pdf-codec's own LayoutImageAsset registry (and its writer, byte-codec's image encoders) supports png and jpeg only`,
+    );
+  }
   const bytes = base64ToBytes(block.base64);
   const imageId = `img${crc32(bytes).toString(16)}`;
   if (!(imageId in images)) {

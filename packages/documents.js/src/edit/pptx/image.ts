@@ -4,7 +4,7 @@ import { addImageMedia } from "../../opc/media";
 import { buildPictureShape } from "./shape";
 
 export interface ImageInit {
-  readonly format: "png" | "jpeg";
+  readonly format: "png" | "jpeg" | "gif";
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly altText?: string;
 }

@@ -2,6 +2,7 @@ import {
   ConstructMarkerImbalanceError,
   flattenTree,
   type ContentDocument,
+  type ContentImageBlock,
   type ContentSection,
   type DocumentTree,
 } from "document-schema.js";
@@ -66,12 +67,30 @@ function buildHead(title: string, residueXml: string | undefined): XmlElement {
   };
 }
 
-function imageExtension(format: "png" | "jpeg"): string {
-  return format === "png" ? "png" : "jpg";
+function imageExtension(format: ContentImageBlock["format"]): string {
+  switch (format) {
+    case "png":
+      return "png";
+    case "jpeg":
+      return "jpg";
+    case "svg":
+      return "svg";
+    case "gif":
+      return "gif";
+  }
 }
 
-function imageMediaType(format: "png" | "jpeg"): string {
-  return format === "png" ? "image/png" : "image/jpeg";
+function imageMediaType(format: ContentImageBlock["format"]): string {
+  switch (format) {
+    case "png":
+      return "image/png";
+    case "jpeg":
+      return "image/jpeg";
+    case "svg":
+      return "image/svg+xml";
+    case "gif":
+      return "image/gif";
+  }
 }
 
 export function writeEpubContent(
@@ -90,7 +109,7 @@ export function writeEpubContent(
   }[] = [];
   const registerImage = (
     bytes: Uint8Array<ArrayBuffer>,
-    format: "png" | "jpeg",
+    format: ContentImageBlock["format"],
   ): string => {
     const index = registeredImages.length + 1;
     const href = `images/img${String(index)}.${imageExtension(format)}`;

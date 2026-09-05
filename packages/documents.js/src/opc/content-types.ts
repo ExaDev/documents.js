@@ -10,6 +10,7 @@ const DEFAULT_CONTENT_TYPES: Readonly<Record<string, string>> = {
   png: "image/png",
   jpeg: "image/jpeg",
   jpg: "image/jpeg",
+  gif: "image/gif",
 };
 
 export function defaultContentTypeForExtension(extension: string): string {

@@ -131,7 +131,10 @@ interface WriteState {
   readonly relationships: WriteRelationship[];
   readonly hyperlinkIds: Map<string, string>;
   readonly mediaIds: Map<string, string>;
-  readonly mediaParts: Map<string, { format: "png" | "jpeg"; base64: string }>;
+  readonly mediaParts: Map<
+    string,
+    { format: "png" | "jpeg" | "gif"; base64: string }
+  >;
   readonly embeddingIds: Map<string, string>;
   readonly embeddingParts: Map<string, EmbeddedPayload>;
   readonly serialiseEmbeddedPresentation:
@@ -178,16 +181,33 @@ function hyperlinkRelationshipId(state: WriteState, uri: string): string {
   return id;
 }
 
+// WordprocessingML's a:blip references a relationship whose target is a raster part Word decodes directly -- PNG, JPEG, and GIF are all in that directly-decodable set. SVG is not: rendering one needs the modern a:svgBlip extension (an a:extLst entry pointing at the SVG part, alongside a required raster fallback a plain a:blip can fall back to for older Word), which this writer does not build -- writing a bare a:blip pointed at an SVG part would produce a docx no version of Word can actually render, worse than refusing it outright.
+function mediaExtension(format: "png" | "jpeg" | "gif"): string {
+  switch (format) {
+    case "png":
+      return "png";
+    case "jpeg":
+      return "jpeg";
+    case "gif":
+      return "gif";
+  }
+}
+
 function imageRelationshipId(
   state: WriteState,
   image: ContentImageBlock,
 ): string {
+  if (image.format === "svg") {
+    throw new Error(
+      "buildDocxPackageFromContent: an image block in svg format has no OOXML blip this writer can produce (WordprocessingML's a:blip only references a raster part Word decodes directly -- png/jpeg/gif -- and this writer does not build the a:svgBlip extension plus raster-fallback pair SVG needs to render at all)",
+    );
+  }
   const key = `${image.format}:${image.base64}`;
   const existing = state.mediaIds.get(key);
   if (existing !== undefined) {
     return existing;
   }
-  const name = `image${state.mediaParts.size + 1}.${image.format === "png" ? "png" : "jpeg"}`;
+  const name = `image${state.mediaParts.size + 1}.${mediaExtension(image.format)}`;
   state.mediaParts.set(name, { format: image.format, base64: image.base64 });
   const id = addRelationship(state, REL_IMAGE, `media/${name}`, false);
   state.mediaIds.set(key, id);
@@ -1440,6 +1460,11 @@ function buildContentTypesPart(state: WriteState): XmlPart {
   if (mediaFormats.has("jpeg")) {
     defaults.push(
       el("Default", { Extension: "jpeg", ContentType: "image/jpeg" }),
+    );
+  }
+  if (mediaFormats.has("gif")) {
+    defaults.push(
+      el("Default", { Extension: "gif", ContentType: "image/gif" }),
     );
   }
   const embeddingOverrides = [...state.embeddingParts].map(([name, payload]) =>

@@ -10,6 +10,7 @@ import {
   type ConstructDescriptor,
   type ContentBlock,
   type ContentDocument,
+  type ContentImageBlock,
   type ContentParagraph,
   type ContentRun,
   type ContentSection,
@@ -837,12 +838,17 @@ class RtfWriter {
 
   private writeImageParagraph(
     base64: string,
-    image: {
-      readonly format: "png" | "jpeg";
-      readonly widthPt: number;
-      readonly heightPt: number;
-    },
+    image: Pick<ContentImageBlock, "format" | "widthPt" | "heightPt">,
   ): void {
+    // RTF's \pict destination has no picture-type keyword for either format: it predates SVG entirely, and GIF is not among the classic \emfblip/\pngblip/\jpegblip/\macpict/\pmmetafile/\wmetafile/\dibitmap/\wbitmap set. Writing one as \jpegblip (as this writer once silently did for anything that was not exactly "png") would mislabel the payload's own encoding to any reader that takes the keyword at its word.
+    if (image.format === "svg" || image.format === "gif") {
+      this.sink({
+        code: RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
+        severity: "warning",
+        message: `an image block in ${image.format} format cannot be written: RTF's \\pict destination has no picture-type keyword for it, so the image is dropped rather than mislabelled as a format it is not`,
+      });
+      return;
+    }
     const bytes = base64ToBytes(base64);
     if (bytes === undefined || bytes.length === 0) {
       this.sink({

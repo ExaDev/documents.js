@@ -44,7 +44,7 @@ function nextPictureIndex(pkg: Package, extension: string): number {
 export function addImageMedia(
   pkg: Package,
   imageBytes: Uint8Array<ArrayBuffer>,
-  format: "png" | "jpeg",
+  format: "png" | "jpeg" | "svg" | "gif",
 ): AddedOdfMedia {
   const index = nextPictureIndex(pkg, format);
   const partPath = `${PICTURES_DIR}/image${index}.${format}`;
