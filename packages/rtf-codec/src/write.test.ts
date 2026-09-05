@@ -468,6 +468,82 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // [MS-DOC] 2.9.78 FFData.hsttbDropList "MUST NOT exceed 25" entries -- not an arbitrary limit, since FFDataBits' own iRes field reserves index 25 as its "undefined selection" sentinel (FORM_FIELD_RESULT_UNDEFINED in constructs.ts). A 26th option would sit exactly where a real Word/DOC consumer expects "no selection".
+  it("truncates a dropDown's options at the MS-DOC 25-entry cap and reports it through the diagnostic sink", () => {
+    const codes: string[] = [];
+    const options = Array.from(
+      { length: 30 },
+      (_, index) => `Option ${String(index)}`,
+    );
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options,
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(out).toContain("{\\*\\ffl Option 0}");
+    expect(out).toContain("{\\*\\ffl Option 24}");
+    expect(out).not.toContain("{\\*\\ffl Option 25}");
+    expectBalancedBraces(out);
+  });
+
+  // A selection that names an option past the 25-entry cutoff is unrepresentable for two independent reasons at once -- the cap and the (now-truncated-away) match -- and both fire their own diagnostic rather than one silently masking the other.
+  it("reports both the cap and the now-unmatched selection when a dropDown's chosen value sits past the 25-entry cutoff", () => {
+    const codes: string[] = [];
+    const options = Array.from(
+      { length: 30 },
+      (_, index) => `Option ${String(index)}`,
+    );
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options,
+                  value: "Option 27",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(
+      codes.filter(
+        (code) => code === RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      ),
+    ).toHaveLength(2);
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
   it("writes \\ffres as a zero-based index into \\*\\ffl when a dropDown's value names one of its own options", () => {
     const out = write(
       wordprocessing([
