@@ -204,7 +204,7 @@ export class PptxTableCell {
     if (w === undefined) {
       return undefined;
     }
-    const widthPt = emuToPt(Number.parseInt(w, 10));
+    const widthPt = emuToPt(Number(w));
     if (!Number.isFinite(widthPt) || widthPt <= 0) {
       return undefined;
     }
