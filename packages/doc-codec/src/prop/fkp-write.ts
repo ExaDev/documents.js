@@ -194,6 +194,14 @@ export function firstFcOfPage(page: Uint8Array): number {
   return new DataView(page.buffer, page.byteOffset, 4).getUint32(0, true);
 }
 
+/** Whether a paragraph carrying exactly this grpprl -- alone, on an otherwise-empty page -- fits within a single 512-byte PapxFkp page. This is precisely the fits-in-isolation check splitIntoBatches performs immediately before it throws "a single paragraph-formatting record does not fit in one 512-byte formatted disk page": production code that can predict an oversized grpprl before committing to it (table/write.ts's own lost-boundary fallback, ExaDev/documents.js#1013) calls this ahead of time, rather than re-deriving fkp-write.ts's own page-packing arithmetic -- the front-reserved rgfc/BxPap bytes, the record-length-prefix parity -- as a second, driftable copy of it. A paragraph that fits alone can always be given its own page by the batching above, so "fits alone" is the exact condition that keeps a paragraph this large from ever reaching that throw, regardless of what else shares its page. `istd` defaults to 0, matching every paragraph this package's own writer ever produces (see write.ts's own PapxParagraphToWrite construction). */
+export function fitsAloneOnPapxPage(
+  grpprl: readonly number[],
+  istd = 0,
+): boolean {
+  return buildPapxPage([{ fc: 0, istd, grpprl }], 0) !== undefined;
+}
+
 /** Builds a PlcBteChpx or PlcBtePapx: the bin table mapping each page's own starting byte offset (plus a final terminating fcLim) to its page number. `firstFcs` must carry exactly one more entry than `pageNumbers` -- see plc.ts's own PLC shape. */
 export function buildPropertyBinTable(
   firstFcs: readonly number[],
