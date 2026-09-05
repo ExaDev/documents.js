@@ -468,10 +468,10 @@ describe("parseFormulaText array constants (PtgArray/PtgExtraArray)", () => {
     expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBeUndefined();
   });
 
-  it("formats a SerNil array element as an empty position between its neighbours", () => {
+  it("aborts a PtgArray on a SerNil element, since {1,,3} is not text Excel's own array-constant grammar accepts back", () => {
     const rgce = bytes(...ptgArrayToken());
     const rgcb = bytes(...ptgExtraArray([[serNum(1), serNil(), serNum(3)]]));
-    expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBe("{1,,3}");
+    expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBeUndefined();
   });
 
   it("degrades to undefined, rather than throwing, when a PtgExtraArray's own row/column counts overrun the rgcb bytes actually supplied", () => {
