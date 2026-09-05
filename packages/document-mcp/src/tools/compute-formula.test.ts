@@ -434,6 +434,10 @@ describe("compute_formula", () => {
     }
     // Same reason as the section-level docx case above: OMML round-trips MathML only, not the documents.js-internal LaTeX/MathExpression two-layer model.
     expect(entry.outcome.status).toBe("no-content");
+    // Pins the equation to inside the table cell, not merely to the document somewhere: blocks[0] is the table itself (the section's only block), rows[0].cells[1] is the second cell, and the trailing blocks[0] is that cell's own equation-only paragraph. Without this, the assertions above would pass identically if the walk mistakenly recovered the equation at section level instead of inside the cell.
+    expect(entry.locate).toBe(
+      "sections[0]/blocks[0].rows[0].cells[1]/blocks[0]",
+    );
   });
 
   // ExaDev/documents.js#928 round-7 review: compute_formula used to pass the OUTERMOST document's own symbolTable to every formula entry collectDocumentFormulas returned, including a formula nested inside another embedded object's own document -- wrong per document-schema.js's own content.ts ("the symbol and unit references inside resolve against the EMBEDDING document's own symbolTable field"), and dangerous specifically for units: two documents fused by nesting can register the identical unit id against two DIFFERENT conversion factors, so evaluating against the wrong table doesn't throw -- it silently returns a wrong number rather than an error. readNativeDocumentTree is mocked for this one call only (see the module-level vi.mock above) because no format codec in this family persists a symbolTable/unit registry into real document bytes yet; every other step -- flattenTree, collectDocumentFormulas, evaluateFormula, structuredContent assembly -- is this file's own real, unmocked code, reached through the identical genuine MCP callTool round trip every other test in this suite uses.
