@@ -11,8 +11,6 @@ const LINK_TITLE =
   "a link/image title has no ContentRun/ContentImageBlock field to survive on (MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)";
 const INFO_STRING =
   "a fenced code block's own info string has no ContentParagraph field to survive on (MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED)";
-const LIST_ITEM_CONSTRUCT_INTERRUPTED =
-  "a construct (most commonly a blockquote's own division pair) sitting directly inside a list item interrupts that item's own contiguous block run once rendered back to markdown -- ContentListMembership.itemId does now let src/emit's own writer re-attach a multi-block item's later PLAIN blocks to its own marker line (src/emit/emit.ts's renderListRegion/collectListItem), but a construct's own extent is resolved independently of that list-region grouping (groupConstructItems), so the construct and any further blocks of the same item after it render as separate top-level content instead of staying nested inside the interrupted item (MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED)";
 const NESTED_LIST_LOOSENESS_SHARED =
   "a nested list's own tight/loose spacing cannot diverge from its enclosing list's: src/shared/list-id.ts's own numId grammar mints exactly one loose flag per TOP-LEVEL list, and a nested list deliberately reuses that SAME numId rather than minting a second one (see that module's own top-of-file note on why nesting never mints again), so a genuinely tight nested list sitting under a genuinely loose outer item renders with the outer item's own loose spacing between its own siblings instead of its own real tight spacing";
 const MARKER_TYPE_CONFLICT =
@@ -99,8 +97,7 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [251, BLOCKQUOTE_STRUCTURE],
   // List items
   [253, SOFT_BREAK],
-  [254, LIST_ITEM_CONSTRUCT_INTERRUPTED],
-  [263, LIST_ITEM_CONSTRUCT_INTERRUPTED],
+  [254, SOFT_BREAK],
   [285, SOFT_BREAK],
   [286, SOFT_BREAK],
   [287, SOFT_BREAK],
@@ -116,8 +113,6 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [302, ADJACENT_SAME_DEPTH],
   [304, SOFT_BREAK],
   [312, SOFT_BREAK],
-  [320, LIST_ITEM_CONSTRUCT_INTERRUPTED],
-  [321, LIST_ITEM_CONSTRUCT_INTERRUPTED],
   [326, NESTED_LIST_LOOSENESS_SHARED],
   // Code spans
   [334, SOFT_BREAK],
