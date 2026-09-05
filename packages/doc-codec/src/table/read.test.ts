@@ -110,7 +110,7 @@ function sprmTSetBrc(
   return [0x2f, 0xd6, remainder.length, ...remainder];
 }
 
-// sprmTSetBrc80, [MS-DOC] 2.6.3 (0xD620): the Word 97-era sibling of sprmTSetBrc, a TableBrcOperand80 ([MS-DOC] 2.9.304) -- the identical cb/ItcFirstLim/bordersToApply header (cb MUST be 7 here, one byte narrower than sprmTSetBrc's own 11 because a Brc80MayBeNil is four bytes against Brc's eight), then a single Brc80MayBeNil applied to every side the mask names.
+// sprmTSetBrc80, [MS-DOC] 2.6.3 (0xD620): the Word 97-era sibling of sprmTSetBrc, a TableBrc80Operand ([MS-DOC] 2.9.304) -- the identical cb/ItcFirstLim/bordersToApply header (cb MUST be 7 here, one byte narrower than sprmTSetBrc's own 11 because a Brc80MayBeNil is four bytes against Brc's eight), then a single Brc80MayBeNil applied to every side the mask names.
 function sprmTSetBrc80(
   itcFirst: number,
   itcLim: number,
