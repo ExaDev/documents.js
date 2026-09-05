@@ -507,9 +507,18 @@ export function buildPictureShape(
   frame: Box,
   relationshipId: string,
   shapeId: number,
+  altText?: string,
 ): XmlElement {
+  // p:cNvPr/@descr is the same CT_NonVisualDrawingProps alt-text attribute docx's own w:drawing writes onto wp:docPr (ECMA-376 20.1.2.2.8), read back by this package's own readBlipImage (typed/pptx/read.ts).
+  const cNvPrAttrs: Record<string, string> = {
+    id: String(shapeId),
+    name: `Picture ${shapeId}`,
+  };
+  if (altText !== undefined) {
+    cNvPrAttrs.descr = encodeXmlText(altText);
+  }
   const nvPicPr = el("p:nvPicPr", {}, [
-    el("p:cNvPr", { id: String(shapeId), name: `Picture ${shapeId}` }),
+    el("p:cNvPr", cNvPrAttrs),
     el("p:cNvPicPr"),
     el("p:nvPr"),
   ]);
