@@ -665,7 +665,7 @@ describe("writeDocContent tables", () => {
               {
                 blocks: [paragraph([{ text: "wide" }])],
                 colSpan: 2,
-                background: { r: 1, g: 1, b: 0 },
+                background: { kind: "solid", color: { r: 1, g: 1, b: 0 } },
                 borders: {
                   top: { color: { r: 1, g: 0, b: 0 }, widthPt: 1 },
                   left: { color: { r: 1, g: 0, b: 0 }, widthPt: 1 },
@@ -682,7 +682,10 @@ describe("writeDocContent tables", () => {
     const result = roundTrip(input);
     const block = tableAt(result, 0);
     expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
-    expect(block.rows[0]?.cells[0]?.background).toEqual({ r: 1, g: 1, b: 0 });
+    expect(block.rows[0]?.cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 1, b: 0 },
+    });
     expect(block.rows[0]?.cells[0]?.borders?.top?.color).toEqual({
       r: 1,
       g: 0,
