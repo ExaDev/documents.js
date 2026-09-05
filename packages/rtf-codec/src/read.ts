@@ -1619,7 +1619,7 @@ function applyPictureControlWord(
   }
 }
 
-// \ffresN "Current result of the form field", \ffdefresN "Default result": whichever is present names a checkbox's checked state or a dropdown's selected entry index, current overriding default exactly as docx's own w:checked/w:default pair does for the identical construct.
+// RTF 1.5's own Form Fields table (verbatim): "\ffresN Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries." and "\ffdefresN Default entry for list field (for example 0 = first list item, 1 = second list item)." Both are stated purely in list-field terms -- neither is defined in terms of a checkbox's checked state -- so both are simply captured here; formFieldContentControl in constructs.ts is where the precedence between them for a checkbox is actually decided, against real-world producer evidence rather than spec text that does not address the case.
 function applyFormFieldControlWord(
   name: string,
   param: number | undefined,
