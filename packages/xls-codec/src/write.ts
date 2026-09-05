@@ -293,6 +293,11 @@ function resolveWriteEdge(
   return { style: borderStyleTokenFor(border), icv: icvOf(border.color) };
 }
 
+/** Reads `.kind` off a ContentCellFill that has already been switched over both of its real members ('solid'/'pattern') -- TypeScript types such a value 'never' at that point, so this takes it through a deliberately widened parameter type rather than an `as` cast. A value that reaches this call anyway (a malformed object bypassing schema validation, or a stale caller shape) still carries a real, inspectable kind at runtime even though the type system says none is left to name. */
+function unrecognizedFillKind(fill: { kind?: unknown }): string {
+  return String(fill.kind);
+}
+
 /** A ContentCellFill's own fillPattern/fillForegroundIcv/fillBackgroundIcv triple, resolved for whichever of 'solid'/'pattern' the cell states -- undefined input resolves to FLSNULL with both colours Automatic, matching the pre-#951 undecorated case exactly. A 'pattern' fill leaving one of its own colours unstated writes that colour Automatic too, the inverse of xf-colors.ts's own resolveFillBackground treating an unresolvable icv the same way on read. */
 function resolveFillFields(
   fill: ContentCellFill | undefined,
@@ -308,30 +313,38 @@ function resolveFillFields(
       fillBackgroundIcv: ICV_AUTOMATIC_BACKGROUND,
     };
   }
-  if (fill.kind === "solid") {
-    return {
-      fillPattern: FILL_PATTERN_SOLID,
-      fillForegroundIcv: icvOf(fill.color),
-      fillBackgroundIcv: ICV_AUTOMATIC_BACKGROUND,
-    };
+  switch (fill.kind) {
+    case "solid":
+      return {
+        fillPattern: FILL_PATTERN_SOLID,
+        fillForegroundIcv: icvOf(fill.color),
+        fillBackgroundIcv: ICV_AUTOMATIC_BACKGROUND,
+      };
+    case "pattern": {
+      const fillPattern = PATTERN_TYPE_TO_FILL_PATTERN.get(fill.patternType);
+      if (fillPattern === undefined) {
+        throw new BiffWriteError(
+          `xls-codec cannot write a '${fill.patternType}' cell fill: [MS-XLS]'s own FillPattern enumeration has no member for it, that pattern name belonging only to WordprocessingML's ST_Shd half of ContentCellPatternType's shared vocabulary`,
+        );
+      }
+      return {
+        fillPattern,
+        fillForegroundIcv:
+          fill.foregroundColor === undefined
+            ? ICV_AUTOMATIC_FOREGROUND
+            : icvOf(fill.foregroundColor),
+        fillBackgroundIcv:
+          fill.backgroundColor === undefined
+            ? ICV_AUTOMATIC_BACKGROUND
+            : icvOf(fill.backgroundColor),
+      };
+    }
+    default:
+      // Reporting the actual kind beats the if/else this replaced, whose implicit "anything that isn't 'solid' must be 'pattern'" fell through to PATTERN_TYPE_TO_FILL_PATTERN.get(undefined) and threw a BiffWriteError blaming a nonexistent pattern name instead of the real cause: an undefined kind.
+      throw new BiffWriteError(
+        `xls-codec cannot write a cell fill with kind '${unrecognizedFillKind(fill)}': ContentCellFillSchema's discriminated union only defines 'solid' and 'pattern'`,
+      );
   }
-  const fillPattern = PATTERN_TYPE_TO_FILL_PATTERN.get(fill.patternType);
-  if (fillPattern === undefined) {
-    throw new BiffWriteError(
-      `xls-codec cannot write a '${fill.patternType}' cell fill: [MS-XLS]'s own FillPattern enumeration has no member for it, that pattern name belonging only to WordprocessingML's ST_Shd half of ContentCellPatternType's shared vocabulary`,
-    );
-  }
-  return {
-    fillPattern,
-    fillForegroundIcv:
-      fill.foregroundColor === undefined
-        ? ICV_AUTOMATIC_FOREGROUND
-        : icvOf(fill.foregroundColor),
-    fillBackgroundIcv:
-      fill.backgroundColor === undefined
-        ? ICV_AUTOMATIC_BACKGROUND
-        : icvOf(fill.backgroundColor),
-  };
 }
 
 /** A cell's own decoration, resolved into the raw XfDecorationFields the CellXF payload packs -- undefined for a cell with neither a background nor any border, so it shares the workbook's plain undecorated XF exactly as it did before decoration existed. The "has decoration at all" question is written-cells.ts's, since the writer's own record-emission predicate turns on the identical answer. */
