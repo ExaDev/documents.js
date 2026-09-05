@@ -966,7 +966,7 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  // Every <formparams> member (\fftype, \ffhaslistbox, \ffdefres/\ffres, \ffprot, \ffownhelp) before every <formstrings> member (\ffname, \ffhelptext, the \ffl entries), matching RTF 1.9.1's own "Form Fields" grammar production exactly -- a dropDown descriptor exercising every field this writer mints at once, so a regression that interleaves the two groups (or reorders \ffname after \ffhelptext within formstrings) fails this single assertion.
+  // Every <formparams> member, in the grammar's own stated order (\fftype, \ffownhelp, \ffprot, \ffhaslistbox, \ffdefres/\ffres), before every <formstrings> member (\ffname, \ffhelptext, the \ffl entries) -- matching RTF 1.9.1's own "Form Fields" grammar production exactly: `<formparams>` `\fftypeN? \ffownhelpN? ... \ffprotN? ... \ffhaslistboxN? ... \ffdefresN? \ffresN?`. A dropDown descriptor exercising every field this writer mints at once, so a regression that reorders any <formparams> member relative to another, interleaves the two groups, or reorders \ffname after \ffhelptext within formstrings, fails this single assertion against the actual emitted bytes -- not merely against a comment claiming the order, which is exactly the gap an earlier round of this writer left open (the code appended \ffprot/\ffownhelp after \ffhaslistbox/\ffdefres/\ffres despite this same comment already describing the grammar's own order).
   it("orders a dropDown's full \\*\\formfield payload as every formparams member, then every formstrings member, matching RTF's own grammar production", () => {
     const out = write(
       wordprocessing([
@@ -992,7 +992,67 @@ describe("body constructs", () => {
       ]),
     );
     expect(out).toContain(
-      "\\fftype2\\ffhaslistbox\\ffdefres1\\ffres1\\ffprot1\\ffownhelp1{\\*\\ffname Drop1}{\\*\\ffhelptext Pick one}{\\*\\ffl Hello}{\\*\\ffl Guten Tag}",
+      "\\fftype2\\ffownhelp1\\ffprot1\\ffhaslistbox\\ffdefres1\\ffres1{\\*\\ffname Drop1}{\\*\\ffhelptext Pick one}{\\*\\ffl Hello}{\\*\\ffl Guten Tag}",
+    );
+    expectBalancedBraces(out);
+  });
+
+  // The identical order assertion as the dropDown case above, but for a checkbox: \fftype, \ffownhelp, \ffprot, then the checkbox's own \ffdefres/\ffres pair (a checkbox has no \ffhaslistbox at all), then <formstrings>. Exercised separately because the dropDown-only fixture above cannot catch a regression specific to the checkbox branch's own concatenation.
+  it("orders a checkbox's full \\*\\formfield payload as every formparams member, then every formstrings member, matching RTF's own grammar production", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                tag: "Check1",
+                alias: "Agree to terms",
+                lock: "content",
+                checked: true,
+              },
+              startRun: 0,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain(
+      "\\fftype1\\ffownhelp1\\ffprot1\\ffdefres1\\ffres1{\\*\\ffname Check1}{\\*\\ffhelptext Agree to terms}",
+    );
+    expectBalancedBraces(out);
+  });
+
+  // The identical order assertion again, for a plainText field: \fftype, \ffownhelp, \ffprot (plainText's own controlType-specific block contributes nothing to <formparams> at all), then <formstrings> (\ffname, \ffdeftext, \ffhelptext).
+  it("orders a plainText's full \\*\\formfield payload as every formparams member, then every formstrings member, matching RTF's own grammar production", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                alias: "Client name",
+                lock: "content",
+                value: "Jane Doe",
+              },
+              startRun: 0,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain(
+      "\\fftype0\\ffownhelp1\\ffprot1{\\*\\ffname Text1}{\\*\\ffdeftext Jane Doe}{\\*\\ffhelptext Client name}",
     );
     expectBalancedBraces(out);
   });
