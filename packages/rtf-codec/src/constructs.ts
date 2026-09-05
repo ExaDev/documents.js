@@ -246,7 +246,7 @@ export interface RtfFormFieldData {
   readonly defaultResultIndex: number | undefined;
 }
 
-// [MS-DOC] 2.9.78 FFDataBits, verbatim: "If iType is iTypeChck (1), iRes specifies the state of the checkbox and MUST be 0 (unchecked), 1 (checked), or 25 (undefined). Undefined checkboxes are treated as unchecked." 25 is FFDataBits's own reserved sentinel for "no explicit state", not a PHPRtfLite-specific quirk: real Word output emits it too on any checkbox whose \ffres was never meaningfully set, alongside a real \ffdefres carrying the field's reset default. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/22a1f1e5-f4b2-4a7d-9e10-3afa26056122
+// [MS-DOC] 2.9.78 FFDataBits, verbatim: "If iType is iTypeChck (1), iRes specifies the state of the checkbox and MUST be 0 (unchecked), 1 (checked), or 25 (undefined). Undefined checkboxes are treated as unchecked." 25 is FFDataBits's own reserved sentinel for "no explicit state", not a PHPRtfLite-specific quirk: real Word output emits it too on any checkbox whose \ffres was never meaningfully set, alongside a real \ffdefres carrying the field's reset default. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/22a1f1e5-f4b2-4a7d-9e10-3afa26056122 -- the code below deliberately goes one step further than this bare quote: rather than treating every undefined \ffres as unchecked outright, it falls through to a *defined* \ffdefres first and only lands on "unchecked" when that too is absent. This is a considered divergence from the spec's own literal default, not an oversight: a real PHPRtfLite-produced file always emits the sentinel \ffres25 alongside a meaningful \ffdefres naming the field's actual intended state, so treating 25 as "fall through to \ffdefres" recovers real-world checkbox state that the bare spec quote alone would silently discard as unchecked. Do not "simplify" this back to matching the quote above verbatim -- that would re-break the real-world case this fallback exists for.
 const FORM_FIELD_RESULT_UNDEFINED = 25;
 
 const FORM_FIELD_CHECKBOX_INSTRUCTION = /\bFORMCHECKBOX\b/i;
@@ -298,8 +298,12 @@ export function formFieldContentControl(
     descriptor.checked = (current ?? formField.defaultResultIndex ?? 0) !== 0;
   } else if (controlType === "dropDown" && formField.listItems.length > 0) {
     descriptor.options = [...formField.listItems];
-    // \ffres also names a dropdown's own currently selected entry -- the same field FFDataBits gives the checkbox's state, read here under iTypeDrop's own "zero-based index into \ffl" meaning instead. Bounds-checked against the list actually read, since an out-of-range index (PHPRtfLite's own \ffres25 constant, which happens to also be this format's checkbox sentinel, included) names no real entry.
-    const selectedIndex = formField.resultIndex;
+    // \ffres also names a dropdown's own currently selected entry -- the same field FFDataBits gives the checkbox's state, read here under iTypeDrop's own "zero-based index into \ffl" meaning instead. FFDataBits's reserved 25 sentinel (see FORM_FIELD_RESULT_UNDEFINED above) means "selection is undefined" for iTypeDrop exactly as it means "checkbox state is undefined" for iTypeChck, so the identical sentinel-then-default fallback the checkbox branch applies six lines above applies here too: a sentinel or absent \ffres falls through to \ffdefres, the field's own recorded default selection. Confirmed against a real PHPRtfLite fixture, which always emits the sentinel \ffres25 alongside a meaningful \ffdefres -- without this fallback, a real-world dropdown's selection is silently lost even though \ffdefres names it. Bounds-checked against the list actually read, since an out-of-range index names no real entry.
+    const current =
+      formField.resultIndex === FORM_FIELD_RESULT_UNDEFINED
+        ? undefined
+        : formField.resultIndex;
+    const selectedIndex = current ?? formField.defaultResultIndex;
     if (
       selectedIndex !== undefined &&
       selectedIndex >= 0 &&

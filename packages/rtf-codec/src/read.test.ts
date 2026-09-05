@@ -651,7 +651,8 @@ describe("form fields", () => {
     });
   });
 
-  it("reads a FORMDROPDOWN field's \\*\\ffl entries as the contentControl's options, and its \\fldrslt as the wrapped run", () => {
+  // \ffdefres0 names "Hello" (index 0) as the field's own recorded default selection -- the sentinel \ffres25 (see FORM_FIELD_RESULT_UNDEFINED in constructs.ts, and its own dropdown-branch comment) falls through to it exactly as a checkbox's sentinel \ffres falls through to \ffdefres, so `value` reads back "Hello" here even though the \fldrslt text shown ("Guten Tag") is a different entry -- \fldrslt is merely the field's last-rendered display text, not authoritative over \ffres/\ffdefres for which entry is "selected" in FFDataBits terms.
+  it("reads a FORMDROPDOWN field's \\*\\ffl entries as the contentControl's options, falling through \\ffres25's undefined sentinel to \\ffdefres for the selected value, with its \\fldrslt as the wrapped run", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN  {\\*\\formfield{\\fftype2\\ffres25\\fftypetxt0\\ffhaslistbox\\ffdefres0{\\*\\ffl Hello}{\\*\\ffl Guten Tag}}}}{\\fldrslt Guten Tag}}\\par}`,
     )[0];
@@ -660,6 +661,7 @@ describe("form fields", () => {
       kind: "contentControl",
       controlType: "dropDown",
       options: ["Hello", "Guten Tag"],
+      value: "Hello",
     });
     expect(
       paragraph?.runs
@@ -678,6 +680,28 @@ describe("form fields", () => {
       controlType: "dropDown",
       options: ["Hello", "Guten Tag"],
       value: "Guten Tag",
+    });
+  });
+
+  it("falls through a FORMDROPDOWN's \\ffres25 undefined sentinel to a non-zero \\ffdefres, not just index 0", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN  {\\*\\formfield{\\fftype2\\ffres25\\fftypetxt0\\ffhaslistbox\\ffdefres1{\\*\\ffl Hello}{\\*\\ffl Guten Tag}}}}{\\fldrslt Guten Tag}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      controlType: "dropDown",
+      options: ["Hello", "Guten Tag"],
+      value: "Guten Tag",
+    });
+  });
+
+  it("leaves a FORMDROPDOWN's value unset when neither \\ffres nor \\ffdefres is present at all", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN  {\\*\\formfield{\\fftype2\\fftypetxt0\\ffhaslistbox{\\*\\ffl Hello}{\\*\\ffl Guten Tag}}}}{\\fldrslt Hello}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "dropDown",
+      options: ["Hello", "Guten Tag"],
     });
   });
 
