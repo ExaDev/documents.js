@@ -726,7 +726,7 @@ describe("round trip through this package's own reader", () => {
               {
                 blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
                 rowSpan: 2,
-                background: { r: 1, g: 1, b: 0 },
+                background: { kind: "solid", color: { r: 1, g: 1, b: 0 } },
                 borders: {
                   top: { color: { r: 1, g: 0, b: 0 }, widthPt: 1.5 },
                   bottom: {
@@ -769,7 +769,10 @@ describe("round trip through this package's own reader", () => {
     const anchor =
       table?.kind === "table" ? table.rows[0]?.cells[0] : undefined;
     expect(anchor?.rowSpan).toBe(2);
-    expect(anchor?.background).toEqual({ r: 1, g: 1, b: 0 });
+    expect(anchor?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 1, b: 0 },
+    });
     expect(anchor?.borders?.top).toEqual({
       color: { r: 1, g: 0, b: 0 },
       widthPt: 1.5,
