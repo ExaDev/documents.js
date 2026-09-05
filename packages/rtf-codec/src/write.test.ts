@@ -699,7 +699,8 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  it("writes a bare \\ffprot for a contentControl locked as 'content'", () => {
+  // Explicit \ffprot1, never a bare \ffprot: every real fixture read.test.ts carries for this bit family already writes the explicit N form, and writing 1 sidesteps outright whether an absent parameter on an N-parameterised bit like this one defaults to on or to off.
+  it("writes the explicit \\ffprot1 (never a bare \\ffprot) for a contentControl locked as 'content'", () => {
     const out = write(
       wordprocessing([
         {
@@ -720,7 +721,8 @@ describe("body constructs", () => {
         },
       ]),
     );
-    expect(out).toContain("\\ffprot");
+    expect(out).toContain("\\ffprot1");
+    expect(out).not.toContain("\\ffprot0");
     expectBalancedBraces(out);
   });
 
@@ -748,7 +750,8 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  it("writes \\ffprot for a 'container'-locked contentControl too, but reports the removal-protection half as dropped", () => {
+  // Unlike a 'content'/'both' lock, a 'container' lock writes NOTHING for \ffprot at all -- it leaves the field's own value editable, so there is no "other half" of \ffprot still written the way there is for 'both'; the whole lock is dropped, reported through one diagnostic naming that.
+  it("writes no \\ffprot at all for a 'container'-locked contentControl, and reports the whole lock as dropped", () => {
     const codes: string[] = [];
     const out = text(
       writeRtfContent(
@@ -777,7 +780,7 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  it("writes \\ffprot for a 'both'-locked contentControl and still reports the removal-protection half as dropped", () => {
+  it("writes the explicit \\ffprot1 for a 'both'-locked contentControl and still reports the removal-protection half as dropped", () => {
     const codes: string[] = [];
     const out = text(
       writeRtfContent(
@@ -801,7 +804,7 @@ describe("body constructs", () => {
         { sink: (diagnostic) => codes.push(diagnostic.code) },
       ),
     );
-    expect(out).toContain("\\ffprot");
+    expect(out).toContain("\\ffprot1");
     expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
     expectBalancedBraces(out);
   });
