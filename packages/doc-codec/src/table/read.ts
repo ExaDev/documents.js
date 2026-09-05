@@ -1,8 +1,8 @@
 import type {
-  Color,
   ContentBlock,
   ContentBorder,
   ContentCellBorders,
+  ContentCellFill,
   ContentParagraph,
   ContentTable,
   ContentTableCell,
@@ -73,7 +73,7 @@ interface RawCell {
   readonly borders: ContentCellBorders | undefined;
   /** Sides this cell's own sprmTSetBrc/sprmTSetBrc80 has explicitly cleared to a NilBrc/NilBrc80, threaded from tap.ts's TableCellProperties.clearedSides -- see applyRowLevelBorderCascade's own note for why cascadeRowBorders must never re-fill one of these. */
   readonly clearedSides: ReadonlySet<CellBorderSide> | undefined;
-  readonly background: Color | undefined;
+  readonly background: ContentCellFill | undefined;
   readonly blocks: ContentBlock[];
 }
 
@@ -427,7 +427,7 @@ interface LogicalCell {
   readonly colSpan: number;
   readonly vertMerge: number;
   readonly borders: ContentCellBorders | undefined;
-  readonly background: Color | undefined;
+  readonly background: ContentCellFill | undefined;
   readonly blocks: ContentBlock[];
 }
 
