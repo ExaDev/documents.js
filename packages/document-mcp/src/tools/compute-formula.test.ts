@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { assembleTree } from "document-schema.js";
+import { assembleTree, type ContentDocument } from "document-schema.js";
 import {
   buildDocumentBytes,
   buildFormulaBlock,
@@ -11,7 +11,9 @@ import {
   createOds,
   formulaDocument,
   latexToFormula,
+  readNativeDocumentTree,
 } from "documents.js";
+import type * as DocumentsJs from "documents.js";
 import {
   afterAll,
   afterEach,
@@ -20,12 +22,22 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 import { createServer } from "../server";
 import { odfFormulaBytes } from "../test-support/odf-formula-fixture";
 import { ComputeFormulaOutputSchema } from "./compute-formula";
 
 // Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- proving compute_formula is registered under that name, reads a document's real embedded formulas via documents.js's own readNativeDocumentTree + document-schema.js's flattenTree + documents.js's shared collectDocumentFormulas walk, and evaluates each through a real document-compute.js evaluate() call. Mirrors src/tools/metadata.test.ts's own connection harness.
+//
+// readNativeDocumentTree is wrapped (not replaced) below so every test but one calls straight through to the real implementation: no format codec in this family persists a symbolTable/unit registry into real document bytes yet (ExaDev/documents.js#928 round-7 review), so the one test exercising a nested formula's own governing symbolTable against a DIFFERENT outer one (see "evaluates a nested formula's qty node" below) has no real docx/odt/pptx/ods file it could read instead -- it overrides just that one call's return value with a hand-built DocumentTree, and every other line downstream (flattenTree, collectDocumentFormulas, evaluateFormula, structuredContent assembly) remains this file's own real, unmocked code, driven through the identical genuine MCP callTool round trip every other test here uses.
+vi.mock("documents.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof DocumentsJs>();
+  return {
+    ...actual,
+    readNativeDocumentTree: vi.fn(actual.readNativeDocumentTree),
+  };
+});
 
 interface ConnectedPair {
   readonly client: Client;
@@ -383,6 +395,105 @@ describe("compute_formula", () => {
     expect(output.documentKind).toBe("wordprocessing");
     expect(output.formulaCount).toBe(1);
     expect(output.formulas[0]?.outcome.status).toBe("no-content");
+  });
+
+  // ExaDev/documents.js#928 round-7 review: compute_formula used to pass the OUTERMOST document's own symbolTable to every formula entry collectDocumentFormulas returned, including a formula nested inside another embedded object's own document -- wrong per document-schema.js's own content.ts ("the symbol and unit references inside resolve against the EMBEDDING document's own symbolTable field"), and dangerous specifically for units: two documents fused by nesting can register the identical unit id against two DIFFERENT conversion factors, so evaluating against the wrong table doesn't throw -- it silently returns a wrong number rather than an error. readNativeDocumentTree is mocked for this one call only (see the module-level vi.mock above) because no format codec in this family persists a symbolTable/unit registry into real document bytes yet; every other step -- flattenTree, collectDocumentFormulas, evaluateFormula, structuredContent assembly -- is this file's own real, unmocked code, reached through the identical genuine MCP callTool round trip every other test in this suite uses.
+  it("evaluates a nested formula's qty node against its OWN document's unit registry, not the differently-scaled one the outer document declares", async () => {
+    const frame = { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 };
+    const pageGeometry = {
+      pageSize: { widthPt: 595, heightPt: 842 },
+      margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+    };
+    // Same unit id, deliberately different factorToSi: 1 outside, 2 inside -- so a wrong-table evaluation is silently WRONG (5 instead of 10), never a thrown error, which is exactly the more dangerous of the two failure modes the fix closes.
+    const nestedDocument: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      symbolTable: {
+        symbols: [],
+        units: [
+          {
+            id: "test:unit",
+            symbol: "tu",
+            dimension: { length: 1 },
+            factorToSi: { numerator: "2", denominator: "1" },
+          },
+        ],
+      },
+      sections: [
+        {
+          ...pageGeometry,
+          blocks: [
+            buildFormulaBlock(
+              {
+                mathml: [],
+                content: {
+                  kind: "qty",
+                  value: { numerator: "5", denominator: "1" },
+                  unit: "test:unit",
+                },
+              },
+              frame,
+              "test:compute-formula-nested",
+            ),
+          ],
+        },
+      ],
+    };
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      symbolTable: {
+        symbols: [],
+        units: [
+          {
+            id: "test:unit",
+            symbol: "tu",
+            dimension: { length: 1 },
+            factorToSi: { numerator: "1", denominator: "1" },
+          },
+        ],
+      },
+      sections: [
+        {
+          ...pageGeometry,
+          blocks: [
+            {
+              kind: "embeddedObject",
+              objectKind: "wordprocessing",
+              document: nestedDocument,
+              frame,
+            },
+          ],
+        },
+      ],
+    };
+
+    vi.mocked(readNativeDocumentTree).mockReturnValueOnce(
+      assembleTree(document),
+    );
+    const result = await pair.client.callTool({
+      name: "compute_formula",
+      arguments: {
+        // The bytes/format here are never actually read -- readNativeDocumentTree is mocked above to hand back the nested-symbolTable tree built directly. A valid base64 string and a real DocumentFormat member keep the input schema satisfied.
+        source: {
+          bytesBase64: bytesToBase64(new Uint8Array()),
+          format: "docx",
+        },
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    const output = structuredContentOf(result);
+    expect(output.formulaCount).toBe(1);
+    const [entry] = output.formulas;
+    if (entry === undefined) {
+      throw new Error("expected one formula entry");
+    }
+    // 5 * 2 = 10 (the nested factor). The pre-fix behaviour -- evaluating against the outer document's own table -- would have silently returned 5 (5 * 1) instead, with no error at all.
+    expect(entry.outcome).toEqual({
+      status: "evaluated",
+      result: { kind: "quantity", magnitude: 10, dimension: { length: 1 } },
+    });
   });
 
   it("surfaces a read failure as an isError result, exactly like every other document-input tool", async () => {
