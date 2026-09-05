@@ -3,11 +3,14 @@ import type {
   ContentCellFill,
   ContentCellPatternType,
 } from "document-schema.js";
-import { colorToRgbHex, rgbHexToColor } from "document-schema.js";
+import {
+  colorToRgbHex,
+  rgbHexToColor,
+  unrecognizedFillKind,
+} from "document-schema.js";
 import type { XmlElement } from "../../model/node";
 import { el } from "../../xml/fragment";
 import { attr, childrenWithTag } from "../util";
-import { unrecognizedFillKind } from "../shared/cell-fill";
 
 // A table cell's own w:shd (ECMA-376 Part 1 17.4.32, renumbered 17.4.33 in some editions -- Microsoft's own index of the standard names this section for w:shd; 17.4.34 is a different element entirely) as document-schema.js's ContentCellFill (ExaDev/documents.js#951), read and written in one place -- the docx side of the identical shading model doc-codec's table/decoration.ts implements for the pre-2007 binary format, since [MS-DOC]'s own Ipat enumeration IS ST_Shd, extended with a handful of binary-only fine percentages that have no ECMA-376 equivalent (see that module's own top comment). w:val="clear" resolves to a 'solid' fill of the cell's own w:fill (the shading model's background colour, shown plain when no pattern is drawn over it); w:val="solid" resolves to a 'solid' fill of w:color instead (the pattern's own foreground, 100% coverage); every other named token resolves to a real 'pattern' fill via SHD_VAL_TO_PATTERN_TYPE, carrying whichever of w:color (the pattern's strokes) and w:fill (what shows through its gaps) states a concrete colour. w:val="nil" and an absent/unrecognised token resolve to no fill at all, the same fallback an "auto"/"none" colour on w:color or w:fill already gets (ECMA-376's own automatic-colour spelling, naming no concrete colour to draw with).
 
