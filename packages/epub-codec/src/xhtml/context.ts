@@ -23,3 +23,8 @@ export interface InlineStyle {
   readonly strike?: boolean;
   readonly fontFamily?: string;
 }
+
+// Elements whose own subtree is never legitimate document prose, wherever it is reached during a body read -- the single shared definition for a check src/xhtml/read.ts used to duplicate three separate ways (an id/heading/anchor prescan's own descendant walk via isInertContainer, a stray-content collector's own isScriptSupportingElement, and a <pre> text extractor's own inline tag-literal check) and src/xhtml/inline.ts duplicated a fourth way (a dedicated switch case in buildInlineRuns's own per-node dispatch), so a future addition to this set can never silently miss one of the several places that needs to agree on it. <script>'s raw JS source and <template>'s inert DOM subtree are never real content per the HTML Standard's own "script-supporting elements" category.
+export function isInertElement(tag: string): boolean {
+  return tag === "script" || tag === "template";
+}
