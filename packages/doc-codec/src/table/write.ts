@@ -12,7 +12,7 @@ import { encodeTableRowGrpprl, type TableCellToWrite } from "./tap-write";
 
 // The inverse of table/read.ts: a section's own ContentBlock list to the flat sequence of paragraphs writeDocContent's own text-layout pass consumes, expanding each ContentTable into its real [MS-DOC] physical-cell stream. Each ContentTableCell -- real content or a vertical-merge continuation's own `{blocks: []}` -- becomes ONE physical cell ending in its own cell mark exactly as [MS-DOC] 2.4.3 requires, in the ordinary case: a horizontally-merged (colSpan > 1) cell is not expanded into extra synthetic continuation cells, because a real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read a horizontal merge back from TCGRF.horzMerge/sprmTMerge continuation cells at all -- it states one purely as a row's own narrower, wider physical-cell layout (ExaDev/documents.js#895; see tap-write.ts's own top-of-file note for the full ground-truth finding). flattenRow instead merges the table-wide column grid's own boundaries across a cell's colSpan to compute that one physical cell's width, so the row's own rgdxaCenter genuinely has fewer entries than the table's full column count whenever a merge is present, matching the merge-encoding strategy LibreOffice's own writer uses -- not its bytes, which still differ in what the row mark carries beyond the facts both state (this writer emits no cell padding, cell spacing or table-style sprm, and no legacy Shd80 array). Each ContentTableCell's own background and borders ride along to tap-write.ts, which states them the same two ways that implementation does -- TC80's own Brc80 fields plus a sprmTSetBrc for a colour the Brc80 palette cannot hold, and a sprmTDefTableShd array of one Shd per cell. A vertical-merge continuation cell is never inferred from a bare `{blocks: []}` alone -- a genuinely blank cell has the identical shape -- so flattenTable tracks which columns carry a vertical merge actually in progress (an `active` map keyed by column position, walked top to bottom exactly as ooxml.js's own buildTable tracks its identical `active` map), and only a `{blocks: []}` cell landing on a column with a merge genuinely active there becomes a continuation; every other cell, blank or not, is ordinary. The same map supplies a continuation's own physical column span from the anchor's recorded span, since the continuation cell's own (typically absent) colSpan is never the source of truth for it. Every physical cell's own grpprl carries sprmPFInTable; the row's own trailing mark additionally carries sprmPFTtp plus the row's whole TAP (tap-write.ts's encodeTableRowGrpprl).
 //
-// The one exception to "one physical cell per ContentTableCell" is the lost-boundary fallback (ExaDev/documents.js#992): table/read.ts reconstructs the table's shared column grid as the union of every row's own physical boundaries, so a boundary every row happens to merge across identically is never stated anywhere and cannot be recovered -- the simplest case is a single-row table with one merged cell, which by definition has no other row to compare against. `recoverableBoundaries` computes, before any row is flattened, exactly which of the table's own internal grid boundaries at least one row's ordinary (un-split) physical layout would state; every boundary outside that set is one no row would otherwise reveal at all. `splitAtLostBoundaries` then breaks a cell's span at those boundaries specifically -- and only those -- into extra physical sub-cells: the first carries the cell's real content and decoration exactly as before, every further sub-cell is an empty TCGRF.horzMerge continuation ([MS-DOC] 2.9.317's own TCGRF: horzMerge value 1, "the cell is one of a set of horizontally merged cells. It contributes its layout region to the set and its own contents are not rendered"), so the boundary is physically present in this row's own rgdxaCenter without changing what the table renders as. A boundary some other row already states is left exactly as flattenRow always encoded it -- unsplit, via the narrower/wider physical-cell layout above -- so the fallback changes nothing for the common case a real producer's own table already exercises (see the "narrows columnWidthsPt" test's replacement in write.test.ts for the fixed round trip, and the README's own Tables section for the third-party-fidelity trade-off this fallback makes only for the rows it actually applies to).
+// The one exception to "one physical cell per ContentTableCell" is the lost-boundary fallback (ExaDev/documents.js#992): table/read.ts reconstructs the table's shared column grid as the union of every row's own physical boundaries, so a boundary every row happens to merge across identically is never stated anywhere and cannot be recovered -- the simplest case is a single-row table with one merged cell, which by definition has no other row to compare against. `recoverableBoundaries` computes, before any row is flattened, exactly which of the table's own internal grid boundaries at least one row's ordinary (un-split) physical layout would state; every boundary outside that set is one no row would otherwise reveal at all. `distributeLostBoundaries` then assigns each lost boundary to exactly one row, round-robin, rather than to every row that crosses it (that function's own note has the full reasoning: every row crosses a lost boundary by definition, so any one of them can state it, and spreading the work keeps a wide, uniformly-merged table's own rows under the format's per-row size ceiling). `splitAtLostBoundaries` then breaks a cell's span at the boundaries its OWN row was assigned -- and only those -- into extra physical sub-cells: the first carries the cell's real content and decoration exactly as before, every further sub-cell is an empty TCGRF.horzMerge continuation ([MS-DOC] 2.9.317's own TCGRF: horzMerge value 1, "the cell is one of a set of horizontally merged cells. It contributes its layout region to the set and its own contents are not rendered"), so the boundary is physically present in that row's own rgdxaCenter without changing what the table renders as. A boundary some other row already states, or that this particular row was not assigned, is left exactly as flattenRow always encoded it -- unsplit, via the narrower/wider physical-cell layout above -- so the fallback changes nothing for the common case a real producer's own table already exercises (see the "narrows columnWidthsPt" test's replacement in write.test.ts for the fixed round trip, and the README's own Tables section for the third-party-fidelity trade-off this fallback makes only for the rows it actually applies to).
 
 /** sprmPFInTable (0x2416): a Bool8, "MUST be 1 any time the table depth is greater than zero". */
 const SPRM_P_F_IN_TABLE = 0x2416;
@@ -144,7 +144,25 @@ function recoverableBoundaries(rows: readonly ContentTableRow[]): Set<number> {
   return stated;
 }
 
-// Splits one logical cell's own [column, column + span) grid range into the physical sub-spans its row must actually carry: a break at every boundary strictly inside the range that `lostBoundaries` names, so a boundary every row would otherwise merge across identically stays physically present in every row that crosses it (ExaDev/documents.js#992). A range crossing no lost boundary returns as its own single sub-span unchanged -- the encoding this writer always used before #992, and still the only one an ordinary merge (recoverable via some other row) ever needs.
+// Assigns each of the table's own lost boundaries (recoverableBoundaries' own complement) to exactly one row, round-robin, rather than to every row: a boundary is only ever "lost" because every row of the table merges across it identically (recoverableBoundaries' own definition), so by construction every row's own cells already cross it and any one of them can be the row that states it -- there is no row this could pick that would be structurally wrong. Cycling through the table's own rows one boundary at a time keeps each row's own count of assigned boundaries to roughly (lost boundary count / row count), which is what makes a wide, uniformly-merged table writable at all: splitting every row at every lost boundary, this function's own original #992 behaviour, makes every row pay the full column count regardless of how many rows exist to share the work, which alone can exceed a single PapxInFkp's own 510-byte GrpPrlAndIstd ceiling (see the README's "about 22 columns" note) even though no individual row needed to state more than a handful of boundaries. A single-row table still pays the full cost, since there is only one row to assign any boundary to at all -- the format's own per-row ceiling is unavoidable there, not a further gap this function could close.
+function distributeLostBoundaries(
+  lostBoundaries: readonly number[],
+  rowCount: number,
+): Set<number>[] {
+  const perRow = Array.from({ length: rowCount }, () => new Set<number>());
+  lostBoundaries.forEach((boundary, index) => {
+    const bucket = perRow[index % rowCount];
+    if (bucket === undefined) {
+      throw new DocFormatError(
+        "internal defect: distributeLostBoundaries built fewer row buckets than the row count it was given",
+      );
+    }
+    bucket.add(boundary);
+  });
+  return perRow;
+}
+
+// Splits one logical cell's own [column, column + span) grid range into the physical sub-spans its row must actually carry: a break at every boundary strictly inside the range that `lostBoundaries` names, so a boundary this row was assigned to state (distributeLostBoundaries) stays physically present in it (ExaDev/documents.js#992). A range crossing no lost boundary this row was assigned -- because it crosses none at all, or because another row was assigned the ones it does cross -- returns as its own single sub-span unchanged, the encoding this writer always used before #992 and still the only one an ordinary merge (recoverable via some other row) ever needs.
 function splitAtLostBoundaries(
   column: number,
   span: number,
@@ -238,19 +256,29 @@ function flattenTable(table: ContentTable): WriteParagraph[] {
   }
   const boundaries = columnBoundariesTwips(table.columnWidthsPt);
   const stated = recoverableBoundaries(table.rows);
-  const lostBoundaries = new Set<number>();
+  const lostBoundaries: number[] = [];
   for (let index = 1; index < columnCount; index += 1) {
-    if (!stated.has(index)) lostBoundaries.add(index);
+    if (!stated.has(index)) lostBoundaries.push(index);
   }
+  const lostBoundariesByRow = distributeLostBoundaries(
+    lostBoundaries,
+    table.rows.length,
+  );
   const active = new Map<number, ActiveVerticalMerge>();
   const output: WriteParagraph[] = [];
-  for (const row of table.rows) {
+  table.rows.forEach((row, rowIndex) => {
+    const rowLostBoundaries = lostBoundariesByRow[rowIndex];
+    if (rowLostBoundaries === undefined) {
+      throw new DocFormatError(
+        "internal defect: distributeLostBoundaries returned fewer buckets than the table has rows",
+      );
+    }
     const { paragraphs, cellsToWrite, rowBoundariesTwips } = flattenRow(
       row.cells,
       columnCount,
       boundaries,
       active,
-      lostBoundaries,
+      rowLostBoundaries,
     );
     output.push(...paragraphs);
     output.push({
@@ -263,7 +291,7 @@ function flattenTable(table: ContentTable): WriteParagraph[] {
       ),
       terminator: CELL_MARK,
     });
-  }
+  });
   return output;
 }
 
