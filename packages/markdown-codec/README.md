@@ -191,7 +191,6 @@ Every construct `src/lower`/`src/emit` cannot represent losslessly is a document
 - **`md/link-title-dropped`** — the one titled shape still dropping: a nested image (inside a link or emphasis) or an unresolved image. Every other title rides a `link` construct's `title` field — a run-level extent for an inline or reference link, a block-scoped marker pair around a resolved image (which also restores the image's original destination on the way out).
 - **`md/blockquote-container-skipped`** — a blockquote containing a heading anywhere in its subtree cannot carry its division construct (a marker extent may not open a heading scope), so that quote degrades to indent-only structure while the heading keeps its fidelity. Every other quote carries a `division` construct pair — exact container boundary and exact nesting depth, with the indent and `Quote` styleId kept as the materialised formatting.
 - **`md/list-item-block-unlisted`** — a table, resolved image, or display-math block in a list item cannot carry `ContentListMembership` (paragraphs only).
-- **`md/list-item-multi-block-flattened`** — a construct (most commonly a blockquote) sitting directly inside a list item interrupts that item's own contiguous block run on write. `ContentListMembership.itemId` does let the writer re-attach a multi-block item's later plain blocks to its own marker line — a paragraph followed by a fenced code block, or by a nested sub-list and then more of the item's own text, all render as one item — but a construct's own extent is resolved independently of that grouping, so the construct and anything of the same item after it render as separate top-level content instead.
 - **`md/list-marker-type-conflict`** — a nested list whose marker type disagrees with its enclosing list's minted numId keeps the enclosing type (first-wins).
 - **`md/math-inline-preserved-as-text`** — inline `\( \)` math stays a Cambria-Math-marked raw-LaTeX run; display `$$` math is a real embedded formula carrying the presentation layer.
 - **`md/image-unresolved`** — no resolver, `undefined` return, or non-PNG/JPEG bytes degrades to alt-text run.
@@ -229,9 +228,9 @@ Emission is the inverse and validates first: a section's markers must pair as ba
 
 | Corpus                                                                                | Examples | Passing round trip | Rate  |
 | ------------------------------------------------------------------------------------- | -------- | ------------------ | ----- |
-| CommonMark 0.31.2 (`assets/commonmark/spec.json`)                                     | 652      | 513                | 78.7% |
+| CommonMark 0.31.2 (`assets/commonmark/spec.json`)                                     | 652      | 516                | 79.1% |
 | GFM tagged extensions (table/strikethrough/autolink/task-list, `assets/gfm/spec.txt`) | 23       | 22                 | 95.7% |
-| Combined                                                                              | 675      | 535                | 79.3% |
+| Combined                                                                              | 675      | 538                | 79.7% |
 
 Every non-passing example is named individually in `src/test-support/conformance-exclusions.ts`, attributed to a closed set of causes (shrink-only — see [Conventions](#conventions)): most commonly a soft line break collapsing to a space, a nested/unresolved image title, an emphasis-span collision, or a blockquote whose heading content skips its container pair.
 
