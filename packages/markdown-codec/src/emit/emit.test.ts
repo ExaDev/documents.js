@@ -27,6 +27,18 @@ function doc(blocks: readonly ContentBlock[]): ContentDocument {
   };
 }
 
+// The document's own first block's leaf text, concatenated across every run -- used where a round trip is expected to preserve CONTENT but not necessarily the exact run boundaries (entity decoding does not re-merge adjacent plain-text runs on a reparse, since src/lower/inline.ts deliberately attempts no adjacent-run merging of its own).
+function leafText(source: ContentDocument): string {
+  if (source.kind !== "wordprocessing") {
+    throw new Error("expected a wordprocessing ContentDocument");
+  }
+  const block = source.sections[0]?.blocks[0];
+  if (block?.kind !== "paragraph") {
+    throw new Error(`expected a paragraph block, got ${block?.kind}`);
+  }
+  return block.runs.map((run) => run.text).join("");
+}
+
 describe("headings", () => {
   it("emits a Heading{N} styleId as ATX by default", () => {
     expect(
@@ -55,6 +67,197 @@ describe("headings", () => {
         { headingStyle: "setext" },
       ),
     ).toBe("### foo");
+  });
+
+  it("promotes a level-1/2 heading whose own runs embed a soft-break line break to setext, overriding the configured ATX style, since ATX has no way to hold one (ExaDev/documents.js#940)", () => {
+    const collector = createDiagnosticCollector();
+    const softBreakRuns = [
+      { text: "foo" },
+      { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+      { text: "bar" },
+    ];
+    expect(
+      emitMarkdown(
+        doc([{ kind: "paragraph", runs: softBreakRuns, styleId: "Heading2" }]),
+        { sink: collector.sink },
+      ),
+    ).toBe("foo\nbar\n---");
+    expect(
+      collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+    ).toBe(false);
+  });
+
+  it("collapses an embedded soft-break line break to a space with a diagnostic for a level 3-6 heading, which has no setext fallback", () => {
+    const collector = createDiagnosticCollector();
+    const softBreakRuns = [
+      { text: "foo" },
+      { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+      { text: "bar" },
+    ];
+    expect(
+      emitMarkdown(
+        doc([{ kind: "paragraph", runs: softBreakRuns, styleId: "Heading3" }]),
+        { sink: collector.sink },
+      ),
+    ).toBe("### foo bar");
+    expect(
+      collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+    ).toBe(true);
+  });
+
+  it("promotes a level-1/2 heading whose own runs embed a hard-break literal newline to setext too, with the backslash-escape spelling reflected in the underline length", () => {
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "foo" }, { text: "\n" }, { text: "bar" }],
+            styleId: "Heading1",
+          },
+        ]),
+      ),
+    ).toBe("foo\\\nbar\n====");
+  });
+
+  describe("a level-1/2 heading whose own text ends in an embedded break (ExaDev/documents.js#940)", () => {
+    // A TRAILING break -- reachable from an ordinary Word heading ending in a manual line break or page break, both of which ooxml.js's docx reader maps to a literal trailing '\n' -- must NOT promote to setext: renderSetextHeading appends its own '\n' plus the underline directly after `text`, so a `text` that already ends in '\n' leaves a genuinely BLANK line between the heading's real last line and the underline. Setext's own grammar (spec 0.31.2) is "one or more lines of text, NOT INTERRUPTED BY A BLANK LINE", so this is unrepresentable -- collapsing to ATX (exactly the existing level-3-6 fallback) is the only safe rendering, not a stylistic choice.
+    it.each([
+      { level: "Heading1", underlineChar: "=" },
+      { level: "Heading2", underlineChar: "-" },
+    ])(
+      "collapses to ATX with a diagnostic instead of promoting to $level setext, since the underline would otherwise land after a blank line",
+      ({ level }) => {
+        const collector = createDiagnosticCollector();
+        const written = emitMarkdown(
+          doc([
+            {
+              kind: "paragraph",
+              runs: [{ text: "foo" }, { text: "\n" }],
+              styleId: level,
+            },
+          ]),
+          { sink: collector.sink },
+        );
+        expect(written).toBe(`${level === "Heading1" ? "#" : "##"} foo `);
+        expect(
+          collector.has(
+            MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+          ),
+        ).toBe(true);
+        expect(
+          collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+        ).toBe(false);
+      },
+    );
+
+    it.each([
+      { level: "Heading1" as const, underlineChar: "=" },
+      { level: "Heading2" as const, underlineChar: "-" },
+    ])(
+      "survives a full write-then-reread round trip as one intact $level heading, rather than fracturing into a plain paragraph plus a spurious block once the underline character is $underlineChar",
+      ({ level }) => {
+        const written = emitMarkdown(
+          doc([
+            {
+              kind: "paragraph",
+              runs: [{ text: "foo" }, { text: "\n" }],
+              styleId: level,
+            },
+            { kind: "paragraph", runs: [{ text: "next para" }] },
+          ]),
+        );
+        const reparsed = lowerMarkdown(written);
+        if (reparsed.kind !== "wordprocessing") {
+          throw new Error("expected a wordprocessing ContentDocument");
+        }
+        const blocks = reparsed.sections[0]?.blocks ?? [];
+        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId) and the trailing paragraph -- pre-fix, this fractured into THREE (the heading text as a bare paragraph, a spurious "===="/"----" paragraph or thematic break invented from the stray underline, and the trailing paragraph).
+        expect(blocks).toHaveLength(2);
+        const [headingBlock, nextBlock] = blocks;
+        if (
+          headingBlock?.kind !== "paragraph" ||
+          nextBlock?.kind !== "paragraph"
+        ) {
+          throw new Error("expected two paragraph blocks");
+        }
+        expect(headingBlock.styleId).toBe(level);
+        expect(headingBlock.runs.map((run) => run.text).join("")).toBe("foo");
+        expect(nextBlock.styleId).toBeUndefined();
+        expect(nextBlock.runs.map((run) => run.text).join("")).toBe(
+          "next para",
+        );
+      },
+    );
+  });
+
+  describe("a level-1/2 heading whose own text STARTS with an embedded break stays eligible for setext (ExaDev/documents.js#940)", () => {
+    // Unlike a TRAILING break, a LEADING one never leaves a blank line for setext to trip over: it sits BEFORE the heading's own run of text-then-underline lines even begins, so a reparse treats it as ordinary inter-block whitespace ahead of the heading -- exactly as a blank line ahead of any other block already works. Refusing setext here would be a strict regression for the escaped-hard-break spelling specifically: escapeMarkdownText always keeps a non-blank backslash on that first line, so the break survives losslessly through setext today, and collapsing to ATX would destroy it (ATX has no representation for a break at all).
+    it.each([
+      { level: "Heading1" as const, underline: "=" },
+      { level: "Heading2" as const, underline: "-" },
+    ])(
+      "still promotes $level to setext and round-trips the leading break losslessly",
+      ({ level, underline }) => {
+        const written = emitMarkdown(
+          doc([
+            {
+              kind: "paragraph",
+              runs: [{ text: "\n" }, { text: "foo" }],
+              styleId: level,
+            },
+          ]),
+        );
+        expect(written).toBe(`\\\nfoo\n${underline}`);
+
+        const reparsed = lowerMarkdown(written);
+        if (reparsed.kind !== "wordprocessing") {
+          throw new Error("expected a wordprocessing ContentDocument");
+        }
+        const blocks = reparsed.sections[0]?.blocks ?? [];
+        expect(blocks).toHaveLength(1);
+        const [headingBlock] = blocks;
+        if (headingBlock?.kind !== "paragraph") {
+          throw new Error("expected a paragraph block");
+        }
+        expect(headingBlock.styleId).toBe(level);
+        expect(headingBlock.runs.map((run) => run.text).join("")).toBe("\nfoo");
+      },
+    );
+  });
+
+  it("keys canInterruptOpenParagraph off the ACTUAL (ATX-collapsed) rendering of a level-1/2 heading whose own trailing break makes setext unsafe, not just its level -- an unsafe-break heading interrupts an open list-item paragraph cleanly, needing no forced blank line, since it never actually renders as setext (ExaDev/documents.js#940)", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "Heading1",
+        runs: [{ text: "h" }, { text: "\n" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    // No forced blank line between "a" and the heading's own ATX line: an ATX heading always interrupts an open paragraph cleanly, and this one really is ATX now (its trailing break made setext unsafe), so requiresBlankLineBefore correctly sees no hazard -- only the list's own loose/tight spacing (not loose here) decides whether a blank line appears at all.
+    expect(written).toBe("- a\n  # h ");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [paragraphBlock, headingBlock] = blocks;
+    if (
+      paragraphBlock?.kind !== "paragraph" ||
+      headingBlock?.kind !== "paragraph"
+    ) {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(paragraphBlock.runs.map((run) => run.text).join("")).toBe("a");
+    expect(headingBlock.styleId).toBe("Heading1");
   });
 });
 
@@ -955,6 +1158,46 @@ describe("lists", () => {
     expect(headingBlock.runs.map((run) => run.text).join("")).toBe("h");
   });
 
+  it("inserts a blank line between a paragraph and a following heading that is forced to setext by its OWN embedded line break, even with the default ATX headingStyle -- the interrupt guard must key off what the heading will actually render as, not the configured style, or the preceding paragraph is silently absorbed into it on reparse (ExaDev/documents.js#940)", () => {
+    const softBreakRuns = [
+      { text: "h1" },
+      { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+      { text: "h2" },
+    ];
+    const source = doc([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "Heading1",
+        runs: softBreakRuns,
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- a\n\n  h1\n  h2\n  ==");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [paragraphBlock, headingBlock] = blocks;
+    if (
+      paragraphBlock?.kind !== "paragraph" ||
+      headingBlock?.kind !== "paragraph"
+    ) {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(paragraphBlock.styleId).toBeUndefined();
+    expect(paragraphBlock.runs.map((run) => run.text).join("")).toBe("a");
+    expect(headingBlock.styleId).toBe("Heading1");
+  });
+
   it("inserts a blank line before a plain block following an HTMLPreformatted block, since a raw HTML block only ends at a blank line and would otherwise swallow the next block as more of its own literal content", () => {
     const source = doc([
       {
@@ -1334,6 +1577,34 @@ describe("tables", () => {
       "| a | b |\n| :--- | ---: |\n| 1 | 2 |",
     );
   });
+
+  it("collapses a soft-break residue run to a space rather than a literal newline that would corrupt the row", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [
+                    { text: "foo" },
+                    { text: " ", source: { format: "markdown", xml: "\n" } },
+                    { text: "bar" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const markdown = emitMarkdown(doc([table]));
+    expect(markdown).toBe("| foo bar |\n| --- |");
+    expect(markdown.split("\n")).toHaveLength(2);
+  });
 });
 
 describe("images", () => {
@@ -1431,6 +1702,31 @@ describe("round trip through src/lower", () => {
     const second = lowerMarkdown(markdown);
     expect(second).toEqual(first);
     expect(markdown).not.toContain("\\(");
+  });
+
+  it("re-emits a soft line break as a literal newline, restoring cmark's own soft-break convention rather than collapsing it to a space (ExaDev/documents.js#940)", () => {
+    const source = "foo\nbar";
+    const first = lowerMarkdown(source);
+    const markdown = emitMarkdown(first);
+    expect(markdown).toBe(source);
+    const second = lowerMarkdown(markdown);
+    expect(second).toEqual(first);
+  });
+
+  it("keeps a soft line break bracketed by emphasis as one nested wrap across the line break, not two independently-wrapped spans", () => {
+    const source = "**foo\nbar**";
+    const first = lowerMarkdown(source);
+    const markdown = emitMarkdown(first);
+    expect(markdown).toBe(source);
+    expect(lowerMarkdown(markdown)).toEqual(first);
+  });
+
+  it("does not swallow a &nbsp;-derived character sitting at a paragraph's own edge as insignificant trim padding (ExaDev/documents.js#940)", () => {
+    const source = "&nbsp; &amp; foo";
+    const first = lowerMarkdown(source);
+    const markdown = emitMarkdown(first);
+    expect(markdown.charCodeAt(0)).toBe(0x00a0);
+    expect(leafText(lowerMarkdown(markdown))).toBe(leafText(first));
   });
 });
 

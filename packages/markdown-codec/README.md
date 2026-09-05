@@ -197,6 +197,8 @@ Every construct `src/lower`/`src/emit` cannot represent losslessly is a document
 - **`md/raw-html-preserved-as-text` / `md/raw-html-dropped`** — raw HTML kept as literal text (default) or dropped; never interpreted. The preserved text's verbatim original quarantines as markdown residue on its node, and this package's own writer re-emits that residue as-is.
 - **`md/front-matter-key-unmapped`** — no YAML/TOML engine; only five known `LayoutMetadata` keys recognised. The verbatim original block rides the package-level residue table (`readMarkdown`'s `documentPackage.source.frontmatter`), which `writeMarkdown` re-emits as-is.
 - **`md/heading-level-clamped`** — styleId beyond `Heading6` (from another format) clamps to level 6 via document-schema.js's shared `clampHeadingLevel()`.
+- **`md/heading-line-break-collapsed`** — a hard or soft break embedded in a heading's own runs (most commonly a setext heading read with more than one physical line) is promoted to setext output whenever the level admits one (1 or 2), the only markdown grammar that can hold a genuine line break inside heading text; a level 3-6 heading with the same shape has no such fallback and collapses the break to a single space instead.
+- **`md/heading-style-overridden-for-line-break`** — the setext promotion above overriding the effective `headingStyle: 'atx'` (this option's own default just as much as an explicit caller choice); that one heading renders as setext regardless because ATX cannot hold the embedded break at all.
 - **`md/adjacent-links-merged`** / **`md/code-span-as-monospace-run`** — same-destination adjacent links merge; monospace runs emit as code spans.
 - **`md/paragraph-indent-dropped`** — `indentLeftPt` without a recognised styleId; indent dropped, paragraph renders.
 - **`md/list-numid-fallback`** — a foreign or absent `numId` (depth-only `ContentListMembership`) falls back to a plain bullet list.
@@ -228,11 +230,11 @@ Emission is the inverse and validates first: a section's markers must pair as ba
 
 | Corpus                                                                                | Examples | Passing round trip | Rate  |
 | ------------------------------------------------------------------------------------- | -------- | ------------------ | ----- |
-| CommonMark 0.31.2 (`assets/commonmark/spec.json`)                                     | 652      | 516                | 79.1% |
-| GFM tagged extensions (table/strikethrough/autolink/task-list, `assets/gfm/spec.txt`) | 23       | 22                 | 95.7% |
-| Combined                                                                              | 675      | 538                | 79.7% |
+| CommonMark 0.31.2 (`assets/commonmark/spec.json`)                                     | 652      | 575                | 88.2% |
+| GFM tagged extensions (table/strikethrough/autolink/task-list, `assets/gfm/spec.txt`) | 23       | 23                 | 100%  |
+| Combined                                                                              | 675      | 598                | 88.6% |
 
-Every non-passing example is named individually in `src/test-support/conformance-exclusions.ts`, attributed to a closed set of causes (shrink-only — see [Conventions](#conventions)): most commonly a soft line break collapsing to a space, a nested/unresolved image title, an emphasis-span collision, or a blockquote whose heading content skips its container pair.
+Every non-passing example is named individually in `src/test-support/conformance-exclusions.ts`, attributed to a closed set of causes (shrink-only — see [Conventions](#conventions)): most commonly an emphasis-span collision, an image with no `data:` URI source for the harness to embed, or a blockquote whose heading content skips its container pair.
 
 **Optional real-world corpus.** `test/corpus/` (gitignored) holds a `pnpm test:corpus` project for a manual sanity check against sibling READMEs on disk — asserts no throw and real content on reparse, not byte fidelity. Not part of `pnpm test`; run locally before significant parser/lower/emit changes.
 
