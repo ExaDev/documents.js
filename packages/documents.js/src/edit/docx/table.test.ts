@@ -1,9 +1,9 @@
-import type { XmlNode } from "ooxml.js";
-import { decodePackage, encodePackage } from "ooxml.js";
+import type { XmlElement, XmlNode } from "ooxml.js";
+import { decodePackage, el, encodePackage } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import { readDocxContent } from "../../ooxml/docx/read";
 import { createDocx } from "./editor";
-import { buildTable, DocxTable } from "./table";
+import { buildTable, DocxTable, type DocxTableCell } from "./table";
 
 describe("buildTable", () => {
   it("builds a grid with the requested row/column count", () => {
@@ -160,6 +160,62 @@ describe("DocxTable cell access and mutation", () => {
       throw new Error("expected a table block");
     }
     expect(roundTrippedTable.rows[0]?.heightPt).toBeCloseTo(34, 5);
+  });
+});
+
+describe("DocxTableCell background", () => {
+  // Walks down to the row-0/col-0 cell's own w:tcPr, creating it (via the public colSpan setter, mirroring the "colSpan and verticalMerge coexist" test above) when the cell has none yet -- so a test can hand-insert a raw w:shd shape this editor's own setter never writes (it always writes w:val="clear"), the same way a real producer's own docx can.
+  function tcPrOf(tableElement: XmlNode, cell: DocxTableCell): XmlElement {
+    cell.colSpan = 1;
+    const tr = tableElement.type === "element" ? tableElement : undefined;
+    const row =
+      tr?.children.find((c) => c.type === "element" && c.tag === "w:tr") ??
+      undefined;
+    const tc =
+      row?.type === "element"
+        ? row.children.find((c) => c.type === "element" && c.tag === "w:tc")
+        : undefined;
+    const tcPr =
+      tc?.type === "element"
+        ? tc.children.find((c) => c.type === "element" && c.tag === "w:tcPr")
+        : undefined;
+    if (tcPr?.type !== "element") {
+      throw new Error("expected w:tcPr");
+    }
+    return tcPr;
+  }
+
+  it("background is undefined for an undecorated cell, and round-trips through the setter", () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    expect(cell.background).toBeUndefined();
+    cell.background = { r: 1, g: 0, b: 0 };
+    expect(cell.background).toEqual({ r: 1, g: 0, b: 0 });
+    cell.background = undefined;
+    expect(cell.background).toBeUndefined();
+  });
+
+  it('resolves a w:val="solid" shading from w:color, not w:fill -- the real bug this getter once had, since it read w:fill unconditionally regardless of w:val', () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    const tcPr = tcPrOf(tableElement, cell);
+    tcPr.children.push(
+      el("w:shd", { "w:val": "solid", "w:color": "00ff00", "w:fill": "auto" }),
+    );
+    expect(cell.background).toEqual({ r: 0, g: 1, b: 0 });
+  });
+
+  it("resolves a genuine pattern fill to its own representative colour, rather than no colour at all", () => {
+    const tableElement = buildTable({ rows: 1, columns: 1 });
+    const table = new DocxTable([tableElement], tableElement);
+    const cell = table.cell(0, 0);
+    const tcPr = tcPrOf(tableElement, cell);
+    tcPr.children.push(
+      el("w:shd", { "w:val": "pct25", "w:color": "0000ff", "w:fill": "auto" }),
+    );
+    expect(cell.background).toEqual({ r: 0, g: 0, b: 1 });
   });
 });
 
