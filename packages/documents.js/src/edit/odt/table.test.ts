@@ -1,7 +1,35 @@
+import type { XmlElement } from "odf.js";
 import { decodePackage, encodePackage, rootElement } from "odf.js";
+import { attr } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import { readOdtContent } from "../../odf/odt/read";
+import { el } from "../../xml/fragment";
+import { findDescendantElement, walkElements } from "../../xml/query";
 import { createOdt } from "./editor";
+
+// Finds styleName's own style:table-row-properties inside automaticStyles, throwing rather than returning undefined -- every caller below already knows the style must exist by this point.
+function findRowStyleProperties(
+  automaticStyles: XmlElement,
+  styleName: string,
+): XmlElement {
+  const style = automaticStyles.children.find(
+    (c) =>
+      c.type === "element" &&
+      c.tag === "style:style" &&
+      attr(c, "style:name") === styleName,
+  );
+  if (style?.type !== "element") {
+    throw new Error(`expected style:style named ${styleName}`);
+  }
+  const props = style.children.find(
+    (c): c is XmlElement =>
+      c.type === "element" && c.tag === "style:table-row-properties",
+  );
+  if (props === undefined) {
+    throw new Error(`expected style:table-row-properties on ${styleName}`);
+  }
+  return props;
+}
 
 describe("OdtTable", () => {
   it("appendTable builds the right row/column count with paragraph-per-cell", () => {
@@ -123,13 +151,105 @@ describe("OdtTableRow.heightPt", () => {
     expect(row.heightPt).toBeCloseTo(30, 5);
   });
 
-  it("clearing heightPt removes table:style-name entirely", () => {
+  it("clearing heightPt removes table:style-name entirely when no other row property remains", () => {
     const editor = createOdt();
     const table = editor.body.appendTable({ rows: 1, columns: 1 });
     const row = table.rows()[0]!;
     row.heightPt = 40;
     row.heightPt = undefined;
     expect(row.heightPt).toBeUndefined();
+
+    const contentPart = editor.toPackage().parts["content.xml"];
+    const rowElement = findDescendantElement(
+      contentPart?.kind === "xml" ? contentPart.nodes : [],
+      "table:table-row",
+    )?.node;
+    if (rowElement === undefined) {
+      throw new Error("expected a table:table-row element");
+    }
+    expect(attr(rowElement, "table:style-name")).toBeUndefined();
+  });
+
+  it("preserves another row-style property already present when setting or clearing heightPt, and never reuses a style carrying extra properties for a plain height-only row", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 1 });
+    const [rowWithExtraProperty, plainRow] = table.rows();
+    if (rowWithExtraProperty === undefined || plainRow === undefined) {
+      throw new Error("expected two rows");
+    }
+
+    const contentPart = editor.toPackage().parts["content.xml"];
+    const root = rootElement(
+      contentPart?.kind === "xml" ? contentPart.nodes : [],
+    );
+    const automaticStyles = root?.children.find(
+      (c) => c.type === "element" && c.tag === "office:automatic-styles",
+    );
+    if (automaticStyles?.type !== "element") {
+      throw new Error("expected office:automatic-styles");
+    }
+    // Simulates a table-row style a real external producer wrote (a document opened via openOdt()) -- fo:break-before stands in for style:use-optimal-row-height/fo:keep-together/fo:background-color, the other properties the review names: the hazard (silently dropped on set, silently imported on reuse) is identical regardless of which property it is.
+    automaticStyles.children.push(
+      el(
+        "style:style",
+        { "style:name": "ExternalRowStyle", "style:family": "table-row" },
+        [
+          el("style:table-row-properties", {
+            "style:row-height": "20pt",
+            "fo:break-before": "page",
+          }),
+        ],
+      ),
+    );
+    const rowElements = [
+      ...walkElements(contentPart?.kind === "xml" ? contentPart.nodes : []),
+    ]
+      .map((cursor) => cursor.node)
+      .filter((node) => node.tag === "table:table-row");
+    const [firstRowElement, secondRowElement] = rowElements;
+    if (firstRowElement === undefined || secondRowElement === undefined) {
+      throw new Error("expected two table:table-row elements");
+    }
+    firstRowElement.attributes.push({
+      name: "table:style-name",
+      value: "ExternalRowStyle",
+    });
+
+    // The reuse loop must not hand ExternalRowStyle to a row that only asked for the matching height -- doing so would silently import fo:break-before onto a row that never had it.
+    plainRow.heightPt = 20;
+    expect(attr(secondRowElement, "table:style-name")).not.toBe(
+      "ExternalRowStyle",
+    );
+
+    // Setting a NEW height on the row that already carries fo:break-before must mint a style carrying both, not silently drop fo:break-before.
+    rowWithExtraProperty.heightPt = 25;
+    expect(rowWithExtraProperty.heightPt).toBeCloseTo(25, 5);
+    const mintedStyleName = attr(firstRowElement, "table:style-name");
+    if (mintedStyleName === undefined) {
+      throw new Error("expected a table:style-name after setting heightPt");
+    }
+    expect(
+      attr(
+        findRowStyleProperties(automaticStyles, mintedStyleName),
+        "fo:break-before",
+      ),
+    ).toBe("page");
+
+    // Clearing the height must keep fo:break-before, minting a style carrying it alone rather than dropping table:style-name entirely.
+    rowWithExtraProperty.heightPt = undefined;
+    expect(rowWithExtraProperty.heightPt).toBeUndefined();
+    const clearedStyleName = attr(firstRowElement, "table:style-name");
+    if (clearedStyleName === undefined) {
+      throw new Error(
+        "expected table:style-name to remain, carrying fo:break-before",
+      );
+    }
+    const clearedProps = findRowStyleProperties(
+      automaticStyles,
+      clearedStyleName,
+    );
+    expect(attr(clearedProps, "fo:break-before")).toBe("page");
+    expect(attr(clearedProps, "style:row-height")).toBeUndefined();
   });
 
   it("survives a real odt read/build round trip via readOdtContent", () => {
