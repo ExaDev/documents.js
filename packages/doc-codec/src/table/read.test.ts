@@ -958,6 +958,69 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       bottom: BOTTOM,
     });
   });
+
+  it("resolves a vertMerge anchor's real bottom edge by the table's shared grid position, not a raw physical-cell index, when the table's last row states genuinely different boundaries", () => {
+    // Three grid columns (colX, col0, the vertMerge target); row 0 states all three as separate physical cells, so the target sits at physical index 2. Row 1 -- the table's own last row -- merges colX+col0 into one genuinely wider physical cell instead (LibreOffice's own encoding, ExaDev/documents.js#895: no TCGRF.horzMerge flag, just wider boundaries), which shifts the target's own continuation down to physical index 1 there. A cascade that matched rows by raw physical-cell index rather than shared-grid position would look at row 1's own (nonexistent) index 2 and never see the continuation's own vertMerge flag at all -- exactly the divergence between array position and grid position cellReachesTableBottom's own note describes. The target's own bottom edge must still resolve to the table's real bcBottom, because its continuation reaches row 1 by grid position regardless of row 1's differently-shaped boundary array.
+    const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
+    const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const rowZeroGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000, 3000], [plain, plain, restart]),
+      ...tableBordersSprm,
+    ];
+    // Row 1's own rgdxaCenter has only two columns: [0, 2000] replaces colX's and col0's own separate [0, 1000, 2000] boundaries with one merged span, while the vertMerge target keeps its own width unchanged.
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 2000, 3000], [plain, continuation]),
+    ];
+    const cell = (text: string): DocParagraphSpec => ({
+      runs: [{ text }],
+      grpprl: SPRM_P_F_IN_TABLE,
+      mark: CELL_MARK,
+    });
+    const rowEnd = (grpprl: readonly number[]): DocParagraphSpec => ({
+      runs: [],
+      grpprl,
+      mark: CELL_MARK,
+    });
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          cell("x0"),
+          cell("c0"),
+          cell("anchor"),
+          rowEnd(rowZeroGrpprl),
+          cell("merged"),
+          cell(""),
+          rowEnd(rowOneGrpprl),
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(2);
+    // The shared grid still reconstructs three columns even though row 1's own array only ever states two -- the merged cell's own boundaries cover two of the canonical grid's segments at once.
+    expect(block.columnWidthsPt).toHaveLength(3);
+    expect(block.rows[0]?.cells).toHaveLength(3);
+    expect(block.rows[1]?.cells).toHaveLength(2);
+    const mergedCell = block.rows[1]?.cells[0];
+    expect(mergedCell?.colSpan).toBe(2);
+    expect(cellText(mergedCell)).toBe("merged");
+    const anchor = block.rows[0]?.cells[2];
+    expect(cellText(anchor)).toBe("anchor");
+    // The core assertion: despite sitting at physical index 2 in row 0 and physical index 1 in row 1, the anchor's own continuation is still matched by grid position, giving a 2-row rowSpan and the table's real bcBottom on its own bottom edge -- not the row cascade's insideHorizontal, which is what a raw physical-index match would have produced the moment it looked at row 1's own nonexistent cell 2.
+    expect(anchor?.rowSpan).toBe(2);
+    expect(anchor?.borders).toEqual({
+      top: TOP,
+      left: INSIDE_V,
+      right: RIGHT,
+      bottom: BOTTOM,
+    });
+    // The continuation cell physically sitting in the table's last row still carries no decoration of its own, exactly as the identical-boundaries case above already established.
+    expect(block.rows[1]?.cells[1]?.blocks).toEqual([]);
+  });
 });
 
 // The tolerance the reconstruction snaps boundaries within is one point, and ContentTable.columnWidthsPt is stated in points, so every expectation below is written in points and every drift is written as a fraction of one -- restated here from the point's own definition rather than imported from table/read.ts, so the two agree only if both are right.
