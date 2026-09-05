@@ -205,7 +205,7 @@ describe("engine frames: wordprocessing (engine.ts)", () => {
           cells: [
             {
               blocks: [paragraph([run("Cell", { sizePt: 10 })])],
-              background: { r: 1, g: 0, b: 0 },
+              background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
             },
           ],
         },

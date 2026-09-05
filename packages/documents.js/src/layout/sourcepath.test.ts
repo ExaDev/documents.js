@@ -251,7 +251,12 @@ describe("sourcePath propagation: docx flow (engine.ts)", () => {
       rows: [
         {
           heightPt: 20,
-          cells: [{ blocks: [], background: { r: 1, g: 0, b: 0 } }],
+          cells: [
+            {
+              blocks: [],
+              background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+            },
+          ],
         },
       ],
     };
@@ -338,7 +343,12 @@ describe("sourcePath propagation: pptx direct placement (slides.ts)", () => {
       rows: [
         {
           heightPt: 20,
-          cells: [{ blocks: [], background: { r: 0, g: 1, b: 0 } }],
+          cells: [
+            {
+              blocks: [],
+              background: { kind: "solid", color: { r: 0, g: 1, b: 0 } },
+            },
+          ],
         },
       ],
     };
