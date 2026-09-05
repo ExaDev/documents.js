@@ -184,11 +184,8 @@ function dptLineWidthFor(widthPt: number, brcType: number): number {
       : MIN_DPT_LINE_WIDTH;
   const eighths = Math.round((widthPt / multiplier) * EIGHTHS_PER_POINT);
   if (eighths < minEighths || eighths > MAX_DPT_LINE_WIDTH) {
-    // Math.round's own tie-breaking means the smallest widthPt this check actually lets through for a double border is half an eighth below MIN_DPT_LINE_WIDTH_DOUBLE's own value, before tripling -- 0.1875pt, not the 0.375pt that MIN_DPT_LINE_WIDTH_DOUBLE / EIGHTHS_PER_POINT * multiplier states, which is what a stored dptLineWidth of exactly 1 converts back to on read rather than the boundary this check itself enforces on the way in. Scoped to double alone: the general (non-double) branch keeps MIN_DPT_LINE_WIDTH's own directly-converted figure, since this fix is for the double-border-width regression, not a rebasing of every border style's own message.
-    const minPt =
-      brcType === BRC_TYPE_DOUBLE
-        ? ((minEighths - 0.5) * multiplier) / EIGHTHS_PER_POINT
-        : minEighths / EIGHTHS_PER_POINT;
+    // Math.round's own tie-breaking means the smallest widthPt this check actually lets through is half an eighth below minEighths's own point value, not minEighths / EIGHTHS_PER_POINT * multiplier -- that naive figure is what a stored dptLineWidth of exactly minEighths converts back to on read, not the boundary this check itself enforces on the way in. Evaluating both branches gives the same number, 0.1875pt -- (2 - 0.5) / 8 for a single-line border, (1 - 0.5) * 3 / 8 for a double one -- a coincidence of the two constants' own values rather than a designed equivalence, but it means dptLineWidthFor's write floor is 0.1875pt across every brcType it handles.
+    const minPt = ((minEighths - 0.5) * multiplier) / EIGHTHS_PER_POINT;
     const maxPt = (MAX_DPT_LINE_WIDTH / EIGHTHS_PER_POINT) * multiplier;
     throw new DocFormatError(
       `a table cell border is ${widthPt}pt, outside the ${minPt}..${maxPt}pt range [MS-DOC]'s own single-byte dptLineWidth can state in 1/8-point increments${brcType === BRC_TYPE_DOUBLE ? " of one line's own width, a double border's field being one third of its total rendered width" : ""}`,
