@@ -88,6 +88,7 @@ export const ComputeFormulaOutputSchema = z.object({
     z.object({
       index: z.number(),
       sourcePath: z.string().optional(),
+      locate: z.string(),
       latex: z.string().optional(),
       outcome: FormulaOutcomeSchema,
     }),
@@ -100,7 +101,7 @@ export function registerComputeFormulaTools(server: McpServer): void {
     {
       title: "Compute document formulas",
       description:
-        "Reads every formula a document embeds (docx/odt/markdown/rtf paragraphs, pptx/odp slide shapes, odg drawing pages, table cells, a spreadsheet's own cell-anchored formula objects, and a standalone .odf formula document) and evaluates each through document-compute.js's units-typed evaluate() -- an agent's way to check whether a document's stated arithmetic actually checks out. A formula referencing a symbol (e.g. F = m * a) needs that symbol's value supplied via bindings, keyed by the document's own symbol-table id (see the document's symbolTable.symbols[].id, or a returned formula's own latex to identify which symbol is which); a formula with no free symbols (units and numeric literals only) evaluates with no bindings at all. Each formula reports its own outcome independently -- 'evaluated' with the result, 'no-content' when the formula was never lowered to a computable MathExpression (the common case for a spreadsheet's own embedded formula object, or any format other than markdown, none of which yet stores the semantic layer on disk), or 'error' naming which document-compute.js error it hit (e.g. UnboundSymbolError) -- so one formula needing more bindings never blocks the others.",
+        "Reads every formula a document embeds (docx/odt/markdown/rtf paragraphs, pptx/odp slide shapes, odg drawing pages, table cells, a spreadsheet's own cell-anchored formula objects, and a standalone .odf formula document) and evaluates each through document-compute.js's units-typed evaluate() -- an agent's way to check whether a document's stated arithmetic actually checks out. A formula referencing a symbol (e.g. F = m * a) needs that symbol's value supplied via bindings, keyed by the document's own symbol-table id (see the document's symbolTable.symbols[].id, or a returned formula's own latex to identify which symbol is which); a formula with no free symbols (units and numeric literals only) evaluates with no bindings at all. Each formula reports its own outcome independently -- 'evaluated' with the result, 'no-content' when the formula was never lowered to a computable MathExpression (the common case for a spreadsheet's own embedded formula object, or any format other than markdown, none of which yet stores the semantic layer on disk), or 'error' naming which document-compute.js error it hit (e.g. UnboundSymbolError) -- so one formula needing more bindings never blocks the others. Each entry's own `locate` field is the reliable way to tell two formulas in the same document apart -- a structural path guaranteed unique per formula -- unlike `sourcePath`, which several formats leave undefined or stamp with the identical constant across sibling formulas (markdown's own display-math lowering among them).",
       inputSchema: z.object({
         source: DocumentInputSchema.describe(
           "The document to read formulas from.",
@@ -124,6 +125,7 @@ export function registerComputeFormulaTools(server: McpServer): void {
         const formulas = entries.map((entry, index) => ({
           index,
           sourcePath: entry.sourcePath,
+          locate: entry.locate,
           latex: entry.formula.presentation?.latex,
           outcome: evaluateFormula(
             entry.formula,

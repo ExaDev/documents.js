@@ -116,6 +116,45 @@ describe("compute_formula", () => {
     );
   });
 
+  // ExaDev/documents.js#928 round-5 review: lowerMarkdownMath (documents.js's src/markdown/math.ts) stamps the identical constant sourcePath "markdown:math-block" on every display formula it lowers -- markdown is also the only format whose formulas ever reach an "evaluated" outcome, so a two-equation markdown document is the tool's own primary real-world use case, not an edge case. A caller distinguishing formulas by sourcePath alone cannot tell these two apart; locate must differ.
+  it("distinguishes two formulas in one markdown document by locate, even though both share the identical sourcePath markdown stamps on every display formula", async () => {
+    const result = await pair.client.callTool({
+      name: "compute_formula",
+      arguments: {
+        source: {
+          bytesBase64: markdownBytes(
+            `${mathBlock("2 + 3")}\n\n${mathBlock("10 - 4")}`,
+          ),
+          format: "markdown",
+        },
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    const output = structuredContentOf(result);
+    expect(output.formulaCount).toBe(2);
+    const [first, second] = output.formulas;
+    if (first === undefined || second === undefined) {
+      throw new Error("expected two formula entries");
+    }
+    // The actual collision this test guards against: both entries share the one constant sourcePath lowerMarkdownMath stamps on every markdown display formula.
+    expect(first.sourcePath).toBe("markdown:math-block");
+    expect(second.sourcePath).toBe("markdown:math-block");
+    expect(first.sourcePath).toBe(second.sourcePath);
+    // locate is the reliable per-formula identifier -- distinct here, not merely by array index.
+    expect(typeof first.locate).toBe("string");
+    expect(typeof second.locate).toBe("string");
+    expect(first.locate).not.toBe(second.locate);
+    expect(first.outcome).toEqual({
+      status: "evaluated",
+      result: { kind: "quantity", magnitude: 5, dimension: {} },
+    });
+    expect(second.outcome).toEqual({
+      status: "evaluated",
+      result: { kind: "quantity", magnitude: 6, dimension: {} },
+    });
+  });
+
   it("evaluates a formula referencing symbols once their values are supplied via bindings", async () => {
     const result = await pair.client.callTool({
       name: "compute_formula",
