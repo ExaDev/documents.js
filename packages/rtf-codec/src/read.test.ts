@@ -521,7 +521,7 @@ describe("embedded objects", () => {
     expect(object?.document).toEqual(embedded);
   });
 
-  it("discards \\result's own fallback content rather than folding it into the surrounding paragraph", () => {
+  it("discards \\result's own fallback content when \\objdata already decoded, rather than folding it into the surrounding paragraph", () => {
     const paragraphs = paragraphsOf(
       `${HEADER}\\pard before {\\object\\objemb{\\*\\objdata ${OBJDATA_HEX}}{\\result{\\pard\\plain fallback text\\par}}} after\\par}`,
     );
@@ -548,6 +548,84 @@ describe("embedded objects", () => {
           diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
       ),
     ).toBe(true);
+  });
+
+  // A real Word-authored \object's OLESaveToStream data (a genuine embedded .xls range, an Equation Editor formula, ...) has no JSON envelope inside its NativeData and so never decodes here -- "hello" stands in for that: real bytes, wrong shape. This is exactly the case RTF 1.9.1's own advice for \result exists for -- "This allows RTF readers that do not understand objects ... to use the current result, in place of the object, to maintain appearance" -- so the fallback preview paragraph is what a real Word-shaped, undecodable \object should recover as, in the object's own place in the surrounding paragraph flow.
+  it("recovers \\result's own fallback paragraphs when \\objdata cannot be decoded", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard before {\\object\\objemb\\objw2000\\objh1000{\\*\\objclass Excel.Sheet.8}{\\*\\objdata 68656c6c6f}{\\result{\\pard\\plain [Embedded worksheet]\\par}}} after\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    // No embeddedObject block -- the real object never decoded -- but its \result content lands as an ordinary paragraph in its place, and the surrounding text ("before "/" after") survives untouched around it: recovering the fallback must not corrupt the paragraph flow the \object sat inside.
+    expect(blocks.some((block) => block.kind === "embeddedObject")).toBe(false);
+    const text = blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .map((paragraph) => paragraph.runs.map((run) => run.text).join(""))
+      .join("|");
+    expect(text).toContain("before");
+    expect(text).toContain("[Embedded worksheet]");
+    expect(text).toContain("after");
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+      ),
+    ).toBe(true);
+    // The recovery must not leave the group stack unbalanced -- reading \result as body content mid-object is a change to how deeply nested groups are interpreted, not to brace matching itself, so the reader must never report a brace fault for input that has none.
+    expect(
+      diagnostics.some(
+        (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+      ),
+    ).toBe(false);
+  });
+
+  it("folds the object's own \\objw/\\objh size hint into the degrade diagnostic instead of discarding it", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb\\objw2000\\objh1000{\\*\\objdata 68656c6c6f}{\\result}}\\par}`,
+      ),
+    );
+    const message = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    )?.message;
+    // 2000/1000 twips is 100pt x 50pt (20 twips per point).
+    expect(message).toContain("100.00pt");
+    expect(message).toContain("50.00pt");
+  });
+
+  it("still prefers the real decoded object over \\result when both are present, leaving no group unbalanced", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${OBJDATA_HEX}}{\\result{\\pard\\plain should not appear\\par}}}\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(
+      blocks.filter((block) => block.kind === "embeddedObject"),
+    ).toHaveLength(1);
+    const text = blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("");
+    expect(text).not.toContain("should not appear");
+    expect(
+      diagnostics.some(
+        (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+      ),
+    ).toBe(false);
   });
 });
 
