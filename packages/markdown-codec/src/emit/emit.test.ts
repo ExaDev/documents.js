@@ -1017,6 +1017,46 @@ describe("lists", () => {
     expect(headingBlock.runs.map((run) => run.text).join("")).toBe("h");
   });
 
+  it("inserts a blank line between a paragraph and a following heading that is forced to setext by its OWN embedded line break, even with the default ATX headingStyle -- the interrupt guard must key off what the heading will actually render as, not the configured style, or the preceding paragraph is silently absorbed into it on reparse (ExaDev/documents.js#940)", () => {
+    const softBreakRuns = [
+      { text: "h1" },
+      { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+      { text: "h2" },
+    ];
+    const source = doc([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "Heading1",
+        runs: softBreakRuns,
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- a\n\n  h1\n  h2\n  ==");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [paragraphBlock, headingBlock] = blocks;
+    if (
+      paragraphBlock?.kind !== "paragraph" ||
+      headingBlock?.kind !== "paragraph"
+    ) {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(paragraphBlock.styleId).toBeUndefined();
+    expect(paragraphBlock.runs.map((run) => run.text).join("")).toBe("a");
+    expect(headingBlock.styleId).toBe("Heading1");
+  });
+
   it("inserts a blank line before a plain block following an HTMLPreformatted block, since a raw HTML block only ends at a blank line and would otherwise swallow the next block as more of its own literal content", () => {
     const source = doc([
       {
