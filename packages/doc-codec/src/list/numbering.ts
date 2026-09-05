@@ -87,8 +87,8 @@ export const NUMBER_FORMAT_BY_NFC: Readonly<Record<number, string>> = {
   0x3a: "russianLower",
   0x3b: "russianUpper",
 };
-/** MSONFC's own "Specifies that the sequence will not display any numbering" sentinel -- not itself an ST_NumberFormat value, so this reader's own spelling for it ("none") is a deliberate literal rather than a value MSONFC's table states. */
-const NFC_NONE = 0xff;
+/** MSONFC's own "Specifies that the sequence will not display any numbering" sentinel -- not itself an ST_NumberFormat value, so this reader's own spelling for it ("none") is a deliberate literal rather than a value MSONFC's table states. Exported so numbering-write.ts can state the identical sentinel by hand for a "none"-format level, since it falls outside NUMBER_FORMAT_BY_NFC's own invertible table (see that module's own NFC_BY_FORMAT). */
+export const NFC_NONE = 0xff;
 
 /** LVLF's own info byte ([MS-DOC] 2.9.148), bit 3: fNoRestart -- "Specifies whether this level does not restart its numbering sequence when a level with a lower ilvl is encountered", the identical "restarts when a more significant level is encountered" default NumberingLevel.restart's own field comment already describes. The low two bits (0x01/0x02) are jc's own 2-bit justification field, not flag bits at all -- neither this reader nor NumberingLevel decodes jc, so only this one bit of the whole info byte is ever consulted. Exported so numbering-write.ts can state the identical bit rather than hand-maintaining a second, independently-drifting copy (this module's own top comment: the writer already does this for NUMBER_FORMAT_BY_NFC). */
 export const LVLF_FLAG_NO_RESTART = 0x08;

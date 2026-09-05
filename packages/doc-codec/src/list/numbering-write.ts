@@ -2,6 +2,7 @@ import type { ContentListMembership } from "document-schema.js";
 import { DocFormatError } from "../errors";
 import {
   LVLF_FLAG_NO_RESTART,
+  NFC_NONE,
   NUMBER_FORMAT_BY_NFC,
   type NumberingDefinition,
   type NumberingDefinitions,
@@ -10,7 +11,7 @@ import {
 
 // The inverse of numbering.ts: PlfLst/PlfLfo did not exist for writeDocContent to emit at all until this module, because ContentListMembership -- unlike NumberingDefinitions -- carries no full level table of its own, only one paragraph's own numId/level/format. gatherListUsage reconstructs a genuine NumberingDefinitions (numbering.ts's own reader-side type, reused rather than reinvented, matching the issue's own framing: encode from "whatever in-memory numbering representation the reader already produces") by walking every paragraph's own list membership in document order and minting a fresh one-based ilfo per distinct numId, in first-occurrence order -- exactly the value numbering.ts's own readNumberingDefinitions would assign it back on a re-read (that function's own numId IS the ilfo, stringified: see its own top comment), which is what makes a round trip through this package alone stable. A numId string minted by a DIFFERENT producer or codec (an arbitrary string, not already a small positive integer matching its own ilfo) is NOT preserved verbatim -- it is renumbered to whichever ilfo this document happens to mint it, since [MS-DOC] has no field to carry an opaque identifier through unchanged.
 //
-// buildNumberingTables then encodes a NumberingDefinitions into real bytes, independently of how gatherListUsage produced it -- a hand-built NumberingDefinitions with its own startAt/restart values round-trips those too, since the LVLF fields they occupy are written from the definition's own fields rather than hardcoded. What it can never write is a level's own grpprlPapx/grpprlChpx (a level's direct paragraph/character formatting) -- NumberingLevel has no field for either, since numbering.ts's own reader never decodes them (see that module's top comment), so every LVL this writer emits states cbGrpprlChpx/cbGrpprlPapx as 0: a real, valid, minimal LVL, just one carrying no per-level direct formatting a real Word list might otherwise have.
+// buildNumberingTables then encodes a NumberingDefinitions into real bytes, independently of how gatherListUsage produced it -- a hand-built NumberingDefinitions round-trips its own startAt/restart/format/text values too, since every one of those LVLF-and-Xst fields is written from the definition's own NumberingLevel rather than a synthesized default (buildLevelXst below inverts numbering.ts's own readLevelText rather than fabricating placeholder text from the level's index, and NFC_BY_FORMAT states "none" by hand alongside every MSONFC value the reader itself decodes). What it can never write is a level's own grpprlPapx/grpprlChpx (a level's direct paragraph/character formatting) -- NumberingLevel has no field for either, since numbering.ts's own reader never decodes them (see that module's top comment), so every LVL this writer emits states cbGrpprlChpx/cbGrpprlPapx as 0: a real, valid, minimal LVL, just one carrying no per-level direct formatting a real Word list might otherwise have.
 
 const LSTF_SIZE = 28;
 const LVLF_SIZE = 28;
@@ -22,12 +23,14 @@ const LSTF_RGISTD_PARA_COUNT = 9;
 /** A non-simple LSTF always carries exactly nine LVLs ([MS-DOC] 2.9.191); sprmPIlvl's own operand range this writer's caller (pap-write.ts) validates against is the same fact restated at the paragraph-property layer. */
 const MAX_LIST_LEVEL = 8;
 const LEVELS_PER_MULTI_LEVEL_LIST = 9;
+/** rgbxchNums ([MS-DOC] 2.9.148): a fixed nine-entry array, zero-terminated -- the same bound numbering.ts's own readRgbxchNums reads against, restated here for buildLevelXst's own placeholder count. */
+const MAX_PLACEHOLDERS_PER_LEVEL = 9;
 /** The format every level this writer invents for a paragraph that leaves ContentListMembership.format unstated, and every level a multi-level list's own dense 0..8 run needs filling but no paragraph ever actually used -- an arbitrary but harmless choice, since an unused level's own appearance is never read back into a context that renders it. */
 const DEFAULT_FORMAT = "decimal";
 /** The glyph this writer states for format 'bullet'. A real Word-format producer typically uses a Private Use Area code point from a symbol font (the README's own "Numbering definitions" section records LibreOffice writing U+F0B7) -- this writer uses the plain, portable Unicode bullet instead, since this is a synthesised definition rather than a captured one, and it round-trips exactly through this package's own reader either way. */
 const BULLET_GLYPH = "•";
 
-/** The inverse of numbering.ts's own NUMBER_FORMAT_BY_NFC, restricted to whichever of its entries a format string can actually reach -- built once by inverting the single source of truth rather than hand-maintaining a second table that could silently drift from it. Where two nfc values map to the same format string (0x00 and 0x28 both mean "decimal"), the lower one wins, because Object.entries on an object whose own keys are non-negative integer strings iterates in ascending numeric order regardless of insertion order (the one case JavaScript's own key-ordering rules give a numeric guarantee), so the first entry visited for "decimal" is 0x00. */
+/** The inverse of numbering.ts's own NUMBER_FORMAT_BY_NFC, restricted to whichever of its entries a format string can actually reach -- built once by inverting the single source of truth rather than hand-maintaining a second table that could silently drift from it. Where two nfc values map to the same format string (0x00 and 0x28 both mean "decimal"), the lower one wins, because Object.entries on an object whose own keys are non-negative integer strings iterates in ascending numeric order regardless of insertion order (the one case JavaScript's own key-ordering rules give a numeric guarantee), so the first entry visited for "decimal" is 0x00. "none" is added by hand afterward: NUMBER_FORMAT_BY_NFC's own inversion never reaches it, since numbering.ts's own numberFormatFor special-cases nfc 0xFF as "none" before ever consulting that table. */
 const NFC_BY_FORMAT: ReadonlyMap<string, number> = (() => {
   const byFormat = new Map<string, number>();
   for (const [nfcKey, format] of Object.entries(NUMBER_FORMAT_BY_NFC)) {
@@ -35,6 +38,7 @@ const NFC_BY_FORMAT: ReadonlyMap<string, number> = (() => {
       byFormat.set(format, Number(nfcKey));
     }
   }
+  byFormat.set("none", NFC_NONE);
   return byFormat;
 })();
 
@@ -70,15 +74,36 @@ function encodeXst(text: string): number[] {
   return bytes;
 }
 
-/** The exact inverse of numbering.ts's own readLevelText: for a numbered format, a single placeholder for the level's own zero-based index (encoded as a raw code unit, per Xst's own placeholder convention) followed by a literal '.', reproducing readLevelText's '%1.'-style output ('%N' where N = level+1) on a subsequent read; for 'bullet', the literal glyph with no placeholder at all. */
-function buildLevelXst(
-  level: number,
-  format: string,
-): { readonly xstText: string; readonly positions: readonly number[] } {
-  if (format === "bullet") {
-    return { xstText: BULLET_GLYPH, positions: [] };
+const PLACEHOLDER_PATTERN = /%(\d+)/g;
+
+/** The exact inverse of numbering.ts's own readLevelText: turns a level's own '%1.'-style text (or a literal glyph string, for a format with no placeholder at all) into an Xst plus the rgbxchNums positions its placeholders occupy. A '%N' match's own N (one-based, naming the zero-based level N-1) becomes a single raw code unit at that position -- exactly what [MS-DOC]'s own Xst field text describes ("Each placeholder is an unsigned 2-byte integer that specifies the zero-based level") -- and every other character passes through literally. Driven entirely by the level's own `text` field rather than by its format: a 'bullet' or 'none' level's text ordinarily carries no '%N' pattern at all, so it round-trips unchanged with no special case needed, exactly the way readLevelText itself never branches on format either. */
+function buildLevelXst(text: string): {
+  readonly xstText: string;
+  readonly positions: readonly number[];
+} {
+  let xstText = "";
+  const positions: number[] = [];
+  let lastIndex = 0;
+  for (const match of text.matchAll(PLACEHOLDER_PATTERN)) {
+    const levelDigits = match[1];
+    if (levelDigits === undefined) {
+      throw new DocFormatError(
+        "internal defect: a global regex match from text.matchAll had no capture group",
+      );
+    }
+    xstText += text.slice(lastIndex, match.index);
+    const levelIndex = Number(levelDigits) - 1;
+    positions.push(xstText.length + 1);
+    xstText += String.fromCharCode(levelIndex);
+    lastIndex = match.index + match[0].length;
   }
-  return { xstText: `${String.fromCharCode(level)}.`, positions: [1] };
+  xstText += text.slice(lastIndex);
+  if (positions.length > MAX_PLACEHOLDERS_PER_LEVEL) {
+    throw new DocFormatError(
+      `numbering level text ${JSON.stringify(text)} names ${positions.length} placeholders, more than rgbxchNums' own fixed ${MAX_PLACEHOLDERS_PER_LEVEL}-entry array ([MS-DOC] 2.9.148) can hold`,
+    );
+  }
+  return { xstText, positions };
 }
 
 function levelText(level: number, format: string): string {
@@ -159,17 +184,14 @@ function buildLstfBytes(lsid: number, fSimpleList: boolean): number[] {
   return lstf;
 }
 
-function buildLvlBytes(
-  level: number,
-  numberingLevel: NumberingLevel,
-): number[] {
+function buildLvlBytes(numberingLevel: NumberingLevel): number[] {
   const nfc = NFC_BY_FORMAT.get(numberingLevel.format);
   if (nfc === undefined) {
     throw new DocFormatError(
       `numbering level format ${JSON.stringify(numberingLevel.format)} has no [MS-OSHARED] 2.2.1.3 MSONFC mapping this writer can state -- only ${JSON.stringify([...NFC_BY_FORMAT.keys()])} round-trip through ContentListMembership.format`,
     );
   }
-  const { xstText, positions } = buildLevelXst(level, numberingLevel.format);
+  const { xstText, positions } = buildLevelXst(numberingLevel.text);
   const lvlf = new Array<number>(LVLF_SIZE).fill(0);
   writeUint32LE(lvlf, 0, numberingLevel.startAt); // iStartAt.
   lvlf[4] = nfc;
@@ -230,7 +252,7 @@ export function buildNumberingTables(
           "internal defect: buildNumberingTables lost a level its own key list just named",
         );
       }
-      lvlBytes.push(...buildLvlBytes(level, numberingLevel));
+      lvlBytes.push(...buildLvlBytes(numberingLevel));
     }
     const lfo = new Array<number>(LFO_SIZE).fill(0);
     writeUint32LE(lfo, 0, ilfo); // lsid -- the same value as this list's own ilfo, which is all buildLstfBytes above needs it to link back to (numbering.ts's own readNumberingDefinitions resolves an LFO to its LSTF purely by matching lsid).
