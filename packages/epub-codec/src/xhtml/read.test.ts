@@ -957,6 +957,109 @@ describe("tables", () => {
     ]);
   });
 
+  it("recovers stray text sitting directly inside a <tbody> outside any <tr>, with a diagnostic, positioned immediately before the table", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><tbody>stray<tr><td>x</td></tr></tbody></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("recovers a stray <p> sitting directly inside a <thead> outside any <tr>, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><thead><p>stray</p><tr><th>H</th></tr></thead></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  { kind: "paragraph", runs: [{ text: "H", bold: true }] },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("recovers a stray, resolved <img> sitting directly inside a <tfoot> outside any <tr>, as a real image block, with a diagnostic", () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body(
+        '<table><tfoot><img src="a.png" alt="pic"/><tr><td>x</td></tr></tfoot></table>',
+      ),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toMatchObject({ kind: "image" });
+    expect(blocks[1]).toMatchObject({ kind: "table" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("recovers a nested <ul> sitting directly inside a <tbody> outside any <tr>, as a properly nested list, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<table><tbody><ul><li>item</li></ul><tr><td>x</td></tr></tbody></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "item" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
   it("degrades a table cell's own direct-child <img> to alt text with a diagnostic, rather than treating it as a schema limitation", () => {
     const sink = vi.fn();
     const blocks = read(
