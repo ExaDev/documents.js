@@ -310,6 +310,9 @@ export type {
   EmbeddedPresentationSerialiser,
 } from "./typed/docx/write";
 
+// One <w:shd> element -> a ContentCellFill, the resolution readDocxContent applies to every table cell's own background -- exported on its own so a consumer editing raw docx XML directly (documents.js's live table-cell editor, rather than the full ContentDocument pipeline above) can read a cell's real w:val-based shading (w:val="clear" from w:fill, w:val="solid" from w:color instead, every other named pattern token from whichever of w:color/w:fill states a concrete colour) instead of re-deriving a narrower, easily-diverging approximation of the same logic.
+export { readCellShading } from "./typed/docx/shading";
+
 // word/numbering.xml's own abstractNum/num level definitions (glyph format, start-at value, restart rule) -- a companion to, not a replacement for, ContentListMembership's existing per-paragraph numId/level tracking. See numbering.ts's own doc comment for why this is a separate keyed structure rather than a ContentListMembership field.
 export {
   NumberingDefinitionSchema,
