@@ -1,6 +1,7 @@
 import type {
   Color,
   ContentBlock,
+  ContentBorder,
   ContentCellBorders,
   ContentParagraph,
   ContentTable,
@@ -15,11 +16,18 @@ import {
   applyTableSprms,
   type TableRowDefinition,
 } from "./tap";
+import {
+  cellBordersFrom,
+  type CellBorderSide,
+  type TableBordersSet,
+} from "./decoration";
 import { CELL_MARK } from "../text/special";
 
 // Groups the flat paragraph-entry sequence read.ts produces into the final ContentBlock list, folding every contiguous run of table-depth-1 paragraphs into a real ContentTable with row/cell/merge structure -- [MS-DOC] 2.4.3's own Overview of Tables model: a table is a run of paragraphs each marked sprmPFInTable, cells delimited by cell-mark (0x07) characters (a cell holding more than one paragraph ends every paragraph but its last with an ordinary 0x0D mark), and each row closed by a row-ending mark of its own (sprmPFTtp, itself a 0x07 mark) that carries the row's TAP -- its column layout and every physical cell's own horizontal/vertical merge state, resolved by tap.ts. A non-table entry passes through untouched. A run whose TAP this reader cannot resolve degrades to its own paragraphs rather than failing the whole document -- see tryAssembleTable's own note.
 //
 // Column layout is derived per row, never assumed shared: [MS-DOC] 2.6.3 permits each row of a table to declare its own independent rgdxaCenter, and a real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed to rely on exactly this for a horizontal merge -- a merged row's own TDefTableOperand simply has fewer, wider physical cells, with no TCGRF.horzMerge or sprmTMerge signal at all (ExaDev/documents.js#895; see table/write.ts's own top-of-file note for the full ground-truth finding). buildRows below reconstructs the table's shared grid as the union of every row's own column boundaries -- taken within one point rather than by exact integer equality, since rows stating the identical grid independently may legally disagree by a twip or two (see isSameColumnBoundary's own note) -- then expresses each physical cell's own colSpan as however many of that shared grid's segments its own boundaries cover -- folding in this writer's own legacy TCGRF.horzMerge-flagged continuation cells (a spec-conformant encoding this reader still honours, in case a genuine third-party producer uses it) exactly as before. A column boundary that no row in the table ever states on its own -- every row happens to merge across it identically -- cannot be recovered from the physical bytes at all; this is a real limitation of [MS-DOC]'s own physical model, not an approximation this reader is choosing to make. table/write.ts's own writer no longer produces this gap for an ordinary merge (ExaDev/documents.js#992: it falls back to a horizontal-merge continuation cell precisely when every row would otherwise merge across a boundary identically) -- but its own lost-boundary fallback now genuinely reopens it: when a row's assigned split would overflow either the row-ending mark's own byte budget or the format's 63-cell ceiling, flattenTable (table/write.ts) trims the excess boundaries rather than throwing (ExaDev/documents.js#1013), and a boundary it trims away is exactly as unrecoverable on the next read as one no row ever stated at all. That trim is now the most likely source of this shape; a table hand-built for a test, or produced by a genuine third-party [MS-DOC] implementation that happens to encode a merge the identical way on every row, are the two remaining, rarer sources (see the README's own note on this).
+//
+// Before any of that, tryAssembleTable runs applyRowLevelBorderCascade over the whole set of rows it has just collected: a table decorated purely through sprmTTableBorders/sprmTTableBorders80 (a row/table-wide border set, [MS-DOC] 2.6.3) rather than per-cell TC80/sprmTSetBrc would otherwise read with no cell borders at all, since tap.ts deliberately only captures that cascade unresolved (see its own top-of-file note on why) -- this is the only place in the pipeline that knows a cell's position in the WHOLE table, which first/last row and first/last physical cell for that cascade's own six fields all depend on. See applyRowLevelBorderCascade's own note for the precedence rule and the one genuine ambiguity it cannot resolve.
 
 const TWIPS_PER_POINT = 20;
 
@@ -173,6 +181,8 @@ function tryAssembleTable(
     );
   }
 
+  const cascadedRows = applyRowLevelBorderCascade(rawRows, rowDefinitions);
+
   const toleranceTwips = effectiveColumnBoundaryTolerance(rowDefinitions);
   const columnBoundariesTwips = canonicalColumnBoundariesTwips(
     rowDefinitions,
@@ -181,7 +191,7 @@ function tryAssembleTable(
   return {
     kind: "table",
     rows: buildRows(
-      rawRows,
+      cascadedRows,
       rowDefinitions,
       columnBoundariesTwips,
       rowHeights,
@@ -189,6 +199,64 @@ function tryAssembleTable(
     ),
     columnWidthsPt: columnWidthsFromBoundaries(columnBoundariesTwips),
   };
+}
+
+// [MS-DOC] 2.6.3's own sprmTTableBorders/sprmTTableBorders80: "specifies the borders for this row unless modified by other Sprms applied to the cells" -- an explicit, order-independent fallback beneath TC80's own per-cell Brc80 (sprmTDefTable) and sprmTSetBrc's exact-colour override, both already folded into each RawCell's own borders by tap.ts's ordinary last-Prl-wins pass by the time this runs (see tap.ts's own top-of-file note on why the cascade itself is captured, unresolved, there rather than applied there). Applied here, once every row of the table is known, because which of a row's own six TableBordersOperand fields reaches a given cell depends on the cell's position in the WHOLE table: brcTop only for the table's own first row, brcBottom only for its last, brcLeft/brcRight only for a row's own first/last physical cell, and brcHorizontalInside/brcVerticalInside for every interior edge -- exactly the ECMA-376 tblBorders/tcBorders precedence [MS-DOC]'s own Overview of Tables (2.4.3) defers to ("To determine which borders are displayed, see... [ECMA-376] Part 1, Section 17.4.66... Section 17.4.38").
+//
+// A genuine format-level ambiguity is left unresolved rather than guessed at: TC80's own Brc80 fields are mandatory for every physical cell, so a cell whose own TC80/sprmTSetBrc states "no border" on a side is byte-for-byte indistinguishable from a cell that never had that side's border stated at all -- there is no way to tell "this cell explicitly punches a hole in the row's cascade" from "this cell defers to it". This cascade therefore fills in every side a cell's own resolved borders (RawCell.borders) leave undefined, which is the correct, common-case behaviour this issue exists to fix (a table decorated purely through the row-level cascade now reads with the borders it actually shows) and the only side of that ambiguity a real byte stream can express one way or the other -- the same kind of narrow, inherent physical-model limit the README's own Tables section already documents for a table-wide merge or a shared leading indent.
+function applyRowLevelBorderCascade(
+  rows: readonly (readonly RawCell[])[],
+  definitions: readonly TableRowDefinition[],
+): RawCell[][] {
+  const lastRowIndex = rows.length - 1;
+  return rows.map((cells, rowIndex) => {
+    const rowBorders = definitions[rowIndex]?.rowBorders;
+    if (rowBorders === undefined) return [...cells];
+    return cascadeRowBorders(
+      cells,
+      rowBorders,
+      rowIndex === 0,
+      rowIndex === lastRowIndex,
+    );
+  });
+}
+
+// One row's own physical cells against its own rowBorders: brcLeft/brcRight land on the row's own first/last physical cell (which, since a physical cell's own boundaries always span from the table's left edge to its right edge regardless of any merge within the row, always IS the row's own outer edge), brcTop/brcBottom on every cell when this is the table's first/last row, and brcHorizontalInside/brcVerticalInside everywhere else. "Last physical cell" is resolved through any trailing sprmTMerge/TCGRF.horzMerge continuation cells (isRightmostPhysicalCell) so a legacy-encoded horizontal merge's own anchor still reaches the row's real right edge; this package's own writer states a horizontal merge as a genuinely narrower, wider physical cell instead, for which physicalIndex === cells.length - 1 already holds directly.
+function cascadeRowBorders(
+  cells: readonly RawCell[],
+  rowBorders: TableBordersSet,
+  isFirstRow: boolean,
+  isLastRow: boolean,
+): RawCell[] {
+  return cells.map((cell, cellIndex): RawCell => {
+    const isFirstCell = cellIndex === 0;
+    const isLastCell = isRightmostPhysicalCell(cells, cellIndex);
+    const sides: Record<CellBorderSide, ContentBorder | undefined> = {
+      top:
+        cell.borders?.top ??
+        (isFirstRow ? rowBorders.top : rowBorders.insideHorizontal),
+      left:
+        cell.borders?.left ??
+        (isFirstCell ? rowBorders.left : rowBorders.insideVertical),
+      bottom:
+        cell.borders?.bottom ??
+        (isLastRow ? rowBorders.bottom : rowBorders.insideHorizontal),
+      right:
+        cell.borders?.right ??
+        (isLastCell ? rowBorders.right : rowBorders.insideVertical),
+    };
+    return { ...cell, borders: cellBordersFrom(sides) };
+  });
+}
+
+function isRightmostPhysicalCell(
+  cells: readonly RawCell[],
+  index: number,
+): boolean {
+  for (let cursor = index + 1; cursor < cells.length; cursor += 1) {
+    if (cells[cursor]?.horzMerge !== HORZ_MERGE_CONTINUATION) return false;
+  }
+  return true;
 }
 
 // The table's own shared column grid, reconstructed as the union of every row's own rgdxaCenter boundary values rather than assumed from any single row -- see this module's own top-of-file note on why a merged row's own boundaries are a genuine subset of the table's full grid, not the whole thing. The union is taken within isSameColumnBoundary's own tolerance rather than by exact integer equality: [MS-DOC] states each row's boundaries independently, so two rows meaning the identical grid can differ by a twip or two without either being wrong, and an exact union would turn that drift into a phantom hairline column plus a spurious colSpan on every row (ExaDev/documents.js#898). Sorting before clustering makes the result depend only on the boundary values themselves, never on which row happened to be read first -- unlike LibreOffice's own insertion-ordered fuzzy set -- and taking each cluster's smallest member as its representative keeps the canonical array non-decreasing and anchored on the leftmost row's own left edge.
