@@ -3,6 +3,8 @@ import type {
   BorderWeight,
   Color,
   ContentBorder,
+  ContentCellFill,
+  ContentCellPatternType,
   ContentStrokeStyle,
 } from "document-schema.js";
 import {
@@ -22,8 +24,44 @@ import type { BlockCursor } from "./cursor";
 
 /** FLSNULL: no fill pattern -- the cell's fill colour fields carry no meaning. */
 export const FILL_PATTERN_NONE = 0x00;
-/** FLSSOLID: a solid fill, the only pattern this package maps onto ContentSheetCell.background -- "If this value is 1 ... then only icvFore is rendered" ([MS-XLS] CellXF). Every other pattern (50%/75%/25% gray, the stripe and crosshatch families, ...) is a real information-loss case this reader does not approximate: see resolveFillBackground below. */
+/** FLSSOLID: a solid fill -- "If this value is 1 ... then only icvFore is rendered" ([MS-XLS] CellXF). */
 export const FILL_PATTERN_SOLID = 0x01;
+
+/**
+ * Every other named FillPattern value ([MS-XLS]/[MS-XLSB] "FillPattern" enumeration, 0x02-0x12), mapped onto the ContentCellPatternType name document-schema.js's own ContentCellPatternTypeSchema gives that same ECMA-376 ST_PatternType token verbatim -- this is the identical vocabulary, values 0x02 (FLSMEDGRAY, "50% gray") through 0x12 (FLSGRAY0625, "6.25% gray") mapping onto ST_PatternType's mediumGray/darkGray/lightGray/darkHorizontal/darkVertical/darkDown/darkUp/darkGrid/darkTrellis/lightHorizontal/lightVertical/lightDown/lightUp/lightGrid/lightTrellis/gray125/gray0625 in that exact order (see ContentCellPatternTypeSchema's own top comment for the full citation). Unlike doc-codec's Ipat table, every value in this contiguous range names a real pattern -- there is no ipatNil/ipatPctNew*-style gap to skip.
+ */
+const FILL_PATTERN_TO_PATTERN_TYPE: Readonly<
+  Record<number, ContentCellPatternType>
+> = {
+  0x02: "mediumGray",
+  0x03: "darkGray",
+  0x04: "lightGray",
+  0x05: "darkHorizontal",
+  0x06: "darkVertical",
+  0x07: "darkDown",
+  0x08: "darkUp",
+  0x09: "darkGrid",
+  0x0a: "darkTrellis",
+  0x0b: "lightHorizontal",
+  0x0c: "lightVertical",
+  0x0d: "lightDown",
+  0x0e: "lightUp",
+  0x0f: "lightGrid",
+  0x10: "lightTrellis",
+  0x11: "gray125",
+  0x12: "gray0625",
+};
+
+/** The inverse of FILL_PATTERN_TO_PATTERN_TYPE, built from it rather than restated by hand so the two can never drift apart. Every ContentCellPatternType this package's own writer is ever asked to state has an entry, since the SpreadsheetML half of the shared vocabulary is exactly FILL_PATTERN_TO_PATTERN_TYPE's own value set -- the WordprocessingML-only members (the percentN family and the stripe/cross families ST_Shd names) are absent, FillPattern having no equivalent for them at all. */
+export const PATTERN_TYPE_TO_FILL_PATTERN: ReadonlyMap<
+  ContentCellPatternType,
+  number
+> = new Map(
+  Object.entries(FILL_PATTERN_TO_PATTERN_TYPE).map(([fls, patternType]) => [
+    patternType,
+    Number(fls),
+  ]),
+);
 
 // --- HorizAlign / VertAlign ([MS-XLS] "HorizAlign"/"VertAlign" enumerations), the CellXF/StyleXF payload's own leading alc/alcV fields ---
 
@@ -323,24 +361,45 @@ export function borderStyleTokenFor(border: ContentBorder): number {
   }
 }
 
-/** A solid fill's own foreground colour resolved to a real background, or undefined for every other FillPattern value -- FLSNULL (no fill at all) and every pattern beyond solid (50%/75%/25% gray, the stripe and crosshatch family) alike. A non-solid pattern is a real information-loss case rather than an oversight: ContentSheetCell.background models one flat colour, and approximating a striped or crosshatched fill as its foreground colour alone would misrepresent what the cell actually shows -- see xls-codec's README for this package's own stated judgment call. */
+/**
+ * Resolves a cell's own FillPattern/icvFore/icvBack triple to a real ContentCellFill (ExaDev/documents.js#951), or undefined for FLSNULL (no fill at all), for a reserved/unrecognised FillPattern value, or for FLSSOLID when its own icvFore does not resolve to a fixed RGB value (an "Automatic" or otherwise unmapped icv, which leaves nothing to state a solid fill's colour as).
+ *
+ * FLSSOLID resolves to a 'solid' fill of icvFore alone -- "If this value is 1 ... then only icvFore is rendered" ([MS-XLS] CellXF), so icvBack carries no meaning for it and is never consulted. Every other named FillPattern resolves to a real 'pattern' fill via FILL_PATTERN_TO_PATTERN_TYPE, carrying whichever of icvFore/icvBack resolves to a real colour (either may be an "Automatic" icv this package cannot express as a fixed RGB value, matching ContentCellFillSchema's own "a colour can defer instead of asserting" convention).
+ */
 export function resolveFillBackground(
   fillPattern: number,
   foregroundIcv: number,
+  backgroundIcv: number,
   palette: readonly Color[] | undefined,
-): Color | undefined {
-  if (fillPattern !== FILL_PATTERN_SOLID) {
+): ContentCellFill | undefined {
+  if (fillPattern === FILL_PATTERN_NONE) {
     return undefined;
   }
-  return resolveIcvColor(foregroundIcv, palette);
+  if (fillPattern === FILL_PATTERN_SOLID) {
+    const color = resolveIcvColor(foregroundIcv, palette);
+    return color === undefined ? undefined : { kind: "solid", color };
+  }
+  const patternType = FILL_PATTERN_TO_PATTERN_TYPE[fillPattern];
+  if (patternType === undefined) {
+    return undefined;
+  }
+  const foregroundColor = resolveIcvColor(foregroundIcv, palette);
+  const backgroundColor = resolveIcvColor(backgroundIcv, palette);
+  return {
+    kind: "pattern",
+    patternType,
+    ...(foregroundColor !== undefined ? { foregroundColor } : {}),
+    ...(backgroundColor !== undefined ? { backgroundColor } : {}),
+  };
 }
 
 // --- The CellXF/StyleXF trailing payload's border/fill words, packed and unpacked in one place ---
 
-/** Every decoration field the trailing payload's word2/word3/word4 carry ([MS-XLS] 2.4.353's own CellXF/StyleXF "Data" field), read or write side alike: which fill pattern (if any) and its foreground colour, and each of the four sides' own border style plus colour. Diagonal borders (dgDiag/grbitDiag/icvDiag) are out of this package's scope -- ContentCellBordersSchema has no diagonal member -- and are always read as absent / always written as none. */
+/** Every decoration field the trailing payload's word2/word3/word4 carry ([MS-XLS] 2.4.353's own CellXF/StyleXF "Data" field), read or write side alike: which fill pattern (if any) and its foreground/background colours, and each of the four sides' own border style plus colour. fillBackgroundIcv carries no meaning for a solid fill (icvFore alone is rendered) but is real for every other named pattern, where it is the colour the pattern's gaps show through. Diagonal borders (dgDiag/grbitDiag/icvDiag) are out of this package's scope -- ContentCellBordersSchema has no diagonal member -- and are always read as absent / always written as none. */
 export interface XfDecorationFields {
   readonly fillPattern: number;
   readonly fillForegroundIcv: number;
+  readonly fillBackgroundIcv: number;
   readonly left: XfBorderEdge;
   readonly right: XfBorderEdge;
   readonly top: XfBorderEdge;
@@ -353,6 +412,7 @@ const UNDECORATED_EDGE: XfBorderEdge = { style: BORDER_STYLE_NONE, icv: 0 };
 export const UNDECORATED_XF_FIELDS: XfDecorationFields = {
   fillPattern: FILL_PATTERN_NONE,
   fillForegroundIcv: ICV_AUTOMATIC_FOREGROUND,
+  fillBackgroundIcv: ICV_AUTOMATIC_BACKGROUND,
   left: UNDECORATED_EDGE,
   right: UNDECORATED_EDGE,
   top: UNDECORATED_EDGE,
@@ -385,9 +445,11 @@ export function unpackXfDecoration(
   const icvBottom = (word3 >>> 7) & 0x7f;
   const fls = (word3 >>> 26) & 0x3f;
   const icvFore = word4 & 0x7f;
+  const icvBack = (word4 >>> 7) & 0x7f;
   return {
     fillPattern: fls,
     fillForegroundIcv: icvFore,
+    fillBackgroundIcv: icvBack,
     left: { style: dgLeft, icv: icvLeft },
     right: { style: dgRight, icv: icvRight },
     top: { style: dgTop, icv: icvTop },
@@ -425,13 +487,18 @@ export function packXfDecorationWords(
     ((fHasXfExt & 0x1) << 25) |
     ((decoration.fillPattern & 0x3f) << 26);
 
-  // icvFore is meaningless for anything but a solid fill ("If this value is 1, then only icvFore is rendered") -- forcing it to the Automatic default whenever fillPattern isn't solid keeps a border-only decoration's fill word byte-identical to a genuinely undecorated one, matching what a real Excel-written cell with borders but no fill also carries.
+  // icvFore/icvBack are meaningless for FLSNULL (no fill at all) -- forcing both to their Automatic defaults there keeps a border-only decoration's fill word byte-identical to a genuinely undecorated one, matching what a real Excel-written cell with borders but no fill also carries. A solid fill states only icvFore ("If this value is 1, then only icvFore is rendered" -- [MS-XLS] CellXF), so icvBack stays Automatic for it too, exactly as this writer always emitted; every other named pattern states both, the colour its strokes are drawn in and the colour its gaps show through.
   const icvFore =
+    decoration.fillPattern === FILL_PATTERN_NONE
+      ? ICV_AUTOMATIC_FOREGROUND
+      : decoration.fillForegroundIcv;
+  const icvBack =
+    decoration.fillPattern === FILL_PATTERN_NONE ||
     decoration.fillPattern === FILL_PATTERN_SOLID
-      ? decoration.fillForegroundIcv
-      : ICV_AUTOMATIC_FOREGROUND;
+      ? ICV_AUTOMATIC_BACKGROUND
+      : decoration.fillBackgroundIcv;
 
-  const word4 = (icvFore & 0x7f) | ((ICV_AUTOMATIC_BACKGROUND & 0x7f) << 7);
+  const word4 = (icvFore & 0x7f) | ((icvBack & 0x7f) << 7);
 
   return { word2, word3, word4 };
 }

@@ -347,16 +347,20 @@ describe("writeXlsContent", () => {
     const blue = rgbHexToColor("0000ff");
     // Coral: genuinely absent from the fixed default table, so a workbook using it can only be written by minting a real Palette record. Checked against xf-colors.ts's own DEFAULT_PALETTE_TABLE rather than assumed -- teal (008080), the obvious candidate, is in fact one of that table's own entries, so a test built on it would have exercised the no-Palette fast path while claiming the opposite.
     const coral = rgbHexToColor("ff7f50");
+    const redFill = { kind: "solid" as const, color: red };
+    const coralFill = { kind: "solid" as const, color: coral };
 
     it("round-trips a solid background colour", () => {
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
-            cell(0, 0, { kind: "string", value: "x" }, { background: red }),
+            cell(0, 0, { kind: "string", value: "x" }, { background: redFill }),
           ]),
         ]),
       );
-      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(red);
+      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
+        redFill,
+      );
     });
 
     it("round-trips per-side borders, including a non-default style and colour", () => {
@@ -396,7 +400,7 @@ describe("writeXlsContent", () => {
               0,
               { kind: "number", value: 1 },
               {
-                background: red,
+                background: redFill,
                 borders: { bottom: { color: blue, widthPt: 1.5 } },
               },
             ),
@@ -404,34 +408,116 @@ describe("writeXlsContent", () => {
         ]),
       );
       const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
-      expect(readBack?.background).toEqual(red);
+      expect(readBack?.background).toEqual(redFill);
       expect(readBack?.borders).toEqual({
         bottom: { color: blue, widthPt: 1.5 },
       });
+    });
+
+    it("round-trips a genuine two-colour percentage-grey pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
+      const fill = {
+        kind: "pattern" as const,
+        patternType: "mediumGray" as const,
+        foregroundColor: red,
+        backgroundColor: blue,
+      };
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "string", value: "x" }, { background: fill }),
+          ]),
+        ]),
+      );
+      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
+        fill,
+      );
+    });
+
+    it("round-trips a genuine two-colour crosshatch pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
+      const fill = {
+        kind: "pattern" as const,
+        patternType: "darkTrellis" as const,
+        foregroundColor: red,
+        backgroundColor: blue,
+      };
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "string", value: "x" }, { background: fill }),
+          ]),
+        ]),
+      );
+      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
+        fill,
+      );
+    });
+
+    it("round-trips a pattern fill leaving one of its own colours unstated", () => {
+      const fill = {
+        kind: "pattern" as const,
+        patternType: "lightHorizontal" as const,
+        foregroundColor: red,
+      };
+      const bytes = writeXlsContent(
+        document([
+          sheet("Sheet1", [
+            cell(0, 0, { kind: "string", value: "x" }, { background: fill }),
+          ]),
+        ]),
+      );
+      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
+        fill,
+      );
+    });
+
+    it("throws writing a WordprocessingML-only pattern type BIFF8's own FillPattern enumeration has no member for", () => {
+      expect(() =>
+        writeXlsContent(
+          document([
+            sheet("Sheet1", [
+              cell(
+                0,
+                0,
+                { kind: "string", value: "x" },
+                {
+                  background: { kind: "pattern", patternType: "diagonalCross" },
+                },
+              ),
+            ]),
+          ]),
+        ),
+      ).toThrow(/diagonalCross/);
     });
 
     it("writes no Palette record when every decoration colour already matches the fixed default table", () => {
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
-            cell(0, 0, { kind: "string", value: "x" }, { background: red }),
+            cell(0, 0, { kind: "string", value: "x" }, { background: redFill }),
           ]),
         ]),
       );
       // red (255,0,0) is icv 10 in the fixed default table -- resolvable with no Palette record present, and readXlsContent must still recover it correctly through that fallback.
-      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(red);
+      expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
+        redFill,
+      );
     });
 
     it("writes a real Palette record and round-trips a colour outside the fixed default table", () => {
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
-            cell(0, 0, { kind: "string", value: "x" }, { background: coral }),
+            cell(
+              0,
+              0,
+              { kind: "string", value: "x" },
+              { background: coralFill },
+            ),
           ]),
         ]),
       );
       expect(findCell(readXlsContent(bytes), 0, 0, 0)?.background).toEqual(
-        coral,
+        coralFill,
       );
     });
 
@@ -440,15 +526,15 @@ describe("writeXlsContent", () => {
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
-            cell(0, 0, { kind: "number", value: 1 }, { background: red }),
-            cell(0, 1, { kind: "number", value: 2 }, { background: red }),
+            cell(0, 0, { kind: "number", value: 1 }, { background: redFill }),
+            cell(0, 1, { kind: "number", value: 2 }, { background: redFill }),
             cell(0, 2, { kind: "number", value: 3 }),
           ]),
         ]),
       );
       const content = readXlsContent(bytes);
-      expect(findCell(content, 0, 0, 0)?.background).toEqual(red);
-      expect(findCell(content, 0, 0, 1)?.background).toEqual(red);
+      expect(findCell(content, 0, 0, 0)?.background).toEqual(redFill);
+      expect(findCell(content, 0, 0, 1)?.background).toEqual(redFill);
       expect(findCell(content, 0, 0, 2)?.background).toBeUndefined();
     });
 
@@ -461,7 +547,7 @@ describe("writeXlsContent", () => {
             0,
             index,
             { kind: "number", value: index },
-            { background: rgbHexToColor(hex) },
+            { background: { kind: "solid", color: rgbHexToColor(hex) } },
           ),
         );
       }
@@ -479,7 +565,12 @@ describe("writeXlsContent", () => {
           0,
           index,
           { kind: "empty" },
-          { background: rgbHexToColor(index.toString(16).padStart(6, "0")) },
+          {
+            background: {
+              kind: "solid",
+              color: rgbHexToColor(index.toString(16).padStart(6, "0")),
+            },
+          },
         ),
       );
     }
@@ -509,7 +600,7 @@ describe("writeXlsContent", () => {
               2,
               { kind: "empty" },
               {
-                background: red,
+                background: redFill,
                 borders: { top: { color: blue, widthPt: 1.5 } },
               },
             ),
@@ -519,7 +610,7 @@ describe("writeXlsContent", () => {
 
       const readBack = findCell(readXlsContent(bytes), 0, 1, 2);
       expect(readBack?.value).toEqual({ kind: "empty" });
-      expect(readBack?.background).toEqual(red);
+      expect(readBack?.background).toEqual(redFill);
       expect(readBack?.borders).toEqual({
         top: { color: blue, widthPt: 1.5 },
       });
@@ -552,7 +643,7 @@ describe("writeXlsContent", () => {
               0,
               0,
               { kind: "empty" },
-              { background: red, colSpan: 2, rowSpan: 3 },
+              { background: redFill, colSpan: 2, rowSpan: 3 },
             ),
           ]),
         ]),
@@ -560,7 +651,7 @@ describe("writeXlsContent", () => {
 
       const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
       expect(readBack?.value).toEqual({ kind: "empty" });
-      expect(readBack?.background).toEqual(red);
+      expect(readBack?.background).toEqual(redFill);
       expect(readBack?.colSpan).toBe(2);
       expect(readBack?.rowSpan).toBe(3);
     });
@@ -570,21 +661,21 @@ describe("writeXlsContent", () => {
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
-            cell(0, 0, { kind: "empty" }, { background: red }),
-            cell(0, 1, { kind: "string", value: "x" }, { background: red }),
+            cell(0, 0, { kind: "empty" }, { background: redFill }),
+            cell(0, 1, { kind: "string", value: "x" }, { background: redFill }),
           ]),
         ]),
       );
 
       const content = readXlsContent(bytes);
-      expect(findCell(content, 0, 0, 0)?.background).toEqual(red);
-      expect(findCell(content, 0, 0, 1)?.background).toEqual(red);
+      expect(findCell(content, 0, 0, 0)?.background).toEqual(redFill);
+      expect(findCell(content, 0, 0, 1)?.background).toEqual(redFill);
     });
 
     it("refuses one distinct colour past the palette's last slot", () => {
       const cells = [
         ...distinctlyColouredEmptyCells(PALETTE_ENTRY_COUNT),
-        cell(1, 0, { kind: "number", value: 1 }, { background: coral }),
+        cell(1, 0, { kind: "number", value: 1 }, { background: coralFill }),
       ];
 
       expect(() => writeXlsContent(document([sheet("Sheet1", cells)]))).toThrow(
@@ -673,7 +764,10 @@ describe("writeXlsContent", () => {
     });
 
     it("round-trips both alignment and decoration on the same cell", () => {
-      const red = rgbHexToColor("ff0000");
+      const redFill = {
+        kind: "solid" as const,
+        color: rgbHexToColor("ff0000"),
+      };
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
@@ -681,7 +775,11 @@ describe("writeXlsContent", () => {
               0,
               0,
               { kind: "string", value: "x" },
-              { alignment: "right", verticalAlignment: "top", background: red },
+              {
+                alignment: "right",
+                verticalAlignment: "top",
+                background: redFill,
+              },
             ),
           ]),
         ]),
@@ -689,7 +787,7 @@ describe("writeXlsContent", () => {
       const readBack = findCell(readXlsContent(bytes), 0, 0, 0);
       expect(readBack?.alignment).toBe("right");
       expect(readBack?.verticalAlignment).toBe("top");
-      expect(readBack?.background).toEqual(red);
+      expect(readBack?.background).toEqual(redFill);
     });
 
     it("round-trips a decorated-alignment-only empty cell through a real Blank record", () => {
