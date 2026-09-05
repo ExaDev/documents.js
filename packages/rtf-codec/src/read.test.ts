@@ -604,8 +604,8 @@ describe("form fields", () => {
     );
   });
 
-  // Regression fixture for a real bug: PHPRtfLite writes the constant \ffres25 on every checkbox it produces regardless of the box's actual state, so preferring \ffres (as this reader once did) reads every one of its checkboxes as checked -- 25 is never 0. Only \ffdefres actually varies with the real state; this pins the unchecked half of the pair the "reads a FORMCHECKBOX field..." test above already covers checked for, both against the identical \ffres25 constant.
-  it("prefers \\ffdefres over \\ffres for a checkbox's checked state, since PHPRtfLite's \\ffres is a constant that does not vary with the real state", () => {
+  // Pins the unchecked half of the pair the "reads a FORMCHECKBOX field..." test above already covers checked for, both against the identical PHPRtfLite \ffres25 fixture. \ffres25 is [MS-DOC] 2.9.78 FFDataBits's own reserved "undefined" sentinel for a checkbox's iRes, not a PHPRtfLite-specific constant -- it falls through to \ffdefres (the field's reset default) exactly as the spec's "Undefined checkboxes are treated as unchecked" describes when the default itself says 0.
+  it("falls through \\ffres's own undefined sentinel (25) to \\ffdefres for a checkbox's checked state", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres25\\ffhps20\\ffdefres0}}}{\\fldrslt }}\\par}`,
     )[0];
@@ -614,12 +614,40 @@ describe("form fields", () => {
     });
   });
 
-  it("falls back to \\ffres for a checkbox's checked state when no \\ffdefres is present at all", () => {
+  it("falls through \\ffres25 all the way to unchecked when no \\ffdefres is present at all, matching a plain Word producer that never set an explicit default", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres25}}}{\\fldrslt }}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      checked: false,
+    });
+  });
+
+  it("uses \\ffres for a checkbox's checked state when no \\ffdefres is present at all, since \\ffres itself already names a real (non-sentinel) state", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres1}}}{\\fldrslt }}\\par}`,
     )[0];
     expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
       checked: true,
+    });
+  });
+
+  // Real Word's own FFDataBits encoding, not PHPRtfLite's: a meaningful (non-sentinel) \ffres and a \ffdefres that genuinely differ from each other. \ffres is the field's own current state and must win over \ffdefres's reset default in both directions -- these two fixtures pin that priority each way, since a precedence bug that merely swapped which control word wins (rather than handling the sentinel) would get one of the two backwards.
+  it("prioritises a meaningful \\ffres over a differing \\ffdefres when the box is checked despite a false default", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres1\\ffdefres0}}}{\\fldrslt }}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      checked: true,
+    });
+  });
+
+  it("prioritises a meaningful \\ffres over a differing \\ffdefres when the box is unchecked despite a true default", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres0\\ffdefres1}}}{\\fldrslt }}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      checked: false,
     });
   });
 

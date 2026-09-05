@@ -1619,7 +1619,7 @@ function applyPictureControlWord(
   }
 }
 
-// RTF 1.5's own Form Fields table (verbatim): "\ffresN Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries." and "\ffdefresN Default entry for list field (for example 0 = first list item, 1 = second list item)." Both are stated purely in list-field terms -- neither is defined in terms of a checkbox's checked state -- so both are simply captured here; formFieldContentControl in constructs.ts is where the precedence between them for a checkbox is actually decided, against real-world producer evidence rather than spec text that does not address the case.
+// RTF 1.5's own Form Fields table states \ffresN/\ffdefresN only in list-field terms ("Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries" / "Default entry for list field"), but \ffres/\ffdefres are RTF's own serialisation of the binary FFDataBits structure [MS-DOC] 2.9.78 defines, and that structure spells out a checkbox's own iRes meaning explicitly: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined, treated as unchecked). Both control words are simply captured here; formFieldContentControl in constructs.ts is where the checkbox-specific sentinel handling is actually decided.
 function applyFormFieldControlWord(
   name: string,
   param: number | undefined,

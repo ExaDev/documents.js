@@ -238,13 +238,16 @@ function pad(value: number, width: number): string {
   return String(value).padStart(width, "0");
 }
 
-// Whatever `{\*\formfield ...}` handed the reader beyond the field's own instruction: the bookmark-style name from `{\*\ffname ...}`, a dropdown's own `{\*\ffl ...}` entries, and the result indices `\ffres`/`\ffdefres` carry. RTF 1.5's own Form Fields table defines both purely in list-field terms -- neither mentions a checkbox's checked state at all -- so which of the two actually names a checkbox's state is a real-world question, not a spec one; see formFieldContentControl below for the precedence this reads decided on and why. Optional end to end -- `\*\formfield` itself is optional per the grammar, so a bare FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction with no `\*\formfield` group still names a control type on its own.
+// Whatever `{\*\formfield ...}` handed the reader beyond the field's own instruction: the bookmark-style name from `{\*\ffname ...}`, a dropdown's own `{\*\ffl ...}` entries, and the result indices `\ffres`/`\ffdefres` carry. RTF 1.5's own Form Fields table defines both purely in list-field terms, but they serialise the binary FFDataBits structure [MS-DOC] 2.9.78 defines, whose iRes field carries a real, spec-defined meaning for a checkbox: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined) -- see formFieldContentControl below for how that reading is decided. Optional end to end -- `\*\formfield` itself is optional per the grammar, so a bare FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction with no `\*\formfield` group still names a control type on its own.
 export interface RtfFormFieldData {
   readonly name: string;
   readonly listItems: readonly string[];
   readonly resultIndex: number | undefined;
   readonly defaultResultIndex: number | undefined;
 }
+
+// [MS-DOC] 2.9.78 FFDataBits, verbatim: "If iType is iTypeChck (1), iRes specifies the state of the checkbox and MUST be 0 (unchecked), 1 (checked), or 25 (undefined). Undefined checkboxes are treated as unchecked." 25 is FFDataBits's own reserved sentinel for "no explicit state", not a PHPRtfLite-specific quirk: real Word output emits it too on any checkbox whose \ffres was never meaningfully set, alongside a real \ffdefres carrying the field's reset default. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/22a1f1e5-f4b2-4a7d-9e10-3afa26056122
+const FORM_FIELD_RESULT_UNDEFINED = 25;
 
 const FORM_FIELD_CHECKBOX_INSTRUCTION = /\bFORMCHECKBOX\b/i;
 const FORM_FIELD_DROPDOWN_INSTRUCTION = /\bFORMDROPDOWN\b/i;
@@ -287,9 +290,12 @@ export function formFieldContentControl(
     descriptor.tag = name;
   }
   if (controlType === "checkbox") {
-    // \ffdefres, not \ffres, decides a checkbox's checked state. Verified against real PHPRtfLite output: an unchecked box writes `\fftype1\ffres25\ffhps20\ffdefres0` and a checked one `\fftype1\ffres25\ffhps20\ffdefres1`, side by side -- \ffres25 is a constant PHPRtfLite emits on every checkbox regardless of state, while only \ffdefres actually varies with it. Preferring \ffres (as the read side once did) mis-reads both fixtures as checked, since 25 is never 0. This reads as consistent with the spec's own \ffdefres wording, "Default entry for list field (for example 0 = first list item, 1 = second list item)" -- a checkbox is a two-entry list (0 = unchecked, 1 = checked) -- whereas \ffres's wording ("Values from 0 to N-1, where N is the number of \ffl entries") has no defined meaning at all for a checkbox, which carries no \ffl entries to index into. \ffres still falls back for a producer that emits only it and no \ffdefres.
-    const result = formField.defaultResultIndex ?? formField.resultIndex ?? 0;
-    descriptor.checked = result !== 0;
+    // \ffres carries the checkbox's real current state and takes priority whenever it is not FFDataBits's own undefined sentinel (see FORM_FIELD_RESULT_UNDEFINED above); only the sentinel -- or \ffres being absent altogether -- falls through to \ffdefres, the field's reset default, which itself defaults to 0 (unchecked) when that too is absent. Verified against both PHPRtfLite's own output (which always emits the sentinel \ffres25 alongside a meaningful \ffdefres) and real Word's FFDataBits encoding (which can emit a meaningful \ffres alongside a \ffdefres that differs, and the current value must win over the reset default in that case).
+    const current =
+      formField.resultIndex === FORM_FIELD_RESULT_UNDEFINED
+        ? undefined
+        : formField.resultIndex;
+    descriptor.checked = (current ?? formField.defaultResultIndex ?? 0) !== 0;
   } else if (controlType === "dropDown" && formField.listItems.length > 0) {
     descriptor.options = [...formField.listItems];
   }
