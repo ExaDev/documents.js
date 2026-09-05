@@ -264,21 +264,48 @@ const FORM_FIELD_SPEC: ReadonlyMap<
 // [MS-DOC] 2.9.78 FFData.hsttbDropList, verbatim: "An optional STTB that specifies the entries in the dropdown list box. This MUST exist if and only if bits.iType is iTypeDrop (2). The entries are Unicode strings and do not have extra data. This MUST NOT exceed 25 elements." Not an arbitrary round number: FFDataBits' own iRes field reserves index 25 as its "undefined selection" sentinel (see FORM_FIELD_RESULT_UNDEFINED in constructs.ts), so a 26th real entry would sit exactly where a real Word/DOC consumer expects "no selection" instead of an actual option.
 const MAX_DROPDOWN_OPTIONS = 25;
 
-// The `<formparams><formstrings>` content of a `\*\formfield` group, emitted in the order RTF 1.9.1's own "Form Fields" grammar production actually lists: `<formfield> '{\*' \formfield '{' <formparams> <formstrings> '}}'`, so every formparams control word precedes every formstrings one as a whole; within `<formparams>` (`\fftypeN? \ffownhelpN? ... \ffprotN? ... \ffhaslistboxN? ... \ffdefresN? \ffresN?`) the order used here is fftype, ffownhelp, ffprot, ffhaslistbox, then ffdefres before ffres; within `<formstrings>` (`<ffname>? <ffdeftext>? ... <ffhelptext>? ... <ffl>*`) the order used here is ffname, ffdeftext, ffhelptext, then the ffl entries. Built as separate fragments (`formParams` plus one variable per formstrings member) precisely because each fact is decided at a different point below -- a checkbox/dropDown's ffdefres+ffres pair, a dropdown's ffhaslistbox and ffl entries, a plainText's ffdeftext, the shared ffprot/ffownhelp/ffname -- and only concatenated into the grammar's own stated sequence once every fragment is known, rather than emitted inline in whatever order this function happens to decide each fact.
+// The `<formparams><formstrings>` content of a `\*\formfield` group, emitted in the order RTF 1.9.1's own "Form Fields" grammar production actually lists: `<formfield> '{\*' \formfield '{' <formparams> <formstrings> '}}'`, so every formparams control word precedes every formstrings one as a whole; within `<formparams>` (`\fftypeN? \ffownhelpN? ... \ffprotN? ... \ffhaslistboxN? ... \ffdefresN? \ffresN?`) the order used here is fftype, ffownhelp, ffprot, ffhaslistbox, then ffdefres before ffres; within `<formstrings>` (`<ffname>? <ffdeftext>? ... <ffhelptext>? ... <ffl>*`) the order used here is ffname, ffdeftext, ffhelptext, then the ffl entries. Built as separate fragments -- `ffOwnHelpFragment` and `ffProtFragment` computed first, ahead of the controlType-specific block, precisely because the grammar places both of them before every field that block decides; `controlTypeParams` for that block itself (a checkbox/dropDown's ffdefres+ffres pair, a dropdown's own ffhaslistbox and ffl entries); one variable per formstrings member (a plainText's ffdeftext, the shared ffname) -- and only concatenated into the grammar's own stated sequence in the `return` below, once every fragment is known. This is a correction, not merely a description: an earlier version of this function built every <formparams> member into one running string via sequential `+=` calls in whatever order its own controlType branch happened to run, which put ffprot/ffownhelp (mutated only after that branch returned) after ffhaslistbox/ffdefres/ffres despite this same comment already claiming the grammar's own order -- the fragment split here is what actually makes the claim true, verified against the raw emitted bytes in write.test.ts's own formfield-payload-order assertions.
 function formFieldPayload(
   descriptor: ContentControlDescriptor,
   fftype: number,
   sink: RtfDiagnosticSink,
 ): string {
-  let formParams = `\\fftype${String(fftype)}`;
+  const fftypeFragment = `\\fftype${String(fftype)}`;
   let ffNameString = "";
   let ffDefTextString = "";
   let ffHelpTextString = "";
   let fflEntries = "";
+
+  // [MS-DOC] 2.9.78 FFData.xstzHelpText, gated by FFDataBits.fOwnHelp ("A bit that specifies whether the form field has custom help text in FFData.xstzHelpText. If fOwnHelp is 0, FFData.xstzHelpText contains an empty or auto-generated string."): RTF 1.9.1's own \ffhelptext ("Help text (string). This is a destination control word.") is this vocabulary's one human-readable descriptive-text slot for a form field, and the closest analogue RTF has to docx `w:alias`/PDF AcroForm's `/TU` alternate description -- both are a label shown to whoever is looking at the control, distinct from the control's own machine-readable name that \ffname/`w:tag`/AcroForm's `/T` already carry. \ffownhelp1 is minted alongside it, mirroring what a real producer does whenever xstzHelpText genuinely carries author-set text rather than an "empty or auto-generated string"; the help text itself is a <formstrings> member and so goes into `ffHelpTextString` instead, joined in with the rest only at the very end. Decided here, ahead of the controlType-specific block below, because <formparams>'s own stated order places \ffownhelp before every field that block decides (\ffprot, \ffhaslistbox, \ffdefres/\ffres).
+  let ffOwnHelpFragment = "";
+  if (descriptor.alias !== undefined && descriptor.alias.length > 0) {
+    ffOwnHelpFragment = "\\ffownhelp1";
+    ffHelpTextString = `{\\*\\ffhelptext ${escapeText(descriptor.alias)}}`;
+  }
+
+  // [MS-DOC] 2.9.79 FFDataBits.fProt, verbatim: "A bit that specifies whether the form field is protected and its value cannot be changed" -- RTF 1.9.1's own Form Fields table states the identical fact, "\ffprotN: 1 if this field is protected, 0 otherwise." It is a single content-protection bit, so it captures the 'content' and 'both' halves of ContentControlLock exactly (both lock the field's own value); 'container' locks only the control's own removal, a fact RTF's form-field vocabulary has no bit for at all -- a legacy form field is ordinary document text with no separate "delete the control" operation to protect in the first place -- so a 'container' lock is reported through the diagnostic sink below rather than silently folded into "unprotected". Written as the explicit `\ffprot1` form rather than a bare `\ffprot`: `\ffprotN` is classified a Value control word, not a Toggle word like `\b`/`\i`, in RTF 1.9.1's own Appendix B ("Index of RTF Control Words"), and a Value word's own bare form defaults to 0/off rather than to an ambiguous "on" -- per "Conventions of an RTF Reader"'s own separate "Change Formatting Property" entry, a different part of the spec from Appendix B's classification table: "If a parameter is needed and not specified, then a default value is used... If the control word does not specify a default, then RTF readers should assume a default of 0 except for the toggle control words (like \b), which have a default of 1"; this reader's own formFieldValueBit in read.ts applies that default on the way in. Writing the explicit `\ffprot1` form here is not hedging against any ambiguity (there is none left to hedge against) -- it costs one character and matches how every real producer-derived fixture in this package's own read.test.ts (PHPRtfLite) writes the sibling `\ffres`/`\ffdefres` bits, none of which settle `\ffprot` specifically since none of those fixtures sets it at all. Decided here, ahead of the controlType-specific block below, for the identical reason `ffOwnHelpFragment` above is: <formparams>'s own stated order places \ffprot before \ffhaslistbox and \ffdefres/\ffres.
+  let ffProtFragment = "";
+  if (descriptor.lock === "content" || descriptor.lock === "both") {
+    ffProtFragment = "\\ffprot1";
+  }
+  if (descriptor.lock === "container" || descriptor.lock === "both") {
+    const message =
+      descriptor.lock === "both"
+        ? `a contentControl's 'both' lock also protects the control from removal, which RTF's \\ffprot ([MS-DOC] 2.9.79 FFDataBits.fProt) cannot express -- \\ffprot1 above already carries the content-protection half of 'both', so only the container-removal half is dropped here`
+        : `a contentControl's 'container' lock protects the control from removal, which RTF's \\ffprot ([MS-DOC] 2.9.79 FFDataBits.fProt) cannot express at all -- it names only whether the field's own value can be changed, and a 'container' lock leaves that value editable, so nothing is written for it and the whole lock is dropped, not merely half of it`;
+    sink({
+      code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      severity: "warning",
+      message,
+    });
+  }
+
+  // The controlType-specific <formparams> members -- \ffhaslistbox and \ffdefres/\ffres -- both of which the grammar places after \ffownhelp/\ffprot above, so this fragment is concatenated in after them (see the `return` at the end of this function) rather than appended into the same running string those two build.
+  let controlTypeParams = "";
   if (descriptor.controlType === "checkbox") {
     // \ffres is what a reader (this package's own included, per FORM_FIELD_RESULT_UNDEFINED in constructs.ts) actually reads back as the checkbox's current state -- omitting it, as this writer once did, opens the box unchecked in Word regardless of `checked`, since an absent \ffres reads as 0. \ffdefres mirrors the same value: ContentControlDescriptor carries one `checked` boolean, not a separate reset default, so the field's default is the value it was minted with. Written ffdefres before ffres, matching <formparams>'s own stated order.
     const value = descriptor.checked === true ? "1" : "0";
-    formParams += `\\ffdefres${value}\\ffres${value}`;
+    controlTypeParams += `\\ffdefres${value}\\ffres${value}`;
     if (descriptor.value !== undefined) {
       // A real, reachable case, from the identical reachability path as the plainText \ffdeftext handling above: documents.js's own PDF AcroForm-to-contentControl reconstruction spreads a checkbox widget's `/V` export-value name (e.g. 'Yes', a custom on-state string, distinct from AcroForm's own boolean derived-from-/V `checked`) onto `value` alongside `checked` (see pdf-codec's own valueFields -- `checked: value !== 'Off', ...(value !== 'Off' ? { value } : {})`). RTF's own \ffres/\ffdefres are a bare 0/1/25 state with no room for a named export value at all, so a checkbox's `value` has no RTF spelling whatsoever, unlike a dropDown's `value` (which at least sometimes matches a real \ffl entry) -- this is unconditional data loss whenever `value` is present, reported through the same sink every other unrepresentable construct in this writer uses rather than silently dropped the way an earlier version of this writer dropped it.
       sink({
@@ -297,7 +324,7 @@ function formFieldPayload(
     }
   } else if (descriptor.controlType === "dropDown") {
     // \ffhaslistbox is minted unconditionally for a dropDown, independent of whether it carries any options at all: [MS-DOC] 2.9.79 FFDataBits.fHasListBox "specifies that the form field has a list box. This value MUST be 1 if iType is iTypeDrop (2)." A dropdown with no options is still a dropdown -- there is no degenerate case in which that bit stops being true, so it cannot be gated behind `options !== undefined` the way an earlier version of this writer gated it (which then also left \ffdefres unminted for exactly that shape, a real, common one: a docx `w:dropDownList`/`w:comboBox` with no `w:listItem` children, or an ODF `form:listbox`, both currently read back by this ecosystem with no options recorded at all -- tracked as ExaDev/documents.js#1016).
-    formParams += "\\ffhaslistbox";
+    controlTypeParams += "\\ffhaslistbox";
     const allOptions = descriptor.options;
     let options = allOptions;
     if (allOptions !== undefined && allOptions.length > MAX_DROPDOWN_OPTIONS) {
@@ -314,7 +341,7 @@ function formFieldPayload(
         : options.indexOf(descriptor.value);
     if (selectedIndex !== undefined && selectedIndex !== -1) {
       // `value` genuinely names one of `options`: \ffres records the real current selection and \ffdefres mirrors it, exactly as the checkbox branch above mirrors its own single `checked` boolean into both \ffres and \ffdefres. Written ffdefres before ffres, matching <formparams>'s own stated order.
-      formParams += `\\ffdefres${String(selectedIndex)}\\ffres${String(selectedIndex)}`;
+      controlTypeParams += `\\ffdefres${String(selectedIndex)}\\ffres${String(selectedIndex)}`;
     } else if (descriptor.value !== undefined) {
       // `value` was recorded but names none of the entries actually written -- real, signalable data loss, distinct from "no value was ever set" below. Substituting the nearest available index (e.g. 0) would silently write a DIFFERENT, wrong selection with no signal that the recorded value was never actually represented, so this writer mints neither \ffres nor \ffdefres and reports the drop through the same sink every other unrepresentable construct in this writer uses (see the "mints neither \ffres nor \ffdefres for a dropDown whose value names none of its own options" test). Two genuinely different reasons collapse into this one branch: `value` may never have matched any of `options` at all, or it may have matched one that the 25-entry truncation above then cut away -- distinguished here so the message names the real cause rather than always blaming a mismatch that, in the truncated case, never actually happened.
       const truncatedAway =
@@ -371,33 +398,21 @@ function formFieldPayload(
       });
     }
   }
-  // [MS-DOC] 2.9.79 FFDataBits.fProt, verbatim: "A bit that specifies whether the form field is protected and its value cannot be changed" -- RTF 1.9.1's own Form Fields table states the identical fact, "\ffprotN: 1 if this field is protected, 0 otherwise." It is a single content-protection bit, so it captures the 'content' and 'both' halves of ContentControlLock exactly (both lock the field's own value); 'container' locks only the control's own removal, a fact RTF's form-field vocabulary has no bit for at all -- a legacy form field is ordinary document text with no separate "delete the control" operation to protect in the first place -- so a 'container' lock is reported through the diagnostic sink below rather than silently folded into "unprotected". Written as the explicit `\ffprot1` form rather than a bare `\ffprot`: `\ffhaslistbox` above is a genuine bare-when-true bit with no N-parameter spelling at all, but `\ffprot` is an N-parameterised bit like `\ffres`/`\ffdefres`, and RTF 1.9.1's own control-word-type table settles the question this comment once left open -- `\ffprotN` is a Value control word, not a Toggle word like `\b`/`\i`, so its own bare form has a real, cited default (0/off) rather than an ambiguous one; this reader's own formFieldValueBit in read.ts applies that default on the way in. Writing the explicit `\ffprot1` form here is not hedging against that ambiguity (there is none left to hedge against) -- it costs one character and matches how every real producer-derived fixture in this package's own read.test.ts (PHPRtfLite) writes the sibling `\ffres`/`\ffdefres` bits, none of which settle `\ffprot` specifically since none of those fixtures sets it at all.
-  if (descriptor.lock === "content" || descriptor.lock === "both") {
-    formParams += "\\ffprot1";
-  }
-  if (descriptor.lock === "container" || descriptor.lock === "both") {
-    const message =
-      descriptor.lock === "both"
-        ? `a contentControl's 'both' lock also protects the control from removal, which RTF's \\ffprot ([MS-DOC] 2.9.79 FFDataBits.fProt) cannot express -- \\ffprot1 above already carries the content-protection half of 'both', so only the container-removal half is dropped here`
-        : `a contentControl's 'container' lock protects the control from removal, which RTF's \\ffprot ([MS-DOC] 2.9.79 FFDataBits.fProt) cannot express at all -- it names only whether the field's own value can be changed, and a 'container' lock leaves that value editable, so nothing is written for it and the whole lock is dropped, not merely half of it`;
-    sink({
-      code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
-      severity: "warning",
-      message,
-    });
-  }
-  // [MS-DOC] 2.9.78 FFData.xstzHelpText, gated by FFDataBits.fOwnHelp ("A bit that specifies whether the form field has custom help text in FFData.xstzHelpText. If fOwnHelp is 0, FFData.xstzHelpText contains an empty or auto-generated string."): RTF 1.9.1's own \ffhelptext ("Help text (string). This is a destination control word.") is this vocabulary's one human-readable descriptive-text slot for a form field, and the closest analogue RTF has to docx `w:alias`/PDF AcroForm's `/TU` alternate description -- both are a label shown to whoever is looking at the control, distinct from the control's own machine-readable name that \ffname/`w:tag`/AcroForm's `/T` already carry. \ffownhelp1 is minted alongside it (into `formParams`, since it is a <formparams> member), mirroring what a real producer does whenever xstzHelpText genuinely carries author-set text rather than an "empty or auto-generated string"; the help text itself is a <formstrings> member and so goes into `ffHelpTextString` instead, joined in with the rest only at the very end.
-  if (descriptor.alias !== undefined && descriptor.alias.length > 0) {
-    formParams += "\\ffownhelp1";
-    ffHelpTextString = `{\\*\\ffhelptext ${escapeText(descriptor.alias)}}`;
-  }
+
   // <formstrings>'s own first member: the field's bookmark-style name, from \ffname.
   if (descriptor.tag !== undefined && descriptor.tag.length > 0) {
     ffNameString = `{\\*\\ffname ${escapeText(descriptor.tag)}}`;
   }
-  // Concatenated in the grammar's own stated order: every <formparams> member first, then <formstrings> in its own stated order (ffname, ffdeftext, ffhelptext, ffl entries).
+  // Concatenated in the grammar's own stated order: every <formparams> member first (fftype, ffownhelp, ffprot, then whatever controlTypeParams decided), then <formstrings> in its own stated order (ffname, ffdeftext, ffhelptext, ffl entries).
   return (
-    formParams + ffNameString + ffDefTextString + ffHelpTextString + fflEntries
+    fftypeFragment +
+    ffOwnHelpFragment +
+    ffProtFragment +
+    controlTypeParams +
+    ffNameString +
+    ffDefTextString +
+    ffHelpTextString +
+    fflEntries
   );
 }
 
