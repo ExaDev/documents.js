@@ -408,6 +408,27 @@ describe("Shd80", () => {
     expect(readShd80(0x03e0)).toBeUndefined(); // ipatAuto (bits 10-15 = 0), icoFore 0, icoBack 0x1f (bits 5-9)
     expect(readShd80(0x041f)).toBeUndefined(); // ipatSolid (bits 10-15 = 1), icoFore 0x1f (bits 0-4), icoBack 0
   });
+
+  // The 6-bit ipat field (bits 10-15) is wide enough to hold IPAT_TO_PATTERN_TYPE's own new 0x25-0x3C ipatPctNew* entries (the fine percentages that DO have an ST_Shd equivalent, unlike the sixteen that don't), but nothing had exercised that packing before: every existing Shd80 test above stays within ipatAuto/ipatSolid/no-background territory, and a round trip through readShd (Shd's own ten-byte COLORREF form) can't substitute for this, since Shd80 packs ipat through an entirely separate bit layout (Ico-palette indices, not raw COLORREFs).
+  it("reads ipat 0x25 (percent12), at the low end of the new packed range, with its own icoFore/icoBack", () => {
+    // ipat 0x25 (bits 10-15), icoBack 0x04 / green (bits 5-9), icoFore 0x02 / blue (bits 0-4).
+    expect(readShd80(0x9482)).toEqual({
+      kind: "pattern",
+      patternType: "percent12",
+      foregroundColor: { r: 0, g: 0, b: 1 },
+      backgroundColor: { r: 0, g: 1, b: 0 },
+    });
+  });
+
+  it("reads ipat 0x3c (percent95), at the high end of the new packed range, with its own icoFore/icoBack", () => {
+    // ipat 0x3c (bits 10-15), icoBack 0x08 / white (bits 5-9), icoFore 0x06 / red (bits 0-4).
+    expect(readShd80(0xf106)).toEqual({
+      kind: "pattern",
+      patternType: "percent95",
+      foregroundColor: { r: 1, g: 0, b: 0 },
+      backgroundColor: { r: 1, g: 1, b: 1 },
+    });
+  });
 });
 
 // The row-level grpprl both directions actually exchange: encodeTableRowGrpprl's own bytes, walked back through the same readGrpprl/applyTableSprms chain a real file's row mark goes through. This is the only place the three DefTableShdOperand arrays can be exercised past the first one, since a row wide enough to reach the second (23 cells) already exceeds the 510-byte PapxInFkp ceiling a whole-document write has to fit inside (see prop/fkp-write.ts and the README's own note on the bound).
