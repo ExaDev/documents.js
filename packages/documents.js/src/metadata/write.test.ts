@@ -111,6 +111,20 @@ describe("patchDocxMetadata", () => {
     expect(part?.kind).toBe("xml");
   });
 
+  // ExaDev/documents.js#1007 round 2: overrides.keywords !== undefined is true for `keywords: []`, but addCoreProperties itself never emits a cp:keywords element for an empty array -- so a naive "any field present" check created a real (but empty) docProps/core.xml, plus its Content_Types override and package-root relationship, out of a document that had neither, contradicting the "no requested change stays byte-for-byte free of a part it never had" contract this same describe block's own previous test pins.
+  it("stays byte-for-byte free of docProps/core.xml when the only override is an empty keywords array", () => {
+    const sourceBytes = encodePackage(docxWithExtrasPackage());
+    expect(
+      decodeOoxmlPackage(sourceBytes).parts["docProps/core.xml"],
+    ).toBeUndefined();
+
+    const patched = patchDocxMetadata(sourceBytes, { keywords: [] });
+
+    expect(
+      decodeOoxmlPackage(patched).parts["docProps/core.xml"],
+    ).toBeUndefined();
+  });
+
   it("leaves fields the caller never mentions exactly as the source document already had them", () => {
     const sourceBytes = minimalDocxBytes();
     const withTitle = patchDocxMetadata(sourceBytes, { title: "First Pass" });
