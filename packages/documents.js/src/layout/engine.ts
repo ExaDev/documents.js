@@ -426,15 +426,19 @@ function layoutTableFlow(
       const cellSourcePath = cell.sourcePath ?? table.sourcePath;
       const cellFrame = flipY(cellFrameYDown, section.pageSize.heightPt);
       stampFrame(cell, pageIndex, cellFrame);
-      if (cell.background !== undefined) {
-        // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for.
+      // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for -- and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
+      const cellFill =
+        cell.background === undefined
+          ? undefined
+          : resolveCellFillColor(cell.background);
+      if (cellFill !== undefined) {
         state.items.push({
           kind: "rect",
           xPt: cellFrame.xPt,
           yPt: cellFrame.yPt,
           widthPt: cellFrame.widthPt,
           heightPt: cellFrame.heightPt,
-          fill: resolveCellFillColor(cell.background),
+          fill: cellFill,
           sourcePath: cellSourcePath,
         });
       }
