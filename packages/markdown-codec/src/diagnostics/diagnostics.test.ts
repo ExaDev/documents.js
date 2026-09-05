@@ -204,6 +204,24 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     reached.add(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED);
   });
 
+  it("HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK: headingStyle 'atx' overridden by a level-1/2 heading's own embedded line break", () => {
+    const collector = createDiagnosticCollector();
+    emitMarkdown(
+      minimalDocument([
+        { kind: "paragraph", runs: [{ text: "a\nb" }], styleId: "Heading1" },
+      ]),
+      { sink: collector.sink, headingStyle: "atx" },
+    );
+    expect(
+      collector.has(
+        MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
+      ),
+    ).toBe(true);
+    reached.add(
+      MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
+    );
+  });
+
   it("ADJACENT_LINKS_MERGED: two consecutive runs sharing one hyperlink", () => {
     const collector = createDiagnosticCollector();
     emitMarkdown(
