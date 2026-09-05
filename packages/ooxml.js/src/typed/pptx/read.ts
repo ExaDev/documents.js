@@ -558,7 +558,7 @@ const DRAWINGML_DASH_STYLE_MAP: ReadonlyMap<string, ContentStrokeStyle> =
     ["lgDashDotDot", "dashed"],
   ]);
 
-// One a:tcPr child among a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2-5, each a CT_LineProperties) -- the DrawingML table cell's own per-edge border, the pptx-side counterpart to WordprocessingML's w:tcBorders edges (typed/docx/read.ts's readCellBorderEdge). @w is the edge's width in EMU and an a:solidFill child names its colour, resolved through the same scheme-colour-aware readSolidFillColor this cell's own background fill already uses rather than the write side's own srgbClr-only shortcut (src/edit/pptx/table.ts), so a theme-coloured border resolves correctly too; an optional a:prstDash child names its dash pattern. An edge missing @w, or whose colour doesn't resolve (no a:solidFill, or one this reader can't resolve to a Color -- including an explicit a:noFill), reads as no border on that side, matching readCellBorders' own "a colourless or zero-width edge isn't visually a border" convention below.
+// One a:tcPr child among a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2-5, each a CT_LineProperties) -- the DrawingML table cell's own per-edge border, the pptx-side counterpart to WordprocessingML's w:tcBorders edges (typed/docx/read.ts's readCellBorderEdge). @w is the edge's width in EMU and an a:solidFill child names its colour, resolved through the same scheme-colour-aware readSolidFillColor this cell's own background fill already uses rather than the write side's own srgbClr-only shortcut (src/edit/pptx/table.ts), so a theme-coloured border resolves correctly too; an optional a:prstDash child names its dash pattern. An edge missing @w, whose @w doesn't resolve to a positive number (non-numeric, zero, or negative -- ContentBorderSchema's widthPt is positive()), or whose colour doesn't resolve (no a:solidFill, or one this reader can't resolve to a Color -- including an explicit a:noFill), reads as no border on that side, matching readCellBorders' own "a colourless or zero-width edge isn't visually a border" convention below.
 function readTableCellBorderEdge(
   tcPr: XmlElement,
   tag: "a:lnL" | "a:lnR" | "a:lnT" | "a:lnB",
@@ -572,6 +572,10 @@ function readTableCellBorderEdge(
   if (w === undefined) {
     return undefined;
   }
+  const widthPt = emuToPt(Number(w));
+  if (!Number.isFinite(widthPt) || widthPt <= 0) {
+    return undefined;
+  }
   const solidFill = childrenWithTag(lnElement, "a:solidFill")[0];
   const color = readSolidFillColor(solidFill, context.colorMap, context.theme);
   if (color === undefined) {
@@ -581,7 +585,7 @@ function readTableCellBorderEdge(
   const dashVal = prstDash === undefined ? undefined : attr(prstDash, "val");
   return {
     color,
-    widthPt: emuToPt(Number(w)),
+    widthPt,
     style:
       dashVal === undefined
         ? undefined
