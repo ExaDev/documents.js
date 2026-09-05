@@ -9,6 +9,7 @@
   "include": [
     "src/**/*.test.ts",
     "src/test-support/**/*.ts",
+    "test/**/*.ts",
     // A glob rather than a hand-listed set, matching the other library packages here. A config file absent from every program is not a silent no-op: type-aware ESLint fails on it outright with "not found in any of the provided project(s)".
     "*.config.ts"
   ],
