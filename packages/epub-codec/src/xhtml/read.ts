@@ -395,7 +395,7 @@ function readPre(element: XmlElement, state: BuildState): ContentBlock {
   return decorateParagraph(paragraph, state);
 }
 
-// A <pre>/<code> block's own content model is plain text with whitespace preserved verbatim (this never routes through buildInlineRuns's own normalizeWhitespace) -- so an <img> found anywhere inside, at any depth, cannot become a real ContentImageBlock the way one reached transparently through readContainerChildren can: there is no block list here to insert a sibling image block into, the identical structural constraint appendImageFallback (src/xhtml/inline.ts) already applies to an <img> reached while building a flat run sequence. Its alt text is spliced into the extracted text in its place, with a diagnostic naming the loss -- mirroring textContent's own recursive walk (src/xml/query.ts) but for the one element kind that walk cannot represent as text at all.
+// A <pre>/<code> block's own content model is plain text with whitespace preserved verbatim (this never routes through buildInlineRuns's own normalizeWhitespace) -- so an <img> found anywhere inside, at any depth, cannot become a real ContentImageBlock the way one reached transparently through readContainerChildren can: there is no block list here to insert a sibling image block into, the identical structural constraint appendImageFallback (src/xhtml/inline.ts) already applies to an <img> reached while building a flat run sequence. Its alt text is spliced into the extracted text in its place, with a diagnostic naming the loss -- mirroring textContent's own recursive walk (src/xml/query.ts) but for the one element kind that walk cannot represent as text at all. <script>/<template> are skipped for the identical reason src/xhtml/inline.ts's own appendElement skips them: both are legal children of <pre> per the HTML content model, and neither's content (raw JS source, an inert DOM subtree) is ever legitimate document text -- this walk is its own separate recursion, not a call into appendElement, so it needs its own identical guard rather than inheriting one.
 function readPreText(
   nodes: readonly XmlNode[],
   context: XhtmlReadContext,
@@ -406,6 +406,11 @@ function readPreText(
       out += node.value;
     } else if (node.type === "element" && node.tag === "img") {
       out += readPreImageFallbackText(node, context);
+    } else if (
+      node.type === "element" &&
+      (node.tag === "script" || node.tag === "template")
+    ) {
+      continue;
     } else if (node.type === "element") {
       out += readPreText(node.children, context);
     }
