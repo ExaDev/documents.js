@@ -16,7 +16,7 @@ import {
 
 const FRAME = { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 };
 
-// ContentSheetSchema's own images/printSettings fields are required (unlike embeddedObjects, which is optional), so every hand-built ContentSheet literal below spreads this rather than restating the boilerplate each time.
+// ContentSheetSchema's own images/printSettings fields are required (unlike embeddedObjects, which is optional), so every hand-built ContentSheet literal below spreads this rather than restating the boilerplate each time. `as const` sits on printSettings alone, not the whole object: ContentSheet.images is a mutable array type, and a top-level `as const` would infer `images` as `readonly []`, which does not structurally satisfy it.
 const SHEET_DEFAULTS = {
   images: [],
   printSettings: {
@@ -25,8 +25,8 @@ const SHEET_DEFAULTS = {
     gridlines: true,
     headers: true,
     pageOrder: "downThenOver",
-  },
-} as const;
+  } as const,
+};
 
 function formulaBlock(latex: string) {
   return buildFormulaBlock(
