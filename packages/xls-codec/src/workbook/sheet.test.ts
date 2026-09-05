@@ -472,8 +472,8 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[1]?.formula).toBe("A2");
   });
 
-  it("wraps an array (CSE) formula's expanded text in braces, identical for every cell in the range", () => {
-    // A2:A3 entered as one array formula "=A1*2" -- the base cell A2 and its sibling A3 both carry just a PtgExp pointing back at A2 (row 1, column 0); the real, position-independent expression lives once in the Array record.
+  it("resolves an array (CSE) formula's expanded text with no formula-bar bracing, identical for every cell in the range", () => {
+    // A2:A3 entered as one array formula "=A1*2" -- the base cell A2 and its sibling A3 both carry just a PtgExp pointing back at A2 (row 1, column 0); the real, position-independent expression lives once in the Array record. Excel's own `{...}` CSE bracing is formula-bar display syntax, never written into the formula itself, so this matches ooxml.js's own xlsx convention rather than adding it.
     const arrayRgce = [
       0x44,
       ...u16(0),
@@ -512,8 +512,8 @@ describe("readSheetRecords formula cells", () => {
       ]),
     );
 
-    expect(cells[0]?.formula).toBe("{A1*2}");
-    expect(cells[1]?.formula).toBe("{A1*2}");
+    expect(cells[0]?.formula).toBe("A1*2");
+    expect(cells[1]?.formula).toBe("A1*2");
   });
 
   it("resolves an array-constant literal inside an ordinary, non-array-entered formula from its own rgcb trailer", () => {
