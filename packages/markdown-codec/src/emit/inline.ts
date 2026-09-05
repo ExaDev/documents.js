@@ -393,11 +393,13 @@ export function emitRuns(
   return out;
 }
 
-// The table-cell-specific variant (src/emit/table.ts): a GFM table row is exactly one physical line, so an embedded hard-break newline (rendered by emitRuns as a backslash-newline pair, matching escapeMarkdownText's own convention) cannot survive as-is -- it collapses to a single space instead.
+// The table-cell-specific variant (src/emit/table.ts): a GFM table row is exactly one physical line, so an embedded hard-break newline (rendered by emitRuns as a backslash-newline pair, matching escapeMarkdownText's own convention) cannot survive as-is -- it collapses to a single space instead. A bare (soft-break) newline is collapsed the same way, mirroring renderParagraphBody's own ATX-heading collapse (src/emit/emit.ts) -- a table cell has no source-level line wrap to hold either kind of break.
 export function emitRunsSingleLine(
   runs: readonly ContentRun[],
   context: InlineEmitContext,
   constructs?: readonly RunConstructExtent[],
 ): string {
-  return emitRuns(runs, context, constructs).replace(/\\\n/g, " ");
+  return emitRuns(runs, context, constructs)
+    .replace(/\\\n/g, " ")
+    .replace(/\n/g, " ");
 }
