@@ -212,6 +212,106 @@ describe("body constructs", () => {
     );
   });
 
+  it("writes a checkbox contentControl as a real \\*\\formfield production", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "before " }, { text: " after" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: true,
+                tag: "Check1",
+              },
+              startRun: 1,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain(
+      "{\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{",
+    );
+    expect(out).toContain("\\ffdefres1");
+    expect(out).toContain("{\\*\\ffname Check1}");
+    expect(out.indexOf("before")).toBeLessThan(out.indexOf("FORMCHECKBOX"));
+    expect(out.indexOf("FORMCHECKBOX")).toBeLessThan(out.indexOf("after"));
+  });
+
+  it("writes a dropDown contentControl's options as \\*\\ffl entries", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Guten Tag" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\fldinst FORMDROPDOWN {\\*\\formfield{");
+    expect(out).toContain("{\\*\\ffl Hello}");
+    expect(out).toContain("{\\*\\ffl Guten Tag}");
+  });
+
+  it("writes a plainText contentControl wrapping its runs in \\fldrslt", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("FORMTEXT {\\*\\formfield{{\\*\\ffname Text1}}}");
+    expect(out).toContain("{\\fldrslt {Lorem ipsum.}}}");
+  });
+
+  it("reports a contentControl controlType RTF's own form-field vocabulary does not cover, rather than minting nothing silently", () => {
+    const codes: string[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: { kind: "contentControl", controlType: "richText" },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+      { sink: (diagnostic) => codes.push(diagnostic.code) },
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+  });
+
   it("writes a table as \\trowd/\\cellxN row definitions with \\cell and \\row marks", () => {
     const out = write(
       wordprocessing([
@@ -586,6 +686,117 @@ describe("round trip through this package's own reader", () => {
       { sink: (diagnostic) => codes.push(diagnostic.code) },
     );
     expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+  });
+
+  it("round-trips a checkbox contentControl's checked state and tag back onto the same point extent", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "before " }, { text: " after" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: true,
+                tag: "Check1",
+              },
+              startRun: 1,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "checkbox",
+      checked: true,
+      tag: "Check1",
+    });
+    expect(extent?.startRun).toBe(extent?.endRun);
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe(
+      "before  after",
+    );
+  });
+
+  it("round-trips a dropDown contentControl's options back onto the runs it wraps", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Guten Tag" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "dropDown",
+      options: ["Hello", "Guten Tag"],
+    });
+    expect(
+      paragraph?.runs
+        .slice(extent?.startRun ?? 0, extent?.endRun ?? 0)
+        .map((run) => run.text)
+        .join(""),
+    ).toBe("Guten Tag");
+  });
+
+  it("round-trips a plainText contentControl's tag and its wrapped text", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+    });
+    expect(
+      paragraph?.runs
+        .slice(extent?.startRun ?? 0, extent?.endRun ?? 0)
+        .map((run) => run.text)
+        .join(""),
+    ).toBe("Lorem ipsum.");
   });
 
   it("writes a run-level provenance extent as the <chrev> character properties, minting a \\*\\revtbl for its author", () => {

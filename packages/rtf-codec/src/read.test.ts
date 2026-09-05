@@ -586,6 +586,87 @@ describe("fields and destinations", () => {
   });
 });
 
+// RTF 1.9.1, "Form Fields": a form field is an ordinary \field whose \*\fldinst names FORMTEXT/FORMCHECKBOX/FORMDROPDOWN, with a sibling \*\formfield destination carrying the control's own data (\fftypeN, \ffname, \ffres/\ffdefres, and a dropdown's \*\ffl entries). The fixtures below are trimmed from a real producer's own output (PHPRtfLite), braces and all, including the anonymous scoping group \*\formfield wraps its own control words in -- this reader never needs to know that group is there, because an unrecognised first control word simply inherits the enclosing destination, the same mechanism an ordinary {\b bold} run-formatting group already relies on.
+describe("form fields", () => {
+  it("reads a FORMCHECKBOX field as a checkbox contentControl point extent between the surrounding runs", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard before {\\field{\\*\\fldinst FORMCHECKBOX  {\\*\\formfield{\\fftype1\\ffres25\\ffhps20\\ffdefres1}}}{\\fldrslt }} after\\par}`,
+    )[0];
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "checkbox",
+      checked: true,
+    });
+    expect(extent?.startRun).toBe(extent?.endRun);
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe(
+      "before  after",
+    );
+  });
+
+  it("prefers \\ffres over \\ffdefres for a checkbox's checked state, current overriding default", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres0\\ffdefres1}}}{\\fldrslt }}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      checked: false,
+    });
+  });
+
+  it("reads a FORMDROPDOWN field's \\*\\ffl entries as the contentControl's options, and its \\fldrslt as the wrapped run", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN  {\\*\\formfield{\\fftype2\\ffres25\\fftypetxt0\\ffhaslistbox\\ffdefres0{\\*\\ffl Hello}{\\*\\ffl Guten Tag}}}}{\\fldrslt Guten Tag}}\\par}`,
+    )[0];
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "dropDown",
+      options: ["Hello", "Guten Tag"],
+    });
+    expect(
+      paragraph?.runs
+        .slice(extent?.startRun ?? 0, extent?.endRun ?? 0)
+        .map((run) => run.text)
+        .join(""),
+    ).toBe("Guten Tag");
+  });
+
+  it("reads a FORMTEXT field's \\*\\ffname as the contentControl's tag, with its \\fldrslt as the wrapped run", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
+    )[0];
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+    });
+    expect(
+      paragraph?.runs
+        .slice(extent?.startRun ?? 0, extent?.endRun ?? 0)
+        .map((run) => run.text)
+        .join(""),
+    ).toBe("Lorem ipsum.");
+  });
+
+  it("still recognises a form field from its instruction alone when the legacy field carries no \\*\\formfield group at all", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT }{\\fldrslt legacy}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+    });
+  });
+
+  it("does not produce a contentControl for an ordinary field whose instruction names none of the three form-field keywords", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst{HYPERLINK "https://example.com/"}}{\\fldrslt link}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs ?? []).toEqual([]);
+  });
+});
+
 describe("byte runs larger than an argument list", () => {
   // A single paragraph whose text is one uninterrupted byte run far past the argument-count ceiling a spread call has (V8 throws RangeError somewhere around 65k-125k arguments). Bare CR/LF does not break a run -- the tokenizer skips those bytes and keeps accumulating -- so a real long paragraph reaches this size easily, and nothing smaller than a fixture this size catches it.
   const LONG_RUN_LENGTH = 300_000;
