@@ -373,6 +373,62 @@ describe("images", () => {
       expect.objectContaining({ code: "epub/image-format-unsupported" }),
     );
   });
+
+  it("degrades an <img> nested inside a <span> to its alt text with a diagnostic, instead of vanishing", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body('<p>before <span><img src="a.png" alt="nested"/></span> after</p>'),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "before " }, { text: "nested" }, { text: " after" }],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/image-nested-inline-unsupported",
+      }),
+    );
+  });
+
+  it("degrades an <img> nested inside an <a> to its alt text, carrying the same hyperlink", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        '<p><a href="https://example.com"><img src="a.png" alt="linked"/></a></p>',
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "linked", hyperlink: "https://example.com" }],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/image-nested-inline-unsupported",
+      }),
+    );
+  });
+
+  it("produces no run but still diagnoses an <img> nested inline with no alt text", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body('<p>before <span><img src="a.png"/></span> after</p>'),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "before " }, { text: " after" }] },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/image-nested-inline-unsupported",
+      }),
+    );
+  });
 });
 
 describe("figure/figcaption", () => {

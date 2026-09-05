@@ -184,6 +184,22 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
     expect(codes.has(EpubDiagnosticCodes.LINK_TARGET_EXTERNAL_ONLY)).toBe(true);
   });
 
+  it("IMAGE_NESTED_INLINE_UNSUPPORTED fires for an <img> nested inside inline markup", () => {
+    const { sink, codes } = collect();
+    readXhtmlBody(
+      '<html><body><p><span><img src="a.png" alt="a"/></span></p></body></html>',
+      {
+        resolveImage: () => undefined,
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(codes.has(EpubDiagnosticCodes.IMAGE_NESTED_INLINE_UNSUPPORTED)).toBe(
+      true,
+    );
+  });
+
   it("IMAGE_FORMAT_UNSUPPORTED fires for a resolved but non-PNG/JPEG image", () => {
     const { sink, codes } = collect();
     readXhtmlBody('<html><body><img src="a.gif" alt="a"/></body></html>', {
