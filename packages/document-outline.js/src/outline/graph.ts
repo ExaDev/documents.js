@@ -7,6 +7,7 @@ import type {
 } from "document-schema.js";
 import { stableContentHash } from "./hash";
 import {
+  OrderKeyBudgetExhaustedError,
   orderKeyAfter,
   orderKeyBefore,
   orderKeyBetween,
@@ -61,6 +62,11 @@ export interface GraphEdge {
 export interface PropertyGraph {
   readonly nodes: readonly GraphNode[];
   readonly edges: readonly GraphEdge[];
+}
+
+// The dedup/identity key for one edge -- (from, to, kind, orderKey, path) -- shared by DocumentProjection's own addEdge below and the write API's rebalancing insert further down, so the two never drift into two different notions of "the same edge".
+function edgeKey(edge: GraphEdge): string {
+  return `${edge.from}\u0000${edge.to}\u0000${edge.kind}\u0000${edge.orderKey}\u0000${edge.path === undefined ? "" : JSON.stringify(edge.path)}`;
 }
 
 // The fractional/lexicographic order-key primitive (src/outline/order-keys.ts), re-exported under one namespace so a caller minting edges of their own (an editor inserting a sibling into an already-projected graph) reaches every operation through `orderKeys.*` rather than a second subpath import -- the projection itself only ever calls `orderKeyForIndex`, but `orderKeyBetween`/`orderKeyBefore`/`orderKeyAfter`/`renumberedOrderKeys` are this module's published answer to "how do I add one more between", "how do I extend past either end", and "how do I rebalance" for exactly that consumer.
@@ -167,7 +173,7 @@ function recordOf(value: object): Record<string, unknown> {
 
 // One document's projection state: the node/edge accumulators (shared across the whole run), the policy, and the memoised per-table entry decisions that keep the root's table walk and every tree ref in agreement.
 //
-// NO CONTENT NODE'S ID IS EVER CALLER-SUPPLIED (ExaDev/documents.js#660): every mint site below -- entryNodeFace, projectLeaf, projectGroup, mintValueNode, and the root in project() -- computes `id` via contentHashV1 and spreads it into the node face AFTER the content (`{ ...content, id, kind }`), so a content field that happens to be named `id` or `kind` is shadowed by the real computed value at every single mint site, unconditionally, the same discipline git applies to a blob's hash. This module currently exposes no write/insert API of its own -- projectDocumentGraph only ever projects an existing DocumentTree, it never accepts a node to insert -- so there is no path today for a caller to assert a content node's id at all. If a write API is ever added, it must preserve this property STRUCTURALLY (derive every content node's id server-side from its content at write time), never by accepting a caller-supplied id and merely validating it against a recomputed one: a write path that accepts an id at all reopens the two failure modes this guards against (two different contents sharing an id, or one content split across two ids), even with a check bolted on.
+// NO CONTENT NODE'S ID IS EVER CALLER-SUPPLIED (ExaDev/documents.js#660): every mint site below -- entryNodeFace, projectLeaf, projectGroup, mintValueNode, and the root in project() -- computes `id` via contentHashV1 and spreads it into the node face AFTER the content (`{ ...content, id, kind }`), so a content field that happens to be named `id` or `kind` is shadowed by the real computed value at every single mint site, unconditionally, the same discipline git applies to a blob's hash. `insertNode` (ExaDev/documents.js#935, published near the bottom of this module beside `insertEdge`) is this module's write/insert API: it preserves the property STRUCTURALLY rather than by validation, because `InsertNodeContent` has no `id` field at all -- there is no parameter through which a caller could supply one even by mistake -- and `insertNode` computes `id` from exactly the content handed in (folding in `children` when given, the same Merkle-DAG rule `projectGroup` applies to its own children's ids) and spreads it after that content at its own single mint site, the identical discipline every read-side mint site already follows. A write path that instead accepted a caller-supplied id and merely checked it against a recomputed one would reopen the two failure modes this guards against (two different contents sharing an id, or one content split across two ids) even with the check in place -- which is why the fix is a parameter that structurally cannot carry one, not a validated one.
 class DocumentProjection {
   private readonly styles: StylesTable | undefined;
   private readonly definitions: DefinitionsTable | undefined;
@@ -271,7 +277,7 @@ class DocumentProjection {
   }
 
   private addEdge(edge: GraphEdge): void {
-    const key = `${edge.from}\u0000${edge.to}\u0000${edge.kind}\u0000${edge.orderKey}\u0000${edge.path === undefined ? "" : JSON.stringify(edge.path)}`;
+    const key = edgeKey(edge);
     if (!this.edges.has(key)) this.edges.set(key, edge);
   }
 
@@ -633,4 +639,170 @@ export function walkPropertyGraph(
 
   visit(startId, undefined);
   return visited;
+}
+
+// The write side of this projection (ExaDev/documents.js#935): projectDocumentGraph only ever reads a whole DocumentTree, so a caller building an interactive editor on top of its output had no way to mint a new content node or attach one into an existing graph. `insertNode` mints a node; `insertEdge` attaches an already-minted node into a graph at a sibling position. Neither owns any tree, table, or extraction-policy state -- there is no styles/definitions table to resolve a ref against once a caller is working at the graph level -- so a node whose identity should fold in a dereferenced entry is built the same way the read side builds one: mint the entry's own node first, then mint the referencing node with the entry's id already substituted into `properties`, exactly as `walkRecord` substitutes an entry's id into `hash` before hashing the referencing node above.
+//
+// Mutating a node is not a separate operation: content-addressing already means "mutate" is "mint a new version" (this module's own top comment, EDITS), so a caller mutates by calling insertNode again with the changed content, getting back a new id, then insertEdge-ing that new id in wherever the old one was referenced. The old node and its edges are left exactly as they were -- neither function ever removes or rewrites existing graph state -- which is the free version history the top comment already promises orphans deliver.
+//
+// Neither function recomputes an ANCESTOR's id when a new child is attached beneath it: a compound node's id was folded from whatever children list it was minted with (the Merkle-DAG rule projectGroup applies), and attaching one more CONTAINS edge to an already-minted node does not retroactively change that node's own id, exactly as adding a blob to a git tree does not change a tree object already written to the object store in place -- git mints a new tree object instead, and a ref is what moves to point at it. A caller wanting an ancestor's id to reflect a new descendant re-mints that ancestor with insertNode (its own unchanged `properties` plus the updated `children` list) and re-wires whichever of ITS OWN referrers should see the new version, one level at a time, up to (never including) the document root -- whose id is caller-assigned and content-independent for exactly this reason, so a root-level insertion needs no cascade at all: mint the new subtree, then insertEdge it under the root id directly.
+
+// One new content node's input: `kind` is the graph vocabulary word for what the node is -- this module's own mint sites decide it four different ways (a payload's own discriminant for a leaf/group, a fixed word for a table entry or an extracted value), so the write side asks for it explicitly rather than guessing a single recipe -- `properties` is the node's own content, and `children`, when given, names the ids of already-minted nodes this node is to CONTAIN, in document order. `children` folds into the id's hash input exactly as projectGroup folds its own children's ids into `hashInput`, but never into the face: children live only as the CONTAINS edges insertNode also emits alongside the node, never as a node property, matching every group node projectDocumentGraph itself mints. Omitting `children` entirely (not an empty array) is what a leaf-shaped node needs: an empty array is itself content (a group that folds `children: []` into its hash, and is entitled to gain CONTAINS children later without changing that already-minted id being nonsensical for identity purposes), whereas omission means "this node's identity has never depended on a children list at all," exactly how projectLeaf's own hash input carries no `children` key.
+export interface InsertNodeContent {
+  readonly kind: string;
+  readonly properties: Record<string, unknown>;
+  readonly children?: readonly string[];
+}
+
+export interface InsertNodeResult {
+  readonly graph: PropertyGraph;
+  readonly id: string;
+}
+
+// Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. When `children` is given, this also emits one CONTAINS edge per child at `orderKeys.orderKeyForIndex(index)`, the WIDE, evenly spaced keys a fresh mint wants (exactly as projectGroup mints them for a freshly walked TreeGroup), leaving room for a later insertEdge to bisect between them without a rebalance. Content identical to a node already present in `graph` dedupes to the existing node and mints no duplicate edges either (addNode's own upsert-once rule): the freshly computed `id` could not already be a node in `graph` unless its content already matched exactly, so re-inserting the same subtree twice is a no-op past the first call, and no edge keyed from that id can already exist either.
+export function insertNode(
+  graph: PropertyGraph,
+  content: InsertNodeContent,
+): InsertNodeResult {
+  const hashInput: Record<string, unknown> =
+    content.children === undefined
+      ? content.properties
+      : { ...content.properties, children: content.children };
+  const id = contentHashV1(hashInput);
+  if (graph.nodes.some((node) => node.id === id)) return { graph, id };
+  const node: GraphNode = { ...content.properties, id, kind: content.kind };
+  const childEdges: readonly GraphEdge[] =
+    content.children === undefined
+      ? []
+      : content.children.map((childId, index) => ({
+          from: id,
+          to: childId,
+          kind: "CONTAINS",
+          orderKey: orderKeys.orderKeyForIndex(index),
+        }));
+  return {
+    graph: {
+      nodes: [...graph.nodes, node],
+      edges: [...graph.edges, ...childEdges],
+    },
+    id,
+  };
+}
+
+// Where a new edge lands among an existing sibling list: `start`/`end` are the two boundaries an empty or non-empty list needs, `before`/`after` name an existing sibling to land relative to. A named sibling not found among `from`'s existing edges of the requested `kind` is a genuine caller error -- there is no position to compute otherwise -- and is refused loudly rather than silently falling back to an end position, in this module's own "refuses a ref the table does not carry" tradition.
+export type InsertPosition =
+  | { readonly at: "start" }
+  | { readonly at: "end" }
+  | { readonly at: "before"; readonly siblingId: string }
+  | { readonly at: "after"; readonly siblingId: string };
+
+export interface InsertEdgeOptions {
+  readonly kind?: GraphEdgeKind;
+  readonly position?: InsertPosition;
+  readonly path?: PropertyPath;
+}
+
+// Resolves `position` against `siblings` (already sorted ascending by orderKey) to a plain array index -- where the new edge would sit if `siblings` were spliced at that index -- rather than an orderKey directly, so the same lookup serves both the fast bisection path and the rebalance fallback below. A named sibling not found is refused here, once, for every position variant that names one.
+function siblingInsertIndex(
+  siblings: readonly GraphEdge[],
+  position: InsertPosition,
+  from: string,
+  kind: GraphEdgeKind,
+): number {
+  if (position.at === "start") return 0;
+  if (position.at === "end") return siblings.length;
+  const index = siblings.findIndex((edge) => edge.to === position.siblingId);
+  if (index === -1) {
+    throw new Error(
+      `insertEdge: sibling "${position.siblingId}" names no existing ${kind} edge from "${from}"`,
+    );
+  }
+  return position.at === "before" ? index : index + 1;
+}
+
+// The fast path: bisect between whichever of `siblings[index - 1]`/`siblings[index]` exist, falling back to orderKeyForIndex(0) only when NEITHER does (a genuinely empty sibling list -- the same wide key a fresh projection mints for its own first child, not a defensive default masking a lookup failure). Throws OrderKeyBudgetExhaustedError when the two neighbours have no room left, which insertEdge below catches and answers with a full rebalance rather than surfacing to the caller -- exactly what a real sibling list needs to keep working once bisection is exhausted, most commonly `start` against a first child that (like every first child projectDocumentGraph itself ever mints) already sits at the scheme's own floor.
+function boundedOrderKey(
+  siblings: readonly GraphEdge[],
+  index: number,
+): string {
+  const before = siblings[index - 1];
+  const after = siblings[index];
+  if (before === undefined && after === undefined)
+    return orderKeys.orderKeyForIndex(0);
+  if (before === undefined) return orderKeys.orderKeyBefore(after!.orderKey);
+  if (after === undefined) return orderKeys.orderKeyAfter(before.orderKey);
+  return orderKeys.orderKeyBetween(before.orderKey, after.orderKey);
+}
+
+// The rebalance fallback: mints a fresh, evenly spaced key for every one of `from`'s existing `kind` edges plus the new one, in the same relative order (renumberedOrderKeys -- the identical rebalance orderKeyBetween's own exhaustion already names as the answer), then replaces exactly those existing edges in `graph` with their rebuilt versions. Every OTHER edge in `graph` -- a different `from`, a different `kind`, or a wholly unrelated edge -- is carried over untouched; only the one sibling group that ran out of room is ever rewritten.
+function rebalancedInsert(
+  graph: PropertyGraph,
+  from: string,
+  to: string,
+  kind: GraphEdgeKind,
+  siblings: readonly GraphEdge[],
+  index: number,
+  path: PropertyPath | undefined,
+): PropertyGraph {
+  const ordered: {
+    readonly to: string;
+    readonly path: PropertyPath | undefined;
+  }[] = [
+    ...siblings
+      .slice(0, index)
+      .map((edge) => ({ to: edge.to, path: edge.path })),
+    { to, path },
+    ...siblings.slice(index).map((edge) => ({ to: edge.to, path: edge.path })),
+  ];
+  const keys = orderKeys.renumberedOrderKeys(ordered.length);
+  const rebuilt: GraphEdge[] = ordered.map((entry, position) => ({
+    from,
+    to: entry.to,
+    kind,
+    orderKey: keys[position]!,
+    ...(entry.path === undefined ? {} : { path: entry.path }),
+  }));
+  const replaced = new Set(siblings.map(edgeKey));
+  const kept = graph.edges.filter((edge) => !replaced.has(edgeKey(edge)));
+  return { nodes: graph.nodes, edges: [...kept, ...rebuilt] };
+}
+
+// Attaches an already-minted node (from insertNode, or any other node already present in `graph`) into `graph` as one new edge, at a sibling position among `from`'s existing edges of the same `kind` -- the "inserting a sibling touches only that one new CONTAINS edge's orderKey" edit this module's own top comment names, extended to a full rebalance on the rare occasions bisection alone cannot express the requested position. Defaults to a CONTAINS edge appended after `from`'s existing children, the common "add one more child" case; pass `kind`/`position`/`path` for a STYLED_BY/DEFINED_BY/PROPERTY edge or a specific sibling position. Never mutates `graph` -- returns a new PropertyGraph, the same pure-function discipline insertNode follows.
+export function insertEdge(
+  graph: PropertyGraph,
+  from: string,
+  to: string,
+  options: InsertEdgeOptions = {},
+): PropertyGraph {
+  const kind = options.kind ?? "CONTAINS";
+  const position = options.position ?? { at: "end" };
+  const siblings = graph.edges
+    .filter((edge) => edge.from === from && edge.kind === kind)
+    .sort((a, b) =>
+      a.orderKey < b.orderKey ? -1 : a.orderKey > b.orderKey ? 1 : 0,
+    );
+  const index = siblingInsertIndex(siblings, position, from, kind);
+  let orderKey: string;
+  try {
+    orderKey = boundedOrderKey(siblings, index);
+  } catch (error) {
+    if (!(error instanceof OrderKeyBudgetExhaustedError)) throw error;
+    return rebalancedInsert(
+      graph,
+      from,
+      to,
+      kind,
+      siblings,
+      index,
+      options.path,
+    );
+  }
+  const edge: GraphEdge = {
+    from,
+    to,
+    kind,
+    orderKey,
+    ...(options.path === undefined ? {} : { path: options.path }),
+  };
+  return { nodes: graph.nodes, edges: [...graph.edges, edge] };
 }
