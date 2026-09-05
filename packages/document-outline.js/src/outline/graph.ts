@@ -710,7 +710,7 @@ function reconcileChildren(
 
   const existingSeq = originalSiblings.map((edge) => edge.to);
 
-  // Longest-common-subsequence length table between `existingSeq` (rows) and `children` (columns), built from the bottom-right corner backwards so the forward backtrack below can read `dp[i + 1]`/`dp[j + 1]` as "the best match achievable over the rest of both sequences from here".
+  // Longest-common-subsequence length table between `existingSeq` (rows) and `children` (columns), built from the bottom-right corner backwards so the forward backtrack below can read `dp[i + 1]`/`dp[j + 1]` as "the best match achievable over the rest of both sequences from here". This full 2D table is O(existingSeq.length * children.length) in space, up from the O(existingSeq.length + children.length) a handful of per-id running counters needed before this LCS rewrite -- only reachable at all when `id` already carries CONTAINS edges, and bounded by how many siblings one node and one reconcile call actually have, which stays small even for a heavily edited document.
   const dp: number[][] = Array.from({ length: existingSeq.length + 1 }, () =>
     new Array<number>(children.length + 1).fill(0),
   );
