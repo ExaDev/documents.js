@@ -54,8 +54,8 @@ const TABLE_BRC_OPERAND_CB = 11;
 export interface TableCellToWrite {
   /** VerticalMergeFlag: 0 fvmClear, 1 fvmMerge (continuation), 3 fvmRestart (first cell). */
   readonly vertMerge: 0 | 1 | 3;
-  /** TCGRF.horzMerge, [MS-DOC] 2.9.317: 0 not merged (the ordinary case, see this module's own top-of-file note), 1 a continuation cell of the lost-boundary fallback's own physical split, 2 the anchor of one. Never written for an ordinary merge -- only for the ExaDev/documents.js#992 fallback flattenRow applies when no row would otherwise state a boundary at all. */
-  readonly horzMerge?: 0 | 1 | 2;
+  /** TCGRF.horzMerge, [MS-DOC] 2.9.317: 0 not merged (the ordinary case, see this module's own top-of-file note), 1 a continuation cell of the lost-boundary fallback's own physical split, 2 the anchor of one. Every one of table/write.ts's own flattenRow construction branches states this explicitly -- 0 for an ordinary cell, 2 for a split anchor, 1 for its continuation -- so this field carries no default of its own; the only fallback flattenRow ever applies for the ExaDev/documents.js#992 fallback is deciding WHICH row of a table states a given lost boundary at all, not what a stated cell's own horzMerge value is. */
+  readonly horzMerge: 0 | 1 | 2;
   /** The cell's own four borders, from ContentTableCell.borders; an absent side is written as the Brc80MayBeNil no-border sentinel. */
   readonly borders?: ContentCellBorders;
   /** The cell's own flat background, from ContentTableCell.background. */
@@ -79,7 +79,7 @@ function le16(value: number): number[] {
 
 function buildTc80(cell: TableCellToWrite): number[] {
   // TCGRF.horzMerge's own low 2 bits are 0 for an ordinary merge -- see this module's own top-of-file note on why a horizontal merge is normally stated through this row's own boundaries instead -- and only ever non-zero when table/write.ts's own lost-boundary fallback hands one in.
-  const tcgrf = ((cell.vertMerge & 0x3) << 5) | (cell.horzMerge ?? 0);
+  const tcgrf = ((cell.vertMerge & 0x3) << 5) | cell.horzMerge;
   return [
     ...le16(tcgrf),
     0x00,
