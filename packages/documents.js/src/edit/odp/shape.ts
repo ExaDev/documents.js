@@ -4,7 +4,8 @@ import { attr } from "ooxml.js";
 import type { Box } from "document-schema.js";
 import { removeChild } from "../../xml/edit";
 import { applyOdfGeometry } from "../geometry";
-import { el } from "../../xml/fragment";
+import { encodeXmlText } from "../../xml/entities";
+import { el, txt } from "../../xml/fragment";
 import { buildList, OdtList } from "../odt/list";
 import type { ParagraphInit } from "../odt/paragraph";
 import { buildParagraph, OdtParagraph } from "../odt/paragraph";
@@ -148,8 +149,16 @@ export function buildTextBoxFrame(
   );
 }
 
-// Builds a fresh draw:frame containing a draw:image referencing an already-inserted media part, for OdpSlide.addImage (slide.ts) -- the odp equivalent of pptx/shape.ts's own buildPictureShape. Unlike OOXML's p:pic, ODF's draw:image references its media part by a plain package path directly via xlink:href, with no relationship-id indirection to allocate (see src/odf-package/media.ts's own addImageMedia).
-export function buildImageFrame(partPath: string, frame: Box): XmlElement {
+// Builds a fresh draw:frame containing a draw:image referencing an already-inserted media part, for OdpSlide.addImage (slide.ts) -- the odp equivalent of pptx/shape.ts's own buildPictureShape. Unlike OOXML's p:pic, ODF's draw:image references its media part by a plain package path directly via xlink:href, with no relationship-id indirection to allocate (see src/odf-package/media.ts's own addImageMedia). altText writes as a svg:title element sibling of draw:image -- ODF's alt text lives on the FRAME as a direct child element, not an attribute on the image itself (confirmed against real LibreOffice output; see odf.js's own readFrameAltText, typed/draw/shapes.ts, which this mirrors on write).
+export function buildImageFrame(
+  partPath: string,
+  frame: Box,
+  altText?: string,
+): XmlElement {
+  const children: XmlNode[] = [el("draw:image", { "xlink:href": partPath })];
+  if (altText !== undefined) {
+    children.push(el("svg:title", {}, [txt(encodeXmlText(altText))]));
+  }
   return el(
     "draw:frame",
     {
@@ -158,7 +167,7 @@ export function buildImageFrame(partPath: string, frame: Box): XmlElement {
       "svg:width": formatOdfLength(frame.widthPt),
       "svg:height": formatOdfLength(frame.heightPt),
     },
-    [el("draw:image", { "xlink:href": partPath })],
+    children,
   );
 }
 

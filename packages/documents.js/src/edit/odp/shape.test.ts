@@ -1,5 +1,5 @@
 import type { XmlNode } from "odf.js";
-import { resolveOdfShapeGeometry } from "odf.js";
+import { decodeOdfText, resolveOdfShapeGeometry } from "odf.js";
 import { describe, expect, it } from "vitest";
 import { createEmptyOdpPackage } from "./scaffold";
 import { buildImageFrame, buildTextBoxFrame, OdpShape } from "./shape";
@@ -208,5 +208,29 @@ describe("buildImageFrame", () => {
     expect(
       image?.type === "element" ? image.attributes : undefined,
     ).toContainEqual({ name: "xlink:href", value: "Pictures/image1.png" });
+  });
+
+  it("writes altText as a svg:title element sibling of draw:image", () => {
+    const frame = { xPt: 10, yPt: 20, widthPt: 30, heightPt: 40 };
+    const frameElement = buildImageFrame(
+      "Pictures/image1.png",
+      frame,
+      "A description",
+    );
+    const title = frameElement.children.find(
+      (c) => c.type === "element" && c.tag === "svg:title",
+    );
+    expect(title?.type === "element" ? decodeOdfText(title) : undefined).toBe(
+      "A description",
+    );
+  });
+
+  it("writes no svg:title when altText is undefined", () => {
+    const frame = { xPt: 10, yPt: 20, widthPt: 30, heightPt: 40 };
+    const frameElement = buildImageFrame("Pictures/image1.png", frame);
+    const title = frameElement.children.find(
+      (c) => c.type === "element" && c.tag === "svg:title",
+    );
+    expect(title).toBeUndefined();
   });
 });
