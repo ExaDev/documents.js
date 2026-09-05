@@ -459,6 +459,55 @@ describe("readWorkbookGlobals", () => {
     ]);
   });
 
+  it("declines a bracketed sheet name reached through a directory separator, not just one at the very start of the path", () => {
+    // A start-of-path-only bracket check misses this: "sub" then a directory separator then a bracketed segment leaves the leading character "s", not "[", so a check scoped to the path's own start would fall through and return "[Book.xlsx]Sheet1" itself as the file name -- doubling up with the caller's own `[fileName]sheet` bracketing into a mangled label, and with `diagnostic` wrongly left false since fileNameFromVirtPath would have reported success.
+    const virtPath = "sub\u0003[Book.xlsx]Sheet1";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[EXTERNAL]Sheet1", diagnostic: true },
+    ]);
+  });
+
+  it("declines an unbalanced bracket with no directory separator at all, rather than passing it through as part of the file name", () => {
+    const virtPath = "abc[def";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[EXTERNAL]Sheet1", diagnostic: true },
+    ]);
+  });
+
   it("resolves a multi-sheet external range as first:last, the same shape a local multi-sheet range takes", () => {
     const virtPath = "\u0001\u0002Book.xlsx";
     const globals = readWorkbookGlobals(

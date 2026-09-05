@@ -288,12 +288,13 @@ function fileNameFromVirtPath(virtPath: string): string | undefined {
   if (path.length === 0) {
     return undefined;
   }
-  if (path.startsWith("[")) {
-    return undefined;
-  }
   const segments = path.split(VIRTPATH_DIRECTORY_SEPARATOR);
   const last = segments.at(-1);
-  return last === undefined || last.length === 0 ? undefined : last;
+  if (last === undefined || last.length === 0) {
+    return undefined;
+  }
+  // A real file name never legitimately carries an unescaped bracket -- the grammar reserves both characters for the bracketed sheet-name form -- so any segment carrying one is declined exactly like that form is, rather than passed through with the bracket still embedded in it. Checked on the EXTRACTED FINAL SEGMENT rather than on the whole path up front: a bracketed sheet-name reached through a directory separator (`sub`, a separator, then `[Book.xlsx]Sheet1`) or an unbalanced bracket with no separator at all (`abc[def`) both leave the leading character untouched by a start-of-path check, and both would otherwise return a segment carrying a raw bracket as if it were a plain file name -- doubling up with resolveXti's own `[${fileName}]` bracketing into a mangled label, with the caller's own `diagnostic` flag left FALSE for it since this function has already reported success by returning a defined string.
+  return last.includes("[") || last.includes("]") ? undefined : last;
 }
 
 /** A bracketed diagnostic placeholder for a sheet label this reader could not fully resolve -- deliberately distinct from Excel's own bare `#REF!` error literal (which is valid, retypeable formula syntax on its own): this always carries a parenthesised reason, and resolveSheetLabel's own quoting (biff/ptg.ts) wraps the whole thing in single quotes regardless, since neither the reason text nor the surrounding punctuation matches a bare sheet-name pattern. */
