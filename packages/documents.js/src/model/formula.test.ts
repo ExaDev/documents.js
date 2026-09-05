@@ -2,6 +2,7 @@ import type {
   ContentBlock,
   ContentDocument,
   ContentEmbeddedObject,
+  SymbolTable,
 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { latexToFormula } from "../latex/lower";
@@ -93,6 +94,54 @@ describe("collectDocumentFormulas", () => {
       "sections[0]/blocks[0].rows[0].cells[0]/blocks[0]",
       "sections[0]/blocks[1]",
     ]);
+  });
+
+  it("resolves a DIRECTLY embedded formula block's own symbolTable field, not the enclosing document's (ExaDev/documents.js#928 round-8 regression)", () => {
+    // The block IS a formula-kind embedded object -- formulaOfBlock(block) returns non-undefined for it, so this is the DIRECT-match push site, never routed through the recursive nested-document branch below. Its own document.symbolTable must win over the enclosing document's.
+    const ownTable: SymbolTable = { symbols: [], units: [] };
+    const block = formulaBlock("1 + 1");
+    // block.document is statically known to be the 'formula'-kind ContentDocument buildFormulaBlock built -- no narrowing needed.
+    block.document.symbolTable = ownTable;
+    const outerTable: SymbolTable = {
+      symbols: [{ glyph: "x", scope: "document", id: "symbols:outer-x" }],
+      units: [],
+    };
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      symbolTable: outerTable,
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+          blocks: [block],
+        },
+      ],
+    };
+    const entries = collectDocumentFormulas(document);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.symbolTable).toBe(ownTable);
+    expect(entries[0]?.symbolTable).not.toBe(outerTable);
+  });
+
+  it("falls back to the enclosing document's symbolTable when a DIRECTLY embedded formula block declares none of its own", () => {
+    const outerTable: SymbolTable = { symbols: [], units: [] };
+    const block = formulaBlock("1 + 1"); // formulaDocument() sets no symbolTable of its own
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      symbolTable: outerTable,
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+          blocks: [block],
+        },
+      ],
+    };
+    const entries = collectDocumentFormulas(document);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.symbolTable).toBe(outerTable);
   });
 
   it("recurses into a non-formula embedded object's own nested document when the top-level block itself is not a formula", () => {
@@ -227,6 +276,79 @@ describe("collectDocumentFormulas", () => {
     expect(entries[0]?.sourcePath).toBeUndefined();
     // locate is derived from sheet/object position, not from sourcePath -- so a spreadsheet's formulas are still individually locatable even though this arm never has a sourcePath to fall back on.
     expect(entries[0]?.locate).toBe("sheets[0].embeddedObjects[0]");
+  });
+
+  it("resolves a spreadsheet's DIRECTLY cell-anchored formula's own symbolTable field, not the enclosing sheet's (ExaDev/documents.js#928 round-8 regression)", () => {
+    // Same direct-match push site as the block-arm test above, for the spreadsheet arm's own bare-ContentEmbeddedObject shape (never wrapped in a block).
+    const ownTable: SymbolTable = { symbols: [], units: [] };
+    const nestedDoc = formulaDocument(
+      latexToFormula("f(x) = x^2", { source: "test:formula" }).formula,
+    );
+    nestedDoc.symbolTable = ownTable;
+    const outerTable: SymbolTable = {
+      symbols: [{ glyph: "x", scope: "document", id: "symbols:outer-x" }],
+      units: [],
+    };
+    const document: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      symbolTable: outerTable,
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          ...SHEET_DEFAULTS,
+          embeddedObjects: [
+            {
+              objectKind: "formula",
+              document: nestedDoc,
+              frame: FRAME,
+              anchorRow: 3,
+              anchorColumn: 2,
+            },
+          ],
+        },
+      ],
+    };
+    const entries = collectDocumentFormulas(document);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.symbolTable).toBe(ownTable);
+    expect(entries[0]?.symbolTable).not.toBe(outerTable);
+  });
+
+  it("falls back to the enclosing sheet's symbolTable when a DIRECTLY cell-anchored formula declares none of its own", () => {
+    const outerTable: SymbolTable = { symbols: [], units: [] };
+    const document: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      symbolTable: outerTable,
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          ...SHEET_DEFAULTS,
+          embeddedObjects: [
+            {
+              objectKind: "formula",
+              document: formulaDocument(
+                latexToFormula("f(x) = x^2", { source: "test:formula" })
+                  .formula,
+              ), // no symbolTable of its own
+              frame: FRAME,
+              anchorRow: 3,
+              anchorColumn: 2,
+            },
+          ],
+        },
+      ],
+    };
+    const entries = collectDocumentFormulas(document);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.symbolTable).toBe(outerTable);
   });
 
   it("skips a spreadsheet's non-formula embedded objects that carry no formula of their own, but still recurses into their nested document", () => {
