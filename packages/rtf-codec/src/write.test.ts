@@ -260,6 +260,25 @@ describe("body constructs", () => {
     expect(out).toContain("89504e470d0a1a0a");
   });
 
+  it("writes an embedded object as a real [MS-CFB] compound file inside \\object's \\objdata", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "embeddedObject",
+          objectKind: "spreadsheet",
+          frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+          document: { kind: "spreadsheet", metadata: {}, sheets: [] },
+        },
+      ]),
+    );
+    expect(out).toContain("{\\object\\objemb\\objw2000\\objh1000");
+    expect(out).toContain("{\\*\\objclass spreadsheet}");
+    expect(out).toContain("{\\*\\objdata");
+    // The [MS-CFB] magic bytes (D0 CF 11 E0 A1 B1 1A E1) -- proof the \objdata payload is a genuine compound file, not a placeholder or an opaque blob.
+    expect(out).toContain("d0cf11e0a1b11ae1");
+    expect(out).toContain("{\\result{\\pard\\plain");
+  });
+
   it("reports rather than silently dropping a construct boundary marker RTF cannot spell", () => {
     const codes: string[] = [];
     writeRtfContent(
@@ -830,5 +849,31 @@ describe("round trip through this package's own reader", () => {
     expect(out).toContain("\\marglsxn720");
     // The document-level geometry is stated once, in the header, from the first section -- not restated per section.
     expect(out.match(/\\paperw/g)).toHaveLength(1);
+  });
+
+  it("preserves an embedded object's kind, frame, and nested document through a real OLE compound file", () => {
+    const embedded: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: { title: "Embedded sheet" },
+      sheets: [],
+    };
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "embeddedObject",
+          objectKind: "spreadsheet",
+          frame: { xPt: 1, yPt: 2, widthPt: 100, heightPt: 50 },
+          document: embedded,
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    expect(block?.kind).toBe("embeddedObject");
+    if (block?.kind !== "embeddedObject")
+      throw new Error("expected an embeddedObject block");
+    expect(block.objectKind).toBe("spreadsheet");
+    expect(block.frame).toEqual({ xPt: 1, yPt: 2, widthPt: 100, heightPt: 50 });
+    expect(block.document).toEqual(embedded);
   });
 });
