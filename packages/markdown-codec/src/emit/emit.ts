@@ -169,7 +169,12 @@ function terminatesCleanly(styleId: string | undefined): boolean {
   );
 }
 
-// Whether a level<=2 heading paragraph will ACTUALLY be written as a setext heading rather than ATX -- exactly mirroring renderParagraphBody's own promotion rule below (headingStyle: 'setext', OR the heading's own rendered text embeds a hard/soft break that ATX has no way to hold), so canInterruptOpenParagraph can answer against the real spelling the heading is about to be written in, not just the configured style. This deliberately calls emitRuns a SECOND time, through a throwaway, diagnostic-free InlineEmitContext: this is a look-ahead check on content renderParagraphBody itself re-emits (through the real sink) moments later at the actual render call, and reporting the same run-level diagnostic (a monospace-styled code span, adjacent merged links) twice for one piece of content would be a duplicate finding, not a second real one -- emitRuns/renderNestedStyles read only InlineEmitContext's own two fields (sink, emphasisMarker) and mutate nothing on the wider EmitContext, so the two calls are independent and always agree on the text they produce.
+// Whether promoting a level<=2 heading's own rendered TEXT to setext would leave a genuine blank line somewhere inside the run of lines renderSetextHeading treats as one unit -- CommonMark's own setext grammar (spec 0.31.2, "Setext headings") is exactly "one or more lines of text, not interrupted by a blank line", immediately followed by the underline, so a blank line anywhere in that run breaks the promotion. A TRAILING one (text's own last line is empty -- it already ends in '\n', and renderSetextHeading appends its own '\n' plus the underline right after) is the reachable, real-world case: an ordinary Word heading ending in a manual line break or page break lowers to a run whose literal '\n' escapeMarkdownText spells as a trailing '\\\n', which is exactly this shape. Reparsing sees the real text close early into its own plain paragraph at the blank line, with the underline surviving as a spurious "===="/"----" paragraph of its own (or, when the underline character is '-', an outright thematic break instead) -- the heading itself is gone, not merely reformatted. An INTERIOR one (two consecutive embedded breaks with nothing between them, reachable only through a same-format markdown source's own un-escaped soft-break residue -- see src/emit/inline.ts's renderLeaf -- since escapeMarkdownText's hard-break spelling always keeps a non-blank backslash on that line instead) fractures the heading into two blocks on reparse, with only the LAST fragment keeping the heading-ness the underline actually attaches to and the first losing it outright. A LEADING blank line is deliberately NOT included here despite reading like it should fall under the identical spec wording: it sits BEFORE this run of lines even starts, so a reparse treats it as ordinary inter-block whitespace ahead of the heading, exactly as a blank line ahead of any other block already works -- verified directly (this module's own test suite) across every context this renders through, top-level, inside a list item's own marker line (including the specific "item begins with a blank line" case CommonMark calls out separately), and inside a blockquote: the heading always comes back intact. For the escaped-hard-break spelling specifically, a leading break round-trips losslessly rather than merely safely, since escapeMarkdownText never emits a bare leading '\n' in the first place -- its own backslash always occupies that line, and refusing promotion for it would be a real regression, not a fix.
+function embedsUnsafeBreakForSetext(text: string): boolean {
+  return text.endsWith("\n") || text.includes("\n\n");
+}
+
+// Whether a level<=2 heading paragraph will ACTUALLY be written as a setext heading rather than ATX -- exactly mirroring renderParagraphBody's own promotion rule below (headingStyle: 'setext', OR the heading's own rendered text embeds a hard/soft break that ATX has no way to hold, AND EITHER WAY only when the resulting break placement is actually safe -- see embedsUnsafeBreakForSetext above), so canInterruptOpenParagraph can answer against the real spelling the heading is about to be written in, not just the configured style. This deliberately calls emitRuns a SECOND time, through a throwaway, diagnostic-free InlineEmitContext: this is a look-ahead check on content renderParagraphBody itself re-emits (through the real sink) moments later at the actual render call, and reporting the same run-level diagnostic (a monospace-styled code span, adjacent merged links) twice for one piece of content would be a duplicate finding, not a second real one -- emitRuns/renderNestedStyles read only InlineEmitContext's own two fields (sink, emphasisMarker) and mutate nothing on the wider EmitContext, so the two calls are independent and always agree on the text they produce. The blank-line safety check needs `text` even when headingStyle is explicitly 'setext', so unlike before, that branch no longer short-circuits ahead of computing it -- an explicit caller preference for setext still cannot promote a heading whose own break placement would corrupt the reparse.
 function willRenderAsSetext(
   paragraph: ContentParagraph,
   level: number,
@@ -177,9 +182,6 @@ function willRenderAsSetext(
 ): boolean {
   if (level > MAX_SETEXT_LEVEL) {
     return false;
-  }
-  if (context.headingStyle === "setext") {
-    return true;
   }
   const text = emitRuns(
     paragraph.runs,
@@ -189,7 +191,10 @@ function willRenderAsSetext(
     },
     paragraph.constructs,
   );
-  return text.includes("\n");
+  if (embedsUnsafeBreakForSetext(text)) {
+    return false;
+  }
+  return context.headingStyle === "setext" || text.includes("\n");
 }
 
 // Whether a rendered block of this paragraph's own styleId can safely open right where an OPEN (non-terminated) paragraph left off, per CommonMark's own "these constructs interrupt a paragraph" rules, rather than being read as more of that paragraph's own text. This is the "safe as NEXT" half, and -- unlike terminatesCleanly -- genuinely depends on the emit options actually in force: a fenced code block and a math block always interrupt (their own opening delimiter is unambiguous either way); a thematic break interrupts UNLESS its rendered character is SETEXT_LEVEL_2_CHAR ('-'), which a reparse reads as a setext level-2 underline for the paragraph it follows instead of a fresh thematic break (context.thematicBreakChar's other two legal values, '_' and '*', are never a setext underline character and interrupt cleanly); an ATX heading always interrupts, but one that will actually be WRITTEN as setext (willRenderAsSetext above -- either headingStyle: 'setext', or a level<=2 heading whose own content embeds a break that forces the promotion regardless of the configured style) is the opposite of an interrupt -- its own text line reads as more of the preceding paragraph, which the underline line then retroactively converts whole into the heading, exactly the case this function exists to catch. Keying this off the paragraph's actual embedded-break state, not merely the configured headingStyle, is load-bearing: a level 1/2 heading forced into setext by its own content is exactly as unsafe to follow an open paragraph with, unmarked, as one setext by explicit configuration -- treating it as an always-interrupting ATX heading (the configured style alone) lets its own first line get silently absorbed as a continuation of whatever precedes it, with the setext underline then retroactively swallowing that preceding block into the heading on reparse. HTML_PREFORMATTED_STYLE_ID never interrupts: CommonMark's own HTML-block start condition 7 (a lone start/end tag on its own line) is explicitly barred from interrupting a paragraph, and this package cannot tell that condition apart from the other six that can, at the point this needs an answer, so it always assumes the unsafe one.
@@ -279,11 +284,13 @@ function renderParagraphBody(
       });
     }
     const text = emitRuns(paragraph.runs, context, paragraph.constructs);
-    // ATX is a single physical line; a hard OR soft break embedded in this heading's own runs (src/emit/inline.ts's renderLeaf) leaves a literal '\n' in `text` regardless of the configured headingStyle, and ATX has no way to hold it -- writing it out anyway would split the ATX line in two on reparse rather than lose formatting, which is strictly worse. Setext's own grammar is exactly "one or more lines of heading text", so promote to it whenever the level admits one (<=2), overriding the configured style; only a genuinely unrepresentable level 3-6 heading falls through to the collapse-with-diagnostic path below.
+    // ATX is a single physical line; a hard OR soft break embedded in this heading's own runs (src/emit/inline.ts's renderLeaf) leaves a literal '\n' in `text` regardless of the configured headingStyle, and ATX has no way to hold it -- writing it out anyway would split the ATX line in two on reparse rather than lose formatting, which is strictly worse. Setext's own grammar is exactly "one or more lines of heading text", so promote to it whenever the level admits one (<=2), overriding the configured style; only a genuinely unrepresentable level 3-6 heading, OR a level<=2 heading whose own break placement would leave a blank line setext cannot survive (embedsUnsafeBreakForSetext above), falls through to the collapse-with-diagnostic path below.
     const embedsLineBreak = text.includes("\n");
+    const unsafeForSetext = embedsUnsafeBreakForSetext(text);
     if (
       (context.headingStyle === "setext" || embedsLineBreak) &&
-      level <= MAX_SETEXT_LEVEL
+      level <= MAX_SETEXT_LEVEL &&
+      !unsafeForSetext
     ) {
       if (context.headingStyle !== "setext") {
         context.sink({
@@ -295,11 +302,19 @@ function renderParagraphBody(
       return renderSetextHeading(level, text);
     }
     if (embedsLineBreak) {
-      context.sink({
-        code: MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED,
-        severity: "info",
-        message: `a level ${String(level)} heading's own content contains a line break; only setext's own level-1/2 grammar can hold one, so ATX collapses it to a single space`,
-      });
+      if (level <= MAX_SETEXT_LEVEL && unsafeForSetext) {
+        context.sink({
+          code: MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+          severity: "info",
+          message: `a level ${String(level)} heading's own content contains a line break that would leave a blank line immediately before the setext underline (or, for a genuinely interior break, in the middle of the heading's own text) if promoted -- setext's own grammar requires "one or more lines of text, not interrupted by a blank line", so ATX collapses it to a single space instead of promoting into a corrupt reparse`,
+        });
+      } else {
+        context.sink({
+          code: MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED,
+          severity: "info",
+          message: `a level ${String(level)} heading's own content contains a line break; only setext's own level-1/2 grammar can hold one, so ATX collapses it to a single space`,
+        });
+      }
       return `${"#".repeat(level)} ${text.replace(/\\\n/g, " ").replace(/\n/g, " ")}`;
     }
     return `${"#".repeat(level)} ${text}`;
