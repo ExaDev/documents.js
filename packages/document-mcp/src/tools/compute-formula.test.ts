@@ -496,6 +496,86 @@ describe("compute_formula", () => {
     });
   });
 
+  // ExaDev/documents.js#928 round-8 review: the round-7 fix above covered a formula NESTED inside another embedded object's own document, but collectDocumentFormulas still pushed the DIRECT case -- a formula-kind embedded object sitting straight in the document's own block flow, exactly what buildFormulaBlock/formulaDocument produce on every real odt/odp/docx/markdown read -- with the ENCLOSING document's symbolTable, never consulting the formula document's OWN symbolTable field. This is the more common real-world shape than round-7's nested-non-formula case. Same silent-wrong-number risk as round-7: two documents fused by embedding registering the same unit id at two different conversion factors.
+  it("evaluates a DIRECTLY embedded formula's qty node against its OWN document's unit registry, not the differently-scaled one the enclosing document declares (ExaDev/documents.js#928 round-8 regression)", async () => {
+    const frame = { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 };
+    const pageGeometry = {
+      pageSize: { widthPt: 595, heightPt: 842 },
+      margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+    };
+    const formulaBlock = buildFormulaBlock(
+      {
+        mathml: [],
+        content: {
+          kind: "qty",
+          value: { numerator: "5", denominator: "1" },
+          unit: "test:unit",
+        },
+      },
+      frame,
+      "test:compute-formula-direct",
+    );
+    // formulaBlock.document is statically known to be the 'formula'-kind ContentDocument buildFormulaBlock built -- no narrowing needed. Same unit id, deliberately different factorToSi: 1 on the enclosing document, 2 on the formula's own -- so a wrong-table evaluation is silently WRONG (5 instead of 10), never a thrown error.
+    formulaBlock.document.symbolTable = {
+      symbols: [],
+      units: [
+        {
+          id: "test:unit",
+          symbol: "tu",
+          dimension: { length: 1 },
+          factorToSi: { numerator: "2", denominator: "1" },
+        },
+      ],
+    };
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      symbolTable: {
+        symbols: [],
+        units: [
+          {
+            id: "test:unit",
+            symbol: "tu",
+            dimension: { length: 1 },
+            factorToSi: { numerator: "1", denominator: "1" },
+          },
+        ],
+      },
+      sections: [
+        {
+          ...pageGeometry,
+          blocks: [formulaBlock],
+        },
+      ],
+    };
+
+    vi.mocked(readNativeDocumentTree).mockReturnValueOnce(
+      assembleTree(document),
+    );
+    const result = await pair.client.callTool({
+      name: "compute_formula",
+      arguments: {
+        source: {
+          bytesBase64: bytesToBase64(new Uint8Array()),
+          format: "docx",
+        },
+      },
+    });
+
+    expect(result.isError).toBeFalsy();
+    const output = structuredContentOf(result);
+    expect(output.formulaCount).toBe(1);
+    const [entry] = output.formulas;
+    if (entry === undefined) {
+      throw new Error("expected one formula entry");
+    }
+    // 5 * 2 = 10 (the formula's own factor). The pre-fix behaviour -- evaluating against the enclosing document's own table -- would have silently returned 5 (5 * 1) instead, with no error at all.
+    expect(entry.outcome).toEqual({
+      status: "evaluated",
+      result: { kind: "quantity", magnitude: 10, dimension: { length: 1 } },
+    });
+  });
+
   it("surfaces a read failure as an isError result, exactly like every other document-input tool", async () => {
     const result = await pair.client.callTool({
       name: "compute_formula",
