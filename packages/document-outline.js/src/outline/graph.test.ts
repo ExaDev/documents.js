@@ -2168,6 +2168,129 @@ describe("write API: insertEdge refuses a CONTAINS cycle (#935)", () => {
   });
 });
 
+describe("write API: insertNode's fresh-mint children-wiring reconciles pre-existing dangling CONTAINS edges (#935)", () => {
+  const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
+
+  it("insertNode does not duplicate a CONTAINS edge that insertEdge already attached onto this id before it had a node", () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const leafB = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [leafA.id, leafB.id],
+    });
+    // leafA is wired under the section before the section has a node of its own -- the exact "edge exists before its node" shape insertEdge tolerates by design.
+    const withDanglingEdge = insertEdge(leafB.graph, sectionId, leafA.id);
+    expect(
+      withDanglingEdge.edges.filter(
+        (edge) => edge.from === sectionId && edge.to === leafA.id,
+      ),
+    ).toHaveLength(1);
+
+    const section = insertNode(withDanglingEdge, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leafA.id, leafB.id],
+    });
+    expect(section.id).toBe(sectionId);
+
+    const contains = section.graph.edges.filter(
+      (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
+    );
+    // Exactly one edge per child -- the fresh-mint wiring must not have minted a second, byte-identical copy of the edge insertEdge already attached to leafA.
+    expect(contains).toHaveLength(2);
+    expect(contains.filter((edge) => edge.to === leafA.id)).toHaveLength(1);
+    expect(contains.filter((edge) => edge.to === leafB.id)).toHaveLength(1);
+    // Document order still matches the requested children order.
+    const ordered = [...contains]
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
+      .map((edge) => edge.to);
+    expect(ordered).toEqual([leafA.id, leafB.id]);
+  });
+
+  it("insertNode does not tie a freshly minted child's orderKey against a pre-existing dangling CONTAINS edge to a different child sitting at that same index-derived key", () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const leafB = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const leafC = insertNode(leafB.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "C." }] },
+    });
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [leafA.id, leafB.id, leafC.id],
+    });
+    // leafC is wired under the not-yet-minted section first, so it lands at orderKeyForIndex(0) -- the same floor key a bare index-keyed fresh mint would hand its own first requested child (leafA) without consulting this edge at all.
+    const withDanglingEdge = insertEdge(leafC.graph, sectionId, leafC.id);
+    const danglingEdge = withDanglingEdge.edges.find(
+      (edge) => edge.from === sectionId,
+    )!;
+    expect(danglingEdge.orderKey).toBe(orderKeys.orderKeyForIndex(0));
+
+    const section = insertNode(withDanglingEdge, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leafA.id, leafB.id, leafC.id],
+    });
+
+    const contains = section.graph.edges.filter(
+      (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
+    );
+    expect(contains).toHaveLength(3);
+    const orderKeysUsed = contains.map((edge) => edge.orderKey);
+    // No two siblings share an orderKey -- the degenerate shape boundedOrderKey/siblingInsertIndex refuse everywhere else in this module.
+    expect(new Set(orderKeysUsed).size).toBe(orderKeysUsed.length);
+    // Requested document order is preserved once the tie is resolved.
+    const ordered = [...contains]
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
+      .map((edge) => edge.to);
+    expect(ordered).toEqual([leafA.id, leafB.id, leafC.id]);
+  });
+
+  it("a fresh mint with no pre-existing CONTAINS edges at all still mints the wide, evenly spaced orderKeyForIndex(index) keys directly, without paying for reconciliation", () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const leafB = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const section = insertNode(leafB.graph, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leafA.id, leafB.id],
+    });
+    const contains = section.graph.edges.filter(
+      (edge) => edge.from === section.id && edge.kind === "CONTAINS",
+    );
+    expect(contains).toEqual([
+      {
+        from: section.id,
+        to: leafA.id,
+        kind: "CONTAINS",
+        orderKey: orderKeys.orderKeyForIndex(0),
+      },
+      {
+        from: section.id,
+        to: leafB.id,
+        kind: "CONTAINS",
+        orderKey: orderKeys.orderKeyForIndex(1),
+      },
+    ]);
+  });
+});
+
 describe("write API: insertNode handles a dedup hit's kind and children correctly (#935)", () => {
   const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
 
