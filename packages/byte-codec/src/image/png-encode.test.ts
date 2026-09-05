@@ -40,6 +40,8 @@ function assertSpecCompliantPng(png: Uint8Array): void {
   ]);
 
   let offset = 8;
+  let width: number | undefined;
+  let height: number | undefined;
   let colorType: number | undefined;
   let paletteEntryCount: number | undefined;
   let trnsLength: number | undefined;
@@ -56,6 +58,8 @@ function assertSpecCompliantPng(png: Uint8Array): void {
     expect(computedCrc).toBe(storedCrc); // every chunk's own CRC-32 must match its declared bytes
 
     if (type === "IHDR") {
+      width = view.getUint32(dataStart);
+      height = view.getUint32(dataStart + 4);
       colorType = data[9];
     } else if (type === "PLTE") {
       expect(data.length % 3).toBe(0); // PLTE is a whole number of RGB triples
@@ -69,6 +73,11 @@ function assertSpecCompliantPng(png: Uint8Array): void {
       break;
     }
   }
+
+  expect(width).toBeDefined();
+  expect(height).toBeDefined();
+  expect(width!).toBeGreaterThan(0); // PNG spec section 11.2.2 (IHDR): zero is an invalid value for width
+  expect(height!).toBeGreaterThan(0); // PNG spec section 11.2.2 (IHDR): zero is an invalid value for height
 
   if (colorType === 3) {
     expect(paletteEntryCount).toBeDefined();
@@ -321,15 +330,10 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     ["zero height", 3, 0],
     ["both zero", 0, 0],
   ])(
-    "never takes the indexed path for a zero-dimension image (%s), since an empty PLTE chunk is not a valid PNG chunk",
+    "rejects a zero-dimension image (%s) outright, since no valid PNG (indexed or truecolour) can represent one",
     (_label, width, height) => {
       const image = rgbImage(width, height, []);
-      const png = encodePng(image);
-
-      expect(colorTypeOf(png)).not.toBe(3); // falls back to the truecolour path, which carries no PLTE at all
-      expect(readChunks(png).has("PLTE")).toBe(false);
-      assertSpecCompliantPng(png);
-      expect(() => decodePng(png)).not.toThrow();
+      expect(() => encodePng(image)).toThrow(/zero-dimension/);
     },
   );
 });
