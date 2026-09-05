@@ -9,6 +9,8 @@
 import {
   type ConstructDescriptor,
   type ContentBlock,
+  type ContentControlDescriptor,
+  type ContentControlType,
   type ContentDocument,
   type ContentImageBlock,
   type ContentParagraph,
@@ -249,6 +251,43 @@ function bookmarkStartGroup(descriptor: ConstructDescriptor): string {
   return `{\\*\\bkmkstart${residue} ${escapeText(descriptor.name)}}`;
 }
 
+// The field instruction keyword for each controlType RTF's own form-field vocabulary actually covers -- the mirror of constructs.ts's own formFieldControlType, so the reader's instruction-to-controlType mapping and this controlType-to-instruction one are the two ends of a single round trip rather than independently maintained. Every other ContentControlType (richText, comboBox, date, picture, repeatingSection, button, index, group) has no member here and falls through to describeConstructGap below -- RTF's own \*\formfield vocabulary genuinely only spells these three.
+const FORM_FIELD_KEYWORDS: ReadonlyMap<ContentControlType, string> = new Map([
+  ["plainText", "FORMTEXT"],
+  ["checkbox", "FORMCHECKBOX"],
+  ["dropDown", "FORMDROPDOWN"],
+]);
+
+// The `<formparams><formstrings>` content of a `\*\formfield` group: a checkbox's own `\ffdefres`, a dropdown's own list of `{\*\ffl ...}` entries, and -- for any of the three types -- the control's bookmark-style name as `{\*\ffname ...}`.
+function formFieldPayload(descriptor: ContentControlDescriptor): string {
+  let out = "";
+  if (descriptor.controlType === "checkbox") {
+    out += `\\ffdefres${descriptor.checked === true ? "1" : "0"}`;
+  } else if (
+    descriptor.controlType === "dropDown" &&
+    descriptor.options !== undefined
+  ) {
+    for (const option of descriptor.options) {
+      out += `{\\*\\ffl ${escapeText(option)}}`;
+    }
+  }
+  if (descriptor.tag !== undefined && descriptor.tag.length > 0) {
+    out += `{\\*\\ffname ${escapeText(descriptor.tag)}}`;
+  }
+  return out;
+}
+
+// The whole field's own open: `{\field{\*\fldinst KEYWORD {\*\formfield PAYLOAD}}{\fldrslt `, left unclosed so the runs the extent wraps land inside \fldrslt's own destination -- the matching `}}` (closing \fldrslt, then \field) is written wherever the extent's endRun falls. Returns undefined for a controlType FORM_FIELD_KEYWORDS does not cover, so the caller can fall back to the ordinary construct-gap diagnostic instead of minting nothing silently.
+function formFieldOpenGroup(
+  descriptor: ContentControlDescriptor,
+): string | undefined {
+  const keyword = FORM_FIELD_KEYWORDS.get(descriptor.controlType);
+  if (keyword === undefined) {
+    return undefined;
+  }
+  return `{\\field{\\*\\fldinst ${keyword} {\\*\\formfield{${formFieldPayload(descriptor)}}}}{\\fldrslt `;
+}
+
 // Each ProvenanceChange's own <chrev> spelling. formatChange is the one with no flag of its own -- "\crauthN ... Note This keyword is used to indicate formatting revisions, such as bold, italic" -- so its author control word is what states that the run carries one at all.
 const CHREV_CONTROL_WORDS: Readonly<
   Record<ProvenanceChange, { flag: string; author: string; date: string }>
@@ -303,11 +342,17 @@ function nameOf(descriptor: ConstructDescriptor): string {
   return isBookmarkAnchor(descriptor) ? descriptor.name : "";
 }
 
+function isContentControlExtent(
+  extent: RunConstructExtent,
+): extent is RunConstructExtent & { descriptor: ContentControlDescriptor } {
+  return extent.descriptor.kind === "contentControl";
+}
+
 // Why a given descriptor kind has no RTF spelling, stated per kind rather than as one generic sentence, because the reasons genuinely differ: two of them are format gaps this package could close and two are gaps in RTF itself.
 function describeConstructGap(descriptor: ConstructDescriptor): string {
   switch (descriptor.kind) {
     case "contentControl":
-      return "structured-document-tag equivalent; its own \\*\\formfield production is a narrower construct this writer does not yet mint";
+      return "block-scoped structured-document-tag equivalent -- a run-scoped plainText/checkbox/dropDown form field mints its own \\*\\formfield instead; any other controlType (richText, comboBox, date, and the rest) has no \\*\\formfield spelling at all";
     case "provenance":
       return "block-scoped revision mark: its <chrev> production is a character property, so a tracked change reaches RTF only as a run-level extent";
     case "anchor":
@@ -575,11 +620,16 @@ class RtfWriter {
     const revisions = (paragraph.constructs ?? []).filter(
       (extent) => extent.descriptor.kind === "provenance",
     );
+    const formFields = (paragraph.constructs ?? []).filter(
+      isContentControlExtent,
+    );
     for (const [index, run] of paragraph.runs.entries()) {
       this.writeRunBoundaries(bookmarks, index);
+      this.writeFormFieldBoundaries(formFields, index);
       this.writeRun(run, revisionsCovering(revisions, index));
     }
     this.writeRunBoundaries(bookmarks, paragraph.runs.length);
+    this.writeFormFieldBoundaries(formFields, paragraph.runs.length);
     if (!inTable) {
       this.line("\\par");
     }
@@ -601,6 +651,38 @@ class RtfWriter {
         if (extent.endRun === position) {
           this.raw(`{\\*\\bkmkend ${escapeText(nameOf(extent.descriptor))}}`);
         }
+      }
+    }
+  }
+
+  // A form field's own two halves, matching writeRunBoundaries above but wrapping rather than flagging: the open is `{\field...}{\fldrslt ` left unclosed, so every run the extent covers lands inside \fldrslt's own destination, and the close is the matching `}}`. A controlType FORM_FIELD_KEYWORDS does not cover degrades through describeConstructGap instead of minting nothing silently.
+  private writeFormFieldBoundaries(
+    extents: readonly (RunConstructExtent & {
+      descriptor: ContentControlDescriptor;
+    })[],
+    position: number,
+  ): void {
+    for (const extent of extents) {
+      if (extent.endRun === position && extent.startRun !== position) {
+        this.raw("}}");
+      }
+    }
+    for (const extent of extents) {
+      if (extent.startRun !== position) {
+        continue;
+      }
+      const open = formFieldOpenGroup(extent.descriptor);
+      if (open === undefined) {
+        this.sink({
+          code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+          severity: "warning",
+          message: `a contentControl construct is dropped: RTF has no ${describeConstructGap(extent.descriptor)}`,
+        });
+        continue;
+      }
+      this.raw(open);
+      if (extent.endRun === position) {
+        this.raw("}}");
       }
     }
   }

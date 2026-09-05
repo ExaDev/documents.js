@@ -2,11 +2,13 @@
 //
 // Two of RTF's three candidates are real. Bookmarks are `'{\*' \bkmkstart (\bkmkcolfN? & \bkmkcollN?) #PCDATA '}'` / `'{\*' \bkmkend #PCDATA '}'` (RTF 1.9.1, "Bookmarks") and map onto the `anchor` descriptor with anchorType 'bookmark'. Revision marks are the <chrev> character-property production -- `\revised? \revauthN? \revdttmN? \crauthN? \crdateN? \deleted? \revauthdelN? \revdttmdelN? \mvf? \mvt? \mvauthN? \mvdateN?` (RTF 1.9.1, "Character Revision Mark Properties") -- and map onto `provenance`, one descriptor per change kind a run carries.
 //
-// The third, CONTENT CONTROLS, has no RTF spelling and is therefore not mapped. RTF 1.9.1 predates OOXML's `w:sdt` and specifies nothing equivalent: its "Custom XML Tags" production (\xmlopen/\xmlclose with the \xmlsdtt* scoping keywords) is a namespace/name tag over a run range with no type, lock, alias, placeholder or value, and its "Custom XML Data Properties" \*\datastore is an opaque #SDATA blob whose "format ... is unknown to RTF" by the spec's own words. What RTF has instead is form fields (`'{\*' \formfield '{' <formparams> <formstrings> '}}'` with \fftypeN naming text/check box/list, driven by a FORMTEXT/FORMCHECKBOX/FORMDROPDOWN field instruction), which ARE a contentControl analogue -- ooxml.js maps docx's own legacy w:ffData twin onto exactly that kind. They are named in this package's README gap table rather than mapped here, because the mapping needs the field machinery to hand the form field its instruction and cached result, which is its own change.
+// The third, CONTENT CONTROLS, has no direct RTF spelling of its own -- RTF 1.9.1 predates OOXML's `w:sdt` and specifies nothing equivalent: its "Custom XML Tags" production (\xmlopen/\xmlclose with the \xmlsdtt* scoping keywords) is a namespace/name tag over a run range with no type, lock, alias, placeholder or value, and its "Custom XML Data Properties" \*\datastore is an opaque #SDATA blob whose "format ... is unknown to RTF" by the spec's own words. What RTF has INSTEAD is form fields (`'{\*' \formfield '{' <formparams> <formstrings> '}}'`, nested inside a field's own `\*\fldinst` alongside its FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction), which ARE a real contentControl analogue -- ooxml.js maps docx's own legacy w:ffData twin onto exactly that kind, and this module does the same for RTF's: `formFieldContentControl` below reads a form field's instruction plus whatever `\*\formfield` data the reader collected into a `contentControl` descriptor (checkbox/dropDown/plainText), and `formFieldPayload`/`FORM_FIELD_KEYWORDS` in the writer mint one back. A form field is always inline -- one `{\field ...}` group, never spanning a paragraph boundary -- so the construct rides a `RunConstructExtent` on the paragraph, exactly like a revision mark, never a block-level `constructStart`/`constructEnd` pair.
 
 import type {
   AnchorDescriptor,
   ConstructDescriptor,
+  ContentControlDescriptor,
+  ContentControlType,
   ProvenanceChange,
   ProvenanceDescriptor,
   RunConstructExtent,
@@ -234,6 +236,63 @@ export function dttmFromIso(dateIso: string): number | undefined {
 
 function pad(value: number, width: number): string {
   return String(value).padStart(width, "0");
+}
+
+// Whatever `{\*\formfield ...}` handed the reader beyond the field's own instruction: the bookmark-style name from `{\*\ffname ...}`, a dropdown's own `{\*\ffl ...}` entries, and the current/default result index `\ffres`/`\ffdefres` carries for a checkbox's checked state or a dropdown's selected entry. Optional end to end -- `\*\formfield` itself is optional per the grammar, so a bare FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction with no `\*\formfield` group still names a control type on its own.
+export interface RtfFormFieldData {
+  readonly name: string;
+  readonly listItems: readonly string[];
+  readonly resultIndex: number | undefined;
+  readonly defaultResultIndex: number | undefined;
+}
+
+const FORM_FIELD_CHECKBOX_INSTRUCTION = /\bFORMCHECKBOX\b/i;
+const FORM_FIELD_DROPDOWN_INSTRUCTION = /\bFORMDROPDOWN\b/i;
+const FORM_FIELD_TEXT_INSTRUCTION = /\bFORMTEXT\b/i;
+
+// The one place a form field's instruction keyword decides its controlType, so the reader and the write-side keyword table (FORM_FIELD_KEYWORDS in write.ts) stay the two ends of one mapping rather than two independent guesses. Order matters only in that FORMCHECKBOX and FORMDROPDOWN are checked before the FORMTEXT fallback would otherwise never apply -- the three keywords do not overlap as substrings, so no ordering is actually load-bearing, but checking the two more specific keywords first reads as the intended precedence.
+function formFieldControlType(
+  instruction: string,
+): ContentControlType | undefined {
+  if (FORM_FIELD_CHECKBOX_INSTRUCTION.test(instruction)) {
+    return "checkbox";
+  }
+  if (FORM_FIELD_DROPDOWN_INSTRUCTION.test(instruction)) {
+    return "dropDown";
+  }
+  if (FORM_FIELD_TEXT_INSTRUCTION.test(instruction)) {
+    return "plainText";
+  }
+  return undefined;
+}
+
+// A form field's instruction plus whatever `\*\formfield` data the reader collected, folded into the one construct document-schema.js gives a content control -- undefined for an ordinary field (HYPERLINK, PAGE, and the rest) whose instruction names none of RTF's three form-field keywords, so the reader's existing hyperlink-only handling for those is untouched. The field's actual displayed text is not duplicated here: it rides the ordinary runs the extent already wraps (the `\fldrslt` content), exactly as ooxml.js's own w:ffData mapping leaves a text input's `value` unset for the identical reason.
+export function formFieldContentControl(
+  instruction: string,
+  formField: RtfFormFieldData | undefined,
+): ContentControlDescriptor | undefined {
+  const controlType = formFieldControlType(instruction);
+  if (controlType === undefined) {
+    return undefined;
+  }
+  const descriptor: ContentControlDescriptor = {
+    kind: "contentControl",
+    controlType,
+  };
+  if (formField === undefined) {
+    return descriptor;
+  }
+  const name = formField.name.trim();
+  if (name.length > 0) {
+    descriptor.tag = name;
+  }
+  if (controlType === "checkbox") {
+    const result = formField.resultIndex ?? formField.defaultResultIndex ?? 0;
+    descriptor.checked = result !== 0;
+  } else if (controlType === "dropDown" && formField.listItems.length > 0) {
+    descriptor.options = [...formField.listItems];
+  }
+  return descriptor;
 }
 
 // Coalesces a per-run descriptor list into the fewest run extents that say the same thing: adjacent runs carrying an equal descriptor become one extent rather than one per run. Equality is structural over the descriptor's own serialisation, which is exact here because a descriptor is a plain data object built by this module with its keys always in the same order.

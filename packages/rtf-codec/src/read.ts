@@ -43,6 +43,7 @@ import {
 import {
   bookmarkAnchorDescriptor,
   coalesceRunConstructs,
+  formFieldContentControl,
   NO_REVISION,
   provenanceDescriptors,
   type RevisionState,
@@ -94,7 +95,10 @@ type DestinationKind =
   | "listText" // the flat rendering of a list number, which a numbering-aware reader must ignore
   | "unicodeWrapper" // \upr, whose ANSI half is discarded and whose \ud half is read
   | "bookmarkStart" // {\*\bkmkstart ...}, whose text is the bookmark's own name
-  | "bookmarkEnd"; // {\*\bkmkend ...}, likewise
+  | "bookmarkEnd" // {\*\bkmkend ...}, likewise
+  | "formField" // {\*\formfield ...}, nested inside \fldinst: no #PCDATA of its own, carried entirely by its own control words and the two destinations below
+  | "formFieldName" // {\*\ffname ...}, whose text is the form field's own bookmark-style name
+  | "formFieldListItem"; // {\*\ffl ...}, whose text is a dropdown's list entry (or a text field's default text, unused here)
 
 const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   // Transparent wrappers whose content is ordinary body flow.
@@ -108,6 +112,9 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["listtext", "listText"],
   ["pntext", "listText"],
   ["upr", "unicodeWrapper"],
+  ["formfield", "formField"],
+  ["ffname", "formFieldName"],
+  ["ffl", "formFieldListItem"],
   // Content this reader deliberately does not place. ContentDocument has no page furniture, note, or annotation position for any of these to land in: a header/footer is page furniture with no ContentSection field to carry it, and a footnote body's real home is document-schema.js's tree-only definitions table, which the flat form this reader produces cannot reach. Each is skipped with a diagnostic rather than silently, and each is listed in the README's own gap table.
   ["footnote", "skip"],
   ["header", "skip"],
@@ -302,9 +309,18 @@ interface PictureState {
   binary: number[];
 }
 
-// Shared by reference across a field group and its children, so a \fldrslt group reads the instruction its sibling \fldinst already collected without either needing to know the other's stack depth.
+// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffl destinations close and its \ffres/\ffdefres control words apply.
+interface FormFieldState {
+  name: string;
+  listItems: string[];
+  resultIndex: number | undefined;
+  defaultResultIndex: number | undefined;
+}
+
+// Shared by reference across a field group and its children, so a \fldrslt group reads the instruction its sibling \fldinst already collected without either needing to know the other's stack depth. `formField` is `undefined` until a nested \*\formfield destination opens -- a legacy field with no \*\formfield group at all still has an instruction, just no further form-field data.
 interface FieldState {
   instruction: string;
+  formField: FormFieldState | undefined;
 }
 
 // One {\*\bkmkstart ...} or {\*\bkmkend ...} group under construction: its #PCDATA name, plus the start half's optional table-column range.
@@ -324,6 +340,8 @@ interface GroupState {
   bookmark: BookmarkState | undefined;
   // Whether this group is a \upr wrapper's own child that must be discarded (the ANSI half). Set on the wrapper; consulted when a child group opens.
   inUnicodeWrapper: boolean;
+  // Whether this group's own head is \field itself, set explicitly on every group open (never inherited) exactly like inUnicodeWrapper above -- state.field is shared by reference down through \field's own descendants, so this is the one flag that tells the group-close handler "this closing brace is the field's own, not one of its children's".
+  isFieldGroup: boolean;
 }
 
 function defaultCharacterState(): CharacterState {
@@ -368,6 +386,7 @@ function cloneGroupState(state: GroupState): GroupState {
     picture: state.picture,
     bookmark: state.bookmark,
     inUnicodeWrapper: state.inUnicodeWrapper,
+    isFieldGroup: state.isFieldGroup,
   };
 }
 
@@ -445,6 +464,12 @@ function skipUnicodeFallback(
     textOffset = 0;
   }
   return { index, textOffset };
+}
+
+// A \field group's own run range, open from its head brace to its closing one. paragraphSerial guards against the pathological (never seen in real RTF) case of a \par landing inside a \field group: without it, a stale runIndex captured before the paragraph reset could produce an inverted startRun/endRun pair.
+interface OpenFormField {
+  readonly paragraphSerial: number;
+  readonly runIndex: number;
 }
 
 // A bookmark start held open until its end arrives, at which point the pair's own scope decides its encoding. `blockIndex` is filled in when the paragraph the start sits in takes its place in a block list, and stays undefined for a pair that opens and closes inside one paragraph.
@@ -546,6 +571,8 @@ class ContentBuilder {
   private pendingRunConstructs: RunConstructExtent[] = [];
   // Bookmarks whose end half arrived in the paragraph currently accumulating, having started in an earlier one -- resolvable only once that paragraph's own block index is known.
   private closingBookmarks: OpenBookmark[] = [];
+  // Form fields, held open the same way as a bookmark, but stacked rather than named: a \field group's own open and close are one matched pair, not two independently placed halves, so there is no genuine cross-paragraph case in real RTF. The paragraphSerial check below is kept anyway, as the same guard against an inverted range a pathological \par-inside-\field would otherwise produce.
+  private openFormFields: OpenFormField[] = [];
 
   constructor(
     private readonly header: RtfHeader,
@@ -595,6 +622,32 @@ class ContentBuilder {
       return;
     }
     this.closingBookmarks.push(open);
+  }
+
+  // "{\field ..." -- flushing first for the same reason startBookmark does: the extent's boundary is a run boundary.
+  startFormField(): void {
+    this.flushRun();
+    this.openFormFields.push({
+      paragraphSerial: this.paragraphSerial,
+      runIndex: this.runs.length,
+    });
+  }
+
+  // The matching "}" for a \field group. `descriptor` is undefined for an ordinary field (no FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction), in which case nothing is produced -- this reader's existing hyperlink-only handling for those fields is unchanged.
+  endFormField(descriptor: ConstructDescriptor | undefined): void {
+    this.flushRun();
+    const open = this.openFormFields.pop();
+    if (open === undefined || descriptor === undefined) {
+      return;
+    }
+    if (open.paragraphSerial !== this.paragraphSerial) {
+      return;
+    }
+    this.pendingRunConstructs.push({
+      descriptor,
+      startRun: open.runIndex,
+      endRun: this.runs.length,
+    });
   }
 
   appendText(
@@ -1200,6 +1253,7 @@ function readRtfDetail(
     picture: undefined,
     bookmark: undefined,
     inUnicodeWrapper: false,
+    isFieldGroup: false,
   };
   const stack: GroupState[] = [root];
   let state = root;
@@ -1247,7 +1301,27 @@ function readRtfDetail(
       state.bookmark.name += text;
       return;
     }
-    // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText" and "unicodeWrapper" discard.
+    if (
+      state.destination === "formFieldName" &&
+      state.field?.formField !== undefined
+    ) {
+      state.field.formField.name += text;
+      return;
+    }
+    if (
+      state.destination === "formFieldListItem" &&
+      state.field?.formField !== undefined
+    ) {
+      // Appends to the LAST item: a \*\ffl group's own open pushed one empty entry per occurrence, so several sibling \*\ffl groups (a dropdown's list) each accumulate into their own slot rather than one shared string.
+      const items = state.field.formField.listItems;
+      const last = items.length - 1;
+      const current = items[last];
+      if (current !== undefined) {
+        items[last] = current + text;
+      }
+      return;
+    }
+    // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText", "unicodeWrapper" and "formField" discard.
   };
 
   let index = 0;
@@ -1303,10 +1377,28 @@ function readRtfDetail(
       }
       const child = cloneGroupState(state);
       child.inUnicodeWrapper = kind === "unicodeWrapper";
+      // Recomputed on every group open rather than inherited from the clone, exactly like inUnicodeWrapper above: state.field is shared by reference down through a \field group's whole subtree, so without an explicit reset here every descendant group (\*\fldinst, \*\formfield, \fldrslt) would also read as "is the field's own group" and the close handler below would fire once per descendant instead of once for the field itself.
+      child.isFieldGroup = head.destination === "field";
       if (known !== undefined) {
         child.destination = kind;
-        if (head.destination === "field") {
-          child.field = { instruction: "" };
+        if (child.isFieldGroup) {
+          child.field = { instruction: "", formField: undefined };
+          builder.startFormField();
+        }
+        if (head.destination === "formfield" && child.field !== undefined) {
+          // Mutates the SAME FieldState object the enclosing \field group's own children all share by reference, so \*\ffname/\*\ffl (nested inside this group) and the \field group's own closing brace (which reads it back to build the descriptor) see the identical data.
+          child.field.formField = {
+            name: "",
+            listItems: [],
+            resultIndex: undefined,
+            defaultResultIndex: undefined,
+          };
+        }
+        if (
+          head.destination === "ffl" &&
+          child.field?.formField !== undefined
+        ) {
+          child.field.formField.listItems.push("");
         }
         if (kind === "picture") {
           child.picture = defaultPictureState();
@@ -1347,6 +1439,15 @@ function readRtfDetail(
         } else if (state.destination === "bookmarkEnd") {
           builder.endBookmark(bookmark.name);
         }
+      }
+      if (state.isFieldGroup && state.field !== undefined) {
+        // The whole field is read by now -- \*\fldinst and \*\formfield are this group's own earlier children, already closed -- so this is the one point that knows both the instruction and whatever form-field data it carried.
+        builder.endFormField(
+          formFieldContentControl(
+            state.field.instruction,
+            state.field.formField,
+          ),
+        );
       }
       if (stack.length > 1) {
         stack.pop();
@@ -1515,6 +1616,24 @@ function applyPictureControlWord(
       return;
     default:
       return;
+  }
+}
+
+// \ffresN "Current result of the form field", \ffdefresN "Default result": whichever is present names a checkbox's checked state or a dropdown's selected entry index, current overriding default exactly as docx's own w:checked/w:default pair does for the identical construct.
+function applyFormFieldControlWord(
+  name: string,
+  param: number | undefined,
+  formField: FormFieldState,
+): boolean {
+  switch (name) {
+    case "ffres":
+      formField.resultIndex = param;
+      return true;
+    case "ffdefres":
+      formField.defaultResultIndex = param;
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -1800,6 +1919,14 @@ function applyControlWord(
     return;
   }
   if (state.destination === "bookmarkEnd") {
+    return;
+  }
+  const formField = state.field?.formField;
+  if (
+    state.destination === "formField" &&
+    formField !== undefined &&
+    applyFormFieldControlWord(name, param, formField)
+  ) {
     return;
   }
   if (applyCharacterControlWord(name, param, state, header)) {
