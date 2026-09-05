@@ -1,13 +1,19 @@
 import { decodePackage as decodeOdfPackage } from "odf.js";
-import { decodePackage as decodeOoxmlPackage, readXlsxContent } from "ooxml.js";
+import {
+  decodePackage as decodeOoxmlPackage,
+  encodePackage,
+  readXlsxContent,
+} from "ooxml.js";
 import { readPdf } from "pdf-codec";
 import { describe, expect, it } from "vitest";
 import { docxToPdf, odsToXlsx } from "../convert/convert";
 import { readOdpContent } from "../odf/odp/read";
-import { minimalDocxBytes } from "../test-support/docx";
+import { readDocxExtras } from "../ooxml/docx/extras";
+import { readDocxContent } from "../ooxml/docx/read";
+import { docxWithExtrasPackage, minimalDocxBytes } from "../test-support/docx";
 import { minimalOdpBytes } from "../test-support/odp";
 import { richOdsBytes } from "../test-support/ods";
-import { setDocumentMetadata } from "./write";
+import { patchDocxMetadata, setDocumentMetadata } from "./write";
 
 describe("setDocumentMetadata: rebuild path (docx/pptx/odt/odp/ods/odg/markdown)", () => {
   it("patches only the overridden field, leaving the source document own existing title untouched", () => {
@@ -62,6 +68,60 @@ describe("setDocumentMetadata: rebuild path (docx/pptx/odt/odp/ods/odg/markdown)
     );
     // The resolved image is inlined back as a data: URI (buildMarkdownText re-serialises a ContentImageBlock), not lost to alt text -- the resolver reached the markdown content codec's read through SetDocumentMetadataOptions.images.
     expect(rebuilt).toContain("data:image/png");
+  });
+});
+
+// ExaDev/documents.js#966: unlike setDocumentMetadata's own docx branch (rebuild path above, which genuinely drops comments/footnotes/headers/numbering -- see extras.ts's own gotcha), patchDocxMetadata patches docProps/core.xml directly on the decoded Package, so everything docx-extras covers survives byte-faithful.
+describe("patchDocxMetadata", () => {
+  it("patches title/author in place, leaving docx-extras data (comments, footnotes, headers/footers, numbering) completely untouched", () => {
+    const sourceBytes = encodePackage(docxWithExtrasPackage());
+    const before = readDocxExtras(decodeOoxmlPackage(sourceBytes));
+    expect(before.comments.length).toBeGreaterThan(0);
+    expect(before.footnotes.length).toBeGreaterThan(0);
+    expect(before.headerFooterParts.length).toBeGreaterThan(0);
+    expect(Object.keys(before.numbering).length).toBeGreaterThan(0);
+
+    const patched = patchDocxMetadata(sourceBytes, {
+      title: "Patched Title",
+      author: "New Author",
+    });
+
+    const after = readDocxExtras(decodeOoxmlPackage(patched));
+    expect(after).toStrictEqual(before);
+
+    // The metadata edit itself still landed.
+    const metadata = readDocxContent(decodeOoxmlPackage(patched)).metadata;
+    expect(metadata.title).toBe("Patched Title");
+    expect(metadata.author).toBe("New Author");
+  });
+
+  it("creates docProps/core.xml from scratch when the source carries none at all, and leaves it absent when no field is overridden", () => {
+    const sourceBytes = encodePackage(docxWithExtrasPackage());
+    expect(
+      decodeOoxmlPackage(sourceBytes).parts["docProps/core.xml"],
+    ).toBeUndefined();
+
+    const untouched = patchDocxMetadata(sourceBytes, {});
+    expect(
+      decodeOoxmlPackage(untouched).parts["docProps/core.xml"],
+    ).toBeUndefined();
+
+    const patched = patchDocxMetadata(sourceBytes, { title: "Brand New" });
+    const part = decodeOoxmlPackage(patched).parts["docProps/core.xml"];
+    expect(part?.kind).toBe("xml");
+  });
+
+  it("leaves fields the caller never mentions exactly as the source document already had them", () => {
+    const sourceBytes = minimalDocxBytes();
+    const withTitle = patchDocxMetadata(sourceBytes, { title: "First Pass" });
+    const withAuthorToo = patchDocxMetadata(withTitle, {
+      author: "Second Pass Author",
+    });
+
+    const core = decodeOoxmlPackage(withAuthorToo);
+    expect(readDocxExtras(core)).toStrictEqual(
+      readDocxExtras(decodeOoxmlPackage(sourceBytes)),
+    );
   });
 });
 
