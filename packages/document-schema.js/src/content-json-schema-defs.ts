@@ -10,7 +10,7 @@ import { schemaUriFor } from "./schema-io";
 // The hand-authored JSON Schema $defs fragments spliced into content-document.schema.json's `override()` callback (scripts/generate-json-schemas.mjs), lifted out into their own src module rather than staying inline in that script. The reason is single-sourcing, not tidiness: this exact object needs to be reachable from two places that cannot share an import graph --
 //
 //   1. scripts/generate-json-schemas.mjs itself, which only ever runs against the freshly-built ../dist/ (it imports every other schema it needs the same way), so it imports CONTENT_DEFS from '../dist/content-json-schema-defs.js', the file tsdown emits for this module (entry: 'src/**/*.ts', one dist file per src file -- see tsdown.config.ts).
-//   2. content-json-schema-defs.test.ts (src/, run directly by vitest's "unit" project against source, never against dist), which imports this exact same CONTENT_DEFS value straight from here and asserts it stays byte-for-byte in step with a live z.toJSONSchema() call over each fragment's real exported Zod schema counterpart (ContentParagraphSchema, ContentRunSchema, ContentListMembershipSchema, ContentImageBlockSchema, ContentPageBreakSchema, ColorSchema, BoxSchema, LayoutFrameSchema, PageSizeSchema, MarginsSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, the package tree's non-recursive descriptors and anchors from src/package-node.ts: SectionDescriptorSchema, SlideDescriptorSchema, SheetDescriptorSchema, DrawPageDescriptorSchema, ShapeDescriptorSchema, HeadingParagraphSchema, ListParagraphSchema, the sheet grid and vector leaves from src/content.ts: ContentSheetCellSchema, ContentCellValueSchema, ContentSheetCellCommentSchema, ContentSheetColumnSchema, ContentSheetRowSchema, ContentSheetPrintSettingsSchema, ContentSheetPrintRangeSchema, ContentSheetRepeatRangeSchema, ContentSheetImageSchema, ContentStrokeSchema, ContentPathPointSchema, ContentPathSegmentSchema, ContentSubpathSchema, ContentVectorSchema, and the definitions facility from src/definitions.ts: StyleParagraphPropertiesSchema, StyleRunPropertiesSchema, StyleEntrySchema, DefinitionEntrySchema, the whole construct descriptor vocabulary from src/construct.ts: ContentControlDescriptorSchema, FieldDescriptorSchema, AnchorDescriptorSchema, LinkTargetSchema, LinkDescriptorSchema, ProvenanceDescriptorSchema, DivisionSourceSchema, DivisionDescriptorSchema, ConstructDescriptorSchema, the flat form's two construct boundary markers from src/content.ts: ContentConstructStartSchema, ContentConstructEndSchema, the quarantined residue value from src/source.ts: SourceResidueSchema, plus the non-recursive math leaves from src/math.ts: ExactRationalSchema, DimensionVectorSchema, MathPresentationSchema, MathProvenanceSchema, MathUncertaintySchema, MathNumSchema, MathQtySchema, MathSymSchema, MathUnparsedSchema, MathSymbolEntrySchema, MathUnitSchema, MathNormalisationContextSchema, SymbolTableSchema) -- see that test file's own top comment for why this is the only structural defence this generator has against silently drifting away from the schemas it's meant to describe.
+//   2. content-json-schema-defs.test.ts (src/, run directly by vitest's "unit" project against source, never against dist), which imports this exact same CONTENT_DEFS value straight from here and asserts it stays byte-for-byte in step with a live z.toJSONSchema() call over each fragment's real exported Zod schema counterpart (ContentParagraphSchema, ContentRunSchema, ContentListMembershipSchema, ContentImageBlockSchema, ContentPageBreakSchema, ColorSchema, BoxSchema, LayoutFrameSchema, PageSizeSchema, MarginsSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, ContentCellPatternTypeSchema, ContentCellFillSchema, the package tree's non-recursive descriptors and anchors from src/package-node.ts: SectionDescriptorSchema, SlideDescriptorSchema, SheetDescriptorSchema, DrawPageDescriptorSchema, ShapeDescriptorSchema, HeadingParagraphSchema, ListParagraphSchema, the sheet grid and vector leaves from src/content.ts: ContentSheetCellSchema, ContentCellValueSchema, ContentSheetCellCommentSchema, ContentSheetColumnSchema, ContentSheetRowSchema, ContentSheetPrintSettingsSchema, ContentSheetPrintRangeSchema, ContentSheetRepeatRangeSchema, ContentSheetImageSchema, ContentStrokeSchema, ContentPathPointSchema, ContentPathSegmentSchema, ContentSubpathSchema, ContentVectorSchema, and the definitions facility from src/definitions.ts: StyleParagraphPropertiesSchema, StyleRunPropertiesSchema, StyleEntrySchema, DefinitionEntrySchema, the whole construct descriptor vocabulary from src/construct.ts: ContentControlDescriptorSchema, FieldDescriptorSchema, AnchorDescriptorSchema, LinkTargetSchema, LinkDescriptorSchema, ProvenanceDescriptorSchema, DivisionSourceSchema, DivisionDescriptorSchema, ConstructDescriptorSchema, the flat form's two construct boundary markers from src/content.ts: ContentConstructStartSchema, ContentConstructEndSchema, the quarantined residue value from src/source.ts: SourceResidueSchema, plus the non-recursive math leaves from src/math.ts: ExactRationalSchema, DimensionVectorSchema, MathPresentationSchema, MathProvenanceSchema, MathUncertaintySchema, MathNumSchema, MathQtySchema, MathSymSchema, MathUnparsedSchema, MathSymbolEntrySchema, MathUnitSchema, MathNormalisationContextSchema, SymbolTableSchema) -- see that test file's own top comment for why this is the only structural defence this generator has against silently drifting away from the schemas it's meant to describe.
 //
 // If CONTENT_DEFS stayed inline in the .mjs script, only path 1 above would work: the script imports Zod schemas exclusively from '../dist/index.js' (a build artefact that may not exist, and per eslint.config.ts/tsconfig.json is deliberately excluded from both linting and typechecking, matching test/smoke.test.mjs's own precedent) -- a test that has to import through that path would only ever run after a build, which `pnpm test` (the "unit" vitest project, run standalone in CI's own "test" job, with no build step beforehand) never guarantees. Living here instead, this is an ordinary, fully typechecked and linted src module like any other -- CONTENT_DEFS just happens to be consumed by a script as well as by the package's own test suite.
 //
@@ -99,7 +99,7 @@ function mathBinderDef(kind: "sum" | "prod"): JsonSchema {
 
 // -- Hand-authored $defs, spliced into content-document.schema.json only (via scripts/generate-json-schemas.mjs's own ContentDocumentSchema override branch) --
 //
-// The fragments below are transcribed by hand, field-for-field, from src/content.ts's real Zod object definitions (ContentParagraphSchema, ContentTableSchema/ContentTableRowSchema/ContentTableCellSchema, ContentImageBlockSchema, ContentPageBreakSchema, ContentRunSchema, ContentListMembershipSchema, ColorSchema, BoxSchema, LayoutFrameSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema -- each cross-checked directly against a real z.toJSONSchema() call over that exact exported schema, and the ones with a real, non-recursive, non-custom counterpart are held to that comparison as a running test by content-json-schema-defs.test.ts) plus the ContentEmbeddedObject/ContentEmbeddedObjectBlock TS interfaces, which have no exported z.object() counterpart at all (both are validated only via the isContentEmbeddedObject*() z.custom() guards), plus the math value schemas of src/math.ts (the semantic half of the two-layer formula model -- see that file's own top comment for how the layers divide). Re-verify this block against src/content.ts/src/math.ts whenever those files' field shapes change -- nothing here is generated or checked against the real schemas at build time, other than the leaf/near-leaf fragments the regression test below does cover.
+// The fragments below are transcribed by hand, field-for-field, from src/content.ts's real Zod object definitions (ContentParagraphSchema, ContentTableSchema/ContentTableRowSchema/ContentTableCellSchema, ContentImageBlockSchema, ContentPageBreakSchema, ContentRunSchema, ContentListMembershipSchema, ColorSchema, BoxSchema, LayoutFrameSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, ContentCellPatternTypeSchema, ContentCellFillSchema -- each cross-checked directly against a real z.toJSONSchema() call over that exact exported schema, and the ones with a real, non-recursive, non-custom counterpart are held to that comparison as a running test by content-json-schema-defs.test.ts) plus the ContentEmbeddedObject/ContentEmbeddedObjectBlock TS interfaces, which have no exported z.object() counterpart at all (both are validated only via the isContentEmbeddedObject*() z.custom() guards), plus the math value schemas of src/math.ts (the semantic half of the two-layer formula model -- see that file's own top comment for how the layers divide). Re-verify this block against src/content.ts/src/math.ts whenever those files' field shapes change -- nothing here is generated or checked against the real schemas at build time, other than the leaf/near-leaf fragments the regression test below does cover.
 export const CONTENT_DEFS: Record<string, JsonSchema> = {
   Color: {
     type: "object",
@@ -191,6 +191,89 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       diagonalDown: { $ref: "#/$defs/ContentBorder" }, // top-left to bottom-right
     },
     additionalProperties: false,
+  },
+  // The closed pattern-type vocabulary a table/sheet cell's own pattern fill can name -- WordprocessingML's ST_Shd percentage/stripe/cross families and SpreadsheetML's ST_PatternType named-density/hatch families, spliced into one flat enum since the two never share a member name (src/content.ts's own ContentCellPatternTypeSchema comment has the full citation).
+  ContentCellPatternType: {
+    type: "string",
+    enum: [
+      "percent5",
+      "percent10",
+      "percent12",
+      "percent15",
+      "percent20",
+      "percent25",
+      "percent30",
+      "percent35",
+      "percent37",
+      "percent40",
+      "percent45",
+      "percent50",
+      "percent55",
+      "percent60",
+      "percent62",
+      "percent65",
+      "percent70",
+      "percent75",
+      "percent80",
+      "percent85",
+      "percent87",
+      "percent90",
+      "percent95",
+      "horizontalStripe",
+      "verticalStripe",
+      "diagonalStripe",
+      "reverseDiagonalStripe",
+      "horizontalCross",
+      "diagonalCross",
+      "thinHorizontalStripe",
+      "thinVerticalStripe",
+      "thinDiagonalStripe",
+      "thinReverseDiagonalStripe",
+      "thinHorizontalCross",
+      "thinDiagonalCross",
+      "mediumGray",
+      "darkGray",
+      "lightGray",
+      "darkHorizontal",
+      "darkVertical",
+      "darkDown",
+      "darkUp",
+      "darkGrid",
+      "darkTrellis",
+      "lightHorizontal",
+      "lightVertical",
+      "lightDown",
+      "lightUp",
+      "lightGrid",
+      "lightTrellis",
+      "gray125",
+      "gray0625",
+    ],
+  },
+  // A table/sheet cell's own background (src/content.ts's ContentCellFillSchema): a plain discriminated union of two strict objects reaching no opaque node, so this fragment is held to the live z.toJSONSchema() comparison by content-json-schema-defs.test.ts like the descriptors beside it.
+  ContentCellFill: {
+    oneOf: [
+      {
+        type: "object",
+        properties: {
+          kind: { type: "string", const: "solid" },
+          color: { $ref: "#/$defs/Color" },
+        },
+        required: ["kind", "color"],
+        additionalProperties: false,
+      },
+      {
+        type: "object",
+        properties: {
+          kind: { type: "string", const: "pattern" },
+          patternType: { $ref: "#/$defs/ContentCellPatternType" },
+          foregroundColor: { $ref: "#/$defs/Color" },
+          backgroundColor: { $ref: "#/$defs/Color" },
+        },
+        required: ["kind", "patternType"],
+        additionalProperties: false,
+      },
+    ],
   },
   ContentListMembership: {
     type: "object",
@@ -322,7 +405,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
         exclusiveMinimum: 0,
         maximum: MAX_SAFE_INTEGER,
       },
-      background: { $ref: "#/$defs/Color" },
+      background: { $ref: "#/$defs/ContentCellFill" },
       borders: { $ref: "#/$defs/ContentCellBorders" },
       verticalAlign: { type: "string", enum: ["top", "center", "bottom"] },
       sourcePath: { type: "string" },
@@ -618,7 +701,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
         exclusiveMinimum: 0,
         maximum: MAX_SAFE_INTEGER,
       },
-      background: { $ref: "#/$defs/Color" },
+      background: { $ref: "#/$defs/ContentCellFill" },
       borders: { $ref: "#/$defs/ContentCellBorders" },
       alignment: { $ref: "#/$defs/Alignment" },
       verticalAlignment: { type: "string", enum: ["top", "middle", "bottom"] },

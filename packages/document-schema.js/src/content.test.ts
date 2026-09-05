@@ -4,6 +4,8 @@ import {
   type ContentBlock,
   ContentBlockSchema,
   ContentCellBordersSchema,
+  ContentCellFillSchema,
+  ContentCellPatternTypeSchema,
   ContentConstructEndSchema,
   ContentConstructStartSchema,
   type ContentDocument,
@@ -28,6 +30,7 @@ import {
   isContentConstructEnd,
   isContentConstructStart,
   isRunConstructExtent,
+  resolveCellFillColor,
   type RunConstructExtent,
 } from "./content";
 import type { ConstructDescriptor } from "./construct";
@@ -77,7 +80,11 @@ const table: ContentBlock = {
     {
       cells: [
         { blocks: [paragraph] },
-        { blocks: [image], colSpan: 2, background: COLOR_BLACK },
+        {
+          blocks: [image],
+          colSpan: 2,
+          background: { kind: "solid", color: COLOR_BLACK },
+        },
       ],
     },
     { cells: [{ blocks: [pageBreak] }], heightPt: 20 },
@@ -1326,6 +1333,179 @@ describe("ContentCellBorders diagonals", () => {
     });
     expect(parsed.diagonalUp).toEqual(border);
     expect(parsed.diagonalDown).toEqual(border);
+  });
+});
+
+describe("ContentCellFill", () => {
+  it("parses a solid fill", () => {
+    const parsed = ContentCellFillSchema.parse({
+      kind: "solid",
+      color: COLOR_BLACK,
+    });
+    expect(parsed).toEqual({ kind: "solid", color: COLOR_BLACK });
+  });
+
+  it("parses a pattern fill carrying both a foreground and a background colour", () => {
+    const parsed = ContentCellFillSchema.parse({
+      kind: "pattern",
+      patternType: "percent50",
+      foregroundColor: COLOR_BLACK,
+      backgroundColor: { r: 1, g: 1, b: 1 },
+    });
+    expect(parsed).toEqual({
+      kind: "pattern",
+      patternType: "percent50",
+      foregroundColor: COLOR_BLACK,
+      backgroundColor: { r: 1, g: 1, b: 1 },
+    });
+  });
+
+  it("parses a pattern fill whose foreground and background colours are both left unstated", () => {
+    const parsed = ContentCellFillSchema.parse({
+      kind: "pattern",
+      patternType: "diagonalCross",
+    });
+    if (parsed.kind !== "pattern") {
+      throw new Error("expected a pattern fill");
+    }
+    expect(parsed.foregroundColor).toBeUndefined();
+    expect(parsed.backgroundColor).toBeUndefined();
+  });
+
+  it("accepts every Word-family and Excel-family pattern type", () => {
+    for (const patternType of ContentCellPatternTypeSchema.options) {
+      expect(
+        ContentCellFillSchema.safeParse({ kind: "pattern", patternType })
+          .success,
+      ).toBe(true);
+    }
+  });
+
+  it("refuses a pattern type outside the closed vocabulary", () => {
+    expect(
+      ContentCellFillSchema.safeParse({
+        kind: "pattern",
+        patternType: "confetti",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("refuses a solid fill missing its colour", () => {
+    expect(ContentCellFillSchema.safeParse({ kind: "solid" }).success).toBe(
+      false,
+    );
+  });
+
+  it("refuses an unrecognised kind", () => {
+    expect(
+      ContentCellFillSchema.safeParse({ kind: "gradient", color: COLOR_BLACK })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe("resolveCellFillColor", () => {
+  it("resolves a solid fill to its own colour", () => {
+    expect(resolveCellFillColor({ kind: "solid", color: COLOR_BLACK })).toEqual(
+      COLOR_BLACK,
+    );
+  });
+
+  it("prefers a pattern fill's own foreground colour", () => {
+    const backgroundColor = { r: 1, g: 1, b: 1 };
+    expect(
+      resolveCellFillColor({
+        kind: "pattern",
+        patternType: "percent50",
+        foregroundColor: COLOR_BLACK,
+        backgroundColor,
+      }),
+    ).toEqual(COLOR_BLACK);
+  });
+
+  it("falls back to a pattern fill's own background colour when no foreground colour is stated", () => {
+    const backgroundColor = { r: 1, g: 1, b: 1 };
+    expect(
+      resolveCellFillColor({
+        kind: "pattern",
+        patternType: "percent50",
+        backgroundColor,
+      }),
+    ).toEqual(backgroundColor);
+  });
+
+  it("resolves to undefined when a pattern fill states neither colour", () => {
+    expect(
+      resolveCellFillColor({ kind: "pattern", patternType: "gray125" }),
+    ).toBeUndefined();
+  });
+});
+
+describe("ContentTableCell background", () => {
+  it("accepts a solid background", () => {
+    const parsed = ContentTableCellSchema.parse({
+      blocks: [],
+      background: { kind: "solid", color: COLOR_BLACK },
+    });
+    expect(parsed.background).toEqual({ kind: "solid", color: COLOR_BLACK });
+  });
+
+  it("accepts a genuine two-colour pattern background instead of dropping it", () => {
+    const parsed = ContentTableCellSchema.parse({
+      blocks: [],
+      background: {
+        kind: "pattern",
+        patternType: "percent20",
+        foregroundColor: COLOR_BLACK,
+        backgroundColor: { r: 1, g: 1, b: 1 },
+      },
+    });
+    expect(parsed.background).toEqual({
+      kind: "pattern",
+      patternType: "percent20",
+      foregroundColor: COLOR_BLACK,
+      backgroundColor: { r: 1, g: 1, b: 1 },
+    });
+  });
+
+  it("refuses a bare Color, the pre-#951 shape, now that background is a discriminated fill", () => {
+    expect(
+      ContentTableCellSchema.safeParse({ blocks: [], background: COLOR_BLACK })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe("ContentSheetCell background", () => {
+  const base = {
+    row: 0,
+    column: 0,
+    value: { kind: "empty" as const },
+    displayText: "",
+  };
+
+  it("accepts a solid background", () => {
+    const parsed = ContentSheetCellSchema.parse({
+      ...base,
+      background: { kind: "solid", color: COLOR_BLACK },
+    });
+    expect(parsed.background).toEqual({ kind: "solid", color: COLOR_BLACK });
+  });
+
+  it("accepts a genuine two-colour pattern background instead of dropping it", () => {
+    const parsed = ContentSheetCellSchema.parse({
+      ...base,
+      background: {
+        kind: "pattern",
+        patternType: "darkTrellis",
+        foregroundColor: COLOR_BLACK,
+      },
+    });
+    expect(parsed.background).toEqual({
+      kind: "pattern",
+      patternType: "darkTrellis",
+      foregroundColor: COLOR_BLACK,
+    });
   });
 });
 
