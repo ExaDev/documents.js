@@ -71,6 +71,8 @@ interface RawCell {
   readonly horzMerge: number;
   readonly vertMerge: number;
   readonly borders: ContentCellBorders | undefined;
+  /** Sides this cell's own sprmTSetBrc has explicitly cleared to a NilBrc, threaded from tap.ts's TableCellProperties.clearedSides -- see applyRowLevelBorderCascade's own note for why cascadeRowBorders must never re-fill one of these. */
+  readonly clearedSides: ReadonlySet<CellBorderSide> | undefined;
   readonly background: Color | undefined;
   readonly blocks: ContentBlock[];
 }
@@ -156,6 +158,7 @@ function tryAssembleTable(
             horzMerge: merge.horzMerge,
             vertMerge: merge.vertMerge,
             borders: merge.borders,
+            clearedSides: merge.clearedSides,
             background: merge.background,
             blocks: cell.blocks,
           };
@@ -203,7 +206,7 @@ function tryAssembleTable(
 
 // [MS-DOC] 2.6.3's own sprmTTableBorders/sprmTTableBorders80: "specifies the borders for this row unless modified by other Sprms applied to the cells" -- an explicit, order-independent fallback beneath TC80's own per-cell Brc80 (sprmTDefTable) and sprmTSetBrc's exact-colour override, both already folded into each RawCell's own borders by tap.ts's ordinary last-Prl-wins pass by the time this runs (see tap.ts's own top-of-file note on why the cascade itself is captured, unresolved, there rather than applied there). Applied here, once every row of the table is known, because which of a row's own six TableBordersOperand fields reaches a given cell depends on the cell's position in the WHOLE table: brcTop only for the table's own first row, brcBottom only for its last, brcLeft/brcRight only for a row's own first/last physical cell, and brcHorizontalInside/brcVerticalInside for every interior edge -- exactly the ECMA-376 tblBorders/tcBorders precedence [MS-DOC]'s own Overview of Tables (2.4.3) defers to ("To determine which borders are displayed, see... [ECMA-376] Part 1, Section 17.4.66... Section 17.4.38").
 //
-// A genuine format-level ambiguity is left unresolved rather than guessed at: TC80's own Brc80 fields are mandatory for every physical cell, so a cell whose own TC80/sprmTSetBrc states "no border" on a side is byte-for-byte indistinguishable from a cell that never had that side's border stated at all -- there is no way to tell "this cell explicitly punches a hole in the row's cascade" from "this cell defers to it". This cascade therefore fills in every side a cell's own resolved borders (RawCell.borders) leave undefined, which is the correct, common-case behaviour this issue exists to fix (a table decorated purely through the row-level cascade now reads with the borders it actually shows) and the only side of that ambiguity a real byte stream can express one way or the other -- the same kind of narrow, inherent physical-model limit the README's own Tables section already documents for a table-wide merge or a shared leading indent.
+// A genuine format-level ambiguity remains for TC80 alone: its own Brc80 fields are mandatory for every physical cell, so a cell whose own TC80 states "no border" on a side (the all-bits-set Brc80MayBeNil sentinel, or a real producer's own BrcType 0x00) is byte-for-byte indistinguishable from a cell whose TC80 was never touched at all -- there is no way to tell "this cell's TC80 explicitly punches a hole in the row's cascade" from "this cell defers to it" from TC80's bytes alone. sprmTSetBrc's own explicit clear is not part of that ambiguity: naming a side with a NilBrc is an unambiguous, out-of-band statement, tap.ts's applyBrcToCell records it on RawCell.clearedSides rather than folding it indistinguishably into RawCell.borders, and cascadeRowBorders below never re-fills a side that set names. What this cascade actually fills, then, is every side that is BOTH absent from a cell's own resolved borders (RawCell.borders) and not in its clearedSides -- the correct, common-case behaviour ExaDev/documents.js#945 exists to fix (a table decorated purely through the row-level cascade now reads with the borders it actually shows) -- leaving only TC80's own inherent ambiguity unresolved, the same kind of narrow, inherent physical-model limit the README's own Tables section already documents for a table-wide merge or a shared leading indent.
 function applyRowLevelBorderCascade(
   rows: readonly (readonly RawCell[])[],
   definitions: readonly TableRowDefinition[],
@@ -221,7 +224,7 @@ function applyRowLevelBorderCascade(
   });
 }
 
-// One row's own physical cells against its own rowBorders: brcLeft/brcRight land on the row's own first/last physical cell (which, since a physical cell's own boundaries always span from the table's left edge to its right edge regardless of any merge within the row, always IS the row's own outer edge), brcTop/brcBottom on every cell when this is the table's first/last row, and brcHorizontalInside/brcVerticalInside everywhere else. "Last physical cell" is resolved through any trailing sprmTMerge/TCGRF.horzMerge continuation cells (isRightmostPhysicalCell) so a legacy-encoded horizontal merge's own anchor still reaches the row's real right edge; this package's own writer states a horizontal merge as a genuinely narrower, wider physical cell instead, for which physicalIndex === cells.length - 1 already holds directly.
+// One row's own physical cells against its own rowBorders: brcLeft/brcRight land on the row's own first/last physical cell (which, since a physical cell's own boundaries always span from the table's left edge to its right edge regardless of any merge within the row, always IS the row's own outer edge), brcTop/brcBottom on every cell when this is the table's first/last row, and brcHorizontalInside/brcVerticalInside everywhere else. "Last physical cell" is resolved through any trailing sprmTMerge/TCGRF.horzMerge continuation cells (isRightmostPhysicalCell) so a legacy-encoded horizontal merge's own anchor still reaches the row's real right edge; this package's own writer states a horizontal merge as a genuinely narrower, wider physical cell instead, for which physicalIndex === cells.length - 1 already holds directly. A side in the cell's own clearedSides is left out of `sides` entirely regardless of what the cascade would otherwise supply -- an explicit sprmTSetBrc clear always wins, exactly as tap.ts's own applyBrcToCell states it should (ExaDev/documents.js#945).
 function cascadeRowBorders(
   cells: readonly RawCell[],
   rowBorders: TableBordersSet,
@@ -232,20 +235,28 @@ function cascadeRowBorders(
     const isFirstCell = cellIndex === 0;
     const isLastCell = isRightmostPhysicalCell(cells, cellIndex);
     const sides: Record<CellBorderSide, ContentBorder | undefined> = {
-      top:
-        cell.borders?.top ??
-        (isFirstRow ? rowBorders.top : rowBorders.insideHorizontal),
-      left:
-        cell.borders?.left ??
-        (isFirstCell ? rowBorders.left : rowBorders.insideVertical),
-      bottom:
-        cell.borders?.bottom ??
-        (isLastRow ? rowBorders.bottom : rowBorders.insideHorizontal),
-      right:
-        cell.borders?.right ??
-        (isLastCell ? rowBorders.right : rowBorders.insideVertical),
+      top: cell.clearedSides?.has("top")
+        ? undefined
+        : (cell.borders?.top ??
+          (isFirstRow ? rowBorders.top : rowBorders.insideHorizontal)),
+      left: cell.clearedSides?.has("left")
+        ? undefined
+        : (cell.borders?.left ??
+          (isFirstCell ? rowBorders.left : rowBorders.insideVertical)),
+      bottom: cell.clearedSides?.has("bottom")
+        ? undefined
+        : (cell.borders?.bottom ??
+          (isLastRow ? rowBorders.bottom : rowBorders.insideHorizontal)),
+      right: cell.clearedSides?.has("right")
+        ? undefined
+        : (cell.borders?.right ??
+          (isLastCell ? rowBorders.right : rowBorders.insideVertical)),
     };
-    return { ...cell, borders: cellBordersFrom(sides) };
+    return {
+      ...cell,
+      borders: cellBordersFrom(sides),
+      clearedSides: undefined,
+    };
   });
 }
 
