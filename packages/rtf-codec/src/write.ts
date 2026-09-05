@@ -261,7 +261,7 @@ const FORM_FIELD_SPEC: ReadonlyMap<
   ["dropDown", { instruction: "FORMDROPDOWN", fftype: 2 }],
 ]);
 
-// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffres`/`\ffdefres` pair, a dropdown's own list of `{\*\ffl ...}` entries, and -- for any of the three types -- the control's bookmark-style name as `{\*\ffname ...}`.
+// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffres`/`\ffdefres` pair, a dropdown's own selected-entry `\ffres` plus its list of `{\*\ffl ...}` entries, and -- for any of the three types -- the control's bookmark-style name as `{\*\ffname ...}`.
 function formFieldPayload(
   descriptor: ContentControlDescriptor,
   fftype: number,
@@ -275,6 +275,14 @@ function formFieldPayload(
     descriptor.controlType === "dropDown" &&
     descriptor.options !== undefined
   ) {
+    // \ffres also names a dropdown's own selected entry as a zero-based index into the \ffl list below -- mint one only when `value` actually names one of `options`, so a dropdown with no recorded selection keeps writing exactly what it always has.
+    const selectedIndex =
+      descriptor.value === undefined
+        ? -1
+        : descriptor.options.indexOf(descriptor.value);
+    if (selectedIndex !== -1) {
+      out += `\\ffres${String(selectedIndex)}`;
+    }
     for (const option of descriptor.options) {
       out += `{\\*\\ffl ${escapeText(option)}}`;
     }

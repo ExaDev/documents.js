@@ -303,6 +303,31 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  it("writes \\ffres as a zero-based index into \\*\\ffl when a dropDown's value names one of its own options", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Guten Tag" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+                value: "Guten Tag",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\ffres1");
+    expectBalancedBraces(out);
+  });
+
   it("writes a plainText contentControl wrapping its runs in \\fldrslt", () => {
     const out = write(
       wordprocessing([
@@ -898,6 +923,38 @@ describe("round trip through this package's own reader", () => {
         .map((run) => run.text)
         .join(""),
     ).toBe("Guten Tag");
+  });
+
+  it("round-trips a dropDown contentControl's selected value back onto the same options", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Guten Tag" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+                value: "Guten Tag",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "dropDown",
+      options: ["Hello", "Guten Tag"],
+      value: "Guten Tag",
+    });
   });
 
   it("round-trips a plainText contentControl's tag and its wrapped text", () => {
