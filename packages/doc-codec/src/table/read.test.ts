@@ -1,8 +1,10 @@
+import type { ContentBorder } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { DocFormatError, DocUnsupportedError } from "../errors";
 import { readDocContent } from "../read";
 import { buildDoc, type DocParagraphSpec } from "../test-support/doc";
 import { CELL_MARK } from "../text/special";
+import { SHD_SIZE } from "./decoration";
 
 // Every writeDocContent table test in write.test.ts reads back bytes this package's own writer produced -- a round trip proves the reader and writer agree with each other, not that either agrees with [MS-DOC] itself. These tests hand-assemble the sgc-5 (table) grpprl bytes straight from the specification's own field tables, independently of tap-write.ts's construction logic, so they exercise table/read.ts and table/tap.ts against bytes this package never wrote.
 
@@ -15,21 +17,52 @@ function le16(value: number): number[] {
   return [value & 0xff, (value >> 8) & 0xff];
 }
 
-// TC80, [MS-DOC] 2.9.313: tcgrf (2 bytes -- horzMerge in bits 0-1, vertMerge in bits 5-6, per TCGRF 2.9.317) + wWidth (2, unused by this reader) + four Brc80 border fields (4 bytes each), each written as Brc80MayBeNil ("no border", all bits set).
-function tc80(horzMerge: number, vertMerge: number): number[] {
+/** A single Brc80MayBeNil field's own no-border sentinel, [MS-DOC] 2.9.18: all four bytes set. */
+const NIL_BRC80 = new Array<number>(4).fill(0xff);
+
+// TC80, [MS-DOC] 2.9.313: tcgrf (2 bytes -- horzMerge in bits 0-1, vertMerge in bits 5-6, per TCGRF 2.9.317) + wWidth (2, unused by this reader) + four Brc80 border fields (4 bytes each). Each defaults to Brc80MayBeNil ("no border", all bits set) unless `borders` names a real Brc80 for that side -- used by the sprmTTableBorders precedence tests below, where one cell's own TC80 states a real border that must win over the row-level cascade.
+function tc80(
+  horzMerge: number,
+  vertMerge: number,
+  borders?: {
+    top?: readonly number[];
+    left?: readonly number[];
+    bottom?: readonly number[];
+    right?: readonly number[];
+  },
+): number[] {
   const tcgrf = (horzMerge & 0x3) | ((vertMerge & 0x3) << 5);
-  return [...le16(tcgrf), 0x00, 0x00, ...new Array<number>(16).fill(0xff)];
+  return [
+    ...le16(tcgrf),
+    0x00,
+    0x00,
+    ...(borders?.top ?? NIL_BRC80),
+    ...(borders?.left ?? NIL_BRC80),
+    ...(borders?.bottom ?? NIL_BRC80),
+    ...(borders?.right ?? NIL_BRC80),
+  ];
 }
 
 // sprmTDefTable, [MS-DOC] 2.6.3 (0xD608): TDefTableOperand's own cb (2 bytes -- "the number of bytes used by the remainder of this structure, incremented by 1"), NumberOfColumns, rgdxaCenter (NumberOfColumns + 1 signed 2-byte boundaries), then one TC80 per column.
 function sprmTDefTable(
   columnBoundariesTwips: readonly number[],
-  cells: readonly { horzMerge: number; vertMerge: number }[],
+  cells: readonly {
+    horzMerge: number;
+    vertMerge: number;
+    borders?: {
+      top?: readonly number[];
+      left?: readonly number[];
+      bottom?: readonly number[];
+      right?: readonly number[];
+    };
+  }[],
 ): number[] {
   const remainder = [
     cells.length,
     ...columnBoundariesTwips.flatMap(le16),
-    ...cells.flatMap((cell) => tc80(cell.horzMerge, cell.vertMerge)),
+    ...cells.flatMap((cell) =>
+      tc80(cell.horzMerge, cell.vertMerge, cell.borders),
+    ),
   ];
   const cb = remainder.length + 1;
   return [0x08, 0xd6, ...le16(cb), ...remainder];
@@ -48,6 +81,67 @@ function sprmPItap(depth: number): number[] {
 // sprmTVertMerge, [MS-DOC] 2.6.3 (0xD62B): a VertMergeOperand naming one cell (itc) and its own VerticalMergeFlag -- the incremental per-cell mechanism for a vertical merge, the vertical analogue of sprmTMerge.
 function sprmTVertMerge(itc: number, vertMergeFlags: number): number[] {
   return [0x2b, 0xd6, 0x02, itc, vertMergeFlags];
+}
+
+/** A Brc80 field's own four bytes, [MS-DOC] 2.9.17: dptLineWidth (1/8-point increments), brcType (BRC_TYPE_SINGLE, 0x01, throughout these tests), ico (an Ico palette index, [MS-DOC] 2.9.119), then a zeroed dptSpace/fShadow/fFrame byte. */
+function brc80(dptLineWidthEighths: number, ico: number): number[] {
+  return [dptLineWidthEighths, 0x01, ico, 0x00];
+}
+
+/** A Brc field's own eight bytes, [MS-DOC] 2.9.16: an exact COLORREF (r, g, b, fAuto -- 2.9.43), dptLineWidth, brcType (BRC_TYPE_SINGLE throughout), then a zeroed reserved word. */
+function brc(
+  rgb: readonly [number, number, number],
+  dptLineWidthEighths: number,
+): number[] {
+  return [rgb[0], rgb[1], rgb[2], 0x00, dptLineWidthEighths, 0x01, 0x00, 0x00];
+}
+
+/** A BrcMayBeNil field's own no-border sentinel, [MS-DOC] 2.9.20: the last four bytes -- dptLineWidth/brcType/reserved -- all set (the cv COLORREF ahead of them is not part of the sentinel, so it is left zeroed here). */
+const NIL_BRC = [0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff];
+
+interface TableBordersSides {
+  readonly top?: readonly number[];
+  readonly left?: readonly number[];
+  readonly bottom?: readonly number[];
+  readonly right?: readonly number[];
+  readonly insideHorizontal?: readonly number[];
+  readonly insideVertical?: readonly number[];
+}
+
+// sprmTTableBorders, [MS-DOC] 2.6.3 (0xD613): a TableBordersOperand ([MS-DOC] 2.9.302) -- cb (1 byte, MUST be 0x30) then six real 8-byte Brc fields in brcTop/brcLeft/brcBottom/brcRight/brcHorizontalInside/brcVerticalInside order, a side defaulting to NIL_BRC ("no border") when the caller does not name it.
+function sprmTTableBorders(sides: TableBordersSides): number[] {
+  const remainder = [
+    ...(sides.top ?? NIL_BRC),
+    ...(sides.left ?? NIL_BRC),
+    ...(sides.bottom ?? NIL_BRC),
+    ...(sides.right ?? NIL_BRC),
+    ...(sides.insideHorizontal ?? NIL_BRC),
+    ...(sides.insideVertical ?? NIL_BRC),
+  ];
+  return [0x13, 0xd6, remainder.length, ...remainder];
+}
+
+// sprmTTableBorders80, [MS-DOC] 2.6.3 (0xD605): the Word 97-era TableBordersOperand80 ([MS-DOC] 2.9.303) -- the same six-field layout as sprmTTableBorders, but each field a 4-byte Brc80MayBeNil rather than an 8-byte Brc.
+function sprmTTableBorders80(sides: TableBordersSides): number[] {
+  const remainder = [
+    ...(sides.top ?? NIL_BRC80),
+    ...(sides.left ?? NIL_BRC80),
+    ...(sides.bottom ?? NIL_BRC80),
+    ...(sides.right ?? NIL_BRC80),
+    ...(sides.insideHorizontal ?? NIL_BRC80),
+    ...(sides.insideVertical ?? NIL_BRC80),
+  ];
+  return [0x05, 0xd6, remainder.length, ...remainder];
+}
+
+/** One Shd's own ten bytes, [MS-DOC] 2.9.247, as a flat ipatAuto background: cvFore automatic (fAuto set), cvBack the stated colour, ipat 0x0000. */
+function shdBackground(rgb: readonly [number, number, number]): number[] {
+  return [0x00, 0x00, 0x00, 0xff, rgb[0], rgb[1], rgb[2], 0x00, 0x00, 0x00];
+}
+
+// sprmTSetShdTable, [MS-DOC] 2.6.3 (0xD660): a SHDOperand ([MS-DOC] 2.9.249) -- cb (1 byte, MUST be 10) then one Shd (10 bytes) applied to every cell in the row.
+function sprmTSetShdTable(shd: readonly number[]): number[] {
+  return [0x60, 0xd6, shd.length, ...shd];
 }
 
 function tableBlock(document: ReturnType<typeof readDocContent>) {
@@ -382,6 +476,231 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
       undefined,
     ]);
     expect(rowTwoCells.map((cell) => cellText(cell))).toEqual(["a", "b", "c"]);
+  });
+});
+
+// ExaDev/documents.js#945: a table decorated only through the row/table-level cascade -- sprmTTableBorders/sprmTTableBorders80, and sprmTSetShdTable for background -- used to read with no cell borders at all, since neither was read before. These tests hand-assemble that cascade the same way every other sprm in this file is exercised, independently of tap-write.ts (which never emits it).
+describe("readDocContent tables, row/table-level border cascade (sprmTTableBorders, ExaDev/documents.js#945)", () => {
+  const TOP: ContentBorder = { color: { r: 1, g: 0, b: 0 }, widthPt: 1 };
+  const LEFT: ContentBorder = { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5 };
+  const BOTTOM: ContentBorder = { color: { r: 0, g: 1, b: 0 }, widthPt: 1.5 };
+  const RIGHT: ContentBorder = { color: { r: 1, g: 1, b: 0 }, widthPt: 2 };
+  const INSIDE_H: ContentBorder = {
+    color: { r: 0, g: 1, b: 1 },
+    widthPt: 0.75,
+  };
+  const INSIDE_V: ContentBorder = {
+    color: { r: 1, g: 0, b: 1 },
+    widthPt: 1.25,
+  };
+
+  const tableBordersSprm = sprmTTableBorders({
+    top: brc([0xff, 0x00, 0x00], 8),
+    left: brc([0x00, 0x00, 0xff], 4),
+    bottom: brc([0x00, 0xff, 0x00], 12),
+    right: brc([0xff, 0xff, 0x00], 16),
+    insideHorizontal: brc([0x00, 0xff, 0xff], 6),
+    insideVertical: brc([0xff, 0x00, 0xff], 10),
+  });
+
+  it("cascades all six sides onto a 2x2 table's own cells, purely from each cell's own position in the whole table", () => {
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...tableBordersSprm,
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+          {
+            runs: [{ text: "C" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "D" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(2);
+    const row0 = block.rows[0]?.cells ?? [];
+    const row1 = block.rows[1]?.cells ?? [];
+    expect(row0[0]?.borders).toEqual({
+      top: TOP,
+      left: LEFT,
+      right: INSIDE_V,
+      bottom: INSIDE_H,
+    });
+    expect(row0[1]?.borders).toEqual({
+      top: TOP,
+      right: RIGHT,
+      left: INSIDE_V,
+      bottom: INSIDE_H,
+    });
+    expect(row1[0]?.borders).toEqual({
+      top: INSIDE_H,
+      left: LEFT,
+      bottom: BOTTOM,
+      right: INSIDE_V,
+    });
+    expect(row1[1]?.borders).toEqual({
+      top: INSIDE_H,
+      right: RIGHT,
+      bottom: BOTTOM,
+      left: INSIDE_V,
+    });
+  });
+
+  it("lets a cell's own explicit TC80 border take precedence over the row-level cascade, regardless of which comes first in the grpprl", () => {
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const explicitTop = brc80(4, 0x02); // 0.5pt solid blue, TC80's own palette-indexed spelling -- deliberately a different colour and width from tableBordersSprm's own brcTop, so a leaked cascade value is unmistakable.
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...tableBordersSprm,
+      ...sprmTDefTable(
+        [0, 1000, 2000],
+        [{ ...unmerged, borders: { top: explicitTop } }, unmerged],
+      ),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    expect(cells[0]?.borders?.top).toEqual({
+      color: { r: 0, g: 0, b: 1 },
+      widthPt: 0.5,
+    });
+    expect(cells[1]?.borders?.top).toEqual(TOP);
+  });
+
+  it("cascades sprmTTableBorders80's palette-indexed Brc80 fields the same way as the modern spelling", () => {
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000], [unmerged]),
+      ...sprmTTableBorders80({
+        top: brc80(8, 0x06), // red
+        bottom: brc80(8, 0x02), // blue
+        left: brc80(8, 0x04), // green
+        right: brc80(8, 0x07), // yellow
+      }),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cell = tableBlock(document).rows[0]?.cells[0];
+    expect(cell?.borders).toEqual({
+      top: { color: { r: 1, g: 0, b: 0 }, widthPt: 1 },
+      bottom: { color: { r: 0, g: 0, b: 1 }, widthPt: 1 },
+      left: { color: { r: 0, g: 1, b: 0 }, widthPt: 1 },
+      right: { color: { r: 1, g: 1, b: 0 }, widthPt: 1 },
+    });
+  });
+
+  it("cascades sprmTSetShdTable's whole-row background onto every cell in the row", () => {
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...sprmTSetShdTable(shdBackground([0xff, 0xff, 0x00])),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    expect(cells[0]?.background).toEqual({ r: 1, g: 1, b: 0 });
+    expect(cells[1]?.background).toEqual({ r: 1, g: 1, b: 0 });
+  });
+
+  it("lets a later, more specific sprmTDefTableShd override an earlier sprmTSetShdTable, the ordinary last-Prl-wins fold every other shading sprm already follows", () => {
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    // sprmTSetShdTable's own text carries none of sprmTTableBorders's "unless modified" exception, so it folds in grpprl order like every other shading sprm rather than always yielding to a per-cell one.
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...sprmTSetShdTable(shdBackground([0xff, 0xff, 0x00])),
+      // sprmTDefTableShd (0xD612): a single-entry rgShd naming only cell 0 -- "cells past its end keep whatever an earlier sprm left them" (tap.ts's own applyShdArray note), so cell 1's own whole-table yellow survives untouched while cell 0's is overridden.
+      ...[0x12, 0xd6, SHD_SIZE, ...shdBackground([0x00, 0xff, 0x00])],
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    expect(cells[0]?.background).toEqual({ r: 0, g: 1, b: 0 });
+    expect(cells[1]?.background).toEqual({ r: 1, g: 1, b: 0 });
   });
 });
 
