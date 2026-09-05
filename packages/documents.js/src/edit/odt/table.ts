@@ -228,10 +228,53 @@ function internTableColumnWidth(pkg: Package, widthPt: number): string {
   return name;
 }
 
-// The row-height counterpart to internTableColumnWidth immediately above, for the identical reason: odf.js's StyleRegistry has no row-height field either, so style:table-row-properties/@style:row-height is hand-rolled here too -- reuse an existing table-row style if one with the exact same formatted height is already present, otherwise mint a fresh name and append a new entry.
-function internTableRowHeight(pkg: Package, heightPt: number): string {
+// Reads rowElement's CURRENT table:style-name -> style:style[family="table-row"] -> style:table-row-properties chain (mirroring src/edit/ods/column-row.ts's own currentRowStyleProperties), returning every attribute EXCEPT style:row-height, which the caller owns. A row opened via openOdt() can carry a style with properties this editor has no dedicated getter/setter for at all -- fo:break-before, style:use-optimal-row-height, fo:keep-together, fo:background-color -- and every one of them must survive a heightPt write untouched, not just the ones this file happens to model by name.
+function currentRowStylePropertiesExceptHeight(
+  pkg: Package,
+  rowElement: XmlElement,
+): Record<string, string> {
+  const styleName = attr(rowElement, "table:style-name");
+  const styleElement =
+    styleName === undefined
+      ? undefined
+      : findStyleElement(styleName, "table-row", pkg);
+  const props =
+    styleElement === undefined
+      ? undefined
+      : styleElement.children.find(
+          (c): c is XmlElement =>
+            c.type === "element" && c.tag === "style:table-row-properties",
+        );
+  const result: Record<string, string> = {};
+  if (props === undefined) {
+    return result;
+  }
+  for (const a of props.attributes) {
+    if (a.name !== "style:row-height") {
+      result[a.name] = a.value;
+    }
+  }
+  return result;
+}
+
+// True only when props carries EXACTLY `expected`'s attributes -- same count, same values -- never a superset or a subset. A plain count-plus-per-key comparison rather than attr() lookups alone, so a style carrying one extra property (say style:use-optimal-row-height alongside a matching style:row-height) is correctly rejected as a candidate rather than silently reused, which would import that extra property onto a row that never had it.
+function rowStylePropertiesMatch(
+  props: XmlElement,
+  expected: Readonly<Record<string, string>>,
+): boolean {
+  const expectedKeys = Object.keys(expected);
+  return (
+    props.attributes.length === expectedKeys.length &&
+    expectedKeys.every((key) => attr(props, key) === expected[key])
+  );
+}
+
+// The row-height counterpart to internTableColumnWidth above, generalised beyond a single height value: mints (or reuses) a style:style[family="table-row"] carrying exactly `properties` in its style:table-row-properties -- reuse requires an EXACT property-set match (rowStylePropertiesMatch above), otherwise mint a fresh name and append a new entry. Callers pass the row's own current non-height properties merged with the height change (or with the height key omitted, when clearing a height on a row whose style also carries something else), matching src/edit/ods/column-row.ts's applyRowStyleProperties: read current, merge, mint fresh -- never mutate an existing style in place, since other rows may still reference it.
+function internTableRowProperties(
+  pkg: Package,
+  properties: Readonly<Record<string, string>>,
+): string {
   const automaticStyles = ensureAutomaticStyles(pkg);
-  const formatted = formatOdfLength(heightPt, "pt");
   for (const child of automaticStyles.children) {
     if (
       child.type !== "element" ||
@@ -244,7 +287,7 @@ function internTableRowHeight(pkg: Package, heightPt: number): string {
       (c): c is XmlElement =>
         c.type === "element" && c.tag === "style:table-row-properties",
     );
-    if (props !== undefined && attr(props, "style:row-height") === formatted) {
+    if (props !== undefined && rowStylePropertiesMatch(props, properties)) {
       const existingName = attr(child, "style:name");
       if (existingName !== undefined) {
         return existingName;
@@ -258,7 +301,7 @@ function internTableRowHeight(pkg: Package, heightPt: number): string {
   );
   automaticStyles.children.push(
     el("style:style", { "style:name": name, "style:family": "table-row" }, [
-      el("style:table-row-properties", { "style:row-height": formatted }),
+      el("style:table-row-properties", { ...properties }),
     ]),
   );
   return name;
@@ -374,7 +417,7 @@ export class OdtTableRow {
     return out;
   }
 
-  // Row height (ODF's own style:table-row-properties/@style:row-height, on the row's own referenced table:style-name) -- the ODF-side mirror of DocxTableRow.heightPt (src/edit/docx/table.ts), read via odf.js's own exported findStyleElement (family "table-row", a single-level lookup with no parent-chain walk, matching typed/shared/table.ts's own resolveRowHeightPt convention for the identical reason: real ODF table-row automatic styles are standalone in practice) and written via internTableRowHeight's append-only, fingerprint-deduplicated mint above. An unresolvable height is genuinely "no height specified" (the layout engine measures content instead), never 0, matching odf.js's own reader.
+  // Row height (ODF's own style:table-row-properties/@style:row-height, on the row's own referenced table:style-name) -- the ODF-side mirror of DocxTableRow.heightPt (src/edit/docx/table.ts), read via odf.js's own exported findStyleElement (family "table-row", a single-level lookup with no parent-chain walk, matching typed/shared/table.ts's own resolveRowHeightPt convention for the identical reason: real ODF table-row automatic styles are standalone in practice) and written via internTableRowProperties's append-only, fingerprint-deduplicated mint above. An unresolvable height is genuinely "no height specified" (the layout engine measures content instead), never 0, matching odf.js's own reader.
   get heightPt(): number | undefined {
     const styleName = attr(this.node, "table:style-name");
     const styleElement =
@@ -393,16 +436,31 @@ export class OdtTableRow {
     return raw === undefined ? undefined : parseOdfLength(raw);
   }
 
-  // No other row-level property is modelled by this editor (or by odf.js's own StyleRegistry -- see internTableRowHeight's own top-of-file note), so a row's table:style-name exists ONLY to carry its height: clearing heightPt removes the reference outright rather than merely blanking one property inside a style something else might still need.
+  // Reads the row's CURRENT style first (currentRowStylePropertiesExceptHeight) so a property this editor has no dedicated getter/setter for -- fo:break-before, style:use-optimal-row-height, fo:keep-together, fo:background-color, exactly what a document opened via openOdt() can already carry -- survives the write, mirroring src/edit/ods/column-row.ts's applyRowStyleProperties (read current, merge, mint fresh). Clearing the height keeps those other properties too, minting a style carrying them alone; only when nothing else remains does clearing remove table:style-name outright, since only then does the row's style exist purely to carry a height.
   set heightPt(value: number | undefined) {
+    const otherProperties = currentRowStylePropertiesExceptHeight(
+      this.pkg,
+      this.node,
+    );
     if (value === undefined) {
-      removeAttr(this.node, "table:style-name");
+      if (Object.keys(otherProperties).length === 0) {
+        removeAttr(this.node, "table:style-name");
+        return;
+      }
+      setAttr(
+        this.node,
+        "table:style-name",
+        internTableRowProperties(this.pkg, otherProperties),
+      );
       return;
     }
     setAttr(
       this.node,
       "table:style-name",
-      internTableRowHeight(this.pkg, value),
+      internTableRowProperties(this.pkg, {
+        ...otherProperties,
+        "style:row-height": formatOdfLength(value, "pt"),
+      }),
     );
   }
 
