@@ -883,7 +883,7 @@ const DECORATED_SHEET: ContentSheet = {
       column: 0,
       value: { kind: "string", value: "Header" },
       displayText: "Header",
-      background: { r: 1, g: 0, b: 0 },
+      background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
       borders: {
         left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 },
         right: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 },
@@ -898,7 +898,7 @@ const DECORATED_SHEET: ContentSheet = {
       column: 0,
       value: { kind: "number", value: 42 },
       displayText: "42",
-      background: { r: 1, g: 1, b: 0 },
+      background: { kind: "solid", color: { r: 1, g: 1, b: 0 } },
     },
   ],
   columns: [],
@@ -1050,8 +1050,14 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips cell decor
   const cells = result.sheets[0]?.cells ?? [];
 
   it("preserves a cell background colour through the round trip", () => {
-    expect(cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
-    expect(cells[1]?.background).toEqual({ r: 1, g: 1, b: 0 });
+    expect(cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
+    expect(cells[1]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 1, b: 0 },
+    });
   });
 
   it("preserves per-edge borders, recovering the same thin solid width the writer emitted", () => {
@@ -1077,5 +1083,75 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips cell decor
   it('preserves horizontal and vertical alignment (middle round-trips through xlsx "center")', () => {
     expect(cells[0]?.alignment).toBe("center");
     expect(cells[0]?.verticalAlignment).toBe("middle");
+  });
+});
+
+describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips a genuine two-colour pattern fill (ExaDev/documents.js#951)", () => {
+  const pkg = buildXlsxPackageFromContent(
+    singleSheetDocument([
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "grey" },
+        displayText: "grey",
+        background: {
+          kind: "pattern",
+          patternType: "mediumGray",
+          foregroundColor: { r: 0, g: 0, b: 0 },
+          backgroundColor: { r: 1, g: 1, b: 1 },
+        },
+      },
+      {
+        row: 0,
+        column: 1,
+        value: { kind: "string", value: "crosshatch" },
+        displayText: "crosshatch",
+        background: {
+          kind: "pattern",
+          patternType: "darkTrellis",
+          foregroundColor: { r: 1, g: 0, b: 0 },
+          backgroundColor: { r: 0, g: 0, b: 1 },
+        },
+      },
+    ]),
+  );
+  const result = readXlsxContent(pkg);
+  if (result.kind !== "spreadsheet") {
+    throw new Error("expected a spreadsheet ContentDocument");
+  }
+  const cells = result.sheets[0]?.cells ?? [];
+
+  it("round-trips a percentage-grey pattern fill instead of dropping it", () => {
+    expect(cells[0]?.background).toEqual({
+      kind: "pattern",
+      patternType: "mediumGray",
+      foregroundColor: { r: 0, g: 0, b: 0 },
+      backgroundColor: { r: 1, g: 1, b: 1 },
+    });
+  });
+
+  it("round-trips a crosshatch pattern fill instead of dropping it", () => {
+    expect(cells[1]?.background).toEqual({
+      kind: "pattern",
+      patternType: "darkTrellis",
+      foregroundColor: { r: 1, g: 0, b: 0 },
+      backgroundColor: { r: 0, g: 0, b: 1 },
+    });
+  });
+
+  it("throws writing a WordprocessingML-only pattern type ST_PatternType has no member for", () => {
+    expect(() =>
+      buildXlsxPackageFromContent(
+        singleSheetDocument([
+          {
+            row: 0,
+            column: 0,
+            value: { kind: "string", value: "x" },
+            displayText: "x",
+            background: { kind: "pattern", patternType: "diagonalCross" },
+          },
+        ]),
+      ),
+    ).toThrow(/diagonalCross/);
   });
 });

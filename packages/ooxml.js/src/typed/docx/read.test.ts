@@ -625,7 +625,10 @@ describe("readDocxContent: tables", () => {
     const table = asTable(doc.sections[0]?.blocks[19]);
     expect(table.columnWidthsPt).toEqual([144, 144]);
     expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
-    expect(table.rows[0]?.cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(table.rows[0]?.cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
   });
 
   it("reads w:tcBorders into the cell's own borders, mapping style keywords and eighth-point widths, skipping a nil edge and resolving an auto colour to black", () => {

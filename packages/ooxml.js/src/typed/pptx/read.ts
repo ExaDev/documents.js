@@ -643,7 +643,7 @@ function readTableCell(
   const tcPr = childrenWithTag(tc, "a:tcPr")[0];
   const solidFill =
     tcPr === undefined ? undefined : childrenWithTag(tcPr, "a:solidFill")[0];
-  const background = readSolidFillColor(
+  const backgroundColor = readSolidFillColor(
     solidFill,
     context.colorMap,
     context.theme,
@@ -656,7 +656,10 @@ function readTableCell(
     blocks: textBodyParagraphs(txBody, undefined, context, slideRels),
     colSpan: gridSpan === undefined ? undefined : Number(gridSpan),
     rowSpan: rowSpan === undefined ? undefined : Number(rowSpan),
-    background,
+    background:
+      backgroundColor === undefined
+        ? undefined
+        : { kind: "solid", color: backgroundColor },
     borders,
   };
 }

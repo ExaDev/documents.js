@@ -4,6 +4,8 @@ import type {
   Color,
   ContentBorder,
   ContentCellBorders,
+  ContentCellFill,
+  ContentCellPatternType,
   ContentStrokeStyle,
 } from "document-schema.js";
 import {
@@ -55,10 +57,58 @@ function readNumberFormatCodesById(
 // Everything this reader resolves for one <cellXfs><xf> entry. numberFormatCode is the numFmt code string that xf displays its value through (undefined when the xf points at a numFmtId no code anywhere supplies); the four decoration fields mirror document-schema.js's own ContentSheetCellSchema fields of the same names, and are each undefined when the xf carries no real value for them -- matching the schema's own "absent means default" semantics for every one.
 export interface CellStyleEntry {
   numberFormatCode?: string;
-  background?: Color;
+  background?: ContentCellFill;
   borders?: ContentCellBorders;
   alignment?: Alignment;
   verticalAlignment?: "top" | "middle" | "bottom";
+}
+
+// ST_PatternType's own seventeen non-solid, non-none members (ECMA-376 Part 1 SS18.18.55) -- the SpreadsheetML half of ContentCellPatternType's shared vocabulary, and (ExaDev/documents.js#951) the exact string spelling <patternFill patternType="..."/> already uses, so no translation table is needed the way doc-codec's Ipat and ooxml.js's own docx w:shd each need one: the attribute value IS the schema's own member name. Named as its own narrow type (rather than typing the guard below `value is ContentCellPatternType`) so a caller already holding a full ContentCellPatternType -- the write side, validating a real cell's own pattern name -- narrows its negative branch to the WordprocessingML-only remainder instead of `never`.
+type XlsxPatternType = Extract<
+  ContentCellPatternType,
+  | "mediumGray"
+  | "darkGray"
+  | "lightGray"
+  | "darkHorizontal"
+  | "darkVertical"
+  | "darkDown"
+  | "darkUp"
+  | "darkGrid"
+  | "darkTrellis"
+  | "lightHorizontal"
+  | "lightVertical"
+  | "lightDown"
+  | "lightUp"
+  | "lightGrid"
+  | "lightTrellis"
+  | "gray125"
+  | "gray0625"
+>;
+
+const SPREADSHEETML_PATTERN_TYPES: ReadonlySet<string> =
+  new Set<XlsxPatternType>([
+    "mediumGray",
+    "darkGray",
+    "lightGray",
+    "darkHorizontal",
+    "darkVertical",
+    "darkDown",
+    "darkUp",
+    "darkGrid",
+    "darkTrellis",
+    "lightHorizontal",
+    "lightVertical",
+    "lightDown",
+    "lightUp",
+    "lightGrid",
+    "lightTrellis",
+    "gray125",
+    "gray0625",
+  ]);
+
+/** Whether `value` is one of ST_PatternType's own seventeen non-solid, non-none members -- the only ContentCellPatternType members a `<patternFill>` can ever name, so a value this returns true for can be used as a ContentCellPatternType directly with no further mapping. */
+function isXlsxPatternType(value: string): value is XlsxPatternType {
+  return SPREADSHEETML_PATTERN_TYPES.has(value);
 }
 
 // xlsx's border style attribute (CT_BorderStyle, ECMA-376 Part 1 SS18.18.3) conflates a stroke's PATTERN (solid/dashed/dotted/double) with its WEIGHT (hair/thin/medium/thick), unlike ODF's separate fo:border "<length> <style> <color>" shorthand or ContentBorderSchema's own widthPt+style pair. The weight half of that -- the named weights, their derived point widths, and the bucketing back from a widthPt to a name -- is document-schema.js's own border-weight module, imported above: BIFF8 quantises to the identical four weights, so xls-codec needs the same mapping and the two must not drift. What stays here is xlsx's own token vocabulary, which is genuinely format-specific.
@@ -113,21 +163,35 @@ export function readColorRgb(
   return colorFromElement(childrenWithTag(container, colorTag)[0]);
 }
 
-// One <fill> -> a solid-fill background colour, or undefined for the non-solid patterns (none/gray125/darkDown/...) that do not produce a single ContentSheetCell.background value. For patternType="solid" the cell's visible background is the pattern's FOREGROUND colour (<fgColor>) per OOXML's solid-pattern semantics -- the whole cell is painted with the pattern's fg colour -- with <bgColor> as a fallback only when a producer left fgColor unset. This is the documented Excel/LibreOffice convention and what every real file's solid fill carries; reading bgColor first (the literal pattern-background) would return the wrong colour for the common case.
-function readFillBackground(fill: XmlElement): Color | undefined {
+// One <fill> -> a ContentCellFill (ExaDev/documents.js#951), or undefined for patternType="none" (or an absent/unrecognised patternType). For patternType="solid" the cell's visible background is the pattern's FOREGROUND colour (<fgColor>) per OOXML's solid-pattern semantics -- the whole cell is painted with the pattern's fg colour -- with <bgColor> as a fallback only when a producer left fgColor unset. This is the documented Excel/LibreOffice convention and what every real file's solid fill carries; reading bgColor first (the literal pattern-background) would return the wrong colour for the common case. Every other named ST_PatternType value (isXlsxPatternType above) resolves to a real 'pattern' fill, carrying whichever of <fgColor>/<bgColor> states a concrete colour -- either may be a theme/indexed/auto colour this reader does not resolve (colorFromElement's own note) and is then left unstated, matching ContentCellFillSchema's own "a colour can defer instead of asserting" convention.
+function readFillBackground(fill: XmlElement): ContentCellFill | undefined {
   const patternFill = childrenWithTag(fill, "patternFill")[0];
-  if (
-    patternFill === undefined ||
-    attr(patternFill, "patternType") !== "solid"
-  ) {
+  if (patternFill === undefined) {
     return undefined;
   }
-  return (
-    readColorRgb(patternFill, "fgColor") ?? readColorRgb(patternFill, "bgColor")
-  );
+  const patternType = attr(patternFill, "patternType");
+  if (patternType === "solid") {
+    const color =
+      readColorRgb(patternFill, "fgColor") ??
+      readColorRgb(patternFill, "bgColor");
+    return color === undefined ? undefined : { kind: "solid", color };
+  }
+  if (patternType === undefined || !isXlsxPatternType(patternType)) {
+    return undefined;
+  }
+  const foregroundColor = readColorRgb(patternFill, "fgColor");
+  const backgroundColor = readColorRgb(patternFill, "bgColor");
+  return {
+    kind: "pattern",
+    patternType,
+    ...(foregroundColor !== undefined ? { foregroundColor } : {}),
+    ...(backgroundColor !== undefined ? { backgroundColor } : {}),
+  };
 }
 
-function readFills(styleSheet: XmlElement): readonly (Color | undefined)[] {
+function readFills(
+  styleSheet: XmlElement,
+): readonly (ContentCellFill | undefined)[] {
   const fillsEl = childrenWithTag(styleSheet, "fills")[0];
   if (fillsEl === undefined) {
     return [];
@@ -351,7 +415,7 @@ function signatureOfNumberFormat(format: CellNumberFormat): string {
 
 // The four decoration fields a cell format can carry alongside its number format, mirroring CellStyleEntry's own shape. Each is optional and independently interned; a cell carrying none of them passes an empty object and shares the default xf with every other undecorated cell.
 export interface CellFormatDecoration {
-  background?: Color;
+  background?: ContentCellFill;
   borders?: ContentCellBorders;
   alignment?: Alignment;
   verticalAlignment?: "top" | "middle" | "bottom";
@@ -359,11 +423,18 @@ export interface CellFormatDecoration {
 
 const EMPTY_DECORATION: CellFormatDecoration = {};
 
+// A deterministic signature for one ContentCellFill, shared by signatureOfDecoration (the cellXfs interning key) and CellFormatTable.internFill (the <fills> table's own dedup key) so the two can never disagree about which fills count as identical.
+function fillSignature(fill: ContentCellFill): string {
+  return fill.kind === "solid"
+    ? `solid:${colorToRgbHex(fill.color)}`
+    : `pattern:${fill.patternType}:${fill.foregroundColor === undefined ? "" : colorToRgbHex(fill.foregroundColor)}:${fill.backgroundColor === undefined ? "" : colorToRgbHex(fill.backgroundColor)}`;
+}
+
 // A deterministic signature for a decoration, so two cells carrying identical decoration share one xf entry. widthPt is encoded with enough precision to round-trip the named-weight widths above (0.5/0.75/1.5/2.25) without floating-point drift producing spurious distinct entries.
 function signatureOfDecoration(decoration: CellFormatDecoration): string {
   let sig = "";
   if (decoration.background !== undefined) {
-    sig += `|bg:${colorToRgbHex(decoration.background)}`;
+    sig += `|bg:${fillSignature(decoration.background)}`;
   }
   const borders = decoration.borders;
   if (borders !== undefined) {
@@ -400,11 +471,17 @@ function borderToXlsxStyle(border: ContentBorder): string {
   }
 }
 
-// One declared <fill> as the writer must emit it: the two reserved entries (none/gray125) carry no colour, and a real solid fill carries its colour plus the indexed="64" bgColor that is Excel's own convention for "no separate background" on a solid pattern.
-export interface DeclaredFill {
-  patternType: "none" | "gray125" | "solid";
-  rgb?: string;
-}
+// One declared <fill> as the writer must emit it. 'none'/'gray125' are the two reserved scaffolding entries every real workbook declares regardless of content, carrying no colour; 'solid' carries its colour plus the indexed="64" bgColor that is Excel's own convention for "no separate background" on a solid pattern; 'pattern' is a genuine ContentCellPatternType fill a real cell asked for, carrying whichever of fgRgb/bgRgb its own foreground/background colours resolved to (ExaDev/documents.js#951) -- discriminated by `kind` rather than by `patternType` alone, since a real cell fill can itself name patternType "gray125" (or any other SpreadsheetML member), which is a wholly different, independently-coloured <fill> entry from the reserved scaffolding one of the identical name.
+export type DeclaredFill =
+  | { kind: "none" }
+  | { kind: "gray125" }
+  | { kind: "solid"; rgb: string }
+  | {
+      kind: "pattern";
+      patternType: ContentCellPatternType;
+      fgRgb?: string;
+      bgRgb?: string;
+    };
 
 // One declared <border> as the writer must emit it: each present edge carries its xlsx style token and colour; absent edges emit an empty <edge/> element, matching the empty-border reserved entry's shape (every edge is always present as an element, just empty when there is no border).
 export interface DeclaredBorder {
@@ -444,10 +521,10 @@ export class CellFormatTable {
     },
   ];
   private readonly declared: DeclaredNumberFormat[] = [];
-  private readonly fillIndexByRgb = new Map<string, number>();
+  private readonly fillIndexBySignature = new Map<string, number>();
   private readonly fills: DeclaredFill[] = [
-    { patternType: "none" },
-    { patternType: "gray125" },
+    { kind: "none" },
+    { kind: "gray125" },
   ];
   private readonly borderIndexBySignature = new Map<string, number>();
   private readonly borders: DeclaredBorder[] = [{ edges: {} }];
@@ -506,7 +583,7 @@ export class CellFormatTable {
     return this.records;
   }
 
-  // The <fills> section: the two reserved entries first (none at 0, gray125 at 1), then one solid fill per distinct background colour, in first-intern order.
+  // The <fills> section: the two reserved entries first (none at 0, gray125 at 1), then one fill per distinct background a cell actually asked for -- solid or pattern alike -- in first-intern order.
   fillDeclarations(): readonly DeclaredFill[] {
     return this.fills;
   }
@@ -522,15 +599,35 @@ export class CellFormatTable {
     return id;
   }
 
-  private internFill(background: Color): number {
-    const rgb = colorToRgbHex(background);
-    const existing = this.fillIndexByRgb.get(rgb);
+  private internFill(background: ContentCellFill): number {
+    const signature = fillSignature(background);
+    const existing = this.fillIndexBySignature.get(signature);
     if (existing !== undefined) {
       return existing;
     }
+    let declared: DeclaredFill;
+    if (background.kind === "solid") {
+      declared = { kind: "solid", rgb: colorToRgbHex(background.color) };
+    } else {
+      if (!isXlsxPatternType(background.patternType)) {
+        throw new Error(
+          `ooxml.js cannot write a '${background.patternType}' cell fill: ECMA-376's own ST_PatternType vocabulary has no member for it, that pattern name belonging only to WordprocessingML's ST_Shd half of ContentCellPatternType's shared vocabulary`,
+        );
+      }
+      declared = {
+        kind: "pattern",
+        patternType: background.patternType,
+        ...(background.foregroundColor === undefined
+          ? {}
+          : { fgRgb: colorToRgbHex(background.foregroundColor) }),
+        ...(background.backgroundColor === undefined
+          ? {}
+          : { bgRgb: colorToRgbHex(background.backgroundColor) }),
+      };
+    }
     const index = this.fills.length;
-    this.fills.push({ patternType: "solid", rgb });
-    this.fillIndexByRgb.set(rgb, index);
+    this.fills.push(declared);
+    this.fillIndexBySignature.set(signature, index);
     return index;
   }
 

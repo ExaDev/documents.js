@@ -435,6 +435,48 @@ describe("buildDocxPackageFromContent: content round trip", () => {
     expect(written.rows[0]?.cells[0]?.colSpan).toBe(2);
   });
 
+  it("round-trips a genuine two-colour pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
+    const table = el("w:tbl", {}, [
+      el("w:tblGrid", {}, [el("w:gridCol", { "w:w": "2880" })]),
+      el("w:tr", {}, [
+        el("w:tc", {}, [
+          el("w:tcPr", {}, [
+            el("w:shd", {
+              "w:val": "pct20",
+              "w:color": "000000",
+              "w:fill": "ffffff",
+            }),
+          ]),
+          para("percentage grey"),
+        ]),
+      ]),
+      el("w:tr", {}, [
+        el("w:tc", {}, [
+          el("w:tcPr", {}, [
+            el("w:shd", { "w:val": "diagCross", "w:color": "ff0000" }),
+          ]),
+          para("crosshatch"),
+        ]),
+      ]),
+    ]);
+    const sections = expectStableRoundTrip(docxPackage([table]));
+    const written = sections[0]?.blocks[0];
+    if (written?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(written.rows[0]?.cells[0]?.background).toEqual({
+      kind: "pattern",
+      patternType: "percent20",
+      foregroundColor: { r: 0, g: 0, b: 0 },
+      backgroundColor: { r: 1, g: 1, b: 1 },
+    });
+    expect(written.rows[1]?.cells[0]?.background).toEqual({
+      kind: "pattern",
+      patternType: "diagonalCross",
+      foregroundColor: { r: 1, g: 0, b: 0 },
+    });
+  });
+
   it("round-trips an image back into the run it was lifted out of, rather than adding a paragraph for it", () => {
     const drawing = (rId: string, alt: string): XmlNode =>
       el("w:drawing", {}, [

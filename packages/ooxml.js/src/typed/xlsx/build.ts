@@ -319,19 +319,34 @@ function buildStylesPart(
 
   const fillDeclarations = cellFormats.fillDeclarations();
   const fillElements = fillDeclarations.map((fill) => {
-    if (fill.patternType === "solid") {
-      // Excel's solid-fill convention: the visible cell colour is the pattern's fgColor, with bgColor indexed="64" (the documented "no separate background" sentinel) -- the exact inverse of readFillBackground, which reads fgColor as the solid-fill colour.
-      const rgb = fill.rgb ?? "000000";
-      return el("fill", {}, [
-        el("patternFill", { patternType: "solid" }, [
-          el("fgColor", { rgb: `FF${rgb}` }),
-          el("bgColor", { indexed: "64" }),
-        ]),
-      ]);
+    switch (fill.kind) {
+      case "none":
+        return el("fill", {}, [el("patternFill", { patternType: "none" })]);
+      case "gray125":
+        return el("fill", {}, [el("patternFill", { patternType: "gray125" })]);
+      case "solid": {
+        // Excel's solid-fill convention: the visible cell colour is the pattern's fgColor, with bgColor indexed="64" (the documented "no separate background" sentinel) -- the exact inverse of readFillBackground, which reads fgColor as the solid-fill colour.
+        return el("fill", {}, [
+          el("patternFill", { patternType: "solid" }, [
+            el("fgColor", { rgb: `FF${fill.rgb}` }),
+            el("bgColor", { indexed: "64" }),
+          ]),
+        ]);
+      }
+      case "pattern": {
+        // A genuine two-colour pattern fill (ExaDev/documents.js#951): fgColor is the colour the pattern's strokes are drawn in, bgColor the colour its gaps show through -- each emitted only when the ContentCellFill actually stated it, left absent (Excel's own "automatic" default) otherwise.
+        const children: XmlElement[] = [];
+        if (fill.fgRgb !== undefined) {
+          children.push(el("fgColor", { rgb: `FF${fill.fgRgb}` }));
+        }
+        if (fill.bgRgb !== undefined) {
+          children.push(el("bgColor", { rgb: `FF${fill.bgRgb}` }));
+        }
+        return el("fill", {}, [
+          el("patternFill", { patternType: fill.patternType }, children),
+        ]);
+      }
     }
-    return el("fill", {}, [
-      el("patternFill", { patternType: fill.patternType }),
-    ]);
   });
 
   const borderDeclarations = cellFormats.borderDeclarations();
