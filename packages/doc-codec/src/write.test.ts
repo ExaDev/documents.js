@@ -481,7 +481,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("round-trips a horizontally merged cell's colSpan via the merged row's own narrower, wider physical cells", () => {
-    // A real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read TCGRF.horzMerge/sprmTMerge at all for a horizontal merge -- it states one purely through a merged row's own physical cell layout: fewer, wider cells than an unmerged row in the same table (ExaDev/documents.js#895). This writer now matches that encoding, so the merged row genuinely has 2 physical cells here, not 3 -- the reader recovers colSpan by comparing this row's own boundaries against the second, unmerged row's, which is what reveals that the table has 3 conceptual columns at all (see the dedicated "narrows columnWidthsPt" test below for what happens when no row ever reveals that boundary).
+    // A real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read TCGRF.horzMerge/sprmTMerge at all for a horizontal merge -- it states one purely through a merged row's own physical cell layout: fewer, wider cells than an unmerged row in the same table (ExaDev/documents.js#895). This writer matches that encoding whenever some other row in the table would otherwise reveal the merged boundary anyway, so the merged row genuinely has 2 physical cells here, not 3 -- the reader recovers colSpan by comparing this row's own boundaries against the second, unmerged row's, which is what reveals that the table has 3 conceptual columns at all (see the dedicated "recovers colSpan and columnWidthsPt" test below for the fallback this writer uses instead when no row ever reveals that boundary on its own).
     const input = document([
       {
         kind: "table",
@@ -521,8 +521,8 @@ describe("writeDocContent tables", () => {
     ]);
   });
 
-  it("narrows columnWidthsPt to what the physical bytes can actually support when no row in the table ever states the boundary a merge crosses", () => {
-    // [MS-DOC]'s own physical model (see the previous test's note) states a table's column grid entirely through the boundaries each row's own TDefTableOperand declares. When literally every row merges across the identical span -- as a single-row table with one merged cell necessarily does, having no other row to compare against -- the boundary between what were nominally 2 of the table's 3 declared columns is never physically written anywhere, so it cannot be recovered on read: this is a genuine limitation of the format's own physical encoding, not an approximation this reader chooses to make (see the README's own note on this).
+  it("recovers colSpan and columnWidthsPt via a horizontal-merge continuation cell when no row in the table ever states the boundary a merge crosses (ExaDev/documents.js#992)", () => {
+    // [MS-DOC]'s own physical model (see the previous test's note) states a table's column grid entirely through the boundaries each row's own TDefTableOperand declares. When literally every row merges across the identical span -- as a single-row table with one merged cell necessarily does, having no other row to compare against -- the merged-pair boundary is never stated by the ordinary narrower/wider physical-cell encoding at all. table/write.ts's own lost-boundary fallback detects exactly this and keeps the boundary physically present instead: the merged cell is written as 2 physical cells, the first carrying the real content, the second an empty TCGRF.horzMerge continuation -- so the row's own rgdxaCenter states all 3 of the table's columns after all.
     const input = document([
       {
         kind: "table",
@@ -542,12 +542,48 @@ describe("writeDocContent tables", () => {
     if (block?.kind !== "table") {
       throw new Error("expected a table block");
     }
-    // Only 2 physical columns are ever written -- one 100pt (the merged pair's combined width) and one 50pt -- so that is genuinely all a reader can recover, not the original 3x50pt grid.
-    expect(block.columnWidthsPt).toEqual([100, 50]);
+    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
     expect(block.rows[0]?.cells).toHaveLength(2);
-    expect(block.rows[0]?.cells[0]?.colSpan).toBeUndefined();
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
+    expect(block.rows[0]?.cells[1]?.colSpan).toBeUndefined();
     expect(cellText(block.rows[0]?.cells[1])).toBe("narrow");
+  });
+
+  it("recovers colSpan and columnWidthsPt when every row of a multi-row table merges across the identical boundary (ExaDev/documents.js#992)", () => {
+    // The previous test's single row is the simplest case of this gap; the issue itself names the general one -- a boundary every row merges across identically, however many rows the table has. Both rows here merge columns 0-1 into one cell, so neither row's own rgdxaCenter would ever state that boundary under the ordinary narrower/wider encoding: the fallback must apply to both rows, not just one, since either row on its own is a table with no other row to compare against.
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50, 50],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "R1-wide" }])], colSpan: 2 },
+              { blocks: [paragraph([{ text: "R1-narrow" }])] },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "R2-wide" }])], colSpan: 2 },
+              { blocks: [paragraph([{ text: "R2-narrow" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(block.columnWidthsPt).toEqual([50, 50, 50]);
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("R1-wide");
+    expect(cellText(block.rows[0]?.cells[1])).toBe("R1-narrow");
+    expect(block.rows[1]?.cells[0]?.colSpan).toBe(2);
+    expect(cellText(block.rows[1]?.cells[0])).toBe("R2-wide");
+    expect(cellText(block.rows[1]?.cells[1])).toBe("R2-narrow");
   });
 
   it("round-trips a vertically merged cell's rowSpan, with the spanned rows carrying an empty placeholder cell", () => {
@@ -635,7 +671,7 @@ describe("writeDocContent tables", () => {
           {
             cells: [{ blocks: [] }, { blocks: [paragraph([{ text: "C2" }])] }],
           },
-          // Neither row above ever states the boundary between the anchor's own 2 merged columns, since both merge across it identically -- a third, wholly unmerged row is what reveals the table genuinely has 3 columns (see this describe block's own "narrows columnWidthsPt" test for what happens without one).
+          // Neither row above ever states the boundary between the anchor's own 2 merged columns, since both merge across it identically -- a third, wholly unmerged row is what reveals the table genuinely has 3 columns here, so the lost-boundary fallback never triggers for this particular table (see this describe block's own "recovers colSpan and columnWidthsPt" tests for what the fallback does when no row reveals it at all).
           {
             cells: [
               { blocks: [paragraph([{ text: "A3" }])] },
