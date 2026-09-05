@@ -334,6 +334,133 @@ describe("lists", () => {
       },
     ]);
   });
+
+  // Regression coverage for the emptiness-probe defect: flushListStrayContent used to decide whether to recover its collected stray nodes by building their inline runs (buildInlineRuns, which only ever produces TEXT) and checking whether that text was blank -- so any stray block-level content whose text projection happens to be empty (a resolved image with no alt text, an <hr>, a table or nested list whose only content is such an image) was misjudged as "whitespace-only" and silently dropped, with no diagnostic, exactly like real pretty-printed whitespace. The fix asks the real question instead: does readContainerChildren's own result carry any blocks at all. Each case below recovers a resolved image inline PNG (fakePng, defined further down this file -- a function declaration, hoisted) so the stray content's own text projection is genuinely empty while its block projection is not.
+  it("recovers a stray, resolved <img> with no alt attribute as a real image block, not judging it whitespace-only by its absent text projection", () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body('<ul><li>a</li><img src="a.png"/></ul>'),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[1]).toMatchObject({ kind: "image" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it('recovers a stray, resolved <img alt=""> as a real image block', () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body('<ul><li>a</li><img src="a.png" alt=""/></ul>'),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[1]).toMatchObject({ kind: "image" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("recovers a nested <ul> stray sibling whose only <li> content is a resolved image with no text -- issue #994's own headline shape, which the emptiness-probe regression defeated", () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body('<ul><li>a</li><ul><li><img src="a.png" alt=""/></li></ul></ul>'),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toMatchObject({
+      kind: "paragraph",
+      list: { numId: "epub1:bullet", level: 0 },
+    });
+    expect(blocks[1]).toMatchObject({ kind: "image" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("recovers a stray <hr/> sitting directly inside a <ul> as a real paragraph block, not empty-runs judged whitespace-only", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul><li>a</li><hr/></ul>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [],
+        styleId: "HorizontalRule",
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("recovers a stray <table> whose only cell content is a resolved image with no alt text -- readTable always yields a real table block regardless of its cells' own text", () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body(
+        '<ul><li>a</li><table><tr><td><img src="a.png" alt=""/></td></tr></table></ul>',
+      ),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[1]).toMatchObject({ kind: "table" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it.each([
+    ["figure", '<figure><img src="a.png" alt=""/></figure>', 2],
+    ["p", '<p><img src="a.png" alt=""/></p>', 2],
+    ["blockquote", '<blockquote><img src="a.png" alt=""/></blockquote>', 4], // division constructStart + image + constructEnd, plus the preceding <li>'s own paragraph
+  ] as const)(
+    "recovers a stray <%s> wrapping only a resolved, alt-less image",
+    (_tag, fragment, expectedBlockCount) => {
+      const bytes = fakePng(96, 96);
+      const sink = vi.fn();
+      const { blocks } = readXhtmlBody(body(`<ul><li>a</li>${fragment}</ul>`), {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      });
+      expect(blocks).toHaveLength(expectedBlockCount);
+      expect(blocks.some((block) => block.kind === "image")).toBe(true);
+      expect(sink).toHaveBeenCalledWith(
+        expect.objectContaining({ code: "epub/list-content-outside-item" }),
+      );
+    },
+  );
 });
 
 describe("script-supporting elements outside lists", () => {
