@@ -107,6 +107,11 @@ function serErr(code: number): number[] {
   return [0x10, code, 0, 0, 0, 0, 0, 0, 0];
 }
 
+/** SerBool's Nil counterpart ([MS-XLS] 69ff31ac's own SerAr type table): reserved 0x00, then eight bytes of pure padding -- an array element left blank, e.g. the middle of `{1,,3}`. */
+function serNil(): number[] {
+  return [0x00, 0, 0, 0, 0, 0, 0, 0, 0];
+}
+
 /** PtgExtraArray ([MS-XLS] edd64b46): one less than the column and row counts, then that many SerAr elements in row-major order. `rows` is given as-written -- an array of rows, each an array of already-encoded SerAr element byte sequences (serNum/serStr/serBool/serErr above). */
 function ptgExtraArray(rows: readonly (readonly number[])[][]): number[] {
   const columnCount = rows[0]?.length ?? 0;
@@ -461,6 +466,12 @@ describe("parseFormulaText array constants (PtgArray/PtgExtraArray)", () => {
     const rgce = bytes(...ptgArrayToken());
     const rgcb = bytes(...ptgExtraArray([[serErr(0xff)]]));
     expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBeUndefined();
+  });
+
+  it("formats a SerNil array element as an empty position between its neighbours", () => {
+    const rgce = bytes(...ptgArrayToken());
+    const rgcb = bytes(...ptgExtraArray([[serNum(1), serNil(), serNum(3)]]));
+    expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBe("{1,,3}");
   });
 
   it("degrades to undefined, rather than throwing, when a PtgExtraArray's own row/column counts overrun the rgcb bytes actually supplied", () => {

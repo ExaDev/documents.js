@@ -472,6 +472,51 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[1]?.formula).toBe("A2");
   });
 
+  it("expands a shared formula mixing an absolute PtgRef with a relative PtgRefN, a real on-disk shape per [MS-XLS]", () => {
+    // "=$A$1+A<row>" filled down: the absolute half never changes with the referencing cell, only the relative half does. SharedParsedFormula's own grammar permits ordinary (non-N) Ptg tokens alongside PtgRefN/PtgAreaN in the same rgce -- only the relative ones expand per cell.
+    const shrFmlaRgce = [
+      0x44,
+      ...u16(0),
+      ...u16(0), // PtgRef $A$1 -- row 0, column field 0 (both absolute)
+      0x4c,
+      ...u16(0),
+      ...u16(0xffff), // PtgRefN -- row delta 0, column delta -1
+      0x03, // PtgAdd
+    ];
+    const ptgExpToBase = [0x01, ...u16(0), ...u16(1)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 1),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_SHRFMLA, [
+        ...u16(0),
+        ...u16(1),
+        1,
+        1,
+        0,
+        2,
+        ...u16(shrFmlaRgce.length),
+        ...shrFmlaRgce,
+      ]),
+      record(RECORD_FORMULA, [
+        ...cell(1, 1),
+        ...f64(2),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBe("$A$1+A1");
+    expect(cells[1]?.formula).toBe("$A$1+A2");
+  });
+
   it("resolves an array (CSE) formula's expanded text with no formula-bar bracing, identical for every cell in the range", () => {
     // A2:A3 entered as one array formula "=A1*2" -- the base cell A2 and its sibling A3 both carry just a PtgExp pointing back at A2 (row 1, column 0); the real, position-independent expression lives once in the Array record. Excel's own `{...}` CSE bracing is formula-bar display syntax, never written into the formula itself, so this matches ooxml.js's own xlsx convention rather than adding it.
     const arrayRgce = [
