@@ -241,10 +241,37 @@ describe("body constructs", () => {
     );
     // \fftype1 is RTF 1.5's own "Form field type: ... 1 Check box" -- without it, the minted \*\formfield data says "text field" while the sibling \*\fldinst says FORMCHECKBOX.
     expect(out).toContain("\\fftype1");
+    // \ffres, not just \ffdefres, is what a real Word reader reads back as the checkbox's own current state -- its absence reads as unchecked regardless of what \ffdefres says, so a checked box this writer minted without it opens unchecked in Word.
+    expect(out).toContain("\\ffres1");
     expect(out).toContain("\\ffdefres1");
     expect(out).toContain("{\\*\\ffname Check1}");
     expect(out.indexOf("before")).toBeLessThan(out.indexOf("FORMCHECKBOX"));
     expect(out.indexOf("FORMCHECKBOX")).toBeLessThan(out.indexOf("after"));
+    expectBalancedBraces(out);
+  });
+
+  it("writes \\ffres0 for an unchecked checkbox's own current state, not just \\ffdefres0", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: false,
+              },
+              startRun: 0,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\ffres0");
+    expect(out).toContain("\\ffdefres0");
     expectBalancedBraces(out);
   });
 

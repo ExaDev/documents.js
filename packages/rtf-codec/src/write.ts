@@ -261,14 +261,16 @@ const FORM_FIELD_SPEC: ReadonlyMap<
   ["dropDown", { instruction: "FORMDROPDOWN", fftype: 2 }],
 ]);
 
-// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffdefres`, a dropdown's own list of `{\*\ffl ...}` entries, and -- for any of the three types -- the control's bookmark-style name as `{\*\ffname ...}`.
+// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffres`/`\ffdefres` pair, a dropdown's own list of `{\*\ffl ...}` entries, and -- for any of the three types -- the control's bookmark-style name as `{\*\ffname ...}`.
 function formFieldPayload(
   descriptor: ContentControlDescriptor,
   fftype: number,
 ): string {
   let out = `\\fftype${String(fftype)}`;
   if (descriptor.controlType === "checkbox") {
-    out += `\\ffdefres${descriptor.checked === true ? "1" : "0"}`;
+    // \ffres is what a reader (this package's own included, per FORM_FIELD_RESULT_UNDEFINED in constructs.ts) actually reads back as the checkbox's current state -- omitting it, as this writer once did, opens the box unchecked in Word regardless of `checked`, since an absent \ffres reads as 0. \ffdefres mirrors the same value: ContentControlDescriptor carries one `checked` boolean, not a separate reset default, so the field's default is the value it was minted with.
+    const value = descriptor.checked === true ? "1" : "0";
+    out += `\\ffres${value}\\ffdefres${value}`;
   } else if (
     descriptor.controlType === "dropDown" &&
     descriptor.options !== undefined
