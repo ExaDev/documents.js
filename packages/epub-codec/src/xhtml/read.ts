@@ -649,6 +649,15 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
     return [table];
   }
   // A <caption> is a legal direct child of <table> (HTML5's own content model puts it first), but document-schema.js's ContentTable carries no field of its own for a caption distinct from an ordinary paragraph -- so, exactly like readBlockElementInner's own <figcaption> case immediately below, it is read as a plain paragraph, placed immediately before the table it describes. Any <img> the caption itself carries degrades to alt text via the same inline-recursion path (and epub/image-inline-unsupported diagnostic) a <figcaption>'s own direct-child <img> already does, rather than becoming a real image block, for the identical reason -- buildInlineRuns has already committed to a flat run sequence by the time it reaches one.
+  const captionInline = buildInlineRuns(
+    captionElement.children,
+    {},
+    state.context,
+  );
+  // An empty or whitespace-only <caption> carries nothing to lose -- dropped entirely, with no diagnostic, matching this package's own documented rule (enforced elsewhere by readContainerChildren's own flush guard) that an empty or whitespace-only paragraph is dropped entirely on read rather than becoming a bogus empty ContentParagraph.
+  if (captionInline.runs.every((run) => run.text.trim().length === 0)) {
+    return [table];
+  }
   state.context.sink({
     code: EpubDiagnosticCodes.TABLE_CAPTION_UNSUPPORTED,
     severity: "info",
@@ -656,11 +665,6 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
       "<caption> has no document-schema.js table-caption field to carry its own distinct tag; read as an ordinary paragraph immediately before the table",
     href: state.context.sourceHref,
   });
-  const captionInline = buildInlineRuns(
-    captionElement.children,
-    {},
-    state.context,
-  );
   const captionParagraph: ContentParagraph = {
     kind: "paragraph",
     runs: captionInline.runs,
