@@ -276,7 +276,7 @@ const SERAR_NUM = 0x01;
 const SERAR_STR = 0x02;
 const SERAR_BOOL = 0x04;
 const SERAR_ERR = 0x10;
-/** SerNil/SerBool/SerErr's own trailing padding, after the one type byte this module already reads and (for SerBool/SerErr) the one payload byte after it -- see SERAR_FIXED_PAYLOAD_BYTES for the pre-payload figure these values are derived from. */
+/** The eight bytes of payload/padding following a SerAr element's own one-byte type tag ([MS-XLS] 69ff31ac): SerNil skips all eight as pure padding, while SerBool and SerErr each consume one real payload byte first and then skip the remaining seven (SERAR_FIXED_PAYLOAD_BYTES - 1). */
 const SERAR_FIXED_PAYLOAD_BYTES = 8;
 
 /** One SerAr element ([MS-XLS] 69ff31ac) from a PtgExtraArray's `array` field, as the literal text an array-constant token in that position would show -- undefined for a type tag this reader does not recognise, or an error code [MS-XLS] does not define, in which case the caller aborts the whole PtgArray rather than fabricating a placeholder value. */
