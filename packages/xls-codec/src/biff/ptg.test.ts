@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { u16, u32 } from "../test-support/biff";
+import { f64, u16, u32, xlUnicodeString } from "../test-support/biff";
 import {
   type FormulaSheetContext,
   parseFormulaText,
@@ -80,6 +80,38 @@ function ptgAreaN(
     ...u16(colFirst),
     ...u16(colLast),
   ];
+}
+
+/** PtgArray (value class, [MS-XLS] 61167ac8): opcode 0x40, then seven bytes this reader never inspects -- the real values live in the RgbExtra trailer's own PtgExtraArray, at the same position-in-sequence as this token (see ptgExtraArray below). */
+function ptgArrayToken(): number[] {
+  return [0x40, 0, 0, 0, 0, 0, 0, 0];
+}
+
+/** SerNum ([MS-XLS] 7a876271): reserved 0x01 then an Xnum. */
+function serNum(value: number): number[] {
+  return [0x01, ...f64(value)];
+}
+
+/** SerStr ([MS-XLS] 8a7db24e): reserved 0x02 then an XLUnicodeString. */
+function serStr(text: string): number[] {
+  return [0x02, ...xlUnicodeString(text)];
+}
+
+/** SerBool ([MS-XLS] 8c22e17f): reserved 0x04, the boolean byte, then reserved2/unused1/unused2 padding it to the fixed nine-byte SerAr size (1 type + 1 value + 7 padding). */
+function serBool(value: boolean): number[] {
+  return [0x04, value ? 1 : 0, 0, 0, 0, 0, 0, 0, 0];
+}
+
+/** SerErr ([MS-XLS] 153fddfb): reserved 0x10, the BErr code byte, then the same seven bytes of padding. */
+function serErr(code: number): number[] {
+  return [0x10, code, 0, 0, 0, 0, 0, 0, 0];
+}
+
+/** PtgExtraArray ([MS-XLS] edd64b46): one less than the column and row counts, then that many SerAr elements in row-major order. `rows` is given as-written -- an array of rows, each an array of already-encoded SerAr element byte sequences (serNum/serStr/serBool/serErr above). */
+function ptgExtraArray(rows: readonly (readonly number[])[][]): number[] {
+  const columnCount = rows[0]?.length ?? 0;
+  const elements = rows.flatMap((row) => row.flatMap((element) => element));
+  return [(columnCount - 1) & 0xff, ...u16(rows.length - 1), ...elements];
 }
 
 describe("parseFormulaText", () => {
@@ -355,6 +387,58 @@ describe("parseFormulaText shared-formula relative tokens (PtgRefN/PtgAreaN)", (
     expect(
       parseFormulaText(bytes(...ptgAreaN(0, 0, 0, 0)), NO_SHEETS),
     ).toBeUndefined();
+  });
+});
+
+describe("parseFormulaText array constants (PtgArray/PtgExtraArray)", () => {
+  it("formats a one-row numeric array constant from its PtgExtraArray trailer", () => {
+    // =SUM({1,2,3}) -- PtgArray's own seven bytes carry nothing; the real values are the RgbExtra trailer's PtgExtraArray, at the same position-in-sequence as this one PtgArray token. iftab 0x0004 is SUM.
+    const rgce = bytes(...ptgArrayToken(), 0x42, 0x01, ...u16(0x0004));
+    const rgcb = bytes(...ptgExtraArray([[serNum(1), serNum(2), serNum(3)]]));
+    expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBe("SUM({1,2,3})");
+  });
+
+  it("formats a two-row-by-two-column array constant, comma within a row and semicolon between rows", () => {
+    const rgce = bytes(...ptgArrayToken());
+    const rgcb = bytes(
+      ...ptgExtraArray([
+        [serNum(1), serNum(2)],
+        [serNum(3), serNum(4)],
+      ]),
+    );
+    expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBe("{1,2;3,4}");
+  });
+
+  it("formats a mixed-type array constant -- string, boolean, and error elements", () => {
+    const rgce = bytes(...ptgArrayToken());
+    const rgcb = bytes(
+      ...ptgExtraArray([[serStr("hi"), serBool(true), serErr(0x07)]]),
+    );
+    expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBe(
+      '{"hi",TRUE,#DIV/0!}',
+    );
+  });
+
+  it("reads two PtgArray tokens' worth of PtgExtraArray in sequence", () => {
+    // {1,2}+{3,4} -- proves rgcb is consumed left-to-right across multiple PtgArray tokens rather than re-read from the start for each one ([MS-XLS] 70f743b2: "the order of the structures MUST be the same").
+    const rgce = bytes(...ptgArrayToken(), ...ptgArrayToken(), 0x03);
+    const rgcb = bytes(
+      ...ptgExtraArray([[serNum(1), serNum(2)]]),
+      ...ptgExtraArray([[serNum(3), serNum(4)]]),
+    );
+    expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBe("{1,2}+{3,4}");
+  });
+
+  it("aborts a PtgArray with no rgcb supplied", () => {
+    expect(
+      parseFormulaText(bytes(...ptgArrayToken()), NO_SHEETS),
+    ).toBeUndefined();
+  });
+
+  it("aborts on an array element whose error code is not one [MS-XLS] defines", () => {
+    const rgce = bytes(...ptgArrayToken());
+    const rgcb = bytes(...ptgExtraArray([[serErr(0xff)]]));
+    expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBeUndefined();
   });
 });
 
