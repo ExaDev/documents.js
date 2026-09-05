@@ -16,12 +16,7 @@ import {
 import { bytesToBase64 } from "../util/base64";
 import { buildXml } from "../xml/build";
 import type { XmlElement, XmlNode } from "../xml/node";
-import {
-  attrValue,
-  elementsWithTag,
-  findChildElement,
-  rootElement,
-} from "../xml/query";
+import { attrValue, findChildElement, rootElement } from "../xml/query";
 import { decodeEntities } from "../xml/entities";
 import { parseXml } from "../xml/parse";
 import type { XhtmlReadContext } from "./context";
@@ -119,12 +114,17 @@ function decorateParagraph(
   return decorated;
 }
 
+// Script-supporting elements per the HTML Standard's own content model -- a <script>'s raw JS source and a <template>'s inert DOM subtree are never legitimate document content, the identical policy src/xhtml/inline.ts's own appendElement already enforces universally for run-building. Every arbitrary-descendant walk in this module (the id->element map below, containsHeading, and readXhtmlBody's own footnote-anchor prescan) shares this same guard, since none of them route through appendElement's own dispatch and would otherwise silently index or recognise content that can never actually be read as part of the document.
+function isInertContainer(tag: string): boolean {
+  return tag === "script" || tag === "template";
+}
+
 function buildIdElementMap(nodes: readonly XmlNode[]): Map<string, XmlElement> {
   const map = new Map<string, XmlElement>();
   const stack: XmlNode[] = [...nodes];
   while (stack.length > 0) {
     const node = stack.pop();
-    if (node?.type !== "element") {
+    if (node?.type !== "element" || isInertContainer(node.tag)) {
       continue;
     }
     const id = attrValue(node, "id");
@@ -134,6 +134,26 @@ function buildIdElementMap(nodes: readonly XmlNode[]): Map<string, XmlElement> {
     stack.push(...node.children);
   }
   return map;
+}
+
+// A depth-first descendant search for every element with the given tag, mirroring src/xml/query.ts's own generic elementsWithTag -- but scoped to this module's own inert-content policy above, since elementsWithTag is shared by callers elsewhere in this package (src/nav, src/opf) with no reason to assume the same policy. Used only by readXhtmlBody's own footnote-anchor prescan: an <a> nested inside a <template> is never real, readable document content (it is skipped entirely wherever buildInlineRuns would otherwise reach it), so it must not be allowed to seed footnoteTargetIds and cause some unrelated, genuinely live body element sharing its target id to be wrapped as a footnote body it was never really referenced by.
+function elementsWithTagSkippingInert(
+  nodes: readonly XmlNode[],
+  tag: string,
+): XmlElement[] {
+  const out: XmlElement[] = [];
+  const stack: XmlNode[] = [...nodes];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (node?.type !== "element" || isInertContainer(node.tag)) {
+      continue;
+    }
+    if (node.tag === tag) {
+      out.push(node);
+    }
+    stack.push(...node.children);
+  }
+  return out;
 }
 
 export interface ReadXhtmlBodyOptions {
@@ -196,7 +216,7 @@ export function readXhtmlBody(
   }
   const idElements = buildIdElementMap(body.children);
   const footnoteTargetIds = new Set<string>();
-  for (const anchor of elementsWithTag(body.children, "a")) {
+  for (const anchor of elementsWithTagSkippingInert(body.children, "a")) {
     const name = isFootnoteReferenceAnchor(anchor, idElements);
     if (name !== undefined) {
       footnoteTargetIds.add(name);
@@ -446,10 +466,10 @@ function languageFromClass(className: string | undefined): string | undefined {
   return match?.[1];
 }
 
-// Whether a blockquote's own subtree carries a heading anywhere -- a construct extent may never open or close a heading scope (document-schema.js's own decompose is the enforcement point), so a quote containing one cannot carry the division construct pair and degrades to indent-only structure instead, matching markdown-codec's identical rule for the identical schema constraint.
+// Whether a blockquote's own subtree carries a heading anywhere -- a construct extent may never open or close a heading scope (document-schema.js's own decompose is the enforcement point), so a quote containing one cannot carry the division construct pair and degrades to indent-only structure instead, matching markdown-codec's identical rule for the identical schema constraint. Never descends into a <script>/<template> subtree: a heading sitting inside inert template content is never real, readable document content (nothing in this module's own dispatch ever reaches it as a heading either), so it must not be allowed to suppress a real division construct the blockquote's actual, live content is otherwise entitled to.
 function containsHeading(nodes: readonly XmlNode[]): boolean {
   for (const node of nodes) {
-    if (node.type !== "element") {
+    if (node.type !== "element" || isInertContainer(node.tag)) {
       continue;
     }
     if (headingLevelOf(node.tag) !== undefined) {
