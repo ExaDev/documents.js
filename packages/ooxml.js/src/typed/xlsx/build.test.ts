@@ -5,7 +5,7 @@ import type { XmlElement } from "../../model/node";
 import type { Package } from "../../model/package";
 import { encodePackage } from "../../codec";
 import { parsePackage } from "../../package-io/read";
-import { childrenWithTag, decodeEntities, rootElement } from "../util";
+import { attr, childrenWithTag, decodeEntities, rootElement } from "../util";
 import { buildXlsxPackageFromContent } from "./build";
 import { readXlsxContent } from "./content";
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
@@ -271,6 +271,49 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips real conte
     const firstColumn = data.columns.find((column) => column.index === 0);
     expect(firstColumn?.widthPt).toBeGreaterThan(80); // approximate, not exact -- see units.ts's own documented round-trip caveat
     expect(firstColumn?.widthPt).toBeLessThan(120);
+  });
+
+  it("column widths converge to a fixed point rather than drifting on repeated read/write cycles (ExaDev/documents.js#953)", () => {
+    // pkg (write 1) came from DOCUMENT's own hand-authored, arbitrary widthPt values (100/60), which need not land on the 96dpi pixel grid columnWidthCharsToPt's own truncation works in -- so write 1 is allowed to differ from write 2 (the grid-snapping happens once, on the very first write). From write 2 onward every column width has already been through that snap, so a further read/write pair must reproduce write 2's own stored <col width> attributes exactly, not merely approximately -- proving convergence to a fixed point rather than a slower, still-ongoing drift.
+    function colWidthAttrs(
+      source: Package,
+      path: string,
+    ): (string | undefined)[] {
+      const worksheet = rootElement(source.parts[path]);
+      if (worksheet === undefined) {
+        throw new Error(`expected ${path} to have a root element`);
+      }
+      const colsEl = childrenWithTag(worksheet, "cols")[0];
+      if (colsEl === undefined) {
+        return [];
+      }
+      return childrenWithTag(colsEl, "col").map((col) => attr(col, "width"));
+    }
+
+    const secondWritePkg = buildXlsxPackageFromContent(roundTripped); // write 2
+    const secondRead = readXlsxContent(secondWritePkg);
+    if (secondRead.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const [secondData] = secondRead.sheets;
+    if (secondData === undefined) {
+      throw new Error("expected the first sheet to survive the second cycle");
+    }
+
+    const thirdWritePkg = buildXlsxPackageFromContent(secondRead); // write 3
+    const thirdRead = readXlsxContent(thirdWritePkg);
+    if (thirdRead.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const [thirdData] = thirdRead.sheets;
+    if (thirdData === undefined) {
+      throw new Error("expected the first sheet to survive the third cycle");
+    }
+
+    expect(colWidthAttrs(thirdWritePkg, "xl/worksheets/sheet1.xml")).toEqual(
+      colWidthAttrs(secondWritePkg, "xl/worksheets/sheet1.xml"),
+    );
+    expect(thirdData.columns).toEqual(secondData.columns);
   });
 
   it("preserves row heights and hidden flags", () => {
