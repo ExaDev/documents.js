@@ -5,12 +5,15 @@ import type {
   Alignment,
   Box,
   ContentBlock,
+  ContentBorder,
+  ContentCellBorders,
   ContentEmbeddedObjectBlock,
   ContentImageBlock,
   ContentParagraph,
   ContentRun,
   ContentShape,
   ContentSlide,
+  ContentStrokeStyle,
   ContentTable,
   ContentTableCell,
   PageSize,
@@ -539,6 +542,89 @@ function readPicShape(
   };
 }
 
+// DrawingML's own preset dash vocabulary (a:prstDash/@val, ECMA-376 20.1.10.48) has no 'double' member -- documents.js's own src/edit/drawingml/vector.ts notes this same gap on the write side -- and several of its members are dash-dot variants ContentStrokeStyle's four values can't distinguish individually, so each collapses onto whichever of solid/dashed/dotted it visually resembles most closely: the same "narrow to the closest matching value" convention typed/docx/read.ts's own BORDER_STYLE_MAP and typed/xlsx/styles.ts's own border-style table already apply to their own formats' larger enumerations.
+const DRAWINGML_DASH_STYLE_MAP: ReadonlyMap<string, ContentStrokeStyle> =
+  new Map([
+    ["solid", "solid"],
+    ["dot", "dotted"],
+    ["sysDot", "dotted"],
+    ["dash", "dashed"],
+    ["sysDash", "dashed"],
+    ["lgDash", "dashed"],
+    ["dashDot", "dashed"],
+    ["sysDashDot", "dashed"],
+    ["lgDashDot", "dashed"],
+    ["sysDashDotDot", "dashed"],
+    ["lgDashDotDot", "dashed"],
+  ]);
+
+// One a:tcPr child among a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2-5, each a CT_LineProperties) -- the DrawingML table cell's own per-edge border, the pptx-side counterpart to WordprocessingML's w:tcBorders edges (typed/docx/read.ts's readCellBorderEdge). @w is the edge's width in EMU and an a:solidFill child names its colour, resolved through the same scheme-colour-aware readSolidFillColor this cell's own background fill already uses rather than the write side's own srgbClr-only shortcut (src/edit/pptx/table.ts), so a theme-coloured border resolves correctly too; an optional a:prstDash child names its dash pattern. An edge missing @w, or whose colour doesn't resolve (no a:solidFill, or one this reader can't resolve to a Color -- including an explicit a:noFill), reads as no border on that side, matching readCellBorders' own "a colourless or zero-width edge isn't visually a border" convention below.
+function readTableCellBorderEdge(
+  tcPr: XmlElement,
+  tag: "a:lnL" | "a:lnR" | "a:lnT" | "a:lnB",
+  context: SlideInheritanceContext,
+): ContentBorder | undefined {
+  const lnElement = childrenWithTag(tcPr, tag)[0];
+  if (lnElement === undefined) {
+    return undefined;
+  }
+  const w = attr(lnElement, "w");
+  if (w === undefined) {
+    return undefined;
+  }
+  const solidFill = childrenWithTag(lnElement, "a:solidFill")[0];
+  const color = readSolidFillColor(solidFill, context.colorMap, context.theme);
+  if (color === undefined) {
+    return undefined;
+  }
+  const prstDash = childrenWithTag(lnElement, "a:prstDash")[0];
+  const dashVal = prstDash === undefined ? undefined : attr(prstDash, "val");
+  return {
+    color,
+    widthPt: emuToPt(Number(w)),
+    style:
+      dashVal === undefined
+        ? undefined
+        : (DRAWINGML_DASH_STYLE_MAP.get(dashVal) ?? "solid"),
+  };
+}
+
+// a:tcPr's own a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2-5) -- the pptx-side counterpart to WordprocessingML's w:tcBorders (typed/docx/read.ts's readCellBorders). Returns undefined when the cell carries no a:tcPr at all, or a:tcPr with every edge unresolvable, matching readCellBorders' own "no information vs information-but-empty are the same absent result" convention.
+function readTableCellBorders(
+  tcPr: XmlElement | undefined,
+  context: SlideInheritanceContext,
+): ContentCellBorders | undefined {
+  if (tcPr === undefined) {
+    return undefined;
+  }
+  const left = readTableCellBorderEdge(tcPr, "a:lnL", context);
+  const right = readTableCellBorderEdge(tcPr, "a:lnR", context);
+  const top = readTableCellBorderEdge(tcPr, "a:lnT", context);
+  const bottom = readTableCellBorderEdge(tcPr, "a:lnB", context);
+  if (
+    left === undefined &&
+    right === undefined &&
+    top === undefined &&
+    bottom === undefined
+  ) {
+    return undefined;
+  }
+  const borders: ContentCellBorders = {};
+  if (left !== undefined) {
+    borders.left = left;
+  }
+  if (right !== undefined) {
+    borders.right = right;
+  }
+  if (top !== undefined) {
+    borders.top = top;
+  }
+  if (bottom !== undefined) {
+    borders.bottom = bottom;
+  }
+  return borders;
+}
+
 function readTableCell(
   tc: XmlElement,
   context: SlideInheritanceContext,
@@ -558,6 +644,7 @@ function readTableCell(
     context.colorMap,
     context.theme,
   );
+  const borders = readTableCellBorders(tcPr, context);
   const txBody = childrenWithTag(tc, "a:txBody")[0];
   const gridSpan = attr(tc, "gridSpan");
   const rowSpan = attr(tc, "rowSpan");
@@ -566,6 +653,7 @@ function readTableCell(
     colSpan: gridSpan === undefined ? undefined : Number(gridSpan),
     rowSpan: rowSpan === undefined ? undefined : Number(rowSpan),
     background,
+    borders,
   };
 }
 
