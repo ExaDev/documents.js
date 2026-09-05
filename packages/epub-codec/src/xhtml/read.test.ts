@@ -1037,6 +1037,31 @@ describe("tables", () => {
     );
   });
 
+  it("recovers a stray <p> sitting directly inside a <colgroup> outside any <col>, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<table><colgroup><p>stray</p><col/></colgroup><tr><td>x</td></tr></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
   it("recovers stray text sitting directly inside a <tbody> outside any <tr>, with a diagnostic, positioned immediately before the table", () => {
     const sink = vi.fn();
     const blocks = read(
