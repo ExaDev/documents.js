@@ -261,10 +261,11 @@ const FORM_FIELD_SPEC: ReadonlyMap<
   ["dropDown", { instruction: "FORMDROPDOWN", fftype: 2 }],
 ]);
 
-// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffres`/`\ffdefres` pair, a dropdown's own `\ffhaslistbox`/`\ffdefres` pair plus its selected-entry `\ffres` and its list of `{\*\ffl ...}` entries, and -- for any of the three types -- the control's bookmark-style name as `{\*\ffname ...}`.
+// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffres`/`\ffdefres` pair, a dropdown's own `\ffhaslistbox` plus its selected-entry `\ffres`/`\ffdefres` pair and its list of `{\*\ffl ...}` entries, and -- for any of the three types -- the control's bookmark-style name as `{\*\ffname ...}`.
 function formFieldPayload(
   descriptor: ContentControlDescriptor,
   fftype: number,
+  sink: RtfDiagnosticSink,
 ): string {
   let out = `\\fftype${String(fftype)}`;
   if (descriptor.controlType === "checkbox") {
@@ -282,8 +283,15 @@ function formFieldPayload(
     if (selectedIndex !== undefined && selectedIndex !== -1) {
       // `value` genuinely names one of `options`: \ffres records the real current selection and \ffdefres mirrors it, exactly as the checkbox branch above mirrors its own single `checked` boolean into both \ffres and \ffdefres.
       out += `\\ffres${String(selectedIndex)}\\ffdefres${String(selectedIndex)}`;
+    } else if (descriptor.value !== undefined) {
+      // `value` was recorded but names none of `options` (or there are no options at all to name) -- real, signalable data loss, distinct from "no value was ever set" below. Substituting the nearest available index (e.g. 0) would silently write a DIFFERENT, wrong selection with no signal that the recorded value was never actually represented, so this writer mints neither \ffres nor \ffdefres and reports the drop through the same sink every other unrepresentable construct in this writer uses (see the "mints neither \ffres nor \ffdefres for a dropDown whose value names none of its own options" test).
+      sink({
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        severity: "warning",
+        message: `a dropDown contentControl's selected value '${descriptor.value}' is dropped: it does not match any of the field's own options, and \\ffres/\\ffdefres can only name a real index into that list`,
+      });
     }
-    // Neither branch above matched: either no selection was ever recorded, or `value` was recorded but names none of `options`. Both converge on minting neither \ffres nor \ffdefres, rather than guessing an index -- substituting the nearest available one (e.g. 0) would silently write a DIFFERENT, wrong selection with no signal that the recorded value was never actually represented. This also makes the round-trip a genuine fixed point: this codec's own read.test.ts ("leaves a FORMDROPDOWN's value unset when neither \ffres nor \ffdefres is present at all") proves RTF has a real way to serialise "no default selection" -- simply omitting both fields -- so an unmatched-or-unset value always reads back as value:undefined, and writing that again reproduces byte-identical output rather than drifting onto a fabricated default on a second pass (see the "mints neither \ffres nor \ffdefres for a dropDown whose value names none of its own options" test). [MS-DOC] 2.9.78 FFData.wDef "MUST exist if and only if bits.iType is iTypeChck (1) or iTypeDrop (2)" is a real MS-DOC production rule this codec deliberately does not always satisfy: a producer omitting wDef is spec-noncompliant but demonstrably tolerated in practice, since this reader (built to survive real-world RTF, not just conformant RTF) decodes the omission cleanly.
+    // The remaining case -- no value was ever recorded at all -- mints neither \ffres nor \ffdefres, exactly like the unmatched-value case above, but silently: this codec's own read.test.ts ("leaves a FORMDROPDOWN's value unset when neither \ffres nor \ffdefres is present at all") proves RTF has a real way to serialise "no default selection" -- simply omitting both fields -- so there is no need to invent a synthetic entry-0 default nobody actually selected, and nothing was actually lost that a diagnostic should name. [MS-DOC] 2.9.78 FFData.wDef "MUST exist if and only if bits.iType is iTypeChck (1) or iTypeDrop (2)" is a real MS-DOC production rule this codec deliberately does not always satisfy: a producer omitting wDef is spec-noncompliant but demonstrably tolerated in practice, since this reader (built to survive real-world RTF, not just conformant RTF) decodes the omission cleanly. Converging both no-match branches onto the identical "omit both fields" output also makes the round-trip a genuine fixed point: an unmatched-or-unset value always reads back as value:undefined, and writing that again reproduces byte-identical output, with no second-pass drift onto a fabricated default.
     if (options !== undefined) {
       for (const option of options) {
         out += `{\\*\\ffl ${escapeText(option)}}`;
@@ -299,12 +307,13 @@ function formFieldPayload(
 // The whole field's own open: `{\field{\*\fldinst KEYWORD {\*\formfield PAYLOAD}}{\fldrslt `, left unclosed so the runs the extent wraps land inside \fldrslt's own destination -- the matching `}}` (closing \fldrslt, then \field) is written wherever the extent's endRun falls. Returns undefined for a controlType FORM_FIELD_SPEC does not cover, so the caller can fall back to the ordinary construct-gap diagnostic instead of minting nothing silently.
 function formFieldOpenGroup(
   descriptor: ContentControlDescriptor,
+  sink: RtfDiagnosticSink,
 ): string | undefined {
   const spec = FORM_FIELD_SPEC.get(descriptor.controlType);
   if (spec === undefined) {
     return undefined;
   }
-  return `{\\field{\\*\\fldinst ${spec.instruction} {\\*\\formfield{${formFieldPayload(descriptor, spec.fftype)}}}}{\\fldrslt `;
+  return `{\\field{\\*\\fldinst ${spec.instruction} {\\*\\formfield{${formFieldPayload(descriptor, spec.fftype, sink)}}}}{\\fldrslt `;
 }
 
 // Each ProvenanceChange's own <chrev> spelling. formatChange is the one with no flag of its own -- "\crauthN ... Note This keyword is used to indicate formatting revisions, such as bold, italic" -- so its author control word is what states that the run carries one at all.
@@ -714,7 +723,7 @@ class RtfWriter {
       if (extent.startRun !== position) {
         continue;
       }
-      const open = formFieldOpenGroup(extent.descriptor);
+      const open = formFieldOpenGroup(extent.descriptor, this.sink);
       if (open === undefined) {
         this.sink({
           code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
