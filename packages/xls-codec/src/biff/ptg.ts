@@ -18,12 +18,15 @@ export interface SheetRange {
 }
 
 /**
- * A 3D reference's sheet-prefix label, already fully formatted by workbook/globals.ts, for an ixti this reader cannot resolve into a plain SheetRange -- a genuinely external workbook (label carries `[workbook]sheet` or `[workbook]first:last`, the workbook name itself a diagnostic placeholder when this reader's own deliberately partial VirtualPath decoding cannot isolate one) or a supporting link of a kind this reader never resolves a sheet name from at all (add-in, DDE/OLE, same-sheet, unused, or an unresolved sheet index -- label then carries a bracketed `#REF!(reason)` diagnostic outright). Kept as a single pre-formatted string rather than a further structured shape, since resolveSheetLabel below only ever needs the finished label text and every other consumer of a 3D reference's sheet name is upstream of this module (see WorkbookGlobals.sheetRanges, which this type's own sheetRanges field matches field-for-field).
+ * A 3D reference's sheet-prefix label, already fully formatted by workbook/globals.ts, for an ixti this reader cannot resolve into a plain SheetRange -- a genuinely external workbook (label carries `[workbook]sheet` or `[workbook]first:last`) or a supporting link of a kind this reader never resolves a sheet name from at all (add-in, DDE/OLE, same-sheet, unused, an unresolved sheet index, or a workbook name this reader's own deliberately partial VirtualPath decoding could not isolate -- label then carries a bracketed `#REF!(reason)` diagnostic, or a `[EXTERNAL]` placeholder workbook name, in place of real recovered data). Kept as a single pre-formatted string rather than a further structured shape, since resolveSheetLabel below only ever needs the finished label text and every other consumer of a 3D reference's sheet name is upstream of this module (see WorkbookGlobals.sheetRanges, which this type's own sheetRanges field matches field-for-field).
  *
- * No `kind` tag: SheetRange's two fields are both required and this type's own `label` field is required too, so the two shapes are already mutually exclusive by construction and a plain `"label" in candidate` check discriminates them.
+ * `diagnostic` says which of those two this is: false only when both the external workbook's own file name and its sheet name(s) were genuinely recovered from the file's own virtPath and rgst, in which case `label` is real data worth writing back out as a formula's sheet-scope text; true whenever `label` instead carries this reader's OWN placeholder text standing in for something it could not resolve. resolveSheetLabel treats a diagnostic label the same as any other construct this reader cannot resolve -- the containing formula is left absent rather than having synthetic, non-formula text spliced into what a spreadsheet application would otherwise treat as real, writable formula content (see documents.js's own write paths, which take ContentSheetCell.formula as literal, verbatim formula text with no further validation).
+ *
+ * No `kind` tag beyond this: SheetRange's two fields are both required and this type's own `label`/`diagnostic` fields are required too, so the two shapes are already mutually exclusive by construction and a plain `"label" in candidate` check discriminates them.
  */
 export interface ExternalSheetLabel {
   readonly label: string;
+  readonly diagnostic: boolean;
 }
 
 /** What a 3D reference's own ixti resolves against: the workbook's sheets in BoundSheet8 order (only the name is needed here), and each ixti's own resolved sheet scope (undefined where this reader has nothing at all to say about it -- see WorkbookGlobals.sheetRanges, which this type's own sheetRanges field matches field-for-field). */
@@ -339,7 +342,8 @@ function resolveSheetLabel(
     return undefined;
   }
   if ("label" in range) {
-    return `${quoteSheetLabel(range.label)}!`;
+    // A diagnostic label is this reader's own placeholder text, not formula syntax a spreadsheet application would accept -- the whole formula it sits in resolves to undefined, exactly like meeting any other construct this reader cannot turn into real formula text, rather than writing a fabricated sheet reference into a live formula field.
+    return range.diagnostic ? undefined : `${quoteSheetLabel(range.label)}!`;
   }
   const first = context.sheets[range.firstSheetIndex]?.name;
   const last = context.sheets[range.lastSheetIndex]?.name;
