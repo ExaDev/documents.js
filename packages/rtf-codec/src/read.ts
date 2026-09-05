@@ -147,7 +147,7 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["objalias", "skip"],
   ["objsect", "skip"],
   ["objtime", "skip"],
-  // \result is \object's own fallback rendering for a reader that cannot decode \object at all -- this reader always attempts \objdata first and prefers it, exactly as Word itself does, so this table's own "skip" is only the default: the group-start handler below overrides it to "body" unconditionally, rendering \result's content provisionally every time its group is seen (see ObjectState's own comment for why), and \object's own group-end handling retracts it again if \objdata does decode.
+  // \result is \object's own fallback rendering for a reader that cannot decode \object at all -- this reader always attempts \objdata first and prefers it, exactly as Word itself does, so this table's own "skip" is only the default: the group-start handler below overrides it to "body" (rendered into an isolated scratch accumulator -- see ContentBuilder's own beginResultScratch), and \object's own group-end handling either splices that scratch content in or discards it once \objdata's own fate is finally known.
   ["result", "skip"],
   ["do", "skip"],
   ["shp", "skip"],
@@ -352,23 +352,17 @@ function appendObjectDataHexText(
 
 // One \object destination's own state, shared by reference across the whole {\object ...} group and every child destination nested inside it (\objdata, \result, and the informational \*\objclass/\*\objname sub-groups) -- the same "shared by reference" pattern FieldState already establishes for \fldinst/\fldrslt, so \result's own group can see whether its sibling \objdata already decoded without either needing to know the other's stack depth.
 //
-// RTF 1.9.1's own <obj> grammar orders <objdata> before <result> but does not require it, so which sibling a producer wrote first cannot be known when \result's own group is seen -- an earlier version of this reader resolved that with a lookahead, re-walking \objdata's own token range ahead of time to predict `decoded` before either sibling was actually read. That lookahead had to re-derive, on its own, every rule the real single-pass read below already applies -- and did so wrongly for a spec-legal \objdata carrying a nested {\*\objalias ...} or {\*\objsect ...} sub-group (RTF 1.9.1: `<objdata> = '{\*' \objdata (<objalias>? & <objsect>?) <data> '}'`), folding those sub-groups' own bytes into the payload it scanned while the real read correctly skips them -- so the two disagreed about whether \objdata would decode, and \result's fate was decided by whichever of them ran. Predicting the outcome in advance is not the only way to avoid double-rendering: `decoded` here is instead resolved by the SAME live read that will decide it anyway, and \result's own content is rendered provisionally the moment its group is seen (see the group-start handling below) rather than gated on a prediction, then retracted after the fact -- at \object's own group end, once every child has actually been read and `decoded` is thus final -- if \objdata went on to decode successfully, wherever in the token stream that turned out to be. This closes the whole category of lookahead-vs-real-parse disagreement rather than keeping a second implementation of the same decode in sync with the first.
+// RTF 1.9.1's own <obj> grammar orders <objdata> before <result> but does not require it, so which sibling a producer wrote first cannot be known when \result's own group is seen -- an earlier version of this reader resolved that with a lookahead, re-walking \objdata's own token range ahead of time to predict `decoded` before either sibling was actually read. That lookahead had to re-derive, on its own, every rule the real single-pass read below already applies -- and did so wrongly for a spec-legal \objdata carrying a nested {\*\objalias ...} or {\*\objsect ...} sub-group (RTF 1.9.1: `<objdata> = '{\*' \objdata (<objalias>? & <objsect>?) <data> '}'`), folding those sub-groups' own bytes into the payload it scanned while the real read correctly skips them -- so the two disagreed about whether \objdata would decode, and \result's fate was decided by whichever of them ran. `decoded` here is instead resolved by the SAME live read that will decide it anyway: \result's own content is rendered into a completely isolated scratch accumulator the moment its group is seen (see ContentBuilder's own beginResultScratch/endResultScratch), and only spliced into the real document -- at \object's own group end, once every child has actually been read and `decoded` is thus final -- if \objdata never went on to decode. This closes the whole category of lookahead-vs-real-parse disagreement rather than keeping a second implementation of the same decode in sync with the first, and it closes a second category besides: \result's scratch content shares no paragraph, block list, or table state with whatever was already accumulating around \object, so rendering it can neither destroy nor be destroyed by the surrounding document, regardless of where \object sits in a still-open paragraph or table cell.
 //
 // widthTwips/heightTwips capture \objwN/\objhN (the size hint RTF 1.9.1 says a producer supplies "to maintain backward compatibility" for a reader that cannot decode \objdata at all): this reader's own reconstruction never needs them when \objdata decodes, but the degrade path folds them into its diagnostic message instead of discarding them silently.
 interface ObjectState {
   decoded: boolean;
   // Whether an {\*\objdata ...} child has actually been read (not merely predicted) anywhere in this \object's own group, regardless of whether it goes on to decode -- distinct from `decoded`, since an \object whose \objdata genuinely fails to decode already reports that failure on its own terms (buildEmbeddedObject's own EMBEDDED_OBJECT_UNREADABLE), while an \object with no \objdata child at all is a different, otherwise-silent construct substitution that \object's own group-end handling below reports separately. Set the moment an \objdata child's group is actually entered, which is also what lets a second \objdata sibling (RTF's own grammar allows only one, but a malformed producer can still write two) be recognised as a duplicate and skipped rather than decoded twice into two identical blocks.
   objectDataSeen: boolean;
-  // Whether an {\result ...} child has actually been read anywhere in this \object's own group -- distinct from whether its content was ultimately kept or retracted, since \object's own group-end diagnostic (below) needs to say which of \objdata/\result, if either, this \object actually had.
+  // Whether an {\result ...} child has actually been read anywhere in this \object's own group -- distinct from whether its content was ultimately kept or discarded, since \object's own group-end diagnostic (below) needs to say which of \objdata/\result, if either, this \object actually had, and it is also how a second \result sibling (RTF's own grammar allows only one, but a malformed producer can still write two) is recognised as a duplicate and skipped, exactly like `objectDataSeen` does for \objdata.
   resultSeen: boolean;
-  // Recorded once \result's own group closes: exactly which blocks its provisionally-rendered fallback content contributed, and to which list (the open table cell's own, or the section's) -- resolved at \object's own group end, once `decoded` is finally known either way, by retracting this range if \objdata did go on to decode. Undefined until \result's group has actually closed, and left undefined forever if this \object has no \result child at all.
-  resultRange:
-    | {
-        readonly inTable: boolean;
-        readonly start: number;
-        readonly end: number;
-      }
-    | undefined;
+  // The finished blocks \result's own scratch rendering produced, recorded once its group closes -- spliced into the real document at \object's own group end if `decoded` is still false then, discarded otherwise. Undefined until \result's group has actually closed, and left undefined forever if this \object has no \result child at all.
+  resultBlocks: ContentBlock[] | undefined;
   widthTwips: number | undefined;
   heightTwips: number | undefined;
 }
@@ -389,10 +383,8 @@ interface GroupState {
   picture: PictureState | undefined;
   objectData: ObjectDataState | undefined;
   object: ObjectState | undefined;
-  // Set only on the one GroupState created directly for a \result destination's own group -- the enclosing \object's shared state to report the rendered range back to when this group closes, and where (which list, and how many blocks it already held) rendering began. Deliberately NOT carried forward by cloneGroupState the way `object` is: a plain nested group inside \result's own content (every test fixture's `{\result{\pard\plain ...\par}}` has one) must not re-trigger this group's own finalisation a second time when IT closes, so only the direct child gets this field and every descendant clones it back to undefined.
+  // Set only on the one GroupState created directly for a \result destination's own group -- the enclosing \object's shared state to report the finished scratch blocks back to when this group closes. Deliberately NOT carried forward by cloneGroupState the way `object` is: a plain nested group inside \result's own content (every test fixture's `{\result{\pard\plain ...\par}}` has one) must not re-trigger this group's own finalisation a second time when IT closes, so only the direct child gets this field and every descendant clones it back to undefined.
   resultOf: ObjectState | undefined;
-  resultOpenAt:
-    { readonly inTable: boolean; readonly start: number } | undefined;
   bookmark: BookmarkState | undefined;
   // Whether this group is a \upr wrapper's own child that must be discarded (the ANSI half). Set on the wrapper; consulted when a child group opens.
   inUnicodeWrapper: boolean;
@@ -441,7 +433,6 @@ function cloneGroupState(state: GroupState): GroupState {
     objectData: state.objectData,
     object: state.object,
     resultOf: undefined,
-    resultOpenAt: undefined,
     bookmark: state.bookmark,
     inUnicodeWrapper: state.inUnicodeWrapper,
   };
@@ -594,6 +585,57 @@ function horizontalSpanAt(
   return span;
 }
 
+// Every piece of mutable state a ContentBuilder holds while it accumulates one document's worth of content -- deliberately excluding `sections` (already-finished sections, never touched mid-accumulation) and the constructor-injected `header`/`sink` (read-only for the whole read). Bundled here so beginResultScratch/endResultScratch can swap the whole thing out for a fresh instance and back, rather than special-casing each field: see those two methods for why \result's own fallback content needs this.
+interface BuilderAccumulatorState {
+  blocks: ContentBlock[];
+  runs: ContentRun[];
+  pendingRunKey: string | undefined;
+  pendingRunText: string;
+  pendingRunFields: Omit<ContentRun, "text">;
+  runProvenance: ConstructDescriptor[][];
+  pendingRunProvenance: ConstructDescriptor[];
+  tableRows: RawTableRow[];
+  tableColumnRights: number[];
+  rowCells: ContentTableCell[];
+  cellBlocks: ContentBlock[];
+  pendingCellRights: number[];
+  pendingCellDefinitions: PendingCell[];
+  pendingCell: PendingCell;
+  rowLeftTwips: number;
+  paragraphSerial: number;
+  openBookmarks: Map<string, OpenBookmark>;
+  sectionBlockExtents: BlockConstructExtent[];
+  cellBlockExtents: BlockConstructExtent[];
+  pendingRunConstructs: RunConstructExtent[];
+  closingBookmarks: OpenBookmark[];
+}
+
+function freshAccumulatorState(): BuilderAccumulatorState {
+  return {
+    blocks: [],
+    runs: [],
+    pendingRunKey: undefined,
+    pendingRunText: "",
+    pendingRunFields: {},
+    runProvenance: [],
+    pendingRunProvenance: [],
+    tableRows: [],
+    tableColumnRights: [],
+    rowCells: [],
+    cellBlocks: [],
+    pendingCellRights: [],
+    pendingCellDefinitions: [],
+    pendingCell: newPendingCell(),
+    rowLeftTwips: 0,
+    paragraphSerial: 0,
+    openBookmarks: new Map(),
+    sectionBlockExtents: [],
+    cellBlockExtents: [],
+    pendingRunConstructs: [],
+    closingBookmarks: [],
+  };
+}
+
 class ContentBuilder {
   private readonly sections: ContentSection[] = [];
   private blocks: ContentBlock[] = [];
@@ -615,13 +657,15 @@ class ContentBuilder {
   private rowLeftTwips = 0;
   // Bookmark bookkeeping. A bookmark's two halves are matched by name and may bracket a sub-sequence of one paragraph's runs or a run of whole paragraphs, and document-schema.js gives those two scopes two different encodings -- a RunConstructExtent on the paragraph, or a constructStart/constructEnd marker pair in the block list. Which one applies is not knowable when the start is seen, only when its end arrives, so a start is held open here and resolved then.
   private paragraphSerial = 0;
-  private readonly openBookmarks = new Map<string, OpenBookmark>();
+  private openBookmarks = new Map<string, OpenBookmark>();
   // Extents whose two halves landed in different paragraphs of the same block list, waiting for that list to be finalised. Two lists, because a table cell's blocks and a section's blocks are separate bracket scopes and a pair may not straddle them.
   private sectionBlockExtents: BlockConstructExtent[] = [];
   private cellBlockExtents: BlockConstructExtent[] = [];
   private pendingRunConstructs: RunConstructExtent[] = [];
   // Bookmarks whose end half arrived in the paragraph currently accumulating, having started in an earlier one -- resolvable only once that paragraph's own block index is known.
   private closingBookmarks: OpenBookmark[] = [];
+  // Suspended accumulator states, one per \result currently rendering -- a stack rather than a single slot because a malformed producer can nest an \object (with its own \result) inside another \object's own \result content; see beginResultScratch/endResultScratch.
+  private resultScratchStack: BuilderAccumulatorState[] = [];
 
   constructor(
     private readonly header: RtfHeader,
@@ -1050,20 +1094,86 @@ class ContentBuilder {
     return widths;
   }
 
-  addBlock(block: ContentBlock): void {
+  // Splices zero or more already-finished blocks into place -- one at a time for a decoded \pict/\object, or a whole run at once for \result's own recovered fallback content (see endResultScratch) -- flushing whatever run is mid-accumulation first, exactly as a single addBlock always did, and targeting the open table cell's own list or the section's the same way endParagraph does. A no-op for an empty list, so callers never need to guard the \result case (which recovers nothing when \objdata decoded, or when \result itself had no content) with their own length check.
+  addBlocks(blocks: readonly ContentBlock[], inTable: boolean): void {
+    if (blocks.length === 0) {
+      return;
+    }
     this.flushRun();
-    this.blocks.push(block);
-  }
-
-  // How many blocks the relevant list (the open table cell's own, or the section's) currently holds -- used only to mark where \result's own provisionally-rendered fallback paragraphs begin and end, so \object's own group end can retract them if \objdata goes on to decode. Never call this expecting it to reflect a paragraph still accumulating in `runs`/`pendingRunText`: only a closed paragraph (via endParagraph) actually lands in the list this counts.
-  blockCount(inTable: boolean): number {
-    return inTable ? this.cellBlocks.length : this.blocks.length;
-  }
-
-  // Discards exactly the blocks \result provisionally rendered, once \objdata's own real decode has gone on to succeed elsewhere in the same \object group -- the retraction half of the deferred-resolution design described on ObjectState. Bookmark extents recorded against absolute indices while \result's content was still standing (a bookmark straddling the removed range, or opening inside it and closing after) are not renumbered here: \result's own fallback preview is not expected to carry a real document's bookmarks, so this is accepted as a known gap rather than solved, matching the same "not defended against" posture the rest of this reader takes toward inputs it does not expect to see in practice.
-  removeBlockRange(inTable: boolean, start: number, end: number): void {
     const target = inTable ? this.cellBlocks : this.blocks;
-    target.splice(start, end - start);
+    target.push(...blocks);
+  }
+
+  // Snapshots every field BuilderAccumulatorState names, by reference -- the arrays/map themselves move to the snapshot, not copies of their contents, so the fields below can be pointed at a fresh empty set without the old one changing shape underneath whoever holds the snapshot.
+  private captureAccumulatorState(): BuilderAccumulatorState {
+    return {
+      blocks: this.blocks,
+      runs: this.runs,
+      pendingRunKey: this.pendingRunKey,
+      pendingRunText: this.pendingRunText,
+      pendingRunFields: this.pendingRunFields,
+      runProvenance: this.runProvenance,
+      pendingRunProvenance: this.pendingRunProvenance,
+      tableRows: this.tableRows,
+      tableColumnRights: this.tableColumnRights,
+      rowCells: this.rowCells,
+      cellBlocks: this.cellBlocks,
+      pendingCellRights: this.pendingCellRights,
+      pendingCellDefinitions: this.pendingCellDefinitions,
+      pendingCell: this.pendingCell,
+      rowLeftTwips: this.rowLeftTwips,
+      paragraphSerial: this.paragraphSerial,
+      openBookmarks: this.openBookmarks,
+      sectionBlockExtents: this.sectionBlockExtents,
+      cellBlockExtents: this.cellBlockExtents,
+      pendingRunConstructs: this.pendingRunConstructs,
+      closingBookmarks: this.closingBookmarks,
+    };
+  }
+
+  private restoreAccumulatorState(saved: BuilderAccumulatorState): void {
+    this.blocks = saved.blocks;
+    this.runs = saved.runs;
+    this.pendingRunKey = saved.pendingRunKey;
+    this.pendingRunText = saved.pendingRunText;
+    this.pendingRunFields = saved.pendingRunFields;
+    this.runProvenance = saved.runProvenance;
+    this.pendingRunProvenance = saved.pendingRunProvenance;
+    this.tableRows = saved.tableRows;
+    this.tableColumnRights = saved.tableColumnRights;
+    this.rowCells = saved.rowCells;
+    this.cellBlocks = saved.cellBlocks;
+    this.pendingCellRights = saved.pendingCellRights;
+    this.pendingCellDefinitions = saved.pendingCellDefinitions;
+    this.pendingCell = saved.pendingCell;
+    this.rowLeftTwips = saved.rowLeftTwips;
+    this.paragraphSerial = saved.paragraphSerial;
+    this.openBookmarks = saved.openBookmarks;
+    this.sectionBlockExtents = saved.sectionBlockExtents;
+    this.cellBlockExtents = saved.cellBlockExtents;
+    this.pendingRunConstructs = saved.pendingRunConstructs;
+    this.closingBookmarks = saved.closingBookmarks;
+  }
+
+  // Begins rendering \result's own fallback content into a totally isolated accumulator, suspending whatever paragraph, block list, table, or bookmark state was already accumulating around \object -- so \result's content can neither destroy that state (a paragraph still open before \object started, as "before" is in `before {\object...}`) nor be destroyed by the block-index confusion a range-based retraction produced (a bare-inline \result closing no block of its own, or a second \result sibling overwriting the first's range). flushRun() first so a run already pending in the SUSPENDED paragraph is completed before it is set aside, rather than left half-built underneath the fresh state. endResultScratch, called when \result's own group closes, hands back whatever this produced and restores the suspended state.
+  beginResultScratch(): void {
+    this.flushRun();
+    this.resultScratchStack.push(this.captureAccumulatorState());
+    this.restoreAccumulatorState(freshAccumulatorState());
+  }
+
+  // Ends \result's own scratch rendering: force-closes whatever paragraph it was still accumulating -- RTF 1.9.1's own <result> = '{' \result <para>+ '}' lets the group's own closing brace stand in for the final paragraph's \par exactly as a table cell's \cell or the document's own end already do elsewhere in this reader (endParagraph's own force=false is exactly that "implicit boundary" case: it produces nothing new when \result's content already closed with its own explicit \par, and produces the one paragraph still pending when it did not) -- then hands back every block \result's content produced, from the open table cell's own scratch list if `para.inTable`, the section's otherwise, before restoring the accumulator `beginResultScratch` suspended. `para` is \result's own child group's paragraph state, which is the same `inTable` \object's own group-end handling will use to decide where these blocks belong if it goes on to keep them.
+  endResultScratch(para: ParagraphState): ContentBlock[] {
+    this.endParagraph(para, false);
+    if (!para.inTable) {
+      this.closeTable();
+    }
+    const blocks = para.inTable ? this.cellBlocks : this.blocks;
+    const saved = this.resultScratchStack.pop();
+    if (saved !== undefined) {
+      this.restoreAccumulatorState(saved);
+    }
+    return blocks;
   }
 
   endSection(section: SectionState, para: ParagraphState): void {
@@ -1340,7 +1450,6 @@ function readRtfDetail(
     objectData: undefined,
     object: undefined,
     resultOf: undefined,
-    resultOpenAt: undefined,
     bookmark: undefined,
     inUnicodeWrapper: false,
   };
@@ -1412,13 +1521,24 @@ function readRtfDetail(
         head.destination !== undefined &&
         HEADER_DESTINATIONS.has(head.destination);
       const wrapperChild = state.inUnicodeWrapper;
-      // \result is \object's own fallback rendering for a reader that cannot decode \objdata at all -- this reader always prefers \objdata, so \result's content is retracted (see \object's own group-end handling further down) whenever \objdata does decode. objectState is the enclosing \object's own shared-by-reference state; see ObjectState's own comment for why \result is rendered provisionally here rather than gated on a lookahead's prediction.
+      // \result is \object's own fallback rendering for a reader that cannot decode \objdata at all -- this reader always prefers \objdata, so \result's content is rendered into a totally isolated scratch accumulator (ContentBuilder's own beginResultScratch, called below once this group is actually entered) and only spliced into the real document, at \object's own group-end handling further down, if \objdata never decodes. objectState is the enclosing \object's own shared-by-reference state.
       const objectState = state.object;
       const isResultDestination =
         head.destination === "result" && objectState !== undefined;
+      // RTF's own <obj> grammar allows only one \result child, but a malformed producer can still write two -- recognised here, mirroring \objdata's own duplicate check just below, by resultSeen already being true from the first one, so the second is skipped whole rather than rendered into a scratch accumulator nothing will read.
+      // objectState is provably defined here: isResultDestination's own definition already asserts `objectState !== undefined`, and TypeScript's aliased-condition narrowing carries that through the `&&` below.
+      const isDuplicateResult = isResultDestination && objectState.resultSeen;
       if (objectState !== undefined && isResultDestination) {
-        // Recorded regardless of whether this \result is ultimately kept or retracted: \object's own group-end diagnostic (below) needs to know whether a \result existed at all, distinctly from whether \objdata did.
+        // Recorded regardless of whether this \result is ultimately kept or discarded: \object's own group-end diagnostic (below) needs to know whether a \result existed at all, distinctly from whether \objdata did, and the duplicate check just above needs it too.
         objectState.resultSeen = true;
+      }
+      if (isDuplicateResult) {
+        sink({
+          code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+          severity: "warning",
+          message:
+            "an \\object destination has more than one \\result child, which RTF's own grammar does not allow; only the first is kept and this one is discarded",
+        });
       }
       // RTF's own <obj> grammar allows only one \objdata child, but a malformed producer can still write two -- recognised here (rather than left to decode twice into two identical embeddedObject blocks) by objectDataSeen already being true from the first one.
       const isObjectDataDestination =
@@ -1439,7 +1559,7 @@ function readRtfDetail(
       const kind: DestinationKind =
         isHeaderTable || (wrapperChild && head.destination !== "ud")
           ? "skip"
-          : isDuplicateObjectData
+          : isDuplicateObjectData || isDuplicateResult
             ? "skip"
             : isResultDestination
               ? "body"
@@ -1490,7 +1610,7 @@ function readRtfDetail(
             decoded: false,
             objectDataSeen: false,
             resultSeen: false,
-            resultRange: undefined,
+            resultBlocks: undefined,
             widthTwips: undefined,
             heightTwips: undefined,
           };
@@ -1507,12 +1627,9 @@ function readRtfDetail(
         index += 1;
       }
       if (objectState !== undefined && isResultDestination) {
-        // \result's content is always rendered provisionally as ordinary body paragraphs -- see ObjectState's own comment -- landing wherever the paragraph state active here already resolves to (the open table cell's own blocks, or the section's). Retracted at \object's own group end if \objdata's real decode succeeds, wherever in the token stream that turns out to happen; left standing otherwise. `object` is cleared on this child (rather than inherited, as cloneGroupState would otherwise carry it forward by reference) so that a malformed \objdata nested inside \result's own fallback content -- not itself wrapped in its own \object, which real RTF never does but a hostile or corrupt file could -- decodes or fails entirely on its own terms, without marking THIS \object decoded and so without retracting real content that happened to render alongside it.
+        // Unreachable for a duplicate \result: isDuplicateResult forces kind to "skip" above, which continues the outer loop before this point is ever reached. \result's own content now builds into a totally isolated scratch accumulator (see ContentBuilder's own beginResultScratch) rather than the paragraph/block list/table state already accumulating around \object -- so it can neither destroy that state nor be destroyed by it, regardless of where \object sits (mid-paragraph, inside a table cell, or anywhere else). `object` is cleared on this child (rather than inherited, as cloneGroupState would otherwise carry it forward by reference) so that a malformed \objdata nested inside \result's own fallback content -- not itself wrapped in its own \object, which real RTF never does but a hostile or corrupt file could -- decodes or fails entirely on its own terms, without marking THIS \object decoded.
+        builder.beginResultScratch();
         child.resultOf = objectState;
-        child.resultOpenAt = {
-          inTable: state.para.inTable,
-          start: builder.blockCount(state.para.inTable),
-        };
         child.object = undefined;
       }
       stack.push(child);
@@ -1526,7 +1643,7 @@ function readRtfDetail(
       if (state.destination === "picture" && state.picture !== undefined) {
         const image = buildPicture(state.picture, sink);
         if (image !== undefined) {
-          builder.addBlock(image);
+          builder.addBlocks([image], state.para.inTable);
         }
       }
       if (
@@ -1539,30 +1656,23 @@ function readRtfDetail(
           sink,
         );
         if (embedded !== undefined) {
-          builder.addBlock(embedded);
-          // Marks the enclosing \object's shared state so \object's own group-end handling below retracts \result's fallback content instead of leaving it standing alongside the real decoded object -- this reader always prefers the real object over \object's own cached appearance, exactly as Word itself does.
+          builder.addBlocks([embedded], state.para.inTable);
+          // Marks the enclosing \object's shared state so \object's own group-end handling below discards \result's fallback content instead of splicing it in alongside the real decoded object -- this reader always prefers the real object over \object's own cached appearance, exactly as Word itself does.
           if (state.object !== undefined) {
             state.object.decoded = true;
           }
         }
       }
-      if (state.resultOf !== undefined && state.resultOpenAt !== undefined) {
-        // \result's own group has fully rendered its provisional fallback paragraphs by now (every \par it contained has already closed a real paragraph into whichever list state.para.inTable pointed at). Recorded, not yet acted on: \object's own group-end handling further up the stack retracts this range if \objdata's real decode went on to succeed, and this \result's own group-end cannot know that outcome when \result comes first in the source -- \objdata may not even have been read yet.
-        state.resultOf.resultRange = {
-          inTable: state.resultOpenAt.inTable,
-          start: state.resultOpenAt.start,
-          end: builder.blockCount(state.resultOpenAt.inTable),
-        };
+      if (state.resultOf !== undefined) {
+        // \result's own scratch accumulator (opened by beginResultScratch when this group started) is finished now: every \par it contained has already closed a real paragraph inside it, and endResultScratch force-closes whatever paragraph was still open otherwise. Recorded, not yet acted on: \object's own group-end handling further up the stack either splices these blocks in or discards them once \objdata's real decode's fate is finally known, and this \result's own group-end cannot know that outcome when \result comes first in the source -- \objdata may not even have been read yet.
+        state.resultOf.resultBlocks = builder.endResultScratch(state.para);
       }
       if (state.destination === "object" && state.object !== undefined) {
-        // Every child \objdata/\result this \object's own group can legally contain has, by construction, already closed by the time \object's own closing brace is reached -- so `decoded`, `objectDataSeen` and `resultRange` are all final here, regardless of which sibling the source actually listed first.
+        // Every child \objdata/\result this \object's own group can legally contain has, by construction, already closed by the time \object's own closing brace is reached -- so `decoded`, `objectDataSeen` and `resultBlocks` are all final here, regardless of which sibling the source actually listed first.
         const objectState = state.object;
-        if (objectState.decoded && objectState.resultRange !== undefined) {
-          builder.removeBlockRange(
-            objectState.resultRange.inTable,
-            objectState.resultRange.start,
-            objectState.resultRange.end,
-          );
+        if (!objectState.decoded && objectState.resultBlocks !== undefined) {
+          // \objdata never decoded (or never existed at all): \result's own recovered content takes \object's own place, spliced in at the current position -- exactly where \object itself sits in the surrounding paragraph or table cell, matching addBlocks' own placement for a decoded \pict/\object.
+          builder.addBlocks(objectState.resultBlocks, state.para.inTable);
         }
         // An \object whose \objdata genuinely exists but fails to decode already reports that failure on its own terms (buildEmbeddedObject's own EMBEDDED_OBJECT_UNREADABLE, above) -- this diagnostic is only for the two cases where NOTHING already said so: no \objdata at all, with \result's content used in its place, or no \objdata AND no \result, where the whole construct is silently dropped.
         if (!objectState.objectDataSeen) {
@@ -2020,7 +2130,7 @@ function applyStructureControlWord(
       return true;
     case "page":
       builder.endParagraph(state.para, false);
-      builder.addBlock({ kind: "pageBreak" });
+      builder.addBlocks([{ kind: "pageBreak" }], state.para.inTable);
       return true;
     case "sect":
       // "\sect End of section and paragraph" -- both, in that order: the paragraph closes into the section that is ending, not into the one about to begin.
