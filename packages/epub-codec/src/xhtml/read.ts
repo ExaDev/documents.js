@@ -764,7 +764,7 @@ function flushDefinitionListStrayContent(
   return blocks;
 }
 
-// The <table> content model per HTML5 is, in order: an optional <caption>, zero or more <colgroup>, an optional <thead>, either zero or more <tbody> or one or more bare <tr>, an optional <tfoot>, optionally intermixed with script-supporting elements -- so <colgroup> and an inert element (isInertElement) are both legal here and carry nothing document-schema.js's own vocabulary can represent, silently skipped exactly like a <div>'s own class/id elsewhere in this file. Anything else that is not tr/thead/tbody/tfoot/caption/colgroup/inert -- a stray <p>, a stray <div>, stray text -- is not valid HTML5, but was previously dropped with zero diagnostics; it is now collected into strayNodes below and recovered through the same readContainerChildren dispatch as everything else this file recovers, reported via the TABLE_CONTENT_UNRECOGNIZED diagnostic further down (there is no separate flushTableStrayContent helper -- the collection and the recovery both live inline in this function) -- the real output order is the recovered stray content FIRST, then any caption paragraph(s), then the table itself (see this function's own closing `return`), mirroring the "recovered as ordinary content, positioned relative to the block it describes" convention this file already applies to a list's own before-the-first-item stray content -- a table's own rows fold into one indivisible ContentTable block, so there is no position WITHIN the table's own structure to reinsert interleaved stray content into without misrepresenting it as more than one table. A <thead>/<tbody>/<tfoot>'s own content model is narrower still: zero or more <tr> and script-supporting elements only, per the HTML Standard -- so any OTHER content sitting directly inside one of those row groups (a stray text node, a stray <p>, a stray <img>, an entire nested list) shares the identical malformed shape and is folded into this very same strayNodes collection by collectRowGroupRows below, exactly one level of nesting deeper than the table-direct case, rather than being silently dropped the way it once was.
+// The <table> content model per HTML5 is, in order: an optional <caption>, zero or more <colgroup>, an optional <thead>, either zero or more <tbody> or one or more bare <tr>, an optional <tfoot>, optionally intermixed with script-supporting elements -- so an inert element (isInertElement) sitting directly inside the <table> carries nothing document-schema.js's own vocabulary can represent and is silently skipped exactly like a <div>'s own class/id elsewhere in this file. A <colgroup> is legal here too, but is not skipped wholesale the same way: its own conforming content (<col>, and the same script-supporting elements) carries nothing to represent either, but anything else inside one -- a stray <p>, stray text, a stray <img> -- is not valid HTML5 and shares the identical malformed shape and identical most-likely producer intent as content sitting directly inside the <table> itself, so collectColgroupStrayContent below folds it into this very same strayNodes collection rather than the wholesale skip silently discarding it. Anything else that is not tr/thead/tbody/tfoot/caption/colgroup/inert -- a stray <p>, a stray <div>, stray text -- is not valid HTML5, but was previously dropped with zero diagnostics; it is now collected into strayNodes below and recovered through the same readContainerChildren dispatch as everything else this file recovers, reported via the TABLE_CONTENT_UNRECOGNIZED diagnostic further down (there is no separate flushTableStrayContent helper -- the collection and the recovery both live inline in this function) -- the real output order is the recovered stray content FIRST, then any caption paragraph(s), then the table itself (see this function's own closing `return`), mirroring the "recovered as ordinary content, positioned relative to the block it describes" convention this file already applies to a list's own before-the-first-item stray content -- a table's own rows fold into one indivisible ContentTable block, so there is no position WITHIN the table's own structure to reinsert interleaved stray content into without misrepresenting it as more than one table. A <thead>/<tbody>/<tfoot>'s own content model is narrower still: zero or more <tr> and script-supporting elements only, per the HTML Standard -- so any OTHER content sitting directly inside one of those row groups (a stray text node, a stray <p>, a stray <img>, an entire nested list) shares the identical malformed shape and is folded into this very same strayNodes collection by collectRowGroupRows below, exactly one level of nesting deeper than the table-direct case, rather than being silently dropped the way it once was.
 function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
   const captionElements = element.children.filter(
     (c): c is XmlElement => c.type === "element" && c.tag === "caption",
@@ -782,7 +782,11 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
       }
       continue;
     }
-    if (section.tag === "colgroup" || isInertElement(section.tag)) {
+    if (section.tag === "colgroup") {
+      collectColgroupStrayContent(section, strayNodes);
+      continue;
+    }
+    if (isInertElement(section.tag)) {
       continue;
     }
     const rowContainers =
@@ -900,6 +904,24 @@ function collectRowGroupRows(
     }
   }
   return trs;
+}
+
+// The <colgroup> twin of collectRowGroupRows immediately above: a <colgroup>'s own content model per the HTML Standard is "zero or more <col> and script-supporting elements" (empty entirely when the <colgroup> itself carries a span attribute) -- conforming content that document-schema.js's own vocabulary has nothing to represent (a column's own width/span belongs on ContentTable.columnWidthsPt, not a per-column node), so a <col> is silently skipped here exactly like an inert element is. Anything else -- a stray <p>, stray text, a stray <img> -- is not valid HTML5 but shares the identical malformed shape and identical most-likely producer intent as content sitting directly inside the <table> one level up, so it feeds the caller's own shared strayNodes accumulator directly, mirroring collectRowGroupRows' own reasoning: recovered and reported exactly once, via readTable's own TABLE_CONTENT_UNRECOGNIZED diagnostic and readContainerChildren call, rather than a separate recovery path that would misrepresent it as belonging to a particular column.
+function collectColgroupStrayContent(
+  section: XmlElement,
+  strayNodes: XmlNode[],
+): void {
+  for (const child of section.children) {
+    if (child.type === "element" && child.tag === "col") {
+      continue;
+    }
+    if (child.type === "element" && isInertElement(child.tag)) {
+      continue;
+    }
+    if (child.type === "element" || isTextLikeNode(child)) {
+      strayNodes.push(child);
+    }
+  }
 }
 
 // A <caption>'s own content, read as an ordinary paragraph immediately before the table it describes -- document-schema.js's ContentTable carries no field of its own for a caption distinct from an ordinary paragraph, exactly like readBlockElementInner's own <figcaption> case. Any <img> the caption itself carries degrades to alt text via the same inline-recursion path (and epub/image-inline-unsupported diagnostic) a <figcaption>'s own direct-child <img> already does, rather than becoming a real image block, for the identical reason -- buildInlineRuns has already committed to a flat run sequence by the time it reaches one. `isDuplicate` fires an additional diagnostic for every caption beyond the first: HTML5 permits at most one <caption> per <table>, so a second is a producer mistake this package now recovers rather than silently discards -- readTable used to resolve its caption via findChildElement, which only ever returns the first match for a given tag, so a second <caption> was lost with no trace and no diagnostic at all.
