@@ -303,6 +303,32 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // [MS-DOC] 2.9.78 FFData: FFDataBits.fHaslistbox MUST be 1 when iType is iTypeDrop, and wDef MUST exist when iType is iTypeChck or iTypeDrop. An earlier version of this writer minted neither for a dropdown -- a real Word reader opening the resulting field would find no default at all recorded for a list-type form field.
+  it("writes \\ffhaslistbox and \\ffdefres for a dropDown, not just its \\*\\ffl entries", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Guten Tag" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\ffhaslistbox");
+    expect(out).toContain("\\ffdefres0");
+    expectBalancedBraces(out);
+  });
+
   it("writes \\ffres as a zero-based index into \\*\\ffl when a dropDown's value names one of its own options", () => {
     const out = write(
       wordprocessing([
@@ -325,6 +351,8 @@ describe("body constructs", () => {
       ]),
     );
     expect(out).toContain("\\ffres1");
+    // \ffdefres mirrors the same selected index, exactly as the checkbox branch mirrors its own single `checked` boolean into both \ffres and \ffdefres.
+    expect(out).toContain("\\ffdefres1");
     expectBalancedBraces(out);
   });
 
@@ -888,7 +916,8 @@ describe("round trip through this package's own reader", () => {
     );
   });
 
-  it("round-trips a dropDown contentControl's options back onto the runs it wraps", () => {
+  // A dropDown minted with no recorded selection still round-trips with `value: "Hello"` (the first option) rather than no value at all -- [MS-DOC] 2.9.78 FFData's wDef is mandatory whenever iType is iTypeDrop, so this writer mints \ffdefres0 for exactly this case (see the "writes \ffhaslistbox and \ffdefres..." test above), and the reader then reads that same \ffdefres0 back as the selected entry. RTF's own form-field model has no way to serialise "list box, no default selection" -- only "list box, default is entry N" -- so this is the correct, spec-forced fixed point, not a fidelity regression.
+  it("round-trips a dropDown contentControl's options back onto the runs it wraps, gaining the spec-mandated first-entry default", () => {
     const back = roundTrip(
       wordprocessing([
         {
@@ -916,6 +945,7 @@ describe("round trip through this package's own reader", () => {
       kind: "contentControl",
       controlType: "dropDown",
       options: ["Hello", "Guten Tag"],
+      value: "Hello",
     });
     expect(
       paragraph?.runs
