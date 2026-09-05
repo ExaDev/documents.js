@@ -35,6 +35,7 @@ import type { Relationship } from "../util";
 import {
   attr,
   childrenWithTag,
+  decodeEntities,
   elementsWithTag,
   resolveRelationships,
   rootElement,
@@ -479,7 +480,7 @@ function readSpShape(
   };
 }
 
-// Resolves the first a:blip/@r:embed anywhere under parent (a p:pic's own p:blipFill, or an OLE object's fallback p:pic nested inside a:graphicData's mc:AlternateContent) through the slide's relationships to a sniffed ContentImageBlock sized to the given frame -- undefined when the id, relationship, part, or magic bytes don't line up, leaving the shape with no image content.
+// Resolves the first a:blip/@r:embed anywhere under parent (a p:pic's own p:blipFill, or an OLE object's fallback p:pic nested inside a:graphicData's mc:AlternateContent) through the slide's relationships to a sniffed ContentImageBlock sized to the given frame -- undefined when the id, relationship, part, or magic bytes don't line up, leaving the shape with no image content. Alt text comes from the nearest p:cNvPr's @descr (falling back to @title) under the same parent -- p:cNvPr is CT_NonVisualDrawingProps, the identical element docx's own w:docPr shares (ECMA-376 20.1.2.2.8), so this mirrors typed/docx/read.ts's readDrawingImage exactly and is what documents.js's own pptx picture writer (edit/pptx/shape.ts's buildPictureShape) writes descr against.
 function readBlipImage(
   parent: XmlElement,
   slideRels: ReadonlyMap<string, Relationship>,
@@ -494,15 +495,25 @@ function readBlipImage(
     return undefined;
   }
   const format = sniffImageFormat(base64ToBytes(mediaPart.base64));
-  return format === undefined
-    ? undefined
-    : {
-        kind: "image",
-        format,
-        base64: mediaPart.base64,
-        widthPt: frame.widthPt,
-        heightPt: frame.heightPt,
-      };
+  if (format === undefined) {
+    return undefined;
+  }
+  const image: ContentImageBlock = {
+    kind: "image",
+    format,
+    base64: mediaPart.base64,
+    widthPt: frame.widthPt,
+    heightPt: frame.heightPt,
+  };
+  const cNvPr = elementsWithTag([parent], "p:cNvPr")[0];
+  const altText =
+    cNvPr === undefined
+      ? undefined
+      : (attr(cNvPr, "descr") ?? attr(cNvPr, "title"));
+  if (altText !== undefined) {
+    image.altText = decodeEntities(altText);
+  }
+  return image;
 }
 
 function readPicShape(
