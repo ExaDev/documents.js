@@ -136,6 +136,11 @@ describe("patchDocxMetadata", () => {
     expect(readDocxExtras(core)).toStrictEqual(
       readDocxExtras(decodeOoxmlPackage(sourceBytes)),
     );
+
+    // The actual behaviour this test's own name claims: title survives the second pass untouched (it was never mentioned in that pass's overrides), and author took the value the second pass actually set.
+    const metadata = readDocxContent(core).metadata;
+    expect(metadata.title).toBe("First Pass");
+    expect(metadata.author).toBe("Second Pass Author");
   });
 });
 
