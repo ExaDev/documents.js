@@ -173,11 +173,11 @@ interface SharedFormulaGroup {
   readonly rgce: Uint8Array<ArrayBuffer>;
 }
 
-/** An array (CSE) formula's real expression, from the ArrayParsedFormula an Array record following the group's base Formula record carries -- identical, unadjusted text for every cell in the array's range (ArrayParsedFormula's own grammar forbids PtgRefN/PtgAreaN, so there is no per-cell expansion to do), wrapped in Excel's own `{...}` array-formula braces by resolveFormulaText. */
+/** An array (CSE) formula's real expression, from the ArrayParsedFormula an Array record following the group's base Formula record carries -- identical, unadjusted text for every cell in the array's range (ArrayParsedFormula's own grammar forbids PtgRefN/PtgAreaN, so there is no per-cell expansion to do), wrapped in Excel's own `{...}` array-formula braces by resolveFormulaText. `rgcb` is undefined both when the record genuinely carries none (rgce has no PtgArray to feed) and when readArrayGroup could not make sense of what should have been one -- the two are indistinguishable from here, and parseFormulaText's own rgcb-absent handling is already the correct behaviour for both: rgce is trusted only up to its own PtgArray tokens, which then simply fail to resolve. */
 interface ArrayFormulaGroup {
   readonly kind: "array";
   readonly rgce: Uint8Array<ArrayBuffer>;
-  readonly rgcb: Uint8Array<ArrayBuffer>;
+  readonly rgcb: Uint8Array<ArrayBuffer> | undefined;
 }
 
 type FormulaGroup = SharedFormulaGroup | ArrayFormulaGroup;
@@ -235,7 +235,18 @@ function readArrayGroup(record: RecordGroup): ArrayFormulaGroup {
   const cce = cursor.u16();
   const rgce = cursor.take(cce);
   const rgcbLength = recordByteLength(record) - (ARRAY_HEADER_BYTES + 2 + cce);
-  return { kind: "array", rgce, rgcb: cursor.take(Math.max(rgcbLength, 0)) };
+  // A non-positive length means the record's own declared byte total does not even cover its header and rgce -- malformed, and genuinely undefined rather than a fake empty buffer: an empty Uint8Array would claim "this record legitimately carries zero bytes of rgcb," which is a real, valid state (an array formula whose rgce has no PtgArray at all) that this distinguishes from. Reading a rgcbLength byte count larger than what the record actually holds (an overrun, as opposed to this too-short case) throws BiffFormatError instead, caught the same way for the same reason: both are this one Array record's own malformed trailer, and neither should stop any OTHER cell's formula from resolving.
+  if (rgcbLength <= 0) {
+    return { kind: "array", rgce, rgcb: undefined };
+  }
+  try {
+    return { kind: "array", rgce, rgcb: cursor.take(rgcbLength) };
+  } catch (error) {
+    if (!(error instanceof BiffFormatError)) {
+      throw error;
+    }
+    return { kind: "array", rgce, rgcb: undefined };
+  }
 }
 
 /** Reads one worksheet substream's records. */
@@ -693,15 +704,24 @@ function readFormula(
   cursor.skip(FORMULA_CALC_CACHE_BYTES);
   const cce = cursor.u16();
   const rgce = cursor.take(cce);
-  const rgcbLength = recordByteLength(record) - (FORMULA_HEADER_BYTES + cce);
-  const rgcb = rgcbLength > 0 ? cursor.take(rgcbLength) : undefined;
-  const formula = resolveFormulaText(
-    rgce,
-    rgcb,
-    header,
-    formulaSheets,
-    formulaGroups,
-  );
+  // This record's own rgcb trailer (present only when rgce contains an inline PtgArray, e.g. `=SUM({1,2,3})` in a cell that is not itself CSE-array-entered) is read past the point cce already bounds, and its own length is inferred the same way readArrayGroup's is -- so the same malformed-trailer risk applies. Caught here rather than left to propagate: a bad rgcb degrades only THIS cell's formula to absent, exactly like any other construct this reader cannot resolve, rather than aborting every other cell's read too.
+  let formula: string | undefined;
+  try {
+    const rgcbLength = recordByteLength(record) - (FORMULA_HEADER_BYTES + cce);
+    const rgcb = rgcbLength > 0 ? cursor.take(rgcbLength) : undefined;
+    formula = resolveFormulaText(
+      rgce,
+      rgcb,
+      header,
+      formulaSheets,
+      formulaGroups,
+    );
+  } catch (error) {
+    if (!(error instanceof BiffFormatError)) {
+      throw error;
+    }
+    formula = undefined;
+  }
   return formula === undefined
     ? { ...header, value, fromFormula: true }
     : { ...header, value, fromFormula: true, formula };
