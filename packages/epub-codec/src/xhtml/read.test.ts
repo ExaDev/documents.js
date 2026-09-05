@@ -1157,6 +1157,33 @@ describe("div/section passthrough", () => {
   });
 });
 
+describe("readContainerChildren's own segment flush", () => {
+  it("keeps a construct-only segment sitting bare between two block siblings, rather than dropping it as an empty segment", () => {
+    const blocks = read(
+      body(
+        '<p>Before</p><a epub:type="noteref" href="#fn1"></a><p>After</p>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Before" }],
+    });
+    expect(blocks[1]).toEqual({
+      kind: "paragraph",
+      runs: [],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 0,
+          endRun: 0,
+        },
+      ],
+    });
+    expect(blocks[2]).toEqual({ kind: "paragraph", runs: [{ text: "After" }] });
+  });
+});
+
 describe("footnotes: EPUB 3 aside + noteref", () => {
   it("wraps the aside body in a footnote anchor construct and marks the reference site", () => {
     const blocks = read(
