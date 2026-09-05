@@ -1,6 +1,7 @@
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { evaluate, type EvaluationResult } from "document-compute.js";
 import {
+  ContentDocumentSchema,
   EvaluationValueSchema,
   flattenTree,
   FormulaBindingsSchema,
@@ -73,16 +74,15 @@ const FormulaOutcomeSchema = z.union([
   }),
 ]);
 
+// Derived from ContentDocumentSchema's own discriminated-union members rather than hand-listed, so deleting or renaming a ContentDocument kind is caught here at the type level (documentKind's own z.enum stops accepting the removed literal, and every caller of it fails to typecheck) instead of surfacing only at runtime as a ProtocolError the first time a document of that kind is read -- the same drift risk collectDocumentFormulas's own exhaustiveness guard (documents.js's src/model/formula.ts) already closes for its switch.
+const documentKindValues = ContentDocumentSchema.options.map(
+  (option) => option.shape.kind.value,
+);
+
 // The full structuredContent shape compute_formula returns -- exported for the same reason as this package's other tools' own OutputSchema constants.
 export const ComputeFormulaOutputSchema = z.object({
   sourceFormat: DocumentFormatSchema,
-  documentKind: z.enum([
-    "wordprocessing",
-    "presentation",
-    "spreadsheet",
-    "drawing",
-    "formula",
-  ]),
+  documentKind: z.enum(documentKindValues),
   formulaCount: z.number(),
   formulas: z.array(
     z.object({
