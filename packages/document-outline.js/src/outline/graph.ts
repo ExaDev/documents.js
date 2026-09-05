@@ -759,6 +759,8 @@ function boundedOrderKey(
 }
 
 // The rebalance fallback: mints a fresh, evenly spaced key for every one of `from`'s existing `kind` edges plus the new one, in the same relative order (renumberedOrderKeys -- the identical rebalance orderKeyBetween's own exhaustion already names as the answer), then replaces exactly those existing edges in `graph` with their rebuilt versions. Every OTHER edge in `graph` -- a different `from`, a different `kind`, or a wholly unrelated edge -- is carried over untouched; only the one sibling group that ran out of room is ever rewritten.
+//
+// A KNOWN, PRE-EXISTING TRADE-OFF (order-keys.ts's own scheme, unchanged by this write API): renumberedOrderKeys always re-establishes orderKeyForIndex(0) -- the all-zero '00000000' floor -- as the new first sibling's key, so a sibling group that has just paid for a full rebalance is immediately back at the exact floor a further front-insert (`{ at: 'start' }`) will exhaust again. Repeated front-inserts into the same sibling group therefore each pay the full rebalance cost, not merely the first one; there is no cheaper "leave headroom below the floor" alternative within this scheme, because '00000000' is definitionally the bottom of the base-36 key space (orderKeyBefore's own refusal). This is a property of the order-key scheme itself, not something insertEdge's own rebalance logic could avoid without changing what a rebalance mints.
 function rebalancedInsert(
   graph: PropertyGraph,
   from: string,
