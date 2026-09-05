@@ -143,7 +143,7 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["objdata", "objectData"],
   ["objclass", "skip"],
   ["objname", "skip"],
-  // \result is \object's own fallback rendering for a reader that does not understand \object at all -- this reader always attempts \objdata first, so \result's own content (ordinary RTF paragraphs, per the spec's <result> = '{' \result <para>+ '}') is discarded rather than appended to the surrounding document, exactly as Word itself ignores \result whenever it can use the real object.
+  // \result is \object's own fallback rendering for a reader that cannot decode \object at all -- this reader always attempts \objdata first and prefers it, exactly as Word itself does, so this table's own "skip" is only the default. The group-start handler below overrides it to "body" precisely when the sibling \objdata this \result belongs to has already failed to decode (state.object.decoded is false), so a genuine decode failure recovers \result's own content (ordinary RTF paragraphs, per the spec's <result> = '{' \result <para>+ '}') instead of discarding it.
   ["result", "skip"],
   ["do", "skip"],
   ["shp", "skip"],
@@ -167,7 +167,7 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
 //  - \pn/\pnseclvl are Word 6/95 paragraph numbering, superseded by the \lsN/\ilvlN this reader does read.
 //  - \nonshppict is by definition the copy Word itself will not read ("Specifies that Word 97 through Word 2002 has written a {\pict destination that it will not read on input"), sitting beside the \*\shppict this reader does take.
 //  - \falt, \panose and \fname are <fontinfo> sub-productions the header parser already consumed.
-//  - \atn*, \objclass/\objname/\result and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct (\objdata is no longer here -- it is real payload now, handled and reported on its own terms by buildEmbeddedObject).
+//  - \atn*, \objclass/\objname/\result and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct (\objdata is no longer here -- it is real payload now, handled and reported on its own terms by buildEmbeddedObject; \result is silent here too even on the degrade path where it is read as body content, since buildEmbeddedObject's own EMBEDDED_OBJECT_UNREADABLE diagnostic already reported the object once).
 //  - The footnote and endnote separators are page furniture with no content of their own, and \xe/\tc/\tcn are index and table-of-contents entry markers whose text is derivable from the document they mark.
 const SILENT_SKIP_DESTINATIONS: ReadonlySet<string> = new Set([
   "pn",
@@ -314,10 +314,17 @@ interface FieldState {
   instruction: string;
 }
 
-// {\*\objdata ...}'s own hex-or-binary payload, captured exactly like PictureState's own hex/binary pair above (the two destinations share the identical (\binN #BDATA) | #SDATA grammar production). Unlike PictureState this carries no dimension/format fields: \object's own \objwN/\objhN are purely informational sizing for a reader that cannot decode \objdata (RTF 1.9.1, "Objects"), and this reader's actual reconstruction gets objectKind/frame/document straight from the decoded payload itself -- see buildEmbeddedObject.
+// {\*\objdata ...}'s own hex-or-binary payload, captured exactly like PictureState's own hex/binary pair above (the two destinations share the identical (\binN #BDATA) | #SDATA grammar production). Unlike PictureState this carries no dimension/format fields: \object's own \objwN/\objhN are purely informational sizing for a reader that cannot decode \objdata (RTF 1.9.1, "Objects") -- captured instead on the enclosing \object's own ObjectState below -- and this reader's actual reconstruction gets objectKind/frame/document straight from the decoded payload itself -- see buildEmbeddedObject.
 interface ObjectDataState {
   hex: string;
   binary: number[];
+}
+
+// One \object destination's own state, shared by reference across the whole {\object ...} group and every child destination nested inside it (\objdata, \result, and the informational \*\objclass/\*\objname sub-groups) -- the same "shared by reference" pattern FieldState already establishes for \fldinst/\fldrslt, so \result's own group can see whether its sibling \objdata already decoded without either needing to know the other's stack depth. widthTwips/heightTwips capture \objwN/\objhN (the size hint RTF 1.9.1 says a producer supplies "to maintain backward compatibility" for a reader that cannot decode \objdata at all): this reader's own reconstruction never needs them when \objdata decodes, but the degrade path folds them into its diagnostic message instead of discarding them silently.
+interface ObjectState {
+  decoded: boolean;
+  widthTwips: number | undefined;
+  heightTwips: number | undefined;
 }
 
 // One {\*\bkmkstart ...} or {\*\bkmkend ...} group under construction: its #PCDATA name, plus the start half's optional table-column range.
@@ -335,6 +342,7 @@ interface GroupState {
   field: FieldState | undefined;
   picture: PictureState | undefined;
   objectData: ObjectDataState | undefined;
+  object: ObjectState | undefined;
   bookmark: BookmarkState | undefined;
   // Whether this group is a \upr wrapper's own child that must be discarded (the ANSI half). Set on the wrapper; consulted when a child group opens.
   inUnicodeWrapper: boolean;
@@ -381,6 +389,7 @@ function cloneGroupState(state: GroupState): GroupState {
     field: state.field,
     picture: state.picture,
     objectData: state.objectData,
+    object: state.object,
     bookmark: state.bookmark,
     inUnicodeWrapper: state.inUnicodeWrapper,
   };
@@ -1176,9 +1185,20 @@ function defaultPictureState(): PictureState {
   };
 }
 
-// Turns {\*\objdata ...}'s collected payload back into a ContentEmbeddedObjectBlock, or reports why it cannot and returns undefined -- the object-destination counterpart of buildPicture above. "no payload" and "not this package's own payload" are the two distinct failure shapes (matching buildPicture's own "no format" vs "no size" split): the first never reaches readEmbeddedObjectData at all, and the second is every way a real, foreign OLE object (or simply malformed \objdata) legitimately fails to parse as one.
+// Formats \objwN/\objhN (captured on the enclosing \object's own ObjectState) as a diagnostic clause, or an empty string when neither was stated -- the degrade path's own way of not discarding the size hint even though nothing in the ContentDocument has a position left to carry it once the real object cannot be decoded.
+function objectSizeHintClause(object: ObjectState | undefined): string {
+  if (object?.widthTwips === undefined || object.heightTwips === undefined) {
+    return "";
+  }
+  const widthPt = twipsToPoints(object.widthTwips).toFixed(2);
+  const heightPt = twipsToPoints(object.heightTwips).toFixed(2);
+  return ` (the object's own \\objw/\\objh declared a ${widthPt}pt x ${heightPt}pt size)`;
+}
+
+// Turns {\*\objdata ...}'s collected payload back into a ContentEmbeddedObjectBlock, or reports why it cannot and returns undefined -- the object-destination counterpart of buildPicture above. "no payload" and "not this package's own payload" are the two distinct failure shapes (matching buildPicture's own "no format" vs "no size" split): the first never reaches readEmbeddedObjectData at all, and the second is every way a real, foreign OLE object (or simply malformed \objdata) legitimately fails to parse as one. `object` is the enclosing \object's own state, consulted only for its \objw/\objh size hint on the degrade path -- readEmbeddedObjectData never needs it, since a decoded payload carries its own frame.
 function buildEmbeddedObject(
   objectData: ObjectDataState,
+  object: ObjectState | undefined,
   sink: RtfDiagnosticSink,
 ): ContentEmbeddedObjectBlock | undefined {
   const bytes =
@@ -1189,7 +1209,7 @@ function buildEmbeddedObject(
     sink({
       code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
       severity: "warning",
-      message: "an \\object destination's \\objdata carried no payload",
+      message: `an \\object destination's \\objdata carried no payload${objectSizeHintClause(object)}`,
     });
     return undefined;
   }
@@ -1199,7 +1219,8 @@ function buildEmbeddedObject(
       code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
       severity: "warning",
       message:
-        "an \\object destination's \\objdata is not a payload this reader produced (a real OLE object's OLESaveToStream data has no decoder here), so the object is dropped",
+        "an \\object destination's \\objdata is not a payload this reader produced (a real OLE object's OLESaveToStream data has no decoder here), so the object is dropped" +
+        `${objectSizeHintClause(object)}; its \\result fallback content, if any, is read in its place`,
     });
     return undefined;
   }
@@ -1244,6 +1265,7 @@ function readRtfDetail(
     field: undefined,
     picture: undefined,
     objectData: undefined,
+    object: undefined,
     bookmark: undefined,
     inUnicodeWrapper: false,
   };
@@ -1315,11 +1337,19 @@ function readRtfDetail(
         head.destination !== undefined &&
         HEADER_DESTINATIONS.has(head.destination);
       const wrapperChild = state.inUnicodeWrapper;
+      // \result is \object's own fallback rendering for a reader that cannot decode \objdata at all -- this reader always tries \objdata first (buildEmbeddedObject, at \objdata's own groupEnd below), so \result is read as ordinary body paragraphs only when that attempt has already failed. state.object is the enclosing \object's own shared-by-reference state (set when the \object group itself opened, below), so this only fires for a \result that is genuinely \object's own sibling -- not a stray \result the tokenizer encounters with no enclosing \object to have failed.
+      const objectState = state.object;
+      const isResultFallback =
+        head.destination === "result" &&
+        objectState !== undefined &&
+        !objectState.decoded;
       // The ANSI half of a {\upr {ansi} {\*\ud unicode}} pair is discarded and the \ud half read, which is exactly what the spec says a Unicode-aware reader must do: the \upr destination "does not use the \* keyword; this forces the old RTF readers to pick up the ANSI representation and discard the Unicode one".
       const kind: DestinationKind =
         isHeaderTable || (wrapperChild && head.destination !== "ud")
           ? "skip"
-          : (known ?? (head.ignorable ? "skip" : state.destination));
+          : isResultFallback
+            ? "body"
+            : (known ?? (head.ignorable ? "skip" : state.destination));
       if (head.destination !== undefined && !isHeaderTable) {
         if (head.ignorable && known === undefined) {
           sink({
@@ -1360,6 +1390,13 @@ function readRtfDetail(
         if (kind === "objectData") {
           child.objectData = { hex: "", binary: [] };
         }
+        if (kind === "object") {
+          child.object = {
+            decoded: false,
+            widthTwips: undefined,
+            heightTwips: undefined,
+          };
+        }
         if (kind === "bookmarkStart" || kind === "bookmarkEnd") {
           child.bookmark = {
             name: "",
@@ -1389,9 +1426,17 @@ function readRtfDetail(
         state.destination === "objectData" &&
         state.objectData !== undefined
       ) {
-        const embedded = buildEmbeddedObject(state.objectData, sink);
+        const embedded = buildEmbeddedObject(
+          state.objectData,
+          state.object,
+          sink,
+        );
         if (embedded !== undefined) {
           builder.addBlock(embedded);
+          // Marks the enclosing \object's shared state so its sibling \result (read next, per <obj>'s own <objdata> <result> order) is skipped rather than read as a fallback -- this reader always prefers the real decoded object over \object's own cached appearance, exactly as Word itself does.
+          if (state.object !== undefined) {
+            state.object.decoded = true;
+          }
         }
       }
       if (state.bookmark !== undefined) {
@@ -1863,6 +1908,16 @@ function applyControlWord(
   const picture = state.picture;
   if (state.destination === "picture" && picture !== undefined) {
     applyPictureControlWord(name, param, picture);
+    return;
+  }
+  const object = state.object;
+  if (state.destination === "object" && object !== undefined) {
+    // \objwN/\objhN (RTF 1.9.1, "Objects": <objsize> = \objw \objh), the size hint captured here for objectSizeHintClause's own use on the degrade path -- every other word \object's own scope can carry (\objemb, \objautlink, \objlock, \objupdate, \objsub, ...) is a bare marker this reader does not otherwise act on, since a decoded \objdata carries its own frame and an undecodable one falls back to \result instead.
+    if (name === "objw") {
+      object.widthTwips = param;
+    } else if (name === "objh") {
+      object.heightTwips = param;
+    }
     return;
   }
   const bookmark = state.bookmark;
