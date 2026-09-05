@@ -602,6 +602,18 @@ function renderConstruct(item: ConstructItem, context: EmitContext): string {
   return body;
 }
 
+// Whether a construct's own recursive extent contains a plain block carrying the given list itemId -- the write-side signal that a list item's own contiguous block run has been interrupted by a construct (a blockquote, most commonly) this writer cannot re-attach to that item: renderListRegion's own region-collection loop below stops at any construct regardless of what it contains, since a construct's extent is resolved independently of list-region grouping (groupConstructItems), so the construct and anything of the same item after it render as separate top-level content instead of staying nested inside the interrupted item. See MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED.
+function constructCarriesListItemId(
+  item: ConstructItem,
+  itemId: string,
+): boolean {
+  return item.children.some((child) =>
+    isConstructItem(child)
+      ? constructCarriesListItemId(child, itemId)
+      : child.block.kind === "paragraph" && child.block.list?.itemId === itemId,
+  );
+}
+
 // A consecutive run of quoted top-level blocks at the SAME depth is genuinely ambiguous once lowered -- ContentParagraph.indentLeftPt has no field distinguishing "one blockquote containing several blocks" from "several independent blockquotes back to back at the same depth" (document-schema.js carries no ContentBlockquote container of its own; src/lower/lower.ts flattens both shapes identically). Joining every top-level block with a bare blank line, as below, resolves that ambiguity by always choosing the "independent blockquotes" reading -- the correctness-preserving default, since re-joining two ADJACENT SAME-depth quoted blocks into one blockquote (tried and reverted here) fixed no example this package's own soft-line-break handling (src/lower/inline.ts's own softBreak -> ' ' mapping, see src/test-support/conformance-exclusions.ts) did not already fail on for an unrelated reason, while genuinely breaking two real cases (two independent same-depth blockquotes with nothing between them) that this simpler join gets right.
 function renderItems(items: readonly EmitItem[], context: EmitContext): string {
   const parts: string[] = [];
@@ -632,6 +644,21 @@ function renderItems(items: readonly EmitItem[], context: EmitContext): string {
       ) {
         region.push(candidate.block);
         end += 1;
+      }
+      const interrupting = items[end];
+      const interruptedItemId = region[region.length - 1]?.list?.itemId;
+      if (
+        interruptedItemId !== undefined &&
+        interrupting !== undefined &&
+        isConstructItem(interrupting) &&
+        constructCarriesListItemId(interrupting, interruptedItemId)
+      ) {
+        context.sink({
+          code: MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED,
+          severity: "info",
+          message:
+            "a construct (most commonly a blockquote) directly inside a list item interrupts that item's own contiguous run of blocks once rendered back to markdown -- the construct, and any further blocks of the same item after it, render as separate top-level content rather than staying nested inside the interrupted item",
+        });
       }
       parts.push(renderListRegion(region, context));
       index = end;

@@ -341,6 +341,33 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     reached.add(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
   });
 
+  it("LIST_ITEM_MULTI_BLOCK_FLATTENED: a construct directly inside a list item", () => {
+    const collector = createDiagnosticCollector();
+    emitMarkdown(
+      minimalDocument([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "constructStart", descriptor: { kind: "division" } },
+        {
+          kind: "paragraph",
+          runs: [{ text: "b" }],
+          indentLeftPt: 36,
+          styleId: "Quote",
+          list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+        },
+        { kind: "constructEnd" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(
+      collector.has(MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED),
+    ).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED);
+  });
+
   it("PACKAGE_TABLE_DROPPED: a DocumentTree carrying a non-empty definitions table", () => {
     const collector = createDiagnosticCollector();
     const pkg: DocumentTree = {
