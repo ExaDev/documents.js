@@ -72,6 +72,7 @@ describe("writeCellXfRecord", () => {
       decoration: {
         fillPattern: 1,
         fillForegroundIcv: 12,
+        fillBackgroundIcv: 0x41,
         left: { style: 1, icv: 10 },
         right: { style: 0, icv: 0 },
         top: { style: 6, icv: 15 },
@@ -90,6 +91,7 @@ describe("writeCellXfRecord", () => {
     expect(unpackXfDecoration(word2, word3, word4)).toEqual({
       fillPattern: 1,
       fillForegroundIcv: 12,
+      fillBackgroundIcv: 0x41,
       left: { style: 1, icv: 10 },
       right: { style: 0, icv: 0 },
       top: { style: 6, icv: 15 },
@@ -97,14 +99,15 @@ describe("writeCellXfRecord", () => {
     });
   });
 
-  it("forces the fill foreground back to 'Automatic' for a border-only decoration (no fill pattern)", () => {
-    // fls=0 renders nothing regardless of icvFore's own value ([MS-XLS] CellXF), but a real Excel-written border-only cell still carries the same Automatic default an undecorated XF does -- this keeps that convention rather than leaking a stale icvFore through.
+  it("forces the fill foreground/background back to 'Automatic' for a border-only decoration (no fill pattern)", () => {
+    // fls=0 renders nothing regardless of icvFore/icvBack's own values ([MS-XLS] CellXF), but a real Excel-written border-only cell still carries the same Automatic defaults an undecorated XF does -- this keeps that convention rather than leaking stale values through.
     const record = writeCellXfRecord({
       fontIndex: 0,
       formatId: 0,
       decoration: {
         fillPattern: 0,
         fillForegroundIcv: 20, // deliberately non-zero, to prove it's ignored
+        fillBackgroundIcv: 21, // deliberately non-zero, to prove it's ignored
         left: { style: 1, icv: 10 },
         right: { style: 0, icv: 0 },
         top: { style: 0, icv: 0 },
@@ -115,6 +118,7 @@ describe("writeCellXfRecord", () => {
     const data = parsed?.data ?? new Uint8Array(0);
     const fillWord = u16At(data, 18);
     expect(fillWord & 0x7f).toBe(0x40);
+    expect((fillWord >>> 7) & 0x7f).toBe(0x41);
   });
 });
 

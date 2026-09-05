@@ -125,6 +125,8 @@ export interface XfTestBorderEdge {
 export interface XfTestDecoration {
   readonly fillPattern?: number;
   readonly fillForegroundIcv?: number;
+  /** icvBack -- meaningless for a solid fill ("only icvFore is rendered"), but a real colour for every other named FillPattern; ICV_AUTOMATIC_BACKGROUND (0x41) when omitted, matching a real Excel-written XF with no explicit background stated. */
+  readonly fillBackgroundIcv?: number;
   readonly left?: XfTestBorderEdge;
   readonly right?: XfTestBorderEdge;
   readonly top?: XfTestBorderEdge;
@@ -137,8 +139,9 @@ export interface XfTestDecoration {
 
 const NO_EDGE: XfTestBorderEdge = { style: 0, icv: 0 };
 
-/** IcvXF's own "default foreground colour" special value (icv 0x40) -- a literal taken directly from [MS-XLS]'s Icv table, the value a genuinely undecorated real Excel-written XF carries in icvFore. Kept as its own literal here rather than imported from src/biff/xf-colors.ts, for the same reason the rest of this fixture builder is independently written (see this module's own top comment). */
+/** IcvXF's own "default foreground/background colour" special values (icv 0x40/0x41) -- literals taken directly from [MS-XLS]'s Icv table, the values a genuinely undecorated real Excel-written XF carries in icvFore/icvBack. Kept as their own literals here rather than imported from src/biff/xf-colors.ts, for the same reason the rest of this fixture builder is independently written (see this module's own top comment). */
 const ICV_DEFAULT_FOREGROUND = 0x40;
+const ICV_DEFAULT_BACKGROUND = 0x41;
 
 /** HorizAlign's ALCGEN (general) and VertAlign's ALCVBOT (bottom) -- word1's own default alc/alcV tokens for an XF with no explicit alignment stated, matching what a real Excel-written cell also carries (xf-writer.ts's own packAlignmentPrefix default). Independently-written literals, for the same reason ICV_DEFAULT_FOREGROUND is. */
 const ALC_GENERAL_DEFAULT = 0x0;
@@ -164,7 +167,10 @@ export function cellXfTrailer(decoration: XfTestDecoration = {}): number[] {
     (top.icv & 0x7f) |
     ((bottom.icv & 0x7f) << 7) |
     (((decoration.fillPattern ?? 0) & 0x3f) << 26);
-  // icvBack (bits 7-13) is always 0 here -- unused by this package's own resolveFillBackground ("only icvFore is rendered" for a solid fill), so no test needs it non-zero.
-  const word4 = (decoration.fillForegroundIcv ?? ICV_DEFAULT_FOREGROUND) & 0x7f;
+  const icvFore =
+    (decoration.fillForegroundIcv ?? ICV_DEFAULT_FOREGROUND) & 0x7f;
+  const icvBack =
+    (decoration.fillBackgroundIcv ?? ICV_DEFAULT_BACKGROUND) & 0x7f;
+  const word4 = icvFore | (icvBack << 7);
   return [...u32(word1), ...u32(word2), ...u32(word3), ...u16(word4)];
 }
