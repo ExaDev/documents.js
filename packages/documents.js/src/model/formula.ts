@@ -1,6 +1,8 @@
 import type {
   Box,
+  ContentBlock,
   ContentDocument,
+  ContentEmbeddedObject,
   ContentEmbeddedObjectBlock,
   ContentFormula,
   LayoutMetadata,
@@ -35,11 +37,91 @@ export function buildFormulaBlock(
   };
 }
 
-// The ContentFormula an embedded-object block actually carries, or undefined when its own document is not a formula document (a block a caller constructed by hand, or one whose objectKind says formula while its document says otherwise). Narrowing lives here so both layout engines resolve a formula block identically rather than each repeating the discriminant check.
+// The ContentFormula an embedded object actually carries, or undefined when its own document is not a formula document (a block a caller constructed by hand, or one whose objectKind says formula while its document says otherwise). Narrowing lives here so both layout engines resolve a formula block identically rather than each repeating the discriminant check. Typed against the base ContentEmbeddedObject rather than the block-level ContentEmbeddedObjectBlock it was originally written for: `document` is a field ContentEmbeddedObjectBlock inherits unchanged from ContentEmbeddedObject (the block wrapper adds only `kind`/`sourcePath`/`frames`), so a spreadsheet's cell-anchored embedded objects -- which are bare ContentEmbeddedObject values, never wrapped in a block -- narrow through this exact same function rather than needing a second copy.
 export function formulaOfBlock(
-  block: ContentEmbeddedObjectBlock,
+  object: ContentEmbeddedObject,
 ): ContentFormula | undefined {
-  return block.document.kind === "formula" ? block.document.formula : undefined;
+  return object.document.kind === "formula"
+    ? object.document.formula
+    : undefined;
+}
+
+// One formula this walk found, alongside the sourcePath its embedding block carried -- undefined for the standalone 'formula' document kind (no embedding block at all) and for a spreadsheet's cell-anchored embedded objects (ContentEmbeddedObject carries no sourcePath field; only the block-level ContentEmbeddedObjectBlock wrapper does).
+export interface DocumentFormulaEntry {
+  readonly formula: ContentFormula;
+  readonly sourcePath: string | undefined;
+}
+
+// Recurses into table cells -- a table cell's own blocks are block-flow content like any other, and a formula can sit inside one.
+function collectFormulasFromBlocks(
+  blocks: readonly ContentBlock[],
+  out: DocumentFormulaEntry[],
+): void {
+  for (const block of blocks) {
+    if (block.kind === "table") {
+      for (const row of block.rows) {
+        for (const cell of row.cells) {
+          collectFormulasFromBlocks(cell.blocks, out);
+        }
+      }
+      continue;
+    }
+    if (block.kind === "embeddedObject") {
+      const formula = formulaOfBlock(block);
+      if (formula !== undefined) {
+        out.push({ formula, sourcePath: block.sourcePath });
+      }
+    }
+  }
+}
+
+// Every place document-schema.js's own content model lets a ContentFormula travel: a wordprocessing section's block flow, a presentation slide's or drawing page's own shape's block flow (both structurally identical to a section's, per ContentShapeSchema/ContentEmbeddedObjectBlock's own comments), a spreadsheet's own cell-anchored embeddedObjects array (a bare ContentEmbeddedObject with no block flow and no sourcePath, not a gap in this walk), and the standalone 'formula' document kind, whose single child IS the formula rather than a block wrapping one. The one shared walk every formula-reading consumer in the family uses -- documents.js's own coherence lint (src/latex/lint.ts) and document-mcp's compute_formula tool both call this rather than each re-deriving the per-kind traversal.
+export function collectDocumentFormulas(
+  document: ContentDocument,
+): DocumentFormulaEntry[] {
+  const out: DocumentFormulaEntry[] = [];
+  switch (document.kind) {
+    case "wordprocessing":
+      for (const section of document.sections) {
+        collectFormulasFromBlocks(section.blocks, out);
+      }
+      break;
+    case "presentation":
+      for (const slide of document.slides) {
+        for (const shape of slide.shapes) {
+          collectFormulasFromBlocks(shape.blocks, out);
+        }
+      }
+      break;
+    case "drawing":
+      for (const page of document.pages) {
+        for (const shape of page.shapes) {
+          collectFormulasFromBlocks(shape.blocks, out);
+        }
+      }
+      break;
+    case "spreadsheet":
+      for (const sheet of document.sheets) {
+        for (const object of sheet.embeddedObjects ?? []) {
+          const formula = formulaOfBlock(object);
+          if (formula !== undefined) {
+            out.push({ formula, sourcePath: undefined });
+          }
+        }
+      }
+      break;
+    case "formula":
+      out.push({ formula: document.formula, sourcePath: undefined });
+      break;
+    default: {
+      // Leading underscore is deliberate, not a suppressed-unused-var workaround: this binding exists purely so its `never` annotation fails to compile the moment ContentDocument gains a kind this switch doesn't handle -- @exadev/eslint-config's no-pointless-reassignment rule exempts underscore-prefixed names precisely because such a binding's only job is the compile-time check, never its runtime value.
+      const _exhaustive: never = document;
+      throw new Error(
+        `collectDocumentFormulas: unhandled ContentDocument kind ${JSON.stringify((_exhaustive as ContentDocument).kind)}`,
+      );
+    }
+  }
+  return out;
 }
 
 // The plain-text stand-in for a formula a consumer cannot typeset: its own StarMath annotation when the source carried one, else the verbatim presentation LaTeX when the formula carries one (a LaTeX-authored formula's own source text is the most faithful thing to show -- and the only thing to show when the pinned parser could not read it, since such a formula's MathML array is empty and its rendering would otherwise collapse to a bare marker), else a literal marker. Never an empty string -- an empty stand-in is indistinguishable from the formula having been silently dropped.
