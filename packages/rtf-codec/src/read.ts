@@ -4,7 +4,7 @@
 //
 // THE STATE MACHINE. RTF's reader model is stated directly by the specification ("Conventions of an RTF Reader") and is what this module implements literally: an opening brace stores the current state on a stack, a closing brace retrieves it, a backslash collects a control word or symbol and dispatches on it, and anything else is text written "to the current destination using the current formatting properties". Four kinds of state ride that stack, exactly as the spec enumerates them -- the destination, character-formatting properties, paragraph-formatting properties, and table-formatting properties -- with one addition of this reader's own, the \ucN skip count, which the spec separately requires be stacked ("values are scoped like character properties ... On exiting the group, the previous \ucN value is restored").
 //
-// WHAT THE DESTINATION DOES. A destination is not merely a label: it decides what happens to text. Body text becomes runs; a \pict destination's text is hex picture payload; a \fldinst destination's text is a field instruction to be parsed rather than shown; a \listtext destination's text is the flat rendering of a list number that "should be ignored by any reader that understands Word 97 through Word 2007 numbering"; an unrecognised {\* destination's text is discarded whole. DESTINATION_KINDS below is that mapping, and it is the reason this reader can be a single pass with no lookahead beyond a group's own head.
+// WHAT THE DESTINATION DOES. A destination is not merely a label: it decides what happens to text. Body text becomes runs; a \pict destination's text is hex picture payload; an \objdata destination's text is the identical hex-or-binary payload for a whole embedded object; a \fldinst destination's text is a field instruction to be parsed rather than shown; a \listtext destination's text is the flat rendering of a list number that "should be ignored by any reader that understands Word 97 through Word 2007 numbering"; an unrecognised {\* destination's text is discarded whole. DESTINATION_KINDS below is that mapping, and it is the reason this reader can be a single pass with no lookahead beyond a group's own head.
 //
 // TABLES ARE PARAGRAPH PROPERTIES, NOT A GROUP. "There is no RTF table group; instead, tables are specified as paragraph properties." A row is a run of \intbl paragraphs terminated by \cell marks and closed by \row, with the row's own <tbldef> (\trowd ... \cellxN) sitting before it, after it, or -- for Word 2002 onward -- both. So the table builder here is driven by the \cell/\row marks in the text stream rather than by nesting, and a table closes when a non-table paragraph arrives or the section ends.
 //
@@ -20,6 +20,7 @@ import {
   type ContentBlock,
   type ContentCellBorders,
   type ContentDocument,
+  type ContentEmbeddedObjectBlock,
   type ContentImageBlock,
   type ContentParagraph,
   type ContentRun,
@@ -48,6 +49,7 @@ import {
   type RevisionState,
 } from "./constructs";
 import { bytesToBase64, hexToBytes } from "./base64";
+import { readEmbeddedObjectData } from "./embedded-object";
 import { appendBytes, asciiStringFromBytes, rtfBytesFromLatin1 } from "./bytes";
 import { decodeCodepageBytes } from "./codepage";
 import {
@@ -94,7 +96,9 @@ type DestinationKind =
   | "listText" // the flat rendering of a list number, which a numbering-aware reader must ignore
   | "unicodeWrapper" // \upr, whose ANSI half is discarded and whose \ud half is read
   | "bookmarkStart" // {\*\bkmkstart ...}, whose text is the bookmark's own name
-  | "bookmarkEnd"; // {\*\bkmkend ...}, likewise
+  | "bookmarkEnd" // {\*\bkmkend ...}, likewise
+  | "object" // \object itself: no text of its own (its content is the destinations below), just a non-skip wrapper so its children are actually read rather than jumped over whole
+  | "objectData"; // {\*\objdata ...}, hex or binary payload exactly like "picture"'s -- see buildEmbeddedObject
 
 const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   // Transparent wrappers whose content is ordinary body flow.
@@ -134,10 +138,13 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   // The bookmark halves, whose #PCDATA is the name the two are matched by (RTF 1.9.1, "Bookmarks").
   ["bkmkstart", "bookmarkStart"],
   ["bkmkend", "bookmarkEnd"],
-  ["object", "skip"],
-  ["objdata", "skip"],
+  // \object is not "skip" -- unlike a genuinely unhandled destination, a "skip" kind jumps straight to the group's own matching close (matchingGroupEnd) without ever looking at its children, which would drop the nested {\*\objdata ...} this reader now decodes along with everything else. "object" is a plain non-skip wrapper with no text of its own; the real handling is objdata's.
+  ["object", "object"],
+  ["objdata", "objectData"],
   ["objclass", "skip"],
   ["objname", "skip"],
+  // \result is \object's own fallback rendering for a reader that does not understand \object at all -- this reader always attempts \objdata first, so \result's own content (ordinary RTF paragraphs, per the spec's <result> = '{' \result <para>+ '}') is discarded rather than appended to the surrounding document, exactly as Word itself ignores \result whenever it can use the real object.
+  ["result", "skip"],
   ["do", "skip"],
   ["shp", "skip"],
   ["shptxt", "skip"],
@@ -160,7 +167,7 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
 //  - \pn/\pnseclvl are Word 6/95 paragraph numbering, superseded by the \lsN/\ilvlN this reader does read.
 //  - \nonshppict is by definition the copy Word itself will not read ("Specifies that Word 97 through Word 2002 has written a {\pict destination that it will not read on input"), sitting beside the \*\shppict this reader does take.
 //  - \falt, \panose and \fname are <fontinfo> sub-productions the header parser already consumed.
-//  - \atn*, \objclass/\objname/\objdata and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct.
+//  - \atn*, \objclass/\objname/\result and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct (\objdata is no longer here -- it is real payload now, handled and reported on its own terms by buildEmbeddedObject).
 //  - The footnote and endnote separators are page furniture with no content of their own, and \xe/\tc/\tcn are index and table-of-contents entry markers whose text is derivable from the document they mark.
 const SILENT_SKIP_DESTINATIONS: ReadonlySet<string> = new Set([
   "pn",
@@ -177,7 +184,7 @@ const SILENT_SKIP_DESTINATIONS: ReadonlySet<string> = new Set([
   "atnicn",
   "objclass",
   "objname",
-  "objdata",
+  "result",
   "shpinst",
   "shptxt",
   "ftnsep",
@@ -307,6 +314,12 @@ interface FieldState {
   instruction: string;
 }
 
+// {\*\objdata ...}'s own hex-or-binary payload, captured exactly like PictureState's own hex/binary pair above (the two destinations share the identical (\binN #BDATA) | #SDATA grammar production). Unlike PictureState this carries no dimension/format fields: \object's own \objwN/\objhN are purely informational sizing for a reader that cannot decode \objdata (RTF 1.9.1, "Objects"), and this reader's actual reconstruction gets objectKind/frame/document straight from the decoded payload itself -- see buildEmbeddedObject.
+interface ObjectDataState {
+  hex: string;
+  binary: number[];
+}
+
 // One {\*\bkmkstart ...} or {\*\bkmkend ...} group under construction: its #PCDATA name, plus the start half's optional table-column range.
 interface BookmarkState {
   name: string;
@@ -321,6 +334,7 @@ interface GroupState {
   para: ParagraphState;
   field: FieldState | undefined;
   picture: PictureState | undefined;
+  objectData: ObjectDataState | undefined;
   bookmark: BookmarkState | undefined;
   // Whether this group is a \upr wrapper's own child that must be discarded (the ANSI half). Set on the wrapper; consulted when a child group opens.
   inUnicodeWrapper: boolean;
@@ -366,6 +380,7 @@ function cloneGroupState(state: GroupState): GroupState {
     para: { ...state.para },
     field: state.field,
     picture: state.picture,
+    objectData: state.objectData,
     bookmark: state.bookmark,
     inUnicodeWrapper: state.inUnicodeWrapper,
   };
@@ -1161,6 +1176,36 @@ function defaultPictureState(): PictureState {
   };
 }
 
+// Turns {\*\objdata ...}'s collected payload back into a ContentEmbeddedObjectBlock, or reports why it cannot and returns undefined -- the object-destination counterpart of buildPicture above. "no payload" and "not this package's own payload" are the two distinct failure shapes (matching buildPicture's own "no format" vs "no size" split): the first never reaches readEmbeddedObjectData at all, and the second is every way a real, foreign OLE object (or simply malformed \objdata) legitimately fails to parse as one.
+function buildEmbeddedObject(
+  objectData: ObjectDataState,
+  sink: RtfDiagnosticSink,
+): ContentEmbeddedObjectBlock | undefined {
+  const bytes =
+    objectData.binary.length > 0
+      ? Uint8Array.from(objectData.binary)
+      : hexToBytes(objectData.hex);
+  if (bytes.length === 0) {
+    sink({
+      code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+      severity: "warning",
+      message: "an \\object destination's \\objdata carried no payload",
+    });
+    return undefined;
+  }
+  const embedded = readEmbeddedObjectData(bytes);
+  if (embedded === undefined) {
+    sink({
+      code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+      severity: "warning",
+      message:
+        "an \\object destination's \\objdata is not a payload this reader produced (a real OLE object's OLESaveToStream data has no decoder here), so the object is dropped",
+    });
+    return undefined;
+  }
+  return { kind: "embeddedObject", ...embedded };
+}
+
 // A toggle control word is on when it carries no parameter or a non-zero one, and off at exactly 0 -- "\b turns on bold and \b0 turns off bold" (RTF 1.9.1, "Control Word").
 function toggleValue(param: number | undefined): boolean {
   return param === undefined || param !== 0;
@@ -1198,6 +1243,7 @@ function readRtfDetail(
     para: defaultParagraphState(),
     field: undefined,
     picture: undefined,
+    objectData: undefined,
     bookmark: undefined,
     inUnicodeWrapper: false,
   };
@@ -1311,6 +1357,9 @@ function readRtfDetail(
         if (kind === "picture") {
           child.picture = defaultPictureState();
         }
+        if (kind === "objectData") {
+          child.objectData = { hex: "", binary: [] };
+        }
         if (kind === "bookmarkStart" || kind === "bookmarkEnd") {
           child.bookmark = {
             name: "",
@@ -1334,6 +1383,15 @@ function readRtfDetail(
         const image = buildPicture(state.picture, sink);
         if (image !== undefined) {
           builder.addBlock(image);
+        }
+      }
+      if (
+        state.destination === "objectData" &&
+        state.objectData !== undefined
+      ) {
+        const embedded = buildEmbeddedObject(state.objectData, sink);
+        if (embedded !== undefined) {
+          builder.addBlock(embedded);
         }
       }
       if (state.bookmark !== undefined) {
@@ -1373,6 +1431,11 @@ function readRtfDetail(
         textOffset === 0 ? token.bytes : token.bytes.subarray(textOffset);
       if (state.destination === "picture" && state.picture !== undefined) {
         state.picture.hex += asciiStringFromBytes(slice);
+      } else if (
+        state.destination === "objectData" &&
+        state.objectData !== undefined
+      ) {
+        state.objectData.hex += asciiStringFromBytes(slice);
       } else {
         appendBytes(pendingBytes, slice);
       }
@@ -1384,6 +1447,11 @@ function readRtfDetail(
     if (token.kind === "binary") {
       if (state.destination === "picture" && state.picture !== undefined) {
         appendBytes(state.picture.binary, token.bytes);
+      } else if (
+        state.destination === "objectData" &&
+        state.objectData !== undefined
+      ) {
+        appendBytes(state.objectData.binary, token.bytes);
       }
       index += 1;
       continue;
@@ -1393,6 +1461,11 @@ function readRtfDetail(
       if (state.destination === "picture" && state.picture !== undefined) {
         // A \'hh inside a picture destination is payload, not text: the hex digits themselves were already consumed by the tokenizer, so the byte goes straight into the binary buffer.
         state.picture.binary.push(token.byte);
+      } else if (
+        state.destination === "objectData" &&
+        state.objectData !== undefined
+      ) {
+        state.objectData.binary.push(token.byte);
       } else {
         pendingBytes.push(token.byte);
       }

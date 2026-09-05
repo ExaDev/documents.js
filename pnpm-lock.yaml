@@ -928,6 +928,9 @@ importers:
 
   packages/rtf-codec:
     dependencies:
+      archive-codec:
+        specifier: ^1.4.2
+        version: link:../archive-codec
       document-schema.js:
         specifier: ^5.6.0
         version: link:../document-schema.js

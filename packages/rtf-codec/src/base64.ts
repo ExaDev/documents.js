@@ -64,7 +64,7 @@ export function bytesToHex(input: Uint8Array): string {
 }
 
 // Decodes a #SDATA run. Every character that is not a hex digit is skipped rather than rejected: a real \pict payload is wrapped across lines, and the spec's own advice to "insert a carriage-return/line feed pair without backslashes at least every 255 characters for better text transmission" means whitespace inside the run is expected, not exceptional. A trailing odd digit is dropped, since half a byte is not a byte.
-export function hexToBytes(input: string): Uint8Array {
+export function hexToBytes(input: string): Uint8Array<ArrayBuffer> {
   const out: number[] = [];
   let high: number | undefined;
   for (const character of input) {
