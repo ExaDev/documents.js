@@ -889,9 +889,9 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  // Unlike a 'content'/'both' lock, a 'container' lock writes NOTHING for \ffprot at all -- it leaves the field's own value editable, so there is no "other half" of \ffprot still written the way there is for 'both'; the whole lock is dropped, reported through one diagnostic naming that.
-  it("writes no \\ffprot at all for a 'container'-locked contentControl, and reports the whole lock as dropped", () => {
-    const codes: string[] = [];
+  // Unlike a 'content'/'both' lock, a 'container' lock writes NOTHING for \ffprot at all -- it leaves the field's own value editable, so there is no "other half" of \ffprot still written the way there is for 'both'; the whole lock is dropped, reported through one diagnostic naming that. Asserting the message's actual text, not just its code, is deliberate: a message-content regression (e.g. the 'container'/'both' branches accidentally swapping their wording, or degrading to one generic sentence describing both) would pass a code-only assertion silently, exactly the kind of accuracy bug this construct's own comment history has repeatedly had.
+  it("writes no \\ffprot at all for a 'container'-locked contentControl, and reports the whole lock as dropped, naming why", () => {
+    const diagnostics: { code: string; message: string }[] = [];
     const out = text(
       writeRtfContent(
         wordprocessing([
@@ -911,16 +911,28 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
       ),
     );
     expect(out).not.toContain("\\ffprot");
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a contentControl's 'container' lock protects the control from removal, which RTF's \\ffprot ([MS-DOC] 2.9.79 FFDataBits.fProt) cannot express at all -- it names only whether the field's own value can be changed, and a 'container' lock leaves that value editable, so nothing is written for it and the whole lock is dropped, not merely half of it",
+      },
+    ]);
     expectBalancedBraces(out);
   });
 
-  it("writes the explicit \\ffprot1 for a 'both'-locked contentControl and still reports the removal-protection half as dropped", () => {
-    const codes: string[] = [];
+  it("writes the explicit \\ffprot1 for a 'both'-locked contentControl and still reports the removal-protection half as dropped, naming why", () => {
+    const diagnostics: { code: string; message: string }[] = [];
     const out = text(
       writeRtfContent(
         wordprocessing([
@@ -940,11 +952,23 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
       ),
     );
     expect(out).toContain("\\ffprot1");
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a contentControl's 'both' lock also protects the control from removal, which RTF's \\ffprot ([MS-DOC] 2.9.79 FFDataBits.fProt) cannot express -- \\ffprot1 above already carries the content-protection half of 'both', so only the container-removal half is dropped here",
+      },
+    ]);
     expectBalancedBraces(out);
   });
 
