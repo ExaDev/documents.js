@@ -129,6 +129,17 @@ describe("paragraphs and inline styling", () => {
       },
     ]);
   });
+
+  // ExaDev/documents.js#994's round-8 systemic gap: every text-bearing walk in this package used to dispatch on node.type === "text" alone, silently dropping a CDATA section -- the standard idiom a producer reaches for when its own literal text needs a raw `<`/`&` it would otherwise have to escape. xml/node.ts's isTextLikeNode is now the one shared predicate buildInlineRuns itself dispatches on.
+  it("reads a CDATA section exactly like an ordinary text node, including its own literal < and &", () => {
+    const blocks = read(body("<p>before <![CDATA[A & B < C]]> after</p>"));
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "before " }, { text: "A & B < C" }, { text: " after" }],
+      },
+    ]);
+  });
 });
 
 describe("hyperlinks", () => {
@@ -978,6 +989,54 @@ describe("tables", () => {
     ]);
   });
 
+  it("reads a CDATA section's own literal content inside a <td>, rather than silently dropping it", () => {
+    const blocks = read(
+      body("<table><tr><td><![CDATA[cell & data]]></td></tr></table>"),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  { kind: "paragraph", runs: [{ text: "cell & data" }] },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+  });
+
+  it("recovers a CDATA section sitting directly inside a <tbody> outside any <tr>, with a diagnostic, positioned immediately before the table", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<table><tbody><![CDATA[stray]]><tr><td>x</td></tr></tbody></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
   it("recovers stray text sitting directly inside a <tbody> outside any <tr>, with a diagnostic, positioned immediately before the table", () => {
     const sink = vi.fn();
     const blocks = read(
@@ -1534,6 +1593,17 @@ describe("pre / code blocks", () => {
         },
       ],
     });
+  });
+
+  it("preserves a CDATA section's own literal content inside a <pre>, rather than silently dropping it", () => {
+    const blocks = read(body("<pre><![CDATA[a & b < c]]></pre>"));
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a & b < c", fontFamily: "Courier New" }],
+        preformatted: true,
+      },
+    ]);
   });
 
   it("keeps a footnote reference construct nested inside a wrapping element inside a <pre>, and leaves surrounding non-footnote text merged into its own run", () => {

@@ -1,4 +1,5 @@
-import type { XmlElement, XmlNode } from "./node";
+import { decodeTextLikeNode } from "./entities";
+import { isTextLikeNode, type XmlElement, type XmlNode } from "./node";
 
 // Small, read-only XML tree query helpers shared across every reader built on the model above -- mirroring odf.js's and ooxml.js's own identical query helpers (odf.js's src/xml/query.ts, ooxml.js's src/typed/util.ts). The lossless model deliberately has no parent pointers and no query API of its own, so every caller that needs "the first dc:title child of this metadata element" or "every li anywhere under this ol" needs the same handful of tiny tree-walking functions. Centralized here so src/opf, src/nav, and src/xhtml share one place to reach for them.
 
@@ -83,12 +84,12 @@ export function attrValue(
   return element.attributes.find((attribute) => attribute.name === name)?.value;
 }
 
-// Concatenated text content of every text-node descendant, in document order -- inline markup stripped, matching the "cached rendered text" reading every construct-mapping table in this family produces for a scalar field (a heading's plain-text outline label, a nav entry's link text).
+// Concatenated, already-decoded text content of every text-like descendant (an ordinary text node or a CDATA section, xml/node.ts's own isTextLikeNode -- a producer reaches for the latter only when its own literal text would otherwise need escaping, and dropping it here would silently lose exactly that content), in document order -- inline markup stripped, matching the "cached rendered text" reading every construct-mapping table in this family produces for a scalar field (a heading's plain-text outline label, a nav entry's link text). Decoding happens once, here, via decodeTextLikeNode -- a caller must never run this function's own result back through decodeEntities, since a CDATA descendant's content was never entity-encoded in the first place and a second decode would corrupt it.
 export function textContent(nodes: readonly XmlNode[]): string {
   let out = "";
   for (const node of nodes) {
-    if (node.type === "text") {
-      out += node.value;
+    if (isTextLikeNode(node)) {
+      out += decodeTextLikeNode(node);
     } else if (node.type === "element") {
       out += textContent(node.children);
     }
