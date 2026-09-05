@@ -16,16 +16,23 @@ import {
   readBrc80,
   readShd,
   readShd80,
+  readTableBordersOperand,
+  readTableBordersOperand80,
   type CellBorderSide,
+  type TableBordersSet,
 } from "./decoration";
 
-// Table row properties (TAP), [MS-DOC] 2.4.3 (Overview of Tables) and 2.6.3 (Table Properties) -- the row-ending mark's own grpprl carries sgc-5 (table) sprms alongside the ordinary sgc-1 (paragraph) sprms pap.ts already folds. Of the roughly seventy table sprms 2.6.3 names, this reader acts on the following, in two groups.
+// Table row properties (TAP), [MS-DOC] 2.4.3 (Overview of Tables) and 2.6.3 (Table Properties) -- the row-ending mark's own grpprl carries sgc-5 (table) sprms alongside the ordinary sgc-1 (paragraph) sprms pap.ts already folds. Of the roughly seventy table sprms 2.6.3 names, this reader acts on the following, in three groups.
 //
 // Structure and merge state: sprmTDefTable, which alone carries the row's own column boundaries, every physical cell's horizontal/vertical merge state (via TC80.tcgrf -- [MS-DOC] 2.9.313's TC80, 2.9.317's TCGRF) and every physical cell's own four Brc80 borders, and which this package's own writer now uses for a horizontal merge too, purely through a merged row's own narrower, wider physical cells rather than any TCGRF/sprmTMerge flag (ExaDev/documents.js#895; see table/write.ts's own top-of-file note); sprmTMerge, an ItcFirstLim range this reader still folds on top of sprmTDefTable's own column layout in case a genuine third-party producer states a horizontal merge that way instead -- a spec-conformant encoding, and the one a real, independent [MS-DOC] implementation (LibreOffice) was verified NOT to honour on its own read side either (its own vertMerge from the identical TC80 array was honoured, but not horzMerge), which is exactly why this package's own writer no longer emits it; sprmTVertMerge, the incremental per-cell equivalent for a vertical merge (this package's own writer states a vertical merge only through TC80.tcgrf, but a real producer may equally state it incrementally, the same asymmetry sprmTMerge exists to cover on the horizontal side); and sprmTDyaRowHeight, the row's own height.
 //
 // Cell decoration: sprmTSetBrc, whose TableBrcOperand restates a named cell range's borders with an exact COLORREF rather than TC80's own palette-indexed Brc80, and which therefore folds on top of sprmTDefTable's border layer exactly as sprmTMerge folds on top of its merge layer; and the row's background shading, which has no TC80 field at all and rides its own sprms instead -- sprmTDefTableShd/2nd/3rd and their sprmTDefTableShdRaw counterparts (one Shd per cell, covering cells 1-22, 23-44 and 45-63 respectively), sprmTDefTableShd80 (the Word 97-era Shd80 spelling of the same array), and sprmTSetShd/sprmTSetShdOdd (a TableShadeOperand naming one cell range). Every one of these was confirmed against real LibreOffice 26.2.5.2 output rather than implemented from the specification alone; see table/decoration.ts's own top-of-file note for the captured bytes.
 //
-// Every other sgc-5 sprm -- the row-level and table-level border sprms (sprmTTableBorders/sprmTTableBorders80, whose TableBordersOperand states one border set for the whole row including its inside-horizontal and inside-vertical edges, and sprmTSetShdTable/sprmTCellShdStyle for a whole table's shading), table style, absolute position, cell padding, cell spacing, vertical alignment, and the rest -- is a genuine TAP layer this package does not implement; see the README's own scope note for what that leaves unread. Those border sprms are a cascade from row to cell rather than a per-cell statement, so they are a separate layer above this one rather than a fifth spelling of the same fact.
+// Row/table cascade: sprmTTableBorders/sprmTTableBorders80 (a TableBordersOperand(80), [MS-DOC] 2.9.302/2.9.303) states one border for each of the row's four physical edges plus the two "inside" edges between cells and between this row and its neighbours, and its own text is explicit that it is a fallback rather than an ordinary direct-formatting sprm: "specifies the borders for this row unless modified by other Sprms applied to the cells" -- unlike every sprm above, which folds in grpprl order (a later Prl overriding an earlier one, exactly as pap.ts's own applyParagraphSprms does), this one must never override a cell's own TC80/sprmTSetBrc border regardless of which comes first in the grpprl. Because of that, this function only captures the row's own six-field operand here, on TableRowDefinition.rowBorders, entirely unresolved onto any cell: which of the six fields reaches a given cell/side depends on that cell's position in the WHOLE table (the table's own first/last row, this row's own first/last physical cell) -- context only table/read.ts's own cross-row assembly has, which is why its applyRowLevelBorderCascade is what actually applies it, once every row is known, filling in only the sides Pass 1/2 above left unstated. sprmTSetShdTable, by contrast, carries no such "unless modified" text, so it is read as an ordinary sprm here: a SHDOperand ([MS-DOC] 2.9.249) applied to every cell in the row, folded in grpprl order like every other shading sprm above.
+//
+// Deliberately not read: sprmTCellShdStyle, despite [MS-DOC] 2.6.3 listing it right beside sprmTSetShdTable. Its own text -- "the background shading to be applied to an entire table defined by a Table style" -- and its neighbouring sprmTCellVertAlignStyle/sprmTCellNoWrapStyle's explicit "MUST NOT appear outside of the grpprlTapx array of UpxTapx" both place it inside a table STYLE's own definition (STSH's LPStd), never inside a row's own direct-formatting grpprl this function walks -- and this package does not read table styles at all, so there is no real byte stream in which this sprm could reach this function for it to act on.
+//
+// Every other sgc-5 sprm -- table style, absolute position, cell padding, cell spacing, vertical alignment, and the rest -- is a genuine TAP layer this package does not implement; see the README's own scope note for what that leaves unread.
 
 const SPRM_T_DEF_TABLE = 0xd608;
 const SPRM_T_DYA_ROW_HEIGHT = 0x9407;
@@ -51,6 +58,12 @@ const SPRM_T_SET_SHD_ODD = 0xd62e;
 const SPRM_T_DEF_TABLE_SHD_RAW = 0xd670;
 const SPRM_T_DEF_TABLE_SHD_RAW_2ND = 0xd671;
 const SPRM_T_DEF_TABLE_SHD_RAW_3RD = 0xd672;
+/** sprmTTableBorders80 (0xD605): the Word 97-era spelling of the row/table border cascade, a TableBordersOperand80 ([MS-DOC] 2.9.303) over Brc80MayBeNil fields. */
+const SPRM_T_TABLE_BORDERS_80 = 0xd605;
+/** sprmTTableBorders (0xD613): a TableBordersOperand ([MS-DOC] 2.9.302) over real Brc fields with an exact COLORREF, the modern spelling of the same cascade. */
+const SPRM_T_TABLE_BORDERS = 0xd613;
+/** sprmTSetShdTable (0xD660): a SHDOperand ([MS-DOC] 2.9.249) stating the whole row/table's own background shading, folded in grpprl order like every other shading sprm above -- its own spec text carries none of sprmTTableBorders's "unless modified" exception. */
+const SPRM_T_SET_SHD_TABLE = 0xd660;
 
 /** The first cell index each of the three DefTableShdOperand sprms shades, [MS-DOC] 2.6.3: "Cells 1 - 22 are shaded by sprmTDefTableShd, and cells 23 - 44 are shaded by sprmTDefTableShd2nd" and 45-63 by the third -- one-based there, so zero-based here. */
 const SHD_ARRAY_FIRST_CELL: Readonly<Record<number, number>> = {
@@ -88,6 +101,8 @@ export interface TableRowDefinition {
   readonly columnBoundariesTwips: readonly number[];
   /** One entry per physical cell in the row, in document order -- every physical cell the row's own cell marks delimit, horizontally- and vertically-merged-away cells included, exactly as [MS-DOC]'s own model keeps them all present. */
   readonly cells: readonly TableCellProperties[];
+  /** This row's own sprmTTableBorders/sprmTTableBorders80 cascade, unresolved onto any cell -- see this module's own top-of-file note on why table/read.ts's applyRowLevelBorderCascade, not this function, is what actually applies it. */
+  readonly rowBorders?: TableBordersSet;
 }
 
 export interface TableRowProperties {
@@ -143,6 +158,7 @@ function withCells(
   return {
     columnBoundariesTwips: definition.columnBoundariesTwips,
     cells: definition.cells.map(next),
+    rowBorders: definition.rowBorders,
   };
 }
 
@@ -320,6 +336,30 @@ export function applyTableSprms(
       case SPRM_T_SET_SHD_ODD: {
         if (into.definition === undefined) break;
         into.definition = applyTableShade(into.definition, prl.operand, 2);
+        break;
+      }
+      case SPRM_T_TABLE_BORDERS_80: {
+        if (into.definition === undefined) break;
+        into.definition = {
+          ...into.definition,
+          rowBorders: readTableBordersOperand80(prl.operand),
+        };
+        break;
+      }
+      case SPRM_T_TABLE_BORDERS: {
+        if (into.definition === undefined) break;
+        into.definition = {
+          ...into.definition,
+          rowBorders: readTableBordersOperand(prl.operand),
+        };
+        break;
+      }
+      case SPRM_T_SET_SHD_TABLE: {
+        if (into.definition === undefined) break;
+        const background = readShd(prl.operand, 1);
+        into.definition = withCells(into.definition, (cell) =>
+          withBackground(cell, background),
+        );
         break;
       }
       default:
