@@ -74,18 +74,28 @@ function collectFormulasFromBlocks(
     }
     if (block.kind === "embeddedObject") {
       const formula = formulaOfBlock(block);
+      const blockLocate = `${locate}/blocks[${String(index)}]`;
       if (formula !== undefined) {
         out.push({
           formula,
           sourcePath: block.sourcePath,
-          locate: `${locate}/blocks[${String(index)}]`,
+          locate: blockLocate,
         });
+      } else {
+        // Not a formula itself, but ContentEmbeddedObject.document is unconditionally a whole ContentDocument (document-schema.js's own content.ts documents the mutual recursion this closes -- a formula embedded inside a drawing embedded inside a spreadsheet, say), so a formula one level deeper is still reachable by recursing the identical walk into it. Each nested entry's own sourcePath rides through unchanged (it is that formula's own field, not this embedding block's); only locate grows, nesting the embedding position ahead of the nested walk's own path so two formulas at different nesting depths -- or two nested inside sibling embedded objects -- can never collide.
+        for (const nested of collectDocumentFormulas(block.document)) {
+          out.push({
+            formula: nested.formula,
+            sourcePath: nested.sourcePath,
+            locate: `${blockLocate}/${nested.locate}`,
+          });
+        }
       }
     }
   }
 }
 
-// Every place document-schema.js's own content model lets a ContentFormula travel: a wordprocessing section's block flow, a presentation slide's or drawing page's own shape's block flow (both structurally identical to a section's, per ContentShapeSchema/ContentEmbeddedObjectBlock's own comments), a spreadsheet's own cell-anchored embeddedObjects array (a bare ContentEmbeddedObject with no block flow and no sourcePath, not a gap in this walk), and the standalone 'formula' document kind, whose single child IS the formula rather than a block wrapping one. The one shared walk every formula-reading consumer in the family uses -- documents.js's own coherence lint (src/latex/lint.ts) and document-mcp's compute_formula tool both call this rather than each re-deriving the per-kind traversal. Every arm derives each entry's own `locate` from container/index position as it walks, so two formulas anywhere in one document -- even two sharing the same sourcePath, or a format that never populates sourcePath at all -- always come back with distinct locate strings.
+// Every place document-schema.js's own content model lets a ContentFormula travel: a wordprocessing section's block flow, a presentation slide's or drawing page's own shape's block flow (both structurally identical to a section's, per ContentShapeSchema/ContentEmbeddedObjectBlock's own comments), a spreadsheet's own cell-anchored embeddedObjects array (a bare ContentEmbeddedObject with no block flow and no sourcePath, not a gap in this walk), and the standalone 'formula' document kind, whose single child IS the formula rather than a block wrapping one -- plus, at any depth beneath any of those four arms, a non-formula embedded object's own nested document, recursed into by both collectFormulasFromBlocks and the spreadsheet arm below precisely because ContentEmbeddedObject is mutually recursive with ContentDocument (content.ts's own comment on that type: "a formula embedded inside a drawing embedded inside a spreadsheet" is the literal example given, not a hypothetical). The one shared walk every formula-reading consumer in the family uses -- documents.js's own coherence lint (src/latex/lint.ts) and document-mcp's compute_formula tool both call this rather than each re-deriving the per-kind traversal. Every arm derives each entry's own `locate` from container/index position as it walks, so two formulas anywhere in one document -- even two sharing the same sourcePath, two nested at different depths, or a format that never populates sourcePath at all -- always come back with distinct locate strings.
 export function collectDocumentFormulas(
   document: ContentDocument,
 ): DocumentFormulaEntry[] {
@@ -128,12 +138,22 @@ export function collectDocumentFormulas(
           sheet.embeddedObjects ?? []
         ).entries()) {
           const formula = formulaOfBlock(object);
+          const objectLocate = `sheets[${String(sheetIndex)}].embeddedObjects[${String(objectIndex)}]`;
           if (formula !== undefined) {
             out.push({
               formula,
               sourcePath: undefined,
-              locate: `sheets[${String(sheetIndex)}].embeddedObjects[${String(objectIndex)}]`,
+              locate: objectLocate,
             });
+          } else {
+            // Same recursion as the block arm above, for a spreadsheet's own cell-anchored embedded objects (a bare ContentEmbeddedObject, never wrapped in a block): a non-formula object's document is still a whole ContentDocument that can itself carry a formula nested further in (a formula embedded inside a chart-cached sub-sheet, or inside a drawing anchored to a cell).
+            for (const nested of collectDocumentFormulas(object.document)) {
+              out.push({
+                formula: nested.formula,
+                sourcePath: nested.sourcePath,
+                locate: `${objectLocate}/${nested.locate}`,
+              });
+            }
           }
         }
       }
