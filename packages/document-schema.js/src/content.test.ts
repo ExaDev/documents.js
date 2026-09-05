@@ -32,6 +32,7 @@ import {
   isRunConstructExtent,
   resolveCellFillColor,
   type RunConstructExtent,
+  unrecognizedFillKind,
 } from "./content";
 import type { ConstructDescriptor } from "./construct";
 import { assembleTree } from "./factor-styles";
@@ -1438,6 +1439,16 @@ describe("resolveCellFillColor", () => {
     expect(
       resolveCellFillColor({ kind: "pattern", patternType: "gray125" }),
     ).toBeUndefined();
+  });
+});
+
+describe("unrecognizedFillKind", () => {
+  it("stringifies a value's own kind field", () => {
+    expect(unrecognizedFillKind({ kind: "gradient" })).toBe("gradient");
+  });
+
+  it("stringifies an absent kind field as the literal string 'undefined'", () => {
+    expect(unrecognizedFillKind({})).toBe("undefined");
   });
 });
 
