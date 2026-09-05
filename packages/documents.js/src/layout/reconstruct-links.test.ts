@@ -1,3 +1,4 @@
+import { encodePng } from "byte-codec";
 import { describe, expect, it } from "vitest";
 import type { ContentBlock, ContentRun } from "document-schema.js";
 import { reconstructWordprocessing } from "./reconstruct";
@@ -10,7 +11,6 @@ import type {
   LayoutPage,
   LayoutText,
 } from "pdf-codec";
-import { encodePng } from "pdf-codec/image/png-encode";
 import { bytesToBase64 } from "pdf-codec/util/base64";
 
 // The PDF-side construct surfacing (#721): link reconciliation (external URI links onto ContentRun.hyperlink where the rect matches recovered runs, else a block-scoped link construct; internal links as link constructs with the internal-target union), hidden-layer content no longer extracting as visible, and annotation/form constructs. These are the reconstruct halves of the issue's rows; the package-table halves (destinations, outline, attachments, layers, residue) are stamped by the composition executor and tested beside it.
