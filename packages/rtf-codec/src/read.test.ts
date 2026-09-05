@@ -778,7 +778,7 @@ describe("form fields", () => {
     });
   });
 
-  // Regression guard: fOwnHelp's own spec-stated default is 0/false, so a \*\formfield group that never spells \ffownhelp at all must default identically to an explicit \ffownhelp0 -- an earlier version of this reader defaulted the absent-control-word case to true instead, which would have surfaced this same auto-generated-looking help text as an author-set alias purely because the producer happened to omit the bit rather than spell it out as 0.
+  // Regression guard: [MS-DOC] 2.9.79 FFDataBits itself states no default at all for fOwnHelp -- it is a fixed-width bit always physically present in the binary structure, so "default" is not a meaningful concept there. The real justification is RTF's own separate Form Fields table, which classifies \ffownhelpN as a Value control word ("1 if there is associated help text, 0 otherwise") rather than a Toggle word, so an absent control word carries no "on" meaning to inherit and this reader's own FormFieldState simply starts at false. A \*\formfield group that never spells \ffownhelp at all must therefore default identically to an explicit \ffownhelp0 -- an earlier version of this reader defaulted the absent-control-word case to true instead, which would have surfaced this same auto-generated-looking help text as an author-set alias purely because the producer happened to omit the bit rather than spell it out as 0.
   it("leaves a FORMTEXT field's alias unset when \\ffownhelp never appears at all, matching \\ffownhelp0's own default", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffhelptext Auto generated}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
@@ -802,12 +802,26 @@ describe("form fields", () => {
     });
   });
 
-  it("reads a bare \\ffprot (no explicit parameter) as protected, matching RTF's own toggle convention", () => {
+  // \ffprotN is classified as a "Value" control word in RTF 1.9.1's own control-word-type table, not a "Toggle" word like \b/\i -- a Value word's own bare (unparameterised) form defaults to 0, not to "on" the way a bare \b/\i would. This regression-guards against an earlier version of this reader applying the toggle convention uniformly to every bare boolean form-field control word, which read a bare \ffprot as protected; see formFieldValueBit's own comment in read.ts for the exact citations.
+  it("reads a bare \\ffprot (no explicit parameter) as unprotected, since \\ffprot is a Value word whose bare form defaults to 0, not a Toggle word", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0\\ffprot}}}{\\fldrslt Lorem ipsum.}}\\par}`,
     )[0];
-    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
-      lock: "content",
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+    });
+  });
+
+  // The identical Value-word classification and bare-form gap as \ffprot immediately above, for the sibling bit \ffownhelp.
+  it("reads a bare \\ffownhelp (no explicit parameter) as false, leaving the alias unset, since \\ffownhelp is a Value word whose bare form defaults to 0", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0\\ffownhelp{\\*\\ffhelptext Auto generated}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
     });
   });
 
