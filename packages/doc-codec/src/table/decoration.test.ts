@@ -1,5 +1,6 @@
 import type { ContentBorder } from "document-schema.js";
 import { describe, expect, it } from "vitest";
+import { DocFormatError } from "../errors";
 import { readGrpprl } from "../prop/sprm";
 import {
   BRC80_SIZE,
@@ -119,6 +120,19 @@ describe("Brc80", () => {
     expect(readBrc80(bytes(written), 0)).toEqual(border);
   });
 
+  it("states the true rounding-aware floor, 0.1875pt, in a single-line border's own refusal message, not the naive 0.25pt a stored minimum converts back to on read", () => {
+    expect(() => writeBrc80({ color: RED, widthPt: 0.1 })).toThrow(
+      /outside the 0\.1875\.\.31\.875pt range/,
+    );
+    expect(() => writeBrc80({ color: RED, widthPt: 0.1 })).toThrow(
+      DocFormatError,
+    );
+  });
+
+  it("accepts a single-line width the naive 0.25pt floor would have wrongly refused, since Math.round rounds it up to a storable 2 eighths", () => {
+    expect(writeBrc80({ color: RED, widthPt: 0.2 })[0]).toBe(2);
+  });
+
   it("snaps a colour outside the palette to the nearest entry it does have", () => {
     // #f00505 is not a palette colour; Ico 0x06 (pure red) is its nearest, which is what a Brc80 alone can say.
     const written = writeBrc80({
@@ -151,6 +165,12 @@ describe("Brc80", () => {
       expect(writeBrc80({ color: RED, widthPt: 2, style: "double" })[0]).toBe(
         5,
       );
+    });
+
+    it("refuses a double border below the true 0.1875pt floor, stating that number rather than the naive 0.375pt a stored minimum converts back to on read", () => {
+      expect(() =>
+        writeBrc80({ color: RED, widthPt: 0.1, style: "double" }),
+      ).toThrow(/outside the 0\.1875\.\.95\.625pt range/);
     });
 
     it("writes an ordinary sub-0.75pt double border width, like Word's own 0.5pt UI default, without refusing it", () => {
