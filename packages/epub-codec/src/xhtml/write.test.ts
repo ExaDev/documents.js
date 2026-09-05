@@ -189,6 +189,34 @@ describe("writeXhtmlBody", () => {
     expect(roundTrip(blocks)).toEqual(blocks);
   });
 
+  // ExaDev/documents.js#994's round-9 regression: writeList built a list item's own anchor content via writeRunsToNodes alone, never consulting isPreBlockParagraph the way writeParagraph itself does for every other paragraph -- so a <pre> nested directly inside an <li> (ordinary, valid HTML5: <li>'s content model is flow content) read back correctly as a preformatted paragraph but was then written out as an ordinary run sequence, destroying the block's own verbatim whitespace exactly like the round-8 regression above, just reached through a list item rather than a section's own top-level blocks.
+  it("writes and re-reads a <pre> nested directly inside a list item, preserving its verbatim block", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [
+          { text: "const x = 1;\nconsole.log(x);", fontFamily: "Courier New" },
+        ],
+        preformatted: true,
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ];
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  // The same writeList gap also swallowed a horizontal rule nested inside an <li>: the horizontal-rule sentinel (an empty-runs paragraph carrying HORIZONTAL_RULE_STYLE_ID) is not "ordinary runs" either, and writeRunsToNodes on a paragraph with zero runs and no constructs produces zero XML nodes -- so the <hr> vanished entirely from the written <li>, with no diagnostic, rather than degrading or round-tripping.
+  it("writes and re-reads a horizontal rule nested directly inside a list item", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [],
+        styleId: "HorizontalRule",
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ];
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
   it("writes and re-reads a blockquote as a division construct pair", () => {
     const blocks: ContentBlock[] = [
       { kind: "constructStart", descriptor: { kind: "division" } },
