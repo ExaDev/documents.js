@@ -661,8 +661,11 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
     {},
     state.context,
   );
-  // An empty or whitespace-only <caption> carries nothing to lose -- dropped entirely, with no diagnostic, matching this package's own documented rule (enforced elsewhere by readContainerChildren's own flush guard) that an empty or whitespace-only paragraph is dropped entirely on read rather than becoming a bogus empty ContentParagraph.
-  if (captionInline.runs.every((run) => run.text.trim().length === 0)) {
+  // An empty or whitespace-only <caption> that also carries no run-level construct of its own (a footnote reference whose own anchor text is empty is the real-world case: `<caption><a epub:type="noteref" href="#fn1"></a></caption>` produces zero text runs but one real RunConstructExtent) genuinely carries nothing to lose -- dropped entirely, with no diagnostic, matching this package's own documented rule that an empty or whitespace-only paragraph is dropped entirely on read rather than becoming a bogus empty ContentParagraph. Checking text emptiness alone would drop the construct along with it: `Array.prototype.every` on the empty runs array such an anchor-only caption produces is vacuously true, which is exactly how this guard used to defeat this package's own construct-preservation fix above -- a construct with nothing else to carry it is still real content.
+  if (
+    captionInline.runs.every((run) => run.text.trim().length === 0) &&
+    captionInline.constructs.length === 0
+  ) {
     return [table];
   }
   state.context.sink({
