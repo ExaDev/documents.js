@@ -202,12 +202,13 @@ export function setDocumentMetadata(
   return buildBytesForRebuildFormat(writePath.format, nextContent);
 }
 
-function hasAnyMetadataOverride(overrides: MetadataOverrides): boolean {
+// Whether `overrides` would actually cause the addCoreProperties fallback below to write at least one element -- NOT merely whether a field is present in `overrides` at all. An empty keywords array is the gap this distinction closes: overrides.keywords !== undefined is true for `keywords: []`, but addCoreProperties itself only ever emits cp:keywords when the array's length is nonzero (mirroring how a from-scratch build never writes an empty keywords element), so treating "the key is present" as "something will be written" created a real docProps/core.xml (plus its Content_Types override and package-root relationship) out of an empty root element, on a document that had none -- contradicting this function's own contract that a document with no requested change stays byte-for-byte free of a part it never had. This predicate mirrors addCoreProperties' own per-field write conditions exactly: title/author/subject count on mere presence (addCoreProperties writes an empty-string element too), keywords counts only with at least one entry.
+function hasWritableMetadataOverride(overrides: MetadataOverrides): boolean {
   return (
     overrides.title !== undefined ||
     overrides.author !== undefined ||
     overrides.subject !== undefined ||
-    overrides.keywords !== undefined
+    (overrides.keywords !== undefined && overrides.keywords.length > 0)
   );
 }
 
@@ -215,7 +216,7 @@ export interface PatchDocxMetadataOptions {
   readonly signal?: AbortSignal;
 }
 
-// Patches a docx's own title/author/subject/keywords directly on its decoded Package, in place -- the same live-view/patch-in-place pattern this ecosystem's editors (openDocx and friends) already use for editing -- rather than rebuilding a fresh package from its ContentDocument the way setDocumentMetadata's own docx branch does (see that function's own comment above). Everything a ContentDocument-only rebuild cannot carry -- comments, footnotes, header/footer parts, section header/footer references, numbering (readDocxExtras' own data) -- survives byte-faithful, because nothing but docProps/core.xml is ever touched: ooxml.js's patchCoreProperties replaces (or adds) only the elements named by `overrides`, leaving every other element on that part, and every other part in the package, exactly as it was. When the source carries no docProps/core.xml part at all (a docx built with no metadata ever set), one is created from scratch via addCoreProperties -- but only when `overrides` actually names a field, so a document with no metadata and no requested change stays byte-for-byte free of a part it never had. ExaDev/documents.js#966: document-cli's own set-metadata command reaches for this instead of setDocumentMetadata specifically when source and target are both docx.
+// Patches a docx's own title/author/subject/keywords directly on its decoded Package, in place -- the same live-view/patch-in-place pattern this ecosystem's editors (openDocx and friends) already use for editing -- rather than rebuilding a fresh package from its ContentDocument the way setDocumentMetadata's own docx branch does (see that function's own comment above). Everything a ContentDocument-only rebuild cannot carry -- comments, footnotes, header/footer parts, section header/footer references, numbering (readDocxExtras' own data) -- survives byte-faithful, because nothing but docProps/core.xml is ever touched: ooxml.js's patchCoreProperties replaces (or adds) only the elements named by `overrides`, leaving every other element on that part, and every other part in the package, exactly as it was. When the source carries no docProps/core.xml part at all (a docx built with no metadata ever set), one is created from scratch via addCoreProperties -- but only when `overrides` actually names a field that would write something (hasWritableMetadataOverride above), so a document with no metadata and no requested change stays byte-for-byte free of a part it never had. ExaDev/documents.js#966: document-cli's own set-metadata command reaches for this instead of setDocumentMetadata specifically when source and target are both docx.
 export function patchDocxMetadata(
   bytes: Uint8Array<ArrayBuffer>,
   overrides: MetadataOverrides,
@@ -225,7 +226,7 @@ export function patchDocxMetadata(
   const pkg = decodePackage(bytes);
   if (hasCoreProperties(pkg)) {
     patchCoreProperties(pkg, overrides);
-  } else if (hasAnyMetadataOverride(overrides)) {
+  } else if (hasWritableMetadataOverride(overrides)) {
     addCoreProperties(pkg, mergeMetadata({}, overrides));
   }
   return encodePackage(pkg);
