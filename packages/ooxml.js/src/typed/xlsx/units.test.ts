@@ -44,6 +44,33 @@ describe("ptToColumnWidthChars: best-effort inverse of columnWidthCharsToPt", ()
   });
 });
 
+// Regression coverage for ExaDev/documents.js#953: a naive round-to-nearest at write time could land the stored "characters" value BELOW columnWidthCharsToPt's own pixel-bucket lower edge, truncating the next read down by one pixel and drifting the width narrower on every further read/write cycle rather than settling. These assert the actual fixed-point property, not mere closeness: once a value has been through one write, a further read/write pair must reproduce byte-identical output, not merely a similar one.
+describe("column width read/write converges to a fixed point rather than drifting", () => {
+  it("read -> write -> read -> write produces byte-identical results for the second read/write pair as for the first", () => {
+    // A spread of real stored <col width> values, including ones the pre-fix rounding demonstrably drifted on (0.08 spiralled to a negative width; 8.43/10/12.76/15.32/20 each moved on at least one further cycle).
+    for (const storedWidth of [
+      0.08, 1, 5, 8.43, 10, 12.76, 15.32, 20, 44.14, 100,
+    ]) {
+      const firstReadPt = columnWidthCharsToPt(storedWidth);
+      const firstWriteChars = ptToColumnWidthChars(firstReadPt);
+
+      const secondReadPt = columnWidthCharsToPt(firstWriteChars);
+      const secondWriteChars = ptToColumnWidthChars(secondReadPt);
+
+      expect(secondReadPt).toBe(firstReadPt);
+      expect(secondWriteChars).toBe(firstWriteChars);
+    }
+  });
+
+  it("a value already produced by ptToColumnWidthChars is a genuine fixed point: write(read(x)) === x", () => {
+    for (const widthPt of [0, 0.75, 12, 44.25, 66.75, 105, 250.5]) {
+      const chars = ptToColumnWidthChars(widthPt);
+      const roundTripped = ptToColumnWidthChars(columnWidthCharsToPt(chars));
+      expect(roundTripped).toBe(chars);
+    }
+  });
+});
+
 describe("DEFAULT_ROW_HEIGHT_PT", () => {
   it("is Excel's own documented Windows default (15pt) for 11pt Calibri", () => {
     expect(DEFAULT_ROW_HEIGHT_PT).toBe(15);
