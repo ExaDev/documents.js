@@ -28,6 +28,24 @@ describe("headings", () => {
       { kind: "paragraph", headingLevel: 6, runs: [{ text: "Six" }] },
     ]);
   });
+
+  it("degrades a heading's own direct-child <img> to alt text with a diagnostic, same as one reached via inline nesting", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body('<h2>Title <img src="a.png" alt="pic"/></h2>'),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        headingLevel: 2,
+        runs: [{ text: "Title " }, { text: "pic" }],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
+    );
+  });
 });
 
 describe("paragraphs and inline styling", () => {
@@ -171,6 +189,44 @@ describe("definition lists", () => {
       { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
     ]);
   });
+
+  it("degrades a dt's own direct-child <img> to alt text with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        '<dl><dt>Term <img src="a.png" alt="term pic"/></dt><dd>Definition</dd></dl>',
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term " }, { text: "term pic" }] },
+      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
+    );
+  });
+
+  it("degrades a dd's own direct-child <img> to alt text with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        '<dl><dt>Term</dt><dd>Definition <img src="a.png" alt="def pic"/></dd></dl>',
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      {
+        kind: "paragraph",
+        runs: [{ text: "Definition " }, { text: "def pic" }],
+        indentLeftPt: 36,
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
+    );
+  });
 });
 
 describe("tables", () => {
@@ -238,6 +294,34 @@ describe("tables", () => {
         columnWidthsPt: [CONTENT_WIDTH_PT],
       },
     ]);
+  });
+
+  it("degrades a table cell's own direct-child <img> to alt text with a diagnostic, rather than treating it as a schema limitation", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        '<table><tr><td><img src="a.png" alt="cell pic"/></td></tr></table>',
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "cell pic" }] }],
+              },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
+    );
   });
 });
 
@@ -388,7 +472,7 @@ describe("images", () => {
     ]);
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({
-        code: "epub/image-nested-inline-unsupported",
+        code: "epub/image-inline-unsupported",
       }),
     );
   });
@@ -409,7 +493,7 @@ describe("images", () => {
     ]);
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({
-        code: "epub/image-nested-inline-unsupported",
+        code: "epub/image-inline-unsupported",
       }),
     );
   });
@@ -425,9 +509,19 @@ describe("images", () => {
     ]);
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({
-        code: "epub/image-nested-inline-unsupported",
+        code: "epub/image-inline-unsupported",
       }),
     );
+  });
+
+  it("does not fabricate a src attribute in the diagnostic message for a nested <img> with no src at all", () => {
+    let diagnostic: EpubDiagnostic | undefined;
+    read(body('<p><span><img alt="no src at all"/></span></p>'), (d) => {
+      diagnostic = d;
+    });
+    expect(diagnostic?.code).toBe("epub/image-inline-unsupported");
+    expect(diagnostic?.message).toContain("<img> cannot become");
+    expect(diagnostic?.message).not.toContain('src=""');
   });
 });
 
@@ -450,6 +544,25 @@ describe("figure/figcaption", () => {
       { kind: "paragraph", runs: [{ text: "alt text" }] },
       { kind: "paragraph", runs: [{ text: "Caption text" }] },
     ]);
+  });
+
+  it("degrades a figcaption's own direct-child <img> to alt text with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        '<figure><figcaption>Caption <img src="a.png" alt="inline pic"/></figcaption></figure>',
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "Caption " }, { text: "inline pic" }],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
+    );
   });
 });
 

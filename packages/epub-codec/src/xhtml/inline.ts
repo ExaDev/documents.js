@@ -154,7 +154,7 @@ function appendElement(
   }
 }
 
-// An <img> reached here was found nested inside inline markup (a <span>, an <a>, or any other formatting wrapper) rather than as a direct child of the container src/xhtml/read.ts's own readContainerChildren already splits at (see that module's own <p>-with-a-direct-<img> gotcha) -- by the time appendElement's recursion reaches it, the surrounding content has already committed to being one paragraph's own run sequence, so there is no block list here to insert a sibling ContentImageBlock into without breaking that paragraph in two mid-recursion. Rather than let the image vanish the way falling through to appendNested (which recurses into a childless <img> and yields nothing) would, this degrades it to its alt text -- the same honest degrade-with-diagnostic policy this file already applies to <sub>/<sup> and src/xhtml/read.ts's own readImage applies to an unresolved or unsupported-format image.
+// appendElement is buildInlineRuns's own per-node dispatch, and buildInlineRuns is called from every container that hands its children straight to run-building with no block-splitting step of its own first: a <p>'s own inline segments between block-level siblings (via readContainerChildren), but also a heading's, a <figcaption>'s, a <dt>'s/<dd>'s, and a table cell's own children directly (src/xhtml/read.ts). Only readContainerChildren ever splits a direct-child <img> out into its own ContentImageBlock (see that module's own <p>-with-a-direct-<img> gotcha) -- everywhere else this case fires, whether the <img> sits several levels deep inside a <span>/<a> or is a direct child of one of those other containers, appendElement's recursion has already committed to producing a flat ContentRun[] with no block list to insert a sibling image block into. Rather than let the image vanish the way falling through to appendNested (which recurses into a childless <img> and yields nothing) would, this degrades it to its alt text -- the same honest degrade-with-diagnostic policy this file already applies to <sub>/<sup> and src/xhtml/read.ts's own readImage applies to an unresolved or unsupported-format image.
 function appendImageFallback(
   element: XmlElement,
   style: InlineStyle,
@@ -163,10 +163,11 @@ function appendImageFallback(
 ): void {
   const src = attrValue(element, "src");
   const alt = attrValue(element, "alt");
+  const label = src === undefined ? "<img>" : `<img src="${src}">`;
   context.sink({
-    code: EpubDiagnosticCodes.IMAGE_NESTED_INLINE_UNSUPPORTED,
+    code: EpubDiagnosticCodes.IMAGE_INLINE_UNSUPPORTED,
     severity: "warning",
-    message: `<img src="${src ?? ""}"> reached inside inline markup rather than as a paragraph's own direct block-level child cannot become its own image block there; degraded to its alt text`,
+    message: `${label} cannot become its own image block here; only a <p>'s own direct-child <img> is split into one (see readContainerChildren), so this degrades to its alt text`,
     href: context.sourceHref,
   });
   if (alt !== undefined && alt.length > 0) {
