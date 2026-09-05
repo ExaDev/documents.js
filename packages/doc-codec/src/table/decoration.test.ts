@@ -487,7 +487,9 @@ describe("encodeTableRowGrpprl", () => {
       foregroundColor: { r: 1, g: 0, b: 0 },
       backgroundColor: { r: 0, g: 0, b: 1 },
     };
-    const read = roundTripRow([{ vertMerge: 0, background: fill }]);
+    const read = roundTripRow([
+      { vertMerge: 0, horzMerge: 0, background: fill },
+    ]);
     expect(read[0]?.background).toEqual(fill);
   });
 
