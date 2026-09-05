@@ -167,15 +167,19 @@ function emitTableCell(state: FrameWalkState, cell: ContentTableCell): void {
     if (page === undefined) {
       continue;
     }
-    if (cell.background !== undefined) {
-      // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for.
+    // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for -- and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
+    const cellFill =
+      cell.background === undefined
+        ? undefined
+        : resolveCellFillColor(cell.background);
+    if (cellFill !== undefined) {
       page.items.push({
         kind: "rect",
         xPt: frame.xPt,
         yPt: frame.yPt,
         widthPt: frame.widthPt,
         heightPt: frame.heightPt,
-        fill: resolveCellFillColor(cell.background),
+        fill: cellFill,
       });
     }
     if (cell.borders !== undefined) {
@@ -259,15 +263,19 @@ function emitSheetCell(state: FrameWalkState, cell: ContentSheetCell): void {
     if (page === undefined) {
       continue;
     }
-    if (cell.background !== undefined) {
-      // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for.
+    // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for -- and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
+    const cellFill =
+      cell.background === undefined
+        ? undefined
+        : resolveCellFillColor(cell.background);
+    if (cellFill !== undefined) {
       page.items.push({
         kind: "rect",
         xPt: frame.xPt,
         yPt: frame.yPt,
         widthPt: frame.widthPt,
         heightPt: frame.heightPt,
-        fill: resolveCellFillColor(cell.background),
+        fill: cellFill,
       });
     }
     if (cell.borders !== undefined) {
