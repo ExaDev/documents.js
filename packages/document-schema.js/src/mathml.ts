@@ -109,14 +109,13 @@ export const MathMlElementSchema = z.object({
   children: z.lazy(() => z.array(MathMlNodeSchema)),
 });
 
-export const MathMlNodeSchema: z.ZodType<MathMlNode> = z.discriminatedUnion(
-  "type",
-  [
+// Both z.ZodType type arguments are MathMlNode -- not just the first (Output). Supplying only one, `z.ZodType<MathMlNode>`, leaves the second (Input) at its own default of `unknown`, which is invisible in this file (z.infer<> and every test here reads Output alone) but surfaces downstream: z.codec()'s own encode() callback is typed against a schema's *input*, so a package consuming this schema through z.codec() (markdown-codec's markdownCodec/markdownContentCodec) would see `mathml: unknown[]` in the value it hands to its own encode function, a real type-checking regression a same-package test run cannot catch since it never calls z.codec() over this schema itself. MathMlNodeSchema has no transform, so Input and Output are genuinely identical -- annotating both is correct, not just defensive.
+export const MathMlNodeSchema: z.ZodType<MathMlNode, MathMlNode> =
+  z.discriminatedUnion("type", [
     MathMlTextSchema,
     MathMlCdataSchema,
     MathMlCommentSchema,
     MathMlDeclarationSchema,
     MathMlPiSchema,
     MathMlElementSchema,
-  ],
-);
+  ]);
