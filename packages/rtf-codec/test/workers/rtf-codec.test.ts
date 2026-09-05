@@ -76,4 +76,40 @@ describe("rtf-codec under the Cloudflare Workers runtime", () => {
     });
     expect(String.fromCharCode(...written)).toContain("89504e470d0a1a0a");
   });
+
+  it("round-trips an embedded object through a real [MS-CFB] compound file, built and read entirely inside the isolate", () => {
+    // Proves src/embedded-object.ts's archive-codec dependency -- writeCompoundFile/writeOlePackage on the way out, readCompoundFile/readOlePackage on the way back -- is genuinely Worker-isomorphic too, not merely bundleable: archive-codec's own CFB/OLE-package machinery runs entirely on DataView/TextEncoder/TextDecoder, and this exercises it for real rather than assuming its own isomorphism proof covers a caller that never calls it.
+    const embedded = {
+      kind: "spreadsheet" as const,
+      metadata: { title: "Embedded sheet" },
+      sheets: [],
+    };
+    const document = {
+      kind: "wordprocessing" as const,
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "embeddedObject" as const,
+              objectKind: "spreadsheet" as const,
+              frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+              document: embedded,
+            },
+          ],
+        },
+      ],
+    };
+    const written = writeRtfContent(document);
+    expect(String.fromCharCode(...written)).toContain("d0cf11e0a1b11ae1");
+    const back = readRtfContent(written).document;
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    expect(block?.kind).toBe("embeddedObject");
+    expect(block?.kind === "embeddedObject" ? block.document : undefined).toEqual(
+      embedded,
+    );
+  });
 });
