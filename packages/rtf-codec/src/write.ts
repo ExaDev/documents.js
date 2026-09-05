@@ -264,17 +264,21 @@ const FORM_FIELD_SPEC: ReadonlyMap<
 // [MS-DOC] 2.9.78 FFData.hsttbDropList, verbatim: "An optional STTB that specifies the entries in the dropdown list box. This MUST exist if and only if bits.iType is iTypeDrop (2). The entries are Unicode strings and do not have extra data. This MUST NOT exceed 25 elements." Not an arbitrary round number: FFDataBits' own iRes field reserves index 25 as its "undefined selection" sentinel (see FORM_FIELD_RESULT_UNDEFINED in constructs.ts), so a 26th real entry would sit exactly where a real Word/DOC consumer expects "no selection" instead of an actual option.
 const MAX_DROPDOWN_OPTIONS = 25;
 
-// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffres`/`\ffdefres` pair, a dropdown's own `\ffhaslistbox` plus its selected-entry `\ffres`/`\ffdefres` pair and its list of `{\*\ffl ...}` entries, a plainText field's own `{\*\ffdeftext ...}` default text, and -- for any of the three types -- a `\ffprot1` bit for a 'content'/'both' lock, the control's human-readable label as `\ffownhelp1{\*\ffhelptext ...}`, and its bookmark-style name as `{\*\ffname ...}`.
+// The `<formparams><formstrings>` content of a `\*\formfield` group, emitted in the order RTF 1.9.1's own "Form Fields" grammar production actually lists: `<formfield> '{\*' \formfield '{' <formparams> <formstrings> '}}'`, so every formparams control word precedes every formstrings one as a whole; within `<formparams>` (`\fftypeN? \ffownhelpN? ... \ffprotN? ... \ffhaslistboxN? ... \ffdefresN? \ffresN?`) the order used here is fftype, ffownhelp, ffprot, ffhaslistbox, then ffdefres before ffres; within `<formstrings>` (`<ffname>? <ffdeftext>? ... <ffhelptext>? ... <ffl>*`) the order used here is ffname, ffdeftext, ffhelptext, then the ffl entries. Built as separate fragments (`formParams` plus one variable per formstrings member) precisely because each fact is decided at a different point below -- a checkbox/dropDown's ffdefres+ffres pair, a dropdown's ffhaslistbox and ffl entries, a plainText's ffdeftext, the shared ffprot/ffownhelp/ffname -- and only concatenated into the grammar's own stated sequence once every fragment is known, rather than emitted inline in whatever order this function happens to decide each fact.
 function formFieldPayload(
   descriptor: ContentControlDescriptor,
   fftype: number,
   sink: RtfDiagnosticSink,
 ): string {
-  let out = `\\fftype${String(fftype)}`;
+  let formParams = `\\fftype${String(fftype)}`;
+  let ffNameString = "";
+  let ffDefTextString = "";
+  let ffHelpTextString = "";
+  let fflEntries = "";
   if (descriptor.controlType === "checkbox") {
-    // \ffres is what a reader (this package's own included, per FORM_FIELD_RESULT_UNDEFINED in constructs.ts) actually reads back as the checkbox's current state -- omitting it, as this writer once did, opens the box unchecked in Word regardless of `checked`, since an absent \ffres reads as 0. \ffdefres mirrors the same value: ContentControlDescriptor carries one `checked` boolean, not a separate reset default, so the field's default is the value it was minted with.
+    // \ffres is what a reader (this package's own included, per FORM_FIELD_RESULT_UNDEFINED in constructs.ts) actually reads back as the checkbox's current state -- omitting it, as this writer once did, opens the box unchecked in Word regardless of `checked`, since an absent \ffres reads as 0. \ffdefres mirrors the same value: ContentControlDescriptor carries one `checked` boolean, not a separate reset default, so the field's default is the value it was minted with. Written ffdefres before ffres, matching <formparams>'s own stated order.
     const value = descriptor.checked === true ? "1" : "0";
-    out += `\\ffres${value}\\ffdefres${value}`;
+    formParams += `\\ffdefres${value}\\ffres${value}`;
     if (descriptor.value !== undefined) {
       // A real, reachable case, from the identical reachability path as the plainText \ffdeftext handling above: documents.js's own PDF AcroForm-to-contentControl reconstruction spreads a checkbox widget's `/V` export-value name (e.g. 'Yes', a custom on-state string, distinct from AcroForm's own boolean derived-from-/V `checked`) onto `value` alongside `checked` (see pdf-codec's own valueFields -- `checked: value !== 'Off', ...(value !== 'Off' ? { value } : {})`). RTF's own \ffres/\ffdefres are a bare 0/1/25 state with no room for a named export value at all, so a checkbox's `value` has no RTF spelling whatsoever, unlike a dropDown's `value` (which at least sometimes matches a real \ffl entry) -- this is unconditional data loss whenever `value` is present, reported through the same sink every other unrepresentable construct in this writer uses rather than silently dropped the way an earlier version of this writer dropped it.
       sink({
@@ -293,7 +297,7 @@ function formFieldPayload(
     }
   } else if (descriptor.controlType === "dropDown") {
     // \ffhaslistbox is minted unconditionally for a dropDown, independent of whether it carries any options at all: [MS-DOC] 2.9.79 FFDataBits.fHasListBox "specifies that the form field has a list box. This value MUST be 1 if iType is iTypeDrop (2)." A dropdown with no options is still a dropdown -- there is no degenerate case in which that bit stops being true, so it cannot be gated behind `options !== undefined` the way an earlier version of this writer gated it (which then also left \ffdefres unminted for exactly that shape, a real, common one: a docx `w:dropDownList`/`w:comboBox` with no `w:listItem` children, or an ODF `form:listbox`, both currently read back by this ecosystem with no options recorded at all -- tracked as ExaDev/documents.js#1016).
-    out += "\\ffhaslistbox";
+    formParams += "\\ffhaslistbox";
     const allOptions = descriptor.options;
     let options = allOptions;
     if (allOptions !== undefined && allOptions.length > MAX_DROPDOWN_OPTIONS) {
@@ -309,8 +313,8 @@ function formFieldPayload(
         ? undefined
         : options.indexOf(descriptor.value);
     if (selectedIndex !== undefined && selectedIndex !== -1) {
-      // `value` genuinely names one of `options`: \ffres records the real current selection and \ffdefres mirrors it, exactly as the checkbox branch above mirrors its own single `checked` boolean into both \ffres and \ffdefres.
-      out += `\\ffres${String(selectedIndex)}\\ffdefres${String(selectedIndex)}`;
+      // `value` genuinely names one of `options`: \ffres records the real current selection and \ffdefres mirrors it, exactly as the checkbox branch above mirrors its own single `checked` boolean into both \ffres and \ffdefres. Written ffdefres before ffres, matching <formparams>'s own stated order.
+      formParams += `\\ffdefres${String(selectedIndex)}\\ffres${String(selectedIndex)}`;
     } else if (descriptor.value !== undefined) {
       // `value` was recorded but names none of `options` (or there are no options at all to name) -- real, signalable data loss, distinct from "no value was ever set" below. Substituting the nearest available index (e.g. 0) would silently write a DIFFERENT, wrong selection with no signal that the recorded value was never actually represented, so this writer mints neither \ffres nor \ffdefres and reports the drop through the same sink every other unrepresentable construct in this writer uses (see the "mints neither \ffres nor \ffdefres for a dropDown whose value names none of its own options" test).
       sink({
@@ -322,7 +326,7 @@ function formFieldPayload(
     // The remaining case -- no value was ever recorded at all -- mints neither \ffres nor \ffdefres, exactly like the unmatched-value case above, but for a different reason. A real producer spells "no current selection" as \ffres25 (FFDataBits' own undefined-selection sentinel) plus a genuine \ffdefres0, not by omitting both -- but this writer cannot emit that exact form without reintroducing the ambiguity an earlier round of it removed: formFieldContentControl in constructs.ts deliberately falls a sentinel \ffres25 through to \ffdefres, precisely so a real PHPRtfLite-produced checkbox's sentinel-plus-meaningful-default pair round-trips as that meaningful default rather than as "unchecked", and that same fallback would read a written \ffdefres0 back as "option 0 is selected" rather than "nothing is selected" for a dropdown with no real selection at all. Omitting both fields instead sidesteps that: read.test.ts's own "leaves a FORMDROPDOWN's value unset when neither \ffres nor \ffdefres is present at all" fixture is a hand-edited variant of a real PHPRtfLite fixture (with its \ffres25\ffdefres0 pair deleted), which proves only that THIS reader tolerates the omission cleanly -- not that a real producer would ever write it that way -- but that is exactly the property this writer needs: a form its own reader decodes back to value:undefined with no ambiguity, at the cost of not matching what a real producer would have written for the identical "nothing selected" case. [MS-DOC] 2.9.78 FFData.wDef "MUST exist if and only if bits.iType is iTypeChck (1) or iTypeDrop (2)" is a real MS-DOC production rule this omission does not satisfy: a producer omitting wDef is spec-noncompliant but demonstrably tolerated in practice, since this reader (built to survive real-world RTF, not just conformant RTF) decodes the omission cleanly. Converging both no-match branches onto the identical "omit both fields" output also makes the round-trip a genuine fixed point: an unmatched-or-unset value always reads back as value:undefined, and writing that again reproduces byte-identical output, with no second-pass drift onto a fabricated default.
     if (options !== undefined) {
       for (const option of options) {
-        out += `{\\*\\ffl ${escapeText(option)}}`;
+        fflEntries += `{\\*\\ffl ${escapeText(option)}}`;
       }
     }
     if (descriptor.checked !== undefined) {
@@ -336,7 +340,7 @@ function formFieldPayload(
   } else if (descriptor.controlType === "plainText") {
     // [MS-DOC] 2.9.78 FFData.xstzTextDef, verbatim: "An optional Xstz that specifies the default text of this textbox. This structure MUST exist if and only if bits.iType is iTypeTxt (0)." RTF 1.9.1's own `\ffdeftext` ("Default text for text field. This is a destination control word.") is its serialisation. This is real, reachable data: documents.js's own PDF AcroForm-to-contentControl reconstruction hands a plainText control exactly `{controlType:'plainText', value, ...}` for a real `/V` string, so a plainText descriptor's `value` is not hypothetical input -- note that this is a WRITE-only use of `value`: the read side deliberately does not restore `\ffdeftext` back onto `value` (see constructs.ts's own formFieldContentControl), since a field's default/reset text is not its current value, so a document built from a descriptor carrying this `value` does not read back with that same `value` on a round trip. Minted only when the descriptor actually carries one -- omitted, like the dropdown branch's own "nothing to name" cases above, when no value was ever recorded, rather than mint an empty `{\*\ffdeftext}` FFData.xstzTextDef's own presence rule would technically require: this writer already diverges from that binary-structure requirement for the identical round-trip-determinism reason the dropdown branch's own wDef note above explains.
     if (descriptor.value !== undefined) {
-      out += `{\\*\\ffdeftext ${escapeText(descriptor.value)}}`;
+      ffDefTextString = `{\\*\\ffdeftext ${escapeText(descriptor.value)}}`;
       // Reported through the same sink every other cross-field mis-slot in this function uses, for consistency: `value` names the control's CURRENT scalar value, and \ffdeftext names its DEFAULT/reset text -- a genuinely different fact, per xstzTextDef's own presence rule quoted above, not a spelling of the same one. The string itself is not dropped (it lands in the RTF byte stream), but this codec's own reader never restores \ffdeftext back onto `value` (see constructs.ts's own formFieldContentControl), so a document built from this descriptor does not read `value` back as `value` on a round trip -- the identical one-directional degradation shape as the checkbox branch's own dropped `value` above, just landing in a real destination instead of nowhere at all.
       sink({
         code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
@@ -363,7 +367,7 @@ function formFieldPayload(
   }
   // [MS-DOC] 2.9.79 FFDataBits.fProt, verbatim: "A bit that specifies whether the form field is protected and its value cannot be changed" -- RTF 1.9.1's own Form Fields table states the identical fact, "\ffprotN: 1 if this field is protected, 0 otherwise." It is a single content-protection bit, so it captures the 'content' and 'both' halves of ContentControlLock exactly (both lock the field's own value); 'container' locks only the control's own removal, a fact RTF's form-field vocabulary has no bit for at all -- a legacy form field is ordinary document text with no separate "delete the control" operation to protect in the first place -- so a 'container' lock is reported through the diagnostic sink below rather than silently folded into "unprotected". Written as the explicit `\ffprot1` form rather than a bare `\ffprot`: `\ffhaslistbox` above is a genuine bare-when-true bit with no N-parameter spelling at all, but `\ffprot` is an N-parameterised bit like `\ffres`/`\ffdefres`, and RTF 1.9.1's own control-word-type table settles the question this comment once left open -- `\ffprotN` is a Value control word, not a Toggle word like `\b`/`\i`, so its own bare form has a real, cited default (0/off) rather than an ambiguous one; this reader's own formFieldValueBit in read.ts applies that default on the way in. Writing the explicit `\ffprot1` form here is not hedging against that ambiguity (there is none left to hedge against) -- it costs one character and matches how every real producer-derived fixture in this package's own read.test.ts (PHPRtfLite) writes the sibling `\ffres`/`\ffdefres` bits, none of which settle `\ffprot` specifically since none of those fixtures sets it at all.
   if (descriptor.lock === "content" || descriptor.lock === "both") {
-    out += "\\ffprot1";
+    formParams += "\\ffprot1";
   }
   if (descriptor.lock === "container" || descriptor.lock === "both") {
     const message =
@@ -376,14 +380,19 @@ function formFieldPayload(
       message,
     });
   }
-  // [MS-DOC] 2.9.78 FFData.xstzHelpText, gated by FFDataBits.fOwnHelp ("A bit that specifies whether the form field has custom help text in FFData.xstzHelpText. If fOwnHelp is 0, FFData.xstzHelpText contains an empty or auto-generated string."): RTF 1.9.1's own \ffhelptext ("Help text (string). This is a destination control word.") is this vocabulary's one human-readable descriptive-text slot for a form field, and the closest analogue RTF has to docx `w:alias`/PDF AcroForm's `/TU` alternate description -- both are a label shown to whoever is looking at the control, distinct from the control's own machine-readable name that \ffname/`w:tag`/AcroForm's `/T` already carry. \ffownhelp1 is minted alongside it, mirroring what a real producer does whenever xstzHelpText genuinely carries author-set text rather than an "empty or auto-generated string".
+  // [MS-DOC] 2.9.78 FFData.xstzHelpText, gated by FFDataBits.fOwnHelp ("A bit that specifies whether the form field has custom help text in FFData.xstzHelpText. If fOwnHelp is 0, FFData.xstzHelpText contains an empty or auto-generated string."): RTF 1.9.1's own \ffhelptext ("Help text (string). This is a destination control word.") is this vocabulary's one human-readable descriptive-text slot for a form field, and the closest analogue RTF has to docx `w:alias`/PDF AcroForm's `/TU` alternate description -- both are a label shown to whoever is looking at the control, distinct from the control's own machine-readable name that \ffname/`w:tag`/AcroForm's `/T` already carry. \ffownhelp1 is minted alongside it (into `formParams`, since it is a <formparams> member), mirroring what a real producer does whenever xstzHelpText genuinely carries author-set text rather than an "empty or auto-generated string"; the help text itself is a <formstrings> member and so goes into `ffHelpTextString` instead, joined in with the rest only at the very end.
   if (descriptor.alias !== undefined && descriptor.alias.length > 0) {
-    out += `\\ffownhelp1{\\*\\ffhelptext ${escapeText(descriptor.alias)}}`;
+    formParams += "\\ffownhelp1";
+    ffHelpTextString = `{\\*\\ffhelptext ${escapeText(descriptor.alias)}}`;
   }
+  // <formstrings>'s own first member: the field's bookmark-style name, from \ffname.
   if (descriptor.tag !== undefined && descriptor.tag.length > 0) {
-    out += `{\\*\\ffname ${escapeText(descriptor.tag)}}`;
+    ffNameString = `{\\*\\ffname ${escapeText(descriptor.tag)}}`;
   }
-  return out;
+  // Concatenated in the grammar's own stated order: every <formparams> member first, then <formstrings> in its own stated order (ffname, ffdeftext, ffhelptext, ffl entries).
+  return (
+    formParams + ffNameString + ffDefTextString + ffHelpTextString + fflEntries
+  );
 }
 
 // The whole field's own open: `{\field{\*\fldinst KEYWORD {\*\formfield PAYLOAD}}{\fldrslt `, left unclosed so the runs the extent wraps land inside \fldrslt's own destination -- the matching `}}` (closing \fldrslt, then \field) is written wherever the extent's endRun falls. Returns undefined for a controlType FORM_FIELD_SPEC does not cover, so the caller can fall back to the ordinary construct-gap diagnostic instead of minting nothing silently.
