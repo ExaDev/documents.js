@@ -7,9 +7,10 @@ import { DocFormatError } from "../errors";
 
 /** sprmPJc: a 1-byte logical justification. */
 const SPRM_P_JC = 0x2461;
-/** sprmPDxaLeft / sprmPDxaLeft1: 2-byte signed twips. There is no writer-side counterpart for sprmPDxaRight (indent from the right margin): pap.ts's own reader folds it into a ParagraphProperties.indentRightPt field, but ContentParagraphSchema (document-schema.js) carries no such field for any writer to round-trip -- the right-indent value the reader computes is simply not part of the shared schema's paragraph vocabulary. */
+/** sprmPDxaLeft / sprmPDxaLeft1 / sprmPDxaRight: 2-byte signed twips. */
 const SPRM_P_DXA_LEFT = 0x845e;
 const SPRM_P_DXA_LEFT1 = 0x8460;
+const SPRM_P_DXA_RIGHT = 0x845d;
 /** sprmPDyaBefore / sprmPDyaAfter: 2-byte unsigned twips. */
 const SPRM_P_DYA_BEFORE = 0xa413;
 const SPRM_P_DYA_AFTER = 0xa414;
@@ -73,6 +74,7 @@ export function encodeParagraphGrpprl(
     ContentParagraph,
     | "alignment"
     | "indentLeftPt"
+    | "indentRightPt"
     | "indentFirstLinePt"
     | "spacingBeforePt"
     | "spacingAfterPt"
@@ -89,6 +91,13 @@ export function encodeParagraphGrpprl(
       bytes,
       SPRM_P_DXA_LEFT,
       int16(pointsToTwips(paragraph.indentLeftPt), "paragraph indentLeftPt"),
+    );
+  }
+  if (paragraph.indentRightPt !== undefined) {
+    pushSprm(
+      bytes,
+      SPRM_P_DXA_RIGHT,
+      int16(pointsToTwips(paragraph.indentRightPt), "paragraph indentRightPt"),
     );
   }
   if (paragraph.indentFirstLinePt !== undefined) {

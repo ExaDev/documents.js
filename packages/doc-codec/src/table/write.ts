@@ -35,6 +35,7 @@ export interface WriteParagraph {
     ContentParagraph,
     | "alignment"
     | "indentLeftPt"
+    | "indentRightPt"
     | "indentFirstLinePt"
     | "spacingBeforePt"
     | "spacingAfterPt"
