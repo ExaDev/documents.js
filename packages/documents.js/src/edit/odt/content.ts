@@ -269,6 +269,9 @@ export function populateOdtTable(table: OdtTable, block: ContentTable): void {
   const verticalMerges = new Map<number, number>();
   block.rows.forEach((row) => {
     const tableRow = table.appendEmptyRow();
+    if (row.heightPt !== undefined) {
+      tableRow.heightPt = row.heightPt;
+    }
     let colIndex = 0;
     let horizontalCoverRemaining = 0;
     row.cells.forEach((cell) => {

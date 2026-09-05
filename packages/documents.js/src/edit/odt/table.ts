@@ -5,6 +5,7 @@ import type {
 } from "document-schema.js";
 import type { Package, XmlElement, XmlNode } from "odf.js";
 import {
+  findStyleElement,
   formatOdfColor,
   formatOdfLength,
   parseOdfColor,
@@ -28,6 +29,7 @@ const DEFAULT_TABLE_WIDTH_PT = 468;
 
 const TABLE_COLUMN_STYLE_PREFIX = "OdtCol";
 const TABLE_CELL_STYLE_PREFIX = "OdtCell";
+const TABLE_ROW_STYLE_PREFIX = "OdtRow";
 
 // odf.js's own reader resolves a cell's background and borders out of style:table-cell-properties (fo:background-color and fo:border-left/right/top/bottom, each a "<width> <style> <color>" shorthand -- see typed/shared/table.ts readCellStyleDecoration). But odf.js's StyleRegistry/StyleProperties model only text/paragraph formatting and never emit a style:table-cell-properties element at all, exactly the same hole src/edit/odg/style.ts closes for style:graphic-properties. This is the table-cell counterpart: a small, self-contained, append-only writer scoped to exactly the two attributes a cell's background and borders need, reusing ensureAutomaticStyles/nextStyleName (the shared find-or-create office:automatic-styles + mint-next-name logic) rather than a third reimplementation of that lookup -- mirroring both internTableColumnWidth above and odg/style.ts's own graphic-family writer.
 
@@ -226,6 +228,42 @@ function internTableColumnWidth(pkg: Package, widthPt: number): string {
   return name;
 }
 
+// The row-height counterpart to internTableColumnWidth immediately above, for the identical reason: odf.js's StyleRegistry has no row-height field either, so style:table-row-properties/@style:row-height is hand-rolled here too -- reuse an existing table-row style if one with the exact same formatted height is already present, otherwise mint a fresh name and append a new entry.
+function internTableRowHeight(pkg: Package, heightPt: number): string {
+  const automaticStyles = ensureAutomaticStyles(pkg);
+  const formatted = formatOdfLength(heightPt, "pt");
+  for (const child of automaticStyles.children) {
+    if (
+      child.type !== "element" ||
+      child.tag !== "style:style" ||
+      attr(child, "style:family") !== "table-row"
+    ) {
+      continue;
+    }
+    const props = child.children.find(
+      (c): c is XmlElement =>
+        c.type === "element" && c.tag === "style:table-row-properties",
+    );
+    if (props !== undefined && attr(props, "style:row-height") === formatted) {
+      const existingName = attr(child, "style:name");
+      if (existingName !== undefined) {
+        return existingName;
+      }
+    }
+  }
+  const name = nextStyleName(
+    automaticStyles,
+    "style:style",
+    TABLE_ROW_STYLE_PREFIX,
+  );
+  automaticStyles.children.push(
+    el("style:style", { "style:name": name, "style:family": "table-row" }, [
+      el("style:table-row-properties", { "style:row-height": formatted }),
+    ]),
+  );
+  return name;
+}
+
 export class OdtTableCell {
   private readonly node: XmlElement;
   private readonly pkg: Package;
@@ -334,6 +372,38 @@ export class OdtTableRow {
       }
     }
     return out;
+  }
+
+  // Row height (ODF's own style:table-row-properties/@style:row-height, on the row's own referenced table:style-name) -- the ODF-side mirror of DocxTableRow.heightPt (src/edit/docx/table.ts), read via odf.js's own exported findStyleElement (family "table-row", a single-level lookup with no parent-chain walk, matching typed/shared/table.ts's own resolveRowHeightPt convention for the identical reason: real ODF table-row automatic styles are standalone in practice) and written via internTableRowHeight's append-only, fingerprint-deduplicated mint above. An unresolvable height is genuinely "no height specified" (the layout engine measures content instead), never 0, matching odf.js's own reader.
+  get heightPt(): number | undefined {
+    const styleName = attr(this.node, "table:style-name");
+    const styleElement =
+      styleName === undefined
+        ? undefined
+        : findStyleElement(styleName, "table-row", this.pkg);
+    const props =
+      styleElement === undefined
+        ? undefined
+        : styleElement.children.find(
+            (c): c is XmlElement =>
+              c.type === "element" && c.tag === "style:table-row-properties",
+          );
+    const raw =
+      props === undefined ? undefined : attr(props, "style:row-height");
+    return raw === undefined ? undefined : parseOdfLength(raw);
+  }
+
+  // No other row-level property is modelled by this editor (or by odf.js's own StyleRegistry -- see internTableRowHeight's own top-of-file note), so a row's table:style-name exists ONLY to carry its height: clearing heightPt removes the reference outright rather than merely blanking one property inside a style something else might still need.
+  set heightPt(value: number | undefined) {
+    if (value === undefined) {
+      removeAttr(this.node, "table:style-name");
+      return;
+    }
+    setAttr(
+      this.node,
+      "table:style-name",
+      internTableRowHeight(this.pkg, value),
+    );
   }
 
   // Appends one ordinary table:table-cell to this row, for a caller (buildOdtPackage's own appendTable) building a row's cells one at a time rather than all at once via OdtTable.appendRow -- needed so a merged table's covered grid positions can be interleaved with real cells in document order.
