@@ -5,6 +5,7 @@ import type {
   ContentParagraph,
   ContentTable,
 } from "document-schema.js";
+import { resolveCellFillColor } from "document-schema.js";
 import type { Package } from "ooxml.js";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import {
@@ -334,8 +335,9 @@ function appendTable(body: DocxBody, block: ContentTable): void {
           gridSpan: span,
         });
       }
+      // DocxTableCell.background models one flat colour (this editor's own w:shd writer states only w:val="clear"/w:fill), so a 'pattern' fill (ExaDev/documents.js#951) writes through resolveCellFillColor's own single representative colour.
       if (cell.background !== undefined) {
-        tableCell.background = cell.background;
+        tableCell.background = resolveCellFillColor(cell.background);
       }
       if (cell.borders !== undefined) {
         tableCell.borders = cell.borders;

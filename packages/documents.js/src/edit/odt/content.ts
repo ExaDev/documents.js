@@ -6,6 +6,7 @@ import type {
   ContentParagraph,
   ContentTable,
 } from "document-schema.js";
+import { resolveCellFillColor } from "document-schema.js";
 import type { Package } from "odf.js";
 import { base64ToBytes } from "odf.js";
 import {
@@ -300,8 +301,9 @@ export function populateOdtTable(table: OdtTable, block: ContentTable): void {
           verticalMerges.set(colIndex + c, cell.rowSpan - 1);
         }
       }
+      // OdtTableCell.background models one flat colour (ODF's own style:table-cell-properties/@fo:background-color has no two-colour pattern-fill vocabulary), so a 'pattern' fill (ExaDev/documents.js#951) writes through resolveCellFillColor's own single representative colour.
       if (cell.background !== undefined) {
-        tableCell.background = cell.background;
+        tableCell.background = resolveCellFillColor(cell.background);
       }
       if (cell.borders !== undefined) {
         tableCell.borders = cell.borders;

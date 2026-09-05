@@ -621,7 +621,7 @@ describe("step 7: a cell's own background paints as a real LayoutRect", () => {
     const s = sheet(
       [
         stringCell(0, 0, "A", {
-          background: RED,
+          background: { kind: "solid", color: RED },
           sourcePath: "sheets[0].cells[0]",
         }),
       ],
@@ -645,7 +645,13 @@ describe("step 7: a cell's own background paints as a real LayoutRect", () => {
 
   it("spans the whole merged region for a colSpan/rowSpan anchor cell, not just its own single row/column", () => {
     const s = sheet(
-      [stringCell(0, 0, "Merged", { background: RED, colSpan: 2, rowSpan: 2 })],
+      [
+        stringCell(0, 0, "Merged", {
+          background: { kind: "solid", color: RED },
+          colSpan: 2,
+          rowSpan: 2,
+        }),
+      ],
       {
         columns: [
           { index: 0, widthPt: 30 },
@@ -768,11 +774,14 @@ describe("step 7: a cell's own borders paint as real LayoutLines, one per declar
   });
 
   it("paints a cell background BEFORE the gridlines and all cell text AFTER them", () => {
-    const s = sheet([stringCell(0, 0, "A", { background: RED })], {
-      columns: [{ index: 0, widthPt: 50 }],
-      rows: [{ index: 0, heightPt: 20 }],
-      printSettings: { ...basePrintSettings, gridlines: true },
-    });
+    const s = sheet(
+      [stringCell(0, 0, "A", { background: { kind: "solid", color: RED } })],
+      {
+        columns: [{ index: 0, widthPt: 50 }],
+        rows: [{ index: 0, heightPt: 20 }],
+        printSettings: { ...basePrintSettings, gridlines: true },
+      },
+    );
     const { items } = convert([s]).pages[0]!;
     const backgroundIndex = items.indexOf(rectItems(items)[0]!);
     const firstGridlineIndex = items.indexOf(lineItems(items)[0]!);

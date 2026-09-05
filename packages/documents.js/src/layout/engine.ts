@@ -8,7 +8,7 @@ import type {
   ContentTable,
   PageSize,
 } from "document-schema.js";
-import { COLOR_BLACK } from "document-schema.js";
+import { COLOR_BLACK, resolveCellFillColor } from "document-schema.js";
 import { parseListNumId } from "markdown-codec";
 import { layoutFormula } from "../mathml/layout";
 import { flipY } from "../model/geometry";
@@ -427,13 +427,14 @@ function layoutTableFlow(
       const cellFrame = flipY(cellFrameYDown, section.pageSize.heightPt);
       stampFrame(cell, pageIndex, cellFrame);
       if (cell.background !== undefined) {
+        // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for.
         state.items.push({
           kind: "rect",
           xPt: cellFrame.xPt,
           yPt: cellFrame.yPt,
           widthPt: cellFrame.widthPt,
           heightPt: cellFrame.heightPt,
-          fill: cell.background,
+          fill: resolveCellFillColor(cell.background),
           sourcePath: cellSourcePath,
         });
       }

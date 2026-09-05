@@ -366,7 +366,7 @@ describe("convertPresentationToLayout: tables", () => {
           cells: [
             {
               blocks: [paragraph([run("A", { sizePt: 10 })])],
-              background: RED,
+              background: { kind: "solid", color: RED },
             },
             { blocks: [paragraph([run("B", { sizePt: 10 })])] },
           ],
@@ -456,7 +456,9 @@ describe("convertPresentationToLayout: rotation", () => {
     const table: ContentTable = {
       kind: "table",
       columnWidthsPt: [50],
-      rows: [{ cells: [{ blocks: [], background: RED }] }],
+      rows: [
+        { cells: [{ blocks: [], background: { kind: "solid", color: RED } }] },
+      ],
     };
     const s = shape({
       frame: { xPt: 0, yPt: 0, widthPt: 50, heightPt: 50 },

@@ -82,6 +82,7 @@ export {
 // --- The semantic content model: one read+write-capable model for both docx and pptx, instead of ooxml.js's two one-way, lossy, format-specific typed readers. The full vocabulary (ContentDocument, ContentBlock, and everything beneath them) is sourced from document-schema.js, the sibling schema package shared with ooxml.js and odf.js -- this package defines no schema of its own here, only consumes and re-exports document-schema.js's. ---
 export type {
   ContentBlock,
+  ContentCellFill,
   ContentCellValue,
   ContentDocument,
   ContentDrawPage,
