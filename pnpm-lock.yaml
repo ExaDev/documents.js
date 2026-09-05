@@ -357,9 +357,15 @@ importers:
       '@modelcontextprotocol/server':
         specifier: ^2.0.0
         version: 2.0.0
+      document-compute.js:
+        specifier: ^1.2.19
+        version: link:../document-compute.js
       document-outline.js:
         specifier: ^3.2.5
         version: link:../document-outline.js
+      document-schema.js:
+        specifier: ^5.6.0
+        version: link:../document-schema.js
       documents.js:
         specifier: ^6.5.3
         version: link:../documents.js
