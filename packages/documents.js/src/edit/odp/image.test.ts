@@ -1,4 +1,7 @@
+import { decodePackage } from "odf.js";
 import { describe, expect, it } from "vitest";
+import { readOdpContent } from "../../odf/odp/read";
+import { createOdp } from "./editor";
 import { createEmptyOdpPackage } from "./scaffold";
 import { insertImageFrameMedia } from "./image";
 import { OdpShape } from "./shape";
@@ -47,5 +50,46 @@ describe("insertImageFrameMedia", () => {
     );
     expect(mediaParts).toHaveLength(2);
     expect(new Set(mediaParts).size).toBe(2);
+  });
+});
+
+describe("OdpSlide.addImage altText", () => {
+  it("round-trips through svg:title and readOdpContent", () => {
+    const editor = createOdp();
+    const slide = editor.addSlide();
+    slide.addImage({
+      frame: { xPt: 0, yPt: 0, widthPt: 50, heightPt: 50 },
+      format: "png",
+      bytes: PNG_BYTES,
+      altText: "A red circle on a white background",
+    });
+
+    const content = readOdpContent(decodePackage(editor.toBytes()));
+    if (content.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const image = content.slides[0]?.shapes[0]?.blocks[0];
+    expect(image?.kind).toBe("image");
+    expect(image?.kind === "image" ? image.altText : undefined).toBe(
+      "A red circle on a white background",
+    );
+  });
+
+  it("writes no svg:title, and reads back no altText, when none is given", () => {
+    const editor = createOdp();
+    const slide = editor.addSlide();
+    slide.addImage({
+      frame: { xPt: 0, yPt: 0, widthPt: 50, heightPt: 50 },
+      format: "png",
+      bytes: PNG_BYTES,
+    });
+
+    const content = readOdpContent(decodePackage(editor.toBytes()));
+    if (content.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const image = content.slides[0]?.shapes[0]?.blocks[0];
+    expect(image?.kind).toBe("image");
+    expect(image?.kind === "image" ? image.altText : undefined).toBeUndefined();
   });
 });
