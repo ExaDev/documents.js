@@ -723,6 +723,19 @@ describe("form fields", () => {
     ).toBe("Lorem ipsum.");
   });
 
+  // [MS-DOC] 2.9.78 FFData.xstzTextDef via RTF's own \ffdeftext -- distinct from the field's DISPLAYED text ("Lorem ipsum." in \fldrslt), which is never duplicated onto `value`.
+  it("reads a FORMTEXT field's \\*\\ffdeftext as the contentControl's value", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffdeftext Jane Doe}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+      value: "Jane Doe",
+    });
+  });
+
   it("reads a FORMTEXT field's \\*\\ffhelptext as the contentControl's alias", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0\\ffownhelp1{\\*\\ffhelptext Client name}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
