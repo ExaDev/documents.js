@@ -14,12 +14,12 @@ import {
   colorToRgbHex,
   dashedBorderWeightForWidthPt,
   rgbHexToColor,
+  unrecognizedFillKind,
 } from "document-schema.js";
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import type { CellNumberFormat } from "./number-format";
 import { attr, childrenWithTag, decodeEntities, rootElement } from "../util";
-import { unrecognizedFillKind } from "../shared/cell-fill";
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
 // Resolves xl/styles.xml for typed/xlsx/content.ts (read) and typed/xlsx/build.ts (write). The read side produces one entry per <cellXfs><xf> -- the array index IS the value of a cell's own s attribute -- carrying everything ContentSheetCellSchema models that lives in a cell format: the number-format CODE STRING (resolved through <numFmts>, classified by typed/xlsx/number-format.ts upstream), and the cell DECORATION (background fill, per-edge borders, horizontal/vertical alignment) added in this same widening that gave ContentSheetCell its background/borders/alignment/verticalAlignment fields. The write side is the same relationship in reverse: CellFormatTable interns the (number format, decoration) tuples a written workbook needs, ready to serialize as <numFmts>/<fills>/<borders>/<cellXfs>.

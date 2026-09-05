@@ -13,7 +13,11 @@ import type {
   ContentSheetCell,
   DocumentTree,
 } from "document-schema.js";
-import { colorToRgbHex, flattenTree } from "document-schema.js";
+import {
+  colorToRgbHex,
+  flattenTree,
+  unrecognizedFillKind,
+} from "document-schema.js";
 
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
@@ -291,11 +295,6 @@ function resolveWriteEdge(
     return UNDECORATED_EDGE;
   }
   return { style: borderStyleTokenFor(border), icv: icvOf(border.color) };
-}
-
-/** Reads `.kind` off a ContentCellFill that has already been switched over both of its real members ('solid'/'pattern') -- TypeScript types such a value 'never' at that point, so this takes it through a deliberately widened parameter type rather than an `as` cast. A value that reaches this call anyway (a malformed object bypassing schema validation, or a stale caller shape) still carries a real, inspectable kind at runtime even though the type system says none is left to name. */
-function unrecognizedFillKind(fill: { kind?: unknown }): string {
-  return String(fill.kind);
 }
 
 /** A ContentCellFill's own fillPattern/fillForegroundIcv/fillBackgroundIcv triple, resolved for whichever of 'solid'/'pattern' the cell states -- undefined input resolves to FLSNULL with both colours Automatic, matching the pre-#951 undecorated case exactly. A 'pattern' fill leaving one of its own colours unstated writes that colour Automatic too, the inverse of xf-colors.ts's own resolveFillBackground treating an unresolvable icv the same way on read. */

@@ -6,6 +6,7 @@ import type {
   ContentCellPatternType,
   ContentStrokeStyle,
 } from "document-schema.js";
+import { unrecognizedFillKind } from "document-schema.js";
 import { readUint16LE, readUint8 } from "../bytes";
 import {
   autoColorRefBytes,
@@ -326,11 +327,6 @@ function shdFill(
     ...(cvFore !== undefined ? { foregroundColor: cvFore } : {}),
     ...(cvBack !== undefined ? { backgroundColor: cvBack } : {}),
   };
-}
-
-/** Reads `.kind` off a ContentCellFill that has already been switched over both of its real members ('solid'/'pattern') -- TypeScript types such a value 'never' at that point, so this takes it through a deliberately widened parameter type rather than an `as` cast. A value that reaches this call anyway (a malformed object bypassing schema validation, or a stale caller shape) still carries a real, inspectable kind at runtime even though the type system says none is left to name. */
-function unrecognizedFillKind(fill: { kind?: unknown }): string {
-  return String(fill.kind);
 }
 
 /** One Shd's own ten bytes, the inverse of readShd: a 'solid' fill states cvFore automatic and the fill's own colour as cvBack under ipatAuto, exactly how LibreOffice 26.2.5.2 writes a plain cell fill (confirmed against its own `.doc` output: a #ffff00 cell came back as cvFore cvAuto, cvBack `ff ff 00 00`, ipat 0x0000) -- writing ipatSolid instead would be an equally spec-conformant alternative Shd never needed, since the two patterns are read identically apart from which COLORREF they draw from. A 'pattern' fill states its own foreground/background colours (automatic where the fill left one unstated) under the Ipat value PATTERN_TYPE_TO_IPAT names for it, throwing DocUnsupportedError for a SpreadsheetML-only pattern type ([MS-DOC]'s Ipat vocabulary has no member for one -- see PATTERN_TYPE_TO_IPAT's own note) rather than silently writing the wrong pattern or dropping it. An absent fill writes ShdAuto -- the all-automatic value [MS-DOC] 2.9.247 defines as "no shading is applied" -- so an undecorated cell inside a row that has decorated ones still states its own lack of shading rather than inheriting a neighbour's. */
