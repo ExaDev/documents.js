@@ -384,6 +384,81 @@ describe("readWorkbookGlobals", () => {
     ]);
   });
 
+  it("resolves a bare simple-file-path virtPath with no leading marker at all", () => {
+    // [MS-XLS] 480c3d2a: simple-file-path = [%x0001] file-path -- the marker is optional, and this is the case where it's absent entirely.
+    const virtPath = "Budget.xlsx";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[Budget.xlsx]Sheet1", diagnostic: false },
+    ]);
+  });
+
+  it("resolves a 0x01-prefixed simple-file-path virtPath without losing the file name's own first character", () => {
+    // [MS-XLS] 480c3d2a: simple-file-path's own %x0001 marker stands ALONE, with no second marker byte -- so the character right after it is already the start of file-path, not part of a two-byte marker to also discard.
+    const virtPath = "\u0001Budget.xlsx";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[Budget.xlsx]Sheet1", diagnostic: false },
+    ]);
+  });
+
+  it("declines a virtPath whose file-path carries its own bracketed sheet name, rather than doubling it up with the caller's own brackets", () => {
+    // [MS-XLS] 480c3d2a: file-path = relative-path / "[" relative-path "]" sheet-name -- this reader's own caller already brackets the resolved file name as `[fileName]sheet`, so a file-path that is ITSELF already bracketed would otherwise render as a mangled `[[Book.xlsx]Sheet1]Sheet1` rather than resolving cleanly.
+    const virtPath = "[Book.xlsx]Sheet1";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[EXTERNAL]Sheet1", diagnostic: true },
+    ]);
+  });
+
   it("resolves a multi-sheet external range as first:last, the same shape a local multi-sheet range takes", () => {
     const virtPath = "\u0001\u0002Book.xlsx";
     const globals = readWorkbookGlobals(
