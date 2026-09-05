@@ -167,7 +167,7 @@ function appendImageFallback(
   context.sink({
     code: EpubDiagnosticCodes.IMAGE_INLINE_UNSUPPORTED,
     severity: "warning",
-    message: `${label} cannot become its own image block here; only a <p>'s own direct-child <img> is split into one (see readContainerChildren), so this degrades to its alt text`,
+    message: `${label} is reached while building a flat run sequence with no block list left to insert a separate image block into; degraded to its alt text`,
     href: context.sourceHref,
   });
   if (alt !== undefined && alt.length > 0) {
