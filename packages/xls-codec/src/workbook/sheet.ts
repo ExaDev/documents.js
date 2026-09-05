@@ -206,14 +206,31 @@ function collectFormulaGroups(
       continue;
     }
     if (next.type === RECORD_SHRFMLA) {
-      const header = readCellHeader(new BlockCursor(record.blocks));
-      groups.set(groupKey(header.row, header.column), readShrFmlaGroup(next));
+      collectFormulaGroup(groups, record, next, readShrFmlaGroup);
     } else if (next.type === RECORD_ARRAY) {
-      const header = readCellHeader(new BlockCursor(record.blocks));
-      groups.set(groupKey(header.row, header.column), readArrayGroup(next));
+      collectFormulaGroup(groups, record, next, readArrayGroup);
     }
   }
   return groups;
+}
+
+/**
+ * Reads one shared/array formula group and keys it by its base Formula record's own cell, degrading a malformed ShrFmla/Array record -- an overrunning cce, on either record, that readShrFmlaGroup/readArrayGroup's own `cursor.take` throws past -- to "no group recovered for this base cell" rather than letting a BiffFormatError propagate out of collectFormulaGroups and abort the whole sheet read (and every other cell in it, formula or not). This is the same per-record boundary readSupBookSafely already draws for a malformed SupBook (workbook/globals.ts): before this reader ever walked a ShrFmla/Array record's own length fields, a malformed one had nothing here to trip over, so this is entirely new territory the read-every-record-once contract now needs to hold against. A cell whose Formula record points at this base through a PtgExp then resolves to no formula text at all -- exactly the same outcome "leaves formula absent for a PtgExp whose base cell has no matching ShrFmla/Array group" already documents for a dangling reference, since from resolveFormulaText's own vantage point the two cases are indistinguishable.
+ */
+function collectFormulaGroup(
+  groups: Map<string, FormulaGroup>,
+  record: RecordGroup,
+  next: RecordGroup,
+  readGroup: (record: RecordGroup) => FormulaGroup,
+): void {
+  try {
+    const header = readCellHeader(new BlockCursor(record.blocks));
+    groups.set(groupKey(header.row, header.column), readGroup(next));
+  } catch (error) {
+    if (!(error instanceof BiffFormatError)) {
+      throw error;
+    }
+  }
 }
 
 /** ShrFmla ([MS-XLS] 984826cc): a RefU range (6 bytes, not needed here -- the group is looked up by its base cell's own coordinates, not by re-deriving them from this range), a reserved byte, a cUse byte, then a SharedParsedFormula (458bbec0): a two-byte cce and that many bytes of rgce. Its own rgce is forbidden from containing PtgArray ([MS-XLS] 458bbec0's own "MUST NOT contain... PtgArray"), so no rgcb is read here. */
