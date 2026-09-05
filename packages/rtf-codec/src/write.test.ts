@@ -414,6 +414,65 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // The identical sibling gap in a fourth shape: `checked` is the checkbox/radio boolean, and a dropDown has no concept of it either -- the checkbox branch reports a stray `options`, the plainText branch reports a stray `checked` and `options`, and this closes the one remaining combination this function's own sink-reporting rule covers.
+  it("reports a dropDown field's checked state through the diagnostic sink, rather than dropping it silently", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options: ["Hello", "Guten Tag"],
+                  checked: true,
+                },
+                startRun: 0,
+                endRun: 0,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).toContain("{\\*\\ffl Hello}");
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
+  it("writes no diagnostic for a dropDown with no recorded `checked`", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options: ["Hello", "Guten Tag"],
+                },
+                startRun: 0,
+                endRun: 0,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
   it("writes a dropDown contentControl's options as \\*\\ffl entries", () => {
     const out = write(
       wordprocessing([
