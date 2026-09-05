@@ -9,6 +9,7 @@
   "include": [
     "src/**/*.test.ts",
     "src/test-support/**/*.ts",
+    "test/**/*.ts",
     "*.config.ts",
     "eslint.config.ts"
   ],
