@@ -1,9 +1,5 @@
 import { type Command } from "commander";
-import {
-  type MetadataOverrides,
-  patchDocxMetadata,
-  setDocumentMetadata,
-} from "documents.js";
+import { type MetadataOverrides, setDocumentMetadata } from "documents.js";
 import { inferFormatFromExtension } from "../format";
 import { createRuntimeSignal } from "../runtime/abort";
 import { createDiagnosticReporter } from "../runtime/diagnostics";
@@ -99,17 +95,14 @@ async function runSetMetadata(
 
   try {
     const inputBytes = await readInput(input, { signal });
-    // A docx source/target patches docProps/core.xml directly on the decoded Package (documents.js's patchDocxMetadata) rather than rebuilding a fresh package from the ContentDocument -- the fast path that keeps comments, footnotes, header/footer parts, section header/footer references, and numbering (everything readDocxExtras/docx-extras covers) byte-faithful, which setDocumentMetadata's own generic rebuild path cannot do for docx (ExaDev/documents.js#966). Every other supported source/target pair still goes through setDocumentMetadata's rebuild (or, for pdf, its own direct patch).
-    const bytes =
-      source === "docx" && target.format === "docx"
-        ? patchDocxMetadata(new Uint8Array(inputBytes), overrides, { signal })
-        : setDocumentMetadata(
-            source,
-            target.format,
-            new Uint8Array(inputBytes),
-            overrides,
-            { signal },
-          );
+    // setDocumentMetadata itself routes a docx/docx pair to patching docProps/core.xml directly on the decoded Package rather than rebuilding a fresh package from the ContentDocument -- the fast path that keeps comments, footnotes, header/footer parts, section header/footer references, and numbering (everything readDocxExtras/docx-extras covers) byte-faithful (ExaDev/documents.js#966). This command no longer needs to special-case docx itself: every source/target pair goes through the one entry point, which resolves internally to the lossless docx patch, the pdf direct patch, or the generic rebuild as appropriate.
+    const bytes = setDocumentMetadata(
+      source,
+      target.format,
+      new Uint8Array(inputBytes),
+      overrides,
+      { signal },
+    );
 
     await writeOutput(resolvedOutput, bytes);
 
