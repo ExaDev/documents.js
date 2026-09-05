@@ -992,7 +992,7 @@ describe("body constructs", () => {
       ]),
     );
     expect(out).toContain(
-      "\\fftype2\\ffownhelp1\\ffprot1\\ffhaslistbox\\ffdefres1\\ffres1{\\*\\ffname Drop1}{\\*\\ffhelptext Pick one}{\\*\\ffl Hello}{\\*\\ffl Guten Tag}",
+      "\\fftype2\\ffownhelp1\\ffprot1\\ffhaslistbox1\\ffdefres1\\ffres1{\\*\\ffname Drop1}{\\*\\ffhelptext Pick one}{\\*\\ffl Hello}{\\*\\ffl Guten Tag}",
     );
     expectBalancedBraces(out);
   });
