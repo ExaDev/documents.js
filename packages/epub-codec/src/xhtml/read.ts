@@ -17,9 +17,9 @@ import {
 } from "../image/dimensions";
 import { bytesToBase64 } from "../util/base64";
 import { buildXml } from "../xml/build";
-import type { XmlElement, XmlNode } from "../xml/node";
+import { isTextLikeNode, type XmlElement, type XmlNode } from "../xml/node";
 import { attrValue, findChildElement, rootElement } from "../xml/query";
-import { decodeEntities } from "../xml/entities";
+import { decodeEntities, decodeTextLikeNode } from "../xml/entities";
 import { parseXml } from "../xml/parse";
 import type { XhtmlReadContext } from "./context";
 import { isInertElement } from "./context";
@@ -308,7 +308,7 @@ function readContainerChildren(
       blocks.push(...readBlockElement(node, state));
       continue;
     }
-    if (node.type === "element" || node.type === "text") {
+    if (node.type === "element" || isTextLikeNode(node)) {
       segment.push(node);
     }
   }
@@ -437,7 +437,7 @@ function readPreFlatRuns(
   nodes: readonly XmlNode[],
   context: XhtmlReadContext,
 ): ContentRun[] {
-  const text = decodeEntities(readPreText(nodes, context));
+  const text = readPreText(nodes, context); // already decoded -- see readPreText's own comment for why decoding happens per-leaf inside it rather than once on its returned string
   return text.length > 0 ? [{ text, fontFamily: MONOSPACE_FONT_FAMILY }] : [];
 }
 
@@ -463,7 +463,7 @@ function containsFootnoteReference(
   return false;
 }
 
-// The <pre> twin of buildInlineRuns (src/xhtml/inline.ts), only ever reached once containsFootnoteReference above has confirmed the subtree actually carries a footnote reference: builds the ContentRun[] plus any run-level construct extents for one <pre>'s own children, still never routing through buildInlineRuns' own normalizeWhitespace (a <pre>'s content model preserves whitespace verbatim, exactly like readPreText above). A recognised footnote-reference anchor's own text becomes its own run range so a RunConstructExtent can bracket exactly it, mirroring src/xhtml/inline.ts's own appendAnchor; every nested call's own constructs are rebased onto the outer runs array's own length at the point of the merge, since a fresh recursive call always starts counting its own runs from zero. Every other wrapping element this file does not otherwise recognise inside a <pre> (<span>, <strong>, a non-footnote <a>, ...) still degrades to its own flattened text via readPreText, exactly as it always has -- a <pre>'s own content model has no rich formatting of its own to preserve structurally; only the footnote-reference construct itself is worth the extra run boundary.
+// The <pre> twin of buildInlineRuns (src/xhtml/inline.ts), only ever reached once containsFootnoteReference above has confirmed the subtree actually carries a footnote reference: builds the ContentRun[] plus any run-level construct extents for one <pre>'s own children, still never routing through buildInlineRuns' own normalizeWhitespace (a <pre>'s content model preserves whitespace verbatim, exactly like readPreText above). A recognised footnote-reference anchor's own text becomes its own run range so a RunConstructExtent can bracket exactly it, mirroring src/xhtml/inline.ts's own appendAnchor; every nested call's own constructs are rebased onto the outer runs array's own length at the point of the merge, since a fresh recursive call always starts counting its own runs from zero. Every other wrapping element this file does not otherwise recognise inside a <pre> (<span>, <strong>, a non-footnote <a>, ...) still degrades to its own flattened text via readPreText, exactly as it always has -- a <pre>'s own content model has no rich formatting of its own to preserve structurally; only the footnote-reference construct itself is worth the extra run boundary. Every leaf added to `buffer` below is decoded at the point it is added (a text/CDATA node via decodeTextLikeNode, an <img>'s alt text via decodeEntities, a wrapping element's own flattened text via readPreText, which is decoded internally for the identical reason) rather than once over the whole accumulated buffer on flush: CDATA content must never be run through decodeEntities at all (xml/entities.ts's own decodeTextLikeNode comment), so once any leaf in the buffer is CDATA a single trailing decode over the mixed buffer would be wrong regardless of ordering.
 function readPreRuns(
   nodes: readonly XmlNode[],
   context: XhtmlReadContext,
@@ -475,22 +475,19 @@ function readPreRuns(
     if (buffer.length === 0) {
       return;
     }
-    runs.push({
-      text: decodeEntities(buffer),
-      fontFamily: MONOSPACE_FONT_FAMILY,
-    });
+    runs.push({ text: buffer, fontFamily: MONOSPACE_FONT_FAMILY });
     buffer = "";
   };
   for (const node of nodes) {
-    if (node.type === "text") {
-      buffer += node.value;
+    if (isTextLikeNode(node)) {
+      buffer += decodeTextLikeNode(node);
       continue;
     }
     if (node.type !== "element" || isInertElement(node.tag)) {
       continue;
     }
     if (node.tag === "img") {
-      buffer += readPreImageFallbackText(node, context);
+      buffer += decodeEntities(readPreImageFallbackText(node, context));
       continue;
     }
     const footnoteName =
@@ -531,17 +528,17 @@ function readPreRuns(
   return { runs, constructs };
 }
 
-// A <pre>/<code> block's own content model is plain text with whitespace preserved verbatim (this never routes through buildInlineRuns's own normalizeWhitespace) -- so an <img> found anywhere inside, at any depth, cannot become a real ContentImageBlock the way one reached transparently through readContainerChildren can: there is no block list here to insert a sibling image block into, the identical structural constraint appendImageFallback (src/xhtml/inline.ts) already applies to an <img> reached while building a flat run sequence. Its alt text is spliced into the extracted text in its place, with a diagnostic naming the loss -- mirroring textContent's own recursive walk (src/xml/query.ts) but for the one element kind that walk cannot represent as text at all. An inert element (context.ts's own isInertElement) is skipped for the identical reason src/xhtml/inline.ts's own appendElement skips it: none of <script>/<template>/<style>/<noscript>'s own content is ever legitimate document text -- this walk is its own separate recursion, not a call into appendElement, so it needs its own identical guard rather than inheriting one.
+// A <pre>/<code> block's own content model is plain text with whitespace preserved verbatim (this never routes through buildInlineRuns's own normalizeWhitespace) -- so an <img> found anywhere inside, at any depth, cannot become a real ContentImageBlock the way one reached transparently through readContainerChildren can: there is no block list here to insert a sibling image block into, the identical structural constraint appendImageFallback (src/xhtml/inline.ts) already applies to an <img> reached while building a flat run sequence. Its alt text is spliced into the extracted text in its place, with a diagnostic naming the loss -- mirroring textContent's own recursive walk (src/xml/query.ts) but for the one element kind that walk cannot represent as text at all. An inert element (context.ts's own isInertElement) is skipped for the identical reason src/xhtml/inline.ts's own appendElement skips it: none of <script>/<template>/<style>/<noscript>'s own content is ever legitimate document text -- this walk is its own separate recursion, not a call into appendElement, so it needs its own identical guard rather than inheriting one. A text node and a CDATA section (xml/node.ts's own isTextLikeNode) are both real, extractable <pre> content and decoded the same way this function has always decoded a text node -- except CDATA never through decodeEntities, since CDATA content was never entity-encoded to begin with (xml/entities.ts's own decodeTextLikeNode comment); every leaf this function returns is already decoded by the time it reaches its own return, which is why every caller uses that string as-is rather than decoding it again.
 function readPreText(
   nodes: readonly XmlNode[],
   context: XhtmlReadContext,
 ): string {
   let out = "";
   for (const node of nodes) {
-    if (node.type === "text") {
-      out += node.value;
+    if (isTextLikeNode(node)) {
+      out += decodeTextLikeNode(node);
     } else if (node.type === "element" && node.tag === "img") {
-      out += readPreImageFallbackText(node, context);
+      out += decodeEntities(readPreImageFallbackText(node, context));
     } else if (node.type === "element" && isInertElement(node.tag)) {
       continue;
     } else if (node.type === "element") {
@@ -639,7 +636,7 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
     if (child.type === "element" && isInertElement(child.tag)) {
       continue;
     }
-    if (child.type === "element" || child.type === "text") {
+    if (child.type === "element" || isTextLikeNode(child)) {
       strayNodes.push(child);
     }
   }
@@ -737,7 +734,7 @@ function readDefinitionListEntries(
     if (child.type === "element" && isInertElement(child.tag)) {
       continue;
     }
-    if (child.type === "element" || child.type === "text") {
+    if (child.type === "element" || isTextLikeNode(child)) {
       strayNodes.push(child);
     }
   }
@@ -780,7 +777,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
       continue; // every <caption>, first or duplicate, is handled in full by readTableCaption below regardless of where in source order it sits
     }
     if (section.type !== "element") {
-      if (section.type === "text") {
+      if (isTextLikeNode(section)) {
         strayNodes.push(section);
       }
       continue;
@@ -851,7 +848,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
         if (cellNode.type === "element" && isInertElement(cellNode.tag)) {
           continue;
         }
-        if (cellNode.type === "element" || cellNode.type === "text") {
+        if (cellNode.type === "element" || isTextLikeNode(cellNode)) {
           strayCellNodes.push(cellNode);
         }
       }
@@ -898,7 +895,7 @@ function collectRowGroupRows(
     if (child.type === "element" && isInertElement(child.tag)) {
       continue;
     }
-    if (child.type === "element" || child.type === "text") {
+    if (child.type === "element" || isTextLikeNode(child)) {
       strayNodes.push(child);
     }
   }

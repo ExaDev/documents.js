@@ -49,6 +49,11 @@ export interface XmlElement {
 export type XmlNode =
   XmlText | XmlCdata | XmlComment | XmlDeclaration | XmlPi | XmlElement;
 
+// A text-bearing leaf node: an ordinary text node or a CDATA section, both literal character data as far as every reader in this package is concerned -- a CDATA section is simply the alternate XML spelling a producer reaches for when its own literal text would otherwise need escaping (a code sample or other content containing a raw `<`/`&`), never a distinct kind of content. Every reader that dispatches on node type to decide what counts as real, extractable text must treat the two identically or it silently drops whichever real-world documents happen to use CDATA -- see xml/entities.ts's decodeTextLikeNode for the one respect in which they are NOT interchangeable (entity encoding), which a caller folding the two together must still honour.
+export function isTextLikeNode(node: XmlNode): node is XmlText | XmlCdata {
+  return node.type === "text" || node.type === "cdata";
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
