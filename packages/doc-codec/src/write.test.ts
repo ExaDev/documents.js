@@ -233,6 +233,7 @@ describe("writeDocContent", () => {
       }),
       paragraph([{ text: "leaded" }], { lineSpacing: 1.5 }),
       paragraph([{ text: "broken" }], { pageBreakBefore: true }),
+      paragraph([{ text: "right-indented" }], { indentRightPt: 24 }),
     ]);
     const result = roundTrip(input);
     expect(paragraphAt(result, 0).alignment).toBe("center");
@@ -242,6 +243,20 @@ describe("writeDocContent", () => {
     expect(paragraphAt(result, 2).spacingAfterPt).toBe(6);
     expect(paragraphAt(result, 3).lineSpacing).toBe(1.5);
     expect(paragraphAt(result, 4).pageBreakBefore).toBe(true);
+    expect(paragraphAt(result, 5).indentRightPt).toBe(24);
+  });
+
+  it("round-trips a paragraph's own left and right indent together", () => {
+    // sprmPDxaLeft (0x845E) and sprmPDxaRight (0x845D) differ by one bit -- a regression here would show up as one indent silently overwriting the other rather than as a missing property, so this pins both present at once with different, sign-distinct values.
+    const input = document([
+      paragraph([{ text: "boxed" }], {
+        indentLeftPt: 18,
+        indentRightPt: -9,
+      }),
+    ]);
+    const result = roundTrip(input);
+    expect(paragraphAt(result, 0).indentLeftPt).toBe(18);
+    expect(paragraphAt(result, 0).indentRightPt).toBe(-9);
   });
 
   it("round-trips a section's own page size and margins", () => {
