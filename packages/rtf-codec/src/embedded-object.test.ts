@@ -86,8 +86,8 @@ describe("readEmbeddedObjectData", () => {
     expect(readEmbeddedObjectData(bytes)).toEqual(embedded);
   });
 
-  it("accepts a LinkedObject-shaped FormatID (0x00000001) as structurally valid, per the ObjectHeader's own invariant", () => {
-    // This module never writes a LinkedObject, but readObjectHeader's own FormatID check ("MUST be set to 0x00000001 or 0x00000002 ... Otherwise, the ObjectHeader structure is invalid") must recognise both values as valid framing -- the NativeData still decodes as this package's own payload here only because the test built it that way, not because a real LinkedObject's NativeData ever would.
+  it("tolerates a LinkedObject-shaped FormatID (0x00000001) as a deliberate leniency, not a spec requirement of this context", () => {
+    // [MS-OLEDS] 2.2.4's own generic ObjectHeader definition allows either 0x00000001 or 0x00000002 structurally -- but 2.2.5's EmbeddedObject, the specific structure readEmbeddedObjectData decodes, narrows that: "The FormatID field of the Header MUST be set to 0x00000002." A genuine FormatID 0x00000001 marks a LinkedObject (2.2.6) instead, whose Header is followed by NetworkName/Reserved1/LinkUpdateOption, not NativeDataSize/NativeData -- fields this reader would misread as NativeDataSize/NativeData for a real LinkedObject. readObjectHeader accepts both values anyway, as a leniency matching ObjectHeader's own generic definition rather than a spec requirement for this context; the NativeData still decodes as this package's own payload here only because the test built it that way (real LinkedObject bytes in NativeData's place would simply fail the CFB/JSON decode below and degrade to undefined, exactly like any other foreign payload).
     const bytes = buildEmbeddedObjectBytes({
       formatId: 0x00000001,
       className: "Package",
