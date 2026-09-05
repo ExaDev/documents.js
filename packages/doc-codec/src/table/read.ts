@@ -27,7 +27,7 @@ import { CELL_MARK } from "../text/special";
 //
 // Column layout is derived per row, never assumed shared: [MS-DOC] 2.6.3 permits each row of a table to declare its own independent rgdxaCenter, and a real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed to rely on exactly this for a horizontal merge -- a merged row's own TDefTableOperand simply has fewer, wider physical cells, with no TCGRF.horzMerge or sprmTMerge signal at all (ExaDev/documents.js#895; see table/write.ts's own top-of-file note for the full ground-truth finding). buildRows below reconstructs the table's shared grid as the union of every row's own column boundaries -- taken within one point rather than by exact integer equality, since rows stating the identical grid independently may legally disagree by a twip or two (see isSameColumnBoundary's own note) -- then expresses each physical cell's own colSpan as however many of that shared grid's segments its own boundaries cover -- folding in this writer's own legacy TCGRF.horzMerge-flagged continuation cells (a spec-conformant encoding this reader still honours, in case a genuine third-party producer uses it) exactly as before. A column boundary that no row in the table ever states on its own -- every row happens to merge across it identically -- cannot be recovered from the physical bytes at all; this is a real limitation of [MS-DOC]'s own physical model, not an approximation this reader is choosing to make. table/write.ts's own writer no longer produces this gap for an ordinary merge (ExaDev/documents.js#992: it falls back to a horizontal-merge continuation cell precisely when every row would otherwise merge across a boundary identically) -- but its own lost-boundary fallback now genuinely reopens it: when a row's assigned split would overflow either the row-ending mark's own byte budget or the format's 63-cell ceiling, flattenTable (table/write.ts) trims the excess boundaries rather than throwing (ExaDev/documents.js#1013), and a boundary it trims away is exactly as unrecoverable on the next read as one no row ever stated at all. That trim is now the most likely source of this shape; a table hand-built for a test, or produced by a genuine third-party [MS-DOC] implementation that happens to encode a merge the identical way on every row, are the two remaining, rarer sources (see the README's own note on this).
 //
-// Before any of that, tryAssembleTable runs applyRowLevelBorderCascade over the whole set of rows it has just collected: a table decorated purely through sprmTTableBorders/sprmTTableBorders80 (a row/table-wide border set, [MS-DOC] 2.6.3) rather than per-cell TC80/sprmTSetBrc would otherwise read with no cell borders at all, since tap.ts deliberately only captures that cascade unresolved (see its own top-of-file note on why) -- this is the only place in the pipeline that knows a cell's position in the WHOLE table, which first/last row and first/last physical cell for that cascade's own six fields all depend on. See applyRowLevelBorderCascade's own note for the precedence rule and the one genuine ambiguity it cannot resolve.
+// tryAssembleTable runs applyRowLevelBorderCascade over the whole set of rows it has just collected, once the table's own shared column grid is known: a table decorated purely through sprmTTableBorders/sprmTTableBorders80 (a row/table-wide border set, [MS-DOC] 2.6.3) rather than per-cell TC80/sprmTSetBrc would otherwise read with no cell borders at all, since tap.ts deliberately only captures that cascade unresolved (see its own top-of-file note on why) -- this is the only place in the pipeline that knows a cell's position in the WHOLE table, which first/last row and first/last physical cell for that cascade's own six fields all depend on. The grid is needed, and not just the row's own physical layout, because a vertically-merged anchor's own bottom edge is the table's real bottom edge whenever its vertMerge continuation chain -- matched by grid position across rows, the identical matching buildRows' own rowSpan computation performs -- reaches a continuation cell physically sitting in the table's last row, regardless of which (non-final) row the anchor itself is written in. See applyRowLevelBorderCascade's own note for the precedence rule and the one genuine ambiguity it cannot resolve.
 
 const TWIPS_PER_POINT = 20;
 
@@ -184,11 +184,15 @@ function tryAssembleTable(
     );
   }
 
-  const cascadedRows = applyRowLevelBorderCascade(rawRows, rowDefinitions);
-
   const toleranceTwips = effectiveColumnBoundaryTolerance(rowDefinitions);
   const columnBoundariesTwips = canonicalColumnBoundariesTwips(
     rowDefinitions,
+    toleranceTwips,
+  );
+  const cascadedRows = applyRowLevelBorderCascade(
+    rawRows,
+    rowDefinitions,
+    columnBoundariesTwips,
     toleranceTwips,
   );
   return {
@@ -206,34 +210,74 @@ function tryAssembleTable(
 
 // [MS-DOC] 2.6.3's own sprmTTableBorders/sprmTTableBorders80: "specifies the borders for this row unless modified by other Sprms applied to the cells" -- an explicit, order-independent fallback beneath TC80's own per-cell Brc80 (sprmTDefTable) and sprmTSetBrc/sprmTSetBrc80's exact-colour and palette-indexed overrides, all already folded into each RawCell's own borders by tap.ts's ordinary last-Prl-wins pass by the time this runs (see tap.ts's own top-of-file note on why the cascade itself is captured, unresolved, there rather than applied there). Applied here, once every row of the table is known, because which of a row's own six TableBordersOperand fields reaches a given cell depends on the cell's position in the WHOLE table: brcTop only for the table's own first row, brcBottom only for its last, brcLeft/brcRight only for a row's own first/last physical cell, and brcHorizontalInside/brcVerticalInside for every interior edge -- exactly the ECMA-376 tblBorders/tcBorders precedence [MS-DOC]'s own Overview of Tables (2.4.3) defers to ("To determine which borders are displayed, see... [ECMA-376] Part 1, Section 17.4.66... Section 17.4.38").
 //
-// A genuine format-level ambiguity remains for TC80 alone: its own Brc80 fields are mandatory for every physical cell, so a cell whose own TC80 states "no border" on a side (the all-bits-set Brc80MayBeNil sentinel, or a real producer's own BrcType 0x00) is byte-for-byte indistinguishable from a cell whose TC80 was never touched at all -- there is no way to tell "this cell's TC80 explicitly punches a hole in the row's cascade" from "this cell defers to it" from TC80's bytes alone. Neither sprmTSetBrc's nor sprmTSetBrc80's own explicit clear is part of that ambiguity: naming a side with a NilBrc/NilBrc80 is an unambiguous, out-of-band statement, tap.ts's applyBrcToCell records it on RawCell.clearedSides rather than folding it indistinguishably into RawCell.borders, and cascadeRowBorders below never re-fills a side that set names. What this cascade actually fills, then, is every side that is BOTH absent from a cell's own resolved borders (RawCell.borders) and not in its clearedSides -- the correct, common-case behaviour ExaDev/documents.js#945 exists to fix (a table decorated purely through the row-level cascade now reads with the borders it actually shows) -- leaving only TC80's own inherent ambiguity unresolved, the same kind of narrow, inherent physical-model limit the README's own Tables section already documents for a table-wide merge or a shared leading indent.
+// A genuine format-level ambiguity remains for TC80 alone: its own Brc80 fields are mandatory for every physical cell, so a cell whose own TC80 states "no border" on a side (the all-bits-set Brc80MayBeNil sentinel, or a real producer's own BrcType 0x00) is byte-for-byte indistinguishable from a cell whose TC80 was never touched at all -- there is no way to tell "this cell's TC80 explicitly punches a hole in the row's cascade" from "this cell defers to it" from TC80's bytes alone. Neither sprmTSetBrc's nor sprmTSetBrc80's own explicit clear is part of that ambiguity: naming a side with a NilBrc/NilBrc80 is an unambiguous, out-of-band statement, tap.ts's applyBrcToCell records it on RawCell.clearedSides rather than folding it indistinguishably into RawCell.borders, and cascadeRowBorders below never re-fills a side that set names. What this cascade actually fills, then, is every side that is BOTH absent from a cell's own resolved borders (RawCell.borders) and not in its clearedSides -- the correct, common-case behaviour ExaDev/documents.js#945 exists to fix (a table decorated purely through the row-level cascade now reads with the borders it actually shows).
+//
+// TC80's own byte-level ambiguity is not, however, the only remaining case this cascade can get wrong -- it is the only one that is a genuine ambiguity in the FORMAT itself, the same kind of narrow, inherent physical-model limit the README's own Tables section already documents for a table-wide merge or a shared leading indent. [MS-DOC] 2.6.3 also defines sprmTCellBrcType (0xD662, a TCellBrcTypeOperand -- one BrcType byte per side for each of a row's leading cells) and the sprmTBrcTopCv/sprmTBrcLeftCv/sprmTBrcBottomCv/sprmTBrcRightCv family (0xD61A-0xD61D, each a BrcCvOperand -- one exact COLORREF per cell for that one side, an all-bits-set entry stating "there is no corresponding border" for that cell), neither of which this reader reads at all. Both are capable of making the identical unambiguous "this side has a border"/"this side has none" statement sprmTSetBrc/80's own NilBrc(80) already makes -- TCellBrcTypeOperand names a side's BrcType 0x00 directly, and a BrcCvOperand's own all-bits-set COLORREF sentinel is the identical "no corresponding border" statement, just per side rather than per cell range -- so a producer stating a cell's border (or its explicit absence) through either of these sprms, rather than through TC80/sprmTSetBrc/sprmTSetBrc80, has that statement silently overwritten by this cascade exactly as if the cell had never mentioned the side at all. This is a genuine reader gap, not a format ambiguity: unlike TC80's own case, the bytes here are not ambiguous, this reader simply does not look at them.
+// Resolved on the table's own shared grid (canonicalBoundariesTwips/toleranceTwips -- computed by tryAssembleTable before this runs, precisely so this cascade can tell a vertically-merged anchor's real bottom row apart from its own physical row; see this module's own top-of-file note) rather than on each row's raw physical cells alone. Grid position and vertMerge state are both read straight off RawCell before any border is resolved, so computing this "pre-cascade" logical view first is safe: it depends on nothing cascadeRowBorders below is about to fill in.
 function applyRowLevelBorderCascade(
   rows: readonly (readonly RawCell[])[],
   definitions: readonly TableRowDefinition[],
+  canonicalBoundariesTwips: readonly number[],
+  toleranceTwips: number,
 ): RawCell[][] {
   const lastRowIndex = rows.length - 1;
+  const logicalRows = rows.map((row, rowIndex): LogicalCell[] => {
+    const definition = definitions[rowIndex];
+    if (definition === undefined) {
+      throw new DocFormatError(
+        `internal defect: table row ${rowIndex} has no TAP definition despite the earlier length check`,
+      );
+    }
+    return logicalCellsForRow(
+      row,
+      definition.columnBoundariesTwips,
+      canonicalBoundariesTwips,
+      toleranceTwips,
+    );
+  });
   return rows.map((cells, rowIndex) => {
     const rowBorders = definitions[rowIndex]?.rowBorders;
     if (rowBorders === undefined) return [...cells];
+    const rowBoundariesTwips = definitions[rowIndex]?.columnBoundariesTwips;
     return cascadeRowBorders(
       cells,
       rowBorders,
       rowIndex === 0,
-      rowIndex === lastRowIndex,
+      rowIndex,
+      lastRowIndex,
+      rowBoundariesTwips,
+      canonicalBoundariesTwips,
+      toleranceTwips,
+      logicalRows,
     );
   });
 }
 
-// One row's own physical cells against its own rowBorders: brcLeft/brcRight land on the row's own first/last physical cell (which, since a physical cell's own boundaries always span from the table's left edge to its right edge regardless of any merge within the row, always IS the row's own outer edge), brcTop/brcBottom on every cell when this is the table's first/last row, and brcHorizontalInside/brcVerticalInside everywhere else. "Last physical cell" is resolved through any trailing sprmTMerge/TCGRF.horzMerge continuation cells (isRightmostPhysicalCell) so a legacy-encoded horizontal merge's own anchor still reaches the row's real right edge; this package's own writer states a horizontal merge as a genuinely narrower, wider physical cell instead, for which physicalIndex === cells.length - 1 already holds directly. A side in the cell's own clearedSides is left out of `sides` entirely regardless of what the cascade would otherwise supply -- an explicit sprmTSetBrc/sprmTSetBrc80 clear always wins, exactly as tap.ts's own applyBrcToCell states it should (ExaDev/documents.js#945).
+// One row's own physical cells against its own rowBorders: brcLeft/brcRight land on the row's own first/last physical cell (which, since a physical cell's own boundaries always span from the table's left edge to its right edge regardless of any merge within the row, always IS the row's own outer edge), brcTop/brcBottom on every cell when this is the table's first/last row, and brcHorizontalInside/brcVerticalInside everywhere else. "Last physical cell" is resolved through any trailing sprmTMerge/TCGRF.horzMerge continuation cells (isRightmostPhysicalCell) so a legacy-encoded horizontal merge's own anchor still reaches the row's real right edge; this package's own writer states a horizontal merge as a genuinely narrower, wider physical cell instead, for which physicalIndex === cells.length - 1 already holds directly. "Last row" is resolved the identical way on the vertical axis (cellReachesTableBottom): a vertically-merged anchor still reaches the table's real bottom edge through its own trailing vertMerge continuations, even when the anchor's own physical row is not the table's last one -- the bug ExaDev/documents.js#945's own follow-up fixes, since a merge anchor sitting in a non-final row previously always got that row's insideHorizontal border on its bottom side, and the continuation cell that actually sits in the table's last row has its own decoration dropped by buildRows regardless (a vertical-merge continuation is `{blocks: []}` by the shared schema's own convention), so the table's real bottom border was never carried by anything in the output at all. A side in the cell's own clearedSides is left out of `sides` entirely regardless of what the cascade would otherwise supply -- an explicit sprmTSetBrc/sprmTSetBrc80 clear always wins, exactly as tap.ts's own applyBrcToCell states it should (ExaDev/documents.js#945).
 function cascadeRowBorders(
   cells: readonly RawCell[],
   rowBorders: TableBordersSet,
   isFirstRow: boolean,
-  isLastRow: boolean,
+  rowIndex: number,
+  lastRowIndex: number,
+  rowBoundariesTwips: readonly number[] | undefined,
+  canonicalBoundariesTwips: readonly number[],
+  toleranceTwips: number,
+  logicalRows: readonly (readonly LogicalCell[])[],
 ): RawCell[] {
   return cells.map((cell, cellIndex): RawCell => {
     const isFirstCell = cellIndex === 0;
     const isLastCell = isRightmostPhysicalCell(cells, cellIndex);
+    const isLastRow = cellReachesTableBottom(
+      cell,
+      cellIndex,
+      rowIndex,
+      lastRowIndex,
+      rowBoundariesTwips,
+      canonicalBoundariesTwips,
+      toleranceTwips,
+      logicalRows,
+    );
     const sides: Record<CellBorderSide, ContentBorder | undefined> = {
       top: cell.clearedSides?.has("top")
         ? undefined
@@ -258,6 +302,36 @@ function cascadeRowBorders(
       clearedSides: undefined,
     };
   });
+}
+
+// Whether one row's own physical cell's visual bottom edge is the table's real bottom edge: true directly when this IS the table's own last row, and true for a vertically-merged anchor sitting in an earlier row whenever its own vertMerge continuation chain -- walked on the table's shared grid by vertMergeChainLastRow, the identical matching buildRows' own rowSpan computation performs -- reaches a continuation cell physically sitting in the table's last row. A horzMerge-continuation or vertMerge-continuation physical cell's own answer is never actually observed downstream (logicalCellsForRow folds a horzMerge continuation into its anchor's span without consulting this cell's own borders at all, and buildRows drops a vertMerge continuation's own borders unconditionally -- see cascadeRowBorders' own note), so grid-index resolution for either is never asked to be more than merely non-throwing.
+function cellReachesTableBottom(
+  cell: RawCell,
+  cellIndex: number,
+  rowIndex: number,
+  lastRowIndex: number,
+  rowBoundariesTwips: readonly number[] | undefined,
+  canonicalBoundariesTwips: readonly number[],
+  toleranceTwips: number,
+  logicalRows: readonly (readonly LogicalCell[])[],
+): boolean {
+  if (rowIndex === lastRowIndex) return true;
+  if (cell.vertMerge === VERT_MERGE_CONTINUATION) return false;
+  const left = rowBoundariesTwips?.[cellIndex];
+  if (left === undefined) {
+    throw new DocFormatError(
+      "a table row's own column-boundary array has fewer entries than its physical cell count requires",
+    );
+  }
+  const startGridIndex = gridIndexFor(
+    canonicalBoundariesTwips,
+    left,
+    toleranceTwips,
+  );
+  return (
+    vertMergeChainLastRow(logicalRows, rowIndex, startGridIndex) ===
+    lastRowIndex
+  );
 }
 
 function isRightmostPhysicalCell(
@@ -384,6 +458,23 @@ function logicalCellsForRow(
   return logical;
 }
 
+// The last row index a vertical-merge chain, anchored at (rowIndex, startGridIndex) on the table's own shared grid, actually reaches: walking forward through subsequent rows' own LogicalCell at the identical grid position for as long as each one keeps stating VERT_MERGE_CONTINUATION there, and returning rowIndex itself for an anchor with no continuation following it (a chain of length one). Grid position, never a raw physical-array index, is what two rows are matched by, because two rows may genuinely have different physical cell counts (a horizontal merge in one row and not the other) and still need their vertical merges to line up correctly. Shared by buildRows' own rowSpan computation and cascadeRowBorders' own bottom-edge determination (via cellReachesTableBottom) above -- both need to know which physical row a vertically-merged anchor's own bottom edge actually falls in, one to count how many rows it spans, the other to decide whether that edge is the table's real bottom border or an interior one.
+function vertMergeChainLastRow(
+  logicalRows: readonly (readonly LogicalCell[])[],
+  rowIndex: number,
+  startGridIndex: number,
+): number {
+  let lastRow = rowIndex;
+  for (let r = rowIndex + 1; r < logicalRows.length; r += 1) {
+    const below = logicalRows[r]?.find(
+      (candidate) => candidate.startGridIndex === startGridIndex,
+    );
+    if (below?.vertMerge !== VERT_MERGE_CONTINUATION) break;
+    lastRow = r;
+  }
+  return lastRow;
+}
+
 // Folds each row's LogicalCell list into the shared schema's own anchor-carries-the-span convention: a vertical-continuation cell is kept as its own `{blocks: []}` entry, mirroring ooxml.js's own docx table reader, which the shared schema's colSpan/rowSpan fields were designed to hold either format's cousin of. rowSpan is matched by each cell's own startGridIndex on the canonical grid, never a raw physical-array position, because two rows may genuinely have different physical cell counts (a horizontal merge in one row and not the other) and still need their vertical merges to line up correctly.
 function buildRows(
   rawRows: readonly RawCell[][],
@@ -416,14 +507,12 @@ function buildRows(
         cells.push({ blocks: [], colSpan });
         continue;
       }
-      let rowSpan = 1;
-      for (let r = rowIndex + 1; r < logicalRows.length; r += 1) {
-        const below = logicalRows[r]?.find(
-          (candidate) => candidate.startGridIndex === cell.startGridIndex,
-        );
-        if (below?.vertMerge !== VERT_MERGE_CONTINUATION) break;
-        rowSpan += 1;
-      }
+      const lastRowInChain = vertMergeChainLastRow(
+        logicalRows,
+        rowIndex,
+        cell.startGridIndex,
+      );
+      const rowSpan = lastRowInChain - rowIndex + 1;
       cells.push({
         blocks: cell.blocks,
         colSpan,
