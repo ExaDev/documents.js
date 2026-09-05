@@ -199,7 +199,10 @@ describe("writeOdpContent: the round-trip law", () => {
                           runs: [{ text: "B1", bold: true }],
                         },
                       ],
-                      background: { r: 0.9, g: 0.9, b: 0.9 },
+                      background: {
+                        kind: "solid",
+                        color: { r: 0.9, g: 0.9, b: 0.9 },
+                      },
                     },
                   ],
                 },

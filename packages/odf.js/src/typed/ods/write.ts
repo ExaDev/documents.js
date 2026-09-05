@@ -1,6 +1,7 @@
 import type {
   Alignment,
   Color,
+  ContentCellFill,
   ContentCellValue,
   ContentDocument,
   ContentRun,
@@ -12,7 +13,12 @@ import type {
   ContentSheetRow,
   DocumentTree,
 } from "document-schema.js";
-import { colorToRgbHex, flattenTree, rgbHexToColor } from "document-schema.js";
+import {
+  colorToRgbHex,
+  flattenTree,
+  resolveCellFillColor,
+  rgbHexToColor,
+} from "document-schema.js";
 import type { Package } from "../../model/package";
 import type { XmlElement, XmlNode } from "../../model/node";
 import { ODF_MEDIA_TYPES } from "../../media-type";
@@ -205,8 +211,13 @@ function sheetCellStyle(
   registry: StyleRegistry,
 ): string | undefined {
   const cellProperties: Record<string, string> = {};
-  if (cell.background !== undefined) {
-    cellProperties["fo:background-color"] = formatOdfColor(cell.background);
+  // ODF's fo:background-color states one flat colour with no pattern-fill vocabulary at all, so a 'pattern' fill approximates through resolveCellFillColor's own single representative colour (ExaDev/documents.js#951) -- the same degradation typed/shared/table.ts's own tableCellStyle applies for odt/odp cell fills.
+  const backgroundColor =
+    cell.background === undefined
+      ? undefined
+      : resolveCellFillColor(cell.background);
+  if (backgroundColor !== undefined) {
+    cellProperties["fo:background-color"] = formatOdfColor(backgroundColor);
   }
   if (cell.borders !== undefined) {
     for (const edge of BORDER_EDGE_KEYS) {
@@ -741,6 +752,14 @@ function canonicalColor(color: Color): Color {
   return rgbHexToColor(colorToRgbHex(color));
 }
 
+// A cell fill written and read back through this writer: always a 'solid' ContentCellFill, since fo:background-color has no two-colour pattern-fill vocabulary at all (ExaDev/documents.js#951) -- sheetCellStyle above resolves a 'pattern' fill to resolveCellFillColor's own single representative colour before it ever reaches ODF, and undefined when that resolves to nothing (a pattern stating neither of its own colours), matching an absent background exactly.
+function canonicalCellFill(fill: ContentCellFill): ContentCellFill | undefined {
+  const color = resolveCellFillColor(fill);
+  return color === undefined
+    ? undefined
+    : { kind: "solid", color: canonicalColor(color) };
+}
+
 // A ContentRun carrying only the fields it actually states -- the same spelled-only canonical form typed/odt/write.ts's own canonicalRun establishes for wordprocessing runs, restated here rather than imported: the two writers are independent codec modules, and this is a small, self-contained defaulting function rather than a shared abstraction worth coupling them over.
 function canonicalRun(run: ContentRun): ContentRun {
   const canonical: ContentRun = { text: run.text };
@@ -837,7 +856,7 @@ function canonicalCell(cell: ContentSheetCell): ContentSheetCell | undefined {
     canonical.rowSpan = cell.rowSpan;
   }
   if (cell.background !== undefined) {
-    canonical.background = canonicalColor(cell.background);
+    canonical.background = canonicalCellFill(cell.background);
   }
   if (cell.borders !== undefined) {
     const borders: NonNullable<ContentSheetCell["borders"]> = {};
