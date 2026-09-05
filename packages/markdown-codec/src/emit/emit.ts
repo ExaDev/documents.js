@@ -817,7 +817,7 @@ function renderConstruct(item: ConstructItem, context: EmitContext): string {
   return body;
 }
 
-// Whether a construct's own recursive extent carries data connecting it back to the given list itemId -- the single test renderItems' own region-collection loop below uses to decide whether a construct immediately following a list-region run genuinely belongs to the item it interrupts (absorbed into the SAME ListRegionItem run, staying nested inside that item on write) or is a genuinely separate, unrelated construct (left to render as ordinary top-level content). Two shapes carry that data, both minted at lower time rather than inferred here: a plain paragraph directly inside the construct sharing this exact itemId (src/lower/lower.ts's lowerBlockquote threads the enclosing item's own membership straight through a quote's directly-wrapped paragraphs), or a plain paragraph carrying a numId whose own `+owner=` suffix (src/shared/list-id.ts) names this itemId -- the shape a quote wrapping a GENUINELY FRESH nested list of its own produces (lowerList always mints that list independently, so none of its OWN paragraphs share the enclosing item's itemId directly; the owner suffix on its numId is the only place that fact survives). ExaDev/documents.js#990's fix reads ownership from the construct's own content in every shape lowering can produce, at any nesting depth, rather than guessing from what happens to follow the construct's own extent in the block list. Matching is scoped to the SPECIFIC itemId of the item currently open, not "any list identity found inside" -- a construct's own subtree can legitimately contain an item at a DIFFERENT list level sharing no itemId with the one currently open (a fresh nested sub-list one level deeper, minted with its own itemId and its own, different owner tag or none at all), and only an exact match tells "genuinely this item's own content" apart from that.
+// Whether a construct's own recursive extent carries data connecting it back to the given list itemId -- the single test renderItems' own region-collection loop below uses to decide whether a construct immediately following a list-region run genuinely belongs to the item it interrupts (absorbed into the SAME ListRegionItem run, staying nested inside that item on write) or is a genuinely separate, unrelated construct (left to render as ordinary top-level content). Two shapes carry that data, both minted at lower time rather than inferred here: a plain paragraph directly inside the construct sharing this exact itemId (src/lower/lower.ts's lowerBlockquote threads the enclosing item's own membership straight through a quote's directly-wrapped paragraphs), or a plain paragraph carrying a numId whose own `+owner=` suffix (src/shared/list-id.ts) names this itemId -- the shape a quote wrapping a GENUINELY FRESH nested list of its own produces (lowerList always mints that list independently, so none of its OWN paragraphs share the enclosing item's itemId directly; the owner suffix on its numId is the only place that fact survives). ExaDev/documents.js#990's fix reads ownership from the construct's own content in every shape lowering can produce, at any nesting depth, rather than guessing from what happens to follow the construct's own extent in the block list. Matching is scoped to the SPECIFIC itemId passed in, not "any list identity found inside" -- a construct's own subtree can legitimately contain an item at a DIFFERENT list level sharing no itemId with the one being tested (a fresh nested sub-list one level deeper, minted with its own itemId and its own, different owner tag or none at all), and only an exact match tells "genuinely this item's own content" apart from that. More than one item can genuinely be "open" at once at the point a construct is encountered -- an outer item interrupted midway by its own nested sub-list (CommonMark spec 0.31.2 example 325) leaves BOTH the outer item's and the inner item's own membership still live -- so the caller does not call this with a single fixed itemId: it walks every level currently open, deepest first, calling this once per level until one matches or none do. This function itself only ever answers for the one itemId it was given; the "at any nesting depth" claim above is about the construct's OWN subtree (this function's recursion), not about how many itemIds the caller may try.
 function constructCarriesListItemId(
   item: ConstructItem,
   itemId: string,
@@ -870,27 +870,34 @@ function renderItems(items: readonly EmitItem[], context: EmitContext): string {
       item.block.list !== undefined &&
       !isInheritedListMembership(item.block.list, context)
     ) {
-      // The region can span several items (a plain paragraph is always absorbed unconditionally -- renderListRegion's own collectListItem is what tells a continuation of the SAME item apart from a fresh sibling), so `runningList` tracks whichever item's own membership is "open" right now -- always the most recently absorbed PLAIN paragraph's own membership, which is exactly what a following construct needs to match to belong to that same item rather than to some earlier, already-closed one.
+      // The region can span several items (a plain paragraph is always absorbed unconditionally -- renderListRegion's own collectListItem is what tells a continuation of the SAME item apart from a fresh sibling), so `openMemberships` tracks every item's own membership CURRENTLY open, keyed by nesting level -- not just the single most recently absorbed one. A single slot cannot survive a nested sub-list: once one of the nested item's own paragraphs is absorbed (unconditionally, like any other list-tagged paragraph -- level is not part of the absorption test), the slot holds the INNER item's membership, so a construct immediately following that resumes the OUTER item (CommonMark spec 0.31.2 example 325's own "nested sub-list in the middle of one item's own blocks" shape, generalised to a construct instead of a plain paragraph) would be tested against the wrong itemId and wrongly fracture out to top level. `openMemberships` fixes this by popping every entry at or deeper than a newly-absorbed paragraph's own level before pushing it -- so the stack always holds exactly the memberships genuinely still open at each shallower level, the outer item's included -- and matching a construct against it deepest-first (constructCarriesListItemId is scoped to one exact itemId, never "any list identity found inside", so at most one level can genuinely match): the currently-innermost open item first, then walking outward to whichever shallower item the construct actually resumes.
       const region: ListRegionItem[] = [];
       let end = index;
-      let runningList: ContentListMembership | undefined;
+      const openMemberships: ContentListMembership[] = [];
       for (;;) {
         const candidate = items[end];
         if (candidate === undefined) {
           break;
         }
         if (isConstructItem(candidate)) {
-          if (runningList?.itemId === undefined) {
-            break;
+          let matched: ContentListMembership | undefined;
+          for (let i = openMemberships.length - 1; i >= 0; i -= 1) {
+            const membership = openMemberships[i]!;
+            if (
+              membership.itemId !== undefined &&
+              constructCarriesListItemId(candidate, membership.itemId)
+            ) {
+              matched = membership;
+              break;
+            }
           }
-          const itemId = runningList.itemId;
-          if (!constructCarriesListItemId(candidate, itemId)) {
+          if (matched === undefined) {
             break;
           }
           region.push({
             kind: "construct",
             item: candidate,
-            list: runningList,
+            list: matched,
           });
           end += 1;
           continue;
@@ -902,11 +909,18 @@ function renderItems(items: readonly EmitItem[], context: EmitContext): string {
         ) {
           break;
         }
-        runningList = candidate.block.list;
+        const list = candidate.block.list;
+        while (
+          openMemberships.length > 0 &&
+          openMemberships[openMemberships.length - 1]!.level >= list.level
+        ) {
+          openMemberships.pop();
+        }
+        openMemberships.push(list);
         region.push({
           kind: "paragraph",
           block: candidate.block,
-          list: runningList,
+          list,
         });
         end += 1;
       }
