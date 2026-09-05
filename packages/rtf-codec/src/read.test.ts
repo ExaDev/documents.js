@@ -723,16 +723,34 @@ describe("form fields", () => {
     ).toBe("Lorem ipsum.");
   });
 
-  // [MS-DOC] 2.9.78 FFData.xstzTextDef via RTF's own \ffdeftext -- distinct from the field's DISPLAYED text ("Lorem ipsum." in \fldrslt), which is never duplicated onto `value`.
-  it("reads a FORMTEXT field's \\*\\ffdeftext as the contentControl's value", () => {
+  // Regression guard: an earlier round of this reader promoted \ffdeftext (FFData.xstzTextDef, the field's DEFAULT/reset text) onto the descriptor's `value`, which document-schema.js's own ContentControlDescriptor defines as the control's CURRENT value -- for a text field, that current value is whatever text is actually wrapped in \fldrslt's own runs ("Lorem ipsum." here), never the default. `value` must stay unset even though a real \ffdeftext group is present, and the genuinely current text must still be readable from the wrapped runs, exactly as it is when no \ffdeftext exists at all (see "reads a FORMTEXT field's \*\ffname..." above).
+  it("leaves a FORMTEXT field's value unset when \\*\\ffdeftext is present, reporting its default text nowhere while its \\fldrslt runs still carry the real current text", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffdeftext Jane Doe}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
+    )[0];
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+    });
+    expect(
+      paragraph?.runs
+        .slice(extent?.startRun ?? 0, extent?.endRun ?? 0)
+        .map((run) => run.text)
+        .join(""),
+    ).toBe("Lorem ipsum.");
+  });
+
+  // The same guard with no wrapped-run content at all: `value` must still stay unset -- \ffdeftext is never promoted to `value` unconditionally, not merely "unless the runs are non-empty".
+  it("leaves a FORMTEXT field's value unset when \\*\\ffdeftext is present and \\fldrslt is empty", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffdeftext Jane Doe}{\\*\\ffname Text1}}}}{\\fldrslt }}\\par}`,
     )[0];
     expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
       kind: "contentControl",
       controlType: "plainText",
       tag: "Text1",
-      value: "Jane Doe",
     });
   });
 

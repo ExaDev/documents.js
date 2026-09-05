@@ -1495,7 +1495,8 @@ describe("round trip through this package's own reader", () => {
     ).toBe("Lorem ipsum.");
   });
 
-  it("round-trips a plainText contentControl's value through \\ffdeftext", () => {
+  // Deliberately NOT a round trip, despite the writer minting {\*\ffdeftext ...} from `value` (see "writes a plainText contentControl's value as {\*\ffdeftext ...}" above): `\ffdeftext` names the field's DEFAULT/reset text, and this reader never promotes it onto `value`, which document-schema.js defines as the control's CURRENT value -- for a text field, that current value is the wrapped-run text, which this document never set. Writing `value` here is a one-directional degradation, the mirror image of the writer's own documented 'both'->'content' lock degradation: real, useful on the way out (documents.js's own PDF AcroForm-to-contentControl reconstruction genuinely produces this shape), but not something a generic reader of the resulting RTF should read back as the field's current content.
+  it("writes a plainText contentControl's value into \\ffdeftext but does not read it back as `value`, since \\ffdeftext names the field's default text, not its current one", () => {
     const back = roundTrip(
       wordprocessing([
         {
@@ -1523,7 +1524,6 @@ describe("round trip through this package's own reader", () => {
       kind: "contentControl",
       controlType: "plainText",
       tag: "Text1",
-      value: "Jane Doe",
     });
   });
 
