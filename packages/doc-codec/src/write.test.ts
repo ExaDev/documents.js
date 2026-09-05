@@ -1159,14 +1159,43 @@ describe("writeDocContent tables", () => {
         },
       ]);
 
-    it("round-trips a cell's background fill", () => {
-      const result = roundTrip(decorated({ background: { r: 1, g: 1, b: 0 } }));
-      expect(onlyCell(result).background).toEqual({ r: 1, g: 1, b: 0 });
+    it("round-trips a cell's solid background fill", () => {
+      const background = {
+        kind: "solid" as const,
+        color: { r: 1, g: 1, b: 0 },
+      };
+      const result = roundTrip(decorated({ background }));
+      expect(onlyCell(result).background).toEqual(background);
     });
 
     it("round-trips a background colour the Ico palette cannot state, through Shd's own exact COLORREFs", () => {
       // #4C7FBF is deliberately nowhere near a palette entry: Shd carries cvFore/cvBack as full COLORREFs, so unlike a Brc80 border there is no palette step to lose it at.
-      const background = { r: 0x4c / 255, g: 0x7f / 255, b: 0xbf / 255 };
+      const background = {
+        kind: "solid" as const,
+        color: { r: 0x4c / 255, g: 0x7f / 255, b: 0xbf / 255 },
+      };
+      const result = roundTrip(decorated({ background }));
+      expect(onlyCell(result).background).toEqual(background);
+    });
+
+    it("round-trips a genuine two-colour pattern fill -- a percentage grey -- instead of dropping it (ExaDev/documents.js#951)", () => {
+      const background = {
+        kind: "pattern" as const,
+        patternType: "percent20" as const,
+        foregroundColor: { r: 0, g: 0, b: 0 },
+        backgroundColor: { r: 1, g: 1, b: 1 },
+      };
+      const result = roundTrip(decorated({ background }));
+      expect(onlyCell(result).background).toEqual(background);
+    });
+
+    it("round-trips a genuine two-colour crosshatch pattern fill (ExaDev/documents.js#951)", () => {
+      const background = {
+        kind: "pattern" as const,
+        patternType: "diagonalCross" as const,
+        foregroundColor: { r: 1, g: 0, b: 0 },
+        backgroundColor: { r: 0, g: 0, b: 1 },
+      };
       const result = roundTrip(decorated({ background }));
       expect(onlyCell(result).background).toEqual(background);
     });
@@ -1267,7 +1296,7 @@ describe("writeDocContent tables", () => {
                 {
                   blocks: [paragraph([{ text: "wide" }])],
                   colSpan: 2,
-                  background: { r: 0, g: 1, b: 1 },
+                  background: { kind: "solid", color: { r: 0, g: 1, b: 1 } },
                   borders: {
                     bottom: { color: { r: 1, g: 0, b: 0 }, widthPt: 1.5 },
                   },
@@ -1285,7 +1314,10 @@ describe("writeDocContent tables", () => {
       ]);
       const anchor = tableAt(roundTrip(input), 0).rows[0]?.cells[0];
       expect(anchor?.colSpan).toBe(2);
-      expect(anchor?.background).toEqual({ r: 0, g: 1, b: 1 });
+      expect(anchor?.background).toEqual({
+        kind: "solid",
+        color: { r: 0, g: 1, b: 1 },
+      });
       expect(anchor?.borders?.bottom).toEqual({
         color: { r: 1, g: 0, b: 0 },
         widthPt: 1.5,
@@ -1302,7 +1334,7 @@ describe("writeDocContent tables", () => {
               cells: [
                 {
                   blocks: [paragraph([{ text: "fill" }])],
-                  background: { r: 1, g: 1, b: 0 },
+                  background: { kind: "solid", color: { r: 1, g: 1, b: 0 } },
                 },
                 {
                   blocks: [paragraph([{ text: "border" }])],
@@ -1317,7 +1349,10 @@ describe("writeDocContent tables", () => {
         },
       ]);
       const cells = tableAt(roundTrip(input), 0).rows[0]?.cells;
-      expect(cells?.[0]?.background).toEqual({ r: 1, g: 1, b: 0 });
+      expect(cells?.[0]?.background).toEqual({
+        kind: "solid",
+        color: { r: 1, g: 1, b: 0 },
+      });
       expect(cells?.[0]?.borders).toBeUndefined();
       expect(cells?.[1]?.background).toBeUndefined();
       expect(cells?.[1]?.borders?.left).toEqual({
