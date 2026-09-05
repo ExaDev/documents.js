@@ -313,6 +313,15 @@ describe("lists", () => {
     );
   });
 
+  it("preserves a genuine inter-element space between two stray inline siblings rather than joining them", () => {
+    const blocks = read(
+      body("<ul><li>a</li><span>foo</span> <span>bar</span></ul>"),
+    );
+    expect(blocks).toHaveLength(2);
+    const strayParagraph = blocks[1] as { runs: { text: string }[] };
+    expect(strayParagraph.runs.map((run) => run.text).join("")).toBe("foo bar");
+  });
+
   it("never leaks a <script>'s raw source as document text even when nested inside a stray wrapper the list-recovery path recurses into", () => {
     const blocks = read(
       body("<ul><li>a</li><div><script>var x=1;</script></div></ul>"),

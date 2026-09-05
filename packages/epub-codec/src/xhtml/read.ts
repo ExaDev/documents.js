@@ -470,12 +470,7 @@ function readBlockquote(
   ];
 }
 
-// Whether a text node carries only inter-element whitespace -- the HTML Standard (section 3.2.5.1) requires "inter-element whitespace, comment nodes, and processing instruction nodes must be ignored when establishing whether an element's contents match the element's content model", so this content is fully conformant sitting directly inside a <ul>/<ol> and must never be collected as stray or diagnosed. This is the pretty-printed shape essentially all real-world HTML uses (a newline-plus-indent text node between each <li>), so failing to ignore it here would fire a spurious diagnostic on almost every real list.
-function isWhitespaceOnlyText(node: XmlNode): boolean {
-  return node.type === "text" && node.value.trim().length === 0;
-}
-
-// The HTML Standard's own content model for <ul>/<ol> is "Zero or more li and script-supporting elements", explicitly naming <script> and <template> as legal direct children alongside <li> -- so these are ignored the same way inter-element whitespace is (see isWhitespaceOnlyText above): no stray collection, no diagnostic, and never routed through readContainerChildren (which has no case for either tag, and readList's own document-content mapping has no use for embedded script/template content regardless).
+// The HTML Standard's own content model for <ul>/<ol> is "Zero or more li and script-supporting elements", explicitly naming <script> and <template> as legal direct children alongside <li> -- so these are ignored entirely here: no stray collection, no diagnostic, and never routed through readContainerChildren (which has no case for either tag, and readList's own document-content mapping has no use for embedded script/template content regardless). This check exists purely to suppress the LIST_CONTENT_OUTSIDE_ITEM diagnostic below for a legal child position; the actual leak this content would otherwise cause if it reached a run sequence some other way is closed universally by src/xhtml/inline.ts's own appendElement, which skips a <script>/<template> the same way regardless of where it is reached from.
 function isScriptSupportingElement(tag: string): boolean {
   return tag === "script" || tag === "template";
 }
@@ -507,9 +502,6 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
       );
       continue;
     }
-    if (isWhitespaceOnlyText(child)) {
-      continue;
-    }
     if (child.type === "element" && isScriptSupportingElement(child.tag)) {
       continue;
     }
@@ -523,14 +515,18 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
   return blocks;
 }
 
-// A <ul>/<ol> content model admits only <li> and script-supporting (<script>/<template>) children -- so any *other* content sitting directly inside one is not valid HTML5, most commonly a <ul>/<ol> nested as a sibling rather than wrapped in its own <li> (a shape real-world producers and converters emit even though it is not conformant), but any other stray content (a bare <img>, a run of text) shares the identical malformed shape and the identical most-likely producer intent: it was meant to continue the content of the <li> immediately before it. Recovered by feeding it through the exact same readContainerChildren dispatch that <li>'s own real children already go through, under that preceding item's own list membership -- so a stray <ul>/<ol> becomes a properly nested list one level deeper sharing the enclosing numId (readBlockElementInner's own "ul"/"ol" case calls back into this function with that membership already on the state, incrementing level exactly as genuine nesting would), a stray <img> becomes its own real image block, and stray text becomes its own paragraph, rather than each needing its own hand-rolled special case. Content sitting before the very first <li> has no preceding item to attach to and is dropped, unchanged from this function's own prior behaviour -- that narrower shape is not evidenced by any real producer and has no sensible single-item owner to recover onto. Inter-element whitespace and script-supporting elements never reach this function at all -- readList filters both out before they are ever collected as stray nodes, since neither is malformed content in the first place.
+// A <ul>/<ol> content model admits only <li> and script-supporting (<script>/<template>) children -- so any *other* content sitting directly inside one is not valid HTML5, most commonly a <ul>/<ol> nested as a sibling rather than wrapped in its own <li> (a shape real-world producers and converters emit even though it is not conformant), but any other stray content (a bare <img>, a run of text) shares the identical malformed shape and the identical most-likely producer intent: it was meant to continue the content of the <li> immediately before it. Recovered by feeding it through the exact same readContainerChildren dispatch that <li>'s own real children already go through, under that preceding item's own list membership -- so a stray <ul>/<ol> becomes a properly nested list one level deeper sharing the enclosing numId (readBlockElementInner's own "ul"/"ol" case calls back into this function with that membership already on the state, incrementing level exactly as genuine nesting would), a stray <img> becomes its own real image block, and stray text becomes its own paragraph, rather than each needing its own hand-rolled special case. Content sitting before the very first <li> has no preceding item to attach to and is dropped, unchanged from this function's own prior behaviour -- that narrower shape is not evidenced by any real producer and has no sensible single-item owner to recover onto. Script-supporting elements never reach this function at all -- readList filters them out before they are ever collected as stray nodes, since their content is never legitimate document text in the first place. Inter-element whitespace, by contrast, DOES reach here: the HTML Standard's own "must be ignored when establishing whether an element's contents match the content model" rule (section 3.2.5 "Content models") governs conformance-checking alone, not deletion of the character data itself, so real whitespace sitting between two stray inline siblings (the single space that keeps two words apart) is still live text that must survive a round trip. What is skipped is only the diagnostic-and-recovery step below, and only when the entire collected run of stray content turns out, once actually read, to carry nothing but whitespace -- the common pretty-printed-list shape of a bare newline-plus-indent text node between two <li> siblings. Real content mixed with real whitespace (e.g. two stray inline elements separated by a single space) still gets the full diagnostic-and-recovery treatment, with the whitespace preserved as part of it.
 function flushListStrayContent(
   nodes: readonly XmlNode[],
   previousItem: ListItemContext | undefined,
   tag: string,
   state: BuildState,
 ): ContentBlock[] {
-  if (nodes.length === 0 || previousItem === undefined) {
+  if (
+    nodes.length === 0 ||
+    previousItem === undefined ||
+    isWhitespaceOnlyStrayContent(nodes, state.context)
+  ) {
     return [];
   }
   state.context.sink({
@@ -540,6 +536,19 @@ function flushListStrayContent(
     href: state.context.sourceHref,
   });
   return readContainerChildren(nodes, withListItem(state, previousItem));
+}
+
+// A pure emptiness probe for flushListStrayContent's own guard above -- builds the collected stray nodes' inline runs through a throwaway sink rather than state.context's real one, so this speculative check can never itself double-fire a diagnostic (an unresolved image, an unmapped sub/sup) that the real readContainerChildren pass below will, correctly, fire once on its own. Checks the result the same way readContainerChildren's own segment flush does (see its own whitespace-only-segment comment): every run's text, once built, trims to nothing.
+function isWhitespaceOnlyStrayContent(
+  nodes: readonly XmlNode[],
+  context: XhtmlReadContext,
+): boolean {
+  const probe = buildInlineRuns(
+    nodes,
+    {},
+    { ...context, sink: () => undefined },
+  );
+  return probe.runs.every((run) => run.text.trim().length === 0);
 }
 
 function startAttr(element: XmlElement): number | undefined {
