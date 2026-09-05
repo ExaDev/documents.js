@@ -46,7 +46,6 @@ export const MarkdownDiagnosticCodes = {
   FOOTNOTE_BODY_HEADING_FLATTENED: "md/footnote-body-heading-flattened",
   // src/emit (write side: ContentDocument -> markdown)
   CONSTRUCT_UNREPRESENTED: "md/construct-unrepresented",
-  LIST_ITEM_MULTI_BLOCK_FLATTENED: "md/list-item-multi-block-flattened",
   // src/write.ts (tree write side: DocumentTree -> markdown, ahead of flattening)
   PACKAGE_TABLE_DROPPED: "md/package-table-dropped",
   HEADING_LEVEL_CLAMPED: "md/heading-level-clamped",
