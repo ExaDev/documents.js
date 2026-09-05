@@ -86,6 +86,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
+    "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "document-outline.js": "^3.2.5",
     "documents.js": "^6.5.3",
