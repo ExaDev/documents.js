@@ -334,14 +334,26 @@ describe("parseFormulaText", () => {
     expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
   });
 
-  it("resolves a 3D reference through an ExternalSheetLabel, quoting the whole bracketed label", () => {
-    // workbook/globals.ts hands this module an already-formatted label for a genuinely external workbook (or a diagnostic placeholder) rather than a plain SheetRange -- resolveSheetLabel's own quoting applies uniformly regardless of which one it is.
+  it("resolves a 3D reference through a genuinely-recovered ExternalSheetLabel, quoting the whole bracketed label", () => {
+    // workbook/globals.ts hands this module an already-formatted label for a genuinely external workbook -- resolveSheetLabel's own quoting wraps it exactly as it would a plain sheet name.
     const context: FormulaSheetContext = {
       sheets: [],
-      sheetRanges: [{ label: "[Budget.xlsx]Sheet1" }],
+      sheetRanges: [{ label: "[Budget.xlsx]Sheet1", diagnostic: false }],
     };
     const rgce = bytes(0x5a, ...u16(0), ...ptgRef(0, 0).slice(1));
     expect(parseFormulaText(rgce, context)).toBe("'[Budget.xlsx]Sheet1'!A1");
+  });
+
+  it("drops the whole formula for a 3D reference through a diagnostic ExternalSheetLabel, rather than writing the placeholder as if it were real formula text", () => {
+    // A diagnostic label is this reader's own placeholder for something it could not resolve, not formula syntax a spreadsheet application would accept -- so this behaves exactly like meeting any other unsupported construct.
+    const context: FormulaSheetContext = {
+      sheets: [],
+      sheetRanges: [
+        { label: "#REF!(add-in function reference)", diagnostic: true },
+      ],
+    };
+    const rgce = bytes(0x5a, ...u16(0), ...ptgRef(0, 0).slice(1));
+    expect(parseFormulaText(rgce, context)).toBeUndefined();
   });
 });
 

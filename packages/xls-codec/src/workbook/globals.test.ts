@@ -379,7 +379,9 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([{ label: "[Budget.xlsx]Sheet1" }]);
+    expect(globals.sheetRanges).toEqual([
+      { label: "[Budget.xlsx]Sheet1", diagnostic: false },
+    ]);
   });
 
   it("resolves a multi-sheet external range as first:last, the same shape a local multi-sheet range takes", () => {
@@ -403,7 +405,9 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([{ label: "[Book.xlsx]Jan:Mar" }]);
+    expect(globals.sheetRanges).toEqual([
+      { label: "[Book.xlsx]Jan:Mar", diagnostic: false },
+    ]);
   });
 
   it("shows a known sheet name against a placeholder workbook label when virtPath's own form is not one this reader decodes", () => {
@@ -426,25 +430,51 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([{ label: "[EXTERNAL]Sheet1" }]);
+    expect(globals.sheetRanges).toEqual([
+      { label: "[EXTERNAL]Sheet1", diagnostic: true },
+    ]);
   });
 
   it("carries a diagnostic label for an add-in-referencing SupBook rather than dropping the reference", () => {
-    // [MS-XLS] 2.4.271: cch 0x3A01 marks an add-in-referencing supporting link, which names XLL/COM add-in functions this reader has no workbook or sheet to resolve a name from.
+    // [MS-XLS] 2.4.271: cch 0x3A01 marks an add-in-referencing supporting link, which names XLL/COM add-in functions this reader has no workbook or sheet to resolve a name from. [MS-XLS] 2.5.344's own itabFirst/itabLast table gives an add-in reference -2 ("not used") for both fields -- not 0 -- since there is no sheet scope for this kind of supporting link at all.
     const globals = readWorkbookGlobals(
       groupsOf(
         record(RECORD_SUPBOOK, [...u16(1), ...u16(0x3a01)]),
         record(RECORD_EXTERNSHEET, [
           ...u16(1),
-          ...u16(0),
-          ...u16(0),
-          ...u16(0),
+          ...u16(0), // iSupBook
+          ...u16(-2), // itabFirst
+          ...u16(-2), // itabLast
         ]),
       ),
     );
 
     expect(globals.sheetRanges).toEqual([
-      { label: "#REF!(add-in function reference)" },
+      { label: "#REF!(add-in function reference)", diagnostic: true },
+    ]);
+  });
+
+  it("carries a diagnostic label for a DDE- or OLE-referencing SupBook rather than dropping the reference", () => {
+    // [MS-XLS] 2.4.271: a supporting link whose ctab is reserved-zero and whose virtPath matches neither the same-sheet nor the unused single-character sentinel is a DDE or OLE data source reference -- and, like an add-in reference, gets -2 for both itabFirst and itabLast, since neither has a sheet scope to name.
+    const virtPath = "Excel\u0003Sheet1";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(0), // ctab: reserved zero for a DDE/OLE link
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(-2),
+          ...u16(-2),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "#REF!(DDE or OLE data source reference)", diagnostic: true },
     ]);
   });
 
@@ -464,7 +494,9 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([{ label: "#REF!(sheet not found)" }]);
+    expect(globals.sheetRanges).toEqual([
+      { label: "#REF!(sheet not found)", diagnostic: true },
+    ]);
   });
 
   it("defaults sheetRanges to empty when the substream carries no EXTERNSHEET record", () => {
