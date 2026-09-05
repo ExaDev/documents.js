@@ -571,13 +571,15 @@ export {
   MarkdownRenderDiagnosticCodes,
   renderContentDocumentToMarkdown,
 } from "./markdown/render";
-// A formula travels inside a ContentDocument now (document-schema.js's own 'formula' variant), not alongside one -- these are the small helpers for building and reading that shape: the 'formula'-kind envelope, the embedded-object block an odt/odp reader produces for an inline formula, the narrowing back out of such a block, and the plain-text stand-in for a consumer with no MathML rendering of its own.
+// A formula travels inside a ContentDocument now (document-schema.js's own 'formula' variant), not alongside one -- these are the small helpers for building and reading that shape: the 'formula'-kind envelope, the embedded-object block an odt/odp reader produces for an inline formula, the narrowing back out of such a block, the plain-text stand-in for a consumer with no MathML rendering of its own, and the shared cross-document-kind formula walk every formula-reading consumer in the family uses.
 export {
   buildFormulaBlock,
+  collectDocumentFormulas,
   formulaDocument,
   formulaOfBlock,
   formulaPlaceholderText,
 } from "./model/formula";
+export type { DocumentFormulaEntry } from "./model/formula";
 // The drawing counterpart to the formula helpers above: reconstructWordprocessing/reconstructPresentation carry a page's recovered vector primitives in an embedded-object block, since neither ContentSection nor ContentSlide has a vectors array of its own. buildDrawingBlock is what builds one; drawingOfBlock narrows back out of it, and is what a consumer distinguishing a recovered drawing from a recovered formula calls.
 export { buildDrawingBlock, drawingOfBlock } from "./model/embedded-drawing";
 // The single write-side precedence rule every create*/build*Package entry point uses to stamp real docProps/core.xml (OOXML)/office:meta (ODF) creation/modification timestamps via an injected ClockPort -- exported directly for a caller composing their own package-building step the same way.
