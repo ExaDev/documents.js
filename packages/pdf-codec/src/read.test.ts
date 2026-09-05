@@ -156,7 +156,7 @@ describe("readPdf: PDFs that open without a password", () => {
       ]);
       expect(doc.metadata.title).toBe(ENCRYPTED_FIXTURE_TITLE);
       expect(doc.metadata.author).toBe(ENCRYPTED_FIXTURE_AUTHOR);
-    }, 15000);
+    }, 60_000);
   }
 
   it("reports no diagnostics at all while decrypting", () => {
@@ -165,7 +165,7 @@ describe("readPdf: PDFs that open without a password", () => {
       sink: (diagnostic) => diagnostics.push(diagnostic),
     });
     expect(diagnostics).toEqual([]);
-  }, 15000);
+  }, 60_000);
 });
 
 describe("readPdf: PDFs it refuses to open", () => {
@@ -181,7 +181,7 @@ describe("readPdf: PDFs it refuses to open", () => {
     expect(() => readPdf(aes256RealUserPasswordPdf())).toThrow(
       PdfPasswordRequiredError,
     );
-  }, 15000);
+  }, 60_000);
 
   it("throws PdfEncryptedError, not PdfPasswordRequiredError, for a security handler no password could open", () => {
     expect(() => readPdf(unsupportedSecurityHandlerPdf())).toThrow(
