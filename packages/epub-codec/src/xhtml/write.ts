@@ -129,6 +129,7 @@ function writeHeading(
   );
 }
 
+// document-schema.js's own ContentListMembership.itemId comment states its whole reason for existing: "it distinguishes 'one item, several blocks' (same itemId) from 'several items sharing this numId/level' (different itemIds)". decomposeSection's own openListGroup, though, opens a fresh ListGroupNode for every list paragraph at a given level regardless of itemId -- two sibling blocks sharing one itemId still arrive here as two separate, adjacent entries in `items`, not one entry with two blocks -- so this function is the one place in the write pipeline that can still honour the field's own documented meaning: it re-groups a run of CONSECUTIVE entries sharing the same defined itemId into one <li>, writing each entry's own anchor content and nested children in turn inside it. An itemId of `undefined` never groups with anything, including another `undefined` neighbour -- absence means "no item identity carried at all" per the same schema comment, and treating two such entries as accidentally the same item would merge genuinely distinct list items a foreign producer's document never combined.
 function writeList(
   items: readonly ListGroupNode[],
   context: XhtmlWriteContext,
@@ -140,11 +141,25 @@ function writeList(
     info?.type === "ordered" && info.start !== undefined
       ? { start: String(info.start) }
       : {};
-  const liNodes = items.map((item) => {
-    const anchorNodes = writeParagraphAsEmbeddedNodes(item.node, context);
-    const nested = writeSectionChildren(item.children, context);
-    return element("li", {}, [...anchorNodes, ...nested]);
-  });
+  const liNodes: XmlElement[] = [];
+  let index = 0;
+  while (index < items.length) {
+    const itemId = items[index]?.node.list.itemId;
+    let end = index + 1;
+    if (itemId !== undefined) {
+      while (end < items.length && items[end]?.node.list.itemId === itemId) {
+        end += 1;
+      }
+    }
+    const liChildren = items
+      .slice(index, end)
+      .flatMap((item) => [
+        ...writeParagraphAsEmbeddedNodes(item.node, context),
+        ...writeSectionChildren(item.children, context),
+      ]);
+    liNodes.push(element("li", {}, liChildren));
+    index = end;
+  }
   return element(tag, attrs, liNodes);
 }
 
