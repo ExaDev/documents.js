@@ -604,12 +604,22 @@ describe("form fields", () => {
     );
   });
 
-  it("prefers \\ffres over \\ffdefres for a checkbox's checked state, current overriding default", () => {
+  // Regression fixture for a real bug: PHPRtfLite writes the constant \ffres25 on every checkbox it produces regardless of the box's actual state, so preferring \ffres (as this reader once did) reads every one of its checkboxes as checked -- 25 is never 0. Only \ffdefres actually varies with the real state; this pins the unchecked half of the pair the "reads a FORMCHECKBOX field..." test above already covers checked for, both against the identical \ffres25 constant.
+  it("prefers \\ffdefres over \\ffres for a checkbox's checked state, since PHPRtfLite's \\ffres is a constant that does not vary with the real state", () => {
     const paragraph = paragraphsOf(
-      `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres0\\ffdefres1}}}{\\fldrslt }}\\par}`,
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres25\\ffhps20\\ffdefres0}}}{\\fldrslt }}\\par}`,
     )[0];
     expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
       checked: false,
+    });
+  });
+
+  it("falls back to \\ffres for a checkbox's checked state when no \\ffdefres is present at all", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres1}}}{\\fldrslt }}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      checked: true,
     });
   });
 
