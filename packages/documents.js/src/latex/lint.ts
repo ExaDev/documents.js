@@ -105,9 +105,11 @@ export function lintMathCoherence(
 ): readonly MathLintDiagnostic[] {
   const warnings: MathLintDiagnostic[] = [];
   const content = flattenTree(pkg);
-  const symbolEntries = content.symbolTable?.symbols;
-  for (const { formula, locate } of collectDocumentFormulas(content)) {
-    lintFormula(formula, locate, symbolEntries, warnings);
+  // Each entry's own `symbolTable` (documents.js's src/model/formula.ts) is already resolved nested-first -- the GOVERNING table for that specific formula's own embedding document, never the outermost package's table hoisted across every nesting depth. Re-lowering a nested formula against the wrong table can mint a different symbol identity for an id the nested table curates differently, producing a false coherence-divergence warning for a formula that is actually perfectly coherent against its own document's table.
+  for (const { formula, locate, symbolTable } of collectDocumentFormulas(
+    content,
+  )) {
+    lintFormula(formula, locate, symbolTable?.symbols, warnings);
   }
   return warnings;
 }

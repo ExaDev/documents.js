@@ -6,6 +6,7 @@ import type {
   ContentEmbeddedObjectBlock,
   ContentFormula,
   LayoutMetadata,
+  SymbolTable,
 } from "document-schema.js";
 
 // A formula's real content lives INSIDE the ContentDocument, not alongside it. document-schema.js 2.0.0 models a genuine fifth 'formula' ContentDocument variant (`formula: ContentFormulaSchema`, carrying `{ mathml: MathMlNode[]; starMath?: string }`) and a fully-specified MathMlNode union of its own -- so a formula embedded in an odt paragraph or an odp slide is an ordinary ContentEmbeddedObjectBlock whose `document` genuinely holds the MathML, and a standalone .odf formula document is a top-level ContentDocument of that same kind.
@@ -46,17 +47,21 @@ export function formulaOfBlock(
     : undefined;
 }
 
-// One formula this walk found. `sourcePath` is the embedding block's own field -- undefined for the standalone 'formula' document kind (no embedding block at all) and for a spreadsheet's cell-anchored embedded objects (ContentEmbeddedObject carries no sourcePath field; only the block-level ContentEmbeddedObjectBlock wrapper does). `locate` is a different thing entirely: a structural path this walk itself derives from container/index position (e.g. "sections[0]/blocks[2]", "sheets[1].embeddedObjects[0]"), guaranteed unique per formula within one document regardless of whether the source format populated sourcePath at all -- a consumer needing to tell two formulas apart (a diagnostic locator, a lint detail string) should key on this, not on sourcePath, which several real producers leave undefined (markdown-codec's own $$ lowering, src/lower/lower.ts's lowerMathBlock, builds its embedded formula block with no sourcePath field at all) or stamp with an identical constant across sibling formulas once this package's own read path replaces that block (src/markdown/math.ts's lowerMarkdownMath stamps every display formula's sourcePath with the same literal "markdown:math-block", every inline formula's with the same literal "markdown:math-inline").
+// One formula this walk found. `sourcePath` is the embedding block's own field for a NON-nested entry -- undefined for the standalone 'formula' document kind (no embedding block at all) and for a spreadsheet's cell-anchored embedded objects (ContentEmbeddedObject carries no sourcePath field; only the block-level ContentEmbeddedObjectBlock wrapper does). For a NESTED entry (one found inside a non-formula embedded object's own document -- see collectDocumentFormulas' formula-inside-a-drawing-inside-a-spreadsheet example), `sourcePath` is that inner block's own field, from a wholly different document's block-flow namespace than the embedding document's -- it can therefore collide with an unrelated block's sourcePath at the outer level, which is exactly why `locate` (below), not `sourcePath`, is the field a consumer keys distinctness on. `locate` is a different thing entirely: a structural path this walk itself derives from container/index position (e.g. "sections[0]/blocks[2]", "sheets[1].embeddedObjects[0]"), guaranteed unique per formula within one document regardless of whether the source format populated sourcePath at all -- a consumer needing to tell two formulas apart (a diagnostic locator, a lint detail string) should key on this, not on sourcePath, which several real producers leave undefined (markdown-codec's own $$ lowering, src/lower/lower.ts's lowerMathBlock, builds its embedded formula block with no sourcePath field at all) or stamp with an identical constant across sibling formulas once this package's own read path replaces that block (src/markdown/math.ts's lowerMarkdownMath stamps every display formula's sourcePath with the same literal "markdown:math-block", every inline formula's with the same literal "markdown:math-inline").
+//
+// `symbolTable` is the GOVERNING table this formula's own symbol and unit references resolve against -- document-schema.js's own content.ts is explicit that "the symbol and unit references inside resolve against the embedding document's own symbolTable field", and for a nested entry that embedding document is the nested ContentDocument the formula actually lives in, never the outermost document a caller started the walk from. Every consumer of this walk (documents.js's own coherence lint, document-mcp's compute_formula tool) MUST resolve a formula's symbols/units against this field, not against some outer document's symbolTable it happens to have lying around: two documents fused into one tree by nesting can mint the same symbol/unit id against different curated meanings (a different quantityKind, a different unit conversion factor), so re-lowering or evaluating a nested formula against the wrong table can silently mint a different symbol identity or resolve a unit to the wrong factor -- wrong, not merely imprecise. Resolution is nested-first with outward fallback, mirroring lexical scoping: a document that declares its own symbolTable uses it as-is; a document with none (most nested embeds, which usually inherit rather than redeclare) falls back to whichever table was governing at the point it was embedded, all the way out to the outermost document if nothing along the chain ever redeclares one. undefined when neither the formula's own document nor any enclosing one ever declared a table.
 export interface DocumentFormulaEntry {
   readonly formula: ContentFormula;
   readonly sourcePath: string | undefined;
   readonly locate: string;
+  readonly symbolTable: SymbolTable | undefined;
 }
 
-// Recurses into table cells -- a table cell's own blocks are block-flow content like any other, and a formula can sit inside one. `locate` is the structural path to this block list's own container (e.g. "sections[0]"); each block's position within it is appended via blocks.entries() rather than a plain for...of, so two formulas anywhere in the same document -- siblings, or nested inside different table cells -- always derive distinct locate strings. A table's own index is folded into the cell path passed to the recursive call (not just row/cell index) so two sibling tables in the same block list can never collide either.
+// Recurses into table cells -- a table cell's own blocks are block-flow content like any other, and a formula can sit inside one. `locate` is the structural path to this block list's own container (e.g. "sections[0]"); each block's position within it is appended via blocks.entries() rather than a plain for...of, so two formulas anywhere in the same document -- siblings, or nested inside different table cells -- always derive distinct locate strings. A table's own index is folded into the cell path passed to the recursive call (not just row/cell index) so two sibling tables in the same block list can never collide either. `symbolTable` is the table already resolved as governing for THIS block list's own document (see collectDocumentFormulas below) -- a table cell is still part of the same document, so it rides through unchanged; only a genuinely nested document (recursed into below) gets a freshly resolved table of its own.
 function collectFormulasFromBlocks(
   blocks: readonly ContentBlock[],
   locate: string,
+  symbolTable: SymbolTable | undefined,
   out: DocumentFormulaEntry[],
 ): void {
   for (const [index, block] of blocks.entries()) {
@@ -66,6 +71,7 @@ function collectFormulasFromBlocks(
           collectFormulasFromBlocks(
             cell.blocks,
             `${locate}/blocks[${String(index)}].rows[${String(rowIndex)}].cells[${String(cellIndex)}]`,
+            symbolTable,
             out,
           );
         }
@@ -80,14 +86,19 @@ function collectFormulasFromBlocks(
           formula,
           sourcePath: block.sourcePath,
           locate: blockLocate,
+          symbolTable,
         });
       } else {
-        // Not a formula itself, but ContentEmbeddedObject.document is unconditionally a whole ContentDocument (document-schema.js's own content.ts documents the mutual recursion this closes -- a formula embedded inside a drawing embedded inside a spreadsheet, say), so a formula one level deeper is still reachable by recursing the identical walk into it. Each nested entry's own sourcePath rides through unchanged (it is that formula's own field, not this embedding block's); only locate grows, nesting the embedding position ahead of the nested walk's own path so two formulas at different nesting depths -- or two nested inside sibling embedded objects -- can never collide.
-        for (const nested of collectDocumentFormulas(block.document)) {
+        // Not a formula itself, but ContentEmbeddedObject.document is unconditionally a whole ContentDocument (document-schema.js's own content.ts documents the mutual recursion this closes -- a formula embedded inside a drawing embedded inside a spreadsheet, say), so a formula one level deeper is still reachable by recursing the identical walk into it. Each nested entry's own sourcePath rides through unchanged (it is that formula's own field, not this embedding block's); only locate grows, nesting the embedding position ahead of the nested walk's own path so two formulas at different nesting depths -- or two nested inside sibling embedded objects -- can never collide. The enclosing `symbolTable` passed to the recursive call is a FALLBACK, not the answer: collectDocumentFormulas resolves the nested document's own symbolTable field first and only reaches for this parameter when the nested document declares none of its own -- so a nested entry's own symbolTable field (read back off `nested`, never recomputed here) is already the correct, nested-first-resolved table by the time it reaches this loop.
+        for (const nested of collectDocumentFormulas(
+          block.document,
+          symbolTable,
+        )) {
           out.push({
             formula: nested.formula,
             sourcePath: nested.sourcePath,
             locate: `${blockLocate}/${nested.locate}`,
+            symbolTable: nested.symbolTable,
           });
         }
       }
@@ -96,9 +107,13 @@ function collectFormulasFromBlocks(
 }
 
 // Every place document-schema.js's own content model lets a ContentFormula travel: a wordprocessing section's block flow, a presentation slide's or drawing page's own shape's block flow (both structurally identical to a section's, per ContentShapeSchema/ContentEmbeddedObjectBlock's own comments), a spreadsheet's own cell-anchored embeddedObjects array (a bare ContentEmbeddedObject with no block flow and no sourcePath, not a gap in this walk), and the standalone 'formula' document kind, whose single child IS the formula rather than a block wrapping one -- plus, at any depth beneath any of those four arms, a non-formula embedded object's own nested document, recursed into by both collectFormulasFromBlocks and the spreadsheet arm below precisely because ContentEmbeddedObject is mutually recursive with ContentDocument (content.ts's own comment on that type: "a formula embedded inside a drawing embedded inside a spreadsheet" is the literal example given, not a hypothetical). The one shared walk every formula-reading consumer in the family uses -- documents.js's own coherence lint (src/latex/lint.ts) and document-mcp's compute_formula tool both call this rather than each re-deriving the per-kind traversal. Every arm derives each entry's own `locate` from container/index position as it walks, so two formulas anywhere in one document -- even two sharing the same sourcePath, two nested at different depths, or a format that never populates sourcePath at all -- always come back with distinct locate strings.
+//
+// `enclosingSymbolTable` is the table that governed whatever embedded THIS document (undefined at the outermost call) -- used purely as a nested-first fallback, per DocumentFormulaEntry's own comment above: this document's own `symbolTable` field wins whenever it declares one, and `enclosingSymbolTable` is only consulted when it does not. A caller starting a fresh walk over a document it read directly (documents.js's own lint, document-mcp's compute_formula) always omits this parameter -- it exists solely for this function's own recursive calls into a nested embedded object's document, where the enclosing document's resolved table is threaded in as the fallback a nested document without its own table should inherit.
 export function collectDocumentFormulas(
   document: ContentDocument,
+  enclosingSymbolTable?: SymbolTable,
 ): DocumentFormulaEntry[] {
+  const symbolTable = document.symbolTable ?? enclosingSymbolTable;
   const out: DocumentFormulaEntry[] = [];
   switch (document.kind) {
     case "wordprocessing":
@@ -106,6 +121,7 @@ export function collectDocumentFormulas(
         collectFormulasFromBlocks(
           section.blocks,
           `sections[${String(index)}]`,
+          symbolTable,
           out,
         );
       }
@@ -116,6 +132,7 @@ export function collectDocumentFormulas(
           collectFormulasFromBlocks(
             shape.blocks,
             `slides[${String(slideIndex)}].shapes[${String(shapeIndex)}]`,
+            symbolTable,
             out,
           );
         }
@@ -127,6 +144,7 @@ export function collectDocumentFormulas(
           collectFormulasFromBlocks(
             shape.blocks,
             `pages[${String(pageIndex)}].shapes[${String(shapeIndex)}]`,
+            symbolTable,
             out,
           );
         }
@@ -144,14 +162,19 @@ export function collectDocumentFormulas(
               formula,
               sourcePath: undefined,
               locate: objectLocate,
+              symbolTable,
             });
           } else {
-            // Same recursion as the block arm above, for a spreadsheet's own cell-anchored embedded objects (a bare ContentEmbeddedObject, never wrapped in a block): a non-formula object's document is still a whole ContentDocument that can itself carry a formula nested further in (a formula embedded inside a chart-cached sub-sheet, or inside a drawing anchored to a cell).
-            for (const nested of collectDocumentFormulas(object.document)) {
+            // Same recursion as the block arm above, for a spreadsheet's own cell-anchored embedded objects (a bare ContentEmbeddedObject, never wrapped in a block): a non-formula object's document is still a whole ContentDocument that can itself carry a formula nested further in (a formula embedded inside a chart-cached sub-sheet, or inside a drawing anchored to a cell). `symbolTable` (this sheet's own governing table) is threaded in as the nested document's fallback, exactly as the block arm above does.
+            for (const nested of collectDocumentFormulas(
+              object.document,
+              symbolTable,
+            )) {
               out.push({
                 formula: nested.formula,
                 sourcePath: nested.sourcePath,
                 locate: `${objectLocate}/${nested.locate}`,
+                symbolTable: nested.symbolTable,
               });
             }
           }
@@ -163,6 +186,7 @@ export function collectDocumentFormulas(
         formula: document.formula,
         sourcePath: undefined,
         locate: "formula",
+        symbolTable,
       });
       break;
     default: {
