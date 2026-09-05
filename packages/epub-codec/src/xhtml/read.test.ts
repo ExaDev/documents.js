@@ -1441,6 +1441,7 @@ describe("pre / code blocks", () => {
         runs: [
           { text: "const x = 1;\nconsole.log(x);", fontFamily: "Courier New" },
         ],
+        preformatted: true,
         codeLanguage: "js",
       },
     ]);
@@ -1456,6 +1457,7 @@ describe("pre / code blocks", () => {
       {
         kind: "paragraph",
         runs: [{ text: "code pic more", fontFamily: "Courier New" }],
+        preformatted: true,
       },
     ]);
     expect(sink).toHaveBeenCalledWith(
@@ -1470,7 +1472,11 @@ describe("pre / code blocks", () => {
       sink,
     );
     expect(blocks).toEqual([
-      { kind: "paragraph", runs: [{ text: "xy", fontFamily: "Courier New" }] },
+      {
+        kind: "paragraph",
+        runs: [{ text: "xy", fontFamily: "Courier New" }],
+        preformatted: true,
+      },
     ]);
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({ code: "epub/image-pre-unsupported" }),
@@ -1486,6 +1492,7 @@ describe("pre / code blocks", () => {
       {
         kind: "paragraph",
         runs: [{ text: "beforeafter", fontFamily: "Courier New" }],
+        preformatted: true,
       },
     ]);
   });
@@ -1500,6 +1507,7 @@ describe("pre / code blocks", () => {
       {
         kind: "paragraph",
         runs: [{ text: "beforeafter", fontFamily: "Courier New" }],
+        preformatted: true,
       },
     ]);
   });
@@ -1517,6 +1525,7 @@ describe("pre / code blocks", () => {
         { text: "see", fontFamily: "Courier New" },
         { text: "1", fontFamily: "Courier New" },
       ],
+      preformatted: true,
       constructs: [
         {
           descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
@@ -1541,6 +1550,7 @@ describe("pre / code blocks", () => {
         { text: "1", fontFamily: "Courier New" },
         { text: " after", fontFamily: "Courier New" },
       ],
+      preformatted: true,
       constructs: [
         {
           descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },

@@ -113,6 +113,7 @@ describe("writeEpubContent -> readEpubContent round trip", () => {
             {
               kind: "paragraph",
               runs: [{ text: "const answer = 42;", fontFamily: "Courier New" }],
+              preformatted: true,
               codeLanguage: "js",
             },
             { kind: "paragraph", runs: [], styleId: "HorizontalRule" },
