@@ -13,6 +13,7 @@ import {
 import { effectivePackage } from "./effective";
 import { OrderKeyBudgetExhaustedError } from "./order-keys";
 import {
+  AmbiguousSiblingError,
   contentHashV1,
   ContainsCycleError,
   defaultExtractionPolicy,
@@ -2183,5 +2184,70 @@ describe("write API: insertNode handles a dedup hit's kind and children correctl
     });
     expect(second.id).toBe(first.id);
     expect(second.graph).toEqual(first.graph);
+  });
+});
+
+describe("write API: insertEdge refuses an ambiguous before/after sibling (#935)", () => {
+  const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
+
+  it("insertEdge refuses an ambiguous before/after position when the named sibling id matches more than one edge of the same kind from the same owner", () => {
+    const v = insertNode(EMPTY_GRAPH, {
+      kind: "value",
+      properties: { value: "shared" },
+    });
+    let graph = insertEdge(v.graph, "parent", v.id, {
+      kind: "PROPERTY",
+      path: ["a"],
+    });
+    graph = insertEdge(graph, "parent", v.id, {
+      kind: "PROPERTY",
+      path: ["b"],
+    });
+    const matches = graph.edges.filter(
+      (edge) =>
+        edge.from === "parent" && edge.kind === "PROPERTY" && edge.to === v.id,
+    );
+    expect(matches).toHaveLength(2); // two real PROPERTY edges from one owner to one shared value node, disambiguated only by path
+
+    const other = insertNode(graph, {
+      kind: "value",
+      properties: { value: "other" },
+    });
+    let caught: unknown;
+    try {
+      insertEdge(other.graph, "parent", other.id, {
+        kind: "PROPERTY",
+        position: { at: "after", siblingId: v.id },
+        path: ["c"],
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(AmbiguousSiblingError);
+    const ambiguous = caught as AmbiguousSiblingError;
+    expect(ambiguous.from).toBe("parent");
+    expect(ambiguous.kind).toBe("PROPERTY");
+    expect(ambiguous.siblingId).toBe(v.id);
+    expect(ambiguous.matchCount).toBe(2);
+  });
+
+  it("insertEdge resolves before/after normally when the named sibling matches exactly one edge, even when other siblings share its orderKey-tying structure", () => {
+    const a = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const b = insertNode(a.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    let graph = insertEdge(b.graph, "parent", a.id);
+    graph = insertEdge(graph, "parent", b.id, {
+      position: { at: "after", siblingId: a.id },
+    });
+    const ordered = graph.edges
+      .filter((edge) => edge.from === "parent" && edge.kind === "CONTAINS")
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
+      .map((edge) => edge.to);
+    expect(ordered).toEqual([a.id, b.id]);
   });
 });

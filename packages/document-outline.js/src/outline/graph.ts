@@ -763,7 +763,31 @@ export class UnknownSiblingError extends Error {
   }
 }
 
-// Resolves `position` against `siblings` (already sorted ascending by orderKey) to a plain array index -- where the new edge would sit if `siblings` were spliced at that index -- rather than an orderKey directly, so the same lookup serves both the fast bisection path and the rebalance fallback below. A named sibling not found is refused here, once, for every position variant that names one.
+// Thrown by siblingInsertIndex when `position` names a sibling id that matches MORE than one of `from`'s existing edges of the requested `kind` -- a parent can legitimately carry more than one edge of the same kind to the same target (two PROPERTY edges from one owner to one shared `value` node, disambiguated only by `path`), and `before`/`after` then names no single boundary to resolve against. Resolving silently against whichever occurrence `findIndex` happens to reach first would make the result depend on edge insertion order rather than on anything the caller actually specified, so this is refused loudly instead, in the identical "a named ref must resolve to exactly one thing or not at all" tradition UnknownSiblingError already established for the zero-match case.
+export class AmbiguousSiblingError extends Error {
+  readonly from: string;
+  readonly kind: GraphEdgeKind;
+  readonly siblingId: string;
+  readonly matchCount: number;
+
+  constructor(
+    from: string,
+    kind: GraphEdgeKind,
+    siblingId: string,
+    matchCount: number,
+  ) {
+    super(
+      `insertEdge: sibling "${siblingId}" names ${String(matchCount)} existing ${kind} edges from "${from}", not exactly one -- before/after has no single position to resolve against`,
+    );
+    this.name = "AmbiguousSiblingError";
+    this.from = from;
+    this.kind = kind;
+    this.siblingId = siblingId;
+    this.matchCount = matchCount;
+  }
+}
+
+// Resolves `position` against `siblings` (already sorted ascending by orderKey) to a plain array index -- where the new edge would sit if `siblings` were spliced at that index -- rather than an orderKey directly, so the same lookup serves both the fast bisection path and the rebalance fallback below. A named sibling matching no edge is refused as UnknownSiblingError; a named sibling matching more than one edge of the same kind from the same owner is refused as AmbiguousSiblingError (its own comment above) -- exactly one match is the only shape `before`/`after` can mean, so both other counts are a genuine caller error rather than a position to guess at.
 function siblingInsertIndex(
   siblings: readonly GraphEdge[],
   position: InsertPosition,
@@ -772,10 +796,22 @@ function siblingInsertIndex(
 ): number {
   if (position.at === "start") return 0;
   if (position.at === "end") return siblings.length;
-  const index = siblings.findIndex((edge) => edge.to === position.siblingId);
-  if (index === -1) {
+  const matches: number[] = [];
+  siblings.forEach((edge, index) => {
+    if (edge.to === position.siblingId) matches.push(index);
+  });
+  if (matches.length === 0) {
     throw new UnknownSiblingError(from, kind, position.siblingId);
   }
+  if (matches.length > 1) {
+    throw new AmbiguousSiblingError(
+      from,
+      kind,
+      position.siblingId,
+      matches.length,
+    );
+  }
+  const index = matches[0]!;
   return position.at === "before" ? index : index + 1;
 }
 
