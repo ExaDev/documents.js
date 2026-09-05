@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  RECORD_ARRAY,
   RECORD_BLANK,
   RECORD_BOOLERR,
   RECORD_BOTTOMMARGIN,
@@ -308,7 +309,8 @@ describe("readSheetRecords formula cells", () => {
         0xff,
         ...formulaTail,
       ]),
-      record(RECORD_SHRFMLA, [...u16(0), ...u16(0), ...u16(0), ...u16(0)]),
+      // ShrFmla ([MS-XLS] 984826cc): a RefU (rwFirst u16, rwLast u16, colFirst u8, colLast u8), a reserved byte, a cUse byte, then a SharedParsedFormula (cce u16, rgce) -- cce=0 here since this test only cares about finding the String past it, not about the shared expression itself.
+      record(RECORD_SHRFMLA, [...u16(0), ...u16(0), 0, 0, 0, 0, ...u16(0)]),
       record(RECORD_STRING, xlUnicodeString("Shared")),
     );
 
@@ -431,6 +433,291 @@ describe("readSheetRecords formula cells", () => {
     ).cells;
 
     expect(cells[0]?.formula).toBe("Data!A1");
+  });
+
+  it("expands a shared formula's ShrFmla text relative to each referencing cell's own position", () => {
+    // A column filled down with "=A<row>": B1 (the base cell) holds =A1, B2 holds =A2 -- both stored on disk as just a PtgExp pointing back at B1's own coordinates (row 0, column 1). The real expression -- a single fully-relative PtgRefN one column to the left, same row -- lives once in the ShrFmla record that follows B1's own Formula record. PtgRefN's row field carries a plain delta (0 here); its column field packs both flag bits (0xC000) and the signed 14-bit delta (-1, i.e. 0x3FFF) into one word, which happens to equal 0xFFFF for exactly this delta.
+    const shrFmlaRgce = [0x4c, ...u16(0), ...u16(0xffff)];
+    const ptgExpToBase = [0x01, ...u16(0), ...u16(1)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 1),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_SHRFMLA, [
+        ...u16(0), // rwFirst
+        ...u16(1), // rwLast
+        1, // colFirst
+        1, // colLast
+        0, // reserved
+        2, // cUse
+        ...u16(shrFmlaRgce.length),
+        ...shrFmlaRgce,
+      ]),
+      record(RECORD_FORMULA, [
+        ...cell(1, 1),
+        ...f64(2),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBe("A1");
+    expect(cells[1]?.formula).toBe("A2");
+  });
+
+  it("expands a shared formula mixing an absolute PtgRef with a relative PtgRefN, a real on-disk shape per [MS-XLS]", () => {
+    // "=$A$1+A<row>" filled down: the absolute half never changes with the referencing cell, only the relative half does. SharedParsedFormula's own grammar permits ordinary (non-N) Ptg tokens alongside PtgRefN/PtgAreaN in the same rgce -- only the relative ones expand per cell.
+    const shrFmlaRgce = [
+      0x44,
+      ...u16(0),
+      ...u16(0), // PtgRef $A$1 -- row 0, column field 0 (both absolute)
+      0x4c,
+      ...u16(0),
+      ...u16(0xffff), // PtgRefN -- row delta 0, column delta -1
+      0x03, // PtgAdd
+    ];
+    const ptgExpToBase = [0x01, ...u16(0), ...u16(1)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 1),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_SHRFMLA, [
+        ...u16(0),
+        ...u16(1),
+        1,
+        1,
+        0,
+        2,
+        ...u16(shrFmlaRgce.length),
+        ...shrFmlaRgce,
+      ]),
+      record(RECORD_FORMULA, [
+        ...cell(1, 1),
+        ...f64(2),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBe("$A$1+A1");
+    expect(cells[1]?.formula).toBe("$A$1+A2");
+  });
+
+  it("resolves an array (CSE) formula's expanded text with no formula-bar bracing, identical for every cell in the range", () => {
+    // A2:A3 entered as one array formula "=A1*2" -- the base cell A2 and its sibling A3 both carry just a PtgExp pointing back at A2 (row 1, column 0); the real, position-independent expression lives once in the Array record. Excel's own `{...}` CSE bracing is formula-bar display syntax, never written into the formula itself, so this matches ooxml.js's own xlsx convention rather than adding it.
+    const arrayRgce = [
+      0x44,
+      ...u16(0),
+      ...u16(0xc000), // PtgRef A1
+      0x1e,
+      ...u16(2), // PtgInt 2
+      0x05, // PtgMul
+    ];
+    const ptgExpToBase = [0x01, ...u16(1), ...u16(0)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(1, 0),
+        ...f64(2),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_ARRAY, [
+        ...u16(1),
+        ...u16(2),
+        0,
+        0, // ref: rwFirst=1, rwLast=2, colFirst=0, colLast=0 -- not interpreted by this reader
+        ...u16(0), // flags word (fAlwaysCalc + reserved)
+        ...u32(0), // unused
+        ...u16(arrayRgce.length),
+        ...arrayRgce,
+      ]),
+      record(RECORD_FORMULA, [
+        ...cell(2, 0),
+        ...f64(4),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBe("A1*2");
+    expect(cells[1]?.formula).toBe("A1*2");
+  });
+
+  it("resolves an array-constant literal inside an ordinary, non-array-entered formula from its own rgcb trailer", () => {
+    // =SUM({1;2;3}) -- a plain formula containing a literal array constant is unrelated to a CSE array formula: PtgArray/PtgExtraArray sit directly in one Formula record's own rgce/rgcb, with no Array record involved at all.
+    const rgce = [
+      0x40,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0, // PtgArray (value class) -- 7 bytes this reader never inspects
+      0x42,
+      0x01,
+      ...u16(0x0004), // PtgFuncVar SUM, cparams=1
+    ];
+    const rgcb = [
+      0, // cols - 1 = 0 (one column)
+      ...u16(2), // rows - 1 = 2 (three rows)
+      0x01,
+      ...f64(1), // SerNum 1
+      0x01,
+      ...f64(2), // SerNum 2
+      0x01,
+      ...f64(3), // SerNum 3
+    ];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        ...f64(6),
+        ...u16(0),
+        ...u32(0),
+        ...u16(rgce.length),
+        ...rgce,
+        ...rgcb,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBe("SUM({1;2;3})");
+  });
+
+  it("keeps the cell's cached value when its own rgcb trailer is too short for the PtgExtraArray it claims to hold", () => {
+    // rgcb's own byte length is never declared anywhere in the file -- this reader infers it by subtraction from the record's total length -- so a PtgExtraArray whose row/column counts overrun what's actually there is a real malformation risk, not a hypothetical one. This must degrade to an absent formula for this one cell, exactly like any other unresolved construct, rather than throwing and losing every other cell's read along with it.
+    const rgce = [
+      0x40,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0, // PtgArray
+      0x42,
+      0x01,
+      ...u16(0x0004), // PtgFuncVar SUM, cparams=1
+    ];
+    const rgcb = [
+      0, // cols - 1 = 0
+      ...u16(2), // rows - 1 = 2 (claims three rows)
+      0x01,
+      ...f64(1), // only one SerNum actually supplied
+    ];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        ...f64(6),
+        ...u16(0),
+        ...u32(0),
+        ...u16(rgce.length),
+        ...rgce,
+        ...rgcb,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 6 });
+  });
+
+  it("leaves formula absent for a PtgExp whose base cell has no matching ShrFmla/Array group", () => {
+    // A PtgExp pointing at a cell that is never followed by ShrFmla/Array -- a dangling or malformed reference this reader declines to guess at, exactly like any other unresolved construct.
+    const ptgExpToNowhere = [0x01, ...u16(5), ...u16(5)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToNowhere.length),
+        ...ptgExpToNowhere,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
+  });
+
+  it("does not abort the whole sheet read when a ShrFmla record's own cce overruns the record", () => {
+    // A ShrFmla whose own cce claims far more rgce bytes than the record actually carries must degrade to no group recovered for this base cell, not throw out of collectFormulaGroups -- that would abort readSheetRecords before its own cell-reading loop ever runs, losing every OTHER cell on the sheet along with this one's formula text, not just this one's.
+    const ptgExpToBase = [0x01, ...u16(0), ...u16(1)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 1),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_SHRFMLA, [
+        ...u16(0), // rwFirst
+        ...u16(1), // rwLast
+        1, // colFirst
+        1, // colLast
+        0, // reserved
+        2, // cUse
+        ...u16(1000), // cce claims 1000 bytes of rgce -- far more than this record actually carries
+        0x4c,
+        ...u16(0),
+        ...u16(0xffff), // a couple of real bytes, nowhere near 1000
+      ]),
+      record(RECORD_NUMBER, [...cell(9, 9), ...f64(42)]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
+    expect(cells[1]?.value).toEqual({ kind: "number", value: 42 });
+  });
+
+  it("does not abort the whole sheet read when an Array record's own cce overruns the record", () => {
+    // The same malformed-length risk as the ShrFmla case above, on the OTHER record collectFormulaGroups reads without a bounds guard: an Array record's own cce claiming far more rgce bytes than it actually carries.
+    const ptgExpToBase = [0x01, ...u16(1), ...u16(0)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(1, 0),
+        ...f64(2),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_ARRAY, [
+        ...u16(1),
+        ...u16(2),
+        0,
+        0, // ref: rwFirst=1, rwLast=2, colFirst=0, colLast=0
+        ...u16(0), // flags word
+        ...u32(0), // unused
+        ...u16(1000), // cce claims 1000 bytes of rgce -- far more than this record actually carries
+        0x44,
+        ...u16(0),
+        ...u16(0xc000), // a couple of real bytes, nowhere near 1000
+      ]),
+      record(RECORD_NUMBER, [...cell(9, 9), ...f64(99)]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 2 });
+    expect(cells[1]?.value).toEqual({ kind: "number", value: 99 });
   });
 });
 

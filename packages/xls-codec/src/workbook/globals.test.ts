@@ -23,6 +23,7 @@ import {
   u16,
   u32,
   xlUnicodeString,
+  xlUnicodeStringNoCch,
 } from "../test-support/biff";
 import { formatCodeOf, readWorkbookGlobals } from "./globals";
 
@@ -358,11 +359,42 @@ describe("readWorkbookGlobals", () => {
     ]);
   });
 
-  it("does not resolve an ixti whose SupBook is a genuinely external workbook", () => {
-    // A SupBook naming an external workbook carries a real cch (its virtPath's own length), never 0x0401 -- this reader resolves only the self-referencing case.
+  it("resolves a genuinely external workbook's own file name and sheet name through virtPath and rgst", () => {
+    // rel-volume ([MS-XLS] 480c3d2a: "%x0001 %x0002 file-path" -- relative to the referencing workbook's own drive), the common real-world case of an external workbook in the same folder: virtPath is just the two-character marker followed directly by the file name.
+    const virtPath = "\u0001\u0002Budget.xlsx";
     const globals = readWorkbookGlobals(
       groupsOf(
-        record(RECORD_SUPBOOK, [...u16(2), ...u16(0x0001), 0x00]),
+        record(RECORD_SUPBOOK, [
+          ...u16(1), // ctab: one sheet in the external workbook
+          ...u16(virtPath.length), // cch
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"), // rgst[0]
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0), // iSupBook
+          ...u16(0), // itabFirst -- rgst[0]
+          ...u16(0), // itabLast -- rgst[0]
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[Budget.xlsx]Sheet1", diagnostic: false },
+    ]);
+  });
+
+  it("resolves a bare simple-file-path virtPath with no leading marker at all", () => {
+    // [MS-XLS] 480c3d2a: simple-file-path = [%x0001] file-path -- the marker is optional, and this is the case where it's absent entirely.
+    const virtPath = "Budget.xlsx";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
         record(RECORD_EXTERNSHEET, [
           ...u16(1),
           ...u16(0),
@@ -372,10 +404,205 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([undefined]);
+    expect(globals.sheetRanges).toEqual([
+      { label: "[Budget.xlsx]Sheet1", diagnostic: false },
+    ]);
   });
 
-  it("does not resolve an XTI whose sheet could not be found", () => {
+  it("resolves a 0x01-prefixed simple-file-path virtPath without losing the file name's own first character", () => {
+    // [MS-XLS] 480c3d2a: simple-file-path's own %x0001 marker stands ALONE, with no second marker byte -- so the character right after it is already the start of file-path, not part of a two-byte marker to also discard.
+    const virtPath = "\u0001Budget.xlsx";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[Budget.xlsx]Sheet1", diagnostic: false },
+    ]);
+  });
+
+  it("declines a virtPath whose file-path carries its own bracketed sheet name, rather than doubling it up with the caller's own brackets", () => {
+    // [MS-XLS] 480c3d2a: file-path = relative-path / "[" relative-path "]" sheet-name -- this reader's own caller already brackets the resolved file name as `[fileName]sheet`, so a file-path that is ITSELF already bracketed would otherwise render as a mangled `[[Book.xlsx]Sheet1]Sheet1` rather than resolving cleanly.
+    const virtPath = "[Book.xlsx]Sheet1";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[EXTERNAL]Sheet1", diagnostic: true },
+    ]);
+  });
+
+  it("declines a bracketed sheet name reached through a directory separator, not just one at the very start of the path", () => {
+    // A start-of-path-only bracket check misses this: "sub" then a directory separator then a bracketed segment leaves the leading character "s", not "[", so a check scoped to the path's own start would fall through and return "[Book.xlsx]Sheet1" itself as the file name -- doubling up with the caller's own `[fileName]sheet` bracketing into a mangled label, and with `diagnostic` wrongly left false since fileNameFromVirtPath would have reported success.
+    const virtPath = "sub\u0003[Book.xlsx]Sheet1";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[EXTERNAL]Sheet1", diagnostic: true },
+    ]);
+  });
+
+  it("declines an unbalanced bracket with no directory separator at all, rather than passing it through as part of the file name", () => {
+    const virtPath = "abc[def";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[EXTERNAL]Sheet1", diagnostic: true },
+    ]);
+  });
+
+  it("resolves a multi-sheet external range as first:last, the same shape a local multi-sheet range takes", () => {
+    const virtPath = "\u0001\u0002Book.xlsx";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(3),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Jan"),
+          ...xlUnicodeString("Feb"),
+          ...xlUnicodeString("Mar"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0), // itabFirst -- rgst[0] "Jan"
+          ...u16(2), // itabLast -- rgst[2] "Mar"
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[Book.xlsx]Jan:Mar", diagnostic: false },
+    ]);
+  });
+
+  it("shows a known sheet name against a placeholder workbook label when virtPath's own form is not one this reader decodes", () => {
+    // An absolute drive volume ([MS-XLS] 480c3d2a: "%x0001 %x0001 volume-character file-path") needs more of the VirtualPath grammar than a trailing path segment to reproduce faithfully -- fileNameFromVirtPath declines rather than guessing, but rgst's own sheet name is still fully resolvable and is not discarded along with it.
+    const virtPath = "\u0001\u0001CBudget.xlsx";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[EXTERNAL]Sheet1", diagnostic: true },
+    ]);
+  });
+
+  it("carries a diagnostic label for an add-in-referencing SupBook rather than dropping the reference", () => {
+    // [MS-XLS] 2.4.271: cch 0x3A01 marks an add-in-referencing supporting link, which names XLL/COM add-in functions this reader has no workbook or sheet to resolve a name from. [MS-XLS] 2.5.344's own itabFirst/itabLast table gives an add-in reference -2 ("not used") for both fields -- not 0 -- since there is no sheet scope for this kind of supporting link at all.
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [...u16(1), ...u16(0x3a01)]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0), // iSupBook
+          ...u16(-2), // itabFirst
+          ...u16(-2), // itabLast
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "#REF!(add-in function reference)", diagnostic: true },
+    ]);
+  });
+
+  it("carries a diagnostic label for a DDE- or OLE-referencing SupBook rather than dropping the reference", () => {
+    // [MS-XLS] 2.4.271: a supporting link whose ctab is reserved-zero and whose virtPath matches neither the same-sheet nor the unused single-character sentinel is a DDE or OLE data source reference -- and, like an add-in reference, gets -2 for both itabFirst and itabLast, since neither has a sheet scope to name.
+    const virtPath = "Excel\u0003Sheet1";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(0), // ctab: reserved zero for a DDE/OLE link
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(-2),
+          ...u16(-2),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "#REF!(DDE or OLE data source reference)", diagnostic: true },
+    ]);
+  });
+
+  it("carries a diagnostic label, not undefined, for an XTI whose sheet could not be found", () => {
     // [MS-XLS] 2.5.344: -1 is itabFirst/itabLast's own "the sheet could not be found" sentinel.
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -391,11 +618,47 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([undefined]);
+    expect(globals.sheetRanges).toEqual([
+      { label: "#REF!(sheet not found)", diagnostic: true },
+    ]);
   });
 
   it("defaults sheetRanges to empty when the substream carries no EXTERNSHEET record", () => {
     expect(readWorkbookGlobals(groupsOf()).sheetRanges).toEqual([]);
+  });
+
+  it("degrades a SupBook whose rgst is shorter than its own declared ctab to a diagnostic, rather than aborting the whole workbook read", () => {
+    // ctab claims 5 sheet names but not one XLUnicodeString actually follows virtPath -- reading the first would run past the end of the record. This must not propagate past readWorkbookGlobals: a malformed SupBook degrades to its own diagnostic, and every OTHER record in the substream (here, a BoundSheet8 after it) still reads normally.
+    const virtPath = "Budget.xlsx";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(5), // ctab: claims five sheet names
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          // no rgst entries actually follow
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+        record(RECORD_BOUNDSHEET8, [
+          ...u32(0x0200),
+          0x00,
+          0x00,
+          ...shortXlUnicodeString("Summary"),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "#REF!(malformed supporting link)", diagnostic: true },
+    ]);
+    expect(globals.sheets).toEqual([
+      { name: "Summary", hidden: false, sheetType: 0, bofPosition: 0x0200 },
+    ]);
   });
 });
 

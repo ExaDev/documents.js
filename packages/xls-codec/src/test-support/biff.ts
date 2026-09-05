@@ -55,6 +55,12 @@ export function xlUnicodeString(text: string): number[] {
   return [...u16(text.length), flags, ...rgb];
 }
 
+/** An XLUnicodeStringNoCch ([MS-XLS] 2.5.295): as XLUnicodeString, but with no character-count field of its own -- the containing structure states the count separately (SupBook's own `cch`, for its `virtPath` field). */
+export function xlUnicodeStringNoCch(text: string): number[] {
+  const { flags, rgb } = encodeCharacters(text);
+  return [flags, ...rgb];
+}
+
 /** A ShortXLUnicodeString ([MS-XLS] 2.5.240): as above with a one-byte character count. */
 export function shortXlUnicodeString(text: string): number[] {
   const { flags, rgb } = encodeCharacters(text);
