@@ -411,6 +411,63 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  it("reports a dropDown's unmatched value through the diagnostic sink, rather than dropping it silently", () => {
+    const codes: string[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+                value: "Bonjour",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+      { sink: (diagnostic) => codes.push(diagnostic.code) },
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+  });
+
+  // A dropDown with no options recorded at all is a distinct shape from one whose options exist but don't contain `value`: `options` itself is undefined here, so `value` names none of a list that does not exist either. This should degrade identically to the unmatched-value case above -- the sink still fires, since a recorded value with nowhere to write it is data loss regardless of whether the option list is empty, absent, or merely missing the one entry that was picked.
+  it("reports a dropDown's value through the diagnostic sink when no options list exists at all to match it against", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  value: "Bonjour",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
   it("writes \\ffres as a zero-based index into \\*\\ffl when a dropDown's value names one of its own options", () => {
     const out = write(
       wordprocessing([
