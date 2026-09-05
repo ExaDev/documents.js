@@ -6,6 +6,7 @@ import {
 } from "./diagnostics";
 import { readRtfContent } from "./read";
 import { text } from "./test-support/bytes";
+import { expectBalancedBraces } from "./test-support/brace-balance";
 import { writeRtfContent } from "./write";
 
 const LETTER_SECTION: Omit<ContentSection, "blocks"> = {
@@ -291,25 +292,72 @@ describe("body constructs", () => {
     expect(out).toContain("{\\fldrslt {Lorem ipsum.}}}");
   });
 
-  it("reports a contentControl controlType RTF's own form-field vocabulary does not cover, rather than minting nothing silently", () => {
+  it("reports a contentControl controlType RTF's own form-field vocabulary does not cover, rather than minting nothing silently -- and mints no unbalanced braces for it", () => {
     const codes: string[] = [];
-    writeRtfContent(
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "richText",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    // The regression this guards: an unrepresentable controlType must mint no open half either, or the writer emits the extent's close "}}" unpaired and corrupts the rest of the document's brace balance.
+    expectBalancedBraces(out);
+  });
+
+  it("mints balanced braces for a paragraph mixing a real form field with an unrepresentable one", () => {
+    const out = write(
       wordprocessing([
         {
           kind: "paragraph",
-          runs: [{ text: "x" }],
+          runs: [{ text: "a" }, { text: "b" }, { text: "c" }],
           constructs: [
             {
-              descriptor: { kind: "contentControl", controlType: "richText" },
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: true,
+              },
               startRun: 0,
-              endRun: 1,
+              endRun: 0,
+            },
+            {
+              descriptor: { kind: "contentControl", controlType: "comboBox" },
+              startRun: 1,
+              endRun: 2,
+            },
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["x"],
+              },
+              startRun: 3,
+              endRun: 3,
             },
           ],
         },
       ]),
-      { sink: (diagnostic) => codes.push(diagnostic.code) },
     );
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(out).toContain("FORMCHECKBOX");
+    expect(out).toContain("FORMDROPDOWN");
+    expect(out).not.toContain("COMBOBOX");
+    expectBalancedBraces(out);
   });
 
   it("writes a table as \\trowd/\\cellxN row definitions with \\cell and \\row marks", () => {
