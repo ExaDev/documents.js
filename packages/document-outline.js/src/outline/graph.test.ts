@@ -2270,8 +2270,8 @@ describe("write API: insertNode's fresh-mint children-wiring reconciles pre-exis
       kind: "section",
       children: [leafA.id, leafB.id, leafA.id],
     });
-    // Wire only leafB directly, before the section has a node of its own -- both of leafA's requested occurrences are still missing when the fresh mint below runs, which a plain existingChildren Set could not tell apart from "one occurrence missing".
-    const withDanglingEdge = insertEdge(leafB.graph, sectionId, leafB.id);
+    // Wire only ONE occurrence of leafA -- the REPEATED id -- directly, before the section has a node of its own; leafB has no existing edge at all. A plain existingChildren Set (membership only, no count) sees leafA present and treats BOTH of its requested occurrences as already satisfied, silently dropping the second one; a multiplicity-aware reconciliation must recognise that only the first occurrence is actually wired and the second is still missing.
+    const withDanglingEdge = insertEdge(leafB.graph, sectionId, leafA.id);
 
     const section = insertNode(withDanglingEdge, {
       kind: "section",
@@ -2283,7 +2283,7 @@ describe("write API: insertNode's fresh-mint children-wiring reconciles pre-exis
     const contains = section.graph.edges.filter(
       (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
     );
-    // Three edges total -- both requested occurrences of leafA survive, not just one.
+    // Three edges total -- both requested occurrences of leafA survive, not just the one that was already wired.
     expect(contains).toHaveLength(3);
     expect(contains.filter((edge) => edge.to === leafA.id)).toHaveLength(2);
     expect(contains.filter((edge) => edge.to === leafB.id)).toHaveLength(1);
@@ -2291,6 +2291,38 @@ describe("write API: insertNode's fresh-mint children-wiring reconciles pre-exis
       .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
       .map((edge) => edge.to);
     expect(ordered).toEqual([leafA.id, leafB.id, leafA.id]);
+  });
+
+  it("insertNode's fresh-mint reconciliation anchors a missing child to the SPECIFIC pre-wired occurrence of a repeated sibling id, not to whichever occurrence of that id sorts earliest", () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const leafX = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "X." }] },
+    });
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [leafA.id, leafX.id, leafA.id],
+    });
+    // Wire BOTH occurrences of the repeated id (leafA) directly, in requested order, before the section has a node of its own. leafX -- the one genuinely missing child -- must anchor to the SECOND of these two leafA edges specifically: anchoring by the bare value "leafA" instead resolves (via insertEdge's own before/after lookup) to whichever leafA edge sorts earliest, landing leafX before the FIRST leafA rather than between the two.
+    const firstA = insertEdge(leafX.graph, sectionId, leafA.id);
+    const secondA = insertEdge(firstA, sectionId, leafA.id);
+
+    const section = insertNode(secondA, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leafA.id, leafX.id, leafA.id],
+    });
+    expect(section.id).toBe(sectionId);
+
+    const ordered = section.graph.edges
+      .filter((edge) => edge.from === sectionId && edge.kind === "CONTAINS")
+      .sort((p, q) => (p.orderKey < q.orderKey ? -1 : 1))
+      .map((edge) => edge.to);
+    // The exact requested order is reproduced: leafX lands between the two leafA occurrences, not before the first (or after the second).
+    expect(ordered).toEqual([leafA.id, leafX.id, leafA.id]);
   });
 
   it("a fresh mint with no pre-existing CONTAINS edges at all still mints the wide, evenly spaced orderKeyForIndex(index) keys directly, without paying for reconciliation", () => {
@@ -2464,11 +2496,11 @@ describe("write API: insertNode handles a dedup hit's kind and children correctl
       properties: { kind: "section", children: [a.id, b.id, a.id] },
     });
 
-    // Wire only b directly, as if an earlier caller had partially populated this id's containment before the full reconciling call arrives -- both of a's requested occurrences are still missing, which a plain existingChildren Set could not tell apart from "one occurrence missing".
+    // Wire only ONE occurrence of a -- the REPEATED id -- directly, as if an earlier caller had partially populated this id's containment before the full reconciling call arrives; b has no existing edge at all. A plain existingChildren Set (membership only, no count) sees a present and treats BOTH requested occurrences as satisfied, silently dropping the second; a multiplicity-aware reconciliation must recognise only the first occurrence is wired and the second is still missing.
     const partiallyWired = insertEdge(
       foldedSpelling.graph,
       foldedSpelling.id,
-      b.id,
+      a.id,
     );
 
     const explicitSpelling = insertNode(partiallyWired, {
@@ -2642,5 +2674,199 @@ describe("write API: insertEdge refuses an ambiguous before/after sibling only o
       .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
       .map((edge) => edge.to);
     expect(ordered).toEqual([a.id, b.id]);
+  });
+});
+
+// Exhaustive correctness proof for reconcileChildren (#935 round 9): every requested `children` array up to length 4 over a 2-id pool, crossed with every COHERENT pre-wiring of its own occurrences ahead of the reconciling call -- an exhaustive enumeration over a small case space, preferred here over fast-check (not a dependency of this package) precisely because it is a genuine proof over that space rather than probabilistic sampling.
+//
+// "Coherent" is load-bearing: reconcileChildren's own classification always matches the Nth requested occurrence of a value to the Nth existing edge to that value, front to back -- an edge carries no metadata saying which specific requested occurrence it was minted for, so a pre-wiring can only ever represent "the first K occurrences of this value are already wired," never an arbitrary later occurrence alone with an earlier one left missing. `allCoherentPreWirings` generates exactly that space: for every value in the pool, a wired COUNT from zero to that value's own occurrence count in `children`, taking the first that many of its occurrences (in request order) as wired -- never an arbitrary subset of positions, which can silently construct an incoherent scenario the reconciliation function has no way to represent (verified directly: an earlier draft of this suite generated arbitrary position subsets and hit exactly this trap on children=[A,B,A] wired at positions [1,2] -- wiring ONLY the second A while leaving the first missing is not a scenario any edge set can encode, since the single existing A edge is unavoidably claimed by request position 0, the first requester of "A", not position 2). Every coherent pre-wiring is attached via sequential insertEdge calls in ascending POSITION order (mixing values), which is what makes the resulting existing edges' mutual order agree with request order among every wired position -- the precondition this module's own documentation names for exact reproduction.
+//
+// Under that precondition, walking CONTAINS edges from the resulting id after insertNode must reproduce the EXACT requested `children` list, order and multiplicity both, with no two edges tied on orderKey -- covering both a repeated id with zero, some, or every occurrence pre-wired, and a missing occurrence whose nearest later already-wired position is itself one occurrence of a repeated id (the round-9 anchor-by-value defect: anchoring against the bare id resolves to whichever occurrence of that id sorts earliest, not the specific one the classification pass actually matched).
+describe("write API: reconcileChildren reproduces every requested children list exhaustively, over every coherent pre-wiring (#935 round 9)", () => {
+  const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
+
+  const leafA = insertNode(EMPTY_GRAPH, {
+    kind: "paragraph",
+    properties: { kind: "paragraph", runs: [{ text: "A." }] },
+  });
+  const leafB = insertNode(leafA.graph, {
+    kind: "paragraph",
+    properties: { kind: "paragraph", runs: [{ text: "B." }] },
+  });
+  const baseGraph = leafB.graph;
+  const idOf = { A: leafA.id, B: leafB.id } as const;
+  type Letter = keyof typeof idOf;
+  const LETTERS: readonly Letter[] = ["A", "B"];
+
+  const MAX_LENGTH = 4;
+
+  // Every sequence of the given length over the 2-id pool: 2^length arrangements, covering every possible multiplicity and every relative order of the two ids.
+  function allSequences(length: number): Letter[][] {
+    if (length === 0) return [[]];
+    return allSequences(length - 1).flatMap((seq) => [
+      [...seq, "A" as const],
+      [...seq, "B" as const],
+    ]);
+  }
+
+  function occurrencePositions(
+    children: readonly Letter[],
+    letter: Letter,
+  ): number[] {
+    const positions: number[] = [];
+    children.forEach((candidate, position) => {
+      if (candidate === letter) positions.push(position);
+    });
+    return positions;
+  }
+
+  // Every coherent pre-wiring of `children`: for each distinct value, a wired count from 0 (nothing of this value pre-wired) to its own occurrence count (every occurrence pre-wired), taking the first that many occurrences in request order -- the only shape reconcileChildren's front-to-back matching can represent. Returned already sorted ascending by position, so sequential insertEdge attachment below reproduces exactly the relative order those positions hold in `children`.
+  function allCoherentPreWirings(children: readonly Letter[]): number[][] {
+    const occurrencesByLetter = new Map(
+      LETTERS.map((letter) => [letter, occurrencePositions(children, letter)]),
+    );
+    let wirings: number[][] = [[]];
+    for (const letter of LETTERS) {
+      const occurrences = occurrencesByLetter.get(letter)!;
+      const nextWirings: number[][] = [];
+      for (const wiring of wirings) {
+        for (let count = 0; count <= occurrences.length; count += 1) {
+          nextWirings.push(
+            [...wiring, ...occurrences.slice(0, count)].sort((x, y) => x - y),
+          );
+        }
+      }
+      wirings = nextWirings;
+    }
+    return wirings;
+  }
+
+  // Attaches exactly the requested occurrences named by `preWiredPositions` (ascending) as literal CONTAINS edges from `id`, via plain sequential insertEdge appends.
+  function preWirePositions(
+    graph: PropertyGraph,
+    id: string,
+    children: readonly Letter[],
+    preWiredPositions: readonly number[],
+  ): PropertyGraph {
+    return preWiredPositions.reduce(
+      (acc, position) => insertEdge(acc, id, idOf[children[position]!]),
+      graph,
+    );
+  }
+
+  function assertExactReconciliation(
+    graph: PropertyGraph,
+    id: string,
+    children: readonly Letter[],
+    caseLabel: string,
+  ): void {
+    const contains = graph.edges
+      .filter((edge) => edge.from === id && edge.kind === "CONTAINS")
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1));
+    try {
+      expect(contains.map((edge) => edge.to)).toEqual(
+        children.map((letter) => idOf[letter]),
+      );
+      expect(new Set(contains.map((edge) => edge.orderKey)).size).toBe(
+        contains.length,
+      );
+    } catch (error) {
+      throw new Error(`${caseLabel}: ${(error as Error).message}`, {
+        cause: error,
+      });
+    }
+  }
+
+  it("fresh-mint reconciliation: every (children, coherent pre-wiring) pair over a 2-id pool up to length 4", () => {
+    let sequencesRun = 0;
+    let casesRun = 0;
+    for (let length = 1; length <= MAX_LENGTH; length += 1) {
+      for (const children of allSequences(length)) {
+        sequencesRun += 1;
+        for (const preWired of allCoherentPreWirings(children)) {
+          const caseLabel = `children=[${children.join(",")}] preWired=[${preWired.join(",")}]`;
+          const sectionId = contentHashV1({
+            kind: "section",
+            children: children.map((letter) => idOf[letter]),
+          });
+          const wired = preWirePositions(
+            baseGraph,
+            sectionId,
+            children,
+            preWired,
+          );
+          const section = insertNode(wired, {
+            kind: "section",
+            properties: { kind: "section" },
+            children: children.map((letter) => idOf[letter]),
+          });
+          expect(section.id).toBe(sectionId);
+          assertExactReconciliation(
+            section.graph,
+            sectionId,
+            children,
+            `fresh-mint ${caseLabel}`,
+          );
+          casesRun += 1;
+        }
+      }
+    }
+    // A sanity check on the sequence enumeration itself (sum over length 1..MAX_LENGTH of 2^length) -- every sequence must actually have run, and every sequence contributes at least its own "nothing pre-wired" case, so casesRun must be at least that many too.
+    const expectedSequences = Array.from(
+      { length: MAX_LENGTH },
+      (_, i) => i + 1,
+    )
+      .map((length) => 2 ** length)
+      .reduce((total, count) => total + count, 0);
+    expect(sequencesRun).toBe(expectedSequences);
+    expect(casesRun).toBeGreaterThanOrEqual(expectedSequences);
+  });
+
+  it("dedup-hit reconciliation: every (children, coherent pre-wiring) pair over a 2-id pool up to length 4", () => {
+    let sequencesRun = 0;
+    let casesRun = 0;
+    for (let length = 1; length <= MAX_LENGTH; length += 1) {
+      for (const children of allSequences(length)) {
+        sequencesRun += 1;
+        // Folded spelling mints the section with NO CONTAINS edges (children folded into `properties` instead of the explicit parameter) -- an already-minted id to pre-wire onto, exercising insertNode's OTHER reconciliation branch (a genuine dedup hit, not a dangling-edge fresh mint).
+        const foldedSpelling = insertNode(baseGraph, {
+          kind: "section",
+          properties: {
+            kind: "section",
+            children: children.map((letter) => idOf[letter]),
+          },
+        });
+        for (const preWired of allCoherentPreWirings(children)) {
+          const caseLabel = `children=[${children.join(",")}] preWired=[${preWired.join(",")}]`;
+          const wired = preWirePositions(
+            foldedSpelling.graph,
+            foldedSpelling.id,
+            children,
+            preWired,
+          );
+          const explicitSpelling = insertNode(wired, {
+            kind: "section",
+            properties: { kind: "section" },
+            children: children.map((letter) => idOf[letter]),
+          });
+          expect(explicitSpelling.id).toBe(foldedSpelling.id);
+          assertExactReconciliation(
+            explicitSpelling.graph,
+            foldedSpelling.id,
+            children,
+            `dedup-hit ${caseLabel}`,
+          );
+          casesRun += 1;
+        }
+      }
+    }
+    const expectedSequences = Array.from(
+      { length: MAX_LENGTH },
+      (_, i) => i + 1,
+    )
+      .map((length) => 2 ** length)
+      .reduce((total, count) => total + count, 0);
+    expect(sequencesRun).toBe(expectedSequences);
+    expect(casesRun).toBeGreaterThanOrEqual(expectedSequences);
   });
 });
