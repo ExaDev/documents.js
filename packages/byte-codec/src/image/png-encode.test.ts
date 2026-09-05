@@ -70,6 +70,11 @@ function assertSpecCompliantPng(png: Uint8Array): void {
     }
   }
 
+  if (colorType === 3) {
+    expect(paletteEntryCount).toBeDefined();
+    expect(paletteEntryCount!).toBeGreaterThan(0); // an indexed image's PLTE must carry at least one entry -- a zero-length PLTE is not a valid PNG chunk
+    expect(paletteEntryCount!).toBeLessThanOrEqual(256); // colour type 3 cannot address more than 256 palette entries
+  }
   if (colorType === 3 && trnsLength !== undefined) {
     expect(trnsLength).toBeGreaterThan(0); // a present tRNS chunk may never be empty -- strict decoders such as libpng reject it outright, even though the PNG spec itself states no lower bound
     expect(trnsLength).toBeLessThanOrEqual(paletteEntryCount!); // and never more than one alpha value per palette entry
@@ -310,4 +315,21 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     // Each row is a leading filter-type byte (0, 'none') followed by one palette-index byte per pixel -- 4 bytes per row, not the 10 a raw-RGB truecolour row of the same width would need.
     expect(Array.from(inflated)).toEqual([0, 0, 1, 2, 0, 0, 1, 2]);
   });
+
+  it.each([
+    ["zero width", 0, 3],
+    ["zero height", 3, 0],
+    ["both zero", 0, 0],
+  ])(
+    "never takes the indexed path for a zero-dimension image (%s), since an empty PLTE chunk is not a valid PNG chunk",
+    (_label, width, height) => {
+      const image = rgbImage(width, height, []);
+      const png = encodePng(image);
+
+      expect(colorTypeOf(png)).not.toBe(3); // falls back to the truecolour path, which carries no PLTE at all
+      expect(readChunks(png).has("PLTE")).toBe(false);
+      assertSpecCompliantPng(png);
+      expect(() => decodePng(png)).not.toThrow();
+    },
+  );
 });
