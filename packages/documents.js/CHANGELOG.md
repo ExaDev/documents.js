@@ -1,3 +1,15 @@
+## [6.5.1](https://github.com/ExaDev/documents.js/compare/documents.js%406.5.0...documents.js%406.5.1) (2026-09-05)
+
+### Bug Fixes
+
+* **documents.js:** wire odp image alt text into a svg:title child ([7f780ec](https://github.com/ExaDev/documents.js/commit/7f780ec8a08e8c477c3d0227e7ad5a94393d337b))
+* **documents.js:** wire pptx picture alt text into p:cNvPr/[@descr](https://github.com/descr) ([773ac62](https://github.com/ExaDev/documents.js/commit/773ac628b12047fc1118b5ff41aefeaad2bdf99a))
+
+
+### Dependencies
+
+- Updated ooxml.js to ^6.3.5
+
 ## [6.5.0](https://github.com/ExaDev/documents.js/compare/documents.js%406.4.1...documents.js%406.5.0) (2026-09-04)
 
 ### Features

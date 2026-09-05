@@ -1,3 +1,9 @@
+## [6.3.5](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.3.4...ooxml.js%406.3.5) (2026-09-05)
+
+### Bug Fixes
+
+* **ooxml.js:** read pptx picture alt text from p:cNvPr/[@descr](https://github.com/descr) ([0168895](https://github.com/ExaDev/documents.js/commit/01688955037817ead265c5898a5d6baa5a20e325))
+
 ## [6.3.4](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.3.3...ooxml.js%406.3.4) (2026-09-04)
 
 ### Code Refactoring
