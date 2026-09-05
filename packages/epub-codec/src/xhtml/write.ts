@@ -291,6 +291,7 @@ type FootnoteExtent = RunConstructExtent & {
   descriptor: { kind: "anchor"; anchorType: "footnote"; name: string };
 };
 
+// Only the "footnote" member of document-schema.js's own AnchorTypeSchema ("bookmark" | "footnote" | "endnote" | "comment") is recognised here -- a run-level construct extent whose anchorType is anything else (a bookmark or comment range that ooxml.js's own docx reader can and does emit at run scope, e.g. pairRunRangeMarkers in src/typed/docx/constructs.ts) is filtered out below with no representation and no diagnostic at all. Tracked as ExaDev/documents.js#1025 rather than fixed here: a genuinely distinct construct-kind gap, not a bug in this function's own footnote handling.
 function isFootnoteExtent(
   construct: RunConstructExtent,
 ): construct is FootnoteExtent {
