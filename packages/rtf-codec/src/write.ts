@@ -261,6 +261,9 @@ const FORM_FIELD_SPEC: ReadonlyMap<
   ["dropDown", { instruction: "FORMDROPDOWN", fftype: 2 }],
 ]);
 
+// [MS-DOC] 2.9.78 FFData.hsttbDropList: "an array of Unicode strings that are the entries in the dropdown list... MUST NOT exceed 25." Not an arbitrary round number: FFDataBits' own iRes field reserves index 25 as its "undefined selection" sentinel (see FORM_FIELD_RESULT_UNDEFINED in constructs.ts), so a 26th real entry would sit exactly where a real Word/DOC consumer expects "no selection" instead of an actual option.
+const MAX_DROPDOWN_OPTIONS = 25;
+
 // The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffres`/`\ffdefres` pair, a dropdown's own `\ffhaslistbox` plus its selected-entry `\ffres`/`\ffdefres` pair and its list of `{\*\ffl ...}` entries, and -- for any of the three types -- the control's bookmark-style name as `{\*\ffname ...}`.
 function formFieldPayload(
   descriptor: ContentControlDescriptor,
@@ -275,7 +278,16 @@ function formFieldPayload(
   } else if (descriptor.controlType === "dropDown") {
     // \ffhaslistbox is minted unconditionally for a dropDown, independent of whether it carries any options at all: [MS-DOC] 2.9.78 FFDataBits.fHasListBox "specifies that the form field has a list box. This value MUST be 1 if iType is iTypeDrop (2)." A dropdown with no options is still a dropdown -- there is no degenerate case in which that bit stops being true, so it cannot be gated behind `options !== undefined` the way an earlier version of this writer gated it (which then also left \ffdefres unminted for exactly that shape, a real, common one: a docx `w:dropDownList`/`w:comboBox` with no `w:listItem` children, or an ODF `form:listbox`, both currently read back by this ecosystem with no options recorded at all -- tracked as ExaDev/documents.js#1016).
     out += "\\ffhaslistbox";
-    const options = descriptor.options;
+    const allOptions = descriptor.options;
+    let options = allOptions;
+    if (allOptions !== undefined && allOptions.length > MAX_DROPDOWN_OPTIONS) {
+      sink({
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        severity: "warning",
+        message: `a dropDown contentControl's ${String(allOptions.length)} options exceed [MS-DOC] 2.9.78 FFData.hsttbDropList's own ${String(MAX_DROPDOWN_OPTIONS)}-entry limit; only the first ${String(MAX_DROPDOWN_OPTIONS)} are written`,
+      });
+      options = allOptions.slice(0, MAX_DROPDOWN_OPTIONS);
+    }
     const selectedIndex =
       options === undefined || descriptor.value === undefined
         ? undefined
