@@ -204,6 +204,22 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     reached.add(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED);
   });
 
+  it("HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT: a level-1/2 heading whose own runs embed a TRAILING line break, which setext cannot promote to without leaving a blank line before its own underline", () => {
+    const collector = createDiagnosticCollector();
+    emitMarkdown(
+      minimalDocument([
+        { kind: "paragraph", runs: [{ text: "a\n" }], styleId: "Heading1" },
+      ]),
+      { sink: collector.sink },
+    );
+    expect(
+      collector.has(
+        MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+      ),
+    ).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT);
+  });
+
   it("HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK: headingStyle 'atx' overridden by a level-1/2 heading's own embedded line break", () => {
     const collector = createDiagnosticCollector();
     emitMarkdown(
