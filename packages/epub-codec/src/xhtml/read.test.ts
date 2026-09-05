@@ -1077,6 +1077,131 @@ describe("tables", () => {
       ],
     });
   });
+
+  it("recovers stray text sitting directly inside a <tr> as its own cell, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<table><tr>stray<td>x</td></tr></table>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "stray" }] }] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-row-content-outside-cell" }),
+    );
+  });
+
+  it("skips a <script> sitting directly inside a <tr>, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><tr><script>var x=1;</script><td>x</td></tr></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-row-content-outside-cell" }),
+    );
+  });
+
+  it("recovers a stray <p> sitting directly inside a <table> outside any row/caption, with a diagnostic, positioned immediately before the table", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><p>stray</p><tr><td>x</td></tr></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("skips a <colgroup>/<script> sitting directly inside a <table>, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<table><colgroup><col/><col/></colgroup><script>var x=1;</script><tr><td>a</td><td>b</td></tr></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "b" }] }] },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("reads a second <caption> as its own paragraph too, with an additional duplicate-caption diagnostic, instead of silently discarding it", () => {
+    const sink = vi.fn<(d: EpubDiagnostic) => void>();
+    const blocks = read(
+      body(
+        "<table><caption>One</caption><caption>Two</caption><tr><td>x</td></tr></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "One" }] },
+      { kind: "paragraph", runs: [{ text: "Two" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    const duplicateCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/table-duplicate-caption",
+    );
+    expect(duplicateCalls).toHaveLength(1);
+    const captionUnsupportedCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/table-caption-unsupported",
+    );
+    expect(captionUnsupportedCalls).toHaveLength(2);
+  });
 });
 
 describe("blockquote", () => {

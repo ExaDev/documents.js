@@ -669,12 +669,29 @@ function flushDefinitionListStrayContent(
   return blocks;
 }
 
+// The <table> content model per HTML5 is, in order: an optional <caption>, zero or more <colgroup>, an optional <thead>, either zero or more <tbody> or one or more bare <tr>, an optional <tfoot>, optionally intermixed with script-supporting elements -- so <colgroup> and a script-supporting element are both legal here and carry nothing document-schema.js's own vocabulary can represent, silently skipped exactly like a <div>'s own class/id elsewhere in this file. Anything else that is not tr/thead/tbody/tfoot/caption/colgroup/script-supporting -- a stray <p>, a stray <div>, stray text -- is not valid HTML5, but was previously dropped with zero diagnostics; it is now collected as table-level stray content and recovered via flushTableStrayContent below, positioned immediately before the table (after any caption paragraph), mirroring the "recovered as ordinary content, positioned relative to the block it describes" convention this file already applies to the caption and to a list's own before-the-first-item stray content -- a table's own rows fold into one indivisible ContentTable block, so there is no position WITHIN the table's own structure to reinsert interleaved stray content into without misrepresenting it as more than one table.
 function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
-  const captionElement = findChildElement(element.children, "caption");
+  const captionElements = element.children.filter(
+    (c): c is XmlElement => c.type === "element" && c.tag === "caption",
+  );
   const rows: ContentTableRow[] = [];
   let columnCount = 0;
+  const strayNodes: XmlNode[] = [];
   for (const section of element.children) {
+    if (section.type === "element" && section.tag === "caption") {
+      continue; // every <caption>, first or duplicate, is handled in full by readTableCaption below regardless of where in source order it sits
+    }
     if (section.type !== "element") {
+      if (section.type === "text") {
+        strayNodes.push(section);
+      }
+      continue;
+    }
+    if (
+      section.tag === "colgroup" ||
+      section.tag === "script" ||
+      section.tag === "template"
+    ) {
       continue;
     }
     const rowContainers =
@@ -686,39 +703,84 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
           ? section.children.filter(
               (c): c is XmlElement => c.type === "element" && c.tag === "tr",
             )
-          : [];
+          : undefined;
+    if (rowContainers === undefined) {
+      strayNodes.push(section);
+      continue;
+    }
     for (const tr of rowContainers) {
       const cells: ContentTableCell[] = [];
+      let strayCellNodes: XmlNode[] = [];
+      const flushStrayCell = (): void => {
+        if (strayCellNodes.length === 0) {
+          return;
+        }
+        const recovered = readContainerChildren(strayCellNodes, state);
+        strayCellNodes = [];
+        if (recovered.length === 0) {
+          return;
+        }
+        state.context.sink({
+          code: EpubDiagnosticCodes.TABLE_ROW_CONTENT_OUTSIDE_CELL,
+          severity: "info",
+          message:
+            "content sits directly inside a <tr> rather than inside a <td>/<th> (not valid HTML5); recovered as its own cell in the row's own column sequence",
+          href: state.context.sourceHref,
+        });
+        cells.push({ blocks: recovered });
+      };
       for (const cellNode of tr.children) {
         if (
-          cellNode.type !== "element" ||
-          (cellNode.tag !== "td" && cellNode.tag !== "th")
+          cellNode.type === "element" &&
+          (cellNode.tag === "td" || cellNode.tag === "th")
+        ) {
+          flushStrayCell();
+          const isHeader = cellNode.tag === "th";
+          const cellStyle = isHeader ? { bold: true } : {};
+          const inline = buildInlineRuns(
+            cellNode.children,
+            cellStyle,
+            state.context,
+          );
+          const paragraph: ContentParagraph = {
+            kind: "paragraph",
+            runs: inline.runs,
+            ...constructsField(inline),
+          };
+          const colSpan = positiveIntAttr(cellNode, "colspan");
+          const rowSpan = positiveIntAttr(cellNode, "rowspan");
+          cells.push({
+            blocks: [paragraph],
+            ...(colSpan !== undefined ? { colSpan } : {}),
+            ...(rowSpan !== undefined ? { rowSpan } : {}),
+          });
+          continue;
+        }
+        if (
+          cellNode.type === "element" &&
+          (cellNode.tag === "script" || cellNode.tag === "template")
         ) {
           continue;
         }
-        const isHeader = cellNode.tag === "th";
-        const cellStyle = isHeader ? { bold: true } : {};
-        const inline = buildInlineRuns(
-          cellNode.children,
-          cellStyle,
-          state.context,
-        );
-        const paragraph: ContentParagraph = {
-          kind: "paragraph",
-          runs: inline.runs,
-          ...constructsField(inline),
-        };
-        const colSpan = positiveIntAttr(cellNode, "colspan");
-        const rowSpan = positiveIntAttr(cellNode, "rowspan");
-        cells.push({
-          blocks: [paragraph],
-          ...(colSpan !== undefined ? { colSpan } : {}),
-          ...(rowSpan !== undefined ? { rowSpan } : {}),
-        });
+        if (cellNode.type === "element" || cellNode.type === "text") {
+          strayCellNodes.push(cellNode);
+        }
       }
+      flushStrayCell();
       columnCount = Math.max(columnCount, cells.length);
       rows.push({ cells });
     }
+  }
+  const strayBlocks =
+    strayNodes.length === 0 ? [] : readContainerChildren(strayNodes, state);
+  if (strayBlocks.length > 0) {
+    state.context.sink({
+      code: EpubDiagnosticCodes.TABLE_CONTENT_UNRECOGNIZED,
+      severity: "info",
+      message:
+        "content sits directly inside a <table> outside any row, caption, or colgroup (not valid HTML5); recovered as ordinary content immediately before the table",
+      href: state.context.sourceHref,
+    });
   }
   const width =
     columnCount > 0 ? state.contentWidthPt / columnCount : state.contentWidthPt;
@@ -727,21 +789,38 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
     rows,
     columnWidthsPt: new Array<number>(Math.max(columnCount, 1)).fill(width),
   };
-  if (captionElement === undefined) {
-    return [table];
-  }
-  // A <caption> is a legal direct child of <table> (HTML5's own content model puts it first), but document-schema.js's ContentTable carries no field of its own for a caption distinct from an ordinary paragraph -- so, exactly like readBlockElementInner's own <figcaption> case immediately below, it is read as a plain paragraph, placed immediately before the table it describes. Any <img> the caption itself carries degrades to alt text via the same inline-recursion path (and epub/image-inline-unsupported diagnostic) a <figcaption>'s own direct-child <img> already does, rather than becoming a real image block, for the identical reason -- buildInlineRuns has already committed to a flat run sequence by the time it reaches one.
+  const captionBlocks = captionElements.flatMap((captionElement, index) =>
+    readTableCaption(captionElement, index > 0, state),
+  );
+  return [...strayBlocks, ...captionBlocks, table];
+}
+
+// A <caption>'s own content, read as an ordinary paragraph immediately before the table it describes -- document-schema.js's ContentTable carries no field of its own for a caption distinct from an ordinary paragraph, exactly like readBlockElementInner's own <figcaption> case. Any <img> the caption itself carries degrades to alt text via the same inline-recursion path (and epub/image-inline-unsupported diagnostic) a <figcaption>'s own direct-child <img> already does, rather than becoming a real image block, for the identical reason -- buildInlineRuns has already committed to a flat run sequence by the time it reaches one. `isDuplicate` fires an additional diagnostic for every caption beyond the first: HTML5 permits at most one <caption> per <table>, so a second is a producer mistake this package now recovers rather than silently discards -- readTable used to resolve its caption via findChildElement, which only ever returns the first match for a given tag, so a second <caption> was lost with no trace and no diagnostic at all.
+function readTableCaption(
+  captionElement: XmlElement,
+  isDuplicate: boolean,
+  state: BuildState,
+): ContentBlock[] {
   const captionInline = buildInlineRuns(
     captionElement.children,
     {},
     state.context,
   );
-  // An empty or whitespace-only <caption> that also carries no run-level construct of its own (a footnote reference whose own anchor text is empty is the real-world case: `<caption><a epub:type="noteref" href="#fn1"></a></caption>` produces zero text runs but one real RunConstructExtent) genuinely carries nothing to lose -- dropped entirely, with no diagnostic, matching this package's own documented rule that an empty or whitespace-only paragraph is dropped entirely on read rather than becoming a bogus empty ContentParagraph. Checking text emptiness alone would drop the construct along with it: `Array.prototype.every` on the empty runs array such an anchor-only caption produces is vacuously true, which is exactly how this guard used to defeat this package's own construct-preservation fix above -- a construct with nothing else to carry it is still real content.
+  // An empty or whitespace-only <caption> that also carries no run-level construct of its own (a footnote reference whose own anchor text is empty is the real-world case: `<caption><a epub:type="noteref" href="#fn1"></a></caption>` produces zero text runs but one real RunConstructExtent) genuinely carries nothing to lose -- dropped entirely, with no diagnostic, matching this package's own documented rule that an empty or whitespace-only paragraph is dropped entirely on read rather than becoming a bogus empty ContentParagraph. Checking text emptiness alone would drop the construct along with it: `Array.prototype.every` on the empty runs array such an anchor-only caption produces is vacuously true, which is exactly how this guard used to defeat this package's own construct-preservation fix -- a construct with nothing else to carry it is still real content.
   if (
     captionInline.runs.every((run) => run.text.trim().length === 0) &&
     captionInline.constructs.length === 0
   ) {
-    return [table];
+    return [];
+  }
+  if (isDuplicate) {
+    state.context.sink({
+      code: EpubDiagnosticCodes.TABLE_DUPLICATE_CAPTION,
+      severity: "info",
+      message:
+        "<table> carries more than one <caption> (HTML5 permits at most one); every caption beyond the first is still read as its own ordinary paragraph immediately before the table, rather than being silently discarded",
+      href: state.context.sourceHref,
+    });
   }
   state.context.sink({
     code: EpubDiagnosticCodes.TABLE_CAPTION_UNSUPPORTED,
@@ -755,7 +834,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
     runs: captionInline.runs,
     ...constructsField(captionInline),
   };
-  return [decorateParagraph(captionParagraph, state), table];
+  return [decorateParagraph(captionParagraph, state)];
 }
 
 function positiveIntAttr(
