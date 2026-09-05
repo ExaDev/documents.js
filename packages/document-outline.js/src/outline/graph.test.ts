@@ -2265,14 +2265,15 @@ describe("write API: insertNode handles a dedup hit's kind and children correctl
   });
 });
 
-describe("write API: insertEdge refuses an ambiguous before/after sibling (#935)", () => {
+describe("write API: insertEdge refuses an ambiguous before/after sibling only on a genuine orderKey tie (#935)", () => {
   const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
 
-  it("insertEdge refuses an ambiguous before/after position when the named sibling id matches more than one edge of the same kind from the same owner", () => {
+  it("insertEdge resolves before/after deterministically -- against the EARLIEST match in orderKey order -- when the named sibling id matches more than one edge but those edges carry distinct orderKeys, rather than refusing the ordinary two-identical-children shape as ambiguous", () => {
     const v = insertNode(EMPTY_GRAPH, {
       kind: "value",
       properties: { value: "shared" },
     });
+    // Two sequential insertEdge appends of the SAME target: insertEdge's own bisection never ties two of its own siblings, so these two PROPERTY edges to v.id carry distinct orderKeys even though they share a target -- exactly the "duplicate CONTAINS/PROPERTY children with distinct orderKeys" shape #935's round-6 fix says must resolve deterministically, not throw.
     let graph = insertEdge(v.graph, "parent", v.id, {
       kind: "PROPERTY",
       path: ["a"],
@@ -2285,7 +2286,45 @@ describe("write API: insertEdge refuses an ambiguous before/after sibling (#935)
       (edge) =>
         edge.from === "parent" && edge.kind === "PROPERTY" && edge.to === v.id,
     );
-    expect(matches).toHaveLength(2); // two real PROPERTY edges from one owner to one shared value node, disambiguated only by path
+    expect(matches).toHaveLength(2);
+    expect(new Set(matches.map((edge) => edge.orderKey)).size).toBe(2); // genuinely distinct, not tied
+
+    const other = insertNode(graph, {
+      kind: "value",
+      properties: { value: "other" },
+    });
+    // Must NOT throw: the earliest of the two v.id matches (path "a", the lower orderKey) is the deterministic boundary for "after v.id".
+    const result = insertEdge(other.graph, "parent", other.id, {
+      kind: "PROPERTY",
+      position: { at: "after", siblingId: v.id },
+      path: ["c"],
+    });
+    const ordered = result.edges
+      .filter((edge) => edge.from === "parent" && edge.kind === "PROPERTY")
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1));
+    expect(ordered.map((edge) => edge.path)).toEqual([["a"], ["c"], ["b"]]);
+  });
+
+  it("insertEdge refuses an ambiguous before/after position when the named sibling id matches more than one edge that GENUINELY TIE on orderKey -- projectDocumentGraph's own emitWalkEdges mints exactly this shape when two metadata fields extract to the identical shared value node", () => {
+    const extractSameValueTwice: ExtractionPolicy = (path) =>
+      path.length === 2 &&
+      path[0] === "metadata" &&
+      (path[1] === "title" || path[1] === "subject")
+        ? "extract"
+        : "inline";
+    const pkg = wordprocessingPackage([sectionGroup([paragraph("Body.")])], {
+      metadata: { title: "shared", subject: "shared" },
+    });
+    const graph = projectDocumentGraph([{ id: "doc", package: pkg }], {
+      policy: extractSameValueTwice,
+    });
+    const tied = graph.edges.filter(
+      (edge) => edge.from === "doc" && edge.kind === "PROPERTY",
+    );
+    // Identical content ("shared") dedupes to ONE value node, referenced by TWO PROPERTY edges (one per metadata key) -- both minted by emitWalkEdges at the uniform floor orderKey, a genuine tie.
+    expect(tied).toHaveLength(2);
+    expect(tied[0]!.to).toBe(tied[1]!.to);
+    expect(tied[0]!.orderKey).toBe(tied[1]!.orderKey);
 
     const other = insertNode(graph, {
       kind: "value",
@@ -2293,20 +2332,52 @@ describe("write API: insertEdge refuses an ambiguous before/after sibling (#935)
     });
     let caught: unknown;
     try {
-      insertEdge(other.graph, "parent", other.id, {
+      insertEdge(other.graph, "doc", other.id, {
         kind: "PROPERTY",
-        position: { at: "after", siblingId: v.id },
-        path: ["c"],
+        position: { at: "after", siblingId: tied[0]!.to },
+        path: ["metadata", "creator"],
       });
     } catch (error) {
       caught = error;
     }
     expect(caught).toBeInstanceOf(AmbiguousSiblingError);
     const ambiguous = caught as AmbiguousSiblingError;
-    expect(ambiguous.from).toBe("parent");
+    expect(ambiguous.from).toBe("doc");
     expect(ambiguous.kind).toBe("PROPERTY");
-    expect(ambiguous.siblingId).toBe(v.id);
+    expect(ambiguous.siblingId).toBe(tied[0]!.to);
     expect(ambiguous.matchCount).toBe(2);
+  });
+
+  it("insertEdge resolves a duplicate CONTAINS child deterministically against its earliest occurrence, rather than hard-blocking the ordinary two-identical-children shape", () => {
+    const shared = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Shared." }] },
+    });
+    // "parent" CONTAINS the same shared node twice, at two different (necessarily distinct) sibling positions.
+    let graph = insertEdge(shared.graph, "parent", shared.id);
+    graph = insertEdge(graph, "parent", shared.id, { position: { at: "end" } });
+    const sharedEdges = graph.edges.filter(
+      (edge) =>
+        edge.from === "parent" &&
+        edge.kind === "CONTAINS" &&
+        edge.to === shared.id,
+    );
+    expect(sharedEdges).toHaveLength(2);
+    expect(new Set(sharedEdges.map((edge) => edge.orderKey)).size).toBe(2);
+
+    const newLeaf = insertNode(graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "New." }] },
+    });
+    // Must resolve against the FIRST occurrence, not throw AmbiguousSiblingError.
+    const result = insertEdge(newLeaf.graph, "parent", newLeaf.id, {
+      position: { at: "before", siblingId: shared.id },
+    });
+    const ordered = result.edges
+      .filter((edge) => edge.from === "parent" && edge.kind === "CONTAINS")
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
+      .map((edge) => edge.to);
+    expect(ordered).toEqual([newLeaf.id, shared.id, shared.id]);
   });
 
   it("insertEdge resolves before/after normally when the named sibling matches exactly one edge, even when other siblings share its orderKey-tying structure", () => {

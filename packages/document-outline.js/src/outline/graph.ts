@@ -769,7 +769,7 @@ export class UnknownSiblingError extends Error {
   }
 }
 
-// Thrown by siblingInsertIndex when `position` names a sibling id that matches MORE than one of `from`'s existing edges of the requested `kind` -- a parent can legitimately carry more than one edge of the same kind to the same target (two PROPERTY edges from one owner to one shared `value` node, disambiguated only by `path`), and `before`/`after` then names no single boundary to resolve against. Resolving silently against whichever occurrence `findIndex` happens to reach first would make the result depend on edge insertion order rather than on anything the caller actually specified, so this is refused loudly instead, in the identical "a named ref must resolve to exactly one thing or not at all" tradition UnknownSiblingError already established for the zero-match case.
+// Thrown by siblingInsertIndex when `position` names a sibling id that matches more than one of `from`'s existing edges of the requested `kind` AND those matches genuinely tie on orderKey -- a parent can carry more than one edge of the same kind to the same target (two identical CONTAINS children under one section, or two PROPERTY edges from one owner to one shared `value` node, disambiguated only by `path`), but `siblings` is already sorted ascending by orderKey before position resolution runs, so when the matching edges carry DISTINCT orderKeys, "the earliest one in that sorted order" is a deterministic, reproducible answer, not a guess dependent on insertion order -- resolving against it is exactly as principled as resolving against the only match in the common case, so that shape is not refused. Only a genuine orderKey TIE among the matches has no such boundary: nothing distinguishes "first" from "second" among keys that compare equal (this module's own emitWalkEdges mints every PROPERTY/DEFINED_BY edge from one owner at the identical floor key for exactly this reason -- they carry no real document-order sequence), so before/after names no single position to resolve against and this is refused loudly instead, in the identical "a named ref must resolve to exactly one thing or not at all" tradition UnknownSiblingError already established for the zero-match case.
 export class AmbiguousSiblingError extends Error {
   readonly from: string;
   readonly kind: GraphEdgeKind;
@@ -793,7 +793,7 @@ export class AmbiguousSiblingError extends Error {
   }
 }
 
-// Resolves `position` against `siblings` (already sorted ascending by orderKey) to a plain array index -- where the new edge would sit if `siblings` were spliced at that index -- rather than an orderKey directly, so the same lookup serves both the fast bisection path and the rebalance fallback below. A named sibling matching no edge is refused as UnknownSiblingError; a named sibling matching more than one edge of the same kind from the same owner is refused as AmbiguousSiblingError (its own comment above) -- exactly one match is the only shape `before`/`after` can mean, so both other counts are a genuine caller error rather than a position to guess at.
+// Resolves `position` against `siblings` (already sorted ascending by orderKey) to a plain array index -- where the new edge would sit if `siblings` were spliced at that index -- rather than an orderKey directly, so the same lookup serves both the fast bisection path and the rebalance fallback below. A named sibling matching no edge is refused as UnknownSiblingError. A named sibling matching more than one edge of the same kind from the same owner resolves to the earliest such match in sorted order -- a deterministic answer, not an insertion-order guess -- UNLESS those matches genuinely tie on orderKey, in which case there is no principled "earliest" and it is refused as AmbiguousSiblingError (its own comment above).
 function siblingInsertIndex(
   siblings: readonly GraphEdge[],
   position: InsertPosition,
@@ -810,12 +810,15 @@ function siblingInsertIndex(
     throw new UnknownSiblingError(from, kind, position.siblingId);
   }
   if (matches.length > 1) {
-    throw new AmbiguousSiblingError(
-      from,
-      kind,
-      position.siblingId,
-      matches.length,
-    );
+    const matchedOrderKeys = matches.map((index) => siblings[index]!.orderKey);
+    if (new Set(matchedOrderKeys).size !== matchedOrderKeys.length) {
+      throw new AmbiguousSiblingError(
+        from,
+        kind,
+        position.siblingId,
+        matches.length,
+      );
+    }
   }
   const index = matches[0]!;
   return position.at === "before" ? index : index + 1;
