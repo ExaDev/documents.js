@@ -132,7 +132,7 @@ const TABLE_BLOCK = {
         {
           blocks: [{ kind: "paragraph", runs: [{ text: "Merged" }] }],
           colSpan: 2,
-          background: rgbHexToColor("#DDEEFF"),
+          background: { kind: "solid", color: rgbHexToColor("#DDEEFF") },
           borders: {
             top: {
               style: "solid",
@@ -196,7 +196,7 @@ const SPREADSHEET: ContentDocument = {
           column: 0,
           value: { kind: "string", value: "Header" },
           displayText: "Header",
-          background: rgbHexToColor("#FFEECC"),
+          background: { kind: "solid", color: rgbHexToColor("#FFEECC") },
           alignment: "center",
           verticalAlignment: "middle",
           borders: {
