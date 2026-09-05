@@ -306,8 +306,8 @@ function formFieldPayload(
     // \ffres is what a reader (this package's own included, per FORM_FIELD_RESULT_UNDEFINED in constructs.ts) actually reads back as the checkbox's current state -- omitting it, as this writer once did, opens the box unchecked in Word regardless of `checked`, since an absent \ffres reads as 0. \ffdefres mirrors the same value: ContentControlDescriptor carries one `checked` boolean, not a separate reset default, so the field's default is the value it was minted with. Written ffdefres before ffres, matching <formparams>'s own stated order.
     const value = descriptor.checked === true ? "1" : "0";
     controlTypeParams += `\\ffdefres${value}\\ffres${value}`;
-    if (descriptor.value !== undefined) {
-      // A real, reachable case, from the identical reachability path as the plainText \ffdeftext handling below: documents.js's own PDF AcroForm-to-contentControl reconstruction spreads a checkbox widget's `/V` export-value name (e.g. 'Yes', a custom on-state string, distinct from AcroForm's own boolean derived-from-/V `checked`) onto `value` alongside `checked` (see pdf-codec's own valueFields -- `checked: value !== 'Off', ...(value !== 'Off' ? { value } : {})`). RTF's own \ffres/\ffdefres are a bare 0/1/25 state with no room for a named export value at all, so a checkbox's `value` has no RTF spelling whatsoever, unlike a dropDown's `value` (which at least sometimes matches a real \ffl entry) -- this is unconditional data loss whenever `value` is present, reported through the same sink every other unrepresentable construct in this writer uses rather than silently dropped the way an earlier version of this writer dropped it.
+    if (descriptor.value !== undefined && descriptor.value.length > 0) {
+      // A real, reachable case, from the identical reachability path as the plainText \ffdeftext handling below: documents.js's own PDF AcroForm-to-contentControl reconstruction spreads a checkbox widget's `/V` export-value name (e.g. 'Yes', a custom on-state string, distinct from AcroForm's own boolean derived-from-/V `checked`) onto `value` alongside `checked` (see pdf-codec's own valueFields -- `checked: value !== 'Off', ...(value !== 'Off' ? { value } : {})`). RTF's own \ffres/\ffdefres are a bare 0/1/25 state with no room for a named export value at all, so a checkbox's `value` has no RTF spelling whatsoever, unlike a dropDown's `value` (which at least sometimes matches a real \ffl entry) -- this is unconditional data loss whenever `value` is present, reported through the same sink every other unrepresentable construct in this writer uses rather than silently dropped the way an earlier version of this writer dropped it. Gated on `.length > 0`, not merely `!== undefined`, for the same reason the plainText branch's own \ffdeftext gating below is (see its comment): this function's one consistent rule for every value-shaped field across every controlType branch -- `alias`, `tag`, and a plainText `value` already all treat an empty string as carrying no distinguishable value to preserve, so it reads as "never recorded" rather than as a genuine present-but-empty value; a checkbox's own `value` follows that same rule rather than firing this diagnostic for a string with nothing in it.
       sink({
         code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
         severity: "warning",
@@ -335,14 +335,17 @@ function formFieldPayload(
       });
       options = allOptions.slice(0, MAX_DROPDOWN_OPTIONS);
     }
+    // `descriptor.value.length === 0` is folded into the same "no selection recorded" branch as `undefined`, not into the mismatch branch below: this function's one consistent rule for every value-shaped field across every controlType branch -- `alias`, `tag`, and a plainText `value` already all treat an empty string as carrying no distinguishable value to preserve, and the checkbox branch's own `value` above now does too (see its comment) -- so an empty string here reads as "never recorded" rather than as a genuine value that then happens to match none of `options`.
     const selectedIndex =
-      options === undefined || descriptor.value === undefined
+      options === undefined ||
+      descriptor.value === undefined ||
+      descriptor.value.length === 0
         ? undefined
         : options.indexOf(descriptor.value);
     if (selectedIndex !== undefined && selectedIndex !== -1) {
       // `value` genuinely names one of `options`: \ffres records the real current selection and \ffdefres mirrors it, exactly as the checkbox branch above mirrors its own single `checked` boolean into both \ffres and \ffdefres. Written ffdefres before ffres, matching <formparams>'s own stated order.
       controlTypeParams += `\\ffdefres${String(selectedIndex)}\\ffres${String(selectedIndex)}`;
-    } else if (descriptor.value !== undefined) {
+    } else if (descriptor.value !== undefined && descriptor.value.length > 0) {
       // `value` was recorded but names none of the entries actually written -- real, signalable data loss, distinct from "no value was ever set" below. Substituting the nearest available index (e.g. 0) would silently write a DIFFERENT, wrong selection with no signal that the recorded value was never actually represented, so this writer mints neither \ffres nor \ffdefres and reports the drop through the same sink every other unrepresentable construct in this writer uses (see the "mints neither \ffres nor \ffdefres for a dropDown whose value names none of its own options" test). Two genuinely different reasons collapse into this one branch: `value` may never have matched any of `options` at all, or it may have matched one that the 25-entry truncation above then cut away -- distinguished here so the message names the real cause rather than always blaming a mismatch that, in the truncated case, never actually happened.
       const truncatedAway =
         allOptions !== undefined &&
