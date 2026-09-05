@@ -527,11 +527,45 @@ describe("lists", () => {
   );
 });
 
-describe("script-supporting elements outside lists", () => {
+describe("inert elements outside lists (script/template/style/noscript)", () => {
   it("never leaks a <script>'s raw source as document text when it sits directly inside a <p>", () => {
     const blocks = read(body("<p>before<script>var x=1;</script>after</p>"));
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "before" }, { text: "after" }] },
+    ]);
+  });
+
+  it("never leaks a <style>'s own CSS text as document prose when it sits directly inside <body> content", () => {
+    const blocks = read(
+      body("<p>before</p><style>p{color:red}</style><p>after</p>"),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "before" }] },
+      { kind: "paragraph", runs: [{ text: "after" }] },
+    ]);
+  });
+
+  it("never leaks a <noscript>'s fallback markup as document prose when it sits directly inside a <p>", () => {
+    const blocks = read(
+      body("<p>before<noscript>Enable JavaScript</noscript>after</p>"),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "before" }, { text: "after" }] },
+    ]);
+  });
+
+  it("does not treat an id living only inside a <noscript> as a resolvable footnote target", () => {
+    const blocks = read(
+      body(
+        '<p>See <a class="footnote" href="#fn1">1</a></p>' +
+          '<noscript><p id="fn1">Hidden note</p></noscript>',
+      ),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "See " }, { text: "1", hyperlink: "#fn1" }],
+      },
     ]);
   });
 
