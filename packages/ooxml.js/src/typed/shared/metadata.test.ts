@@ -2,7 +2,11 @@ import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import { describe, expect, it } from "vitest";
 import { el, txt } from "../../xml/fragment";
-import { readCoreProperties } from "./metadata";
+import {
+  hasCoreProperties,
+  patchCoreProperties,
+  readCoreProperties,
+} from "./metadata";
 
 // Ported verbatim from documents.js's src/ooxml/core-properties.test.ts.
 
@@ -64,5 +68,88 @@ describe("readCoreProperties", () => {
     const core = el("cp:coreProperties", {}, [el("cp:keywords")]);
     const metadata = readCoreProperties(packageWith(core, undefined));
     expect(metadata.keywords).toBeUndefined();
+  });
+});
+
+describe("hasCoreProperties", () => {
+  it("is true once a real docProps/core.xml XML part exists", () => {
+    const pkg = packageWith(el("cp:coreProperties"), undefined);
+    expect(hasCoreProperties(pkg)).toBe(true);
+  });
+
+  it("is false when the package carries no docProps/core.xml part at all", () => {
+    expect(hasCoreProperties(packageWith(undefined, undefined))).toBe(false);
+  });
+
+  it("is false when the path exists but is a binary part, not XML", () => {
+    const pkg: Package = {
+      parts: { "docProps/core.xml": { kind: "binary", base64: "" } },
+    };
+    expect(hasCoreProperties(pkg)).toBe(false);
+  });
+});
+
+describe("patchCoreProperties", () => {
+  function packageWithCore(children: XmlElement[]): Package {
+    return packageWith(el("cp:coreProperties", {}, children), undefined);
+  }
+
+  it("replaces an existing element's text and leaves every other element untouched", () => {
+    const pkg = packageWithCore([
+      el("dc:title", {}, [txt("Old Title")]),
+      el("dc:creator", {}, [txt("Jane Doe")]),
+      el("dcterms:created", { "xsi:type": "dcterms:W3CDTF" }, [
+        txt("2024-01-01T00:00:00Z"),
+      ]),
+    ]);
+
+    patchCoreProperties(pkg, { title: "New Title" });
+
+    const metadata = readCoreProperties(pkg);
+    expect(metadata.title).toBe("New Title");
+    // Untouched fields survive exactly as they were.
+    expect(metadata.author).toBe("Jane Doe");
+    expect(metadata.createdIso).toBe("2024-01-01T00:00:00Z");
+  });
+
+  it("creates an element that did not previously exist", () => {
+    const pkg = packageWithCore([el("dc:creator", {}, [txt("Jane Doe")])]);
+
+    patchCoreProperties(pkg, { title: "Brand New Title" });
+
+    expect(readCoreProperties(pkg).title).toBe("Brand New Title");
+    expect(readCoreProperties(pkg).author).toBe("Jane Doe");
+  });
+
+  it("XML-encodes a value written into a new or existing element", () => {
+    const pkg = packageWithCore([]);
+    patchCoreProperties(pkg, { title: "Q&A <draft>" });
+    expect(readCoreProperties(pkg).title).toBe("Q&A <draft>");
+  });
+
+  it("joins keywords with a comma and removes the element entirely for an empty array", () => {
+    const pkg = packageWithCore([]);
+    patchCoreProperties(pkg, { keywords: ["alpha", "beta"] });
+    expect(readCoreProperties(pkg).keywords).toEqual(["alpha", "beta"]);
+
+    patchCoreProperties(pkg, { keywords: [] });
+    expect(readCoreProperties(pkg).keywords).toBeUndefined();
+  });
+
+  it("leaves every field untouched when overrides names none of them", () => {
+    const pkg = packageWithCore([
+      el("dc:title", {}, [txt("Untouched")]),
+      el("dc:creator", {}, [txt("Jane Doe")]),
+    ]);
+    patchCoreProperties(pkg, {});
+    expect(readCoreProperties(pkg).title).toBe("Untouched");
+    expect(readCoreProperties(pkg).author).toBe("Jane Doe");
+  });
+
+  it("throws when the package has no docProps/core.xml part to patch", () => {
+    const pkg = packageWith(undefined, undefined);
+    expect(() => {
+      patchCoreProperties(pkg, { title: "x" });
+    }).toThrow(/no 'docProps\/core\.xml' XML part/);
   });
 });
