@@ -364,9 +364,8 @@ describe("tables", () => {
       ...eolFunction({ subgroup: EOL_TABLE_OFF }),
     ]);
     expect(tablesOf(document)[0]?.rows[0]?.cells[0]?.background).toEqual({
-      r: 0,
-      g: 1,
-      b: 0,
+      kind: "solid",
+      color: { r: 0, g: 1, b: 0 },
     });
   });
 
