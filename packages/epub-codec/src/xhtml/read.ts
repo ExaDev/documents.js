@@ -21,7 +21,6 @@ import {
   elementsWithTag,
   findChildElement,
   rootElement,
-  textContent,
 } from "../xml/query";
 import { decodeEntities } from "../xml/entities";
 import { parseXml } from "../xml/parse";
@@ -360,7 +359,7 @@ function readBlockElementInner(
     case "dl":
       return readDefinitionList(element, state);
     case "table":
-      return [readTable(element, state)];
+      return readTable(element, state);
     case "figure":
       return readContainerChildren(element.children, state);
     case "figcaption": {
@@ -387,13 +386,47 @@ function readPre(element: XmlElement, state: BuildState): ContentBlock {
   const codeElement = findChildElement(element.children, "code");
   const languageSource = codeElement ?? element;
   const codeLanguage = languageFromClass(attrValue(languageSource, "class"));
-  const text = decodeEntities(textContent(element.children));
+  const text = decodeEntities(readPreText(element.children, state.context));
   const paragraph: ContentParagraph = {
     kind: "paragraph",
     runs: text.length > 0 ? [{ text, fontFamily: MONOSPACE_FONT_FAMILY }] : [],
     ...(codeLanguage !== undefined ? { codeLanguage } : {}),
   };
   return decorateParagraph(paragraph, state);
+}
+
+// A <pre>/<code> block's own content model is plain text with whitespace preserved verbatim (this never routes through buildInlineRuns's own normalizeWhitespace) -- so an <img> found anywhere inside, at any depth, cannot become a real ContentImageBlock the way one reached transparently through readContainerChildren can: there is no block list here to insert a sibling image block into, the identical structural constraint appendImageFallback (src/xhtml/inline.ts) already applies to an <img> reached while building a flat run sequence. Its alt text is spliced into the extracted text in its place, with a diagnostic naming the loss -- mirroring textContent's own recursive walk (src/xml/query.ts) but for the one element kind that walk cannot represent as text at all.
+function readPreText(
+  nodes: readonly XmlNode[],
+  context: XhtmlReadContext,
+): string {
+  let out = "";
+  for (const node of nodes) {
+    if (node.type === "text") {
+      out += node.value;
+    } else if (node.type === "element" && node.tag === "img") {
+      out += readPreImageFallbackText(node, context);
+    } else if (node.type === "element") {
+      out += readPreText(node.children, context);
+    }
+  }
+  return out;
+}
+
+function readPreImageFallbackText(
+  element: XmlElement,
+  context: XhtmlReadContext,
+): string {
+  const src = attrValue(element, "src");
+  const alt = attrValue(element, "alt");
+  const label = src === undefined ? "<img>" : `<img src="${src}">`;
+  context.sink({
+    code: EpubDiagnosticCodes.IMAGE_PRE_UNSUPPORTED,
+    severity: "warning",
+    message: `${label} inside a <pre>/<code> block cannot become a real image block (a <pre>'s own content model is plain text, with no block list to insert one into); degraded to its alt text`,
+    href: context.sourceHref,
+  });
+  return alt ?? "";
 }
 
 // A common real-world convention (highlight.js, Prism, and this package's own writer alike): a fenced code block's language rides a "language-xxx" class on the <code> element.
@@ -446,15 +479,51 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
     });
   const level = state.list === undefined ? 0 : state.list.level + 1;
   const blocks: ContentBlock[] = [];
+  let previousItem: ListItemContext | undefined;
+  let strayNodes: XmlNode[] = [];
   for (const child of element.children) {
-    if (child.type !== "element" || child.tag !== "li") {
+    if (child.type === "element" && child.tag === "li") {
+      blocks.push(
+        ...flushListStrayContent(strayNodes, previousItem, element.tag, state),
+      );
+      strayNodes = [];
+      const itemId = state.minter.mintItemId();
+      previousItem = { numId, level, itemId };
+      blocks.push(
+        ...readContainerChildren(
+          child.children,
+          withListItem(state, previousItem),
+        ),
+      );
       continue;
     }
-    const itemId = state.minter.mintItemId();
-    const itemState = withListItem(state, { numId, level, itemId });
-    blocks.push(...readContainerChildren(child.children, itemState));
+    if (child.type === "element" || child.type === "text") {
+      strayNodes.push(child);
+    }
   }
+  blocks.push(
+    ...flushListStrayContent(strayNodes, previousItem, element.tag, state),
+  );
   return blocks;
+}
+
+// A <ul>/<ol> content model admits only <li> children -- so any other content sitting directly inside one is not valid HTML5, most commonly a <ul>/<ol> nested as a sibling rather than wrapped in its own <li> (a shape real-world producers and converters emit even though it is not conformant), but any other stray content (a bare <img>, a run of text) shares the identical malformed shape and the identical most-likely producer intent: it was meant to continue the content of the <li> immediately before it. Recovered by feeding it through the exact same readContainerChildren dispatch that <li>'s own real children already go through, under that preceding item's own list membership -- so a stray <ul>/<ol> becomes a properly nested list one level deeper sharing the enclosing numId (readBlockElementInner's own "ul"/"ol" case calls back into this function with that membership already on the state, incrementing level exactly as genuine nesting would), a stray <img> becomes its own real image block, and stray text becomes its own paragraph, rather than each needing its own hand-rolled special case. Content sitting before the very first <li> has no preceding item to attach to and is dropped, unchanged from this function's own prior behaviour -- that narrower shape is not evidenced by any real producer and has no sensible single-item owner to recover onto.
+function flushListStrayContent(
+  nodes: readonly XmlNode[],
+  previousItem: ListItemContext | undefined,
+  tag: string,
+  state: BuildState,
+): ContentBlock[] {
+  if (nodes.length === 0 || previousItem === undefined) {
+    return [];
+  }
+  state.context.sink({
+    code: EpubDiagnosticCodes.LIST_CONTENT_OUTSIDE_ITEM,
+    severity: "info",
+    message: `content sits directly inside a <${tag}> rather than inside an <li> (not valid HTML5); recovered as a continuation of the preceding <li>'s own content`,
+    href: state.context.sourceHref,
+  });
+  return readContainerChildren(nodes, withListItem(state, previousItem));
 }
 
 function startAttr(element: XmlElement): number | undefined {
@@ -465,8 +534,16 @@ function readDefinitionList(
   element: XmlElement,
   state: BuildState,
 ): ContentBlock[] {
+  return readDefinitionListEntries(element.children, state);
+}
+
+// HTML5's own <dl> content model explicitly permits wrapping one or more dt/dd pairs in a <div> (a producer idiom for a per-entry styling hook), as an alternative to dt/dd sitting directly under the <dl> -- recursing into a <div> child finds the pairs it wraps exactly as if they sat directly in the <dl>. No diagnostic: the <div> itself carries no property document-schema.js's own vocabulary can express, identical to every other <div> this package already reads transparently (readBlockElementInner's own default passthrough case), so there is no loss here for a diagnostic to name.
+function readDefinitionListEntries(
+  nodes: readonly XmlNode[],
+  state: BuildState,
+): ContentBlock[] {
   const blocks: ContentBlock[] = [];
-  for (const child of element.children) {
+  for (const child of nodes) {
     if (child.type !== "element") {
       continue;
     }
@@ -488,12 +565,15 @@ function readDefinitionList(
           state,
         ),
       );
+    } else if (child.tag === "div") {
+      blocks.push(...readDefinitionListEntries(child.children, state));
     }
   }
   return blocks;
 }
 
-function readTable(element: XmlElement, state: BuildState): ContentBlock {
+function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
+  const captionElement = findChildElement(element.children, "caption");
   const rows: ContentTableRow[] = [];
   let columnCount = 0;
   for (const section of element.children) {
@@ -544,11 +624,32 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock {
   }
   const width =
     columnCount > 0 ? state.contentWidthPt / columnCount : state.contentWidthPt;
-  return {
+  const table: ContentBlock = {
     kind: "table",
     rows,
     columnWidthsPt: new Array<number>(Math.max(columnCount, 1)).fill(width),
   };
+  if (captionElement === undefined) {
+    return [table];
+  }
+  // A <caption> is a legal direct child of <table> (HTML5's own content model puts it first), but document-schema.js's ContentTable carries no field of its own for a caption distinct from an ordinary paragraph -- so, exactly like readBlockElementInner's own <figcaption> case immediately below, it is read as a plain paragraph, placed immediately before the table it describes. Any <img> the caption itself carries degrades to alt text via the same inline-recursion path (and epub/image-inline-unsupported diagnostic) a <figcaption>'s own direct-child <img> already does, rather than becoming a real image block, for the identical reason -- buildInlineRuns has already committed to a flat run sequence by the time it reaches one.
+  state.context.sink({
+    code: EpubDiagnosticCodes.TABLE_CAPTION_UNSUPPORTED,
+    severity: "info",
+    message:
+      "<caption> has no document-schema.js table-caption field to carry its own distinct tag; read as an ordinary paragraph immediately before the table",
+    href: state.context.sourceHref,
+  });
+  const captionInline = buildInlineRuns(
+    captionElement.children,
+    {},
+    state.context,
+  );
+  const captionParagraph: ContentParagraph = {
+    kind: "paragraph",
+    runs: captionInline.runs,
+  };
+  return [decorateParagraph(captionParagraph, state), table];
 }
 
 function positiveIntAttr(

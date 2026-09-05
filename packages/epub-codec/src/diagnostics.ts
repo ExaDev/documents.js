@@ -36,10 +36,13 @@ export const EpubDiagnosticCodes = {
   IMAGE_FORMAT_UNSUPPORTED: "epub/image-format-unsupported",
   IMAGE_UNRESOLVED: "epub/image-unresolved",
   IMAGE_INLINE_UNSUPPORTED: "epub/image-inline-unsupported",
+  IMAGE_PRE_UNSUPPORTED: "epub/image-pre-unsupported",
   ELEMENT_UNMAPPED: "epub/element-unmapped",
   STYLE_RESIDUE: "epub/style-residue",
   FOOTNOTE_TARGET_UNRESOLVED: "epub/footnote-target-unresolved",
   LINK_TARGET_EXTERNAL_ONLY: "epub/link-target-external-only",
+  TABLE_CAPTION_UNSUPPORTED: "epub/table-caption-unsupported",
+  LIST_CONTENT_OUTSIDE_ITEM: "epub/list-content-outside-item",
   // src/xhtml (write side: ContentDocument -> XHTML)
   CONSTRUCT_UNREPRESENTED: "epub/construct-unrepresented",
   // src/read.ts (package-level: invented page geometry, matching markdown-codec's own precedent)
