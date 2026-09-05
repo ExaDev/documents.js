@@ -38,7 +38,8 @@ type FormulaOutcome =
       readonly message: string;
     };
 
-function evaluateFormula(
+// Exported for the same reason ComputeFormulaOutputSchema below is: this is the exact function the registered tool calls per formula entry (never a test-local reimplementation), and no format codec in the family persists a symbolTable/unit registry into real document bytes today (ExaDev/documents.js#928 round-7 review) -- a nested formula whose governing table differs from its enclosing document's own is therefore not yet constructible by writing and re-reading a real docx/odt/pptx/ods file, only by building the ContentDocument tree directly (as collectDocumentFormulas's own real, unmocked walk returns it). Testing this function directly against such a hand-built tree still exercises this file's own real logic end to end -- flattenTree -> collectDocumentFormulas -> evaluateFormula -- everything downstream of the one gap (no writer round-trips symbolTable yet) that this package cannot close on its own.
+export function evaluateFormula(
   formula: ContentFormula,
   bindings: FormulaBindings,
   symbolTable: SymbolTable | undefined,
@@ -127,10 +128,11 @@ export function registerComputeFormulaTools(server: McpServer): void {
           sourcePath: entry.sourcePath,
           locate: entry.locate,
           latex: entry.formula.presentation?.latex,
+          // entry.symbolTable is the GOVERNING table for this specific formula (documents.js's src/model/formula.ts, resolved nested-first) -- never the outermost document's own symbolTable, which for a formula nested inside another embedded object's document would resolve its symbol/unit ids against the wrong curation entirely: two documents fused by embedding can mint the same id against a different quantityKind or a different unit conversion factor, so evaluating against the outer table can throw a bogus UnknownUnitError or, worse, silently return a wrong numeric result with no error at all.
           outcome: evaluateFormula(
             entry.formula,
             resolvedBindings,
-            document.symbolTable,
+            entry.symbolTable,
           ),
         }));
         const structuredContent = {
