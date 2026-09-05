@@ -9,7 +9,11 @@ import type {
 import { DocFormatError, DocUnsupportedError } from "../errors";
 import { fitsAloneOnPapxPage } from "../prop/fkp-write";
 import { CELL_MARK, PARAGRAPH_MARK } from "../text/special";
-import { encodeTableRowGrpprl, type TableCellToWrite } from "./tap-write";
+import {
+  encodeTableRowGrpprl,
+  MAX_TABLE_ROW_CELLS,
+  type TableCellToWrite,
+} from "./tap-write";
 
 /** Reports a non-fatal write-time degradation -- this package's own analogue of byte-codec's/pdf-codec's `onWarning`, adopted here rather than a new shape of its own so a caller already handling one already handles the other. */
 export type WriteWarning = (message: string) => void;
@@ -274,6 +278,31 @@ function rowMarkParagraph(
   };
 }
 
+// Whether a candidate lost-boundary split -- a subset of a row's own assigned boundaries, tried on a throwaway clone of `active` so a rejected candidate cannot leak its placeCell mutations anywhere -- can actually be written for this row: both the format's own hard ceiling on physical cells per row (MAX_TABLE_ROW_CELLS, [MS-DOC] 2.4.3's "between 1 and 63 table cells") and the row-ending mark's own PapxInFkp byte budget (fitsAloneOnPapxPage). The cell-count check runs first and returns false directly, entirely so this never calls rowMarkExtraGrpprl (and, through it, encodeTableRowGrpprl) with a cell count past that ceiling: that function throws unconditionally there for every OTHER caller, since the row actually committed has a genuine internal defect if it ever produces one, but a split this wide is only ever a spending trial here and must be treated as "doesn't fit" so the caller can keep trimming, not crash (ExaDev/documents.js#992). A split that clears the cell-count check almost always still has to clear the byte budget too -- 63 physical cells alone costs far more than any row-ending mark's own ~487-byte allowance -- so the two checks are cheap-first, not redundant.
+function rowSplitFits(
+  row: ContentTableRow,
+  columnCount: number,
+  boundaries: readonly number[],
+  active: ReadonlyMap<number, ActiveVerticalMerge>,
+  candidateBoundaries: ReadonlySet<number>,
+  heightPt: number | undefined,
+): boolean {
+  const trial = flattenRow(
+    row.cells,
+    columnCount,
+    boundaries,
+    cloneActive(active),
+    candidateBoundaries,
+  );
+  if (trial.cellsToWrite.length > MAX_TABLE_ROW_CELLS) return false;
+  const trialGrpprl = rowMarkExtraGrpprl(
+    trial.rowBoundariesTwips,
+    trial.cellsToWrite,
+    heightPt,
+  );
+  return fitsAloneOnPapxPage(trialGrpprl);
+}
+
 function flattenTable(
   table: ContentTable,
   onWarning: WriteWarning | undefined,
@@ -303,28 +332,43 @@ function flattenTable(
         "internal defect: distributeLostBoundaries returned fewer buckets than the table has rows",
       );
     }
-    // The row's own assigned split (ExaDev/documents.js#992) can itself overflow a PapxInFkp's own per-record budget on a table wide enough, or short enough on rows to share the work with (ExaDev/documents.js#1013): splitting states more of the table's own lost boundaries in physical form than #992's own fix ever needed to. Trying the split first, on a throwaway clone of `active` so a rejected trial cannot leak its own placeCell mutations into the row actually committed below, is what lets this decide "does the split fit" without duplicating fkp-write.ts's own page-packing arithmetic (fitsAloneOnPapxPage, whose own note has the full reasoning) as a second, driftable formula here.
+    // The row's own assigned split (ExaDev/documents.js#992) can itself overflow either of two ceilings on a table wide enough, or short enough on rows to share the work with: this row-ending mark's own PapxInFkp byte budget, and the format's own hard 63-physical-cell-per-row limit -- splitting states more of the table's own lost boundaries in physical form than #992's own fix ever needed to. rowSplitFits tries a candidate split against both without duplicating fkp-write.ts's own page-packing arithmetic or encodeTableRowGrpprl's own cell-count check as a second, driftable copy of either here.
     let rowLostBoundariesToApply = rowLostBoundaries;
-    if (rowLostBoundaries.size > 0) {
-      const trial = flattenRow(
-        row.cells,
+    if (
+      rowLostBoundaries.size > 0 &&
+      !rowSplitFits(
+        row,
         columnCount,
         boundaries,
-        cloneActive(active),
+        active,
         rowLostBoundaries,
-      );
-      const trialGrpprl = rowMarkExtraGrpprl(
-        trial.rowBoundariesTwips,
-        trial.cellsToWrite,
         row.heightPt,
-      );
-      if (!fitsAloneOnPapxPage(trialGrpprl)) {
-        // Falls back to the pre-#992 encoding for this one row alone: none of its assigned boundaries are split into a physical continuation cell, so the row states them the ordinary narrower/wider way (see this module's own top-of-file note) and the boundary itself goes back to being unrecoverable on read -- the same narrowing loss #992 exists to close, now scoped to only the rows genuinely too wide to close it for. A row that still will not fit even unsplit is not this fallback's concern: it throws exactly the DocFormatError it always has, from the real buildPapxPages call in write.ts, for the same "row is too wide or too decorated" reason #992 never touched.
-        rowLostBoundariesToApply = new Set();
-        onWarning?.(
-          `doc-codec: table row ${rowIndex} could not state ${rowLostBoundaries.size === 1 ? "its assigned lost column boundary" : `all ${rowLostBoundaries.size} of its assigned lost column boundaries`} without exceeding a PapxInFkp record's own byte budget; writing it unsplit instead, which narrows columnWidthsPt on read for this table exactly as this writer's own pre-#992 behaviour did`,
-        );
+      )
+    ) {
+      // The row's own full assigned split doesn't fit. Rather than drop every one of its assigned boundaries -- this fallback's own original, all-or-nothing behaviour -- trim it down: `rowLostBoundaries` is a Set whose insertion order tracks distributeLostBoundaries' own ascending boundary order, so dropping from the end drops the row's highest-valued (and, since #992's own round-robin assignment is otherwise arbitrary, no more or less significant) boundaries first. Both ceilings rowSplitFits checks are monotonic in how many boundaries a split states -- fewer boundaries can only mean fewer physical cells and a smaller grpprl -- so the first prefix that fits, found by trimming one boundary at a time, is also the largest one that does: this maximizes how many of the row's own assigned boundaries survive instead of making an all-or-nothing choice (a two-row, 42-column table recovers 41 of its 42 columns this way, not the 21 the all-or-nothing fallback used to leave; see write.test.ts's own "trims" test for the measured numbers).
+      const ordered = Array.from(rowLostBoundaries);
+      let kept = ordered;
+      while (
+        kept.length > 0 &&
+        !rowSplitFits(
+          row,
+          columnCount,
+          boundaries,
+          active,
+          new Set(kept),
+          row.heightPt,
+        )
+      ) {
+        kept = kept.slice(0, -1);
       }
+      // A row that still will not fit even fully unsplit (kept.length === 0) is not this fallback's concern: it throws exactly the DocFormatError it always has, from the real buildPapxPages call in write.ts, for the same "row is too wide or too decorated" reason #992 never touched.
+      rowLostBoundariesToApply = new Set(kept);
+      const droppedCount = ordered.length - kept.length;
+      onWarning?.(
+        kept.length === 0
+          ? `doc-codec: table row ${rowIndex} could not state ${rowLostBoundaries.size === 1 ? "its assigned lost column boundary" : `any of its ${rowLostBoundaries.size} assigned lost column boundaries`} without exceeding a PapxInFkp record's own byte budget or the format's own ${MAX_TABLE_ROW_CELLS}-cell-per-row ceiling; writing it unsplit instead, which narrows columnWidthsPt on read for this table exactly as this writer's own pre-#992 behaviour did`
+          : `doc-codec: table row ${rowIndex} could only state ${kept.length} of its ${ordered.length} assigned lost column boundaries without exceeding a PapxInFkp record's own byte budget or the format's own ${MAX_TABLE_ROW_CELLS}-cell-per-row ceiling; dropping the other ${droppedCount} (narrowing columnWidthsPt on read for those boundaries alone)`,
+      );
     }
     const { paragraphs, cellsToWrite, rowBoundariesTwips } = flattenRow(
       row.cells,
