@@ -175,7 +175,7 @@ export interface MathMatrix {
   rows: MathExpression[][];
 }
 
-// MathExpression is recursive through app args, binder bounds/bodies, and matrix rows -- hand-written with a structural z.custom() guard below, mirroring ContentBlock's and MathMlNode's identical treatment, since z.lazy() collapses to `unknown` for recursive children in the pinned Zod version.
+// MathExpression is recursive through app args, binder bounds/bodies, and matrix rows -- hand-written with a structural z.custom() guard below, mirroring ContentBlock's identical treatment, since z.lazy() collapses to `unknown` for recursive children in the pinned Zod version (MathMlNode used to share this treatment too, before ExaDev/documents.js#937's z.lazy() rewrite made MathMlNodeSchema a real, self-recursive z.discriminatedUnion() -- see src/mathml.ts).
 export type MathExpression =
   | MathNum
   | MathQty
@@ -210,7 +210,7 @@ function isMathUncertainty(value: unknown): value is MathUncertainty {
   );
 }
 
-// Recursive structural guard, mirroring the per-variant Zod schemas' checks by hand (including the canonical-integer patterns and the equal-width matrix rule) so the z.custom() node validates exactly what the named schemas validate. Used via z.custom so recursive children validate without a recursive Zod schema -- the same treatment as ContentBlockSchema/ContentEmbeddedObjectSchema (src/content.ts) and MathMlNodeSchema (src/mathml.ts).
+// Recursive structural guard, mirroring the per-variant Zod schemas' checks by hand (including the canonical-integer patterns and the equal-width matrix rule) so the z.custom() node validates exactly what the named schemas validate. Used via z.custom so recursive children validate without a recursive Zod schema -- the same treatment as ContentBlockSchema/ContentEmbeddedObjectSchema (src/content.ts).
 export function isMathExpression(value: unknown): value is MathExpression {
   if (!isRecord(value)) {
     return false;

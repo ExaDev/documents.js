@@ -41,7 +41,7 @@ export const MathMlPiSchema = z.object({
 });
 export type MathMlPi = z.infer<typeof MathMlPiSchema>;
 
-// MathMlElement is recursive through its own children -- hand-written, mirroring ContentBlock's and odf.js's XmlElement's identical treatment, since z.lazy() collapses to `unknown` for recursive element children in the pinned Zod version.
+// MathMlElement is recursive through its own children -- the interface stays hand-written even though MathMlElementSchema is a real z.object() below, because MathMlNode's own binding needs an explicit z.ZodType<MathMlNode> annotation to escape TypeScript's circular-inference error (see MathMlNodeSchema's own comment), and that annotation has to name a type that already exists rather than one z.infer would derive from the very schema it annotates.
 export interface MathMlElement {
   type: "element";
   tag: string;
@@ -69,7 +69,7 @@ function isMathMlAttribute(value: unknown): value is MathMlAttribute {
   );
 }
 
-// Recursive structural guard. Used via z.custom so element children validate without a recursive Zod schema (which collapses to `unknown` under z.lazy in this Zod version) -- one of this package's z.custom() recursion nodes, alongside ContentBlockSchema and ContentEmbeddedObjectSchema (src/content.ts) and MathExpressionSchema (src/math.ts).
+// Recursive structural guard, kept as a standalone public type guard alongside the real MathMlNodeSchema below (a caller narrowing an unknown value with no Zod import in hand still has this) -- no longer backing a z.custom() node itself, unlike ContentBlockSchema and ContentEmbeddedObjectSchema (src/content.ts) and MathExpressionSchema (src/math.ts), which still are.
 export function isMathMlNode(value: unknown): value is MathMlNode {
   if (!isRecord(value)) {
     return false;
@@ -101,12 +101,22 @@ export function isMathMlNode(value: unknown): value is MathMlNode {
   return false;
 }
 
-export const MathMlNodeSchema = z.custom<MathMlNode>(isMathMlNode);
-
-// The element variant on its own, matching the sibling per-variant schemas above even though MathMlNodeSchema itself validates every variant, element included, through the single custom guard above.
+// Defined before MathMlNodeSchema, and deliberately left with no z.ZodType<MathMlElement> annotation of its own -- ExaDev/documents.js#937's spike (see the README's "z.custom() vs z.lazy() for recursive schemas" section) found that annotating a discriminated union's own member schemas widens them so z.discriminatedUnion (which needs each member's internal propValues) rejects the union, while dropping every annotation entirely hits TypeScript's circular-inference error. The fix is annotating only the outer union's own binding below, leaving MathMlElementSchema (and every other member) unannotated and fully inferred. children recurses back to MathMlNodeSchema through z.lazy() rather than a direct reference, since MathMlNodeSchema's own binding is not yet initialised at this point in the module.
 export const MathMlElementSchema = z.object({
   type: z.literal("element"),
   tag: z.string(),
   attributes: z.array(MathMlAttributeSchema),
-  children: z.array(MathMlNodeSchema),
+  children: z.lazy(() => z.array(MathMlNodeSchema)),
 });
+
+export const MathMlNodeSchema: z.ZodType<MathMlNode> = z.discriminatedUnion(
+  "type",
+  [
+    MathMlTextSchema,
+    MathMlCdataSchema,
+    MathMlCommentSchema,
+    MathMlDeclarationSchema,
+    MathMlPiSchema,
+    MathMlElementSchema,
+  ],
+);
