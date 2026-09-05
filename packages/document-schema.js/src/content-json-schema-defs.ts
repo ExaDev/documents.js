@@ -14,7 +14,7 @@ import { schemaUriFor } from "./schema-io";
 //
 // If CONTENT_DEFS stayed inline in the .mjs script, only path 1 above would work: the script imports Zod schemas exclusively from '../dist/index.js' (a build artefact that may not exist, and per eslint.config.ts/tsconfig.json is deliberately excluded from both linting and typechecking, matching test/smoke.test.mjs's own precedent) -- a test that has to import through that path would only ever run after a build, which `pnpm test` (the "unit" vitest project, run standalone in CI's own "test" job, with no build step beforehand) never guarantees. Living here instead, this is an ordinary, fully typechecked and linted src module like any other -- CONTENT_DEFS just happens to be consumed by a script as well as by the package's own test suite.
 //
-// The fragments below still cover exactly what scripts/generate-json-schemas.mjs's own top-of-file comment already explains: ContentBlockSchema, ContentEmbeddedObjectSchema, and MathExpressionSchema are z.custom() predicates z.toJSONSchema() cannot introspect at all (recursion the pinned Zod version's z.lazy() can't express -- see src/content.ts's isContentBlock/isContentEmbeddedObject and src/math.ts's isMathExpression), so every schema reachable only through one of those three is transcribed by hand here, field-for-field, from the real Zod object definitions. MathMlNodeSchema left that set in ExaDev/documents.js#937: it is a real, self-recursive z.discriminatedUnion() now (src/mathml.ts), so MATHML_JSON_DEFS below computes MathMlAttribute/MathMlElement/MathMlNode from a live z.toJSONSchema() call instead of transcribing them, and CONTENT_DEFS just spreads that in. The package tree added its own opaque set in the 4.0.0 major: DocumentTreeSchema's children reach the tree's per-kind group schemas (src/package-node.ts, all z.custom over recursive guards), so the whole TreeNode vocabulary -- container descriptors, anchor paragraphs, the nine group wrappers (the seven of 4.0.0 plus 4.1.0's two construct groups), and the sheet-image/vector leaves -- is transcribed here too, and the generator splices CONTENT_DEFS into document-tree.schema.json as well as content-document.schema.json so both files resolve their local #/$defs pointers without depending on each other's file layout (the one deliberate cross-file ref stays $defs.ContentEmbeddedObject(Block)'s document pointer, CONTENT_DOCUMENT_URI). Three further schemas are transcribed despite being real z.objects themselves: ContentFormulaSchema (its `content` field still reaches the opaque MathExpressionSchema node, exactly like ContentTableCellSchema's blocks -- its `mathml` field reaches the now-real MathMlNodeSchema, but the fragment stays hand-transcribed as a whole because of the field that doesn't), SymbolTableSchema (transcribed so each ContentDocument arm's symbolTable field is one named $ref rather than five inlined copies of the whole unit-registry subtree), and now StyleEntrySchema/DefinitionEntrySchema (same five-copies reason for the package arms' styles/definitions fields) -- the generator's override() replaces each with a $ref to its fragment here. Anything transcribed here that DOES have a real, non-custom, exported Zod schema counterpart is exactly what content-json-schema-defs.test.ts holds to a live z.toJSONSchema() comparison -- which is every construct descriptor fragment, since a descriptor is a plain z.strictObject reaching no opaque node, plus MathMlAttribute/MathMlElement/MathMlNode now that they are generated rather than transcribed; re-verify the rest (ContentTableCell/ContentTableRow/ContentTable, ContentEmbeddedObject(Block), the two block unions -- ContentBlock and the tree's marker-free TreeBlockLeaf -- the nine group wrappers, MathApp/MathSum/MathProd/MathMatrix/MathExpression, ContentFormula) against src/content.ts/src/package-node.ts/src/math.ts by hand whenever those files' field shapes change, exactly as before.
+// The fragments below still cover exactly what scripts/generate-json-schemas.mjs's own top-of-file comment already explains: ContentBlockSchema, ContentEmbeddedObjectSchema, and MathExpressionSchema are z.custom() predicates z.toJSONSchema() cannot introspect at all (recursion the pinned Zod version's z.lazy() can't express -- see src/content.ts's isContentBlock/isContentEmbeddedObject and src/math.ts's isMathExpression), so every schema reachable only through one of those three is transcribed by hand here, field-for-field, from the real Zod object definitions. MathMlNodeSchema left that set in ExaDev/documents.js#937: it is a real, self-recursive z.discriminatedUnion() now (src/mathml.ts), so CONTENT_DEFS.MathMlAttribute/MathMlElement/MathMlNode are lazy getters (defined immediately after this file's own CONTENT_DEFS object literal closes) computing that live z.toJSONSchema() call on first read instead of transcribing them -- lazy rather than a plain computed spread so a bare import of document-schema.js never pays for the conversion, since every codec in the workspace imports this package and is held to Worker-isomorphism. The package tree added its own opaque set in the 4.0.0 major: DocumentTreeSchema's children reach the tree's per-kind group schemas (src/package-node.ts, all z.custom over recursive guards), so the whole TreeNode vocabulary -- container descriptors, anchor paragraphs, the nine group wrappers (the seven of 4.0.0 plus 4.1.0's two construct groups), and the sheet-image/vector leaves -- is transcribed here too, and the generator splices CONTENT_DEFS into document-tree.schema.json as well as content-document.schema.json so both files resolve their local #/$defs pointers without depending on each other's file layout (the one deliberate cross-file ref stays $defs.ContentEmbeddedObject(Block)'s document pointer, CONTENT_DOCUMENT_URI). Three further schemas are transcribed despite being real z.objects themselves: ContentFormulaSchema (its `content` field still reaches the opaque MathExpressionSchema node, exactly like ContentTableCellSchema's blocks -- its `mathml` field reaches the now-real MathMlNodeSchema, but the fragment stays hand-transcribed as a whole because of the field that doesn't), SymbolTableSchema (transcribed so each ContentDocument arm's symbolTable field is one named $ref rather than five inlined copies of the whole unit-registry subtree), and now StyleEntrySchema/DefinitionEntrySchema (same five-copies reason for the package arms' styles/definitions fields) -- the generator's override() replaces each with a $ref to its fragment here. Anything transcribed here that DOES have a real, non-custom, exported Zod schema counterpart is exactly what content-json-schema-defs.test.ts holds to a live z.toJSONSchema() comparison -- which is every construct descriptor fragment, since a descriptor is a plain z.strictObject reaching no opaque node, plus MathMlAttribute/MathMlElement/MathMlNode now that they are generated rather than transcribed; re-verify the rest (ContentTableCell/ContentTableRow/ContentTable, ContentEmbeddedObject(Block), the two block unions -- ContentBlock and the tree's marker-free TreeBlockLeaf -- the nine group wrappers, MathApp/MathSum/MathProd/MathMatrix/MathExpression, ContentFormula) against src/content.ts/src/package-node.ts/src/math.ts by hand whenever those files' field shapes change, exactly as before.
 
 type JsonSchema = z.core.JSONSchema.JSONSchema;
 
@@ -33,20 +33,29 @@ export const EMBEDDED_OBJECT_KINDS = [
 // The genuine cycle back to a whole ContentDocument: ContentEmbeddedObject(Block)'s own `document` field. Resolved once here since both the ContentEmbeddedObjectBlock fragment below and scripts/generate-json-schemas.mjs's own override() branch for the standalone ContentEmbeddedObjectSchema need the identical URI.
 export const CONTENT_DOCUMENT_URI = schemaUriFor("ContentDocument");
 
-// MathMlAttribute/MathMlElement/MathMlNode (src/mathml.ts), computed from a live z.toJSONSchema() call rather than transcribed by hand: MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937, so it introspects cleanly now. The `#/$defs/<id>` uri scheme matches every other cross-reference CONTENT_DEFS's own fragments use, and reproduces the identical nested-$ref shape (MathMlElement.children and MathMlNode's own element variant pointing back at each other by name rather than inlining) that content-json-schema-defs.test.ts's own live-comparison registry confirms empirically against a hand-authored fragment -- see that file's top comment for the same construction.
-const MATHML_REGISTRY = z.registry<{ id: string }>();
-MATHML_REGISTRY.add(MathMlAttributeSchema, { id: "MathMlAttribute" });
-MATHML_REGISTRY.add(MathMlElementSchema, { id: "MathMlElement" });
-MATHML_REGISTRY.add(MathMlNodeSchema, { id: "MathMlNode" });
-const { schemas: mathMlJsonSchemas } = z.toJSONSchema(MATHML_REGISTRY, {
-  uri: (id) => `#/$defs/${id}`,
-});
+// MathMlAttribute/MathMlElement/MathMlNode (src/mathml.ts), computed from a live z.toJSONSchema() call rather than transcribed by hand: MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937, so it introspects cleanly now. The `#/$defs/<id>` uri scheme matches every other cross-reference CONTENT_DEFS's own fragments use, and reproduces the identical nested-$ref shape (MathMlElement.children and MathMlNode's own element variant pointing back at each other by name rather than inlining) that content-json-schema-defs.test.ts's own live-comparison registry confirms empirically against CONTENT_DEFS's own value -- see that file's top comment for the same construction and for why that comparison is a generation-determinism check for these three ids rather than an independent drift check.
+//
+// Computed lazily rather than at module load. This module is re-exported wholesale from src/index.ts (`export * from "./content-json-schema-defs"`), so every consumer of document-schema.js -- a package every codec in the workspace depends on, held to Worker-isomorphism -- used to pay for this z.toJSONSchema() call the moment it imported the package, whether or not it ever read $defs.MathMlAttribute/Element/Node. getMathMlJsonSchemas() below builds the registry and runs the conversion at most once, the first time any of the three `get MathMlAttribute()`/`get MathMlElement()`/`get MathMlNode()` accessors CONTENT_DEFS's own object literal declares further down (in their original field position, not spread in as plain values -- see that literal's own comment) is actually read, and every later read reuses the cached result.
+let cachedMathMlJsonSchemas: Record<string, JsonSchema> | undefined;
+function getMathMlJsonSchemas(): Record<string, JsonSchema> {
+  if (cachedMathMlJsonSchemas === undefined) {
+    const registry = z.registry<{ id: string }>();
+    registry.add(MathMlAttributeSchema, { id: "MathMlAttribute" });
+    registry.add(MathMlElementSchema, { id: "MathMlElement" });
+    registry.add(MathMlNodeSchema, { id: "MathMlNode" });
+    const { schemas } = z.toJSONSchema(registry, {
+      uri: (id) => `#/$defs/${id}`,
+    });
+    cachedMathMlJsonSchemas = schemas;
+  }
+  return cachedMathMlJsonSchemas;
+}
 
 // Strips the $schema/$id root markers z.toJSONSchema() stamps onto every registry entry (each is generated as its own standalone root) -- an artefact of generation, not a real structural difference from a fragment nested inside another schema's own $defs, matching content-json-schema-defs.test.ts's own withoutRootMarkers.
 function mathMlDef(
   id: "MathMlAttribute" | "MathMlElement" | "MathMlNode",
 ): JsonSchema {
-  const generated = mathMlJsonSchemas[id];
+  const generated = getMathMlJsonSchemas()[id];
   if (generated === undefined) {
     throw new Error(
       `z.toJSONSchema() produced no schema for registered id "${id}"`,
@@ -58,14 +67,19 @@ function mathMlDef(
   return stripped;
 }
 
-const MATHML_JSON_DEFS: Record<
-  "MathMlAttribute" | "MathMlElement" | "MathMlNode",
-  JsonSchema
-> = {
-  MathMlAttribute: mathMlDef("MathMlAttribute"),
-  MathMlElement: mathMlDef("MathMlElement"),
-  MathMlNode: mathMlDef("MathMlNode"),
-};
+// Called from each of CONTENT_DEFS's own `get MathMlAttribute()`/`get MathMlElement()`/`get MathMlNode()` accessors (see that object literal further down), never before CONTENT_DEFS itself has finished being constructed: a getter's body only runs when something later reads the property, strictly after the `export const CONTENT_DEFS = {...}` statement below has completed, so referencing CONTENT_DEFS by name here is safe despite this function being declared above it -- the same forward-reference-inside-a-deferred-closure pattern ordinary mutual recursion between top-level functions already relies on. Redefines CONTENT_DEFS's own property as a plain cached value on first call so the underlying z.toJSONSchema() call and this stripping work run at most once per id, and every read after the first is a plain property lookup with no getter overhead at all.
+function cacheMathMlDef(
+  id: "MathMlAttribute" | "MathMlElement" | "MathMlNode",
+): JsonSchema {
+  const value = mathMlDef(id);
+  Object.defineProperty(CONTENT_DEFS, id, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: false,
+  });
+  return value;
+}
 
 // The two binder variants (MathSum/MathProd) differ only in their kind discriminant -- one builder rather than two copies of the same twelve-line fragment, so a binder-field change lands in both or fails the hand re-verification visibly in the diff.
 function mathBinderDef(kind: "sum" | "prod"): JsonSchema {
@@ -1683,8 +1697,17 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["kind"],
     additionalProperties: {},
   },
-  // The MathML node tree carried by the ContentDocument 'formula' variant's own ContentFormulaSchema.mathml (src/content.ts) -- MathMlAttribute/MathMlElement/MathMlNode, spread in from MATHML_JSON_DEFS above rather than transcribed by hand, since MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937 and z.toJSONSchema() can introspect it directly now.
-  ...MATHML_JSON_DEFS,
+  // The MathML node tree carried by the ContentDocument 'formula' variant's own ContentFormulaSchema.mathml (src/content.ts) -- MathMlAttribute/MathMlElement/MathMlNode, rather than transcribed by hand, since MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937 and z.toJSONSchema() can introspect it directly now. Declared as `get` accessors here, in their own field position, rather than spread in as plain values from a separately-built object: a getter fires only when the property is actually read, so cacheMathMlDef()'s z.toJSONSchema() call happens on first access to any of the three, not the moment this object literal is constructed -- and declaring them in place (rather than via Object.defineProperty after this literal closes) keeps CONTENT_DEFS's own key order exactly where it always was, so the generated content-document.schema.json/document-tree.schema.json's own $defs key order is unaffected by the deferral. See cacheMathMlDef's own comment above for the self-caching mechanism and why referencing CONTENT_DEFS from inside it is safe.
+  get MathMlAttribute(): JsonSchema {
+    return cacheMathMlDef("MathMlAttribute");
+  },
+  get MathMlElement(): JsonSchema {
+    return cacheMathMlDef("MathMlElement");
+  },
+  get MathMlNode(): JsonSchema {
+    return cacheMathMlDef("MathMlNode");
+  },
+  //
   // -- The math value schemas (src/math.ts) --
   //
   // ContentFormula itself (src/content.ts): its `mathml` field reaches the opaque MathMlNodeSchema and its `content` field the opaque MathExpressionSchema, so the generator's override() replaces every occurrence with a $ref to this fragment (the ContentTableCell precedent -- a real z.object dragged opaque by one field). presentation/provenance/starMath are transcribed alongside rather than left to inline, so the whole fragment tree under `formula` lives here where the regression test can see the leaves.
