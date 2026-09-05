@@ -520,7 +520,7 @@ describe("images", () => {
       diagnostic = d;
     });
     expect(diagnostic?.code).toBe("epub/image-inline-unsupported");
-    expect(diagnostic?.message).toContain("<img> cannot become");
+    expect(diagnostic?.message).toContain("<img> is reached");
     expect(diagnostic?.message).not.toContain('src=""');
   });
 });
