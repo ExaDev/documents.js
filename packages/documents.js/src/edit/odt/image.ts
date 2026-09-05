@@ -6,7 +6,7 @@ import { el } from "../../xml/fragment";
 import { encodeOdfText } from "../../xml/odf-text";
 
 export interface ImageInit {
-  readonly format: "png" | "jpeg";
+  readonly format: "png" | "jpeg" | "svg" | "gif";
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly widthPt: number;
   readonly heightPt: number;

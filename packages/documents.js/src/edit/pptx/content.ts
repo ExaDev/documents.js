@@ -102,6 +102,11 @@ function appendShape(
     }
   }
   if (shape.blocks.length === 1 && onlyBlock?.kind === "image") {
+    if (onlyBlock.format === "svg") {
+      throw new Error(
+        "buildPptxPackage: an image block in svg format has no OOXML blip this writer can produce (PresentationML's a:blip only references a raster part PowerPoint decodes directly -- png/jpeg/gif)",
+      );
+    }
     const imageShape = slide.addImage({
       frame: shape.frame,
       format: onlyBlock.format,

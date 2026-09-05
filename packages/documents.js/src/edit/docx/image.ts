@@ -4,11 +4,22 @@ import { addImageMedia } from "../../opc/media";
 import { el } from "../../xml/fragment";
 
 export interface ImageInit {
-  readonly format: "png" | "jpeg";
+  readonly format: "png" | "jpeg" | "gif";
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly widthPt: number;
   readonly heightPt: number;
   readonly altText?: string;
+}
+
+// WordprocessingML's a:blip only references a raster part Word decodes directly (png/jpeg/gif); rendering an svg needs the a:svgBlip extension plus a raster-fallback pair this package does not build. Shared by every ContentImageBlock -> ImageInit call site in this editor so the rejection message stays one string.
+export function assertDocxWritableImageFormat(
+  format: "png" | "jpeg" | "svg" | "gif",
+): asserts format is "png" | "jpeg" | "gif" {
+  if (format === "svg") {
+    throw new Error(
+      "buildDocxPackage: an image block in svg format has no OOXML blip this writer can produce (WordprocessingML's a:blip only references a raster part Word decodes directly -- png/jpeg/gif)",
+    );
+  }
 }
 
 const DRAWING_NS = {

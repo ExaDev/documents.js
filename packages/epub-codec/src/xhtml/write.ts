@@ -32,7 +32,7 @@ export interface XhtmlWriteContext {
   // Registers one image's bytes for the manifest, returning the href this document's own <img src> should use (relative to the XHTML document's own directory). Called once per ContentImageBlock encountered, in document order.
   readonly registerImage: (
     bytes: Uint8Array<ArrayBuffer>,
-    format: "png" | "jpeg",
+    format: ContentImageBlock["format"],
   ) => string;
   readonly sink: EpubDiagnosticSink;
   readonly sourceHref: string;

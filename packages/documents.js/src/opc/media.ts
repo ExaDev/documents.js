@@ -55,19 +55,14 @@ export function addImageMedia(
   pkg: Package,
   fromPartPath: string,
   mediaDir: string, // e.g. 'word/media' or 'ppt/media'
-  format: "png" | "jpeg",
+  format: "png" | "jpeg" | "gif",
   bytes: Uint8Array<ArrayBuffer>,
 ): AddedMedia {
-  const extension = format === "jpeg" ? "jpeg" : "png";
   const fileNamePrefix = "image";
-  const index = nextMediaIndex(pkg, mediaDir, fileNamePrefix, extension);
-  const partPath = `${mediaDir}/${fileNamePrefix}${index}.${extension}`;
+  const index = nextMediaIndex(pkg, mediaDir, fileNamePrefix, format);
+  const partPath = `${mediaDir}/${fileNamePrefix}${index}.${format}`;
   pkg.parts[partPath] = { kind: "binary", base64: bytesToBase64(bytes) };
-  ensureDefaultContentType(
-    pkg,
-    extension,
-    defaultContentTypeForExtension(extension),
-  );
+  ensureDefaultContentType(pkg, format, defaultContentTypeForExtension(format));
   const target = buildRelativeTarget(fromPartPath, partPath);
   const relationshipId = addRelationship(pkg, fromPartPath, {
     type: IMAGE_RELATIONSHIP_TYPE,

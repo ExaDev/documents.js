@@ -141,6 +141,12 @@ function resolvePartMediaType(
     if (sniffed === "jpeg") {
       return "image/jpeg";
     }
+    if (sniffed === "gif") {
+      return "image/gif";
+    }
+    if (sniffed === "svg") {
+      return "image/svg+xml";
+    }
   }
 
   // LibreOffice's own real-world behaviour for a part it cannot otherwise classify -- not "application/octet-stream", which LibreOffice never actually emits here.

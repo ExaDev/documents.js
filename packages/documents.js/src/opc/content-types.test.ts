@@ -38,10 +38,11 @@ describe("defaultContentTypeForExtension", () => {
     expect(defaultContentTypeForExtension("png")).toBe("image/png");
     expect(defaultContentTypeForExtension("JPEG")).toBe("image/jpeg");
     expect(defaultContentTypeForExtension("jpg")).toBe("image/jpeg");
+    expect(defaultContentTypeForExtension("gif")).toBe("image/gif");
   });
 
   it("throws for an unknown extension rather than guessing", () => {
-    expect(() => defaultContentTypeForExtension("gif")).toThrow();
+    expect(() => defaultContentTypeForExtension("tiff")).toThrow();
   });
 });
 
