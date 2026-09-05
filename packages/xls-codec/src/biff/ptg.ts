@@ -3,13 +3,13 @@ import { columnIndexToLetters } from "document-schema.js";
 import { BlockCursor } from "./cursor";
 import { errorTextOf } from "./errors";
 import { FTAB_FIXED_ARITY, FTAB_NAMES } from "./ptg-functions";
-import { readShortXLUnicodeString } from "./strings";
+import { readShortXLUnicodeString, readXLUnicodeString } from "./strings";
 
 // A BIFF8 compiled formula (Ptg token stream, [MS-XLS] 2.5.198.25 -- https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/94229a89-a5b6-4f2b-834f-bd28cdc57c6b) walked left to right and rebuilt into the infix text a spreadsheet application would show.
 //
 // The tokens are postfix (reverse Polish): an operand token pushes a value, an operator or function token pops however many operands it needs and pushes the combined result. This module carries that same shape one level up -- an OPERAND STACK of already-formatted text, each entry tagged with the precedence of whatever built it -- so a binary operator or function call is always "pop N, join, push" and the only real complexity is deciding when a child needs literal parentheses around it before it can sit inside its parent's text. That decision is precedence comparison, not a special case: wrap the left child when its own precedence is lower than the operator being applied, wrap the right child when its precedence is lower than OR EQUAL to it. The equal case on the right is what reproduces `a-(b-c)` correctly (and, for a commutative operator, only ever fires when the postfix stream itself demanded that grouping -- which happens only when the formula's own author wrote explicit parentheses, since a bare `a+b+c` always compiles left-nested) -- so this one rule is correct for every operator here regardless of its true associativity, and this module never needs to know what that associativity actually is.
 //
-// A shared formula's PtgExp is now resolved rather than aborting the parse -- see readPtgExpBase (joined against a ShrFmla record by workbook/sheet.ts's collectFormulaGroups) and the ParseFormulaOptions.relativeTo-driven PtgRefN/PtgAreaN expansion below. What remains unrecognised -- an array constant's PtgArray, a data table's PtgTbl, a defined name's PtgName/PtgNameX, a natural-language "Elf" reference, a genuinely external workbook's 3D reference -- still aborts the whole parse rather than guessing: parseFormulaText returns undefined, and the caller leaves ContentSheetCell.formula absent for that cell exactly as it already does for a cell this reader cannot map at all. A BiffFormatError from a cursor read past the end of rgce is not caught here: cce already bounds a well-formed token stream exactly, so a cursor genuinely running past it means this module misjudged a token's own byte width, which is a bug worth failing loudly on rather than silently discarding.
+// A shared formula's PtgExp and an array constant's PtgArray are now resolved rather than aborting the parse -- see readPtgExpBase (joined against a ShrFmla/Array record by workbook/sheet.ts's collectFormulaGroups), the ParseFormulaOptions.relativeTo-driven PtgRefN/PtgAreaN expansion, and the ParseFormulaOptions.rgcb-driven PtgArray/PtgExtraArray handling below. What remains unrecognised -- a data table's PtgTbl, a defined name's PtgName/PtgNameX, a natural-language "Elf" reference, a genuinely external workbook's 3D reference -- still aborts the whole parse rather than guessing: parseFormulaText returns undefined, and the caller leaves ContentSheetCell.formula absent for that cell exactly as it already does for a cell this reader cannot map at all. A BiffFormatError from a cursor read past the end of rgce is not caught here: cce already bounds a well-formed token stream exactly, so a cursor genuinely running past it means this module misjudged a token's own byte width, which is a bug worth failing loudly on rather than silently discarding.
 
 /** A 3D reference's sheet scope, resolved from its ixti through EXTERNSHEET and a self-referencing SupBook ([MS-XLS] 2.4.271, 2.4.106, 2.5.344): the first and last sheet of the reference, both direct BoundSheet8 indices into FormulaSheetContext.sheets. A single-sheet 3D reference has `firstSheetIndex === lastSheetIndex`. Defined here rather than alongside the globals reader that produces it, since resolving it into reference text is what this module exists to do. */
 export interface SheetRange {
@@ -251,6 +251,64 @@ function readRelativeArea(
   ];
 }
 
+/**
+ * PtgExtraArray's own SerAr elements ([MS-XLS] 69ff31ac): every variant but SerStr is a fixed nine bytes -- a one-byte type tag plus eight bytes of payload/padding -- so only SerStr's own XLUnicodeString needs its length read from the data rather than assumed.
+ */
+const SERAR_NIL = 0x00;
+const SERAR_NUM = 0x01;
+const SERAR_STR = 0x02;
+const SERAR_BOOL = 0x04;
+const SERAR_ERR = 0x10;
+/** SerNil/SerBool/SerErr's own trailing padding, after the one type byte this module already reads and (for SerBool/SerErr) the one payload byte after it -- see SERAR_FIXED_PAYLOAD_BYTES for the pre-payload figure these values are derived from. */
+const SERAR_FIXED_PAYLOAD_BYTES = 8;
+
+/** One SerAr element ([MS-XLS] 69ff31ac) from a PtgExtraArray's `array` field, as the literal text an array-constant token in that position would show -- undefined for a type tag this reader does not recognise, or an error code [MS-XLS] does not define, in which case the caller aborts the whole PtgArray rather than fabricating a placeholder value. */
+function readArrayElementText(cursor: BlockCursor): string | undefined {
+  const type = cursor.u8();
+  switch (type) {
+    case SERAR_NUM:
+      return String(cursor.f64());
+    case SERAR_STR:
+      return quoteStringLiteral(readXLUnicodeString(cursor));
+    case SERAR_BOOL: {
+      const value = cursor.u8() !== 0;
+      cursor.skip(SERAR_FIXED_PAYLOAD_BYTES - 1);
+      return value ? "TRUE" : "FALSE";
+    }
+    case SERAR_ERR: {
+      const text = errorTextOf(cursor.u8());
+      cursor.skip(SERAR_FIXED_PAYLOAD_BYTES - 1);
+      return text;
+    }
+    case SERAR_NIL:
+      cursor.skip(SERAR_FIXED_PAYLOAD_BYTES);
+      return "";
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * PtgExtraArray ([MS-XLS] edd64b46): the literal value grid a PtgArray token's own RgbExtra trailer carries -- one less than the column and row counts, then that many SerAr elements in row-major order. Rendered as Excel's own array-constant syntax (comma between columns, semicolon between rows, e.g. `{1,2;3,4}`), which is the same textual spelling this token has whether it sits inside an ordinary formula's array-constant literal (`=SUM({1,2,3})`) or inside an array formula's own expression -- the array-FORMULA-level `{...}` a CSE entry adds is a separate, outer wrapping applied by the caller, never this one.
+ */
+function readArrayLiteralText(cursor: BlockCursor): string | undefined {
+  const columns = cursor.u8() + 1;
+  const rows = cursor.u16() + 1;
+  const rowTexts: string[] = [];
+  for (let row = 0; row < rows; row += 1) {
+    const values: string[] = [];
+    for (let column = 0; column < columns; column += 1) {
+      const value = readArrayElementText(cursor);
+      if (value === undefined) {
+        return undefined;
+      }
+      values.push(value);
+    }
+    rowTexts.push(values.join(","));
+  }
+  return `{${rowTexts.join(";")}}`;
+}
+
 // A sheet name needs single-quote wrapping (with any embedded quote doubled) whenever it is not a bare identifier -- this covers the common real-world cases (a space, a leading digit, punctuation) without attempting Excel's full, more permissive grammar; a name this pattern quotes unnecessarily is still valid Excel syntax, so the only real risk is the pattern being too PERMISSIVE, and every character it allows unquoted (letters, digits, underscore, period) is one Excel itself never requires quoting for.
 const SIMPLE_SHEET_NAME_RE = /^[A-Za-z_][A-Za-z0-9_.]*$/;
 
@@ -329,6 +387,12 @@ const PTG_REFN_ARRAY = 0x6c;
 const PTG_AREAN_REF = 0x2d;
 const PTG_AREAN_VALUE = 0x4d;
 const PTG_AREAN_ARRAY = 0x6d;
+/** PtgArray's family ([MS-XLS] 61167ac8): an array-constant literal, whose values live in a PtgExtraArray this token's own bytes never carry -- see ParseFormulaOptions.rgcb and readArrayLiteralText. Each token is a fixed eight bytes: the opcode itself (already consumed by the caller) plus seven bytes this reader never inspects (unused1/2/3), since the real data is the RgbExtra trailer's own PtgExtraArray in the same position-in-sequence as this token. */
+const PTG_ARRAY_REF = 0x20;
+const PTG_ARRAY_VALUE = 0x40;
+const PTG_ARRAY_ARRAY = 0x60;
+/** The seven bytes of a PtgArray token besides its own opcode byte (already consumed as `opcode` by the caller) -- unused1 (1 byte) + unused2 (2 bytes) + unused3 (4 bytes), [MS-XLS] 61167ac8. */
+const PTG_ARRAY_TRAILING_BYTES = 7;
 
 // PtgAttr's own family ([MS-XLS] 2.5.198.25's 0x19 second-byte group): every one of these is a fixed four bytes (the shared 0x19 opcode, a one-byte subtype flag, then two more bytes -- an offset for Semi/If/Goto, unused for Sum/Baxcel/Space/SpaceSemi) EXCEPT PtgAttrChoose, whose trailing rgOffset array is variable-length and therefore unsupported here (see PTG_ATTR_CHOOSE below). None of the fixed four carries any text-relevant information for this module's purposes: PtgAttrIf/PtgAttrGoto/PtgAttrSemi/PtgAttrSpace/PtgAttrSpaceSemi/PtgAttrBaxcel are calculation-engine control/display framing this module discards as pure no-ops (their own "offset" fields describe evaluator jump distances, irrelevant to reconstructing text), and PtgAttrSum alone has a text effect, wrapping whatever operand already sits on top of the stack.
 const PTG_ATTR_OPCODE = 0x19;
@@ -345,13 +409,15 @@ const PTG_ATTR_SPACE_SEMI = 0x41;
 const PTG_ATTR_TRAILING_BYTES = 2;
 
 /**
- * Parses a Formula record's compiled expression into the text a spreadsheet application would show, or returns undefined for a token this reader does not resolve -- an array constant, a defined name, a natural-language reference, a data table, or a 3D reference into a genuinely external workbook (see the module comment for the full list). The caller leaves ContentSheetCell.formula absent in that case, exactly as for any other unsupported construct.
+ * Parses a Formula record's compiled expression into the text a spreadsheet application would show, or returns undefined for a token this reader does not resolve -- a defined name, a natural-language reference, a data table, or a 3D reference into a genuinely external workbook (see the module comment for the full list). The caller leaves ContentSheetCell.formula absent in that case, exactly as for any other unsupported construct.
  *
- * `rgce` is the formula's own token bytes, already sliced to their declared length (CellParsedFormula.cce/SharedParsedFormula.cce) by the caller -- this function reads exactly that many bytes and nothing past them.
+ * `rgce` is the formula's own token bytes, already sliced to their declared length (CellParsedFormula.cce/SharedParsedFormula.cce/ArrayParsedFormula.cce) by the caller -- this function reads exactly that many bytes and nothing past them.
  */
 export interface ParseFormulaOptions {
   /** The cell this formula is being evaluated for -- present only when `rgce` is a ShrFmla's own SharedParsedFormula being expanded for one specific referencing cell (see workbook/sheet.ts's collectFormulaGroups), which is the only place PtgRefN/PtgAreaN are legal. Absent for every other caller, in which case meeting one of those tokens aborts the parse exactly as it always has. */
   readonly relativeTo?: FormulaOrigin;
+  /** The RgbExtra trailer following `rgce` in the same CellParsedFormula/ArrayParsedFormula ([MS-XLS] 7dd67f0a/242bcf20) -- consulted only when `rgce` contains a PtgArray, one PtgExtraArray pulled off the front for each in the order both arrays share ([MS-XLS] 70f743b2: "The order of the structures MUST be the same as the order of the Ptgs"). Absent (or exhausted before a PtgArray needs it) aborts the parse rather than guessing at the array's values. */
+  readonly rgcb?: Uint8Array<ArrayBuffer>;
 }
 
 export function parseFormulaText(
@@ -361,6 +427,9 @@ export function parseFormulaText(
 ): string | undefined {
   const cursor = new BlockCursor([rgce]);
   const stack: FormulaOperand[] = [];
+  // Lazily-nonexistent rather than lazily-created: a formula with no PtgArray at all (the overwhelming majority) never touches this, and a genuine RgbExtra trailer is read strictly left-to-right across however many PtgArray tokens rgce turns out to hold, in the same single pass as rgce itself.
+  const rgcbCursor =
+    options.rgcb === undefined ? undefined : new BlockCursor([options.rgcb]);
 
   while (cursor.remainingInBlock() > 0) {
     const opcode = cursor.u8();
@@ -485,6 +554,16 @@ export function parseFormulaText(
         pushAtomic(stack, `${formatPoint(start)}:${formatPoint(end)}`);
         break;
       }
+      case PTG_ARRAY_REF:
+      case PTG_ARRAY_VALUE:
+      case PTG_ARRAY_ARRAY: {
+        cursor.skip(PTG_ARRAY_TRAILING_BYTES);
+        if (rgcbCursor === undefined) return undefined;
+        const text = readArrayLiteralText(rgcbCursor);
+        if (text === undefined) return undefined;
+        pushAtomic(stack, text);
+        break;
+      }
       case PTG_FUNC_REF:
       case PTG_FUNC_VALUE:
       case PTG_FUNC_ARRAY: {
@@ -528,7 +607,7 @@ export function parseFormulaText(
         break;
       }
       default:
-        // Every token this module still does not recognise -- PtgExp (resolved one level up, by the caller joining it against a ShrFmla record before ever calling this function -- see readPtgExpBase), PtgArray, PtgTbl, PtgName/PtgNameX, PtgMemArea/MemErr/MemNoMem/MemFunc, PtgSxName, the Elf/Radical natural-language family, and PtgIsect/PtgUnion/PtgRange (the space/comma/colon reference operators, not in this reader's supported vocabulary) -- aborts the parse.
+        // Every token this module still does not recognise -- PtgExp (resolved one level up, by the caller joining it against a ShrFmla/Array record before ever calling this function -- see readPtgExpBase), PtgTbl, PtgName/PtgNameX, PtgMemArea/MemErr/MemNoMem/MemFunc, PtgSxName, the Elf/Radical natural-language family, and PtgIsect/PtgUnion/PtgRange (the space/comma/colon reference operators, not in this reader's supported vocabulary) -- aborts the parse.
         return undefined;
     }
   }
@@ -536,15 +615,15 @@ export function parseFormulaText(
   return stack.length === 1 ? stack[0]?.text : undefined;
 }
 
-/** PtgExp's own opcode ([MS-XLS] f9aa266f): 0x01, a reserved bit, then the row/col of the Formula record that carries the shared formula's real expression -- see readPtgExpBase. */
+/** PtgExp's own opcode ([MS-XLS] f9aa266f): 0x01, a reserved bit, then the row/col of the Formula record that carries the shared or array formula's real expression -- see readPtgExpBase. */
 const PTG_EXP_OPCODE = 0x01;
 /** PtgExp's own fixed size: the opcode byte plus a Rw (2 bytes) and a Col (2 bytes), [MS-XLS] f9aa266f. */
 const PTG_EXP_SIZE = 5;
 
 /**
- * If `rgce` is EXACTLY one PtgExp token -- which is the only shape a Formula record belonging to a shared formula group ever has, including the group's own base cell, which points at itself -- returns the (row, column) of the Formula record that carries the real expression (a ShrFmla record immediately follows it). Returns undefined for every other rgce, so a caller can try this first and fall back to parseFormulaText for a formula that merely happens to open with byte 0x01 for some other reason (it cannot: no other single-byte-opcode Ptg in this reader's vocabulary is 0x01, but a malformed or foreign rgce is not assumed well-formed here either) or is simply longer than five bytes.
+ * If `rgce` is EXACTLY one PtgExp token -- which is the only shape a Formula record belonging to a shared or array formula group ever has, including the group's own base cell, which points at itself -- returns the (row, column) of the Formula record that carries the real expression (a ShrFmla or Array record immediately follows it). Returns undefined for every other rgce, so a caller can try this first and fall back to parseFormulaText for a formula that merely happens to open with byte 0x01 for some other reason (it cannot: no other single-byte-opcode Ptg in this reader's vocabulary is 0x01, but a malformed or foreign rgce is not assumed well-formed here either) or is simply longer than five bytes.
  *
- * Exported for workbook/sheet.ts's collectFormulaGroups, which joins the returned cell against whichever ShrFmla record follows the Formula record found there.
+ * Exported for workbook/sheet.ts's collectFormulaGroups, which joins the returned cell against whichever ShrFmla/Array record follows the Formula record found there.
  */
 export function readPtgExpBase(
   rgce: Uint8Array<ArrayBuffer>,

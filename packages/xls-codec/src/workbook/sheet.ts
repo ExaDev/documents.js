@@ -75,7 +75,7 @@ export interface RawCell {
   readonly value: RawCellValue;
   /** True when the value is a Formula record's CACHED result rather than a literal. */
   readonly fromFormula: boolean;
-  /** The formula's own text, recovered from its compiled Ptg token stream ([MS-XLS] 2.5.198), when every token in it is one this reader resolves -- absent for an array formula, a defined-name or natural-language reference, or a 3D reference into a genuinely external workbook (see biff/ptg.ts). */
+  /** The formula's own text, recovered from its compiled Ptg token stream ([MS-XLS] 2.5.198), when every token in it is one this reader resolves -- absent for a defined-name or natural-language reference, a data table, or a 3D reference into a genuinely external workbook (see biff/ptg.ts). */
   readonly formula?: string;
 }
 
@@ -173,17 +173,24 @@ interface SharedFormulaGroup {
   readonly rgce: Uint8Array<ArrayBuffer>;
 }
 
-type FormulaGroup = SharedFormulaGroup;
+/** An array (CSE) formula's real expression, from the ArrayParsedFormula an Array record following the group's base Formula record carries -- identical, unadjusted text for every cell in the array's range (ArrayParsedFormula's own grammar forbids PtgRefN/PtgAreaN, so there is no per-cell expansion to do), wrapped in Excel's own `{...}` array-formula braces by resolveFormulaText. */
+interface ArrayFormulaGroup {
+  readonly kind: "array";
+  readonly rgce: Uint8Array<ArrayBuffer>;
+  readonly rgcb: Uint8Array<ArrayBuffer>;
+}
 
-/** The key collectFormulaGroups and its lookup agree on: a shared formula group's own base cell, the same (row, column) a PtgExp token elsewhere in the sheet points back to. */
+type FormulaGroup = SharedFormulaGroup | ArrayFormulaGroup;
+
+/** The key collectFormulaGroups and its lookup agree on: a shared/array formula group's own base cell, the same (row, column) a PtgExp token elsewhere in the sheet points back to. */
 function groupKey(row: number, column: number): string {
   return `${row},${column}`;
 }
 
 /**
- * Walks every record once, looking for a Formula record immediately followed by a ShrFmla record ([MS-XLS] 2.1.7.20.6's own FORMULA production, and 984826cc's own "this record is preceded by a single Formula record"), and returns the shared expression each one carries, keyed by that Formula record's own cell -- the same (row, column) a PtgExp token names when it points back to this group (see readPtgExpBase, and readFormula below which performs the actual lookup).
+ * Walks every record once, looking for a Formula record immediately followed by a ShrFmla or Array record ([MS-XLS] 2.1.7.20.6's own FORMULA production, and 984826cc/c6ee7512's own "this record is preceded by a single Formula record"), and returns the shared/array expression each one carries, keyed by that Formula record's own cell -- the same (row, column) a PtgExp token names when it points back to this group (see readPtgExpBase, and readFormula below which performs the actual lookup).
  *
- * Built as a single upfront pass over the whole sheet rather than interleaved into readSheetRecords' own per-record loop: every Formula record that uses a shared formula (including the group's own base cell, which points at itself) needs this map already complete when it is reached, and although [MS-XLS] guarantees the base pair precedes every other use, resolving the whole map first removes that ordering as a correctness dependency rather than merely relying on it.
+ * Built as a single upfront pass over the whole sheet rather than interleaved into readSheetRecords' own per-record loop: every Formula record that uses a shared/array formula (including the group's own base cell, which points at itself) needs this map already complete when it is reached, and although [MS-XLS] guarantees the base pair precedes every other use, resolving the whole map first removes that ordering as a correctness dependency rather than merely relying on it.
  */
 function collectFormulaGroups(
   records: readonly RecordGroup[],
@@ -195,16 +202,21 @@ function collectFormulaGroups(
     if (record === undefined || next === undefined) {
       continue;
     }
-    if (record.type !== RECORD_FORMULA || next.type !== RECORD_SHRFMLA) {
+    if (record.type !== RECORD_FORMULA) {
       continue;
     }
-    const header = readCellHeader(new BlockCursor(record.blocks));
-    groups.set(groupKey(header.row, header.column), readShrFmlaGroup(next));
+    if (next.type === RECORD_SHRFMLA) {
+      const header = readCellHeader(new BlockCursor(record.blocks));
+      groups.set(groupKey(header.row, header.column), readShrFmlaGroup(next));
+    } else if (next.type === RECORD_ARRAY) {
+      const header = readCellHeader(new BlockCursor(record.blocks));
+      groups.set(groupKey(header.row, header.column), readArrayGroup(next));
+    }
   }
   return groups;
 }
 
-/** ShrFmla ([MS-XLS] 984826cc): a RefU range (6 bytes, not needed here -- the group is looked up by its base cell's own coordinates, not by re-deriving them from this range), a reserved byte, a cUse byte, then a SharedParsedFormula (458bbec0): a two-byte cce and that many bytes of rgce. */
+/** ShrFmla ([MS-XLS] 984826cc): a RefU range (6 bytes, not needed here -- the group is looked up by its base cell's own coordinates, not by re-deriving them from this range), a reserved byte, a cUse byte, then a SharedParsedFormula (458bbec0): a two-byte cce and that many bytes of rgce. Its own rgce is forbidden from containing PtgArray ([MS-XLS] 458bbec0's own "MUST NOT contain... PtgArray"), so no rgcb is read here. */
 const SHRFMLA_HEADER_BYTES = 8;
 
 function readShrFmlaGroup(record: RecordGroup): SharedFormulaGroup {
@@ -212,6 +224,18 @@ function readShrFmlaGroup(record: RecordGroup): SharedFormulaGroup {
   cursor.skip(SHRFMLA_HEADER_BYTES);
   const cce = cursor.u16();
   return { kind: "shared", rgce: cursor.take(cce) };
+}
+
+/** Array ([MS-XLS] c6ee7512): a Ref range (6 bytes), a flags word (fAlwaysCalc plus reserved bits), four unused bytes, then an ArrayParsedFormula (242bcf20): a two-byte cce, that many bytes of rgce, and -- unlike ShrFmla's own SharedParsedFormula -- a real rgcb trailer, since an array formula's rgce CAN contain a PtgArray for an array-constant literal used within it (e.g. `{=A1:A3+{1;2;3}}`). rgcb's own length is never stated directly: it is whatever bytes remain in the record once the header and rgce are accounted for. */
+const ARRAY_HEADER_BYTES = 12;
+
+function readArrayGroup(record: RecordGroup): ArrayFormulaGroup {
+  const cursor = new BlockCursor(record.blocks);
+  cursor.skip(ARRAY_HEADER_BYTES);
+  const cce = cursor.u16();
+  const rgce = cursor.take(cce);
+  const rgcbLength = recordByteLength(record) - (ARRAY_HEADER_BYTES + 2 + cce);
+  return { kind: "array", rgce, rgcb: cursor.take(Math.max(rgcbLength, 0)) };
 }
 
 /** Reads one worksheet substream's records. */
@@ -642,11 +666,14 @@ function readLabel(record: RecordGroup): RawCell {
 /** The Formula record's own flags field ([MS-XLS] 2.4.127) and calculation cache, between the cached value and the compiled expression -- neither read for its own content; see the two-byte and four-byte skips in readFormula. */
 const FORMULA_FLAGS_BYTES = 2;
 const FORMULA_CALC_CACHE_BYTES = 4;
+/** The Cell (6 bytes) and FormulaValue (8 bytes) fields readFormula has already consumed by the time it reaches cce, plus the flags and calculation-cache fields above and the cce field itself (2 bytes) -- what's left of the record past `FORMULA_HEADER_BYTES + cce` is the CellParsedFormula's own rgcb trailer. */
+const FORMULA_HEADER_BYTES =
+  6 + 8 + FORMULA_FLAGS_BYTES + FORMULA_CALC_CACHE_BYTES + 2;
 
 /**
- * Formula ([MS-XLS] 2.4.127): a Cell, an eight-byte FormulaValue, flags, a calculation cache, then a CellParsedFormula -- a two-byte cce followed by exactly that many bytes of compiled Ptg tokens ([MS-XLS] 2.5.198.3).
+ * Formula ([MS-XLS] 2.4.127): a Cell, an eight-byte FormulaValue, flags, a calculation cache, then a CellParsedFormula -- a two-byte cce, that many bytes of compiled Ptg tokens ([MS-XLS] 2.5.198.3), and (whenever rgce contains a PtgArray -- an inline array-constant literal like `=SUM({1,2,3})`, unrelated to whether the cell itself is CSE-array-entered) an RgbExtra trailer of whatever bytes remain in the record.
  *
- * Both the cached value and the expression are read: the value from the FormulaValue exactly as before, and the expression by resolveFormulaText below, which joins a lone PtgExp against the shared-formula group collectFormulaGroups found for it and otherwise hands the token bytes straight to biff/ptg.ts's parseFormulaText. `formula` is attached only when it resolves; a cell it does not resolve for keeps exactly the behaviour this reader always had, its cached value present and `formula` absent.
+ * Both the cached value and the expression are read: the value from the FormulaValue exactly as before, and the expression by resolveFormulaText below, which joins a lone PtgExp against the shared/array formula group collectFormulaGroups found for it and otherwise hands the token bytes straight to biff/ptg.ts's parseFormulaText. `formula` is attached only when it resolves; a cell it does not resolve for keeps exactly the behaviour this reader always had, its cached value present and `formula` absent.
  */
 function readFormula(
   record: RecordGroup,
@@ -666,8 +693,11 @@ function readFormula(
   cursor.skip(FORMULA_CALC_CACHE_BYTES);
   const cce = cursor.u16();
   const rgce = cursor.take(cce);
+  const rgcbLength = recordByteLength(record) - (FORMULA_HEADER_BYTES + cce);
+  const rgcb = rgcbLength > 0 ? cursor.take(rgcbLength) : undefined;
   const formula = resolveFormulaText(
     rgce,
+    rgcb,
     header,
     formulaSheets,
     formulaGroups,
@@ -678,25 +708,32 @@ function readFormula(
 }
 
 /**
- * A Formula record's rgce resolves one of two ways: a lone PtgExp pointing back to a shared-formula base cell, whose real expression (a ShrFmla's SharedParsedFormula) is expanded relative to THIS cell's own position; or an ordinary rgce, handed to parseFormulaText as-is. A PtgExp with no matching group -- a dangling or malformed reference this reader cannot join -- resolves to undefined exactly like any other unsupported construct.
+ * A Formula record's rgce resolves one of three ways: a lone PtgExp pointing back to a shared-formula base cell, whose real expression (a ShrFmla's SharedParsedFormula) is expanded relative to THIS cell's own position; a lone PtgExp pointing back to an array-formula base cell, whose real expression (an Array's ArrayParsedFormula) is identical for every cell in the range and gets Excel's own `{...}` array-formula wrapping; or an ordinary rgce, handed to parseFormulaText as-is (with this record's own rgcb, for an inline array-constant literal). A PtgExp with no matching group -- a dangling or malformed reference this reader cannot join -- resolves to undefined exactly like any other unsupported construct.
  */
 function resolveFormulaText(
   rgce: Uint8Array<ArrayBuffer>,
+  rgcb: Uint8Array<ArrayBuffer> | undefined,
   header: { readonly row: number; readonly column: number },
   formulaSheets: FormulaSheetContext,
   formulaGroups: ReadonlyMap<string, FormulaGroup>,
 ): string | undefined {
   const base = readPtgExpBase(rgce);
   if (base === undefined) {
-    return parseFormulaText(rgce, formulaSheets);
+    return parseFormulaText(rgce, formulaSheets, { rgcb });
   }
   const group = formulaGroups.get(groupKey(base.row, base.column));
   if (group === undefined) {
     return undefined;
   }
-  return parseFormulaText(group.rgce, formulaSheets, {
-    relativeTo: header,
+  if (group.kind === "shared") {
+    return parseFormulaText(group.rgce, formulaSheets, {
+      relativeTo: header,
+    });
+  }
+  const text = parseFormulaText(group.rgce, formulaSheets, {
+    rgcb: group.rgcb,
   });
+  return text === undefined ? undefined : `{${text}}`;
 }
 
 /** The non-numeric readings of a FormulaValue ([MS-XLS] 2.5.133), selected by its first byte. */
