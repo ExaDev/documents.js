@@ -171,6 +171,43 @@ export function readBrc(
   );
 }
 
+/** A row's own six-side border cascade, from sprmTTableBorders ([MS-DOC] 2.9.302) or the Word 97-era sprmTTableBorders80 ([MS-DOC] 2.9.303) -- the layer table/tap.ts's own top-of-file note calls "a cascade above the per-cell layer rather than another spelling of it". Both structures always state all six fields (there is no bordersToApply-style subset the way TableBrcOperand has), in the same order: brcTop, brcLeft, brcBottom, brcRight, brcHorizontalInside (the border between this row and its table neighbours), brcVerticalInside (the border between this row's own cells). Left unresolved onto any particular cell here: which of the six reaches a given cell/side depends on that cell's position in the WHOLE table -- is this the table's first row; does this cell reach the table's real bottom edge (the table's own last physical row directly, or any non-continuation cell -- a plain cell or a vertically-merged anchor -- whose own merge chain's last row no later row covers at all in a ragged table, a plain cell being the length-one special case of that chain); is this row's first or last physical cell -- which only table/read.ts's own cross-row assembly knows -- see its applyRowLevelBorderCascade and cellReachesTableBottom. */
+export interface TableBordersSet {
+  readonly top?: ContentBorder;
+  readonly left?: ContentBorder;
+  readonly bottom?: ContentBorder;
+  readonly right?: ContentBorder;
+  readonly insideHorizontal?: ContentBorder;
+  readonly insideVertical?: ContentBorder;
+}
+
+function readTableBordersFields(
+  operand: Uint8Array,
+  fieldSize: number,
+  readField: (bytes: Uint8Array, offset: number) => ContentBorder | undefined,
+): TableBordersSet {
+  return {
+    top: readField(operand, 1),
+    left: readField(operand, 1 + fieldSize),
+    bottom: readField(operand, 1 + fieldSize * 2),
+    right: readField(operand, 1 + fieldSize * 3),
+    insideHorizontal: readField(operand, 1 + fieldSize * 4),
+    insideVertical: readField(operand, 1 + fieldSize * 5),
+  };
+}
+
+/** TableBordersOperand's own 49 bytes ([MS-DOC] 2.9.302): cb (1 byte, MUST be 0x30) then six real Brc fields (8 bytes each, 2.9.16) back to back -- brcTop, brcLeft, brcBottom, brcRight, brcHorizontalInside, brcVerticalInside -- each an exact COLORREF exactly like sprmTSetBrc's own per-cell layer. */
+export function readTableBordersOperand(operand: Uint8Array): TableBordersSet {
+  return readTableBordersFields(operand, BRC_SIZE, readBrc);
+}
+
+/** TableBordersOperand80's own 25 bytes ([MS-DOC] 2.9.303): the Word 97-era spelling, cb (1 byte, MUST be 0x18) then the same six fields as Brc80MayBeNil (4 bytes each, 2.9.18), palette-indexed exactly like TC80's own Brc80 fields. */
+export function readTableBordersOperand80(
+  operand: Uint8Array,
+): TableBordersSet {
+  return readTableBordersFields(operand, BRC80_SIZE, readBrc80);
+}
+
 /** Brc80MayBeNil's own no-border value, [MS-DOC] 2.9.18: "When all bits are set (0xFFFFFFFF when interpreted as a 4-byte unsigned integer), this structure specifies that the region in question has no border." */
 const NIL_BRC80: readonly number[] = [0xff, 0xff, 0xff, 0xff];
 

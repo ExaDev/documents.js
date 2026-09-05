@@ -1,8 +1,10 @@
+import type { ContentBorder } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { DocFormatError, DocUnsupportedError } from "../errors";
 import { readDocContent } from "../read";
 import { buildDoc, type DocParagraphSpec } from "../test-support/doc";
 import { CELL_MARK } from "../text/special";
+import { BORDERS_TO_APPLY, SHD_SIZE } from "./decoration";
 
 // Every writeDocContent table test in write.test.ts reads back bytes this package's own writer produced -- a round trip proves the reader and writer agree with each other, not that either agrees with [MS-DOC] itself. These tests hand-assemble the sgc-5 (table) grpprl bytes straight from the specification's own field tables, independently of tap-write.ts's construction logic, so they exercise table/read.ts and table/tap.ts against bytes this package never wrote.
 
@@ -15,21 +17,52 @@ function le16(value: number): number[] {
   return [value & 0xff, (value >> 8) & 0xff];
 }
 
-// TC80, [MS-DOC] 2.9.313: tcgrf (2 bytes -- horzMerge in bits 0-1, vertMerge in bits 5-6, per TCGRF 2.9.317) + wWidth (2, unused by this reader) + four Brc80 border fields (4 bytes each), each written as Brc80MayBeNil ("no border", all bits set).
-function tc80(horzMerge: number, vertMerge: number): number[] {
+/** A single Brc80MayBeNil field's own no-border sentinel, [MS-DOC] 2.9.18: all four bytes set. */
+const NIL_BRC80 = new Array<number>(4).fill(0xff);
+
+// TC80, [MS-DOC] 2.9.313: tcgrf (2 bytes -- horzMerge in bits 0-1, vertMerge in bits 5-6, per TCGRF 2.9.317) + wWidth (2, unused by this reader) + four Brc80 border fields (4 bytes each). Each defaults to Brc80MayBeNil ("no border", all bits set) unless `borders` names a real Brc80 for that side -- used by the sprmTTableBorders precedence tests below, where one cell's own TC80 states a real border that must win over the row-level cascade.
+function tc80(
+  horzMerge: number,
+  vertMerge: number,
+  borders?: {
+    top?: readonly number[];
+    left?: readonly number[];
+    bottom?: readonly number[];
+    right?: readonly number[];
+  },
+): number[] {
   const tcgrf = (horzMerge & 0x3) | ((vertMerge & 0x3) << 5);
-  return [...le16(tcgrf), 0x00, 0x00, ...new Array<number>(16).fill(0xff)];
+  return [
+    ...le16(tcgrf),
+    0x00,
+    0x00,
+    ...(borders?.top ?? NIL_BRC80),
+    ...(borders?.left ?? NIL_BRC80),
+    ...(borders?.bottom ?? NIL_BRC80),
+    ...(borders?.right ?? NIL_BRC80),
+  ];
 }
 
 // sprmTDefTable, [MS-DOC] 2.6.3 (0xD608): TDefTableOperand's own cb (2 bytes -- "the number of bytes used by the remainder of this structure, incremented by 1"), NumberOfColumns, rgdxaCenter (NumberOfColumns + 1 signed 2-byte boundaries), then one TC80 per column.
 function sprmTDefTable(
   columnBoundariesTwips: readonly number[],
-  cells: readonly { horzMerge: number; vertMerge: number }[],
+  cells: readonly {
+    horzMerge: number;
+    vertMerge: number;
+    borders?: {
+      top?: readonly number[];
+      left?: readonly number[];
+      bottom?: readonly number[];
+      right?: readonly number[];
+    };
+  }[],
 ): number[] {
   const remainder = [
     cells.length,
     ...columnBoundariesTwips.flatMap(le16),
-    ...cells.flatMap((cell) => tc80(cell.horzMerge, cell.vertMerge)),
+    ...cells.flatMap((cell) =>
+      tc80(cell.horzMerge, cell.vertMerge, cell.borders),
+    ),
   ];
   const cb = remainder.length + 1;
   return [0x08, 0xd6, ...le16(cb), ...remainder];
@@ -48,6 +81,89 @@ function sprmPItap(depth: number): number[] {
 // sprmTVertMerge, [MS-DOC] 2.6.3 (0xD62B): a VertMergeOperand naming one cell (itc) and its own VerticalMergeFlag -- the incremental per-cell mechanism for a vertical merge, the vertical analogue of sprmTMerge.
 function sprmTVertMerge(itc: number, vertMergeFlags: number): number[] {
   return [0x2b, 0xd6, 0x02, itc, vertMergeFlags];
+}
+
+/** A Brc80 field's own four bytes, [MS-DOC] 2.9.17: dptLineWidth (1/8-point increments), brcType (BRC_TYPE_SINGLE, 0x01, throughout these tests), ico (an Ico palette index, [MS-DOC] 2.9.119), then a zeroed dptSpace/fShadow/fFrame byte. */
+function brc80(dptLineWidthEighths: number, ico: number): number[] {
+  return [dptLineWidthEighths, 0x01, ico, 0x00];
+}
+
+/** A Brc field's own eight bytes, [MS-DOC] 2.9.16: an exact COLORREF (r, g, b, fAuto -- 2.9.43), dptLineWidth, brcType (BRC_TYPE_SINGLE throughout), then a zeroed reserved word. */
+function brc(
+  rgb: readonly [number, number, number],
+  dptLineWidthEighths: number,
+): number[] {
+  return [rgb[0], rgb[1], rgb[2], 0x00, dptLineWidthEighths, 0x01, 0x00, 0x00];
+}
+
+/** A BrcMayBeNil field's own no-border sentinel, [MS-DOC] 2.9.20: the last four bytes -- dptLineWidth/brcType/reserved -- all set (the cv COLORREF ahead of them is not part of the sentinel, so it is left zeroed here). */
+const NIL_BRC = [0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff];
+
+// sprmTSetBrc, [MS-DOC] 2.6.3 (0xD62F): a TableBrcOperand ([MS-DOC] 2.9.305) -- cb (1 byte, MUST be 11), an ItcFirstLim (itcFirst, itcLim), a bordersToApply bitmask, then a single BrcMayBeNil applied to every side the mask names.
+function sprmTSetBrc(
+  itcFirst: number,
+  itcLim: number,
+  bordersToApply: number,
+  brcBytes: readonly number[],
+): number[] {
+  const remainder = [itcFirst, itcLim, bordersToApply, ...brcBytes];
+  return [0x2f, 0xd6, remainder.length, ...remainder];
+}
+
+// sprmTSetBrc80, [MS-DOC] 2.6.3 (0xD620): the Word 97-era sibling of sprmTSetBrc, a TableBrc80Operand ([MS-DOC] 2.9.304) -- the identical cb/ItcFirstLim/bordersToApply header (cb MUST be 7 here, one byte narrower than sprmTSetBrc's own 11 because a Brc80MayBeNil is four bytes against Brc's eight), then a single Brc80MayBeNil applied to every side the mask names.
+function sprmTSetBrc80(
+  itcFirst: number,
+  itcLim: number,
+  bordersToApply: number,
+  brc80Bytes: readonly number[],
+): number[] {
+  const remainder = [itcFirst, itcLim, bordersToApply, ...brc80Bytes];
+  return [0x20, 0xd6, remainder.length, ...remainder];
+}
+
+interface TableBordersSides {
+  readonly top?: readonly number[];
+  readonly left?: readonly number[];
+  readonly bottom?: readonly number[];
+  readonly right?: readonly number[];
+  readonly insideHorizontal?: readonly number[];
+  readonly insideVertical?: readonly number[];
+}
+
+// sprmTTableBorders, [MS-DOC] 2.6.3 (0xD613): a TableBordersOperand ([MS-DOC] 2.9.302) -- cb (1 byte, MUST be 0x30) then six real 8-byte Brc fields in brcTop/brcLeft/brcBottom/brcRight/brcHorizontalInside/brcVerticalInside order, a side defaulting to NIL_BRC ("no border") when the caller does not name it.
+function sprmTTableBorders(sides: TableBordersSides): number[] {
+  const remainder = [
+    ...(sides.top ?? NIL_BRC),
+    ...(sides.left ?? NIL_BRC),
+    ...(sides.bottom ?? NIL_BRC),
+    ...(sides.right ?? NIL_BRC),
+    ...(sides.insideHorizontal ?? NIL_BRC),
+    ...(sides.insideVertical ?? NIL_BRC),
+  ];
+  return [0x13, 0xd6, remainder.length, ...remainder];
+}
+
+// sprmTTableBorders80, [MS-DOC] 2.6.3 (0xD605): the Word 97-era TableBordersOperand80 ([MS-DOC] 2.9.303) -- the same six-field layout as sprmTTableBorders, but each field a 4-byte Brc80MayBeNil rather than an 8-byte Brc.
+function sprmTTableBorders80(sides: TableBordersSides): number[] {
+  const remainder = [
+    ...(sides.top ?? NIL_BRC80),
+    ...(sides.left ?? NIL_BRC80),
+    ...(sides.bottom ?? NIL_BRC80),
+    ...(sides.right ?? NIL_BRC80),
+    ...(sides.insideHorizontal ?? NIL_BRC80),
+    ...(sides.insideVertical ?? NIL_BRC80),
+  ];
+  return [0x05, 0xd6, remainder.length, ...remainder];
+}
+
+/** One Shd's own ten bytes, [MS-DOC] 2.9.247, as a flat ipatAuto background: cvFore automatic (fAuto set), cvBack the stated colour, ipat 0x0000. */
+function shdBackground(rgb: readonly [number, number, number]): number[] {
+  return [0x00, 0x00, 0x00, 0xff, rgb[0], rgb[1], rgb[2], 0x00, 0x00, 0x00];
+}
+
+// sprmTSetShdTable, [MS-DOC] 2.6.3 (0xD660): a SHDOperand ([MS-DOC] 2.9.249) -- cb (1 byte, MUST be 10) then one Shd (10 bytes) applied to every cell in the row.
+function sprmTSetShdTable(shd: readonly number[]): number[] {
+  return [0x60, 0xd6, shd.length, ...shd];
 }
 
 function tableBlock(document: ReturnType<typeof readDocContent>) {
@@ -382,6 +498,734 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
       undefined,
     ]);
     expect(rowTwoCells.map((cell) => cellText(cell))).toEqual(["a", "b", "c"]);
+  });
+});
+
+// ExaDev/documents.js#945: a table decorated only through the row/table-level cascade -- sprmTTableBorders/sprmTTableBorders80, and sprmTSetShdTable for background -- used to read with no cell borders at all, since neither was read before. These tests hand-assemble that cascade the same way every other sprm in this file is exercised, independently of tap-write.ts (which never emits it).
+describe("readDocContent tables, row/table-level border cascade (sprmTTableBorders, ExaDev/documents.js#945)", () => {
+  const TOP: ContentBorder = { color: { r: 1, g: 0, b: 0 }, widthPt: 1 };
+  const LEFT: ContentBorder = { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5 };
+  const BOTTOM: ContentBorder = { color: { r: 0, g: 1, b: 0 }, widthPt: 1.5 };
+  const RIGHT: ContentBorder = { color: { r: 1, g: 1, b: 0 }, widthPt: 2 };
+  const INSIDE_H: ContentBorder = {
+    color: { r: 0, g: 1, b: 1 },
+    widthPt: 0.75,
+  };
+  const INSIDE_V: ContentBorder = {
+    color: { r: 1, g: 0, b: 1 },
+    widthPt: 1.25,
+  };
+
+  const tableBordersSprm = sprmTTableBorders({
+    top: brc([0xff, 0x00, 0x00], 8),
+    left: brc([0x00, 0x00, 0xff], 4),
+    bottom: brc([0x00, 0xff, 0x00], 12),
+    right: brc([0xff, 0xff, 0x00], 16),
+    insideHorizontal: brc([0x00, 0xff, 0xff], 6),
+    insideVertical: brc([0xff, 0x00, 0xff], 10),
+  });
+
+  it("cascades all six sides onto a 2x2 table's own cells, purely from each cell's own position in the whole table", () => {
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...tableBordersSprm,
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+          {
+            runs: [{ text: "C" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "D" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(2);
+    const row0 = block.rows[0]?.cells ?? [];
+    const row1 = block.rows[1]?.cells ?? [];
+    expect(row0[0]?.borders).toEqual({
+      top: TOP,
+      left: LEFT,
+      right: INSIDE_V,
+      bottom: INSIDE_H,
+    });
+    expect(row0[1]?.borders).toEqual({
+      top: TOP,
+      right: RIGHT,
+      left: INSIDE_V,
+      bottom: INSIDE_H,
+    });
+    expect(row1[0]?.borders).toEqual({
+      top: INSIDE_H,
+      left: LEFT,
+      bottom: BOTTOM,
+      right: INSIDE_V,
+    });
+    expect(row1[1]?.borders).toEqual({
+      top: INSIDE_H,
+      right: RIGHT,
+      bottom: BOTTOM,
+      left: INSIDE_V,
+    });
+  });
+
+  it("lets a cell's own explicit TC80 border take precedence over the row-level cascade, regardless of which comes first in the grpprl", () => {
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const explicitTop = brc80(4, 0x02); // 0.5pt solid blue, TC80's own palette-indexed spelling -- deliberately a different colour and width from tableBordersSprm's own brcTop, so a leaked cascade value is unmistakable.
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...tableBordersSprm,
+      ...sprmTDefTable(
+        [0, 1000, 2000],
+        [{ ...unmerged, borders: { top: explicitTop } }, unmerged],
+      ),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    expect(cells[0]?.borders?.top).toEqual({
+      color: { r: 0, g: 0, b: 1 },
+      widthPt: 0.5,
+    });
+    expect(cells[1]?.borders?.top).toEqual(TOP);
+  });
+
+  it("cascades sprmTTableBorders80's palette-indexed Brc80 fields the same way as the modern spelling", () => {
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000], [unmerged]),
+      ...sprmTTableBorders80({
+        top: brc80(8, 0x06), // red
+        bottom: brc80(8, 0x02), // blue
+        left: brc80(8, 0x04), // green
+        right: brc80(8, 0x07), // yellow
+      }),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cell = tableBlock(document).rows[0]?.cells[0];
+    expect(cell?.borders).toEqual({
+      top: { color: { r: 1, g: 0, b: 0 }, widthPt: 1 },
+      bottom: { color: { r: 0, g: 0, b: 1 }, widthPt: 1 },
+      left: { color: { r: 0, g: 1, b: 0 }, widthPt: 1 },
+      right: { color: { r: 1, g: 1, b: 0 }, widthPt: 1 },
+    });
+  });
+
+  it("cascades sprmTSetShdTable's whole-row background onto every cell in the row", () => {
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...sprmTSetShdTable(shdBackground([0xff, 0xff, 0x00])),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    expect(cells[0]?.background).toEqual({ r: 1, g: 1, b: 0 });
+    expect(cells[1]?.background).toEqual({ r: 1, g: 1, b: 0 });
+  });
+
+  it("lets a later, more specific sprmTDefTableShd override an earlier sprmTSetShdTable, the ordinary last-Prl-wins fold every other shading sprm already follows", () => {
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    // sprmTSetShdTable's own text carries none of sprmTTableBorders's "unless modified" exception, so it folds in grpprl order like every other shading sprm rather than always yielding to a per-cell one.
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...sprmTSetShdTable(shdBackground([0xff, 0xff, 0x00])),
+      // sprmTDefTableShd (0xD612): a single-entry rgShd naming only cell 0 -- "cells past its end keep whatever an earlier sprm left them" (tap.ts's own applyShdArray note), so cell 1's own whole-table yellow survives untouched while cell 0's is overridden.
+      ...[0x12, 0xd6, SHD_SIZE, ...shdBackground([0x00, 0xff, 0x00])],
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    expect(cells[0]?.background).toEqual({ r: 0, g: 1, b: 0 });
+    expect(cells[1]?.background).toEqual({ r: 1, g: 1, b: 0 });
+  });
+
+  // ExaDev/documents.js#945, round-1 review: a cell's own sprmTSetBrc explicitly clearing a side (a NilBrc) must never be refilled by the row-level cascade -- applyBrcToCell's own clearedSides is what makes this distinguishable from a side the cell simply never mentioned, since TC80's own Brc80 fields cannot state the difference on their own. A 1x2 row, every one of sprmTTableBorders's six sides red, plus sprmTSetBrc(itcFirst 0, itcLim 1, bordersToApply 0x01 [top], NilBrc) naming only cell 0's own top side.
+  it("does not refill a cell's own top border after sprmTSetBrc explicitly clears it to a NilBrc", () => {
+    const RED: ContentBorder = { color: { r: 1, g: 0, b: 0 }, widthPt: 1 };
+    const redSide = brc([0xff, 0x00, 0x00], 8);
+    const allRedTableBorders = sprmTTableBorders({
+      top: redSide,
+      left: redSide,
+      bottom: redSide,
+      right: redSide,
+      insideHorizontal: redSide,
+      insideVertical: redSide,
+    });
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...allRedTableBorders,
+      ...sprmTSetBrc(0, 1, BORDERS_TO_APPLY.top, NIL_BRC),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    // Cell 0's own sprmTSetBrc states "no top border" explicitly -- the row's own red cascade must never refill it, even though this is both the table's first and last row (so an unfixed cascade would otherwise supply rowBorders.top here).
+    expect(cells[0]?.borders?.top).toBeUndefined();
+    expect(cells[0]?.borders).toEqual({ left: RED, right: RED, bottom: RED });
+    // Cell 1 never mentions its own top side at all, so it still inherits the row's cascade there.
+    expect(cells[1]?.borders).toEqual({
+      top: RED,
+      left: RED,
+      right: RED,
+      bottom: RED,
+    });
+  });
+
+  // ExaDev/documents.js#945, round-5: sprmTSetBrc80 (0xD620), the Word 97-era sibling of sprmTSetBrc, was not read at all -- the SPRM_T_* constants in tap.ts covered up to 0xD62F but skipped 0xD620 entirely, so a genuine Word-97-era NilBrc80 clear never reached applyBrcToCell and clearedSides never recorded it. The identical 1x2/all-red-cascade setup as the sprmTSetBrc test immediately above, but stating the top-side clear through sprmTSetBrc80's own palette-indexed Brc80MayBeNil instead of sprmTSetBrc's exact-colour BrcMayBeNil.
+  it("does not refill a cell's own top border after sprmTSetBrc80 explicitly clears it to a NilBrc80", () => {
+    const RED: ContentBorder = { color: { r: 1, g: 0, b: 0 }, widthPt: 1 };
+    const redSide = brc([0xff, 0x00, 0x00], 8);
+    const allRedTableBorders = sprmTTableBorders({
+      top: redSide,
+      left: redSide,
+      bottom: redSide,
+      right: redSide,
+      insideHorizontal: redSide,
+      insideVertical: redSide,
+    });
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...allRedTableBorders,
+      ...sprmTSetBrc80(0, 1, BORDERS_TO_APPLY.top, NIL_BRC80),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    // Cell 0's own sprmTSetBrc80 states "no top border" explicitly -- the row's own red cascade must never refill it, exactly like the sprmTSetBrc case above.
+    expect(cells[0]?.borders?.top).toBeUndefined();
+    expect(cells[0]?.borders).toEqual({ left: RED, right: RED, bottom: RED });
+    // Cell 1 never mentions its own top side at all, so it still inherits the row's cascade there.
+    expect(cells[1]?.borders).toEqual({
+      top: RED,
+      left: RED,
+      right: RED,
+      bottom: RED,
+    });
+  });
+
+  // The second symptom the same missing SPRM_T_SET_BRC80 case caused, worse than the clear above: a real per-cell border override stated only through sprmTSetBrc80 was silently discarded entirely (never folded into RawCell.borders at all), so cascadeRowBorders' own `cell.borders?.top ?? rowBorders.top` fallback saw an unstated side and filled in the cascade's own border instead of the cell's real one. Same 1x2/all-red-cascade setup, but cell 0's own top side is restated with a real, distinct blue border via sprmTSetBrc80 rather than cleared.
+  it("lets a real border stated via sprmTSetBrc80 override the row-level cascade, not the other way round", () => {
+    const RED: ContentBorder = { color: { r: 1, g: 0, b: 0 }, widthPt: 1 };
+    const BLUE: ContentBorder = { color: { r: 0, g: 0, b: 1 }, widthPt: 2 };
+    const redSide = brc([0xff, 0x00, 0x00], 8);
+    const allRedTableBorders = sprmTTableBorders({
+      top: redSide,
+      left: redSide,
+      bottom: redSide,
+      right: redSide,
+      insideHorizontal: redSide,
+      insideVertical: redSide,
+    });
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...allRedTableBorders,
+      ...sprmTSetBrc80(0, 1, BORDERS_TO_APPLY.top, brc80(16, 0x02)),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    // Cell 0's own sprmTSetBrc80 states a real blue top border -- the row's own red cascade must never overwrite it, even though nothing in TC80 itself states a top border for this cell.
+    expect(cells[0]?.borders).toEqual({
+      top: BLUE,
+      left: RED,
+      right: RED,
+      bottom: RED,
+    });
+    // Cell 1 never mentions its own top side at all, so it still inherits the row's red cascade there.
+    expect(cells[1]?.borders).toEqual({
+      top: RED,
+      left: RED,
+      right: RED,
+      bottom: RED,
+    });
+  });
+
+  it("gives a vertically merged anchor the table's real bottom border when its own merge chain -- not the anchor's own physical row -- reaches the table's last row", () => {
+    // Column 0 is vertically merged across all three rows (restart in row 0, continuation in rows 1 and 2); column 1 is plain in every row, purely to give the table a real second column. Every row states the identical six-side cascade, so brcBottom only ever reaches a cell whose own visual bottom edge is genuinely the table's last row -- which, for the anchor, is row 2, not the anchor's own row 0.
+    const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
+    const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const boundaries = [0, 1000, 2000];
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [restart, plain]),
+      ...tableBordersSprm,
+    ];
+    const rowTwoGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [continuation, plain]),
+      ...tableBordersSprm,
+    ];
+    const rowThreeGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [continuation, plain]),
+      ...tableBordersSprm,
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "top" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "right-1" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowOneGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          {
+            runs: [{ text: "right-2" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowTwoGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          {
+            runs: [{ text: "right-3" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowThreeGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(3);
+    const anchor = block.rows[0]?.cells[0];
+    // The merge structure itself: a 3-row rowSpan, anchored in row 0.
+    expect(anchor?.rowSpan).toBe(3);
+    expect(cellText(anchor)).toBe("top");
+    // The anchor's own row (0) is not the table's last row, so its top edge is still the ordinary first-row border -- unaffected by this fix. Its bottom edge, though, IS the table's real bottom edge, because the merge chain it anchors reaches row 2 -- the table's actual last row -- even though row 0 itself is not that row. Before this fix, a merge anchor sitting in a non-final row always got the row cascade's insideHorizontal on its bottom side instead.
+    expect(anchor?.borders).toEqual({
+      top: TOP,
+      left: LEFT,
+      right: INSIDE_V,
+      bottom: BOTTOM,
+    });
+    // The continuation cell physically sitting in the table's last row carries no decoration of its own -- the shared schema's own convention for a vertical-merge continuation -- so the table's real bottom border is carried by the anchor above, not duplicated here.
+    expect(block.rows[2]?.cells[0]?.blocks).toEqual([]);
+    // The plain, unmerged column still cascades ordinarily: row 2 is genuinely its own last row too.
+    expect(block.rows[2]?.cells[1]?.borders).toEqual({
+      top: INSIDE_H,
+      left: INSIDE_V,
+      right: RIGHT,
+      bottom: BOTTOM,
+    });
+  });
+
+  it("resolves a vertMerge anchor's real bottom edge by the table's shared grid position, not a raw physical-cell index, when the table's last row states genuinely different boundaries", () => {
+    // Three grid columns (colX, col0, the vertMerge target); row 0 states all three as separate physical cells, so the target sits at physical index 2. Row 1 -- the table's own last row -- merges colX+col0 into one genuinely wider physical cell instead (LibreOffice's own encoding, ExaDev/documents.js#895: no TCGRF.horzMerge flag, just wider boundaries), which shifts the target's own continuation down to physical index 1 there. A cascade that matched rows by raw physical-cell index rather than shared-grid position would look at row 1's own (nonexistent) index 2 and never see the continuation's own vertMerge flag at all -- exactly the divergence between array position and grid position cellReachesTableBottom's own note describes. The target's own bottom edge must still resolve to the table's real bcBottom, because its continuation reaches row 1 by grid position regardless of row 1's differently-shaped boundary array.
+    const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
+    const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const rowZeroGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000, 3000], [plain, plain, restart]),
+      ...tableBordersSprm,
+    ];
+    // Row 1's own rgdxaCenter has only two columns: [0, 2000] replaces colX's and col0's own separate [0, 1000, 2000] boundaries with one merged span, while the vertMerge target keeps its own width unchanged. Row 1 -- the table's own real last row -- states the identical tableBordersSprm too: this test is about grid-position resolution for the vertMerge chain, not about which row's own operand brcBottom is read from (a genuinely different bottom value per row is exercised by its own dedicated test below), so both rows agree here.
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 2000, 3000], [plain, continuation]),
+      ...tableBordersSprm,
+    ];
+    const cell = (text: string): DocParagraphSpec => ({
+      runs: [{ text }],
+      grpprl: SPRM_P_F_IN_TABLE,
+      mark: CELL_MARK,
+    });
+    const rowEnd = (grpprl: readonly number[]): DocParagraphSpec => ({
+      runs: [],
+      grpprl,
+      mark: CELL_MARK,
+    });
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          cell("x0"),
+          cell("c0"),
+          cell("anchor"),
+          rowEnd(rowZeroGrpprl),
+          cell("merged"),
+          cell(""),
+          rowEnd(rowOneGrpprl),
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(2);
+    // The shared grid still reconstructs three columns even though row 1's own array only ever states two -- the merged cell's own boundaries cover two of the canonical grid's segments at once.
+    expect(block.columnWidthsPt).toHaveLength(3);
+    expect(block.rows[0]?.cells).toHaveLength(3);
+    expect(block.rows[1]?.cells).toHaveLength(2);
+    const mergedCell = block.rows[1]?.cells[0];
+    expect(mergedCell?.colSpan).toBe(2);
+    expect(cellText(mergedCell)).toBe("merged");
+    const anchor = block.rows[0]?.cells[2];
+    expect(cellText(anchor)).toBe("anchor");
+    // The core assertion: despite sitting at physical index 2 in row 0 and physical index 1 in row 1, the anchor's own continuation is still matched by grid position, giving a 2-row rowSpan and the table's real bcBottom on its own bottom edge -- not the row cascade's insideHorizontal, which is what a raw physical-index match would have produced the moment it looked at row 1's own nonexistent cell 2.
+    expect(anchor?.rowSpan).toBe(2);
+    expect(anchor?.borders).toEqual({
+      top: TOP,
+      left: INSIDE_V,
+      right: RIGHT,
+      bottom: BOTTOM,
+    });
+    // The continuation cell physically sitting in the table's last row still carries no decoration of its own, exactly as the identical-boundaries case above already established.
+    expect(block.rows[1]?.cells[1]?.blocks).toEqual([]);
+  });
+
+  it("gives a vertically merged anchor the table's real LAST ROW's own brcBottom, not its own row's, when the two rows state genuinely different bottom borders", () => {
+    // [MS-DOC] 2.9.302's own field text: a row's brcBottom "specifies the bottom border of the row, if it is the last row in the table" -- so when the anchor's own row (0) and the table's real last row (2) state genuinely DIFFERENT bottom borders, the anchor must read row 2's value, never its own row's. Column 0 is vertically merged across all three rows; column 1 is plain, purely to confirm the identical row-2 value reaches a genuinely ordinary cell too.
+    const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
+    const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const boundaries = [0, 1000, 2000];
+    const ANCHOR_ROW_BOTTOM: ContentBorder = {
+      color: { r: 1, g: 0, b: 0 },
+      widthPt: 2,
+    };
+    const TABLE_BOTTOM: ContentBorder = {
+      color: { r: 0, g: 0, b: 1 },
+      widthPt: 3,
+    };
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [restart, plain]),
+      ...sprmTTableBorders({ bottom: brc([0xff, 0x00, 0x00], 16) }),
+    ];
+    // The middle row states no sprmTTableBorders of its own at all -- it is neither the anchor's own row nor the table's real last row, so nothing should ever read a bottom border from it.
+    const rowTwoGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [continuation, plain]),
+    ];
+    const rowThreeGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable(boundaries, [continuation, plain]),
+      ...sprmTTableBorders({ bottom: brc([0x00, 0x00, 0xff], 24) }),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "top" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "right-1" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowOneGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          {
+            runs: [{ text: "right-2" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowTwoGrpprl, mark: CELL_MARK },
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          {
+            runs: [{ text: "right-3" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowThreeGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(3);
+    const anchor = block.rows[0]?.cells[0];
+    expect(anchor?.rowSpan).toBe(3);
+    // The core assertion: the anchor's own bottom border is the table's real last row's own brcBottom (blue), not its own row's (red) -- before this fix, a merge anchor always inherited its own row's bottom border, which [MS-DOC] 2.9.302's own text never licenses for a row that is not genuinely the table's last.
+    expect(anchor?.borders?.bottom).toEqual(TABLE_BOTTOM);
+    expect(anchor?.borders?.bottom).not.toEqual(ANCHOR_ROW_BOTTOM);
+    // The plain, unmerged column's own cell in the table's real last row agrees exactly -- both cells' visual bottom edge is genuinely the table's own bottom edge, so both must carry the identical value.
+    expect(block.rows[2]?.cells[1]?.borders?.bottom).toEqual(TABLE_BOTTOM);
+  });
+
+  it("gives a NON-merged cell in a ragged table's earlier row the table's real bottom border when no later row covers its column at all", () => {
+    // Row 0 states three columns (A, B, C); row 1 -- the table's own real last row -- is genuinely narrower and states only two (A, B), never mentioning C at all. Nothing this reader can find sits beneath row 0's own column C, so its visual bottom edge IS the table's real bottom edge in that column, even though row 0 is not the table's last physical row and column C is not part of any vertical merge.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const rowZeroGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000, 3000], [plain, plain, plain]),
+      ...tableBordersSprm,
+    ];
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [plain, plain]),
+      ...tableBordersSprm,
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "a0" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "b0" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "c0" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowZeroGrpprl, mark: CELL_MARK },
+          {
+            runs: [{ text: "a1" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "b1" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowOneGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(2);
+    const columnA = block.rows[0]?.cells[0];
+    const columnB = block.rows[0]?.cells[1];
+    const columnC = block.rows[0]?.cells[2];
+    expect(cellText(columnC)).toBe("c0");
+    // Columns A and B are covered by row 1 immediately below, so their own bottom edge is still an ordinary interior one -- unaffected by this fix.
+    expect(columnA?.borders?.bottom).toEqual(INSIDE_H);
+    expect(columnB?.borders?.bottom).toEqual(INSIDE_H);
+    // The core assertion: column C's own bottom edge is the table's real bcBottom, not insideHorizontal, because row 1 never states a cell reaching that far right at all.
+    expect(columnC?.borders).toEqual({
+      top: TOP,
+      left: INSIDE_V,
+      right: RIGHT,
+      bottom: BOTTOM,
+    });
+  });
+
+  it("still gives a vertMerge anchor the table's real bottom border when its own chain ends before a later, ragged row drops its column", () => {
+    // ExaDev/documents.js#945's own follow-up bug: the ragged-table path above only ever checked coverage starting from the ANCHOR's own row, so a merge chain's own continuation in the very next row always counted as "coverage" and permanently blocked this path for any merged cell. Column 0 is plain throughout; column 1 is vertically merged across rows 0-1, then row 2 -- the table's own real last row -- drops column 1 entirely, exactly as the plain-cell ragged test above drops its own last column. Nothing this reader can find sits beneath the merge chain's own last row (row 1) in column 1, so the anchor's visual bottom edge IS the table's real bottom edge there, even though the anchor's own chain never reaches row 2 at all.
+    const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
+    const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const cell = (text: string): DocParagraphSpec => ({
+      runs: [{ text }],
+      grpprl: SPRM_P_F_IN_TABLE,
+      mark: CELL_MARK,
+    });
+    const rowEnd = (grpprl: readonly number[]): DocParagraphSpec => ({
+      runs: [],
+      grpprl,
+      mark: CELL_MARK,
+    });
+    const rowZeroGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [plain, restart]),
+      ...tableBordersSprm,
+    ];
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [plain, continuation]),
+      ...tableBordersSprm,
+    ];
+    const rowTwoGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000], [plain]),
+      ...tableBordersSprm,
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          cell("a0"),
+          cell("anchor"),
+          rowEnd(rowZeroGrpprl),
+          cell("a1"),
+          cell(""),
+          rowEnd(rowOneGrpprl),
+          cell("a2"),
+          rowEnd(rowTwoGrpprl),
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(3);
+    const anchor = block.rows[0]?.cells[1];
+    expect(cellText(anchor)).toBe("anchor");
+    expect(anchor?.rowSpan).toBe(2);
+    // The core assertion: before this fix, row 1's own continuation cell always counted as "coverage" for column 1 when checked from the anchor's own row (0), permanently blocking this path for a merged cell -- the anchor's bottom edge came back as insideHorizontal instead of the table's real bcBottom.
+    expect(anchor?.borders).toEqual({
+      top: TOP,
+      left: INSIDE_V,
+      right: RIGHT,
+      bottom: BOTTOM,
+    });
+    // The continuation cell physically sitting in row 1 carries no decoration of its own, exactly as every other vertMerge continuation in this file.
+    expect(block.rows[1]?.cells[1]?.blocks).toEqual([]);
+    // The plain column is genuinely unaffected: row 2 is its own real last row directly (the first path cellReachesTableBottom checks), never touching the ragged/vertMerge paths at all.
+    expect(block.rows[2]?.cells[0]?.borders?.bottom).toEqual(BOTTOM);
   });
 });
 
