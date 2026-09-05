@@ -599,6 +599,163 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  it("writes a contentControl's alias as \\ffownhelp1{\\*\\ffhelptext ...}", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                alias: "Client name",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\ffownhelp1{\\*\\ffhelptext Client name}");
+    expectBalancedBraces(out);
+  });
+
+  it("writes no \\ffownhelp/\\ffhelptext at all when a contentControl has no alias", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).not.toContain("\\ffownhelp");
+    expect(out).not.toContain("\\ffhelptext");
+    expectBalancedBraces(out);
+  });
+
+  it("writes a bare \\ffprot for a contentControl locked as 'content'", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                lock: "content",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\ffprot");
+    expectBalancedBraces(out);
+  });
+
+  it("writes no \\ffprot at all for a contentControl with no lock", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).not.toContain("\\ffprot");
+    expectBalancedBraces(out);
+  });
+
+  it("writes \\ffprot for a 'container'-locked contentControl too, but reports the removal-protection half as dropped", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "plainText",
+                  lock: "container",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).not.toContain("\\ffprot");
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
+  it("writes \\ffprot for a 'both'-locked contentControl and still reports the removal-protection half as dropped", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "plainText",
+                  lock: "both",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).toContain("\\ffprot");
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
   it("reports a contentControl controlType RTF's own form-field vocabulary does not cover, rather than minting nothing silently -- and mints no unbalanced braces for it", () => {
     const codes: string[] = [];
     const out = text(
@@ -1283,6 +1440,71 @@ describe("round trip through this package's own reader", () => {
         .map((run) => run.text)
         .join(""),
     ).toBe("Lorem ipsum.");
+  });
+
+  it("round-trips a plainText contentControl's alias and lock alongside its tag", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                alias: "Client name",
+                lock: "content",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+      alias: "Client name",
+      lock: "content",
+    });
+  });
+
+  // 'both' has no RTF spelling of its own -- \ffprot is a single bit -- so this is the writer's own documented, one-directional degradation: a 'both' lock survives the round trip as 'content', the half RTF can actually state.
+  it("round-trips a 'both'-locked contentControl's lock down to 'content', the half RTF's \\ffprot can actually state", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                lock: "both",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      lock: "content",
+    });
   });
 
   it("writes a run-level provenance extent as the <chrev> character properties, minting a \\*\\revtbl for its author", () => {
