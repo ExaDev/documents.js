@@ -6,7 +6,7 @@ import { buildImageFrame } from "./shape";
 export interface ImageInit {
   readonly format: "png" | "jpeg";
   readonly bytes: Uint8Array<ArrayBuffer>;
-  // Mirrors pptx/image.ts's own ImageInit.altText for API-shape parity across the two sibling editors -- not yet wired into any XML attribute, matching that sibling's own identical, pre-existing scope (pptx/image.ts's insertPictureShapeMedia never passes altText into buildPictureShape either). odf.js's own readDrawImageBlock (typed/draw/shapes.ts) does not read image alt text back into ContentImageBlock, so there is nothing downstream in this package to round-trip a written value against yet.
+  // Mirrors pptx/image.ts's own ImageInit.altText for API-shape parity across the two sibling editors -- written as the draw:frame's own svg:title child (see shape.ts's own buildImageFrame), the exact element odf.js's readDrawImageBlock (typed/draw/shapes.ts) already reads back into ContentImageBlock.altText.
   readonly altText?: string;
 }
 
@@ -21,5 +21,5 @@ export function insertImageFrameMedia(
   image: ImageInit,
 ): XmlElement {
   const { partPath } = addImageMedia(context.pkg, image.bytes, image.format);
-  return buildImageFrame(partPath, frame);
+  return buildImageFrame(partPath, frame, image.altText);
 }
