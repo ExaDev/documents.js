@@ -601,6 +601,36 @@ describe("embedded objects", () => {
     expect(message).toContain("50.00pt");
   });
 
+  it("still reports a \\objw-only size hint, rather than discarding it for the want of a matching \\objh", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb\\objw2000{\\*\\objdata 68656c6c6f}{\\result}}\\par}`,
+      ),
+    );
+    const message = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    )?.message;
+    expect(message).toContain("100.00pt");
+    expect(message).toContain("\\objw");
+    expect(message).not.toContain("\\objw/\\objh");
+  });
+
+  it("still reports a \\objh-only size hint, rather than discarding it for the want of a matching \\objw", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb\\objh1000{\\*\\objdata 68656c6c6f}{\\result}}\\par}`,
+      ),
+    );
+    const message = diagnostics.find(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    )?.message;
+    expect(message).toContain("50.00pt");
+    expect(message).toContain("\\objh");
+    expect(message).not.toContain("\\objw/\\objh");
+  });
+
   it("still prefers the real decoded object over \\result when both are present, leaving no group unbalanced", () => {
     const { document, diagnostics } = readRtfContent(
       bytes(

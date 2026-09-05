@@ -1185,14 +1185,22 @@ function defaultPictureState(): PictureState {
   };
 }
 
-// Formats \objwN/\objhN (captured on the enclosing \object's own ObjectState) as a diagnostic clause, or an empty string when neither was stated -- the degrade path's own way of not discarding the size hint even though nothing in the ContentDocument has a position left to carry it once the real object cannot be decoded.
+// Formats \objwN/\objhN (captured on the enclosing \object's own ObjectState) as a diagnostic clause, reporting whichever of the two is actually present rather than requiring both -- the degrade path's own way of not discarding a size hint the producer genuinely stated, even a partial one, even though nothing in the ContentDocument has a position left to carry it once the real object cannot be decoded.
 function objectSizeHintClause(object: ObjectState | undefined): string {
-  if (object?.widthTwips === undefined || object.heightTwips === undefined) {
-    return "";
+  const widthTwips = object?.widthTwips;
+  const heightTwips = object?.heightTwips;
+  if (widthTwips !== undefined && heightTwips !== undefined) {
+    const widthPt = twipsToPoints(widthTwips).toFixed(2);
+    const heightPt = twipsToPoints(heightTwips).toFixed(2);
+    return ` (the object's own \\objw/\\objh declared a ${widthPt}pt x ${heightPt}pt size)`;
   }
-  const widthPt = twipsToPoints(object.widthTwips).toFixed(2);
-  const heightPt = twipsToPoints(object.heightTwips).toFixed(2);
-  return ` (the object's own \\objw/\\objh declared a ${widthPt}pt x ${heightPt}pt size)`;
+  if (widthTwips !== undefined) {
+    return ` (the object's own \\objw declared a ${twipsToPoints(widthTwips).toFixed(2)}pt width)`;
+  }
+  if (heightTwips !== undefined) {
+    return ` (the object's own \\objh declared a ${twipsToPoints(heightTwips).toFixed(2)}pt height)`;
+  }
+  return "";
 }
 
 // Turns {\*\objdata ...}'s collected payload back into a ContentEmbeddedObjectBlock, or reports why it cannot and returns undefined -- the object-destination counterpart of buildPicture above. "no payload" and "not this package's own payload" are the two distinct failure shapes (matching buildPicture's own "no format" vs "no size" split): the first never reaches readEmbeddedObjectData at all, and the second is every way a real, foreign OLE object (or simply malformed \objdata) legitimately fails to parse as one. `object` is the enclosing \object's own state, consulted only for its \objw/\objh size hint on the degrade path -- readEmbeddedObjectData never needs it, since a decoded payload carries its own frame.
