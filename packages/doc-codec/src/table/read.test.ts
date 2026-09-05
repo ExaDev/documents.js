@@ -4,7 +4,7 @@ import { DocFormatError, DocUnsupportedError } from "../errors";
 import { readDocContent } from "../read";
 import { buildDoc, type DocParagraphSpec } from "../test-support/doc";
 import { CELL_MARK } from "../text/special";
-import { SHD_SIZE } from "./decoration";
+import { BORDERS_TO_APPLY, SHD_SIZE } from "./decoration";
 
 // Every writeDocContent table test in write.test.ts reads back bytes this package's own writer produced -- a round trip proves the reader and writer agree with each other, not that either agrees with [MS-DOC] itself. These tests hand-assemble the sgc-5 (table) grpprl bytes straight from the specification's own field tables, independently of tap-write.ts's construction logic, so they exercise table/read.ts and table/tap.ts against bytes this package never wrote.
 
@@ -98,6 +98,17 @@ function brc(
 
 /** A BrcMayBeNil field's own no-border sentinel, [MS-DOC] 2.9.20: the last four bytes -- dptLineWidth/brcType/reserved -- all set (the cv COLORREF ahead of them is not part of the sentinel, so it is left zeroed here). */
 const NIL_BRC = [0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff];
+
+// sprmTSetBrc, [MS-DOC] 2.6.3 (0xD62F): a TableBrcOperand ([MS-DOC] 2.9.305) -- cb (1 byte, MUST be 11), an ItcFirstLim (itcFirst, itcLim), a bordersToApply bitmask, then a single BrcMayBeNil applied to every side the mask names.
+function sprmTSetBrc(
+  itcFirst: number,
+  itcLim: number,
+  bordersToApply: number,
+  brcBytes: readonly number[],
+): number[] {
+  const remainder = [itcFirst, itcLim, bordersToApply, ...brcBytes];
+  return [0x2f, 0xd6, remainder.length, ...remainder];
+}
 
 interface TableBordersSides {
   readonly top?: readonly number[];
@@ -701,6 +712,56 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     const cells = tableBlock(document).rows[0]?.cells ?? [];
     expect(cells[0]?.background).toEqual({ r: 0, g: 1, b: 0 });
     expect(cells[1]?.background).toEqual({ r: 1, g: 1, b: 0 });
+  });
+
+  // ExaDev/documents.js#945, round-1 review: a cell's own sprmTSetBrc explicitly clearing a side (a NilBrc) must never be refilled by the row-level cascade -- applyBrcToCell's own clearedSides is what makes this distinguishable from a side the cell simply never mentioned, since TC80's own Brc80 fields cannot state the difference on their own. A 1x2 row, every one of sprmTTableBorders's six sides red, plus sprmTSetBrc(itcFirst 0, itcLim 1, bordersToApply 0x01 [top], NilBrc) naming only cell 0's own top side.
+  it("does not refill a cell's own top border after sprmTSetBrc explicitly clears it to a NilBrc", () => {
+    const RED: ContentBorder = { color: { r: 1, g: 0, b: 0 }, widthPt: 1 };
+    const redSide = brc([0xff, 0x00, 0x00], 8);
+    const allRedTableBorders = sprmTTableBorders({
+      top: redSide,
+      left: redSide,
+      bottom: redSide,
+      right: redSide,
+      insideHorizontal: redSide,
+      insideVertical: redSide,
+    });
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...allRedTableBorders,
+      ...sprmTSetBrc(0, 1, BORDERS_TO_APPLY.top, NIL_BRC),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    // Cell 0's own sprmTSetBrc states "no top border" explicitly -- the row's own red cascade must never refill it, even though this is both the table's first and last row (so an unfixed cascade would otherwise supply rowBorders.top here).
+    expect(cells[0]?.borders?.top).toBeUndefined();
+    expect(cells[0]?.borders).toEqual({ left: RED, right: RED, bottom: RED });
+    // Cell 1 never mentions its own top side at all, so it still inherits the row's cascade there.
+    expect(cells[1]?.borders).toEqual({
+      top: RED,
+      left: RED,
+      right: RED,
+      bottom: RED,
+    });
   });
 });
 

@@ -92,6 +92,8 @@ export interface TableCellProperties {
   readonly vertMerge: number;
   /** The cell's own four borders, absent when it states none on any side. */
   readonly borders?: ContentCellBorders;
+  /** Sides sprmTSetBrc has explicitly named with a NilBrc -- a real "this cell has no border here" statement, distinct from a side this cell's own TAP has simply never mentioned. `borders` alone cannot carry that distinction (an absent side means the same thing either way once cellBordersFrom has dropped it), so table/read.ts's own row-level border cascade (applyRowLevelBorderCascade) consults this set too: a side listed here is never filled from the row's cascade, no matter what `borders` says. See applyBrcToCell's own note for why only sprmTSetBrc, never TC80's own Brc80 fields, can state this. */
+  readonly clearedSides?: ReadonlySet<CellBorderSide>;
   /** The cell's own flat background colour, absent when it states no shading or states a pattern Color cannot express (see decoration.ts's readShd). */
   readonly background?: Color;
 }
@@ -162,7 +164,7 @@ function withCells(
   };
 }
 
-/** Overlays the sides one TableBrcOperand names onto a cell's existing borders, leaving every side it does not name as TC80's own Brc80 stated it. A named side whose Brc is a NilBrc removes that side's border, which is how a producer states "this cell has no top border" over a row-level one it would otherwise inherit. */
+/** Overlays the sides one TableBrcOperand names onto a cell's existing borders, leaving every side it does not name as TC80's own Brc80 stated it. A named side whose Brc is a NilBrc explicitly clears that side -- how a producer states "this cell has no top border" over a row-level one it would otherwise inherit -- and is recorded in `clearedSides` so table/read.ts's own row-level cascade can tell that apart from a side this cell has simply never mentioned. TC80's own Brc80 fields cannot state this distinction on their own (they are mandatory for every cell, so "no border" and "never stated" are the identical bytes -- table/read.ts's own applyRowLevelBorderCascade note); only an explicit sprmTSetBrc naming the side carries an unambiguous "clear" signal. A later sprmTSetBrc restating a real border on a previously cleared side un-clears it, matching the ordinary last-Prl-wins fold every sprm in this module already follows. */
 function applyBrcToCell(
   cell: TableCellProperties,
   bordersToApply: number,
@@ -174,13 +176,21 @@ function applyBrcToCell(
     bottom: cell.borders?.bottom,
     right: cell.borders?.right,
   };
+  const clearedSides = new Set(cell.clearedSides);
   for (const side of CELL_BORDER_SIDES) {
-    if ((bordersToApply & BORDERS_TO_APPLY[side]) !== 0) sides[side] = border;
+    if ((bordersToApply & BORDERS_TO_APPLY[side]) === 0) continue;
+    sides[side] = border;
+    if (border === undefined) {
+      clearedSides.add(side);
+    } else {
+      clearedSides.delete(side);
+    }
   }
   return {
     horzMerge: cell.horzMerge,
     vertMerge: cell.vertMerge,
     borders: cellBordersFrom(sides),
+    clearedSides: clearedSides.size > 0 ? clearedSides : undefined,
     background: cell.background,
   };
 }
@@ -193,6 +203,7 @@ function withBackground(
     horzMerge: cell.horzMerge,
     vertMerge: cell.vertMerge,
     borders: cell.borders,
+    clearedSides: cell.clearedSides,
     background,
   };
 }
@@ -263,6 +274,7 @@ export function applyTableSprms(
             horzMerge: index === itcFirst ? 2 : HORZ_MERGE_CONTINUATION,
             vertMerge: cell.vertMerge,
             borders: cell.borders,
+            clearedSides: cell.clearedSides,
             background: cell.background,
           };
         });
@@ -279,6 +291,7 @@ export function applyTableSprms(
                 horzMerge: cell.horzMerge,
                 vertMerge: vertMergeFlags,
                 borders: cell.borders,
+                clearedSides: cell.clearedSides,
                 background: cell.background,
               }
             : cell,
