@@ -3,12 +3,14 @@ import { COLOR_BLACK } from "./color";
 import {
   type ContentBlock,
   ContentBlockSchema,
+  ContentCellBordersSchema,
   ContentConstructEndSchema,
   ContentConstructStartSchema,
   type ContentDocument,
   ContentDocumentSchema,
   type ContentEmbeddedObject,
   ContentEmbeddedObjectSchema,
+  ContentImageBlockSchema,
   ContentParagraphSchema,
   ContentRunSchema,
   ContentSectionSchema,
@@ -17,6 +19,8 @@ import {
   ContentSheetColumnSchema,
   ContentSheetRowSchema,
   type ContentTable,
+  ContentTableCellSchema,
+  ContentTableRowSchema,
   clampHeadingLevel,
   findConstructMarkerImbalance,
   findRunConstructFault,
@@ -30,6 +34,7 @@ import type { ConstructDescriptor } from "./construct";
 import { assembleTree } from "./factor-styles";
 import { flattenTree } from "./flatten";
 import { LayoutFrameSchema } from "./geometry";
+import { LayoutMetadataSchema } from "./metadata";
 import type { SourceResidue } from "./source";
 
 const paragraph: ContentBlock = {
@@ -1208,6 +1213,172 @@ describe("ContentListMembership checked and itemId", () => {
         list: { level: 0, itemId: 1 },
       }).success,
     ).toBe(false);
+  });
+
+  it("parses a numbering format, distinguishing an ordered list from a bulleted one", () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: "paragraph",
+      runs: [{ text: "First" }],
+      list: { level: 0, format: "decimal" },
+    });
+    expect(parsed.list).toEqual({ level: 0, format: "decimal" });
+  });
+
+  it("refuses a format outside the closed numbering-format vocabulary", () => {
+    expect(
+      ContentParagraphSchema.safeParse({
+        kind: "paragraph",
+        runs: [],
+        list: { level: 0, format: "hebrew" },
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("ContentRun verticalAlign and direction", () => {
+  it("parses a superscript run", () => {
+    expect(
+      ContentRunSchema.parse({ text: "x", verticalAlign: "superscript" })
+        .verticalAlign,
+    ).toBe("superscript");
+  });
+
+  it("parses a subscript run", () => {
+    expect(
+      ContentRunSchema.parse({ text: "x", verticalAlign: "subscript" })
+        .verticalAlign,
+    ).toBe("subscript");
+  });
+
+  it("refuses a verticalAlign outside superscript/subscript", () => {
+    expect(
+      ContentRunSchema.safeParse({ text: "x", verticalAlign: "baseline" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("parses an rtl run, RTF's own \\rtlch scope", () => {
+    expect(
+      ContentRunSchema.parse({ text: "x", direction: "rtl" }).direction,
+    ).toBe("rtl");
+  });
+
+  it("keeps both fields optional, so a run carrying neither parses exactly as before", () => {
+    const parsed = ContentRunSchema.parse({ text: "plain" });
+    expect(parsed.verticalAlign).toBeUndefined();
+    expect(parsed.direction).toBeUndefined();
+  });
+});
+
+describe("ContentParagraph indentRightPt and direction", () => {
+  it("parses a right indent alongside the existing left/first-line indents", () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: "paragraph",
+      runs: [],
+      indentLeftPt: 36,
+      indentRightPt: 18,
+    });
+    expect(parsed.indentRightPt).toBe(18);
+  });
+
+  it("parses an rtl paragraph, RTF's own \\rtlpar scope", () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: "paragraph",
+      runs: [],
+      direction: "rtl",
+    });
+    expect(parsed.direction).toBe("rtl");
+  });
+});
+
+describe("ContentImageBlock format", () => {
+  it.each(["png", "jpeg", "svg", "gif"] as const)("accepts %s", (format) => {
+    expect(
+      ContentImageBlockSchema.parse({
+        kind: "image",
+        format,
+        base64: "",
+        widthPt: 10,
+        heightPt: 10,
+      }).format,
+    ).toBe(format);
+  });
+
+  it("refuses a format outside the closed vocabulary", () => {
+    expect(
+      ContentImageBlockSchema.safeParse({
+        kind: "image",
+        format: "webp",
+        base64: "",
+        widthPt: 10,
+        heightPt: 10,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("ContentCellBorders diagonals", () => {
+  it("parses diagonalUp and diagonalDown alongside the four sides", () => {
+    const border = { color: COLOR_BLACK, widthPt: 1 };
+    const parsed = ContentCellBordersSchema.parse({
+      diagonalUp: border,
+      diagonalDown: border,
+    });
+    expect(parsed.diagonalUp).toEqual(border);
+    expect(parsed.diagonalDown).toEqual(border);
+  });
+});
+
+describe("ContentTableCell verticalAlign", () => {
+  it.each(["top", "center", "bottom"] as const)(
+    "accepts %s",
+    (verticalAlign) => {
+      expect(
+        ContentTableCellSchema.parse({ blocks: [], verticalAlign })
+          .verticalAlign,
+      ).toBe(verticalAlign);
+    },
+  );
+});
+
+describe("ContentTableRow direction", () => {
+  it("parses an rtl row, RTF's own \\rtlrow scope", () => {
+    expect(
+      ContentTableRowSchema.parse({ cells: [], direction: "rtl" }).direction,
+    ).toBe("rtl");
+  });
+});
+
+describe("LayoutMetadata publication and provenance fields", () => {
+  it("parses the full set of newly added fields", () => {
+    const parsed = LayoutMetadataSchema.parse({
+      publisher: "Acme Press",
+      contributor: "J. Editor",
+      rights: "CC-BY-4.0",
+      identifier: "urn:isbn:0000000000",
+      comments: "Draft for review",
+      lastPrintedIso: "2026-01-01T00:00:00Z",
+      company: "Acme Corp",
+      manager: "A. Manager",
+      direction: "rtl",
+    });
+    expect(parsed).toMatchObject({
+      publisher: "Acme Press",
+      contributor: "J. Editor",
+      rights: "CC-BY-4.0",
+      identifier: "urn:isbn:0000000000",
+      comments: "Draft for review",
+      lastPrintedIso: "2026-01-01T00:00:00Z",
+      company: "Acme Corp",
+      manager: "A. Manager",
+      direction: "rtl",
+    });
+  });
+
+  it("keeps every new field optional, so metadata carrying none of them parses exactly as before", () => {
+    expect(LayoutMetadataSchema.parse({ title: "Plain" })).toEqual({
+      title: "Plain",
+    });
   });
 });
 

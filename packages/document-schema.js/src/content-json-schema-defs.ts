@@ -134,6 +134,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       right: { $ref: "#/$defs/ContentBorder" },
       top: { $ref: "#/$defs/ContentBorder" },
       bottom: { $ref: "#/$defs/ContentBorder" },
+      diagonalUp: { $ref: "#/$defs/ContentBorder" }, // bottom-left to top-right
+      diagonalDown: { $ref: "#/$defs/ContentBorder" }, // top-left to bottom-right
     },
     additionalProperties: false,
   },
@@ -144,6 +146,17 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       level: { type: "integer", minimum: 0, maximum: MAX_SAFE_INTEGER },
       checked: { type: "boolean" }, // a GFM task-list item's checkbox state -- see src/content.ts's own field comment
       itemId: { type: "string" }, // the identity of ONE list item, distinguishing "one item, several blocks" from sibling items sharing a numId/level -- see src/content.ts's own field comment
+      format: {
+        type: "string",
+        enum: [
+          "bullet",
+          "decimal",
+          "lowerLetter",
+          "upperLetter",
+          "lowerRoman",
+          "upperRoman",
+        ],
+      }, // the item's own numbering format -- see src/content.ts's own field comment
     },
     required: ["level"],
     additionalProperties: false,
@@ -160,6 +173,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       sizePt: { type: "number", exclusiveMinimum: 0 },
       color: { $ref: "#/$defs/Color" },
       hyperlink: { type: "string" }, // resolved external URI
+      verticalAlign: { type: "string", enum: ["superscript", "subscript"] },
+      direction: { type: "string", enum: ["ltr", "rtl"] }, // RTF's \rtlch/\ltrch scope -- see src/content.ts's own field comment
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
@@ -200,7 +215,9 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       spacingAfterPt: { type: "number" },
       lineSpacing: { type: "number", exclusiveMinimum: 0 }, // multiple of single line height
       indentLeftPt: { type: "number" },
+      indentRightPt: { type: "number" },
       indentFirstLinePt: { type: "number" },
+      direction: { type: "string", enum: ["ltr", "rtl"] }, // RTF's \rtlpar/\ltrpar scope -- see src/content.ts's own field comment
       pageBreakBefore: { type: "boolean" }, // explicit page boundaries a paragraph style forces around its own paragraph
       pageBreakAfter: { type: "boolean" },
       sourcePath: { type: "string" },
@@ -214,7 +231,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     type: "object",
     properties: {
       kind: { type: "string", const: "image" },
-      format: { type: "string", enum: ["png", "jpeg"] },
+      format: { type: "string", enum: ["png", "jpeg", "svg", "gif"] },
       base64: { type: "string" },
       widthPt: { type: "number", exclusiveMinimum: 0 },
       heightPt: { type: "number", exclusiveMinimum: 0 },
@@ -254,6 +271,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       },
       background: { $ref: "#/$defs/Color" },
       borders: { $ref: "#/$defs/ContentCellBorders" },
+      verticalAlign: { type: "string", enum: ["top", "center", "bottom"] },
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
@@ -267,6 +285,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       // pptx tables carry an explicit row height (a:tr/@h); docx tables do not model one at the row level in the same way, so heightPt is undefined there (src/content.ts's own ContentTableRow comment).
       cells: { type: "array", items: { $ref: "#/$defs/ContentTableCell" } },
       heightPt: { type: "number", exclusiveMinimum: 0 },
+      direction: { type: "string", enum: ["ltr", "rtl"] }, // RTF's \rtlrow/\ltrrow scope -- see src/content.ts's own field comment
     },
     required: ["cells"],
     additionalProperties: false,
@@ -479,7 +498,9 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       spacingAfterPt: { type: "number" },
       lineSpacing: { type: "number", exclusiveMinimum: 0 },
       indentLeftPt: { type: "number" },
+      indentRightPt: { type: "number" },
       indentFirstLinePt: { type: "number" },
+      direction: { type: "string", enum: ["ltr", "rtl"] },
       pageBreakBefore: { type: "boolean" }, // explicit page boundaries a paragraph style forces around its own paragraph
       pageBreakAfter: { type: "boolean" },
       sourcePath: { type: "string" },
@@ -512,7 +533,9 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       spacingAfterPt: { type: "number" },
       lineSpacing: { type: "number", exclusiveMinimum: 0 },
       indentLeftPt: { type: "number" },
+      indentRightPt: { type: "number" },
       indentFirstLinePt: { type: "number" },
+      direction: { type: "string", enum: ["ltr", "rtl"] },
       pageBreakBefore: { type: "boolean" }, // explicit page boundaries a paragraph style forces around its own paragraph
       pageBreakAfter: { type: "boolean" },
       sourcePath: { type: "string" },
@@ -1097,7 +1120,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     type: "object",
     properties: {
       kind: { type: "string", const: "image" },
-      format: { type: "string", enum: ["png", "jpeg"] },
+      format: { type: "string", enum: ["png", "jpeg", "svg", "gif"] },
       base64: { type: "string" },
       widthPt: { type: "number", exclusiveMinimum: 0 },
       heightPt: { type: "number", exclusiveMinimum: 0 },
