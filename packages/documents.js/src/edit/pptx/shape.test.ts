@@ -257,4 +257,43 @@ describe("buildPictureShape", () => {
       blip?.type === "element" ? blip.attributes : undefined,
     ).toContainEqual({ name: "r:embed", value: "rId5" });
   });
+
+  it("writes altText as p:cNvPr/@descr", () => {
+    const frame = { xPt: 10, yPt: 20, widthPt: 30, heightPt: 40 };
+    const shapeElement = buildPictureShape(frame, "rId5", 3, "A description");
+    const nvPicPr = shapeElement.children.find(
+      (c) => c.type === "element" && c.tag === "p:nvPicPr",
+    );
+    const cNvPr =
+      nvPicPr?.type === "element"
+        ? nvPicPr.children.find(
+            (c) => c.type === "element" && c.tag === "p:cNvPr",
+          )
+        : undefined;
+    expect(
+      cNvPr?.type === "element" ? cNvPr.attributes : undefined,
+    ).toContainEqual({
+      name: "descr",
+      value: "A description",
+    });
+  });
+
+  it("omits p:cNvPr/@descr when altText is undefined", () => {
+    const frame = { xPt: 10, yPt: 20, widthPt: 30, heightPt: 40 };
+    const shapeElement = buildPictureShape(frame, "rId5", 3);
+    const nvPicPr = shapeElement.children.find(
+      (c) => c.type === "element" && c.tag === "p:nvPicPr",
+    );
+    const cNvPr =
+      nvPicPr?.type === "element"
+        ? nvPicPr.children.find(
+            (c) => c.type === "element" && c.tag === "p:cNvPr",
+          )
+        : undefined;
+    expect(
+      cNvPr?.type === "element"
+        ? cNvPr.attributes.some((a) => a.name === "descr")
+        : undefined,
+    ).toBe(false);
+  });
 });
