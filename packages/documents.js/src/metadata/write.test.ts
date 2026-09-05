@@ -15,7 +15,7 @@ import { minimalOdpBytes } from "../test-support/odp";
 import { richOdsBytes } from "../test-support/ods";
 import { patchDocxMetadata, setDocumentMetadata } from "./write";
 
-describe("setDocumentMetadata: rebuild path (docx/pptx/odt/odp/ods/odg/markdown)", () => {
+describe("setDocumentMetadata: rebuild path (pptx/odt/odp/ods/odg/markdown)", () => {
   it("patches only the overridden field, leaving the source document own existing title untouched", () => {
     const bytes = setDocumentMetadata("odp", "odp", minimalOdpBytes(), {
       author: "New Author",
@@ -71,7 +71,7 @@ describe("setDocumentMetadata: rebuild path (docx/pptx/odt/odp/ods/odg/markdown)
   });
 });
 
-// ExaDev/documents.js#966: unlike setDocumentMetadata's own docx branch (rebuild path above, which genuinely drops comments/footnotes/headers/numbering -- see extras.ts's own gotcha), patchDocxMetadata patches docProps/core.xml directly on the decoded Package, so everything docx-extras covers survives byte-faithful.
+// ExaDev/documents.js#966: patchDocxMetadata patches docProps/core.xml directly on the decoded Package, so everything docx-extras covers (comments, footnotes, header/footer parts, numbering) survives byte-faithful -- unlike the rebuild-from-ContentDocument path every REBUILD_FORMATS member above takes, which genuinely drops all of it (see extras.ts's own gotcha). setDocumentMetadata's own docx/docx branch calls this function directly (see the "setDocumentMetadata: docx-patch path" describe block below), so every caller gets this for free.
 describe("patchDocxMetadata", () => {
   it("patches title/author in place, leaving docx-extras data (comments, footnotes, headers/footers, numbering) completely untouched", () => {
     const sourceBytes = encodePackage(docxWithExtrasPackage());
@@ -141,6 +141,43 @@ describe("patchDocxMetadata", () => {
     const metadata = readDocxContent(core).metadata;
     expect(metadata.title).toBe("First Pass");
     expect(metadata.author).toBe("Second Pass Author");
+  });
+});
+
+// ExaDev/documents.js#966 round 2: classifyWritePath routes a docx/docx pair to patchDocxMetadata internally (the "docx-patch" WritePath kind), rather than the generic ContentDocument rebuild every other REBUILD_FORMATS member takes -- so calling setDocumentMetadata directly, with no caller-side special-casing, is exactly as lossless for docx as calling patchDocxMetadata by hand (proven above).
+describe("setDocumentMetadata: docx-patch path", () => {
+  it("preserves docx-extras data (comments, footnotes, headers/footers, numbering) when source and target are both docx", () => {
+    const sourceBytes = encodePackage(docxWithExtrasPackage());
+    const before = readDocxExtras(decodeOoxmlPackage(sourceBytes));
+    expect(before.comments.length).toBeGreaterThan(0);
+    expect(before.footnotes.length).toBeGreaterThan(0);
+    expect(before.headerFooterParts.length).toBeGreaterThan(0);
+    expect(Object.keys(before.numbering).length).toBeGreaterThan(0);
+
+    const patched = setDocumentMetadata("docx", "docx", sourceBytes, {
+      title: "Patched Title",
+      author: "New Author",
+    });
+
+    const after = readDocxExtras(decodeOoxmlPackage(patched));
+    expect(after).toStrictEqual(before);
+
+    const metadata = readDocxContent(decodeOoxmlPackage(patched)).metadata;
+    expect(metadata.title).toBe("Patched Title");
+    expect(metadata.author).toBe("New Author");
+  });
+
+  it("rejects docx paired with a different target format, naming that the formats must match", () => {
+    expect(() =>
+      setDocumentMetadata("docx", "pptx", minimalDocxBytes(), {}),
+    ).toThrow(/must be the same format\./);
+  });
+
+  it("rejects a different source format paired with a docx target, naming that the formats must match", () => {
+    // classifyWritePath rejects on the format pair alone, before ever reading the bytes -- so an empty Uint8Array is fine here, matching the sibling "rejects two different rebuild formats" test's own pattern.
+    expect(() =>
+      setDocumentMetadata("pptx", "docx", new Uint8Array(), {}),
+    ).toThrow(/must be the same format\./);
   });
 });
 
