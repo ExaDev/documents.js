@@ -851,13 +851,28 @@ interface AstConversionContext {
   readonly options: MarkdownParseOptions;
 }
 
+// Every line addLine appends (including a leaf block's own LAST line) carries a synthetic trailing '\n' -- bookkeeping internal to accumulation, present unconditionally whether or not the ORIGINAL source line it came from was itself followed by one (see Parser.parse above: the source's own final line ending, if any, is deliberately excluded from the split before a single addLine call ever runs). Left in place, that trailing artifact reaches parseInlines indistinguishable from a genuine line ending BETWEEN two real lines of content, and parseLineBreak has no way to tell "nothing follows, this is bookkeeping" apart from "another line of this same block follows, this is a real soft/hard break" -- so a block ending exactly at end-of-input would mint a spurious trailing softBreak/hardBreak node with nothing on its far side (ExaDev/documents.js#940's own debug-softbreak.mjs exploration: `parseLineBreak` fires unconditionally on any '\n' it scans, with no end-of-content lookahead). A leaf block built by some other path than addLine (an ATX heading's single-line content, sliced directly off its own source line -- tryAtxHeadingStart above) never carries this artifact in the first place, so stripping it is conditional on it actually being present, not an unconditional slice.
+//
+// Once that artifact is gone, what remains is spec 0.31.2's own "Paragraphs" rule: the raw content is formed "by concatenating the lines and removing initial and final spaces or tabs" -- ASCII space (U+0020) and tab (U+0009) ONLY, not the broader Unicode whitespace category JavaScript's own String.prototype.trim() strips (NBSP U+00A0, the various em/en spaces, line/paragraph separators, BOM...). That distinction is load-bearing too: an entity reference decodes to its literal character during INLINE parsing, which runs AFTER this trim -- but this package's own writer re-emits that decoded character verbatim, so a paragraph or heading whose rendered markdown happens to START or END with, say, a &nbsp;-derived U+00A0 reaches this exact trim again on reparse, this time as a literal character already sitting at the block's own edge. A plain .trim() would silently swallow it there, misreading real content as insignificant padding.
+const BLOCK_EDGE_SPACE_OR_TAB_PATTERN = /^[ \t]+|[ \t]+$/g;
+
+function trimBlockContent(text: string): string {
+  const withoutTrailingArtifactNewline = text.endsWith("\n")
+    ? text.slice(0, -1)
+    : text;
+  return withoutTrailingArtifactNewline.replace(
+    BLOCK_EDGE_SPACE_OR_TAB_PATTERN,
+    "",
+  );
+}
+
 function toInlineChildren(
   content: string,
   context: AstConversionContext,
 ): MarkdownInlineNode[] {
   // A leaf block's accumulated content keeps the line endings that separated its source lines but not the whitespace around the block itself: leading indentation was stripped as each line was added, and trailing whitespace at the very end of the block is not a hard line break.
   return parseInlines(
-    content.trim(),
+    trimBlockContent(content),
     context.references,
     context.footnotes,
     context.options,
