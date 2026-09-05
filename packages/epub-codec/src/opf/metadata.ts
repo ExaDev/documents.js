@@ -1,7 +1,7 @@
 import type { LayoutMetadata } from "document-schema.js";
 import { EpubDiagnosticCodes, type EpubDiagnosticSink } from "../diagnostics";
 import type { XmlElement } from "../xml/node";
-import { attrValue, childrenWithTag, textContent } from "../xml/query";
+import { attrValue, childrenWithTag, decodedTextContent } from "../xml/query";
 
 // Dublin Core <-> LayoutMetadata mapping, EPUB 3.3 section 5.2 (unchanged from EPUB 2's own OPF metadata, itself carried straight from OPF 2.0's Dublin Core requirement). One role decision drives the two fields that could otherwise collide: dc:creator names EPUB's human, byline-style author -- exactly the role ooxml.js's own dc:creator -> DocumentMetadata.author reading already established for OOXML core properties (NOT the "whoever last saved this" role odf.js's dc:creator plays for ODF, which has no EPUB analogue at all) -- so it maps to `author`, matching that established role rather than ODF's. `creator` itself (the tool that PRODUCED the file, LayoutMetadata's own "originating application" role -- ooxml.js's docProps/app.xml Application element, ODF's meta:generator) has no reliable Dublin Core analogue in an OPF and stays unmapped: EPUB carries no equivalent standard element, and guessing at a non-standard <meta name="generator"> some producers add would be inventing a convention rather than reading one.
 //
@@ -31,14 +31,14 @@ export function readOpfMetadata(
   }
 
   const creators = childrenWithTag(metadataElement, "dc:creator")
-    .map((element) => textContent(element.children).trim())
+    .map((element) => decodedTextContent(element.children).trim())
     .filter((value) => value.length > 0);
   if (creators.length > 0) {
     metadata.author = creators.join("; ");
   }
 
   const subjects = childrenWithTag(metadataElement, "dc:subject")
-    .map((element) => textContent(element.children).trim())
+    .map((element) => decodedTextContent(element.children).trim())
     .filter((value) => value.length > 0);
   if (subjects.length > 0) {
     metadata.keywords = subjects;
@@ -67,7 +67,7 @@ function firstElementText(parent: XmlElement, tag: string): string | undefined {
   if (element === undefined) {
     return undefined;
   }
-  const text = textContent(element.children).trim();
+  const text = decodedTextContent(element.children).trim();
   return text.length > 0 ? text : undefined;
 }
 
@@ -75,7 +75,7 @@ function firstElementText(parent: XmlElement, tag: string): string | undefined {
 function dctermsModified(metadataElement: XmlElement): string | undefined {
   for (const meta of childrenWithTag(metadataElement, "meta")) {
     if (attrValue(meta, "property") === "dcterms:modified") {
-      const text = textContent(meta.children).trim();
+      const text = decodedTextContent(meta.children).trim();
       if (text.length > 0) {
         return text;
       }
