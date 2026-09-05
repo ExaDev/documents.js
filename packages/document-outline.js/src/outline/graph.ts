@@ -684,11 +684,15 @@ export class NodeKindMismatchError extends Error {
 //
 // Reconciliation is by MULTIPLICITY, not set membership: `children` can legitimately repeat an id -- two identical CONTAINS children under one section is a shape this module's own projectDocumentGraph and insertEdge tests both exercise directly -- so "is this id already wired" is never a single yes/no per id, it is "how many of this id are already wired, out of how many the Nth requested occurrence still needs." A plain Set of already-wired ids -- this function's own first implementation -- cannot represent "one occurrence of A is wired, a second is not": it treated every later occurrence of an already-seen id as satisfied too, silently dropping a repeated id's own extra occurrences.
 //
-// Classification and anchoring both work against SPECIFIC EXISTING EDGES, never a bare id value -- the second, subtler defect the first multiplicity-aware rewrite still carried. `originalSiblings` is `id`'s existing CONTAINS edges sorted once, up front, into a fixed reference list this function never mutates or reorders again; each id's own existing occurrences are grouped by their index into that fixed list, and the Nth requested occurrence of an id claims the Nth not-yet-claimed such index, if one remains. A matched position records WHICH `originalSiblings` index it resolved to, not the id it matched: anchoring a missing occurrence against "the value X" is ambiguous the instant X repeats, because a before/after lookup by id (`siblingInsertIndex`, used by `insertEdge`'s public position API) always resolves ties in orderKey order to X's EARLIEST existing edge -- the wrong occurrence whenever the intended anchor is a later one, e.g. requested `[A, X, A]` with both `A`s already wired: `X` must land between the two `A`s, but anchoring by the bare value "A" finds the FIRST `A` and inserts `X` before it instead, misplacing it at the front. Anchoring by a specific `originalSiblings` index rather than a value sidesteps this: there is only ever one edge a given index can mean.
+// Classification and anchoring both work against SPECIFIC EXISTING EDGES, never a bare id value -- the second, subtler defect the first multiplicity-aware rewrite still carried. `originalSiblings` is `id`'s existing CONTAINS edges sorted once, up front, into a fixed reference list this function never mutates or reorders again. A matched position records WHICH `originalSiblings` index it resolved to, not the id it matched: anchoring a missing occurrence against "the value X" is ambiguous the instant X repeats, because a before/after lookup by id (`siblingInsertIndex`, used by `insertEdge`'s public position API) always resolves ties in orderKey order to X's EARLIEST existing edge -- the wrong occurrence whenever the intended anchor is a later one, e.g. requested `[A, X, A]` with both `A`s already wired: `X` must land between the two `A`s, but anchoring by the bare value "A" finds the FIRST `A` and inserts `X` before it instead, misplacing it at the front. Anchoring by a specific `originalSiblings` index rather than a value sidesteps this: there is only ever one edge a given index can mean.
+//
+// The classification pass itself (ExaDev/documents.js#935 round 10) is a longest-common-subsequence match between `originalSiblings`' own target sequence and the full requested `children` list, not a per-id front-to-back count: matching the Nth requested occurrence of an id to the Nth not-yet-claimed existing edge to that SAME id -- independently per id, this function's own round-9 shape -- ignores how that id's existing edges sit relative to every OTHER id's existing edges, and can misassign which requested position an existing edge satisfies whenever two ids' existing edges are interleaved in an order that is itself a genuine subsequence of the request (requested `[A, B, A]` against existing edges wired `[B, A]` -- dropping the request's own first `A` from `[A, B, A]` does yield `[B, A]`, so this is a real, order-consistent pre-wiring, not a malformed one -- yet the per-id matcher pairs request position 0's `A` with the SECOND existing `A`, an assignment no global reading of the two sequences together would produce). The LCS match instead considers both sequences at once: a maximum set of (existing index, requested position) pairs with existing indices increasing exactly where requested positions increase, computed by the standard dynamic-program over `originalSiblings.length + 1` by `children.length + 1` prefixes and read back into `matchedIndex` by a forward walk that takes a match the instant both sequences agree and otherwise advances whichever side the table says still carries the larger remaining match (ties broken toward advancing the existing side, so a requested position matches as early as an optimal assignment allows).
+//
+// An existing edge the LCS pass leaves unmatched is not necessarily genuinely extra: the request can still hold an unmatched occurrence of that SAME id, just not one reachable by any assignment that keeps both sequences' relative order intact throughout -- originalSiblings wired in an order the request's own interleaving cannot embed at all, e.g. requested `[A, B]` against existing edges wired `[B, A]` (this exact shape is impossible to construct as any subsequence of `[A, B]`, since a subsequence's own elements never reverse the source's relative order). Leaving such an edge unmatched and inserting a fresh one for the position it could have satisfied would silently inflate that id's multiplicity past both the existing and requested counts -- so a second, per-id pass pairs every remaining unmatched existing edge against a remaining unmatched requested occurrence of the identical id, front to back on each side, whenever one exists. This pairing deliberately does not attempt to preserve global order -- no order-preserving assignment of these specific edges exists by construction, or the LCS pass would already have found it -- it exists purely to cap each id's final multiplicity at `max(existingCount, requestedCount)` for that id, never beyond it.
 //
 // A missing occurrence's anchor is the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched -- the same "before the next already-wired position, or at the end" rule as before, just resolved against a fixed index rather than a value that can drift or repeat. That anchor index is translated into the anchor's CURRENT position among `id`'s live CONTAINS siblings by counting how many of this reconcile's OWN prior insertions already landed at or before the same anchor index: `originalSiblings` itself is never reordered, so every earlier insertion's own (equally fixed) anchor index is exactly how far it shifted everything from that index onward. This is what lets a run of several consecutive missing occurrences sharing one anchor interleave in requested order -- each is placed by a running numeric offset, never re-resolved by value against the by-then-mutated live sibling list.
 //
-// The insertion itself reuses insertEdge's own CONTAINS-cycle check, bisection, and rebalance-on-exhaustion primitives directly (`assertNoContainsCycle`, `boundedOrderKey`, `rebalancedInsert`) rather than calling insertEdge with a before/after position -- that position parameter is exactly the value-based lookup this function must not go through, so the same guarantees are reached by index instead of by name. Only a position classified as missing is ever placed this way -- an already-matched occurrence is never moved -- so the reconciled order agrees with the order named in `children` only to the extent that the already-wired occurrences' own existing mutual order already agrees with it too: reconciliation interleaves what is missing correctly around what already exists, it does not re-sort existing containment to match a new request. Requesting an identical `children` list twice stays the no-op past-the-first-call behaviour this module has always promised, because every position is then classified as already matched and none are inserted.
+// The insertion itself reuses insertEdge's own CONTAINS-cycle check, bisection, and rebalance-on-exhaustion primitives directly (`assertNoContainsCycle`, `boundedOrderKey`, `rebalancedInsert`) rather than calling insertEdge with a before/after position -- that position parameter is exactly the value-based lookup this function must not go through, so the same guarantees are reached by index instead of by name. Only a position classified as missing is ever placed this way -- an already-matched occurrence is never moved. Walking CONTAINS edges from `id` after reconciliation reproduces the exact requested `children` list, in order and multiplicity both, whenever `originalSiblings`' own target sequence is a genuine subsequence of `children` -- a strictly wider guarantee than round 9's per-id matcher offered, since it now holds for any order-consistent interleaving across ids, not only a prefix of each id's own occurrences. When `originalSiblings` is not even a subsequence of `children` (a genuine cross-id ordering conflict, existing containment wired in a relative order the request cannot embed), reconciliation still terminates safely and never inflates any id's multiplicity past `max(existingCount, requestedCount)`, but the resulting order is not guaranteed to equal `children`, because existing containment is never reordered to fit a new request -- reconciliation inserts what is missing around what already exists, it does not re-sort what already exists. Requesting an identical `children` list twice stays the no-op past-the-first-call behaviour this module has always promised, because every position is then classified as already matched and none are inserted.
 function reconcileChildren(
   graph: PropertyGraph,
   id: string,
@@ -704,21 +708,62 @@ function reconcileChildren(
     .filter((edge) => edge.from === id && edge.kind === "CONTAINS")
     .sort(byOrderKeyAsc);
 
-  const occurrenceIndicesByTarget = new Map<string, number[]>();
+  const existingSeq = originalSiblings.map((edge) => edge.to);
+
+  // Longest-common-subsequence length table between `existingSeq` (rows) and `children` (columns), built from the bottom-right corner backwards so the forward backtrack below can read `dp[i + 1]`/`dp[j + 1]` as "the best match achievable over the rest of both sequences from here".
+  const dp: number[][] = Array.from({ length: existingSeq.length + 1 }, () =>
+    new Array<number>(children.length + 1).fill(0),
+  );
+  for (let i = existingSeq.length - 1; i >= 0; i -= 1) {
+    for (let j = children.length - 1; j >= 0; j -= 1) {
+      dp[i]![j] =
+        existingSeq[i] === children[j]
+          ? dp[i + 1]![j + 1]! + 1
+          : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+    }
+  }
+
+  // Forward backtrack from (0, 0): a matching pair is taken the instant both sequences agree at the current pointers (the only move that can ever belong to a MAXIMUM common subsequence there), otherwise whichever pointer leads to the branch the table says still carries the larger remaining match advances -- a genuine tie breaks toward advancing `i` (the existing side), so a requested position matches as early as any optimal assignment allows.
+  const matchedIndex = new Array<number | undefined>(children.length).fill(
+    undefined,
+  );
+  const matchedByOriginal = new Array<number | undefined>(
+    existingSeq.length,
+  ).fill(undefined);
+  {
+    let i = 0;
+    let j = 0;
+    while (i < existingSeq.length && j < children.length) {
+      if (existingSeq[i] === children[j]) {
+        matchedIndex[j] = i;
+        matchedByOriginal[i] = j;
+        i += 1;
+        j += 1;
+      } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+        i += 1;
+      } else {
+        j += 1;
+      }
+    }
+  }
+
+  // Anti-inflation pass: pairs every existing edge the LCS match above left unmatched against a remaining unmatched requested occurrence of the identical id, front to back on each side -- see this function's own doc comment above for why this cannot preserve global order (no order-preserving assignment of these specific edges exists, or the LCS pass would already have found it) and why it must run anyway (capping each id's final multiplicity at max(existingCount, requestedCount), never minting a fresh edge for a position an existing one could satisfy).
+  const unmatchedExistingByTarget = new Map<string, number[]>();
   originalSiblings.forEach((edge, index) => {
-    const bucket = occurrenceIndicesByTarget.get(edge.to);
-    if (bucket === undefined) occurrenceIndicesByTarget.set(edge.to, [index]);
+    if (matchedByOriginal[index] !== undefined) return;
+    const bucket = unmatchedExistingByTarget.get(edge.to);
+    if (bucket === undefined) unmatchedExistingByTarget.set(edge.to, [index]);
     else bucket.push(index);
   });
-
-  // One classification pass: the Nth requested occurrence of an id claims the Nth not-yet-claimed existing edge to that id, recorded as an `originalSiblings` INDEX (a specific edge) rather than the id value -- `undefined` means genuinely missing.
-  const nextOccurrence = new Map<string, number>();
-  const matchedIndex: (number | undefined)[] = children.map((childId) => {
-    const occurrences = occurrenceIndicesByTarget.get(childId) ?? [];
-    const pointer = nextOccurrence.get(childId) ?? 0;
-    if (pointer >= occurrences.length) return undefined;
-    nextOccurrence.set(childId, pointer + 1);
-    return occurrences[pointer]!;
+  const leftoverPointer = new Map<string, number>();
+  children.forEach((childId, position) => {
+    if (matchedIndex[position] !== undefined) return;
+    const leftovers = unmatchedExistingByTarget.get(childId);
+    if (leftovers === undefined) return;
+    const pointer = leftoverPointer.get(childId) ?? 0;
+    if (pointer >= leftovers.length) return;
+    matchedIndex[position] = leftovers[pointer]!;
+    leftoverPointer.set(childId, pointer + 1);
   });
 
   // A missing position's anchor: the `originalSiblings` index of the nearest LATER requested position already matched, or `originalSiblings.length` (past the end) when nothing later matched.
