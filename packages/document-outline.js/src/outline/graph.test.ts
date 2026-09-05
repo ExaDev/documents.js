@@ -14,6 +14,7 @@ import { effectivePackage } from "./effective";
 import { OrderKeyBudgetExhaustedError } from "./order-keys";
 import {
   contentHashV1,
+  ContainsCycleError,
   defaultExtractionPolicy,
   insertEdge,
   insertNode,
@@ -2031,5 +2032,58 @@ describe("write API: insertNode / insertEdge (#935)", () => {
     )!;
     expect(originalAfterInsert.orderKey).not.toBe(original[0]!.orderKey);
     expect(originalAfterInsert.path).toEqual(original[0]!.path);
+  });
+});
+
+describe("write API: insertEdge refuses a CONTAINS cycle (#935)", () => {
+  const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
+
+  it("insertEdge refuses to attach a CONTAINS edge that would close a cycle (re-parenting a node under its own descendant)", () => {
+    const leaf = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Leaf." }] },
+    });
+    const group = insertNode(leaf.graph, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leaf.id],
+    });
+    // group already CONTAINS leaf; attaching leaf -> group would close a cycle (leaf -> group -> leaf), which is exactly the shape that used to crash walkPropertyGraph's CONTAINS-only walk with a stack overflow once someone walked it.
+    let caught: unknown;
+    try {
+      insertEdge(group.graph, leaf.id, group.id);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ContainsCycleError);
+    const cycleError = caught as ContainsCycleError;
+    expect(cycleError.from).toBe(leaf.id);
+    expect(cycleError.to).toBe(group.id);
+  });
+
+  it("insertEdge refuses a CONTAINS self-loop", () => {
+    const leaf = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Solo." }] },
+    });
+    expect(() => insertEdge(leaf.graph, leaf.id, leaf.id)).toThrow(
+      ContainsCycleError,
+    );
+  });
+
+  it("insertEdge still allows attaching one already-minted node under two independent parents -- multi-parent DAG sharing is not a cycle", () => {
+    const shared = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Shared." }] },
+    });
+    let graph = insertEdge(shared.graph, "parentA", shared.id);
+    graph = insertEdge(graph, "parentB", shared.id);
+    const contains = graph.edges
+      .filter((edge) => edge.kind === "CONTAINS")
+      .map((edge) => `${edge.from}->${edge.to}`);
+    expect(contains).toEqual([
+      `parentA->${shared.id}`,
+      `parentB->${shared.id}`,
+    ]);
   });
 });
