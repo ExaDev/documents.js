@@ -98,30 +98,43 @@ export function readCellShading(
   };
 }
 
+/** Reads `.kind` off a ContentCellFill that has already been switched over both of its real members ('solid'/'pattern') -- TypeScript types such a value 'never' at that point, so this takes it through a deliberately widened parameter type rather than an `as` cast. A value that reaches this call anyway (a malformed object bypassing schema validation, or a stale caller shape) still carries a real, inspectable kind at runtime even though the type system says none is left to name. */
+function unrecognizedFillKind(fill: { kind?: unknown }): string {
+  return String(fill.kind);
+}
+
 /** The inverse of readCellShading: a ContentCellFill's own single <w:shd> element. A 'solid' fill writes w:val="clear" with the colour stated as w:fill (the plain background a real producer's own solid cell fill is spelled with) and w:color left automatic. A 'pattern' fill writes its own token from PATTERN_TYPE_TO_SHD_VAL, with w:color/w:fill stated for whichever of foregroundColor/backgroundColor the fill actually carries and left automatic for the one it does not -- throwing for a SpreadsheetML-only pattern name ST_Shd has no member for, rather than writing the wrong pattern or silently dropping it. */
 export function buildCellShading(fill: ContentCellFill): XmlElement {
-  if (fill.kind === "solid") {
-    return el("w:shd", {
-      "w:val": "clear",
-      "w:color": "auto",
-      "w:fill": colorToRgbHex(fill.color),
-    });
+  switch (fill.kind) {
+    case "solid":
+      return el("w:shd", {
+        "w:val": "clear",
+        "w:color": "auto",
+        "w:fill": colorToRgbHex(fill.color),
+      });
+    case "pattern": {
+      const val = PATTERN_TYPE_TO_SHD_VAL.get(fill.patternType);
+      if (val === undefined) {
+        throw new Error(
+          `ooxml.js cannot write a '${fill.patternType}' cell fill: ECMA-376's own ST_Shd vocabulary has no member for it, that pattern name belonging only to SpreadsheetML's ST_PatternType half of ContentCellPatternType's shared vocabulary`,
+        );
+      }
+      return el("w:shd", {
+        "w:val": val,
+        "w:color":
+          fill.foregroundColor === undefined
+            ? "auto"
+            : colorToRgbHex(fill.foregroundColor),
+        "w:fill":
+          fill.backgroundColor === undefined
+            ? "auto"
+            : colorToRgbHex(fill.backgroundColor),
+      });
+    }
+    default:
+      // Reporting the actual kind beats an if/else's implicit "anything that isn't 'solid' must be 'pattern'", which would silently mistreat an undefined kind as a real pattern lookup instead of naming the actual cause.
+      throw new Error(
+        `ooxml.js cannot write a cell fill with kind '${unrecognizedFillKind(fill)}': ContentCellFillSchema's discriminated union only defines 'solid' and 'pattern'`,
+      );
   }
-  const val = PATTERN_TYPE_TO_SHD_VAL.get(fill.patternType);
-  if (val === undefined) {
-    throw new Error(
-      `ooxml.js cannot write a '${fill.patternType}' cell fill: ECMA-376's own ST_Shd vocabulary has no member for it, that pattern name belonging only to SpreadsheetML's ST_PatternType half of ContentCellPatternType's shared vocabulary`,
-    );
-  }
-  return el("w:shd", {
-    "w:val": val,
-    "w:color":
-      fill.foregroundColor === undefined
-        ? "auto"
-        : colorToRgbHex(fill.foregroundColor),
-    "w:fill":
-      fill.backgroundColor === undefined
-        ? "auto"
-        : colorToRgbHex(fill.backgroundColor),
-  });
 }
