@@ -323,6 +323,8 @@ interface ObjectDataState {
 // One \object destination's own state, shared by reference across the whole {\object ...} group and every child destination nested inside it (\objdata, \result, and the informational \*\objclass/\*\objname sub-groups) -- the same "shared by reference" pattern FieldState already establishes for \fldinst/\fldrslt, so \result's own group can see whether its sibling \objdata already decoded without either needing to know the other's stack depth. `decoded` is resolved by a lookahead at \object's own group-start (below), before either \objdata or \result is actually read, precisely because RTF 1.9.1's own <obj> grammar orders <objdata> before <result> but does not require it: a lenient reader that decided \result's fate from whichever sibling it happened to encounter first would double-render an \object whose producer wrote them the other way around. widthTwips/heightTwips capture \objwN/\objhN (the size hint RTF 1.9.1 says a producer supplies "to maintain backward compatibility" for a reader that cannot decode \objdata at all): this reader's own reconstruction never needs them when \objdata decodes, but the degrade path folds them into its diagnostic message instead of discarding them silently.
 interface ObjectState {
   decoded: boolean;
+  // Whether an {\*\objdata ...} child exists anywhere in this \object's own group at all, regardless of whether it decodes -- distinct from `decoded`, since an \object whose \objdata genuinely fails to decode already reports that failure on its own terms (buildEmbeddedObject's own EMBEDDED_OBJECT_UNREADABLE), while an \object with no \objdata child at all is a different, otherwise-silent construct substitution the \result-fallback handler below reports separately. Resolved by the same lookahead that resolves `decoded`.
+  objectDataSeen: boolean;
   widthTwips: number | undefined;
   heightTwips: number | undefined;
 }
@@ -1398,6 +1400,15 @@ function readRtfDetail(
         head.destination === "result" &&
         objectState !== undefined &&
         !objectState.decoded;
+      // An \object with no \objdata child at all is a different construct substitution from one whose \objdata merely fails to decode (buildEmbeddedObject already reports that on its own terms): \result's fallback content silently taking \objdata's place is exactly the kind of substitution SILENT_SKIP_DESTINATIONS's own policy comment warns against, so it is signalled here rather than left to speak for itself.
+      if (isResultFallback && !objectState.objectDataSeen) {
+        sink({
+          code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+          severity: "warning",
+          message:
+            "an \\object destination has no \\objdata payload at all; its \\result fallback content is used in its place",
+        });
+      }
       // The ANSI half of a {\upr {ansi} {\*\ud unicode}} pair is discarded and the \ud half read, which is exactly what the spec says a Unicode-aware reader must do: the \upr destination "does not use the \* keyword; this forces the old RTF readers to pick up the ANSI representation and discard the Unicode one".
       const kind: DestinationKind =
         isHeaderTable || (wrapperChild && head.destination !== "ud")
@@ -1467,6 +1478,7 @@ function readRtfDetail(
             ) !== undefined;
           child.object = {
             decoded,
+            objectDataSeen: objectDataRange !== undefined,
             widthTwips: undefined,
             heightTwips: undefined,
           };
