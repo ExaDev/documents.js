@@ -1,3 +1,28 @@
+## [6.5.4](https://github.com/ExaDev/documents.js/compare/documents.js%406.5.3...documents.js%406.5.4) (2026-09-05)
+
+### Bug Fixes
+
+* **documents.js:** carry table row height into odt from docx ([e7b53c9](https://github.com/ExaDev/documents.js/commit/e7b53c9a681807f88456683d32cbd42c5f68a024))
+* **documents.js:** preserve existing odt row-style properties when writing row height ([5e8a233](https://github.com/ExaDev/documents.js/commit/5e8a233e39c0139e899288526e920979603b846f))
+* **documents.js:** preserve odt row-style children and clear stale auto-fit on heightPt ([4dea6b4](https://github.com/ExaDev/documents.js/commit/4dea6b4e4b4c852543052dcd731b9638f99808d7))
+
+### Documentation
+
+* **documents.js:** correct stale docx row-height reader-gap comment ([e16b187](https://github.com/ExaDev/documents.js/commit/e16b1872903239636e899904f1a5b804a1cd58f5))
+* **documents.js:** correct which odt row-properties survive a heightPt write untouched ([5844a4c](https://github.com/ExaDev/documents.js/commit/5844a4cdca7d3ea47a955e7909d64d646bcd41e4))
+* **documents.js:** fix backwards claim about OdtTableRow's own accessors ([e4bf47f](https://github.com/ExaDev/documents.js/commit/e4bf47ffdbc4325d14089bbc8ba33bfe04ed4547))
+
+### Tests
+
+* **documents.js:** pin odt row-style child preservation and auto-fit clearing ([48864e2](https://github.com/ExaDev/documents.js/commit/48864e272fab0959f0b7b62e2f0fed682dd0cdff))
+* **documents.js:** pin the merge-preserving odt row-height behaviour ([030983d](https://github.com/ExaDev/documents.js/commit/030983d83fecbb5c073e2e55c8f139637d3f005b))
+* **documents.js:** prove row height survives the docx and odt bridge round trip ([fb74b29](https://github.com/ExaDev/documents.js/commit/fb74b294ef64b640b2eab9d582c29f811190da33))
+
+
+### Dependencies
+
+- Updated markdown-codec to ^6.1.7
+
 ## [6.5.3](https://github.com/ExaDev/documents.js/compare/documents.js%406.5.2...documents.js%406.5.3) (2026-09-05)
 
 
