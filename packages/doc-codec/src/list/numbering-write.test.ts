@@ -225,6 +225,17 @@ describe("buildNumberingTables: level text and format", () => {
     // The old message enumerated every one of NFC_BY_FORMAT's ~59 internal MSONFC-derived keys; a format this writer never emits by hand (e.g. a MSONFC string ContentListMembership.format can't even carry) must not appear.
     expect(() => buildNumberingTables(definitions)).not.toThrow(/hebrew/);
   });
+
+  it("refuses a placeholder position beyond rgbxchNums' own 8-bit range, rather than silently truncating it mod 256", () => {
+    const text = `${"a".repeat(255)}%1.`; // the placeholder's own one-based position lands at 256.
+    const definitions: NumberingDefinitions = {
+      "1": { levels: { "0": { format: "decimal", text, startAt: 1 } } },
+    };
+    expect(() => buildNumberingTables(definitions)).toThrow(
+      /character position 256/,
+    );
+    expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
+  });
 });
 
 describe("gatherListUsage feeding buildNumberingTables", () => {

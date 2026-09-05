@@ -27,6 +27,8 @@ const MAX_LIST_LEVEL = 8;
 const LEVELS_PER_MULTI_LEVEL_LIST = 9;
 /** rgbxchNums ([MS-DOC] 2.9.148): a fixed nine-entry array, zero-terminated -- the same bound numbering.ts's own readRgbxchNums reads against, restated here for buildLevelXst's own placeholder count. */
 const MAX_PLACEHOLDERS_PER_LEVEL = 9;
+/** rgbxchNums' own 8-bit entries ([MS-DOC] 2.9.148): each names a one-based character POSITION in the level's own Xst text, not a value, and that position has to fit a single unsigned byte -- a longer literal prefix before the first placeholder pushes it past this without complaint from anything but this check, since a plain JS number[] never clamps on its own and only silently truncates mod 256 once this module's bytes become a Uint8Array. */
+const MAX_UINT8 = 0xff;
 /** The format every level this writer invents for a paragraph that leaves ContentListMembership.format unstated, and every level a multi-level list's own dense 0..8 run needs filling but no paragraph ever actually used -- an arbitrary but harmless choice, since an unused level's own appearance is never read back into a context that renders it. */
 const DEFAULT_FORMAT = "decimal";
 /** The glyph this writer states for format 'bullet'. A real Word-format producer typically uses a Private Use Area code point from a symbol font (the README's own "Numbering definitions" section records LibreOffice writing U+F0B7) -- this writer uses the plain, portable Unicode bullet instead, since this is a synthesised definition rather than a captured one, and it round-trips exactly through this package's own reader either way. */
@@ -104,7 +106,13 @@ function buildLevelXst(text: string): {
     }
     xstText += text.slice(lastIndex, match.index);
     const levelIndex = Number(levelDigits) - 1;
-    positions.push(xstText.length + 1);
+    const position = xstText.length + 1;
+    if (position > MAX_UINT8) {
+      throw new DocFormatError(
+        `numbering level text ${JSON.stringify(text)} places a placeholder at character position ${position}, outside the 0..${MAX_UINT8} range rgbxchNums' own 8-bit entries ([MS-DOC] 2.9.148) can hold -- writing it anyway would silently truncate the position mod 256 once these bytes become a Uint8Array, corrupting the encoded level text`,
+      );
+    }
+    positions.push(position);
     xstText += String.fromCharCode(levelIndex);
     lastIndex = match.index + match[0].length;
   }
