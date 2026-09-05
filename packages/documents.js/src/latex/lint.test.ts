@@ -177,6 +177,41 @@ describe("lintMathCoherence", () => {
     expect(warnings[0]?.detail).not.toBe(warnings[1]?.detail);
   });
 
+  it("resolves a nested formula's symbols against its OWN embedding document's symbolTable, not the outer package's (ExaDev/documents.js#928 round-7 regression)", () => {
+    // The outer package declares no symbolTable at all; only the nested document curates glyph "U" -- as "symbols:voltage", an id that does NOT match the auto-mint scheme ("symbols:U") a table-less re-lowering would produce for an uncurated glyph. Re-lowering the nested formula against the wrong (outer) table would therefore mint a different symbol id for the same glyph and falsely report a coherence divergence for a formula that is actually perfectly coherent against its own document's table.
+    const curatedEntries = [
+      { glyph: "U", scope: "document", id: "symbols:voltage" },
+    ];
+    const nestedFormula = latexToFormula("U", {
+      symbolEntries: curatedEntries,
+      source: "test:lint",
+    }).formula;
+    const nestedBlock = buildFormulaBlock(
+      nestedFormula,
+      { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 },
+      "test:lint",
+    );
+    const embeddingBlock: ContentBlock = {
+      kind: "embeddedObject",
+      objectKind: "wordprocessing",
+      document: {
+        kind: "wordprocessing",
+        metadata: {},
+        symbolTable: { symbols: curatedEntries, units: [] },
+        sections: [
+          {
+            pageSize: { widthPt: 595, heightPt: 842 },
+            margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+            blocks: [nestedBlock],
+          },
+        ],
+      },
+      frame: { xPt: 0, yPt: 0, widthPt: 0, heightPt: 0 },
+    };
+    const pkg = packageOf([embeddingBlock]);
+    expect(lintMathCoherence(pkg)).toEqual([]);
+  });
+
   it("walks formula blocks inside table cells and skips formulas carrying only one layer", () => {
     const presentationOnly = buildFormulaBlock(
       { mathml: [], presentation: { latex: "x^2" } },
