@@ -308,7 +308,8 @@ describe("readSheetRecords formula cells", () => {
         0xff,
         ...formulaTail,
       ]),
-      record(RECORD_SHRFMLA, [...u16(0), ...u16(0), ...u16(0), ...u16(0)]),
+      // ShrFmla ([MS-XLS] 984826cc): a RefU (rwFirst u16, rwLast u16, colFirst u8, colLast u8), a reserved byte, a cUse byte, then a SharedParsedFormula (cce u16, rgce) -- cce=0 here since this test only cares about finding the String past it, not about the shared expression itself.
+      record(RECORD_SHRFMLA, [...u16(0), ...u16(0), 0, 0, 0, 0, ...u16(0)]),
       record(RECORD_STRING, xlUnicodeString("Shared")),
     );
 
@@ -431,6 +432,61 @@ describe("readSheetRecords formula cells", () => {
     ).cells;
 
     expect(cells[0]?.formula).toBe("Data!A1");
+  });
+
+  it("expands a shared formula's ShrFmla text relative to each referencing cell's own position", () => {
+    // A column filled down with "=A<row>": B1 (the base cell) holds =A1, B2 holds =A2 -- both stored on disk as just a PtgExp pointing back at B1's own coordinates (row 0, column 1). The real expression -- a single fully-relative PtgRefN one column to the left, same row -- lives once in the ShrFmla record that follows B1's own Formula record. PtgRefN's row field carries a plain delta (0 here); its column field packs both flag bits (0xC000) and the signed 14-bit delta (-1, i.e. 0x3FFF) into one word, which happens to equal 0xFFFF for exactly this delta.
+    const shrFmlaRgce = [0x4c, ...u16(0), ...u16(0xffff)];
+    const ptgExpToBase = [0x01, ...u16(0), ...u16(1)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 1),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_SHRFMLA, [
+        ...u16(0), // rwFirst
+        ...u16(1), // rwLast
+        1, // colFirst
+        1, // colLast
+        0, // reserved
+        2, // cUse
+        ...u16(shrFmlaRgce.length),
+        ...shrFmlaRgce,
+      ]),
+      record(RECORD_FORMULA, [
+        ...cell(1, 1),
+        ...f64(2),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBe("A1");
+    expect(cells[1]?.formula).toBe("A2");
+  });
+
+  it("leaves formula absent for a PtgExp whose base cell has no matching ShrFmla group", () => {
+    // A PtgExp pointing at a cell that is never followed by ShrFmla -- a dangling or malformed reference this reader declines to guess at, exactly like any other unresolved construct.
+    const ptgExpToNowhere = [0x01, ...u16(5), ...u16(5)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToNowhere.length),
+        ...ptgExpToNowhere,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
   });
 });
 

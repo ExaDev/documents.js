@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { u16, u32 } from "../test-support/biff";
-import { type FormulaSheetContext, parseFormulaText } from "./ptg";
+import {
+  type FormulaSheetContext,
+  parseFormulaText,
+  readPtgExpBase,
+} from "./ptg";
 
 // Every byte sequence here is built by hand from [MS-XLS] 2.5.198's own per-Ptg field layouts, matching this package's established convention (see test-support/biff.ts) -- and cross-checked against a real BIFF8 workbook that LibreOffice wrote for the identical formulas during development of this module (SUM/AVERAGE/IF/ROUND/ATAN2/SYD/REPLACE/SUMIF/CONCATENATE, a cross-sheet SUM, and a parenthesised `(A1+B1)*C1`), which produced byte-for-byte the same token streams these tests assert against.
 
@@ -40,6 +44,42 @@ function ptgArea(
 /** PtgInt ([MS-XLS] 2.5.198.66): opcode 0x1E then an unsigned 16-bit value. */
 function ptgInt(value: number): number[] {
   return [0x1e, ...u16(value)];
+}
+
+/** A fully-relative RgceLocRel ([MS-XLS] 2db37ba7): both colRelative and rowRelative set, and each field holding a signed delta (packed two's-complement, -255..255 per [MS-XLS] 174e856e) rather than an absolute coordinate. */
+function relativeLoc(rowDelta: number, columnDelta: number): number[] {
+  const rowField = rowDelta < 0 ? rowDelta + 0x10000 : rowDelta;
+  const columnField =
+    (columnDelta < 0 ? columnDelta + 0x4000 : columnDelta) | 0xc000;
+  return [...u16(rowField), ...u16(columnField)];
+}
+
+/** PtgRefN (value class, [MS-XLS] bf3b872b): opcode 0x4C, then a fully-relative RgceLocRel -- legal only inside a shared formula's own SharedParsedFormula, and only resolvable when parseFormulaText is given a `relativeTo` cell. */
+function ptgRefN(rowDelta: number, columnDelta: number): number[] {
+  return [0x4c, ...relativeLoc(rowDelta, columnDelta)];
+}
+
+/** PtgAreaN (value class, [MS-XLS] f2c8529a): opcode 0x4D, then two fully-relative corners (RgceAreaRel, [MS-XLS] 75afd109) -- PtgRefN's area counterpart. */
+function ptgAreaN(
+  rowFirstDelta: number,
+  rowLastDelta: number,
+  columnFirstDelta: number,
+  columnLastDelta: number,
+): number[] {
+  const rowFirst = rowFirstDelta < 0 ? rowFirstDelta + 0x10000 : rowFirstDelta;
+  const rowLast = rowLastDelta < 0 ? rowLastDelta + 0x10000 : rowLastDelta;
+  const colFirst =
+    (columnFirstDelta < 0 ? columnFirstDelta + 0x4000 : columnFirstDelta) |
+    0xc000;
+  const colLast =
+    (columnLastDelta < 0 ? columnLastDelta + 0x4000 : columnLastDelta) | 0xc000;
+  return [
+    0x4d,
+    ...u16(rowFirst),
+    ...u16(rowLast),
+    ...u16(colFirst),
+    ...u16(colLast),
+  ];
 }
 
 describe("parseFormulaText", () => {
@@ -260,5 +300,73 @@ describe("parseFormulaText", () => {
   it("aborts when the token stream leaves more than one value on the stack", () => {
     const rgce = bytes(...ptgRef(0, 0), ...ptgRef(0, 1)); // two operands, no combining operator
     expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
+  });
+});
+
+describe("parseFormulaText shared-formula relative tokens (PtgRefN/PtgAreaN)", () => {
+  it("expands a relative PtgRefN against the cell being evaluated, not the token's own literal bytes", () => {
+    // The ShrFmla's own rgce for a filled-down "=A<row>" column: a single relative reference one column to the left, same row (row delta 0, column delta -1) -- the same token stream regardless of which member cell it is later expanded for.
+    const rgce = bytes(...ptgRefN(0, -1));
+    expect(
+      parseFormulaText(rgce, NO_SHEETS, { relativeTo: { row: 3, column: 1 } }),
+    ).toBe("A4");
+    // A different referencing cell gets a different absolute reference from the identical token bytes.
+    expect(
+      parseFormulaText(rgce, NO_SHEETS, { relativeTo: { row: 6, column: 1 } }),
+    ).toBe("A7");
+  });
+
+  it("expands a relative PtgAreaN the same way", () => {
+    // Relative to B6 (row 5, column 1): row delta 0/+1 and column delta -1/-1 resolves to A6:A7.
+    const rgce = bytes(...ptgAreaN(0, 1, -1, -1));
+    expect(
+      parseFormulaText(rgce, NO_SHEETS, { relativeTo: { row: 5, column: 1 } }),
+    ).toBe("A6:A7");
+  });
+
+  it("wraps a relative reference's column around the sheet edge exactly as the spec states", () => {
+    // One column to the left of column A (index 0) wraps to column 255 (IV), the format's own edge case -- [MS-XLS] 2db37ba7: "adjusted by 0x0100".
+    const rgce = bytes(...ptgRefN(0, -1));
+    expect(
+      parseFormulaText(rgce, NO_SHEETS, { relativeTo: { row: 0, column: 0 } }),
+    ).toBe("IV1");
+  });
+
+  it("wraps a relative reference's row around the sheet edge the same way", () => {
+    // One row above row 1 (index 0) wraps to row 65536 -- [MS-XLS] 2db37ba7: "adjusted by 0x00010000".
+    const rgce = bytes(...ptgRefN(-1, 0));
+    expect(
+      parseFormulaText(rgce, NO_SHEETS, { relativeTo: { row: 0, column: 0 } }),
+    ).toBe("A65536");
+  });
+
+  it("still honours an absolute ($) reference packed inside a relative token, unaffected by the cell being evaluated", () => {
+    // column.colRelative=0 and rowRelative=0: the stored value is the absolute coordinate itself.
+    const rgce = bytes(0x4c, ...u16(0), ...u16(0)); // $A$1
+    expect(
+      parseFormulaText(rgce, NO_SHEETS, { relativeTo: { row: 9, column: 9 } }),
+    ).toBe("$A$1");
+  });
+
+  it("rejects PtgRefN/PtgAreaN when no relativeTo cell is supplied", () => {
+    expect(
+      parseFormulaText(bytes(...ptgRefN(0, -1)), NO_SHEETS),
+    ).toBeUndefined();
+    expect(
+      parseFormulaText(bytes(...ptgAreaN(0, 0, 0, 0)), NO_SHEETS),
+    ).toBeUndefined();
+  });
+});
+
+describe("readPtgExpBase", () => {
+  it("extracts the base cell from a lone PtgExp token", () => {
+    const rgce = bytes(0x01, ...u16(3), ...u16(1));
+    expect(readPtgExpBase(rgce)).toEqual({ row: 3, column: 1 });
+  });
+
+  it("returns undefined for anything other than exactly one PtgExp token", () => {
+    expect(readPtgExpBase(bytes(...ptgRef(0, 0)))).toBeUndefined();
+    expect(readPtgExpBase(bytes(0x01, ...u32(0), 0x03))).toBeUndefined();
+    expect(readPtgExpBase(bytes())).toBeUndefined();
   });
 });
