@@ -271,22 +271,31 @@ function formFieldPayload(
     // \ffres is what a reader (this package's own included, per FORM_FIELD_RESULT_UNDEFINED in constructs.ts) actually reads back as the checkbox's current state -- omitting it, as this writer once did, opens the box unchecked in Word regardless of `checked`, since an absent \ffres reads as 0. \ffdefres mirrors the same value: ContentControlDescriptor carries one `checked` boolean, not a separate reset default, so the field's default is the value it was minted with.
     const value = descriptor.checked === true ? "1" : "0";
     out += `\\ffres${value}\\ffdefres${value}`;
-  } else if (
-    descriptor.controlType === "dropDown" &&
-    descriptor.options !== undefined
-  ) {
-    // \ffres also names a dropdown's own selected entry as a zero-based index into the \ffl list below -- mint one only when `value` actually names one of `options`, so a dropdown with no recorded selection keeps writing exactly what it always has. \ffhaslistbox and \ffdefres are not optional the way \ffres is: [MS-DOC] 2.9.78 FFData defines \ffhaslistbox's underlying FFDataBits.fHaslistbox as "specifies whether the form field has a list box" (MUST be 1 when iType is iTypeDrop), and FFData.wDef "MUST exist... If iType is iTypeChck or iTypeDrop" -- both omitted entirely by an earlier version of this writer, which minted a dropdown with no default at all. ContentControlDescriptor carries one `value`, not a separate reset default, so \ffdefres mirrors the same selected index (falling back to 0, the first entry, when no selection is recorded) exactly as the checkbox branch above mirrors its own single `checked` boolean into both \ffres and \ffdefres.
-    const selectedIndex =
-      descriptor.value === undefined
-        ? -1
-        : descriptor.options.indexOf(descriptor.value);
+  } else if (descriptor.controlType === "dropDown") {
+    // \ffhaslistbox is minted unconditionally for a dropDown, independent of whether it carries any options at all: [MS-DOC] 2.9.78 FFDataBits.fHasListBox "specifies that the form field has a list box. This value MUST be 1 if iType is iTypeDrop (2)." A dropdown with no options is still a dropdown -- there is no degenerate case in which that bit stops being true, so it cannot be gated behind `options !== undefined` the way an earlier version of this writer gated it (which then also left \ffdefres unminted for exactly that shape, a real, common one: a docx `w:dropDownList`/`w:comboBox` with no `w:listItem` children, or an ODF `form:listbox`, both currently read back by this ecosystem with no options recorded at all -- tracked as ExaDev/documents.js#1016).
     out += "\\ffhaslistbox";
-    if (selectedIndex !== -1) {
-      out += `\\ffres${String(selectedIndex)}`;
+    const options = descriptor.options;
+    // FFData.wDef "MUST exist if and only if bits.iType is iTypeChck (1) or iTypeDrop (2)" and, for iTypeDrop, "MUST be less than the number of items in the dropdown list box and specify the default item selected (zero-based index)". With zero options there is no index less than zero that could satisfy the second rule, so this writer mints no \ffdefres at all in that case rather than an invalid one -- an acknowledged edge the spec itself does not cover cleanly, since it requires wDef to exist for iTypeDrop without saying what a producer with an empty list should write.
+    const selectedIndex =
+      options === undefined || descriptor.value === undefined
+        ? undefined
+        : options.indexOf(descriptor.value);
+    if (selectedIndex !== undefined && selectedIndex !== -1) {
+      // `value` genuinely names one of `options`: \ffres records the real current selection and \ffdefres mirrors it, exactly as the checkbox branch above mirrors its own single `checked` boolean into both \ffres and \ffdefres.
+      out += `\\ffres${String(selectedIndex)}\\ffdefres${String(selectedIndex)}`;
+    } else if (
+      descriptor.value === undefined &&
+      options !== undefined &&
+      options.length > 0
+    ) {
+      // No selection was recorded at all -- as distinct from a `value` that names none of `options`, handled by the fallthrough below. RTF's own form-field model has no way to serialise "list box, no default selection", only "list box, default is entry N", so entry 0 is minted as the spec-forced fixed point (see the "gaining the spec-mandated first-entry default" round-trip test).
+      out += "\\ffdefres0";
     }
-    out += `\\ffdefres${String(selectedIndex === -1 ? 0 : selectedIndex)}`;
-    for (const option of descriptor.options) {
-      out += `{\\*\\ffl ${escapeText(option)}}`;
+    // The remaining case -- `value` was recorded but names none of `options` -- deliberately mints neither \ffres nor \ffdefres: substituting the nearest available index (e.g. 0) would silently write a DIFFERENT, wrong selection with no signal that the recorded value was never actually represented, which is worse than the honest absence this writer minted before it grew \ffdefres handling at all (see the "does not silently substitute a different option" test).
+    if (options !== undefined) {
+      for (const option of options) {
+        out += `{\\*\\ffl ${escapeText(option)}}`;
+      }
     }
   }
   if (descriptor.tag !== undefined && descriptor.tag.length > 0) {
