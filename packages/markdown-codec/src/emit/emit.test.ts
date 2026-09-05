@@ -1396,6 +1396,34 @@ describe("tables", () => {
       "| a | b |\n| :--- | ---: |\n| 1 | 2 |",
     );
   });
+
+  it("collapses a soft-break residue run to a space rather than a literal newline that would corrupt the row", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [
+                    { text: "foo" },
+                    { text: " ", source: { format: "markdown", xml: "\n" } },
+                    { text: "bar" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const markdown = emitMarkdown(doc([table]));
+    expect(markdown).toBe("| foo bar |\n| --- |");
+    expect(markdown.split("\n")).toHaveLength(2);
+  });
 });
 
 describe("images", () => {
