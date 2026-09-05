@@ -305,6 +305,7 @@ function rowSplitFits(
 
 function flattenTable(
   table: ContentTable,
+  blockIndex: number,
   onWarning: WriteWarning | undefined,
 ): WriteParagraph[] {
   const columnCount = table.columnWidthsPt.length;
@@ -366,8 +367,8 @@ function flattenTable(
       const droppedCount = ordered.length - kept.length;
       onWarning?.(
         kept.length === 0
-          ? `doc-codec: table row ${rowIndex} could not state ${rowLostBoundaries.size === 1 ? "its assigned lost column boundary" : `any of its ${rowLostBoundaries.size} assigned lost column boundaries`} without exceeding a PapxInFkp record's own byte budget or the format's own ${MAX_TABLE_ROW_CELLS}-cell-per-row ceiling; attempting to write it unsplit instead, which narrows columnWidthsPt on read for this table exactly as this writer's own pre-#992 behaviour did -- if this row's own unsplit encoding also overflows this same budget, writeDocContent can still throw its usual DocFormatError further down this same pipeline, after any remaining rows have reported their own warnings`
-          : `doc-codec: table row ${rowIndex} could only state ${kept.length} of its ${ordered.length} assigned lost column boundaries without exceeding a PapxInFkp record's own byte budget or the format's own ${MAX_TABLE_ROW_CELLS}-cell-per-row ceiling; dropping the other ${droppedCount} (narrowing columnWidthsPt on read for those boundaries alone)`,
+          ? `doc-codec: table at block ${blockIndex}, row ${rowIndex} could not state ${rowLostBoundaries.size === 1 ? "its assigned lost column boundary" : `any of its ${rowLostBoundaries.size} assigned lost column boundaries`} without exceeding a PapxInFkp record's own byte budget or the format's own ${MAX_TABLE_ROW_CELLS}-cell-per-row ceiling; attempting to write it unsplit instead, which narrows columnWidthsPt on read for this table exactly as this writer's own pre-#992 behaviour did -- if this row's own unsplit encoding also overflows this same budget, writeDocContent can still throw its usual DocFormatError further down this same pipeline, after any remaining rows have reported their own warnings`
+          : `doc-codec: table at block ${blockIndex}, row ${rowIndex} could only state ${kept.length} of its ${ordered.length} assigned lost column boundaries without exceeding a PapxInFkp record's own byte budget or the format's own ${MAX_TABLE_ROW_CELLS}-cell-per-row ceiling; dropping the other ${droppedCount} (narrowing columnWidthsPt on read for those boundaries alone)`,
       );
     }
     const { paragraphs, cellsToWrite, rowBoundariesTwips } = flattenRow(
@@ -385,13 +386,13 @@ function flattenTable(
   return output;
 }
 
-// Flattens a section's whole block list into the paragraph sequence writeDocContent's own text-layout pass consumes: an ordinary paragraph passes through as one WriteParagraph, a table expands into its own real cell/row-mark stream. `onWarning`, when given, is reported a message for a non-fatal write-time degradation -- today, only flattenTable's own per-row lost-boundary-budget fallback (see its own note).
+// Flattens a section's whole block list into the paragraph sequence writeDocContent's own text-layout pass consumes: an ordinary paragraph passes through as one WriteParagraph, a table expands into its own real cell/row-mark stream. `onWarning`, when given, is reported a message for a non-fatal write-time degradation -- today, only flattenTable's own per-row lost-boundary-budget fallback (see its own note) -- naming the degraded table by its own position in `blocks` (`blockIndex`), since a document with more than one table would otherwise report every warning as an indistinguishable "table row N", with no way for a caller to tell which table it came from.
 export function flattenSectionBlocks(
   blocks: readonly ContentBlock[],
   onWarning?: WriteWarning,
 ): WriteParagraph[] {
   const output: WriteParagraph[] = [];
-  for (const block of blocks) {
+  blocks.forEach((block, blockIndex) => {
     if (block.kind === "paragraph") {
       output.push({
         runs: block.runs,
@@ -399,15 +400,15 @@ export function flattenSectionBlocks(
         extraGrpprl: [],
         terminator: PARAGRAPH_MARK,
       });
-      continue;
+      return;
     }
     if (block.kind === "table") {
-      output.push(...flattenTable(block, onWarning));
-      continue;
+      output.push(...flattenTable(block, blockIndex, onWarning));
+      return;
     }
     throw new DocUnsupportedError(
       `doc-codec's writer does not yet support '${block.kind}' blocks (see README's scope note)`,
     );
-  }
+  });
   return output;
 }
