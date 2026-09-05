@@ -269,6 +269,11 @@ export type { ColorTransform } from "./typed/shared/color";
 
 export { DocumentMetadataSchema } from "./typed/shared/metadata";
 export type { DocumentMetadata } from "./typed/shared/metadata";
+export {
+  hasCoreProperties,
+  patchCoreProperties,
+} from "./typed/shared/metadata";
+export type { CorePropertiesOverrides } from "./typed/shared/metadata";
 
 export { sniffImageFormat } from "./image/sniff";
 export type { ImageFormat } from "./image/sniff";
