@@ -1,7 +1,7 @@
 import type {
-  Color,
   ContentBorder,
   ContentCellBorders,
+  ContentCellFill,
 } from "document-schema.js";
 import { readInt16LE, readUint16LE, readUint8 } from "../bytes";
 import { SGC, type Prl } from "../prop/sprm";
@@ -98,8 +98,8 @@ export interface TableCellProperties {
   readonly borders?: ContentCellBorders;
   /** Sides sprmTSetBrc or sprmTSetBrc80 has explicitly named with a NilBrc/NilBrc80 -- a real "this cell has no border here" statement, distinct from a side this cell's own TAP has simply never mentioned. `borders` alone cannot carry that distinction (an absent side means the same thing either way once cellBordersFrom has dropped it), so table/read.ts's own row-level border cascade (applyRowLevelBorderCascade) consults this set too: a side listed here is never filled from the row's cascade, no matter what `borders` says. See applyBrcToCell's own note for why only sprmTSetBrc/sprmTSetBrc80, never TC80's own Brc80 fields, can state this. */
   readonly clearedSides?: ReadonlySet<CellBorderSide>;
-  /** The cell's own flat background colour, absent when it states no shading or states a pattern Color cannot express (see decoration.ts's readShd). */
-  readonly background?: Color;
+  /** The cell's own background fill, absent when it states no shading or states a pattern this reader cannot resolve at all (see decoration.ts's readShd). */
+  readonly background?: ContentCellFill;
 }
 
 export interface TableRowDefinition {
@@ -201,7 +201,7 @@ function applyBrcToCell(
 
 function withBackground(
   cell: TableCellProperties,
-  background: Color | undefined,
+  background: ContentCellFill | undefined,
 ): TableCellProperties {
   return {
     horzMerge: cell.horzMerge,
@@ -218,14 +218,14 @@ function applyShdArray(
   operand: Uint8Array,
   firstCell: number,
   entrySize: number,
-  colorAt: (operand: Uint8Array, offset: number) => Color | undefined,
+  fillAt: (operand: Uint8Array, offset: number) => ContentCellFill | undefined,
 ): TableRowDefinition {
   const cb = readUint8(operand, 0);
   const count = Math.floor(cb / entrySize);
   return withCells(definition, (cell, index) => {
     const entry = index - firstCell;
     if (entry < 0 || entry >= count) return cell;
-    return withBackground(cell, colorAt(operand, 1 + entry * entrySize));
+    return withBackground(cell, fillAt(operand, 1 + entry * entrySize));
   });
 }
 
