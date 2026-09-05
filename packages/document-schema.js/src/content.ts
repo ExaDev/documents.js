@@ -534,6 +534,11 @@ export function resolveCellFillColor(fill: ContentCellFill): Color | undefined {
     : (fill.foregroundColor ?? fill.backgroundColor);
 }
 
+// Reads `.kind` off a ContentCellFill that a caller's own exhaustive switch has already switched over both real members ('solid'/'pattern') -- TypeScript types such a value 'never' at that point, so this takes it through a deliberately widened parameter type rather than an `as` cast. A value that reaches this call anyway (a malformed object bypassing schema validation, or a stale caller shape) still carries a real, inspectable kind at runtime even though the type system says none is left to name. Every codec writer that switches exhaustively on ContentCellFill's kind and needs to name an unreachable default's actual value shares this one implementation (doc-codec, xls-codec, ooxml.js) rather than each keeping its own byte-identical copy.
+export function unrecognizedFillKind(fill: { kind?: unknown }): string {
+  return String(fill.kind);
+}
+
 export const ContentTableCellSchema = z.object({
   blocks: z.array(ContentBlockSchema),
   colSpan: z.number().int().positive().optional(),
