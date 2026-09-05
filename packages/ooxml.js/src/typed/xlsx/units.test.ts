@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  COLUMN_WIDTH_CHARS_DECIMAL_PLACES,
   columnWidthCharsToPt,
   DEFAULT_ROW_HEIGHT_PT,
   MAX_DIGIT_WIDTH_PX,
@@ -44,29 +45,41 @@ describe("ptToColumnWidthChars: best-effort inverse of columnWidthCharsToPt", ()
   });
 });
 
-// Regression coverage for ExaDev/documents.js#953: a naive round-to-nearest at write time could land the stored "characters" value BELOW columnWidthCharsToPt's own pixel-bucket lower edge, truncating the next read down by one pixel and drifting the width narrower on every further read/write cycle rather than settling. These assert the actual fixed-point property, not mere closeness: once a value has been through one write, a further read/write pair must reproduce byte-identical output, not merely a similar one.
+// Regression coverage for ExaDev/documents.js#953: a naive round-to-nearest at write time could land the stored "characters" value BELOW columnWidthCharsToPt's own pixel-bucket lower edge, truncating the next read down by one pixel and drifting the width narrower on every further read/write cycle rather than settling. These assert the actual fixed-point property, not mere closeness: once a value has been through one write, a further read/write pair must reproduce byte-identical output, not merely a similar one. Every write below goes through `write`, which reproduces buildColsElement's own `ptToColumnWidthChars(...).toFixed(COLUMN_WIDTH_CHARS_DECIMAL_PLACES)` string-and-reparse step exactly -- calling ptToColumnWidthChars bare would prove nothing here, since its own unrounded algebraic result is already an exact fixed point of the forward formula (it recovers, bit for bit, the same lowest-width-in-bucket value every time) and never exhibits the drift; the drift only appears once that result is quantized down to the two decimal places <col width> is actually stored at, which is what turning it into a string and back reproduces.
+function write(widthPt: number): number {
+  return Number(
+    ptToColumnWidthChars(widthPt).toFixed(COLUMN_WIDTH_CHARS_DECIMAL_PLACES),
+  );
+}
+
 describe("column width read/write converges to a fixed point rather than drifting", () => {
   it("read -> write -> read -> write produces byte-identical results for the second read/write pair as for the first", () => {
-    // A spread of real stored <col width> values, including ones the pre-fix rounding demonstrably drifted on (0.08 spiralled to a negative width; 8.43/10/12.76/15.32/20 each moved on at least one further cycle).
+    // A spread of real stored <col width> values. Independently re-verified against the pre-fix rounding with this same write-side toFixed(2) step included: 0.08 spirals to a negative width (0.08 -> 0.07 -> -0.07), and 12.76/44.14 each keep narrowing across a further write cycle beyond their first (12.76 -> 12.64 -> 12.5; 44.14 -> 44.07 -> 43.93) before settling. The remaining values (1, 5, 8.43, 10, 15.32, 20, 100) already stabilize on their very first write even pre-fix, so they demonstrate no drift on their own -- they stay in this list purely as ordinary boundary coverage for the fixed behaviour, not as further evidence of the bug.
     for (const storedWidth of [
       0.08, 1, 5, 8.43, 10, 12.76, 15.32, 20, 44.14, 100,
     ]) {
       const firstReadPt = columnWidthCharsToPt(storedWidth);
-      const firstWriteChars = ptToColumnWidthChars(firstReadPt);
+      const firstWriteChars = write(firstReadPt);
 
       const secondReadPt = columnWidthCharsToPt(firstWriteChars);
-      const secondWriteChars = ptToColumnWidthChars(secondReadPt);
+      const secondWriteChars = write(secondReadPt);
 
       expect(secondReadPt).toBe(firstReadPt);
       expect(secondWriteChars).toBe(firstWriteChars);
     }
   });
 
-  it("a value already produced by ptToColumnWidthChars is a genuine fixed point: write(read(x)) === x", () => {
+  it("a value already produced by a write is a genuine fixed point: write(read(x)) === x", () => {
     for (const widthPt of [0, 0.75, 12, 44.25, 66.75, 105, 250.5]) {
-      const chars = ptToColumnWidthChars(widthPt);
-      const roundTripped = ptToColumnWidthChars(columnWidthCharsToPt(chars));
+      const chars = write(widthPt);
+      const roundTripped = write(columnWidthCharsToPt(chars));
       expect(roundTripped).toBe(chars);
+    }
+  });
+
+  it("never produces a negative characters value, even for a near-zero or explicitly zero-width column", () => {
+    for (const widthPt of [0, 0.1, 0.3]) {
+      expect(ptToColumnWidthChars(widthPt)).toBeGreaterThanOrEqual(0);
     }
   });
 });
