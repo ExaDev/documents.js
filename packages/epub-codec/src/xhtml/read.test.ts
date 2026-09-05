@@ -679,6 +679,47 @@ describe("definition lists", () => {
       { kind: "paragraph", runs: [{ text: "b" }], indentLeftPt: 36 },
     ]);
   });
+
+  it("keeps a footnote reference construct carried by a dt's own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<dl><dt>Term<a epub:type="noteref" href="#fn1">1</a></dt><dd>Definition</dd></dl>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Term" }, { text: "1" }],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
+
+  it("keeps a footnote reference construct carried by a dd's own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<dl><dt>Term</dt><dd>Definition<a epub:type="noteref" href="#fn1">1</a></dd></dl>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[1]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Definition" }, { text: "1" }],
+      indentLeftPt: 36,
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
 });
 
 describe("tables", () => {
@@ -893,6 +934,43 @@ describe("tables", () => {
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({ code: "epub/table-caption-unsupported" }),
     );
+  });
+
+  it("keeps a footnote reference construct carried by a table cell's own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<table><tr><td>Cell<a epub:type="noteref" href="#fn1">1</a></td></tr></table>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toMatchObject({
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "Cell" }, { text: "1" }],
+                  constructs: [
+                    {
+                      descriptor: {
+                        kind: "anchor",
+                        anchorType: "footnote",
+                        name: "fn1",
+                      },
+                      startRun: 1,
+                      endRun: 2,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
   });
 });
 
@@ -1192,6 +1270,26 @@ describe("figure/figcaption", () => {
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
+  });
+
+  it("keeps a footnote reference construct carried by a <figcaption>'s own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<figure><figcaption>Caption<a epub:type="noteref" href="#fn1">1</a></figcaption></figure>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Caption" }, { text: "1" }],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
   });
 });
 
