@@ -199,8 +199,11 @@ function writeLeafBlock(
   }
 }
 
-// A paragraph carrying codeLanguage, or exactly one monospace run whose text embeds a literal newline (an inline code span essentially never does; a <pre> block's own single run, read verbatim including its real line breaks, always might), is this package's own <pre><code> round-trip shape (src/xhtml/read.ts's readPre). Every other paragraph is an ordinary <p>/<hr>.
+// A paragraph carrying document-schema.js's own preformatted flag, or codeLanguage, or (for a foreign producer's document that sets neither) exactly one monospace run whose text embeds a literal newline (an inline code span essentially never does; a <pre> block's own single run, read verbatim including its real line breaks, always might), is this package's own <pre><code> round-trip shape (src/xhtml/read.ts's readPre). The preformatted check is checked first and alone decides the common case: readPre sets it unconditionally on every paragraph it produces, so this is the one reliable signal for a paragraph this package itself read out of a <pre> -- unlike run count, which a footnote reference (or any other construct) nested inside the block changes with no bearing on whether the block is preformatted (a <pre> containing one recognised construct produces 2+ runs via readPreRuns, which a runs.length===1 check would misclassify as an ordinary paragraph, silently losing the block's own verbatim whitespace on write). Every other paragraph is an ordinary <p>/<hr>.
 function isPreBlockParagraph(paragraph: ContentParagraph): boolean {
+  if (paragraph.preformatted === true) {
+    return true;
+  }
   if (paragraph.codeLanguage !== undefined) {
     return true;
   }
@@ -223,8 +226,8 @@ function writeParagraph(paragraph: ContentParagraph): XmlElement {
       paragraph.codeLanguage === undefined
         ? {}
         : { class: `language-${paragraph.codeLanguage}` };
-    const codeText = paragraph.runs.map((run) => run.text).join("");
-    return element("pre", {}, [element("code", codeAttrs, [text(codeText)])]);
+    const codeNodes = writePreRunsToNodes(paragraph.runs, paragraph.constructs);
+    return element("pre", {}, [element("code", codeAttrs, codeNodes)]);
   }
   return element(
     "p",
@@ -244,9 +247,12 @@ function isFootnoteExtent(
   );
 }
 
-function writeRunsToNodes(
+// The run-range walk shared by writeRunsToNodes and its <pre> twin writePreRunsToNodes below: both need to walk one paragraph's own runs in order, recognising wherever a footnote-reference construct extent starts and bracketing that extent's own run range in an <a epub:type="noteref">, and both differ only in HOW a run (or an extent's own range of them) becomes XML nodes -- writeRunsToNodes wraps a run in its own formatting elements and splits an embedded newline into a <br/>, while writePreRunsToNodes emits a run's text verbatim with neither -- so the extent-finding loop itself is written once here and parameterised over that one difference, rather than duplicated with the same footnote-matching logic copied into both.
+function writeRunRangeNodes(
   runs: readonly ContentRun[],
   constructs: readonly RunConstructExtent[] | undefined,
+  renderRun: (run: ContentRun) => XmlNode[],
+  renderExtentRange: (rangeRuns: readonly ContentRun[]) => XmlNode[],
 ): XmlNode[] {
   const footnoteExtents = (constructs ?? []).filter(isFootnoteExtent);
   const out: XmlNode[] = [];
@@ -254,14 +260,12 @@ function writeRunsToNodes(
   while (index < runs.length) {
     const extent = footnoteExtents.find((e) => e.startRun === index);
     if (extent !== undefined) {
-      const inner = runs
-        .slice(extent.startRun, extent.endRun)
-        .flatMap((run) => writeRunNodes(run));
+      const rangeRuns = runs.slice(extent.startRun, extent.endRun);
       out.push(
         element(
           "a",
           { "epub:type": "noteref", href: `#${extent.descriptor.name}` },
-          inner,
+          renderExtentRange(rangeRuns),
         ),
       );
       index = Math.max(extent.endRun, index + 1);
@@ -269,11 +273,33 @@ function writeRunsToNodes(
     }
     const run = runs[index];
     if (run !== undefined) {
-      out.push(...writeRunNodes(run));
+      out.push(...renderRun(run));
     }
     index += 1;
   }
   return out;
+}
+
+function writeRunsToNodes(
+  runs: readonly ContentRun[],
+  constructs: readonly RunConstructExtent[] | undefined,
+): XmlNode[] {
+  return writeRunRangeNodes(runs, constructs, writeRunNodes, (rangeRuns) =>
+    rangeRuns.flatMap((run) => writeRunNodes(run)),
+  );
+}
+
+// The <pre> twin of writeRunsToNodes immediately above, sharing its extent-finding walk (writeRunRangeNodes) but never its per-run rendering: a <pre>'s content model preserves whitespace verbatim (mirroring src/xhtml/read.ts's readPre/readPreRuns, which never route through buildInlineRuns' own whitespace normalisation either), so a run's embedded newline must survive as a literal newline character, not the <br/> element writeRunNodes emits for one -- readPreText/readPreRuns have no <br> handling of their own (a <br> element has no children, so recursing into it yields nothing), so a newline written that way would silently vanish on the next read rather than round-tripping. Each run's own text is instead emitted as one plain text node, verbatim, exactly as readPre's own readPreFlatRuns/readPreRuns already assume a <pre>'s text content is: no per-run formatting wrapper either (<pre>'s content model has no rich formatting to preserve structurally beyond the block's own single monospace font, already carried by the enclosing <code>).
+function writePreRunsToNodes(
+  runs: readonly ContentRun[],
+  constructs: readonly RunConstructExtent[] | undefined,
+): XmlNode[] {
+  return writeRunRangeNodes(
+    runs,
+    constructs,
+    (run) => (run.text.length > 0 ? [text(run.text)] : []),
+    (rangeRuns) => [text(rangeRuns.map((run) => run.text).join(""))],
+  );
 }
 
 // One run's own text, split on embedded newlines into <br/>-separated segments (the inverse of src/xhtml/inline.ts's own <br> -> "\n" run), wrapped in the formatting elements its own fields name -- innermost the text/br sequence, then <code> (fontFamily===MONOSPACE_FONT_FAMILY), <strong>, <em>, <u>, <s>, and finally <a href> for an external/internal hyperlink. This fixed wrapping order does not attempt to reproduce a source document's own original tag nesting (<strong><em> vs <em><strong> both read identically), only its semantic formatting -- exactly the "restorable, not byte-identical" tier this family's every codec already documents for markup order.

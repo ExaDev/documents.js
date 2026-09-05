@@ -153,8 +153,38 @@ describe("writeXhtmlBody", () => {
         runs: [
           { text: "const x = 1;\nconsole.log(x);", fontFamily: "Courier New" },
         ],
+        preformatted: true,
         codeLanguage: "js",
       },
+    ];
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  // ExaDev/documents.js#994's round-8 regression: a <pre> containing a footnote reference and no language class produces 2+ runs on read (readPreRuns splits the reference into its own run range), which write.ts's own isPreBlockParagraph used to misclassify as an ordinary paragraph (its old heuristic only recognised a lone monospace run) -- silently rewriting the block as a <p> and destroying the verbatim whitespace <pre> exists to preserve. The paragraph's own `preformatted: true` flag is what makes this round-trip correctly regardless of run count.
+  it("writes and re-reads a <pre> carrying a footnote reference and no language class, preserving both the verbatim block and the construct", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [
+          { text: "line one\nsee", fontFamily: "Courier New" },
+          { text: "1", fontFamily: "Courier New" },
+          { text: "\nline two", fontFamily: "Courier New" },
+        ],
+        preformatted: true,
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 1,
+            endRun: 2,
+          },
+        ],
+      },
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+      },
+      { kind: "paragraph", runs: [{ text: "Note body." }] },
+      { kind: "constructEnd" },
     ];
     expect(roundTrip(blocks)).toEqual(blocks);
   });
