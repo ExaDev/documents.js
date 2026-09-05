@@ -139,6 +139,28 @@ describe("DocxTable cell access and mutation", () => {
     expect(roundTrippedTable.rows[0]?.cells).toHaveLength(1);
     expect(roundTrippedTable.rows[1]?.cells).toHaveLength(1);
   });
+
+  it("heightPt is undefined for a row with no w:trHeight, and a value written through the live editor survives a real docx read/build round trip", () => {
+    const editor = createDocx();
+    const table = editor.body.appendTable({ rows: 1, columns: 1 });
+    const row = table.rows()[0]!;
+    expect(row.heightPt).toBeUndefined();
+    row.heightPt = 34;
+    expect(row.heightPt).toBeCloseTo(34, 5);
+
+    const pkg = decodePackage(encodePackage(editor.toPackage()));
+    const content = readDocxContent(pkg);
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
+    }
+    const roundTrippedTable = content.sections[0]?.blocks.find(
+      (b) => b.kind === "table",
+    );
+    if (roundTrippedTable?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(roundTrippedTable.rows[0]?.heightPt).toBeCloseTo(34, 5);
+  });
 });
 
 describe("DocxTableRow.mergeCellsHorizontally", () => {
