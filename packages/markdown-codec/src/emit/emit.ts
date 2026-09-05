@@ -253,8 +253,21 @@ function renderParagraphBody(
       });
     }
     const text = emitRuns(paragraph.runs, context, paragraph.constructs);
-    if (context.headingStyle === "setext" && level <= MAX_SETEXT_LEVEL) {
+    // ATX is a single physical line; a hard OR soft break embedded in this heading's own runs (src/emit/inline.ts's renderLeaf) leaves a literal '\n' in `text` regardless of the configured headingStyle, and ATX has no way to hold it -- writing it out anyway would split the ATX line in two on reparse rather than lose formatting, which is strictly worse. Setext's own grammar is exactly "one or more lines of heading text", so promote to it whenever the level admits one (<=2), overriding the configured style; only a genuinely unrepresentable level 3-6 heading falls through to the collapse-with-diagnostic path below.
+    const embedsLineBreak = text.includes("\n");
+    if (
+      (context.headingStyle === "setext" || embedsLineBreak) &&
+      level <= MAX_SETEXT_LEVEL
+    ) {
       return renderSetextHeading(level, text);
+    }
+    if (embedsLineBreak) {
+      context.sink({
+        code: MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED,
+        severity: "info",
+        message: `a level ${String(level)} heading's own content contains a line break; only setext's own level-1/2 grammar can hold one, so ATX collapses it to a single space`,
+      });
+      return `${"#".repeat(level)} ${text.replace(/\\\n/g, " ").replace(/\n/g, " ")}`;
     }
     return `${"#".repeat(level)} ${text}`;
   }
