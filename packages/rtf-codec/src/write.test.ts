@@ -878,7 +878,8 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  it("writes a contentControl's alias as \\ffownhelp1{\\*\\ffhelptext ...}", () => {
+  // \ffownhelp1 is a <formparams> member and {\*\ffhelptext ...} a <formstrings> one, so RTF 1.9.1's own "Form Fields" grammar (`<formfield> '{\*' \formfield '{' <formparams> <formstrings> '}}'`) puts every formparams control word before every formstrings one -- including {\*\ffname ...}, itself <formstrings>'s own first member, which lands between them here.
+  it("writes a contentControl's alias as \\ffownhelp1 (formparams) and {\\*\\ffhelptext ...} (formstrings), with formparams entirely before formstrings", () => {
     const out = write(
       wordprocessing([
         {
@@ -899,7 +900,40 @@ describe("body constructs", () => {
         },
       ]),
     );
-    expect(out).toContain("\\ffownhelp1{\\*\\ffhelptext Client name}");
+    expect(out).toContain(
+      "\\ffownhelp1{\\*\\ffname Text1}{\\*\\ffhelptext Client name}",
+    );
+    expectBalancedBraces(out);
+  });
+
+  // Every <formparams> member (\fftype, \ffhaslistbox, \ffdefres/\ffres, \ffprot, \ffownhelp) before every <formstrings> member (\ffname, \ffhelptext, the \ffl entries), matching RTF 1.9.1's own "Form Fields" grammar production exactly -- a dropDown descriptor exercising every field this writer mints at once, so a regression that interleaves the two groups (or reorders \ffname after \ffhelptext within formstrings) fails this single assertion.
+  it("orders a dropDown's full \\*\\formfield payload as every formparams member, then every formstrings member, matching RTF's own grammar production", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                tag: "Drop1",
+                alias: "Pick one",
+                lock: "content",
+                options: ["Hello", "Guten Tag"],
+                value: "Guten Tag",
+              },
+              startRun: 0,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain(
+      "\\fftype2\\ffhaslistbox\\ffdefres1\\ffres1\\ffprot1\\ffownhelp1{\\*\\ffname Drop1}{\\*\\ffhelptext Pick one}{\\*\\ffl Hello}{\\*\\ffl Guten Tag}",
+    );
     expectBalancedBraces(out);
   });
 
