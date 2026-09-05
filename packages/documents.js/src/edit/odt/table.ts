@@ -228,51 +228,84 @@ function internTableColumnWidth(pkg: Package, widthPt: number): string {
   return name;
 }
 
-// Reads rowElement's CURRENT table:style-name -> style:style[family="table-row"] -> style:table-row-properties chain (mirroring src/edit/ods/column-row.ts's own currentRowStyleProperties), returning every attribute EXCEPT style:row-height, which the caller owns. A row opened via openOdt() can carry a style with properties this editor has no dedicated getter/setter for at all -- fo:break-before, style:use-optimal-row-height, fo:keep-together, fo:background-color -- and every one of them must survive a heightPt write untouched, not just the ones this file happens to model by name.
-function currentRowStylePropertiesExceptHeight(
+// The row's own CURRENT style:table-row-properties element -- via table:style-name -> style:style[family="table-row"] -> style:table-row-properties -- or undefined when the row carries no style, or its style has no such properties element. findStyleElement itself resolves across BOTH content.xml and styles.xml (including office:styles' common/named styles), so a row referencing a shared named style rather than its own automatic one still resolves here -- but cloneCurrentRowProperties below copies only the resolved style's own style:table-row-properties element, discarding that style's own style:parent-style-name and any sibling properties element a named style might also carry (style:table-cell-properties and the like); harmless within this ecosystem, since a table-row family style never carries anything but style:table-row-properties in practice and odf.js's own table-row resolution does no parent-chain walk either (typed/shared/table.ts's own resolveRowHeightPt convention, for the identical "standalone in practice" reason).
+function currentRowPropertiesElement(
   pkg: Package,
   rowElement: XmlElement,
-): Record<string, string> {
+): XmlElement | undefined {
   const styleName = attr(rowElement, "table:style-name");
   const styleElement =
     styleName === undefined
       ? undefined
       : findStyleElement(styleName, "table-row", pkg);
-  const props =
-    styleElement === undefined
-      ? undefined
-      : styleElement.children.find(
-          (c): c is XmlElement =>
-            c.type === "element" && c.tag === "style:table-row-properties",
-        );
-  const result: Record<string, string> = {};
-  if (props === undefined) {
-    return result;
+  return styleElement === undefined
+    ? undefined
+    : styleElement.children.find(
+        (c): c is XmlElement =>
+          c.type === "element" && c.tag === "style:table-row-properties",
+      );
+}
+
+// A structural clone of the row's own current style:table-row-properties element (currentRowPropertiesElement above), or a fresh empty one when the row has none -- structuredClone is safe here exactly as it is at src/edit/ods/address.ts's own identical use: an XmlElement is plain, serializable data with no methods or non-cloneable values. Cloning the WHOLE element, rather than reconstructing it attribute-by-attribute the way this file's own previous version did, is what lets EVERY property already on it survive a heightPt write untouched -- not just the ones this file has a dedicated getter/setter for (fo:break-before, style:use-optimal-row-height, fo:keep-together, fo:background-color) but also this element's one permitted CHILD, style:background-image (OASIS ODF 1.3 RelaxNG: style:table-row-properties-content permits exactly that one optional child) -- without this file ever needing to enumerate each one by name. The caller mutates only style:row-height (and, conditionally, style:use-optimal-row-height) on the returned clone; see the heightPt setter below.
+function cloneCurrentRowProperties(
+  pkg: Package,
+  rowElement: XmlElement,
+): XmlElement {
+  const props = currentRowPropertiesElement(pkg, rowElement);
+  return props === undefined
+    ? el("style:table-row-properties")
+    : structuredClone(props);
+}
+
+// Structural equality between two XML nodes -- used by xmlElementsEqual below to compare a style:table-row-properties element's CHILDREN, not just its attributes. style:background-image, the one child the schema permits here, is itself an element, so the element branch is the one that actually matters; text/cdata/comment are covered too since a hand-pretty-printed source document could carry whitespace between an opening tag and its child. An XmlDeclaration/XmlPi can never occur as an element's own child in a tree odf.js's parser produces (both appear only at the document root), so either one simply compares unequal to anything here rather than this function pretending to model a case that cannot arise.
+function xmlNodesEqual(a: XmlNode, b: XmlNode): boolean {
+  if (a.type === "element" && b.type === "element") {
+    return xmlElementsEqual(a, b);
   }
-  for (const a of props.attributes) {
-    if (a.name !== "style:row-height") {
-      result[a.name] = a.value;
+  if (a.type === "text" && b.type === "text") {
+    return a.value === b.value;
+  }
+  if (a.type === "cdata" && b.type === "cdata") {
+    return a.value === b.value;
+  }
+  if (a.type === "comment" && b.type === "comment") {
+    return a.value === b.value;
+  }
+  return false;
+}
+
+// Structural equality between two elements: the same tag, the identical set of attributes (order-independent, mirroring this file's own established attribute-set comparison), and the identical children in the same document order. internTableRowProperties below uses this to decide whether an existing automatic style's own style:table-row-properties element can be reused for a new request -- comparing attributes alone (this file's previous rowStylePropertiesMatch) let a plain height-only row reuse a style that also carried an extra child element such as style:background-image, silently importing it onto a row that never had one. Comparing the WHOLE element closes that generally, for any property or child this file has never enumerated by name, rather than special-casing style:background-image specifically.
+function xmlElementsEqual(a: XmlElement, b: XmlElement): boolean {
+  if (a.tag !== b.tag || a.attributes.length !== b.attributes.length) {
+    return false;
+  }
+  if (
+    !a.attributes.every(
+      (candidate) => attr(b, candidate.name) === candidate.value,
+    )
+  ) {
+    return false;
+  }
+  if (a.children.length !== b.children.length) {
+    return false;
+  }
+  for (let index = 0; index < a.children.length; index++) {
+    const childA = a.children[index];
+    const childB = b.children[index];
+    if (childA === undefined || childB === undefined) {
+      return false;
+    }
+    if (!xmlNodesEqual(childA, childB)) {
+      return false;
     }
   }
-  return result;
+  return true;
 }
 
-// True only when props carries EXACTLY `expected`'s attributes -- same count, same values -- never a superset or a subset. A plain count-plus-per-key comparison rather than attr() lookups alone, so a style carrying one extra property (say style:use-optimal-row-height alongside a matching style:row-height) is correctly rejected as a candidate rather than silently reused, which would import that extra property onto a row that never had it.
-function rowStylePropertiesMatch(
-  props: XmlElement,
-  expected: Readonly<Record<string, string>>,
-): boolean {
-  const expectedKeys = Object.keys(expected);
-  return (
-    props.attributes.length === expectedKeys.length &&
-    expectedKeys.every((key) => attr(props, key) === expected[key])
-  );
-}
-
-// The row-height counterpart to internTableColumnWidth above, generalised beyond a single height value: mints (or reuses) a style:style[family="table-row"] carrying exactly `properties` in its style:table-row-properties -- reuse requires an EXACT property-set match (rowStylePropertiesMatch above), otherwise mint a fresh name and append a new entry. Callers pass the row's own current non-height properties merged with the height change (or with the height key omitted, when clearing a height on a row whose style also carries something else), matching src/edit/ods/column-row.ts's applyRowStyleProperties: read current, merge, mint fresh -- never mutate an existing style in place, since other rows may still reference it.
+// The row-height counterpart to internTableColumnWidth above, generalised beyond a single attribute: mints (or reuses) a style:style[family="table-row"] carrying `properties` -- already a full style:table-row-properties element, attributes and any children both -- as its own child. Reuse requires the FULL element to match (xmlElementsEqual above: same attributes, same children, same order), never attributes alone, so a request carrying no extra child never reuses a style whose element carries one. Callers pass a clone of the row's own current properties element with heightPt's own change already applied (cloneCurrentRowProperties plus the heightPt setter's own mutation below) -- never mutate an existing automatic style in place, since other rows may still reference it.
 function internTableRowProperties(
   pkg: Package,
-  properties: Readonly<Record<string, string>>,
+  properties: XmlElement,
 ): string {
   const automaticStyles = ensureAutomaticStyles(pkg);
   for (const child of automaticStyles.children) {
@@ -287,7 +320,7 @@ function internTableRowProperties(
       (c): c is XmlElement =>
         c.type === "element" && c.tag === "style:table-row-properties",
     );
-    if (props !== undefined && rowStylePropertiesMatch(props, properties)) {
+    if (props !== undefined && xmlElementsEqual(props, properties)) {
       const existingName = attr(child, "style:name");
       if (existingName !== undefined) {
         return existingName;
@@ -301,7 +334,7 @@ function internTableRowProperties(
   );
   automaticStyles.children.push(
     el("style:style", { "style:name": name, "style:family": "table-row" }, [
-      el("style:table-row-properties", { ...properties }),
+      properties,
     ]),
   );
   return name;
@@ -417,50 +450,33 @@ export class OdtTableRow {
     return out;
   }
 
-  // Row height (ODF's own style:table-row-properties/@style:row-height, on the row's own referenced table:style-name) -- the ODF-side mirror of DocxTableRow.heightPt (src/edit/docx/table.ts), read via odf.js's own exported findStyleElement (family "table-row", a single-level lookup with no parent-chain walk, matching typed/shared/table.ts's own resolveRowHeightPt convention for the identical reason: real ODF table-row automatic styles are standalone in practice) and written via internTableRowProperties's append-only, fingerprint-deduplicated mint above. An unresolvable height is genuinely "no height specified" (the layout engine measures content instead), never 0, matching odf.js's own reader.
+  // Row height (ODF's own style:table-row-properties/@style:row-height, on the row's own referenced table:style-name) -- the ODF-side mirror of DocxTableRow.heightPt (src/edit/docx/table.ts), read via currentRowPropertiesElement above (family "table-row", a single-level lookup with no parent-chain walk, matching typed/shared/table.ts's own resolveRowHeightPt convention for the identical reason: real ODF table-row automatic styles are standalone in practice) and written via internTableRowProperties's append-only, fingerprint-deduplicated mint above. An unresolvable height is genuinely "no height specified" (the layout engine measures content instead), never 0, matching odf.js's own reader.
   get heightPt(): number | undefined {
-    const styleName = attr(this.node, "table:style-name");
-    const styleElement =
-      styleName === undefined
-        ? undefined
-        : findStyleElement(styleName, "table-row", this.pkg);
-    const props =
-      styleElement === undefined
-        ? undefined
-        : styleElement.children.find(
-            (c): c is XmlElement =>
-              c.type === "element" && c.tag === "style:table-row-properties",
-          );
+    const props = currentRowPropertiesElement(this.pkg, this.node);
     const raw =
       props === undefined ? undefined : attr(props, "style:row-height");
     return raw === undefined ? undefined : parseOdfLength(raw);
   }
 
-  // Reads the row's CURRENT style first (currentRowStylePropertiesExceptHeight) so a property this editor has no dedicated getter/setter for -- fo:break-before, style:use-optimal-row-height, fo:keep-together, fo:background-color, exactly what a document opened via openOdt() can already carry -- survives the write, mirroring src/edit/ods/column-row.ts's applyRowStyleProperties (read current, merge, mint fresh). Clearing the height keeps those other properties too, minting a style carrying them alone; only when nothing else remains does clearing remove table:style-name outright, since only then does the row's style exist purely to carry a height.
+  // Clones the row's CURRENT style:table-row-properties element (cloneCurrentRowProperties above) and mutates only the attributes this setter itself owns, so every other property already on it -- including its one permitted child element -- survives untouched; see cloneCurrentRowProperties's own comment for why cloning the whole element, rather than continuing to merge named attributes one at a time, is the general fix. Setting an explicit height ALSO forces a pre-existing style:use-optimal-row-height="true" to "false": left alone, that flag tells a real consumer (LibreOffice confirmed) to auto-fit the row to its own content and ignore style:row-height entirely, so the height this setter just wrote would silently never render even though the getter above keeps reporting it back -- an explicit height is a stronger, more recent statement of intent than a pre-existing autofit flag, so it wins, and is stated as an explicit "false" (never merely removed) so the outcome holds even against a consumer that treats an absent attribute as inheriting some other default rather than the OASIS-stated one. The flag is left untouched when it was never "true" to begin with, so a plain height write on a row with no pre-existing style never grows one it didn't need. Clearing the height removes only style:row-height and leaves every other property -- use-optimal-row-height included, whichever way an earlier call left it -- exactly as found, minting a style carrying them alone; only when nothing else remains does clearing remove table:style-name outright, since only then does the row's style exist purely to carry a height.
   set heightPt(value: number | undefined) {
-    const otherProperties = currentRowStylePropertiesExceptHeight(
-      this.pkg,
-      this.node,
-    );
+    const props = cloneCurrentRowProperties(this.pkg, this.node);
     if (value === undefined) {
-      if (Object.keys(otherProperties).length === 0) {
-        removeAttr(this.node, "table:style-name");
-        return;
+      removeAttr(props, "style:row-height");
+    } else {
+      setAttr(props, "style:row-height", formatOdfLength(value, "pt"));
+      if (attr(props, "style:use-optimal-row-height") === "true") {
+        setAttr(props, "style:use-optimal-row-height", "false");
       }
-      setAttr(
-        this.node,
-        "table:style-name",
-        internTableRowProperties(this.pkg, otherProperties),
-      );
+    }
+    if (props.attributes.length === 0 && props.children.length === 0) {
+      removeAttr(this.node, "table:style-name");
       return;
     }
     setAttr(
       this.node,
       "table:style-name",
-      internTableRowProperties(this.pkg, {
-        ...otherProperties,
-        "style:row-height": formatOdfLength(value, "pt"),
-      }),
+      internTableRowProperties(this.pkg, props),
     );
   }
 
