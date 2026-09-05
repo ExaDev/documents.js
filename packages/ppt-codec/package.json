@@ -57,6 +57,7 @@
     "_typecheck:attw": "attw --pack",
     "test": "turbo run _test",
     "_test": "vitest run --project unit",
+    "_test:coverage": "vitest run --project unit --coverage",
     "test:watch": "vitest --project unit",
     "test:workers": "turbo run _test:workers",
     "_test:workers": "vitest run --config vitest.workers.config.ts",
