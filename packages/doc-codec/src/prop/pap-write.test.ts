@@ -24,7 +24,26 @@ describe("encodeParagraphGrpprl list membership", () => {
     expect(ilfoOpcodeIndex).toBeGreaterThan(ilvlOpcodeIndex);
   });
 
-  it("writes no list sprms at all for a paragraph with no list membership", () => {
-    expect(encodeParagraphGrpprl({}, () => 1)).toEqual([]);
+  it("writes an explicit 'not in a list' zero pair, never omits the sprms, for a paragraph with no list membership", () => {
+    // Omitting these sprms is what causes list membership to leak into a following non-list paragraph on a real consumer (a real LibreOffice-authored .doc round trip carries the previously-seen ilvl/ilfo forward across any paragraph that doesn't explicitly restate or clear them) -- see encodeParagraphGrpprl's own top comment. sprmPIlvl (0x260a) then a 1-byte 0, sprmPIlfo (0x460b) then a 2-byte signed 0 -- prop/pap.ts's own ILFO_NOT_IN_LIST sentinel.
+    expect(encodeParagraphGrpprl({}, () => 1)).toEqual([
+      0x0a, 0x26, 0x00, 0x0b, 0x46, 0x00, 0x00,
+    ]);
+  });
+
+  it("still emits the explicit zero pair alongside other direct paragraph formatting, for a non-list paragraph", () => {
+    const bytes = encodeParagraphGrpprl({ alignment: "center" }, () => 1);
+    expect(bytes).toEqual([
+      0x61,
+      0x24,
+      0x01, // sprmPJc: center
+      0x0a,
+      0x26,
+      0x00, // sprmPIlvl: 0
+      0x0b,
+      0x46,
+      0x00,
+      0x00, // sprmPIlfo: 0
+    ]);
   });
 });

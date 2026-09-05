@@ -18,8 +18,9 @@ const SPRM_P_DYA_AFTER = 0xa414;
 const SPRM_P_DYA_LINE = 0x6412;
 /** sprmPFPageBreakBefore: a 1-byte Bool8. */
 const SPRM_P_F_PAGE_BREAK_BEFORE = 0x2407;
-/** sprmPIlfo: a 2-byte signed one-based index into PlfLfo.rgLfo -- which list membership names. */
+/** sprmPIlfo: a 2-byte signed one-based index into PlfLfo.rgLfo -- which list membership names. 0x0000 is prop/pap.ts's own ILFO_NOT_IN_LIST sentinel ("This paragraph is not in a list"), restated here rather than imported for the same reason every other opcode in this file is: this module's exports are coupled to the specification's own field table, not to a sibling module's private reader constants. */
 const SPRM_P_ILFO = 0x460b;
+const ILFO_NOT_IN_LIST = 0x0000;
 /** sprmPIlvl: a 1-byte zero-based list level. */
 const SPRM_P_ILVL = 0x260a;
 /** sprmPIlvl's own 0..8 range: a non-simple list's LSTF always carries exactly nine LVLs ([MS-DOC] 2.9.148), so a level outside it names a depth this format cannot express at all. */
@@ -156,6 +157,7 @@ export function encodeParagraphGrpprl(
   if (paragraph.pageBreakBefore === true) {
     pushSprm(bytes, SPRM_P_F_PAGE_BREAK_BEFORE, [0x01]);
   }
+  // Every paragraph states its own list membership explicitly -- either a real ilvl/ilfo pair, or an explicit "not in a list" zero pair -- rather than writing the sprms only when list membership is present. Omitting them for a non-list paragraph was the earlier shape of this code, and it is a real, verified-reproducible bug: this package's own reader defaults an unstated ilvl/ilfo to 0 fresh per paragraph (prop/pap.ts starts every ParagraphProperties from an empty object), but a real consumer does not -- confirmed directly against a real LibreOffice-authored .doc round trip -- it carries the PREVIOUSLY-SEEN ilfo/ilvl forward across any paragraph whose own grpprl doesn't explicitly restate or clear them, treating "sprm absent" as "no change" rather than "reset to none". So a plain paragraph immediately following a list item was silently absorbed into that list by a real consumer, even though this package's own round trip read it back correctly (the identical shape of self-blind-spot ExaDev/documents.js#892 was: a lenient reader tolerating bytes a real, stricter consumer does not). Explicitly zeroing both sprms on every non-list paragraph is the verified fix: it states "no list" rather than "no change", which is the only spelling that stops the carry-forward.
   if (paragraph.list?.numId !== undefined) {
     if (paragraph.list.level > MAX_LIST_LEVEL) {
       throw new DocFormatError(
@@ -168,6 +170,13 @@ export function encodeParagraphGrpprl(
       bytes,
       SPRM_P_ILFO,
       int16(ilfoOf(paragraph.list.numId), "paragraph list ilfo"),
+    );
+  } else {
+    pushSprm(bytes, SPRM_P_ILVL, [0]);
+    pushSprm(
+      bytes,
+      SPRM_P_ILFO,
+      int16(ILFO_NOT_IN_LIST, "paragraph list ilfo"),
     );
   }
   return bytes;
