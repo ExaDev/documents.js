@@ -7,7 +7,7 @@ import type {
   ContentTable,
   PageSize,
 } from "document-schema.js";
-import { COLOR_BLACK } from "document-schema.js";
+import { COLOR_BLACK, resolveCellFillColor } from "document-schema.js";
 import { layoutFormula } from "../mathml/layout";
 import type { Box } from "document-schema.js";
 import { flipY } from "../model/geometry";
@@ -252,14 +252,14 @@ function layoutTable(
         cell.background !== undefined &&
         placement.layoutRotationDeg === undefined
       ) {
-        // ContentTableCell has no sourcePath of its own (only ContentTable does -- see document-schema.js), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell.
+        // ContentTableCell has no sourcePath of its own (only ContentTable does -- see document-schema.js), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell. A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for.
         out.push({
           kind: "rect",
           xPt: cellFrame.xPt,
           yPt: cellFrame.yPt,
           widthPt: cellFrame.widthPt,
           heightPt: cellFrame.heightPt,
-          fill: cell.background,
+          fill: resolveCellFillColor(cell.background),
           sourcePath: table.sourcePath,
         });
       }

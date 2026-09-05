@@ -496,7 +496,10 @@ describe("buildPptxPackage threading", () => {
                     {
                       cells: [
                         {
-                          background: { r: 1, g: 0, b: 0 },
+                          background: {
+                            kind: "solid",
+                            color: { r: 1, g: 0, b: 0 },
+                          },
                           borders: {
                             left: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
                             right: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },

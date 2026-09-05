@@ -133,7 +133,7 @@ describe("docx/odt decoration bridge", () => {
     const cell2 = table2.rows[0]?.cells[0];
 
     expect(cell2).toBeDefined();
-    expect(cell2?.background).toEqual(RED);
+    expect(cell2?.background).toEqual({ kind: "solid", color: RED });
     const top = cell2?.borders?.top;
     expect(top).toBeDefined();
     expect(top?.style).toBe("dashed");
@@ -155,7 +155,7 @@ describe("docx/odt decoration bridge", () => {
     const cell2 = table2.rows[0]?.cells[0];
 
     expect(cell2).toBeDefined();
-    expect(cell2?.background).toEqual(BLUE);
+    expect(cell2?.background).toEqual({ kind: "solid", color: BLUE });
     const bottom = cell2?.borders?.bottom;
     expect(bottom).toBeDefined();
     expect(bottom?.style).toBe("dotted");

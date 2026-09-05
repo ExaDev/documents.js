@@ -5,6 +5,7 @@ import type {
   ContentShape,
   ContentTable,
 } from "document-schema.js";
+import { resolveCellFillColor } from "document-schema.js";
 import type { Package } from "ooxml.js";
 import type { EmbeddedPresentationSerialiser } from "ooxml.js";
 import { base64ToBytes, encodePackage } from "ooxml.js";
@@ -239,8 +240,9 @@ function populatePptxTable(
           verticalMerges.set(colIndex + c, cell.rowSpan - 1);
         }
       }
+      // PptxTableCell.background models one flat colour (DrawingML's own <a:solidFill>, the only fill kind this editor's table-cell writer states), so a 'pattern' fill (ExaDev/documents.js#951) writes through resolveCellFillColor's own single representative colour.
       if (cell.background !== undefined) {
-        tableCell.background = cell.background;
+        tableCell.background = resolveCellFillColor(cell.background);
       }
       if (cell.borders !== undefined) {
         tableCell.borders = cell.borders;
