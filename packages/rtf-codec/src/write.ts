@@ -275,7 +275,6 @@ function formFieldPayload(
     // \ffhaslistbox is minted unconditionally for a dropDown, independent of whether it carries any options at all: [MS-DOC] 2.9.78 FFDataBits.fHasListBox "specifies that the form field has a list box. This value MUST be 1 if iType is iTypeDrop (2)." A dropdown with no options is still a dropdown -- there is no degenerate case in which that bit stops being true, so it cannot be gated behind `options !== undefined` the way an earlier version of this writer gated it (which then also left \ffdefres unminted for exactly that shape, a real, common one: a docx `w:dropDownList`/`w:comboBox` with no `w:listItem` children, or an ODF `form:listbox`, both currently read back by this ecosystem with no options recorded at all -- tracked as ExaDev/documents.js#1016).
     out += "\\ffhaslistbox";
     const options = descriptor.options;
-    // FFData.wDef "MUST exist if and only if bits.iType is iTypeChck (1) or iTypeDrop (2)" and, for iTypeDrop, "MUST be less than the number of items in the dropdown list box and specify the default item selected (zero-based index)". With zero options there is no index less than zero that could satisfy the second rule, so this writer mints no \ffdefres at all in that case rather than an invalid one -- an acknowledged edge the spec itself does not cover cleanly, since it requires wDef to exist for iTypeDrop without saying what a producer with an empty list should write.
     const selectedIndex =
       options === undefined || descriptor.value === undefined
         ? undefined
@@ -283,15 +282,8 @@ function formFieldPayload(
     if (selectedIndex !== undefined && selectedIndex !== -1) {
       // `value` genuinely names one of `options`: \ffres records the real current selection and \ffdefres mirrors it, exactly as the checkbox branch above mirrors its own single `checked` boolean into both \ffres and \ffdefres.
       out += `\\ffres${String(selectedIndex)}\\ffdefres${String(selectedIndex)}`;
-    } else if (
-      descriptor.value === undefined &&
-      options !== undefined &&
-      options.length > 0
-    ) {
-      // No selection was recorded at all -- as distinct from a `value` that names none of `options`, handled by the fallthrough below. RTF's own form-field model has no way to serialise "list box, no default selection", only "list box, default is entry N", so entry 0 is minted as the spec-forced fixed point (see the "gaining the spec-mandated first-entry default" round-trip test).
-      out += "\\ffdefres0";
     }
-    // The remaining case -- `value` was recorded but names none of `options` -- deliberately mints neither \ffres nor \ffdefres: substituting the nearest available index (e.g. 0) would silently write a DIFFERENT, wrong selection with no signal that the recorded value was never actually represented, which is worse than the honest absence this writer minted before it grew \ffdefres handling at all (see the "does not silently substitute a different option" test).
+    // Neither branch above matched: either no selection was ever recorded, or `value` was recorded but names none of `options`. Both converge on minting neither \ffres nor \ffdefres, rather than guessing an index -- substituting the nearest available one (e.g. 0) would silently write a DIFFERENT, wrong selection with no signal that the recorded value was never actually represented. This also makes the round-trip a genuine fixed point: this codec's own read.test.ts ("leaves a FORMDROPDOWN's value unset when neither \ffres nor \ffdefres is present at all") proves RTF has a real way to serialise "no default selection" -- simply omitting both fields -- so an unmatched-or-unset value always reads back as value:undefined, and writing that again reproduces byte-identical output rather than drifting onto a fabricated default on a second pass (see the "mints neither \ffres nor \ffdefres for a dropDown whose value names none of its own options" test). [MS-DOC] 2.9.78 FFData.wDef "MUST exist if and only if bits.iType is iTypeChck (1) or iTypeDrop (2)" is a real MS-DOC production rule this codec deliberately does not always satisfy: a producer omitting wDef is spec-noncompliant but demonstrably tolerated in practice, since this reader (built to survive real-world RTF, not just conformant RTF) decodes the omission cleanly.
     if (options !== undefined) {
       for (const option of options) {
         out += `{\\*\\ffl ${escapeText(option)}}`;
