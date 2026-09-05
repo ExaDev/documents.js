@@ -10,6 +10,7 @@ import {
 import { assignInlineVars } from "@vanilla-extract/dynamic";
 import { columnIndexToLetters } from "documents.js";
 import type {
+  ContentCellFill,
   ContentDocument,
   ContentSheet,
   ContentSheetCell,
@@ -169,11 +170,24 @@ function cellClassName(cell: ContentSheetCell | undefined): string {
   });
 }
 
+// A cell's own background is a discriminated 'solid'/'pattern' ContentCellFill (documents.js re-exporting document-schema.js's own shape). This preview renders one flat swatch either way, so a 'pattern' fill picks its own most-representative single colour -- the foreground, falling back to the background, mirroring document-schema.js's own resolveCellFillColor rather than importing it (this UI layer may not import documents.js's conversion/editor functions directly -- see this package's own README).
+function previewColor(
+  fill: ContentCellFill | undefined,
+): { r: number; g: number; b: number } | undefined {
+  if (fill === undefined) {
+    return undefined;
+  }
+  return fill.kind === "solid"
+    ? fill.color
+    : (fill.foregroundColor ?? fill.backgroundColor);
+}
+
 function cellBackgroundStyle(cell: ContentSheetCell | undefined) {
+  const color = previewColor(cell?.background);
   return assignInlineVars({
     [styles.cellBackgroundVar]:
-      cell?.background !== undefined
-        ? `rgb(${cell.background.r * 255} ${cell.background.g * 255} ${cell.background.b * 255})`
+      color !== undefined
+        ? `rgb(${color.r * 255} ${color.g * 255} ${color.b * 255})`
         : undefined,
   });
 }
