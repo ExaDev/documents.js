@@ -224,7 +224,7 @@ describe("writeOdsContent round trip", () => {
         column: 0,
         value: { kind: "string", value: "Decorated" },
         displayText: "Decorated",
-        background: { r: 1, g: 1, b: 0.6 },
+        background: { kind: "solid", color: { r: 1, g: 1, b: 0.6 } },
         borders: {
           left: { color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: "solid" },
           right: { color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: "dashed" },

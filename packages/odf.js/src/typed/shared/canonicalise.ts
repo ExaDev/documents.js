@@ -1,5 +1,6 @@
 import type {
   Color,
+  ContentCellFill,
   ContentImageBlock,
   ContentParagraph,
   ContentTable,
@@ -7,7 +8,11 @@ import type {
   ContentRun,
   LayoutMetadata,
 } from "document-schema.js";
-import { colorToRgbHex, rgbHexToColor } from "document-schema.js";
+import {
+  colorToRgbHex,
+  resolveCellFillColor,
+  rgbHexToColor,
+} from "document-schema.js";
 import { segmentOdfParagraphRuns } from "./paragraph";
 
 // The write-side canonical form every ODF content writer in this package states its own round-trip law against: what reading a WRITTEN document back actually produces, for the pieces of the content model this package's writers already share verbatim (a paragraph's runs and formatting, a table's cells, an image block) -- factored out once typed/odt/write.ts's own normaliseOdtContent first stated it, now reused by typed/odp/write.ts (a shape's own text paragraphs, and a table nested inside a shape) rather than restated per format. See typed/odt/write.ts's own top-of-file note for the fuller philosophy this canonical-form discipline follows; this module owns only the pieces genuinely identical across every writer, not a format's own section/slide-level structure.
@@ -21,6 +26,16 @@ function unsupportedContent(what: string, where: string): Error {
 // ODF states every colour as six hex digits (its own text:color datatype -- see typed/shared/color.ts), so a Color component that is not a whole 1/255 step cannot be carried: 0.9 is written as "e6" and read back as 230/255. Round-tripping through document-schema.js's own hex pair IS that quantisation, stated once here rather than approximated with an epsilon comparison in a test.
 export function canonicalColor(color: Color): Color {
   return rgbHexToColor(colorToRgbHex(color));
+}
+
+// A cell fill written and read back through this package's own writers: always a 'solid' ContentCellFill, since style:table-cell-properties/@fo:background-color (ODF's own flat-colour cell-fill attribute) has no two-colour pattern-fill vocabulary at all (ExaDev/documents.js#951) -- the writer resolves a 'pattern' fill to resolveCellFillColor's own single representative colour before it ever reaches ODF, and undefined when that resolves to nothing (a pattern stating neither of its own colours), matching an absent background exactly.
+export function canonicalCellFill(
+  fill: ContentCellFill,
+): ContentCellFill | undefined {
+  const color = resolveCellFillColor(fill);
+  return color === undefined
+    ? undefined
+    : { kind: "solid", color: canonicalColor(color) };
 }
 
 // One run carrying only the fields it actually states. The reader builds every run with all seven formatting fields present and most of them undefined (typed/shared/paragraph.ts's runFromText), while a hand-built document states only what it means -- the same run, spelled two ways. The canonical form is the spelled-only one, so the two are comparable at all.
@@ -125,7 +140,7 @@ function canonicalCell(
     canonical.rowSpan = cell.rowSpan;
   }
   if (cell.background !== undefined) {
-    canonical.background = canonicalColor(cell.background);
+    canonical.background = canonicalCellFill(cell.background);
   }
   if (cell.borders !== undefined) {
     // An absent border style is written as "solid", which is what ContentBorderSchema already documents an absent style to mean -- so it comes back stated rather than absent.
