@@ -23,6 +23,7 @@ import {
   u16,
   u32,
   xlUnicodeString,
+  xlUnicodeStringNoCch,
 } from "../test-support/biff";
 import { formatCodeOf, readWorkbookGlobals } from "./globals";
 
@@ -358,11 +359,64 @@ describe("readWorkbookGlobals", () => {
     ]);
   });
 
-  it("does not resolve an ixti whose SupBook is a genuinely external workbook", () => {
-    // A SupBook naming an external workbook carries a real cch (its virtPath's own length), never 0x0401 -- this reader resolves only the self-referencing case.
+  it("resolves a genuinely external workbook's own file name and sheet name through virtPath and rgst", () => {
+    // rel-volume ([MS-XLS] 480c3d2a: "%x0001 %x0002 file-path" -- relative to the referencing workbook's own drive), the common real-world case of an external workbook in the same folder: virtPath is just the two-character marker followed directly by the file name.
+    const virtPath = "\u0001\u0002Budget.xlsx";
     const globals = readWorkbookGlobals(
       groupsOf(
-        record(RECORD_SUPBOOK, [...u16(2), ...u16(0x0001), 0x00]),
+        record(RECORD_SUPBOOK, [
+          ...u16(1), // ctab: one sheet in the external workbook
+          ...u16(virtPath.length), // cch
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"), // rgst[0]
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0), // iSupBook
+          ...u16(0), // itabFirst -- rgst[0]
+          ...u16(0), // itabLast -- rgst[0]
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([{ label: "[Budget.xlsx]Sheet1" }]);
+  });
+
+  it("resolves a multi-sheet external range as first:last, the same shape a local multi-sheet range takes", () => {
+    const virtPath = "\u0001\u0002Book.xlsx";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(3),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Jan"),
+          ...xlUnicodeString("Feb"),
+          ...xlUnicodeString("Mar"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0), // itabFirst -- rgst[0] "Jan"
+          ...u16(2), // itabLast -- rgst[2] "Mar"
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([{ label: "[Book.xlsx]Jan:Mar" }]);
+  });
+
+  it("shows a known sheet name against a placeholder workbook label when virtPath's own form is not one this reader decodes", () => {
+    // An absolute drive volume ([MS-XLS] 480c3d2a: "%x0001 %x0001 volume-character file-path") needs more of the VirtualPath grammar than a trailing path segment to reproduce faithfully -- fileNameFromVirtPath declines rather than guessing, but rgst's own sheet name is still fully resolvable and is not discarded along with it.
+    const virtPath = "\u0001\u0001CBudget.xlsx";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
         record(RECORD_EXTERNSHEET, [
           ...u16(1),
           ...u16(0),
@@ -372,10 +426,29 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([undefined]);
+    expect(globals.sheetRanges).toEqual([{ label: "[EXTERNAL]Sheet1" }]);
   });
 
-  it("does not resolve an XTI whose sheet could not be found", () => {
+  it("carries a diagnostic label for an add-in-referencing SupBook rather than dropping the reference", () => {
+    // [MS-XLS] 2.4.271: cch 0x3A01 marks an add-in-referencing supporting link, which names XLL/COM add-in functions this reader has no workbook or sheet to resolve a name from.
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [...u16(1), ...u16(0x3a01)]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "#REF!(add-in function reference)" },
+    ]);
+  });
+
+  it("carries a diagnostic label, not undefined, for an XTI whose sheet could not be found", () => {
     // [MS-XLS] 2.5.344: -1 is itabFirst/itabLast's own "the sheet could not be found" sentinel.
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -391,7 +464,7 @@ describe("readWorkbookGlobals", () => {
       ),
     );
 
-    expect(globals.sheetRanges).toEqual([undefined]);
+    expect(globals.sheetRanges).toEqual([{ label: "#REF!(sheet not found)" }]);
   });
 
   it("defaults sheetRanges to empty when the substream carries no EXTERNSHEET record", () => {

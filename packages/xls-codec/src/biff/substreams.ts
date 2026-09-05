@@ -19,7 +19,7 @@ export interface RecordGroup {
   readonly offset: number;
 }
 
-/** The total byte length of a record's data across every block (the base record's and any Continues that followed it) -- what a reader needs whenever a trailing field's own length is implied by "whatever is left" rather than stated by a preceding count (a Mul record's entry count, an SST's own bounds check). */
+/** The total byte length of a record's data across every block (the base record's and any Continues that followed it) -- what a reader needs whenever a trailing field's own length is implied by "whatever is left" rather than stated by a preceding count (a Mul record's entry count, an SST's own bounds check, a formula's RgbExtra trailer). */
 export function recordByteLength(record: RecordGroup): number {
   return record.blocks.reduce((sum, block) => sum + block.length, 0);
 }
