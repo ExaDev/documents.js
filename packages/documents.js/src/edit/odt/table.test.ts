@@ -113,6 +113,73 @@ describe("OdtTable", () => {
   });
 });
 
+describe("OdtTableRow.heightPt", () => {
+  it("is undefined for a row with no style, and round-trips a value written through the setter", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 1 });
+    const row = table.rows()[0]!;
+    expect(row.heightPt).toBeUndefined();
+    row.heightPt = 30;
+    expect(row.heightPt).toBeCloseTo(30, 5);
+  });
+
+  it("clearing heightPt removes table:style-name entirely", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 1 });
+    const row = table.rows()[0]!;
+    row.heightPt = 40;
+    row.heightPt = undefined;
+    expect(row.heightPt).toBeUndefined();
+  });
+
+  it("survives a real odt read/build round trip via readOdtContent", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 1 });
+    table.rows()[0]!.heightPt = 36;
+
+    const pkg = decodePackage(encodePackage(editor.toPackage()));
+    const content = readOdtContent(pkg);
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
+    }
+    const roundTrippedTable = content.sections[0]?.blocks.find(
+      (b) => b.kind === "table",
+    );
+    if (roundTrippedTable?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    expect(roundTrippedTable.rows[0]?.heightPt).toBeCloseTo(36, 5);
+  });
+
+  it("two rows with the same height reuse one table-row style; a distinct height mints another", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 3, columns: 1 });
+    table.rows()[0]!.heightPt = 20;
+    table.rows()[1]!.heightPt = 20;
+    table.rows()[2]!.heightPt = 50;
+
+    const contentPart = editor.toPackage().parts["content.xml"];
+    const root = rootElement(
+      contentPart?.kind === "xml" ? contentPart.nodes : [],
+    );
+    const automaticStyles = root?.children.find(
+      (c) => c.type === "element" && c.tag === "office:automatic-styles",
+    );
+    const rowStyles =
+      automaticStyles?.type === "element"
+        ? automaticStyles.children.filter(
+            (c) =>
+              c.type === "element" &&
+              c.tag === "style:style" &&
+              c.attributes.some(
+                (a) => a.name === "style:family" && a.value === "table-row",
+              ),
+          )
+        : [];
+    expect(rowStyles).toHaveLength(2);
+  });
+});
+
 describe("OdtTableRow.mergeCellsHorizontally", () => {
   it("merges colSpan grid columns into one cell, retagging the consumed positions to table:covered-table-cell", () => {
     const editor = createOdt();
