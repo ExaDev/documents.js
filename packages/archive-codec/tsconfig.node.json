@@ -9,6 +9,7 @@
   "include": [
     "src/**/*.test.ts",
     "src/test-support/**/*.ts",
+    "test/**/*.ts",
     // A glob rather than a hand-listed set, matching the other library packages here. The list this replaces still named commitlint.config.ts and release.config.ts -- files that existed when this package was its own repository and are workspace-root-only now -- while omitting vitest.config.ts, which does exist. A config file absent from every program is not a silent no-op: type-aware ESLint fails on it outright with "not found in any of the provided project(s)".
     "*.config.ts"
   ],
