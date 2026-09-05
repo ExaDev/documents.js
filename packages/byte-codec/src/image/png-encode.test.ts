@@ -32,7 +32,7 @@ function colorTypeOf(png: Uint8Array): number {
   return ihdr[9]!;
 }
 
-// Independently re-walks the chunk stream and checks the PNG spec's own structural constraints on it -- deliberately never routing through decodePng, since decodePng is this repo's own reader and is exactly what let a zero-length tRNS chunk (an invalid PNG a strict external decoder rejects or silently mis-reads) pass every existing round-trip test undetected. Verifies every chunk's CRC-32 (catching any chunk-framing bug, not just tRNS) and, for an indexed (colour type 3) image carrying a tRNS chunk, the two length constraints the PNG spec places on it: a present tRNS chunk must carry at least one entry (a zero-length tRNS is what libpng's own reader flags as "Zero length tRNS chunk" and either rejects or -- as this exact case was verified against real decoders below -- silently treats as no transparency at all, discarding the alpha data), and must never exceed one entry per PLTE colour.
+// Independently re-walks the chunk stream and checks the PNG chunk stream's own structural constraints -- deliberately never routing through decodePng, since decodePng is this repo's own reader and is exactly what let a zero-length tRNS chunk (an invalid PNG a strict external decoder rejects or silently mis-reads) pass every existing round-trip test undetected. Verifies every chunk's CRC-32 (catching any chunk-framing bug, not just tRNS) and, for an indexed (colour type 3) image carrying a tRNS chunk, the two bounds this repo's encoder must respect on it: a present tRNS chunk must carry at least one entry (the PNG spec itself places no lower bound here, but strict decoders such as libpng reject an empty tRNS chunk outright, as verified against real decoders below), and the PNG spec's own upper bound -- never more than one alpha value per PLTE colour.
 function assertSpecCompliantPng(png: Uint8Array): void {
   const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
   expect(Array.from(png.subarray(0, 8))).toEqual([
@@ -71,7 +71,7 @@ function assertSpecCompliantPng(png: Uint8Array): void {
   }
 
   if (colorType === 3 && trnsLength !== undefined) {
-    expect(trnsLength).toBeGreaterThan(0); // a present tRNS chunk may never be empty (PNG spec / libpng "Zero length tRNS chunk")
+    expect(trnsLength).toBeGreaterThan(0); // a present tRNS chunk may never be empty -- strict decoders such as libpng reject it outright, even though the PNG spec itself states no lower bound
     expect(trnsLength).toBeLessThanOrEqual(paletteEntryCount!); // and never more than one alpha value per palette entry
   }
 }
