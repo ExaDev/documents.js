@@ -98,6 +98,7 @@ type DestinationKind =
   | "bookmarkEnd" // {\*\bkmkend ...}, likewise
   | "formField" // {\*\formfield ...}, nested inside \fldinst: no #PCDATA of its own, carried entirely by its own control words and the two destinations below
   | "formFieldName" // {\*\ffname ...}, whose text is the form field's own bookmark-style name
+  | "formFieldHelpText" // {\*\ffhelptext ...}, whose text is the form field's own human-readable help text -- the closest RTF analogue to a contentControl's `alias`
   | "formFieldListItem"; // {\*\ffl ...}, whose text is a dropdown's list entry (or a text field's default text, unused here)
 
 const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
@@ -114,6 +115,7 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["upr", "unicodeWrapper"],
   ["formfield", "formField"],
   ["ffname", "formFieldName"],
+  ["ffhelptext", "formFieldHelpText"],
   ["ffl", "formFieldListItem"],
   // Content this reader deliberately does not place. ContentDocument has no page furniture, note, or annotation position for any of these to land in: a header/footer is page furniture with no ContentSection field to carry it, and a footnote body's real home is document-schema.js's tree-only definitions table, which the flat form this reader produces cannot reach. Each is skipped with a diagnostic rather than silently, and each is listed in the README's own gap table.
   ["footnote", "skip"],
@@ -309,12 +311,14 @@ interface PictureState {
   binary: number[];
 }
 
-// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffl destinations close and its \ffres/\ffdefres control words apply.
+// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffhelptext/\*\ffl destinations close and its \ffres/\ffdefres/\ffprot control words apply.
 interface FormFieldState {
   name: string;
+  helpText: string;
   listItems: string[];
   resultIndex: number | undefined;
   defaultResultIndex: number | undefined;
+  protectedField: boolean;
 }
 
 // Shared by reference across a field group and its children, so a \fldrslt group reads the instruction its sibling \fldinst already collected without either needing to know the other's stack depth. `formField` is `undefined` until a nested \*\formfield destination opens -- a legacy field with no \*\formfield group at all still has an instruction, just no further form-field data.
@@ -1309,6 +1313,13 @@ function readRtfDetail(
       return;
     }
     if (
+      state.destination === "formFieldHelpText" &&
+      state.field?.formField !== undefined
+    ) {
+      state.field.formField.helpText += text;
+      return;
+    }
+    if (
       state.destination === "formFieldListItem" &&
       state.field?.formField !== undefined
     ) {
@@ -1389,9 +1400,11 @@ function readRtfDetail(
           // Mutates the SAME FieldState object the enclosing \field group's own children all share by reference, so \*\ffname/\*\ffl (nested inside this group) and the \field group's own closing brace (which reads it back to build the descriptor) see the identical data.
           child.field.formField = {
             name: "",
+            helpText: "",
             listItems: [],
             resultIndex: undefined,
             defaultResultIndex: undefined,
+            protectedField: false,
           };
         }
         if (
@@ -1619,7 +1632,7 @@ function applyPictureControlWord(
   }
 }
 
-// RTF 1.5's own Form Fields table states \ffresN/\ffdefresN only in list-field terms ("Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries" / "Default entry for list field"), but \ffres/\ffdefres are RTF's own serialisation of the binary FFDataBits structure [MS-DOC] 2.9.78 defines, and that structure spells out a checkbox's own iRes meaning explicitly: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined, treated as unchecked). Both control words are simply captured here regardless of the field's iType; formFieldContentControl in constructs.ts is where the checkbox-specific sentinel handling and the dropdown's own zero-based-index reading of the identical \ffres are actually decided.
+// RTF 1.5's own Form Fields table states \ffresN/\ffdefresN only in list-field terms ("Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries" / "Default entry for list field"), but \ffres/\ffdefres are RTF's own serialisation of the binary FFDataBits structure [MS-DOC] 2.9.79 defines, and that structure spells out a checkbox's own iRes meaning explicitly: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined, treated as unchecked). Both control words are simply captured here regardless of the field's iType; formFieldContentControl in constructs.ts is where the checkbox-specific sentinel handling and the dropdown's own zero-based-index reading of the identical \ffres are actually decided. \ffprot ("1 if this field is protected, 0 otherwise" -- RTF 1.9.1's own Form Fields table, mirroring [MS-DOC] 2.9.79 FFDataBits.fProt) is read with the same toggle convention every other bare RTF boolean control word uses: a present-but-unparameterised `\ffprot` means protected, matching toggleValue's own "absent parameter means on" rule for `\b`/`\i` and the rest.
 function applyFormFieldControlWord(
   name: string,
   param: number | undefined,
@@ -1631,6 +1644,9 @@ function applyFormFieldControlWord(
       return true;
     case "ffdefres":
       formField.defaultResultIndex = param;
+      return true;
+    case "ffprot":
+      formField.protectedField = toggleValue(param);
       return true;
     default:
       return false;

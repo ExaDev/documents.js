@@ -264,7 +264,7 @@ const FORM_FIELD_SPEC: ReadonlyMap<
 // [MS-DOC] 2.9.78 FFData.hsttbDropList: "an array of Unicode strings that are the entries in the dropdown list... MUST NOT exceed 25." Not an arbitrary round number: FFDataBits' own iRes field reserves index 25 as its "undefined selection" sentinel (see FORM_FIELD_RESULT_UNDEFINED in constructs.ts), so a 26th real entry would sit exactly where a real Word/DOC consumer expects "no selection" instead of an actual option.
 const MAX_DROPDOWN_OPTIONS = 25;
 
-// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffres`/`\ffdefres` pair, a dropdown's own `\ffhaslistbox` plus its selected-entry `\ffres`/`\ffdefres` pair and its list of `{\*\ffl ...}` entries, and -- for any of the three types -- the control's bookmark-style name as `{\*\ffname ...}`.
+// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffres`/`\ffdefres` pair, a dropdown's own `\ffhaslistbox` plus its selected-entry `\ffres`/`\ffdefres` pair and its list of `{\*\ffl ...}` entries, and -- for any of the three types -- a `\ffprot` bit for a 'content'/'both' lock, the control's human-readable label as `\ffownhelp1{\*\ffhelptext ...}`, and its bookmark-style name as `{\*\ffname ...}`.
 function formFieldPayload(
   descriptor: ContentControlDescriptor,
   fftype: number,
@@ -309,6 +309,21 @@ function formFieldPayload(
         out += `{\\*\\ffl ${escapeText(option)}}`;
       }
     }
+  }
+  // [MS-DOC] 2.9.79 FFDataBits.fProt, verbatim: "A bit that specifies whether the form field is protected and its value cannot be changed" -- RTF 1.9.1's own Form Fields table states the identical fact in list-field terms, "\ffprotN: 1 if this field is protected, 0 otherwise." It is a single content-protection bit, so it captures the 'content' and 'both' halves of ContentControlLock exactly (both lock the field's own value); 'container' locks only the control's own removal, a fact RTF's form-field vocabulary has no bit for at all -- a legacy form field is ordinary document text with no separate "delete the control" operation to protect in the first place -- so that half is reported through the diagnostic sink below rather than silently folded into "unprotected". Written bare, matching \ffhaslistbox's own bare-when-true style above: RTF's own toggle convention treats an absent parameter as 1, so `\ffprot` alone says the same thing `\ffprot1` would.
+  if (descriptor.lock === "content" || descriptor.lock === "both") {
+    out += "\\ffprot";
+  }
+  if (descriptor.lock === "container" || descriptor.lock === "both") {
+    sink({
+      code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      severity: "warning",
+      message: `a contentControl's '${descriptor.lock}' lock also protects the control from removal, which RTF's \\ffprot ([MS-DOC] 2.9.79 FFDataBits.fProt) cannot express -- it names only whether the field's own value can be changed, never whether the control itself can be removed, so that half of the lock is dropped`,
+    });
+  }
+  // [MS-DOC] 2.9.78 FFData.xstzHelpText, gated by FFDataBits.fOwnHelp ("A bit that specifies whether the form field has custom help text in FFData.xstzHelpText. If fOwnHelp is 0, FFData.xstzHelpText contains an empty or auto-generated string."): RTF 1.9.1's own \ffhelptext ("Help text (string). This is a destination control word.") is this vocabulary's one human-readable descriptive-text slot for a form field, and the closest analogue RTF has to docx `w:alias`/PDF AcroForm's `/TU` alternate description -- both are a label shown to whoever is looking at the control, distinct from the control's own machine-readable name that \ffname/`w:tag`/AcroForm's `/T` already carry. \ffownhelp1 is minted alongside it, mirroring what a real producer does whenever xstzHelpText genuinely carries author-set text rather than an "empty or auto-generated string".
+  if (descriptor.alias !== undefined && descriptor.alias.length > 0) {
+    out += `\\ffownhelp1{\\*\\ffhelptext ${escapeText(descriptor.alias)}}`;
   }
   if (descriptor.tag !== undefined && descriptor.tag.length > 0) {
     out += `{\\*\\ffname ${escapeText(descriptor.tag)}}`;

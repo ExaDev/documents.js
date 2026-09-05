@@ -238,12 +238,14 @@ function pad(value: number, width: number): string {
   return String(value).padStart(width, "0");
 }
 
-// Whatever `{\*\formfield ...}` handed the reader beyond the field's own instruction: the bookmark-style name from `{\*\ffname ...}`, a dropdown's own `{\*\ffl ...}` entries, and the result indices `\ffres`/`\ffdefres` carry. RTF 1.5's own Form Fields table defines both purely in list-field terms, but they serialise the binary FFDataBits structure [MS-DOC] 2.9.78 defines, whose iRes field carries a real, spec-defined meaning per iType -- a checkbox's checked state (0/1/25-undefined) for iTypeChck, a zero-based \ffl index for iTypeDrop (25 again for an undefined selection); see formFieldContentControl below for how each iType's own reading is decided. Optional end to end -- `\*\formfield` itself is optional per the grammar, so a bare FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction with no `\*\formfield` group still names a control type on its own.
+// Whatever `{\*\formfield ...}` handed the reader beyond the field's own instruction: the bookmark-style name from `{\*\ffname ...}`, the human-readable label from `{\*\ffhelptext ...}`, a dropdown's own `{\*\ffl ...}` entries, the result indices `\ffres`/`\ffdefres` carry, and the `\ffprot` protection bit. RTF 1.5's own Form Fields table defines the result indices purely in list-field terms, but they serialise the binary FFDataBits structure [MS-DOC] 2.9.79 defines, whose iRes field carries a real, spec-defined meaning per iType -- a checkbox's checked state (0/1/25-undefined) for iTypeChck, a zero-based \ffl index for iTypeDrop (25 again for an undefined selection); see formFieldContentControl below for how each iType's own reading is decided. Optional end to end -- `\*\formfield` itself is optional per the grammar, so a bare FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction with no `\*\formfield` group still names a control type on its own.
 export interface RtfFormFieldData {
   readonly name: string;
+  readonly helpText: string;
   readonly listItems: readonly string[];
   readonly resultIndex: number | undefined;
   readonly defaultResultIndex: number | undefined;
+  readonly protectedField: boolean;
 }
 
 // [MS-DOC] 2.9.78 FFDataBits, verbatim: "If iType is iTypeChck (1), iRes specifies the state of the checkbox and MUST be 0 (unchecked), 1 (checked), or 25 (undefined). Undefined checkboxes are treated as unchecked." 25 is FFDataBits's own reserved sentinel for "no explicit state", not a PHPRtfLite-specific quirk: real Word output emits it too on any checkbox whose \ffres was never meaningfully set, alongside a real \ffdefres carrying the field's reset default. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/22a1f1e5-f4b2-4a7d-9e10-3afa26056122 -- the code below deliberately goes one step further than this bare quote: rather than treating every undefined \ffres as unchecked outright, it falls through to a *defined* \ffdefres first and only lands on "unchecked" when that too is absent. This is a considered divergence from the spec's own literal default, not an oversight: a real PHPRtfLite-produced file always emits the sentinel \ffres25 alongside a meaningful \ffdefres naming the field's actual intended state, so treating 25 as "fall through to \ffdefres" recovers real-world checkbox state that the bare spec quote alone would silently discard as unchecked. Do not "simplify" this back to matching the quote above verbatim -- that would re-break the real-world case this fallback exists for.
@@ -288,6 +290,14 @@ export function formFieldContentControl(
   const name = formField.name.trim();
   if (name.length > 0) {
     descriptor.tag = name;
+  }
+  const helpText = formField.helpText.trim();
+  if (helpText.length > 0) {
+    descriptor.alias = helpText;
+  }
+  if (formField.protectedField) {
+    // \ffprot is a single bit ("the form field is protected and its value cannot be changed" -- [MS-DOC] 2.9.79 FFDataBits.fProt), so reading it back can only ever name ContentControlLock's 'content' member: RTF's own vocabulary has no second bit for the 'container' (removal) half 'both' also carries, and there is no way to tell a written 'content' apart from a written 'both' once both have collapsed onto the identical \ffprot bit -- an inherent, one-directional loss the writer's own diagnostic (formFieldPayload in write.ts) names at write time, not something this read side can recover.
+    descriptor.lock = "content";
   }
   if (controlType === "checkbox") {
     // \ffres carries the checkbox's real current state and takes priority whenever it is not FFDataBits's own undefined sentinel (see FORM_FIELD_RESULT_UNDEFINED above); only the sentinel -- or \ffres being absent altogether -- falls through to \ffdefres, the field's reset default, which itself defaults to 0 (unchecked) when that too is absent. Verified against both PHPRtfLite's own output (which always emits the sentinel \ffres25 alongside a meaningful \ffdefres) and real Word's FFDataBits encoding (which can emit a meaningful \ffres alongside a \ffdefres that differs, and the current value must win over the reset default in that case).
