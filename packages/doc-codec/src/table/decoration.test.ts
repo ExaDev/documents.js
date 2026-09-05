@@ -362,8 +362,8 @@ describe("encodeTableRowGrpprl", () => {
       { length: 25 },
       (_unused, index): TableCellToWrite =>
         index === 24
-          ? { vertMerge: 0, background: { r: 1, g: 0, b: 1 } }
-          : { vertMerge: 0 },
+          ? { vertMerge: 0, horzMerge: 0, background: { r: 1, g: 0, b: 1 } }
+          : { vertMerge: 0, horzMerge: 0 },
     );
     const read = roundTripRow(cells);
     expect(read[24]?.background).toEqual({ r: 1, g: 0, b: 1 });
@@ -381,8 +381,8 @@ describe("encodeTableRowGrpprl", () => {
       (_unused, index): TableCellToWrite => {
         const background = shaded.get(index);
         return background === undefined
-          ? { vertMerge: 0 }
-          : { vertMerge: 0, background };
+          ? { vertMerge: 0, horzMerge: 0 }
+          : { vertMerge: 0, horzMerge: 0, background };
       },
     );
     const read = roundTripRow(cells);
@@ -395,8 +395,8 @@ describe("encodeTableRowGrpprl", () => {
 
   it("keeps a cell's vertical-merge state alongside its decoration", () => {
     const read = roundTripRow([
-      { vertMerge: 3, background: { r: 1, g: 1, b: 0 } },
-      { vertMerge: 1 },
+      { vertMerge: 3, horzMerge: 0, background: { r: 1, g: 1, b: 0 } },
+      { vertMerge: 1, horzMerge: 0 },
     ]);
     expect(read[0]?.vertMerge).toBe(3);
     expect(read[0]?.background).toEqual({ r: 1, g: 1, b: 0 });
@@ -415,7 +415,10 @@ describe("encodeTableRowGrpprl", () => {
     expect(
       encodeTableRowGrpprl(
         [0, 100, 200],
-        [{ vertMerge: 0 }, { vertMerge: 0 }],
+        [
+          { vertMerge: 0, horzMerge: 0 },
+          { vertMerge: 0, horzMerge: 0 },
+        ],
         undefined,
       ),
     ).toEqual([
@@ -445,6 +448,7 @@ describe("encodeTableRowGrpprl", () => {
       [
         {
           vertMerge: 0,
+          horzMerge: 0,
           borders: {
             top: border,
             left: border,
