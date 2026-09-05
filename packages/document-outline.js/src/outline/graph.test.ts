@@ -1930,4 +1930,58 @@ describe("write API: insertNode / insertEdge (#935)", () => {
     insertEdge(before, "parent", leaf.id);
     expect(before.edges).toEqual([]);
   });
+
+  it("insertEdge rebalances rather than throwing when two adjacent siblings already share one orderKey (e.g. the uniform floor key emitWalkEdges mints for every PROPERTY/DEFINED_BY edge from one owner)", () => {
+    // Extract two metadata scalars off the same document root: emitWalkEdges (graph.ts's own PROPERTY/DEFINED_BY emission) gives both edges orderKeyForIndex(0) -- a real tie between two siblings of the SAME kind from the SAME owner, not merely a narrow interval.
+    const extractMetadataScalars: ExtractionPolicy = (path) =>
+      path.length === 2 &&
+      path[0] === "metadata" &&
+      (path[1] === "title" || path[1] === "author")
+        ? "extract"
+        : "inline";
+    const pkg = wordprocessingPackage([sectionGroup([paragraph("Body.")])], {
+      metadata: { title: "T", author: "A" },
+    });
+    const graph = projectDocumentGraph([{ id: "doc", package: pkg }], {
+      policy: extractMetadataScalars,
+    });
+    const tiedSiblings = graph.edges.filter(
+      (edge) => edge.from === "doc" && edge.kind === "PROPERTY",
+    );
+    expect(tiedSiblings).toHaveLength(2);
+    expect(tiedSiblings[0]!.orderKey).toBe(tiedSiblings[1]!.orderKey);
+    expect(tiedSiblings[0]!.orderKey).toBe(orderKeys.orderKeyForIndex(0));
+
+    const inserted = insertNode(graph, {
+      kind: "value",
+      properties: { value: "inserted" },
+    });
+    // Inserting directly between the two tied siblings is exactly the case boundedOrderKey must recognise before ever calling orderKeyBetween(tied, tied) -- this must rebalance, not throw.
+    const result = insertEdge(inserted.graph, "doc", inserted.id, {
+      kind: "PROPERTY",
+      position: { at: "after", siblingId: tiedSiblings[0]!.to },
+      path: ["metadata", "inserted"],
+    });
+
+    const rebalanced = result.edges.filter(
+      (edge) => edge.from === "doc" && edge.kind === "PROPERTY",
+    );
+    expect(rebalanced).toHaveLength(3);
+    // The tie is gone -- every sibling now sorts uniquely.
+    expect(new Set(rebalanced.map((edge) => edge.orderKey)).size).toBe(3);
+    const ordered = [...rebalanced].sort((x, y) =>
+      x.orderKey < y.orderKey ? -1 : 1,
+    );
+    expect(ordered.map((edge) => edge.to)).toEqual([
+      tiedSiblings[0]!.to,
+      inserted.id,
+      tiedSiblings[1]!.to,
+    ]);
+    // Each rebalanced edge kept its own path -- rebalancedInsert carries path through, it does not drop it.
+    expect(ordered.map((edge) => edge.path)).toEqual([
+      tiedSiblings[0]!.path,
+      ["metadata", "inserted"],
+      tiedSiblings[1]!.path,
+    ]);
+  });
 });

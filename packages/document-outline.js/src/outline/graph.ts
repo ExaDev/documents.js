@@ -721,6 +721,8 @@ function siblingInsertIndex(
 }
 
 // The fast path: bisect between whichever of `siblings[index - 1]`/`siblings[index]` exist, falling back to orderKeyForIndex(0) only when NEITHER does (a genuinely empty sibling list -- the same wide key a fresh projection mints for its own first child, not a defensive default masking a lookup failure). Throws OrderKeyBudgetExhaustedError when the two neighbours have no room left, which insertEdge below catches and answers with a full rebalance rather than surfacing to the caller -- exactly what a real sibling list needs to keep working once bisection is exhausted, most commonly `start` against a first child that (like every first child projectDocumentGraph itself ever mints) already sits at the scheme's own floor.
+//
+// Two adjacent siblings sharing one orderKey are a SEPARATE no-room case from a narrow-but-nonempty interval, and are checked for explicitly, before ever calling orderKeyBetween: this module's own emitWalkEdges mints every PROPERTY/DEFINED_BY edge from one owner at the uniform floor key, by design, since those edges carry no real document-order sequence for orderKey to encode (only `path` disambiguates them) -- so a tied pair here is an expected shape this module itself produces, not a malformed graph. orderKeyBetween's own precondition ("low must sort strictly before high") is written for a genuine caller error -- a reversed pair, low > high -- and throws a plain Error for that; asking it to also cover the tied case would make one precondition violation throw two different error classes depending on which of "equal" or "reversed" produced it. Recognising the tie here instead, ahead of the call, keeps that plain-Error/OrderKeyBudgetExhaustedError split consistent (genuine misuse vs. legitimate no-room-left) and routes the tie through the identical rebalance fallback insertEdge already has for a narrow interval.
 function boundedOrderKey(
   siblings: readonly GraphEdge[],
   index: number,
@@ -731,6 +733,11 @@ function boundedOrderKey(
     return orderKeys.orderKeyForIndex(0);
   if (before === undefined) return orderKeys.orderKeyBefore(after!.orderKey);
   if (after === undefined) return orderKeys.orderKeyAfter(before.orderKey);
+  if (before.orderKey === after.orderKey) {
+    throw new OrderKeyBudgetExhaustedError(
+      "boundedOrderKey: adjacent siblings share one orderKey, leaving no room to bisect; rebalance with renumberedOrderKeys",
+    );
+  }
   return orderKeys.orderKeyBetween(before.orderKey, after.orderKey);
 }
 
