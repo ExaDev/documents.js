@@ -569,6 +569,46 @@ describe("lists", () => {
     expect(lowerMarkdown(written)).toEqual(first);
   });
 
+  it("keeps a construct (blockquote) directly inside a multi-block list item nested inside that item's own contiguous run on write, rather than fracturing it out as separate top-level content -- ExaDev/documents.js#990", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        runs: [{ text: "before" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      { kind: "constructStart", descriptor: { kind: "division" } },
+      {
+        kind: "paragraph",
+        runs: [{ text: "quoted" }],
+        styleId: "Quote",
+        indentLeftPt: 36,
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      { kind: "constructEnd" },
+      {
+        kind: "paragraph",
+        runs: [{ text: "after" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- before\n  > quoted\n\n  after");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    // The item stays ONE item across the reparse: "before", the quoted division pair, and "after" all still share a single itemId, none of them split out as separate top-level content the way this issue's own root cause used to fracture them.
+    const paragraphs = blocks.filter((block) => block.kind === "paragraph");
+    expect(paragraphs).toHaveLength(3);
+    const itemIds = new Set(
+      paragraphs.map((paragraph) => paragraph.list?.itemId),
+    );
+    expect(itemIds.size).toBe(1);
+    expect(itemIds.has(undefined)).toBe(false);
+  });
+
   it("keeps a Quote-styled block and a following plain block of the same item as two separate blocks on write-then-reparse -- Quote is NOT self-delimiting inside a list region: renderListRegion renders every block through renderParagraphBody, which never applies a '> ' prefix, so a Quote-styled block reads back identically to a plain one and the two would otherwise merge into one paragraph via CommonMark's lazy continuation", () => {
     const source = doc([
       {

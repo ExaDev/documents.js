@@ -3,7 +3,7 @@
 //  - "Heading{1..6}" styleId -> ATX heading, "#" repeated to the level, clamped through document-schema.js's own shared clampHeadingLevel (one heading-range clamp across the ecosystem instead of a private copy here) -- MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED when the level exceeds 6 (a markdown-produced document never carries one, but ContentDocument is a shared cross-format pivot; a paragraph from, say, odt's own unbounded readOutlineLevel can).
 //  - 'CodeBlock'/'HorizontalRule'/'HTMLPreformatted' styleId -> a fenced code block / a thematic break / literal, unescaped text. A CodeBlock paragraph's own codeLanguage re-emits as the fence's info word, with any markdown-residue remainder (src/lower/lower.ts's splitInfoString) re-emitted verbatim after it -- one space between fence and info line, the spec's own canonical spacing, which also keeps an info word that begins with the fence character from fusing into the fence itself.
 //  - a division construct pair whose wrapped paragraphs carry the quote indent (this package's own dual carry) -> one '> ' blockquote wrapper per nesting level, with the blocks' own indentLeftPt suppressed so the fact is counted once. A paragraph outside any division still recovers its quote depth from indentLeftPt alone: 'Quote' styleId, or ANY of the four styleIds below while indentLeftPt is also set, -> '> ' repeated per recovered nesting level (Math.round(indentLeftPt / QUOTE_INDENT_PT)) prefixed to every line -- the cross-format path for a document this package never produced. A paragraph with indentLeftPt set but none of these five styleIds is a genuine cross-format ambiguity this package cannot resolve (is it a quote, or just some other format's own paragraph indentation?) -- MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED; the indent is dropped, the paragraph still renders.
-//  - ContentListMembership -> a bullet/ordered/task-list item, decoded from its own numId string (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK for a numId this package never minted itself, or a depth-only membership carrying no numId at all (both fall back to a plain, tight, non-task bullet, per that module's own documented cross-format contract). A membership's own itemId groups every block sharing it back into one item's marker line plus continuation blocks (renderListRegion below), alternating with any nested sub-list content in between -- MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED for the one shape that still cannot be re-attached this way: a construct (most commonly a blockquote's division pair) sitting directly inside the item renders as separate top-level content instead of staying nested inside it, since a construct's own extent is resolved independently of list-region grouping (groupConstructItems below).
+//  - ContentListMembership -> a bullet/ordered/task-list item, decoded from its own numId string (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK for a numId this package never minted itself, or a depth-only membership carrying no numId at all (both fall back to a plain, tight, non-task bullet, per that module's own documented cross-format contract). A membership's own itemId groups every block sharing it back into one item's marker line plus continuation blocks (renderListRegion below), alternating with any nested sub-list content in between and with any construct (most commonly a blockquote's division pair) directly interrupting the item's own contiguous run -- ListRegionItem generalises renderListRegion/collectListItem's own input to that heterogeneous shape (plain blocks and constructs alike) precisely so a construct sharing the running item's itemId stays nested inside it rather than fracturing out as separate top-level content.
 //  - ContentTable -> a GFM table, src/emit/table.ts.
 //  - ContentImageBlock -> a markdown image, src/emit/image.ts.
 //  - ContentRun[] -> inline text, src/emit/inline.ts.
@@ -16,6 +16,7 @@ import type {
   ContentConstructEnd,
   ContentConstructStart,
   ContentDocument,
+  ContentListMembership,
   ContentParagraph,
 } from "document-schema.js";
 import {
@@ -90,6 +91,8 @@ interface EmitContext extends TableEmitContext {
   reportedAbsentNumIdFallback: boolean;
   // How many blockquote-rendered division constructs currently enclose the block being rendered. Inside one, the '> ' prefixes come from the divisions themselves and a paragraph's own indentLeftPt is NOT also read back as quote depth -- the indent is the division's materialised formatting, counted once, not twice. Mutable for the same reason the counters are: it is render position, not configuration.
   divisionDepth: number;
+  // The itemId of the list item whose own construct is CURRENTLY being rendered, when there is one -- set by listRegionItemBody around a construct absorbed into a list region, restored to whatever it was straight after. src/lower/lower.ts's lowerBlockquote threads the enclosing item's OWN membership straight through every paragraph a quote directly wraps (the same context-carrying dual carry the quote indent itself uses), so a paragraph inside the quote sharing this exact itemId is NOT a list item of its own -- it is ordinary prose that merely inherited the enclosing item's membership so renderItems' own region-collection scan could recognise the construct as belonging to that item in the first place (see constructCarriesListItemId). Rendering it as a fresh marker line would invent a bullet the source never had; renderItems checks this field to render such a paragraph as plain content instead. A GENUINE nested list directly inside the same quote (its own freshly-minted numId/itemId, independent of anything outside) never matches this field and renders with its own marker exactly as before.
+  enclosingItemId: string | undefined;
 }
 
 // setext's own grammar (spec 0.31.2, "Setext headings") only distinguishes two levels (a run of '=' for level 1, of '-' for level 2) -- there is no setext spelling for level 3 and deeper, so headingStyle: 'setext' still falls back to ATX there.
@@ -316,7 +319,7 @@ function renderTopLevelBlock(
   }
 }
 
-// --- List rendering: every ContentParagraph carrying .list is its own list item (see src/lower/lower.ts's own top-of-file note on why ContentListMembership cannot distinguish a continuation paragraph from a fresh sibling item -- this package resolves that ambiguity the same way on both sides, consistently). ---
+// --- List rendering: every ContentParagraph carrying .list is its own list item (see src/lower/lower.ts's own top-of-file note on why ContentListMembership cannot distinguish a continuation paragraph from a fresh sibling item -- this package resolves that ambiguity the same way on both sides, consistently). A construct (most commonly a blockquote's division pair) sitting directly inside an item shares that item's own membership on its own wrapped paragraphs -- src/lower/lower.ts's lowerBlockquote threads the enclosing BlockLowerContext.list straight through a quote's own children -- so ListRegionItem below generalises every function in this section from plain ContentParagraph blocks to that heterogeneous shape (a plain list-tagged paragraph, or a construct carrying one), letting a construct stay nested inside the item it interrupts rather than fracturing it into separate top-level content (renderItems' own region-collection scan is where that heterogeneous run is actually assembled, via constructCarriesListItemId below). ---
 
 // numId undefined is a depth-only ContentListMembership -- document-schema.js 3.3.0+ makes numId optional for sources that carry a level but no numbering identity of their own (OOXML drawing paragraphs' a:pPr/@lvl being the motivating case) -- and it lands in the same documented cross-format fallback as a foreign numId string: with no marker type, task-ness, or loose-ness to recover, the item renders as an ordinary, tight, non-task bullet at its own level.
 function listInfoFor(
@@ -365,26 +368,44 @@ function stripCheckboxRun(item: ContentParagraph): ContentParagraph {
   return { ...item, runs };
 }
 
-// One item's first-block preparation: the checkbox text its marker line carries, and whether that block's own leading run is a legacy checkbox glyph that must be stripped from the body. The membership's own checked field is the current spelling and needs no task-flagged numId behind it; the glyph sniff is gated on the numId's task flag exactly as it always was, so an ordinary item whose text happens to begin with a ballot-box glyph is never misread as a checkbox.
+// One item of a list region once its own list identity is known: either a plain list-tagged paragraph, or a construct (a division, almost always) directly interrupting the item -- see the region-collection scan in renderItems for how a construct's own membership is resolved (always inherited from the paragraph it interrupts, via constructCarriesListItemId, never independently re-derived from the construct's own subtree). `list` is carried directly on every variant rather than re-read from `block`/`item` on each access, since a construct has no membership of its own to re-read in the first place.
+type ListRegionItem =
+  | {
+      readonly kind: "paragraph";
+      readonly block: ContentParagraph;
+      readonly list: ContentListMembership;
+    }
+  | {
+      readonly kind: "construct";
+      readonly item: ConstructItem;
+      readonly list: ContentListMembership;
+    };
+
+// Recovers the plain EmitItem shape underneath a ListRegionItem, for the two helpers below (emitItemCanInterrupt/lastStyleIdOf) that already know how to recurse through a construct's own children and have no need for the list identity ListRegionItem adds on top.
+function toEmitItem(item: ListRegionItem): EmitItem {
+  return item.kind === "paragraph" ? { block: item.block } : item.item;
+}
+
+// One item's first-block preparation: the checkbox text its marker line carries, and whether that block's own leading run is a legacy checkbox glyph that must be stripped from the body. The membership's own checked field is the current spelling and needs no task-flagged numId behind it; the glyph sniff is gated on the numId's task flag AND on the first block actually being a paragraph (a construct has no runs of its own to sniff a glyph from), so an ordinary item whose text happens to begin with a ballot-box glyph is never misread as a checkbox.
 interface FirstBlockCheckbox {
   readonly checkboxText: string;
   readonly stripGlyph: boolean;
 }
 
 function firstBlockCheckbox(
-  first: ContentParagraph,
+  first: ListRegionItem,
   taskNumId: boolean,
 ): FirstBlockCheckbox {
-  if (first.list?.checked !== undefined) {
+  if (first.list.checked !== undefined) {
     return {
       checkboxText: first.list.checked ? "[x] " : "[ ] ",
       stripGlyph: false,
     };
   }
-  if (!taskNumId) {
+  if (!taskNumId || first.kind !== "paragraph") {
     return { checkboxText: "", stripGlyph: false };
   }
-  const leading = first.runs[0]?.text ?? "";
+  const leading = first.block.runs[0]?.text ?? "";
   if (leading.startsWith(`${TASK_CHECKBOX_CHECKED} `)) {
     return { checkboxText: "[x] ", stripGlyph: true };
   }
@@ -424,20 +445,20 @@ interface ListItemPart {
   readonly text: string;
 }
 
-// One item's own contiguous run of same-level, same-itemId blocks (kind 'own'), or the deeper-level blocks of a nested sub-list sitting between two such runs (kind 'nested') -- see collectListItem below for why an item can carry more than one 'own' run.
+// One item's own contiguous run of same-level, same-itemId blocks (kind 'own') -- a plain paragraph, or a construct renderItems' own region-collection scan already verified shares this exact itemId -- or the deeper-level blocks of a nested sub-list sitting between two such runs (kind 'nested') -- see collectListItem below for why an item can carry more than one 'own' run.
 interface ItemOwnSegment {
   readonly kind: "own";
-  readonly blocks: readonly ContentParagraph[];
+  readonly blocks: readonly ListRegionItem[];
 }
 interface ItemNestedSegment {
   readonly kind: "nested";
-  readonly blocks: readonly ContentParagraph[];
+  readonly blocks: readonly ListRegionItem[];
 }
 type ItemSegment = ItemOwnSegment | ItemNestedSegment;
 
-// The contiguous run, starting at `from`, of blocks sharing this exact level and itemId. collectListItem's own leading call is the ONLY call site where `items[from]` is guaranteed to already match (it reads level/itemId from items[from] itself before calling), so there the result is always at least `from + 1`; the resume call inside its loop has no such guarantee -- `from` sits right after a nested sub-list run, and the next block there may belong to a different item, a different level, or not exist at all -- so a result equal to `from` (no match at all) is a real, expected outcome that caller explicitly checks for rather than something this function rules out.
+// The contiguous run, starting at `from`, of items sharing this exact level and itemId. collectListItem's own leading call is the ONLY call site where `items[from]` is guaranteed to already match (it reads level/itemId from items[from] itself before calling), so there the result is always at least `from + 1`; the resume call inside its loop has no such guarantee -- `from` sits right after a nested sub-list run, and the next item there may belong to a different item, a different level, or not exist at all -- so a result equal to `from` (no match at all) is a real, expected outcome that caller explicitly checks for rather than something this function rules out.
 function consumeSameItemRun(
-  items: readonly ContentParagraph[],
+  items: readonly ListRegionItem[],
   from: number,
   level: number,
   itemId: string,
@@ -445,7 +466,7 @@ function consumeSameItemRun(
   let end = from;
   while (end < items.length) {
     const candidate = items[end];
-    if (candidate?.list?.level !== level || candidate.list.itemId !== itemId) {
+    if (candidate?.list.level !== level || candidate.list.itemId !== itemId) {
       break;
     }
     end += 1;
@@ -453,9 +474,9 @@ function consumeSameItemRun(
   return end;
 }
 
-// Collects one list item's FULL block run starting at `start`: its own leading same-level/same-itemId blocks, then any nested (deeper-level) sub-list content, then -- when the item's own blocks resume immediately after that nested content, sharing the same itemId -- another own-level run, alternating for as long as the pattern repeats. This is the write-side shape CommonMark spec 0.31.2 example 325 names directly ("* foo\n  * bar\n\n  baz"): a nested sub-list can sit in the MIDDLE of one item's own blocks, not only after all of them, and only itemId (never numId+level alone) can tell that "baz" belongs to the same item as "foo" rather than starting a new sibling. A membership with no itemId at all never resumes: its own segment is always exactly the one block at `start`, exactly as this writer always treated a cross-format item.
+// Collects one list item's FULL run starting at `start`: its own leading same-level/same-itemId run (plain blocks and any directly-interrupting construct alike), then any nested (deeper-level) sub-list content, then -- when the item's own blocks resume immediately after that nested content, sharing the same itemId -- another own-level run, alternating for as long as the pattern repeats. This is the write-side shape CommonMark spec 0.31.2 example 325 names directly ("* foo\n  * bar\n\n  baz"): a nested sub-list can sit in the MIDDLE of one item's own blocks, not only after all of them, and only itemId (never numId+level alone) can tell that "baz" belongs to the same item as "foo" rather than starting a new sibling. A membership with no itemId at all never resumes: its own segment is always exactly the one item at `start`, exactly as this writer always treated a cross-format item.
 function collectListItem(
-  items: readonly ContentParagraph[],
+  items: readonly ListRegionItem[],
   start: number,
   level: number,
   itemId: string | undefined,
@@ -473,7 +494,7 @@ function collectListItem(
   for (;;) {
     let nestedEnd = index;
     while (nestedEnd < items.length) {
-      const candidateLevel = items[nestedEnd]?.list?.level;
+      const candidateLevel = items[nestedEnd]?.list.level;
       if (candidateLevel === undefined || candidateLevel <= level) {
         break;
       }
@@ -499,9 +520,62 @@ function collectListItem(
   return { segments, next: index };
 }
 
-// Whether a paragraph immediately following `previousStyleId`, with no blank line between them, risks CommonMark's own lazy-continuation rule silently absorbing it into the PRECEDING block instead of starting a fresh one. HTML_PREFORMATTED_STYLE_ID as `previousStyleId` is checked unconditionally, first, regardless of `next`: an open HTML block (CommonMark start conditions 1-7) is not a paragraph at all, and canInterruptOpenParagraph answers a different question -- "does this construct interrupt an open PARAGRAPH" -- that has no bearing on what interrupts an open HTML block, which several of those seven conditions close only at a blank line (and, per terminatesCleanly's own note, this package cannot tell which of the seven conditions it produced, so it always assumes the least permissive). Past that, "can this ever go wrong" and "is this construct itself safe to follow with" are different properties (see terminatesCleanly and canInterruptOpenParagraph above), and a blank line is required only when BOTH answers are unfavourable: terminatesCleanly(previousStyleId) means there is no open paragraph left for anything to absorb into, regardless of what `next` is; canInterruptOpenParagraph(next.styleId, context) means `next` starts fresh unconditionally when `previousStyleId` IS an open paragraph (never an open HTML block, handled above). `previousStyleId` for a block immediately following a nested sub-list is that sub-list's own LAST rendered paragraph's styleId (renderListRegion below passes it through rather than treating "just finished a nested list" as blanket-safe) -- a plain paragraph ending a nested item is exactly as open as any other, and a following line at the outer item's own continuation indent is CommonMark's own lazy continuation of THAT paragraph, not something the outer item's markers make safe (spec 0.31.2 example 325 is this exact shape, and is why it requires the blank line it has). Two blocks that are BOTH plain (or one/both Quote-styled) are genuinely ambiguous without a blank line: for two plain paragraphs specifically, src/lower/lower.ts's own reader can only ever produce that pair when a real source blank line separated them in the first place (two adjacent non-blank plain-text lines are read as ONE multi-line paragraph, never two), so re-inserting the blank line here is not merely safe, it is what the source actually had.
+// Whether an EmitItem's own rendered spelling unconditionally interrupts an open paragraph when it immediately follows one, with no blank line between them -- generalises canInterruptOpenParagraph (styleId-keyed, paragraph-only) to a construct too. A materialised division's '> ' marker interrupts regardless of what it wraps (CommonMark spec 0.31.2's own list of blocks that can interrupt a paragraph includes block quotes -- confirmed directly by spec example 245, "foo\n> bar\n", where "> bar" opens a fresh blockquote with no blank line needed). A construct rendering TRANSPARENTLY (no marker of its own to interrupt with -- see isMaterialisedDivision) is not itself a boundary at all, so the question passes straight through, recursively, to its own first child.
+function emitItemCanInterrupt(item: EmitItem, context: EmitContext): boolean {
+  if (!isConstructItem(item)) {
+    return item.block.kind === "paragraph"
+      ? canInterruptOpenParagraph(item.block.styleId, context)
+      : true;
+  }
+  if (isMaterialisedDivision(item)) {
+    return true;
+  }
+  const first = item.children[0];
+  return first === undefined ? true : emitItemCanInterrupt(first, context);
+}
+
+// The styleId of the last paragraph an EmitItem's own rendering actually ends on, looking straight through any construct wrapper (marked or transparent) to find it. A construct's own '> ' marker (or the lack of one) changes whether IT interrupts whatever follows (emitItemCanInterrupt above), but not whether what it wraps leaves an open paragraph behind for CommonMark's own lazy-continuation rule to absorb a following unmarked line into -- that risk is a property of the innermost content alone, at any nesting depth, since laziness itself cascades through nested containers unchanged. Feeding this straight into the existing terminatesCleanly/requiresBlankLineBefore therefore needs no change to either for a construct to be handled exactly as safely, or unsafely, as a bare paragraph already was.
+function lastStyleIdOf(item: EmitItem): string | undefined {
+  if (isConstructItem(item)) {
+    const last = item.children[item.children.length - 1];
+    return last === undefined ? undefined : lastStyleIdOf(last);
+  }
+  return item.block.kind === "paragraph" ? item.block.styleId : undefined;
+}
+
+function regionItemCanInterrupt(
+  item: ListRegionItem,
+  context: EmitContext,
+): boolean {
+  return emitItemCanInterrupt(toEmitItem(item), context);
+}
+
+function lastStyleIdOfRegionItem(item: ListRegionItem): string | undefined {
+  return lastStyleIdOf(toEmitItem(item));
+}
+
+// One list-region item's own rendered body, with no marker/indent applied yet. A plain paragraph renders through renderParagraphBody exactly as before (optionally with its checkbox glyph stripped); a construct renders through renderConstruct -- the SAME function renderItems reaches for a construct that is NOT part of any list region, so a construct's own markdown spelling never diverges depending on whether it happens to sit inside a list item, EXCEPT for context.enclosingItemId, set here for the duration of that one call: it is what lets renderItems' own recursive walk over the construct's children tell inherited pass-through membership (this exact item, see EmitContext's own field comment) apart from a genuinely fresh nested list.
+function listRegionItemBody(
+  item: ListRegionItem,
+  context: EmitContext,
+  stripGlyph: boolean,
+): string {
+  if (item.kind === "paragraph") {
+    return renderParagraphBody(
+      stripGlyph ? stripCheckboxRun(item.block) : item.block,
+      context,
+    );
+  }
+  const previousEnclosingItemId = context.enclosingItemId;
+  context.enclosingItemId = item.list.itemId;
+  const body = renderConstruct(item.item, context);
+  context.enclosingItemId = previousEnclosingItemId;
+  return body;
+}
+
+// Whether a list-region item immediately following `previousStyleId`, with no blank line between them, risks CommonMark's own lazy-continuation rule silently absorbing it into the PRECEDING block instead of starting a fresh one. HTML_PREFORMATTED_STYLE_ID as `previousStyleId` is checked unconditionally, first, regardless of `next`: an open HTML block (CommonMark start conditions 1-7) is not a paragraph at all, and regionItemCanInterrupt answers a different question -- "does this item interrupt an open PARAGRAPH" -- that has no bearing on what interrupts an open HTML block, which several of those seven conditions close only at a blank line (and, per terminatesCleanly's own note, this package cannot tell which of the seven conditions it produced, so it always assumes the least permissive). Past that, "can this ever go wrong" and "is this item itself safe to follow with" are different properties (see terminatesCleanly and regionItemCanInterrupt above), and a blank line is required only when BOTH answers are unfavourable: terminatesCleanly(previousStyleId) means there is no open paragraph left for anything to absorb into, regardless of what `next` is; regionItemCanInterrupt(next, context) means `next` starts fresh unconditionally when `previousStyleId` IS an open paragraph (never an open HTML block, handled above) -- true unconditionally for a materialised construct (a '>' marker always interrupts), and deferring to canInterruptOpenParagraph for a plain paragraph exactly as before. `previousStyleId` for an item immediately following a nested sub-list, or a construct, is that run's own LAST rendered paragraph's styleId found by looking straight through it (lastStyleIdOfRegionItem) rather than treating "just finished a nested list" or "just finished a construct" as blanket-safe -- a plain paragraph ending either is exactly as open as any other, and a following line at the outer item's own continuation indent is CommonMark's own lazy continuation of THAT paragraph, not something the outer item's markers (or the construct's own marker) make safe (spec 0.31.2 example 325 is this exact shape for a nested sub-list, and is why it requires the blank line it has). Two blocks that are BOTH plain (or one/both Quote-styled) are genuinely ambiguous without a blank line: for two plain paragraphs specifically, src/lower/lower.ts's own reader can only ever produce that pair when a real source blank line separated them in the first place (two adjacent non-blank plain-text lines are read as ONE multi-line paragraph, never two), so re-inserting the blank line here is not merely safe, it is what the source actually had.
 function requiresBlankLineBefore(
-  next: ContentParagraph,
+  next: ListRegionItem,
   previousStyleId: string | undefined,
   context: EmitContext,
 ): boolean {
@@ -510,20 +584,20 @@ function requiresBlankLineBefore(
   }
   return (
     !terminatesCleanly(previousStyleId) &&
-    !canInterruptOpenParagraph(next.styleId, context)
+    !regionItemCanInterrupt(next, context)
   );
 }
 
-// Renders one contiguous, flat run of .list-carrying paragraphs -- possibly spanning several sibling top-level lists back to back, and arbitrarily nested sub-lists (a paragraph whose own level is deeper than its predecessor's is that predecessor's own nested list content, recursed into here via collectListItem's 'nested' segments). One ITEM is every block sharing one itemId -- the write-side inverse of src/lower/lower.ts's minted item identity -- so a multi-block item renders one marker line with every later block of its own continued on the continuation indent, and any nested sub-list content indented in place between them. A membership with no itemId at all is the cross-format shape: each paragraph is its own item, exactly as this writer always treated them. Spacing between two blocks of the SAME item is a blank line whenever requiresBlankLineBefore says one is structurally required (see that function), and OTHERWISE only when the item's own numId was minted loose (info.loose) -- never unconditionally: forcing a blank line onto every continuation would silently turn a tight list loose on the way out (spec 0.31.2 example 300's own regression, a heading directly followed by a plain paragraph with no blank line between them in a tight list). Loose/tight spacing between two SIBLING items sharing the same numId is read from that same numId's own `loose` flag; a boundary between two DIFFERENT numIds always gets a blank line, matching how two genuinely separate lists always render with visual separation.
+// Renders one contiguous, flat run of list-region items -- plain .list-carrying paragraphs, and any construct directly interrupting one of them -- possibly spanning several sibling top-level lists back to back, and arbitrarily nested sub-lists (an item whose own level is deeper than its predecessor's is that predecessor's own nested list content, recursed into here via collectListItem's 'nested' segments). One ITEM is every block sharing one itemId -- the write-side inverse of src/lower/lower.ts's minted item identity -- so a multi-block item renders one marker line with every later block of its own continued on the continuation indent, any nested sub-list content indented in place between them, and any interrupting construct rendered (and indented) exactly where it falls in that same run. A membership with no itemId at all is the cross-format shape: each paragraph is its own item, exactly as this writer always treated them. Spacing between two items of the SAME item run is a blank line whenever requiresBlankLineBefore says one is structurally required (see that function), and OTHERWISE only when the item's own numId was minted loose (info.loose) -- never unconditionally: forcing a blank line onto every continuation would silently turn a tight list loose on the way out (spec 0.31.2 example 300's own regression, a heading directly followed by a plain paragraph with no blank line between them in a tight list). Loose/tight spacing between two SIBLING items sharing the same numId is read from that same numId's own `loose` flag; a boundary between two DIFFERENT numIds always gets a blank line, matching how two genuinely separate lists always render with visual separation.
 function renderListRegion(
-  items: readonly ContentParagraph[],
+  items: readonly ListRegionItem[],
   context: EmitContext,
 ): string {
   const parts: ListItemPart[] = [];
   let index = 0;
   while (index < items.length) {
     const item = items[index];
-    if (item?.list === undefined) {
+    if (item === undefined) {
       break;
     }
     const { numId, level, itemId } = item.list;
@@ -552,15 +626,20 @@ function renderListRegion(
           .map((line) => (line.length === 0 ? line : `${indent}${line}`))
           .join("\n");
         text += `\n${nested}`;
-        // segment.blocks is the flat, in-order slice of every deeper-level paragraph this nested run rendered, regardless of how many further nesting levels it recursed through -- rendering always processes that slice front to back, so its LAST element is exactly the last content line the nested call above actually produced. Its own styleId, not blanket "just finished a nested list, always safe", is what requiresBlankLineBefore needs next.
-        previousStyleId = segment.blocks[segment.blocks.length - 1]?.styleId;
+        // segment.blocks is the flat, in-order slice of every deeper-level item this nested run rendered, regardless of how many further nesting levels it recursed through -- rendering always processes that slice front to back, so its LAST element is exactly the last content this nested call above actually produced. Looking straight through it to the real last styleId (lastStyleIdOfRegionItem), not blanket "just finished a nested list, always safe", is what requiresBlankLineBefore needs next.
+        const lastNested = segment.blocks[segment.blocks.length - 1];
+        previousStyleId =
+          lastNested === undefined
+            ? undefined
+            : lastStyleIdOfRegionItem(lastNested);
         continue;
       }
       for (const block of segment.blocks) {
         if (!renderedFirstLine) {
-          const bodyLines = renderParagraphBody(
-            stripGlyph ? stripCheckboxRun(block) : block,
+          const bodyLines = listRegionItemBody(
+            block,
             context,
+            stripGlyph,
           ).split("\n");
           const [firstLine = "", ...restLines] = bodyLines;
           text = [
@@ -568,17 +647,17 @@ function renderListRegion(
             ...restLines.map((line) => `${indent}${line}`),
           ].join("\n");
           renderedFirstLine = true;
-          previousStyleId = block.styleId;
+          previousStyleId = lastStyleIdOfRegionItem(block);
           continue;
         }
-        const rendered = renderParagraphBody(block, context)
+        const rendered = listRegionItemBody(block, context, false)
           .split("\n")
           .map((line) => (line.length === 0 ? line : `${indent}${line}`))
           .join("\n");
         const blank =
           loose || requiresBlankLineBefore(block, previousStyleId, context);
         text += blank ? `\n\n${rendered}` : `\n${rendered}`;
-        previousStyleId = block.styleId;
+        previousStyleId = lastStyleIdOfRegionItem(block);
       }
     }
 
@@ -614,6 +693,23 @@ interface ConstructItem {
 
 function isConstructItem(item: EmitItem): item is ConstructItem {
   return "descriptor" in item;
+}
+
+// Whether a construct's own rendered spelling opens with a self-delimiting marker on every line ('> ' for a division, per renderConstruct below) rather than rendering transparently as its own children's content with nothing distinguishing it -- see renderConstruct's own comment for why the blockquote spelling is gated on the wrapped paragraphs' own indentLeftPt dual carry rather than on descriptor.kind alone (a division whose paragraphs carry no such indent is a FOREIGN one, and renders transparently). This same test doubles as the write-side "does this construct's own marker unconditionally interrupt an open paragraph" signal renderListRegion below needs (a materialised division's '> ' does, per CommonMark spec 0.31.2's own list of blocks that can interrupt a paragraph; a transparent construct instead defers to whatever its own first child renders as).
+function isMaterialisedDivision(item: ConstructItem): boolean {
+  return (
+    item.descriptor.kind === "division" &&
+    item.children.every((child) => {
+      if (isConstructItem(child)) {
+        return true;
+      }
+      return (
+        child.block.kind !== "paragraph" ||
+        (child.block.indentLeftPt !== undefined &&
+          child.block.indentLeftPt >= QUOTE_INDENT_PT)
+      );
+    })
+  );
 }
 
 // Bracket matching, per document-schema.js's own contract: a constructEnd closes the nearest preceding still-open constructStart in the SAME block list, and the blocks between them are that construct's extent. emitMarkdown validates the whole list's balance up front (findConstructMarkerImbalance -- the one shared definition of that check, which this writer, every sibling codec, and documents.js's decompose all have to agree on exactly), so by the time this runs a closing marker for every open one is known to exist.
@@ -678,18 +774,8 @@ function renderConstruct(item: ConstructItem, context: EmitContext): string {
     return body;
   }
   if (descriptor.kind === "division") {
-    // The blockquote spelling is gated on this package's own dual carry, not on the descriptor alone: a division whose wrapped paragraphs carry the quote indent is a blockquote this package's own read side minted (pair for the boundary, indent for the materialised formatting -- see src/lower/lower.ts's lowerBlockquote), and it renders as '> ' on every line with a bare '>' holding blank lines open. A division whose paragraphs carry no such indent is a FOREIGN one -- an ODF text:section, a tagged-PDF /Sect -- and renders transparently below: a named section is not a markdown blockquote, and rendering it as one would invent a construct the source never had. Non-paragraph children (a table, an image) carry no indent either way and do not vote; nested construct children defer to their own gate.
-    const materialised = item.children.every((child) => {
-      if (isConstructItem(child)) {
-        return true;
-      }
-      return (
-        child.block.kind !== "paragraph" ||
-        (child.block.indentLeftPt !== undefined &&
-          child.block.indentLeftPt >= QUOTE_INDENT_PT)
-      );
-    });
-    if (materialised) {
+    // The blockquote spelling is gated on this package's own dual carry, not on the descriptor alone -- see isMaterialisedDivision above for exactly what that gate checks and why. A division whose paragraphs carry no such indent is a FOREIGN one -- an ODF text:section, a tagged-PDF /Sect -- and renders transparently below: a named section is not a markdown blockquote, and rendering it as one would invent a construct the source never had.
+    if (isMaterialisedDivision(item)) {
       context.divisionDepth += 1;
       const body = renderItems(item.children, context);
       context.divisionDepth -= 1;
@@ -731,7 +817,7 @@ function renderConstruct(item: ConstructItem, context: EmitContext): string {
   return body;
 }
 
-// Whether a construct's own recursive extent contains a plain block carrying the given list itemId -- the write-side signal that a list item's own contiguous block run has been interrupted by a construct (a blockquote, most commonly) this writer cannot re-attach to that item: renderListRegion's own region-collection loop below stops at any construct regardless of what it contains, since a construct's extent is resolved independently of list-region grouping (groupConstructItems), so the construct and anything of the same item after it render as separate top-level content instead of staying nested inside the interrupted item. See MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED.
+// Whether a construct's own recursive extent contains a plain block carrying the given list itemId -- the write-side test renderItems' own region-collection loop below uses to decide whether a construct immediately following a list-region run genuinely belongs to the item it interrupts (absorbed into the SAME ListRegionItem run, staying nested inside that item on write) or is a genuinely separate, unrelated construct (left to render as ordinary top-level content). Matching is scoped to the SPECIFIC itemId of the item currently open, not "any list identity found inside" -- a construct's own subtree can legitimately contain an UNRELATED list of its own (its own fresh numId/itemId, e.g. a blockquote directly inside a list item that itself wraps a completely separate bullet list), and only an exact itemId match tells the two apart.
 function constructCarriesListItemId(
   item: ConstructItem,
   itemId: string,
@@ -741,6 +827,14 @@ function constructCarriesListItemId(
       ? constructCarriesListItemId(child, itemId)
       : child.block.kind === "paragraph" && child.block.list?.itemId === itemId,
   );
+}
+
+// Whether a paragraph's own list membership is INHERITED pass-through rather than a list identity of its own -- true exactly when its itemId matches context.enclosingItemId (see that field's own comment): the paragraph sits inside a construct whose extent was absorbed into an already-open list item purely so that item could be recognised as such, not because the paragraph is itself a fresh list item. renderItems checks this before treating a .list-carrying paragraph as the start (or continuation) of a marker-bearing list region -- rendering one as a marker line would invent a bullet the source never had.
+function isInheritedListMembership(
+  list: ContentListMembership,
+  context: EmitContext,
+): boolean {
+  return list.itemId !== undefined && list.itemId === context.enclosingItemId;
 }
 
 // A consecutive run of quoted top-level blocks at the SAME depth is genuinely ambiguous once lowered -- ContentParagraph.indentLeftPt has no field distinguishing "one blockquote containing several blocks" from "several independent blockquotes back to back at the same depth" (document-schema.js carries no ContentBlockquote container of its own; src/lower/lower.ts flattens both shapes identically). Joining every top-level block with a bare blank line, as below, resolves that ambiguity by always choosing the "independent blockquotes" reading -- the correctness-preserving default, since re-joining two ADJACENT SAME-depth quoted blocks into one blockquote (tried and reverted here) fixed no example this package's own soft-line-break handling (src/lower/inline.ts's own softBreak -> ' ' mapping, see src/test-support/conformance-exclusions.ts) did not already fail on for an unrelated reason, while genuinely breaking two real cases (two independent same-depth blockquotes with nothing between them) that this simpler join gets right.
@@ -760,34 +854,49 @@ function renderItems(items: readonly EmitItem[], context: EmitContext): string {
       index += 1;
       continue;
     }
-    if (item.block.kind === "paragraph" && item.block.list !== undefined) {
-      const region: ContentParagraph[] = [];
+    if (
+      item.block.kind === "paragraph" &&
+      item.block.list !== undefined &&
+      !isInheritedListMembership(item.block.list, context)
+    ) {
+      // The region can span several items (a plain paragraph is always absorbed unconditionally -- renderListRegion's own collectListItem is what tells a continuation of the SAME item apart from a fresh sibling), so `runningList` tracks whichever item's own membership is "open" right now -- always the most recently absorbed PLAIN paragraph's own membership, which is exactly what a following construct needs to match to belong to that same item rather than to some earlier, already-closed one.
+      const region: ListRegionItem[] = [];
       let end = index;
-      for (
-        let candidate = items[end];
-        candidate !== undefined &&
-        !isConstructItem(candidate) &&
-        candidate.block.kind === "paragraph" &&
-        candidate.block.list !== undefined;
-        candidate = items[end]
-      ) {
-        region.push(candidate.block);
-        end += 1;
-      }
-      const interrupting = items[end];
-      const interruptedItemId = region[region.length - 1]?.list?.itemId;
-      if (
-        interruptedItemId !== undefined &&
-        interrupting !== undefined &&
-        isConstructItem(interrupting) &&
-        constructCarriesListItemId(interrupting, interruptedItemId)
-      ) {
-        context.sink({
-          code: MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED,
-          severity: "info",
-          message:
-            "a construct (most commonly a blockquote) directly inside a list item interrupts that item's own contiguous run of blocks once rendered back to markdown -- the construct, and any further blocks of the same item after it, render as separate top-level content rather than staying nested inside the interrupted item",
+      let runningList: ContentListMembership | undefined;
+      for (;;) {
+        const candidate = items[end];
+        if (candidate === undefined) {
+          break;
+        }
+        if (isConstructItem(candidate)) {
+          if (
+            runningList?.itemId === undefined ||
+            !constructCarriesListItemId(candidate, runningList.itemId)
+          ) {
+            break;
+          }
+          region.push({
+            kind: "construct",
+            item: candidate,
+            list: runningList,
+          });
+          end += 1;
+          continue;
+        }
+        if (
+          candidate.block.kind !== "paragraph" ||
+          candidate.block.list === undefined ||
+          isInheritedListMembership(candidate.block.list, context)
+        ) {
+          break;
+        }
+        runningList = candidate.block.list;
+        region.push({
+          kind: "paragraph",
+          block: candidate.block,
+          list: runningList,
         });
+        end += 1;
       }
       parts.push(renderListRegion(region, context));
       index = end;
@@ -866,6 +975,7 @@ export function emitMarkdown(
     reportedFallbackNumIds: new Set(),
     reportedAbsentNumIdFallback: false,
     divisionDepth: 0,
+    enclosingItemId: undefined,
   };
 
   const sections = document.sections.map((section) =>
