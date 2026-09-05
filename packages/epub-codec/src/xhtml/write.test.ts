@@ -494,6 +494,80 @@ describe("writeXhtmlBody", () => {
     expect(xml).toContain(".");
   });
 
+  // ExaDev/documents.js#994's round-12 regression, one input shape past the same-startRun collision immediately above: two footnote extents that genuinely CROSS -- fn2's own startRun (1) falls strictly INSIDE fn1's already-winning range (runs 0-2), rather than sharing fn1's exact startRun. Because a winning range extent advances the write walk straight from its own startRun to its own endRun, index 1 is never visited at all, so the previous fix (which only looked for a collision among extents sharing the SAME startRun) never saw fn2 and dropped it with no diagnostic whatsoever -- the exact silent-drop class this whole diagnostic exists to close, just reached via a different input shape. document-schema.js's own RunConstructExtentSchema comment names this precise shape ("two entries may cross freely") as real, representable input.
+  it("reports CONSTRUCT_UNREPRESENTED and preserves all run text when two footnote extents genuinely cross", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [
+          { text: "See" },
+          { text: "this" },
+          { text: "footnote" },
+          { text: "text" },
+        ],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 0,
+            endRun: 2,
+          },
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn2" },
+            startRun: 1,
+            endRun: 3,
+          },
+        ],
+      },
+    ];
+    const { xml, diagnostics } = writeWithSink(blocks, () => undefined);
+    expect(
+      diagnostics.some(
+        (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      ),
+    ).toBe(true);
+    // fn1 wins and wraps the first two runs; fn2 is unrepresented, but every run it would have covered still appears -- "this" wrapped inside fn1's own anchor, "footnote" written unwrapped past fn1's endRun.
+    expect(xml).toContain('href="#fn1"');
+    expect(xml).not.toContain('href="#fn2"');
+    expect(xml).toContain("See");
+    expect(xml).toContain("this");
+    expect(xml).toContain("footnote");
+    expect(xml).toContain("text");
+  });
+
+  // The point-anchor twin of the crossing-ranges case immediately above: fn2 is a POINT anchor (startRun === endRun) whose own boundary sits strictly inside fn1's already-winning range, rather than a second range extent. A point anchor wraps zero runs of its own and never conflicts with a sibling point anchor at the same boundary -- but here it never gets the chance to be compared against anything, since the write walk skips straight over index 1 (fn1's own interior) without ever checking it, so fn2's own startRun===1 is never matched. Before this round's fix, this silently deleted nothing (a point anchor wraps no run text), but the anchor markup itself -- and the footnote body it addresses -- simply vanished from the output with no diagnostic.
+  it("reports CONSTRUCT_UNREPRESENTED when a point-anchor footnote reference sits strictly inside another extent's own winning range", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "See" }, { text: "this" }, { text: "note" }],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 0,
+            endRun: 3,
+          },
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn2" },
+            startRun: 1,
+            endRun: 1,
+          },
+        ],
+      },
+    ];
+    const { xml, diagnostics } = writeWithSink(blocks, () => undefined);
+    expect(
+      diagnostics.some(
+        (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      ),
+    ).toBe(true);
+    // fn1 wins and wraps every run; fn2's own anchor is not emitted, but no run text is lost -- a point anchor never wraps any of its own.
+    expect(xml).toContain('href="#fn1"');
+    expect(xml).not.toContain('href="#fn2"');
+    expect(xml).toContain("See");
+    expect(xml).toContain("this");
+    expect(xml).toContain("note");
+  });
+
   it("writes an image using the registered manifest href", () => {
     const xml = write([
       {
