@@ -823,6 +823,37 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // `value` names the field's CURRENT scalar value and \ffdeftext names its DEFAULT/reset text -- a genuinely different fact this codec's own reader never restores back onto `value` (see "writes a plainText contentControl's value into \ffdeftext but does not read it back as `value`" in the "round trip through this package's own reader" describe block below), so writing `value` into \ffdeftext is reported through the diagnostic sink for consistency with every other cross-field mis-slot this function reports, even though the string itself is written rather than dropped.
+  it("reports a plainText contentControl's value through the diagnostic sink when it is written into \\ffdeftext", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "Lorem ipsum." }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "plainText",
+                  tag: "Text1",
+                  value: "Jane Doe",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).toContain("{\\*\\ffdeftext Jane Doe}");
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
   it("writes no \\ffdeftext at all for a plainText contentControl with no recorded value", () => {
     const out = write(
       wordprocessing([
