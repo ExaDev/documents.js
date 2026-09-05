@@ -1,7 +1,5 @@
-import type { RawImage } from "./image/png-decode";
-import { encodePng } from "./image/png-encode";
-import type { JpegInfo } from "./image/jpeg-info";
-import { readJpegInfo } from "./image/jpeg-info";
+import type { JpegInfo, RawImage } from "byte-codec";
+import { encodePng, readJpegInfo } from "byte-codec";
 import type { Jpeg2000Image } from "./image/jpeg2000";
 import { decodeJpeg2000 } from "./image/jpeg2000";
 import type { PdfDiagnosticSink } from "./diagnostics";
@@ -10,7 +8,7 @@ import type { PdfObjectResolver } from "./interpret";
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asBool, asName, asNumber, dictGet } from "./objects";
 
-// Turns an Image XObject (or an inline image's dict+data) into bytes ready to store as a LayoutImageAsset. A DCTDecode (JPEG) image passes through completely undecoded -- its compressed bytes ARE the deliverable, exactly mirroring the write path's own lossless JPEG passthrough. Everything else is decoded to raw samples and re-encoded as PNG via image/png-encode.ts, since LayoutImageAsset only ever stores 'png' or 'jpeg'.
+// Turns an Image XObject (or an inline image's dict+data) into bytes ready to store as a LayoutImageAsset. A DCTDecode (JPEG) image passes through completely undecoded -- its compressed bytes ARE the deliverable, exactly mirroring the write path's own lossless JPEG passthrough. Everything else is decoded to raw samples and re-encoded as PNG via byte-codec's own encodePng, since LayoutImageAsset only ever stores 'png' or 'jpeg' -- byte-codec's encodePng is this package's only PNG encoder: a caller's own imageId is a crc32 of the PNG bytes it originally supplied (see documents.js's registerImageBytes), so this module's re-encode of the same raster data must run through the identical function a caller would have used, not a second, independently-maintained copy that could silently diverge from it.
 
 export interface ExtractedPdfImage {
   readonly format: "png" | "jpeg";
