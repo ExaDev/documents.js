@@ -13,7 +13,7 @@ import { registerOdmTools } from "./tools/odm";
 import { registerOutlineTools } from "./tools/outline";
 import { registerPdfInspectTools } from "./tools/pdf-inspect";
 
-// Builds a fresh MCP server instance advertising this package's own name and version. Never parses argv or connects a transport itself -- that is src/bin.ts's job, so this stays testable as pure construction and importable from anywhere (including a future HTTP entry point, should one be added).
+// Builds a fresh MCP server instance advertising this package's own name and version. Never parses argv or connects a transport itself -- that is src/bin.ts's job, so this stays testable as pure construction and importable from anywhere, including both the stdio and HTTP entry points, which each call it once per connection/request rather than sharing one instance.
 export function createServer(): McpServer {
   const server = new McpServer({ name: "document-mcp", version });
 
