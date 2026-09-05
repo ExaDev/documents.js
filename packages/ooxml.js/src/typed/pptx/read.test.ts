@@ -226,6 +226,32 @@ function buildFixturePackage(): Package {
       el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("B")])])]),
     ]),
   ]);
+  const cellAllEdgesUnresolvable = el("a:tc", {}, [
+    el("a:tcPr", {}, [
+      el("a:lnL", {}, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]), // missing @w
+      el("a:lnR", { w: "12700" }, [el("a:noFill")]), // explicit noFill, no colour
+      // a:lnT/a:lnB absent entirely
+    ]),
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("C")])])]),
+    ]),
+  ]);
+  const cellZeroWidthAndUnknownDash = el("a:tc", {}, [
+    el("a:tcPr", {}, [
+      el("a:lnL", { w: "0" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]), // resolved width is zero -- not visually a border
+      el("a:lnR", { w: "12700" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+        el("a:prstDash", { val: "notARealPrstDashValue" }),
+      ]), // unrecognised dash token defaults to 'solid' rather than being dropped
+    ]),
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("D")])])]),
+    ]),
+  ]);
   const tbl = el("a:tbl", {}, [
     el("a:tblGrid", {}, [
       el("a:gridCol", { w: "1270000" }),
@@ -233,6 +259,7 @@ function buildFixturePackage(): Package {
     ]),
     el("a:tr", { h: "457200" }, [mergedCell, continuationCell]),
     el("a:tr", {}, [cellA, cellB]),
+    el("a:tr", {}, [cellAllEdgesUnresolvable, cellZeroWidthAndUnknownDash]),
   ]);
   const tableFrame = el("p:graphicFrame", {}, [
     el("p:nvGraphicFramePr", {}, [el("p:cNvPr", { id: "5", name: "Table 1" })]),
@@ -691,6 +718,22 @@ describe("readPptxContent: tables", () => {
     const table = asTable(tableShape?.blocks[0]);
     expect(table.rows[1]?.cells[1]?.borders).toBeUndefined();
     expect(table.rows[0]?.cells[0]?.borders).toBeUndefined();
+  });
+
+  it("reads no borders for a cell whose a:tcPr is present but every edge is unresolvable (missing @w, explicit a:noFill, or the edge absent entirely)", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[2]?.cells[0]?.borders).toBeUndefined();
+  });
+
+  it("treats a resolved zero-width edge as no border, and defaults an unrecognised a:prstDash token to 'solid' rather than dropping the edge", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[2]?.cells[1]?.borders).toEqual({
+      right: { color: { r: 0, g: 0, b: 1 }, widthPt: 1, style: "solid" },
+    });
   });
 });
 
