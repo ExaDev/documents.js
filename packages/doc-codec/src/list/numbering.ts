@@ -90,6 +90,9 @@ export const NUMBER_FORMAT_BY_NFC: Readonly<Record<number, string>> = {
 /** MSONFC's own "Specifies that the sequence will not display any numbering" sentinel -- not itself an ST_NumberFormat value, so this reader's own spelling for it ("none") is a deliberate literal rather than a value MSONFC's table states. */
 const NFC_NONE = 0xff;
 
+/** LVLF's own info byte ([MS-DOC] 2.9.148), bit 3: fNoRestart -- "Specifies whether this level does not restart its numbering sequence when a level with a lower ilvl is encountered", the identical "restarts when a more significant level is encountered" default NumberingLevel.restart's own field comment already describes. The low two bits (0x01/0x02) are jc's own 2-bit justification field, not flag bits at all -- neither this reader nor NumberingLevel decodes jc, so only this one bit of the whole info byte is ever consulted. Exported so numbering-write.ts can state the identical bit rather than hand-maintaining a second, independently-drifting copy (this module's own top comment: the writer already does this for NUMBER_FORMAT_BY_NFC). */
+export const LVLF_FLAG_NO_RESTART = 0x08;
+
 function numberFormatFor(nfc: number): string {
   if (nfc === NFC_NONE) {
     return "none";
@@ -196,7 +199,7 @@ function readLvl(bytes: Uint8Array, offset: number): ParsedLvl {
   const iStartAt = readInt32LE(bytes, offset);
   const nfc = readUint8(bytes, offset + 4);
   const flags = readUint8(bytes, offset + 5);
-  const fNoRestart = (flags & 0x02) !== 0;
+  const fNoRestart = (flags & LVLF_FLAG_NO_RESTART) !== 0;
   const rgbxchNums = readRgbxchNums(bytes, offset + 6);
   const cbGrpprlChpx = readUint8(bytes, offset + 24);
   const cbGrpprlPapx = readUint8(bytes, offset + 25);

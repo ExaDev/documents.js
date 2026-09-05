@@ -1,6 +1,7 @@
 import type { ContentListMembership } from "document-schema.js";
 import { DocFormatError } from "../errors";
 import {
+  LVLF_FLAG_NO_RESTART,
   NUMBER_FORMAT_BY_NFC,
   type NumberingDefinition,
   type NumberingDefinitions,
@@ -18,8 +19,6 @@ const LSTF_FLAG_SIMPLE_LIST = 0x01;
 /** rgistdPara ([MS-DOC] 2.9.191's own LSTF field table): nine 2-byte ISTD entries, one per level, each "MUST be set to 0x0FFF to specify that this level is not linked to a style" when (as here) the writer links no per-level style cascade at all -- a genuine MUST this writer has to satisfy itself, unlike tplc/grfhic, which numbering.ts's own reader ignores outright. 0x0000 is not an available "unset" spelling: it names a real style (ISTD 0, "Normal"), so leaving the field zeroed states a link this writer never intended. */
 const LSTF_RGISTD_PARA_UNLINKED = 0x0fff;
 const LSTF_RGISTD_PARA_COUNT = 9;
-/** The LVLF flags-byte bit numbering.ts's own reader treats as fNoRestart -- restated here for the reason pap-write.ts's own top comment gives for restating pap.ts's opcodes: this module's own byte layout is coupled to the specification's field table, not to a sibling module's private constant name. */
-const LVLF_FLAG_NO_RESTART = 0x02;
 /** A non-simple LSTF always carries exactly nine LVLs ([MS-DOC] 2.9.191); sprmPIlvl's own operand range this writer's caller (pap-write.ts) validates against is the same fact restated at the paragraph-property layer. */
 const MAX_LIST_LEVEL = 8;
 const LEVELS_PER_MULTI_LEVEL_LIST = 9;
