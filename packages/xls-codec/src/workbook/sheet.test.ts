@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  RECORD_ARRAY,
   RECORD_BLANK,
   RECORD_BOOLERR,
   RECORD_BOTTOMMARGIN,
@@ -471,8 +472,92 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[1]?.formula).toBe("A2");
   });
 
-  it("leaves formula absent for a PtgExp whose base cell has no matching ShrFmla group", () => {
-    // A PtgExp pointing at a cell that is never followed by ShrFmla -- a dangling or malformed reference this reader declines to guess at, exactly like any other unresolved construct.
+  it("wraps an array (CSE) formula's expanded text in braces, identical for every cell in the range", () => {
+    // A2:A3 entered as one array formula "=A1*2" -- the base cell A2 and its sibling A3 both carry just a PtgExp pointing back at A2 (row 1, column 0); the real, position-independent expression lives once in the Array record.
+    const arrayRgce = [
+      0x44,
+      ...u16(0),
+      ...u16(0xc000), // PtgRef A1
+      0x1e,
+      ...u16(2), // PtgInt 2
+      0x05, // PtgMul
+    ];
+    const ptgExpToBase = [0x01, ...u16(1), ...u16(0)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(1, 0),
+        ...f64(2),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_ARRAY, [
+        ...u16(1),
+        ...u16(2),
+        0,
+        0, // ref: rwFirst=1, rwLast=2, colFirst=0, colLast=0 -- not interpreted by this reader
+        ...u16(0), // flags word (fAlwaysCalc + reserved)
+        ...u32(0), // unused
+        ...u16(arrayRgce.length),
+        ...arrayRgce,
+      ]),
+      record(RECORD_FORMULA, [
+        ...cell(2, 0),
+        ...f64(4),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBe("{A1*2}");
+    expect(cells[1]?.formula).toBe("{A1*2}");
+  });
+
+  it("resolves an array-constant literal inside an ordinary, non-array-entered formula from its own rgcb trailer", () => {
+    // =SUM({1;2;3}) -- a plain formula containing a literal array constant is unrelated to a CSE array formula: PtgArray/PtgExtraArray sit directly in one Formula record's own rgce/rgcb, with no Array record involved at all.
+    const rgce = [
+      0x40,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0, // PtgArray (value class) -- 7 bytes this reader never inspects
+      0x42,
+      0x01,
+      ...u16(0x0004), // PtgFuncVar SUM, cparams=1
+    ];
+    const rgcb = [
+      0, // cols - 1 = 0 (one column)
+      ...u16(2), // rows - 1 = 2 (three rows)
+      0x01,
+      ...f64(1), // SerNum 1
+      0x01,
+      ...f64(2), // SerNum 2
+      0x01,
+      ...f64(3), // SerNum 3
+    ];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        ...f64(6),
+        ...u16(0),
+        ...u32(0),
+        ...u16(rgce.length),
+        ...rgce,
+        ...rgcb,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBe("SUM({1;2;3})");
+  });
+
+  it("leaves formula absent for a PtgExp whose base cell has no matching ShrFmla/Array group", () => {
+    // A PtgExp pointing at a cell that is never followed by ShrFmla/Array -- a dangling or malformed reference this reader declines to guess at, exactly like any other unresolved construct.
     const ptgExpToNowhere = [0x01, ...u16(5), ...u16(5)];
     const cells = readCells(
       record(RECORD_FORMULA, [
