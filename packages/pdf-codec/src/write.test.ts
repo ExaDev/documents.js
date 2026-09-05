@@ -1,3 +1,4 @@
+import { encodePng } from "byte-codec";
 import { bytesToBase64 } from "./util/base64";
 import { describe, expect, it } from "vitest";
 import type {
@@ -7,7 +8,6 @@ import type {
   LayoutPage,
 } from "./layout";
 import { LAYOUT_FORMAT_VERSION } from "./layout";
-import { encodePng } from "./image/png-encode";
 import { writePdf } from "./write";
 
 const HELVETICA = {
