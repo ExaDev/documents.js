@@ -19,6 +19,7 @@ import {
   insertNode,
   orderKeys,
   projectDocumentGraph,
+  UnknownSiblingError,
   walkPropertyGraph,
   type ExtractionPolicy,
   type GraphNode,
@@ -1912,13 +1913,20 @@ describe("write API: insertNode / insertEdge (#935)", () => {
       .map((edge) => edge.to);
     expect(ordered).toEqual([a.id, b.id, c.id, d.id, e.id]);
 
-    expect(() =>
+    let caught: unknown;
+    try {
       insertEdge(graph, "parent", a.id, {
         position: { at: "before", siblingId: "not-a-real-sibling" },
-      }),
-    ).toThrow(
-      /sibling "not-a-real-sibling" names no existing CONTAINS edge from "parent"/,
-    );
+      });
+    } catch (error) {
+      caught = error;
+    }
+    // A named error class with structured fields, this module's own convention (OrderKeyBudgetExhaustedError), rather than a message a caller would have to parse.
+    expect(caught).toBeInstanceOf(UnknownSiblingError);
+    const unknownSibling = caught as UnknownSiblingError;
+    expect(unknownSibling.from).toBe("parent");
+    expect(unknownSibling.kind).toBe("CONTAINS");
+    expect(unknownSibling.siblingId).toBe("not-a-real-sibling");
   });
 
   it("insertEdge never mutates the graph handed to it", () => {

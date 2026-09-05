@@ -689,7 +689,7 @@ export function insertNode(
   };
 }
 
-// Where a new edge lands among an existing sibling list: `start`/`end` are the two boundaries an empty or non-empty list needs, `before`/`after` name an existing sibling to land relative to. A named sibling not found among `from`'s existing edges of the requested `kind` is a genuine caller error -- there is no position to compute otherwise -- and is refused loudly rather than silently falling back to an end position, in this module's own "refuses a ref the table does not carry" tradition.
+// Where a new edge lands among an existing sibling list: `start`/`end` are the two boundaries an empty or non-empty list needs, `before`/`after` name an existing sibling to land relative to. A named sibling not found among `from`'s existing edges of the requested `kind` is a genuine caller error -- there is no position to compute otherwise -- and is refused loudly, as UnknownSiblingError, rather than silently falling back to an end position, in this module's own "refuses a ref the table does not carry" tradition.
 export type InsertPosition =
   | { readonly at: "start" }
   | { readonly at: "end" }
@@ -700,6 +700,23 @@ export interface InsertEdgeOptions {
   readonly kind?: GraphEdgeKind;
   readonly position?: InsertPosition;
   readonly path?: PropertyPath;
+}
+
+// Thrown by siblingInsertIndex when `position` names a sibling id that is not among `from`'s existing edges of the requested `kind` -- there is no position to compute otherwise, so this module refuses loudly rather than silently falling back to an end position, in its own "refuses a ref the table does not carry" tradition (decideEntry's own refusal above is the same pattern). A named class, in the OrderKeyBudgetExhaustedError/ConstructMarkerImbalanceError family convention, carrying the three facts that produced the refusal as structured fields rather than only a formatted message, so a caller narrows with `instanceof` and reads `from`/`kind`/`siblingId` directly instead of parsing the message string.
+export class UnknownSiblingError extends Error {
+  readonly from: string;
+  readonly kind: GraphEdgeKind;
+  readonly siblingId: string;
+
+  constructor(from: string, kind: GraphEdgeKind, siblingId: string) {
+    super(
+      `insertEdge: sibling "${siblingId}" names no existing ${kind} edge from "${from}"`,
+    );
+    this.name = "UnknownSiblingError";
+    this.from = from;
+    this.kind = kind;
+    this.siblingId = siblingId;
+  }
 }
 
 // Resolves `position` against `siblings` (already sorted ascending by orderKey) to a plain array index -- where the new edge would sit if `siblings` were spliced at that index -- rather than an orderKey directly, so the same lookup serves both the fast bisection path and the rebalance fallback below. A named sibling not found is refused here, once, for every position variant that names one.
@@ -713,9 +730,7 @@ function siblingInsertIndex(
   if (position.at === "end") return siblings.length;
   const index = siblings.findIndex((edge) => edge.to === position.siblingId);
   if (index === -1) {
-    throw new Error(
-      `insertEdge: sibling "${position.siblingId}" names no existing ${kind} edge from "${from}"`,
-    );
+    throw new UnknownSiblingError(from, kind, position.siblingId);
   }
   return position.at === "before" ? index : index + 1;
 }
