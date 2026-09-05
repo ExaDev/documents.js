@@ -599,6 +599,56 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // [MS-DOC] 2.9.78 FFData.xstzTextDef via RTF's own \ffdeftext -- the real, reachable case this exists for: documents.js's own PDF AcroForm-to-contentControl reconstruction hands a plainText control exactly this {controlType:'plainText', value, ...} shape for a real /V string.
+  it("writes a plainText contentControl's value as {\\*\\ffdeftext ...}", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                value: "Jane Doe",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\ffdeftext Jane Doe}");
+    expectBalancedBraces(out);
+  });
+
+  it("writes no \\ffdeftext at all for a plainText contentControl with no recorded value", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).not.toContain("\\ffdeftext");
+    expectBalancedBraces(out);
+  });
+
   it("writes a contentControl's alias as \\ffownhelp1{\\*\\ffhelptext ...}", () => {
     const out = write(
       wordprocessing([
@@ -1440,6 +1490,38 @@ describe("round trip through this package's own reader", () => {
         .map((run) => run.text)
         .join(""),
     ).toBe("Lorem ipsum.");
+  });
+
+  it("round-trips a plainText contentControl's value through \\ffdeftext", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                value: "Jane Doe",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+      value: "Jane Doe",
+    });
   });
 
   it("round-trips a plainText contentControl's alias and lock alongside its tag", () => {
