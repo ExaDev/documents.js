@@ -1710,7 +1710,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
   //
   // -- The math value schemas (src/math.ts) --
   //
-  // ContentFormula itself (src/content.ts): its `mathml` field reaches the opaque MathMlNodeSchema and its `content` field the opaque MathExpressionSchema, so the generator's override() replaces every occurrence with a $ref to this fragment (the ContentTableCell precedent -- a real z.object dragged opaque by one field). presentation/provenance/starMath are transcribed alongside rather than left to inline, so the whole fragment tree under `formula` lives here where the regression test can see the leaves.
+  // ContentFormula itself (src/content.ts): its `content` field reaches the opaque MathExpressionSchema, so the generator's override() replaces every occurrence with a $ref to this fragment (the ContentTableCell precedent -- a real z.object dragged opaque by one field); its `mathml` field reaches the now-real, self-recursive MathMlNodeSchema instead, since ExaDev/documents.js#937, but the whole fragment still stays hand-transcribed because of the field that remains opaque. presentation/provenance/starMath are transcribed alongside rather than left to inline, so the whole fragment tree under `formula` lives here where the regression test can see the leaves.
   ContentFormula: {
     type: "object",
     properties: {
