@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { OlePackageFormatError, readOlePackage } from "./ole-package";
+import {
+  OlePackageFormatError,
+  OlePackageWriteError,
+  readOlePackage,
+  writeOlePackage,
+} from "./ole-package";
 
 // Coverage for the OLE Package stream unwrapping (src/cfb/ole-package.ts): the [MS-OLEDS]-family packaging a Word/PowerPoint compound-file embed wraps the real file in before storing it as the 'Package' stream. Fixtures are built inline (the layout is a short run of length-prefixed fields) rather than through the compound-file writer, so the byte construction here is an independent spelling of the format the module must parse.
 
@@ -93,5 +98,68 @@ describe("readOlePackage", () => {
     expect(() => readOlePackage(new Uint8Array(3))).toThrow(
       OlePackageFormatError,
     );
+  });
+});
+
+describe("writeOlePackage", () => {
+  it("round-trips through readOlePackage", () => {
+    const fileBytes = enc("the real embedded file");
+    const built = writeOlePackage({
+      label: "Book1.xlsx",
+      sourcePath: "C:\\data\\Book1.xlsx",
+      tempPath: "C:\\users\\joe\\AppData\\Local\\Temp\\Book1.xlsx",
+      fileBytes,
+    });
+    const parsed = readOlePackage(built);
+    expect(parsed.label).toBe("Book1.xlsx");
+    expect(parsed.sourcePath).toBe("C:\\data\\Book1.xlsx");
+    expect(parsed.tempPath).toBe(
+      "C:\\users\\joe\\AppData\\Local\\Temp\\Book1.xlsx",
+    );
+    expect(parsed.fileBytes).toEqual(fileBytes);
+  });
+
+  it("round-trips empty label/paths and an empty packaged file", () => {
+    const built = writeOlePackage({
+      label: "",
+      sourcePath: "",
+      tempPath: "",
+      fileBytes: new Uint8Array(0),
+    });
+    const parsed = readOlePackage(built);
+    expect(parsed.label).toBe("");
+    expect(parsed.sourcePath).toBe("");
+    expect(parsed.tempPath).toBe("");
+    expect(parsed.fileBytes).toEqual(new Uint8Array(0));
+  });
+
+  it("throws OlePackageWriteError when label contains a non-ASCII character", () => {
+    expect(() =>
+      writeOlePackage({
+        label: "café.docx",
+        sourcePath: "",
+        tempPath: "",
+        fileBytes: new Uint8Array(0),
+      }),
+    ).toThrow(OlePackageWriteError);
+  });
+
+  it("throws OlePackageWriteError when sourcePath or tempPath contains a non-ASCII character", () => {
+    expect(() =>
+      writeOlePackage({
+        label: "a",
+        sourcePath: "C:\\café\\a.docx",
+        tempPath: "",
+        fileBytes: new Uint8Array(0),
+      }),
+    ).toThrow(OlePackageWriteError);
+    expect(() =>
+      writeOlePackage({
+        label: "a",
+        sourcePath: "",
+        tempPath: "C:\\café\\a.docx",
+        fileBytes: new Uint8Array(0),
+      }),
+    ).toThrow(OlePackageWriteError);
   });
 });
