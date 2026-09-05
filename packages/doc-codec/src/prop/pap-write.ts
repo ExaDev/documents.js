@@ -18,6 +18,12 @@ const SPRM_P_DYA_AFTER = 0xa414;
 const SPRM_P_DYA_LINE = 0x6412;
 /** sprmPFPageBreakBefore: a 1-byte Bool8. */
 const SPRM_P_F_PAGE_BREAK_BEFORE = 0x2407;
+/** sprmPIlfo: a 2-byte signed one-based index into PlfLfo.rgLfo -- which list membership names. */
+const SPRM_P_ILFO = 0x460b;
+/** sprmPIlvl: a 1-byte zero-based list level. */
+const SPRM_P_ILVL = 0x260a;
+/** sprmPIlvl's own 0..8 range: a non-simple list's LSTF always carries exactly nine LVLs ([MS-DOC] 2.9.148), so a level outside it names a depth this format cannot express at all. */
+const MAX_LIST_LEVEL = 8;
 
 const TWIPS_PER_POINT = 20;
 const LSPD_MULTIPLE_DIVISOR = 240;
@@ -69,6 +75,8 @@ function pointsToTwips(pt: number): number {
 }
 
 // Builds the PapxInFkp grpprl for one paragraph's direct formatting (excluding istd, which write.ts's caller places in GrpPrlAndIstd's own field rather than as a sprm -- see prop/fkp-write.ts). Returns an empty array for a paragraph with no direct formatting at all.
+//
+// `ilfoOf` resolves a paragraph's own ContentListMembership.numId to the one-based ilfo write.ts's own list/numbering-write.ts minted for it (every distinct numId in the document, in first-occurrence order -- see that module's own top comment) -- required whenever ANY paragraph in the call's document carries `list`, even one whose own numId this particular paragraph does not use, since the caller mints the whole map once up front. A paragraph whose `list` names a level but no numId (document-schema.js's own "a source format carries only a depth" case, e.g. an OOXML drawing paragraph's a:pPr/@lvl) writes neither sprm: [MS-DOC] has no way to state a list level without a list to belong to, so this is a genuine, permanent format gap rather than something to approximate -- the identical silent-drop precedent this writer already applies to hyperlinks and fields (see the README's own Writing scope table).
 export function encodeParagraphGrpprl(
   paragraph: Pick<
     ContentParagraph,
@@ -80,7 +88,9 @@ export function encodeParagraphGrpprl(
     | "spacingAfterPt"
     | "lineSpacing"
     | "pageBreakBefore"
+    | "list"
   >,
+  ilfoOf: (numId: string) => number,
 ): number[] {
   const bytes: number[] = [];
   if (paragraph.alignment !== undefined) {
@@ -145,6 +155,19 @@ export function encodeParagraphGrpprl(
   }
   if (paragraph.pageBreakBefore === true) {
     pushSprm(bytes, SPRM_P_F_PAGE_BREAK_BEFORE, [0x01]);
+  }
+  if (paragraph.list?.numId !== undefined) {
+    if (paragraph.list.level > MAX_LIST_LEVEL) {
+      throw new DocFormatError(
+        `paragraph list level ${paragraph.list.level} is outside the 0..${MAX_LIST_LEVEL} range a non-simple LSTF's fixed nine LVLs can address`,
+      );
+    }
+    pushSprm(
+      bytes,
+      SPRM_P_ILFO,
+      int16(ilfoOf(paragraph.list.numId), "paragraph list ilfo"),
+    );
+    pushSprm(bytes, SPRM_P_ILVL, [paragraph.list.level]);
   }
   return bytes;
 }
