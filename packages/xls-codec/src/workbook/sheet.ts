@@ -75,7 +75,7 @@ export interface RawCell {
   readonly value: RawCellValue;
   /** True when the value is a Formula record's CACHED result rather than a literal. */
   readonly fromFormula: boolean;
-  /** The formula's own text, recovered from its compiled Ptg token stream ([MS-XLS] 2.5.198), when every token in it is one this reader resolves -- absent for a defined-name or natural-language reference, a data table, or a 3D reference into a genuinely external workbook (see biff/ptg.ts). */
+  /** The formula's own text, recovered from its compiled Ptg token stream ([MS-XLS] 2.5.198), when every token in it is one this reader resolves -- absent for a defined-name or natural-language reference, or a data table (see biff/ptg.ts). */
   readonly formula?: string;
 }
 
