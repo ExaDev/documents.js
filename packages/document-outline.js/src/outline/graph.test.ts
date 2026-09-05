@@ -18,6 +18,7 @@ import {
   defaultExtractionPolicy,
   insertEdge,
   insertNode,
+  NodeKindMismatchError,
   orderKeys,
   projectDocumentGraph,
   UnknownSiblingError,
@@ -2085,5 +2086,102 @@ describe("write API: insertEdge refuses a CONTAINS cycle (#935)", () => {
       `parentA->${shared.id}`,
       `parentB->${shared.id}`,
     ]);
+  });
+});
+
+describe("write API: insertNode handles a dedup hit's kind and children correctly (#935)", () => {
+  const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
+
+  it("insertNode throws NodeKindMismatchError when two different requested kinds hash to the identical id, rather than silently handing back the first call's kind", () => {
+    const first = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { text: "Same content." },
+    });
+    let caught: unknown;
+    try {
+      insertNode(first.graph, {
+        kind: "heading",
+        properties: { text: "Same content." },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(NodeKindMismatchError);
+    const mismatch = caught as NodeKindMismatchError;
+    expect(mismatch.id).toBe(first.id);
+    expect(mismatch.existingKind).toBe("paragraph");
+    expect(mismatch.requestedKind).toBe("heading");
+    // Confirms the collision is genuine: `kind` never enters hashInput, so both calls really do compute the identical id.
+    expect(contentHashV1({ text: "Same content." })).toBe(first.id);
+  });
+
+  it("insertNode succeeds as a plain no-op dedup when the SAME kind is re-requested for an id already in the graph", () => {
+    const first = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { text: "Same content." },
+    });
+    const second = insertNode(first.graph, {
+      kind: "paragraph",
+      properties: { text: "Same content." },
+    });
+    expect(second.id).toBe(first.id);
+    expect(second.graph).toEqual(first.graph);
+  });
+
+  it("insertNode reconciles a dedup hit's requested children rather than silently dropping them when an earlier call minted the identical id via a different spelling", () => {
+    const a = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const b = insertNode(a.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+
+    // First spelling: "children" folded directly into properties as ordinary data, with no top-level `children` parameter at all -- mints the node with NO CONTAINS edges, since insertNode only ever emits them from the explicit parameter.
+    const foldedSpelling = insertNode(b.graph, {
+      kind: "section",
+      properties: { kind: "section", children: [a.id, b.id] },
+    });
+    expect(
+      foldedSpelling.graph.edges.filter(
+        (edge) => edge.from === foldedSpelling.id && edge.kind === "CONTAINS",
+      ),
+    ).toEqual([]);
+
+    // Second spelling of the IDENTICAL content: `children` given as the explicit top-level parameter this time -- hashInput folds `properties` + `children` into the same shape either spelling arrives at, so this is a genuine dedup hit against the node the first spelling already minted.
+    const explicitSpelling = insertNode(foldedSpelling.graph, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [a.id, b.id],
+    });
+    expect(explicitSpelling.id).toBe(foldedSpelling.id);
+
+    // The requested CONTAINS edges must be present now -- not silently dropped just because the id already existed under the no-edges spelling.
+    const childEdges = explicitSpelling.graph.edges
+      .filter(
+        (edge) => edge.from === explicitSpelling.id && edge.kind === "CONTAINS",
+      )
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1));
+    expect(childEdges.map((edge) => edge.to)).toEqual([a.id, b.id]);
+  });
+
+  it("insertNode's dedup reconciliation is idempotent: requesting the same children twice adds no duplicate edges", () => {
+    const a = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const first = insertNode(a.graph, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [a.id],
+    });
+    const second = insertNode(first.graph, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [a.id],
+    });
+    expect(second.id).toBe(first.id);
+    expect(second.graph).toEqual(first.graph);
   });
 });

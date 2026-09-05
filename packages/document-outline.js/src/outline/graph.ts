@@ -661,7 +661,43 @@ export interface InsertNodeResult {
   readonly id: string;
 }
 
-// Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. When `children` is given, this also emits one CONTAINS edge per child at `orderKeys.orderKeyForIndex(index)`, the WIDE, evenly spaced keys a fresh mint wants (exactly as projectGroup mints them for a freshly walked TreeGroup), leaving room for a later insertEdge to bisect between them without a rebalance. Content identical to a node already present in `graph` dedupes to the existing node and mints no duplicate edges either (addNode's own upsert-once rule): the freshly computed `id` could not already be a node in `graph` unless its content already matched exactly, so re-inserting the same subtree twice is a no-op past the first call, and no edge keyed from that id can already exist either.
+// Thrown by insertNode when the freshly computed id already names a node in `graph` whose `kind` does not match the one just requested -- a genuine content-hash collision across two different kinds, possible precisely because `kind` is asked for explicitly rather than folded into the hash (see insertNode's own comment below for why that exclusion is correct, not a gap). Silently handing the caller back the EXISTING node's kind here would be indistinguishable from the two-different-contents-sharing-an-id failure mode insertNode's hash discipline otherwise guards against, so this is refused loudly instead of resolved by an arbitrary "first write wins" rule. A named class, in the OrderKeyBudgetExhaustedError/UnknownSiblingError family convention.
+export class NodeKindMismatchError extends Error {
+  readonly id: string;
+  readonly existingKind: string;
+  readonly requestedKind: string;
+
+  constructor(id: string, existingKind: string, requestedKind: string) {
+    super(
+      `insertNode: id "${id}" already names a node of kind "${existingKind}", cannot also be kind "${requestedKind}"`,
+    );
+    this.name = "NodeKindMismatchError";
+    this.id = id;
+    this.existingKind = existingKind;
+    this.requestedKind = requestedKind;
+  }
+}
+
+// Reconciles a dedup hit's requested `children` against the graph's already-existing CONTAINS edges from `id`: two insertNode calls can mint the identical id via different spellings of the same content -- `children` named explicitly vs. an equal-valued field folded directly into `properties` -- and only the explicit-`children` spelling ever asks insertNode to emit CONTAINS edges, so the SECOND call to reach a given id must not have its own requested containment silently dropped just because that id's content already existed under a different spelling. Missing children are appended via insertEdge's own default position, in the order requested; a child already wired stays exactly as it is, which is what keeps calling insertNode twice with the identical children list the no-op past-the-first-call behaviour this module has always promised.
+function reconcileChildren(
+  graph: PropertyGraph,
+  id: string,
+  children: readonly string[] | undefined,
+): PropertyGraph {
+  if (children === undefined) return graph;
+  const existingChildren = new Set(
+    graph.edges
+      .filter((edge) => edge.from === id && edge.kind === "CONTAINS")
+      .map((edge) => edge.to),
+  );
+  return children.reduce(
+    (acc, childId) =>
+      existingChildren.has(childId) ? acc : insertEdge(acc, id, childId),
+    graph,
+  );
+}
+
+// Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. `kind` is deliberately excluded from the hash INPUT itself, the same reason mintValueNode's own `kind: 'value'` and entryNodeFace's graph-vocabulary kind are never folded into their hashes either: it is the graph vocabulary's word for what a node IS, asked for explicitly because this module's own mint sites decide it four different ways, not a fact about the node's content that identity should hinge on. When `children` is given, this also emits one CONTAINS edge per child at `orderKeys.orderKeyForIndex(index)`, the WIDE, evenly spaced keys a fresh mint wants (exactly as projectGroup mints them for a freshly walked TreeGroup), leaving room for a later insertEdge to bisect between them without a rebalance. Content identical to a node already present in `graph` dedupes to the existing node rather than minting a duplicate (addNode's own upsert-once rule) -- checked against the existing node's own `kind` first (NodeKindMismatchError above covers a genuine collision across kinds), then reconciled against its own CONTAINS edges (reconcileChildren above) rather than assumed to already match, since two differently spelled calls can hash identically while only one of them declared `children` at all.
 export function insertNode(
   graph: PropertyGraph,
   content: InsertNodeContent,
@@ -671,7 +707,13 @@ export function insertNode(
       ? content.properties
       : { ...content.properties, children: content.children };
   const id = contentHashV1(hashInput);
-  if (graph.nodes.some((node) => node.id === id)) return { graph, id };
+  const existing = graph.nodes.find((node) => node.id === id);
+  if (existing !== undefined) {
+    if (existing.kind !== content.kind) {
+      throw new NodeKindMismatchError(id, existing.kind, content.kind);
+    }
+    return { graph: reconcileChildren(graph, id, content.children), id };
+  }
   const node: GraphNode = { ...content.properties, id, kind: content.kind };
   const childEdges: readonly GraphEdge[] =
     content.children === undefined
