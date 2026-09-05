@@ -10,9 +10,11 @@ Created for [documents.js#564](https://github.com/ExaDev/documents.js/issues/564
 
 [documents.js#815](https://github.com/ExaDev/documents.js/issues/815), [#816](https://github.com/ExaDev/documents.js/issues/816), and [#817](https://github.com/ExaDev/documents.js/issues/817) then needed the other direction. `xls-codec`, `doc-codec`, `ppt-codec`, and `wpd-codec` each read a legacy Office binary format out of an [MS-CFB] container, and none of them can write one back, because there was no container to put their streams into: a `.xls` writer producing a `Workbook` stream, or a `.doc` writer producing `WordDocument` and `1Table`, needs a conformant compound file to hold them. That container is structural knowledge exactly as the reader's is, so `writeCompoundFile` is the mirror of `readCompoundFile` here rather than four hand-rolled emitters in four codecs.
 
+[documents.js#974](https://github.com/ExaDev/documents.js/issues/974) added the other half of the OLE Package stream: `writeOlePackage`, the mirror of `readOlePackage`, for `rtf-codec`'s own OLE embedding -- an RTF `\object`'s `\objdata` is the hex bytes of a real [MS-CFB] compound file wrapping a `Package` stream, so writing one needed both halves this package already had separately (`writeCompoundFile` for the container, `readOlePackage` for the stream inside it) plus the write side of the stream itself.
+
 [documents.js#815](https://github.com/ExaDev/documents.js/issues/815), [#816](https://github.com/ExaDev/documents.js/issues/816), and [#817](https://github.com/ExaDev/documents.js/issues/817) also each named the same remaining gap: `doc-codec`, `xls-codec`, and `ppt-codec` all hard-coded document metadata (title, author, dates) to an empty object, because that metadata lives in a genuinely different structure from the one each format's own reader already parses -- a [MS-OLEPS] Property Set Stream, conventionally stored as a "\x05SummaryInformation" stream beside `WordDocument`/`Workbook`/`PowerPoint Document` in the identical [MS-CFB] container all three already read through this package. `oleps/read` and `oleps/write` are the generic property-set codec (the stream header, the PropertySet packet's dictionary, and VT_I2/VT_I4/VT_LPSTR/VT_LPWSTR/VT_FILETIME typed values), and `oleps/summary-information` is the SummaryInformation-specific mapping on top of it -- the same two-layer split `cfb/read.ts` and `cfb/ole-package.ts` already establish for the OLE Package stream, container structure below, one named stream's own field layout above.
 
-Scope: **ZIP containers** (read and write over [`fflate`](https://github.com/101arrowz/fflate), recursive walking of ZIP-in-ZIP entries), **classic OLE compound files** (bounded [MS-CFB] reading and conformant [MS-CFB] writing, plus the OLE Package stream unwrapping), and **[MS-OLEPS] Property Set Streams** (generic read/write of a single-property-set stream, plus SummaryInformation's own title/subject/author/keywords/comments/created/last-saved/last-printed fields). **tar and gzip, DocumentSummaryInformation's extended and user-defined property sets, and writing VT_LPSTR (ANSI-codepage) string properties are explicitly out of scope.**
+Scope: **ZIP containers** (read and write over [`fflate`](https://github.com/101arrowz/fflate), recursive walking of ZIP-in-ZIP entries), **classic OLE compound files** (bounded [MS-CFB] reading and conformant [MS-CFB] writing, plus OLE Package stream reading and writing), and **[MS-OLEPS] Property Set Streams** (generic read/write of a single-property-set stream, plus SummaryInformation's own title/subject/author/keywords/comments/created/last-saved/last-printed fields). **tar and gzip, DocumentSummaryInformation's extended and user-defined property sets, and writing VT_LPSTR (ANSI-codepage) string properties are explicitly out of scope.**
 
 ## Getting started
 
@@ -50,7 +52,7 @@ The smoke suite (`test/smoke.test.mjs`) is the guard on that advertisement: it l
 | `cfb/detect`                | `isCompoundFile` (the `D0 CF 11 E0 …` magic-byte check)                                                                                                                                                                                                                                 |
 | `cfb/read`                  | `readCompoundFile` (bounded [MS-CFB] stream extraction), `CompoundFileStream`, `CompoundFileFormatError`, `MAX_CFB_TOTAL_STREAM_BYTES`, `ReadCompoundFileOptions`                                                                                                                       |
 | `cfb/write`                 | `writeCompoundFile` ([MS-CFB] container generation), `CompoundFileWriteError`, `WriteCompoundFileOptions` — takes the `CompoundFileStream` array `cfb/read` returns                                                                                                                     |
-| `cfb/ole-package`           | `readOlePackage` (OLE Package stream unwrapping), `OlePackage`, `OlePackageFormatError`                                                                                                                                                                                                 |
+| `cfb/ole-package`           | `readOlePackage` (OLE Package stream unwrapping), `writeOlePackage` (the mirror), `OlePackage`, `OlePackageFormatError`, `OlePackageWriteError`                                                                                                                                         |
 | `oleps/read`                | `readPropertySetStream` (generic [MS-OLEPS] property-set decoding), `PropertySetFormatError`                                                                                                                                                                                            |
 | `oleps/write`               | `writePropertySetStream` (generic [MS-OLEPS] property-set encoding), `PropertySetWriteError` — takes the `PropertySet` shape `oleps/read` returns                                                                                                                                       |
 | `oleps/summary-information` | `readSummaryInformation`, `writeSummaryInformationStream`, `SummaryInformationProperties`, `FMTID_SUMMARY_INFORMATION`                                                                                                                                                                  |
@@ -76,7 +78,12 @@ Both guards throw rather than truncate: an input outside the contract must fail 
 ### Compound files
 
 ```ts
-import { readCompoundFile, readOlePackage } from "archive-codec";
+import {
+  readCompoundFile,
+  readOlePackage,
+  writeCompoundFile,
+  writeOlePackage,
+} from "archive-codec";
 
 // Every stream of a classic OLE compound file, with its storage path.
 // Throws CompoundFileFormatError on any structural nonconformance.
@@ -93,6 +100,19 @@ const packageStream = readCompoundFile(oleBinBytes).find(
 if (packageStream !== undefined) {
   readOlePackage(packageStream.bytes).fileBytes; // often a ZIP for a modern embed
 }
+
+// The mirror image: builds a 'Package' stream's bytes from the same shape
+// readOlePackage returns, to wrap alongside writeCompoundFile -- this is how
+// rtf-codec builds the real [MS-CFB] container an RTF \object's \objdata carries.
+const packageBytes = writeOlePackage({
+  label: "embedded.docx",
+  sourcePath: "",
+  tempPath: "",
+  fileBytes: embeddedFileBytes,
+});
+const embedBytes = writeCompoundFile([
+  { path: "Package", bytes: packageBytes },
+]);
 ```
 
 Reading is bounded the same way walking is: chain cycles and out-of-range sectors fail against bounds derived from the file's own sector count, and one cumulative extracted-bytes budget (`MAX_CFB_TOTAL_STREAM_BYTES`, 512 MiB — the same figure the family grants one decompressed stream) bounds the multiplication a hostile FAT gains by aliasing one sector into many streams. Every structural failure throws rather than truncating — a malformed compound file fails whole, never a partial stream listing that looks complete. Version 3 (512-byte sectors) and version 4 (4096-byte) files both read; the mini-FAT path every stream shorter than the header's cutoff takes is first-class, because a small real-world embed genuinely lands there.

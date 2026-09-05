@@ -17,6 +17,7 @@ const BARREL_FUNCTIONS = [
   'readCompoundFile',
   'writeCompoundFile',
   'readOlePackage',
+  'writeOlePackage',
   'readPropertySetStream',
   'writePropertySetStream',
   'readSummaryInformation',
@@ -36,6 +37,7 @@ const BARREL_CLASSES = [
   'CompoundFileFormatError',
   'CompoundFileWriteError',
   'OlePackageFormatError',
+  'OlePackageWriteError',
   'PropertySetFormatError',
   'PropertySetWriteError',
 ];
@@ -72,7 +74,10 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/cfb/detect.js', exports: ['isCompoundFile'] },
     { path: '../dist/cfb/read.js', exports: ['readCompoundFile', 'MAX_CFB_TOTAL_STREAM_BYTES'] },
     { path: '../dist/cfb/write.js', exports: ['writeCompoundFile', 'CompoundFileWriteError'] },
-    { path: '../dist/cfb/ole-package.js', exports: ['readOlePackage'] },
+    {
+      path: '../dist/cfb/ole-package.js',
+      exports: ['readOlePackage', 'writeOlePackage'],
+    },
     { path: '../dist/oleps/read.js', exports: ['readPropertySetStream', 'PropertySetFormatError'] },
     { path: '../dist/oleps/write.js', exports: ['writePropertySetStream', 'PropertySetWriteError'] },
     {
@@ -151,5 +156,18 @@ describe('dist/ end-to-end: both builds round-trip a real archive', () => {
     expect(cjsRead.title).toBe(metadata.title);
     expect(cjsRead.author).toBe(metadata.author);
     expect(cjsRead.keywords).toEqual(metadata.keywords);
+  });
+
+  it('writeOlePackage -> readOlePackage agrees across ESM and CJS', () => {
+    // The OLE Package half of the same end-to-end check: a writer whose stream only its own build can unwrap back would pass every deep-import check above and still be broken.
+    const pkg = { label: 'smoke.bin', sourcePath: 'C:\\smoke.bin', tempPath: 'C:\\temp\\smoke.bin', fileBytes: new TextEncoder().encode('smoke package payload') };
+
+    const esmParsed = esm.readOlePackage(esm.writeOlePackage(pkg));
+    expect(esmParsed.label).toBe(pkg.label);
+    expect(esmParsed.fileBytes).toEqual(pkg.fileBytes);
+
+    const cjsParsed = cjs.readOlePackage(cjs.writeOlePackage(pkg));
+    expect(cjsParsed.label).toBe(pkg.label);
+    expect(cjsParsed.fileBytes).toEqual(pkg.fileBytes);
   });
 });
