@@ -3,13 +3,16 @@ import { columnIndexToLetters } from "document-schema.js";
 import { BlockCursor } from "./cursor";
 import { errorTextOf } from "./errors";
 import { FTAB_FIXED_ARITY, FTAB_NAMES } from "./ptg-functions";
+import { BiffFormatError } from "./records";
 import { readShortXLUnicodeString, readXLUnicodeString } from "./strings";
 
 // A BIFF8 compiled formula (Ptg token stream, [MS-XLS] 2.5.198.25 -- https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/94229a89-a5b6-4f2b-834f-bd28cdc57c6b) walked left to right and rebuilt into the infix text a spreadsheet application would show.
 //
 // The tokens are postfix (reverse Polish): an operand token pushes a value, an operator or function token pops however many operands it needs and pushes the combined result. This module carries that same shape one level up -- an OPERAND STACK of already-formatted text, each entry tagged with the precedence of whatever built it -- so a binary operator or function call is always "pop N, join, push" and the only real complexity is deciding when a child needs literal parentheses around it before it can sit inside its parent's text. That decision is precedence comparison, not a special case: wrap the left child when its own precedence is lower than the operator being applied, wrap the right child when its precedence is lower than OR EQUAL to it. The equal case on the right is what reproduces `a-(b-c)` correctly (and, for a commutative operator, only ever fires when the postfix stream itself demanded that grouping -- which happens only when the formula's own author wrote explicit parentheses, since a bare `a+b+c` always compiles left-nested) -- so this one rule is correct for every operator here regardless of its true associativity, and this module never needs to know what that associativity actually is.
 //
-// A shared formula's PtgExp, an array constant's PtgArray, and a genuinely external 3D reference are now resolved rather than aborting the parse -- see readPtgExpBase (joined against a ShrFmla/Array record by workbook/sheet.ts's collectFormulaGroups), the ParseFormulaOptions.rgcb-driven PtgArray/PtgExtraArray handling below, and FormulaSheetContext.sheetRanges' ExternalSheetLabel case respectively. What remains unrecognised -- a data table's PtgTbl, a defined name's PtgName/PtgNameX, a natural-language "Elf" reference -- still aborts the whole parse rather than guessing: parseFormulaText returns undefined, and the caller leaves ContentSheetCell.formula absent for that cell exactly as it already does for a cell this reader cannot map at all. A BiffFormatError from a cursor read past the end of rgce is not caught here: cce already bounds a well-formed token stream exactly, so a cursor genuinely running past it means this module misjudged a token's own byte width, which is a bug worth failing loudly on rather than silently discarding.
+// A shared formula's PtgExp, an array constant's PtgArray, and a genuinely external 3D reference are now resolved rather than aborting the parse -- see readPtgExpBase (joined against a ShrFmla/Array record by workbook/sheet.ts's collectFormulaGroups), the ParseFormulaOptions.rgcb-driven PtgArray/PtgExtraArray handling below, and FormulaSheetContext.sheetRanges' ExternalSheetLabel case respectively. What remains unrecognised -- a data table's PtgTbl, a defined name's PtgName/PtgNameX, a natural-language "Elf" reference -- still aborts the whole parse rather than guessing: parseFormulaText returns undefined, and the caller leaves ContentSheetCell.formula absent for that cell exactly as it already does for a cell this reader cannot map at all.
+//
+// A BiffFormatError from `cursor` -- the cursor walking `rgce` itself -- is not caught here: `cce` already bounds a well-formed token stream exactly, so a cursor genuinely running past it means this module misjudged a token's own byte width, which is a bug worth failing loudly on rather than silently discarding. That reasoning does NOT extend to `rgcbCursor`, the separate cursor walking the RgbExtra trailer a PtgArray consults: unlike `cce`, an rgcb's own length is never declared anywhere in the file -- workbook/sheet.ts infers it by subtracting the rest of a Formula/Array record's known fields from the record's total byte length -- so a malformed record can hand this module a trailer that is short, or a PtgExtraArray whose own row/column counts or SerStr length overrun it. Both are file-controlled data this module reads, not a byte-width bug of its own, so a BiffFormatError from `rgcbCursor` (including from a SerAr element's own SerStr) is caught at the PtgArray case below and degrades that one array literal -- and with it the whole formula, exactly like any other unresolved token -- rather than aborting every other cell's read too.
 
 /** A 3D reference's sheet scope, resolved from its ixti through EXTERNSHEET and a self-referencing SupBook ([MS-XLS] 2.4.271, 2.4.106, 2.5.344): the first and last sheet of the reference, both direct BoundSheet8 indices into FormulaSheetContext.sheets. A single-sheet 3D reference has `firstSheetIndex === lastSheetIndex`. Defined here rather than alongside the globals reader that produces it, since resolving it into reference text is what this module exists to do. */
 export interface SheetRange {
@@ -577,7 +580,14 @@ export function parseFormulaText(
       case PTG_ARRAY_ARRAY: {
         cursor.skip(PTG_ARRAY_TRAILING_BYTES);
         if (rgcbCursor === undefined) return undefined;
-        const text = readArrayLiteralText(rgcbCursor);
+        let text: string | undefined;
+        try {
+          text = readArrayLiteralText(rgcbCursor);
+        } catch (error) {
+          // A malformed rgcb -- a PtgExtraArray whose row/column counts or SerStr length overrun the trailer's own bytes -- degrades this one array literal (and with it the whole formula) exactly like any other unresolved token, rather than aborting every other cell's read; see the module comment for why this cursor, unlike the cce-bounded one walking rgce, is not trusted to stay in bounds.
+          if (!(error instanceof BiffFormatError)) throw error;
+          text = undefined;
+        }
         if (text === undefined) return undefined;
         pushAtomic(stack, text);
         break;

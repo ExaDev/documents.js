@@ -556,6 +556,43 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[0]?.formula).toBe("SUM({1;2;3})");
   });
 
+  it("keeps the cell's cached value when its own rgcb trailer is too short for the PtgExtraArray it claims to hold", () => {
+    // rgcb's own byte length is never declared anywhere in the file -- this reader infers it by subtraction from the record's total length -- so a PtgExtraArray whose row/column counts overrun what's actually there is a real malformation risk, not a hypothetical one. This must degrade to an absent formula for this one cell, exactly like any other unresolved construct, rather than throwing and losing every other cell's read along with it.
+    const rgce = [
+      0x40,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0, // PtgArray
+      0x42,
+      0x01,
+      ...u16(0x0004), // PtgFuncVar SUM, cparams=1
+    ];
+    const rgcb = [
+      0, // cols - 1 = 0
+      ...u16(2), // rows - 1 = 2 (claims three rows)
+      0x01,
+      ...f64(1), // only one SerNum actually supplied
+    ];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        ...f64(6),
+        ...u16(0),
+        ...u32(0),
+        ...u16(rgce.length),
+        ...rgce,
+        ...rgcb,
+      ]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 6 });
+  });
+
   it("leaves formula absent for a PtgExp whose base cell has no matching ShrFmla/Array group", () => {
     // A PtgExp pointing at a cell that is never followed by ShrFmla/Array -- a dangling or malformed reference this reader declines to guess at, exactly like any other unresolved construct.
     const ptgExpToNowhere = [0x01, ...u16(5), ...u16(5)];

@@ -577,6 +577,40 @@ describe("readWorkbookGlobals", () => {
   it("defaults sheetRanges to empty when the substream carries no EXTERNSHEET record", () => {
     expect(readWorkbookGlobals(groupsOf()).sheetRanges).toEqual([]);
   });
+
+  it("degrades a SupBook whose rgst is shorter than its own declared ctab to a diagnostic, rather than aborting the whole workbook read", () => {
+    // ctab claims 5 sheet names but not one XLUnicodeString actually follows virtPath -- reading the first would run past the end of the record. This must not propagate past readWorkbookGlobals: a malformed SupBook degrades to its own diagnostic, and every OTHER record in the substream (here, a BoundSheet8 after it) still reads normally.
+    const virtPath = "Budget.xlsx";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(5), // ctab: claims five sheet names
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          // no rgst entries actually follow
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+        record(RECORD_BOUNDSHEET8, [
+          ...u32(0x0200),
+          0x00,
+          0x00,
+          ...shortXlUnicodeString("Summary"),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "#REF!(malformed supporting link)", diagnostic: true },
+    ]);
+    expect(globals.sheets).toEqual([
+      { name: "Summary", hidden: false, sheetType: 0, bofPosition: 0x0200 },
+    ]);
+  });
 });
 
 describe("formatCodeOf", () => {

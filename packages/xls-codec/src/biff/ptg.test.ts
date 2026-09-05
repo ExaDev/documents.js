@@ -462,6 +462,13 @@ describe("parseFormulaText array constants (PtgArray/PtgExtraArray)", () => {
     const rgcb = bytes(...ptgExtraArray([[serErr(0xff)]]));
     expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBeUndefined();
   });
+
+  it("degrades to undefined, rather than throwing, when a PtgExtraArray's own row/column counts overrun the rgcb bytes actually supplied", () => {
+    // The trailer claims three rows of one column each (columns-1=0, rows-1=2) but only ONE SerNum's worth of bytes follows -- a malformed/truncated rgcb this reader must not let crash the caller over, since rgcb's own length is inferred by the caller rather than declared anywhere in the file (see biff/ptg.ts's own module comment).
+    const rgce = bytes(...ptgArrayToken());
+    const rgcb = bytes(0, ...u16(2), ...serNum(1));
+    expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBeUndefined();
+  });
 });
 
 describe("readPtgExpBase", () => {

@@ -137,7 +137,7 @@ export function readWorkbookGlobals(
         date1904 = readDate1904(record);
         break;
       case RECORD_SUPBOOK:
-        supBooks.push(readSupBook(record));
+        supBooks.push(readSupBookSafely(record));
         break;
       case RECORD_EXTERNSHEET:
         externSheet = record;
@@ -184,7 +184,7 @@ const SUPBOOK_SAME_SHEET_CHAR = "\u0000";
 const SUPBOOK_UNUSED_CHAR = " ";
 
 /**
- * One SupBook record's own resolution, keyed by kind ([MS-XLS] 2.4.271's cch/virtPath table) -- see readSupBook. "self" needs no further data, since the workbook's own BoundSheet8 list already resolves it elsewhere. "external-workbook" carries what this reader could recover from virtPath and rgst. "unresolvable" carries a short, fixed diagnostic for every other kind (add-in, DDE/OLE data source, same-sheet, unused, or a virtPath shape fileNameFromVirtPath's own deliberately partial VirtualPath decoding does not attempt).
+ * One SupBook record's own resolution, keyed by kind ([MS-XLS] 2.4.271's cch/virtPath table) -- see readSupBook. "self" needs no further data, since the workbook's own BoundSheet8 list already resolves it elsewhere. "external-workbook" carries what this reader could recover from virtPath and rgst. "unresolvable" carries a short, fixed diagnostic for every other kind (add-in, DDE/OLE data source, same-sheet, unused, a virtPath shape fileNameFromVirtPath's own deliberately partial VirtualPath decoding does not attempt, or a record too malformed for readSupBookSafely to finish reading at all).
  */
 type SupBookInfo =
   | { readonly kind: "self" }
@@ -236,6 +236,20 @@ function readSupBook(record: RecordGroup): SupBookInfo {
     sheetNames.push(readXLUnicodeString(cursor));
   }
   return { kind: "external-workbook", fileName, sheetNames };
+}
+
+/**
+ * readSupBook, degrading a malformed record (an rgst shorter than its own declared ctab, most concretely) to an unresolvable diagnostic rather than letting a BiffFormatError propagate out of this one SupBook and abort the whole globals read -- and with it, the whole workbook. This is entirely new territory added alongside external-3D-reference resolution: before it, this reader never walked a SupBook's own virtPath/rgst at all, so a malformed one had nothing here to trip over. The per-record boundary keeps the damage to the XTI entries that resolve through this one SupBook, which already carry their own `unresolvable` label path for every other kind this reader cannot fully resolve.
+ */
+function readSupBookSafely(record: RecordGroup): SupBookInfo {
+  try {
+    return readSupBook(record);
+  } catch (error) {
+    if (!(error instanceof BiffFormatError)) {
+      throw error;
+    }
+    return { kind: "unresolvable", diagnostic: "malformed supporting link" };
+  }
 }
 
 /** [MS-XLS] 480c3d2a's own VirtualPath grammar directory separator (U+0003) -- never a printable character a real file or sheet name may contain, so splitting on it to find the trailing segment is unambiguous. */
