@@ -721,24 +721,24 @@ function readFormula(
   cursor.skip(FORMULA_CALC_CACHE_BYTES);
   const cce = cursor.u16();
   const rgce = cursor.take(cce);
-  // This record's own rgcb trailer (present only when rgce contains an inline PtgArray, e.g. `=SUM({1,2,3})` in a cell that is not itself CSE-array-entered) is read past the point cce already bounds, and its own length is inferred the same way readArrayGroup's is -- so the same malformed-trailer risk applies. Caught here rather than left to propagate: a bad rgcb degrades only THIS cell's formula to absent, exactly like any other construct this reader cannot resolve, rather than aborting every other cell's read too.
-  let formula: string | undefined;
+  // This record's own rgcb trailer (present only when rgce contains an inline PtgArray, e.g. `=SUM({1,2,3})` in a cell that is not itself CSE-array-entered) is read past the point cce already bounds, and its own length is inferred the same way readArrayGroup's is -- so the same malformed-trailer risk applies. Caught here, and only here, rather than left to propagate: a bad rgcb degrades only its own PtgArray literal (and with it this one cell's formula) to absent, exactly like any other construct this reader cannot resolve, rather than aborting every other cell's read too. resolveFormulaText below is deliberately OUTSIDE this try: a BiffFormatError it raises comes from parseFormulaText's own rgce-bounded cursor, which biff/ptg.ts's own module comment says is a byte-width bug in that module worth failing loudly on, not file-controlled data to degrade gracefully the way this record's own inferred rgcb length is.
+  let rgcb: Uint8Array<ArrayBuffer> | undefined;
   try {
     const rgcbLength = recordByteLength(record) - (FORMULA_HEADER_BYTES + cce);
-    const rgcb = rgcbLength > 0 ? cursor.take(rgcbLength) : undefined;
-    formula = resolveFormulaText(
-      rgce,
-      rgcb,
-      header,
-      formulaSheets,
-      formulaGroups,
-    );
+    rgcb = rgcbLength > 0 ? cursor.take(rgcbLength) : undefined;
   } catch (error) {
     if (!(error instanceof BiffFormatError)) {
       throw error;
     }
-    formula = undefined;
+    rgcb = undefined;
   }
+  const formula = resolveFormulaText(
+    rgce,
+    rgcb,
+    header,
+    formulaSheets,
+    formulaGroups,
+  );
   return formula === undefined
     ? { ...header, value, fromFormula: true }
     : { ...header, value, fromFormula: true, formula };
