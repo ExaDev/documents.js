@@ -64,7 +64,7 @@ const SPRM_T_DEF_TABLE_SHD_RAW_3RD = 0xd672;
 const SPRM_T_TABLE_BORDERS_80 = 0xd605;
 /** sprmTTableBorders (0xD613): a TableBordersOperand ([MS-DOC] 2.9.302) over real Brc fields with an exact COLORREF, the modern spelling of the same cascade. */
 const SPRM_T_TABLE_BORDERS = 0xd613;
-/** sprmTSetShdTable (0xD660): a SHDOperand ([MS-DOC] 2.9.249) stating the whole row/table's own background shading, folded in grpprl order like every other shading sprm above -- its own spec text carries none of sprmTTableBorders's "unless modified" exception. */
+/** sprmTSetShdTable (0xD660): a SHDOperand ([MS-DOC] 2.9.249) whose own text states it as shading for "the entire table" -- but its own spec text carries none of sprmTTableBorders's "unless modified" exception, so this reader applies it as an ordinary per-row sprm to every cell of whichever row's grpprl states it (folded in grpprl order like every other shading sprm above), rather than resolving it across the whole table the way its name implies: a producer writing it on only one row's grpprl shades, per this implementation, only that row. */
 const SPRM_T_SET_SHD_TABLE = 0xd660;
 
 /** The first cell index each of the three DefTableShdOperand sprms shades, [MS-DOC] 2.6.3: "Cells 1 - 22 are shaded by sprmTDefTableShd, and cells 23 - 44 are shaded by sprmTDefTableShd2nd" and 45-63 by the third -- one-based there, so zero-based here. */
