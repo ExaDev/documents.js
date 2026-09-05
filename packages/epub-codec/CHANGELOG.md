@@ -1,3 +1,14 @@
+## [1.0.3](https://github.com/ExaDev/documents.js/compare/epub-codec%401.0.2...epub-codec%401.0.3) (2026-09-05)
+
+### Bug Fixes
+
+* handle ContentImageBlock's widened svg/gif formats across every consumer ([875b10b](https://github.com/ExaDev/documents.js/commit/875b10b3281ca1ab598abc97230d82f8ff5cdaae))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.6.0
+
 ## [1.0.2](https://github.com/ExaDev/documents.js/compare/epub-codec%401.0.1...epub-codec%401.0.2) (2026-09-04)
 
 

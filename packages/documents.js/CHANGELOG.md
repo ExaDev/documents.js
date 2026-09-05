@@ -1,3 +1,24 @@
+## [6.5.2](https://github.com/ExaDev/documents.js/compare/documents.js%406.5.1...documents.js%406.5.2) (2026-09-05)
+
+### Bug Fixes
+
+* handle ContentImageBlock's widened svg/gif formats across every consumer ([875b10b](https://github.com/ExaDev/documents.js/commit/875b10b3281ca1ab598abc97230d82f8ff5cdaae))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.6.0
+- Updated archive-codec to ^1.4.1
+- Updated markdown-codec to ^6.1.6
+- Updated odf.js to ^6.4.1
+- Updated pdf-codec to ^3.6.4
+- Updated rtf-codec to ^1.1.2
+- Updated doc-codec to ^1.1.1
+- Updated ooxml.js to ^6.3.6
+- Updated ppt-codec to ^1.1.1
+- Updated wpd-codec to 1.1.2 (declared as `workspace:^`, resolved by pnpm at publish time)
+- Updated xls-codec to ^2.0.1
+
 ## [6.5.1](https://github.com/ExaDev/documents.js/compare/documents.js%406.5.0...documents.js%406.5.1) (2026-09-05)
 
 ### Bug Fixes

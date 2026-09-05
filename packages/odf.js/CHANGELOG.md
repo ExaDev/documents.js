@@ -1,3 +1,14 @@
+## [6.4.1](https://github.com/ExaDev/documents.js/compare/odf.js%406.4.0...odf.js%406.4.1) (2026-09-05)
+
+### Bug Fixes
+
+* handle ContentImageBlock's widened svg/gif formats across every consumer ([875b10b](https://github.com/ExaDev/documents.js/commit/875b10b3281ca1ab598abc97230d82f8ff5cdaae))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.6.0
+
 ## [6.4.0](https://github.com/ExaDev/documents.js/compare/odf.js%406.3.0...odf.js%406.4.0) (2026-09-04)
 
 ### Features

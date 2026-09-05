@@ -1,3 +1,15 @@
+## [6.3.6](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.3.5...ooxml.js%406.3.6) (2026-09-05)
+
+### Bug Fixes
+
+* handle ContentImageBlock's widened svg/gif formats across every consumer ([875b10b](https://github.com/ExaDev/documents.js/commit/875b10b3281ca1ab598abc97230d82f8ff5cdaae))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.6.0
+- Updated archive-codec to ^1.4.1
+
 ## [6.3.5](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.3.4...ooxml.js%406.3.5) (2026-09-05)
 
 ### Bug Fixes
