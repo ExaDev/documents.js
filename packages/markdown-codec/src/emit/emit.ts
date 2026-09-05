@@ -149,6 +149,24 @@ function isQuotableStyle(styleId: string | undefined): boolean {
   );
 }
 
+// Every styleId with its own unambiguous single-line-or-explicitly-closed boundary, one a reparse recognises regardless of what precedes or follows it, per CommonMark's "these constructs interrupt a paragraph" rules -- a heading, a fenced code block, a thematic break, preformatted HTML, a display-math block. Deliberately NOT QUOTABLE_STYLE_IDS: QUOTE_STYLE_ID sits in that set because renderParagraph applies a '> ' prefix to it, but renderListRegion below never calls renderParagraph -- every list block, Quote-styled or not, renders through the prefix-free renderParagraphBody -- so a Quote-styled block inside a list carries no boundary of its own at all and is exactly as ambiguous as a plain paragraph.
+const SELF_DELIMITING_STYLE_IDS: ReadonlySet<string> = new Set([
+  CODE_BLOCK_STYLE_ID,
+  HORIZONTAL_RULE_STYLE_ID,
+  HTML_PREFORMATTED_STYLE_ID,
+  MATH_BLOCK_STYLE_ID,
+]);
+
+function isSelfDelimitingStyle(styleId: string | undefined): boolean {
+  if (styleId === undefined) {
+    return false;
+  }
+  return (
+    SELF_DELIMITING_STYLE_IDS.has(styleId) ||
+    parseHeadingStyleId(styleId) !== undefined
+  );
+}
+
 function quoteDepthOf(paragraph: ContentParagraph): number {
   if (paragraph.indentLeftPt === undefined || paragraph.indentLeftPt <= 0) {
     return 0;
@@ -455,7 +473,7 @@ function collectListItem(
   return { segments, next: index };
 }
 
-// Whether a plain (non-quotable-style) paragraph immediately following `previousStyleId`, with no blank line between them, risks CommonMark's own lazy-continuation rule silently absorbing it into the PRECEDING paragraph instead of starting a fresh block: true exactly when NEITHER side has a styleId isQuotableStyle already recognises as self-delimiting (a heading, a fenced code block, a thematic break, preformatted HTML, a display-math block -- every one of these has its own unambiguous single-line-or-explicitly-closed boundary that a reparse recognises regardless of what precedes or follows it, per CommonMark's "these constructs interrupt a paragraph" rules). `previousStyleId` of `undefined` with `previousWasNested: true` means the immediately preceding rendered unit was a nested sub-list, not a paragraph at all -- also unambiguous, since a list's own item markers are themselves a recognised block starter. Only a plain paragraph directly followed by another plain paragraph is genuinely ambiguous: src/lower/lower.ts's own reader can only ever produce that pair when a real source blank line separated them in the first place (two adjacent non-blank plain-text lines are read as ONE multi-line paragraph, never two), so re-inserting the blank line here is not merely safe, it is what the source actually had.
+// Whether a paragraph immediately following `previousStyleId`, with no blank line between them, risks CommonMark's own lazy-continuation rule silently absorbing it into the PRECEDING block instead of starting a fresh one: true exactly when NEITHER side has a styleId isSelfDelimitingStyle recognises as self-delimiting (see that function -- deliberately excludes QUOTE_STYLE_ID, since a Quote-styled block renders through the same prefix-free renderParagraphBody as a plain one here and so carries no boundary of its own). `previousStyleId` of `undefined` with `previousWasNested: true` means the immediately preceding rendered unit was a nested sub-list, not a paragraph at all -- also unambiguous, since a list's own item markers are themselves a recognised block starter. Two blocks that are BOTH plain (or one/both Quote-styled) are genuinely ambiguous without a blank line: for two plain paragraphs specifically, src/lower/lower.ts's own reader can only ever produce that pair when a real source blank line separated them in the first place (two adjacent non-blank plain-text lines are read as ONE multi-line paragraph, never two), so re-inserting the blank line here is not merely safe, it is what the source actually had.
 function requiresBlankLineBefore(
   next: ContentParagraph,
   previousStyleId: string | undefined,
@@ -464,7 +482,10 @@ function requiresBlankLineBefore(
   if (previousWasNested) {
     return false;
   }
-  return !isQuotableStyle(previousStyleId) && !isQuotableStyle(next.styleId);
+  return (
+    !isSelfDelimitingStyle(previousStyleId) &&
+    !isSelfDelimitingStyle(next.styleId)
+  );
 }
 
 // Renders one contiguous, flat run of .list-carrying paragraphs -- possibly spanning several sibling top-level lists back to back, and arbitrarily nested sub-lists (a paragraph whose own level is deeper than its predecessor's is that predecessor's own nested list content, recursed into here via collectListItem's 'nested' segments). One ITEM is every block sharing one itemId -- the write-side inverse of src/lower/lower.ts's minted item identity -- so a multi-block item renders one marker line with every later block of its own continued on the continuation indent, and any nested sub-list content indented in place between them. A membership with no itemId at all is the cross-format shape: each paragraph is its own item, exactly as this writer always treated them. Spacing between two blocks of the SAME item is a blank line whenever requiresBlankLineBefore says one is structurally required (see that function), and OTHERWISE only when the item's own numId was minted loose (info.loose) -- never unconditionally: forcing a blank line onto every continuation would silently turn a tight list loose on the way out (spec 0.31.2 example 300's own regression, a heading directly followed by a plain paragraph with no blank line between them in a tight list). Loose/tight spacing between two SIBLING items sharing the same numId is read from that same numId's own `loose` flag; a boundary between two DIFFERENT numIds always gets a blank line, matching how two genuinely separate lists always render with visual separation.
