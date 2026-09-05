@@ -127,6 +127,54 @@ describe("Brc80", () => {
     });
     expect(readBrc80(bytes(written), 0)?.color).toEqual(RED);
   });
+
+  describe("double-line width (ExaDev/documents.js#959)", () => {
+    it("triples dptLineWidth into widthPt for BrcType 0x03, since the field states one of the border's two lines rather than its total rendered width", () => {
+      // The exact dptLineWidth a genuine LibreOffice-authored double border was found to carry: read directly as the field's own value, this used to report 0.625pt where LibreOffice's own re-export calls the identical border ~1.8pt double (5 eighths tripled is 1.875pt, matching to LibreOffice's own twip-rounding).
+      expect(readBrc80(bytes([0x05, 0x03, 0x00, 0x00]), 0)?.widthPt).toBe(
+        1.875,
+      );
+    });
+
+    it("applies the dptLineWidth floor before tripling, not after", () => {
+      // "Values of less than 2 are considered to be equivalent to 2" floors the field itself to 2 eighths, which then triples to 6 eighths (0.75pt) -- not 3 eighths (0.375pt), which tripling the raw sub-floor value of 1 would give.
+      expect(readBrc80(bytes([0x01, 0x03, 0x00, 0x00]), 0)?.widthPt).toBe(0.75);
+    });
+
+    it("leaves a single-line border's width unmultiplied", () => {
+      expect(readBrc80(bytes([0x10, 0x01, 0x00, 0x00]), 0)?.widthPt).toBe(2);
+      expect(writeBrc80({ color: RED, widthPt: 2 })[0]).toBe(0x10);
+    });
+
+    it("writes a double border's total widthPt as one third of it, the inverse of the read-side tripling", () => {
+      // The pre-fix writer stated dptLineWidth as widthPt directly (16 for 2pt), which is exactly what a real LibreOffice reader tripled back into the 6pt double the issue reported; dividing by three first states the same 2pt intent as dptLineWidth 5.
+      expect(writeBrc80({ color: RED, widthPt: 2, style: "double" })[0]).toBe(
+        5,
+      );
+    });
+
+    it("writes and reads back a double border's own total width exactly, for a width the tripled field can state precisely", () => {
+      const border: ContentBorder = {
+        color: RED,
+        widthPt: 1.875,
+        style: "double",
+      };
+      const written = writeBrc80(border);
+      expect(written[0]).toBe(5);
+      expect(readBrc80(bytes(written), 0)).toEqual(border);
+    });
+
+    it("triples on the Brc's own exact-colour encoding too, not just Brc80's palette one", () => {
+      const border: ContentBorder = {
+        color: RED,
+        widthPt: 1.875,
+        style: "double",
+      };
+      const written = writeBrc(border);
+      expect(written[4]).toBe(5);
+      expect(readBrc(bytes(written), 0)).toEqual(border);
+    });
+  });
 });
 
 describe("Brc", () => {
