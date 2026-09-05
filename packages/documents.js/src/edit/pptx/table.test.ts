@@ -160,6 +160,22 @@ describe("buildDrawingTable / PptxTable", () => {
     );
     expect(cell.borders).toBeUndefined();
   });
+
+  it("borders getter rejects a numeric-prefixed @w rather than truncating it, unlike Number.parseInt", () => {
+    const tableElement = buildDrawingTable({ rows: 1, columns: 1 });
+    const table = new PptxTable(tableElement);
+    const cell = table.cell(0, 0);
+    const tcPr = directChildElement(cell.element, "a:tcPr");
+    if (tcPr === undefined) {
+      throw new Error("expected a:tcPr");
+    }
+    tcPr.children.push(
+      el("a:lnT", { w: "12700abc" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "FF0000" })]),
+      ]),
+    );
+    expect(cell.borders).toBeUndefined();
+  });
 });
 
 describe("buildTableGraphicFrame", () => {
