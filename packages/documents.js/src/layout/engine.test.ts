@@ -292,7 +292,12 @@ describe("convertWordprocessingToLayout: tables", () => {
       rows: [
         {
           heightPt: 20,
-          cells: [{ blocks: [], background: { r: 1, g: 0, b: 0 } }],
+          cells: [
+            {
+              blocks: [],
+              background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+            },
+          ],
         },
       ],
     };
@@ -302,6 +307,30 @@ describe("convertWordprocessingToLayout: tables", () => {
     );
     expect(rects).toHaveLength(1);
     expect(rects[0]?.fill).toEqual({ r: 1, g: 0, b: 0 });
+  });
+
+  it("emits no background rect at all for a pattern fill that resolves to no colour, rather than a fill-less no-op one", () => {
+    // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined -- genuinely no fill, not a reason to still push a rect item that would render invisibly.
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        {
+          heightPt: 20,
+          cells: [
+            {
+              blocks: [],
+              background: { kind: "pattern", patternType: "gray125" },
+            },
+          ],
+        },
+      ],
+    };
+    const layout = convert([section([table])]);
+    const rects = layout.pages[0]!.items.filter(
+      (i): i is LayoutRect => i.kind === "rect",
+    );
+    expect(rects).toHaveLength(0);
   });
 
   it("emits one LayoutLine per declared border edge of a cell, at that edge's own position", () => {
@@ -388,13 +417,13 @@ describe("convertWordprocessingToLayout: tables", () => {
           cells: [
             {
               blocks: [],
-              background: red,
+              background: { kind: "solid", color: red },
               borders: { top: { color: red, widthPt: 1 } },
               sourcePath: "sections[0].blocks[0].rows[0].cells[0]",
             },
             {
               blocks: [],
-              background: red,
+              background: { kind: "solid", color: red },
               borders: { top: { color: red, widthPt: 1 } },
             },
           ],

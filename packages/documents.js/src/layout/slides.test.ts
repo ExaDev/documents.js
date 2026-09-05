@@ -366,7 +366,7 @@ describe("convertPresentationToLayout: tables", () => {
           cells: [
             {
               blocks: [paragraph([run("A", { sizePt: 10 })])],
-              background: RED,
+              background: { kind: "solid", color: RED },
             },
             { blocks: [paragraph([run("B", { sizePt: 10 })])] },
           ],
@@ -400,6 +400,40 @@ describe("convertPresentationToLayout: tables", () => {
     expect(rects[0]?.fill).toEqual(RED);
     expect(rects[0]?.widthPt).toBe(50);
     expect(rects[0]?.heightPt).toBe(20);
+  });
+
+  it("emits no background rect at all for a pattern fill that resolves to no colour, rather than a fill-less no-op one", () => {
+    // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined -- genuinely no fill, not a reason to still push a rect item that would render invisibly.
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [50],
+      rows: [
+        {
+          heightPt: 20,
+          cells: [
+            {
+              blocks: [],
+              background: { kind: "pattern", patternType: "gray125" },
+            },
+          ],
+        },
+      ],
+    };
+    const layout = convert([
+      slide(
+        [
+          shape({
+            frame: { xPt: 0, yPt: 0, widthPt: 50, heightPt: 20 },
+            blocks: [table],
+          }),
+        ],
+        { widthPt: 960, heightPt: 100 },
+      ),
+    ]);
+    const rects = layout.pages[0]!.items.filter(
+      (i): i is LayoutRect => i.kind === "rect",
+    );
+    expect(rects).toHaveLength(0);
   });
 });
 
@@ -456,7 +490,9 @@ describe("convertPresentationToLayout: rotation", () => {
     const table: ContentTable = {
       kind: "table",
       columnWidthsPt: [50],
-      rows: [{ cells: [{ blocks: [], background: RED }] }],
+      rows: [
+        { cells: [{ blocks: [], background: { kind: "solid", color: RED } }] },
+      ],
     };
     const s = shape({
       frame: { xPt: 0, yPt: 0, widthPt: 50, heightPt: 50 },

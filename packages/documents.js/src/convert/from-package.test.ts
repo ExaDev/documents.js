@@ -1,6 +1,9 @@
 import {
   assembleTree,
   flattenTree,
+  type ContentDocument,
+  type ContentSheetPrintSettings,
+  type ContentTable,
   type DocumentTree,
 } from "document-schema.js";
 
@@ -25,8 +28,8 @@ import { minimalOdpBytes } from "../test-support/odp";
 import { minimalOdsBytes } from "../test-support/ods";
 import { minimalOdtBytes } from "../test-support/odt";
 import { docxToPdf, odtToDocx } from "./convert";
-import { buildDocumentBytes } from "./from-package";
-import type { LayoutItem } from "pdf-codec";
+import { buildDocumentBytes, layoutDocumentFromPackage } from "./from-package";
+import type { LayoutItem, LayoutRect } from "pdf-codec";
 
 function wordprocessingPackage(): DocumentTree {
   return assembleTree(readOdtContent(decodeOdfPackage(minimalOdtBytes())));
@@ -167,5 +170,88 @@ describe("buildDocumentBytes", () => {
     expect(() => buildDocumentBytes(wordprocessingPackage(), "odf")).toThrow(
       /no ContentDocument-to-odf builder/,
     );
+  });
+});
+
+// The frames-to-layout inverse's own two cell-background call sites (emitTableCell, emitSheetCell), each carrying the identical resolved-colour guard engine.ts/sheets.ts/slides.ts already cover: a cell's background renders as a LayoutRect only when resolveCellFillColor actually resolves a colour, not merely when the cell declares a background object at all. A frame is hand-stamped directly onto each cell here (rather than run through a real layout pass) since layoutDocumentFromPackage only ever reads the frames a package already carries.
+describe("layoutDocumentFromPackage: cell background rects", () => {
+  function rectItems(items: readonly LayoutItem[]): LayoutRect[] {
+    return items.filter((i): i is LayoutRect => i.kind === "rect");
+  }
+
+  it("emits no rect for a table cell whose pattern fill resolves to no colour (emitTableCell)", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [50],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [],
+              background: { kind: "pattern", patternType: "gray125" },
+              frames: [
+                { pageIndex: 0, xPt: 0, yPt: 0, widthPt: 50, heightPt: 20 },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const content: Extract<ContentDocument, { kind: "wordprocessing" }> = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 200, heightPt: 200 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [table],
+        },
+      ],
+    };
+    const pkg: DocumentTree = assembleTree(content, [
+      { widthPt: 200, heightPt: 200 },
+    ]);
+    const layout = layoutDocumentFromPackage(pkg);
+    expect(rectItems(layout.pages[0]!.items)).toHaveLength(0);
+  });
+
+  it("emits no rect for a sheet cell whose pattern fill resolves to no colour (emitSheetCell)", () => {
+    const printSettings: ContentSheetPrintSettings = {
+      pageSize: { widthPt: 200, heightPt: 200 },
+      margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+      gridlines: false,
+      headers: false,
+      pageOrder: "downThenOver",
+    };
+    const content: Extract<ContentDocument, { kind: "spreadsheet" }> = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [
+            {
+              row: 0,
+              column: 0,
+              value: { kind: "string", value: "A" },
+              displayText: "A",
+              background: { kind: "pattern", patternType: "gray125" },
+              frames: [
+                { pageIndex: 0, xPt: 0, yPt: 0, widthPt: 50, heightPt: 20 },
+              ],
+            },
+          ],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings,
+        },
+      ],
+    };
+    const pkg: DocumentTree = assembleTree(content, [
+      { widthPt: 200, heightPt: 200 },
+    ]);
+    const layout = layoutDocumentFromPackage(pkg);
+    expect(rectItems(layout.pages[0]!.items)).toHaveLength(0);
   });
 });

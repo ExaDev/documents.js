@@ -581,18 +581,22 @@ describe("readXlsContent", () => {
         displayText: "",
       });
       // icv 10 is the default table's own Red, icv 12 its own Blue.
-      expect(cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
+      expect(cells[0]?.background).toEqual({
+        kind: "solid",
+        color: { r: 1, g: 0, b: 0 },
+      });
       expect(cells[0]?.borders).toEqual({
         top: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.75 },
       });
     });
 
     it("still drops a Blank cell whose XF resolves to no decoration this reader can express", () => {
-      // fls=2 is 50% gray, a pattern that deliberately resolves to no background at all (see the test below), and no side carries a border -- so this Blank has nothing to show after resolution and stays dropped, exactly as an undecorated one does.
+      // 0x13 is a reserved FillPattern value past FLSGRAY0625 (0x12), the last one [MS-XLS]/[MS-XLSB]'s own enumeration names -- it resolves to no background at all (see the test below), and no side carries a border, so this Blank has nothing to show after resolution and stays dropped, exactly as an undecorated one does.
+      const RESERVED_FILL_PATTERN = 0x13;
       const bytes = xlsFile(
         workbookStream({
           globals: xfTableWithDecoration(0, {
-            fillPattern: 2,
+            fillPattern: RESERVED_FILL_PATTERN,
             fillForegroundIcv: 10,
           }),
           sheets: [
@@ -607,23 +611,37 @@ describe("readXlsContent", () => {
       expect(readXlsContent(bytes).sheets[0]?.cells).toHaveLength(0);
     });
 
-    it("reads a solid fill's own foreground colour as background, through the default palette", () => {
+    it("reads a solid fill's own foreground colour as a solid background, through the default palette", () => {
       // icv 10: the default table's own duplicate of Red (rgColor[2], [MS-XLS] "Icv") -- resolvable with no Palette record present at all.
       const bytes = decoratedCellDocument({
         fillPattern: 1,
         fillForegroundIcv: 10,
       });
       expect(readXlsContent(bytes).sheets[0]?.cells[0]?.background).toEqual({
-        r: 1,
-        g: 0,
-        b: 0,
+        kind: "solid",
+        color: { r: 1, g: 0, b: 0 },
       });
     });
 
-    it("does not map a background for a fill pattern beyond solid", () => {
-      // fls=2 is 50% gray ([MS-XLS] FillPattern) -- a real information-loss case this package deliberately does not approximate as its foreground colour; see the README's own "Cell decoration" note.
+    it("maps a genuine two-colour pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
+      // fls=2 is FLSMEDGRAY, 50% gray ([MS-XLS]/[MS-XLSB] FillPattern) -- ContentCellPatternType's own 'mediumGray'.
       const bytes = decoratedCellDocument({
         fillPattern: 2,
+        fillForegroundIcv: 10, // default Red
+        fillBackgroundIcv: 11, // default Green
+      });
+      expect(readXlsContent(bytes).sheets[0]?.cells[0]?.background).toEqual({
+        kind: "pattern",
+        patternType: "mediumGray",
+        foregroundColor: { r: 1, g: 0, b: 0 },
+        backgroundColor: { r: 0, g: 1, b: 0 },
+      });
+    });
+
+    it("does not map a background for a reserved FillPattern value past FLSGRAY0625", () => {
+      const RESERVED_FILL_PATTERN = 0x13;
+      const bytes = decoratedCellDocument({
+        fillPattern: RESERVED_FILL_PATTERN,
         fillForegroundIcv: 10,
       });
       expect(
@@ -670,9 +688,8 @@ describe("readXlsContent", () => {
         ],
       );
       expect(readXlsContent(bytes).sheets[0]?.cells[0]?.background).toEqual({
-        r: 1,
-        g: 128 / 255,
-        b: 0,
+        kind: "solid",
+        color: { r: 1, g: 128 / 255, b: 0 },
       });
     });
   });

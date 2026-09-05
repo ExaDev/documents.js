@@ -7,7 +7,7 @@ import type {
   ContentTable,
   PageSize,
 } from "document-schema.js";
-import { COLOR_BLACK } from "document-schema.js";
+import { COLOR_BLACK, resolveCellFillColor } from "document-schema.js";
 import { layoutFormula } from "../mathml/layout";
 import type { Box } from "document-schema.js";
 import { flipY } from "../model/geometry";
@@ -248,18 +248,19 @@ function layoutTable(
       if (placement.layoutRotationDeg === undefined) {
         stampFrame(cell, pageIndex, cellFrame);
       }
-      if (
-        cell.background !== undefined &&
-        placement.layoutRotationDeg === undefined
-      ) {
-        // ContentTableCell has no sourcePath of its own (only ContentTable does -- see document-schema.js), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell.
+      // ContentTableCell has no sourcePath of its own (only ContentTable does -- see document-schema.js), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell. A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for -- and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
+      const cellFill =
+        cell.background === undefined
+          ? undefined
+          : resolveCellFillColor(cell.background);
+      if (cellFill !== undefined && placement.layoutRotationDeg === undefined) {
         out.push({
           kind: "rect",
           xPt: cellFrame.xPt,
           yPt: cellFrame.yPt,
           widthPt: cellFrame.widthPt,
           heightPt: cellFrame.heightPt,
-          fill: cell.background,
+          fill: cellFill,
           sourcePath: table.sourcePath,
         });
       }

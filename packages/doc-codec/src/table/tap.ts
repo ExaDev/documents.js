@@ -1,7 +1,7 @@
 import type {
-  Color,
   ContentBorder,
   ContentCellBorders,
+  ContentCellFill,
 } from "document-schema.js";
 import { readInt16LE, readUint16LE, readUint8 } from "../bytes";
 import { SGC, type Prl } from "../prop/sprm";
@@ -79,8 +79,8 @@ export interface TableCellProperties {
   readonly vertMerge: number;
   /** The cell's own four borders, absent when it states none on any side. */
   readonly borders?: ContentCellBorders;
-  /** The cell's own flat background colour, absent when it states no shading or states a pattern Color cannot express (see decoration.ts's readShd). */
-  readonly background?: Color;
+  /** The cell's own background fill, absent when it states no shading or states a pattern this reader cannot resolve at all (see decoration.ts's readShd). */
+  readonly background?: ContentCellFill;
 }
 
 export interface TableRowDefinition {
@@ -171,7 +171,7 @@ function applyBrcToCell(
 
 function withBackground(
   cell: TableCellProperties,
-  background: Color | undefined,
+  background: ContentCellFill | undefined,
 ): TableCellProperties {
   return {
     horzMerge: cell.horzMerge,
@@ -187,14 +187,14 @@ function applyShdArray(
   operand: Uint8Array,
   firstCell: number,
   entrySize: number,
-  colorAt: (operand: Uint8Array, offset: number) => Color | undefined,
+  fillAt: (operand: Uint8Array, offset: number) => ContentCellFill | undefined,
 ): TableRowDefinition {
   const cb = readUint8(operand, 0);
   const count = Math.floor(cb / entrySize);
   return withCells(definition, (cell, index) => {
     const entry = index - firstCell;
     if (entry < 0 || entry >= count) return cell;
-    return withBackground(cell, colorAt(operand, 1 + entry * entrySize));
+    return withBackground(cell, fillAt(operand, 1 + entry * entrySize));
   });
 }
 

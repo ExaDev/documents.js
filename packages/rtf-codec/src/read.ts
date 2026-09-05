@@ -907,15 +907,18 @@ class ContentBuilder {
             }
           }
           const borders = this.resolveBorders(definition);
-          const background =
+          const backgroundColor =
             definition?.backgroundIndex === undefined
               ? undefined
               : this.header.colors[definition.backgroundIndex];
+          // ContentTableCell.background is document-schema.js's discriminated ContentCellFill (ExaDev/documents.js#951); \clcbpatN names only a flat colour (\clshdngN's own shading percentage is a real pattern this package does not yet resolve -- see this package's own README, "Deliberately not handled"), so it always wraps as a 'solid' fill.
           return {
             blocks: cell.blocks,
             ...(colSpan > 1 ? { colSpan } : {}),
             ...(rowSpan > 1 ? { rowSpan } : {}),
-            ...(background === undefined ? {} : { background }),
+            ...(backgroundColor === undefined
+              ? {}
+              : { background: { kind: "solid", color: backgroundColor } }),
             ...(borders === undefined ? {} : { borders }),
           };
         }),

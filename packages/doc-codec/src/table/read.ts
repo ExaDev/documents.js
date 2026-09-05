@@ -1,7 +1,7 @@
 import type {
-  Color,
   ContentBlock,
   ContentCellBorders,
+  ContentCellFill,
   ContentParagraph,
   ContentTable,
   ContentTableCell,
@@ -63,7 +63,7 @@ interface RawCell {
   readonly horzMerge: number;
   readonly vertMerge: number;
   readonly borders: ContentCellBorders | undefined;
-  readonly background: Color | undefined;
+  readonly background: ContentCellFill | undefined;
   readonly blocks: ContentBlock[];
 }
 
@@ -246,7 +246,7 @@ interface LogicalCell {
   readonly colSpan: number;
   readonly vertMerge: number;
   readonly borders: ContentCellBorders | undefined;
-  readonly background: Color | undefined;
+  readonly background: ContentCellFill | undefined;
   readonly blocks: ContentBlock[];
 }
 

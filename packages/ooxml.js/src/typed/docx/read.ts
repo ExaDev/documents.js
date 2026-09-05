@@ -3,11 +3,11 @@ import type { Package } from "../../model/package";
 import type { XmlElement, XmlNode } from "../../model/node";
 import type {
   AnchorDescriptor,
-  Color,
   ConstructDescriptor,
   ContentBlock,
   ContentBorder,
   ContentCellBorders,
+  ContentCellFill,
   ContentControlDescriptor,
   ContentEmbeddedObjectBlock,
   ContentImageBlock,
@@ -55,6 +55,7 @@ import {
   NumberingDefinitionSchema,
   readNumberingDefinitions,
 } from "./numbering";
+import { readCellShading } from "./shading";
 import type {
   ConstructExtent,
   ParagraphContentIndex,
@@ -737,16 +738,6 @@ function readParagraph(
   };
 }
 
-// w:shd/@w:fill is a 6-hex-digit colour, or "auto"/"none" meaning no fill -- both defer rather than asserting a colour, the same convention as w:color/@w:val.
-function readCellShading(tcPr: XmlElement | undefined): Color | undefined {
-  const shd =
-    tcPr === undefined ? undefined : childrenWithTag(tcPr, "w:shd")[0];
-  const fill = shd === undefined ? undefined : attr(shd, "w:fill");
-  return fill === undefined || fill === "auto" || fill === "none"
-    ? undefined
-    : rgbHexToColor(fill);
-}
-
 // WordprocessingML's own ST_Border enumeration has several dozen decorative line styles (wave, threeDEmboss, dashDotStroked, ...) that ContentBorder's four-member ContentStrokeStyle can't distinguish individually -- each maps to whichever of solid/dashed/dotted/double it visually resembles most closely, the same "narrow to the closest matching value" convention readAlignment (styles.ts) already applies to w:jc's own both/distribute -> justify. Anything unmapped defaults to 'solid' rather than being dropped, since a border with an unrecognised style is still visually a border.
 const BORDER_STYLE_MAP: ReadonlyMap<string, ContentStrokeStyle> = new Map([
   ["single", "solid"],
@@ -836,7 +827,7 @@ function readCellBorders(
 interface RawCell {
   readonly gridSpan: number;
   readonly isVMergeContinuation: boolean;
-  readonly background: Color | undefined;
+  readonly background: ContentCellFill | undefined;
   readonly borders: ContentCellBorders | undefined;
   readonly blocks: ContentBlock[];
 }

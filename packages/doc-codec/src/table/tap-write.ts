@@ -1,7 +1,7 @@
 import type {
-  Color,
   ContentBorder,
   ContentCellBorders,
+  ContentCellFill,
 } from "document-schema.js";
 import { DocFormatError } from "../errors";
 import {
@@ -58,8 +58,8 @@ export interface TableCellToWrite {
   readonly horzMerge: 0 | 1 | 2;
   /** The cell's own four borders, from ContentTableCell.borders; an absent side is written as the Brc80MayBeNil no-border sentinel. */
   readonly borders?: ContentCellBorders;
-  /** The cell's own flat background, from ContentTableCell.background. */
-  readonly background?: Color;
+  /** The cell's own background fill, from ContentTableCell.background. */
+  readonly background?: ContentCellFill;
 }
 
 function int16(value: number, what: string): number[] {

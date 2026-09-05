@@ -537,7 +537,7 @@ describe("writeOdtContent: tables", () => {
             cells: [
               {
                 colSpan: 2,
-                background: { r: 1, g: 1, b: 0 },
+                background: { kind: "solid", color: { r: 1, g: 1, b: 0 } },
                 borders: {
                   top: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
                   left: {

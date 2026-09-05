@@ -14,7 +14,11 @@ import type {
 import { columnIndexToLetters } from "document-schema.js";
 import { layoutFormula } from "../mathml/layout";
 import type { Color as LayoutColor } from "document-schema.js";
-import { COLOR_BLACK, rgbHexToColor } from "document-schema.js";
+import {
+  COLOR_BLACK,
+  resolveCellFillColor,
+  rgbHexToColor,
+} from "document-schema.js";
 import type { Alignment } from "document-schema.js";
 import { DEFAULT_LAYOUT_FONT } from "document-schema.js";
 import { flipY } from "../model/geometry";
@@ -502,6 +506,11 @@ function renderCellBackground(
   if (cell.background === undefined) {
     return;
   }
+  // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for -- and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard below checks the RESOLVED colour, not merely whether the cell declared a background object.
+  const fill = resolveCellFillColor(cell.background);
+  if (fill === undefined) {
+    return;
+  }
   const flipped = flipY(frameYDown, pageHeightPt);
   out.push({
     kind: "rect",
@@ -509,7 +518,7 @@ function renderCellBackground(
     yPt: flipped.yPt,
     widthPt: flipped.widthPt,
     heightPt: flipped.heightPt,
-    fill: cell.background,
+    fill,
     sourcePath: cell.sourcePath,
   });
 }

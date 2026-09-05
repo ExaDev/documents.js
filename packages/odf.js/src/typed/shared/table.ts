@@ -4,11 +4,13 @@ import type {
   ContentBlock,
   ContentBorder,
   ContentCellBorders,
+  ContentCellFill,
   ContentStrokeStyle,
   ContentTable,
   ContentTableCell,
   ContentTableRow,
 } from "document-schema.js";
+import { resolveCellFillColor } from "document-schema.js";
 import type { XmlElement } from "../../model/node";
 import type { Package } from "../../model/package";
 import type { StyleRegistry } from "../../styles/registry";
@@ -188,8 +190,9 @@ function bordersFromAccumulated(
   return borders;
 }
 
+// background is always a 'solid' ContentCellFill, never a 'pattern' -- style:table-cell-properties/@fo:background-color is OASIS's own flat-colour attribute, with no two-colour pattern-fill vocabulary at all (unlike WordprocessingML's w:shd or SpreadsheetML's patternFill, ExaDev/documents.js#951). tableCellStyle below writes the inverse: resolveCellFillColor's own single-colour approximation for a 'pattern' fill this format has no way to state.
 export interface CellStyleDecoration {
-  background?: Color;
+  background?: ContentCellFill;
   borders?: ContentCellBorders;
   alignment?: Alignment;
   verticalAlignment?: "top" | "middle" | "bottom";
@@ -249,7 +252,10 @@ export function readCellStyleDecoration(
   }
 
   return {
-    background,
+    background:
+      background === undefined
+        ? undefined
+        : { kind: "solid", color: background },
     borders: bordersFromAccumulated(borderAccumulator),
     alignment,
     verticalAlignment,
@@ -367,8 +373,13 @@ function tableCellStyle(
   registry: StyleRegistry,
 ): string | undefined {
   const attributes: Record<string, string> = {};
-  if (cell.background !== undefined) {
-    attributes["fo:background-color"] = formatOdfColor(cell.background);
+  // ODF's fo:background-color states one flat colour with no pattern-fill vocabulary at all, so a 'pattern' fill approximates through resolveCellFillColor's own single representative colour (its foreground, falling back to its background) -- the same degradation this schema function exists for, rather than a bespoke one-off here. A pattern stating neither colour resolves to undefined and writes no attribute at all, exactly like an absent background.
+  const backgroundColor =
+    cell.background === undefined
+      ? undefined
+      : resolveCellFillColor(cell.background);
+  if (backgroundColor !== undefined) {
+    attributes["fo:background-color"] = formatOdfColor(backgroundColor);
   }
   const borders = cell.borders;
   if (borders !== undefined) {
