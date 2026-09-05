@@ -162,12 +162,13 @@ export function encodeParagraphGrpprl(
         `paragraph list level ${paragraph.list.level} is outside the 0..${MAX_LIST_LEVEL} range a non-simple LSTF's fixed nine LVLs can address`,
       );
     }
+    // sprmPIlvl MUST precede sprmPIlfo, not merely may -- confirmed directly against a real LibreOffice-authored .doc's own paragraph grpprl, which always states level before id. A real consumer applies a paragraph's list membership at the moment it sees the id sprm, using whatever level the grpprl has already set by that point, so id-before-level silently flattens every level back to 0 on read by any consumer but this package's own. This package's own reader cannot catch a regression here: prop/pap.ts folds sprms by last-Prl-wins regardless of the order they arrived in, so a round trip through this package alone reads back correctly either way -- the identical shape of self-blind-spot bug ExaDev/documents.js#892 was (a lenient reader tolerating bytes a real, stricter consumer rejects), just for an sprm's own operand order rather than a missing trailing byte.
+    pushSprm(bytes, SPRM_P_ILVL, [paragraph.list.level]);
     pushSprm(
       bytes,
       SPRM_P_ILFO,
       int16(ilfoOf(paragraph.list.numId), "paragraph list ilfo"),
     );
-    pushSprm(bytes, SPRM_P_ILVL, [paragraph.list.level]);
   }
   return bytes;
 }
