@@ -506,15 +506,19 @@ function renderCellBackground(
   if (cell.background === undefined) {
     return;
   }
+  // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for -- and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard below checks the RESOLVED colour, not merely whether the cell declared a background object.
+  const fill = resolveCellFillColor(cell.background);
+  if (fill === undefined) {
+    return;
+  }
   const flipped = flipY(frameYDown, pageHeightPt);
-  // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for.
   out.push({
     kind: "rect",
     xPt: flipped.xPt,
     yPt: flipped.yPt,
     widthPt: flipped.widthPt,
     heightPt: flipped.heightPt,
-    fill: resolveCellFillColor(cell.background),
+    fill,
     sourcePath: cell.sourcePath,
   });
 }

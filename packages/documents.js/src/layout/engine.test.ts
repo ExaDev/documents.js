@@ -309,6 +309,30 @@ describe("convertWordprocessingToLayout: tables", () => {
     expect(rects[0]?.fill).toEqual({ r: 1, g: 0, b: 0 });
   });
 
+  it("emits no background rect at all for a pattern fill that resolves to no colour, rather than a fill-less no-op one", () => {
+    // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined -- genuinely no fill, not a reason to still push a rect item that would render invisibly.
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        {
+          heightPt: 20,
+          cells: [
+            {
+              blocks: [],
+              background: { kind: "pattern", patternType: "gray125" },
+            },
+          ],
+        },
+      ],
+    };
+    const layout = convert([section([table])]);
+    const rects = layout.pages[0]!.items.filter(
+      (i): i is LayoutRect => i.kind === "rect",
+    );
+    expect(rects).toHaveLength(0);
+  });
+
   it("emits one LayoutLine per declared border edge of a cell, at that edge's own position", () => {
     const red = { r: 1, g: 0, b: 0 };
     const table: ContentTable = {
