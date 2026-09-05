@@ -32,7 +32,7 @@ import {
   METADATA_FIXTURE,
 } from "../test-support/metadata-fixture";
 
-// Drives the real assembled commander program end to end against real fixtures, proving both write paths set-metadata.ts implements: the ContentDocument full rebuild (docx here, standing in for pptx/odt/odp/ods/odg/markdown, which all go through the identical readXContent -> buildXPackage shape) -- including the documented lossy-for-docx-extras caveat -- and the direct pdf metadata patch, which runs no layout engine at all and must leave every other page item untouched.
+// Drives the real assembled commander program end to end against real fixtures, proving all three write paths set-metadata.ts implements: the docx docProps/core.xml in-place patch (patchDocxMetadata), which must leave docx-extras' own data (comments, footnotes, headers/footers, numbering) completely untouched; the ContentDocument full rebuild every other rebuild format goes through (xlsx here, standing in for pptx/odt/odp/ods/odg/markdown, which all go through the identical readXContent -> buildXPackage shape); and the direct pdf metadata patch, which runs no layout engine at all and must leave every other page item untouched.
 
 let savedExitCode: typeof process.exitCode;
 let workspace: string;
@@ -113,8 +113,8 @@ afterEach(() => {
 });
 
 describe("set-metadata", () => {
-  it("rebuilds a docx with only the given fields overridden, leaving everything else untouched", async () => {
-    const outputPath = join(workspace, "rebuilt.docx");
+  it("patches a docx's own metadata in place, leaving everything else -- including the body paragraph -- untouched", async () => {
+    const outputPath = join(workspace, "patched.docx");
     const { exitCode, stderr } = await runCli([
       "set-metadata",
       join(workspace, "source.docx"),
@@ -129,20 +129,20 @@ describe("set-metadata", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(EXIT_SUCCESS);
 
-    const rebuilt = readDocxContent(
+    const patched = readDocxContent(
       decodePackage(new Uint8Array(await readFile(outputPath))),
     );
-    expect(rebuilt.metadata.title).toBe("New Title");
+    expect(patched.metadata.title).toBe("New Title");
     // Author/subject were never overridden, so they survive the merge from the source's own metadata.
-    expect(rebuilt.metadata.author).toBe(METADATA_FIXTURE.author);
-    expect(rebuilt.metadata.subject).toBe(METADATA_FIXTURE.subject);
+    expect(patched.metadata.author).toBe(METADATA_FIXTURE.author);
+    expect(patched.metadata.subject).toBe(METADATA_FIXTURE.subject);
     // --set-keywords splits on comma, trims, and drops empty entries.
-    expect(rebuilt.metadata.keywords).toStrictEqual(["gamma", "delta"]);
-    // The paragraph itself survives the rebuild -- only metadata changed.
-    expect(rebuilt.kind).toBe("wordprocessing");
+    expect(patched.metadata.keywords).toStrictEqual(["gamma", "delta"]);
+    // The paragraph itself survives the patch -- only metadata changed.
+    expect(patched.kind).toBe("wordprocessing");
     const survived =
-      rebuilt.kind === "wordprocessing" &&
-      rebuilt.sections[0]?.blocks.some(
+      patched.kind === "wordprocessing" &&
+      patched.sections[0]?.blocks.some(
         (block) =>
           block.kind === "paragraph" &&
           block.runs.some((run) => run.text === BODY_TEXT),
@@ -150,15 +150,17 @@ describe("set-metadata", () => {
     expect(survived).toBe(true);
   });
 
-  it("genuinely drops docx-extras data (a comment) when rebuilding, matching the documented lossy caveat", async () => {
-    const before = readDocxExtras(
-      decodePackage(
-        new Uint8Array(await readFile(join(workspace, "extras.docx"))),
-      ),
+  it("preserves docx-extras data (comments, footnotes, headers/footers, numbering) when patching a docx's metadata in place", async () => {
+    const beforeBytes = new Uint8Array(
+      await readFile(join(workspace, "extras.docx")),
     );
+    const before = readDocxExtras(decodePackage(beforeBytes));
     expect(before.comments.length).toBeGreaterThan(0);
+    expect(before.footnotes.length).toBeGreaterThan(0);
+    expect(before.headerFooterParts.length).toBeGreaterThan(0);
+    expect(Object.keys(before.numbering).length).toBeGreaterThan(0);
 
-    const outputPath = join(workspace, "extras-rebuilt.docx");
+    const outputPath = join(workspace, "extras-patched.docx");
     const { exitCode } = await runCli([
       "set-metadata",
       join(workspace, "extras.docx"),
@@ -171,13 +173,13 @@ describe("set-metadata", () => {
     const after = readDocxExtras(
       decodePackage(new Uint8Array(await readFile(outputPath))),
     );
-    expect(after.comments).toStrictEqual([]);
+    expect(after).toStrictEqual(before);
 
     // The metadata edit itself still landed.
-    const rebuiltContent = readDocxContent(
+    const patchedContent = readDocxContent(
       decodePackage(new Uint8Array(await readFile(outputPath))),
     );
-    expect(rebuiltContent.metadata.author).toBe("New Author");
+    expect(patchedContent.metadata.author).toBe("New Author");
   });
 
   it("patches a pdf directly, leaving every other page item byte-for-byte untouched", async () => {
