@@ -7,8 +7,12 @@ import type {
   ContentTableRow,
 } from "document-schema.js";
 import { DocFormatError, DocUnsupportedError } from "../errors";
+import { fitsAloneOnPapxPage } from "../prop/fkp-write";
 import { CELL_MARK, PARAGRAPH_MARK } from "../text/special";
 import { encodeTableRowGrpprl, type TableCellToWrite } from "./tap-write";
+
+/** Reports a non-fatal write-time degradation -- this package's own analogue of byte-codec's/pdf-codec's `onWarning`, adopted here rather than a new shape of its own so a caller already handling one already handles the other. */
+export type WriteWarning = (message: string) => void;
 
 // The inverse of table/read.ts: a section's own ContentBlock list to the flat sequence of paragraphs writeDocContent's own text-layout pass consumes, expanding each ContentTable into its real [MS-DOC] physical-cell stream. Each ContentTableCell -- real content or a vertical-merge continuation's own `{blocks: []}` -- becomes ONE physical cell ending in its own cell mark exactly as [MS-DOC] 2.4.3 requires, in the ordinary case: a horizontally-merged (colSpan > 1) cell is not expanded into extra synthetic continuation cells, because a real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read a horizontal merge back from TCGRF.horzMerge/sprmTMerge continuation cells at all -- it states one purely as a row's own narrower, wider physical-cell layout (ExaDev/documents.js#895; see tap-write.ts's own top-of-file note for the full ground-truth finding). flattenRow instead merges the table-wide column grid's own boundaries across a cell's colSpan to compute that one physical cell's width, so the row's own rgdxaCenter genuinely has fewer entries than the table's full column count whenever a merge is present, matching the merge-encoding strategy LibreOffice's own writer uses -- not its bytes, which still differ in what the row mark carries beyond the facts both state (this writer emits no cell padding, cell spacing or table-style sprm, and no legacy Shd80 array). Each ContentTableCell's own background and borders ride along to tap-write.ts, which states them the same two ways that implementation does -- TC80's own Brc80 fields plus a sprmTSetBrc for a colour the Brc80 palette cannot hold, and a sprmTDefTableShd array of one Shd per cell. A vertical-merge continuation cell is never inferred from a bare `{blocks: []}` alone -- a genuinely blank cell has the identical shape -- so flattenTable tracks which columns carry a vertical merge actually in progress (an `active` map keyed by column position, walked top to bottom exactly as ooxml.js's own buildTable tracks its identical `active` map), and only a `{blocks: []}` cell landing on a column with a merge genuinely active there becomes a continuation; every other cell, blank or not, is ordinary. The same map supplies a continuation's own physical column span from the anchor's recorded span, since the continuation cell's own (typically absent) colSpan is never the source of truth for it. Every physical cell's own grpprl carries sprmPFInTable; the row's own trailing mark additionally carries sprmPFTtp plus the row's whole TAP (tap-write.ts's encodeTableRowGrpprl).
 //
@@ -106,6 +110,15 @@ function columnBoundariesTwips(columnWidthsPt: readonly number[]): number[] {
 interface ActiveVerticalMerge {
   span: number;
   remaining: number;
+}
+
+/** A deep copy of `active` -- a fresh Map holding a fresh object per entry, never the same ActiveVerticalMerge instances. flattenTable's own per-row budget check (see its own note below) has to try flattening a row's lost-boundary split as a dry run before committing to it, and placeCell mutates `covered.remaining` on the object a Map entry already holds -- a shallow copy would let that dry run's own mutation bleed into the real, committed state for every row after it. */
+function cloneActive(
+  active: ReadonlyMap<number, ActiveVerticalMerge>,
+): Map<number, ActiveVerticalMerge> {
+  return new Map(
+    Array.from(active, ([column, merge]) => [column, { ...merge }]),
+  );
 }
 
 /** Where one logical cell lands on the row's own grid, before any lost-boundary splitting: its span in grid columns, and whether it is a vertical-merge continuation of a cell above. `active`'s own cross-row state must evolve identically wherever this runs, since recoverableBoundaries and flattenRow each walk every row with their own fresh map and have to land on the same columns for the second pass's splitting decisions to mean anything. */
@@ -247,7 +260,24 @@ function flattenRow(
   return { paragraphs, cellsToWrite, rowBoundariesTwips };
 }
 
-function flattenTable(table: ContentTable): WriteParagraph[] {
+// Builds the row-ending mark's own WriteParagraph from a flattened row's own three products (see flattenRow), the one shape both the ordinary path and the per-row budget fallback below need.
+function rowMarkParagraph(
+  rowBoundariesTwips: readonly number[],
+  cellsToWrite: readonly TableCellToWrite[],
+  heightPt: number | undefined,
+): WriteParagraph {
+  return {
+    runs: [],
+    properties: {},
+    extraGrpprl: rowMarkExtraGrpprl(rowBoundariesTwips, cellsToWrite, heightPt),
+    terminator: CELL_MARK,
+  };
+}
+
+function flattenTable(
+  table: ContentTable,
+  onWarning: WriteWarning | undefined,
+): WriteParagraph[] {
   const columnCount = table.columnWidthsPt.length;
   if (columnCount === 0 || table.rows.length === 0) {
     throw new DocFormatError(
@@ -273,31 +303,48 @@ function flattenTable(table: ContentTable): WriteParagraph[] {
         "internal defect: distributeLostBoundaries returned fewer buckets than the table has rows",
       );
     }
+    // The row's own assigned split (ExaDev/documents.js#992) can itself overflow a PapxInFkp's own per-record budget on a table wide enough, or short enough on rows to share the work with (ExaDev/documents.js#1013): splitting states more of the table's own lost boundaries in physical form than #992's own fix ever needed to. Trying the split first, on a throwaway clone of `active` so a rejected trial cannot leak its own placeCell mutations into the row actually committed below, is what lets this decide "does the split fit" without duplicating fkp-write.ts's own page-packing arithmetic (fitsAloneOnPapxPage, whose own note has the full reasoning) as a second, driftable formula here.
+    let rowLostBoundariesToApply = rowLostBoundaries;
+    if (rowLostBoundaries.size > 0) {
+      const trial = flattenRow(
+        row.cells,
+        columnCount,
+        boundaries,
+        cloneActive(active),
+        rowLostBoundaries,
+      );
+      const trialGrpprl = rowMarkExtraGrpprl(
+        trial.rowBoundariesTwips,
+        trial.cellsToWrite,
+        row.heightPt,
+      );
+      if (!fitsAloneOnPapxPage(trialGrpprl)) {
+        // Falls back to the pre-#992 encoding for this one row alone: none of its assigned boundaries are split into a physical continuation cell, so the row states them the ordinary narrower/wider way (see this module's own top-of-file note) and the boundary itself goes back to being unrecoverable on read -- the same narrowing loss #992 exists to close, now scoped to only the rows genuinely too wide to close it for. A row that still will not fit even unsplit is not this fallback's concern: it throws exactly the DocFormatError it always has, from the real buildPapxPages call in write.ts, for the same "row is too wide or too decorated" reason #992 never touched.
+        rowLostBoundariesToApply = new Set();
+        onWarning?.(
+          `doc-codec: table row ${rowIndex} could not state ${rowLostBoundaries.size === 1 ? "its assigned lost column boundary" : `all ${rowLostBoundaries.size} of its assigned lost column boundaries`} without exceeding a PapxInFkp record's own byte budget; writing it unsplit instead, which narrows columnWidthsPt on read for this table exactly as this writer's own pre-#992 behaviour did`,
+        );
+      }
+    }
     const { paragraphs, cellsToWrite, rowBoundariesTwips } = flattenRow(
       row.cells,
       columnCount,
       boundaries,
       active,
-      rowLostBoundaries,
+      rowLostBoundariesToApply,
     );
     output.push(...paragraphs);
-    output.push({
-      runs: [],
-      properties: {},
-      extraGrpprl: rowMarkExtraGrpprl(
-        rowBoundariesTwips,
-        cellsToWrite,
-        row.heightPt,
-      ),
-      terminator: CELL_MARK,
-    });
+    output.push(
+      rowMarkParagraph(rowBoundariesTwips, cellsToWrite, row.heightPt),
+    );
   });
   return output;
 }
 
-// Flattens a section's whole block list into the paragraph sequence writeDocContent's own text-layout pass consumes: an ordinary paragraph passes through as one WriteParagraph, a table expands into its own real cell/row-mark stream.
+// Flattens a section's whole block list into the paragraph sequence writeDocContent's own text-layout pass consumes: an ordinary paragraph passes through as one WriteParagraph, a table expands into its own real cell/row-mark stream. `onWarning`, when given, is reported a message for a non-fatal write-time degradation -- today, only flattenTable's own per-row lost-boundary-budget fallback (see its own note).
 export function flattenSectionBlocks(
   blocks: readonly ContentBlock[],
+  onWarning?: WriteWarning,
 ): WriteParagraph[] {
   const output: WriteParagraph[] = [];
   for (const block of blocks) {
@@ -311,7 +358,7 @@ export function flattenSectionBlocks(
       continue;
     }
     if (block.kind === "table") {
-      output.push(...flattenTable(block));
+      output.push(...flattenTable(block, onWarning));
       continue;
     }
     throw new DocUnsupportedError(
