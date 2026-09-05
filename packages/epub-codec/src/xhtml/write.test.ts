@@ -246,6 +246,59 @@ describe("writeXhtmlBody", () => {
     expect(roundTrip(blocks)).toEqual(blocks);
   });
 
+  // ExaDev/documents.js#994's round-11 regression: writeList wrote one <li> per ListGroupNode entry, never consulting each entry's own list.itemId -- so a genuinely multi-block list item (readList mints ONE itemId per real <li> and shares it across every block readContainerChildren produces from that <li>'s own children) round-tripped back out as several separate, sibling <li> elements instead of the single item the source document actually had. document-schema.js's own ContentListMembership.itemId comment names exactly this distinction ("one item, several blocks" vs "several items"), which the writer was silently not honouring.
+  it("writes and re-reads a multi-block list item (a horizontal rule followed by a paragraph) as one <li>, not two", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [],
+        styleId: "HorizontalRule",
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "after the rule" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ];
+    const xml = write(blocks);
+    expect(xml.match(/<li>/gu)).toHaveLength(1);
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  // The one gap the round-11 itemId-grouping fix above does NOT close, pinned here rather than fixed: a document-schema.js decomposeSection defect (ExaDev/documents.js#1022), not something writeList alone can correct. walkSectionBlocks only closes list nesting on a heading or a PLAIN paragraph -- never on a constructStart -- so a footnote reference sitting in the last block of a list item, with that footnote's own body immediately following in the flat stream and nothing plain in between to close the list first, attaches the footnote's own construct group as a CHILD of that still-open list item rather than at the section root. The output below is the current, known-incorrect shape (the <aside> nested inside the <li>) -- tracked in #1022 as a decompose-level fix affecting every codec built on decomposeSection, not an epub-codec-only one.
+  it("nests a footnote's own aside inside the enclosing <li> when it immediately follows a list item's last block (ExaDev/documents.js#1022, tracked separately)", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "before" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 0,
+            endRun: 0,
+          },
+        ],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+      },
+      { kind: "paragraph", runs: [{ text: "Note body." }] },
+      { kind: "constructEnd" },
+    ];
+    const xml = write(blocks);
+    expect(xml).toContain(
+      '<li>before<a epub:type="noteref" href="#fn1"></a><aside epub:type="footnote" id="fn1"><p>Note body.</p></aside></li>',
+    );
+  });
+
   it("writes and re-reads a blockquote as a division construct pair", () => {
     const blocks: ContentBlock[] = [
       { kind: "constructStart", descriptor: { kind: "division" } },
