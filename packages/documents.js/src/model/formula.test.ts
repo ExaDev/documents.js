@@ -95,6 +95,53 @@ describe("collectDocumentFormulas", () => {
     ]);
   });
 
+  it("recurses into a non-formula embedded object's own nested document when the top-level block itself is not a formula", () => {
+    // document-schema.js's own content.ts comment on ContentEmbeddedObject names this exact shape: "a formula embedded inside a drawing embedded inside a spreadsheet". This test covers the wordprocessing block-flow arm's half of that recursion -- a drawing embedded directly in a section's own blocks, carrying a formula one level further in.
+    const nestedFormula = formulaBlock("a^2 + b^2 = c^2");
+    const drawingBlock: ContentBlock = {
+      kind: "embeddedObject",
+      objectKind: "drawing",
+      document: {
+        kind: "drawing",
+        metadata: {},
+        pages: [
+          {
+            size: { widthPt: 720, heightPt: 540 },
+            shapes: [
+              {
+                frame: { xPt: 0, yPt: 0, widthPt: 200, heightPt: 40 },
+                insetLeftPt: 0,
+                insetTopPt: 0,
+                insetRightPt: 0,
+                insetBottomPt: 0,
+                blocks: [nestedFormula],
+              },
+            ],
+            vectors: [],
+          },
+        ],
+      },
+      frame: FRAME,
+    };
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+          blocks: [drawingBlock],
+        },
+      ],
+    };
+    const entries = collectDocumentFormulas(document);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.formula.presentation?.latex).toBe("a^2 + b^2 = c^2");
+    expect(entries[0]?.locate).toBe(
+      "sections[0]/blocks[0]/pages[0].shapes[0]/blocks[0]",
+    );
+  });
+
   it("walks a presentation slide's shapes", () => {
     const document: ContentDocument = {
       kind: "presentation",
@@ -182,7 +229,9 @@ describe("collectDocumentFormulas", () => {
     expect(entries[0]?.locate).toBe("sheets[0].embeddedObjects[0]");
   });
 
-  it("skips a spreadsheet's non-formula embedded objects", () => {
+  it("skips a spreadsheet's non-formula embedded objects that carry no formula of their own, but still recurses into their nested document", () => {
+    // A drawing embedded object is not itself a formula, but ContentEmbeddedObject.document is unconditionally a whole ContentDocument -- an EMPTY nested document (pages: []) would pass this assertion whether or not the walk actually recurses, so it pins nothing about the recursion this test exists to cover. A real formula nested inside the drawing's own shape is the only way to prove the walk reaches it.
+    const nestedFormula = formulaBlock("y = mx + b");
     const document: ContentDocument = {
       kind: "spreadsheet",
       metadata: {},
@@ -196,14 +245,89 @@ describe("collectDocumentFormulas", () => {
           embeddedObjects: [
             {
               objectKind: "drawing",
-              document: { kind: "drawing", metadata: {}, pages: [] },
+              document: {
+                kind: "drawing",
+                metadata: {},
+                pages: [
+                  {
+                    size: { widthPt: 720, heightPt: 540 },
+                    shapes: [
+                      {
+                        frame: {
+                          xPt: 0,
+                          yPt: 0,
+                          widthPt: 200,
+                          heightPt: 40,
+                        },
+                        insetLeftPt: 0,
+                        insetTopPt: 0,
+                        insetRightPt: 0,
+                        insetBottomPt: 0,
+                        blocks: [nestedFormula],
+                      },
+                    ],
+                    vectors: [],
+                  },
+                ],
+              },
               frame: FRAME,
             },
           ],
         },
       ],
     };
-    expect(collectDocumentFormulas(document)).toEqual([]);
+    const entries = collectDocumentFormulas(document);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.formula.presentation?.latex).toBe("y = mx + b");
+    // The nested walk's own locate (relative to the drawing document's root) rides after the embedding object's own locate, so the full path names both the spreadsheet-level embedding position and the formula's position inside the nested drawing.
+    expect(entries[0]?.locate).toBe(
+      "sheets[0].embeddedObjects[0]/pages[0].shapes[0]/blocks[0]",
+    );
+  });
+
+  it("recurses through a wordprocessing document embedded inside a spreadsheet's own embeddedObjects array -- the shape a real LibreOffice .ods embedding a Writer document containing an equation produces", () => {
+    const nestedFormula = formulaBlock("E = mc^2");
+    const document: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          ...SHEET_DEFAULTS,
+          embeddedObjects: [
+            {
+              objectKind: "wordprocessing",
+              document: {
+                kind: "wordprocessing",
+                metadata: {},
+                sections: [
+                  {
+                    pageSize: { widthPt: 595, heightPt: 842 },
+                    margins: {
+                      topPt: 20,
+                      rightPt: 20,
+                      bottomPt: 20,
+                      leftPt: 20,
+                    },
+                    blocks: [nestedFormula],
+                  },
+                ],
+              },
+              frame: FRAME,
+            },
+          ],
+        },
+      ],
+    };
+    const entries = collectDocumentFormulas(document);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.formula.presentation?.latex).toBe("E = mc^2");
+    expect(entries[0]?.locate).toBe(
+      "sheets[0].embeddedObjects[0]/sections[0]/blocks[0]",
+    );
   });
 
   it("returns a sheet with no embeddedObjects array at all as an empty result, not a crash", () => {
