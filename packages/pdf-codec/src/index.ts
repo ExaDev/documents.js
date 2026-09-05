@@ -112,7 +112,7 @@ export type {
 export type { FontFace } from "./font-face";
 export { FontFaceParseError, readFontFace } from "./font-face";
 
-// Bytes + generic image (PNG/JPEG): re-exported from byte-codec (the neutral shared package), where these pure utilities now live. pdf-codec keeps its own internal copies under src/bytes/ and src/image/ (its own read/write/interpret paths use them), but its PUBLIC surface sources them from byte-codec so a consumer does not need to reach into a PDF backend for generic byte/image code.
+// Bytes + generic image (PNG/JPEG): re-exported from byte-codec (the neutral shared package), where these pure utilities now live. pdf-codec keeps its own internal byte primitives under src/bytes/ (its own read/write/interpret paths use them) and its own internal PNG decoder under src/image/png-decode.ts (write.ts decodes an embedded PNG through it), but has no internal PNG encoder of its own any more -- every PNG this package writes goes through byte-codec's own encodePng, so its PUBLIC surface sources these from byte-codec so a consumer does not need to reach into a PDF backend for generic byte/image code, and so this package's own re-encoded output can never silently diverge from what a caller's own byte-codec encodePng call would produce for the same raster data.
 export * from "byte-codec";
 
 // PDF-specific image codecs (CCITT fax, JBIG2, JPEG 2000) stay here -- they are genuine PDF-format concerns, not generic byte/image utilities.

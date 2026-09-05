@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { encodePng } from "byte-codec";
 import { describe, expect, it } from "vitest";
 import type { LayoutFont } from "document-schema.js";
 import type { LayoutDocument, LayoutImageAsset } from "./layout";
@@ -6,7 +7,6 @@ import { LAYOUT_FORMAT_VERSION } from "./layout";
 import type { EmbeddedFace, EmbeddedFaceSubstitution } from "./embedded-font";
 import { encodeForShowEmbedded, loadEmbeddedFace } from "./embedded-font";
 import { createFontRegistry } from "./font-registry";
-import { encodePng } from "./image/png-encode";
 import { createFontMeasurer, createStandardFontMeasurer } from "./measure";
 import { readPdf } from "./read";
 import { parseSfnt } from "./sfnt";

@@ -1,3 +1,4 @@
+import { encodePng } from "byte-codec";
 import { bytesToBase64 } from "./util/base64";
 import { describe, expect, it } from "vitest";
 import type {
@@ -11,7 +12,6 @@ import type {
   LayoutRect,
 } from "./layout";
 import { LAYOUT_FORMAT_VERSION, LayoutDocumentSchema } from "./layout";
-import { encodePng } from "./image/png-encode";
 import { readPdf } from "./read";
 import { writePdf } from "./write";
 
