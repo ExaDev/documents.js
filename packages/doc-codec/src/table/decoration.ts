@@ -2,6 +2,8 @@ import type {
   Color,
   ContentBorder,
   ContentCellBorders,
+  ContentCellFill,
+  ContentCellPatternType,
   ContentStrokeStyle,
 } from "document-schema.js";
 import { readUint16LE, readUint8 } from "../bytes";
@@ -13,7 +15,7 @@ import {
   nearestIco,
   readColorRef,
 } from "../color";
-import { DocFormatError } from "../errors";
+import { DocFormatError, DocUnsupportedError } from "../errors";
 
 // A table cell's own border and background-shading encodings, read and written in one place -- the role xls-codec's biff/xf-colors.ts plays for BIFF8's own CellXF payload, and for the same reason: table/tap.ts unpacks these on the read side and table/tap-write.ts packs them on the write side, so a bit layout either of them got wrong on its own would round-trip through this package undetected while disagreeing with every other [MS-DOC] implementation.
 //
@@ -231,49 +233,151 @@ export function borderNeedsExactColor(border: ContentBorder): boolean {
   );
 }
 
-/** ipatAuto, [MS-DOC] 2.9.121: "Clear, ST_Shd: clear" -- the pattern under which a cell simply shows its own cvBack, which is how both Word and LibreOffice spell a flat background colour, and the only pattern this package writes. */
+/** ipatAuto, [MS-DOC] 2.9.121: "Clear, ST_Shd: clear" -- the pattern under which a cell simply shows its own cvBack, which is how both Word and LibreOffice spell a flat background colour. */
 const IPAT_AUTO = 0x0000;
 /** ipatSolid, [MS-DOC] 2.9.121: "Solid ST_Shd: solid" -- the cell is filled entirely with cvFore. */
 const IPAT_SOLID = 0x0001;
 
 /**
- * One Shd ([MS-DOC] 2.9.247) as a flat background colour, or undefined where it states none.
- *
- * Only the two patterns that genuinely produce a flat fill resolve: ipatAuto, under which the cell shows cvBack (ECMA-376's own `clear` shading with a fill colour, which is what a real producer writes for a plain cell background), and ipatSolid, under which it shows cvFore. Every other Ipat -- the fourteen percentage fills, the stripe and crosshatch families, and ipatNil -- is a genuine pattern that Color cannot express, and reads as no background rather than as one of its two colours: reporting a 50% grey crosshatch as its own foreground colour would misstate what the cell actually shows. This is the same deliberate judgment xls-codec makes for BIFF8's own FillPattern enumeration, for the same reason, and it costs nothing on a round trip because this package's own writer emits ipatAuto and nothing else.
- *
- * A cvAuto colour under either pattern is likewise no background: it designates the application's own default, which for a cell background is "not shaded" rather than a colour to state. ShdAuto and ShdNil -- the two special values [MS-DOC] 2.9.247 names for "no shading is applied" -- both fall out of exactly that, with no separate check: each is a pair of cvAuto colours under ipatAuto.
+ * Every Ipat value [MS-DOC] 2.9.121 maps onto a real ECMA-376 ST_Shd token, to the ContentCellPatternType name document-schema.js's own ContentCellPatternTypeSchema gives that same ST_Shd token (see that schema's own top comment for the full citation and the two vocabularies' shared naming rationale). ipatAuto and ipatSolid are handled by their own callers rather than listed here, since each resolves to a 'solid' fill, not a 'pattern' one. The fourteen ipatPctNew* fine percentages [MS-DOC] itself says "SHOULD NOT be used" (2.9.121's own note) and that have no ST_Shd equivalent at all -- 2.5%, 7.5%, 17.5%, 22.5%, 27.5%, 32.5%, 42.5%, 47.5%, 52.5%, 57.5%, 67.5%, 72.5%, 77.5%, 82.5%, 92.5%, 97.5% -- are deliberately absent, exactly as ContentCellPatternTypeSchema deliberately has no member for them; a cell stating one of these reads as no background, the same fallback every other genuinely unrepresentable Ipat value already resolves to.
  */
-export function readShd(bytes: Uint8Array, offset: number): Color | undefined {
-  const ipat = readUint16LE(bytes, offset + 8);
-  if (ipat === IPAT_AUTO) return readColorRef(bytes, offset + 4);
-  if (ipat === IPAT_SOLID) return readColorRef(bytes, offset);
-  return undefined;
+const IPAT_TO_PATTERN_TYPE: Readonly<Record<number, ContentCellPatternType>> = {
+  0x0002: "percent5",
+  0x0003: "percent10",
+  0x0004: "percent20",
+  0x0005: "percent25",
+  0x0006: "percent30",
+  0x0007: "percent40",
+  0x0008: "percent50",
+  0x0009: "percent60",
+  0x000a: "percent70",
+  0x000b: "percent75",
+  0x000c: "percent80",
+  0x000d: "percent90",
+  0x000e: "horizontalStripe", // ipatDkHorizontal, ST_Shd horzStripe
+  0x000f: "verticalStripe", // ipatDkVertical, ST_Shd vertStripe
+  0x0010: "reverseDiagonalStripe", // ipatDkForeDiag, ST_Shd reverseDiagStripe
+  0x0011: "diagonalStripe", // ipatDkBackDiag, ST_Shd diagStripe
+  0x0012: "horizontalCross", // ipatDkCross, ST_Shd horzCross
+  0x0013: "diagonalCross", // ipatDkDiagCross, ST_Shd diagCross
+  0x0014: "thinHorizontalStripe", // ipatHorizontal, ST_Shd thinHorzStripe
+  0x0015: "thinVerticalStripe", // ipatVertical, ST_Shd thinVertStripe
+  0x0016: "thinReverseDiagonalStripe", // ipatForeDiag, ST_Shd thinReverseDiagStripe
+  0x0017: "thinDiagonalStripe", // ipatBackDiag, ST_Shd thinDiagStripe
+  0x0018: "thinHorizontalCross", // ipatCross, ST_Shd thinHorzCross
+  0x0019: "thinDiagonalCross", // ipatDiagCross, ST_Shd thinDiagCross
+  0x0025: "percent12", // ipatPctNew12
+  0x0026: "percent15", // ipatPctNew15
+  0x002b: "percent35", // ipatPctNew35
+  0x002c: "percent37", // ipatPctNew37
+  0x002e: "percent45", // ipatPctNew45
+  0x0031: "percent55", // ipatPctNew55
+  0x0033: "percent62", // ipatPctNew62
+  0x0034: "percent65", // ipatPctNew65
+  0x0039: "percent85", // ipatPctNew85
+  0x003a: "percent87", // ipatPctNew87
+  0x003c: "percent95", // ipatPctNew95
+};
+
+/** The inverse of IPAT_TO_PATTERN_TYPE, built from it rather than restated by hand so the two can never drift apart. Every ContentCellPatternType this package's own writer is ever asked to state has an entry, since the Word-family half of the shared vocabulary is exactly IPAT_TO_PATTERN_TYPE's own value set -- the SpreadsheetML-only members (mediumGray through gray0625) are absent, ST_Shd having no equivalent for them at all. */
+const PATTERN_TYPE_TO_IPAT: ReadonlyMap<ContentCellPatternType, number> =
+  new Map(
+    Object.entries(IPAT_TO_PATTERN_TYPE).map(([ipat, patternType]) => [
+      patternType,
+      Number(ipat),
+    ]),
+  );
+
+/**
+ * One Shd ([MS-DOC] 2.9.247) as a ContentCellFill, or undefined where it states none.
+ *
+ * ipatAuto resolves to a 'solid' fill of cvBack (ECMA-376's own `clear` shading with a fill colour, which is what a real producer writes for a plain cell background) and ipatSolid to a 'solid' fill of cvFore. Every other named Ipat resolves to a real 'pattern' fill via IPAT_TO_PATTERN_TYPE, carrying whichever of cvFore/cvBack the cell actually states -- either may be cvAuto (the application's own default) and therefore absent, matching ContentCellFillSchema's own "a colour can defer instead of asserting" convention. ipatNil and the sixteen ipatPctNew* values with no ST_Shd equivalent (see IPAT_TO_PATTERN_TYPE's own note) resolve to no background at all, the same fallback this reader has always used for a pattern it cannot express.
+ *
+ * A cvAuto colour under ipatAuto/ipatSolid is likewise no background: it designates the application's own default, which for a cell background is "not shaded" rather than a colour to state. ShdAuto and ShdNil -- the two special values [MS-DOC] 2.9.247 names for "no shading is applied" -- both fall out of exactly that, with no separate check: each is a pair of cvAuto colours under ipatAuto.
+ */
+export function readShd(
+  bytes: Uint8Array,
+  offset: number,
+): ContentCellFill | undefined {
+  return shdFill(
+    readColorRef(bytes, offset),
+    readColorRef(bytes, offset + 4),
+    readUint16LE(bytes, offset + 8),
+  );
 }
 
-/** One Shd's own ten bytes: cvFore left automatic and the background stated as cvBack under ipatAuto, which is exactly how LibreOffice 26.2.5.2 writes a cell fill (confirmed against its own `.doc` output: a #ffff00 cell came back as cvFore cvAuto, cvBack `ff ff 00 00`, ipat 0x0000). An absent background writes ShdAuto -- the all-automatic value [MS-DOC] 2.9.247 defines as "no shading is applied" -- so an undecorated cell inside a row that has decorated ones still states its own lack of shading rather than inheriting a neighbour's. */
-export function writeShd(background: Color | undefined): number[] {
+/** Resolves one cvFore/cvBack/ipat triple -- however the caller sourced the three, whether from Shd's own COLORREFs (readShd) or Shd80's Ico-palette pair (readShd80) -- into the ContentCellFill readShd's own doc comment describes. Shared so the two callers can never disagree about what a given ipat means. */
+function shdFill(
+  cvFore: Color | undefined,
+  cvBack: Color | undefined,
+  ipat: number,
+): ContentCellFill | undefined {
+  if (ipat === IPAT_AUTO) {
+    return cvBack === undefined ? undefined : { kind: "solid", color: cvBack };
+  }
+  if (ipat === IPAT_SOLID) {
+    return cvFore === undefined ? undefined : { kind: "solid", color: cvFore };
+  }
+  const patternType = IPAT_TO_PATTERN_TYPE[ipat];
+  if (patternType === undefined) return undefined;
+  return {
+    kind: "pattern",
+    patternType,
+    ...(cvFore !== undefined ? { foregroundColor: cvFore } : {}),
+    ...(cvBack !== undefined ? { backgroundColor: cvBack } : {}),
+  };
+}
+
+/** One Shd's own ten bytes, the inverse of readShd: a 'solid' fill states cvFore automatic and the fill's own colour as cvBack under ipatAuto, exactly how LibreOffice 26.2.5.2 writes a plain cell fill (confirmed against its own `.doc` output: a #ffff00 cell came back as cvFore cvAuto, cvBack `ff ff 00 00`, ipat 0x0000) -- writing ipatSolid instead would be an equally spec-conformant alternative Shd never needed, since the two patterns are read identically apart from which COLORREF they draw from. A 'pattern' fill states its own foreground/background colours (automatic where the fill left one unstated) under the Ipat value PATTERN_TYPE_TO_IPAT names for it, throwing DocUnsupportedError for a SpreadsheetML-only pattern type ([MS-DOC]'s Ipat vocabulary has no member for one -- see PATTERN_TYPE_TO_IPAT's own note) rather than silently writing the wrong pattern or dropping it. An absent fill writes ShdAuto -- the all-automatic value [MS-DOC] 2.9.247 defines as "no shading is applied" -- so an undecorated cell inside a row that has decorated ones still states its own lack of shading rather than inheriting a neighbour's. */
+export function writeShd(fill: ContentCellFill | undefined): number[] {
+  if (fill === undefined) {
+    return [
+      ...autoColorRefBytes(),
+      ...autoColorRefBytes(),
+      IPAT_AUTO & 0xff,
+      (IPAT_AUTO >> 8) & 0xff,
+    ];
+  }
+  if (fill.kind === "solid") {
+    return [
+      ...autoColorRefBytes(),
+      ...colorRefBytes(fill.color),
+      IPAT_AUTO & 0xff,
+      (IPAT_AUTO >> 8) & 0xff,
+    ];
+  }
+  const ipat = PATTERN_TYPE_TO_IPAT.get(fill.patternType);
+  if (ipat === undefined) {
+    throw new DocUnsupportedError(
+      `doc-codec cannot write a '${fill.patternType}' cell fill: [MS-DOC]'s own Ipat enumeration has no member for it, that pattern name belonging only to SpreadsheetML's ST_PatternType half of ContentCellPatternType's shared vocabulary`,
+    );
+  }
   return [
-    ...autoColorRefBytes(),
-    ...(background === undefined
+    ...(fill.foregroundColor === undefined
       ? autoColorRefBytes()
-      : colorRefBytes(background)),
-    IPAT_AUTO & 0xff,
-    (IPAT_AUTO >> 8) & 0xff,
+      : colorRefBytes(fill.foregroundColor)),
+    ...(fill.backgroundColor === undefined
+      ? autoColorRefBytes()
+      : colorRefBytes(fill.backgroundColor)),
+    ipat & 0xff,
+    (ipat >> 8) & 0xff,
   ];
 }
 
 /** Shd80Nil, [MS-DOC] 2.9.248: icoFore 0x1F, icoBack 0x1F, ipat 0x3F -- every bit set, "specifies that no shading is applied", and explicitly exempt from the Ico and Ipat bounds the fields otherwise carry. */
 const SHD80_NIL = 0xffff;
 
-/** One Shd80 ([MS-DOC] 2.9.248) as a flat background colour: the same ipatAuto/ipatSolid reading readShd applies, over the Ico palette rather than COLORREFs. This is the Word 97-era spelling of cell shading, superseded by Shd but still written -- alongside it -- by a real producer, so a file carrying only this one still reads. Never written by this package, which states shading through Shd alone. icoFore/icoBack are each a 5-bit field, so a value the 17-entry palette cannot hold is a real possibility rather than a format-level impossibility; decorativeIcoColor resolves that case to no background instead of aborting the whole document read. */
-export function readShd80(value: number): Color | undefined {
+/** One Shd80 ([MS-DOC] 2.9.248) as a ContentCellFill: the same Ipat vocabulary readShd resolves, over the Ico palette rather than COLORREFs. This is the Word 97-era spelling of cell shading, superseded by Shd but still written -- alongside it -- by a real producer, so a file carrying only this one still reads. Never written by this package, which states shading through Shd alone. icoFore/icoBack are each a 5-bit field, so a value the 17-entry palette cannot hold is a real possibility rather than a format-level impossibility; decorativeIcoColor resolves that case to no concrete colour (the same fallback cvAuto already gets) instead of aborting the whole document read. */
+export function readShd80(value: number): ContentCellFill | undefined {
   if (value === SHD80_NIL) return undefined;
   const icoFore = value & 0x1f;
   const icoBack = (value >> 5) & 0x1f;
   const ipat = (value >> 10) & 0x3f;
-  if (ipat === IPAT_AUTO) return decorativeIcoColor(icoBack);
-  if (ipat === IPAT_SOLID) return decorativeIcoColor(icoFore);
-  return undefined;
+  return shdFill(
+    decorativeIcoColor(icoFore),
+    decorativeIcoColor(icoBack),
+    ipat,
+  );
 }
 
 /** A cell's four sides as a ContentCellBorders, or undefined when it has none -- the shape ContentTableCell.borders carries, with an absent side meaning that side has no border rather than an explicitly-null one. */

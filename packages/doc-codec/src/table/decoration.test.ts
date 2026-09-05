@@ -283,15 +283,21 @@ describe("Brc", () => {
 });
 
 describe("Shd", () => {
-  it("reads ipatAuto's own cvBack as the cell's background", () => {
+  it("reads ipatAuto's own cvBack as a solid background", () => {
     // The exact bytes LibreOffice wrote for a #ffff00 cell fill.
     const shd = [0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00];
-    expect(readShd(bytes(shd), 0)).toEqual({ r: 1, g: 1, b: 0 });
+    expect(readShd(bytes(shd), 0)).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 1, b: 0 },
+    });
   });
 
-  it("reads ipatSolid's own cvFore as the cell's background", () => {
+  it("reads ipatSolid's own cvFore as a solid background", () => {
     const shd = [0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, 0x01, 0x00];
-    expect(readShd(bytes(shd), 0)).toEqual({ r: 0, g: 0, b: 1 });
+    expect(readShd(bytes(shd), 0)).toEqual({
+      kind: "solid",
+      color: { r: 0, g: 0, b: 1 },
+    });
   });
 
   it("reads ShdAuto -- both colours automatic under ipatAuto -- as no background", () => {
@@ -301,17 +307,44 @@ describe("Shd", () => {
     expect(readShd(bytes(shdAuto), 0)).toBeUndefined();
   });
 
-  it("reads a genuine pattern as no background rather than as one of its two colours", () => {
-    // ipatPct50 (0x0008): a 50% fill of cvFore over cvBack, which one flat Color cannot represent -- the same judgment xls-codec makes for BIFF8's non-solid FillPattern values.
+  it("reads a genuine two-colour percentage pattern as a pattern fill, not one of its two colours", () => {
+    // ipatPct50 (0x0008), ExaDev/documents.js#951: a 50% fill of cvFore (red) over cvBack (blue), which a bare Color could never represent but ContentCellFill's 'pattern' variant states exactly.
     const pct50 = [0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x08, 0x00];
-    expect(readShd(bytes(pct50), 0)).toBeUndefined();
+    expect(readShd(bytes(pct50), 0)).toEqual({
+      kind: "pattern",
+      patternType: "percent50",
+      foregroundColor: { r: 1, g: 0, b: 0 },
+      backgroundColor: { r: 0, g: 0, b: 1 },
+    });
+  });
+
+  it("reads a stripe/cross pattern by its own ST_Shd name", () => {
+    // ipatDkDiagCross (0x0013), ST_Shd diagCross -> ContentCellPatternType's own 'diagonalCross', both colours automatic.
+    const diagCross = [
+      0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x13, 0x00,
+    ];
+    expect(readShd(bytes(diagCross), 0)).toEqual({
+      kind: "pattern",
+      patternType: "diagonalCross",
+    });
+  });
+
+  it("reads ipatNil, and every ipatPctNew* fine percentage with no ST_Shd equivalent, as no background", () => {
     // ipatNil (0xFFFF), ST_Shd nil.
     const nil = [0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0xff, 0xff];
     expect(readShd(bytes(nil), 0)).toBeUndefined();
+    // ipatPctNew2 (0x0023), a 2.5% fill [MS-DOC] itself says SHOULD NOT be used, and that ST_Shd -- and therefore ContentCellPatternType -- has no member for at all.
+    const pctNew2 = [
+      0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x23, 0x00,
+    ];
+    expect(readShd(bytes(pctNew2), 0)).toBeUndefined();
   });
 
-  it("writes a background into the ten bytes readShd reads back", () => {
-    const background = { r: 0x4c / 255, g: 0x7f / 255, b: 0xbf / 255 };
+  it("writes a solid background into the ten bytes readShd reads back", () => {
+    const background = {
+      kind: "solid" as const,
+      color: { r: 0x4c / 255, g: 0x7f / 255, b: 0xbf / 255 },
+    };
     const written = writeShd(background);
     expect(written).toHaveLength(SHD_SIZE);
     expect(readShd(bytes(written), 0)).toEqual(background);
@@ -320,14 +353,46 @@ describe("Shd", () => {
   it("writes an absent background as ShdAuto, which reads back as absent", () => {
     expect(readShd(bytes(writeShd(undefined)), 0)).toBeUndefined();
   });
+
+  it("writes a pattern fill's own foreground/background colours into the ten bytes readShd reads back", () => {
+    const background = {
+      kind: "pattern" as const,
+      patternType: "percent25" as const,
+      foregroundColor: { r: 1, g: 0, b: 0 },
+      backgroundColor: { r: 0, g: 1, b: 0 },
+    };
+    const written = writeShd(background);
+    expect(written).toHaveLength(SHD_SIZE);
+    expect(readShd(bytes(written), 0)).toEqual(background);
+  });
+
+  it("writes a pattern fill leaving both colours unstated as automatic, which read back as absent", () => {
+    const written = writeShd({ kind: "pattern", patternType: "diagonalCross" });
+    expect(readShd(bytes(written), 0)).toEqual({
+      kind: "pattern",
+      patternType: "diagonalCross",
+    });
+  });
+
+  it("throws writing a SpreadsheetML-only pattern type Word's own Ipat vocabulary has no member for", () => {
+    expect(() => writeShd({ kind: "pattern", patternType: "gray125" })).toThrow(
+      /gray125/,
+    );
+  });
 });
 
 describe("Shd80", () => {
-  it("reads icoBack under ipatAuto as the background", () => {
+  it("reads icoBack under ipatAuto as a solid background", () => {
     // The exact word LibreOffice wrote in its legacy sprmTDefTableShd80 array beside the #ffff00 Shd above: icoBack 0x07 (yellow).
-    expect(readShd80(0x00e0)).toEqual({ r: 1, g: 1, b: 0 });
+    expect(readShd80(0x00e0)).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 1, b: 0 },
+    });
     // The third cell of the same array: icoBack 0x03 (cyan).
-    expect(readShd80(0x0060)).toEqual({ r: 0, g: 1, b: 1 });
+    expect(readShd80(0x0060)).toEqual({
+      kind: "solid",
+      color: { r: 0, g: 1, b: 1 },
+    });
   });
 
   it("reads an all-automatic Shd80 as no background", () => {
@@ -358,23 +423,24 @@ describe("encodeTableRowGrpprl", () => {
   }
 
   it("round-trips a background stated past the first 22-cell shading array", () => {
+    const fill = { kind: "solid" as const, color: { r: 1, g: 0, b: 1 } };
     const cells: TableCellToWrite[] = Array.from(
       { length: 25 },
       (_unused, index): TableCellToWrite =>
         index === 24
-          ? { vertMerge: 0, horzMerge: 0, background: { r: 1, g: 0, b: 1 } }
+          ? { vertMerge: 0, horzMerge: 0, background: fill }
           : { vertMerge: 0, horzMerge: 0 },
     );
     const read = roundTripRow(cells);
-    expect(read[24]?.background).toEqual({ r: 1, g: 0, b: 1 });
+    expect(read[24]?.background).toEqual(fill);
     expect(read[0]?.background).toBeUndefined();
   });
 
   it("round-trips a background in each of the three shading arrays at once", () => {
     const shaded = new Map([
-      [0, { r: 1, g: 0, b: 0 }],
-      [30, { r: 0, g: 1, b: 0 }],
-      [50, { r: 0, g: 0, b: 1 }],
+      [0, { kind: "solid" as const, color: { r: 1, g: 0, b: 0 } }],
+      [30, { kind: "solid" as const, color: { r: 0, g: 1, b: 0 } }],
+      [50, { kind: "solid" as const, color: { r: 0, g: 0, b: 1 } }],
     ]);
     const cells: TableCellToWrite[] = Array.from(
       { length: 60 },
@@ -393,13 +459,25 @@ describe("encodeTableRowGrpprl", () => {
     expect(read[31]?.background).toBeUndefined();
   });
 
+  it("round-trips a genuine two-colour pattern fill through a row's own shading array", () => {
+    const fill = {
+      kind: "pattern" as const,
+      patternType: "percent50" as const,
+      foregroundColor: { r: 1, g: 0, b: 0 },
+      backgroundColor: { r: 0, g: 0, b: 1 },
+    };
+    const read = roundTripRow([{ vertMerge: 0, background: fill }]);
+    expect(read[0]?.background).toEqual(fill);
+  });
+
   it("keeps a cell's vertical-merge state alongside its decoration", () => {
+    const fill = { kind: "solid" as const, color: { r: 1, g: 1, b: 0 } };
     const read = roundTripRow([
-      { vertMerge: 3, horzMerge: 0, background: { r: 1, g: 1, b: 0 } },
+      { vertMerge: 3, horzMerge: 0, background: fill },
       { vertMerge: 1, horzMerge: 0 },
     ]);
     expect(read[0]?.vertMerge).toBe(3);
-    expect(read[0]?.background).toEqual({ r: 1, g: 1, b: 0 });
+    expect(read[0]?.background).toEqual(fill);
     expect(read[1]?.vertMerge).toBe(1);
     expect(read[1]?.background).toBeUndefined();
   });
