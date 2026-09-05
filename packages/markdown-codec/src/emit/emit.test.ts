@@ -544,6 +544,31 @@ describe("lists", () => {
     expect(emitMarkdown(lowerMarkdown(written))).toBe(written);
   });
 
+  it("round-trips a TIGHT list item containing a paragraph and a fenced code block as ONE item, not two", () => {
+    const source = "- a\n  ```\n  code\n  ```\n- b";
+    const first = lowerMarkdown(source);
+    if (first.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = first.sections[0]?.blocks ?? [];
+    const [paragraphA, codeBlock, paragraphB] = blocks;
+    if (
+      paragraphA?.kind !== "paragraph" ||
+      codeBlock?.kind !== "paragraph" ||
+      paragraphB?.kind !== "paragraph"
+    ) {
+      throw new Error("expected three paragraph blocks");
+    }
+    // "a" and the fenced code block are ONE item -- same itemId -- while "b" is a genuinely separate sibling item, never sharing it.
+    expect(paragraphA.list?.itemId).toBeDefined();
+    expect(codeBlock.list?.itemId).toBe(paragraphA.list?.itemId);
+    expect(paragraphB.list?.itemId).not.toBe(paragraphA.list?.itemId);
+
+    const written = emitMarkdown(first);
+    expect(written).toBe(source);
+    expect(lowerMarkdown(written)).toEqual(first);
+  });
+
   it("separates loose-list siblings with a blank line and tight-list siblings with none", () => {
     const tight = emitMarkdown(
       doc([

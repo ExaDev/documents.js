@@ -11,12 +11,14 @@ const LINK_TITLE =
   "a link/image title has no ContentRun/ContentImageBlock field to survive on (MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)";
 const INFO_STRING =
   "a fenced code block's own info string has no ContentParagraph field to survive on (MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED)";
-const MULTI_BLOCK =
-  'a list item directly containing more than one block loses its own item boundary once lowered -- ContentListMembership carries only numId/level, with no field distinguishing "one item, several blocks" from "several items sharing this numId/level" (MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED)';
+const LIST_ITEM_CONSTRUCT_INTERRUPTED =
+  "a construct (most commonly a blockquote's own division pair) sitting directly inside a list item interrupts that item's own contiguous block run once rendered back to markdown -- ContentListMembership.itemId does now let src/emit's own writer re-attach a multi-block item's later PLAIN blocks to its own marker line (src/emit/emit.ts's renderListRegion/collectListItem), but a construct's own extent is resolved independently of that list-region grouping (groupConstructItems), so the construct and any further blocks of the same item after it render as separate top-level content instead of staying nested inside the interrupted item (MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED)";
+const NESTED_LIST_LOOSENESS_SHARED =
+  "a nested list's own tight/loose spacing cannot diverge from its enclosing list's: src/shared/list-id.ts's own numId grammar mints exactly one loose flag per TOP-LEVEL list, and a nested list deliberately reuses that SAME numId rather than minting a second one (see that module's own top-of-file note on why nesting never mints again), so a genuinely tight nested list sitting under a genuinely loose outer item renders with the outer item's own loose spacing between its own siblings instead of its own real tight spacing";
 const MARKER_TYPE_CONFLICT =
   "a nested list disagreeing with its enclosing list's own minted marker type is resolved first-wins, not preserved (MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT) -- reusing the enclosing numId is itself the correct, tested design (src/shared/list-id.ts), just lossy for a genuinely mixed-type nesting";
 const BLOCKQUOTE_STRUCTURE =
-  "a blockquote directly containing more than one block, or nested beyond one level, has no ContentBlockquote container of its own to preserve that structure on -- indentLeftPt only encodes a nesting DEPTH (MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH beyond level 1), never a container boundary, so this is the blockquote-shaped sibling of MULTI_BLOCK above";
+  "a blockquote directly containing more than one block, or nested beyond one level, has no ContentBlockquote container of its own to preserve that structure on -- indentLeftPt only encodes a nesting DEPTH (MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH beyond level 1), never a container boundary";
 const ADJACENT_SAME_DEPTH =
   "two independent containers back to back at the same depth (two blockquotes with nothing between them, or two lists using different bullet/ordered marker glyphes) are indistinguishable, once lowered, from one container spanning both -- ContentParagraph.indentLeftPt and the numId minted for each list carry no shared-boundary field of their own; merging them (tried and reverted for blockquotes, see src/emit/emit.ts's own emitBlocks comment) fixes no example this list's own SOFT_BREAK entries were not already going to fail on regardless, while genuinely breaking the common case";
 const IMAGE_SRC_UNPRESERVABLE =
@@ -97,8 +99,8 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [251, BLOCKQUOTE_STRUCTURE],
   // List items
   [253, SOFT_BREAK],
-  [254, MULTI_BLOCK],
-  [263, MULTI_BLOCK],
+  [254, LIST_ITEM_CONSTRUCT_INTERRUPTED],
+  [263, LIST_ITEM_CONSTRUCT_INTERRUPTED],
   [285, SOFT_BREAK],
   [286, SOFT_BREAK],
   [287, SOFT_BREAK],
@@ -109,16 +111,14 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [293, BLOCKQUOTE_STRUCTURE],
   [296, MARKER_TYPE_CONFLICT],
   [299, MARKER_TYPE_CONFLICT],
-  [300, MULTI_BLOCK],
   // Lists
   [301, ADJACENT_SAME_DEPTH],
   [302, ADJACENT_SAME_DEPTH],
   [304, SOFT_BREAK],
   [312, SOFT_BREAK],
-  [320, MULTI_BLOCK],
-  [321, MULTI_BLOCK],
-  [325, MULTI_BLOCK],
-  [326, MULTI_BLOCK],
+  [320, LIST_ITEM_CONSTRUCT_INTERRUPTED],
+  [321, LIST_ITEM_CONSTRUCT_INTERRUPTED],
+  [326, NESTED_LIST_LOOSENESS_SHARED],
   // Code spans
   [334, SOFT_BREAK],
   // Emphasis and strong emphasis
