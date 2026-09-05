@@ -43,7 +43,7 @@ export const MathMlPiSchema = z.object({
 });
 export type MathMlPi = z.infer<typeof MathMlPiSchema>;
 
-// MathMlElement is recursive through its own children -- the interface stays hand-written even though MathMlElementSchema is a real z.object() below, because MathMlNode's own binding needs an explicit z.ZodType<MathMlNode> annotation to escape TypeScript's circular-inference error (see MathMlNodeSchema's own comment), and that annotation has to name a type that already exists rather than one z.infer would derive from the very schema it annotates.
+// MathMlElement is recursive through its own children -- the interface stays hand-written even though MathMlElementSchema is a real z.object() below, because MathMlNode's own binding needs an explicit z.ZodType<MathMlNode, MathMlNode> annotation (both type parameters, not just Output -- see MathMlNodeSchema's own comment for why) to escape TypeScript's circular-inference error, and that annotation has to name a type that already exists rather than one z.infer would derive from the very schema it annotates.
 export interface MathMlElement {
   type: "element";
   tag: string;
