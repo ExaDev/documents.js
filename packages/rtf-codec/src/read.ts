@@ -320,7 +320,7 @@ interface ObjectDataState {
   binary: number[];
 }
 
-// One \object destination's own state, shared by reference across the whole {\object ...} group and every child destination nested inside it (\objdata, \result, and the informational \*\objclass/\*\objname sub-groups) -- the same "shared by reference" pattern FieldState already establishes for \fldinst/\fldrslt, so \result's own group can see whether its sibling \objdata already decoded without either needing to know the other's stack depth. widthTwips/heightTwips capture \objwN/\objhN (the size hint RTF 1.9.1 says a producer supplies "to maintain backward compatibility" for a reader that cannot decode \objdata at all): this reader's own reconstruction never needs them when \objdata decodes, but the degrade path folds them into its diagnostic message instead of discarding them silently.
+// One \object destination's own state, shared by reference across the whole {\object ...} group and every child destination nested inside it (\objdata, \result, and the informational \*\objclass/\*\objname sub-groups) -- the same "shared by reference" pattern FieldState already establishes for \fldinst/\fldrslt, so \result's own group can see whether its sibling \objdata already decoded without either needing to know the other's stack depth. `decoded` is resolved by a lookahead at \object's own group-start (below), before either \objdata or \result is actually read, precisely because RTF 1.9.1's own <obj> grammar orders <objdata> before <result> but does not require it: a lenient reader that decided \result's fate from whichever sibling it happened to encounter first would double-render an \object whose producer wrote them the other way around. widthTwips/heightTwips capture \objwN/\objhN (the size hint RTF 1.9.1 says a producer supplies "to maintain backward compatibility" for a reader that cannot decode \objdata at all): this reader's own reconstruction never needs them when \objdata decodes, but the degrade path folds them into its diagnostic message instead of discarding them silently.
 interface ObjectState {
   decoded: boolean;
   widthTwips: number | undefined;
@@ -1203,16 +1203,63 @@ function objectSizeHintClause(object: ObjectState | undefined): string {
   return "";
 }
 
+// The hex-or-binary payload an ObjectDataState (or a lookahead's own scanObjectDataTokens result of the identical shape) carries, as real bytes -- shared by buildEmbeddedObject's own live read and the \object group-start handler's lookahead below, which both need the identical extraction.
+function objectDataBytes(objectData: ObjectDataState): Uint8Array<ArrayBuffer> {
+  return objectData.binary.length > 0
+    ? Uint8Array.from(objectData.binary)
+    : hexToBytes(objectData.hex);
+}
+
+// A read-only walk of one {\*\objdata ...} destination's own token range, collecting the identical hex-or-binary payload the main loop's live "text"/"binary"/"hex" token handling further down would. \objdata's content is pure (\binN #BDATA) | #SDATA per RTF 1.9.1's own <objdata> production -- no control words and no nested groups of its own -- so a flat scan reproduces the same bytes without replaying the whole state machine. Used only for the \object group-start handler's own lookahead below; the main loop still does its own live accumulation for the actual read.
+function scanObjectDataTokens(
+  tokens: readonly RtfToken[],
+  contentStart: number,
+  end: number,
+): ObjectDataState {
+  const objectData: ObjectDataState = { hex: "", binary: [] };
+  for (let index = contentStart; index < end; index += 1) {
+    const token = tokens[index];
+    if (token?.kind === "text") {
+      objectData.hex += asciiStringFromBytes(token.bytes);
+    } else if (token?.kind === "binary") {
+      appendBytes(objectData.binary, token.bytes);
+    } else if (token?.kind === "hex") {
+      objectData.binary.push(token.byte);
+    }
+  }
+  return objectData;
+}
+
+// Looks for one direct child destination within `parentStart`..`parentEnd` (the parent's own groupStart/groupEnd token indices), skipping whole sibling subtrees that do not match rather than descending into them -- \objdata is only ever a direct child of \object per RTF 1.9.1's own <obj> grammar, so a match nested inside some other sibling (e.g. inside \result's own content) is not this destination's \objdata and must not be found. Used by the \object group-start handler below to look ahead at its own \objdata before any of \object's children are actually read.
+function findChildDestinationGroup(
+  tokens: readonly RtfToken[],
+  parentStart: number,
+  parentEnd: number,
+  destination: string,
+): { readonly contentStart: number; readonly end: number } | undefined {
+  let index = parentStart + 1;
+  while (index < parentEnd) {
+    if (tokens[index]?.kind === "groupStart") {
+      const head = groupHead(tokens, index);
+      const end = matchingGroupEnd(tokens, index);
+      if (head.destination === destination) {
+        return { contentStart: head.contentStart, end };
+      }
+      index = end + 1;
+      continue;
+    }
+    index += 1;
+  }
+  return undefined;
+}
+
 // Turns {\*\objdata ...}'s collected payload back into a ContentEmbeddedObjectBlock, or reports why it cannot and returns undefined -- the object-destination counterpart of buildPicture above. "no payload" and "not this package's own payload" are the two distinct failure shapes (matching buildPicture's own "no format" vs "no size" split): the first never reaches readEmbeddedObjectData at all, and the second is every way a real, foreign OLE object (or simply malformed \objdata) legitimately fails to parse as one. `object` is the enclosing \object's own state, consulted only for its \objw/\objh size hint on the degrade path -- readEmbeddedObjectData never needs it, since a decoded payload carries its own frame.
 function buildEmbeddedObject(
   objectData: ObjectDataState,
   object: ObjectState | undefined,
   sink: RtfDiagnosticSink,
 ): ContentEmbeddedObjectBlock | undefined {
-  const bytes =
-    objectData.binary.length > 0
-      ? Uint8Array.from(objectData.binary)
-      : hexToBytes(objectData.hex);
+  const bytes = objectDataBytes(objectData);
   if (bytes.length === 0) {
     sink({
       code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
@@ -1345,7 +1392,7 @@ function readRtfDetail(
         head.destination !== undefined &&
         HEADER_DESTINATIONS.has(head.destination);
       const wrapperChild = state.inUnicodeWrapper;
-      // \result is \object's own fallback rendering for a reader that cannot decode \objdata at all -- this reader always tries \objdata first (buildEmbeddedObject, at \objdata's own groupEnd below), so \result is read as ordinary body paragraphs only when that attempt has already failed. state.object is the enclosing \object's own shared-by-reference state (set when the \object group itself opened, below), so this only fires for a \result that is genuinely \object's own sibling -- not a stray \result the tokenizer encounters with no enclosing \object to have failed.
+      // \result is \object's own fallback rendering for a reader that cannot decode \objdata at all -- this reader always prefers \objdata, so \result is read as ordinary body paragraphs only when \objdata will not (or does not) decode. state.object is the enclosing \object's own shared-by-reference state, and objectState.decoded here is a lookahead's own pre-resolved verdict (see the \object group-start handling further down), not merely "has \objdata already been read" -- if it were the latter, an \object whose producer wrote \result before \objdata (both orders are legal RTF) would render both the cached preview and the real decoded object, since \objdata's own success would not yet be known at this point in the token stream. Resolving it ahead of time here means this check is correct regardless of which sibling the source lists first.
       const objectState = state.object;
       const isResultFallback =
         head.destination === "result" &&
@@ -1399,8 +1446,27 @@ function readRtfDetail(
           child.objectData = { hex: "", binary: [] };
         }
         if (kind === "object") {
+          // A lookahead over this \object's own group, resolved before any of its children (\objdata, \result) are actually read: whether an \objdata child exists at all, and, if so, whether its payload will decode. `index` here is still \object's own groupStart token, unmoved since the top of this iteration, so matchingGroupEnd(tokens, index) is \object's own matching close.
+          const objectGroupEnd = matchingGroupEnd(tokens, index);
+          const objectDataRange = findChildDestinationGroup(
+            tokens,
+            index,
+            objectGroupEnd,
+            "objdata",
+          );
+          const decoded =
+            objectDataRange !== undefined &&
+            readEmbeddedObjectData(
+              objectDataBytes(
+                scanObjectDataTokens(
+                  tokens,
+                  objectDataRange.contentStart,
+                  objectDataRange.end,
+                ),
+              ),
+            ) !== undefined;
           child.object = {
-            decoded: false,
+            decoded,
             widthTwips: undefined,
             heightTwips: undefined,
           };
