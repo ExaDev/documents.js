@@ -510,6 +510,50 @@ describe("tables", () => {
       expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
   });
+
+  it("drops an empty <caption> entirely, firing no diagnostic, matching the package's own empty-paragraph-drop rule", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><caption></caption><tr><td>x</td></tr></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-caption-unsupported" }),
+    );
+  });
+
+  it("drops a whitespace-only <caption> entirely, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><caption>   </caption><tr><td>x</td></tr></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-caption-unsupported" }),
+    );
+  });
 });
 
 describe("blockquote", () => {
