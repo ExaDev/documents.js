@@ -110,6 +110,17 @@ function sprmTSetBrc(
   return [0x2f, 0xd6, remainder.length, ...remainder];
 }
 
+// sprmTSetBrc80, [MS-DOC] 2.6.3 (0xD620): the Word 97-era sibling of sprmTSetBrc, a TableBrcOperand80 ([MS-DOC] 2.9.304) -- the identical cb/ItcFirstLim/bordersToApply header (cb MUST be 7 here, one byte narrower than sprmTSetBrc's own 11 because a Brc80MayBeNil is four bytes against Brc's eight), then a single Brc80MayBeNil applied to every side the mask names.
+function sprmTSetBrc80(
+  itcFirst: number,
+  itcLim: number,
+  bordersToApply: number,
+  brc80Bytes: readonly number[],
+): number[] {
+  const remainder = [itcFirst, itcLim, bordersToApply, ...brc80Bytes];
+  return [0x20, 0xd6, remainder.length, ...remainder];
+}
+
 interface TableBordersSides {
   readonly top?: readonly number[];
   readonly left?: readonly number[];
@@ -756,6 +767,111 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     expect(cells[0]?.borders?.top).toBeUndefined();
     expect(cells[0]?.borders).toEqual({ left: RED, right: RED, bottom: RED });
     // Cell 1 never mentions its own top side at all, so it still inherits the row's cascade there.
+    expect(cells[1]?.borders).toEqual({
+      top: RED,
+      left: RED,
+      right: RED,
+      bottom: RED,
+    });
+  });
+
+  // ExaDev/documents.js#945, round-5: sprmTSetBrc80 (0xD620), the Word 97-era sibling of sprmTSetBrc, was not read at all -- the SPRM_T_* constants in tap.ts covered up to 0xD62F but skipped 0xD620 entirely, so a genuine Word-97-era NilBrc80 clear never reached applyBrcToCell and clearedSides never recorded it. The identical 1x2/all-red-cascade setup as the sprmTSetBrc test immediately above, but stating the top-side clear through sprmTSetBrc80's own palette-indexed Brc80MayBeNil instead of sprmTSetBrc's exact-colour BrcMayBeNil.
+  it("does not refill a cell's own top border after sprmTSetBrc80 explicitly clears it to a NilBrc80", () => {
+    const RED: ContentBorder = { color: { r: 1, g: 0, b: 0 }, widthPt: 1 };
+    const redSide = brc([0xff, 0x00, 0x00], 8);
+    const allRedTableBorders = sprmTTableBorders({
+      top: redSide,
+      left: redSide,
+      bottom: redSide,
+      right: redSide,
+      insideHorizontal: redSide,
+      insideVertical: redSide,
+    });
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...allRedTableBorders,
+      ...sprmTSetBrc80(0, 1, BORDERS_TO_APPLY.top, NIL_BRC80),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    // Cell 0's own sprmTSetBrc80 states "no top border" explicitly -- the row's own red cascade must never refill it, exactly like the sprmTSetBrc case above.
+    expect(cells[0]?.borders?.top).toBeUndefined();
+    expect(cells[0]?.borders).toEqual({ left: RED, right: RED, bottom: RED });
+    // Cell 1 never mentions its own top side at all, so it still inherits the row's cascade there.
+    expect(cells[1]?.borders).toEqual({
+      top: RED,
+      left: RED,
+      right: RED,
+      bottom: RED,
+    });
+  });
+
+  // The second symptom the same missing SPRM_T_SET_BRC80 case caused, worse than the clear above: a real per-cell border override stated only through sprmTSetBrc80 was silently discarded entirely (never folded into RawCell.borders at all), so cascadeRowBorders' own `cell.borders?.top ?? rowBorders.top` fallback saw an unstated side and filled in the cascade's own border instead of the cell's real one. Same 1x2/all-red-cascade setup, but cell 0's own top side is restated with a real, distinct blue border via sprmTSetBrc80 rather than cleared.
+  it("lets a real border stated via sprmTSetBrc80 override the row-level cascade, not the other way round", () => {
+    const RED: ContentBorder = { color: { r: 1, g: 0, b: 0 }, widthPt: 1 };
+    const BLUE: ContentBorder = { color: { r: 0, g: 0, b: 1 }, widthPt: 2 };
+    const redSide = brc([0xff, 0x00, 0x00], 8);
+    const allRedTableBorders = sprmTTableBorders({
+      top: redSide,
+      left: redSide,
+      bottom: redSide,
+      right: redSide,
+      insideHorizontal: redSide,
+      insideVertical: redSide,
+    });
+    const unmerged = { horzMerge: 0, vertMerge: 0 };
+    const rowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
+      ...allRedTableBorders,
+      ...sprmTSetBrc80(0, 1, BORDERS_TO_APPLY.top, brc80(16, 0x02)),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "A" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "B" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const cells = tableBlock(document).rows[0]?.cells ?? [];
+    // Cell 0's own sprmTSetBrc80 states a real blue top border -- the row's own red cascade must never overwrite it, even though nothing in TC80 itself states a top border for this cell.
+    expect(cells[0]?.borders).toEqual({
+      top: BLUE,
+      left: RED,
+      right: RED,
+      bottom: RED,
+    });
+    // Cell 1 never mentions its own top side at all, so it still inherits the row's red cascade there.
     expect(cells[1]?.borders).toEqual({
       top: RED,
       left: RED,
