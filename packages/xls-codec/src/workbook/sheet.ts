@@ -173,7 +173,7 @@ interface SharedFormulaGroup {
   readonly rgce: Uint8Array<ArrayBuffer>;
 }
 
-/** An array (CSE) formula's real expression, from the ArrayParsedFormula an Array record following the group's base Formula record carries -- identical, unadjusted text for every cell in the array's range (ArrayParsedFormula's own grammar forbids PtgRefN/PtgAreaN, so there is no per-cell expansion to do), wrapped in Excel's own `{...}` array-formula braces by resolveFormulaText. `rgcb` is undefined both when the record genuinely carries none (rgce has no PtgArray to feed) and when readArrayGroup could not make sense of what should have been one -- the two are indistinguishable from here, and parseFormulaText's own rgcb-absent handling is already the correct behaviour for both: rgce is trusted only up to its own PtgArray tokens, which then simply fail to resolve. */
+/** An array (CSE) formula's real expression, from the ArrayParsedFormula an Array record following the group's base Formula record carries -- identical, unadjusted text for every cell in the array's range (ArrayParsedFormula's own grammar forbids PtgRefN/PtgAreaN, so there is no per-cell expansion to do). resolveFormulaText hands this straight back with no further wrapping: Excel's own `{...}` bracing around a CSE-entered formula is formula-BAR DISPLAY syntax, not something written into the formula itself (unlike an array-CONSTANT-literal's own `{...}`, e.g. `{1,2;3,4}`, which genuinely is real, retypeable syntax -- see biff/ptg.ts's PtgExtraArray), matching the convention ooxml.js's own xlsx reading already uses for the identical construct. `rgcb` is undefined both when the record genuinely carries none (rgce has no PtgArray to feed) and when readArrayGroup could not make sense of what should have been one -- the two are indistinguishable from here, and parseFormulaText's own rgcb-absent handling is already the correct behaviour for both: rgce is trusted only up to its own PtgArray tokens, which then simply fail to resolve. */
 interface ArrayFormulaGroup {
   readonly kind: "array";
   readonly rgce: Uint8Array<ArrayBuffer>;
@@ -728,7 +728,7 @@ function readFormula(
 }
 
 /**
- * A Formula record's rgce resolves one of three ways: a lone PtgExp pointing back to a shared-formula base cell, whose real expression (a ShrFmla's SharedParsedFormula) is expanded relative to THIS cell's own position; a lone PtgExp pointing back to an array-formula base cell, whose real expression (an Array's ArrayParsedFormula) is identical for every cell in the range and gets Excel's own `{...}` array-formula wrapping; or an ordinary rgce, handed to parseFormulaText as-is (with this record's own rgcb, for an inline array-constant literal). A PtgExp with no matching group -- a dangling or malformed reference this reader cannot join -- resolves to undefined exactly like any other unsupported construct.
+ * A Formula record's rgce resolves one of three ways: a lone PtgExp pointing back to a shared-formula base cell, whose real expression (a ShrFmla's SharedParsedFormula) is expanded relative to THIS cell's own position; a lone PtgExp pointing back to an array-formula base cell, whose real expression (an Array's ArrayParsedFormula) is identical for every cell in the range and is returned as-is, with no CSE bracing (see ArrayFormulaGroup's own comment for why); or an ordinary rgce, handed to parseFormulaText as-is (with this record's own rgcb, for an inline array-constant literal). A PtgExp with no matching group -- a dangling or malformed reference this reader cannot join -- resolves to undefined exactly like any other unsupported construct.
  */
 function resolveFormulaText(
   rgce: Uint8Array<ArrayBuffer>,
@@ -750,10 +750,9 @@ function resolveFormulaText(
       relativeTo: header,
     });
   }
-  const text = parseFormulaText(group.rgce, formulaSheets, {
+  return parseFormulaText(group.rgce, formulaSheets, {
     rgcb: group.rgcb,
   });
-  return text === undefined ? undefined : `{${text}}`;
 }
 
 /** The non-numeric readings of a FormulaValue ([MS-XLS] 2.5.133), selected by its first byte. */
