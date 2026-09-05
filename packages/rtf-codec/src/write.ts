@@ -251,16 +251,22 @@ function bookmarkStartGroup(descriptor: ConstructDescriptor): string {
   return `{\\*\\bkmkstart${residue} ${escapeText(descriptor.name)}}`;
 }
 
-// The field instruction keyword for each controlType RTF's own form-field vocabulary actually covers -- the mirror of constructs.ts's own formFieldControlType, so the reader's instruction-to-controlType mapping and this controlType-to-instruction one are the two ends of a single round trip rather than independently maintained. Every other ContentControlType (richText, comboBox, date, picture, repeatingSection, button, index, group) has no member here and falls through to describeConstructGap below -- RTF's own \*\formfield vocabulary genuinely only spells these three.
-const FORM_FIELD_KEYWORDS: ReadonlyMap<ContentControlType, string> = new Map([
-  ["plainText", "FORMTEXT"],
-  ["checkbox", "FORMCHECKBOX"],
-  ["dropDown", "FORMDROPDOWN"],
+// The field instruction keyword and \fftype number for each controlType RTF's own form-field vocabulary actually covers -- the mirror of constructs.ts's own formFieldControlType, so the reader's instruction-to-controlType mapping and this controlType-to-instruction one are the two ends of a single round trip rather than independently maintained. \fftype's own three values are RTF 1.5's own Form Fields table: "Form field type: 0 Text 1 Check box 2 List". Every other ContentControlType (richText, comboBox, date, picture, repeatingSection, button, index, group) has no member here and falls through to describeConstructGap below -- RTF's own \*\formfield vocabulary genuinely only spells these three.
+const FORM_FIELD_SPEC: ReadonlyMap<
+  ContentControlType,
+  { readonly instruction: string; readonly fftype: number }
+> = new Map([
+  ["plainText", { instruction: "FORMTEXT", fftype: 0 }],
+  ["checkbox", { instruction: "FORMCHECKBOX", fftype: 1 }],
+  ["dropDown", { instruction: "FORMDROPDOWN", fftype: 2 }],
 ]);
 
-// The `<formparams><formstrings>` content of a `\*\formfield` group: a checkbox's own `\ffdefres`, a dropdown's own list of `{\*\ffl ...}` entries, and -- for any of the three types -- the control's bookmark-style name as `{\*\ffname ...}`.
-function formFieldPayload(descriptor: ContentControlDescriptor): string {
-  let out = "";
+// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffdefres`, a dropdown's own list of `{\*\ffl ...}` entries, and -- for any of the three types -- the control's bookmark-style name as `{\*\ffname ...}`.
+function formFieldPayload(
+  descriptor: ContentControlDescriptor,
+  fftype: number,
+): string {
+  let out = `\\fftype${String(fftype)}`;
   if (descriptor.controlType === "checkbox") {
     out += `\\ffdefres${descriptor.checked === true ? "1" : "0"}`;
   } else if (
@@ -277,15 +283,15 @@ function formFieldPayload(descriptor: ContentControlDescriptor): string {
   return out;
 }
 
-// The whole field's own open: `{\field{\*\fldinst KEYWORD {\*\formfield PAYLOAD}}{\fldrslt `, left unclosed so the runs the extent wraps land inside \fldrslt's own destination -- the matching `}}` (closing \fldrslt, then \field) is written wherever the extent's endRun falls. Returns undefined for a controlType FORM_FIELD_KEYWORDS does not cover, so the caller can fall back to the ordinary construct-gap diagnostic instead of minting nothing silently.
+// The whole field's own open: `{\field{\*\fldinst KEYWORD {\*\formfield PAYLOAD}}{\fldrslt `, left unclosed so the runs the extent wraps land inside \fldrslt's own destination -- the matching `}}` (closing \fldrslt, then \field) is written wherever the extent's endRun falls. Returns undefined for a controlType FORM_FIELD_SPEC does not cover, so the caller can fall back to the ordinary construct-gap diagnostic instead of minting nothing silently.
 function formFieldOpenGroup(
   descriptor: ContentControlDescriptor,
 ): string | undefined {
-  const keyword = FORM_FIELD_KEYWORDS.get(descriptor.controlType);
-  if (keyword === undefined) {
+  const spec = FORM_FIELD_SPEC.get(descriptor.controlType);
+  if (spec === undefined) {
     return undefined;
   }
-  return `{\\field{\\*\\fldinst ${keyword} {\\*\\formfield{${formFieldPayload(descriptor)}}}}{\\fldrslt `;
+  return `{\\field{\\*\\fldinst ${spec.instruction} {\\*\\formfield{${formFieldPayload(descriptor, spec.fftype)}}}}{\\fldrslt `;
 }
 
 // Each ProvenanceChange's own <chrev> spelling. formatChange is the one with no flag of its own -- "\crauthN ... Note This keyword is used to indicate formatting revisions, such as bold, italic" -- so its author control word is what states that the run carries one at all.
@@ -661,7 +667,7 @@ class RtfWriter {
     }
   }
 
-  // A form field's own two halves, matching writeRunBoundaries above but wrapping rather than flagging: the open is `{\field...}{\fldrslt ` left unclosed, so every run the extent covers lands inside \fldrslt's own destination, and the close is the matching `}}`. A controlType FORM_FIELD_KEYWORDS does not cover degrades through describeConstructGap instead of minting nothing silently -- and, critically, mints NO open braces for that extent, so the close loop must only ever emit "}}" for an extent whose open half was actually written (tracked in `opened`). Emitting the close unconditionally would leave every degraded extent's would-be open half missing while its close half still lands, corrupting the document's brace balance for everything written afterwards.
+  // A form field's own two halves, matching writeRunBoundaries above but wrapping rather than flagging: the open is `{\field...}{\fldrslt ` left unclosed, so every run the extent covers lands inside \fldrslt's own destination, and the close is the matching `}}`. A controlType FORM_FIELD_SPEC does not cover degrades through describeConstructGap instead of minting nothing silently -- and, critically, mints NO open braces for that extent, so the close loop must only ever emit "}}" for an extent whose open half was actually written (tracked in `opened`). Emitting the close unconditionally would leave every degraded extent's would-be open half missing while its close half still lands, corrupting the document's brace balance for everything written afterwards.
   private writeFormFieldBoundaries(
     extents: readonly (RunConstructExtent & {
       descriptor: ContentControlDescriptor;
