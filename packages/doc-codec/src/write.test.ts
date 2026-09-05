@@ -777,6 +777,130 @@ describe("writeDocContent tables", () => {
     }
   });
 
+  it("keeps every row's own #992 fix when a table is wide enough that one row's assigned split sits right at the per-row PapxInFkp budget (ExaDev/documents.js#1013)", () => {
+    // 41 columns, 2 rows, every row merging across the whole grid: 40 internal boundaries are lost and distributed round-robin, 20 to each row. A row assigned 20 boundaries splits into 21 physical TC80 cells -- exactly the ceiling an undecorated row's own row-mark grpprl can still fit alone on a PapxFkp page (15 fixed bytes for sprmPFInTable+sprmPFTtp+sprmTDefTable's own opcode/cb/istd, plus 22 bytes per physical cell+boundary pair, must stay at or under the 487-byte grpPrlAndIstd a lone paragraph can actually claim once a page's own front-reserved rgfc/BxPap bytes are subtracted from the raw 510-byte MAX_GRP_PRL_AND_ISTD ceiling -- see fkp-write.ts's own fitsAloneOnPapxPage). Neither row here needs the new per-row fallback, so both keep #992's own fix intact: no warning, and the full 41-column grid recovers on read.
+    const columnCount = 41;
+    const rowCount = 2;
+    const columnWidthsPt = Array.from({ length: columnCount }, () => 20);
+    const rows = Array.from({ length: rowCount }, (_unused, rowIndex) => ({
+      cells: [
+        {
+          blocks: [paragraph([{ text: `row ${rowIndex}` }])],
+          colSpan: columnCount,
+        },
+      ],
+    }));
+    const input = document([{ kind: "table", columnWidthsPt, rows }]);
+    const warnings: string[] = [];
+    const bytes = writeDocContent(input, {
+      onWarning: (message) => warnings.push(message),
+    });
+    expect(isDocBytes(bytes)).toBe(true);
+    const block = tableAt(readDocContent(bytes), 0);
+    expect(warnings).toEqual([]);
+    expect(block.columnWidthsPt).toHaveLength(columnCount);
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      expect(block.rows[rowIndex]?.cells[0]?.colSpan).toBe(columnCount);
+    }
+  });
+
+  it("falls back to the pre-#992 encoding for one over-budget row instead of throwing, reporting the degradation via onWarning (ExaDev/documents.js#1013)", () => {
+    // One column wider than the previous test: 41 internal boundaries now, round-robin distribution gives row 0 the extra one (21 boundaries, the odd remainder always lands on row 0) and row 1 the other 20. Row 0's own 21 assigned boundaries would split it into 22 physical cells -- one past the 21-cell ceiling the previous test sits exactly at -- so flattenTable's own per-row budget check (table/write.ts) rejects that split and falls back to writing row 0's cell unsplit instead of throwing, exactly as this writer always did before #992's own fix existed. Row 1 is untouched and still states its own 20 boundaries. table/read.ts's union reconstruction then recovers the 21 columns row 1 alone reveals -- a real, partial degradation, not the single-row case's total collapse to one column (see the next test) -- and both rows' colSpan correctly reflects that smaller, honestly-recovered grid rather than reporting `undefined`.
+    const columnCount = 42;
+    const rowCount = 2;
+    const columnWidthsPt = Array.from({ length: columnCount }, () => 20);
+    const rows = Array.from({ length: rowCount }, (_unused, rowIndex) => ({
+      cells: [
+        {
+          blocks: [paragraph([{ text: `row ${rowIndex}` }])],
+          colSpan: columnCount,
+        },
+      ],
+    }));
+    const input = document([{ kind: "table", columnWidthsPt, rows }]);
+    const warnings: string[] = [];
+    const bytes = writeDocContent(input, {
+      onWarning: (message) => warnings.push(message),
+    });
+    expect(isDocBytes(bytes)).toBe(true);
+    const block = tableAt(readDocContent(bytes), 0);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("table row 0");
+    expect(warnings[0]).toMatch(
+      /without exceeding a PapxInFkp record's own byte budget/,
+    );
+    const recoveredColumnCount = columnCount - 21;
+    expect(block.columnWidthsPt).toHaveLength(recoveredColumnCount);
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(recoveredColumnCount);
+    expect(block.rows[1]?.cells[0]?.colSpan).toBe(recoveredColumnCount);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("row 0");
+    expect(cellText(block.rows[1]?.cells[0])).toBe("row 1");
+  });
+
+  it("writes a single-row table whose one merged cell's split exactly fits the per-row budget, and falls back one column past it, instead of throwing (ExaDev/documents.js#1013 regression: this writer used to throw DocFormatError above 21 columns here)", () => {
+    // A single-row table has no other row to share lost boundaries with, so every one of its internal boundaries is assigned to that one row (distributeLostBoundaries' own single-bucket case). 21 columns means 20 lost boundaries, splitting the merged cell into 21 physical cells -- the same per-row ceiling the two-row test above sits at -- and still gets #992's own fix in full. 22 columns means 21 lost boundaries, one physical cell past that ceiling: table/write.ts's own budget check now falls back to the pre-#992 encoding instead of throwing, and because there is no other row to recover the boundary from at all, the degradation here is total -- columnWidthsPt narrows to the table's own single physical cell, exactly as this writer's pre-#992 behaviour always produced for a table like this.
+    const withinBudget = 21;
+    const overBudget = 22;
+
+    const buildSingleRowTable = (columnCount: number): ContentDocument =>
+      document([
+        {
+          kind: "table",
+          columnWidthsPt: Array.from({ length: columnCount }, () => 20),
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [paragraph([{ text: "wide" }])],
+                  colSpan: columnCount,
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+
+    const fittingWarnings: string[] = [];
+    const fittingBytes = writeDocContent(buildSingleRowTable(withinBudget), {
+      onWarning: (message) => fittingWarnings.push(message),
+    });
+    const fittingBlock = tableAt(readDocContent(fittingBytes), 0);
+    expect(fittingWarnings).toEqual([]);
+    expect(fittingBlock.columnWidthsPt).toHaveLength(withinBudget);
+    expect(fittingBlock.rows[0]?.cells[0]?.colSpan).toBe(withinBudget);
+
+    const overflowingWarnings: string[] = [];
+    const overflowingBytes = writeDocContent(buildSingleRowTable(overBudget), {
+      onWarning: (message) => overflowingWarnings.push(message),
+    });
+    expect(isDocBytes(overflowingBytes)).toBe(true);
+    const overflowingBlock = tableAt(readDocContent(overflowingBytes), 0);
+    expect(overflowingWarnings).toHaveLength(1);
+    expect(overflowingWarnings[0]).toContain("table row 0");
+    expect(overflowingBlock.columnWidthsPt).toHaveLength(1);
+    expect(overflowingBlock.rows[0]?.cells[0]?.colSpan).toBeUndefined();
+    expect(cellText(overflowingBlock.rows[0]?.cells[0])).toBe("wide");
+  });
+
+  it("writing without an onWarning callback still falls back silently instead of throwing (ExaDev/documents.js#1013)", () => {
+    // The degradation is reported, not gated: an onWarning-less caller must still get working bytes back, not a thrown DocFormatError, for the identical over-budget table the previous tests pass an onWarning to.
+    const columnCount = 22;
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: Array.from({ length: columnCount }, () => 20),
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "wide" }])], colSpan: columnCount },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(() => writeDocContent(input)).not.toThrow();
+  });
+
   it("round-trips a vertically merged cell's rowSpan, with the spanned rows carrying an empty placeholder cell", () => {
     const input = document([
       {
