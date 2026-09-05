@@ -928,7 +928,7 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  // Explicit \ffprot1, never a bare \ffprot: every real fixture read.test.ts carries for this bit family already writes the explicit N form, and writing 1 sidesteps outright whether an absent parameter on an N-parameterised bit like this one defaults to on or to off.
+  // Explicit \ffprot1, never a bare \ffprot: \ffprotN is a Value control word (RTF 1.9.1's own control-word-type table), not a Toggle word like \b/\i, so its bare form defaults to 0/off rather than "on" -- writing the explicit N form costs one character and matches every real fixture read.test.ts carries for this bit family (PHPRtfLite always writes the explicit form for the sibling \ffres/\ffdefres bits).
   it("writes the explicit \\ffprot1 (never a bare \\ffprot) for a contentControl locked as 'content'", () => {
     const out = write(
       wordprocessing([
