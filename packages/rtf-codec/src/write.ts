@@ -325,6 +325,14 @@ function formFieldPayload(
         out += `{\\*\\ffl ${escapeText(option)}}`;
       }
     }
+    if (descriptor.checked !== undefined) {
+      // The identical sibling-gap shape as the checkbox branch's own dropped `options` above and the plainText branch's own dropped `checked` below: `checked` is the checkbox/radio boolean, and a dropDown descriptor carrying one has recorded a fact this control type has no concept of at all -- reported rather than silently ignored, matching this function's own treatment of every other recorded-but-unrepresentable field on every OTHER controlType branch.
+      sink({
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        severity: "warning",
+        message: `a dropDown contentControl's checked state (${String(descriptor.checked)}) is dropped: a dropdown has no boolean checked state at all, in RTF or in the harmonised contentControl vocabulary itself`,
+      });
+    }
   } else if (descriptor.controlType === "plainText") {
     // [MS-DOC] 2.9.78 FFData.xstzTextDef, verbatim: "An optional Xstz that specifies the default text of this textbox. This structure MUST exist if and only if bits.iType is iTypeTxt (0)." RTF 1.9.1's own `\ffdeftext` ("Default text for text field. This is a destination control word.") is its serialisation. This is real, reachable data: documents.js's own PDF AcroForm-to-contentControl reconstruction hands a plainText control exactly `{controlType:'plainText', value, ...}` for a real `/V` string, so a plainText descriptor's `value` is not hypothetical input -- note that this is a WRITE-only use of `value`: the read side deliberately does not restore `\ffdeftext` back onto `value` (see constructs.ts's own formFieldContentControl), since a field's default/reset text is not its current value, so a document built from a descriptor carrying this `value` does not read back with that same `value` on a round trip. Minted only when the descriptor actually carries one -- omitted, like the dropdown branch's own "nothing to name" cases above, when no value was ever recorded, rather than mint an empty `{\*\ffdeftext}` FFData.wDef's own presence rule would technically require: this writer already diverges from that binary-structure requirement for the identical round-trip-determinism reason the dropdown branch's own wDef note above explains.
     if (descriptor.value !== undefined) {
