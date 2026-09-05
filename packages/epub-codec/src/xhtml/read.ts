@@ -2,8 +2,10 @@ import type {
   ContentBlock,
   ContentListMembership,
   ContentParagraph,
+  ContentRun,
   ContentTableCell,
   ContentTableRow,
+  RunConstructExtent,
   SourceResidue,
 } from "document-schema.js";
 import { clampHeadingLevel } from "document-schema.js";
@@ -407,17 +409,125 @@ function readBlockElementInner(
   }
 }
 
+// A <pre>'s own inline content can carry a run-level construct (most commonly a footnote reference) exactly like any other paragraph's, but a <pre>'s own content model needs its text preserved verbatim -- so this cannot simply call buildInlineRuns (src/xhtml/inline.ts), which normalizes whitespace. containsFootnoteReference below decides which of the two walks actually builds the paragraph's runs: the common case (no footnote reference anywhere in the <pre>) takes the cheap, unchanged single-string readPreText path with no construct to lose; only a <pre> that genuinely carries one pays for readPreRuns' own run-splitting recursion.
 function readPre(element: XmlElement, state: BuildState): ContentBlock {
   const codeElement = findChildElement(element.children, "code");
   const languageSource = codeElement ?? element;
   const codeLanguage = languageFromClass(attrValue(languageSource, "class"));
-  const text = decodeEntities(readPreText(element.children, state.context));
+  const inline: InlineResult = containsFootnoteReference(
+    element.children,
+    state.context,
+  )
+    ? readPreRuns(element.children, state.context)
+    : {
+        runs: readPreFlatRuns(element.children, state.context),
+        constructs: [],
+      };
   const paragraph: ContentParagraph = {
     kind: "paragraph",
-    runs: text.length > 0 ? [{ text, fontFamily: MONOSPACE_FONT_FAMILY }] : [],
+    runs: inline.runs,
     ...(codeLanguage !== undefined ? { codeLanguage } : {}),
+    ...constructsField(inline),
   };
   return decorateParagraph(paragraph, state);
+}
+
+function readPreFlatRuns(
+  nodes: readonly XmlNode[],
+  context: XhtmlReadContext,
+): ContentRun[] {
+  const text = decodeEntities(readPreText(nodes, context));
+  return text.length > 0 ? [{ text, fontFamily: MONOSPACE_FONT_FAMILY }] : [];
+}
+
+// Whether a <pre>'s own subtree carries a recognised footnote-reference anchor anywhere, at any depth -- mirrors containsHeading's own inert-skipping descendant walk above. This is the cheap pre-check readPre uses to decide whether it can take readPreText's own flat-string shortcut (nothing structural to lose) or must pay for readPreRuns' own run-splitting recursion (needed only to bracket a footnote reference's own text as a distinct run range a RunConstructExtent can point at).
+function containsFootnoteReference(
+  nodes: readonly XmlNode[],
+  context: XhtmlReadContext,
+): boolean {
+  for (const node of nodes) {
+    if (node.type !== "element" || isInertElement(node.tag)) {
+      continue;
+    }
+    if (
+      node.tag === "a" &&
+      isFootnoteReferenceAnchor(node, context.idElements) !== undefined
+    ) {
+      return true;
+    }
+    if (containsFootnoteReference(node.children, context)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The <pre> twin of buildInlineRuns (src/xhtml/inline.ts), only ever reached once containsFootnoteReference above has confirmed the subtree actually carries a footnote reference: builds the ContentRun[] plus any run-level construct extents for one <pre>'s own children, still never routing through buildInlineRuns' own normalizeWhitespace (a <pre>'s content model preserves whitespace verbatim, exactly like readPreText above). A recognised footnote-reference anchor's own text becomes its own run range so a RunConstructExtent can bracket exactly it, mirroring src/xhtml/inline.ts's own appendAnchor; every nested call's own constructs are rebased onto the outer runs array's own length at the point of the merge, since a fresh recursive call always starts counting its own runs from zero. Every other wrapping element this file does not otherwise recognise inside a <pre> (<span>, <strong>, a non-footnote <a>, ...) still degrades to its own flattened text via readPreText, exactly as it always has -- a <pre>'s own content model has no rich formatting of its own to preserve structurally; only the footnote-reference construct itself is worth the extra run boundary.
+function readPreRuns(
+  nodes: readonly XmlNode[],
+  context: XhtmlReadContext,
+): InlineResult {
+  const runs: ContentRun[] = [];
+  const constructs: RunConstructExtent[] = [];
+  let buffer = "";
+  const flush = (): void => {
+    if (buffer.length === 0) {
+      return;
+    }
+    runs.push({
+      text: decodeEntities(buffer),
+      fontFamily: MONOSPACE_FONT_FAMILY,
+    });
+    buffer = "";
+  };
+  for (const node of nodes) {
+    if (node.type === "text") {
+      buffer += node.value;
+      continue;
+    }
+    if (node.type !== "element" || isInertElement(node.tag)) {
+      continue;
+    }
+    if (node.tag === "img") {
+      buffer += readPreImageFallbackText(node, context);
+      continue;
+    }
+    const footnoteName =
+      node.tag === "a"
+        ? isFootnoteReferenceAnchor(node, context.idElements)
+        : undefined;
+    if (
+      footnoteName === undefined &&
+      !containsFootnoteReference([node], context)
+    ) {
+      buffer += readPreText(node.children, context);
+      continue;
+    }
+    flush();
+    const startRun = runs.length;
+    const nested = readPreRuns(node.children, context);
+    runs.push(...nested.runs);
+    for (const construct of nested.constructs) {
+      constructs.push({
+        ...construct,
+        startRun: construct.startRun + startRun,
+        endRun: construct.endRun + startRun,
+      });
+    }
+    if (footnoteName !== undefined) {
+      constructs.push({
+        descriptor: {
+          kind: "anchor",
+          anchorType: "footnote",
+          name: footnoteName,
+        },
+        startRun,
+        endRun: runs.length,
+      });
+    }
+  }
+  flush();
+  return { runs, constructs };
 }
 
 // A <pre>/<code> block's own content model is plain text with whitespace preserved verbatim (this never routes through buildInlineRuns's own normalizeWhitespace) -- so an <img> found anywhere inside, at any depth, cannot become a real ContentImageBlock the way one reached transparently through readContainerChildren can: there is no block list here to insert a sibling image block into, the identical structural constraint appendImageFallback (src/xhtml/inline.ts) already applies to an <img> reached while building a flat run sequence. Its alt text is spliced into the extracted text in its place, with a diagnostic naming the loss -- mirroring textContent's own recursive walk (src/xml/query.ts) but for the one element kind that walk cannot represent as text at all. An inert element (context.ts's own isInertElement) is skipped for the identical reason src/xhtml/inline.ts's own appendElement skips it: none of <script>/<template>/<style>/<noscript>'s own content is ever legitimate document text -- this walk is its own separate recursion, not a call into appendElement, so it needs its own identical guard rather than inheriting one.
