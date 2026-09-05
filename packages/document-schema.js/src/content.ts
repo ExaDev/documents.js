@@ -18,7 +18,11 @@ import {
 import { MathMlNodeSchema } from "./mathml";
 import { LayoutMetadataSchema } from "./metadata";
 import { SourceResidueSchema, type SourceResidue } from "./source";
-import { AlignmentSchema } from "./style";
+import {
+  AlignmentSchema,
+  type TextDirection,
+  TextDirectionSchema,
+} from "./style";
 
 // The shared block model underlying a wordprocessing document's sections and a presentation document's slides. Ported from ooxml.js's src/typed/shared/content.ts (itself ported from documents.js's src/model/content.ts) -- the canonical home now; ooxml.js and documents.js both import this instead of maintaining their own copy. The ContentDocument envelope below (kind + wordprocessing/presentation/spreadsheet/drawing/formula variants) is this package's own addition on top of that shared vocabulary, matching documents.js's existing model/content.ts shape, since a caller needs a single top-level value to carry through a conversion pipeline.
 
@@ -39,6 +43,8 @@ export const ContentRunSchema = z.object({
   sizePt: z.number().positive().optional(),
   color: ColorSchema.optional(),
   hyperlink: z.string().optional(), // resolved external URI
+  verticalAlign: z.enum(["superscript", "subscript"]).optional(), // absent means baseline
+  direction: TextDirectionSchema.optional(), // RTF's own \rtlch/\ltrch scope -- the run-level of the four this format states direction at (see ContentParagraph.direction, ContentTableRow.direction, LayoutMetadata.direction for the other three)
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this run's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
@@ -50,6 +56,16 @@ export const ContentListMembershipSchema = z.object({
   level: z.number().int().nonnegative(), // w:ilvl
   checked: z.boolean().optional(), // a GFM task-list item's checkbox state -- absent when the source format's list items carry no checkbox at all, which is every format but markdown's task-list extension; deliberately on the membership (not the paragraph) because it is a fact about the ITEM, carried on each block that belongs to the item
   itemId: z.string().optional(), // the identity of ONE list item, minted by the reader that produced the membership -- absent when the source format states each block as its own item or carries no item identity at all; it distinguishes "one item, several blocks" (same itemId) from "several items sharing this numId/level" (different itemIds), which numId+level alone cannot
+  format: z
+    .enum([
+      "bullet",
+      "decimal",
+      "lowerLetter",
+      "upperLetter",
+      "lowerRoman",
+      "upperRoman",
+    ])
+    .optional(), // the item's own numbering format -- docx's w:numFmt, ODF's style:num-format -- absent when the source format states only a depth with no format of its own (the OOXML drawing paragraphs case numId's own comment describes), which downstream renderers have always treated as an implicit bullet; this field lets a renderer distinguish that from a genuinely ordered list instead of defaulting every list to a bullet marker
 });
 export type ContentListMembership = z.infer<typeof ContentListMembershipSchema>;
 
@@ -74,7 +90,9 @@ export const ContentParagraphSchema = z.object({
   spacingAfterPt: z.number().optional(),
   lineSpacing: z.number().positive().optional(), // multiple of single line height
   indentLeftPt: z.number().optional(),
+  indentRightPt: z.number().optional(),
   indentFirstLinePt: z.number().optional(),
+  direction: TextDirectionSchema.optional(), // RTF's own \rtlpar/\ltrpar scope -- the paragraph-level of the four this format states direction at (see ContentRun.direction, ContentTableRow.direction, LayoutMetadata.direction for the other three)
   // Explicit page boundaries a paragraph style forces around its own paragraph (docx w:pageBreakBefore, ODF fo:break-before/fo:break-after="page"). A break INSIDE one page style is this per-paragraph flag; a break that SWITCHES page geometry is a section boundary (ContentSection.breakType), and the two never encode one occurrence between them -- the same split w:pageBreakBefore and w:sectPr already make in WordprocessingML.
   pageBreakBefore: z.boolean().optional(),
   pageBreakAfter: z.boolean().optional(),
@@ -91,7 +109,7 @@ export function clampHeadingLevel(level: number): number {
 
 export const ContentImageBlockSchema = z.object({
   kind: z.literal("image"),
-  format: z.enum(["png", "jpeg"]),
+  format: z.enum(["png", "jpeg", "svg", "gif"]), // svg/gif added for epub's own manifest image kinds; a codec whose reader cannot yet decode one of the four degrades to alt text with a diagnostic exactly as it did before this field existed, rather than being forced to adopt them the moment they exist here
   base64: z.string(),
   widthPt: z.number().positive(),
   heightPt: z.number().positive(),
@@ -142,6 +160,7 @@ export interface ContentTableCell {
   rowSpan?: number;
   background?: Color;
   borders?: ContentCellBorders;
+  verticalAlign?: "top" | "center" | "bottom"; // RTF's \clvertalt/\clvertalc/\clvertalb; absent means the format's own default (top)
   sourcePath?: string;
   source?: SourceResidue; // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames?: LayoutFrame[]; // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
@@ -151,6 +170,7 @@ export interface ContentTableRow {
   cells: ContentTableCell[];
   // pptx tables carry an explicit row height (a:tr/@h); docx tables do not model one at the row level in the same way, so this is undefined there.
   heightPt?: number;
+  direction?: TextDirection; // RTF's own \rtlrow/\ltrrow scope -- the row-level of the four this format states direction at (see ContentRun.direction, ContentParagraph.direction, LayoutMetadata.direction for the other three)
 }
 
 export interface ContentTable {
@@ -425,12 +445,14 @@ export const ContentBorderSchema = z.object({
 });
 export type ContentBorder = z.infer<typeof ContentBorderSchema>;
 
-// Per-side borders for a rectangular cell (table or sheet) -- each side independently optional, since a real cell frequently has some sides bordered and others not.
+// Per-side borders for a rectangular cell (table or sheet) -- each side independently optional, since a real cell frequently has some sides bordered and others not. diagonalUp/diagonalDown name the two corner-to-corner rules a cell can carry independently of its four sides (OOXML's own xlsx cell-border vocabulary already names them this way; RTF's \cldglu/\cldgll state the identical pair for a table cell) -- "up" runs bottom-left to top-right, "down" runs top-left to bottom-right.
 export const ContentCellBordersSchema = z.object({
   left: ContentBorderSchema.optional(),
   right: ContentBorderSchema.optional(),
   top: ContentBorderSchema.optional(),
   bottom: ContentBorderSchema.optional(),
+  diagonalUp: ContentBorderSchema.optional(),
+  diagonalDown: ContentBorderSchema.optional(),
 });
 export type ContentCellBorders = z.infer<typeof ContentCellBordersSchema>;
 
@@ -440,6 +462,7 @@ export const ContentTableCellSchema = z.object({
   rowSpan: z.number().int().positive().optional(),
   background: ColorSchema.optional(),
   borders: ContentCellBordersSchema.optional(),
+  verticalAlign: z.enum(["top", "center", "bottom"]).optional(), // RTF's \clvertalt/\clvertalc/\clvertalb; absent means the format's own default (top)
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
@@ -448,6 +471,7 @@ export const ContentTableCellSchema = z.object({
 export const ContentTableRowSchema = z.object({
   cells: z.array(ContentTableCellSchema),
   heightPt: z.number().positive().optional(),
+  direction: TextDirectionSchema.optional(), // RTF's own \rtlrow/\ltrrow scope -- the row-level of the four this format states direction at (see ContentRun.direction, ContentParagraph.direction, LayoutMetadata.direction for the other three)
 });
 
 export const ContentTableSchema = z.object({
