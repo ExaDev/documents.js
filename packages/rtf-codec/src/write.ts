@@ -623,13 +623,19 @@ class RtfWriter {
     const formFields = (paragraph.constructs ?? []).filter(
       isContentControlExtent,
     );
+    // Which of formFields actually had their open half written -- see writeFormFieldBoundaries below for why the close loop must consult this rather than assume every extent that reaches its endRun was opened.
+    const openedFormFields = new Set<RunConstructExtent>();
     for (const [index, run] of paragraph.runs.entries()) {
       this.writeRunBoundaries(bookmarks, index);
-      this.writeFormFieldBoundaries(formFields, index);
+      this.writeFormFieldBoundaries(formFields, index, openedFormFields);
       this.writeRun(run, revisionsCovering(revisions, index));
     }
     this.writeRunBoundaries(bookmarks, paragraph.runs.length);
-    this.writeFormFieldBoundaries(formFields, paragraph.runs.length);
+    this.writeFormFieldBoundaries(
+      formFields,
+      paragraph.runs.length,
+      openedFormFields,
+    );
     if (!inTable) {
       this.line("\\par");
     }
@@ -655,15 +661,20 @@ class RtfWriter {
     }
   }
 
-  // A form field's own two halves, matching writeRunBoundaries above but wrapping rather than flagging: the open is `{\field...}{\fldrslt ` left unclosed, so every run the extent covers lands inside \fldrslt's own destination, and the close is the matching `}}`. A controlType FORM_FIELD_KEYWORDS does not cover degrades through describeConstructGap instead of minting nothing silently.
+  // A form field's own two halves, matching writeRunBoundaries above but wrapping rather than flagging: the open is `{\field...}{\fldrslt ` left unclosed, so every run the extent covers lands inside \fldrslt's own destination, and the close is the matching `}}`. A controlType FORM_FIELD_KEYWORDS does not cover degrades through describeConstructGap instead of minting nothing silently -- and, critically, mints NO open braces for that extent, so the close loop must only ever emit "}}" for an extent whose open half was actually written (tracked in `opened`). Emitting the close unconditionally would leave every degraded extent's would-be open half missing while its close half still lands, corrupting the document's brace balance for everything written afterwards.
   private writeFormFieldBoundaries(
     extents: readonly (RunConstructExtent & {
       descriptor: ContentControlDescriptor;
     })[],
     position: number,
+    opened: Set<RunConstructExtent>,
   ): void {
     for (const extent of extents) {
-      if (extent.endRun === position && extent.startRun !== position) {
+      if (
+        extent.endRun === position &&
+        extent.startRun !== position &&
+        opened.has(extent)
+      ) {
         this.raw("}}");
       }
     }
@@ -681,6 +692,7 @@ class RtfWriter {
         continue;
       }
       this.raw(open);
+      opened.add(extent);
       if (extent.endRun === position) {
         this.raw("}}");
       }
