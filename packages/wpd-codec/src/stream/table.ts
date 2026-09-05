@@ -234,7 +234,7 @@ export function readCellSpanning(
 //
 // RGBS is four bytes: red, green, blue, and a shading percentage. "Each color takes one byte with a range from 0 to 255 (0xFF) where 255 is 100%", the same statement the character-colour function rests on, so each component divides by 255 into the shared schema's 0..1 Color.
 //
-// The BACKGROUND colour is the one a cell's fill means in the shared schema's ContentTableCell.background. WordPerfect's foreground/background pair with a shading percentage describes a two-colour pattern fill, which a single flat colour cannot express -- so a cell whose shading says it is a genuine blend is reported rather than flattened to whichever half looks closer.
+// The BACKGROUND colour is the one this reader resolves into the shared schema's ContentTableCell.background (always as a 'solid' ContentCellFill -- see read.ts's own closeCell). WordPerfect's foreground/background pair with a shading percentage describes a genuine two-colour pattern fill, which document-schema.js's ContentCellFill can now express as its own 'pattern' variant (ExaDev/documents.js#951) -- this reader does not yet parse the foreground half or resolve the shading percentage into that shape, so a cell whose shading says it is a genuine blend is reported rather than flattened to whichever half looks closer.
 
 const COLOR_COMPONENT_MAX = 255;
 const RGBS_SIZE = 4;

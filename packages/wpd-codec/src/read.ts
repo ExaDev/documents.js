@@ -412,9 +412,10 @@ function closeCell(
       ? { colSpan: attributes.columnSpan }
       : {}),
     ...(attributes.rowSpan > NO_SPAN ? { rowSpan: attributes.rowSpan } : {}),
+    // ContentTableCell.background is document-schema.js's discriminated ContentCellFill (ExaDev/documents.js#951); this reader's own background is always the flat colour readCellFill resolves (see that function's own top-of-file note on why the blend itself is not reproduced), so it always wraps as a 'solid' fill, never a 'pattern' one.
     ...(attributes.background === undefined
       ? {}
-      : { background: attributes.background }),
+      : { background: { kind: "solid", color: attributes.background } }),
   };
   table.cells.push(cell);
 }
