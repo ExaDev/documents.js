@@ -2257,6 +2257,42 @@ describe("write API: insertNode's fresh-mint children-wiring reconciles pre-exis
     expect(ordered).toEqual([leafA.id, leafB.id, leafC.id]);
   });
 
+  it("insertNode's fresh-mint reconciliation preserves a repeated child id's own multiplicity and position, not just its first occurrence", () => {
+    const leafA = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const leafB = insertNode(leafA.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [leafA.id, leafB.id, leafA.id],
+    });
+    // Wire only leafB directly, before the section has a node of its own -- both of leafA's requested occurrences are still missing when the fresh mint below runs, which a plain existingChildren Set could not tell apart from "one occurrence missing".
+    const withDanglingEdge = insertEdge(leafB.graph, sectionId, leafB.id);
+
+    const section = insertNode(withDanglingEdge, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leafA.id, leafB.id, leafA.id],
+    });
+    expect(section.id).toBe(sectionId);
+
+    const contains = section.graph.edges.filter(
+      (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
+    );
+    // Three edges total -- both requested occurrences of leafA survive, not just one.
+    expect(contains).toHaveLength(3);
+    expect(contains.filter((edge) => edge.to === leafA.id)).toHaveLength(2);
+    expect(contains.filter((edge) => edge.to === leafB.id)).toHaveLength(1);
+    const ordered = [...contains]
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1))
+      .map((edge) => edge.to);
+    expect(ordered).toEqual([leafA.id, leafB.id, leafA.id]);
+  });
+
   it("a fresh mint with no pre-existing CONTAINS edges at all still mints the wide, evenly spaced orderKeyForIndex(index) keys directly, without paying for reconciliation", () => {
     const leafA = insertNode(EMPTY_GRAPH, {
       kind: "paragraph",
@@ -2410,6 +2446,47 @@ describe("write API: insertNode handles a dedup hit's kind and children correctl
       .sort((p, q) => (p.orderKey < q.orderKey ? -1 : 1))
       .map((edge) => edge.to);
     expect(ordered).toEqual([x.id, a.id, y.id]);
+  });
+
+  it("insertNode's dedup reconciliation preserves a repeated child id's own multiplicity and position, not just its first occurrence", () => {
+    const a = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const b = insertNode(a.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+
+    // Folded spelling mints the section with NO CONTAINS edges (established behaviour above), requesting [a, b, a] -- a repeated id, the same shape projectDocumentGraph and insertEdge already support elsewhere in this file.
+    const foldedSpelling = insertNode(b.graph, {
+      kind: "section",
+      properties: { kind: "section", children: [a.id, b.id, a.id] },
+    });
+
+    // Wire only b directly, as if an earlier caller had partially populated this id's containment before the full reconciling call arrives -- both of a's requested occurrences are still missing, which a plain existingChildren Set could not tell apart from "one occurrence missing".
+    const partiallyWired = insertEdge(
+      foldedSpelling.graph,
+      foldedSpelling.id,
+      b.id,
+    );
+
+    const explicitSpelling = insertNode(partiallyWired, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [a.id, b.id, a.id],
+    });
+    expect(explicitSpelling.id).toBe(foldedSpelling.id);
+
+    const ordered = explicitSpelling.graph.edges
+      .filter(
+        (edge) => edge.from === explicitSpelling.id && edge.kind === "CONTAINS",
+      )
+      .sort((p, q) => (p.orderKey < q.orderKey ? -1 : 1));
+    // Three edges total -- both requested occurrences of a survive, not just one.
+    expect(ordered).toHaveLength(3);
+    expect(ordered.filter((edge) => edge.to === a.id)).toHaveLength(2);
+    expect(ordered.map((edge) => edge.to)).toEqual([a.id, b.id, a.id]);
   });
 
   it("insertNode's dedup reconciliation is idempotent: requesting the same children twice adds no duplicate edges", () => {
