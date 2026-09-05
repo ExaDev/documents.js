@@ -728,7 +728,78 @@ describe("lists", () => {
     expect(a?.list?.numId).not.toBe(inner?.list?.numId);
   });
 
-  it("still fractures a list item around a quote wrapping ONLY a table -- a ContentTable has no ContentListMembership field of its own to carry either a direct itemId or a numId owner tag, so constructCarriesListItemId cannot recognise it -- but LIST_ITEM_BLOCK_UNLISTED already reports the underlying cause at lower time, so the loss is diagnosed rather than silent (LIST_ITEM_MULTI_BLOCK_FLATTENED stays retired: every other shape a blockquote can wrap either carries list-membership data (a paragraph, of any kind decorateParagraph produces) or is one of the three block kinds LIST_ITEM_BLOCK_UNLISTED already covers -- table, resolved image, display math)", () => {
+  it("keeps a construct nested inside the OUTER item when it directly resumes that item right after a NESTED sub-list closes, rather than fracturing the item and rendering the construct with an inverted marker -- a single most-recently-absorbed membership cannot tell this apart from the nested item's own construct, since the nested item's own paragraph was the last one absorbed before the construct is reached -- ExaDev/documents.js#990", () => {
+    const source = "- before\n\n  - nested\n\n  > quoted\n\n  after\n";
+    const written = emitMarkdown(lowerMarkdown(source));
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const paragraphs = (reparsed.sections[0]?.blocks ?? []).filter(
+      (block) => block.kind === "paragraph",
+    );
+    const [before, nested, quoted, after] = paragraphs;
+    expect(paragraphs).toHaveLength(4);
+    // "before", "quoted", and "after" all still share the OUTER item's own itemId across the reparse -- the construct resuming the outer item after the nested sub-list closes did not fracture it apart, and the construct's own marker is never inverted (no bullet ends up rendered inside the blockquote).
+    expect(before?.list?.level).toBe(0);
+    expect(quoted?.list?.level).toBe(0);
+    expect(after?.list?.level).toBe(0);
+    expect(before?.list?.itemId).toBeDefined();
+    expect(quoted?.list?.itemId).toBe(before?.list?.itemId);
+    expect(after?.list?.itemId).toBe(before?.list?.itemId);
+    // "nested" is a genuinely separate, deeper item -- its own itemId at level 1, unrelated to the outer item's.
+    expect(nested?.list?.level).toBe(1);
+    expect(nested?.list?.itemId).toBeDefined();
+    expect(nested?.list?.itemId).not.toBe(before?.list?.itemId);
+  });
+
+  it("keeps a construct nested inside the OUTER item resuming after a NESTED sub-list even when the construct itself wraps a FRESH nested list of its own, not just plain prose -- the owner-tag match (constructCarriesListItemId's numId path) must also be tried against the outer item, not only the nested item most recently absorbed -- ExaDev/documents.js#990", () => {
+    const source = "- before\n\n  - nested\n\n  > - q1\n  > - q2\n\n  after\n";
+    const written = emitMarkdown(lowerMarkdown(source));
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const paragraphs = (reparsed.sections[0]?.blocks ?? []).filter(
+      (block) => block.kind === "paragraph",
+    );
+    const [before, nested, q1, q2, after] = paragraphs;
+    expect(paragraphs).toHaveLength(5);
+    expect(before?.list?.itemId).toBeDefined();
+    expect(after?.list?.itemId).toBe(before?.list?.itemId);
+    // "nested" is the outer item's own deeper sibling list, untouched by the quote resuming past it.
+    expect(nested?.list?.level).toBe(1);
+    expect(nested?.list?.itemId).not.toBe(before?.list?.itemId);
+    // "q1"/"q2" are their own genuinely separate, freshly-minted nested list -- neither their itemIds nor their numId match the outer item's or "nested"'s own.
+    expect(q1?.list?.itemId).toBeDefined();
+    expect(q2?.list?.itemId).toBeDefined();
+    expect(q1?.list?.itemId).not.toBe(before?.list?.itemId);
+    expect(q2?.list?.itemId).not.toBe(q1?.list?.itemId);
+    expect(q1?.list?.numId).not.toBe(before?.list?.numId);
+    expect(q1?.list?.numId).not.toBe(nested?.list?.numId);
+  });
+
+  it("keeps a construct nested inside the OUTER item resuming after a NESTED sub-list even when it is that outer item's own LAST block, with nothing after it to look ahead to -- ExaDev/documents.js#990", () => {
+    const source = "- before\n\n  - nested\n\n  > quoted\n";
+    const written = emitMarkdown(lowerMarkdown(source));
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const paragraphs = (reparsed.sections[0]?.blocks ?? []).filter(
+      (block) => block.kind === "paragraph",
+    );
+    const [before, nested, quoted] = paragraphs;
+    expect(paragraphs).toHaveLength(3);
+    expect(before?.list?.itemId).toBeDefined();
+    expect(quoted?.list?.itemId).toBe(before?.list?.itemId);
+    expect(nested?.list?.itemId).not.toBe(before?.list?.itemId);
+  });
+
+  it("still fractures a list item around a quote wrapping ONLY a table -- a ContentTable has no ContentListMembership field of its own to carry either a direct itemId or a numId owner tag, so constructCarriesListItemId cannot recognise it -- but LIST_ITEM_BLOCK_UNLISTED already reports the underlying cause at lower time, so the loss is diagnosed rather than silent (LIST_ITEM_MULTI_BLOCK_FLATTENED stays retired: every other shape a blockquote can wrap either carries list-membership data (a paragraph, of any kind decorateParagraph produces, at any list nesting depth and regardless of how many nested sub-list runs intervene before the quote resumes its own enclosing item -- renderItems' own openMemberships stack, not just constructCarriesListItemId's recursion, is what makes that true) or is one of the three block kinds LIST_ITEM_BLOCK_UNLISTED already covers -- table, resolved image, display math)", () => {
     const source =
       "- before\n\n  > | a | b |\n  > | - | - |\n  > | 1 | 2 |\n\n  after\n";
     const collector = createDiagnosticCollector();
