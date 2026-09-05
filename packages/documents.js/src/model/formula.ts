@@ -46,22 +46,28 @@ export function formulaOfBlock(
     : undefined;
 }
 
-// One formula this walk found, alongside the sourcePath its embedding block carried -- undefined for the standalone 'formula' document kind (no embedding block at all) and for a spreadsheet's cell-anchored embedded objects (ContentEmbeddedObject carries no sourcePath field; only the block-level ContentEmbeddedObjectBlock wrapper does).
+// One formula this walk found. `sourcePath` is the embedding block's own field -- undefined for the standalone 'formula' document kind (no embedding block at all) and for a spreadsheet's cell-anchored embedded objects (ContentEmbeddedObject carries no sourcePath field; only the block-level ContentEmbeddedObjectBlock wrapper does). `locate` is a different thing entirely: a structural path this walk itself derives from container/index position (e.g. "sections[0]/blocks[2]", "sheets[1].embeddedObjects[0]"), guaranteed unique per formula within one document regardless of whether the source format populated sourcePath at all -- a consumer needing to tell two formulas apart (a diagnostic locator, a lint detail string) should key on this, not on sourcePath, which several real producers (markdown-codec's math lowerer among them) leave undefined or repeat verbatim across sibling formulas.
 export interface DocumentFormulaEntry {
   readonly formula: ContentFormula;
   readonly sourcePath: string | undefined;
+  readonly locate: string;
 }
 
-// Recurses into table cells -- a table cell's own blocks are block-flow content like any other, and a formula can sit inside one.
+// Recurses into table cells -- a table cell's own blocks are block-flow content like any other, and a formula can sit inside one. `locate` is the structural path to this block list's own container (e.g. "sections[0]"); each block's position within it is appended via blocks.entries() rather than a plain for...of, so two formulas anywhere in the same document -- siblings, or nested inside different table cells -- always derive distinct locate strings. A table's own index is folded into the cell path passed to the recursive call (not just row/cell index) so two sibling tables in the same block list can never collide either.
 function collectFormulasFromBlocks(
   blocks: readonly ContentBlock[],
+  locate: string,
   out: DocumentFormulaEntry[],
 ): void {
-  for (const block of blocks) {
+  for (const [index, block] of blocks.entries()) {
     if (block.kind === "table") {
-      for (const row of block.rows) {
-        for (const cell of row.cells) {
-          collectFormulasFromBlocks(cell.blocks, out);
+      for (const [rowIndex, row] of block.rows.entries()) {
+        for (const [cellIndex, cell] of row.cells.entries()) {
+          collectFormulasFromBlocks(
+            cell.blocks,
+            `${locate}/blocks[${String(index)}].rows[${String(rowIndex)}].cells[${String(cellIndex)}]`,
+            out,
+          );
         }
       }
       continue;
@@ -69,49 +75,75 @@ function collectFormulasFromBlocks(
     if (block.kind === "embeddedObject") {
       const formula = formulaOfBlock(block);
       if (formula !== undefined) {
-        out.push({ formula, sourcePath: block.sourcePath });
+        out.push({
+          formula,
+          sourcePath: block.sourcePath,
+          locate: `${locate}/blocks[${String(index)}]`,
+        });
       }
     }
   }
 }
 
-// Every place document-schema.js's own content model lets a ContentFormula travel: a wordprocessing section's block flow, a presentation slide's or drawing page's own shape's block flow (both structurally identical to a section's, per ContentShapeSchema/ContentEmbeddedObjectBlock's own comments), a spreadsheet's own cell-anchored embeddedObjects array (a bare ContentEmbeddedObject with no block flow and no sourcePath, not a gap in this walk), and the standalone 'formula' document kind, whose single child IS the formula rather than a block wrapping one. The one shared walk every formula-reading consumer in the family uses -- documents.js's own coherence lint (src/latex/lint.ts) and document-mcp's compute_formula tool both call this rather than each re-deriving the per-kind traversal.
+// Every place document-schema.js's own content model lets a ContentFormula travel: a wordprocessing section's block flow, a presentation slide's or drawing page's own shape's block flow (both structurally identical to a section's, per ContentShapeSchema/ContentEmbeddedObjectBlock's own comments), a spreadsheet's own cell-anchored embeddedObjects array (a bare ContentEmbeddedObject with no block flow and no sourcePath, not a gap in this walk), and the standalone 'formula' document kind, whose single child IS the formula rather than a block wrapping one. The one shared walk every formula-reading consumer in the family uses -- documents.js's own coherence lint (src/latex/lint.ts) and document-mcp's compute_formula tool both call this rather than each re-deriving the per-kind traversal. Every arm derives each entry's own `locate` from container/index position as it walks, so two formulas anywhere in one document -- even two sharing the same sourcePath, or a format that never populates sourcePath at all -- always come back with distinct locate strings.
 export function collectDocumentFormulas(
   document: ContentDocument,
 ): DocumentFormulaEntry[] {
   const out: DocumentFormulaEntry[] = [];
   switch (document.kind) {
     case "wordprocessing":
-      for (const section of document.sections) {
-        collectFormulasFromBlocks(section.blocks, out);
+      for (const [index, section] of document.sections.entries()) {
+        collectFormulasFromBlocks(
+          section.blocks,
+          `sections[${String(index)}]`,
+          out,
+        );
       }
       break;
     case "presentation":
-      for (const slide of document.slides) {
-        for (const shape of slide.shapes) {
-          collectFormulasFromBlocks(shape.blocks, out);
+      for (const [slideIndex, slide] of document.slides.entries()) {
+        for (const [shapeIndex, shape] of slide.shapes.entries()) {
+          collectFormulasFromBlocks(
+            shape.blocks,
+            `slides[${String(slideIndex)}].shapes[${String(shapeIndex)}]`,
+            out,
+          );
         }
       }
       break;
     case "drawing":
-      for (const page of document.pages) {
-        for (const shape of page.shapes) {
-          collectFormulasFromBlocks(shape.blocks, out);
+      for (const [pageIndex, page] of document.pages.entries()) {
+        for (const [shapeIndex, shape] of page.shapes.entries()) {
+          collectFormulasFromBlocks(
+            shape.blocks,
+            `pages[${String(pageIndex)}].shapes[${String(shapeIndex)}]`,
+            out,
+          );
         }
       }
       break;
     case "spreadsheet":
-      for (const sheet of document.sheets) {
-        for (const object of sheet.embeddedObjects ?? []) {
+      for (const [sheetIndex, sheet] of document.sheets.entries()) {
+        for (const [objectIndex, object] of (
+          sheet.embeddedObjects ?? []
+        ).entries()) {
           const formula = formulaOfBlock(object);
           if (formula !== undefined) {
-            out.push({ formula, sourcePath: undefined });
+            out.push({
+              formula,
+              sourcePath: undefined,
+              locate: `sheets[${String(sheetIndex)}].embeddedObjects[${String(objectIndex)}]`,
+            });
           }
         }
       }
       break;
     case "formula":
-      out.push({ formula: document.formula, sourcePath: undefined });
+      out.push({
+        formula: document.formula,
+        sourcePath: undefined,
+        locate: "formula",
+      });
       break;
     default: {
       // Leading underscore is deliberate, not a suppressed-unused-var workaround: this binding exists purely so its `never` annotation fails to compile the moment ContentDocument gains a kind this switch doesn't handle -- @exadev/eslint-config's no-pointless-reassignment rule exempts underscore-prefixed names precisely because such a binding's only job is the compile-time check, never its runtime value.

@@ -99,15 +99,15 @@ function lintFormula(
   }
 }
 
-// Lint every formula carrying both layers in a package. The tree-form package is flattened once at entry (the same single tree-to-flat authority every package consumer uses); collectDocumentFormulas (src/model/formula.ts) is the shared walk covering every arm a formula actually travels through in the flat form -- the wordprocessing sections' block flow, presentation slides and drawing pages (both via their shapes' own block flows, including table cells), the spreadsheet arm's own embeddedObjects array, and the formula arm itself (a standalone formula document). The exported signature keeps DocumentTree -- callers hand back exactly what onDocument gave them. A found formula's own sourcePath doubles as its diagnostic locate string, falling back to the document's own kind for the two shapes with no sourcePath to report (a standalone formula document, and a spreadsheet's cell-anchored embedded objects -- see collectDocumentFormulas's own comment for why those carry none).
+// Lint every formula carrying both layers in a package. The tree-form package is flattened once at entry (the same single tree-to-flat authority every package consumer uses); collectDocumentFormulas (src/model/formula.ts) is the shared walk covering every arm a formula actually travels through in the flat form -- the wordprocessing sections' block flow, presentation slides and drawing pages (both via their shapes' own block flows, including table cells), the spreadsheet arm's own embeddedObjects array, and the formula arm itself (a standalone formula document). The exported signature keeps DocumentTree -- callers hand back exactly what onDocument gave them. Each entry's own `locate` -- a structural path the walk derives from container/index position, not the document's own sourcePath field -- is the diagnostic locate string: sourcePath is optional on every block (several real producers, markdown-codec's math lowerer among them, never populate it, and nothing stops two sibling formulas from sharing the identical sourcePath their format happened to stamp), so keying the lint's own detail string on it would let two distinct formulas in one document produce byte-identical diagnostics. `locate` is guaranteed unique per formula within a document regardless of what the source format did or didn't record.
 export function lintMathCoherence(
   pkg: DocumentTree,
 ): readonly MathLintDiagnostic[] {
   const warnings: MathLintDiagnostic[] = [];
   const content = flattenTree(pkg);
   const symbolEntries = content.symbolTable?.symbols;
-  for (const { formula, sourcePath } of collectDocumentFormulas(content)) {
-    lintFormula(formula, sourcePath ?? content.kind, symbolEntries, warnings);
+  for (const { formula, locate } of collectDocumentFormulas(content)) {
+    lintFormula(formula, locate, symbolEntries, warnings);
   }
   return warnings;
 }

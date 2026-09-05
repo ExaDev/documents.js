@@ -143,6 +143,40 @@ describe("lintMathCoherence", () => {
     ]);
   });
 
+  it("two divergent formulas in one document produce distinct detail strings, even though mathBlockOf stamps the identical sourcePath on both (ExaDev/documents.js#928 round-3/4 regression)", () => {
+    // Both formulas below are built through the same mathBlockOf helper, which hardcodes "test:lint" as every formula's sourcePath -- exactly the shape a real document can have too (markdown-codec's own math lowerer never populates sourcePath at all). If the lint keyed its diagnostic locate string on sourcePath (or on the document's own kind as a shared fallback), these two formulas' diagnostics would be byte-identical except for the latex suffix's own natural difference -- the actual round-3 regression. Keying on the walk's own structural `locate` instead keeps them apart regardless of what sourcePath the source format did or didn't stamp.
+    const nested = mathBlockOf("c + d");
+    const topLevel = mathBlockOf("a + b");
+    const pkg = packageOf([
+      {
+        kind: "table",
+        columnWidthsPt: [100],
+        rows: [{ cells: [{ blocks: [nested] }] }],
+      },
+      topLevel,
+    ]);
+    for (const block of [nested, topLevel]) {
+      if (
+        block.kind !== "embeddedObject" ||
+        block.document.kind !== "formula"
+      ) {
+        throw new Error("expected a formula block");
+      }
+      // Force a divergence: neither "c + d" nor "a + b" mechanically re-lowers to a bare symbol reference.
+      block.document.formula.content = { kind: "sym", id: "symbols:x" };
+    }
+    const warnings = lintMathCoherence(pkg);
+    expect(warnings).toHaveLength(2);
+    expect(
+      warnings.every((warning) => warning.code === "math/coherence-divergence"),
+    ).toBe(true);
+    expect(warnings[0]?.detail).toBe(
+      "sections[0]/blocks[0].rows[0].cells[0]/blocks[0]: c + d",
+    );
+    expect(warnings[1]?.detail).toBe("sections[0]/blocks[1]: a + b");
+    expect(warnings[0]?.detail).not.toBe(warnings[1]?.detail);
+  });
+
   it("walks formula blocks inside table cells and skips formulas carrying only one layer", () => {
     const presentationOnly = buildFormulaBlock(
       { mathml: [], presentation: { latex: "x^2" } },
