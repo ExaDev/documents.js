@@ -4,6 +4,7 @@ import type { XmlElement, XmlNode } from "../xml/node";
 import { attrValue } from "../xml/query";
 import { decodeEntities } from "../xml/entities";
 import type { InlineStyle, XhtmlReadContext } from "./context";
+import { isInertElement } from "./context";
 import { isFootnoteReferenceAnchor, sameDocumentFragment } from "./footnote";
 import { MONOSPACE_FONT_FAMILY } from "./style-constants";
 
@@ -73,6 +74,10 @@ function appendElement(
   runs: ContentRun[],
   constructs: RunConstructExtent[],
 ): void {
+  if (isInertElement(element.tag)) {
+    // Never legitimate document text -- see context.ts's own isInertElement for why <script>/<template> share this treatment. This is the universal safety net: it fires regardless of where one of these is reached from -- directly inside a <p>/<td>/<figcaption>, or several levels deep inside a stray <div> a container's own recovery path (e.g. src/xhtml/read.ts's readList/flushListStrayContent) has recursed into -- rather than only the single position a narrower, call-site-specific check would guard against.
+    return;
+  }
   switch (element.tag) {
     case "strong":
     case "b":
@@ -139,10 +144,6 @@ function appendElement(
     }
     case "br":
       runs.push(styledRun("\n", style));
-      return;
-    case "script":
-    case "template":
-      // Script-supporting elements per the HTML Standard's own content model -- their content (raw JS source for <script>, an inert DOM subtree for <template>) is never legitimate document text, so it must never reach the default appendNested passthrough below, which would otherwise recurse into it and emit it as a plain run exactly like real prose. This is the universal safety net: it fires regardless of where a <script>/<template> is reached from -- directly inside a <p>/<td>/<figcaption>, or several levels deep inside a stray <div> a container's own recovery path (e.g. src/xhtml/read.ts's readList/flushListStrayContent) has recursed into -- rather than only the single position that package's own isScriptSupportingElement check happens to guard against.
       return;
     case "a": {
       appendAnchor(element, style, context, runs, constructs);
