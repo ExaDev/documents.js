@@ -222,6 +222,7 @@ function applyRowLevelBorderCascade(
   toleranceTwips: number,
 ): RawCell[][] {
   const lastRowIndex = rows.length - 1;
+  const lastRowBorders = definitions[lastRowIndex]?.rowBorders;
   const logicalRows = rows.map((row, rowIndex): LogicalCell[] => {
     const definition = definitions[rowIndex];
     if (definition === undefined) {
@@ -243,6 +244,7 @@ function applyRowLevelBorderCascade(
     return cascadeRowBorders(
       cells,
       rowBorders,
+      lastRowBorders,
       rowIndex === 0,
       rowIndex,
       lastRowIndex,
@@ -254,10 +256,11 @@ function applyRowLevelBorderCascade(
   });
 }
 
-// One row's own physical cells against its own rowBorders: brcLeft/brcRight land on the row's own first/last physical cell (which, since a physical cell's own boundaries always span from the table's left edge to its right edge regardless of any merge within the row, always IS the row's own outer edge); brcTop lands on every cell when this is the table's first row; brcBottom lands on a cell reaching the table's real bottom edge through one of the two paths cellReachesTableBottom checks -- the table's own last physical row directly, or a vertically-merged anchor whose own continuation chain reaches into it -- resolved on the vertical axis by walking that chain rather than by checking the row's own index alone, justified by [MS-DOC] 2.4.3's own Overview of Tables, whose Figure 2 caption states that "the vertically merged cells act as one cell": the group's real bottom edge, not each physical row's own, is where brcBottom belongs; and brcHorizontalInside/brcVerticalInside land everywhere else. Walking the chain is what lets a vertically-merged anchor reach the table's real bottom edge even when the anchor's own physical row is not the table's last one -- the bug ExaDev/documents.js#945's own follow-up fixes, since a merge anchor sitting in a non-final row previously always got that row's insideHorizontal border on its bottom side, and the continuation cell that actually sits in the table's last row has its own decoration dropped by buildRows regardless (a vertical-merge continuation is `{blocks: []}` by the shared schema's own convention), so the table's real bottom border was never carried by anything in the output at all. "Last physical cell" is resolved the same way on the horizontal axis, through any trailing sprmTMerge/TCGRF.horzMerge continuation cells (isRightmostPhysicalCell), so a legacy-encoded horizontal merge's own anchor still reaches the row's real right edge; this package's own writer states a horizontal merge as a genuinely narrower, wider physical cell instead, for which physicalIndex === cells.length - 1 already holds directly. A side in the cell's own clearedSides is left out of `sides` entirely regardless of what the cascade would otherwise supply -- an explicit sprmTSetBrc/sprmTSetBrc80 clear always wins, exactly as tap.ts's own applyBrcToCell states it should (ExaDev/documents.js#945).
+// One row's own physical cells against its own rowBorders: brcLeft/brcRight land on the row's own first/last physical cell (which, since a physical cell's own boundaries always span from the table's left edge to its right edge regardless of any merge within the row, always IS the row's own outer edge); brcTop lands on every cell when this is the table's first row; and brcHorizontalInside/brcVerticalInside land everywhere else. brcBottom is the one field NOT drawn from this row's own rowBorders: [MS-DOC] 2.9.302's own field text is explicit that brcBottom "specifies the bottom border of the row, if it is the last row in the table" -- a row's own brcBottom describes the table's true bottom edge only when that row genuinely IS the table's last physical row, so this always reads it off lastRowBorders (the table's real last row's own TableBordersOperand), never off rowBorders (this row's own), even when this row happens to be the one being cascaded (the two are then the identical value). A cell gets that value whenever it reaches the table's real bottom edge through one of the two paths cellReachesTableBottom checks -- the table's own last physical row directly, or a vertically-merged anchor whose own continuation chain reaches into it -- resolved on the vertical axis by walking that chain rather than by checking the row's own index alone, justified by [MS-DOC] 2.4.3's own Overview of Tables, whose Figure 2 caption states that "the vertically merged cells act as one cell": the group's real bottom edge, not each physical row's own, is where brcBottom belongs. Walking the chain is what lets a vertically-merged anchor reach the table's real bottom edge even when the anchor's own physical row is not the table's last one -- the bug ExaDev/documents.js#945's own follow-up fixes, since a merge anchor sitting in a non-final row previously always got that row's insideHorizontal border on its bottom side (and, even once that much was fixed, still its own row's brcBottom rather than the table's real last row's, which [MS-DOC] 2.9.302's own text never licenses for a non-final row), and the continuation cell that actually sits in the table's last row has its own decoration dropped by buildRows regardless (a vertical-merge continuation is `{blocks: []}` by the shared schema's own convention), so the table's real bottom border was never carried by anything in the output at all. "Last physical cell" is resolved the same way on the horizontal axis, through any trailing sprmTMerge/TCGRF.horzMerge continuation cells (isRightmostPhysicalCell), so a legacy-encoded horizontal merge's own anchor still reaches the row's real right edge; this package's own writer states a horizontal merge as a genuinely narrower, wider physical cell instead, for which physicalIndex === cells.length - 1 already holds directly. A side in the cell's own clearedSides is left out of `sides` entirely regardless of what the cascade would otherwise supply -- an explicit sprmTSetBrc/sprmTSetBrc80 clear always wins, exactly as tap.ts's own applyBrcToCell states it should (ExaDev/documents.js#945).
 function cascadeRowBorders(
   cells: readonly RawCell[],
   rowBorders: TableBordersSet,
+  lastRowBorders: TableBordersSet | undefined,
   isFirstRow: boolean,
   rowIndex: number,
   lastRowIndex: number,
@@ -291,7 +294,7 @@ function cascadeRowBorders(
       bottom: cell.clearedSides?.has("bottom")
         ? undefined
         : (cell.borders?.bottom ??
-          (isLastRow ? rowBorders.bottom : rowBorders.insideHorizontal)),
+          (isLastRow ? lastRowBorders?.bottom : rowBorders.insideHorizontal)),
       right: cell.clearedSides?.has("right")
         ? undefined
         : (cell.borders?.right ??
