@@ -256,6 +256,52 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
     ).toBe(true);
   });
 
+  it("TABLE_ROW_CONTENT_OUTSIDE_CELL fires for stray text sitting directly inside a <tr>", () => {
+    const { sink, codes } = collect();
+    readXhtmlBody(
+      "<html><body><table><tr>stray<td>x</td></tr></table></body></html>",
+      {
+        resolveImage: () => undefined,
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(codes.has(EpubDiagnosticCodes.TABLE_ROW_CONTENT_OUTSIDE_CELL)).toBe(
+      true,
+    );
+  });
+
+  it("TABLE_CONTENT_UNRECOGNIZED fires for a stray <p> sitting directly inside a <table>", () => {
+    const { sink, codes } = collect();
+    readXhtmlBody(
+      "<html><body><table><p>stray</p><tr><td>x</td></tr></table></body></html>",
+      {
+        resolveImage: () => undefined,
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(codes.has(EpubDiagnosticCodes.TABLE_CONTENT_UNRECOGNIZED)).toBe(
+      true,
+    );
+  });
+
+  it("TABLE_DUPLICATE_CAPTION fires for a <table> carrying a second <caption>", () => {
+    const { sink, codes } = collect();
+    readXhtmlBody(
+      "<html><body><table><caption>One</caption><caption>Two</caption><tr><td>x</td></tr></table></body></html>",
+      {
+        resolveImage: () => undefined,
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(codes.has(EpubDiagnosticCodes.TABLE_DUPLICATE_CAPTION)).toBe(true);
+  });
+
   it("IMAGE_FORMAT_UNSUPPORTED fires for a resolved but non-PNG/JPEG image", () => {
     const { sink, codes } = collect();
     readXhtmlBody('<html><body><img src="a.gif" alt="a"/></body></html>', {
