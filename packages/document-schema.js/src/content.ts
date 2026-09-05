@@ -158,7 +158,7 @@ export interface ContentTableCell {
   blocks: ContentBlock[];
   colSpan?: number;
   rowSpan?: number;
-  background?: Color;
+  background?: ContentCellFill;
   borders?: ContentCellBorders;
   verticalAlign?: "top" | "center" | "bottom"; // RTF's \clvertalt/\clvertalc/\clvertalb; absent means the format's own default (top)
   sourcePath?: string;
@@ -456,11 +456,89 @@ export const ContentCellBordersSchema = z.object({
 });
 export type ContentCellBorders = z.infer<typeof ContentCellBordersSchema>;
 
+// The closed set of genuine two-colour pattern fills a table/sheet cell's background can carry, spanning the two independent vocabularies this family's format codecs actually read: WordprocessingML's own ST_Shd (ECMA-376 Part 1 17.18.78) -- which [MS-DOC]'s Ipat enumeration (2.9.121) maps its own supported values onto directly, so doc-codec's binary reader and ooxml.js's docx reader share this half verbatim -- and SpreadsheetML's own ST_PatternType, which [MS-XLS]'s FillPattern enumeration is the binary predecessor of, so xls-codec's BIFF8 reader and ooxml.js's xlsx reader share this other half. The two never overlap in membership (a table cell never carries an xlsx-style named grey density, a sheet cell never carries a Word-style percentage), so one flat enum serves both without ambiguity, the same way ContentCellValueSchema's ten variants serve every spreadsheet format's own value-kind vocabulary in one union. percentN is ST_Shd's own pctN family (5 through 95, the 23 members [MS-DOC] maps onto a real ST_Shd token -- its own further ipatPctNew* fine percentages have no ST_Shd equivalent at all and [MS-DOC] itself says they "SHOULD NOT be used", so they are deliberately excluded here rather than invented a name for); the twelve directional stripe/cross members and their 'thin' density variants are ST_Shd's own remaining tokens. mediumGray/darkGray/lightGray through gray0625 are ST_PatternType's own seventeen non-solid, non-none members verbatim, including the two fixed micro-densities (12.5%/6.25%) Excel's own UI exposes as "Gray125"/"Gray0625" rather than as another percentage step.
+export const ContentCellPatternTypeSchema = z.enum([
+  "percent5",
+  "percent10",
+  "percent12",
+  "percent15",
+  "percent20",
+  "percent25",
+  "percent30",
+  "percent35",
+  "percent37",
+  "percent40",
+  "percent45",
+  "percent50",
+  "percent55",
+  "percent60",
+  "percent62",
+  "percent65",
+  "percent70",
+  "percent75",
+  "percent80",
+  "percent85",
+  "percent87",
+  "percent90",
+  "percent95",
+  "horizontalStripe",
+  "verticalStripe",
+  "diagonalStripe",
+  "reverseDiagonalStripe",
+  "horizontalCross",
+  "diagonalCross",
+  "thinHorizontalStripe",
+  "thinVerticalStripe",
+  "thinDiagonalStripe",
+  "thinReverseDiagonalStripe",
+  "thinHorizontalCross",
+  "thinDiagonalCross",
+  "mediumGray",
+  "darkGray",
+  "lightGray",
+  "darkHorizontal",
+  "darkVertical",
+  "darkDown",
+  "darkUp",
+  "darkGrid",
+  "darkTrellis",
+  "lightHorizontal",
+  "lightVertical",
+  "lightDown",
+  "lightUp",
+  "lightGrid",
+  "lightTrellis",
+  "gray125",
+  "gray0625",
+]);
+export type ContentCellPatternType = z.infer<
+  typeof ContentCellPatternTypeSchema
+>;
+
+// A table/sheet cell's own background, replacing a bare Color with a discriminated shape wide enough to state what the source format actually carries (ExaDev/documents.js#951): 'solid' is the overwhelmingly common case, one flat colour; 'pattern' is a genuine two-colour fill (a percentage grey, a stripe, a crosshatch) that a single Color cannot express at all, foregroundColor/backgroundColor each independently optional because a real producer's own pattern fill may state only one half explicitly and leave the other at the application's automatic default -- the identical "a colour can defer instead of asserting" convention w:shd/@w:fill and xlsx's own theme/indexed/auto colours already follow elsewhere in this family. There is no third 'none' variant: the field's own optionality already states "no fill" by being absent, exactly as it always has.
+export const ContentCellFillSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("solid"), color: ColorSchema }),
+  z.object({
+    kind: z.literal("pattern"),
+    patternType: ContentCellPatternTypeSchema,
+    foregroundColor: ColorSchema.optional(),
+    backgroundColor: ColorSchema.optional(),
+  }),
+]);
+export type ContentCellFill = z.infer<typeof ContentCellFillSchema>;
+
+// A single representative colour for a ContentCellFill, for a consumer that only ever renders or approximates with one colour (a rasterising layout engine, a preview pane, a format whose own decoration vocabulary has no pattern-fill concept of its own to write one into) and has no use for the full pattern shape: a solid fill's own colour, or a pattern's foreground colour -- the one a mid-to-high-density pattern shows the most of -- falling back to its background colour when the producer left the foreground unset, and undefined only when a pattern states neither. Never a substitute for branching on `fill.kind` in a writer that can actually state a pattern: this exists solely for the many simpler consumers that cannot.
+export function resolveCellFillColor(fill: ContentCellFill): Color | undefined {
+  return fill.kind === "solid"
+    ? fill.color
+    : (fill.foregroundColor ?? fill.backgroundColor);
+}
+
 export const ContentTableCellSchema = z.object({
   blocks: z.array(ContentBlockSchema),
   colSpan: z.number().int().positive().optional(),
   rowSpan: z.number().int().positive().optional(),
-  background: ColorSchema.optional(),
+  background: ContentCellFillSchema.optional(),
   borders: ContentCellBordersSchema.optional(),
   verticalAlign: z.enum(["top", "center", "bottom"]).optional(), // RTF's \clvertalt/\clvertalc/\clvertalb; absent means the format's own default (top)
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
@@ -584,7 +662,7 @@ export const ContentSheetCellSchema = z.object({
   runs: z.array(ContentRunSchema).optional(), // the rare case of genuinely mixed inline formatting within one cell's text; absent when the cell's formatting is uniform
   colSpan: z.number().int().positive().optional(),
   rowSpan: z.number().int().positive().optional(),
-  background: ColorSchema.optional(),
+  background: ContentCellFillSchema.optional(),
   borders: ContentCellBordersSchema.optional(),
   alignment: AlignmentSchema.optional(), // override; absent means the existing value-kind default
   verticalAlignment: z.enum(["top", "middle", "bottom"]).optional(), // absent means 'bottom'
