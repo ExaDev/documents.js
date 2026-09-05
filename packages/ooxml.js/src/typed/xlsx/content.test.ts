@@ -738,7 +738,10 @@ describe("readXlsxContent: cell decoration (background/borders/alignment/vertica
       styledSheet,
       el("c", { r: "A1", s: "1" }, [el("v", {}, [txt("42")])]),
     );
-    expect(cell?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(cell?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
   });
 
   it("reads each present border edge with its derived widthPt and style, and omits absent edges", () => {

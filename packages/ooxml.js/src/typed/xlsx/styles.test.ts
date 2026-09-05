@@ -192,7 +192,7 @@ describe("readCellStyles: per-cellXfs background/borders/alignment (synthetic st
     expect(entries[0]).toEqual({ numberFormatCode: "General" });
     expect(entries[1]).toEqual({
       numberFormatCode: "General",
-      background: { r: 1, g: 0, b: 0 },
+      background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
       // thin solid left at 0.75pt, mediumDashed right at 1.5pt with style 'dashed', double top at 0.75pt with style 'double'
       borders: {
         left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 },
@@ -202,6 +202,46 @@ describe("readCellStyles: per-cellXfs background/borders/alignment (synthetic st
       alignment: "right",
       verticalAlignment: "top",
     });
+  });
+
+  it("reads a genuine two-colour pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fills", {}, [
+          el("fill", {}, [el("patternFill", { patternType: "none" })]),
+          el("fill", {}, [el("patternFill", { patternType: "gray125" })]),
+          el("fill", {}, [
+            el("patternFill", { patternType: "mediumGray" }, [
+              el("fgColor", { rgb: "FFFF0000" }),
+              el("bgColor", { rgb: "FF0000FF" }),
+            ]),
+          ]),
+        ]),
+        el("cellXfs", {}, [
+          el("xf", { numFmtId: "0" }),
+          el("xf", { numFmtId: "0", fillId: "2" }),
+        ]),
+      ]),
+    );
+    const entries = readCellStyles(pkg);
+    expect(entries[1]?.background).toEqual({
+      kind: "pattern",
+      patternType: "mediumGray",
+      foregroundColor: { r: 1, g: 0, b: 0 },
+      backgroundColor: { r: 0, g: 0, b: 1 },
+    });
+  });
+
+  it('reads no background for patternType="none"', () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fills", {}, [
+          el("fill", {}, [el("patternFill", { patternType: "none" })]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fillId: "0" })]),
+      ]),
+    );
+    expect(readCellStyles(pkg)[0]?.background).toBeUndefined();
   });
 
   it("reads an empty entry for a styleSheet with no fills/borders and an unstyled <xf>", () => {
@@ -274,12 +314,56 @@ describe("CellFormatTable: interning decoration alongside the number format", ()
     const table = new CellFormatTable();
     table.intern(
       { kind: "builtin", id: GENERAL_NUM_FMT_ID },
-      { background: { r: 1, g: 0, b: 0 } },
+      { background: { kind: "solid", color: { r: 1, g: 0, b: 0 } } },
     );
     expect(table.fillDeclarations()).toEqual([
-      { patternType: "none" },
-      { patternType: "gray125" },
-      { patternType: "solid", rgb: "ff0000" },
+      { kind: "none" },
+      { kind: "gray125" },
+      { kind: "solid", rgb: "ff0000" },
+    ]);
+  });
+
+  it("interns a genuine two-colour pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
+    const table = new CellFormatTable();
+    table.intern(
+      { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+      {
+        background: {
+          kind: "pattern",
+          patternType: "darkTrellis",
+          foregroundColor: { r: 1, g: 0, b: 0 },
+          backgroundColor: { r: 0, g: 0, b: 1 },
+        },
+      },
+    );
+    expect(table.fillDeclarations()).toEqual([
+      { kind: "none" },
+      { kind: "gray125" },
+      {
+        kind: "pattern",
+        patternType: "darkTrellis",
+        fgRgb: "ff0000",
+        bgRgb: "0000ff",
+      },
+    ]);
+  });
+
+  it("mints a real cell fill for patternType 'gray125', distinct from the reserved scaffolding entry of the same name", () => {
+    const table = new CellFormatTable();
+    table.intern(
+      { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+      {
+        background: {
+          kind: "pattern",
+          patternType: "gray125",
+          foregroundColor: { r: 0, g: 0, b: 0 },
+        },
+      },
+    );
+    expect(table.fillDeclarations()).toEqual([
+      { kind: "none" },
+      { kind: "gray125" },
+      { kind: "pattern", patternType: "gray125", fgRgb: "000000" },
     ]);
   });
 
