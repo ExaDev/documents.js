@@ -609,6 +609,37 @@ describe("lists", () => {
     expect(itemIds.has(undefined)).toBe(false);
   });
 
+  it("keeps a blockquote directly inside a multi-block list item nested inside that item even when the quote wraps only a NESTED LIST of its own, rather than fracturing the item around it -- ExaDev/documents.js#990", () => {
+    const source = "- before\n\n  > - a\n  > - b\n\n  after\n";
+    const written = emitMarkdown(lowerMarkdown(source));
+    expect(written).toBe("- before\n\n  > - a\n  > - b\n\n  after");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    const paragraphs = blocks.filter((block) => block.kind === "paragraph");
+    // Four paragraphs total: "before"/"after" (the outer item) plus "a"/"b" (the quote's own nested list) -- none of them dropped or fused together.
+    expect(paragraphs).toHaveLength(4);
+    const [before, a, b, after] = paragraphs;
+    // "before" and "after" still share ONE outer itemId across the construct, exactly like the plain-paragraph-in-quote case above -- the construct did not fracture the item.
+    expect(before?.list?.itemId).toBeDefined();
+    expect(after?.list?.itemId).toBe(before?.list?.itemId);
+    // "a" and "b" are a GENUINELY separate, freshly-minted nested list -- their own itemIds differ from each other and from the outer item's, and their own numId differs from the outer item's numId, proving this is real nesting (a bullet list inside the blockquote) rather than the quote's content being folded into the outer item's own run.
+    expect(a?.list?.itemId).toBeDefined();
+    expect(b?.list?.itemId).toBeDefined();
+    expect(a?.list?.itemId).not.toBe(before?.list?.itemId);
+    expect(b?.list?.itemId).not.toBe(a?.list?.itemId);
+    expect(a?.list?.numId).not.toBe(before?.list?.numId);
+  });
+
+  it("still renders a blockquote wrapping its own list as separate top-level content when it genuinely sits BETWEEN two unrelated lists, not inside either one's item -- the construct's surrounding itemId differs on both sides, so it must not be absorbed the way the in-item case above is", () => {
+    const source = "- a\n- b\n\n> quote\n\n- c\n- d\n";
+    const written = emitMarkdown(lowerMarkdown(source));
+    expect(written).toBe("- a\n- b\n\n> quote\n\n- c\n- d");
+  });
+
   it("keeps a Quote-styled block and a following plain block of the same item as two separate blocks on write-then-reparse -- Quote is NOT self-delimiting inside a list region: renderListRegion renders every block through renderParagraphBody, which never applies a '> ' prefix, so a Quote-styled block reads back identically to a plain one and the two would otherwise merge into one paragraph via CommonMark's lazy continuation", () => {
     const source = doc([
       {
