@@ -705,7 +705,9 @@ function reconcileChildren(
   }, graph);
 }
 
-// Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. `kind` is deliberately excluded from the hash INPUT itself, the same reason mintValueNode's own `kind: 'value'` and entryNodeFace's graph-vocabulary kind are never folded into their hashes either: it is the graph vocabulary's word for what a node IS, asked for explicitly because this module's own mint sites decide it four different ways, not a fact about the node's content that identity should hinge on. When `children` is given, this also emits one CONTAINS edge per child at `orderKeys.orderKeyForIndex(index)`, the WIDE, evenly spaced keys a fresh mint wants (exactly as projectGroup mints them for a freshly walked TreeGroup), leaving room for a later insertEdge to bisect between them without a rebalance -- but, exactly like insertEdge's own CONTAINS attachment, each of those child edges is checked with `assertNoContainsCycle` before it is appended, and throws `ContainsCycleError` when `to` (the child) already reaches `from` (this node's own about-to-be-minted id): folding the child's hash into this node's hash proves this id could never have existed before now, but says nothing about an edge some EARLIER call already pointed at this not-yet-existing id (insertEdge tolerates exactly that), so the check cannot be skipped just because this is a fresh mint. Content identical to a node already present in `graph` dedupes to the existing node rather than minting a duplicate (addNode's own upsert-once rule) -- checked against the existing node's own `kind` first (NodeKindMismatchError above covers a genuine collision across kinds), then reconciled against its own CONTAINS edges at each child's OWN requested position (reconcileChildren above) rather than assumed to already match or simply appended, since two differently spelled calls can hash identically while only one of them declared `children` at all.
+// Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. `kind` is deliberately excluded from the hash INPUT itself, the same reason mintValueNode's own `kind: 'value'` and entryNodeFace's graph-vocabulary kind are never folded into their hashes either: it is the graph vocabulary's word for what a node IS, asked for explicitly because this module's own mint sites decide it four different ways, not a fact about the node's content that identity should hinge on. Content identical to a node already present in `graph` dedupes to the existing node rather than minting a duplicate (addNode's own upsert-once rule) -- checked against the existing node's own `kind` first (NodeKindMismatchError above covers a genuine collision across kinds), then reconciled against its own CONTAINS edges at each child's OWN requested position (reconcileChildren above) rather than assumed to already match or simply appended, since two differently spelled calls can hash identically while only one of them declared `children` at all.
+//
+// When `children` is given for a genuinely fresh id -- one no earlier `insertEdge` call has ever pointed a dangling CONTAINS edge onto (the common case, checked by scanning `graph.edges` for `from === id` before minting anything) -- this mints one CONTAINS edge per child at `orderKeys.orderKeyForIndex(index)`, the WIDE, evenly spaced keys a fresh mint wants (exactly as projectGroup mints them for a freshly walked TreeGroup), leaving room for a later insertEdge to bisect between them without a rebalance; each of those child edges is still checked with `assertNoContainsCycle` first, exactly like insertEdge's own CONTAINS attachment, and throws `ContainsCycleError` when `to` (the child) already reaches `from` (this node's own about-to-be-minted id) -- folding the child's hash into this node's hash proves this id could never have existed before now, but says nothing about an edge some EARLIER call already pointed at this not-yet-existing id (insertEdge tolerates exactly that), so the check cannot be skipped just because this is a fresh mint. But when `graph` already carries one or more CONTAINS edges from this id -- exactly the dangling-edge shape the cycle check above exists to catch, an id named by an `insertEdge` call before any node with that id existed -- minting every child at its own bare `orderKeyForIndex(index)` regardless of what is already there is unsafe: an already-attached edge can sit at a key a fresh mint is about to hand to an unrelated sibling (an order-key TIE, the exact degenerate shape `boundedOrderKey` and `siblingInsertIndex` refuse everywhere else in this module) or can already BE the edge a fresh mint is about to re-mint (a byte-identical duplicate, violating `addEdge`'s own one-edge-per-tuple invariant on the read side). So a fresh mint with pre-existing CONTAINS edges routes every child through the identical `reconcileChildren` machinery the dedup-hit branch above already uses: a child already wired is left exactly as it is, and a genuinely new one is inserted at its own requested position via `insertEdge`'s sibling-aware bisection (or automatic rebalance), which cannot produce a tie or a duplicate by construction.
 export function insertNode(
   graph: PropertyGraph,
   content: InsertNodeContent,
@@ -723,13 +725,20 @@ export function insertNode(
     return { graph: reconcileChildren(graph, id, content.children), id };
   }
   const node: GraphNode = { ...content.properties, id, kind: content.kind };
+  const minted: PropertyGraph = {
+    nodes: [...graph.nodes, node],
+    edges: graph.edges,
+  };
   if (content.children === undefined) {
-    return {
-      graph: { nodes: [...graph.nodes, node], edges: graph.edges },
-      id,
-    };
+    return { graph: minted, id };
   }
-  let edges = graph.edges;
+  const hasPriorContainsEdges = graph.edges.some(
+    (edge) => edge.from === id && edge.kind === "CONTAINS",
+  );
+  if (hasPriorContainsEdges) {
+    return { graph: reconcileChildren(minted, id, content.children), id };
+  }
+  let edges = minted.edges;
   content.children.forEach((childId, index) => {
     assertNoContainsCycle(edges, id, childId);
     edges = [
@@ -742,7 +751,7 @@ export function insertNode(
       },
     ];
   });
-  return { graph: { nodes: [...graph.nodes, node], edges }, id };
+  return { graph: { nodes: minted.nodes, edges }, id };
 }
 
 // Where a new edge lands among an existing sibling list: `start`/`end` are the two boundaries an empty or non-empty list needs, `before`/`after` name an existing sibling to land relative to. A named sibling not found among `from`'s existing edges of the requested `kind` is a genuine caller error -- there is no position to compute otherwise -- and is refused loudly, as UnknownSiblingError, rather than silently falling back to an end position, in this module's own "refuses a ref the table does not carry" tradition.
