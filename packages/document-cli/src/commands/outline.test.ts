@@ -1,7 +1,13 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDocx, createOdg, createOds, docxToPdf } from "documents.js";
+import {
+  createDocx,
+  createOdg,
+  createOdt,
+  createOds,
+  docxToPdf,
+} from "documents.js";
 import {
   afterAll,
   afterEach,
@@ -102,6 +108,48 @@ describe("outline", () => {
     expect(stdout).toBe(
       "Introduction\n  Intro paragraph.\n  Details\n    First item\n    Second item\n",
     );
+  });
+
+  // ExaDev/documents.js#961 (already fixed by the time it was filed, and stale documentation was the report's own evidence): buildDocxPackage stamps a headingLevel paragraph's w:outlineLvl (fixed in c16d5f40), so a docx built through this ecosystem's own editor -- not just one authored by Word -- nests headings exactly as document-outline.js's buildOutline expects.
+  it("nests headings by level in a docx built through this ecosystem's own editor (not authored by Word)", async () => {
+    const docxPath = join(workspace, "own-headings.docx");
+    const editor = createDocx();
+    const h1 = editor.body.appendParagraph();
+    h1.headingLevel = 1;
+    h1.appendRun({ text: "Top" });
+    editor.body.appendParagraph().appendRun({ text: "Body under top." });
+    const h2 = editor.body.appendParagraph();
+    h2.headingLevel = 2;
+    h2.appendRun({ text: "Sub" });
+    editor.body.appendParagraph().appendRun({ text: "Body under sub." });
+    await writeFile(docxPath, editor.toBytes());
+
+    const { exitCode, stdout, stderr } = await runCli(["outline", docxPath]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    expect(stdout).toBe("Top\n  Body under top.\n  Sub\n    Body under sub.\n");
+  });
+
+  // The odt counterpart: writeOdt/buildOdtPackage promote a headingLevel paragraph to a real text:h (fixed for the body in ExaDev/documents.js#752, PR #779), so a plain-body heading nests correctly too.
+  it("nests headings by level in an odt built through this ecosystem's own editor (not authored by LibreOffice)", async () => {
+    const odtPath = join(workspace, "own-headings.odt");
+    const editor = createOdt();
+    const h1 = editor.body.appendParagraph();
+    h1.headingLevel = 1;
+    h1.appendRun({ text: "Top" });
+    editor.body.appendParagraph().appendRun({ text: "Body under top." });
+    const h2 = editor.body.appendParagraph();
+    h2.headingLevel = 2;
+    h2.appendRun({ text: "Sub" });
+    editor.body.appendParagraph().appendRun({ text: "Body under sub." });
+    await writeFile(odtPath, editor.toBytes());
+
+    const { exitCode, stdout, stderr } = await runCli(["outline", odtPath]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    expect(stdout).toBe("Top\n  Body under top.\n  Sub\n    Body under sub.\n");
   });
 
   it("renders a spreadsheet as one group per sheet, labelled with the sheet names in order", async () => {
