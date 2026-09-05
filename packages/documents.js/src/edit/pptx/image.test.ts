@@ -1,5 +1,11 @@
-import { attr, resolveRelationships, rootElement } from "ooxml.js";
+import {
+  attr,
+  decodePackage,
+  resolveRelationships,
+  rootElement,
+} from "ooxml.js";
 import { describe, expect, it } from "vitest";
+import { readPptxContent } from "../../ooxml/pptx/read";
 import { createPptx } from "./editor";
 
 const PNG_BYTES = new Uint8Array([
@@ -52,5 +58,44 @@ describe("PptxSlide.addImage media wiring", () => {
     const pkg = editor.toPackage();
     expect(pkg.parts["ppt/media/image1.png"]).toBeDefined();
     expect(pkg.parts["ppt/media/image2.png"]).toBeDefined();
+  });
+
+  it("round-trips altText through p:cNvPr/@descr and readPptxContent", () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    slide.addImage({
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+      format: "png",
+      bytes: PNG_BYTES,
+      altText: "A red circle on a white background",
+    });
+
+    const content = readPptxContent(decodePackage(editor.toBytes()));
+    if (content.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const image = content.slides[0]?.shapes[0]?.blocks[0];
+    expect(image?.kind).toBe("image");
+    expect(image?.kind === "image" ? image.altText : undefined).toBe(
+      "A red circle on a white background",
+    );
+  });
+
+  it("omits p:cNvPr/@descr, and reads back no altText, when none is given", () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    slide.addImage({
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+      format: "png",
+      bytes: PNG_BYTES,
+    });
+
+    const content = readPptxContent(decodePackage(editor.toBytes()));
+    if (content.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const image = content.slides[0]?.shapes[0]?.blocks[0];
+    expect(image?.kind).toBe("image");
+    expect(image?.kind === "image" ? image.altText : undefined).toBeUndefined();
   });
 });

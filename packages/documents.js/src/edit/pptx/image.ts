@@ -58,5 +58,5 @@ export function insertPictureShapeMedia(
     image.bytes,
   );
   const id = nextShapeId(slideRoot);
-  return buildPictureShape(frame, relationshipId, id);
+  return buildPictureShape(frame, relationshipId, id, image.altText);
 }
