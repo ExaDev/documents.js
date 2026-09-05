@@ -238,10 +238,12 @@ function pad(value: number, width: number): string {
   return String(value).padStart(width, "0");
 }
 
-// Whatever `{\*\formfield ...}` handed the reader beyond the field's own instruction: the bookmark-style name from `{\*\ffname ...}`, the human-readable label from `{\*\ffhelptext ...}`, a plainText field's own default text from `{\*\ffdeftext ...}`, a dropdown's own `{\*\ffl ...}` entries, the result indices `\ffres`/`\ffdefres` carry, and the `\ffprot` protection bit. RTF 1.5's own Form Fields table defines the result indices purely in list-field terms, but they serialise the binary FFDataBits structure [MS-DOC] 2.9.79 defines, whose iRes field carries a real, spec-defined meaning per iType -- a checkbox's checked state (0/1/25-undefined) for iTypeChck, a zero-based \ffl index for iTypeDrop (25 again for an undefined selection); see formFieldContentControl below for how each iType's own reading is decided. Optional end to end -- `\*\formfield` itself is optional per the grammar, so a bare FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction with no `\*\formfield` group still names a control type on its own.
+// Whatever `{\*\formfield ...}` handed the reader beyond the field's own instruction: the bookmark-style name from `{\*\ffname ...}`, the human-readable label from `{\*\ffhelptext ...}` (gated by `ownHelp`, see below), a plainText field's own default text from `{\*\ffdeftext ...}`, a dropdown's own `{\*\ffl ...}` entries, the result indices `\ffres`/`\ffdefres` carry, and the `\ffprot` protection bit. RTF 1.5's own Form Fields table defines the result indices purely in list-field terms, but they serialise the binary FFDataBits structure [MS-DOC] 2.9.79 defines, whose iRes field carries a real, spec-defined meaning per iType -- a checkbox's checked state (0/1/25-undefined) for iTypeChck, a zero-based \ffl index for iTypeDrop (25 again for an undefined selection); see formFieldContentControl below for how each iType's own reading is decided. Optional end to end -- `\*\formfield` itself is optional per the grammar, so a bare FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction with no `\*\formfield` group still names a control type on its own.
 export interface RtfFormFieldData {
   readonly name: string;
   readonly helpText: string;
+  // [MS-DOC] 2.9.79 FFDataBits.fOwnHelp, verbatim: "A bit that specifies whether the form field has custom help text in FFData.xstzHelpText. If fOwnHelp is 0, FFData.xstzHelpText contains an empty or auto-generated string." Read from `\ffownhelp`, defaulting true when the control word never appears at all (every real fixture this package's own read.test.ts carries that sets `helpText` also sets `\ffownhelp1` alongside it, so "absent" only ever means "the field carries no help-text destination at all" in practice, not "the producer deliberately marked auto-generated text as such"). formFieldContentControl below gates promoting `helpText` to the descriptor's `alias` on this flag, so a genuinely auto-generated xstzHelpText string never surfaces as an author-set alias.
+  readonly ownHelp: boolean;
   // [MS-DOC] 2.9.78 FFData.xstzTextDef, "MUST exist if and only if bits.iType is iTypeTxt (0)" -- read from `\ffdeftext`, RTF 1.9.1's own "Default text for text field" destination. Empty when the field carries no `\ffdeftext` group at all, or none of iTypeTxt.
   readonly defaultText: string;
   readonly listItems: readonly string[];
@@ -294,7 +296,8 @@ export function formFieldContentControl(
     descriptor.tag = name;
   }
   const helpText = formField.helpText.trim();
-  if (helpText.length > 0) {
+  if (formField.ownHelp && helpText.length > 0) {
+    // Gated on \ffownhelp ([MS-DOC] 2.9.79 FFDataBits.fOwnHelp): when a producer sets \ffownhelp0, xstzHelpText is "an empty or auto-generated string" by the spec's own words, not an author-set label -- surfacing it as `alias` regardless would misrepresent auto-generated help text as something an author actually typed.
     descriptor.alias = helpText;
   }
   if (formField.protectedField) {

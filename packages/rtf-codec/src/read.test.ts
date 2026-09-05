@@ -748,6 +748,18 @@ describe("form fields", () => {
     });
   });
 
+  // [MS-DOC] 2.9.79 FFDataBits.fOwnHelp, verbatim: "If fOwnHelp is 0, FFData.xstzHelpText contains an empty or auto-generated string." A non-empty \ffhelptext under an explicit \ffownhelp0 is exactly that auto-generated string, not an author-set label, so it must not surface as `alias`.
+  it("leaves a FORMTEXT field's alias unset when \\ffownhelp0 marks its \\ffhelptext as auto-generated", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0\\ffownhelp0{\\*\\ffhelptext Auto generated}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+    });
+  });
+
   it("reads a FORMTEXT field's \\ffprot as the contentControl's 'content' lock", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0\\ffprot1{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,

@@ -313,10 +313,11 @@ interface PictureState {
   binary: number[];
 }
 
-// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffhelptext/\*\ffl/\*\ffdeftext destinations close and its \ffres/\ffdefres/\ffprot control words apply.
+// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffhelptext/\*\ffl/\*\ffdeftext destinations close and its \ffres/\ffdefres/\ffprot/\ffownhelp control words apply.
 interface FormFieldState {
   name: string;
   helpText: string;
+  ownHelp: boolean;
   defaultText: string;
   listItems: string[];
   resultIndex: number | undefined;
@@ -1411,6 +1412,7 @@ function readRtfDetail(
           child.field.formField = {
             name: "",
             helpText: "",
+            ownHelp: true,
             defaultText: "",
             listItems: [],
             resultIndex: undefined,
@@ -1643,7 +1645,7 @@ function applyPictureControlWord(
   }
 }
 
-// RTF 1.5's own Form Fields table states \ffresN/\ffdefresN only in list-field terms ("Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries" / "Default entry for list field"), but \ffres/\ffdefres are RTF's own serialisation of the binary FFDataBits structure [MS-DOC] 2.9.79 defines, and that structure spells out a checkbox's own iRes meaning explicitly: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined, treated as unchecked). Both control words are simply captured here regardless of the field's iType; formFieldContentControl in constructs.ts is where the checkbox-specific sentinel handling and the dropdown's own zero-based-index reading of the identical \ffres are actually decided. \ffprot ("1 if this field is protected, 0 otherwise" -- RTF 1.9.1's own Form Fields table, mirroring [MS-DOC] 2.9.79 FFDataBits.fProt) is read with the same toggle convention every other bare RTF boolean control word uses: a present-but-unparameterised `\ffprot` means protected, matching toggleValue's own "absent parameter means on" rule for `\b`/`\i` and the rest.
+// RTF 1.5's own Form Fields table states \ffresN/\ffdefresN only in list-field terms ("Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries" / "Default entry for list field"), but \ffres/\ffdefres are RTF's own serialisation of the binary FFDataBits structure [MS-DOC] 2.9.79 defines, and that structure spells out a checkbox's own iRes meaning explicitly: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined, treated as unchecked). Both control words are simply captured here regardless of the field's iType; formFieldContentControl in constructs.ts is where the checkbox-specific sentinel handling and the dropdown's own zero-based-index reading of the identical \ffres are actually decided. \ffprot ("1 if this field is protected, 0 otherwise" -- RTF 1.9.1's own Form Fields table, mirroring [MS-DOC] 2.9.79 FFDataBits.fProt) and \ffownhelp ([MS-DOC] 2.9.79 FFDataBits.fOwnHelp) are both read with the same toggle convention every other bare RTF boolean control word uses: a present-but-unparameterised control word means true, matching toggleValue's own "absent parameter means on" rule for `\b`/`\i` and the rest -- this reader tolerates that spelling on the way in regardless of what this package's own writer chooses to emit.
 function applyFormFieldControlWord(
   name: string,
   param: number | undefined,
@@ -1658,6 +1660,9 @@ function applyFormFieldControlWord(
       return true;
     case "ffprot":
       formField.protectedField = toggleValue(param);
+      return true;
+    case "ffownhelp":
+      formField.ownHelp = toggleValue(param);
       return true;
     default:
       return false;
