@@ -264,7 +264,7 @@ const FORM_FIELD_SPEC: ReadonlyMap<
 // [MS-DOC] 2.9.78 FFData.hsttbDropList, verbatim: "An optional STTB that specifies the entries in the dropdown list box. This MUST exist if and only if bits.iType is iTypeDrop (2). The entries are Unicode strings and do not have extra data. This MUST NOT exceed 25 elements." Not an arbitrary round number: FFDataBits' own iRes field reserves index 25 as its "undefined selection" sentinel (see FORM_FIELD_RESULT_UNDEFINED in constructs.ts), so a 26th real entry would sit exactly where a real Word/DOC consumer expects "no selection" instead of an actual option.
 const MAX_DROPDOWN_OPTIONS = 25;
 
-// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffres`/`\ffdefres` pair, a dropdown's own `\ffhaslistbox` plus its selected-entry `\ffres`/`\ffdefres` pair and its list of `{\*\ffl ...}` entries, and -- for any of the three types -- a `\ffprot` bit for a 'content'/'both' lock, the control's human-readable label as `\ffownhelp1{\*\ffhelptext ...}`, and its bookmark-style name as `{\*\ffname ...}`.
+// The `<formparams><formstrings>` content of a `\*\formfield` group: \fftypeN naming the field's own real type (never left to the implicit text-field default), a checkbox's own `\ffres`/`\ffdefres` pair, a dropdown's own `\ffhaslistbox` plus its selected-entry `\ffres`/`\ffdefres` pair and its list of `{\*\ffl ...}` entries, a plainText field's own `{\*\ffdeftext ...}` default text, and -- for any of the three types -- a `\ffprot` bit for a 'content'/'both' lock, the control's human-readable label as `\ffownhelp1{\*\ffhelptext ...}`, and its bookmark-style name as `{\*\ffname ...}`.
 function formFieldPayload(
   descriptor: ContentControlDescriptor,
   fftype: number,
@@ -308,6 +308,11 @@ function formFieldPayload(
       for (const option of options) {
         out += `{\\*\\ffl ${escapeText(option)}}`;
       }
+    }
+  } else if (descriptor.controlType === "plainText") {
+    // [MS-DOC] 2.9.78 FFData.xstzTextDef, verbatim: "The default text of the field ... MUST exist if and only if bits.iType is iTypeTxt (0)." RTF 1.9.1's own `\ffdeftext` ("Default text for text field. This is a destination control word.") is its serialisation. This is real, reachable data: documents.js's own PDF AcroForm-to-contentControl reconstruction hands a plainText control exactly `{controlType:'plainText', value, ...}` for a real `/V` string, so a plainText descriptor's `value` is not hypothetical input. Minted only when the descriptor actually carries one -- omitted, like the dropdown branch's own "nothing to name" cases above, when no value was ever recorded, rather than mint an empty `{\*\ffdeftext}` FFData.wDef's own presence rule would technically require: this writer already diverges from that binary-structure requirement for the identical round-trip-determinism reason the dropdown branch's own wDef note above explains.
+    if (descriptor.value !== undefined) {
+      out += `{\\*\\ffdeftext ${escapeText(descriptor.value)}}`;
     }
   }
   // [MS-DOC] 2.9.79 FFDataBits.fProt, verbatim: "A bit that specifies whether the form field is protected and its value cannot be changed" -- RTF 1.9.1's own Form Fields table states the identical fact in list-field terms, "\ffprotN: 1 if this field is protected, 0 otherwise." It is a single content-protection bit, so it captures the 'content' and 'both' halves of ContentControlLock exactly (both lock the field's own value); 'container' locks only the control's own removal, a fact RTF's form-field vocabulary has no bit for at all -- a legacy form field is ordinary document text with no separate "delete the control" operation to protect in the first place -- so that half is reported through the diagnostic sink below rather than silently folded into "unprotected". Written bare, matching \ffhaslistbox's own bare-when-true style above: RTF's own toggle convention treats an absent parameter as 1, so `\ffprot` alone says the same thing `\ffprot1` would.

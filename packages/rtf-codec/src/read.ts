@@ -99,7 +99,8 @@ type DestinationKind =
   | "formField" // {\*\formfield ...}, nested inside \fldinst: no #PCDATA of its own, carried entirely by its own control words and the two destinations below
   | "formFieldName" // {\*\ffname ...}, whose text is the form field's own bookmark-style name
   | "formFieldHelpText" // {\*\ffhelptext ...}, whose text is the form field's own human-readable help text -- the closest RTF analogue to a contentControl's `alias`
-  | "formFieldListItem"; // {\*\ffl ...}, whose text is a dropdown's list entry (or a text field's default text, unused here)
+  | "formFieldListItem" // {\*\ffl ...}, whose text is a dropdown's own list entry
+  | "formFieldDefaultText"; // {\*\ffdeftext ...}, whose text is a plainText field's own default/reset text -- [MS-DOC] 2.9.78 FFData.xstzTextDef
 
 const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   // Transparent wrappers whose content is ordinary body flow.
@@ -117,6 +118,7 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["ffname", "formFieldName"],
   ["ffhelptext", "formFieldHelpText"],
   ["ffl", "formFieldListItem"],
+  ["ffdeftext", "formFieldDefaultText"],
   // Content this reader deliberately does not place. ContentDocument has no page furniture, note, or annotation position for any of these to land in: a header/footer is page furniture with no ContentSection field to carry it, and a footnote body's real home is document-schema.js's tree-only definitions table, which the flat form this reader produces cannot reach. Each is skipped with a diagnostic rather than silently, and each is listed in the README's own gap table.
   ["footnote", "skip"],
   ["header", "skip"],
@@ -311,10 +313,11 @@ interface PictureState {
   binary: number[];
 }
 
-// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffhelptext/\*\ffl destinations close and its \ffres/\ffdefres/\ffprot control words apply.
+// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffhelptext/\*\ffl/\*\ffdeftext destinations close and its \ffres/\ffdefres/\ffprot control words apply.
 interface FormFieldState {
   name: string;
   helpText: string;
+  defaultText: string;
   listItems: string[];
   resultIndex: number | undefined;
   defaultResultIndex: number | undefined;
@@ -1332,6 +1335,13 @@ function readRtfDetail(
       }
       return;
     }
+    if (
+      state.destination === "formFieldDefaultText" &&
+      state.field?.formField !== undefined
+    ) {
+      state.field.formField.defaultText += text;
+      return;
+    }
     // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText", "unicodeWrapper" and "formField" discard.
   };
 
@@ -1401,6 +1411,7 @@ function readRtfDetail(
           child.field.formField = {
             name: "",
             helpText: "",
+            defaultText: "",
             listItems: [],
             resultIndex: undefined,
             defaultResultIndex: undefined,
