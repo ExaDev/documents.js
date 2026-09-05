@@ -124,7 +124,7 @@ export class PptxTableCell {
     );
   }
 
-  // a:tcPr children a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2/3/4/5) -- the four cell-border edges. Each a:lnX carries @w in EMU and an a:solidFill/a:srgbClr child naming the border colour. ooxml.js's own readTableCell does not currently read these (it reads only background), so a written border reaches the output file but does not yet round-trip through this package's own reader -- a real, tracked read-side gap rather than a write-side silence.
+  // a:tcPr children a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2/3/4/5) -- the four cell-border edges. Each a:lnX carries @w in EMU and an a:solidFill/a:srgbClr child naming the border colour. ooxml.js's own readTableCell reads these too (its own readTableCellBorders, resolved through the scheme-colour-aware readSolidFillColor rather than this setter's own srgbClr-only shortcut), so a border written here round-trips through this package's own reader.
   get borders(): ContentCellBorders | undefined {
     const tcPr = this.tcPrElement(false);
     if (tcPr === undefined) {
