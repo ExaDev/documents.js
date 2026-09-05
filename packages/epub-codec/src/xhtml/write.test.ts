@@ -2,6 +2,7 @@ import type { ContentBlock } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { buildXml } from "../xml/build";
 import { readXhtmlBody } from "./read";
+import { MONOSPACE_FONT_FAMILY } from "./style-constants";
 import { writeXhtmlBody } from "./write";
 
 const CONTENT_WIDTH_PT = 451.28;
@@ -32,6 +33,21 @@ describe("writeXhtmlBody", () => {
       { kind: "paragraph", runs: [{ text: "Body text." }] },
     ];
     expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  // ExaDev/documents.js#994's round-10 regression: writeHeading briefly routed through the same horizontal-rule/preformatted/ordinary-runs dispatch writeParagraph and writeList use, which let a heading styled entirely in a monospace font with an embedded newline -- isPreBlockParagraph's own legacy heuristic for a foreign producer's <pre> that never set the preformatted flag -- write a <pre> nested inside an <hN>. h1-h6 permit only phrasing content per the HTML Standard; <pre> is flow content, so that shape is non-conformant XHTML no real EPUB validator accepts, and a heading's own content model already rules it out regardless of what produced the input. A plain string check on the writer's own output, not a round trip: reading a <br>-split heading back always produces more than the single run this heuristic keys on, so a full round trip would prove nothing about the shape this test exists to rule out.
+  it("keeps a heading's own runs as phrasing content even when they would otherwise trip the <pre> heuristic", () => {
+    const xml = write([
+      {
+        kind: "paragraph",
+        headingLevel: 1,
+        runs: [
+          { text: "line one\nline two", fontFamily: MONOSPACE_FONT_FAMILY },
+        ],
+      },
+    ]);
+    expect(xml).not.toContain("<pre>");
+    expect(xml).toContain("<h1><code>line one<br");
   });
 
   it("writes and re-reads bold/italic/underline/strike/monospace runs", () => {
