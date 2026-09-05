@@ -24,6 +24,7 @@ import {
   clampHeadingLevel,
   colorToRgbHex,
   flattenTree,
+  resolveCellFillColor,
 } from "document-schema.js";
 import { borderControlWords } from "./cell-format";
 import {
@@ -178,8 +179,12 @@ function collectTables(document: ContentDocument): DocumentTables {
     if (block.kind === "table") {
       for (const row of block.rows) {
         for (const cell of row.cells) {
-          // A cell's own colours reference the same \colortbl the runs do, so they must be minted here or a \clcbpatN/\brdrcfN would name an index the table never defines.
-          noteColor(cell.background);
+          // A cell's own colours reference the same \colortbl the runs do, so they must be minted here or a \clcbpatN/\brdrcfN would name an index the table never defines. \clcbpatN names only a flat colour, so a 'pattern' fill (ExaDev/documents.js#951) notes resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern this package does not yet write (see this package's own README, "Deliberately not handled").
+          noteColor(
+            cell.background === undefined
+              ? undefined
+              : resolveCellFillColor(cell.background),
+          );
           for (const side of CELL_BORDER_ORDER) {
             noteColor(cell.borders?.[side]?.color);
           }
@@ -811,8 +816,12 @@ class RtfWriter {
         }
       }
     }
-    if (cell.background !== undefined) {
-      const index = colorIndexOf(cell.background, this.tables.colors);
+    const cellBackgroundColor =
+      cell.background === undefined
+        ? undefined
+        : resolveCellFillColor(cell.background);
+    if (cellBackgroundColor !== undefined) {
+      const index = colorIndexOf(cellBackgroundColor, this.tables.colors);
       if (index !== undefined) {
         out += `\\clcbpat${String(index)}`;
       }
