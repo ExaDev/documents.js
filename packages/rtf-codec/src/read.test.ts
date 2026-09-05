@@ -658,6 +658,63 @@ describe("embedded objects", () => {
     ).toBe(false);
   });
 
+  // Both orderings of <objdata> and <result> are legal RTF: RTF 1.9.1's own <obj> grammar lists <objdata> first, but does not forbid a producer writing the other way around. A reader that decides \result's fate from whichever sibling it happens to read first would double-render (or silently drop) content depending on order alone.
+  it("renders the decoded object exactly once when \\result appears before \\objdata in the source", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\result{\\pard\\plain should not appear\\par}}{\\*\\objdata ${OBJDATA_HEX}}}\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(
+      blocks.filter((block) => block.kind === "embeddedObject"),
+    ).toHaveLength(1);
+    const paragraphText = blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("");
+    expect(paragraphText).not.toContain("should not appear");
+    expect(
+      diagnostics.some(
+        (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+      ),
+    ).toBe(false);
+  });
+
+  it("still recovers \\result's own fallback content, exactly once, when it appears before an \\objdata that fails to decode", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard before {\\object\\objemb{\\result{\\pard\\plain [Embedded worksheet]\\par}}{\\*\\objdata 68656c6c6f}} after\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(blocks.some((block) => block.kind === "embeddedObject")).toBe(false);
+    const paragraphText = blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .map((paragraph) => paragraph.runs.map((run) => run.text).join(""))
+      .join("|");
+    expect(paragraphText).toContain("before");
+    expect(paragraphText).toContain("[Embedded worksheet]");
+    expect(paragraphText).toContain("after");
+    // Exactly one fallback rendering, not one per occurrence -- \result was read (and, before this fix, would already have been committed) before \objdata's own failure was even known.
+    expect(paragraphText.split("[Embedded worksheet]")).toHaveLength(2);
+    expect(
+      diagnostics.some(
+        (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+      ),
+    ).toBe(false);
+  });
+
   // \objdata's own grammar is (\binN #BDATA) | #SDATA: every test above delivers #SDATA (plain hex-digit text), which is only one of the two legal wire forms. \binN's raw-byte-run form, and repeated \'hh escapes inside the destination (an alternative RTF affords anywhere, not only in #SDATA-shaped destinations), are the other two shapes buildEmbeddedObject's own byte extraction has to handle identically -- covered here directly rather than only through hex text.
   it("reads \\objdata delivered as a \\binN raw-byte run rather than #SDATA hex text", () => {
     const raw = writeEmbeddedObjectData({
