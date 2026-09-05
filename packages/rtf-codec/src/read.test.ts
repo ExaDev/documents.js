@@ -715,6 +715,49 @@ describe("embedded objects", () => {
     ).toBe(false);
   });
 
+  it("recovers \\result's own fallback content, with a diagnostic, when an \\object has no \\objdata destination at all", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard before {\\object\\objemb\\objw2000\\objh1000{\\result{\\pard\\plain [no objdata]\\par}}} after\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const blocks = document.sections[0]?.blocks ?? [];
+    expect(blocks.some((block) => block.kind === "embeddedObject")).toBe(false);
+    const paragraphText = blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .map((paragraph) => paragraph.runs.map((run) => run.text).join(""))
+      .join("|");
+    expect(paragraphText).toContain("before");
+    expect(paragraphText).toContain("[no objdata]");
+    expect(paragraphText).toContain("after");
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE &&
+          diagnostic.message.includes("no \\objdata payload at all"),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not also report the no-\\objdata-at-all diagnostic when \\objdata genuinely exists but fails to decode instead", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result{\\pard\\plain fallback\\par}}}\\par}`,
+      ),
+    );
+    const unreadable = diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(unreadable).toHaveLength(1);
+    expect(unreadable[0]?.message).not.toContain("no \\objdata payload at all");
+  });
+
   // \objdata's own grammar is (\binN #BDATA) | #SDATA: every test above delivers #SDATA (plain hex-digit text), which is only one of the two legal wire forms. \binN's raw-byte-run form, and repeated \'hh escapes inside the destination (an alternative RTF affords anywhere, not only in #SDATA-shaped destinations), are the other two shapes buildEmbeddedObject's own byte extraction has to handle identically -- covered here directly rather than only through hex text.
   it("reads \\objdata delivered as a \\binN raw-byte run rather than #SDATA hex text", () => {
     const raw = writeEmbeddedObjectData({
