@@ -40,6 +40,8 @@ const CONTENT_LIST_MEMBERSHIP_FORMATS = [
   "lowerRoman",
   "upperRoman",
 ] as const;
+/** MSONFC values [MS-DOC] 2.9.148's own LVLF.nfc field text explicitly forbids ("This value MUST NOT be equal to 0x08, 0x09, 0x0F, or 0x13"), even though NUMBER_FORMAT_BY_NFC decodes all four for other contexts (word field codes) where MSONFC's wider vocabulary is legal: hex (0x08), chicago (0x09), decimalHalfWidth (0x0F), decimalFullWidth2 (0x13). None of CONTENT_LIST_MEMBERSHIP_FORMATS' own six values ever resolves to one of these, so reaching this set means a hand-built NumberingDefinitions named one of these four format strings directly. */
+const LVLF_FORBIDDEN_NFC = new Set<number>([0x08, 0x09, 0x0f, 0x13]);
 /** iStartAt's own [MS-DOC] 2.9.148 range: "MUST be in the range 0 to 0x7FFF, inclusive", despite the field occupying a full 4-byte slot. */
 const MAX_START_AT = 0x7fff;
 
@@ -215,7 +217,12 @@ function buildLvlBytes(
   const nfc = NFC_BY_FORMAT.get(numberingLevel.format);
   if (nfc === undefined) {
     throw new DocFormatError(
-      `numbering level format ${JSON.stringify(numberingLevel.format)} has no [MS-OSHARED] 2.2.1.3 MSONFC mapping this writer can state -- ContentListMembership.format itself only ever carries ${JSON.stringify(CONTENT_LIST_MEMBERSHIP_FORMATS)} (document-schema.js's own six-member enum), each of which always resolves here, so this failure means a NumberingDefinitions built by hand -- bypassing gatherListUsage entirely -- named a format string outside that set and outside the wider MSONFC vocabulary this function otherwise accepts`,
+      `numbering level format ${JSON.stringify(numberingLevel.format)} has no [MS-OSHARED] 2.2.1.3 MSONFC mapping this writer can state -- ContentListMembership.format itself only ever carries ${JSON.stringify(CONTENT_LIST_MEMBERSHIP_FORMATS)} (document-schema.js's own six-member enum), each of which always resolves here, so this failure means a NumberingDefinitions built by hand -- bypassing gatherListUsage entirely -- named a format string outside both that set and the wider MSONFC vocabulary this function otherwise accepts (itself narrower than MSONFC's full range -- see LVLF_FORBIDDEN_NFC just above)`,
+    );
+  }
+  if (LVLF_FORBIDDEN_NFC.has(nfc)) {
+    throw new DocFormatError(
+      `numbering level format ${JSON.stringify(numberingLevel.format)} resolves to MSONFC 0x${nfc.toString(16).padStart(2, "0")}, one of the four values [MS-DOC] 2.9.148's own LVLF.nfc field explicitly forbids (0x08 hex, 0x09 chicago, 0x0F decimalHalfWidth, 0x13 decimalFullWidth2) even though the wider MSONFC vocabulary permits it in other contexts -- ContentListMembership's own six formats never reach one of these, so this failure means a NumberingDefinitions built by hand named one directly`,
     );
   }
   if (numberingLevel.startAt < 0 || numberingLevel.startAt > MAX_START_AT) {

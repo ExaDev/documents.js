@@ -253,6 +253,23 @@ describe("buildNumberingTables: level text and format", () => {
     expect(() => buildNumberingTables(definitions)).not.toThrow(/hebrew/);
   });
 
+  it("refuses a format resolving to an MSONFC value LVLF explicitly forbids (hex, chicago, decimalHalfWidth, decimalFullWidth2)", () => {
+    for (const [format, nfcHex] of [
+      ["hex", "08"],
+      ["chicago", "09"],
+      ["decimalHalfWidth", "0f"],
+      ["decimalFullWidth2", "13"],
+    ] as const) {
+      const definitions: NumberingDefinitions = {
+        "1": { levels: { "0": { format, text: "%1.", startAt: 1 } } },
+      };
+      expect(() => buildNumberingTables(definitions)).toThrow(
+        new RegExp(`MSONFC 0x${nfcHex}`),
+      );
+      expect(() => buildNumberingTables(definitions)).toThrow(DocFormatError);
+    }
+  });
+
   it("refuses a placeholder position beyond rgbxchNums' own 8-bit range, rather than silently truncating it mod 256", () => {
     const text = `${"a".repeat(255)}%1.`; // the placeholder's own one-based position lands at 256.
     const definitions: NumberingDefinitions = {
