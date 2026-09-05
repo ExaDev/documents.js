@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { directChildElement } from "../../xml/edit";
+import { el } from "../../xml/fragment";
 import { buildDrawingTable, buildTableGraphicFrame, PptxTable } from "./table";
 
 describe("buildDrawingTable / PptxTable", () => {
@@ -124,6 +126,39 @@ describe("buildDrawingTable / PptxTable", () => {
         ? cellElement.attributes.some((a) => a.name === "vMerge")
         : true,
     ).toBe(false);
+  });
+
+  it("borders round-trip colour and width through get/set, but not stroke style", () => {
+    const tableElement = buildDrawingTable({ rows: 1, columns: 1 });
+    const table = new PptxTable(tableElement);
+    const cell = table.cell(0, 0);
+    cell.borders = {
+      left: { color: { r: 1, g: 0, b: 0 }, widthPt: 2, style: "dashed" },
+      top: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5 },
+    };
+    expect(cell.borders).toEqual({
+      left: { color: { r: 1, g: 0, b: 0 }, widthPt: 2 },
+      top: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5 },
+    });
+  });
+
+  it("borders getter treats a resolved zero-width or non-numeric-width edge as no border", () => {
+    const tableElement = buildDrawingTable({ rows: 1, columns: 1 });
+    const table = new PptxTable(tableElement);
+    const cell = table.cell(0, 0);
+    const tcPr = directChildElement(cell.element, "a:tcPr");
+    if (tcPr === undefined) {
+      throw new Error("expected a:tcPr");
+    }
+    tcPr.children.push(
+      el("a:lnL", { w: "0" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "FF0000" })]),
+      ]),
+      el("a:lnR", { w: "abc" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]),
+    );
+    expect(cell.borders).toBeUndefined();
   });
 });
 
