@@ -391,7 +391,7 @@ interface ItemNestedSegment {
 }
 type ItemSegment = ItemOwnSegment | ItemNestedSegment;
 
-// The contiguous run, starting at `from`, of blocks sharing this exact level and itemId -- `items[from]` itself is assumed to already match (every call site below only reaches here once that is known), so the result is always at least `from + 1`.
+// The contiguous run, starting at `from`, of blocks sharing this exact level and itemId. collectListItem's own leading call is the ONLY call site where `items[from]` is guaranteed to already match (it reads level/itemId from items[from] itself before calling), so there the result is always at least `from + 1`; the resume call inside its loop has no such guarantee -- `from` sits right after a nested sub-list run, and the next block there may belong to a different item, a different level, or not exist at all -- so a result equal to `from` (no match at all) is a real, expected outcome that caller explicitly checks for rather than something this function rules out.
 function consumeSameItemRun(
   items: readonly ContentParagraph[],
   from: number,
