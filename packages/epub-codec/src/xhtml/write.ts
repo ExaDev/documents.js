@@ -287,22 +287,34 @@ function writeParagraphAsEmbeddedNodes(
   return writeRunsToNodes(paragraph.runs, paragraph.constructs, context);
 }
 
+type FootnoteExtent = RunConstructExtent & {
+  descriptor: { kind: "anchor"; anchorType: "footnote"; name: string };
+};
+
 function isFootnoteExtent(
   construct: RunConstructExtent,
-): construct is RunConstructExtent & {
-  descriptor: { kind: "anchor"; anchorType: "footnote"; name: string };
-} {
+): construct is FootnoteExtent {
   return (
     construct.descriptor.kind === "anchor" &&
     construct.descriptor.anchorType === "footnote"
   );
 }
 
+// Describes, for CONSTRUCT_UNREPRESENTED's own message field, what actually happens to one footnote-reference extent writeRunRangeNodes below could not emit as its own <a> element -- covering every extent its own post-walk sweep finds unemitted, whatever the reason. A point extent (startRun === endRun) only ever goes unemitted because it sits strictly inside another extent's own winning run range: the walk advances straight from that winning extent's own startRun to its endRun and never revisits any index in between, so the point's own boundary is simply never checked against the current index at all. Since a point anchor wraps zero runs of its own, nothing besides its own <a> link marker is missing from the output in that case. A range extent (endRun > startRun) goes unemitted either because another extent sharing its exact startRun was tried first (a same-startRun collision) or because another extent's own winning range already claims part of the run sequence before this one's startRun would otherwise be reached (a crossing overlap) -- either way, the run text underneath its own range is never lost: every run in it is still written, wrapped by whichever extent's range actually claims it, or written unwrapped by the ordinary per-run path wherever no extent's range reaches it; only this specific reference's own <a> link is not emitted.
+function describeUnrepresentedFootnoteExtent(extent: FootnoteExtent): string {
+  if (extent.endRun === extent.startRun) {
+    return `a footnote reference ('${extent.descriptor.name}') marking the boundary before run ${extent.startRun} sits inside another footnote reference's own winning run range and is never reached by the write walk; a point anchor wraps no run text of its own, so nothing besides this reference's own <a> link is missing from the output`;
+  }
+  return `a footnote reference ('${extent.descriptor.name}') overlaps another footnote reference's own run range and cannot be represented as its own <a> element; the run text underneath it is not lost, it is still written, wrapped by whichever extent's range actually claims it, or written unwrapped past it, but this reference's own anchor link is not emitted`;
+}
+
 // The run-range walk shared by writeRunsToNodes and its <pre> twin writePreRunsToNodes below: both need to walk one paragraph's own runs in order, recognising wherever a footnote-reference construct extent starts and bracketing that extent's own run range in an <a epub:type="noteref">, and both differ only in HOW a run (or an extent's own range of them) becomes XML nodes -- writeRunsToNodes wraps a run in its own formatting elements and splits an embedded newline into a <br/>, while writePreRunsToNodes emits a run's text verbatim with neither -- so the extent-finding loop itself is written once here and parameterised over that one difference, rather than duplicated with the same footnote-matching logic copied into both.
 //
 // The walk bounds itself with `index <= runs.length`, not `<`, and treats a point anchor (document-schema.js's own RunConstructExtent: startRun === endRun, "a point anchor at the boundary before run startRun") as consuming no run at all, for two reasons that share one root cause. First, a point anchor can sit at the boundary past the last real run -- a construct-only paragraph (zero runs, one footnote reference with startRun === endRun === 0) has runs.length === 0, so an index bound of `< runs.length` would never let the loop body run even once, silently dropping the extent along with the empty anchor markup it should still produce. Second, a point anchor sitting strictly inside the run sequence marks a boundary, not a range: renderExtentRange over its own empty rangeRuns correctly emits an empty <a>, but the run actually sitting at that same index is a separate run the anchor does not wrap and must still be rendered in its own right -- treating the point extent as "consuming" that index (as if it were an ordinary non-empty extent advancing past its own endRun) would silently delete that run's text instead of merely failing to wrap it.
 //
-// EVERY extent whose own startRun equals the current index is collected, not just the first found -- document-schema.js's own RunConstructExtentSchema comment states extents are "data, not brackets" and "two entries may cross freely", so more than one footnote reference legitimately sharing a startRun is real, representable input (two point-anchor references back-to-back with nothing between them; a construct-only paragraph that reads two footnote markers in immediate succession) and must not depend on which one a `.find()` happened to see first. Every point anchor collected here (startRun === endRun) is emitted as its own empty <a>, in the order the input's own constructs array carries them, since a point anchor wraps zero runs and therefore never conflicts with a sibling point anchor at the same boundary. A non-point range extent is different: it claims a contiguous run of `runs` for its own <a>, so at most one of them can actually advance the walk from this index -- the first one in the input's own array order is written normally (matching this loop's pre-existing single-extent behaviour when there is no collision at all), and every other range extent found at this same index is a genuine, unrepresentable overlap: two sibling <a> elements cannot both claim the identical starting run without one nesting inside the other (which HTML's own interactive-content rule forbids for <a>), so it is reported through the diagnostic sink -- matching writeSectionConstructGroup's own CONSTRUCT_UNREPRESENTED policy for a block-level construct this writer has no spelling for -- rather than silently vanishing the way `.find()` used to let it. The runs underneath a dropped range extent are never lost: they are still written, either wrapped by whichever range extent won, or (past its endRun) by the ordinary per-run path below.
+// EVERY extent whose own startRun equals the current index is collected, not just the first found -- document-schema.js's own RunConstructExtentSchema comment states extents are "data, not brackets" and "two entries may cross freely", so more than one footnote reference legitimately sharing a startRun is real, representable input (two point-anchor references back-to-back with nothing between them; a construct-only paragraph that reads two footnote markers in immediate succession) and must not depend on which one a `.find()` happened to see first. Every point anchor collected here (startRun === endRun) is emitted as its own empty <a>, in the order the input's own constructs array carries them, since a point anchor wraps zero runs and therefore never conflicts with a sibling point anchor at the same boundary. A non-point range extent is different: it claims a contiguous run of `runs` for its own <a>, so at most one of them can actually advance the walk from this index -- the first one in the input's own array order is written normally (matching this loop's pre-existing single-extent behaviour when there is no collision at all).
+//
+// That "at most one wins" rule creates two distinct ways for a range extent to go unrepresented, only one of which this loop can actually see: a same-startRun collision is visible right here, at the index where both extents start, since extentsHere legitimately holds more than one range extent and only the first becomes primaryRange; a crossing overlap (a second extent's own startRun falls strictly INSIDE the first extent's already-claimed range, e.g. one spanning runs 0-2 and another spanning runs 1-3) is invisible to this loop, because a winning range extent advances `index` straight from its own startRun to its own endRun -- skipping every index in between entirely -- so the second extent's own startRun is never compared against `index` at all, and the same is true of a point anchor whose own startRun happens to fall in that skipped interior. Reporting only the collision this loop can see (as an earlier version of this function did, inline, the moment extentsHere held more than one range extent) left the crossing/nested case silently unrepresented with no diagnostic at all -- the identical silent-drop class this function exists to close, just one input shape further. So rather than reporting inline, the walk instead records every extent it actually emits in `emittedExtents`, and a single sweep after the walk completes reports CONSTRUCT_UNREPRESENTED (via describeUnrepresentedFootnoteExtent above) for every extent in the candidate set the walk never emitted -- the same mechanism covering both the same-startRun collision and the crossing/nested case, since both leave an extent absent from `emittedExtents` regardless of which reason caused it.
 function writeRunRangeNodes(
   runs: readonly ContentRun[],
   constructs: readonly RunConstructExtent[] | undefined,
@@ -311,11 +323,13 @@ function writeRunRangeNodes(
   context: XhtmlWriteContext,
 ): XmlNode[] {
   const footnoteExtents = (constructs ?? []).filter(isFootnoteExtent);
+  const emittedExtents = new Set<FootnoteExtent>();
   const out: XmlNode[] = [];
   let index = 0;
   while (index <= runs.length) {
     const extentsHere = footnoteExtents.filter((e) => e.startRun === index);
     for (const point of extentsHere.filter((e) => e.endRun === e.startRun)) {
+      emittedExtents.add(point);
       out.push(
         element(
           "a",
@@ -324,18 +338,9 @@ function writeRunRangeNodes(
         ),
       );
     }
-    const [primaryRange, ...unrepresentedRanges] = extentsHere.filter(
-      (e) => e.endRun > e.startRun,
-    );
-    for (const dropped of unrepresentedRanges) {
-      context.sink({
-        code: EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
-        severity: "info",
-        message: `a footnote reference ('${dropped.descriptor.name}') overlaps another footnote reference starting at the same run and cannot both be represented as sibling <a> elements; its own run text is not lost, it is still written, wrapped by whichever extent won the collision, or written unwrapped past the winner's own endRun -- only this reference's own anchor link is not emitted`,
-        href: context.sourceHref,
-      });
-    }
+    const [primaryRange] = extentsHere.filter((e) => e.endRun > e.startRun);
     if (primaryRange !== undefined) {
+      emittedExtents.add(primaryRange);
       const rangeRuns = runs.slice(primaryRange.startRun, primaryRange.endRun);
       out.push(
         element(
@@ -352,6 +357,15 @@ function writeRunRangeNodes(
       out.push(...renderRun(run));
     }
     index += 1;
+  }
+  for (const extent of footnoteExtents) {
+    if (emittedExtents.has(extent)) continue;
+    context.sink({
+      code: EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      severity: "info",
+      message: describeUnrepresentedFootnoteExtent(extent),
+      href: context.sourceHref,
+    });
   }
   return out;
 }
