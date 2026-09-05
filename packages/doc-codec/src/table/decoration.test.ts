@@ -10,6 +10,8 @@ import {
   readBrc80,
   readShd,
   readShd80,
+  readTableBordersOperand,
+  readTableBordersOperand80,
   writeBrc,
   writeBrc80,
   writeShd,
@@ -279,6 +281,95 @@ describe("Brc", () => {
     const written = writeBrc(border);
     expect(written).toHaveLength(BRC_SIZE);
     expect(readBrc(bytes(written), 0)).toEqual(border);
+  });
+});
+
+describe("TableBordersOperand", () => {
+  const GREEN: ContentBorder = { color: { r: 0, g: 1, b: 0 }, widthPt: 1 };
+  const BLUE: ContentBorder = {
+    color: { r: 0, g: 0, b: 1 },
+    widthPt: 0.75,
+    style: "dashed",
+  };
+  const nilBrc = new Array<number>(BRC_SIZE).fill(0xff);
+
+  it("reads all six Brc fields in brcTop/brcLeft/brcBottom/brcRight/brcHorizontalInside/brcVerticalInside order", () => {
+    // [MS-DOC] 2.9.302: cb (MUST be 0x30) then six 8-byte Brc fields back to back, in that declared order.
+    const top: ContentBorder = { color: RED, widthPt: 1 };
+    const left: ContentBorder = { color: BLACK, widthPt: 0.5 };
+    const bottom: ContentBorder = { color: RED, widthPt: 1.5 };
+    const right: ContentBorder = { color: BLACK, widthPt: 2 };
+    const operand = bytes([
+      0x30,
+      ...writeBrc(top),
+      ...writeBrc(left),
+      ...writeBrc(bottom),
+      ...writeBrc(right),
+      ...writeBrc(GREEN),
+      ...writeBrc(BLUE),
+    ]);
+    expect(readTableBordersOperand(operand)).toEqual({
+      top,
+      left,
+      bottom,
+      right,
+      insideHorizontal: GREEN,
+      insideVertical: BLUE,
+    });
+  });
+
+  it("reads a NilBrc field as no border for that side, leaving the others intact", () => {
+    const top: ContentBorder = { color: RED, widthPt: 1 };
+    const operand = bytes([
+      0x30,
+      ...writeBrc(top),
+      ...nilBrc,
+      ...nilBrc,
+      ...nilBrc,
+      ...nilBrc,
+      ...nilBrc,
+    ]);
+    expect(readTableBordersOperand(operand)).toEqual({ top });
+  });
+
+  it("reads a whole-nil operand as a set with no side stated at all", () => {
+    const operand = bytes([
+      0x30,
+      ...nilBrc,
+      ...nilBrc,
+      ...nilBrc,
+      ...nilBrc,
+      ...nilBrc,
+      ...nilBrc,
+    ]);
+    expect(readTableBordersOperand(operand)).toEqual({});
+  });
+});
+
+describe("TableBordersOperand80", () => {
+  const nilBrc80 = new Array<number>(BRC80_SIZE).fill(0xff);
+
+  it("reads all six Brc80 fields in the same order, palette-indexed", () => {
+    // [MS-DOC] 2.9.303: cb (MUST be 0x18) then six 4-byte Brc80MayBeNil fields, same order as TableBordersOperand.
+    const top: ContentBorder = { color: RED, widthPt: 0.5 };
+    const insideVertical: ContentBorder = {
+      color: BLACK,
+      widthPt: 1,
+      style: "dotted",
+    };
+    const operand = bytes([
+      0x18,
+      ...writeBrc80(top),
+      ...nilBrc80,
+      ...nilBrc80,
+      ...nilBrc80,
+      ...nilBrc80,
+      ...writeBrc80(insideVertical),
+    ]);
+    expect(readTableBordersOperand80(operand)).toEqual({
+      top,
+      insideVertical,
+    });
   });
 });
 
