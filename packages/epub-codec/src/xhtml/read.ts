@@ -426,6 +426,7 @@ function readPre(element: XmlElement, state: BuildState): ContentBlock {
   const paragraph: ContentParagraph = {
     kind: "paragraph",
     runs: inline.runs,
+    preformatted: true, // document-schema.js's own discriminating signal for "this paragraph's whitespace must survive verbatim" -- set unconditionally here (every call to readPre corresponds to a real <pre> element) rather than left for the writer to infer from run shape, which src/xhtml/write.ts's own isPreBlockParagraph cannot do reliably: a footnote reference (or any other recognised construct) nested inside a <pre> splits its content into further runs via readPreRuns above, with no bearing on whether the block is preformatted, so run count is never a safe proxy for this fact
     ...(codeLanguage !== undefined ? { codeLanguage } : {}),
     ...constructsField(inline),
   };
