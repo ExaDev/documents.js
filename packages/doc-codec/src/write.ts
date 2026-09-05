@@ -47,7 +47,7 @@ interface FormattedParagraph {
 }
 
 export interface WriteDocContentOptions {
-  /** Reports a non-fatal write-time degradation -- today, only table/write.ts's own per-row lost-boundary-budget fallback (ExaDev/documents.js#1013), the same `onWarning` shape byte-codec's PNG decoder and pdf-codec already use for a recoverable, non-fatal defect. Never called for anything this writer refuses outright: those still throw DocFormatError/DocUnsupportedError exactly as before. */
+  /** Reports a non-fatal write-time degradation -- today, only table/write.ts's own per-row lost-boundary-budget fallback (ExaDev/documents.js#1013), the same `onWarning` shape byte-codec's PNG decoder and pdf-codec already use for a recoverable, non-fatal defect. Not a guarantee the write itself goes on to succeed: when a row's own assigned lost boundaries can't be trimmed down to a split that fits at all, this still fires once -- reporting that the row's boundaries could not be stated and that its fully-unsplit encoding is being attempted instead -- before writeDocContent can discover, further down the same pipeline, that even that unsplit encoding overflows the row's own byte budget and throws its usual DocFormatError; the warning describes what this fallback could not recover, not a promise that a hard failure won't immediately follow it. It is never called in place of a genuine refusal this writer makes outright (an unsupported block kind, more than one section, and so on) -- those always throw DocFormatError/DocUnsupportedError directly, with no warning first. */
   readonly onWarning?: WriteWarning;
 }
 
