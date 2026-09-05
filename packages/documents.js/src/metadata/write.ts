@@ -1,8 +1,15 @@
 import type { ContentDocument, LayoutMetadata } from "document-schema.js";
 import type { MarkdownImageResolver } from "markdown-codec";
+import {
+  decodePackage,
+  encodePackage,
+  hasCoreProperties,
+  patchCoreProperties,
+} from "ooxml.js";
 import { readPdf, writePdf } from "pdf-codec";
 import { DOCUMENT_FORMAT_CODECS } from "../codecs/registry";
 import type { DocumentCodecOptions } from "../codecs/read";
+import { addCoreProperties } from "../opc/core-properties";
 import { requireArrayBufferBytes } from "../model/bytes";
 import type { DocumentFormat } from "../convert/port";
 import { throwIfAborted } from "../ports/abort";
@@ -160,7 +167,7 @@ export interface SetDocumentMetadataOptions {
   readonly images?: MarkdownImageResolver;
 }
 
-// Patches a document's own title/author/subject/keywords, leaving every other field and every other flag as-is. Two write paths: a pdf source/target patches the metadata directly on the parsed PDF (writePdf), with no layout engine involved at all -- genuinely lossless for everything else on the page. Every other supported format (docx, pptx, xlsx, odt, odp, ods, odg, markdown, rtf) rebuilds a fresh package from that format's own ContentDocument -- see classifyWritePath's own comment for exactly what that costs for docx specifically. doc/xls/ppt are NOT supported (classifyWritePath rejects each explicitly): none of the three legacy binary codecs round-trips document-property metadata at all yet. Overrides are applied via mergeMetadata: a field omitted from `overrides` is left exactly as the source document already had it.
+// Patches a document's own title/author/subject/keywords, leaving every other field and every other flag as-is. Two write paths: a pdf source/target patches the metadata directly on the parsed PDF (writePdf), with no layout engine involved at all -- genuinely lossless for everything else on the page. Every other supported format (docx, pptx, xlsx, odt, odp, ods, odg, markdown, rtf) rebuilds a fresh package from that format's own ContentDocument -- see classifyWritePath's own comment for exactly what that costs for docx specifically. A docx caller that needs docx-extras' own data (comments, footnotes, header/footer parts, numbering) to survive should reach for patchDocxMetadata below instead, which patches docProps/core.xml directly on the decoded Package rather than rebuilding -- document-cli's own set-metadata command does exactly this whenever source and target are both docx (ExaDev/documents.js#966). doc/xls/ppt are NOT supported (classifyWritePath rejects each explicitly): none of the three legacy binary codecs round-trips document-property metadata at all yet. Overrides are applied via mergeMetadata: a field omitted from `overrides` is left exactly as the source document already had it.
 export function setDocumentMetadata(
   sourceFormat: DocumentFormat,
   targetFormat: DocumentFormat,
@@ -193,4 +200,33 @@ export function setDocumentMetadata(
     metadata: mergeMetadata(content.metadata, overrides),
   };
   return buildBytesForRebuildFormat(writePath.format, nextContent);
+}
+
+function hasAnyMetadataOverride(overrides: MetadataOverrides): boolean {
+  return (
+    overrides.title !== undefined ||
+    overrides.author !== undefined ||
+    overrides.subject !== undefined ||
+    overrides.keywords !== undefined
+  );
+}
+
+export interface PatchDocxMetadataOptions {
+  readonly signal?: AbortSignal;
+}
+
+// Patches a docx's own title/author/subject/keywords directly on its decoded Package, in place -- the same live-view/patch-in-place pattern this ecosystem's editors (openDocx and friends) already use for editing -- rather than rebuilding a fresh package from its ContentDocument the way setDocumentMetadata's own docx branch does (see that function's own comment above). Everything a ContentDocument-only rebuild cannot carry -- comments, footnotes, header/footer parts, section header/footer references, numbering (readDocxExtras' own data) -- survives byte-faithful, because nothing but docProps/core.xml is ever touched: ooxml.js's patchCoreProperties replaces (or adds) only the elements named by `overrides`, leaving every other element on that part, and every other part in the package, exactly as it was. When the source carries no docProps/core.xml part at all (a docx built with no metadata ever set), one is created from scratch via addCoreProperties -- but only when `overrides` actually names a field, so a document with no metadata and no requested change stays byte-for-byte free of a part it never had. ExaDev/documents.js#966: document-cli's own set-metadata command reaches for this instead of setDocumentMetadata specifically when source and target are both docx.
+export function patchDocxMetadata(
+  bytes: Uint8Array<ArrayBuffer>,
+  overrides: MetadataOverrides,
+  options?: PatchDocxMetadataOptions,
+): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodePackage(bytes);
+  if (hasCoreProperties(pkg)) {
+    patchCoreProperties(pkg, overrides);
+  } else if (hasAnyMetadataOverride(overrides)) {
+    addCoreProperties(pkg, mergeMetadata({}, overrides));
+  }
+  return encodePackage(pkg);
 }
