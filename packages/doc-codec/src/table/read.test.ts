@@ -1096,6 +1096,72 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     // The plain, unmerged column's own cell in the table's real last row agrees exactly -- both cells' visual bottom edge is genuinely the table's own bottom edge, so both must carry the identical value.
     expect(block.rows[2]?.cells[1]?.borders?.bottom).toEqual(TABLE_BOTTOM);
   });
+
+  it("gives a NON-merged cell in a ragged table's earlier row the table's real bottom border when no later row covers its column at all", () => {
+    // Row 0 states three columns (A, B, C); row 1 -- the table's own real last row -- is genuinely narrower and states only two (A, B), never mentioning C at all. Nothing this reader can find sits beneath row 0's own column C, so its visual bottom edge IS the table's real bottom edge in that column, even though row 0 is not the table's last physical row and column C is not part of any vertical merge.
+    const plain = { horzMerge: 0, vertMerge: 0 };
+    const rowZeroGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000, 3000], [plain, plain, plain]),
+      ...tableBordersSprm,
+    ];
+    const rowOneGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 1000, 2000], [plain, plain]),
+      ...tableBordersSprm,
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "a0" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "b0" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "c0" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowZeroGrpprl, mark: CELL_MARK },
+          {
+            runs: [{ text: "a1" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          {
+            runs: [{ text: "b1" }],
+            grpprl: SPRM_P_F_IN_TABLE,
+            mark: CELL_MARK,
+          },
+          { runs: [], grpprl: rowOneGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const block = tableBlock(document);
+    expect(block.rows).toHaveLength(2);
+    const columnA = block.rows[0]?.cells[0];
+    const columnB = block.rows[0]?.cells[1];
+    const columnC = block.rows[0]?.cells[2];
+    expect(cellText(columnC)).toBe("c0");
+    // Columns A and B are covered by row 1 immediately below, so their own bottom edge is still an ordinary interior one -- unaffected by this fix.
+    expect(columnA?.borders?.bottom).toEqual(INSIDE_H);
+    expect(columnB?.borders?.bottom).toEqual(INSIDE_H);
+    // The core assertion: column C's own bottom edge is the table's real bcBottom, not insideHorizontal, because row 1 never states a cell reaching that far right at all.
+    expect(columnC?.borders).toEqual({
+      top: TOP,
+      left: INSIDE_V,
+      right: RIGHT,
+      bottom: BOTTOM,
+    });
+  });
 });
 
 // The tolerance the reconstruction snaps boundaries within is one point, and ContentTable.columnWidthsPt is stated in points, so every expectation below is written in points and every drift is written as a fraction of one -- restated here from the point's own definition rather than imported from table/read.ts, so the two agree only if both are right.
