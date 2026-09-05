@@ -1,6 +1,6 @@
 {
   "name": "wpd-codec",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Hand-written read-only WordPerfect 6.x-X6 (.wpd) reader over document-schema.js's ContentDocument",
   "type": "module",
   "repository": {
@@ -78,8 +78,8 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "archive-codec": "^1.4.0",
-    "document-schema.js": "^5.5.1",
+    "archive-codec": "^1.4.1",
+    "document-schema.js": "^5.6.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -1,3 +1,9 @@
+## [5.6.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.5.1...document-schema.js%405.6.0) (2026-09-05)
+
+### Features
+
+* **document-schema.js:** add subscript, list format, cell/paragraph, and metadata fields ([186af90](https://github.com/ExaDev/documents.js/commit/186af907b9cd5ec5ac90d3687b2674bf7145d694))
+
 ## [5.5.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.5.0...document-schema.js%405.5.1) (2026-09-04)
 
 ### Code Refactoring

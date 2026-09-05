@@ -1,6 +1,6 @@
 {
   "name": "xls-codec",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Hand-written reader for the legacy Excel Binary File Format (.xls, BIFF8) as specified by [MS-XLS], mapping a workbook's record stream onto the shared document-schema.js spreadsheet model - the .xls codec for the documents.js family.",
   "type": "module",
   "repository": {
@@ -67,8 +67,8 @@
   },
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "archive-codec": "^1.4.0",
-    "document-schema.js": "^5.5.1",
+    "archive-codec": "^1.4.1",
+    "document-schema.js": "^5.6.0",
     "excel-number-format": "^1.0.0"
   },
   "devDependencies": {

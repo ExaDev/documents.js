@@ -1,6 +1,6 @@
 {
   "name": "archive-codec",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "ZIP-in-ZIP recursive walking with depth and cumulative decompressed-size guards, bounded classic OLE compound-file ([MS-CFB]) reading and writing, and [MS-OLEPS] Property Set Stream reading and writing - zero document-format knowledge, the archive and container utility package for the documents.js family.",
   "type": "module",
   "repository": {
@@ -67,7 +67,7 @@
   },
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema.js": "^5.5.1",
+    "document-schema.js": "^5.6.0",
     "fflate": "^0.8.2"
   },
   "devDependencies": {
