@@ -2,11 +2,13 @@
 //
 // Two of RTF's three candidates are real. Bookmarks are `'{\*' \bkmkstart (\bkmkcolfN? & \bkmkcollN?) #PCDATA '}'` / `'{\*' \bkmkend #PCDATA '}'` (RTF 1.9.1, "Bookmarks") and map onto the `anchor` descriptor with anchorType 'bookmark'. Revision marks are the <chrev> character-property production -- `\revised? \revauthN? \revdttmN? \crauthN? \crdateN? \deleted? \revauthdelN? \revdttmdelN? \mvf? \mvt? \mvauthN? \mvdateN?` (RTF 1.9.1, "Character Revision Mark Properties") -- and map onto `provenance`, one descriptor per change kind a run carries.
 //
-// The third, CONTENT CONTROLS, has no RTF spelling and is therefore not mapped. RTF 1.9.1 predates OOXML's `w:sdt` and specifies nothing equivalent: its "Custom XML Tags" production (\xmlopen/\xmlclose with the \xmlsdtt* scoping keywords) is a namespace/name tag over a run range with no type, lock, alias, placeholder or value, and its "Custom XML Data Properties" \*\datastore is an opaque #SDATA blob whose "format ... is unknown to RTF" by the spec's own words. What RTF has instead is form fields (`'{\*' \formfield '{' <formparams> <formstrings> '}}'` with \fftypeN naming text/check box/list, driven by a FORMTEXT/FORMCHECKBOX/FORMDROPDOWN field instruction), which ARE a contentControl analogue -- ooxml.js maps docx's own legacy w:ffData twin onto exactly that kind. They are named in this package's README gap table rather than mapped here, because the mapping needs the field machinery to hand the form field its instruction and cached result, which is its own change.
+// The third, CONTENT CONTROLS, has no direct RTF spelling of its own -- RTF 1.9.1 predates OOXML's `w:sdt` and specifies nothing equivalent: its "Custom XML Tags" production (\xmlopen/\xmlclose with the \xmlsdtt* scoping keywords) is a namespace/name tag over a run range with no type, lock, alias, placeholder or value, and its "Custom XML Data Properties" \*\datastore is an opaque #SDATA blob whose "format ... is unknown to RTF" by the spec's own words. What RTF has INSTEAD is form fields (`'{\*' \formfield '{' <formparams> <formstrings> '}}'`, nested inside a field's own `\*\fldinst` alongside its FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction), which ARE a real contentControl analogue -- ooxml.js maps docx's own legacy w:ffData twin onto exactly that kind, and this module does the same for RTF's: `formFieldContentControl` below reads a form field's instruction plus whatever `\*\formfield` data the reader collected into a `contentControl` descriptor (checkbox/dropDown/plainText), and `formFieldPayload`/`FORM_FIELD_SPEC` in the writer mint one back. A form field is always inline -- one `{\field ...}` group, never spanning a paragraph boundary -- so the construct rides a `RunConstructExtent` on the paragraph, exactly like a revision mark, never a block-level `constructStart`/`constructEnd` pair.
 
 import type {
   AnchorDescriptor,
   ConstructDescriptor,
+  ContentControlDescriptor,
+  ContentControlType,
   ProvenanceChange,
   ProvenanceDescriptor,
   RunConstructExtent,
@@ -234,6 +236,102 @@ export function dttmFromIso(dateIso: string): number | undefined {
 
 function pad(value: number, width: number): string {
   return String(value).padStart(width, "0");
+}
+
+// Whatever `{\*\formfield ...}` handed the reader beyond the field's own instruction: the bookmark-style name from `{\*\ffname ...}`, the human-readable label from `{\*\ffhelptext ...}` (gated by `ownHelp`, see below), a plainText field's own default text from `{\*\ffdeftext ...}`, a dropdown's own `{\*\ffl ...}` entries, the result indices `\ffres`/`\ffdefres` carry, and the `\ffprot` protection bit. RTF 1.5's own Form Fields table defines the result indices purely in list-field terms, but they serialise the binary FFDataBits structure [MS-DOC] 2.9.79 defines, whose iRes field carries a real, spec-defined meaning per iType -- a checkbox's checked state (0/1/25-undefined) for iTypeChck, a zero-based \ffl index for iTypeDrop (25 again for an undefined selection); see formFieldContentControl below for how each iType's own reading is decided. Optional end to end -- `\*\formfield` itself is optional per the grammar, so a bare FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction with no `\*\formfield` group still names a control type on its own.
+export interface RtfFormFieldData {
+  readonly name: string;
+  readonly helpText: string;
+  // [MS-DOC] 2.9.79 FFDataBits.fOwnHelp, verbatim: "A bit that specifies whether the form field has custom help text in FFData.xstzHelpText. If fOwnHelp is 0, FFData.xstzHelpText contains an empty or auto-generated string." Read from `\ffownhelp` via read.ts's own formFieldValueBit, not the `\b`/`\i`-style toggleValue: RTF 1.9.1's own control-word-type table classifies `\ffownhelpN` as a Value control word rather than a Toggle word, so a bare (unparameterised) `\ffownhelp` reads as false, exactly like an explicit `\ffownhelp0` -- and the control word never appearing in the group at all defaults identically to false too, since FormFieldState's own initial value already starts there. formFieldContentControl below gates promoting `helpText` to the descriptor's `alias` on this flag, so a genuinely auto-generated (or wholly absent) xstzHelpText string never surfaces as an author-set alias.
+  readonly ownHelp: boolean;
+  // [MS-DOC] 2.9.78 FFData.xstzTextDef, "MUST exist if and only if bits.iType is iTypeTxt (0)" -- read from `\ffdeftext`, RTF 1.9.1's own "Default text for text field" destination. Empty when the field carries no `\ffdeftext` group at all, or none of iTypeTxt. Read here for completeness of the raw `\*\formfield` data this interface carries, but deliberately NOT promoted onto a plainText contentControl's `value` by formFieldContentControl below -- see that function's own top comment for why a field's default/reset text is not its current value.
+  readonly defaultText: string;
+  readonly listItems: readonly string[];
+  readonly resultIndex: number | undefined;
+  readonly defaultResultIndex: number | undefined;
+  readonly protectedField: boolean;
+}
+
+// [MS-DOC] 2.9.79 FFDataBits, verbatim: "If iType is iTypeChck (1), iRes specifies the state of the checkbox and MUST be 0 (unchecked), 1 (checked), or 25 (undefined). Undefined checkboxes are treated as unchecked." 25 is FFDataBits's own reserved sentinel for "no explicit state", not a PHPRtfLite-specific quirk: real Word output emits it too on any checkbox whose \ffres was never meaningfully set, alongside a real \ffdefres carrying the field's reset default. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/22a1f1e5-f4b2-4a7d-9e10-3afa26056122 -- the code below deliberately goes one step further than this bare quote: rather than treating every undefined \ffres as unchecked outright, it falls through to a *defined* \ffdefres first and only lands on "unchecked" when that too is absent. This is a considered divergence from the spec's own literal default, not an oversight: a real PHPRtfLite-produced file always emits the sentinel \ffres25 alongside a meaningful \ffdefres naming the field's actual intended state, so treating 25 as "fall through to \ffdefres" recovers real-world checkbox state that the bare spec quote alone would silently discard as unchecked. Do not "simplify" this back to matching the quote above verbatim -- that would re-break the real-world case this fallback exists for.
+const FORM_FIELD_RESULT_UNDEFINED = 25;
+
+const FORM_FIELD_CHECKBOX_INSTRUCTION = /\bFORMCHECKBOX\b/i;
+const FORM_FIELD_DROPDOWN_INSTRUCTION = /\bFORMDROPDOWN\b/i;
+const FORM_FIELD_TEXT_INSTRUCTION = /\bFORMTEXT\b/i;
+
+// The one place a form field's instruction keyword decides its controlType, so the reader and the write-side keyword table (FORM_FIELD_SPEC in write.ts) stay the two ends of one mapping rather than two independent guesses. Order matters only in that FORMCHECKBOX and FORMDROPDOWN are checked before the FORMTEXT fallback would otherwise never apply -- the three keywords do not overlap as substrings, so no ordering is actually load-bearing, but checking the two more specific keywords first reads as the intended precedence.
+function formFieldControlType(
+  instruction: string,
+): ContentControlType | undefined {
+  if (FORM_FIELD_CHECKBOX_INSTRUCTION.test(instruction)) {
+    return "checkbox";
+  }
+  if (FORM_FIELD_DROPDOWN_INSTRUCTION.test(instruction)) {
+    return "dropDown";
+  }
+  if (FORM_FIELD_TEXT_INSTRUCTION.test(instruction)) {
+    return "plainText";
+  }
+  return undefined;
+}
+
+// A form field's instruction plus whatever `\*\formfield` data the reader collected, folded into the one construct document-schema.js gives a content control -- undefined for an ordinary field (HYPERLINK, PAGE, and the rest) whose instruction names none of RTF's three form-field keywords, so the reader's existing hyperlink-only handling for those is untouched. The field's actual DISPLAYED text is not duplicated onto `value` here: it rides the ordinary runs the extent already wraps (the `\fldrslt` content). `ContentControlDescriptor.value` is defined as the control's CURRENT scalar value ("a control whose value IS its rendered content carries that content in `children` and leaves this absent" -- document-schema.js's own field comment), and for a text form field the current value IS the wrapped-run text this function has no access to, never the field's default/reset text. What a plainText field's own `\ffdeftext` carries -- FFData.xstzTextDef -- is a genuinely different fact from that current value, so it is deliberately NOT promoted to `value` below, matching the checkbox/dropDown branches immediately below it, which likewise let a genuinely current fact (`\ffres`) win over a reset default (`\ffdefres`) rather than reporting the default as though it were current. `formField.defaultText` is read (see RtfFormFieldData above) purely so a caller inspecting the raw `\*\formfield` data can see it; this codec's own writer mints `\ffdeftext` from `value` when building RTF from a descriptor a real producer (documents.js's own PDF AcroForm-to-contentControl reconstruction, for one) supplied, but that is a write-only use of `value` and reading `\ffdeftext` back into `value` here would misreport a reset default as the field's real current content.
+export function formFieldContentControl(
+  instruction: string,
+  formField: RtfFormFieldData | undefined,
+): ContentControlDescriptor | undefined {
+  const controlType = formFieldControlType(instruction);
+  if (controlType === undefined) {
+    return undefined;
+  }
+  const descriptor: ContentControlDescriptor = {
+    kind: "contentControl",
+    controlType,
+  };
+  if (formField === undefined) {
+    return descriptor;
+  }
+  const name = formField.name.trim();
+  if (name.length > 0) {
+    descriptor.tag = name;
+  }
+  const helpText = formField.helpText.trim();
+  if (formField.ownHelp && helpText.length > 0) {
+    // Gated on \ffownhelp ([MS-DOC] 2.9.79 FFDataBits.fOwnHelp): when a producer sets \ffownhelp0, xstzHelpText is "an empty or auto-generated string" by the spec's own words, not an author-set label -- surfacing it as `alias` regardless would misrepresent auto-generated help text as something an author actually typed.
+    descriptor.alias = helpText;
+  }
+  if (formField.protectedField) {
+    // \ffprot is a single bit ("the form field is protected and its value cannot be changed" -- [MS-DOC] 2.9.79 FFDataBits.fProt), so reading it back can only ever name ContentControlLock's 'content' member: RTF's own vocabulary has no second bit for the 'container' (removal) half 'both' also carries, and there is no way to tell a written 'content' apart from a written 'both' once both have collapsed onto the identical \ffprot bit -- an inherent, one-directional loss the writer's own diagnostic (formFieldPayload in write.ts) names at write time, not something this read side can recover.
+    descriptor.lock = "content";
+  }
+  // controlType === "plainText" deliberately has no branch here promoting formField.defaultText (\ffdeftext, FFData.xstzTextDef) onto `value` -- see this function's own top comment for why: `value` names the CURRENT value, `\ffdeftext` names the DEFAULT/reset text, and the field's real current content already rides the wrapped runs the extent covers. Reading `\ffdeftext` into `value` was tried and reverted (it reported the default placeholder text as if it were the real field content, discarding the fact that genuinely current text sits in the runs) -- do not reintroduce it.
+  if (controlType === "checkbox") {
+    // \ffres carries the checkbox's real current state and takes priority whenever it is not FFDataBits's own undefined sentinel (see FORM_FIELD_RESULT_UNDEFINED above); only the sentinel -- or \ffres being absent altogether -- falls through to \ffdefres, the field's reset default, which itself defaults to 0 (unchecked) when that too is absent. Verified against both PHPRtfLite's own output (which always emits the sentinel \ffres25 alongside a meaningful \ffdefres) and real Word's FFDataBits encoding (which can emit a meaningful \ffres alongside a \ffdefres that differs, and the current value must win over the reset default in that case).
+    const current =
+      formField.resultIndex === FORM_FIELD_RESULT_UNDEFINED
+        ? undefined
+        : formField.resultIndex;
+    descriptor.checked = (current ?? formField.defaultResultIndex ?? 0) !== 0;
+  } else if (controlType === "dropDown" && formField.listItems.length > 0) {
+    descriptor.options = [...formField.listItems];
+    // \ffres also names a dropdown's own currently selected entry -- the same field FFDataBits gives the checkbox's state, read here under iTypeDrop's own "zero-based index into \ffl" meaning instead. FFDataBits's reserved 25 sentinel (see FORM_FIELD_RESULT_UNDEFINED above) means "selection is undefined" for iTypeDrop exactly as it means "checkbox state is undefined" for iTypeChck, so the identical sentinel-then-default fallback the checkbox branch above applies to its own `current` value applies here too: a sentinel or absent \ffres falls through to \ffdefres, the field's own recorded default selection. Confirmed against a real PHPRtfLite fixture, which always emits the sentinel \ffres25 alongside a meaningful \ffdefres -- without this fallback, a real-world dropdown's selection is silently lost even though \ffdefres names it. Bounds-checked against the list actually read, since an out-of-range index names no real entry.
+    const current =
+      formField.resultIndex === FORM_FIELD_RESULT_UNDEFINED
+        ? undefined
+        : formField.resultIndex;
+    const selectedIndex = current ?? formField.defaultResultIndex;
+    if (
+      selectedIndex !== undefined &&
+      selectedIndex >= 0 &&
+      selectedIndex < formField.listItems.length
+    ) {
+      const selected = formField.listItems[selectedIndex];
+      if (selected !== undefined) {
+        descriptor.value = selected;
+      }
+    }
+  }
+  return descriptor;
 }
 
 // Coalesces a per-run descriptor list into the fewest run extents that say the same thing: adjacent runs carrying an equal descriptor become one extent rather than one per run. Equality is structural over the descriptor's own serialisation, which is exact here because a descriptor is a plain data object built by this module with its keys always in the same order.

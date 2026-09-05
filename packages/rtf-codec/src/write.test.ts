@@ -6,6 +6,7 @@ import {
 } from "./diagnostics";
 import { readRtfContent } from "./read";
 import { text } from "./test-support/bytes";
+import { expectBalancedBraces } from "./test-support/brace-balance";
 import { writeRtfContent } from "./write";
 
 const LETTER_SECTION: Omit<ContentSection, "blocks"> = {
@@ -35,6 +36,7 @@ describe("output shape", () => {
     );
     expect(out.startsWith("{\\rtf1\\ansi")).toBe(true);
     expect(out.endsWith("}")).toBe(true);
+    expectBalancedBraces(out);
   });
 
   it("emits pure 7-bit ASCII whatever the input contained", () => {
@@ -210,6 +212,1253 @@ describe("body constructs", () => {
     expect(out).toContain(
       '{\\field{\\*\\fldinst{HYPERLINK "https://example.com/"}}{\\fldrslt{',
     );
+    expectBalancedBraces(out);
+  });
+
+  it("writes a checkbox contentControl as a real \\*\\formfield production", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "before " }, { text: " after" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: true,
+                tag: "Check1",
+              },
+              startRun: 1,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain(
+      "{\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{",
+    );
+    // \fftype1 is RTF 1.5's own "Form field type: ... 1 Check box" -- without it, the minted \*\formfield data says "text field" while the sibling \*\fldinst says FORMCHECKBOX.
+    expect(out).toContain("\\fftype1");
+    // \ffres, not just \ffdefres, is what a real Word reader reads back as the checkbox's own current state -- its absence reads as unchecked regardless of what \ffdefres says, so a checked box this writer minted without it opens unchecked in Word.
+    expect(out).toContain("\\ffres1");
+    expect(out).toContain("\\ffdefres1");
+    expect(out).toContain("{\\*\\ffname Check1}");
+    expect(out.indexOf("before")).toBeLessThan(out.indexOf("FORMCHECKBOX"));
+    expect(out.indexOf("FORMCHECKBOX")).toBeLessThan(out.indexOf("after"));
+    expectBalancedBraces(out);
+  });
+
+  it("writes \\ffres0 for an unchecked checkbox's own current state, not just \\ffdefres0", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: false,
+              },
+              startRun: 0,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\ffres0");
+    expect(out).toContain("\\ffdefres0");
+    expectBalancedBraces(out);
+  });
+
+  // The identical reachability path as the plainText \ffdeftext handling above (documents.js's own PDF AcroForm-to-contentControl reconstruction), but for a checkbox: pdf-codec's own valueFields spreads the widget's /V export-value name (e.g. 'Yes') onto `value` alongside the boolean `checked` it derives from that same /V. RTF's \ffres/\ffdefres are a bare 0/1/25 state with no room for a named export value at all -- unlike plainText's `value` (which the writer CAN mint, into \ffdeftext) or a dropDown's `value` (which sometimes matches a real \ffl entry), a checkbox's `value` has no RTF spelling whatsoever, so this is unconditional data loss whenever it is present. This regression-guards against the sibling gap this writer once had: silently dropping it with no diagnostic, from the same reachability path its plainText \ffdeftext fix was specifically written to address.
+  it("reports a checkbox's on-state value through the diagnostic sink, rather than dropping it silently", () => {
+    const diagnostics: { code: string; message: string }[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "checkbox",
+                  checked: true,
+                  value: "Yes",
+                },
+                startRun: 0,
+                endRun: 0,
+              },
+            ],
+          },
+        ]),
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
+      ),
+    );
+    // The checked state itself still writes normally -- only the named export value has nowhere to go.
+    expect(out).toContain("\\ffres1");
+    expect(out).toContain("\\ffdefres1");
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a checkbox contentControl's value 'Yes' (its on-state export name) is dropped: RTF's \\ffres/\\ffdefres can only carry the field's boolean checked state, with no spelling for a named export value at all",
+      },
+    ]);
+    expectBalancedBraces(out);
+  });
+
+  it("writes no diagnostic for a checkbox with no recorded value, only `checked`", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "checkbox",
+                  checked: false,
+                },
+                startRun: 0,
+                endRun: 0,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
+  // An empty string carries no distinguishable on-state export name to preserve, so it is treated the same as no recorded value at all -- matching this function's one consistent empty-string rule across every value-shaped field (`alias`, `tag`, a plainText `value`, and now this), rather than firing the diagnostic sink for a value with nothing in it.
+  it("writes no diagnostic for a checkbox whose value is an empty string, treating it the same as no recorded value", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "checkbox",
+                  checked: true,
+                  value: "",
+                },
+                startRun: 0,
+                endRun: 0,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).toContain("\\ffres1");
+    expect(out).toContain("\\ffdefres1");
+    expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
+  // The identical silent-drop shape a checkbox's own dropped `value` had, but for a field the checkbox controlType has no concept of at all: `options` is the dropDown/comboBox choice list.
+  it("reports a checkbox's options list through the diagnostic sink, rather than dropping it silently", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "checkbox",
+                  checked: true,
+                  options: ["Hello", "Guten Tag"],
+                },
+                startRun: 0,
+                endRun: 0,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).not.toContain("\\ffl");
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
+  // A plainText field carrying `checked`/`options` -- fields that name concepts a text field simply does not have -- is the same sibling gap in a third shape.
+  it("reports a plainText field's checked state and options list through the diagnostic sink, rather than dropping either silently", () => {
+    const diagnostics: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "plainText",
+                  checked: true,
+                  options: ["Hello", "Guten Tag"],
+                },
+                startRun: 0,
+                endRun: 0,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => diagnostics.push(diagnostic.code) },
+      ),
+    );
+    expect(out).not.toContain("\\ffl");
+    expect(
+      diagnostics.filter(
+        (code) => code === RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      ),
+    ).toHaveLength(2);
+    expectBalancedBraces(out);
+  });
+
+  // The identical sibling gap in a fourth shape: `checked` is the checkbox/radio boolean, and a dropDown has no concept of it either -- the checkbox branch reports a stray `options`, the plainText branch reports a stray `checked` and `options`, and this closes the one remaining combination this function's own sink-reporting rule covers.
+  it("reports a dropDown field's checked state through the diagnostic sink, rather than dropping it silently", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options: ["Hello", "Guten Tag"],
+                  checked: true,
+                },
+                startRun: 0,
+                endRun: 0,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).toContain("{\\*\\ffl Hello}");
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
+  it("writes no diagnostic for a dropDown with no recorded `checked`", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options: ["Hello", "Guten Tag"],
+                },
+                startRun: 0,
+                endRun: 0,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
+  it("writes a dropDown contentControl's options as \\*\\ffl entries", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Guten Tag" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\fldinst FORMDROPDOWN {\\*\\formfield{");
+    // \fftype2 is RTF 1.5's own "Form field type: ... 2 List".
+    expect(out).toContain("\\fftype2");
+    expect(out).toContain("{\\*\\ffl Hello}");
+    expect(out).toContain("{\\*\\ffl Guten Tag}");
+    expectBalancedBraces(out);
+  });
+
+  // [MS-DOC] 2.9.79 FFDataBits.fHasListBox MUST be 1 when iType is iTypeDrop; [MS-DOC] 2.9.78 FFData.wDef "MUST exist if and only if" iType is iTypeChck or iTypeDrop is a real MS-DOC production rule this codec deliberately does not always satisfy here: a dropdown with options but no recorded selection has no genuine default to report, and a real producer would spell that as \ffres25 (FFDataBits' own undefined-selection sentinel) plus a genuine \ffdefres0 rather than omitting both -- but this writer's own reader deliberately falls \ffres25 through to \ffdefres (to recover a real checkbox's meaningful reset default instead of reading it as unchecked), so emitting that exact pair here would read back as "option 0 is selected" rather than "nothing is selected"; omitting both instead round-trips cleanly through this reader's own hand-edited read.test.ts fixture ("leaves a FORMDROPDOWN's value unset when neither \ffres nor \ffdefres is present at all"), at the cost of not matching the form a real producer would write for the same case.
+  it("writes \\ffhaslistbox for a dropDown with options but no recorded selection, minting neither \\ffres nor \\ffdefres", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Guten Tag" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\ffhaslistbox1");
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
+  // [MS-DOC] 2.9.79 FFDataBits.fHasListBox "MUST be 1 if iType is iTypeDrop (2)" with no carve-out for a dropdown that happens to carry no options -- a real, common shape this ecosystem's own docx/odf readers can produce (ExaDev/documents.js#1016). An earlier version of this writer gated \ffhaslistbox behind `options !== undefined`, so a dropDown with no options minted \fftype2 alone: a fftype naming a list field with no \*\formfield data backing that claim at all.
+  it("writes \\ffhaslistbox for a dropDown with no options at all, rather than minting \\fftype2 with no formfield data to back it", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: { kind: "contentControl", controlType: "dropDown" },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\fftype2");
+    expect(out).toContain("\\ffhaslistbox1");
+    // FFData.wDef "MUST be less than the number of items in the dropdown list box" -- with zero items there is no valid index, so this writer mints none at all rather than an invalid \ffdefres0.
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
+  it("writes \\ffhaslistbox for a dropDown with an empty options array, and still mints no \\ffdefres", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: [],
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\fftype2");
+    expect(out).toContain("\\ffhaslistbox1");
+    // 0 is not less than 0 items, so an empty array is exactly as invalid a target for \ffdefres0 as no array at all.
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
+  it("mints neither \\ffres nor \\ffdefres for a dropDown whose value names none of its own options, rather than silently selecting a different entry", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+                value: "Bonjour",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\ffhaslistbox1");
+    // The regression this guards: an earlier version of this writer's `indexOf` returning -1 for an unmatched value was indistinguishable from -1 for "no value recorded at all", so it minted \ffdefres0 either way -- silently picking "Hello" for a document that actually recorded "Bonjour". Neither \ffres nor \ffdefres should exist at all for this shape.
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
+  // An empty string that matches none of `options` (as here, where the list is ["Hello", "Guten Tag"]) is treated as "no selection was ever recorded" rather than as a genuine mismatch to report -- firing the unmatched-value diagnostic for it would be indistinguishable from a real mismatch like "Bonjour" above, which is a materially different fact to report. This is decided by `indexOf` returning -1, exactly like any other non-matching value, NOT by a blanket "empty string means no value" rule: see the sibling test directly below, where `options` genuinely contains the empty string and value:'' is therefore a real, matched selection.
+  it("mints neither \\ffres nor \\ffdefres, and reports no diagnostic, for a dropDown whose value is an empty string that matches none of its options", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options: ["Hello", "Guten Tag"],
+                  value: "",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).toContain("\\ffhaslistbox1");
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
+  // The regression this guards: an earlier version of this writer folded `descriptor.value.length === 0` into the same branch as `descriptor.value === undefined`, which discarded this selection entirely -- neither \ffres nor \ffdefres, with no diagnostic -- even though the empty string names a real, indexable option here (index 0). This codec's own reader can produce exactly this descriptor shape from real RTF bytes (a genuine PHPRtfLite-style dropdown whose current selection is a blank list entry), so a read-then-write round trip of a document this package itself emits must not silently lose the selection.
+  it("mints \\ffdefres0\\ffres0 for a dropDown whose value is an empty string that matches a real empty-string option", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options: ["", "Hello"],
+                  value: "",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).toContain("\\ffdefres0\\ffres0");
+    expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
+  it("reports a dropDown's unmatched value through the diagnostic sink, rather than dropping it silently", () => {
+    const codes: string[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+                value: "Bonjour",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+      { sink: (diagnostic) => codes.push(diagnostic.code) },
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+  });
+
+  // A dropDown with no options recorded at all is a distinct shape from one whose options exist but don't contain `value`: `options` itself is undefined here, so `value` names none of a list that does not exist either. This should degrade identically to the unmatched-value case above -- the sink still fires, since a recorded value with nowhere to write it is data loss regardless of whether the option list is empty, absent, or merely missing the one entry that was picked.
+  it("reports a dropDown's value through the diagnostic sink when no options list exists at all to match it against", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  value: "Bonjour",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
+  // [MS-DOC] 2.9.78 FFData.hsttbDropList "MUST NOT exceed 25" entries -- not an arbitrary limit, since FFDataBits' own iRes field reserves index 25 as its "undefined selection" sentinel (FORM_FIELD_RESULT_UNDEFINED in constructs.ts). A 26th option would sit exactly where a real Word/DOC consumer expects "no selection".
+  it("truncates a dropDown's options at the MS-DOC 25-entry cap and reports it through the diagnostic sink", () => {
+    const codes: string[] = [];
+    const options = Array.from(
+      { length: 30 },
+      (_, index) => `Option ${String(index)}`,
+    );
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options,
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(out).toContain("{\\*\\ffl Option 0}");
+    expect(out).toContain("{\\*\\ffl Option 24}");
+    expect(out).not.toContain("{\\*\\ffl Option 25}");
+    expectBalancedBraces(out);
+  });
+
+  // A selection that names an option past the 25-entry cutoff is unrepresentable for two independent reasons at once -- the cap and the (now-truncated-away) match -- and both fire their own diagnostic rather than one silently masking the other. The second diagnostic's message must name the REAL reason (the option was truncated away) rather than claim the value never matched any option at all, since it did match one before the cap removed it.
+  it("reports both the cap and the now-unmatched selection when a dropDown's chosen value sits past the 25-entry cutoff, naming truncation as the reason rather than a false mismatch", () => {
+    const messages: string[] = [];
+    const options = Array.from(
+      { length: 30 },
+      (_, index) => `Option ${String(index)}`,
+    );
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options,
+                  value: "Option 27",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        {
+          sink: (diagnostic) => {
+            if (
+              diagnostic.code === RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED
+            ) {
+              messages.push(diagnostic.message);
+            }
+          },
+        },
+      ),
+    );
+    expect(messages).toHaveLength(2);
+    expect(messages.some((message) => message.includes("25-entry"))).toBe(true);
+    expect(messages.some((message) => message.includes("truncated away"))).toBe(
+      true,
+    );
+    expect(
+      messages.some((message) => message.includes("does not match any")),
+    ).toBe(false);
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
+  // The genuine mismatch case, distinguished from the truncated-away case above: a value that never matched any option at all (not even before truncation) keeps the original "does not match any" message, since that IS the real reason here.
+  it("reports a genuinely unmatched dropDown value as not matching any option, even when the option list is also truncated", () => {
+    const messages: string[] = [];
+    const options = Array.from(
+      { length: 30 },
+      (_, index) => `Option ${String(index)}`,
+    );
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options,
+                  value: "Not an option at all",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        {
+          sink: (diagnostic) => {
+            if (
+              diagnostic.code === RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED
+            ) {
+              messages.push(diagnostic.message);
+            }
+          },
+        },
+      ),
+    );
+    expect(
+      messages.some((message) => message.includes("does not match any")),
+    ).toBe(true);
+    expect(messages.some((message) => message.includes("truncated away"))).toBe(
+      false,
+    );
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
+  it("writes \\ffres as a zero-based index into \\*\\ffl when a dropDown's value names one of its own options", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Guten Tag" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+                value: "Guten Tag",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\ffres1");
+    // \ffdefres mirrors the same selected index, exactly as the checkbox branch mirrors its own single `checked` boolean into both \ffres and \ffdefres.
+    expect(out).toContain("\\ffdefres1");
+    expectBalancedBraces(out);
+  });
+
+  it("writes a plainText contentControl wrapping its runs in \\fldrslt", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    // \fftype0 is RTF 1.5's own "Form field type: 0 Text ...".
+    expect(out).toContain(
+      "FORMTEXT {\\*\\formfield{\\fftype0{\\*\\ffname Text1}}}",
+    );
+    expect(out).toContain("{\\fldrslt {Lorem ipsum.}}}");
+    expectBalancedBraces(out);
+  });
+
+  // [MS-DOC] 2.9.78 FFData.xstzTextDef via RTF's own \ffdeftext -- the real, reachable case this exists for: documents.js's own PDF AcroForm-to-contentControl reconstruction hands a plainText control exactly this {controlType:'plainText', value, ...} shape for a real /V string.
+  it("writes a plainText contentControl's value as {\\*\\ffdeftext ...}", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                value: "Jane Doe",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\ffdeftext Jane Doe}");
+    expectBalancedBraces(out);
+  });
+
+  // `value` names the field's CURRENT scalar value and \ffdeftext names its DEFAULT/reset text -- a genuinely different fact this codec's own reader never restores back onto `value` (see "writes a plainText contentControl's value into \ffdeftext but does not read it back as `value`" in the "round trip through this package's own reader" describe block below), so writing `value` into \ffdeftext is reported through the diagnostic sink for consistency with every other cross-field mis-slot this function reports, even though the string itself is written rather than dropped.
+  it("reports a plainText contentControl's value through the diagnostic sink when it is written into \\ffdeftext", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "Lorem ipsum." }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "plainText",
+                  tag: "Text1",
+                  value: "Jane Doe",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).toContain("{\\*\\ffdeftext Jane Doe}");
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
+  it("writes no \\ffdeftext at all for a plainText contentControl with no recorded value", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).not.toContain("\\ffdeftext");
+    expectBalancedBraces(out);
+  });
+
+  // An empty string carries no distinguishable default text to preserve, so it is treated the same as no recorded value at all -- matching this function's own existing convention for an empty `alias`/`tag` (see "writes no \ffownhelp/\ffhelptext at all when a contentControl has no alias" above), rather than minting an empty {\*\ffdeftext} destination and firing the diagnostic sink for a value with nothing in it.
+  it("writes no \\ffdeftext at all for a plainText contentControl whose value is an empty string, treating it the same as no recorded value", () => {
+    const diagnostics: { code: string }[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "Lorem ipsum." }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "plainText",
+                  tag: "Text1",
+                  value: "",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => diagnostics.push({ code: diagnostic.code }) },
+      ),
+    );
+    expect(out).not.toContain("\\ffdeftext");
+    expect(diagnostics).toEqual([]);
+    expectBalancedBraces(out);
+  });
+
+  // \ffownhelp1 is a <formparams> member and {\*\ffhelptext ...} a <formstrings> one, so RTF 1.9.1's own "Form Fields" grammar (`<formfield> '{\*' \formfield '{' <formparams> <formstrings> '}}'`) puts every formparams control word before every formstrings one -- including {\*\ffname ...}, itself <formstrings>'s own first member, which lands between them here.
+  it("writes a contentControl's alias as \\ffownhelp1 (formparams) and {\\*\\ffhelptext ...} (formstrings), with formparams entirely before formstrings", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                alias: "Client name",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain(
+      "\\ffownhelp1{\\*\\ffname Text1}{\\*\\ffhelptext Client name}",
+    );
+    expectBalancedBraces(out);
+  });
+
+  // Every <formparams> member, in the grammar's own stated order (\fftype, \ffownhelp, \ffprot, \ffhaslistbox, \ffdefres/\ffres), before every <formstrings> member (\ffname, \ffhelptext, the \ffl entries) -- matching RTF 1.9.1's own "Form Fields" grammar production exactly: `<formparams>` `\fftypeN? \ffownhelpN? ... \ffprotN? ... \ffhaslistboxN? ... \ffdefresN? \ffresN?`. A dropDown descriptor exercising every field this writer mints at once, so a regression that reorders any <formparams> member relative to another, interleaves the two groups, or reorders \ffname after \ffhelptext within formstrings, fails this single assertion against the actual emitted bytes -- not merely against a comment claiming the order, which is exactly the gap an earlier round of this writer left open (the code appended \ffprot/\ffownhelp after \ffhaslistbox/\ffdefres/\ffres despite this same comment already describing the grammar's own order).
+  it("orders a dropDown's full \\*\\formfield payload as every formparams member, then every formstrings member, matching RTF's own grammar production", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                tag: "Drop1",
+                alias: "Pick one",
+                lock: "content",
+                options: ["Hello", "Guten Tag"],
+                value: "Guten Tag",
+              },
+              startRun: 0,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain(
+      "\\fftype2\\ffownhelp1\\ffprot1\\ffhaslistbox1\\ffdefres1\\ffres1{\\*\\ffname Drop1}{\\*\\ffhelptext Pick one}{\\*\\ffl Hello}{\\*\\ffl Guten Tag}",
+    );
+    expectBalancedBraces(out);
+  });
+
+  // The identical order assertion as the dropDown case above, but for a checkbox: \fftype, \ffownhelp, \ffprot, then the checkbox's own \ffdefres/\ffres pair (a checkbox has no \ffhaslistbox at all), then <formstrings>. Exercised separately because the dropDown-only fixture above cannot catch a regression specific to the checkbox branch's own concatenation.
+  it("orders a checkbox's full \\*\\formfield payload as every formparams member, then every formstrings member, matching RTF's own grammar production", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                tag: "Check1",
+                alias: "Agree to terms",
+                lock: "content",
+                checked: true,
+              },
+              startRun: 0,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain(
+      "\\fftype1\\ffownhelp1\\ffprot1\\ffdefres1\\ffres1{\\*\\ffname Check1}{\\*\\ffhelptext Agree to terms}",
+    );
+    expectBalancedBraces(out);
+  });
+
+  // The identical order assertion again, for a plainText field: \fftype, \ffownhelp, \ffprot (plainText's own controlType-specific block contributes nothing to <formparams> at all), then <formstrings> (\ffname, \ffdeftext, \ffhelptext).
+  it("orders a plainText's full \\*\\formfield payload as every formparams member, then every formstrings member, matching RTF's own grammar production", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                alias: "Client name",
+                lock: "content",
+                value: "Jane Doe",
+              },
+              startRun: 0,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain(
+      "\\fftype0\\ffownhelp1\\ffprot1{\\*\\ffname Text1}{\\*\\ffdeftext Jane Doe}{\\*\\ffhelptext Client name}",
+    );
+    expectBalancedBraces(out);
+  });
+
+  it("writes no \\ffownhelp/\\ffhelptext at all when a contentControl has no alias", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).not.toContain("\\ffownhelp");
+    expect(out).not.toContain("\\ffhelptext");
+    expectBalancedBraces(out);
+  });
+
+  // Explicit \ffprot1, never a bare \ffprot: \ffprotN is a Value control word (RTF 1.9.1's own control-word-type table), not a Toggle word like \b/\i, so its bare form defaults to 0/off rather than "on" -- writing the explicit N form costs one character and matches every real fixture read.test.ts carries for this bit family (PHPRtfLite always writes the explicit form for the sibling \ffres/\ffdefres bits).
+  it("writes the explicit \\ffprot1 (never a bare \\ffprot) for a contentControl locked as 'content'", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                lock: "content",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\ffprot1");
+    expect(out).not.toContain("\\ffprot0");
+    expectBalancedBraces(out);
+  });
+
+  it("writes no \\ffprot at all for a contentControl with no lock", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).not.toContain("\\ffprot");
+    expectBalancedBraces(out);
+  });
+
+  // Unlike a 'content'/'both' lock, a 'container' lock writes NOTHING for \ffprot at all -- it leaves the field's own value editable, so there is no "other half" of \ffprot still written the way there is for 'both'; the whole lock is dropped, reported through one diagnostic naming that. Asserting the message's actual text, not just its code, is deliberate: a message-content regression (e.g. the 'container'/'both' branches accidentally swapping their wording, or degrading to one generic sentence describing both) would pass a code-only assertion silently, exactly the kind of accuracy bug this construct's own comment history has repeatedly had.
+  it("writes no \\ffprot at all for a 'container'-locked contentControl, and reports the whole lock as dropped, naming why", () => {
+    const diagnostics: { code: string; message: string }[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "plainText",
+                  lock: "container",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
+      ),
+    );
+    expect(out).not.toContain("\\ffprot");
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a contentControl's 'container' lock protects the control from removal, which RTF's \\ffprot ([MS-DOC] 2.9.79 FFDataBits.fProt) cannot express at all -- it names only whether the field's own value can be changed, and a 'container' lock leaves that value editable, so nothing is written for it and the whole lock is dropped, not merely half of it",
+      },
+    ]);
+    expectBalancedBraces(out);
+  });
+
+  it("writes the explicit \\ffprot1 for a 'both'-locked contentControl and still reports the removal-protection half as dropped, naming why", () => {
+    const diagnostics: { code: string; message: string }[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "plainText",
+                  lock: "both",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
+      ),
+    );
+    expect(out).toContain("\\ffprot1");
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a contentControl's 'both' lock also protects the control from removal, which RTF's \\ffprot ([MS-DOC] 2.9.79 FFDataBits.fProt) cannot express -- \\ffprot1 above already carries the content-protection half of 'both', so only the container-removal half is dropped here",
+      },
+    ]);
+    expectBalancedBraces(out);
+  });
+
+  it("reports a contentControl controlType RTF's own form-field vocabulary does not cover, rather than minting nothing silently -- and mints no unbalanced braces for it", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "richText",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    // The regression this guards: an unrepresentable controlType must mint no open half either, or the writer emits the extent's close "}}" unpaired and corrupts the rest of the document's brace balance.
+    expectBalancedBraces(out);
+  });
+
+  it("mints balanced braces for a paragraph mixing a real form field with an unrepresentable one", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }, { text: "c" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: true,
+              },
+              startRun: 0,
+              endRun: 0,
+            },
+            {
+              descriptor: { kind: "contentControl", controlType: "comboBox" },
+              startRun: 1,
+              endRun: 2,
+            },
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["x"],
+              },
+              startRun: 3,
+              endRun: 3,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("FORMCHECKBOX");
+    expect(out).toContain("FORMDROPDOWN");
+    expect(out).not.toContain("COMBOBOX");
+    expectBalancedBraces(out);
+  });
+
+  // Regression for a round-2 fix that only patched the symptom for a controlType FORM_FIELD_SPEC does not cover, without making the writer structurally incapable of leaving a field group unmatched for every other malformed-looking range. writeFormFieldBoundaries is only ever called for positions 0..paragraph.runs.length, so an extent whose own endRun exceeds that range never reaches a position where its close would fire from that method alone -- only the drain step in writeParagraph closes it.
+  it("mints a balanced close for a form field extent whose endRun exceeds the paragraph's own runs.length", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: true,
+              },
+              startRun: 1,
+              endRun: 5,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("FORMCHECKBOX");
+    expectBalancedBraces(out);
+  });
+
+  // Regression for a real defect the round-2 brace-balance fix introduced: an extent with startRun > endRun let the close loop run at its endRun position before the open loop ever reached its startRun, so `opened.has(extent)` read false there and the close was (correctly, at that position) skipped -- but nothing revisited that endRun once the open finally happened later, leaving the open half unmatched for the rest of the document.
+  it("mints a balanced close for a form field extent whose startRun is after its own endRun", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }, { text: "c" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: false,
+              },
+              startRun: 2,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("FORMCHECKBOX");
+    expectBalancedBraces(out);
   });
 
   it("writes a table as \\trowd/\\cellxN row definitions with \\cell and \\row marks", () => {
@@ -233,6 +1482,7 @@ describe("body constructs", () => {
     expect(out).toContain("\\intbl");
     expect(out).toContain("\\cell");
     expect(out).toContain("\\row");
+    expectBalancedBraces(out);
   });
 
   it("writes a page break as \\page", () => {
@@ -586,6 +1836,294 @@ describe("round trip through this package's own reader", () => {
       { sink: (diagnostic) => codes.push(diagnostic.code) },
     );
     expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+  });
+
+  it("round-trips a checkbox contentControl's checked state and tag back onto the same point extent", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "before " }, { text: " after" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: true,
+                tag: "Check1",
+              },
+              startRun: 1,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "checkbox",
+      checked: true,
+      tag: "Check1",
+    });
+    expect(extent?.startRun).toBe(extent?.endRun);
+    expect(paragraph?.runs.map((run) => run.text).join("")).toBe(
+      "before  after",
+    );
+  });
+
+  // A dropDown minted with no recorded selection round-trips with no `value` at all, not a fabricated first-entry default: this writer mints neither \ffres nor \ffdefres for exactly this case (see "writes \ffhaslistbox for a dropDown with options but no recorded selection" above), and the reader leaves `value` unset when it finds neither control word (see read.test.ts's "leaves a FORMDROPDOWN's value unset..."). This is the genuine stable fixed point -- writing this descriptor again reproduces byte-identical output, with nothing to drift.
+  it("round-trips a dropDown contentControl's options back onto the runs it wraps, with no fabricated default selection", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Guten Tag" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "dropDown",
+      options: ["Hello", "Guten Tag"],
+    });
+    expect(
+      paragraph?.runs
+        .slice(extent?.startRun ?? 0, extent?.endRun ?? 0)
+        .map((run) => run.text)
+        .join(""),
+    ).toBe("Guten Tag");
+  });
+
+  // The round-trip stability fix this round exists for: an unmatched value must stay unmatched across repeated write/read cycles, never drifting onto a fabricated match. Before this fix, writing an unmatched value correctly minted no \ffres/\ffdefres (signalling loss), but reading that back gave `value: undefined` -- indistinguishable from "no value was ever set" -- so a SECOND write hit the other branch and minted \ffdefres0, silently turning "value was Bonjour, now lost" into "value is now definitely Hello".
+  it("keeps a dropDown's unmatched value unmatched across two full write-read cycles, rather than drifting onto a fabricated match on the second pass", () => {
+    const original = wordprocessing([
+      {
+        kind: "paragraph",
+        runs: [{ text: "x" }],
+        constructs: [
+          {
+            descriptor: {
+              kind: "contentControl",
+              controlType: "dropDown",
+              options: ["Hello", "Guten Tag"],
+              value: "Bonjour",
+            },
+            startRun: 0,
+            endRun: 1,
+          },
+        ],
+      },
+    ]);
+    const firstPassBytes = writeRtfContent(original);
+    const firstPassDocument = readRtfContent(firstPassBytes).document;
+    const secondPassBytes = writeRtfContent(firstPassDocument);
+    const secondPassDocument = readRtfContent(secondPassBytes).document;
+
+    const descriptorOf = (document: ContentDocument) => {
+      const block =
+        document.kind === "wordprocessing"
+          ? document.sections[0]?.blocks[0]
+          : undefined;
+      const paragraph = block?.kind === "paragraph" ? block : undefined;
+      return paragraph?.constructs?.[0]?.descriptor;
+    };
+
+    // Neither pass may recover "Bonjour" (it was never a valid option) nor drift onto "Hello" (the entry-0 fabrication this round's fix removes).
+    expect(descriptorOf(firstPassDocument)).toEqual({
+      kind: "contentControl",
+      controlType: "dropDown",
+      options: ["Hello", "Guten Tag"],
+    });
+    expect(descriptorOf(secondPassDocument)).toEqual(
+      descriptorOf(firstPassDocument),
+    );
+    // The bytes themselves are the strongest form of this assertion: a true fixed point produces byte-identical RTF on the second pass, not merely an equal descriptor.
+    expect(text(secondPassBytes)).toBe(text(firstPassBytes));
+  });
+
+  it("round-trips a dropDown contentControl's selected value back onto the same options", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Guten Tag" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+                value: "Guten Tag",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "dropDown",
+      options: ["Hello", "Guten Tag"],
+      value: "Guten Tag",
+    });
+  });
+
+  it("round-trips a plainText contentControl's tag and its wrapped text", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    const extent = paragraph?.constructs?.[0];
+    expect(extent?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+    });
+    expect(
+      paragraph?.runs
+        .slice(extent?.startRun ?? 0, extent?.endRun ?? 0)
+        .map((run) => run.text)
+        .join(""),
+    ).toBe("Lorem ipsum.");
+  });
+
+  // Deliberately NOT a round trip, despite the writer minting {\*\ffdeftext ...} from `value` (see "writes a plainText contentControl's value as {\*\ffdeftext ...}" above): `\ffdeftext` names the field's DEFAULT/reset text, and this reader never promotes it onto `value`, which document-schema.js defines as the control's CURRENT value -- for a text field, that current value is the wrapped-run text, which this document never set. Writing `value` here is a one-directional degradation, the mirror image of the writer's own documented 'both'->'content' lock degradation: real, useful on the way out (documents.js's own PDF AcroForm-to-contentControl reconstruction genuinely produces this shape), but not something a generic reader of the resulting RTF should read back as the field's current content.
+  it("writes a plainText contentControl's value into \\ffdeftext but does not read it back as `value`, since \\ffdeftext names the field's default text, not its current one", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                value: "Jane Doe",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+    });
+  });
+
+  it("round-trips a plainText contentControl's alias and lock alongside its tag", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Text1",
+                alias: "Client name",
+                lock: "content",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      tag: "Text1",
+      alias: "Client name",
+      lock: "content",
+    });
+  });
+
+  // 'both' has no RTF spelling of its own -- \ffprot is a single bit -- so this is the writer's own documented, one-directional degradation: a 'both' lock survives the round trip as 'content', the half RTF can actually state.
+  it("round-trips a 'both'-locked contentControl's lock down to 'content', the half RTF's \\ffprot can actually state", () => {
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                lock: "both",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    const paragraph = block?.kind === "paragraph" ? block : undefined;
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "plainText",
+      lock: "content",
+    });
   });
 
   it("writes a run-level provenance extent as the <chrev> character properties, minting a \\*\\revtbl for its author", () => {
