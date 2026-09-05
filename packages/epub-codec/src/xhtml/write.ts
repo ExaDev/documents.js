@@ -331,7 +331,7 @@ function writeRunRangeNodes(
       context.sink({
         code: EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
         severity: "info",
-        message: `a footnote reference ('${dropped.descriptor.name}') overlaps another footnote reference starting at the same run and cannot both be represented as sibling <a> elements; its own anchor is dropped, the run text it would have wrapped is written unwrapped`,
+        message: `a footnote reference ('${dropped.descriptor.name}') overlaps another footnote reference starting at the same run and cannot both be represented as sibling <a> elements; its own run text is not lost, it is still written, wrapped by whichever extent won the collision, or written unwrapped past the winner's own endRun -- only this reference's own anchor link is not emitted`,
         href: context.sourceHref,
       });
     }
