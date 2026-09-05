@@ -201,6 +201,21 @@ function buildFixturePackage(): Package {
   const cellA = el("a:tc", {}, [
     el("a:tcPr", {}, [
       el("a:solidFill", {}, [el("a:srgbClr", { val: "FF0000" })]),
+      el("a:lnL", { w: "12700" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]),
+      el("a:lnR", { w: "25400" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "00FF00" })]),
+        el("a:prstDash", { val: "dash" }),
+      ]),
+      el("a:lnT", { w: "6350" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "FFFF00" })]),
+        el("a:prstDash", { val: "dot" }),
+      ]),
+      el("a:lnB", { w: "19050" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "000000" })]),
+        el("a:prstDash", { val: "solid" }),
+      ]),
     ]),
     el("a:txBody", {}, [
       el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("A")])])]),
@@ -656,6 +671,26 @@ describe("readPptxContent: tables", () => {
     const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
     const table = asTable(tableShape?.blocks[0]);
     expect(table.rows[1]?.cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
+  });
+
+  it("reads a cell's four a:lnL/a:lnR/a:lnT/a:lnB border edges, each edge's colour, width, and preset dash pattern", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[1]?.cells[0]?.borders).toEqual({
+      left: { color: { r: 0, g: 0, b: 1 }, widthPt: 1 },
+      right: { color: { r: 0, g: 1, b: 0 }, widthPt: 2, style: "dashed" },
+      top: { color: { r: 1, g: 1, b: 0 }, widthPt: 0.5, style: "dotted" },
+      bottom: { color: { r: 0, g: 0, b: 0 }, widthPt: 1.5, style: "solid" },
+    });
+  });
+
+  it("reads no borders for a cell whose a:tcPr declares none", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[1]?.cells[1]?.borders).toBeUndefined();
+    expect(table.rows[0]?.cells[0]?.borders).toBeUndefined();
   });
 });
 
