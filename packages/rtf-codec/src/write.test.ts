@@ -348,6 +348,38 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // An empty string carries no distinguishable on-state export name to preserve, so it is treated the same as no recorded value at all -- matching this function's one consistent empty-string rule across every value-shaped field (`alias`, `tag`, a plainText `value`, and now this), rather than firing the diagnostic sink for a value with nothing in it.
+  it("writes no diagnostic for a checkbox whose value is an empty string, treating it the same as no recorded value", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "checkbox",
+                  checked: true,
+                  value: "",
+                },
+                startRun: 0,
+                endRun: 0,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).toContain("\\ffres1");
+    expect(out).toContain("\\ffdefres1");
+    expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expectBalancedBraces(out);
+  });
+
   // The identical silent-drop shape a checkbox's own dropped `value` had, but for a field the checkbox controlType has no concept of at all: `options` is the dropDown/comboBox choice list.
   it("reports a checkbox's options list through the diagnostic sink, rather than dropping it silently", () => {
     const codes: string[] = [];
@@ -606,6 +638,39 @@ describe("body constructs", () => {
     // The regression this guards: an earlier version of this writer's `indexOf` returning -1 for an unmatched value was indistinguishable from -1 for "no value recorded at all", so it minted \ffdefres0 either way -- silently picking "Hello" for a document that actually recorded "Bonjour". Neither \ffres nor \ffdefres should exist at all for this shape.
     expect(out).not.toContain("\\ffdefres");
     expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
+  // An empty string carries no distinguishable selection to preserve, so it is treated as "no selection was ever recorded" (the branch above) rather than as a genuine value that then matches none of `options` -- matching this function's one consistent empty-string rule across every value-shaped field (`alias`, `tag`, a plainText `value`, a checkbox's own `value`, and now this). Firing the unmatched-value diagnostic for it would be indistinguishable from a real mismatch like "Bonjour" above, which is a materially different fact to report.
+  it("mints neither \\ffres nor \\ffdefres, and reports no diagnostic, for a dropDown whose value is an empty string", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "x" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "dropDown",
+                  options: ["Hello", "Guten Tag"],
+                  value: "",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(out).toContain("\\ffhaslistbox1");
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
     expectBalancedBraces(out);
   });
 
