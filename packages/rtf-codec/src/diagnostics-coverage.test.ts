@@ -135,6 +135,15 @@ describe("every read-side diagnostic code is reachable", () => {
       ),
     ).toContain(RtfDiagnosticCodes.FORM_FIELD_KEYWORD_LOST);
   });
+
+  it("rtf/embedded-object-unreadable", () => {
+    // \objdata's hex decodes to real bytes ("hello"), but they are not a compound file at all -- exactly the shape a real Word-authored OLESaveToStream payload this reader does not decode, or simply malformed \objdata, both take: this reader always tries its own JSON-envelope decode first, and degrades with this code for anything that is not that.
+    expect(
+      readCodes(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result}}\\par}`,
+      ),
+    ).toContain(RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE);
+  });
 });
 
 describe("every write-side diagnostic code is reachable", () => {
@@ -155,21 +164,6 @@ describe("every write-side diagnostic code is reachable", () => {
         ]),
       ),
     ).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
-  });
-
-  it("rtf/embedded-object-dropped", () => {
-    expect(
-      writeCodes(
-        wordprocessing([
-          {
-            kind: "embeddedObject",
-            objectKind: "spreadsheet",
-            frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
-            document: { kind: "spreadsheet", metadata: {}, sheets: [] },
-          },
-        ]),
-      ),
-    ).toContain(RtfDiagnosticCodes.EMBEDDED_OBJECT_DROPPED);
   });
 
   it("rtf/package-table-dropped", () => {
