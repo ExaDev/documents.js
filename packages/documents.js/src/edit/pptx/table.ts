@@ -124,7 +124,7 @@ export class PptxTableCell {
     );
   }
 
-  // a:tcPr children a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2/3/4/5) -- the four cell-border edges. Each a:lnX carries @w in EMU and an a:solidFill/a:srgbClr child naming the border colour. ooxml.js's own readTableCell reads these too (its own readTableCellBorders, resolved through the scheme-colour-aware readSolidFillColor rather than this setter's own srgbClr-only shortcut), so a border written here round-trips through this package's own reader.
+  // a:tcPr children a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2/3/4/5) -- the four cell-border edges. Each a:lnX carries @w in EMU and an a:solidFill/a:srgbClr child naming the border colour. ooxml.js's own readTableCell reads these too (its own readTableCellBorders, resolved through the scheme-colour-aware readSolidFillColor rather than this setter's own srgbClr-only shortcut), so a border's colour and width written here round-trip through both this package's own reader below and ooxml.js's. A border's stroke style (dashed/dotted/etc, ContentStrokeStyle) does not round-trip: the setter below never writes an a:prstDash child, and this package's own readBorder has no style field to read one back into even were it present.
   get borders(): ContentCellBorders | undefined {
     const tcPr = this.tcPrElement(false);
     if (tcPr === undefined) {
@@ -193,6 +193,7 @@ export class PptxTableCell {
     }
   }
 
+  // Mirrors ooxml.js's own readTableCellBorderEdge (typed/pptx/read.ts) guard: @w missing, non-numeric, zero, or negative all leave no valid ContentBorder to construct, since ContentBorderSchema's widthPt is positive().
   private readBorder(
     lnElement: XmlElement | undefined,
   ): ContentBorder | undefined {
@@ -201,6 +202,10 @@ export class PptxTableCell {
     }
     const w = attr(lnElement, "w");
     if (w === undefined) {
+      return undefined;
+    }
+    const widthPt = emuToPt(Number.parseInt(w, 10));
+    if (!Number.isFinite(widthPt) || widthPt <= 0) {
       return undefined;
     }
     const solidFill = directChildElement(lnElement, "a:solidFill");
@@ -214,7 +219,7 @@ export class PptxTableCell {
     }
     return {
       color: rgbHexToColor(hex),
-      widthPt: emuToPt(Number.parseInt(w, 10)),
+      widthPt,
     };
   }
 
