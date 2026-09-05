@@ -1,5 +1,5 @@
 import type { Package } from "../../model/package";
-import type { XmlElement } from "../../model/node";
+import type { XmlElement, XmlNode } from "../../model/node";
 import { describe, expect, it } from "vitest";
 import type {
   ContentBlock,
@@ -36,6 +36,36 @@ function asImage(block: ContentBlock | undefined): ContentImageBlock {
     throw new Error("expected an image block");
   }
   return block;
+}
+
+// A depth-first search for the first element named tag whose own attribute attrName equals attrValue -- used to mutate one specific p:cNvPr in place within buildFixturePackage's already-parsed slide tree, rather than duplicating the whole fixture to exercise a single attribute variant.
+function findElementByTagAndAttr(
+  nodes: readonly XmlNode[],
+  tag: string,
+  attrName: string,
+  attrValue: string,
+): XmlElement | undefined {
+  for (const node of nodes) {
+    if (node.type !== "element") {
+      continue;
+    }
+    if (
+      node.tag === tag &&
+      node.attributes.some((a) => a.name === attrName && a.value === attrValue)
+    ) {
+      return node;
+    }
+    const found = findElementByTagAndAttr(
+      node.children,
+      tag,
+      attrName,
+      attrValue,
+    );
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
 }
 
 function asEmbeddedObject(
@@ -147,7 +177,7 @@ function buildFixturePackage(): Package {
 
   const picShape = el("p:pic", {}, [
     el("p:nvPicPr", {}, [
-      el("p:cNvPr", { id: "4", name: "Picture 1" }),
+      el("p:cNvPr", { id: "4", name: "Picture 1", descr: "A red circle" }),
       el("p:cNvPicPr"),
       el("p:nvPr"),
     ]),
@@ -565,6 +595,38 @@ describe("readPptxContent: images", () => {
     expect(image.format).toBe("png");
     expect(image.widthPt).toBe(80);
     expect(image.heightPt).toBe(80);
+  });
+
+  it("reads p:cNvPr/@descr as ContentImageBlock.altText", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const picShape = doc.slides[1]?.shapes.find((s) => s.name === "Picture 1");
+    const image = asImage(picShape?.blocks[0]);
+    expect(image.altText).toBe("A red circle");
+  });
+
+  it("falls back to p:cNvPr/@title when @descr is absent", () => {
+    const pkg = buildFixturePackage();
+    const slide1 = pkg.parts["ppt/slides/slide1.xml"];
+    if (slide1?.kind !== "xml") {
+      throw new Error("expected ppt/slides/slide1.xml");
+    }
+    const cNvPr = findElementByTagAndAttr(
+      slide1.nodes,
+      "p:cNvPr",
+      "name",
+      "Picture 1",
+    );
+    if (cNvPr === undefined) {
+      throw new Error("expected Picture 1's p:cNvPr");
+    }
+    cNvPr.attributes = cNvPr.attributes
+      .filter((a) => a.name !== "descr")
+      .concat({ name: "title", value: "Titled only" });
+
+    const doc = readPptxContent(pkg);
+    const picShape = doc.slides[1]?.shapes.find((s) => s.name === "Picture 1");
+    const image = asImage(picShape?.blocks[0]);
+    expect(image.altText).toBe("Titled only");
   });
 });
 
