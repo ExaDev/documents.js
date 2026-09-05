@@ -312,6 +312,56 @@ describe("lists", () => {
       expect.objectContaining({ code: "epub/list-content-outside-item" }),
     );
   });
+
+  it("never leaks a <script>'s raw source as document text even when nested inside a stray wrapper the list-recovery path recurses into", () => {
+    const blocks = read(
+      body("<ul><li>a</li><div><script>var x=1;</script></div></ul>"),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ]);
+  });
+});
+
+describe("script-supporting elements outside lists", () => {
+  it("never leaks a <script>'s raw source as document text when it sits directly inside a <p>", () => {
+    const blocks = read(body("<p>before<script>var x=1;</script>after</p>"));
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "before" }, { text: "after" }] },
+    ]);
+  });
+
+  it("never leaks a <template>'s inert content as document text when it sits directly inside a table cell", () => {
+    const blocks = read(
+      body(
+        "<table><tr><td>before<template><li>fake</li></template>after</td></tr></table>",
+      ),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  {
+                    kind: "paragraph",
+                    runs: [{ text: "before" }, { text: "after" }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+  });
 });
 
 describe("definition lists", () => {
