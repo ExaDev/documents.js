@@ -428,10 +428,11 @@ function collectListItem(
 
   for (;;) {
     let nestedEnd = index;
-    while (
-      nestedEnd < items.length &&
-      (items[nestedEnd]?.list?.level ?? -1) > level
-    ) {
+    while (nestedEnd < items.length) {
+      const candidateLevel = items[nestedEnd]?.list?.level;
+      if (candidateLevel === undefined || candidateLevel <= level) {
+        break;
+      }
       nestedEnd += 1;
     }
     if (nestedEnd === index) {
