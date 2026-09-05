@@ -1,5 +1,6 @@
 import type { ContentBlock } from "document-schema.js";
 import { describe, expect, it } from "vitest";
+import { EpubDiagnosticCodes, type EpubDiagnostic } from "../diagnostics";
 import { buildXml } from "../xml/build";
 import { readXhtmlBody } from "./read";
 import { MONOSPACE_FONT_FAMILY } from "./style-constants";
@@ -8,12 +9,24 @@ import { writeXhtmlBody } from "./write";
 const CONTENT_WIDTH_PT = 451.28;
 
 function write(blocks: ContentBlock[]): string {
+  return writeWithSink(blocks, () => undefined).xml;
+}
+
+function writeWithSink(
+  blocks: ContentBlock[],
+  sink: (d: EpubDiagnostic) => void,
+): { xml: string; diagnostics: EpubDiagnostic[] } {
+  const diagnostics: EpubDiagnostic[] = [];
   const body = writeXhtmlBody(blocks, {
     registerImage: () => "images/img1.png",
-    sink: () => undefined,
+    sink: (d) => {
+      diagnostics.push(d);
+      sink(d);
+    },
     sourceHref: "chapter1.xhtml",
   });
-  return `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">${buildXml([body])}</html>`;
+  const xml = `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">${buildXml([body])}</html>`;
+  return { xml, diagnostics };
 }
 
 function roundTrip(blocks: ContentBlock[]): ContentBlock[] {
@@ -357,6 +370,75 @@ describe("writeXhtmlBody", () => {
       { kind: "constructEnd" },
     ];
     expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  // ExaDev/documents.js#994's round-11 regression: writeRunRangeNodes's own extent lookup used Array.prototype.find, which resolves at most one extent per startRun -- so two point-anchor footnote references sitting back-to-back at the identical run boundary (nothing between them, both startRun === endRun === the same index) silently dropped the second one, with no diagnostic, orphaning its own footnote body. document-schema.js's own RunConstructExtentSchema comment states extents are "data, not brackets" precisely so two of them CAN legitimately share a boundary like this; the writer must collect every extent at an index, not just the first.
+  it("writes and re-reads two point-anchor footnote references sitting at the same run boundary, preserving both", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "See" }, { text: "." }],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 1,
+            endRun: 1,
+          },
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn2" },
+            startRun: 1,
+            endRun: 1,
+          },
+        ],
+      },
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+      },
+      { kind: "paragraph", runs: [{ text: "First note." }] },
+      { kind: "constructEnd" },
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "fn2" },
+      },
+      { kind: "paragraph", runs: [{ text: "Second note." }] },
+      { kind: "constructEnd" },
+    ];
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  // The overlapping-range twin of the point-anchor case immediately above: two NON-point footnote extents sharing the same startRun. Unlike two point anchors (which wrap zero runs each and never conflict), two range extents both claiming the identical starting run cannot both become sibling <a> elements -- <a> is interactive content and HTML forbids nesting one inside another, so at most one can actually wrap the runs. This is the "genuinely unrepresentable overlap" the fix reports through the diagnostic sink rather than silently dropping: the first extent in the input's own constructs array wins and is written normally, the second is reported via CONSTRUCT_UNREPRESENTED, and -- the property that actually matters -- every run's own text still survives in the output either way, since the losing extent's own runs are already covered by the winner's range.
+  it("reports CONSTRUCT_UNREPRESENTED and preserves all run text when two overlapping footnote extents share a startRun", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "See" }, { text: "this" }, { text: "." }],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 0,
+            endRun: 2,
+          },
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn2" },
+            startRun: 0,
+            endRun: 1,
+          },
+        ],
+      },
+    ];
+    const { xml, diagnostics } = writeWithSink(blocks, () => undefined);
+    expect(
+      diagnostics.some(
+        (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      ),
+    ).toBe(true);
+    // No run text is lost: the winning extent (fn1) wraps the first two runs, and the third run -- past fn1's own endRun -- is still written on its own.
+    expect(xml).toContain('href="#fn1"');
+    expect(xml).not.toContain('href="#fn2"');
+    expect(xml).toContain("See");
+    expect(xml).toContain("this");
+    expect(xml).toContain(".");
   });
 
   it("writes an image using the registered manifest href", () => {

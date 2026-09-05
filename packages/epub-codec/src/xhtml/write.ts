@@ -103,7 +103,7 @@ function writeSectionChild(
 ): XmlNode[] {
   if (isHeadingGroupNode(child)) {
     return [
-      writeHeading(child),
+      writeHeading(child, context),
       ...writeSectionChildren(child.children, context),
     ];
   }
@@ -117,12 +117,15 @@ function writeSectionChild(
   return writeLeafBlock(child, context);
 }
 
-function writeHeading(group: HeadingGroupNode): XmlElement {
+function writeHeading(
+  group: HeadingGroupNode,
+  context: XhtmlWriteContext,
+): XmlElement {
   const level = Math.min(6, Math.max(1, group.node.headingLevel));
   return element(
     `h${String(level)}`,
     {},
-    writeRunsToNodes(group.node.runs, group.node.constructs),
+    writeRunsToNodes(group.node.runs, group.node.constructs, context),
   );
 }
 
@@ -138,7 +141,7 @@ function writeList(
       ? { start: String(info.start) }
       : {};
   const liNodes = items.map((item) => {
-    const anchorNodes = writeParagraphAsEmbeddedNodes(item.node);
+    const anchorNodes = writeParagraphAsEmbeddedNodes(item.node, context);
     const nested = writeSectionChildren(item.children, context);
     return element("li", {}, [...anchorNodes, ...nested]);
   });
@@ -179,7 +182,7 @@ function writeLeafBlock(
 ): XmlNode[] {
   switch (block.kind) {
     case "paragraph":
-      return [writeParagraph(block)];
+      return [writeParagraph(block, context)];
     case "table":
       return [writeTable(block, context)];
     case "image":
@@ -221,7 +224,10 @@ function isHorizontalRuleParagraph(paragraph: ContentParagraph): boolean {
   );
 }
 
-function writePreElement(paragraph: ContentParagraph): XmlElement {
+function writePreElement(
+  paragraph: ContentParagraph,
+  context: XhtmlWriteContext,
+): XmlElement {
   const codeAttrs: Record<string, string> =
     paragraph.codeLanguage === undefined
       ? {}
@@ -230,34 +236,40 @@ function writePreElement(paragraph: ContentParagraph): XmlElement {
     element(
       "code",
       codeAttrs,
-      writePreRunsToNodes(paragraph.runs, paragraph.constructs),
+      writePreRunsToNodes(paragraph.runs, paragraph.constructs, context),
     ),
   ]);
 }
 
-function writeParagraph(paragraph: ContentParagraph): XmlElement {
+function writeParagraph(
+  paragraph: ContentParagraph,
+  context: XhtmlWriteContext,
+): XmlElement {
   if (isHorizontalRuleParagraph(paragraph)) {
     return element("hr");
   }
   if (isPreBlockParagraph(paragraph)) {
-    return writePreElement(paragraph);
+    return writePreElement(paragraph, context);
   }
   return element(
     "p",
     {},
-    writeRunsToNodes(paragraph.runs, paragraph.constructs),
+    writeRunsToNodes(paragraph.runs, paragraph.constructs, context),
   );
 }
 
 // The identical horizontal-rule/preformatted/ordinary-runs dispatch writeParagraph itself uses immediately above, reused by writeList to embed a paragraph's own body directly inside a container OTHER than a fresh <p> -- a list item's own anchor content. This dispatch is deliberately NOT used for a heading's own runs (writeHeading writes them directly via writeRunsToNodes): h1-h6 admit only phrasing content per the HTML Standard, and both <pre> and <hr> are flow content, so routing a heading through this dispatcher would let a foreign producer's input (e.g. a heading styled entirely in a monospace font with an embedded line break, tripping isPreBlockParagraph's own legacy heuristic) write a non-conformant <pre>/<hr> nested inside an <hN> -- a shape real EPUB validators reject. "This reader can't produce that shape" is not a safe argument for the writer, since the writer's own job is round-tripping whatever a foreign producer's document actually contains, and a heading's content model already rules the shape out unconditionally regardless of provenance. Before this existed, writeList built its own anchor content via writeRunsToNodes alone, so a <pre> or an <hr> nested directly inside an <li> -- both ordinary, real-world HTML, since <li>'s content model is flow content -- silently lost its own block shape on write despite reading back correctly as a preformatted or horizontal-rule paragraph: the reader's own list-membership decoration (decorateParagraph) applies uniformly to every paragraph shape reached inside a list item, but the writer's list path checked none of the shapes writeParagraph itself already knew how to recognise. The horizontal-rule and preformatted cases each return their own single, already-complete block element (<hr>, <pre><code>...); the ordinary case returns the paragraph's own inline run nodes with no wrapper, since the wrapper differs by call site (a fresh <p> in writeParagraph, nothing extra when embedding directly in <li>).
-function writeParagraphAsEmbeddedNodes(paragraph: ContentParagraph): XmlNode[] {
+function writeParagraphAsEmbeddedNodes(
+  paragraph: ContentParagraph,
+  context: XhtmlWriteContext,
+): XmlNode[] {
   if (isHorizontalRuleParagraph(paragraph)) {
     return [element("hr")];
   }
   if (isPreBlockParagraph(paragraph)) {
-    return [writePreElement(paragraph)];
+    return [writePreElement(paragraph, context)];
   }
-  return writeRunsToNodes(paragraph.runs, paragraph.constructs);
+  return writeRunsToNodes(paragraph.runs, paragraph.constructs, context);
 }
 
 function isFootnoteExtent(
@@ -274,31 +286,51 @@ function isFootnoteExtent(
 // The run-range walk shared by writeRunsToNodes and its <pre> twin writePreRunsToNodes below: both need to walk one paragraph's own runs in order, recognising wherever a footnote-reference construct extent starts and bracketing that extent's own run range in an <a epub:type="noteref">, and both differ only in HOW a run (or an extent's own range of them) becomes XML nodes -- writeRunsToNodes wraps a run in its own formatting elements and splits an embedded newline into a <br/>, while writePreRunsToNodes emits a run's text verbatim with neither -- so the extent-finding loop itself is written once here and parameterised over that one difference, rather than duplicated with the same footnote-matching logic copied into both.
 //
 // The walk bounds itself with `index <= runs.length`, not `<`, and treats a point anchor (document-schema.js's own RunConstructExtent: startRun === endRun, "a point anchor at the boundary before run startRun") as consuming no run at all, for two reasons that share one root cause. First, a point anchor can sit at the boundary past the last real run -- a construct-only paragraph (zero runs, one footnote reference with startRun === endRun === 0) has runs.length === 0, so an index bound of `< runs.length` would never let the loop body run even once, silently dropping the extent along with the empty anchor markup it should still produce. Second, a point anchor sitting strictly inside the run sequence marks a boundary, not a range: renderExtentRange over its own empty rangeRuns correctly emits an empty <a>, but the run actually sitting at that same index is a separate run the anchor does not wrap and must still be rendered in its own right -- treating the point extent as "consuming" that index (as if it were an ordinary non-empty extent advancing past its own endRun) would silently delete that run's text instead of merely failing to wrap it.
+//
+// EVERY extent whose own startRun equals the current index is collected, not just the first found -- document-schema.js's own RunConstructExtentSchema comment states extents are "data, not brackets" and "two entries may cross freely", so more than one footnote reference legitimately sharing a startRun is real, representable input (two point-anchor references back-to-back with nothing between them; a construct-only paragraph that reads two footnote markers in immediate succession) and must not depend on which one a `.find()` happened to see first. Every point anchor collected here (startRun === endRun) is emitted as its own empty <a>, in the order the input's own constructs array carries them, since a point anchor wraps zero runs and therefore never conflicts with a sibling point anchor at the same boundary. A non-point range extent is different: it claims a contiguous run of `runs` for its own <a>, so at most one of them can actually advance the walk from this index -- the first one in the input's own array order is written normally (matching this loop's pre-existing single-extent behaviour when there is no collision at all), and every other range extent found at this same index is a genuine, unrepresentable overlap: two sibling <a> elements cannot both claim the identical starting run without one nesting inside the other (which HTML's own interactive-content rule forbids for <a>), so it is reported through the diagnostic sink -- matching writeSectionConstructGroup's own CONSTRUCT_UNREPRESENTED policy for a block-level construct this writer has no spelling for -- rather than silently vanishing the way `.find()` used to let it. The runs underneath a dropped range extent are never lost: they are still written, either wrapped by whichever range extent won, or (past its endRun) by the ordinary per-run path below.
 function writeRunRangeNodes(
   runs: readonly ContentRun[],
   constructs: readonly RunConstructExtent[] | undefined,
   renderRun: (run: ContentRun) => XmlNode[],
   renderExtentRange: (rangeRuns: readonly ContentRun[]) => XmlNode[],
+  context: XhtmlWriteContext,
 ): XmlNode[] {
   const footnoteExtents = (constructs ?? []).filter(isFootnoteExtent);
   const out: XmlNode[] = [];
   let index = 0;
   while (index <= runs.length) {
-    const extent = footnoteExtents.find((e) => e.startRun === index);
-    if (extent !== undefined) {
-      const rangeRuns = runs.slice(extent.startRun, extent.endRun);
+    const extentsHere = footnoteExtents.filter((e) => e.startRun === index);
+    for (const point of extentsHere.filter((e) => e.endRun === e.startRun)) {
       out.push(
         element(
           "a",
-          { "epub:type": "noteref", href: `#${extent.descriptor.name}` },
+          { "epub:type": "noteref", href: `#${point.descriptor.name}` },
+          renderExtentRange([]),
+        ),
+      );
+    }
+    const [primaryRange, ...unrepresentedRanges] = extentsHere.filter(
+      (e) => e.endRun > e.startRun,
+    );
+    for (const dropped of unrepresentedRanges) {
+      context.sink({
+        code: EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        severity: "info",
+        message: `a footnote reference ('${dropped.descriptor.name}') overlaps another footnote reference starting at the same run and cannot both be represented as sibling <a> elements; its own anchor is dropped, the run text it would have wrapped is written unwrapped`,
+        href: context.sourceHref,
+      });
+    }
+    if (primaryRange !== undefined) {
+      const rangeRuns = runs.slice(primaryRange.startRun, primaryRange.endRun);
+      out.push(
+        element(
+          "a",
+          { "epub:type": "noteref", href: `#${primaryRange.descriptor.name}` },
           renderExtentRange(rangeRuns),
         ),
       );
-      if (extent.endRun > extent.startRun) {
-        index = extent.endRun;
-        continue;
-      }
-      // A point anchor: fall through to render the run sitting at this same index (if any) as its own node, since the anchor's own empty range consumed nothing.
+      index = primaryRange.endRun;
+      continue;
     }
     const run = runs[index];
     if (run !== undefined) {
@@ -312,9 +344,14 @@ function writeRunRangeNodes(
 function writeRunsToNodes(
   runs: readonly ContentRun[],
   constructs: readonly RunConstructExtent[] | undefined,
+  context: XhtmlWriteContext,
 ): XmlNode[] {
-  return writeRunRangeNodes(runs, constructs, writeRunNodes, (rangeRuns) =>
-    rangeRuns.flatMap((run) => writeRunNodes(run)),
+  return writeRunRangeNodes(
+    runs,
+    constructs,
+    writeRunNodes,
+    (rangeRuns) => rangeRuns.flatMap((run) => writeRunNodes(run)),
+    context,
   );
 }
 
@@ -322,12 +359,14 @@ function writeRunsToNodes(
 function writePreRunsToNodes(
   runs: readonly ContentRun[],
   constructs: readonly RunConstructExtent[] | undefined,
+  context: XhtmlWriteContext,
 ): XmlNode[] {
   return writeRunRangeNodes(
     runs,
     constructs,
     (run) => (run.text.length > 0 ? [text(run.text)] : []),
     (rangeRuns) => [text(rangeRuns.map((run) => run.text).join(""))],
+    context,
   );
 }
 
