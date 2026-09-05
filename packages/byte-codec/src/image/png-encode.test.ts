@@ -1,3 +1,4 @@
+import * as zlib from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { crc32 } from "../bytes/crc32";
 import { decodePng } from "./png-decode";
@@ -84,6 +85,56 @@ function rgbImage(width: number, height: number, pixels: readonly number[]) {
     data: new Uint8Array(pixels),
   };
 }
+
+describe("encodePng basic round-trip (truecolour/greyscale)", () => {
+  it("round-trips a gray+alpha image (colour type 4)", () => {
+    const image = {
+      width: 2,
+      height: 1,
+      channels: 1 as const,
+      data: new Uint8Array([10, 200]),
+      alpha: new Uint8Array([255, 0]),
+    };
+    const png = encodePng(image);
+
+    expect(colorTypeOf(png)).toBe(4);
+    const decoded = decodePng(png);
+    expect(decoded.channels).toBe(1);
+    expect(Array.from(decoded.data)).toEqual(Array.from(image.data));
+    expect(Array.from(decoded.alpha!)).toEqual(Array.from(image.alpha));
+  });
+
+  it("round-trips a larger varied image under both filter strategies", () => {
+    const width = 13;
+    const height = 7;
+    const data = new Uint8Array(width * height * 3);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (i * 53 + 7) % 256;
+    }
+    const image = rgbImage(width, height, Array.from(data));
+    for (const filter of ["none", "adaptive"] as const) {
+      const png = encodePng(image, { filter });
+      assertSpecCompliantPng(png);
+      expect(Array.from(decodePng(png).data)).toEqual(Array.from(image.data));
+    }
+  });
+
+  it("emits an IDAT chunk that Node's own zlib.inflateSync (an external decoder, not this repo's own inflate) accepts, for the plain (non-indexed) path", () => {
+    // channels 1 (greyscale) never takes the indexed path, so this exercises writeTruecolorPng's raw-byte-per-sample IDAT layout specifically.
+    const image = {
+      width: 3,
+      height: 2,
+      channels: 1 as const,
+      data: new Uint8Array([1, 2, 3, 4, 5, 6]),
+    };
+    const png = encodePng(image, { filter: "none" });
+    const idat = readChunks(png).get("IDAT");
+    expect(idat).toBeDefined();
+    const inflated = zlib.inflateSync(Buffer.from(idat!));
+    // Each row is a leading filter-type byte (0, 'none') followed by 3 raw grey samples.
+    expect(Array.from(inflated)).toEqual([0, 1, 2, 3, 0, 4, 5, 6]);
+  });
+});
 
 describe("encodePng indexed-colour (colour type 3)", () => {
   it("emits colour type 3 with a real PLTE chunk for a small-palette image, and decodePng reads it back exactly", () => {
@@ -215,5 +266,48 @@ describe("encodePng indexed-colour (colour type 3)", () => {
 
     expect(colorTypeOf(png)).toBe(3);
     expect(Array.from(decodePng(png).data)).toEqual(Array.from(image.data));
+  });
+
+  it("retains partial (non-boolean) per-entry alpha values in tRNS, not just fully-opaque/fully-transparent", () => {
+    const image = {
+      ...rgbImage(2, 1, [10, 20, 30, 40, 50, 60]),
+      alpha: new Uint8Array([128, 200]),
+    };
+    const png = encodePng(image);
+
+    expect(colorTypeOf(png)).toBe(3);
+    assertSpecCompliantPng(png);
+
+    const decoded = decodePng(png);
+    expect(Array.from(decoded.data)).toEqual(Array.from(image.data));
+    expect(Array.from(decoded.alpha!)).toEqual(Array.from(image.alpha));
+  });
+
+  it("emits a real PNG signature and correct IHDR dimensions/colour type for a single-colour (indexed) image", () => {
+    const image = rgbImage(4, 3, new Array(4 * 3 * 3).fill(0)); // one solid colour -> the indexed path
+    const png = encodePng(image);
+    assertSpecCompliantPng(png);
+
+    const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+    expect(view.getUint32(8 + 8)).toBe(4); // IHDR data starts after signature + length/type
+    expect(view.getUint32(8 + 8 + 4)).toBe(3);
+    expect(png[8 + 8 + 9]).toBe(3); // colour type 3: indexed -- a single distinct colour always reduces to a 1-entry palette
+  });
+
+  it("emits an indexed-colour IDAT that Node's own zlib.inflateSync (an external decoder, not this repo's own inflate) accepts, containing genuine one-byte-per-pixel palette indices rather than raw RGB samples", () => {
+    // Row-major: red, green, blue, red, green, blue -- palette assignment order is first-seen, so red/green/blue become indices 0/1/2.
+    const image = rgbImage(
+      3,
+      2,
+      [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255],
+    );
+    const png = encodePng(image, { filter: "none" });
+    expect(colorTypeOf(png)).toBe(3);
+
+    const idat = readChunks(png).get("IDAT");
+    expect(idat).toBeDefined();
+    const inflated = zlib.inflateSync(Buffer.from(idat!));
+    // Each row is a leading filter-type byte (0, 'none') followed by one palette-index byte per pixel -- 4 bytes per row, not the 10 a raw-RGB truecolour row of the same width would need.
+    expect(Array.from(inflated)).toEqual([0, 0, 1, 2, 0, 0, 1, 2]);
   });
 });
