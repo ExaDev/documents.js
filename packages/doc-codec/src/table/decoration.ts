@@ -328,6 +328,11 @@ function shdFill(
   };
 }
 
+/** Reads `.kind` off a ContentCellFill that has already been switched over both of its real members ('solid'/'pattern') -- TypeScript types such a value 'never' at that point, so this takes it through a deliberately widened parameter type rather than an `as` cast. A value that reaches this call anyway (a malformed object bypassing schema validation, or a stale caller shape) still carries a real, inspectable kind at runtime even though the type system says none is left to name. */
+function unrecognizedFillKind(fill: { kind?: unknown }): string {
+  return String(fill.kind);
+}
+
 /** One Shd's own ten bytes, the inverse of readShd: a 'solid' fill states cvFore automatic and the fill's own colour as cvBack under ipatAuto, exactly how LibreOffice 26.2.5.2 writes a plain cell fill (confirmed against its own `.doc` output: a #ffff00 cell came back as cvFore cvAuto, cvBack `ff ff 00 00`, ipat 0x0000) -- writing ipatSolid instead would be an equally spec-conformant alternative Shd never needed, since the two patterns are read identically apart from which COLORREF they draw from. A 'pattern' fill states its own foreground/background colours (automatic where the fill left one unstated) under the Ipat value PATTERN_TYPE_TO_IPAT names for it, throwing DocUnsupportedError for a SpreadsheetML-only pattern type ([MS-DOC]'s Ipat vocabulary has no member for one -- see PATTERN_TYPE_TO_IPAT's own note) rather than silently writing the wrong pattern or dropping it. An absent fill writes ShdAuto -- the all-automatic value [MS-DOC] 2.9.247 defines as "no shading is applied" -- so an undecorated cell inside a row that has decorated ones still states its own lack of shading rather than inheriting a neighbour's. */
 export function writeShd(fill: ContentCellFill | undefined): number[] {
   if (fill === undefined) {
@@ -338,30 +343,38 @@ export function writeShd(fill: ContentCellFill | undefined): number[] {
       (IPAT_AUTO >> 8) & 0xff,
     ];
   }
-  if (fill.kind === "solid") {
-    return [
-      ...autoColorRefBytes(),
-      ...colorRefBytes(fill.color),
-      IPAT_AUTO & 0xff,
-      (IPAT_AUTO >> 8) & 0xff,
-    ];
+  switch (fill.kind) {
+    case "solid":
+      return [
+        ...autoColorRefBytes(),
+        ...colorRefBytes(fill.color),
+        IPAT_AUTO & 0xff,
+        (IPAT_AUTO >> 8) & 0xff,
+      ];
+    case "pattern": {
+      const ipat = PATTERN_TYPE_TO_IPAT.get(fill.patternType);
+      if (ipat === undefined) {
+        throw new DocUnsupportedError(
+          `doc-codec cannot write a '${fill.patternType}' cell fill: [MS-DOC]'s own Ipat enumeration has no member for it, that pattern name belonging only to SpreadsheetML's ST_PatternType half of ContentCellPatternType's shared vocabulary`,
+        );
+      }
+      return [
+        ...(fill.foregroundColor === undefined
+          ? autoColorRefBytes()
+          : colorRefBytes(fill.foregroundColor)),
+        ...(fill.backgroundColor === undefined
+          ? autoColorRefBytes()
+          : colorRefBytes(fill.backgroundColor)),
+        ipat & 0xff,
+        (ipat >> 8) & 0xff,
+      ];
+    }
+    default:
+      // Reporting the actual kind beats an if/else's implicit "anything that isn't 'solid' must be 'pattern'", which would silently mistreat an undefined kind as a real pattern lookup instead of naming the actual cause.
+      throw new DocUnsupportedError(
+        `doc-codec cannot write a cell fill with kind '${unrecognizedFillKind(fill)}': ContentCellFillSchema's discriminated union only defines 'solid' and 'pattern'`,
+      );
   }
-  const ipat = PATTERN_TYPE_TO_IPAT.get(fill.patternType);
-  if (ipat === undefined) {
-    throw new DocUnsupportedError(
-      `doc-codec cannot write a '${fill.patternType}' cell fill: [MS-DOC]'s own Ipat enumeration has no member for it, that pattern name belonging only to SpreadsheetML's ST_PatternType half of ContentCellPatternType's shared vocabulary`,
-    );
-  }
-  return [
-    ...(fill.foregroundColor === undefined
-      ? autoColorRefBytes()
-      : colorRefBytes(fill.foregroundColor)),
-    ...(fill.backgroundColor === undefined
-      ? autoColorRefBytes()
-      : colorRefBytes(fill.backgroundColor)),
-    ipat & 0xff,
-    (ipat >> 8) & 0xff,
-  ];
 }
 
 /** Shd80Nil, [MS-DOC] 2.9.248: icoFore 0x1F, icoBack 0x1F, ipat 0x3F -- every bit set, "specifies that no shading is applied", and explicitly exempt from the Ico and Ipat bounds the fields otherwise carry. */
