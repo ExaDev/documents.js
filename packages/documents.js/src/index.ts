@@ -571,7 +571,7 @@ export {
   MarkdownRenderDiagnosticCodes,
   renderContentDocumentToMarkdown,
 } from "./markdown/render";
-// A formula travels inside a ContentDocument now (document-schema.js's own 'formula' variant), not alongside one -- these are the small helpers for building and reading that shape: the 'formula'-kind envelope, the embedded-object block an odt/odp reader produces for an inline formula, the narrowing back out of such a block, the plain-text stand-in for a consumer with no MathML rendering of its own, and the shared cross-document-kind formula walk every formula-reading consumer in the family uses.
+// A formula travels inside a ContentDocument now (document-schema.js's own 'formula' variant), not alongside one -- these are the small helpers for building and reading that shape: the 'formula'-kind envelope, the embedded-object block an odt/odp reader produces for an inline formula, the narrowing back out of such a block, the plain-text stand-in for a consumer with no MathML rendering of its own, and collectDocumentFormulas, the cross-document-kind formula walk this package's own coherence lint (src/latex/lint.ts) and document-mcp's compute_formula tool both call. document-compute.js's own harness/corpus.ts is a second, independent, real formula-reading walk elsewhere in the family -- not a third caller of this one, since document-compute.js sits below documents.js in the dependency graph and cannot import it, so it derives its own narrower wordprocessing-only traversal instead (see this function's own comment in ./model/formula for the full explanation).
 export {
   buildFormulaBlock,
   collectDocumentFormulas,
