@@ -179,6 +179,63 @@ describe("lists", () => {
     const blocks = read(body('<ol start="3"><li>a</li></ol>'));
     expect(blocks[0]).toMatchObject({ list: { numId: "epub1:ordered@3" } });
   });
+
+  it("recovers a <ul> nested directly as a sibling of <li> rather than inside one, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul><li>a</li><ul><li>b</li></ul></ul>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:bullet", level: 1, itemId: "item2" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("recovers a stray <img> sitting directly inside a <ul> as a continuation of the preceding <li>", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body('<ul><li>a</li><img src="a.png" alt="ulpic"/></ul>'),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "ulpic" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-unresolved" }),
+    );
+  });
+
+  it("drops content that sits before the very first <li>, unchanged from prior behaviour", () => {
+    const blocks = read(body("<ul>stray<li>a</li></ul>"));
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ]);
+  });
 });
 
 describe("definition lists", () => {
@@ -226,6 +283,30 @@ describe("definition lists", () => {
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
+  });
+
+  it("recurses into a <div> wrapping a dt/dd pair, a legal HTML5 per-entry styling hook", () => {
+    const blocks = read(
+      body("<dl><div><dt>Term</dt><dd>Definition</dd></div></dl>"),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
+    ]);
+  });
+
+  it("recurses into several <div>-wrapped groups in sequence", () => {
+    const blocks = read(
+      body(
+        "<dl><div><dt>A</dt><dd>a</dd></div><div><dt>B</dt><dd>b</dd></div></dl>",
+      ),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "A" }] },
+      { kind: "paragraph", runs: [{ text: "a" }], indentLeftPt: 36 },
+      { kind: "paragraph", runs: [{ text: "B" }] },
+      { kind: "paragraph", runs: [{ text: "b" }], indentLeftPt: 36 },
+    ]);
   });
 });
 
@@ -323,6 +404,36 @@ describe("tables", () => {
       expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
   });
+
+  it("reads a <caption> as a paragraph before the table, with a diagnostic, instead of dropping it", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        '<table><caption>Cap <img src="a.png" alt="cappic"/></caption><tr><td>cell</td></tr></table>',
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Cap " }, { text: "cappic" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "cell" }] }] },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-caption-unsupported" }),
+    );
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
+    );
+  });
 });
 
 describe("blockquote", () => {
@@ -378,6 +489,37 @@ describe("pre / code blocks", () => {
         codeLanguage: "js",
       },
     ]);
+  });
+
+  it("splices an <img>'s alt text into the extracted text with a diagnostic, instead of vanishing", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body('<pre>code <img src="a.png" alt="pic"/> more</pre>'),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "code pic more", fontFamily: "Courier New" }],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-pre-unsupported" }),
+    );
+  });
+
+  it("reaches an <img> nested a level deeper, inside <code>", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body('<pre><code>x<img src="a.png"/>y</code></pre>'),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "xy", fontFamily: "Courier New" }] },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-pre-unsupported" }),
+    );
   });
 });
 
