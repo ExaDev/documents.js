@@ -29,7 +29,7 @@ import {
 //
 // Dedup itself needs no bespoke merge logic: identical content yields an identical hash yields an identical id, so the projection keeps one node per id and one edge per (from, to, kind, orderKey, path) tuple, which is exactly what a graph store's native upsert (Neo4j MERGE, an RDF store keyed by the hash) would do with this output. An identical whole subtree collapses to one shared subtree with only the seam edges from each document's own ancestors being document-specific; a single shared leaf inside otherwise-different structure shares only that leaf. Table entries that nothing references are still emitted as nodes -- they are document content, reachable by kind queries.
 //
-// ExaDev/documents.js#660 hardens this projection for use as a real graph-native store rather than a one-shot export: (1) CONTAINS/STYLED_BY/DEFINED_BY/PROPERTY edges carry a fractional orderKey instead of a dense integer, so a later insertion touches one edge, never a renumber (order-keys.ts, re-exported as `orderKeys`); (2) `contentHashV1` names this module's own node-identity recipe as a versioned contract, independent of hash.ts's own leafContentHash contract even though they share an implementation today; (3) no content node's id is ever caller-supplied -- see the doc comment on DocumentProjection; (4) a heading or list anchor, and a bare paragraph leaf, emit one STYLED_BY edge per entry in their resolved style chain rather than only their own direct ref, so a consumer can walk the whole resolution chain from edges alone; (5) `walkPropertyGraph` is a shared traversal with a cycle guard that activates automatically whenever a non-CONTAINS edge kind is in play; (6) `insertEdge` refuses to attach a CONTAINS edge that would close a cycle back to one of `to`'s own descendants, thrown as `ContainsCycleError` -- because an insertEdge-attached CONTAINS edge, unlike one minted by projectDocumentGraph's tree walk or insertNode's own `children` list, is never required to fold the target's hash into the source's (insertEdge's own comment explains why), the "a path can never lead back to its own ancestor" guarantee walkPropertyGraph's CONTAINS-only fast path relies on holds only because insertEdge enforces it explicitly, not because every CONTAINS edge remains hash-derived.
+// ExaDev/documents.js#660 hardens this projection for use as a real graph-native store rather than a one-shot export: (1) CONTAINS/STYLED_BY/DEFINED_BY/PROPERTY edges carry a fractional orderKey instead of a dense integer, so a later insertion touches one edge, never a renumber (order-keys.ts, re-exported as `orderKeys`); (2) `contentHashV1` names this module's own node-identity recipe as a versioned contract, independent of hash.ts's own leafContentHash contract even though they share an implementation today; (3) no content node's id is ever caller-supplied -- see the doc comment on DocumentProjection; (4) a heading or list anchor, and a bare paragraph leaf, emit one STYLED_BY edge per entry in their resolved style chain rather than only their own direct ref, so a consumer can walk the whole resolution chain from edges alone; (5) `walkPropertyGraph` is a shared traversal with a cycle guard that activates automatically whenever a non-CONTAINS edge kind is in play; (6) every CONTAINS edge this module ever attaches onto an already-existing `PropertyGraph` -- `insertEdge`'s own attachment, and `insertNode`'s fresh-mint children-wiring alike -- passes through one shared, edge-only reachability check (`containsWouldReach`) before it is appended, and is refused as `ContainsCycleError` when `to` already reaches `from`. This check deliberately never consults `graph.nodes`: an id can be the target of an `insertEdge` call before any node with that id exists (dangling edges to a not-yet-minted id are allowed, matching `walkPropertyGraph`'s own tolerance of an edge naming an absent node), and a *later* `insertNode` call can mint exactly that id -- folding a child's hash into a freshly-minted parent's own hash prevents the parent from being ITS OWN pre-existing descendant, but says nothing about an edge some earlier call already pointed at the parent's not-yet-computed id, which is exactly the shape that needs an edge-only, node-presence-independent search to catch. The "a path can never lead back to its own ancestor" guarantee `walkPropertyGraph`'s CONTAINS-only fast path relies on holds because this one check gates every CONTAINS attachment in the module, not because hash-folding alone makes every CONTAINS edge acyclic.
 
 export type GraphEdgeKind =
   "CONTAINS" | "STYLED_BY" | "DEFINED_BY" | "PROPERTY";
@@ -599,7 +599,7 @@ export interface WalkPropertyGraphOptions {
 
 // A shared pre-order depth-first walker over a PropertyGraph (ExaDev/documents.js#660), so every consumer of this projection's output -- an outline renderer walking CONTAINS, a style-chain reader walking STYLED_BY, a generic graph browser walking everything -- shares one traversal and one cycle policy instead of each hand-rolling its own. At each node, outgoing edges (edge.from === node.id) are filtered to `options.kinds` when given, else every kind present, and visited sorted ascending by orderKey -- which is what makes a CONTAINS walk reproduce document order and a STYLED_BY walk reproduce the resolution chain in order (#660's whole point for ordering keys).
 //
-// The cycle guard is derived from the kinds being traversed, never separately configured: CONTAINS alone needs no guard at all -- every CONTAINS edge minted directly by a node's own construction (projectDocumentGraph's tree walk, insertNode's own `children` list) points from a node whose hash already covers the target's hash, so a path built purely from those edges can never lead back to its own ancestor. A CONTAINS edge insertEdge attaches onto an already-minted node carries no such hash relationship -- that is the whole point of never recomputing an ancestor's id on attachment (see the note on that below) -- so insertEdge itself refuses any CONTAINS attachment that would close a cycle back to one of `to`'s own descendants (ContainsCycleError); the acyclicity this fast path relies on is upheld by that refusal, not by every CONTAINS edge remaining hash-derived. The on-stack set is not even allocated for a CONTAINS-only walk, purely as an optimisation that refusal keeps safe, never a behavioural branch. Traversing any other kind (including the default "every kind present", since STYLED_BY/DEFINED_BY/PROPERTY edges carry no acyclicity guarantee of their own -- a hand-built or malicious graph can point them anywhere) maintains a Set of the current DFS path's node ids; descending into a neighbour already on that path is skipped entirely (no WalkedNode emitted, no recursion), which suppresses a true cycle while still visiting a node reached via two different, non-nested paths once per path, because neither occurrence is an ancestor of the other -- exactly the same multi-parent sharing a CONTAINS walk already relies on.
+// The cycle guard is derived from the kinds being traversed, never separately configured: CONTAINS alone needs no guard at all -- every CONTAINS edge minted directly by projectDocumentGraph's own tree walk points from a node whose hash already covers the target's hash, so a path built purely from those edges can never lead back to its own ancestor. A CONTAINS edge insertEdge or insertNode attaches onto an already-existing PropertyGraph carries no such hash relationship by itself -- an id can be the target of an insertEdge call before any node with that id exists, and a later insertNode call can mint exactly that id, so hash-folding alone cannot rule out a cycle closing across two calls -- so both of those attachment sites refuse any CONTAINS attachment that would close a cycle back to one of `to`'s own descendants (ContainsCycleError), via one shared, edge-only reachability check that works correctly whether or not the endpoints are nodes yet (see the note above ContainsCycleError for why node presence cannot be the test). The acyclicity this fast path relies on is upheld by that shared refusal being the ONLY way a CONTAINS edge ever enters a graph outside of projectDocumentGraph's own tree walk, not by every CONTAINS edge remaining hash-derived. The on-stack set is not even allocated for a CONTAINS-only walk, purely as an optimisation that refusal keeps safe, never a behavioural branch. Traversing any other kind (including the default "every kind present", since STYLED_BY/DEFINED_BY/PROPERTY edges carry no acyclicity guarantee of their own -- a hand-built or malicious graph can point them anywhere) maintains a Set of the current DFS path's node ids; descending into a neighbour already on that path is skipped entirely (no WalkedNode emitted, no recursion), which suppresses a true cycle while still visiting a node reached via two different, non-nested paths once per path, because neither occurrence is an ancestor of the other -- exactly the same multi-parent sharing a CONTAINS walk already relies on.
 export function walkPropertyGraph(
   graph: GraphLike,
   startId: string,
@@ -648,6 +648,8 @@ export function walkPropertyGraph(
 // That recipe covers minting the new version and attaching it, but not detaching the old one: insertEdge-ing the new id adds a second edge from the same parent alongside the old edge, it does not remove or repoint the old edge, so a caller who wants the new version to REPLACE the old one at that position -- not sit beside it -- has no primitive here for the second half. There is no removeEdge/replaceEdge in this module (ExaDev/documents.js#1004, filed as this gap): the parent ends up with both the old and the new version attached, which reads identically to two deliberately-added siblings rather than one version replacing another. Free version history for the ORPHANED node (nothing referencing the old id) is unaffected by this gap and remains exactly as described above; the gap is specifically the still-live edge from an ANCESTOR that a caller intending a true in-place replacement has no way to remove.
 //
 // Neither function recomputes an ANCESTOR's id when a new child is attached beneath it: a compound node's id was folded from whatever children list it was minted with (the Merkle-DAG rule projectGroup applies), and attaching one more CONTAINS edge to an already-minted node does not retroactively change that node's own id, exactly as adding a blob to a git tree does not change a tree object already written to the object store in place -- git mints a new tree object instead, and a ref is what moves to point at it. A caller wanting an ancestor's id to reflect a new descendant re-mints that ancestor with insertNode (its own unchanged `properties` plus the updated `children` list) and re-wires whichever of ITS OWN referrers should see the new version, one level at a time, up to (never including) the document root -- whose id is caller-assigned and content-independent for exactly this reason, so a root-level insertion needs no cascade at all: mint the new subtree, then insertEdge it under the root id directly.
+//
+// insertNode's own children-wiring is NOT exempt from the CONTAINS-cycle check just because it folds each child's id into the freshly-minted parent's own hash: that folding proves a fresh id was never equal to any id minted before it existed, which is not the same claim as "no edge anywhere in the graph already points at this id." insertEdge tolerates attaching an edge to a `to` that names no node yet (walkPropertyGraph's own tolerance of an edge naming an absent node is the read-side mirror of this), so a caller can `insertEdge` a forward edge onto an id it has computed but not yet minted, then `insertNode` that exact id with a `children` list that points back through that edge -- closing a cycle no amount of hash-folding could have anticipated, because the id did not exist when the first edge was attached. insertNode therefore runs the identical edge-only cycle check insertEdge runs, once per child, before appending that child's CONTAINS edge (throwing ContainsCycleError just as insertEdge does), rather than trusting hash-folding alone to keep its own children-wiring acyclic.
 
 // One new content node's input: `kind` is the graph vocabulary word for what the node is -- this module's own mint sites decide it four different ways (a payload's own discriminant for a leaf/group, a fixed word for a table entry or an extracted value), so the write side asks for it explicitly rather than guessing a single recipe -- `properties` is the node's own content, and `children`, when given, names the ids of already-minted nodes this node is to CONTAIN, in document order. `children` folds into the id's hash input exactly as projectGroup folds its own children's ids into `hashInput`, but never into the face: children live only as the CONTAINS edges insertNode also emits alongside the node, never as a node property, matching every group node projectDocumentGraph itself mints. Omitting `children` entirely (not an empty array) is what a leaf-shaped node needs: an empty array is itself content (a group that folds `children: []` into its hash, and is entitled to gain CONTAINS children later without changing that already-minted id being nonsensical for identity purposes), whereas omission means "this node's identity has never depended on a children list at all," exactly how projectLeaf's own hash input carries no `children` key.
 export interface InsertNodeContent {
@@ -697,7 +699,7 @@ function reconcileChildren(
   );
 }
 
-// Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. `kind` is deliberately excluded from the hash INPUT itself, the same reason mintValueNode's own `kind: 'value'` and entryNodeFace's graph-vocabulary kind are never folded into their hashes either: it is the graph vocabulary's word for what a node IS, asked for explicitly because this module's own mint sites decide it four different ways, not a fact about the node's content that identity should hinge on. When `children` is given, this also emits one CONTAINS edge per child at `orderKeys.orderKeyForIndex(index)`, the WIDE, evenly spaced keys a fresh mint wants (exactly as projectGroup mints them for a freshly walked TreeGroup), leaving room for a later insertEdge to bisect between them without a rebalance. Content identical to a node already present in `graph` dedupes to the existing node rather than minting a duplicate (addNode's own upsert-once rule) -- checked against the existing node's own `kind` first (NodeKindMismatchError above covers a genuine collision across kinds), then reconciled against its own CONTAINS edges (reconcileChildren above) rather than assumed to already match, since two differently spelled calls can hash identically while only one of them declared `children` at all.
+// Mints one new node with the identical discipline as every read-side mint site: `id` is computed from content alone via contentHashV1 and spread into the face AFTER the content (`{ ...properties, id, kind }`), so a `properties` field named `id` or `kind` is shadowed unconditionally, and `InsertNodeContent` carries no `id` field at all -- there is no parameter a caller-supplied id could occupy. `kind` is deliberately excluded from the hash INPUT itself, the same reason mintValueNode's own `kind: 'value'` and entryNodeFace's graph-vocabulary kind are never folded into their hashes either: it is the graph vocabulary's word for what a node IS, asked for explicitly because this module's own mint sites decide it four different ways, not a fact about the node's content that identity should hinge on. When `children` is given, this also emits one CONTAINS edge per child at `orderKeys.orderKeyForIndex(index)`, the WIDE, evenly spaced keys a fresh mint wants (exactly as projectGroup mints them for a freshly walked TreeGroup), leaving room for a later insertEdge to bisect between them without a rebalance -- but, exactly like insertEdge's own CONTAINS attachment, each of those child edges is checked with `assertNoContainsCycle` before it is appended, and throws `ContainsCycleError` when `to` (the child) already reaches `from` (this node's own about-to-be-minted id): folding the child's hash into this node's hash proves this id could never have existed before now, but says nothing about an edge some EARLIER call already pointed at this not-yet-existing id (insertEdge tolerates exactly that), so the check cannot be skipped just because this is a fresh mint. Content identical to a node already present in `graph` dedupes to the existing node rather than minting a duplicate (addNode's own upsert-once rule) -- checked against the existing node's own `kind` first (NodeKindMismatchError above covers a genuine collision across kinds), then reconciled against its own CONTAINS edges (reconcileChildren above) rather than assumed to already match, since two differently spelled calls can hash identically while only one of them declared `children` at all.
 export function insertNode(
   graph: PropertyGraph,
   content: InsertNodeContent,
@@ -715,22 +717,26 @@ export function insertNode(
     return { graph: reconcileChildren(graph, id, content.children), id };
   }
   const node: GraphNode = { ...content.properties, id, kind: content.kind };
-  const childEdges: readonly GraphEdge[] =
-    content.children === undefined
-      ? []
-      : content.children.map((childId, index) => ({
-          from: id,
-          to: childId,
-          kind: "CONTAINS",
-          orderKey: orderKeys.orderKeyForIndex(index),
-        }));
-  return {
-    graph: {
-      nodes: [...graph.nodes, node],
-      edges: [...graph.edges, ...childEdges],
-    },
-    id,
-  };
+  if (content.children === undefined) {
+    return {
+      graph: { nodes: [...graph.nodes, node], edges: graph.edges },
+      id,
+    };
+  }
+  let edges = graph.edges;
+  content.children.forEach((childId, index) => {
+    assertNoContainsCycle(edges, id, childId);
+    edges = [
+      ...edges,
+      {
+        from: id,
+        to: childId,
+        kind: "CONTAINS",
+        orderKey: orderKeys.orderKeyForIndex(index),
+      },
+    ];
+  });
+  return { graph: { nodes: [...graph.nodes, node], edges }, id };
 }
 
 // Where a new edge lands among an existing sibling list: `start`/`end` are the two boundaries an empty or non-empty list needs, `before`/`after` name an existing sibling to land relative to. A named sibling not found among `from`'s existing edges of the requested `kind` is a genuine caller error -- there is no position to compute otherwise -- and is refused loudly, as UnknownSiblingError, rather than silently falling back to an end position, in this module's own "refuses a ref the table does not carry" tradition.
@@ -871,7 +877,7 @@ function rebalancedInsert(
   return { nodes: graph.nodes, edges: [...kept, ...rebuilt] };
 }
 
-// Thrown by insertEdge when attaching a CONTAINS edge would close a cycle: `to` already reaches `from` via existing CONTAINS edges (most directly, re-parenting a node underneath its own descendant in one call), so attaching `from -> to` would make `from` its own transitive ancestor. insertEdge is the only place this module ever attaches a CONTAINS edge without folding `to`'s hash into `from`'s -- projectDocumentGraph's tree walk and insertNode's own `children` list both fold it in, which is what makes THEIR CONTAINS edges provably acyclic by construction (walkPropertyGraph's own comment above) -- so insertEdge is also the only place a cycle could ever enter a CONTAINS graph built through this module's own functions, and the only place that can refuse one before it exists. Refused here, at the point of the actual mistake, rather than by adding a guard to every walkPropertyGraph CONTAINS-only traversal for a hazard only this one write path can ever introduce. A named class, in the OrderKeyBudgetExhaustedError/UnknownSiblingError family convention, carrying the two ids that produced the refusal as structured fields.
+// Thrown when attaching a CONTAINS edge would close a cycle: `to` already reaches `from` via existing CONTAINS edges (most directly, re-parenting a node underneath its own descendant in one call), so attaching `from -> to` would make `from` its own transitive ancestor. Both insertEdge's own attachment and insertNode's fresh-mint children-wiring throw this, via the identical `assertNoContainsCycle` check just below -- the ONE place in this module a CONTAINS edge is ever appended onto an already-existing `PropertyGraph` without going through that check is nowhere: projectDocumentGraph's own tree walk is the only other CONTAINS source, and it is acyclic by a different, structural argument (every child's id is already known before its parent's id is computed, so a parent can never be a descendant of a child it has not yet been assigned an id relative to). A named class, in the OrderKeyBudgetExhaustedError/UnknownSiblingError family convention, carrying the two ids that produced the refusal as structured fields.
 export class ContainsCycleError extends Error {
   readonly from: string;
   readonly to: string;
@@ -886,6 +892,42 @@ export class ContainsCycleError extends Error {
   }
 }
 
+// Whether `to` already reaches `from` by following CONTAINS edges alone -- the reachability test both insertEdge and insertNode's fresh-mint children-wiring run before ever appending a CONTAINS edge. Deliberately edge-only: it builds its own from->to[] adjacency straight out of `edges` and never once consults a node list, which is the actual fix for the hazard a node-lookup-based check (walkPropertyGraph's own `nodesById.get` short-circuit) cannot close -- insertEdge tolerates attaching an edge to a `to` that names no node in `graph.nodes` yet (walkPropertyGraph's own "an edge naming a node absent from this graph is not this walker's concern to diagnose" is the read-side mirror of that same tolerance), so a caller can attach a forward edge onto an id it has merely computed, then a LATER insertNode call can mint exactly that id with a `children` list pointing back through it -- closing a cycle that never had a node to look up at the moment the first edge was attached. Searching from `to` and stopping the instant `from` is found (rather than walking outward from `from` and collecting everything reachable, or building the whole reachable set before checking membership) keeps the common, no-cycle case cheap: most attachments touch a small, recently-visited neighbourhood, not the whole graph.
+function containsWouldReach(
+  edges: readonly GraphEdge[],
+  from: string,
+  to: string,
+): boolean {
+  const childrenOf = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (edge.kind !== "CONTAINS") continue;
+    const bucket = childrenOf.get(edge.from);
+    if (bucket === undefined) childrenOf.set(edge.from, [edge.to]);
+    else bucket.push(edge.to);
+  }
+  const stack = [to];
+  const seen = new Set<string>();
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current === from) return true;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    for (const next of childrenOf.get(current) ?? []) stack.push(next);
+  }
+  return false;
+}
+
+// Throws ContainsCycleError when containsWouldReach says attaching CONTAINS `from -> to` would close a cycle; a plain pass-through otherwise. The single choke point insertEdge and insertNode both call before appending a CONTAINS edge, so neither can drift from the other's notion of what counts as a cycle.
+function assertNoContainsCycle(
+  edges: readonly GraphEdge[],
+  from: string,
+  to: string,
+): void {
+  if (containsWouldReach(edges, from, to)) {
+    throw new ContainsCycleError(from, to);
+  }
+}
+
 // Attaches an already-minted node (from insertNode, or any other node already present in `graph`) into `graph` as one new edge, at a sibling position among `from`'s existing edges of the same `kind` -- the "inserting a sibling touches only that one new CONTAINS edge's orderKey" edit this module's own top comment names, extended to a full rebalance on the rare occasions bisection alone cannot express the requested position. Defaults to a CONTAINS edge appended after `from`'s existing children, the common "add one more child" case; pass `kind`/`position`/`path` for a STYLED_BY/DEFINED_BY/PROPERTY edge or a specific sibling position. Never mutates `graph` -- returns a new PropertyGraph, the same pure-function discipline insertNode follows.
 export function insertEdge(
   graph: PropertyGraph,
@@ -894,14 +936,9 @@ export function insertEdge(
   options: InsertEdgeOptions = {},
 ): PropertyGraph {
   const kind = options.kind ?? "CONTAINS";
-  // A CONTAINS edge is the one kind this function ever attaches without a hash relationship backing its acyclicity (ContainsCycleError's own comment explains why), so it is the one kind checked here: does `to` already reach `from`, in which case the new edge would close a cycle back to `from` itself.
+  // A CONTAINS edge is the one kind this function ever attaches without a hash relationship backing its acyclicity on its own (ContainsCycleError's own comment explains why hash-folding is not enough), so it is the one kind checked here, before position resolution even runs.
   if (kind === "CONTAINS") {
-    const reachableFromTo = walkPropertyGraph(graph, to, {
-      kinds: ["CONTAINS"],
-    });
-    if (reachableFromTo.some((walked) => walked.node.id === from)) {
-      throw new ContainsCycleError(from, to);
-    }
+    assertNoContainsCycle(graph.edges, from, to);
   }
   const position = options.position ?? { at: "end" };
   const siblings = graph.edges
