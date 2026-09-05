@@ -12,8 +12,9 @@ const BIN_PATH = fileURLToPath(new URL('../dist/bin.js', import.meta.url));
 // The one real .odb fixture this repo checks in (src/test-support/odb-fixture.ts's own source) -- referenced by path directly here rather than through that helper, since this file deliberately stays outside tsconfig's "src" program (it tests build output, matching document-cli's identical exclusion) and so cannot import a .ts module.
 const FORM_AND_REPORT_ODB_PATH = fileURLToPath(new URL('../src/test-support/fixtures/form-and-report.odb', import.meta.url));
 
-// Every tool src/server.ts's createServer() actually registers, across all ten tool modules -- kept as an explicit sorted list (rather than merely asserting a count) so a renamed or dropped tool fails this test by name, not just by a number changing.
+// Every tool src/server.ts's createServer() actually registers, across all eleven tool modules -- kept as an explicit sorted list (rather than merely asserting a count) so a renamed or dropped tool fails this test by name, not just by a number changing.
 const EXPECTED_TOOL_NAMES = [
+  'compute_formula',
   'convert_document',
   'describe_font_file',
   'docx_extras',
