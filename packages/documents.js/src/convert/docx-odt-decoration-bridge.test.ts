@@ -200,4 +200,31 @@ describe("docx/odt decoration bridge", () => {
     const row = table?.kind === "table" ? table.rows[0] : undefined;
     expect(row?.heightPt).toBeCloseTo(28, 5);
   });
+
+  // The reverse direction this file's own row.heightPt test above only proved half of: docx -> odt now genuinely carries a row height through, via OdtTableRow's own heightPt setter (src/edit/odt/table.ts) -- previously dropped silently, since the ODT editor modelled no row-level property at all regardless of what the (then still gapped) docx reader produced.
+  it("carries row height through docx -> odt -> docx", () => {
+    const editor = createDocx();
+    const table = editor.body.appendTable({ rows: 1, columns: 1 });
+    table.rows()[0]!.heightPt = 40;
+    table.cell(0, 0).appendParagraph({ text: "tall" });
+    const docxBytes = editor.toBytes();
+
+    const roundTripped = docxContentOf(odtToDocx(docxToOdt(docxBytes)));
+    const table2 = firstTable(roundTripped);
+
+    expect(table2.rows[0]?.heightPt).toBeCloseTo(40, 5);
+  });
+
+  it("carries row height through odt -> docx -> odt", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 1 });
+    table.rows()[0]!.heightPt = 45;
+    table.cell(0, 0).appendParagraph({ text: "tall" });
+    const odtBytes = editor.toBytes();
+
+    const roundTripped = odtContentOf(docxToOdt(odtToDocx(odtBytes)));
+    const table2 = firstTable(roundTripped);
+
+    expect(table2.rows[0]?.heightPt).toBeCloseTo(45, 5);
+  });
 });
