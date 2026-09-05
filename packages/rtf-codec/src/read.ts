@@ -1227,6 +1227,11 @@ function toggleValue(param: number | undefined): boolean {
   return param === undefined || param !== 0;
 }
 
+// \ffownhelpN and \ffprotN are classified as "Value" control words in RTF 1.9.1's own control-word-type table ("Change Formatting Property", Appendix B), not "Toggle" words like \b/\i -- a Value word's own bare (unparameterised) form defaults to 0, the opposite of toggleValue's "absent parameter means on" rule above. RTF's own Form Fields table states the identical fact for this specific pair without ever describing a bare-word meaning of its own: "\ffownhelpN: 1 if there is associated help text, 0 otherwise" and "\ffprotN: 1 if this field is protected, 0 otherwise" name only an explicit 0/1 parameter, unlike \b's own entry, which states outright what the bare word alone means ("turns on bold"). A bare \ffownhelp or \ffprot therefore reads as 0/false here, not true.
+function formFieldValueBit(param: number | undefined): boolean {
+  return param !== undefined && param !== 0;
+}
+
 function readRtfDetail(
   input: Uint8Array,
   options: ReadRtfOptions,
@@ -1645,7 +1650,7 @@ function applyPictureControlWord(
   }
 }
 
-// RTF 1.5's own Form Fields table states \ffresN/\ffdefresN only in list-field terms ("Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries" / "Default entry for list field"), but \ffres/\ffdefres are RTF's own serialisation of the binary FFDataBits structure [MS-DOC] 2.9.79 defines, and that structure spells out a checkbox's own iRes meaning explicitly: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined, treated as unchecked). Both control words are simply captured here regardless of the field's iType; formFieldContentControl in constructs.ts is where the checkbox-specific sentinel handling and the dropdown's own zero-based-index reading of the identical \ffres are actually decided. \ffprot ("1 if this field is protected, 0 otherwise" -- RTF 1.9.1's own Form Fields table, mirroring [MS-DOC] 2.9.79 FFDataBits.fProt) and \ffownhelp ([MS-DOC] 2.9.79 FFDataBits.fOwnHelp) are both read with the same toggle convention every other bare RTF boolean control word uses: a present-but-unparameterised control word means true, matching toggleValue's own "absent parameter means on" rule for `\b`/`\i` and the rest -- this reader tolerates that spelling on the way in regardless of what this package's own writer chooses to emit.
+// RTF 1.5's own Form Fields table states \ffresN/\ffdefresN only in list-field terms ("Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries" / "Default entry for list field"), but \ffres/\ffdefres are RTF's own serialisation of the binary FFDataBits structure [MS-DOC] 2.9.79 defines, and that structure spells out a checkbox's own iRes meaning explicitly: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined, treated as unchecked). Both control words are simply captured here regardless of the field's iType; formFieldContentControl in constructs.ts is where the checkbox-specific sentinel handling and the dropdown's own zero-based-index reading of the identical \ffres are actually decided. \ffprot ("1 if this field is protected, 0 otherwise" -- RTF 1.9.1's own Form Fields table, mirroring [MS-DOC] 2.9.79 FFDataBits.fProt) and \ffownhelp ([MS-DOC] 2.9.79 FFDataBits.fOwnHelp) are read via formFieldValueBit above, not toggleValue: both are Value control words per RTF 1.9.1's own control-word-type table, so a bare (unparameterised) occurrence of either defaults to 0/false rather than to true the way a bare `\b`/`\i` would -- see formFieldValueBit's own comment for the exact citations.
 function applyFormFieldControlWord(
   name: string,
   param: number | undefined,
@@ -1659,10 +1664,10 @@ function applyFormFieldControlWord(
       formField.defaultResultIndex = param;
       return true;
     case "ffprot":
-      formField.protectedField = toggleValue(param);
+      formField.protectedField = formFieldValueBit(param);
       return true;
     case "ffownhelp":
-      formField.ownHelp = toggleValue(param);
+      formField.ownHelp = formFieldValueBit(param);
       return true;
     default:
       return false;
