@@ -128,7 +128,7 @@ describe("Brc80", () => {
     expect(readBrc80(bytes(written), 0)?.color).toEqual(RED);
   });
 
-  describe("double-line width (ExaDev/documents.js#959)", () => {
+  describe("double-line border width", () => {
     it("triples dptLineWidth into widthPt for BrcType 0x03, since the field states one of the border's two lines rather than its total rendered width", () => {
       // The exact dptLineWidth a genuine LibreOffice-authored double border was found to carry: read directly as the field's own value, this used to report 0.625pt where LibreOffice's own re-export calls the identical border ~1.8pt double (5 eighths tripled is 1.875pt, matching to LibreOffice's own twip-rounding).
       expect(readBrc80(bytes([0x05, 0x03, 0x00, 0x00]), 0)?.widthPt).toBe(
@@ -183,6 +183,14 @@ describe("Brc80", () => {
       const written = writeBrc(border);
       expect(written[4]).toBe(5);
       expect(readBrc(bytes(written), 0)).toEqual(border);
+    });
+
+    it("does not round-trip a non-literal collapsed BrcType's own width, since BRC_TYPE_STYLE has already discarded which of the 24 families a 'double'-style border came from by the time it is written back", () => {
+      // 0x0e (thinThickMediumGap) is one of the 23 BrcTypes BRC_TYPE_STYLE folds onto 'double' without the literal-0x03 tripling: reading it back reports dptLineWidth's own untripled value directly (16 eighths, 2pt), an approximation of unknown accuracy per DOUBLE_BORDER_WIDTH_MULTIPLIER's own note on the ratios LibreOffice's source actually gives that family. Writing that same ContentBorder back has no way to recover 0x0e -- ContentStrokeStyle names only one 'double' member -- so it re-emits a literal 0x03 and applies this package's own tripling to the 2pt it was given, producing dptLineWidth 5 rather than the original 16: a further, compounding approximation on an already-lossy round trip, not a fresh regression from this file's own read/write pair agreeing with each other.
+      const read = readBrc80(bytes([0x10, 0x0e, 0x06, 0x00]), 0);
+      expect(read).toEqual({ color: RED, widthPt: 2, style: "double" });
+      if (read === undefined) throw new Error("expected a border");
+      expect(writeBrc80(read)[0]).toBe(5);
     });
   });
 });
