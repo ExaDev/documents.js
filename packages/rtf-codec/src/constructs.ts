@@ -238,7 +238,7 @@ function pad(value: number, width: number): string {
   return String(value).padStart(width, "0");
 }
 
-// Whatever `{\*\formfield ...}` handed the reader beyond the field's own instruction: the bookmark-style name from `{\*\ffname ...}`, a dropdown's own `{\*\ffl ...}` entries, and the result indices `\ffres`/`\ffdefres` carry. RTF 1.5's own Form Fields table defines both purely in list-field terms, but they serialise the binary FFDataBits structure [MS-DOC] 2.9.78 defines, whose iRes field carries a real, spec-defined meaning for a checkbox: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined) -- see formFieldContentControl below for how that reading is decided. Optional end to end -- `\*\formfield` itself is optional per the grammar, so a bare FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction with no `\*\formfield` group still names a control type on its own.
+// Whatever `{\*\formfield ...}` handed the reader beyond the field's own instruction: the bookmark-style name from `{\*\ffname ...}`, a dropdown's own `{\*\ffl ...}` entries, and the result indices `\ffres`/`\ffdefres` carry. RTF 1.5's own Form Fields table defines both purely in list-field terms, but they serialise the binary FFDataBits structure [MS-DOC] 2.9.78 defines, whose iRes field carries a real, spec-defined meaning per iType -- a checkbox's checked state (0/1/25-undefined) for iTypeChck, a zero-based \ffl index for iTypeDrop; see formFieldContentControl below for how each iType's own reading is decided. Optional end to end -- `\*\formfield` itself is optional per the grammar, so a bare FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction with no `\*\formfield` group still names a control type on its own.
 export interface RtfFormFieldData {
   readonly name: string;
   readonly listItems: readonly string[];
@@ -298,6 +298,18 @@ export function formFieldContentControl(
     descriptor.checked = (current ?? formField.defaultResultIndex ?? 0) !== 0;
   } else if (controlType === "dropDown" && formField.listItems.length > 0) {
     descriptor.options = [...formField.listItems];
+    // \ffres also names a dropdown's own currently selected entry -- the same field FFDataBits gives the checkbox's state, read here under iTypeDrop's own "zero-based index into \ffl" meaning instead. Bounds-checked against the list actually read, since an out-of-range index (PHPRtfLite's own \ffres25 constant, which happens to also be this format's checkbox sentinel, included) names no real entry.
+    const selectedIndex = formField.resultIndex;
+    if (
+      selectedIndex !== undefined &&
+      selectedIndex >= 0 &&
+      selectedIndex < formField.listItems.length
+    ) {
+      const selected = formField.listItems[selectedIndex];
+      if (selected !== undefined) {
+        descriptor.value = selected;
+      }
+    }
   }
   return descriptor;
 }
