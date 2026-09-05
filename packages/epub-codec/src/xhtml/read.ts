@@ -22,6 +22,7 @@ import { parseXml } from "../xml/parse";
 import type { XhtmlReadContext } from "./context";
 import { isFootnoteAside, isFootnoteReferenceAnchor } from "./footnote";
 import { buildInlineRuns } from "./inline";
+import type { InlineResult } from "./inline";
 import type { MintListNumIdOptions } from "./list-id";
 import { mintListNumId } from "./list-id";
 import {
@@ -112,6 +113,13 @@ function decorateParagraph(
     decorated = { ...decorated, list: membership };
   }
   return decorated;
+}
+
+// The spreadable `constructs` field for a paragraph built directly from one buildInlineRuns result -- shared by every call site that turns a flat inline result into a ContentParagraph (a heading, a table caption, a table cell, a <dt>/<dd>, a <figcaption>), so a run-level construct extent (most commonly a footnote reference) collected while walking that inline content is never silently dropped just because the paragraph itself carries no other property worth spreading in. Before this helper existed, only readContainerChildren's own segment flush and the table caption got this right (ExaDev/documents.js#994's own caption fix); a <figcaption>, a <dt>/<dd>, and a table cell all built `{ kind: "paragraph", runs: inline.runs }` directly, discarding inline.constructs outright -- the identical defect shape reproduced four more times rather than fixed once.
+function constructsField(
+  inline: InlineResult,
+): Pick<ContentParagraph, "constructs"> | Record<string, never> {
+  return inline.constructs.length > 0 ? { constructs: inline.constructs } : {};
 }
 
 // Script-supporting elements per the HTML Standard's own content model -- a <script>'s raw JS source and a <template>'s inert DOM subtree are never legitimate document content, the identical policy src/xhtml/inline.ts's own appendElement already enforces universally for run-building. Every arbitrary-descendant walk in this module (the id->element map below, containsHeading, and readXhtmlBody's own footnote-anchor prescan) shares this same guard, since none of them route through appendElement's own dispatch and would otherwise silently index or recognise content that can never actually be read as part of the document.
@@ -291,9 +299,7 @@ function readContainerChildren(
     const paragraph: ContentParagraph = {
       kind: "paragraph",
       runs: inline.runs,
-      ...(inline.constructs.length > 0
-        ? { constructs: inline.constructs }
-        : {}),
+      ...constructsField(inline),
     };
     blocks.push(decorateParagraph(paragraph, state));
   };
@@ -353,9 +359,7 @@ function readBlockElementInner(
       kind: "paragraph",
       headingLevel,
       runs: inline.runs,
-      ...(inline.constructs.length > 0
-        ? { constructs: inline.constructs }
-        : {}),
+      ...constructsField(inline),
     };
     return [decorateParagraph(paragraph, state)];
   }
@@ -390,6 +394,7 @@ function readBlockElementInner(
       const paragraph: ContentParagraph = {
         kind: "paragraph",
         runs: inline.runs,
+        ...constructsField(inline),
       };
       return [decorateParagraph(paragraph, state)];
     }
@@ -596,7 +601,10 @@ function readDefinitionListEntries(
     if (child.tag === "dt") {
       const inline = buildInlineRuns(child.children, {}, state.context);
       blocks.push(
-        decorateParagraph({ kind: "paragraph", runs: inline.runs }, state),
+        decorateParagraph(
+          { kind: "paragraph", runs: inline.runs, ...constructsField(inline) },
+          state,
+        ),
       );
     } else if (child.tag === "dd") {
       const inline = buildInlineRuns(child.children, {}, state.context);
@@ -605,6 +613,7 @@ function readDefinitionListEntries(
           {
             kind: "paragraph",
             runs: inline.runs,
+            ...constructsField(inline),
             indentLeftPt:
               DEFINITION_BODY_INDENT_PT + state.quoteDepth * QUOTE_INDENT_PT,
           },
@@ -655,6 +664,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
         const paragraph: ContentParagraph = {
           kind: "paragraph",
           runs: inline.runs,
+          ...constructsField(inline),
         };
         const colSpan = positiveIntAttr(cellNode, "colspan");
         const rowSpan = positiveIntAttr(cellNode, "rowspan");
@@ -701,9 +711,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
   const captionParagraph: ContentParagraph = {
     kind: "paragraph",
     runs: captionInline.runs,
-    ...(captionInline.constructs.length > 0
-      ? { constructs: captionInline.constructs }
-      : {}),
+    ...constructsField(captionInline),
   };
   return [decorateParagraph(captionParagraph, state), table];
 }
