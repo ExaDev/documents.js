@@ -66,35 +66,46 @@ interface PaletteEncoding {
   readonly trns?: Uint8Array<ArrayBuffer>; // one alpha byte per palette entry, present only when image.alpha was defined
 }
 
+// A bijective encoding of pixel i's four 0..255 (r, g, b, a) samples into one safe-integer key -- multiplication (not a `<<` shift) so the top channel never overflows into JS's 32-bit bitwise-operator truncation.
+function pixelKey(
+  data: Uint8Array<ArrayBuffer>,
+  alpha: Uint8Array<ArrayBuffer> | undefined,
+  pixelIndex: number,
+): number {
+  const base = pixelIndex * 3;
+  const r = data[base]!;
+  const g = data[base + 1]!;
+  const b = data[base + 2]!;
+  const a = alpha === undefined ? 255 : alpha[pixelIndex]!;
+  return r + g * 256 + b * 65536 + a * 16777216;
+}
+
 // Scans a truecolour RawImage's pixels for a lossless indexed-colour (PNG colour type 3) representation: every pixel's (r, g, b, a) reduces to one of at most 256 distinct colours, addressed by a one-byte-per-pixel index into a PLTE (+ tRNS) chunk pair. Returns undefined the instant a 257th distinct colour would be needed -- colour type 3 cannot hold more entries than that -- so the caller falls back to the truecolour path, which has no such limit. Only ever called for channels === 3: PNG's palette entries are always RGB triples, so a grayscale (channels === 1) RawImage indexed this way would come back from decodePng with channels === 3, silently changing its colour space -- exactly the round-trip break this feature must not introduce.
 function detectPalette(image: RawImage): PaletteEncoding | undefined {
   const { width, height, data, alpha } = image;
   const pixelCount = width * height;
   const colorToIndex = new Map<number, number>();
-  const indices = new Uint8Array(pixelCount);
   const paletteRgb: number[] = [];
   const paletteAlpha: number[] = [];
 
+  // Pass 1: build the palette and confirm it fits within MAX_PALETTE_ENTRIES, without yet allocating the full-resolution index buffer below. A typical photographic image -- the common case for pdf-codec's own extracted images -- carries well over 256 distinct colours and bails out here, often within the first few pixels, so allocating a pixelCount-sized Uint8Array before knowing that would waste a potentially large buffer on exactly the inputs least likely to ever use it.
   for (let i = 0; i < pixelCount; i++) {
-    const base = i * 3;
-    const r = data[base]!;
-    const g = data[base + 1]!;
-    const b = data[base + 2]!;
-    const a = alpha === undefined ? 255 : alpha[i]!;
-    // A bijective encoding of the four 0..255 samples into one safe-integer key -- multiplication (not a `<<` shift) so the top channel never overflows into JS's 32-bit bitwise-operator truncation.
-    const key = r + g * 256 + b * 65536 + a * 16777216;
-
-    let index = colorToIndex.get(key);
-    if (index === undefined) {
+    const key = pixelKey(data, alpha, i);
+    if (!colorToIndex.has(key)) {
       if (colorToIndex.size >= MAX_PALETTE_ENTRIES) {
         return undefined;
       }
-      index = colorToIndex.size;
-      colorToIndex.set(key, index);
-      paletteRgb.push(r, g, b);
-      paletteAlpha.push(a);
+      colorToIndex.set(key, colorToIndex.size);
+      const base = i * 3;
+      paletteRgb.push(data[base]!, data[base + 1]!, data[base + 2]!);
+      paletteAlpha.push(alpha === undefined ? 255 : alpha[i]!);
     }
-    indices[i] = index;
+  }
+
+  // Pass 2: the palette is now confirmed to fit, so it's safe to allocate the real per-pixel index buffer and fill it from the completed map.
+  const indices = new Uint8Array(pixelCount);
+  for (let i = 0; i < pixelCount; i++) {
+    indices[i] = colorToIndex.get(pixelKey(data, alpha, i))!;
   }
 
   const palette = Uint8Array.from(paletteRgb);
