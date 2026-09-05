@@ -41,6 +41,7 @@ export type MarkdownLineEnding = "lf" | "crlf";
 
 // writeMarkdown's own emit-side style choices -- which of several equally CommonMark/GFM-valid syntaxes to render with. Read separately from the shared sink/signal/images/frontMatter fields below since these have no read-side equivalent (a reader accepts whichever style the source document happens to use; a writer must pick one).
 export interface WriteMarkdownStyleOptions {
+  // A level 1/2 heading whose own content embeds a hard or soft break is rendered as setext regardless of this setting (MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK when it overrides an explicit 'atx') -- ATX is a single physical line with no way to hold an embedded newline, while setext's own grammar spans one or more lines. A level 3-6 heading has no setext fallback and collapses the break to a single space instead (MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED).
   readonly headingStyle?: MarkdownHeadingStyle;
   readonly bulletListMarker?: MarkdownBulletListMarker;
   readonly orderedListDelimiter?: MarkdownOrderedListDelimiter;
