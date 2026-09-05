@@ -122,7 +122,7 @@ describe("Brc80", () => {
 
   it("states the true rounding-aware floor, 0.1875pt, in a single-line border's own refusal message, not the naive 0.25pt a stored minimum converts back to on read", () => {
     expect(() => writeBrc80({ color: RED, widthPt: 0.1 })).toThrow(
-      /outside the 0\.1875\.\.31\.875pt range/,
+      /outside the 0\.1875\.\.31\.9375pt range/,
     );
     expect(() => writeBrc80({ color: RED, widthPt: 0.1 })).toThrow(
       DocFormatError,
@@ -131,6 +131,16 @@ describe("Brc80", () => {
 
   it("accepts a single-line width the naive 0.25pt floor would have wrongly refused, since Math.round rounds it up to a storable 2 eighths", () => {
     expect(writeBrc80({ color: RED, widthPt: 0.2 })[0]).toBe(2);
+  });
+
+  it("accepts a single-line width above the naive 31.875pt ceiling the pre-fix refusal message wrongly implied, since Math.round rounds it down to a storable 255 eighths", () => {
+    expect(writeBrc80({ color: RED, widthPt: 31.9 })[0]).toBe(255);
+  });
+
+  it("states the true rounding-aware ceiling, 31.9375pt, in a single-line border's own refusal message, not the naive 31.875pt a stored maximum converts back to on read", () => {
+    expect(() => writeBrc80({ color: RED, widthPt: 31.9375 })).toThrow(
+      /outside the 0\.1875\.\.31\.9375pt range/,
+    );
   });
 
   it("snaps a colour outside the palette to the nearest entry it does have", () => {
@@ -170,7 +180,19 @@ describe("Brc80", () => {
     it("refuses a double border below the true 0.1875pt floor, stating that number rather than the naive 0.375pt a stored minimum converts back to on read", () => {
       expect(() =>
         writeBrc80({ color: RED, widthPt: 0.1, style: "double" }),
-      ).toThrow(/outside the 0\.1875\.\.95\.625pt range/);
+      ).toThrow(/outside the 0\.1875\.\.95\.8125pt range/);
+    });
+
+    it("accepts a double-line width above the naive 95.625pt ceiling the pre-fix refusal message wrongly implied, since Math.round rounds it down to a storable 255 eighths", () => {
+      expect(
+        writeBrc80({ color: RED, widthPt: 95.8, style: "double" })[0],
+      ).toBe(255);
+    });
+
+    it("states the true rounding-aware ceiling, 95.8125pt, in a double border's own refusal message, not the naive 95.625pt a stored maximum converts back to on read", () => {
+      expect(() =>
+        writeBrc80({ color: RED, widthPt: 95.8125, style: "double" }),
+      ).toThrow(/outside the 0\.1875\.\.95\.8125pt range/);
     });
 
     it("writes an ordinary sub-0.75pt double border width, like Word's own 0.5pt UI default, without refusing it", () => {
