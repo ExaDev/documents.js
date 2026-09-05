@@ -169,11 +169,35 @@ function terminatesCleanly(styleId: string | undefined): boolean {
   );
 }
 
-// Whether a rendered block of this styleId can safely open right where an OPEN (non-terminated) paragraph left off, per CommonMark's own "these constructs interrupt a paragraph" rules, rather than being read as more of that paragraph's own text. This is the "safe as NEXT" half, and -- unlike terminatesCleanly -- genuinely depends on the emit options actually in force: a fenced code block and a math block always interrupt (their own opening delimiter is unambiguous either way); a thematic break interrupts UNLESS its rendered character is SETEXT_LEVEL_2_CHAR ('-'), which a reparse reads as a setext level-2 underline for the paragraph it follows instead of a fresh thematic break (context.thematicBreakChar's other two legal values, '_' and '*', are never a setext underline character and interrupt cleanly); an ATX heading always interrupts, but a SETEXT-rendered one (headingStyle 'setext', level <= MAX_SETEXT_LEVEL) is the opposite of an interrupt -- its own text line reads as more of the preceding paragraph, which the underline line then retroactively converts whole into the heading, exactly the case this function exists to catch. HTML_PREFORMATTED_STYLE_ID never interrupts: CommonMark's own HTML-block start condition 7 (a lone start/end tag on its own line) is explicitly barred from interrupting a paragraph, and this package cannot tell that condition apart from the other six that can, at the point this needs an answer, so it always assumes the unsafe one.
-function canInterruptOpenParagraph(
-  styleId: string | undefined,
+// Whether a level<=2 heading paragraph will ACTUALLY be written as a setext heading rather than ATX -- exactly mirroring renderParagraphBody's own promotion rule below (headingStyle: 'setext', OR the heading's own rendered text embeds a hard/soft break that ATX has no way to hold), so canInterruptOpenParagraph can answer against the real spelling the heading is about to be written in, not just the configured style. This deliberately calls emitRuns a SECOND time, through a throwaway, diagnostic-free InlineEmitContext: this is a look-ahead check on content renderParagraphBody itself re-emits (through the real sink) moments later at the actual render call, and reporting the same run-level diagnostic (a monospace-styled code span, adjacent merged links) twice for one piece of content would be a duplicate finding, not a second real one -- emitRuns/renderNestedStyles read only InlineEmitContext's own two fields (sink, emphasisMarker) and mutate nothing on the wider EmitContext, so the two calls are independent and always agree on the text they produce.
+function willRenderAsSetext(
+  paragraph: ContentParagraph,
+  level: number,
   context: EmitContext,
 ): boolean {
+  if (level > MAX_SETEXT_LEVEL) {
+    return false;
+  }
+  if (context.headingStyle === "setext") {
+    return true;
+  }
+  const text = emitRuns(
+    paragraph.runs,
+    {
+      sink: NOOP_MARKDOWN_DIAGNOSTIC_SINK,
+      emphasisMarker: context.emphasisMarker,
+    },
+    paragraph.constructs,
+  );
+  return text.includes("\n");
+}
+
+// Whether a rendered block of this paragraph's own styleId can safely open right where an OPEN (non-terminated) paragraph left off, per CommonMark's own "these constructs interrupt a paragraph" rules, rather than being read as more of that paragraph's own text. This is the "safe as NEXT" half, and -- unlike terminatesCleanly -- genuinely depends on the emit options actually in force: a fenced code block and a math block always interrupt (their own opening delimiter is unambiguous either way); a thematic break interrupts UNLESS its rendered character is SETEXT_LEVEL_2_CHAR ('-'), which a reparse reads as a setext level-2 underline for the paragraph it follows instead of a fresh thematic break (context.thematicBreakChar's other two legal values, '_' and '*', are never a setext underline character and interrupt cleanly); an ATX heading always interrupts, but one that will actually be WRITTEN as setext (willRenderAsSetext above -- either headingStyle: 'setext', or a level<=2 heading whose own content embeds a break that forces the promotion regardless of the configured style) is the opposite of an interrupt -- its own text line reads as more of the preceding paragraph, which the underline line then retroactively converts whole into the heading, exactly the case this function exists to catch. Keying this off the paragraph's actual embedded-break state, not merely the configured headingStyle, is load-bearing: a level 1/2 heading forced into setext by its own content is exactly as unsafe to follow an open paragraph with, unmarked, as one setext by explicit configuration -- treating it as an always-interrupting ATX heading (the configured style alone) lets its own first line get silently absorbed as a continuation of whatever precedes it, with the setext underline then retroactively swallowing that preceding block into the heading on reparse. HTML_PREFORMATTED_STYLE_ID never interrupts: CommonMark's own HTML-block start condition 7 (a lone start/end tag on its own line) is explicitly barred from interrupting a paragraph, and this package cannot tell that condition apart from the other six that can, at the point this needs an answer, so it always assumes the unsafe one.
+function canInterruptOpenParagraph(
+  paragraph: ContentParagraph,
+  context: EmitContext,
+): boolean {
+  const styleId = paragraph.styleId;
   if (
     styleId === undefined ||
     styleId === QUOTE_STYLE_ID ||
@@ -189,8 +213,10 @@ function canInterruptOpenParagraph(
   }
   const headingLevel = parseHeadingStyleId(styleId);
   if (headingLevel !== undefined) {
-    return !(
-      context.headingStyle === "setext" && headingLevel <= MAX_SETEXT_LEVEL
+    return !willRenderAsSetext(
+      paragraph,
+      clampHeadingLevel(headingLevel),
+      context,
     );
   }
   return false;
@@ -540,11 +566,11 @@ function collectListItem(
   return { segments, next: index };
 }
 
-// Whether an EmitItem's own rendered spelling unconditionally interrupts an open paragraph when it immediately follows one, with no blank line between them -- generalises canInterruptOpenParagraph (styleId-keyed, paragraph-only) to a construct too. A materialised division's '> ' marker interrupts regardless of what it wraps (CommonMark spec 0.31.2's own list of blocks that can interrupt a paragraph includes block quotes -- confirmed directly by spec example 245, "foo\n> bar\n", where "> bar" opens a fresh blockquote with no blank line needed). A construct rendering TRANSPARENTLY (no marker of its own to interrupt with -- see isMaterialisedDivision) is not itself a boundary at all, so the question passes straight through, recursively, to its own first child.
+// Whether an EmitItem's own rendered spelling unconditionally interrupts an open paragraph when it immediately follows one, with no blank line between them -- generalises canInterruptOpenParagraph (paragraph-keyed, checking its own actual rendered heading spelling too, not just its styleId) to a construct too. A materialised division's '> ' marker interrupts regardless of what it wraps (CommonMark spec 0.31.2's own list of blocks that can interrupt a paragraph includes block quotes -- confirmed directly by spec example 245, "foo\n> bar\n", where "> bar" opens a fresh blockquote with no blank line needed). A construct rendering TRANSPARENTLY (no marker of its own to interrupt with -- see isMaterialisedDivision) is not itself a boundary at all, so the question passes straight through, recursively, to its own first child.
 function emitItemCanInterrupt(item: EmitItem, context: EmitContext): boolean {
   if (!isConstructItem(item)) {
     return item.block.kind === "paragraph"
-      ? canInterruptOpenParagraph(item.block.styleId, context)
+      ? canInterruptOpenParagraph(item.block, context)
       : true;
   }
   if (isMaterialisedDivision(item)) {
