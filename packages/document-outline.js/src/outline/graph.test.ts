@@ -2875,5 +2875,28 @@ describe("write API: reconcileChildren reproduces every requested children list 
     expect(contains).toHaveLength(2);
     expect(contains.filter((edge) => edge.to === a)).toHaveLength(1);
     expect(contains.filter((edge) => edge.to === b)).toHaveLength(1);
+
+    // A second pre-wiring, against a distinct id, for the anti-inflation pass's own multi-occurrence branch: two existing edges to the SAME id (A) rather than one each to two different ids, with A not requested at all. The LCS pass matches nothing (children holds only B), so both A edges land in the anti-inflation pass's unmatched-by-target bucket for A -- the first populates the bucket, the second appends to it, which is the branch the case above never reaches since every existing edge there has a distinct target of its own.
+    const bOnlyId = contentHashV1({ kind: "section", children: [b] });
+    const bOnlyWired = insertEdge(
+      insertEdge(baseGraph, bOnlyId, a),
+      bOnlyId,
+      a,
+    );
+
+    const bOnlyReconciled = insertNode(bOnlyWired, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [b],
+    });
+    expect(bOnlyReconciled.id).toBe(bOnlyId);
+
+    const bOnlyContains = bOnlyReconciled.graph.edges.filter(
+      (edge) => edge.from === bOnlyId && edge.kind === "CONTAINS",
+    );
+    // A's two pre-wired, unmatched edges are left exactly as they were (multiplicity stays 2, neither dropped nor duplicated), and B -- requested but never pre-wired -- is inserted fresh at multiplicity 1.
+    expect(bOnlyContains).toHaveLength(3);
+    expect(bOnlyContains.filter((edge) => edge.to === a)).toHaveLength(2);
+    expect(bOnlyContains.filter((edge) => edge.to === b)).toHaveLength(1);
   });
 });
