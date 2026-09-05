@@ -32,7 +32,7 @@ import {
   METADATA_FIXTURE,
 } from "../test-support/metadata-fixture";
 
-// Drives the real assembled commander program end to end against real fixtures, proving all three write paths set-metadata.ts implements: the docx docProps/core.xml in-place patch (patchDocxMetadata), which must leave docx-extras' own data (comments, footnotes, headers/footers, numbering) completely untouched; the ContentDocument full rebuild every other rebuild format goes through (xlsx here, standing in for pptx/odt/odp/ods/odg/markdown, which all go through the identical readXContent -> buildXPackage shape); and the direct pdf metadata patch, which runs no layout engine at all and must leave every other page item untouched.
+// Drives the real assembled commander program end to end against real fixtures, proving all three write paths setDocumentMetadata resolves to for this command's single call site: the docx docProps/core.xml in-place patch (patchDocxMetadata, resolved internally whenever source and target are both docx), which must leave docx-extras' own data (comments, footnotes, headers/footers, numbering) completely untouched; the ContentDocument full rebuild every other rebuild format goes through (xlsx here, standing in for pptx/odt/odp/ods/odg/markdown, which all go through the identical readXContent -> buildXPackage shape); and the direct pdf metadata patch, which runs no layout engine at all and must leave every other page item untouched.
 
 let savedExitCode: typeof process.exitCode;
 let workspace: string;
