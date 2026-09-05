@@ -1418,6 +1418,36 @@ describe("ContentParagraph codeLanguage", () => {
   });
 });
 
+describe("ContentParagraph preformatted", () => {
+  it("parses a paragraph whose whitespace must survive verbatim, independent of codeLanguage", () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: "paragraph",
+      runs: [{ text: "line one\nline two" }],
+      preformatted: true,
+    });
+    expect(parsed.preformatted).toBe(true);
+    expect("codeLanguage" in parsed).toBe(false);
+  });
+
+  it("leaves the field optional, so an ordinary paragraph parses exactly as before", () => {
+    const plain = ContentParagraphSchema.parse({
+      kind: "paragraph",
+      runs: [{ text: "text" }],
+    });
+    expect("preformatted" in plain).toBe(false);
+  });
+
+  it("refuses a non-boolean, so the flag cannot arrive as a structured or string value this field never promised to hold", () => {
+    expect(
+      ContentParagraphSchema.safeParse({
+        kind: "paragraph",
+        runs: [],
+        preformatted: "true",
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe("clampHeadingLevel", () => {
   it("leaves a level already within 1-6 untouched", () => {
     expect(clampHeadingLevel(1)).toBe(1);

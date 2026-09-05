@@ -257,6 +257,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       }, // the run-scoped construct extents this paragraph carries -- see src/content.ts's own field comment for the block-marker/run-extent scope split
       styleId: { type: "string" }, // w:pStyle/@w:val, e.g. 'Heading1'
       codeLanguage: { type: "string" }, // the source-format language identifier of a code-styled block -- see src/content.ts's own field comment
+      preformatted: { type: "boolean" }, // whitespace inside this paragraph's own runs is significant and must survive verbatim -- see src/content.ts's own field comment
       headingLevel: {
         type: "integer",
         exclusiveMinimum: 0,
@@ -540,6 +541,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       },
       styleId: { type: "string" },
       codeLanguage: { type: "string" },
+      preformatted: { type: "boolean" },
       headingLevel: {
         type: "integer",
         exclusiveMinimum: 0,
@@ -575,6 +577,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       },
       styleId: { type: "string" },
       codeLanguage: { type: "string" },
+      preformatted: { type: "boolean" },
       headingLevel: {
         type: "integer",
         exclusiveMinimum: 0,
