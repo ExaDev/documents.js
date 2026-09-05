@@ -720,6 +720,111 @@ describe("definition lists", () => {
       ],
     });
   });
+
+  it("recovers a stray <p> sitting directly inside a <dl> between dt/dd, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<dl><dt>Term</dt><p>stray</p><dd>Definition</dd></dl>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/definition-list-content-outside-entry",
+      }),
+    );
+  });
+
+  it("recovers stray text sitting before the very first dt inside a <dl>, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<dl>stray<dt>Term</dt></dl>"), sink);
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/definition-list-content-outside-entry",
+      }),
+    );
+  });
+
+  it("recovers a stray, resolved <img> sitting directly inside a <dl> as a real image block, with a diagnostic", () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body('<dl><dt>Term</dt><img src="a.png" alt="pic"/></dl>'),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[1]).toMatchObject({ kind: "image" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/definition-list-content-outside-entry",
+      }),
+    );
+  });
+
+  it("skips a <script> sitting directly inside a <dl>, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<dl><dt>Term</dt><script>var x=1;</script><dd>Definition</dd></dl>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/definition-list-content-outside-entry",
+      }),
+    );
+  });
+
+  it("ignores inter-element whitespace inside a <dl>, firing no diagnostic, for the pretty-printed shape essentially all real-world HTML uses", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<dl>\n  <dt>Term</dt>\n  <dd>Definition</dd>\n</dl>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
+    ]);
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it("recovers a <section> wrapping a dt/dd pair as degraded, concatenated plain text, with a diagnostic -- <div> is the only wrapper HTML5's own <dl> content model actually names as legal", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<dl><section><dt>Term</dt><dd>Definition</dd></section></dl>"),
+      sink,
+    );
+    // The section's own dt/dd children lose their distinct term/definition treatment once routed through readContainerChildren, which has no notion of dt/dd -- a real, documented fidelity cost, but a text-preserving one.
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "Term" }, { text: "Definition" }],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/definition-list-content-outside-entry",
+      }),
+    );
+  });
 });
 
 describe("tables", () => {

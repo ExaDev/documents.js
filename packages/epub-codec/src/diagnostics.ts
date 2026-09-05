@@ -43,6 +43,8 @@ export const EpubDiagnosticCodes = {
   LINK_TARGET_EXTERNAL_ONLY: "epub/link-target-external-only",
   TABLE_CAPTION_UNSUPPORTED: "epub/table-caption-unsupported",
   LIST_CONTENT_OUTSIDE_ITEM: "epub/list-content-outside-item",
+  DEFINITION_LIST_CONTENT_OUTSIDE_ENTRY:
+    "epub/definition-list-content-outside-entry",
   // src/xhtml (write side: ContentDocument -> XHTML)
   CONSTRUCT_UNREPRESENTED: "epub/construct-unrepresented",
   // src/read.ts (package-level: invented page geometry, matching markdown-codec's own precedent)
