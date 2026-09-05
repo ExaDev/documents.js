@@ -1073,7 +1073,10 @@ describe('readOdsContent: cell background/borders/alignment/verticalAlignment (s
       ]),
     ]);
     const { sheets } = readOdsContent(sheetPackage([ce1], table));
-    expect(sheets[0]?.cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(sheets[0]?.cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
   });
 
   it("expands the fo:border shorthand onto all four edges", () => {
@@ -1213,7 +1216,10 @@ describe('readOdsContent: cell background/borders/alignment/verticalAlignment (s
       ]),
     ]);
     const { sheets } = readOdsContent(sheetPackage([defaultStyle, ce1], table));
-    expect(sheets[0]?.cells[0]?.background).toEqual({ r: 0, g: 1, b: 0 });
+    expect(sheets[0]?.cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 0, g: 1, b: 0 },
+    });
     expect(sheets[0]?.cells[0]?.verticalAlignment).toBe("top");
   });
 
@@ -1236,7 +1242,10 @@ describe('readOdsContent: cell background/borders/alignment/verticalAlignment (s
       ]),
     ]);
     const { sheets } = readOdsContent(sheetPackage([parent, ce1], table));
-    expect(sheets[0]?.cells[0]?.background).toEqual({ r: 0, g: 0, b: 1 });
+    expect(sheets[0]?.cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 0, g: 0, b: 1 },
+    });
   });
 
   it("leaves background/borders/alignment/verticalAlignment all undefined for a cell with no table:style-name at all", () => {

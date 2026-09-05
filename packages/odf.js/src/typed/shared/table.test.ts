@@ -247,9 +247,8 @@ describe("readOdfTable: cell background", () => {
     ]);
     const pkg: Package = { parts: { "content.xml": contentPackage([ce1]) } };
     expect(readOdfTable(table, pkg).rows[0]?.cells[0]?.background).toEqual({
-      r: 1,
-      g: 0,
-      b: 0,
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
     });
   });
 
