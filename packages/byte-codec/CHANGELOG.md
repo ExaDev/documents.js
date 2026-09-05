@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/ExaDev/documents.js/compare/byte-codec%401.2.0...byte-codec%401.2.1) (2026-09-05)
+
+### Continuous Integration
+
+* add the missing _test:coverage script to nine packages ([bc658d0](https://github.com/ExaDev/documents.js/commit/bc658d094b6ffbd0616cc225c57d5c0595374172))
+
 ## [1.2.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.1.13...byte-codec%401.2.0) (2026-08-24)
 
 ### Features

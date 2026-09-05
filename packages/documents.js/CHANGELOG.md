@@ -1,3 +1,17 @@
+## [6.5.3](https://github.com/ExaDev/documents.js/compare/documents.js%406.5.2...documents.js%406.5.3) (2026-09-05)
+
+
+### Dependencies
+
+- Updated byte-codec to ^1.2.1
+- Updated archive-codec to ^1.4.2
+- Updated pdf-codec to ^3.6.5
+- Updated doc-codec to ^1.1.2
+- Updated ooxml.js to ^6.3.7
+- Updated ppt-codec to ^1.1.2
+- Updated wpd-codec to 1.1.3 (declared as `workspace:^`, resolved by pnpm at publish time)
+- Updated xls-codec to ^2.0.2
+
 ## [6.5.2](https://github.com/ExaDev/documents.js/compare/documents.js%406.5.1...documents.js%406.5.2) (2026-09-05)
 
 ### Bug Fixes

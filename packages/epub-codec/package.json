@@ -1,6 +1,6 @@
 {
   "name": "epub-codec",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "EPUB 2/3 reading and deterministic EPUB 3 writing against the shared document-schema.js content pivot.",
   "type": "module",
   "repository": {
