@@ -110,7 +110,7 @@ describe("outline", () => {
     );
   });
 
-  // ExaDev/documents.js#961 (already fixed by the time it was filed, and stale documentation was the report's own evidence): buildDocxPackage stamps a headingLevel paragraph's w:outlineLvl (fixed in c16d5f40), so a docx built through this ecosystem's own editor -- not just one authored by Word -- nests headings exactly as document-outline.js's buildOutline expects.
+  // ExaDev/documents.js#961: a headingLevel paragraph written by this ecosystem's own docx writer -- DocxParagraph's headingLevel setter, which buildDocxPackage delegates to -- carries w:outlineLvl, so a docx built through this ecosystem's own editor, not just one authored by Word, nests headings exactly as document-outline.js's buildOutline expects.
   it("nests headings by level in a docx built through this ecosystem's own editor (not authored by Word)", async () => {
     const docxPath = join(workspace, "own-headings.docx");
     const editor = createDocx();
@@ -131,7 +131,7 @@ describe("outline", () => {
     expect(stdout).toBe("Top\n  Body under top.\n  Sub\n    Body under sub.\n");
   });
 
-  // The odt counterpart: writeOdt/buildOdtPackage promote a headingLevel paragraph to a real text:h (fixed for the body in ExaDev/documents.js#752, PR #779), so a plain-body heading nests correctly too.
+  // The odt counterpart: OdtParagraph's headingLevel setter, which buildOdtPackage delegates to, promotes a headingLevel paragraph to a real text:h (fixed for the body in ExaDev/documents.js#752, PR #779), so a plain-body heading nests correctly too.
   it("nests headings by level in an odt built through this ecosystem's own editor (not authored by LibreOffice)", async () => {
     const odtPath = join(workspace, "own-headings.odt");
     const editor = createOdt();
