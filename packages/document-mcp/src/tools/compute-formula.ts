@@ -1,13 +1,18 @@
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { evaluate, type EvaluationResult } from "document-compute.js";
 import {
+  EvaluationValueSchema,
   flattenTree,
   FormulaBindingsSchema,
   type ContentFormula,
   type FormulaBindings,
   type SymbolTable,
 } from "document-schema.js";
-import { collectDocumentFormulas, readNativeDocumentTree } from "documents.js";
+import {
+  collectDocumentFormulas,
+  DocumentFormatSchema,
+  readNativeDocumentTree,
+} from "documents.js";
 import { z } from "zod";
 import {
   DocumentInputSchema,
@@ -54,6 +59,41 @@ function evaluateFormula(
   }
 }
 
+// One formula outcome's own structuredContent shape, matching this package's own convert.ts/odm.ts convention (see ConvertDocumentOutputSchema/OdmToPdfOutputSchema) -- lets registerTool validate/type a successful result via outputSchema, and lets a caller (this file's own test included) read result.structuredContent without an unsafe cast or an isRecord guard.
+const FormulaOutcomeSchema = z.union([
+  z.object({
+    status: z.literal("evaluated"),
+    result: EvaluationValueSchema,
+  }),
+  z.object({ status: z.literal("no-content") }),
+  z.object({
+    status: z.literal("error"),
+    errorType: z.string(),
+    message: z.string(),
+  }),
+]);
+
+// The full structuredContent shape compute_formula returns -- exported for the same reason as this package's other tools' own OutputSchema constants.
+export const ComputeFormulaOutputSchema = z.object({
+  sourceFormat: DocumentFormatSchema,
+  documentKind: z.enum([
+    "wordprocessing",
+    "presentation",
+    "spreadsheet",
+    "drawing",
+    "formula",
+  ]),
+  formulaCount: z.number(),
+  formulas: z.array(
+    z.object({
+      index: z.number(),
+      sourcePath: z.string().optional(),
+      latex: z.string().optional(),
+      outcome: FormulaOutcomeSchema,
+    }),
+  ),
+});
+
 export function registerComputeFormulaTools(server: McpServer): void {
   server.registerTool(
     "compute_formula",
@@ -69,6 +109,7 @@ export function registerComputeFormulaTools(server: McpServer): void {
           "Known values for symbols the document's formulas reference, keyed by symbol-table id (a Quantity { kind: 'quantity', magnitude, dimension } or an Interval { kind: 'interval', min, max, dimension } per symbol). Omit for a document whose formulas are fully closed (units and numeric literals only, no 'sym' nodes).",
         ),
       }),
+      outputSchema: ComputeFormulaOutputSchema,
     },
     async ({ source, bindings }, ctx) => {
       const { signal } = ctx.mcpReq;
