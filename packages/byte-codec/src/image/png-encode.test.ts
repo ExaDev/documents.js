@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { crc32 } from "../bytes/crc32";
 import { decodePng } from "./png-decode";
 import { encodePng } from "./png-encode";
 
@@ -28,6 +29,50 @@ function colorTypeOf(png: Uint8Array): number {
     throw new Error("PNG has no IHDR chunk");
   }
   return ihdr[9]!;
+}
+
+// Independently re-walks the chunk stream and checks the PNG spec's own structural constraints on it -- deliberately never routing through decodePng, since decodePng is this repo's own reader and is exactly what let a zero-length tRNS chunk (an invalid PNG a strict external decoder rejects or silently mis-reads) pass every existing round-trip test undetected. Verifies every chunk's CRC-32 (catching any chunk-framing bug, not just tRNS) and, for an indexed (colour type 3) image carrying a tRNS chunk, the two length constraints the PNG spec places on it: a present tRNS chunk must carry at least one entry (a zero-length tRNS is what libpng's own reader flags as "Zero length tRNS chunk" and either rejects or -- as this exact case was verified against real decoders below -- silently treats as no transparency at all, discarding the alpha data), and must never exceed one entry per PLTE colour.
+function assertSpecCompliantPng(png: Uint8Array): void {
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  expect(Array.from(png.subarray(0, 8))).toEqual([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ]);
+
+  let offset = 8;
+  let colorType: number | undefined;
+  let paletteEntryCount: number | undefined;
+  let trnsLength: number | undefined;
+  while (offset + 8 <= png.length) {
+    const length = view.getUint32(offset);
+    const type = new TextDecoder("latin1").decode(
+      png.subarray(offset + 4, offset + 8),
+    );
+    const dataStart = offset + 8;
+    const data = png.subarray(dataStart, dataStart + length);
+    const storedCrc = view.getUint32(dataStart + length);
+    const typeBytes = png.subarray(offset + 4, offset + 8);
+    const computedCrc = crc32(Uint8Array.from([...typeBytes, ...data]));
+    expect(computedCrc).toBe(storedCrc); // every chunk's own CRC-32 must match its declared bytes
+
+    if (type === "IHDR") {
+      colorType = data[9];
+    } else if (type === "PLTE") {
+      expect(data.length % 3).toBe(0); // PLTE is a whole number of RGB triples
+      paletteEntryCount = data.length / 3;
+    } else if (type === "tRNS") {
+      trnsLength = data.length;
+    }
+
+    offset = dataStart + length + 4;
+    if (type === "IEND") {
+      break;
+    }
+  }
+
+  if (colorType === 3 && trnsLength !== undefined) {
+    expect(trnsLength).toBeGreaterThan(0); // a present tRNS chunk may never be empty (PNG spec / libpng "Zero length tRNS chunk")
+    expect(trnsLength).toBeLessThanOrEqual(paletteEntryCount!); // and never more than one alpha value per palette entry
+  }
 }
 
 // Builds a channels=3 RawImage from a flat list of [r, g, b] pixels, row-major, `width` pixels per row.
@@ -73,6 +118,7 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     expect(colorTypeOf(png)).toBe(3);
     const trns = readChunks(png).get("tRNS");
     expect(trns).toBeDefined();
+    assertSpecCompliantPng(png);
 
     const decoded = decodePng(png);
     expect(Array.from(decoded.data)).toEqual(Array.from(image.data));
@@ -88,7 +134,10 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     const png = encodePng(image);
 
     expect(colorTypeOf(png)).toBe(3);
-    expect(readChunks(png).has("tRNS")).toBe(true); // presence preserved even though every value is opaque
+    const trns = readChunks(png).get("tRNS");
+    expect(trns).toBeDefined(); // presence preserved even though every value is opaque
+    expect(trns!.length).toBeGreaterThan(0); // regression guard: trimming every opaque entry away must never reach a zero-length (spec-invalid) tRNS chunk
+    assertSpecCompliantPng(png); // independent structural check (CRC + PNG's own tRNS length constraints), not routed through this repo's own decodePng
 
     const decoded = decodePng(png);
     expect(decoded.alpha).toBeDefined();
