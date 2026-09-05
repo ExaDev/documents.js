@@ -252,6 +252,169 @@ describe("OdtTableRow.heightPt", () => {
     expect(attr(clearedProps, "style:row-height")).toBeUndefined();
   });
 
+  it("preserves a row style's own child element (style:background-image) across a heightPt set and clear, and never reuses a style whose properties element carries a child the request doesn't", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 1 });
+    const [rowWithBackgroundImage, plainRow] = table.rows();
+    if (rowWithBackgroundImage === undefined || plainRow === undefined) {
+      throw new Error("expected two rows");
+    }
+
+    const contentPart = editor.toPackage().parts["content.xml"];
+    const root = rootElement(
+      contentPart?.kind === "xml" ? contentPart.nodes : [],
+    );
+    const automaticStyles = root?.children.find(
+      (c) => c.type === "element" && c.tag === "office:automatic-styles",
+    );
+    if (automaticStyles?.type !== "element") {
+      throw new Error("expected office:automatic-styles");
+    }
+    // style:background-image is the one child OASIS ODF 1.3's RelaxNG schema permits on style:table-row-properties -- simulating a table-row style a real external producer (openOdt()) wrote, carrying it alongside a matching row-height.
+    automaticStyles.children.push(
+      el(
+        "style:style",
+        { "style:name": "ImageRowStyle", "style:family": "table-row" },
+        [
+          el("style:table-row-properties", { "style:row-height": "20pt" }, [
+            el("style:background-image", { "xlink:href": "Pictures/bg.png" }),
+          ]),
+        ],
+      ),
+    );
+    const rowElements = [
+      ...walkElements(contentPart?.kind === "xml" ? contentPart.nodes : []),
+    ]
+      .map((cursor) => cursor.node)
+      .filter((node) => node.tag === "table:table-row");
+    const [firstRowElement, secondRowElement] = rowElements;
+    if (firstRowElement === undefined || secondRowElement === undefined) {
+      throw new Error("expected two table:table-row elements");
+    }
+    firstRowElement.attributes.push({
+      name: "table:style-name",
+      value: "ImageRowStyle",
+    });
+
+    // A plain row asking for the same 20pt height must NOT reuse ImageRowStyle -- doing so would silently import a background image onto a row that never had one.
+    plainRow.heightPt = 20;
+    expect(attr(secondRowElement, "table:style-name")).not.toBe(
+      "ImageRowStyle",
+    );
+
+    // Setting a NEW height on the row that already carries the background image must mint a style carrying both the new height AND the child element, not silently drop it.
+    rowWithBackgroundImage.heightPt = 25;
+    const mintedStyleName = attr(firstRowElement, "table:style-name");
+    if (mintedStyleName === undefined) {
+      throw new Error("expected a table:style-name after setting heightPt");
+    }
+    const mintedProps = findRowStyleProperties(
+      automaticStyles,
+      mintedStyleName,
+    );
+    const mintedBackgroundImage = mintedProps.children.find(
+      (c): c is XmlElement =>
+        c.type === "element" && c.tag === "style:background-image",
+    );
+    if (mintedBackgroundImage === undefined) {
+      throw new Error("expected style:background-image to survive the set");
+    }
+    expect(attr(mintedBackgroundImage, "xlink:href")).toBe("Pictures/bg.png");
+
+    // Clearing the height must keep the background image, minting a style carrying it alone rather than dropping table:style-name entirely.
+    rowWithBackgroundImage.heightPt = undefined;
+    const clearedStyleName = attr(firstRowElement, "table:style-name");
+    if (clearedStyleName === undefined) {
+      throw new Error(
+        "expected table:style-name to remain, carrying the background image",
+      );
+    }
+    const clearedProps = findRowStyleProperties(
+      automaticStyles,
+      clearedStyleName,
+    );
+    expect(attr(clearedProps, "style:row-height")).toBeUndefined();
+    const clearedBackgroundImage = clearedProps.children.find(
+      (c): c is XmlElement =>
+        c.type === "element" && c.tag === "style:background-image",
+    );
+    if (clearedBackgroundImage === undefined) {
+      throw new Error("expected style:background-image to survive the clear");
+    }
+    expect(attr(clearedBackgroundImage, "xlink:href")).toBe("Pictures/bg.png");
+  });
+
+  it('clears a pre-existing style:use-optimal-row-height="true" to "false" when an explicit height is set, but never introduces the attribute for a row that never had it', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 1 });
+    const [autoFitRow, plainRow] = table.rows();
+    if (autoFitRow === undefined || plainRow === undefined) {
+      throw new Error("expected two rows");
+    }
+
+    const contentPart = editor.toPackage().parts["content.xml"];
+    const root = rootElement(
+      contentPart?.kind === "xml" ? contentPart.nodes : [],
+    );
+    const automaticStyles = root?.children.find(
+      (c) => c.type === "element" && c.tag === "office:automatic-styles",
+    );
+    if (automaticStyles?.type !== "element") {
+      throw new Error("expected office:automatic-styles");
+    }
+    automaticStyles.children.push(
+      el(
+        "style:style",
+        { "style:name": "AutoFitRowStyle", "style:family": "table-row" },
+        [
+          el("style:table-row-properties", {
+            "style:row-height": "20pt",
+            "style:use-optimal-row-height": "true",
+          }),
+        ],
+      ),
+    );
+    const rowElements = [
+      ...walkElements(contentPart?.kind === "xml" ? contentPart.nodes : []),
+    ]
+      .map((cursor) => cursor.node)
+      .filter((node) => node.tag === "table:table-row");
+    const [firstRowElement, secondRowElement] = rowElements;
+    if (firstRowElement === undefined || secondRowElement === undefined) {
+      throw new Error("expected two table:table-row elements");
+    }
+    firstRowElement.attributes.push({
+      name: "table:style-name",
+      value: "AutoFitRowStyle",
+    });
+
+    // Writing a new explicit height on a row whose style says "auto-fit to content" must turn that flag off -- left at "true", a real consumer would keep auto-fitting and ignore the height this setter just wrote, even though the getter reports it back.
+    autoFitRow.heightPt = 30;
+    const autoFitStyleName = attr(firstRowElement, "table:style-name");
+    if (autoFitStyleName === undefined) {
+      throw new Error("expected a table:style-name after setting heightPt");
+    }
+    expect(
+      attr(
+        findRowStyleProperties(automaticStyles, autoFitStyleName),
+        "style:use-optimal-row-height",
+      ),
+    ).toBe("false");
+
+    // A row that never carried the flag at all must not gain it just because a height was set.
+    plainRow.heightPt = 30;
+    const plainStyleName = attr(secondRowElement, "table:style-name");
+    if (plainStyleName === undefined) {
+      throw new Error("expected a table:style-name after setting heightPt");
+    }
+    expect(
+      attr(
+        findRowStyleProperties(automaticStyles, plainStyleName),
+        "style:use-optimal-row-height",
+      ),
+    ).toBeUndefined();
+  });
+
   it("survives a real odt read/build round trip via readOdtContent", () => {
     const editor = createOdt();
     const table = editor.body.appendTable({ rows: 1, columns: 1 });
