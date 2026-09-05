@@ -770,6 +770,137 @@ describe("lists", () => {
     );
   });
 
+  it("inserts a blank line before a CodeBlock following an HTMLPreformatted block, even though a fenced code block always interrupts an open PARAGRAPH -- an open HTML block (CommonMark start conditions 6/7) is a different construct that ends only at a blank line, so canInterruptOpenParagraph's answer for the NEXT block is not a valid signal here at all", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "HTMLPreformatted",
+        runs: [{ text: "<div>x</div>" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "CodeBlock",
+        runs: [{ text: "code" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- <div>x</div>\n\n  ```\n  code\n  ```");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [htmlBlock, codeBlock] = blocks;
+    if (htmlBlock?.kind !== "paragraph" || codeBlock?.kind !== "paragraph") {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(htmlBlock.styleId).toBe("HTMLPreformatted");
+    expect(htmlBlock.runs.map((run) => run.text).join("")).toBe("<div>x</div>");
+    expect(codeBlock.styleId).toBe("CodeBlock");
+    expect(codeBlock.runs.map((run) => run.text).join("")).toBe("code");
+  });
+
+  it("inserts a blank line before an ATX heading following an HTMLPreformatted block, for the same reason as the CodeBlock case above: an ATX heading interrupts a PARAGRAPH unconditionally, but that says nothing about an open HTML block, which absorbs the heading's own line as more literal content without one", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "HTMLPreformatted",
+        runs: [{ text: "<div>x</div>" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "Heading1",
+        runs: [{ text: "h" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- <div>x</div>\n\n  # h");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [htmlBlock, headingBlock] = blocks;
+    if (htmlBlock?.kind !== "paragraph" || headingBlock?.kind !== "paragraph") {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(htmlBlock.styleId).toBe("HTMLPreformatted");
+    expect(headingBlock.styleId).toBe("Heading1");
+    expect(headingBlock.runs.map((run) => run.text).join("")).toBe("h");
+  });
+
+  it("inserts a blank line before a MathBlock following an HTMLPreformatted block, for the same reason as the CodeBlock case above: a $$ line interrupts a PARAGRAPH exactly as a code fence does, but an open HTML block is not a paragraph and absorbs it without one", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "HTMLPreformatted",
+        runs: [{ text: "<div>x</div>" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "MathBlock",
+        runs: [{ text: "x^2" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source);
+    expect(written).toBe("- <div>x</div>\n\n  $$\n  x^2\n  $$");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [htmlBlock, mathBlock] = blocks;
+    if (htmlBlock?.kind !== "paragraph") {
+      throw new Error("expected the first block to be a paragraph");
+    }
+    expect(htmlBlock.styleId).toBe("HTMLPreformatted");
+    expect(mathBlock?.kind).toBe("embeddedObject");
+  });
+
+  it("inserts a blank line before a thematic break rendered with a non-default character ('*') following an HTMLPreformatted block -- '*' is never a setext underline, so canInterruptOpenParagraph accepts it, but an open HTML block absorbs any non-blank line regardless of what that line looks like", () => {
+    const source = doc([
+      {
+        kind: "paragraph",
+        styleId: "HTMLPreformatted",
+        runs: [{ text: "<div>x</div>" }],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+      {
+        kind: "paragraph",
+        styleId: "HorizontalRule",
+        runs: [],
+        list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+      },
+    ]);
+    const written = emitMarkdown(source, { thematicBreakChar: "*" });
+    expect(written).toBe("- <div>x</div>\n\n  ***");
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const blocks = reparsed.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(2);
+    const [htmlBlock, ruleBlock] = blocks;
+    if (htmlBlock?.kind !== "paragraph" || ruleBlock?.kind !== "paragraph") {
+      throw new Error("expected two paragraph blocks");
+    }
+    expect(htmlBlock.styleId).toBe("HTMLPreformatted");
+    expect(ruleBlock.styleId).toBe("HorizontalRule");
+  });
+
   it("inserts a blank line resuming an outer item's own blocks after a nested sub-list whose own last block is a plain (open) paragraph, since a line at the outer continuation indent would otherwise be read as the NESTED item's own lazy continuation rather than the outer item resuming (CommonMark spec 0.31.2 example 325's own shape)", () => {
     const source = doc([
       {
