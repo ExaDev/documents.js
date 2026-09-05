@@ -15,6 +15,9 @@ const LSTF_SIZE = 28;
 const LVLF_SIZE = 28;
 const LFO_SIZE = 16;
 const LSTF_FLAG_SIMPLE_LIST = 0x01;
+/** rgistdPara ([MS-DOC] 2.9.191's own LSTF field table): nine 2-byte ISTD entries, one per level, each "MUST be set to 0x0FFF to specify that this level is not linked to a style" when (as here) the writer links no per-level style cascade at all -- a genuine MUST this writer has to satisfy itself, unlike tplc/grfhic, which numbering.ts's own reader ignores outright. 0x0000 is not an available "unset" spelling: it names a real style (ISTD 0, "Normal"), so leaving the field zeroed states a link this writer never intended. */
+const LSTF_RGISTD_PARA_UNLINKED = 0x0fff;
+const LSTF_RGISTD_PARA_COUNT = 9;
 /** The LVLF flags-byte bit numbering.ts's own reader treats as fNoRestart -- restated here for the reason pap-write.ts's own top comment gives for restating pap.ts's opcodes: this module's own byte layout is coupled to the specification's field table, not to a sibling module's private constant name. */
 const LVLF_FLAG_NO_RESTART = 0x02;
 /** A non-simple LSTF always carries exactly nine LVLs ([MS-DOC] 2.9.191); sprmPIlvl's own operand range this writer's caller (pap-write.ts) validates against is the same fact restated at the paragraph-property layer. */
@@ -147,7 +150,11 @@ export function gatherListUsage(
 function buildLstfBytes(lsid: number, fSimpleList: boolean): number[] {
   const lstf = new Array<number>(LSTF_SIZE).fill(0);
   writeUint32LE(lstf, 0, lsid);
-  // tplc (offset 4, 4 bytes) and rgistdPara (offset 8, 18 bytes) stay 0 -- both ignored by this package's own reader (numbering.ts's readLstf: "tplc... ignored -- UI-only" / "rgistdPara... ignored -- this reader has no per-level style cascade to link into").
+  // tplc (offset 4, 4 bytes) stays 0 -- ignored by this package's own reader (numbering.ts's readLstf: "tplc... ignored -- UI-only"), and [MS-DOC] states no MUST of its own for it. rgistdPara (offset 8, 18 bytes) is a genuine MUST this writer has to satisfy itself, unlike tplc: numbering.ts's own reader ignores every entry ("this reader has no per-level style cascade to link into"), but [MS-DOC] 2.9.191 requires each of the nine ISTD entries to be 0x0FFF when, as here, the level links to no style -- 0x0000 is not an available "unset" spelling, since it names a real style (ISTD 0, "Normal"), so leaving the field zeroed would state a link this writer never intended, even though this package's own round trip can never detect the difference.
+  for (let index = 0; index < LSTF_RGISTD_PARA_COUNT; index += 1) {
+    lstf[8 + index * 2] = LSTF_RGISTD_PARA_UNLINKED & 0xff;
+    lstf[8 + index * 2 + 1] = (LSTF_RGISTD_PARA_UNLINKED >> 8) & 0xff;
+  }
   lstf[26] = fSimpleList ? LSTF_FLAG_SIMPLE_LIST : 0x00;
   // grfhic (offset 27) stays 0 -- "ignored -- HTML-export-only incompatibility flags" per numbering.ts's own readLstf.
   return lstf;
