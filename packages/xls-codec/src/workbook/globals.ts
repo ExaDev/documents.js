@@ -241,20 +241,40 @@ function readSupBook(record: RecordGroup): SupBookInfo {
 /** [MS-XLS] 480c3d2a's own VirtualPath grammar directory separator (U+0003) -- never a printable character a real file or sheet name may contain, so splitting on it to find the trailing segment is unambiguous. */
 const VIRTPATH_DIRECTORY_SEPARATOR = "\u0003";
 
+/** [MS-XLS] 480c3d2a's own two-character virt-path markers this reader still resolves a trailing file name through: rel-volume, startup, alt-startup, and library -- each %x0001 followed by one of these bytes, then file-path itself. Distinct from simple-file-path, whose own leading %x0001 (when present at all) stands ALONE, with no second marker byte, directly followed by file-path -- so any OTHER second character belongs to that file-path, not to a marker this function should also consume. */
+const VIRTPATH_REL_VOLUME_MARKER = 0x02;
+const VIRTPATH_STARTUP_MARKER = 0x06;
+const VIRTPATH_ALT_STARTUP_MARKER = 0x07;
+const VIRTPATH_LIBRARY_MARKER = 0x08;
+
 /**
- * Isolates a plain trailing file name from a SupBook's own virtPath, when it uses one of the VirtualPath grammar's simpler forms: no leading marker at all (simple-file-path), or a two-character marker saying the path is relative to the referencing workbook's own drive, the startup directory, the alternate startup directory, or the library directory (rel-volume/startup/alt-startup/library -- [MS-XLS] 480c3d2a's own virt-path alternatives). An absolute drive volume, a UNC share, or a transfer-protocol URL needs more of the grammar than a trailing path segment to reproduce faithfully, so those return undefined rather than a guess -- readSupBook's own caller then shows the sheet name(s) (still fully resolvable from rgst) against a placeholder workbook label instead of discarding them.
+ * Isolates a plain trailing file name from a SupBook's own virtPath, when it uses one of the VirtualPath grammar's simpler forms: simple-file-path (no marker at all, or its own optional lone %x0001 with no second marker byte), or a genuine two-character marker saying the path is relative to the referencing workbook's own drive, the startup directory, the alternate startup directory, or the library directory (rel-volume/startup/alt-startup/library -- [MS-XLS] 480c3d2a's own virt-path alternatives). An absolute drive volume, a UNC share, or a transfer-protocol URL needs more of the grammar than a trailing path segment to reproduce faithfully, so those return undefined rather than a guess -- readSupBook's own caller then shows the sheet name(s) (still fully resolvable from rgst) against a placeholder workbook label instead of discarding them. file-path's own bracketed form (`"[" relative-path "]" sheet-name`, naming a sheet directly in the path rather than through SupBook's separate rgst array) is outside what this reader reconstructs too, and is declined the same way rather than folded into the file name and doubled up with the caller's own `[bookLabel]` bracketing.
  */
 function fileNameFromVirtPath(virtPath: string): string | undefined {
   let path = virtPath;
   if (path.startsWith("\u0001")) {
     const marker = path.codePointAt(1);
-    // 0x01 (an absolute drive volume or a UNC share, both of which open with a SECOND 0x01) and 0x05 (a transfer-protocol URL, whose own "count" field is a raw byte rather than a character this reader could safely treat as part of the path) need more of the grammar than a trailing segment can supply.
-    if (marker === undefined || marker === 0x01 || marker === 0x05) {
-      return undefined;
+    switch (marker) {
+      // A volume/unc-volume (both open with a SECOND 0x01) or a transfer-protocol URL (whose own "count" field is a raw byte rather than a character this reader could safely treat as part of the path) needs more of the grammar than a trailing segment can supply.
+      case 0x01:
+      case 0x05:
+        return undefined;
+      case VIRTPATH_REL_VOLUME_MARKER:
+      case VIRTPATH_STARTUP_MARKER:
+      case VIRTPATH_ALT_STARTUP_MARKER:
+      case VIRTPATH_LIBRARY_MARKER:
+        path = path.slice(2);
+        break;
+      default:
+        // simple-file-path: the lone %x0001 marker stands alone -- whatever follows (including this "marker" character, undefined when virtPath is the single byte on its own) is already the start of file-path itself, not a second marker byte to also discard.
+        path = path.slice(1);
+        break;
     }
-    path = path.slice(2);
   }
   if (path.length === 0) {
+    return undefined;
+  }
+  if (path.startsWith("[")) {
     return undefined;
   }
   const segments = path.split(VIRTPATH_DIRECTORY_SEPARATOR);
