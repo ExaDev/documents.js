@@ -613,6 +613,26 @@ describe("tables", () => {
       expect.objectContaining({ code: "epub/table-caption-unsupported" }),
     );
   });
+
+  it("keeps a footnote reference construct carried by a <caption>'s own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<table><caption>Cap<a epub:type="noteref" href="#fn1">1</a></caption><tr><td>x</td></tr></table>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Cap" }, { text: "1" }],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
 });
 
 describe("blockquote", () => {
