@@ -825,7 +825,7 @@ describe("writeDocContent tables", () => {
     expect(isDocBytes(bytes)).toBe(true);
     const block = tableAt(readDocContent(bytes), 0);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("table row 0");
+    expect(warnings[0]).toContain("table at block 0, row 0");
     expect(warnings[0]).toMatch(
       /could only state 20 of its 21 assigned lost column boundaries/,
     );
@@ -879,7 +879,7 @@ describe("writeDocContent tables", () => {
     expect(isDocBytes(overflowingBytes)).toBe(true);
     const overflowingBlock = tableAt(readDocContent(overflowingBytes), 0);
     expect(overflowingWarnings).toHaveLength(1);
-    expect(overflowingWarnings[0]).toContain("table row 0");
+    expect(overflowingWarnings[0]).toContain("table at block 0, row 0");
     expect(overflowingWarnings[0]).toMatch(
       /could only state 20 of its 21 assigned lost column boundaries/,
     );
@@ -917,7 +917,7 @@ describe("writeDocContent tables", () => {
     expect(isDocBytes(bytes)).toBe(true);
     const block = tableAt(readDocContent(bytes), 0);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("table row 0");
+    expect(warnings[0]).toContain("table at block 0, row 0");
     expect(warnings[0]).toMatch(
       /could only state 20 of its 63 assigned lost column boundaries/,
     );
@@ -945,6 +945,36 @@ describe("writeDocContent tables", () => {
       },
     ]);
     expect(() => writeDocContent(input)).not.toThrow();
+  });
+
+  it("names the degraded table by its own block index, so two over-budget tables in one document report distinguishable warnings (containing-block-index diagnostic)", () => {
+    // Two tables past the same 21-column ceiling, separated by an ordinary paragraph: without a table identity in the warning, both would report the indistinguishable "table row 0", leaving a caller no way to tell which table actually degraded. Naming each by its own position in the section's blocks (1 and 3, since the leading and separating paragraphs are blocks 0 and 2) is what makes the two warnings tell apart.
+    const columnCount = 22;
+    const overBudgetTable: ContentTable = {
+      kind: "table",
+      columnWidthsPt: Array.from({ length: columnCount }, () => 20),
+      rows: [
+        {
+          cells: [
+            { blocks: [paragraph([{ text: "wide" }])], colSpan: columnCount },
+          ],
+        },
+      ],
+    };
+    const input = document([
+      paragraph([{ text: "before" }]),
+      overBudgetTable,
+      paragraph([{ text: "between" }]),
+      overBudgetTable,
+    ]);
+    const warnings: string[] = [];
+    const bytes = writeDocContent(input, {
+      onWarning: (message) => warnings.push(message),
+    });
+    expect(isDocBytes(bytes)).toBe(true);
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toContain("table at block 1, row 0");
+    expect(warnings[1]).toContain("table at block 3, row 0");
   });
 
   it("round-trips a vertically merged cell's rowSpan, with the spanned rows carrying an empty placeholder cell", () => {
