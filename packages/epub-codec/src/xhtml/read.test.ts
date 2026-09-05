@@ -46,6 +46,27 @@ describe("headings", () => {
       expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
   });
+
+  it("keeps a footnote reference construct carried by a heading's own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<h2>Title<a epub:type="noteref" href="#fn1">1</a></h2>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      headingLevel: 2,
+      runs: [{ text: "Title" }, { text: "1" }],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
 });
 
 describe("paragraphs and inline styling", () => {
@@ -105,6 +126,17 @@ describe("paragraphs and inline styling", () => {
       {
         kind: "paragraph",
         runs: [{ text: "a" }, { text: "\n" }, { text: "b" }],
+      },
+    ]);
+  });
+
+  // ExaDev/documents.js#994's round-8 systemic gap: every text-bearing walk in this package used to dispatch on node.type === "text" alone, silently dropping a CDATA section -- the standard idiom a producer reaches for when its own literal text needs a raw `<`/`&` it would otherwise have to escape. xml/node.ts's isTextLikeNode is now the one shared predicate buildInlineRuns itself dispatches on.
+  it("reads a CDATA section exactly like an ordinary text node, including its own literal < and &", () => {
+    const blocks = read(body("<p>before <![CDATA[A & B < C]]> after</p>"));
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "before " }, { text: "A & B < C" }, { text: " after" }],
       },
     ]);
   });
@@ -179,6 +211,497 @@ describe("lists", () => {
     const blocks = read(body('<ol start="3"><li>a</li></ol>'));
     expect(blocks[0]).toMatchObject({ list: { numId: "epub1:ordered@3" } });
   });
+
+  it("recovers a <ul> nested directly as a sibling of <li> rather than inside one, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul><li>a</li><ul><li>b</li></ul></ul>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:bullet", level: 1, itemId: "item2" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("recovers a stray <img> sitting directly inside a <ul> as a continuation of the preceding <li>", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body('<ul><li>a</li><img src="a.png" alt="ulpic"/></ul>'),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "ulpic" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-unresolved" }),
+    );
+  });
+
+  it("recovers stray text that sits before the very first <li>, with no list membership of its own, positioned immediately before the list's own items", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul>stray<li>a</li></ul>"), sink);
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("recovers a <ul> nested directly before the very first <li> as its own separate top-level list, rather than losing it -- issue #994's own headline repro", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul><ul><li>b</li></ul><li>a</li></ul>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub2:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("mints item ids and fires diagnostics in document order, never for a recovered read whose result is then discarded", () => {
+    const sink = vi.fn<(d: EpubDiagnostic) => void>();
+    const blocks = read(
+      body('<ul><img src="before.png" alt="before"/><li>a</li><li>b</li></ul>'),
+      sink,
+    );
+    // "before" carries no list membership (recovered ahead of the first real <li>); "a" and "b" are item1/item2 in document order -- the minter is never advanced for a read whose result this function goes on to discard.
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "before" }] },
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
+      },
+    ]);
+    const outsideItemCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/list-content-outside-item",
+    );
+    expect(outsideItemCalls).toHaveLength(1);
+  });
+
+  it("still drops genuinely whitespace-only content before the very first <li>, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul>\n  <li>a</li>\n</ul>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it("ignores inter-element whitespace between <li> siblings, firing no diagnostic, for the pretty-printed shape essentially all real-world HTML uses", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul>\n  <li>a</li>\n  <li>b</li>\n</ul>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it("ignores inter-element whitespace across a multi-item indented <ol>, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<ol>\n  <li>a</li>\n  <li>b</li>\n  <li>c</li>\n</ol>"),
+      sink,
+    );
+    expect(blocks.map((b) => (b as { runs: { text: string }[] }).runs)).toEqual(
+      [[{ text: "a" }], [{ text: "b" }], [{ text: "c" }]],
+    );
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it("skips a <script> script-supporting element sitting directly inside a <ul> entirely, never leaking it into content", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<ul><li>a</li><script>var x = 1;</script><li>b</li></ul>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("skips a <template> script-supporting element sitting directly inside an <ol> entirely", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<ol><li>a</li><template><li>fake</li></template><li>b</li></ol>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:ordered", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:ordered", level: 0, itemId: "item2" },
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("preserves a genuine inter-element space between two stray inline siblings rather than joining them", () => {
+    const blocks = read(
+      body("<ul><li>a</li><span>foo</span> <span>bar</span></ul>"),
+    );
+    expect(blocks).toHaveLength(2);
+    const strayParagraph = blocks[1] as { runs: { text: string }[] };
+    expect(strayParagraph.runs.map((run) => run.text).join("")).toBe("foo bar");
+  });
+
+  it("never leaks a <script>'s raw source as document text even when nested inside a stray wrapper the list-recovery path recurses into", () => {
+    const blocks = read(
+      body("<ul><li>a</li><div><script>var x=1;</script></div></ul>"),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ]);
+  });
+
+  // Regression coverage for the emptiness-probe defect: flushListStrayContent used to decide whether to recover its collected stray nodes by building their inline runs (buildInlineRuns, which only ever produces TEXT) and checking whether that text was blank -- so any stray block-level content whose text projection happens to be empty (a resolved image with no alt text, an <hr>, a table or nested list whose only content is such an image) was misjudged as "whitespace-only" and silently dropped, with no diagnostic, exactly like real pretty-printed whitespace. The fix asks the real question instead: does readContainerChildren's own result carry any blocks at all. Each case below recovers a resolved image inline PNG (fakePng, defined further down this file -- a function declaration, hoisted) so the stray content's own text projection is genuinely empty while its block projection is not.
+  it("recovers a stray, resolved <img> with no alt attribute as a real image block, not judging it whitespace-only by its absent text projection", () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body('<ul><li>a</li><img src="a.png"/></ul>'),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[1]).toMatchObject({ kind: "image" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it('recovers a stray, resolved <img alt=""> as a real image block', () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body('<ul><li>a</li><img src="a.png" alt=""/></ul>'),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[1]).toMatchObject({ kind: "image" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("recovers a nested <ul> stray sibling whose only <li> content is a resolved image with no text -- issue #994's own headline shape, which the emptiness-probe regression defeated", () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body('<ul><li>a</li><ul><li><img src="a.png" alt=""/></li></ul></ul>'),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toMatchObject({
+      kind: "paragraph",
+      list: { numId: "epub1:bullet", level: 0 },
+    });
+    expect(blocks[1]).toMatchObject({ kind: "image" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("recovers a stray <hr/> sitting directly inside a <ul> as a real paragraph block, not empty-runs judged whitespace-only", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul><li>a</li><hr/></ul>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [],
+        styleId: "HorizontalRule",
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("recovers a stray <table> whose only cell content is a resolved image with no alt text -- readTable always yields a real table block regardless of its cells' own text", () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body(
+        '<ul><li>a</li><table><tr><td><img src="a.png" alt=""/></td></tr></table></ul>',
+      ),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[1]).toMatchObject({ kind: "table" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it.each([
+    ["figure", '<figure><img src="a.png" alt=""/></figure>', 2],
+    ["p", '<p><img src="a.png" alt=""/></p>', 2],
+    ["blockquote", '<blockquote><img src="a.png" alt=""/></blockquote>', 4], // division constructStart + image + constructEnd, plus the preceding <li>'s own paragraph
+  ] as const)(
+    "recovers a stray <%s> wrapping only a resolved, alt-less image",
+    (_tag, fragment, expectedBlockCount) => {
+      const bytes = fakePng(96, 96);
+      const sink = vi.fn();
+      const { blocks } = readXhtmlBody(body(`<ul><li>a</li>${fragment}</ul>`), {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      });
+      expect(blocks).toHaveLength(expectedBlockCount);
+      expect(blocks.some((block) => block.kind === "image")).toBe(true);
+      expect(sink).toHaveBeenCalledWith(
+        expect.objectContaining({ code: "epub/list-content-outside-item" }),
+      );
+    },
+  );
+
+  it("recovers stray content before the first <li> of a NESTED list inheriting the outer <li>'s own list membership, not none, when the enclosing list is itself nested", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<ul><li>outer<ul>stray<li>inner</li></ul></li></ul>"),
+      sink,
+    );
+    // "stray" sits before the inner <ul>'s own first <li>, so it has no preceding item WITHIN that inner list to attach to -- but the inner <ul> is itself nested inside the outer <li>, so the recovered content inherits THAT membership rather than carrying none of its own, exactly as the diagnostic message now states.
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "outer" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "stray" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "inner" }],
+        list: { numId: "epub1:bullet", level: 1, itemId: "item2" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+});
+
+describe("inert elements outside lists (script/template/style/noscript)", () => {
+  it("never leaks a <script>'s raw source as document text when it sits directly inside a <p>", () => {
+    const blocks = read(body("<p>before<script>var x=1;</script>after</p>"));
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "before" }, { text: "after" }] },
+    ]);
+  });
+
+  it("never leaks a <style>'s own CSS text as document prose when it sits directly inside <body> content", () => {
+    const blocks = read(
+      body("<p>before</p><style>p{color:red}</style><p>after</p>"),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "before" }] },
+      { kind: "paragraph", runs: [{ text: "after" }] },
+    ]);
+  });
+
+  it("never leaks a <noscript>'s fallback markup as document prose when it sits directly inside a <p>", () => {
+    const blocks = read(
+      body("<p>before<noscript>Enable JavaScript</noscript>after</p>"),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "before" }, { text: "after" }] },
+    ]);
+  });
+
+  it("does not treat an id living only inside a <noscript> as a resolvable footnote target", () => {
+    const blocks = read(
+      body(
+        '<p>See <a class="footnote" href="#fn1">1</a></p>' +
+          '<noscript><p id="fn1">Hidden note</p></noscript>',
+      ),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "See " }, { text: "1", hyperlink: "#fn1" }],
+      },
+    ]);
+  });
+
+  it("never leaks a <template>'s inert content as document text when it sits directly inside a table cell", () => {
+    const blocks = read(
+      body(
+        "<table><tr><td>before<template><li>fake</li></template>after</td></tr></table>",
+      ),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  {
+                    kind: "paragraph",
+                    runs: [{ text: "before" }, { text: "after" }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+  });
+
+  it("does not let a heading inside an inert <template> suppress a blockquote's own division construct", () => {
+    const blocks = read(
+      body(
+        "<blockquote><template><h2>Hidden</h2></template><p>quoted</p></blockquote>",
+      ),
+    );
+    expect(blocks).toEqual([
+      { kind: "constructStart", descriptor: { kind: "division" } },
+      {
+        kind: "paragraph",
+        runs: [{ text: "quoted" }],
+        indentLeftPt: 36,
+        styleId: "Quote",
+      },
+      { kind: "constructEnd" },
+    ]);
+  });
+
+  it("does not treat an id living only inside an inert <template> as a resolvable footnote target", () => {
+    const blocks = read(
+      body(
+        '<p>See <a class="footnote" href="#fn1">1</a></p>' +
+          '<template><p id="fn1">Hidden note</p></template>',
+      ),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "See " }, { text: "1", hyperlink: "#fn1" }],
+      },
+    ]);
+  });
+
+  it("does not let a footnote-reference anchor living only inside an inert <template> mark an unrelated live element as a footnote target", () => {
+    const blocks = read(
+      body(
+        '<template><a epub:type="noteref" href="#fn1">hidden</a></template>' +
+          '<p id="fn1">Real paragraph</p>',
+      ),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Real paragraph" }] },
+    ]);
+  });
 });
 
 describe("definition lists", () => {
@@ -225,6 +748,176 @@ describe("definition lists", () => {
     ]);
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({ code: "epub/image-inline-unsupported" }),
+    );
+  });
+
+  it("recurses into a <div> wrapping a dt/dd pair, a legal HTML5 per-entry styling hook", () => {
+    const blocks = read(
+      body("<dl><div><dt>Term</dt><dd>Definition</dd></div></dl>"),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
+    ]);
+  });
+
+  it("recurses into several <div>-wrapped groups in sequence", () => {
+    const blocks = read(
+      body(
+        "<dl><div><dt>A</dt><dd>a</dd></div><div><dt>B</dt><dd>b</dd></div></dl>",
+      ),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "A" }] },
+      { kind: "paragraph", runs: [{ text: "a" }], indentLeftPt: 36 },
+      { kind: "paragraph", runs: [{ text: "B" }] },
+      { kind: "paragraph", runs: [{ text: "b" }], indentLeftPt: 36 },
+    ]);
+  });
+
+  it("keeps a footnote reference construct carried by a dt's own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<dl><dt>Term<a epub:type="noteref" href="#fn1">1</a></dt><dd>Definition</dd></dl>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Term" }, { text: "1" }],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
+
+  it("keeps a footnote reference construct carried by a dd's own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<dl><dt>Term</dt><dd>Definition<a epub:type="noteref" href="#fn1">1</a></dd></dl>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[1]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Definition" }, { text: "1" }],
+      indentLeftPt: 36,
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
+
+  it("recovers a stray <p> sitting directly inside a <dl> between dt/dd, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<dl><dt>Term</dt><p>stray</p><dd>Definition</dd></dl>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/definition-list-content-outside-entry",
+      }),
+    );
+  });
+
+  it("recovers stray text sitting before the very first dt inside a <dl>, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<dl>stray<dt>Term</dt></dl>"), sink);
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/definition-list-content-outside-entry",
+      }),
+    );
+  });
+
+  it("recovers a stray, resolved <img> sitting directly inside a <dl> as a real image block, with a diagnostic", () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body('<dl><dt>Term</dt><img src="a.png" alt="pic"/></dl>'),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[1]).toMatchObject({ kind: "image" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/definition-list-content-outside-entry",
+      }),
+    );
+  });
+
+  it("skips a <script> sitting directly inside a <dl>, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<dl><dt>Term</dt><script>var x=1;</script><dd>Definition</dd></dl>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/definition-list-content-outside-entry",
+      }),
+    );
+  });
+
+  it("ignores inter-element whitespace inside a <dl>, firing no diagnostic, for the pretty-printed shape essentially all real-world HTML uses", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<dl>\n  <dt>Term</dt>\n  <dd>Definition</dd>\n</dl>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
+    ]);
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it("recovers a <section> wrapping a dt/dd pair as degraded, concatenated plain text, with a diagnostic -- <div> is the only wrapper HTML5's own <dl> content model actually names as legal", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<dl><section><dt>Term</dt><dd>Definition</dd></section></dl>"),
+      sink,
+    );
+    // The section's own dt/dd children lose their distinct term/definition treatment once routed through readContainerChildren, which has no notion of dt/dd -- a real, documented fidelity cost, but a text-preserving one.
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "Term" }, { text: "Definition" }],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/definition-list-content-outside-entry",
+      }),
     );
   });
 });
@@ -296,6 +989,182 @@ describe("tables", () => {
     ]);
   });
 
+  it("reads a CDATA section's own literal content inside a <td>, rather than silently dropping it", () => {
+    const blocks = read(
+      body("<table><tr><td><![CDATA[cell & data]]></td></tr></table>"),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  { kind: "paragraph", runs: [{ text: "cell & data" }] },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+  });
+
+  it("recovers a CDATA section sitting directly inside a <tbody> outside any <tr>, with a diagnostic, positioned immediately before the table", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<table><tbody><![CDATA[stray]]><tr><td>x</td></tr></tbody></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("recovers a stray <p> sitting directly inside a <colgroup> outside any <col>, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<table><colgroup><p>stray</p><col/></colgroup><tr><td>x</td></tr></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("recovers stray text sitting directly inside a <tbody> outside any <tr>, with a diagnostic, positioned immediately before the table", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><tbody>stray<tr><td>x</td></tr></tbody></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("recovers a stray <p> sitting directly inside a <thead> outside any <tr>, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><thead><p>stray</p><tr><th>H</th></tr></thead></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  { kind: "paragraph", runs: [{ text: "H", bold: true }] },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("recovers a stray, resolved <img> sitting directly inside a <tfoot> outside any <tr>, as a real image block, with a diagnostic", () => {
+    const bytes = fakePng(96, 96);
+    const sink = vi.fn();
+    const { blocks } = readXhtmlBody(
+      body(
+        '<table><tfoot><img src="a.png" alt="pic"/><tr><td>x</td></tr></tfoot></table>',
+      ),
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toMatchObject({ kind: "image" });
+    expect(blocks[1]).toMatchObject({ kind: "table" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("recovers a nested <ul> sitting directly inside a <tbody> outside any <tr>, as a properly nested list, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<table><tbody><ul><li>item</li></ul><tr><td>x</td></tr></tbody></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "item" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
   it("degrades a table cell's own direct-child <img> to alt text with a diagnostic, rather than treating it as a schema limitation", () => {
     const sink = vi.fn();
     const blocks = read(
@@ -322,6 +1191,287 @@ describe("tables", () => {
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
+  });
+
+  it("reads a <caption> as a paragraph before the table, with a diagnostic, instead of dropping it", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        '<table><caption>Cap <img src="a.png" alt="cappic"/></caption><tr><td>cell</td></tr></table>',
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Cap " }, { text: "cappic" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "cell" }] }] },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-caption-unsupported" }),
+    );
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
+    );
+  });
+
+  it("drops an empty <caption> entirely, firing no diagnostic, matching the package's own empty-paragraph-drop rule", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><caption></caption><tr><td>x</td></tr></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-caption-unsupported" }),
+    );
+  });
+
+  it("drops a whitespace-only <caption> entirely, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><caption>   </caption><tr><td>x</td></tr></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-caption-unsupported" }),
+    );
+  });
+
+  it("keeps a footnote reference construct carried by a <caption>'s own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<table><caption>Cap<a epub:type="noteref" href="#fn1">1</a></caption><tr><td>x</td></tr></table>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Cap" }, { text: "1" }],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
+
+  it("keeps a caption whose only content is a construct with no surrounding text, rather than dropping it as empty", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        '<table><caption><a epub:type="noteref" href="#fn1"></a></caption><tr><td>x</td></tr></table>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+      sink,
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 0,
+          endRun: 0,
+        },
+      ],
+    });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-caption-unsupported" }),
+    );
+  });
+
+  it("keeps a footnote reference construct carried by a table cell's own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<table><tr><td>Cell<a epub:type="noteref" href="#fn1">1</a></td></tr></table>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toMatchObject({
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "Cell" }, { text: "1" }],
+                  constructs: [
+                    {
+                      descriptor: {
+                        kind: "anchor",
+                        anchorType: "footnote",
+                        name: "fn1",
+                      },
+                      startRun: 1,
+                      endRun: 2,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("recovers stray text sitting directly inside a <tr> as its own cell, with a diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<table><tr>stray<td>x</td></tr></table>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "stray" }] }] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-row-content-outside-cell" }),
+    );
+  });
+
+  it("skips a <script> sitting directly inside a <tr>, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><tr><script>var x=1;</script><td>x</td></tr></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-row-content-outside-cell" }),
+    );
+  });
+
+  it("recovers a stray <p> sitting directly inside a <table> outside any row/caption, with a diagnostic, positioned immediately before the table", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><p>stray</p><tr><td>x</td></tr></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("skips a <colgroup>/<script> sitting directly inside a <table>, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<table><colgroup><col/><col/></colgroup><script>var x=1;</script><tr><td>a</td><td>b</td></tr></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [
+              { blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] },
+              { blocks: [{ kind: "paragraph", runs: [{ text: "b" }] }] },
+            ],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT / 2, CONTENT_WIDTH_PT / 2],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("reads a second <caption> as its own paragraph too, with an additional duplicate-caption diagnostic, instead of silently discarding it", () => {
+    const sink = vi.fn<(d: EpubDiagnostic) => void>();
+    const blocks = read(
+      body(
+        "<table><caption>One</caption><caption>Two</caption><tr><td>x</td></tr></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "One" }] },
+      { kind: "paragraph", runs: [{ text: "Two" }] },
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    const duplicateCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/table-duplicate-caption",
+    );
+    expect(duplicateCalls).toHaveLength(1);
+    const captionUnsupportedCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/table-caption-unsupported",
+    );
+    expect(captionUnsupportedCalls).toHaveLength(2);
   });
 });
 
@@ -375,9 +1525,135 @@ describe("pre / code blocks", () => {
         runs: [
           { text: "const x = 1;\nconsole.log(x);", fontFamily: "Courier New" },
         ],
+        preformatted: true,
         codeLanguage: "js",
       },
     ]);
+  });
+
+  it("splices an <img>'s alt text into the extracted text with a diagnostic, instead of vanishing", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body('<pre>code <img src="a.png" alt="pic"/> more</pre>'),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "code pic more", fontFamily: "Courier New" }],
+        preformatted: true,
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-pre-unsupported" }),
+    );
+  });
+
+  it("reaches an <img> nested a level deeper, inside <code>", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body('<pre><code>x<img src="a.png"/>y</code></pre>'),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "xy", fontFamily: "Courier New" }],
+        preformatted: true,
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-pre-unsupported" }),
+    );
+  });
+
+  // readPreText is its own separate recursive walk over a <pre>'s children, not a call into src/xhtml/inline.ts's appendElement -- so the script/template guard that file's own comment calls "universal" needed its own identical guard here too, since <script>/<template> are both legal children of <pre> per the HTML content model and neither's content is ever legitimate document text.
+  it("skips a <script>'s raw source when it sits directly inside a <pre>, never leaking it into the extracted text", () => {
+    const blocks = read(
+      body("<pre>before<script>var x = 1;</script>after</pre>"),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "beforeafter", fontFamily: "Courier New" }],
+        preformatted: true,
+      },
+    ]);
+  });
+
+  it("skips a <template>'s inert content when it sits directly inside a <pre>'s own <code>", () => {
+    const blocks = read(
+      body(
+        "<pre><code>before<template><li>fake</li></template>after</code></pre>",
+      ),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "beforeafter", fontFamily: "Courier New" }],
+        preformatted: true,
+      },
+    ]);
+  });
+
+  it("keeps a footnote reference construct carried by inline content inside a <pre>, rather than discarding it silently", () => {
+    const blocks = read(
+      body(
+        '<pre>see<a epub:type="noteref" href="#fn1">1</a></pre>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [
+        { text: "see", fontFamily: "Courier New" },
+        { text: "1", fontFamily: "Courier New" },
+      ],
+      preformatted: true,
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
+
+  it("preserves a CDATA section's own literal content inside a <pre>, rather than silently dropping it", () => {
+    const blocks = read(body("<pre><![CDATA[a & b < c]]></pre>"));
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a & b < c", fontFamily: "Courier New" }],
+        preformatted: true,
+      },
+    ]);
+  });
+
+  it("keeps a footnote reference construct nested inside a wrapping element inside a <pre>, and leaves surrounding non-footnote text merged into its own run", () => {
+    const blocks = read(
+      body(
+        '<pre>before <span>middle</span> see<a epub:type="noteref" href="#fn1">1</a> after</pre>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [
+        { text: "before middle see", fontFamily: "Courier New" },
+        { text: "1", fontFamily: "Courier New" },
+        { text: " after", fontFamily: "Courier New" },
+      ],
+      preformatted: true,
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
   });
 });
 
@@ -564,12 +1840,59 @@ describe("figure/figcaption", () => {
       expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
   });
+
+  it("keeps a footnote reference construct carried by a <figcaption>'s own inline content, rather than discarding it", () => {
+    const blocks = read(
+      body(
+        '<figure><figcaption>Caption<a epub:type="noteref" href="#fn1">1</a></figcaption></figure>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Caption" }, { text: "1" }],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
 });
 
 describe("div/section passthrough", () => {
   it("reads a div's children transparently", () => {
     const blocks = read(body("<div><p>inside</p></div>"));
     expect(blocks).toEqual([{ kind: "paragraph", runs: [{ text: "inside" }] }]);
+  });
+});
+
+describe("readContainerChildren's own segment flush", () => {
+  it("keeps a construct-only segment sitting bare between two block siblings, rather than dropping it as an empty segment", () => {
+    const blocks = read(
+      body(
+        '<p>Before</p><a epub:type="noteref" href="#fn1"></a><p>After</p>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Before" }],
+    });
+    expect(blocks[1]).toEqual({
+      kind: "paragraph",
+      runs: [],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 0,
+          endRun: 0,
+        },
+      ],
+    });
+    expect(blocks[2]).toEqual({ kind: "paragraph", runs: [{ text: "After" }] });
   });
 });
 

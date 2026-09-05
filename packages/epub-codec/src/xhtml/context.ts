@@ -23,3 +23,13 @@ export interface InlineStyle {
   readonly strike?: boolean;
   readonly fontFamily?: string;
 }
+
+// Elements whose own subtree is never legitimate document prose, wherever it is reached during a body read -- the single shared definition for a check src/xhtml/read.ts used to duplicate three separate ways (an id/heading/anchor prescan's own descendant walk via isInertContainer, a stray-content collector's own isScriptSupportingElement, and a <pre> text extractor's own inline tag-literal check) and src/xhtml/inline.ts duplicated a fourth way (a dedicated switch case in buildInlineRuns's own per-node dispatch), so a future addition to this set can never silently miss one of the several places that needs to agree on it. <script>'s raw JS source and <template>'s inert DOM subtree are never real content per the HTML Standard's own "script-supporting elements" category. <style> in body content is CSS, exactly like the <head>-level style residue this package already quarantines rather than interprets (src/xhtml/read.ts's readStyleResidue) -- there is no per-element residue channel for a body-level <style>, so it is simply skipped rather than captured. <noscript> is included for the identical residue-not-content reasoning, deliberately conservative about the ambiguity it carries: its own children ARE ordinary markup a scripting-disabled reading system would genuinely render, but a producer commonly uses it for a "please enable JavaScript" placeholder that would be actively wrong to surface as document prose, and this package has no way to tell the two apart from the markup alone.
+export function isInertElement(tag: string): boolean {
+  return (
+    tag === "script" ||
+    tag === "template" ||
+    tag === "style" ||
+    tag === "noscript"
+  );
+}

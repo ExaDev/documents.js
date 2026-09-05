@@ -2,8 +2,10 @@ import type {
   ContentBlock,
   ContentListMembership,
   ContentParagraph,
+  ContentRun,
   ContentTableCell,
   ContentTableRow,
+  RunConstructExtent,
   SourceResidue,
 } from "document-schema.js";
 import { clampHeadingLevel } from "document-schema.js";
@@ -15,19 +17,15 @@ import {
 } from "../image/dimensions";
 import { bytesToBase64 } from "../util/base64";
 import { buildXml } from "../xml/build";
-import type { XmlElement, XmlNode } from "../xml/node";
-import {
-  attrValue,
-  elementsWithTag,
-  findChildElement,
-  rootElement,
-  textContent,
-} from "../xml/query";
-import { decodeEntities } from "../xml/entities";
+import { isTextLikeNode, type XmlElement, type XmlNode } from "../xml/node";
+import { attrValue, findChildElement, rootElement } from "../xml/query";
+import { decodeEntities, decodeTextLikeNode } from "../xml/entities";
 import { parseXml } from "../xml/parse";
 import type { XhtmlReadContext } from "./context";
+import { isInertElement } from "./context";
 import { isFootnoteAside, isFootnoteReferenceAnchor } from "./footnote";
 import { buildInlineRuns } from "./inline";
+import type { InlineResult } from "./inline";
 import type { MintListNumIdOptions } from "./list-id";
 import { mintListNumId } from "./list-id";
 import {
@@ -120,12 +118,20 @@ function decorateParagraph(
   return decorated;
 }
 
+// The spreadable `constructs` field for a paragraph built directly from one buildInlineRuns result -- shared by every call site that turns a flat inline result into a ContentParagraph (a heading, a table caption, a table cell, a <dt>/<dd>, a <figcaption>), so a run-level construct extent (most commonly a footnote reference) collected while walking that inline content is never silently dropped just because the paragraph itself carries no other property worth spreading in. Before this helper existed, only readContainerChildren's own segment flush and the table caption got this right (ExaDev/documents.js#994's own caption fix); a <figcaption>, a <dt>/<dd>, and a table cell all built `{ kind: "paragraph", runs: inline.runs }` directly, discarding inline.constructs outright -- the identical defect shape reproduced four more times rather than fixed once.
+function constructsField(
+  inline: InlineResult,
+): Pick<ContentParagraph, "constructs"> | Record<string, never> {
+  return inline.constructs.length > 0 ? { constructs: inline.constructs } : {};
+}
+
+// Every arbitrary-descendant walk in this module (the id->element map below, containsHeading, and readXhtmlBody's own footnote-anchor prescan) shares context.ts's own isInertElement guard, since none of them route through appendElement's own dispatch and would otherwise silently index or recognise content that can never actually be read as part of the document.
 function buildIdElementMap(nodes: readonly XmlNode[]): Map<string, XmlElement> {
   const map = new Map<string, XmlElement>();
   const stack: XmlNode[] = [...nodes];
   while (stack.length > 0) {
     const node = stack.pop();
-    if (node?.type !== "element") {
+    if (node?.type !== "element" || isInertElement(node.tag)) {
       continue;
     }
     const id = attrValue(node, "id");
@@ -135,6 +141,26 @@ function buildIdElementMap(nodes: readonly XmlNode[]): Map<string, XmlElement> {
     stack.push(...node.children);
   }
   return map;
+}
+
+// A depth-first descendant search for every element with the given tag, mirroring src/xml/query.ts's own generic elementsWithTag -- but scoped to this module's own inert-content policy above, since elementsWithTag is shared by callers elsewhere in this package (src/nav, src/opf) with no reason to assume the same policy. Used only by readXhtmlBody's own footnote-anchor prescan: an <a> nested inside an inert element (<template>, <noscript>, ...) is never real, readable document content (it is skipped entirely wherever buildInlineRuns would otherwise reach it), so it must not be allowed to seed footnoteTargetIds and cause some unrelated, genuinely live body element sharing its target id to be wrapped as a footnote body it was never really referenced by.
+function elementsWithTagSkippingInert(
+  nodes: readonly XmlNode[],
+  tag: string,
+): XmlElement[] {
+  const out: XmlElement[] = [];
+  const stack: XmlNode[] = [...nodes];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (node?.type !== "element" || isInertElement(node.tag)) {
+      continue;
+    }
+    if (node.tag === tag) {
+      out.push(node);
+    }
+    stack.push(...node.children);
+  }
+  return out;
 }
 
 export interface ReadXhtmlBodyOptions {
@@ -197,7 +223,7 @@ export function readXhtmlBody(
   }
   const idElements = buildIdElementMap(body.children);
   const footnoteTargetIds = new Set<string>();
-  for (const anchor of elementsWithTag(body.children, "a")) {
+  for (const anchor of elementsWithTagSkippingInert(body.children, "a")) {
     const name = isFootnoteReferenceAnchor(anchor, idElements);
     if (name !== undefined) {
       footnoteTargetIds.add(name);
@@ -262,16 +288,17 @@ function readContainerChildren(
     }
     const inline = buildInlineRuns(segment, {}, state.context);
     segment = [];
-    // A segment whose only content, once built, is whitespace produces no visible paragraph -- the common real-world case being pretty-printed XHTML's own indentation landing as a bare text node between two block-level siblings (e.g. the newline-plus-indent between <body> and its first real child), which every browser's own block-formatting context already collapses to nothing rather than an empty line. The identical rule also covers a producer's own literal `<p> </p>`/`<p></p>` (used for CSS spacing): both read as "no content here" rather than a bogus empty ContentParagraph, matching this package's own documented choice to drop an empty paragraph entirely on read.
-    if (inline.runs.every((run) => run.text.trim().length === 0)) {
+    // A segment whose only content, once built, is whitespace produces no visible paragraph -- the common real-world case being pretty-printed XHTML's own indentation landing as a bare text node between two block-level siblings (e.g. the newline-plus-indent between <body> and its first real child), which every browser's own block-formatting context already collapses to nothing rather than an empty line. The identical rule also covers a producer's own literal `<p> </p>`/`<p></p>` (used for CSS spacing): both read as "no content here" rather than a bogus empty ContentParagraph, matching this package's own documented choice to drop an empty paragraph entirely on read. The construct check alongside it exists for the identical reason readTable's own caption guard needs one: a segment carrying only a footnote-reference anchor with empty text (`<a epub:type="noteref" href="#fn1"></a>` sitting bare between two block siblings) produces zero text runs but one real RunConstructExtent, and text-emptiness alone would drop that construct along with the whitespace it is vacuously indistinguishable from.
+    if (
+      inline.runs.every((run) => run.text.trim().length === 0) &&
+      inline.constructs.length === 0
+    ) {
       return;
     }
     const paragraph: ContentParagraph = {
       kind: "paragraph",
       runs: inline.runs,
-      ...(inline.constructs.length > 0
-        ? { constructs: inline.constructs }
-        : {}),
+      ...constructsField(inline),
     };
     blocks.push(decorateParagraph(paragraph, state));
   };
@@ -281,7 +308,7 @@ function readContainerChildren(
       blocks.push(...readBlockElement(node, state));
       continue;
     }
-    if (node.type === "element" || node.type === "text") {
+    if (node.type === "element" || isTextLikeNode(node)) {
       segment.push(node);
     }
   }
@@ -331,9 +358,7 @@ function readBlockElementInner(
       kind: "paragraph",
       headingLevel,
       runs: inline.runs,
-      ...(inline.constructs.length > 0
-        ? { constructs: inline.constructs }
-        : {}),
+      ...constructsField(inline),
     };
     return [decorateParagraph(paragraph, state)];
   }
@@ -360,7 +385,7 @@ function readBlockElementInner(
     case "dl":
       return readDefinitionList(element, state);
     case "table":
-      return [readTable(element, state)];
+      return readTable(element, state);
     case "figure":
       return readContainerChildren(element.children, state);
     case "figcaption": {
@@ -368,6 +393,7 @@ function readBlockElementInner(
       const paragraph: ContentParagraph = {
         kind: "paragraph",
         runs: inline.runs,
+        ...constructsField(inline),
       };
       return [decorateParagraph(paragraph, state)];
     }
@@ -383,17 +409,159 @@ function readBlockElementInner(
   }
 }
 
+// A <pre>'s own inline content can carry a run-level construct (most commonly a footnote reference) exactly like any other paragraph's, but a <pre>'s own content model needs its text preserved verbatim -- so this cannot simply call buildInlineRuns (src/xhtml/inline.ts), which normalizes whitespace. containsFootnoteReference below decides which of the two walks actually builds the paragraph's runs: the common case (no footnote reference anywhere in the <pre>) takes the cheap, unchanged single-string readPreText path with no construct to lose; only a <pre> that genuinely carries one pays for readPreRuns' own run-splitting recursion.
 function readPre(element: XmlElement, state: BuildState): ContentBlock {
   const codeElement = findChildElement(element.children, "code");
   const languageSource = codeElement ?? element;
   const codeLanguage = languageFromClass(attrValue(languageSource, "class"));
-  const text = decodeEntities(textContent(element.children));
+  const inline: InlineResult = containsFootnoteReference(
+    element.children,
+    state.context,
+  )
+    ? readPreRuns(element.children, state.context)
+    : {
+        runs: readPreFlatRuns(element.children, state.context),
+        constructs: [],
+      };
   const paragraph: ContentParagraph = {
     kind: "paragraph",
-    runs: text.length > 0 ? [{ text, fontFamily: MONOSPACE_FONT_FAMILY }] : [],
+    runs: inline.runs,
+    preformatted: true, // document-schema.js's own discriminating signal for "this paragraph's whitespace must survive verbatim" -- set unconditionally here (every call to readPre corresponds to a real <pre> element) rather than left for the writer to infer from run shape, which src/xhtml/write.ts's own isPreBlockParagraph cannot do reliably: a footnote reference (or any other recognised construct) nested inside a <pre> splits its content into further runs via readPreRuns above, with no bearing on whether the block is preformatted, so run count is never a safe proxy for this fact
     ...(codeLanguage !== undefined ? { codeLanguage } : {}),
+    ...constructsField(inline),
   };
   return decorateParagraph(paragraph, state);
+}
+
+function readPreFlatRuns(
+  nodes: readonly XmlNode[],
+  context: XhtmlReadContext,
+): ContentRun[] {
+  const text = readPreText(nodes, context); // already decoded -- see readPreText's own comment for why decoding happens per-leaf inside it rather than once on its returned string
+  return text.length > 0 ? [{ text, fontFamily: MONOSPACE_FONT_FAMILY }] : [];
+}
+
+// Whether a <pre>'s own subtree carries a recognised footnote-reference anchor anywhere, at any depth -- mirrors containsHeading's own inert-skipping descendant walk above. This is the cheap pre-check readPre uses to decide whether it can take readPreText's own flat-string shortcut (nothing structural to lose) or must pay for readPreRuns' own run-splitting recursion (needed only to bracket a footnote reference's own text as a distinct run range a RunConstructExtent can point at).
+function containsFootnoteReference(
+  nodes: readonly XmlNode[],
+  context: XhtmlReadContext,
+): boolean {
+  for (const node of nodes) {
+    if (node.type !== "element" || isInertElement(node.tag)) {
+      continue;
+    }
+    if (
+      node.tag === "a" &&
+      isFootnoteReferenceAnchor(node, context.idElements) !== undefined
+    ) {
+      return true;
+    }
+    if (containsFootnoteReference(node.children, context)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The <pre> twin of buildInlineRuns (src/xhtml/inline.ts), only ever reached once containsFootnoteReference above has confirmed the subtree actually carries a footnote reference: builds the ContentRun[] plus any run-level construct extents for one <pre>'s own children, still never routing through buildInlineRuns' own normalizeWhitespace (a <pre>'s content model preserves whitespace verbatim, exactly like readPreText above). A recognised footnote-reference anchor's own text becomes its own run range so a RunConstructExtent can bracket exactly it, mirroring src/xhtml/inline.ts's own appendAnchor; every nested call's own constructs are rebased onto the outer runs array's own length at the point of the merge, since a fresh recursive call always starts counting its own runs from zero. Every other wrapping element this file does not otherwise recognise inside a <pre> (<span>, <strong>, a non-footnote <a>, ...) still degrades to its own flattened text via readPreText, exactly as it always has -- a <pre>'s own content model has no rich formatting of its own to preserve structurally; only the footnote-reference construct itself is worth the extra run boundary. Every leaf added to `buffer` below is decoded at the point it is added (a text/CDATA node via decodeTextLikeNode, an <img>'s alt text via decodeEntities, a wrapping element's own flattened text via readPreText, which is decoded internally for the identical reason) rather than once over the whole accumulated buffer on flush: CDATA content must never be run through decodeEntities at all (xml/entities.ts's own decodeTextLikeNode comment), so once any leaf in the buffer is CDATA a single trailing decode over the mixed buffer would be wrong regardless of ordering.
+function readPreRuns(
+  nodes: readonly XmlNode[],
+  context: XhtmlReadContext,
+): InlineResult {
+  const runs: ContentRun[] = [];
+  const constructs: RunConstructExtent[] = [];
+  let buffer = "";
+  const flush = (): void => {
+    if (buffer.length === 0) {
+      return;
+    }
+    runs.push({ text: buffer, fontFamily: MONOSPACE_FONT_FAMILY });
+    buffer = "";
+  };
+  for (const node of nodes) {
+    if (isTextLikeNode(node)) {
+      buffer += decodeTextLikeNode(node);
+      continue;
+    }
+    if (node.type !== "element" || isInertElement(node.tag)) {
+      continue;
+    }
+    if (node.tag === "img") {
+      buffer += decodeEntities(readPreImageFallbackText(node, context));
+      continue;
+    }
+    const footnoteName =
+      node.tag === "a"
+        ? isFootnoteReferenceAnchor(node, context.idElements)
+        : undefined;
+    if (
+      footnoteName === undefined &&
+      !containsFootnoteReference([node], context)
+    ) {
+      buffer += readPreText(node.children, context);
+      continue;
+    }
+    flush();
+    const startRun = runs.length;
+    const nested = readPreRuns(node.children, context);
+    runs.push(...nested.runs);
+    for (const construct of nested.constructs) {
+      constructs.push({
+        ...construct,
+        startRun: construct.startRun + startRun,
+        endRun: construct.endRun + startRun,
+      });
+    }
+    if (footnoteName !== undefined) {
+      constructs.push({
+        descriptor: {
+          kind: "anchor",
+          anchorType: "footnote",
+          name: footnoteName,
+        },
+        startRun,
+        endRun: runs.length,
+      });
+    }
+  }
+  flush();
+  return { runs, constructs };
+}
+
+// A <pre>/<code> block's own content model is plain text with whitespace preserved verbatim (this never routes through buildInlineRuns's own normalizeWhitespace) -- so an <img> found anywhere inside, at any depth, cannot become a real ContentImageBlock the way one reached transparently through readContainerChildren can: there is no block list here to insert a sibling image block into, the identical structural constraint appendImageFallback (src/xhtml/inline.ts) already applies to an <img> reached while building a flat run sequence. Its alt text is spliced into the extracted text in its place, with a diagnostic naming the loss -- mirroring textContent's own recursive walk (src/xml/query.ts) but for the one element kind that walk cannot represent as text at all. An inert element (context.ts's own isInertElement) is skipped for the identical reason src/xhtml/inline.ts's own appendElement skips it: none of <script>/<template>/<style>/<noscript>'s own content is ever legitimate document text -- this walk is its own separate recursion, not a call into appendElement, so it needs its own identical guard rather than inheriting one. A text node and a CDATA section (xml/node.ts's own isTextLikeNode) are both real, extractable <pre> content and decoded the same way this function has always decoded a text node -- except CDATA never through decodeEntities, since CDATA content was never entity-encoded to begin with (xml/entities.ts's own decodeTextLikeNode comment); every leaf this function returns is already decoded by the time it reaches its own return, which is why every caller uses that string as-is rather than decoding it again.
+function readPreText(
+  nodes: readonly XmlNode[],
+  context: XhtmlReadContext,
+): string {
+  let out = "";
+  for (const node of nodes) {
+    if (isTextLikeNode(node)) {
+      out += decodeTextLikeNode(node);
+    } else if (node.type === "element" && node.tag === "img") {
+      out += decodeEntities(readPreImageFallbackText(node, context));
+    } else if (node.type === "element" && isInertElement(node.tag)) {
+      continue;
+    } else if (node.type === "element") {
+      out += readPreText(node.children, context);
+    }
+  }
+  return out;
+}
+
+function readPreImageFallbackText(
+  element: XmlElement,
+  context: XhtmlReadContext,
+): string {
+  const src = attrValue(element, "src");
+  const alt = attrValue(element, "alt");
+  const label = src === undefined ? "<img>" : `<img src="${src}">`;
+  context.sink({
+    code: EpubDiagnosticCodes.IMAGE_PRE_UNSUPPORTED,
+    severity: "warning",
+    message: `${label} inside a <pre>/<code> block cannot become a real image block (a <pre>'s own content model is plain text, with no block list to insert one into); degraded to its alt text`,
+    href: context.sourceHref,
+  });
+  return alt ?? "";
 }
 
 // A common real-world convention (highlight.js, Prism, and this package's own writer alike): a fenced code block's language rides a "language-xxx" class on the <code> element.
@@ -405,10 +573,10 @@ function languageFromClass(className: string | undefined): string | undefined {
   return match?.[1];
 }
 
-// Whether a blockquote's own subtree carries a heading anywhere -- a construct extent may never open or close a heading scope (document-schema.js's own decompose is the enforcement point), so a quote containing one cannot carry the division construct pair and degrades to indent-only structure instead, matching markdown-codec's identical rule for the identical schema constraint.
+// Whether a blockquote's own subtree carries a heading anywhere -- a construct extent may never open or close a heading scope (document-schema.js's own decompose is the enforcement point), so a quote containing one cannot carry the division construct pair and degrades to indent-only structure instead, matching markdown-codec's identical rule for the identical schema constraint. Never descends into an inert subtree (context.ts's own isInertElement -- <script>/<template>/<style>/<noscript>): a heading sitting inside one is never real, readable document content (nothing in this module's own dispatch ever reaches it as a heading either), so it must not be allowed to suppress a real division construct the blockquote's actual, live content is otherwise entitled to.
 function containsHeading(nodes: readonly XmlNode[]): boolean {
   for (const node of nodes) {
-    if (node.type !== "element") {
+    if (node.type !== "element" || isInertElement(node.tag)) {
       continue;
     }
     if (headingLevelOf(node.tag) !== undefined) {
@@ -446,14 +614,64 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
     });
   const level = state.list === undefined ? 0 : state.list.level + 1;
   const blocks: ContentBlock[] = [];
+  let previousItem: ListItemContext | undefined;
+  let strayNodes: XmlNode[] = [];
   for (const child of element.children) {
-    if (child.type !== "element" || child.tag !== "li") {
+    if (child.type === "element" && child.tag === "li") {
+      blocks.push(
+        ...flushListStrayContent(strayNodes, previousItem, element.tag, state),
+      );
+      strayNodes = [];
+      const itemId = state.minter.mintItemId();
+      previousItem = { numId, level, itemId };
+      blocks.push(
+        ...readContainerChildren(
+          child.children,
+          withListItem(state, previousItem),
+        ),
+      );
       continue;
     }
-    const itemId = state.minter.mintItemId();
-    const itemState = withListItem(state, { numId, level, itemId });
-    blocks.push(...readContainerChildren(child.children, itemState));
+    // The HTML Standard's own content model for <ul>/<ol> is "Zero or more li and script-supporting elements", explicitly naming <script>/<template> as legal direct children alongside <li> -- so those two are ignored entirely here: no stray collection, no diagnostic, and never routed through readContainerChildren (which has no case for either tag, and readList's own document-content mapping has no use for embedded script/template content regardless). This uses the shared isInertElement predicate (context.ts) rather than a narrower spec-accurate script/template-only check, deliberately extending the identical exemption to <style>/<noscript> too -- neither is actually legal here per the content model above, but both are just as unrepresentable and just as safe to skip silently as the two that are, and a single shared definition is worth more than a spec-perfect distinction no diagnostic here would ever need to draw. This check exists purely to suppress the LIST_CONTENT_OUTSIDE_ITEM diagnostic below for what is (for script/template) a legal child position; the actual leak this content would otherwise cause if it reached a run sequence some other way is closed universally by src/xhtml/inline.ts's own appendElement, which skips it the same way regardless of where it is reached from.
+    if (child.type === "element" && isInertElement(child.tag)) {
+      continue;
+    }
+    if (child.type === "element" || isTextLikeNode(child)) {
+      strayNodes.push(child);
+    }
   }
+  blocks.push(
+    ...flushListStrayContent(strayNodes, previousItem, element.tag, state),
+  );
+  return blocks;
+}
+
+// A <ul>/<ol> content model admits only <li> and script-supporting (<script>/<template>) children -- so any *other* content sitting directly inside one is not valid HTML5, most commonly a <ul>/<ol> nested as a sibling rather than wrapped in its own <li> (a shape real-world producers and converters emit even though it is not conformant), but any other stray content (a bare <img>, a run of text) shares the identical malformed shape and the identical most-likely producer intent. Content sitting between or after real <li> siblings is recovered by feeding it through the exact same readContainerChildren dispatch that <li>'s own real children already go through, under that preceding item's own list membership -- so a stray <ul>/<ol> becomes a properly nested list one level deeper sharing the enclosing numId (readBlockElementInner's own "ul"/"ol" case calls back into this function with that membership already on the state, incrementing level exactly as genuine nesting would), a stray <img> becomes its own real image block, and stray text becomes its own paragraph, rather than each needing its own hand-rolled special case. Content sitting BEFORE the very first <li> has no preceding item to attach to, but that is not a reason to drop it: it is recovered through the identical readContainerChildren dispatch, inheriting whatever list membership its own enclosing context already carries (none, unless the <ul>/<ol> it sits directly inside is itself nested inside another list's <li>), and lands in the returned block sequence immediately before the list's own real items -- matching a browser's rendering ORDER for this malformed shape, but not necessarily its nesting DEPTH: when the enclosing <ul>/<ol> is itself nested inside an outer list's own <li>, a browser indents this recovered content at that outer item's depth, while this recovery always emits it as a top-level sibling of the enclosing list, one level shallower than a browser would place it. Silently dropping this case (this function's own prior behaviour) lost real content with no diagnostic at all: ExaDev/documents.js#994's own headline repro, `<ul><ul><li>b</li></ul><li>a</li></ul>`, discarded the entire nested list. A stray <script>/<template>/<style>/<noscript> sitting as a DIRECT child of the <ul>/<ol> itself never reaches this function at all -- readList's own loop above filters it out (isInertElement) before it is ever collected as a stray node in the first place. One nested a level or more deeper, though -- e.g. a <script> inside a stray <div> -- still reaches this function's own readContainerChildren call above, which resolves it to zero blocks via src/xhtml/inline.ts's own appendElement guard, the identical narrower claim flushDefinitionListStrayContent's own comment below already states for the <dl> case. Inter-element whitespace, by contrast, DOES reach here: the HTML Standard's own "must be ignored when establishing whether an element's contents match the content model" rule (section 3.2.5 "Content models") governs conformance-checking alone, not deletion of the character data itself, so real whitespace sitting between two stray inline siblings (the single space that keeps two words apart) is still live text that must survive a round trip. What decides whether the diagnostic-and-recovery step below fires is the actual readContainerChildren result, not a speculative text-only probe: a bare block-level construct with no text projection at all (a stray <img>, an <hr>, a table or figure whose only content is an image) still produces a real, non-empty block list and must still be recovered and reported, exactly like the common pretty-printed-list shape of a bare newline-plus-indent text node, which readContainerChildren's own segment-flush already reduces to an empty block list on its own (see its whitespace-only-segment comment) -- so nodes.length === 0 is the only cheap short-circuit worth taking before paying for the real read, whether or not a preceding item exists to attach the result to. The read always runs exactly once and its result is always either fully used (recovered and reported) or fully discarded (an empty block list, meaning nothing was ever minted or reported for it to leak) -- never computed and then thrown away, so the item-id minter and the diagnostic sink never see a read whose outcome this function goes on to ignore.
+function flushListStrayContent(
+  nodes: readonly XmlNode[],
+  previousItem: ListItemContext | undefined,
+  tag: string,
+  state: BuildState,
+): ContentBlock[] {
+  if (nodes.length === 0) {
+    return [];
+  }
+  const blocks = readContainerChildren(
+    nodes,
+    previousItem === undefined ? state : withListItem(state, previousItem),
+  );
+  if (blocks.length === 0) {
+    return [];
+  }
+  state.context.sink({
+    code: EpubDiagnosticCodes.LIST_CONTENT_OUTSIDE_ITEM,
+    severity: "info",
+    message:
+      previousItem === undefined
+        ? `content sits directly inside a <${tag}> before its first <li> (not valid HTML5); recovered as ordinary content immediately before the list, inheriting whatever list membership its own enclosing context already carries (none, unless this <${tag}> is itself nested inside another list's <li>)`
+        : `content sits directly inside a <${tag}> rather than inside an <li> (not valid HTML5); recovered as a continuation of the preceding <li>'s own content`,
+    href: state.context.sourceHref,
+  });
   return blocks;
 }
 
@@ -465,39 +683,110 @@ function readDefinitionList(
   element: XmlElement,
   state: BuildState,
 ): ContentBlock[] {
+  return readDefinitionListEntries(element.children, state);
+}
+
+// HTML5's own <dl> content model explicitly permits wrapping one or more dt/dd pairs in a <div> (a producer idiom for a per-entry styling hook), as an alternative to dt/dd sitting directly under the <dl> -- recursing into a <div> child finds the pairs it wraps exactly as if they sat directly in the <dl>. No diagnostic: the <div> itself carries no property document-schema.js's own vocabulary can express, identical to every other <div> this package already reads transparently (readBlockElementInner's own default passthrough case), so there is no loss here for a diagnostic to name. <div> is the only wrapper this narrower rule recognises, deliberately: it is the one shape HTML5's own <dl> content model actually names as legal, so recursing into it and reporting nothing is a statement about conformant markup, not an arbitrary choice of which tag to special-case. Anything else that is not dt/dd/div -- a stray <p>, stray text, a stray <img>, a non-conformant wrapper like <section> used in <div>'s place -- gets the same general treatment readList already applies to its own analogous whitelist (route the stray run through readContainerChildren and report a real diagnostic naming the loss), via flushDefinitionListStrayContent below, rather than being silently dropped the way this function used to drop everything outside its three named tags with zero diagnostics -- reachable one tag away from ExaDev/documents.js#994's own headline shape. A non-conformant wrapper's own dt/dd children lose their distinct term/definition treatment once routed this way (readContainerChildren has no notion of dt/dd, so they degrade to plain concatenated inline text) -- a real, documented fidelity cost, but a text-preserving one, matching the "recovered as ordinary content" tier every other stray-content gap in this file resolves to.
+function readDefinitionListEntries(
+  nodes: readonly XmlNode[],
+  state: BuildState,
+): ContentBlock[] {
   const blocks: ContentBlock[] = [];
-  for (const child of element.children) {
-    if (child.type !== "element") {
-      continue;
-    }
-    if (child.tag === "dt") {
+  let strayNodes: XmlNode[] = [];
+  const flushStray = (): void => {
+    blocks.push(...flushDefinitionListStrayContent(strayNodes, state));
+    strayNodes = [];
+  };
+  for (const child of nodes) {
+    if (child.type === "element" && child.tag === "dt") {
+      flushStray();
       const inline = buildInlineRuns(child.children, {}, state.context);
       blocks.push(
-        decorateParagraph({ kind: "paragraph", runs: inline.runs }, state),
+        decorateParagraph(
+          { kind: "paragraph", runs: inline.runs, ...constructsField(inline) },
+          state,
+        ),
       );
-    } else if (child.tag === "dd") {
+      continue;
+    }
+    if (child.type === "element" && child.tag === "dd") {
+      flushStray();
       const inline = buildInlineRuns(child.children, {}, state.context);
       blocks.push(
         decorateParagraph(
           {
             kind: "paragraph",
             runs: inline.runs,
+            ...constructsField(inline),
             indentLeftPt:
               DEFINITION_BODY_INDENT_PT + state.quoteDepth * QUOTE_INDENT_PT,
           },
           state,
         ),
       );
+      continue;
+    }
+    if (child.type === "element" && child.tag === "div") {
+      flushStray();
+      blocks.push(...readDefinitionListEntries(child.children, state));
+      continue;
+    }
+    if (child.type === "element" && isInertElement(child.tag)) {
+      continue;
+    }
+    if (child.type === "element" || isTextLikeNode(child)) {
+      strayNodes.push(child);
     }
   }
+  flushStray();
   return blocks;
 }
 
-function readTable(element: XmlElement, state: BuildState): ContentBlock {
+// The <dl> twin of flushListStrayContent above: content that is not dt/dd/div (nor an inert element) sitting directly inside a <dl> or one of its <div> wrappers is not valid HTML5, but silently dropping it loses real content with no diagnostic at all -- exactly the defect class ExaDev/documents.js#994 was filed about, reachable here one tag away from the shape that issue's own fix already covers. Recovered through the same readContainerChildren dispatch dt/dd's own real children go through, under the plain `state` (a <dl> entry carries no numId/level membership the way a list item does for stray content to inherit, so there is no withListItem-equivalent to apply here). Reported only when the recovery actually produces content, matching flushListStrayContent's own rule: genuine inter-element whitespace (the common pretty-printed-<dl> shape) and a stray <script>/<template>/<style>/<noscript> collected here (isInertElement's own check above already filters most of these before they are ever collected, but a nested one -- e.g. a <script> inside a stray <section> -- still reaches this function's own readContainerChildren call, which resolves it to zero blocks via src/xhtml/inline.ts's own appendElement guard) both produce an empty recovered block list and fire nothing.
+function flushDefinitionListStrayContent(
+  nodes: readonly XmlNode[],
+  state: BuildState,
+): ContentBlock[] {
+  if (nodes.length === 0) {
+    return [];
+  }
+  const blocks = readContainerChildren(nodes, state);
+  if (blocks.length === 0) {
+    return [];
+  }
+  state.context.sink({
+    code: EpubDiagnosticCodes.DEFINITION_LIST_CONTENT_OUTSIDE_ENTRY,
+    severity: "info",
+    message:
+      "content sits directly inside a <dl> (or one of its <div> wrappers) outside any dt/dd (not valid HTML5); recovered as ordinary content -- a non-conformant wrapper's own dt/dd children, if any, lose their distinct term/definition treatment and degrade to plain concatenated text",
+    href: state.context.sourceHref,
+  });
+  return blocks;
+}
+
+// The <table> content model per HTML5 is, in order: an optional <caption>, zero or more <colgroup>, an optional <thead>, either zero or more <tbody> or one or more bare <tr>, an optional <tfoot>, optionally intermixed with script-supporting elements -- so an inert element (isInertElement) sitting directly inside the <table> carries nothing document-schema.js's own vocabulary can represent and is silently skipped exactly like a <div>'s own class/id elsewhere in this file. A <colgroup> is legal here too, but is not skipped wholesale the same way: its own conforming content (<col>, and the same script-supporting elements) carries nothing to represent either, but anything else inside one -- a stray <p>, stray text, a stray <img> -- is not valid HTML5 and shares the identical malformed shape and identical most-likely producer intent as content sitting directly inside the <table> itself, so collectColgroupStrayContent below folds it into this very same strayNodes collection rather than the wholesale skip silently discarding it. Anything else that is not tr/thead/tbody/tfoot/caption/colgroup/inert -- a stray <p>, a stray <div>, stray text -- is not valid HTML5, but was previously dropped with zero diagnostics; it is now collected into strayNodes below and recovered through the same readContainerChildren dispatch as everything else this file recovers, reported via the TABLE_CONTENT_UNRECOGNIZED diagnostic further down (there is no separate flushTableStrayContent helper -- the collection and the recovery both live inline in this function) -- the real output order is the recovered stray content FIRST, then any caption paragraph(s), then the table itself (see this function's own closing `return`), mirroring the "recovered as ordinary content, positioned relative to the block it describes" convention this file already applies to a list's own before-the-first-item stray content -- a table's own rows fold into one indivisible ContentTable block, so there is no position WITHIN the table's own structure to reinsert interleaved stray content into without misrepresenting it as more than one table. A <thead>/<tbody>/<tfoot>'s own content model is narrower still: zero or more <tr> and script-supporting elements only, per the HTML Standard -- so any OTHER content sitting directly inside one of those row groups (a stray text node, a stray <p>, a stray <img>, an entire nested list) shares the identical malformed shape and is folded into this very same strayNodes collection by collectRowGroupRows below, exactly one level of nesting deeper than the table-direct case, rather than being silently dropped the way it once was.
+function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
+  const captionElements = element.children.filter(
+    (c): c is XmlElement => c.type === "element" && c.tag === "caption",
+  );
   const rows: ContentTableRow[] = [];
   let columnCount = 0;
+  const strayNodes: XmlNode[] = [];
   for (const section of element.children) {
+    if (section.type === "element" && section.tag === "caption") {
+      continue; // every <caption>, first or duplicate, is handled in full by readTableCaption below regardless of where in source order it sits
+    }
     if (section.type !== "element") {
+      if (isTextLikeNode(section)) {
+        strayNodes.push(section);
+      }
+      continue;
+    }
+    if (section.tag === "colgroup") {
+      collectColgroupStrayContent(section, strayNodes);
+      continue;
+    }
+    if (isInertElement(section.tag)) {
       continue;
     }
     const rowContainers =
@@ -506,49 +795,175 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock {
         : section.tag === "thead" ||
             section.tag === "tbody" ||
             section.tag === "tfoot"
-          ? section.children.filter(
-              (c): c is XmlElement => c.type === "element" && c.tag === "tr",
-            )
-          : [];
+          ? collectRowGroupRows(section, strayNodes)
+          : undefined;
+    if (rowContainers === undefined) {
+      strayNodes.push(section);
+      continue;
+    }
     for (const tr of rowContainers) {
       const cells: ContentTableCell[] = [];
+      let strayCellNodes: XmlNode[] = [];
+      const flushStrayCell = (): void => {
+        if (strayCellNodes.length === 0) {
+          return;
+        }
+        const recovered = readContainerChildren(strayCellNodes, state);
+        strayCellNodes = [];
+        if (recovered.length === 0) {
+          return;
+        }
+        state.context.sink({
+          code: EpubDiagnosticCodes.TABLE_ROW_CONTENT_OUTSIDE_CELL,
+          severity: "info",
+          message:
+            "content sits directly inside a <tr> rather than inside a <td>/<th> (not valid HTML5); recovered as its own cell in the row's own column sequence",
+          href: state.context.sourceHref,
+        });
+        cells.push({ blocks: recovered });
+      };
       for (const cellNode of tr.children) {
         if (
-          cellNode.type !== "element" ||
-          (cellNode.tag !== "td" && cellNode.tag !== "th")
+          cellNode.type === "element" &&
+          (cellNode.tag === "td" || cellNode.tag === "th")
         ) {
+          flushStrayCell();
+          const isHeader = cellNode.tag === "th";
+          const cellStyle = isHeader ? { bold: true } : {};
+          const inline = buildInlineRuns(
+            cellNode.children,
+            cellStyle,
+            state.context,
+          );
+          const paragraph: ContentParagraph = {
+            kind: "paragraph",
+            runs: inline.runs,
+            ...constructsField(inline),
+          };
+          const colSpan = positiveIntAttr(cellNode, "colspan");
+          const rowSpan = positiveIntAttr(cellNode, "rowspan");
+          cells.push({
+            blocks: [paragraph],
+            ...(colSpan !== undefined ? { colSpan } : {}),
+            ...(rowSpan !== undefined ? { rowSpan } : {}),
+          });
           continue;
         }
-        const isHeader = cellNode.tag === "th";
-        const cellStyle = isHeader ? { bold: true } : {};
-        const inline = buildInlineRuns(
-          cellNode.children,
-          cellStyle,
-          state.context,
-        );
-        const paragraph: ContentParagraph = {
-          kind: "paragraph",
-          runs: inline.runs,
-        };
-        const colSpan = positiveIntAttr(cellNode, "colspan");
-        const rowSpan = positiveIntAttr(cellNode, "rowspan");
-        cells.push({
-          blocks: [paragraph],
-          ...(colSpan !== undefined ? { colSpan } : {}),
-          ...(rowSpan !== undefined ? { rowSpan } : {}),
-        });
+        if (cellNode.type === "element" && isInertElement(cellNode.tag)) {
+          continue;
+        }
+        if (cellNode.type === "element" || isTextLikeNode(cellNode)) {
+          strayCellNodes.push(cellNode);
+        }
       }
+      flushStrayCell();
       columnCount = Math.max(columnCount, cells.length);
       rows.push({ cells });
     }
   }
+  const strayBlocks =
+    strayNodes.length === 0 ? [] : readContainerChildren(strayNodes, state);
+  if (strayBlocks.length > 0) {
+    state.context.sink({
+      code: EpubDiagnosticCodes.TABLE_CONTENT_UNRECOGNIZED,
+      severity: "info",
+      message:
+        "content sits directly inside a <table> (or one of its <thead>/<tbody>/<tfoot> row groups) outside any row, caption, or colgroup (not valid HTML5); recovered as ordinary content immediately before the table",
+      href: state.context.sourceHref,
+    });
+  }
   const width =
     columnCount > 0 ? state.contentWidthPt / columnCount : state.contentWidthPt;
-  return {
+  const table: ContentBlock = {
     kind: "table",
     rows,
     columnWidthsPt: new Array<number>(Math.max(columnCount, 1)).fill(width),
   };
+  const captionBlocks = captionElements.flatMap((captionElement, index) =>
+    readTableCaption(captionElement, index > 0, state),
+  );
+  return [...strayBlocks, ...captionBlocks, table];
+}
+
+// The <thead>/<tbody>/<tfoot> twin of readTable's own table-direct stray-content collection above: a row group's content model per the HTML Standard is "zero or more tr and script-supporting elements" only, so anything else sitting directly inside one -- stray text, a stray <p>, a stray <img>, a whole nested list -- is not valid HTML5, but shares the identical malformed shape and identical most-likely producer intent as content sitting directly inside the <table> one level up. Rather than a separate recovery path (and a separate diagnostic positioned somewhere inside the table's own row sequence, which would misrepresent it as belonging to a particular row when it does not), this feeds the caller's own shared strayNodes accumulator directly, so it is recovered and reported exactly once, in exactly the same place, via readTable's own TABLE_CONTENT_UNRECOGNIZED diagnostic and readContainerChildren call.
+function collectRowGroupRows(
+  section: XmlElement,
+  strayNodes: XmlNode[],
+): XmlElement[] {
+  const trs: XmlElement[] = [];
+  for (const child of section.children) {
+    if (child.type === "element" && child.tag === "tr") {
+      trs.push(child);
+      continue;
+    }
+    if (child.type === "element" && isInertElement(child.tag)) {
+      continue;
+    }
+    if (child.type === "element" || isTextLikeNode(child)) {
+      strayNodes.push(child);
+    }
+  }
+  return trs;
+}
+
+// The <colgroup> twin of collectRowGroupRows immediately above: a <colgroup>'s own content model per the HTML Standard is "zero or more <col> and script-supporting elements" (empty entirely when the <colgroup> itself carries a span attribute) -- conforming content that document-schema.js's own vocabulary has nothing to represent (a column's own width/span belongs on ContentTable.columnWidthsPt, not a per-column node), so a <col> is silently skipped here exactly like an inert element is. Anything else -- a stray <p>, stray text, a stray <img> -- is not valid HTML5 but shares the identical malformed shape and identical most-likely producer intent as content sitting directly inside the <table> one level up, so it feeds the caller's own shared strayNodes accumulator directly, mirroring collectRowGroupRows' own reasoning: recovered and reported exactly once, via readTable's own TABLE_CONTENT_UNRECOGNIZED diagnostic and readContainerChildren call, rather than a separate recovery path that would misrepresent it as belonging to a particular column.
+function collectColgroupStrayContent(
+  section: XmlElement,
+  strayNodes: XmlNode[],
+): void {
+  for (const child of section.children) {
+    if (child.type === "element" && child.tag === "col") {
+      continue;
+    }
+    if (child.type === "element" && isInertElement(child.tag)) {
+      continue;
+    }
+    if (child.type === "element" || isTextLikeNode(child)) {
+      strayNodes.push(child);
+    }
+  }
+}
+
+// A <caption>'s own content, read as an ordinary paragraph immediately before the table it describes -- document-schema.js's ContentTable carries no field of its own for a caption distinct from an ordinary paragraph, exactly like readBlockElementInner's own <figcaption> case. Any <img> the caption itself carries degrades to alt text via the same inline-recursion path (and epub/image-inline-unsupported diagnostic) a <figcaption>'s own direct-child <img> already does, rather than becoming a real image block, for the identical reason -- buildInlineRuns has already committed to a flat run sequence by the time it reaches one. `isDuplicate` fires an additional diagnostic for every caption beyond the first: HTML5 permits at most one <caption> per <table>, so a second is a producer mistake this package now recovers rather than silently discards -- readTable used to resolve its caption via findChildElement, which only ever returns the first match for a given tag, so a second <caption> was lost with no trace and no diagnostic at all.
+function readTableCaption(
+  captionElement: XmlElement,
+  isDuplicate: boolean,
+  state: BuildState,
+): ContentBlock[] {
+  const captionInline = buildInlineRuns(
+    captionElement.children,
+    {},
+    state.context,
+  );
+  // An empty or whitespace-only <caption> that also carries no run-level construct of its own (a footnote reference whose own anchor text is empty is the real-world case: `<caption><a epub:type="noteref" href="#fn1"></a></caption>` produces zero text runs but one real RunConstructExtent) genuinely carries nothing to lose -- dropped entirely, with no diagnostic, matching this package's own documented rule that an empty or whitespace-only paragraph is dropped entirely on read rather than becoming a bogus empty ContentParagraph. Checking text emptiness alone would drop the construct along with it: `Array.prototype.every` on the empty runs array such an anchor-only caption produces is vacuously true, which is exactly how this guard used to defeat this package's own construct-preservation fix -- a construct with nothing else to carry it is still real content.
+  if (
+    captionInline.runs.every((run) => run.text.trim().length === 0) &&
+    captionInline.constructs.length === 0
+  ) {
+    return [];
+  }
+  if (isDuplicate) {
+    state.context.sink({
+      code: EpubDiagnosticCodes.TABLE_DUPLICATE_CAPTION,
+      severity: "info",
+      message:
+        "<table> carries more than one <caption> (HTML5 permits at most one); every caption beyond the first is still read as its own ordinary paragraph immediately before the table, rather than being silently discarded",
+      href: state.context.sourceHref,
+    });
+  }
+  state.context.sink({
+    code: EpubDiagnosticCodes.TABLE_CAPTION_UNSUPPORTED,
+    severity: "info",
+    message:
+      "<caption> has no document-schema.js table-caption field to carry its own distinct tag; read as an ordinary paragraph immediately before the table",
+    href: state.context.sourceHref,
+  });
+  const captionParagraph: ContentParagraph = {
+    kind: "paragraph",
+    runs: captionInline.runs,
+    ...constructsField(captionInline),
+  };
+  return [decorateParagraph(captionParagraph, state)];
 }
 
 function positiveIntAttr(
