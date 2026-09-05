@@ -2245,6 +2245,50 @@ describe("write API: insertNode handles a dedup hit's kind and children correctl
     expect(childEdges.map((edge) => edge.to)).toEqual([a.id, b.id]);
   });
 
+  it("insertNode's dedup reconciliation inserts each missing child at its OWN requested position relative to already-present siblings, rather than always appending missing ones at the end -- so the reconciled CONTAINS order agrees with the order the node's own content-hash was minted from", () => {
+    const x = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "X." }] },
+    });
+    const a = insertNode(x.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const y = insertNode(a.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Y." }] },
+    });
+
+    // Folded spelling mints the section with NO CONTAINS edges (established behaviour above); the requested order is [x, a, y].
+    const foldedSpelling = insertNode(y.graph, {
+      kind: "section",
+      properties: { kind: "section", children: [x.id, a.id, y.id] },
+    });
+
+    // Wire only the MIDDLE child directly, as if some earlier caller had partially populated this id's containment before the full reconciling call arrives.
+    const partiallyWired = insertEdge(
+      foldedSpelling.graph,
+      foldedSpelling.id,
+      a.id,
+    );
+
+    // Explicit spelling of the IDENTICAL content -- a genuine dedup hit -- requesting the full [x, a, y] order. x and y are both missing; a naive "append missing at the end" would produce [a, x, y], disagreeing with the order the id was actually minted from.
+    const explicitSpelling = insertNode(partiallyWired, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [x.id, a.id, y.id],
+    });
+    expect(explicitSpelling.id).toBe(foldedSpelling.id);
+
+    const ordered = explicitSpelling.graph.edges
+      .filter(
+        (edge) => edge.from === explicitSpelling.id && edge.kind === "CONTAINS",
+      )
+      .sort((p, q) => (p.orderKey < q.orderKey ? -1 : 1))
+      .map((edge) => edge.to);
+    expect(ordered).toEqual([x.id, a.id, y.id]);
+  });
+
   it("insertNode's dedup reconciliation is idempotent: requesting the same children twice adds no duplicate edges", () => {
     const a = insertNode(EMPTY_GRAPH, {
       kind: "paragraph",
