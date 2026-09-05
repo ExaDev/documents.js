@@ -126,7 +126,14 @@ describe("patchCoreProperties", () => {
   it("XML-encodes a value written into a new or existing element", () => {
     const pkg = packageWithCore([]);
     patchCoreProperties(pkg, { title: "Q&A <draft>" });
-    expect(readCoreProperties(pkg).title).toBe("Q&A <draft>");
+    // Asserted against the raw serialized XML, not readCoreProperties: that reader decodes entities on the way back out, so raw and encoded storage are indistinguishable to it -- deleting the encoding call entirely would still leave readCoreProperties reporting "Q&A <draft>" and every test green. The serialized text is the only place a missing encoding call would actually show up (as unescaped '&'/'<'/'>' corrupting the XML).
+    const part = pkg.parts["docProps/core.xml"];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml part");
+    }
+    const xml = buildXml(part.nodes);
+    expect(xml).toContain("<dc:title>Q&amp;A &lt;draft&gt;</dc:title>");
+    expect(xml).not.toContain("Q&A <draft>");
   });
 
   it("joins keywords with a comma and removes the element entirely for an empty array", () => {
