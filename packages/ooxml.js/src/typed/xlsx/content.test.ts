@@ -17,9 +17,10 @@ import type { Package } from "../../model/package";
 import { el, txt } from "../../xml/fragment";
 import { decodePackage, encodePackage } from "../../codec";
 import { parsePackage } from "../../package-io/read";
+import { attr, childrenWithTag, rootElement } from "../util";
 import { buildXlsxPackageFromContent } from "./build";
 import { columnWidthCharsToPt } from "./units";
-import { readXlsxContent } from "./content";
+import { readXlsxContent, resolveSheetEntries } from "./content";
 
 // This suite reads real, unmodified LibreOffice-generated .xlsx fixtures (src/typed/xlsx/fixtures/*.xlsx). Both fixtures are genuine LibreOffice xlsx-exports (`soffice --headless --convert-to xlsx`) of odf.js's own src/typed/ods/fixtures/{kitchen-sink,minimal}.ods -- the same feature set that package's own readOds test suite already validates against ODF's equivalent mechanisms, run back through LibreOffice's real SpreadsheetML export filter so this suite exercises genuine, LibreOffice-authored xlsx markup (column-width character units, row heights, hidden rows/columns, every value-type LibreOffice's own xlsx exporter distinguishes, a real merged range, a real cross-sheet formula, and real print settings including Print_Area/Print_Titles defined names) rather than a hand-built approximation of what that markup might look like. A handful of narrow scope-boundary/error-path tests at the end use small, synthetic, hand-built packages instead (via el/txt), mirroring readOds's own established convention for the identical reason.
 
@@ -82,6 +83,53 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
       expect(data.columns.map((column) => column.index)).toEqual([
         0, 1, 2, 3, 4, 5, 6, 7, 8,
       ]);
+    });
+
+    // Regression coverage for ExaDev/documents.js#953: this fixture's own real, LibreOffice-authored stored widths (15.32, 12.76, 10.21, ...) are exactly the kind of value that used to keep re-approximating narrower on every further write -- see units.test.ts's own convergence suite for the underlying arithmetic proof and units.ts's ptToColumnWidthChars for why rounding up (never to nearest) fixes it.
+    function dataSheetColWidthAttrs(pkg: Package): (string | undefined)[] {
+      const entry = resolveSheetEntries(pkg).find(
+        (sheet) => sheet.name === "Data",
+      );
+      if (entry === undefined) {
+        throw new Error("expected a Data sheet entry");
+      }
+      const worksheet = rootElement(pkg.parts[entry.path]);
+      if (worksheet === undefined) {
+        throw new Error(`expected ${entry.path} to have a root element`);
+      }
+      const colsEl = childrenWithTag(worksheet, "cols")[0];
+      if (colsEl === undefined) {
+        return [];
+      }
+      return childrenWithTag(colsEl, "col").map((col) => attr(col, "width"));
+    }
+
+    it("read -> write -> read -> write produces byte-identical stored <col width> attributes for the second read/write pair as for the first, rather than a further-narrowed value (ExaDev/documents.js#953)", () => {
+      const firstWritePkg = buildXlsxPackageFromContent(document); // write 1, from the ORIGINAL fixture's own stored widths
+      const firstWriteRead = readXlsxContent(firstWritePkg); // read 2
+      if (firstWriteRead.kind !== "spreadsheet") {
+        throw new Error("expected a spreadsheet ContentDocument");
+      }
+      const secondWritePkg = buildXlsxPackageFromContent(firstWriteRead); // write 2
+      const secondWriteRead = readXlsxContent(secondWritePkg); // read 3, only to compare the resolved columns too
+      if (secondWriteRead.kind !== "spreadsheet") {
+        throw new Error("expected a spreadsheet ContentDocument");
+      }
+
+      expect(dataSheetColWidthAttrs(secondWritePkg)).toEqual(
+        dataSheetColWidthAttrs(firstWritePkg),
+      );
+
+      const firstData = firstWriteRead.sheets.find(
+        (sheet) => sheet.name === "Data",
+      );
+      const secondData = secondWriteRead.sheets.find(
+        (sheet) => sheet.name === "Data",
+      );
+      if (firstData === undefined || secondData === undefined) {
+        throw new Error("expected the Data sheet to survive both write cycles");
+      }
+      expect(secondData.columns).toEqual(firstData.columns);
     });
   });
 
