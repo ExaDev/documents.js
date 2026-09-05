@@ -372,6 +372,56 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // Regression for a round-2 fix that only patched the symptom for a controlType FORM_FIELD_SPEC does not cover, without making the writer structurally incapable of leaving a field group unmatched for every other malformed-looking range. writeFormFieldBoundaries is only ever called for positions 0..paragraph.runs.length, so an extent whose own endRun exceeds that range never reaches a position where its close would fire from that method alone -- only the drain step in writeParagraph closes it.
+  it("mints a balanced close for a form field extent whose endRun exceeds the paragraph's own runs.length", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: true,
+              },
+              startRun: 1,
+              endRun: 5,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("FORMCHECKBOX");
+    expectBalancedBraces(out);
+  });
+
+  // Regression for a real defect the round-2 brace-balance fix introduced: an extent with startRun > endRun let the close loop run at its endRun position before the open loop ever reached its startRun, so `opened.has(extent)` read false there and the close was (correctly, at that position) skipped -- but nothing revisited that endRun once the open finally happened later, leaving the open half unmatched for the rest of the document.
+  it("mints a balanced close for a form field extent whose startRun is after its own endRun", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }, { text: "c" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: false,
+              },
+              startRun: 2,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("FORMCHECKBOX");
+    expectBalancedBraces(out);
+  });
+
   it("writes a table as \\trowd/\\cellxN row definitions with \\cell and \\row marks", () => {
     const out = write(
       wordprocessing([
