@@ -938,6 +938,37 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // An empty string carries no distinguishable default text to preserve, so it is treated the same as no recorded value at all -- matching this function's own existing convention for an empty `alias`/`tag` (see "writes no \ffownhelp/\ffhelptext at all when a contentControl has no alias" above), rather than minting an empty {\*\ffdeftext} destination and firing the diagnostic sink for a value with nothing in it.
+  it("writes no \\ffdeftext at all for a plainText contentControl whose value is an empty string, treating it the same as no recorded value", () => {
+    const diagnostics: { code: string }[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "paragraph",
+            runs: [{ text: "Lorem ipsum." }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "contentControl",
+                  controlType: "plainText",
+                  tag: "Text1",
+                  value: "",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => diagnostics.push({ code: diagnostic.code }) },
+      ),
+    );
+    expect(out).not.toContain("\\ffdeftext");
+    expect(diagnostics).toEqual([]);
+    expectBalancedBraces(out);
+  });
+
   // \ffownhelp1 is a <formparams> member and {\*\ffhelptext ...} a <formstrings> one, so RTF 1.9.1's own "Form Fields" grammar (`<formfield> '{\*' \formfield '{' <formparams> <formstrings> '}}'`) puts every formparams control word before every formstrings one -- including {\*\ffname ...}, itself <formstrings>'s own first member, which lands between them here.
   it("writes a contentControl's alias as \\ffownhelp1 (formparams) and {\\*\\ffhelptext ...} (formstrings), with formparams entirely before formstrings", () => {
     const out = write(
