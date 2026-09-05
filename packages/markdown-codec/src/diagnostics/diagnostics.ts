@@ -53,6 +53,8 @@ export const MarkdownDiagnosticCodes = {
   CODE_SPAN_AS_MONOSPACE_RUN: "md/code-span-as-monospace-run",
   PARAGRAPH_INDENT_DROPPED: "md/paragraph-indent-dropped",
   HEADING_LINE_BREAK_COLLAPSED: "md/heading-line-break-collapsed",
+  HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT:
+    "md/heading-line-break-unsafe-for-setext",
   HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK:
     "md/heading-style-overridden-for-line-break",
   LIST_NUMID_FALLBACK: "md/list-numid-fallback",
