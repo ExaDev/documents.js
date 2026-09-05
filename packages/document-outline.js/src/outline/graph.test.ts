@@ -2088,6 +2088,84 @@ describe("write API: insertEdge refuses a CONTAINS cycle (#935)", () => {
       `parentB->${shared.id}`,
     ]);
   });
+
+  it("insertNode refuses ContainsCycleError as part of the round-5 regression fix: its own fresh-mint children-wiring is now checked exactly like insertEdge's attachment, so a cycle closing through an id insertEdge already attached an edge onto BEFORE that id had a node is caught rather than silently wired -- the old node-lookup-based check could not see a cycle closing through an id with no node yet", () => {
+    const leaf = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Leaf." }] },
+    });
+    // Compute the section's id WITHOUT minting it -- exactly the shape that defeated the old node-presence-gated check.
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [leaf.id],
+    });
+    // insertEdge onto a not-yet-existing id is allowed by design (a dangling forward edge); at this point it closes no cycle, since sectionId has no outgoing CONTAINS edges yet.
+    const withDanglingEdge = insertEdge(leaf.graph, leaf.id, sectionId);
+    expect(
+      withDanglingEdge.edges.some(
+        (edge) => edge.from === leaf.id && edge.to === sectionId,
+      ),
+    ).toBe(true);
+    expect(withDanglingEdge.nodes.some((node) => node.id === sectionId)).toBe(
+      false,
+    );
+
+    // Minting the section now, with children: [leaf.id], would wire section -> leaf on top of the already-attached leaf -> section edge, closing the cycle. Must throw, not silently succeed and leave a graph walkPropertyGraph can no longer traverse.
+    let caught: unknown;
+    try {
+      insertNode(withDanglingEdge, {
+        kind: "section",
+        properties: { kind: "section" },
+        children: [leaf.id],
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ContainsCycleError);
+    const cycleError = caught as ContainsCycleError;
+    expect(cycleError.from).toBe(sectionId);
+    expect(cycleError.to).toBe(leaf.id);
+
+    // The graph never actually gained the section node or the section -> leaf edge -- insertNode threw before either was appended.
+    expect(withDanglingEdge.nodes.some((node) => node.id === sectionId)).toBe(
+      false,
+    );
+    expect(
+      withDanglingEdge.edges.some(
+        (edge) => edge.from === sectionId && edge.to === leaf.id,
+      ),
+    ).toBe(false);
+  });
+
+  it("insertNode refuses ContainsCycleError for a multi-child fresh mint when only a LATER child in the list closes the cycle, and mints nothing before the throw", () => {
+    const leaf = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Leaf." }] },
+    });
+    const otherLeaf = insertNode(leaf.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Other." }] },
+    });
+    const sectionId = contentHashV1({
+      kind: "section",
+      children: [otherLeaf.id, leaf.id],
+    });
+    const withDanglingEdge = insertEdge(otherLeaf.graph, leaf.id, sectionId);
+
+    expect(() =>
+      insertNode(withDanglingEdge, {
+        kind: "section",
+        properties: { kind: "section" },
+        children: [otherLeaf.id, leaf.id],
+      }),
+    ).toThrow(ContainsCycleError);
+    // otherLeaf's own CONTAINS edge from the not-yet-existing section id must not have been left behind by the throw.
+    expect(
+      withDanglingEdge.edges.some(
+        (edge) => edge.from === sectionId && edge.to === otherLeaf.id,
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("write API: insertNode handles a dedup hit's kind and children correctly (#935)", () => {
