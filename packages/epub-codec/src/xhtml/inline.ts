@@ -144,9 +144,33 @@ function appendElement(
       appendAnchor(element, style, context, runs, constructs);
       return;
     }
+    case "img": {
+      appendImageFallback(element, style, context, runs);
+      return;
+    }
     case "span":
     default:
       appendNested(element, style, context, runs, constructs);
+  }
+}
+
+// An <img> reached here was found nested inside inline markup (a <span>, an <a>, or any other formatting wrapper) rather than as a direct child of the container src/xhtml/read.ts's own readContainerChildren already splits at (see that module's own <p>-with-a-direct-<img> gotcha) -- by the time appendElement's recursion reaches it, the surrounding content has already committed to being one paragraph's own run sequence, so there is no block list here to insert a sibling ContentImageBlock into without breaking that paragraph in two mid-recursion. Rather than let the image vanish the way falling through to appendNested (which recurses into a childless <img> and yields nothing) would, this degrades it to its alt text -- the same honest degrade-with-diagnostic policy this file already applies to <sub>/<sup> and src/xhtml/read.ts's own readImage applies to an unresolved or unsupported-format image.
+function appendImageFallback(
+  element: XmlElement,
+  style: InlineStyle,
+  context: XhtmlReadContext,
+  runs: ContentRun[],
+): void {
+  const src = attrValue(element, "src");
+  const alt = attrValue(element, "alt");
+  context.sink({
+    code: EpubDiagnosticCodes.IMAGE_NESTED_INLINE_UNSUPPORTED,
+    severity: "warning",
+    message: `<img src="${src ?? ""}"> reached inside inline markup rather than as a paragraph's own direct block-level child cannot become its own image block there; degraded to its alt text`,
+    href: context.sourceHref,
+  });
+  if (alt !== undefined && alt.length > 0) {
+    runs.push(styledRun(decodeEntities(alt), style));
   }
 }
 
