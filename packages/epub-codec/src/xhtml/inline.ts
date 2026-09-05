@@ -140,6 +140,10 @@ function appendElement(
     case "br":
       runs.push(styledRun("\n", style));
       return;
+    case "script":
+    case "template":
+      // Script-supporting elements per the HTML Standard's own content model -- their content (raw JS source for <script>, an inert DOM subtree for <template>) is never legitimate document text, so it must never reach the default appendNested passthrough below, which would otherwise recurse into it and emit it as a plain run exactly like real prose. This is the universal safety net: it fires regardless of where a <script>/<template> is reached from -- directly inside a <p>/<td>/<figcaption>, or several levels deep inside a stray <div> a container's own recovery path (e.g. src/xhtml/read.ts's readList/flushListStrayContent) has recursed into -- rather than only the single position that package's own isScriptSupportingElement check happens to guard against.
+      return;
     case "a": {
       appendAnchor(element, style, context, runs, constructs);
       return;
