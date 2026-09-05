@@ -824,6 +824,31 @@ describe("tables", () => {
       ],
     });
   });
+
+  it("keeps a caption whose only content is a construct with no surrounding text, rather than dropping it as empty", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        '<table><caption><a epub:type="noteref" href="#fn1"></a></caption><tr><td>x</td></tr></table>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+      sink,
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 0,
+          endRun: 0,
+        },
+      ],
+    });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-caption-unsupported" }),
+    );
+  });
 });
 
 describe("blockquote", () => {
