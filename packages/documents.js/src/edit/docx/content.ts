@@ -14,6 +14,7 @@ import {
 } from "../../model/embedded-drawing";
 import { formulaOfBlock, formulaPlaceholderText } from "../../model/formula";
 import { base64ToBytes } from "ooxml.js";
+import { assertDocxWritableImageFormat } from "./image";
 import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
 import { ptToTwips } from "../../model/units";
@@ -190,6 +191,7 @@ function appendBlocks(
       paragraph.styleId = block.styleId;
       paragraph.alignment = block.alignment;
       paragraph.list = block.list;
+      assertDocxWritableImageFormat(next.format);
       paragraph.insertImageAfter({
         format: next.format,
         bytes: base64ToBytes(next.base64),
@@ -360,6 +362,7 @@ function appendBlock(
     populateParagraph(body.appendParagraph(), block);
   } else if (block.kind === "image") {
     const paragraph = body.appendParagraph();
+    assertDocxWritableImageFormat(block.format);
     paragraph.insertImageAfter({
       format: block.format,
       bytes: base64ToBytes(block.base64),

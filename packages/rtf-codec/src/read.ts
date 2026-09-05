@@ -1087,7 +1087,7 @@ function buildPicture(
     sink({
       code: RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
       severity: "warning",
-      message: `a \\pict destination declared ${picture.unsupportedFormat ?? "no"} picture format; ContentImageBlock carries PNG and JPEG only, so this picture is dropped`,
+      message: `a \\pict destination declared ${picture.unsupportedFormat ?? "no"} picture format; this reader recognises only \\pngblip and \\jpegblip, so this picture is dropped`,
     });
     return undefined;
   }

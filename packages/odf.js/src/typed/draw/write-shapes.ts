@@ -12,6 +12,7 @@ import { el, txt } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { type StyleRegistry } from "../../styles/registry";
 import { formatOdfLength, formatOdfNumber } from "../shared/units";
+import { imageExtension } from "../shared/image";
 import { writeOdfParagraph } from "../shared/paragraph";
 import { writeOdfTable } from "../shared/table";
 import {
@@ -278,7 +279,7 @@ function writeShapeImage(
   image: ContentImageBlock,
   state: DrawShapeWriteState,
 ): XmlNode[] {
-  const extension = image.format === "png" ? "png" : "jpg";
+  const extension = imageExtension(image.format);
   const path = `${PICTURES_DIRECTORY}/image${state.nextImage}.${extension}`;
   state.nextImage += 1;
   state.pkg.parts[path] = { kind: "binary", base64: image.base64 };
