@@ -1,8 +1,8 @@
 import type { ContentRun, RunConstructExtent } from "document-schema.js";
 import { EpubDiagnosticCodes } from "../diagnostics";
-import type { XmlElement, XmlNode } from "../xml/node";
+import { isTextLikeNode, type XmlElement, type XmlNode } from "../xml/node";
 import { attrValue } from "../xml/query";
-import { decodeEntities } from "../xml/entities";
+import { decodeEntities, decodeTextLikeNode } from "../xml/entities";
 import type { InlineStyle, XhtmlReadContext } from "./context";
 import { isInertElement } from "./context";
 import { isFootnoteReferenceAnchor, sameDocumentFragment } from "./footnote";
@@ -51,8 +51,9 @@ export function buildInlineRuns(
   const constructs: RunConstructExtent[] = [];
 
   for (const node of nodes) {
-    if (node.type === "text") {
-      const text = normalizeWhitespace(decodeEntities(node.value));
+    if (isTextLikeNode(node)) {
+      // A text node and a CDATA section (xml/node.ts's own isTextLikeNode) are both real, extractable inline content -- a producer reaches for CDATA only when its own literal text would otherwise need escaping, never as a distinct kind of content -- decoded identically to how a text node has always been decoded here, except CDATA never through decodeEntities (xml/entities.ts's own decodeTextLikeNode comment: CDATA content was never entity-encoded to begin with).
+      const text = normalizeWhitespace(decodeTextLikeNode(node));
       if (text.length > 0) {
         runs.push(styledRun(text, style));
       }
