@@ -1654,7 +1654,7 @@ describe("ContentDocumentSchema round trips", () => {
   });
 });
 
-// Deliberately deep nesting for ContentEmbeddedObjectSchema's own recursive guard, mirroring the discipline already applied to ContentTable's three-level recursion test above: a formula embedded inside a drawing embedded inside a spreadsheet, three levels deep, exercising both anchoring mechanisms (ContentSheetSchema.embeddedObjects at level 1->2, and the ContentBlock 'embeddedObject' variant at level 2->3) in the same structure. The innermost document is a genuine 'formula'-kind ContentDocument (reusing the fixture above), so this also drives the recursion down through the custom MathMlNode guard, not only through the block model.
+// Deliberately deep nesting for ContentEmbeddedObjectSchema's own recursive guard, mirroring the discipline already applied to ContentTable's three-level recursion test above: a formula embedded inside a drawing embedded inside a spreadsheet, three levels deep, exercising both anchoring mechanisms (ContentSheetSchema.embeddedObjects at level 1->2, and the ContentBlock 'embeddedObject' variant at level 2->3) in the same structure. The innermost document is a genuine 'formula'-kind ContentDocument (reusing the fixture above), so this also drives the recursion down through the real, self-recursive MathMlNodeSchema (src/mathml.ts), not only through the block model.
 const formulaEmbeddedBlock: ContentBlock = {
   kind: "embeddedObject",
   objectKind: "formula",
