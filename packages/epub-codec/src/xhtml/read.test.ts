@@ -226,8 +226,71 @@ describe("lists", () => {
     );
   });
 
-  it("drops content that sits before the very first <li>, unchanged from prior behaviour", () => {
-    const blocks = read(body("<ul>stray<li>a</li></ul>"));
+  it("recovers stray text that sits before the very first <li>, with no list membership of its own, positioned immediately before the list's own items", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul>stray<li>a</li></ul>"), sink);
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "stray" }] },
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("recovers a <ul> nested directly before the very first <li> as its own separate top-level list, rather than losing it -- issue #994's own headline repro", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul><ul><li>b</li></ul><li>a</li></ul>"), sink);
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub2:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
+  it("mints item ids and fires diagnostics in document order, never for a recovered read whose result is then discarded", () => {
+    const sink = vi.fn<(d: EpubDiagnostic) => void>();
+    const blocks = read(
+      body('<ul><img src="before.png" alt="before"/><li>a</li><li>b</li></ul>'),
+      sink,
+    );
+    // "before" carries no list membership (recovered ahead of the first real <li>); "a" and "b" are item1/item2 in document order -- the minter is never advanced for a read whose result this function goes on to discard.
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "before" }] },
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
+      },
+    ]);
+    const outsideItemCalls = sink.mock.calls.filter(
+      ([diagnostic]) => diagnostic.code === "epub/list-content-outside-item",
+    );
+    expect(outsideItemCalls).toHaveLength(1);
+  });
+
+  it("still drops genuinely whitespace-only content before the very first <li>, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(body("<ul>\n  <li>a</li>\n</ul>"), sink);
     expect(blocks).toEqual([
       {
         kind: "paragraph",
@@ -235,6 +298,7 @@ describe("lists", () => {
         list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
       },
     ]);
+    expect(sink).not.toHaveBeenCalled();
   });
 
   it("ignores inter-element whitespace between <li> siblings, firing no diagnostic, for the pretty-printed shape essentially all real-world HTML uses", () => {
