@@ -586,6 +586,197 @@ describe("writeDocContent tables", () => {
     expect(cellText(block.rows[1]?.cells[1])).toBe("R2-narrow");
   });
 
+  it("recovers two adjacent lost boundaries inside a single colSpan-3 cell", () => {
+    // A single-row table has no other row to state a boundary through, so both of the wide cell's own internal boundaries are lost at once -- splitAtLostBoundaries must break the one cell into three physical sub-cells (content, continuation, continuation), not just one.
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50, 50, 50],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "wide" }])], colSpan: 3 },
+              { blocks: [paragraph([{ text: "narrow" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = tableAt(result, 0);
+    expect(block.columnWidthsPt).toEqual([50, 50, 50, 50]);
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(3);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("wide");
+    expect(block.rows[0]?.cells[1]?.colSpan).toBeUndefined();
+    expect(cellText(block.rows[0]?.cells[1])).toBe("narrow");
+  });
+
+  it("recovers non-contiguous lost boundaries when a third row states the boundary in between two that stay lost", () => {
+    // Rows A and B both merge columns 0-3 into one cell, identically, so neither boundary 1 nor boundary 3 (columns 0|1 and 2|3) is ever stated by either of them. Row C merges only columns 0-1 and 2-3, which states the boundary in between (2) but not the ones either side (1 and 3) -- so the table's own lost set is {1, 3}, a non-contiguous pair with a recoverable gap between them, rather than the single contiguous run every other test in this suite exercises.
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [20, 20, 20, 20, 20],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "A-wide" }])], colSpan: 4 },
+              { blocks: [paragraph([{ text: "A-narrow" }])] },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "B-wide" }])], colSpan: 4 },
+              { blocks: [paragraph([{ text: "B-narrow" }])] },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "C-left" }])], colSpan: 2 },
+              { blocks: [paragraph([{ text: "C-right" }])], colSpan: 2 },
+              { blocks: [paragraph([{ text: "C-narrow" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = tableAt(result, 0);
+    expect(block.columnWidthsPt).toEqual([20, 20, 20, 20, 20]);
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(4);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("A-wide");
+    expect(block.rows[1]?.cells[0]?.colSpan).toBe(4);
+    expect(cellText(block.rows[1]?.cells[0])).toBe("B-wide");
+    expect(block.rows[2]?.cells[0]?.colSpan).toBe(2);
+    expect(cellText(block.rows[2]?.cells[0])).toBe("C-left");
+    expect(block.rows[2]?.cells[1]?.colSpan).toBe(2);
+    expect(cellText(block.rows[2]?.cells[1])).toBe("C-right");
+  });
+
+  it("keeps a cell's own background and borders on the content sub-cell after a lost-boundary split", () => {
+    // The lost-boundary fallback's own content sub-cell (subIndex 0) carries the cell's real decoration exactly as an unsplit cell would; the continuation sub-cell carries none, matching a genuine TCGRF.horzMerge continuation's own contents-and-formatting-not-rendered rule.
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [50, 50, 50],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [paragraph([{ text: "wide" }])],
+                colSpan: 2,
+                background: { r: 1, g: 1, b: 0 },
+                borders: {
+                  top: { color: { r: 1, g: 0, b: 0 }, widthPt: 1 },
+                  left: { color: { r: 1, g: 0, b: 0 }, widthPt: 1 },
+                  bottom: { color: { r: 1, g: 0, b: 0 }, widthPt: 1 },
+                  right: { color: { r: 1, g: 0, b: 0 }, widthPt: 1 },
+                },
+              },
+              { blocks: [paragraph([{ text: "narrow" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = tableAt(result, 0);
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(block.rows[0]?.cells[0]?.background).toEqual({ r: 1, g: 1, b: 0 });
+    expect(block.rows[0]?.cells[0]?.borders?.top?.color).toEqual({
+      r: 1,
+      g: 0,
+      b: 0,
+    });
+  });
+
+  it("recovers colSpan and rowSpan together when a vertical-merge anchor's own colSpan crosses a lost boundary (ExaDev/documents.js#992)", () => {
+    // The anchor (row 0) and its own vertical-merge continuation (row 1) are the table's only two rows, and both merge columns 0-2 identically -- there is no third row to reveal either internal boundary, so both are lost. The fallback must split the rowSpan anchor itself, not just an ordinary cell, and must split the continuation's own inherited span the same way.
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: [20, 20, 20, 20],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [paragraph([{ text: "anchor" }])],
+                colSpan: 3,
+                rowSpan: 2,
+              },
+              { blocks: [paragraph([{ text: "top-right" }])] },
+            ],
+          },
+          {
+            cells: [
+              { blocks: [] },
+              { blocks: [paragraph([{ text: "bottom-right" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = tableAt(result, 0);
+    expect(block.columnWidthsPt).toEqual([20, 20, 20, 20]);
+    expect(block.rows[0]?.cells[0]?.colSpan).toBe(3);
+    expect(block.rows[0]?.cells[0]?.rowSpan).toBe(2);
+    expect(cellText(block.rows[0]?.cells[0])).toBe("anchor");
+    expect(cellText(block.rows[0]?.cells[1])).toBe("top-right");
+    expect(block.rows[1]?.cells[0]?.blocks).toEqual([]);
+    expect(block.rows[1]?.cells[0]?.colSpan).toBe(3);
+    expect(cellText(block.rows[1]?.cells[1])).toBe("bottom-right");
+  });
+
+  it("writes an ordinary, fully unmerged 20-column table without the lost-boundary fallback touching it", () => {
+    // No cell here ever merges, so recoverableBoundaries states every internal boundary itself and the fallback assigns nothing to any row -- an ordinary wide table stays exactly as costly as it always was, unaffected by the boundary-distribution logic that exists only for merged tables.
+    const columnCount = 20;
+    const input = document([
+      {
+        kind: "table",
+        columnWidthsPt: Array.from({ length: columnCount }, () => 30),
+        rows: [
+          {
+            cells: Array.from({ length: columnCount }, (_unused, index) => ({
+              blocks: [paragraph([{ text: `c${index}` }])],
+            })),
+          },
+        ],
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = tableAt(result, 0);
+    expect(block.columnWidthsPt).toHaveLength(columnCount);
+    expect(block.rows[0]?.cells).toHaveLength(columnCount);
+    for (let index = 0; index < columnCount; index += 1) {
+      expect(cellText(block.rows[0]?.cells[index])).toBe(`c${index}`);
+    }
+  });
+
+  it("writes a wide table where every row merges across the entire grid without exceeding any single row's own PapxInFkp budget (ExaDev/documents.js#992 regression)", () => {
+    // Every row here has exactly one cell spanning the whole grid, so none of the table's 23 internal boundaries is ever stated by any row -- all 23 are lost. Splitting every row at every lost boundary (this writer's own pre-fix behaviour) would make each of the 3 rows state all 24 columns physically, which alone exceeds a PapxInFkp's own 510-byte GrpPrlAndIstd ceiling (see the README's "about 22 columns" note) even though the table has rows enough to share the work; the fix must spread the 23 boundaries across the 3 rows instead of restating every one of them in every row.
+    const columnCount = 24;
+    const rowCount = 3;
+    const columnWidthsPt = Array.from({ length: columnCount }, () => 20);
+    const rows = Array.from({ length: rowCount }, (_unused, rowIndex) => ({
+      cells: [
+        {
+          blocks: [paragraph([{ text: `row ${rowIndex}` }])],
+          colSpan: columnCount,
+        },
+      ],
+    }));
+    const input = document([{ kind: "table", columnWidthsPt, rows }]);
+    const result = roundTrip(input);
+    const block = tableAt(result, 0);
+    expect(block.columnWidthsPt).toHaveLength(columnCount);
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      expect(block.rows[rowIndex]?.cells).toHaveLength(1);
+      expect(block.rows[rowIndex]?.cells[0]?.colSpan).toBe(columnCount);
+      expect(cellText(block.rows[rowIndex]?.cells[0])).toBe(`row ${rowIndex}`);
+    }
+  });
+
   it("round-trips a vertically merged cell's rowSpan, with the spanned rows carrying an empty placeholder cell", () => {
     const input = document([
       {
