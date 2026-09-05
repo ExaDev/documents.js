@@ -588,17 +588,20 @@ function readDefinitionList(
   return readDefinitionListEntries(element.children, state);
 }
 
-// HTML5's own <dl> content model explicitly permits wrapping one or more dt/dd pairs in a <div> (a producer idiom for a per-entry styling hook), as an alternative to dt/dd sitting directly under the <dl> -- recursing into a <div> child finds the pairs it wraps exactly as if they sat directly in the <dl>. No diagnostic: the <div> itself carries no property document-schema.js's own vocabulary can express, identical to every other <div> this package already reads transparently (readBlockElementInner's own default passthrough case), so there is no loss here for a diagnostic to name.
+// HTML5's own <dl> content model explicitly permits wrapping one or more dt/dd pairs in a <div> (a producer idiom for a per-entry styling hook), as an alternative to dt/dd sitting directly under the <dl> -- recursing into a <div> child finds the pairs it wraps exactly as if they sat directly in the <dl>. No diagnostic: the <div> itself carries no property document-schema.js's own vocabulary can express, identical to every other <div> this package already reads transparently (readBlockElementInner's own default passthrough case), so there is no loss here for a diagnostic to name. <div> is the only wrapper this narrower rule recognises, deliberately: it is the one shape HTML5's own <dl> content model actually names as legal, so recursing into it and reporting nothing is a statement about conformant markup, not an arbitrary choice of which tag to special-case. Anything else that is not dt/dd/div -- a stray <p>, stray text, a stray <img>, a non-conformant wrapper like <section> used in <div>'s place -- gets the same general treatment readList already applies to its own analogous whitelist (route the stray run through readContainerChildren and report a real diagnostic naming the loss), via flushDefinitionListStrayContent below, rather than being silently dropped the way this function used to drop everything outside its three named tags with zero diagnostics -- reachable one tag away from ExaDev/documents.js#994's own headline shape. A non-conformant wrapper's own dt/dd children lose their distinct term/definition treatment once routed this way (readContainerChildren has no notion of dt/dd, so they degrade to plain concatenated inline text) -- a real, documented fidelity cost, but a text-preserving one, matching the "recovered as ordinary content" tier every other stray-content gap in this file resolves to.
 function readDefinitionListEntries(
   nodes: readonly XmlNode[],
   state: BuildState,
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
+  let strayNodes: XmlNode[] = [];
+  const flushStray = (): void => {
+    blocks.push(...flushDefinitionListStrayContent(strayNodes, state));
+    strayNodes = [];
+  };
   for (const child of nodes) {
-    if (child.type !== "element") {
-      continue;
-    }
-    if (child.tag === "dt") {
+    if (child.type === "element" && child.tag === "dt") {
+      flushStray();
       const inline = buildInlineRuns(child.children, {}, state.context);
       blocks.push(
         decorateParagraph(
@@ -606,7 +609,10 @@ function readDefinitionListEntries(
           state,
         ),
       );
-    } else if (child.tag === "dd") {
+      continue;
+    }
+    if (child.type === "element" && child.tag === "dd") {
+      flushStray();
       const inline = buildInlineRuns(child.children, {}, state.context);
       blocks.push(
         decorateParagraph(
@@ -620,10 +626,46 @@ function readDefinitionListEntries(
           state,
         ),
       );
-    } else if (child.tag === "div") {
+      continue;
+    }
+    if (child.type === "element" && child.tag === "div") {
+      flushStray();
       blocks.push(...readDefinitionListEntries(child.children, state));
+      continue;
+    }
+    if (
+      child.type === "element" &&
+      (child.tag === "script" || child.tag === "template")
+    ) {
+      continue;
+    }
+    if (child.type === "element" || child.type === "text") {
+      strayNodes.push(child);
     }
   }
+  flushStray();
+  return blocks;
+}
+
+// The <dl> twin of flushListStrayContent above: content that is not dt/dd/div (nor a script-supporting element) sitting directly inside a <dl> or one of its <div> wrappers is not valid HTML5, but silently dropping it loses real content with no diagnostic at all -- exactly the defect class ExaDev/documents.js#994 was filed about, reachable here one tag away from the shape that issue's own fix already covers. Recovered through the same readContainerChildren dispatch dt/dd's own real children go through, under the plain `state` (a <dl> entry carries no numId/level membership the way a list item does for stray content to inherit, so there is no withListItem-equivalent to apply here). Reported only when the recovery actually produces content, matching flushListStrayContent's own rule: genuine inter-element whitespace (the common pretty-printed-<dl> shape) produces an empty recovered block list and fires nothing.
+function flushDefinitionListStrayContent(
+  nodes: readonly XmlNode[],
+  state: BuildState,
+): ContentBlock[] {
+  if (nodes.length === 0) {
+    return [];
+  }
+  const blocks = readContainerChildren(nodes, state);
+  if (blocks.length === 0) {
+    return [];
+  }
+  state.context.sink({
+    code: EpubDiagnosticCodes.DEFINITION_LIST_CONTENT_OUTSIDE_ENTRY,
+    severity: "info",
+    message:
+      "content sits directly inside a <dl> (or one of its <div> wrappers) outside any dt/dd (not valid HTML5); recovered as ordinary content -- a non-conformant wrapper's own dt/dd children, if any, lose their distinct term/definition treatment and degrade to plain concatenated text",
+    href: state.context.sourceHref,
+  });
   return blocks;
 }
 

@@ -240,6 +240,22 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
     expect(codes.has(EpubDiagnosticCodes.LIST_CONTENT_OUTSIDE_ITEM)).toBe(true);
   });
 
+  it("DEFINITION_LIST_CONTENT_OUTSIDE_ENTRY fires for a stray <p> sitting directly inside a <dl>", () => {
+    const { sink, codes } = collect();
+    readXhtmlBody(
+      "<html><body><dl><dt>Term</dt><p>stray</p><dd>Def</dd></dl></body></html>",
+      {
+        resolveImage: () => undefined,
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(
+      codes.has(EpubDiagnosticCodes.DEFINITION_LIST_CONTENT_OUTSIDE_ENTRY),
+    ).toBe(true);
+  });
+
   it("IMAGE_FORMAT_UNSUPPORTED fires for a resolved but non-PNG/JPEG image", () => {
     const { sink, codes } = collect();
     readXhtmlBody('<html><body><img src="a.gif" alt="a"/></body></html>', {
