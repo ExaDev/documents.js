@@ -329,6 +329,87 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // [MS-DOC] 2.9.78 FFDataBits.fHasListBox "MUST be 1 if iType is iTypeDrop (2)" with no carve-out for a dropdown that happens to carry no options -- a real, common shape this ecosystem's own docx/odf readers can produce (ExaDev/documents.js#1016). An earlier version of this writer gated \ffhaslistbox behind `options !== undefined`, so a dropDown with no options minted \fftype2 alone: a fftype naming a list field with no \*\formfield data backing that claim at all.
+  it("writes \\ffhaslistbox for a dropDown with no options at all, rather than minting \\fftype2 with no formfield data to back it", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: { kind: "contentControl", controlType: "dropDown" },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\fftype2");
+    expect(out).toContain("\\ffhaslistbox");
+    // FFData.wDef "MUST be less than the number of items in the dropdown list box" -- with zero items there is no valid index, so this writer mints none at all rather than an invalid \ffdefres0.
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
+  it("writes \\ffhaslistbox for a dropDown with an empty options array, and still mints no \\ffdefres", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: [],
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\fftype2");
+    expect(out).toContain("\\ffhaslistbox");
+    // 0 is not less than 0 items, so an empty array is exactly as invalid a target for \ffdefres0 as no array at all.
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
+  it("mints neither \\ffres nor \\ffdefres for a dropDown whose value names none of its own options, rather than silently selecting a different entry", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "dropDown",
+                options: ["Hello", "Guten Tag"],
+                value: "Bonjour",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\ffhaslistbox");
+    // The regression this guards: an earlier version of this writer's `indexOf` returning -1 for an unmatched value was indistinguishable from -1 for "no value recorded at all", so it minted \ffdefres0 either way -- silently picking "Hello" for a document that actually recorded "Bonjour". Neither \ffres nor \ffdefres should exist at all for this shape.
+    expect(out).not.toContain("\\ffdefres");
+    expect(out).not.toContain("\\ffres");
+    expectBalancedBraces(out);
+  });
+
   it("writes \\ffres as a zero-based index into \\*\\ffl when a dropDown's value names one of its own options", () => {
     const out = write(
       wordprocessing([
