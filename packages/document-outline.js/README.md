@@ -140,7 +140,7 @@ const withParagraph = insertEdge(
 
 **`insertNode` mints with the identical discipline every read-side mint site already follows.** `id` is `contentHashV1` of the content handed in — folding in `children` (an ordered list of already-minted node ids) exactly as a group node folds its own children's ids into its hash — computed and spread into the node face _after_ the content, so a `properties` field named `id` or `kind` is shadowed unconditionally. `InsertNodeContent` carries no `id` field at all, which is what makes the no-caller-supplied-id property hold structurally rather than by validation: there is no parameter through which a caller could supply one, even by mistake. When `children` is given, `insertNode` also emits one `CONTAINS` edge per child at `orderKeys.orderKeyForIndex(index)` — the same wide, evenly spaced keys a fresh projection mints. Content identical to a node already in the graph dedupes to the existing node and mints no duplicate edges, the same upsert-once rule `projectDocumentGraph` itself follows.
 
-**Mutating a node is not a separate operation.** Content-addressing already means "mutate" is "mint a new version": call `insertNode` again with the changed content, get back a new id, then `insertEdge` that new id in wherever the old one was referenced. The old node and its edges are left exactly as they were — free version history, the same behaviour `projectDocumentGraph` itself exhibits when projecting two versions of one document side by side.
+**Mutating a node is not a separate operation.** Content-addressing already means "mutate" is "mint a new version": call `insertNode` again with the changed content, get back a new id, then `insertEdge` that new id in wherever the old one was referenced. The old node and its edges are left exactly as they were — neither function ever removes or rewrites existing graph state, which is the free version history `projectDocumentGraph` itself exhibits when projecting two versions of one document side by side. That recipe covers minting the new version and attaching it, but not detaching the old one: `insertEdge`-ing the new id adds a second edge from the same parent alongside the old edge rather than removing or repointing it, so the parent ends up with both versions attached — reading identically to two deliberately added siblings, not one version replacing another. There is no `removeEdge`/`replaceEdge` in this module yet ([ExaDev/documents.js#1004](https://github.com/ExaDev/documents.js/issues/1004)); a caller wanting a true in-place replacement has no primitive here for detaching the still-live edge from the ancestor.
 
 **`insertEdge` attaches an already-minted node at a sibling position**, defaulting to a `CONTAINS` edge appended after the target's existing children:
 
@@ -150,8 +150,8 @@ insertEdge(graph, parentId, childId, { position: { at: "start" } });
 insertEdge(graph, parentId, childId, { position: { at: "before", siblingId } });
 insertEdge(graph, parentId, childId, {
   position: { at: "after", siblingId },
-  kind: "STYLED_BY",
-  path: ["style"],
+  kind: "PROPERTY",
+  path: ["metadata", "keywords"],
 });
 ```
 
