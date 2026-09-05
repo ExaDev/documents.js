@@ -677,6 +677,9 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
   const captionParagraph: ContentParagraph = {
     kind: "paragraph",
     runs: captionInline.runs,
+    ...(captionInline.constructs.length > 0
+      ? { constructs: captionInline.constructs }
+      : {}),
   };
   return [decorateParagraph(captionParagraph, state), table];
 }
