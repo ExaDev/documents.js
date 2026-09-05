@@ -847,6 +847,33 @@ describe("pre / code blocks", () => {
       expect.objectContaining({ code: "epub/image-pre-unsupported" }),
     );
   });
+
+  // readPreText is its own separate recursive walk over a <pre>'s children, not a call into src/xhtml/inline.ts's appendElement -- so the script/template guard that file's own comment calls "universal" needed its own identical guard here too, since <script>/<template> are both legal children of <pre> per the HTML content model and neither's content is ever legitimate document text.
+  it("skips a <script>'s raw source when it sits directly inside a <pre>, never leaking it into the extracted text", () => {
+    const blocks = read(
+      body("<pre>before<script>var x = 1;</script>after</pre>"),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "beforeafter", fontFamily: "Courier New" }],
+      },
+    ]);
+  });
+
+  it("skips a <template>'s inert content when it sits directly inside a <pre>'s own <code>", () => {
+    const blocks = read(
+      body(
+        "<pre><code>before<template><li>fake</li></template>after</code></pre>",
+      ),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "beforeafter", fontFamily: "Courier New" }],
+      },
+    ]);
+  });
 });
 
 describe("hr", () => {
