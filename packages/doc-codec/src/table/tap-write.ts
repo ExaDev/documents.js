@@ -43,8 +43,8 @@ const SHD_ARRAYS: readonly {
 const MAX_SHD_PER_ARRAY = 22;
 
 const TWIPS_PER_POINT = 20;
-/** A table row has "between 1 and 63 table cells" ([MS-DOC] 2.4.3), and TDefTableOperand.NumberOfColumns is itself a single byte "MUST NOT exceed 63". */
-const MAX_COLUMNS = 63;
+/** A table row has "between 1 and 63 table cells" ([MS-DOC] 2.4.3), and TDefTableOperand.NumberOfColumns is itself a single byte "MUST NOT exceed 63". Exported so table/write.ts's own lost-boundary fallback can check a trial split's cell count against this format ceiling BEFORE calling encodeTableRowGrpprl with it -- that function still throws unconditionally past this limit for every other caller (the row actually committed has a genuine internal defect if it ever produces one), but a speculative trial split needs to treat the ceiling as "doesn't fit" and keep trimming rather than crash (ExaDev/documents.js#992). */
+export const MAX_TABLE_ROW_CELLS = 63;
 /** sprmPDyaBefore/After's unsigned 2-byte operand range, reused here for XAS column boundaries (also an unsigned 2-byte field in practice for the non-negative widths this writer produces). */
 const MIN_INT16 = -0x8000;
 const MAX_INT16 = 0x7fff;
@@ -163,9 +163,9 @@ export function encodeTableRowGrpprl(
       `a table row's column-boundary array must carry exactly one more entry than its cell count (got ${columnBoundariesTwips.length} boundaries for ${cells.length} cells)`,
     );
   }
-  if (cells.length < 1 || cells.length > MAX_COLUMNS) {
+  if (cells.length < 1 || cells.length > MAX_TABLE_ROW_CELLS) {
     throw new DocFormatError(
-      `a table row must have between 1 and ${MAX_COLUMNS} cells, got ${cells.length}`,
+      `a table row must have between 1 and ${MAX_TABLE_ROW_CELLS} cells, got ${cells.length}`,
     );
   }
   const remainder = [
