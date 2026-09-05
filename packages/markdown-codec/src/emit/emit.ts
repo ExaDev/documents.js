@@ -3,7 +3,7 @@
 //  - "Heading{1..6}" styleId -> ATX heading, "#" repeated to the level, clamped through document-schema.js's own shared clampHeadingLevel (one heading-range clamp across the ecosystem instead of a private copy here) -- MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED when the level exceeds 6 (a markdown-produced document never carries one, but ContentDocument is a shared cross-format pivot; a paragraph from, say, odt's own unbounded readOutlineLevel can).
 //  - 'CodeBlock'/'HorizontalRule'/'HTMLPreformatted' styleId -> a fenced code block / a thematic break / literal, unescaped text. A CodeBlock paragraph's own codeLanguage re-emits as the fence's info word, with any markdown-residue remainder (src/lower/lower.ts's splitInfoString) re-emitted verbatim after it -- one space between fence and info line, the spec's own canonical spacing, which also keeps an info word that begins with the fence character from fusing into the fence itself.
 //  - a division construct pair whose wrapped paragraphs carry the quote indent (this package's own dual carry) -> one '> ' blockquote wrapper per nesting level, with the blocks' own indentLeftPt suppressed so the fact is counted once. A paragraph outside any division still recovers its quote depth from indentLeftPt alone: 'Quote' styleId, or ANY of the four styleIds below while indentLeftPt is also set, -> '> ' repeated per recovered nesting level (Math.round(indentLeftPt / QUOTE_INDENT_PT)) prefixed to every line -- the cross-format path for a document this package never produced. A paragraph with indentLeftPt set but none of these five styleIds is a genuine cross-format ambiguity this package cannot resolve (is it a quote, or just some other format's own paragraph indentation?) -- MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED; the indent is dropped, the paragraph still renders.
-//  - ContentListMembership -> a bullet/ordered/task-list item, decoded from its own numId string (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK for a numId this package never minted itself, or a depth-only membership carrying no numId at all (both fall back to a plain, tight, non-task bullet, per that module's own documented cross-format contract).
+//  - ContentListMembership -> a bullet/ordered/task-list item, decoded from its own numId string (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK for a numId this package never minted itself, or a depth-only membership carrying no numId at all (both fall back to a plain, tight, non-task bullet, per that module's own documented cross-format contract). A membership's own itemId groups every block sharing it back into one item's marker line plus continuation blocks (renderListRegion below), alternating with any nested sub-list content in between -- MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED for the one shape that still cannot be re-attached this way: a construct (most commonly a blockquote's division pair) sitting directly inside the item renders as separate top-level content instead of staying nested inside it, since a construct's own extent is resolved independently of list-region grouping (groupConstructItems below).
 //  - ContentTable -> a GFM table, src/emit/table.ts.
 //  - ContentImageBlock -> a markdown image, src/emit/image.ts.
 //  - ContentRun[] -> inline text, src/emit/inline.ts.
@@ -380,7 +380,93 @@ interface ListItemPart {
   readonly text: string;
 }
 
-// Renders one contiguous, flat run of .list-carrying paragraphs -- possibly spanning several sibling top-level lists back to back, and arbitrarily nested sub-lists (a paragraph whose own level is deeper than its predecessor's is that predecessor's own nested list content, recursed into here). One ITEM is the run of same-level paragraphs sharing one itemId -- the write-side inverse of src/lower/lower.ts's minted item identity -- so a multi-block item renders one marker line with every later block continued on the continuation indent after a blank line (the only spacing a reparse reads back as separate blocks inside one item). A membership with no itemId at all is the cross-format shape: each paragraph is its own item, exactly as this writer always treated them. Loose/tight spacing between two SIBLING items sharing the same numId is read from that numId's own `loose` flag; a boundary between two DIFFERENT numIds always gets a blank line, matching how two genuinely separate lists always render with visual separation.
+// One item's own contiguous run of same-level, same-itemId blocks (kind 'own'), or the deeper-level blocks of a nested sub-list sitting between two such runs (kind 'nested') -- see collectListItem below for why an item can carry more than one 'own' run.
+interface ItemOwnSegment {
+  readonly kind: "own";
+  readonly blocks: readonly ContentParagraph[];
+}
+interface ItemNestedSegment {
+  readonly kind: "nested";
+  readonly blocks: readonly ContentParagraph[];
+}
+type ItemSegment = ItemOwnSegment | ItemNestedSegment;
+
+// The contiguous run, starting at `from`, of blocks sharing this exact level and itemId -- `items[from]` itself is assumed to already match (every call site below only reaches here once that is known), so the result is always at least `from + 1`.
+function consumeSameItemRun(
+  items: readonly ContentParagraph[],
+  from: number,
+  level: number,
+  itemId: string,
+): number {
+  let end = from;
+  while (end < items.length) {
+    const candidate = items[end];
+    if (candidate?.list?.level !== level || candidate.list.itemId !== itemId) {
+      break;
+    }
+    end += 1;
+  }
+  return end;
+}
+
+// Collects one list item's FULL block run starting at `start`: its own leading same-level/same-itemId blocks, then any nested (deeper-level) sub-list content, then -- when the item's own blocks resume immediately after that nested content, sharing the same itemId -- another own-level run, alternating for as long as the pattern repeats. This is the write-side shape CommonMark spec 0.31.2 example 325 names directly ("* foo\n  * bar\n\n  baz"): a nested sub-list can sit in the MIDDLE of one item's own blocks, not only after all of them, and only itemId (never numId+level alone) can tell that "baz" belongs to the same item as "foo" rather than starting a new sibling. A membership with no itemId at all never resumes: its own segment is always exactly the one block at `start`, exactly as this writer always treated a cross-format item.
+function collectListItem(
+  items: readonly ContentParagraph[],
+  start: number,
+  level: number,
+  itemId: string | undefined,
+): { readonly segments: readonly ItemSegment[]; readonly next: number } {
+  const segments: ItemSegment[] = [];
+  let index = start;
+
+  const ownEnd =
+    itemId === undefined
+      ? index + 1
+      : consumeSameItemRun(items, index, level, itemId);
+  segments.push({ kind: "own", blocks: items.slice(index, ownEnd) });
+  index = ownEnd;
+
+  for (;;) {
+    let nestedEnd = index;
+    while (
+      nestedEnd < items.length &&
+      (items[nestedEnd]?.list?.level ?? -1) > level
+    ) {
+      nestedEnd += 1;
+    }
+    if (nestedEnd === index) {
+      break;
+    }
+    segments.push({ kind: "nested", blocks: items.slice(index, nestedEnd) });
+    index = nestedEnd;
+
+    if (itemId === undefined) {
+      break;
+    }
+    const resumedEnd = consumeSameItemRun(items, index, level, itemId);
+    if (resumedEnd === index) {
+      break;
+    }
+    segments.push({ kind: "own", blocks: items.slice(index, resumedEnd) });
+    index = resumedEnd;
+  }
+
+  return { segments, next: index };
+}
+
+// Whether a plain (non-quotable-style) paragraph immediately following `previousStyleId`, with no blank line between them, risks CommonMark's own lazy-continuation rule silently absorbing it into the PRECEDING paragraph instead of starting a fresh block: true exactly when NEITHER side has a styleId isQuotableStyle already recognises as self-delimiting (a heading, a fenced code block, a thematic break, preformatted HTML, a display-math block -- every one of these has its own unambiguous single-line-or-explicitly-closed boundary that a reparse recognises regardless of what precedes or follows it, per CommonMark's "these constructs interrupt a paragraph" rules). `previousStyleId` of `undefined` with `previousWasNested: true` means the immediately preceding rendered unit was a nested sub-list, not a paragraph at all -- also unambiguous, since a list's own item markers are themselves a recognised block starter. Only a plain paragraph directly followed by another plain paragraph is genuinely ambiguous: src/lower/lower.ts's own reader can only ever produce that pair when a real source blank line separated them in the first place (two adjacent non-blank plain-text lines are read as ONE multi-line paragraph, never two), so re-inserting the blank line here is not merely safe, it is what the source actually had.
+function requiresBlankLineBefore(
+  next: ContentParagraph,
+  previousStyleId: string | undefined,
+  previousWasNested: boolean,
+): boolean {
+  if (previousWasNested) {
+    return false;
+  }
+  return !isQuotableStyle(previousStyleId) && !isQuotableStyle(next.styleId);
+}
+
+// Renders one contiguous, flat run of .list-carrying paragraphs -- possibly spanning several sibling top-level lists back to back, and arbitrarily nested sub-lists (a paragraph whose own level is deeper than its predecessor's is that predecessor's own nested list content, recursed into here via collectListItem's 'nested' segments). One ITEM is every block sharing one itemId -- the write-side inverse of src/lower/lower.ts's minted item identity -- so a multi-block item renders one marker line with every later block of its own continued on the continuation indent, and any nested sub-list content indented in place between them. A membership with no itemId at all is the cross-format shape: each paragraph is its own item, exactly as this writer always treated them. Spacing between two blocks of the SAME item is a blank line whenever requiresBlankLineBefore says one is structurally required (see that function), and OTHERWISE only when the item's own numId was minted loose (info.loose) -- never unconditionally: forcing a blank line onto every continuation would silently turn a tight list loose on the way out (spec 0.31.2 example 300's own regression, a heading directly followed by a plain paragraph with no blank line between them in a tight list). Loose/tight spacing between two SIBLING items sharing the same numId is read from that same numId's own `loose` flag; a boundary between two DIFFERENT numIds always gets a blank line, matching how two genuinely separate lists always render with visual separation.
 function renderListRegion(
   items: readonly ContentParagraph[],
   context: EmitContext,
@@ -394,32 +480,10 @@ function renderListRegion(
     }
     const { numId, level, itemId } = item.list;
     const info = listInfoFor(numId, context);
+    const loose = info?.loose === true;
 
-    let ownEnd = index + 1;
-    if (itemId !== undefined) {
-      while (ownEnd < items.length) {
-        const candidate = items[ownEnd];
-        if (
-          candidate?.list?.level !== level ||
-          candidate.list.itemId !== itemId
-        ) {
-          break;
-        }
-        ownEnd += 1;
-      }
-    }
-    const ownBlocks = items.slice(index, ownEnd);
-
-    let lookahead = ownEnd;
-    while (
-      lookahead < items.length &&
-      (items[lookahead]?.list?.level ?? -1) > level
-    ) {
-      lookahead += 1;
-    }
-    const nestedItems = items.slice(ownEnd, lookahead);
-
-    const first = ownBlocks[0];
+    const { segments, next } = collectListItem(items, index, level, itemId);
+    const first = segments[0]?.blocks[0];
     if (first === undefined) {
       break;
     }
@@ -429,32 +493,53 @@ function renderListRegion(
     );
     const marker = renderListItemMarker(numId, info, checkboxText, context);
     const indent = " ".repeat(marker.bareLength);
-    const bodyLines = renderParagraphBody(
-      stripGlyph ? stripCheckboxRun(first) : first,
-      context,
-    ).split("\n");
-    const [firstLine = "", ...restLines] = bodyLines;
-    let text = [
-      `${marker.full}${firstLine}`,
-      ...restLines.map((line) => `${indent}${line}`),
-    ].join("\n");
-    for (const extra of ownBlocks.slice(1)) {
-      const rendered = renderParagraphBody(extra, context)
-        .split("\n")
-        .map((line) => (line.length === 0 ? line : `${indent}${line}`))
-        .join("\n");
-      text += `\n\n${rendered}`;
-    }
-    if (nestedItems.length > 0) {
-      const nested = renderListRegion(nestedItems, context)
-        .split("\n")
-        .map((line) => (line.length === 0 ? line : `${indent}${line}`))
-        .join("\n");
-      text += `\n${nested}`;
+
+    let text = "";
+    let renderedFirstLine = false;
+    let previousStyleId: string | undefined;
+    let previousWasNested = false;
+    for (const segment of segments) {
+      if (segment.kind === "nested") {
+        const nested = renderListRegion(segment.blocks, context)
+          .split("\n")
+          .map((line) => (line.length === 0 ? line : `${indent}${line}`))
+          .join("\n");
+        text += `\n${nested}`;
+        previousStyleId = undefined;
+        previousWasNested = true;
+        continue;
+      }
+      for (const block of segment.blocks) {
+        if (!renderedFirstLine) {
+          const bodyLines = renderParagraphBody(
+            stripGlyph ? stripCheckboxRun(block) : block,
+            context,
+          ).split("\n");
+          const [firstLine = "", ...restLines] = bodyLines;
+          text = [
+            `${marker.full}${firstLine}`,
+            ...restLines.map((line) => `${indent}${line}`),
+          ].join("\n");
+          renderedFirstLine = true;
+          previousStyleId = block.styleId;
+          previousWasNested = false;
+          continue;
+        }
+        const rendered = renderParagraphBody(block, context)
+          .split("\n")
+          .map((line) => (line.length === 0 ? line : `${indent}${line}`))
+          .join("\n");
+        const blank =
+          loose ||
+          requiresBlankLineBefore(block, previousStyleId, previousWasNested);
+        text += blank ? `\n\n${rendered}` : `\n${rendered}`;
+        previousStyleId = block.styleId;
+        previousWasNested = false;
+      }
     }
 
     parts.push({ numId, text });
-    index = lookahead;
+    index = next;
   }
 
   let out = "";
