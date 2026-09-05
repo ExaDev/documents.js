@@ -1,12 +1,12 @@
 import {
   flattenTree,
-  type ContentBlock,
   type ContentFormula,
   type DocumentTree,
   type MathExpression,
   type MathSymbolEntry,
 } from "document-schema.js";
 import type { MathLintDiagnostic } from "./diagnostics";
+import { collectDocumentFormulas } from "../model/formula";
 import { lowerLatex } from "./lower";
 import { reduceRational } from "./rational";
 
@@ -99,91 +99,15 @@ function lintFormula(
   }
 }
 
-// Every formula the lint can see in a block flow, including inside table cells.
-function collectBlockFormulas(
-  blocks: readonly ContentBlock[],
-  locate: string,
-  formulas: { formula: ContentFormula; locate: string }[],
-): void {
-  for (const [index, block] of blocks.entries()) {
-    if (
-      block.kind === "embeddedObject" &&
-      block.objectKind === "formula" &&
-      block.document.kind === "formula"
-    ) {
-      formulas.push({
-        formula: block.document.formula,
-        locate: `${locate}/blocks[${String(index)}]`,
-      });
-      continue;
-    }
-    if (block.kind === "table") {
-      for (const [rowIndex, row] of block.rows.entries()) {
-        for (const [cellIndex, cell] of row.cells.entries()) {
-          collectBlockFormulas(
-            cell.blocks,
-            `${locate}/rows[${String(rowIndex)}].cells[${String(cellIndex)}]`,
-            formulas,
-          );
-        }
-      }
-    }
-  }
-}
-
-// Lint every formula carrying both layers in a package. The tree-form package is flattened once at entry (the same single tree-to-flat authority every package consumer uses); the walk below covers every arm formulas actually travel through in the flat form: the wordprocessing sections' block flow, presentation slides and drawing pages (both via their shapes' own block flows), the spreadsheet arm's own embeddedObjects array, and the formula arm itself (a standalone formula document). The exported signature keeps DocumentTree -- callers hand back exactly what onDocument gave them.
+// Lint every formula carrying both layers in a package. The tree-form package is flattened once at entry (the same single tree-to-flat authority every package consumer uses); collectDocumentFormulas (src/model/formula.ts) is the shared walk covering every arm a formula actually travels through in the flat form -- the wordprocessing sections' block flow, presentation slides and drawing pages (both via their shapes' own block flows, including table cells), the spreadsheet arm's own embeddedObjects array, and the formula arm itself (a standalone formula document). The exported signature keeps DocumentTree -- callers hand back exactly what onDocument gave them. A found formula's own sourcePath doubles as its diagnostic locate string, falling back to the document's own kind for the two shapes with no sourcePath to report (a standalone formula document, and a spreadsheet's cell-anchored embedded objects -- see collectDocumentFormulas's own comment for why those carry none).
 export function lintMathCoherence(
   pkg: DocumentTree,
 ): readonly MathLintDiagnostic[] {
   const warnings: MathLintDiagnostic[] = [];
   const content = flattenTree(pkg);
   const symbolEntries = content.symbolTable?.symbols;
-  const found: { formula: ContentFormula; locate: string }[] = [];
-  if (content.kind === "formula") {
-    found.push({ formula: content.formula, locate: "formula" });
-  } else if (content.kind === "wordprocessing") {
-    for (const [index, section] of content.sections.entries()) {
-      collectBlockFormulas(section.blocks, `sections[${String(index)}]`, found);
-    }
-  } else if (content.kind === "presentation") {
-    for (const [slideIndex, slide] of content.slides.entries()) {
-      for (const [shapeIndex, shape] of slide.shapes.entries()) {
-        collectBlockFormulas(
-          shape.blocks,
-          `slides[${String(slideIndex)}].shapes[${String(shapeIndex)}]`,
-          found,
-        );
-      }
-    }
-  } else if (content.kind === "drawing") {
-    for (const [pageIndex, page] of content.pages.entries()) {
-      for (const [shapeIndex, shape] of page.shapes.entries()) {
-        collectBlockFormulas(
-          shape.blocks,
-          `pages[${String(pageIndex)}].shapes[${String(shapeIndex)}]`,
-          found,
-        );
-      }
-    }
-  } else {
-    for (const [sheetIndex, sheet] of content.sheets.entries()) {
-      for (const [objectIndex, object] of (
-        sheet.embeddedObjects ?? []
-      ).entries()) {
-        if (
-          object.objectKind === "formula" &&
-          object.document.kind === "formula"
-        ) {
-          found.push({
-            formula: object.document.formula,
-            locate: `sheets[${String(sheetIndex)}].embeddedObjects[${String(objectIndex)}]`,
-          });
-        }
-      }
-    }
-  }
-  for (const { formula, locate } of found) {
-    lintFormula(formula, locate, symbolEntries, warnings);
+  for (const { formula, sourcePath } of collectDocumentFormulas(content)) {
+    lintFormula(formula, sourcePath ?? content.kind, symbolEntries, warnings);
   }
   return warnings;
 }
