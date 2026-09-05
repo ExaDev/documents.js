@@ -642,9 +642,19 @@ class RtfWriter {
       paragraph.runs.length,
       openedFormFields,
     );
+    // A structural backstop, not a normal-path event: writeFormFieldBoundaries above is only ever called for positions 0..paragraph.runs.length, so an extent whose own endRun falls outside that range (beyond the paragraph's last run, or before its own startRun -- see that method's own comment) can leave its open half written with no position left to match it to a close. Draining here makes the writer structurally incapable of emitting an unmatched field group regardless of what ranges an extent is handed, rather than trusting every caller to hand it only well-formed ones.
+    this.drainOpenedFormFields(openedFormFields);
     if (!inTable) {
       this.line("\\par");
     }
+  }
+
+  private drainOpenedFormFields(opened: Set<RunConstructExtent>): void {
+    // Only the count matters here -- every remaining entry closes identically ("}}"), so there is nothing to read off any individual extent.
+    for (let remaining = opened.size; remaining > 0; remaining -= 1) {
+      this.raw("}}");
+    }
+    opened.clear();
   }
 
   private writeRunBoundaries(
@@ -668,6 +678,8 @@ class RtfWriter {
   }
 
   // A form field's own two halves, matching writeRunBoundaries above but wrapping rather than flagging: the open is `{\field...}{\fldrslt ` left unclosed, so every run the extent covers lands inside \fldrslt's own destination, and the close is the matching `}}`. A controlType FORM_FIELD_SPEC does not cover degrades through describeConstructGap instead of minting nothing silently -- and, critically, mints NO open braces for that extent, so the close loop must only ever emit "}}" for an extent whose open half was actually written (tracked in `opened`). Emitting the close unconditionally would leave every degraded extent's would-be open half missing while its close half still lands, corrupting the document's brace balance for everything written afterwards.
+  //
+  // `opened` holds exactly the extents currently open with no close yet written -- an entry is removed the moment its close is emitted, by either branch below -- which is what lets writeParagraph's own drainOpenedFormFields (after the final call for a paragraph) tell a genuinely still-open extent apart from one already closed. This matters for two shapes of malformed-looking input this writer must still round-trip to balanced output rather than crash or corrupt: an extent whose endRun exceeds paragraph.runs.length (this method is only ever called for positions 0..runs.length, so such a close position never arrives), and an extent with startRun > endRun (the close loop for its endRun runs before the open loop ever reaches its startRun, so `opened.has(extent)` is false there and the close is correctly skipped as "not yet opened" -- but nothing then revisits that endRun once the open finally happens at the later startRun position, so the close never fires from this method alone).
   private writeFormFieldBoundaries(
     extents: readonly (RunConstructExtent & {
       descriptor: ContentControlDescriptor;
@@ -682,6 +694,7 @@ class RtfWriter {
         opened.has(extent)
       ) {
         this.raw("}}");
+        opened.delete(extent);
       }
     }
     for (const extent of extents) {
@@ -701,6 +714,7 @@ class RtfWriter {
       opened.add(extent);
       if (extent.endRun === position) {
         this.raw("}}");
+        opened.delete(extent);
       }
     }
   }
