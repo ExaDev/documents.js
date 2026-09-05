@@ -43,7 +43,10 @@ import {
   RESERVED_BORDER_INDICES,
   RESERVED_FILL_INDICES,
 } from "./styles";
-import { ptToColumnWidthChars } from "./units";
+import {
+  COLUMN_WIDTH_CHARS_DECIMAL_PLACES,
+  ptToColumnWidthChars,
+} from "./units";
 import {
   pageSizeToPaperSizeCode,
   ptToUniversalMeasure,
@@ -516,7 +519,9 @@ function buildColsElement(
       max: String(column.index + 1),
     };
     if (column.widthPt !== undefined) {
-      attrs.width = ptToColumnWidthChars(column.widthPt).toFixed(2);
+      attrs.width = ptToColumnWidthChars(column.widthPt).toFixed(
+        COLUMN_WIDTH_CHARS_DECIMAL_PLACES,
+      );
       attrs.customWidth = "true";
     }
     if (column.hidden === true) {
