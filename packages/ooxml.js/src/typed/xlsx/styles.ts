@@ -430,6 +430,11 @@ function fillSignature(fill: ContentCellFill): string {
     : `pattern:${fill.patternType}:${fill.foregroundColor === undefined ? "" : colorToRgbHex(fill.foregroundColor)}:${fill.backgroundColor === undefined ? "" : colorToRgbHex(fill.backgroundColor)}`;
 }
 
+/** Reads `.kind` off a ContentCellFill that has already been switched over both of its real members ('solid'/'pattern') -- TypeScript types such a value 'never' at that point, so this takes it through a deliberately widened parameter type rather than an `as` cast. A value that reaches this call anyway (a malformed object bypassing schema validation, or a stale caller shape) still carries a real, inspectable kind at runtime even though the type system says none is left to name. */
+function unrecognizedFillKind(fill: { kind?: unknown }): string {
+  return String(fill.kind);
+}
+
 // A deterministic signature for a decoration, so two cells carrying identical decoration share one xf entry. widthPt is encoded with enough precision to round-trip the named-weight widths above (0.5/0.75/1.5/2.25) without floating-point drift producing spurious distinct entries.
 function signatureOfDecoration(decoration: CellFormatDecoration): string {
   let sig = "";
@@ -606,24 +611,33 @@ export class CellFormatTable {
       return existing;
     }
     let declared: DeclaredFill;
-    if (background.kind === "solid") {
-      declared = { kind: "solid", rgb: colorToRgbHex(background.color) };
-    } else {
-      if (!isXlsxPatternType(background.patternType)) {
-        throw new Error(
-          `ooxml.js cannot write a '${background.patternType}' cell fill: ECMA-376's own ST_PatternType vocabulary has no member for it, that pattern name belonging only to WordprocessingML's ST_Shd half of ContentCellPatternType's shared vocabulary`,
-        );
+    switch (background.kind) {
+      case "solid":
+        declared = { kind: "solid", rgb: colorToRgbHex(background.color) };
+        break;
+      case "pattern": {
+        if (!isXlsxPatternType(background.patternType)) {
+          throw new Error(
+            `ooxml.js cannot write a '${background.patternType}' cell fill: ECMA-376's own ST_PatternType vocabulary has no member for it, that pattern name belonging only to WordprocessingML's ST_Shd half of ContentCellPatternType's shared vocabulary`,
+          );
+        }
+        declared = {
+          kind: "pattern",
+          patternType: background.patternType,
+          ...(background.foregroundColor === undefined
+            ? {}
+            : { fgRgb: colorToRgbHex(background.foregroundColor) }),
+          ...(background.backgroundColor === undefined
+            ? {}
+            : { bgRgb: colorToRgbHex(background.backgroundColor) }),
+        };
+        break;
       }
-      declared = {
-        kind: "pattern",
-        patternType: background.patternType,
-        ...(background.foregroundColor === undefined
-          ? {}
-          : { fgRgb: colorToRgbHex(background.foregroundColor) }),
-        ...(background.backgroundColor === undefined
-          ? {}
-          : { bgRgb: colorToRgbHex(background.backgroundColor) }),
-      };
+      default:
+        // Reporting the actual kind beats an if/else's implicit "anything that isn't 'solid' must be 'pattern'", which would silently mistreat an undefined kind as a real pattern lookup instead of naming the actual cause.
+        throw new Error(
+          `ooxml.js cannot write a cell fill with kind '${unrecognizedFillKind(background)}': ContentCellFillSchema's discriminated union only defines 'solid' and 'pattern'`,
+        );
     }
     const index = this.fills.length;
     this.fills.push(declared);
