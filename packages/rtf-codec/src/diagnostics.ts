@@ -31,6 +31,7 @@ export const RtfDiagnosticCodes = {
   UNSUPPORTED_CODEPAGE: "rtf/unsupported-codepage",
   UNSUPPORTED_PICTURE_FORMAT: "rtf/unsupported-picture-format",
   PICTURE_SIZE_UNSTATED: "rtf/picture-size-unstated",
+  EMBEDDED_OBJECT_UNREADABLE: "rtf/embedded-object-unreadable",
   TABLE_ROW_WITHOUT_DEFINITION: "rtf/table-row-without-definition",
   TABLE_COLUMN_WIDTH_INVALID: "rtf/table-column-width-invalid",
   NESTED_TABLE_FLATTENED: "rtf/nested-table-flattened",
@@ -40,7 +41,6 @@ export const RtfDiagnosticCodes = {
   FORM_FIELD_KEYWORD_LOST: "rtf/form-field-keyword-lost",
   // Write side: a ContentDocument fact RTF's own vocabulary cannot state, or that this writer does not yet state.
   CONSTRUCT_UNREPRESENTED: "rtf/construct-unrepresented",
-  EMBEDDED_OBJECT_DROPPED: "rtf/embedded-object-dropped",
   PACKAGE_TABLE_DROPPED: "rtf/package-table-dropped",
 } as const;
 
