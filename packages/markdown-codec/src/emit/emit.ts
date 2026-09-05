@@ -289,7 +289,7 @@ function renderParagraphBody(
         context.sink({
           code: MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
           severity: "info",
-          message: `WriteMarkdownOptions.headingStyle was 'atx', but this level ${String(level)} heading's own content contains a line break ATX has no way to hold -- rendered as setext instead so the break survives`,
+          message: `the effective WriteMarkdownOptions.headingStyle is 'atx' (its own default, or an explicit caller choice), but this level ${String(level)} heading's own content contains a line break ATX has no way to hold -- rendered as setext instead so the break survives`,
         });
       }
       return renderSetextHeading(level, text);
