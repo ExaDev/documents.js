@@ -723,7 +723,7 @@ function reconcileChildren(
     }
   }
 
-  // Forward backtrack from (0, 0): a matching pair is taken the instant both sequences agree at the current pointers (the only move that can ever belong to a MAXIMUM common subsequence there), otherwise whichever pointer leads to the branch the table says still carries the larger remaining match advances -- a genuine tie breaks toward advancing `i` (the existing side), so a requested position matches as early as any optimal assignment allows.
+  // Forward backtrack from (0, 0): a matching pair is taken the instant both sequences agree at the current pointers -- not because it is the only move an optimal assignment could ever take there (existingSeq [A, B] against children [A, A] has more than one assignment reaching a maximum common subsequence), but because the standard LCS recurrence guarantees taking an agreeing pair is always part of AT LEAST ONE maximum common subsequence, which is all a single deterministic backtrack needs. Otherwise whichever pointer leads to the branch the table says still carries the larger remaining match advances -- a genuine tie breaks toward advancing `i` (the existing side), so a requested position matches as early as any optimal assignment allows.
   const matchedIndex = new Array<number | undefined>(children.length).fill(
     undefined,
   );
