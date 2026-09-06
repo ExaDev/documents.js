@@ -960,6 +960,69 @@ describe("form fields", () => {
     });
   });
 
+  // Regression guard: a real Word-authored \field wraps its own \*\fldinst instruction text in an anonymous nested group (`{\*\fldinst {FORMTEXT }...}`), and that nested group inherits the enclosing "fieldInstruction" destination just like \*\fldinst itself does -- so, before FieldState's own formFieldStarted guard existed, both the nested group's close and \*\fldinst's own close independently satisfied startFormField's condition, opening two extents for what is really one field while only the field's own single closing brace ever popped one back off. Five consecutive such fields exercise the guard across several fields in a row rather than just one, pinning that each field's own contentControl still lands on the correct run range with no duplication or cross-field mis-nesting.
+  it("opens a Word-shaped nested \\*\\fldinst group's contentControl only once, across several consecutive fields", () => {
+    const field =
+      "{\\field{\\*\\fldinst {FORMTEXT }{\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname T}}}}{\\fldrslt X}}";
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard ${field.repeat(5)}\\par}`,
+    )[0];
+    expect(paragraph?.runs.map((run) => run.text)).toEqual([
+      "X",
+      "X",
+      "X",
+      "X",
+      "X",
+    ]);
+    expect(paragraph?.constructs).toEqual([
+      {
+        descriptor: {
+          kind: "contentControl",
+          controlType: "plainText",
+          tag: "T",
+        },
+        startRun: 0,
+        endRun: 1,
+      },
+      {
+        descriptor: {
+          kind: "contentControl",
+          controlType: "plainText",
+          tag: "T",
+        },
+        startRun: 1,
+        endRun: 2,
+      },
+      {
+        descriptor: {
+          kind: "contentControl",
+          controlType: "plainText",
+          tag: "T",
+        },
+        startRun: 2,
+        endRun: 3,
+      },
+      {
+        descriptor: {
+          kind: "contentControl",
+          controlType: "plainText",
+          tag: "T",
+        },
+        startRun: 3,
+        endRun: 4,
+      },
+      {
+        descriptor: {
+          kind: "contentControl",
+          controlType: "plainText",
+          tag: "T",
+        },
+        startRun: 4,
+        endRun: 5,
+      },
+    ]);
+  });
+
   it("swallows a stray \\par inside a \\*\\ffl entry instead of splitting the surrounding paragraph", () => {
     const blocks = blocksOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN {\\*\\formfield{\\fftype2\\fftypetxt0\\ffhaslistbox{\\*\\ffl item1\\par item2}}}}{\\fldrslt X}}\\par}`,
