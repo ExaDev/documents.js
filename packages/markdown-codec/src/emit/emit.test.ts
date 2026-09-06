@@ -699,6 +699,33 @@ describe("headings", () => {
     });
   });
 
+  describe("a level 3-6 heading's own escaped hard break is spelled with a CRLF or bare CR, not merely LF (ExaDev/documents.js#940)", () => {
+    // This package's own escapeMarkdownText always spells an escaped hard break with a trailing LF ('\\\n'), but a foreign producer's own markdown residue (re-emitted verbatim, unescaped, by src/emit/inline.ts's renderLeaf) can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately. Stripping only the LF-spelled escape ahead of the LINE_ENDING_PATTERN-based collapse leaves this backslash behind as a stray literal character once that wider split removes the CRLF/CR line ending out from under it -- the collapse consumes the line ending but not the escape that preceded it.
+    it.each([
+      { name: "a bare CR", xml: "\\\r" },
+      { name: "a CRLF", xml: "\\\r\n" },
+    ])(
+      "collapses to a plain space, not a space plus a leftover literal backslash, for $name",
+      ({ xml }) => {
+        const written = emitMarkdown(
+          doc([
+            {
+              kind: "paragraph",
+              runs: [
+                { text: "foo" },
+                { text: "\n", source: { format: "markdown", xml } },
+                { text: "bar" },
+              ],
+              styleId: "Heading3",
+            },
+          ]),
+        );
+        expect(written).toBe("### foo bar");
+        expect(written).not.toContain("\\");
+      },
+    );
+  });
+
   it("keys canInterruptOpenParagraph off the ACTUAL (ATX-collapsed) rendering of a level-1/2 heading whose own trailing break makes setext unsafe, not just its level -- an unsafe-break heading interrupts an open list-item paragraph cleanly, needing no forced blank line, since it never actually renders as setext (ExaDev/documents.js#940)", () => {
     const source = doc([
       {
@@ -2112,6 +2139,41 @@ describe("tables", () => {
       const markdown = emitMarkdown(doc([table]));
       expect(markdown).toBe("| foo bar |\n| --- |");
       expect(markdown.split("\n")).toHaveLength(2);
+    },
+  );
+
+  it.each([
+    { name: "an escaped hard break spelled with a bare CR", xml: "\\\r" },
+    { name: "an escaped hard break spelled with a CRLF", xml: "\\\r\n" },
+  ])(
+    "collapses $name residue run to a plain space, not a space plus a leftover literal backslash (ExaDev/documents.js#940)",
+    ({ xml }) => {
+      // This package's own escapeMarkdownText always spells an escaped hard break with a trailing LF ('\\\n'), but a foreign producer's own markdown residue can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately, re-emitted verbatim (unescaped) by src/emit/inline.ts's renderLeaf. Stripping only the LF-spelled escape (a bare /\\\n/ regex) leaves this backslash unmatched -- the LINE_ENDING_PATTERN split that follows then removes the CRLF/CR line ending out from under it, leaving the backslash behind as a spurious literal character in the row.
+      const table: ContentTable = {
+        kind: "table",
+        columnWidthsPt: [100],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  {
+                    kind: "paragraph",
+                    runs: [
+                      { text: "foo" },
+                      { text: "\n", source: { format: "markdown", xml } },
+                      { text: "bar" },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const markdown = emitMarkdown(doc([table]));
+      expect(markdown).toBe("| foo bar |\n| --- |");
+      expect(markdown).not.toContain("\\");
     },
   );
 });
