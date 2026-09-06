@@ -252,6 +252,44 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     expect(Array.from(decoded.alpha!)).toEqual(Array.from(image.alpha));
   });
 
+  it("keeps two trailing pixels' own differing RGB values when an alpha plane shorter than width*height leaves both without a real sample, rather than colliding them onto one shared palette entry", () => {
+    // Simulates the shape pdf-codec's own tolerant-recovery paths can produce for real (a short-streamed /SMask, or inflateTolerant's by-design partial inflate on a truncated stream): an alpha plane shorter than width*height, so the trailing pixels' alpha[i] reads run past the end of the array. Two trailing pixels are dropped, not one, because the two rows alternate colour -- the bug this guards against only shows up once a second, differently-coloured out-of-range pixel reuses the first one's palette entry instead of getting its own.
+    const image = repeatRowsWithAlpha(
+      2,
+      [[10, 20, 30, 40, 50, 60]],
+      [[255, 128]],
+      5000,
+    );
+    const shortAlpha = image.alpha.slice(0, image.alpha.length - 2);
+    const png = encodePng({ ...image, alpha: shortAlpha });
+
+    expect(colorTypeOf(png)).toBe(3); // confirms this exercises the indexed path the bug lives in, not a truecolour fallback
+    const decoded = decodePng(png);
+    // Every pixel, including the two whose own alpha sample ran out of range, decodes back to its own real RGB -- never an unrelated palette entry's.
+    expect(Array.from(decoded.data)).toEqual(Array.from(image.data));
+    // Each out-of-range alpha sample defaults to 0, exactly what writeTruecolorPng's own Uint8Array write already coerces a missing sample to (ToUint8(ToNumber(undefined))) -- so the indexed and truecolour candidate encodings can never disagree about a malformed image's actual content.
+    expect(Array.from(decoded.alpha!.slice(-2))).toEqual([0, 0]);
+  });
+
+  it("keeps two trailing pixels' own differing alpha values when a data plane shorter than width*height*channels leaves both without a real RGB sample, rather than collapsing them onto one shared palette entry's alpha", () => {
+    // Same real-world shape as the alpha case above, but on the colour plane instead: a data buffer shorter than width*height*channels, so the trailing pixels' r/g/b reads run past the end of the array while their own alpha sample (untouched here) stays intact and genuinely differs between the two.
+    const image = repeatRowsWithAlpha(
+      2,
+      [[10, 20, 30, 40, 50, 60]],
+      [[255, 128]],
+      5000,
+    );
+    const shortData = image.data.slice(0, image.data.length - 6); // drop both trailing pixels' RGB triples
+    const png = encodePng({ ...image, data: shortData });
+
+    expect(colorTypeOf(png)).toBe(3); // confirms this exercises the indexed path the bug lives in, not a truecolour fallback
+    const decoded = decodePng(png);
+    // Both out-of-range pixels default their missing RGB to (0, 0, 0), exactly what writeTruecolorPng's own Uint8Array write already coerces a missing sample to.
+    expect(Array.from(decoded.data.slice(-6))).toEqual([0, 0, 0, 0, 0, 0]);
+    // Each keeps its own real alpha (255, then 128) -- not collapsed onto the first out-of-range pixel's alpha the way a shared NaN palette key would.
+    expect(Array.from(decoded.alpha!.slice(-2))).toEqual([255, 128]);
+  });
+
   it("chooses indexed colour at exactly 256 distinct colours", () => {
     const row: number[] = [];
     for (let i = 0; i < 256; i++) {
