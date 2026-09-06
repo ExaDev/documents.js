@@ -528,6 +528,59 @@ describe("headings", () => {
         ),
       ).toBe("foo\nbar\n===");
     });
+
+    it.each([
+      {
+        name: "a $$ math-block opener promoted from a residue run",
+        secondLineRuns: [
+          { text: "$$", source: { format: "markdown" as const, xml: "$$" } },
+        ],
+      },
+      {
+        name: "a GFM table delimiter row promoted from a residue run, matching the preceding line's own single cell",
+        secondLineRuns: [
+          {
+            text: "| --- |",
+            source: { format: "markdown" as const, xml: "| --- |" },
+          },
+        ],
+      },
+    ])(
+      "collapses to ATX with a diagnostic instead of promoting to setext for $name (ExaDev/documents.js#940)",
+      ({ secondLineRuns }) => {
+        // Beyond CommonMark's own six named interrupting constructs, this package's own reader treats two more shapes as paragraph-interrupting/-converting: a $$ math-block opener (a genuine block start, exactly like a code fence) and a GFM table delimiter row (a paragraph PROMOTION converting the line before it, src/block/table.ts's own top-of-file note). Both are reachable only via a run carrying markdown residue, since escapeMarkdownText always backslash-escapes a literal '$' and '|'/':' never survive a table-delimiter shape through ordinary escaped text either.
+        const collector = createDiagnosticCollector();
+        const written = emitMarkdown(
+          doc([
+            {
+              kind: "paragraph",
+              runs: [{ text: "foo" }, { text: "\n" }, ...secondLineRuns],
+              styleId: "Heading1",
+            },
+          ]),
+          { sink: collector.sink },
+        );
+        expect(written).not.toContain("\n");
+        expect(
+          collector.has(
+            MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+          ),
+        ).toBe(true);
+
+        const reparsed = lowerMarkdown(written);
+        if (reparsed.kind !== "wordprocessing") {
+          throw new Error("expected a wordprocessing ContentDocument");
+        }
+        const blocks = reparsed.sections[0]?.blocks ?? [];
+        // Exactly one block, still the heading -- pre-fix, the second line converted the paragraph into a math block or a table, leaving the "===" underline as a stray, unrelated block of its own with the heading gone entirely.
+        expect(blocks).toHaveLength(1);
+        const [headingBlock] = blocks;
+        if (headingBlock?.kind !== "paragraph") {
+          throw new Error("expected a paragraph block");
+        }
+        expect(headingBlock.styleId).toBe("Heading1");
+      },
+    );
   });
 
   describe("a level-1/2 heading whose own FIRST line would itself start an interrupting block construct never promotes to setext (ExaDev/documents.js#940)", () => {
