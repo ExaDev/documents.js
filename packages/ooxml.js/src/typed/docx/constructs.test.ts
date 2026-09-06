@@ -91,6 +91,18 @@ describe("docx constructs: structured document tags", () => {
     });
   });
 
+  it("reads a dropdown control with no w:listItem entries as options: [], distinct from a control that is not a list field at all", () => {
+    const sdt = el("w:sdt", {}, [
+      el("w:sdtPr", {}, [el("w:dropDownList", {}, [])]),
+      el("w:sdtContent", {}, [para("")]),
+    ]);
+    expect(outline(blocksOf([sdt]))[0]).toEqual({
+      kind: "contentControl",
+      controlType: "dropDown",
+      options: [],
+    });
+  });
+
   it("reads a w14 checkbox control's checked state as a boolean rather than through the scalar value field", () => {
     const checked = el("w:sdt", {}, [
       el("w:sdtPr", {}, [
