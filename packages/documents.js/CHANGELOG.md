@@ -1,3 +1,15 @@
+## [7.1.1](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.0...documents.js%407.1.1) (2026-09-06)
+
+### Tests
+
+* **documents.js:** import encodePng from byte-codec, not pdf-codec's removed subpath ([dafd3d1](https://github.com/ExaDev/documents.js/commit/dafd3d19b760b4f344473e0de8bd419e0fb5261c))
+
+
+### Dependencies
+
+- Updated byte-codec to ^1.4.0
+- Updated pdf-codec to ^4.0.0
+
 ## [7.1.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.0.3...documents.js%407.1.0) (2026-09-06)
 
 ### Features
