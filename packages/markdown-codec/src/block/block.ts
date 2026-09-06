@@ -64,13 +64,13 @@ const NUL_PATTERN = /\0/g;
 // A cheap first filter before the block-start list is tried at all: no block start, and no paragraph promotion, can begin with any other character. `|` and `:` are here for the GFM table delimiter row (`| --- |`, `:-: | ---:`), the only construct in this package that can start with either. `$` is here for a $$ math block's own opening line (ExaDev/markdown-codec#53), and `[` for a footnote definition's own `[^label]:` marker (ExaDev/markdown-codec#66).
 const MAYBE_SPECIAL_PATTERN = /^[#$`~*+_=<>[0-9|:-]/;
 
-// spec 0.31.2, "ATX headings": one to six `#` characters, followed by spaces/tabs or the end of the line.
-const ATX_MARKER_PATTERN = /^#{1,6}(?:[ \t]+|$)/;
+// spec 0.31.2, "ATX headings": one to six `#` characters, followed by spaces/tabs or the end of the line. Exported for src/emit/emit.ts's own setext-safety check (the setext grammar's third clause, spec 0.31.2 "Setext headings": a non-first line of a would-be setext heading's text may not itself be interpretable as an ATX heading among other constructs) -- reusing this pattern rather than restating it there is what keeps the write side's promotion refusal and this module's own reparse from ever drifting apart.
+export const ATX_MARKER_PATTERN = /^#{1,6}(?:[ \t]+|$)/;
 const ATX_ONLY_CLOSING_SEQUENCE_PATTERN = /^[ \t]*#+[ \t]*$/;
 const ATX_TRAILING_CLOSING_SEQUENCE_PATTERN = /[ \t]+#+[ \t]*$/;
 
-// spec 0.31.2, "Fenced code blocks": at least three backticks or tildes. A backtick fence's own info string may not contain a backtick, which the lookahead enforces at the point of matching rather than after the fact.
-const CODE_FENCE_PATTERN = /^`{3,}(?!.*`)|^~{3,}/;
+// spec 0.31.2, "Fenced code blocks": at least three backticks or tildes. A backtick fence's own info string may not contain a backtick, which the lookahead enforces at the point of matching rather than after the fact. Exported for the same setext-safety reuse as ATX_MARKER_PATTERN above.
+export const CODE_FENCE_PATTERN = /^`{3,}(?!.*`)|^~{3,}/;
 const CLOSING_CODE_FENCE_PATTERN = /^(?:`{3,}|~{3,})(?=[ \t]*$)/;
 
 // Pandoc/GitHub math-extension display math (ExaDev/markdown-codec#53): a line consisting of exactly $$, optionally followed by trailing spaces/tabs and nothing else -- deliberately stricter than the code-fence pattern above (no "info string", no variable length): both the opening and the closing line must match this exact shape, which is what makes a bare "$$" line on its own unambiguous rather than colliding with GFM's own single-dollar-free inline math (this package never adds inline $$ recognition at all, only \( \)).
@@ -80,8 +80,8 @@ const MATH_BLOCK_MARKER_LENGTH = 2;
 // spec 0.31.2, "Setext headings": a sequence of `=` or of `-`, optionally followed by spaces/tabs, and nothing else.
 const SETEXT_UNDERLINE_PATTERN = /^(?:=+|-+)[ \t]*$/;
 
-// spec 0.31.2, "Thematic breaks": three or more matching `*`, `-`, or `_` characters, with optional spaces/tabs between and after them.
-const THEMATIC_BREAK_PATTERN =
+// spec 0.31.2, "Thematic breaks": three or more matching `*`, `-`, or `_` characters, with optional spaces/tabs between and after them. Exported for the same setext-safety reuse as ATX_MARKER_PATTERN above.
+export const THEMATIC_BREAK_PATTERN =
   /^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$|^(?:-[ \t]*){3,}$/;
 
 const BLANK_CONTENT_PATTERN = /^[ \t\n]*$/;
