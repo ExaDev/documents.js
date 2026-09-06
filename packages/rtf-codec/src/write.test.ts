@@ -1695,6 +1695,45 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // writeCellBlocks writes a cell's own content as \intbl paragraphs only -- a non-paragraph block (embeddedObject, image, table, pageBreak) placed directly in a cell has no \intbl shape to inherit, so it is dropped rather than embedded. Reported through CONSTRUCT_UNREPRESENTED, matching how every other unrepresentable ContentDocument fact degrades here, rather than filtered out with no diagnostic at all.
+  it("reports rather than silently dropping a non-paragraph block placed directly in a table cell", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "table",
+            columnWidthsPt: [72],
+            rows: [
+              {
+                cells: [
+                  {
+                    blocks: [
+                      {
+                        kind: "embeddedObject",
+                        objectKind: "spreadsheet",
+                        frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+                        document: {
+                          kind: "spreadsheet",
+                          metadata: {},
+                          sheets: [],
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(out).not.toContain("\\object");
+    expect(out).not.toContain("\\objdata");
+  });
+
   it("writes a page break as \\page", () => {
     expect(write(wordprocessing([{ kind: "pageBreak" }]))).toContain("\\page");
   });
