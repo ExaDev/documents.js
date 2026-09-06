@@ -333,6 +333,12 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     ["NaN height", 3, Number.NaN],
     ["fractional width", 1.5, 3],
     ["fractional height", 3, 1.5],
+    ["negative width", -1, 3],
+    ["negative height", 3, -1],
+    ["Infinity width", Number.POSITIVE_INFINITY, 3],
+    ["Infinity height", 3, Number.POSITIVE_INFINITY],
+    ["width at the PNG four-byte-unsigned-integer ceiling (2^31)", 2 ** 31, 1],
+    ["height at the PNG four-byte-unsigned-integer ceiling (2^31)", 1, 2 ** 31],
   ])(
     "rejects an invalid-dimension image (%s) outright, since no valid PNG (indexed or truecolour) can represent one",
     (_label, width, height) => {
