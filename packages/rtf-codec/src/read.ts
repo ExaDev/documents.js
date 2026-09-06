@@ -341,6 +341,8 @@ interface FormFieldState {
 interface FieldState {
   instruction: string;
   formField: FormFieldState | undefined;
+  // Guards startFormField below against firing twice for the one field: a real Word-authored \field wraps its own \*\fldinst instruction text in an anonymous nested group (e.g. `{\*\fldinst {FORMTEXT }...}`), and that nested group inherits the enclosing "fieldInstruction" destination just like the \*\fldinst group itself does -- so both the nested group's own close and \*\fldinst's own close see formFieldControlType return a real controlType and would otherwise each open their own extent for what is really one field. Set true the first time startFormField is actually called for this field, since FieldState is the one object shared by reference across the whole \field group's subtree.
+  formFieldStarted: boolean;
 }
 
 // One {\*\bkmkstart ...} or {\*\bkmkend ...} group under construction: its #PCDATA name, plus the start half's optional table-column range.
@@ -1430,7 +1432,11 @@ function readRtfDetail(
         child.destination = kind;
         if (child.isFieldGroup) {
           // No `builder.startFormField()` here: the instruction (this field's own `\*\fldinst` content) is still empty at this point, so formFieldControlType has nothing to decide a genuine form field from yet. The extent opens later, at `\*\fldinst`'s own close below, once that decision is actually possible.
-          child.field = { instruction: "", formField: undefined };
+          child.field = {
+            instruction: "",
+            formField: undefined,
+            formFieldStarted: false,
+          };
         }
         if (head.destination === "formfield" && child.field !== undefined) {
           // Mutates the SAME FieldState object the enclosing \field group's own children all share by reference, so \*\ffname/\*\ffl (nested inside this group) and the \field group's own closing brace (which reads it back to build the descriptor) see the identical data.
@@ -1493,10 +1499,12 @@ function readRtfDetail(
       if (
         state.destination === "fieldInstruction" &&
         state.field !== undefined &&
+        !state.field.formFieldStarted &&
         formFieldControlType(state.field.instruction) !== undefined
       ) {
-        // \*\fldinst's own instruction text is complete now (it is the only destination that appends to it), so this is the earliest point a genuine form field (FORMTEXT/FORMCHECKBOX/FORMDROPDOWN) can be told apart from an ordinary field (PAGE, DATE, NUMPAGES, and the rest) -- opening the extent here, rather than unconditionally at \field's own open, means an ordinary field never calls startFormField/flushRun at all.
+        // \*\fldinst's own instruction text is complete now (it is the only destination that appends to it), so this is the earliest point a genuine form field (FORMTEXT/FORMCHECKBOX/FORMDROPDOWN) can be told apart from an ordinary field (PAGE, DATE, NUMPAGES, and the rest) -- opening the extent here, rather than unconditionally at \field's own open, means an ordinary field never calls startFormField/flushRun at all. Guarded on formFieldStarted (see FieldState's own comment) because a real Word-authored \*\fldinst wraps its instruction text in its own anonymous nested group, which inherits this same "fieldInstruction" destination and would otherwise reach this branch a second time when it closes.
         builder.startFormField();
+        state.field.formFieldStarted = true;
       }
       if (state.isFieldGroup && state.field !== undefined) {
         // The whole field is read by now -- \*\fldinst and \*\formfield are this group's own earlier children, already closed -- so this is the one point that knows both the instruction and whatever form-field data it carried. `descriptor` is undefined for an ordinary field, matching startFormField above never having opened an extent for it either, so endFormField is skipped rather than called with nothing to close.
