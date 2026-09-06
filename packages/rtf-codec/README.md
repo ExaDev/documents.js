@@ -197,8 +197,7 @@ const written = writeRtfContent({
   ],
 });
 
-// The \objdata this writer produced is a real [MS-CFB] compound file -- readRtfContent
-// decodes it back into the identical objectKind/frame/document.
+// \objdata's own NativeData field (inside the ObjectHeader/NativeDataSize/NativeData/Presentation envelope this writer produces) is a real [MS-CFB] compound file -- readRtfContent decodes the whole envelope back into the identical objectKind/frame/document.
 const { document } = readRtfContent(written);
 ```
 
