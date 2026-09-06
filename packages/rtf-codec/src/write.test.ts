@@ -1065,8 +1065,8 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  // \ffownhelp1 is a <formparams> member and {\*\ffhelptext ...} a <formstrings> one, so RTF 1.9.1's own "Form Fields" grammar (`<formfield> '{\*' \formfield '{' <formparams> <formstrings> '}}'`) puts every formparams control word before every formstrings one -- including {\*\ffname ...}, itself <formstrings>'s own first member, which lands between them here.
-  it("writes a contentControl's alias as \\ffownhelp1 (formparams) and {\\*\\ffhelptext ...} (formstrings), with formparams entirely before formstrings", () => {
+  // \ffownhelp1 is one of this writer's own numeric-flag members and {\*\ffhelptext ...} one of its destination-string members; this writer's own chosen order (see write.ts's formFieldPayload top comment -- not an RTF grammar production, since the Form Fields table has none) puts every flag before every destination string, including {\*\ffname ...}, itself the first destination-string member, which lands between them here.
+  it("writes a contentControl's alias as \\ffownhelp1 (a flag member) and {\\*\\ffhelptext ...} (a destination-string member), with every flag entirely before every destination string", () => {
     const out = write(
       wordprocessing([
         {
@@ -1093,8 +1093,8 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  // Every <formparams> member, in the grammar's own stated order (\fftype, \ffownhelp, \ffprot, \ffhaslistbox, \ffdefres/\ffres), before every <formstrings> member (\ffname, \ffhelptext, the \ffl entries) -- matching RTF 1.9.1's own "Form Fields" grammar production exactly: `<formparams>` `\fftypeN? \ffownhelpN? ... \ffprotN? ... \ffhaslistboxN? ... \ffdefresN? \ffresN?`. A dropDown descriptor exercising every field this writer mints at once, so a regression that reorders any <formparams> member relative to another, interleaves the two groups, or reorders \ffname after \ffhelptext within formstrings, fails this single assertion against the actual emitted bytes -- not merely against a comment claiming the order, which is exactly the gap an earlier round of this writer left open (the code appended \ffprot/\ffownhelp after \ffhaslistbox/\ffdefres/\ffres despite this same comment already describing the grammar's own order).
-  it("orders a dropDown's full \\*\\formfield payload as every formparams member, then every formstrings member, matching RTF's own grammar production", () => {
+  // Every numeric-flag member, in this writer's own chosen order (\fftype, \ffownhelp, \ffprot, \ffhaslistbox, \ffdefres/\ffres -- see write.ts's formFieldPayload top comment for why this is a writer convention, not an RTF grammar production, since RTF's own Form Fields table has none), before every destination-string member (\ffname, \ffhelptext, the \ffl entries). A dropDown descriptor exercising every field this writer mints at once, so a regression that reorders any flag member relative to another, interleaves the two groups, or reorders \ffname after \ffhelptext among the destination strings, fails this single assertion against the actual emitted bytes -- not merely against a comment claiming the order, which is exactly the gap an earlier round of this writer left open (the code appended \ffprot/\ffownhelp after \ffhaslistbox/\ffdefres/\ffres despite this same comment already describing the chosen order).
+  it("orders a dropDown's full \\*\\formfield payload as every flag member, then every destination-string member", () => {
     const out = write(
       wordprocessing([
         {
@@ -1124,8 +1124,8 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  // The identical order assertion as the dropDown case above, but for a checkbox: \fftype, \ffownhelp, \ffprot, then the checkbox's own \ffdefres/\ffres pair (a checkbox has no \ffhaslistbox at all), then <formstrings>. Exercised separately because the dropDown-only fixture above cannot catch a regression specific to the checkbox branch's own concatenation.
-  it("orders a checkbox's full \\*\\formfield payload as every formparams member, then every formstrings member, matching RTF's own grammar production", () => {
+  // The identical order assertion as the dropDown case above, but for a checkbox: \fftype, \ffownhelp, \ffprot, then the checkbox's own \ffdefres/\ffres pair (a checkbox has no \ffhaslistbox at all), then the destination strings. Exercised separately because the dropDown-only fixture above cannot catch a regression specific to the checkbox branch's own concatenation.
+  it("orders a checkbox's full \\*\\formfield payload as every flag member, then every destination-string member", () => {
     const out = write(
       wordprocessing([
         {
@@ -1154,8 +1154,8 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
-  // The identical order assertion again, for a plainText field: \fftype, \ffownhelp, \ffprot (plainText's own controlType-specific block contributes nothing to <formparams> at all), then <formstrings> (\ffname, \ffdeftext, \ffhelptext).
-  it("orders a plainText's full \\*\\formfield payload as every formparams member, then every formstrings member, matching RTF's own grammar production", () => {
+  // The identical order assertion again, for a plainText field: \fftype, \ffownhelp, \ffprot (plainText's own controlType-specific block contributes no flag member at all), then the destination strings (\ffname, \ffdeftext, \ffhelptext).
+  it("orders a plainText's full \\*\\formfield payload as every flag member, then every destination-string member", () => {
     const out = write(
       wordprocessing([
         {
