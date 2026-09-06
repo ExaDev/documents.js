@@ -1,3 +1,79 @@
+## [1.2.0](https://github.com/ExaDev/documents.js/compare/epub-codec%401.1.0...epub-codec%401.2.0) (2026-09-06)
+
+### Features
+
+* **epub-codec:** report epub/noscript-content-skipped wherever a <noscript> subtree is dropped ([13ae06e](https://github.com/ExaDev/documents.js/commit/13ae06eed433d238a557d4c5060ac5369c36662f))
+
+### Bug Fixes
+
+* **epub-codec:** collect every run-level construct sharing a startRun, not just the first ([509f463](https://github.com/ExaDev/documents.js/commit/509f463dffe64cffaff35b3bcfe84141fda11c41))
+* **epub-codec:** correct a stale reachability claim in list stray-content recovery's own comment ([f976994](https://github.com/ExaDev/documents.js/commit/f976994825f87fba216ce2b3b379640c38fd4734))
+* **epub-codec:** correct elementsWithTag caller attribution in comment ([63a40d3](https://github.com/ExaDev/documents.js/commit/63a40d3bbb16f4f5bf3014c4c9466e02eaba3b1c))
+* **epub-codec:** correct the same-startRun overlap diagnostic's own wording ([52cd5f4](https://github.com/ExaDev/documents.js/commit/52cd5f453cf95dc40b594d73d5aed7bf4ee9b6bb))
+* **epub-codec:** correct two overclaims about list stray-content recovery ([4ad3fc7](https://github.com/ExaDev/documents.js/commit/4ad3fc766742e618bf3a943036af412e0c3ebb69))
+* **epub-codec:** drop an empty or whitespace-only table caption on read ([af5804b](https://github.com/ExaDev/documents.js/commit/af5804bd04e1df4e0d3a18552389a57ee3cc5a06))
+* **epub-codec:** group a list item's own consecutive blocks by itemId, not one <li> each ([741b756](https://github.com/ExaDev/documents.js/commit/741b756e6ea7845b3f4f626bd89da093e222f71a)), references [ExaDev/documents.js#1022](https://github.com/ExaDev/documents.js/issues/1022)
+* **epub-codec:** keep a construct-only inline segment between block siblings ([7c025b7](https://github.com/ExaDev/documents.js/commit/7c025b7582d3cbcaf82eeaae6ce401219343acbf))
+* **epub-codec:** keep a table caption's construct when its own text is empty ([7fcee9c](https://github.com/ExaDev/documents.js/commit/7fcee9ccb90353e3001b5a4f630d57ca22bd056c))
+* **epub-codec:** map a <br> inside a <pre> to a literal newline ([5913e72](https://github.com/ExaDev/documents.js/commit/5913e72cf0ebe5a75445bf90441ac096551cba0e)), references [#994](https://github.com/ExaDev/documents.js/issues/994)
+* **epub-codec:** preserve a footnote-reference construct carried by inline content inside a <pre> ([39fe7be](https://github.com/ExaDev/documents.js/commit/39fe7bec2b9de6bdcdf0651ebcb6b7a28caefb54))
+* **epub-codec:** preserve a zero-run construct and a point anchor's own run on write ([bd91336](https://github.com/ExaDev/documents.js/commit/bd913360b215dd8525ef19ee3d24a16c1ba5fceb))
+* **epub-codec:** preserve real whitespace in stray list content ([2600d6d](https://github.com/ExaDev/documents.js/commit/2600d6d91ff5bb194fdea865172bf86738e544b2))
+* **epub-codec:** preserve run-level constructs carried by a table caption ([001618f](https://github.com/ExaDev/documents.js/commit/001618fe085e84fa7f71b0d85ae10b23860fba03))
+* **epub-codec:** preserve run-level constructs on every paragraph built directly from inline content ([ff64725](https://github.com/ExaDev/documents.js/commit/ff647257711f458006b0573a580f4f5aac33a4d5))
+* **epub-codec:** read a CDATA section exactly like a text node across the XHTML reading path ([13587bc](https://github.com/ExaDev/documents.js/commit/13587bc86ea909a394d24e0d040c6a71883429a3))
+* **epub-codec:** recover stray content inside a <colgroup> outside any <col> ([f71e34c](https://github.com/ExaDev/documents.js/commit/f71e34cd12ba97f52bc5be2a427889bfadb73adf))
+* **epub-codec:** recover stray content inside a table row group outside any <tr> ([bcdf277](https://github.com/ExaDev/documents.js/commit/bcdf2779c3f095562ed46079396b2ced6822f9bd))
+* **epub-codec:** recover stray content inside a table's rows and outside them ([390a0e2](https://github.com/ExaDev/documents.js/commit/390a0e267ccd9f95983910b21ca54dee62e377ed))
+* **epub-codec:** recover stray content sitting outside dt/dd in a definition list ([f77ad3c](https://github.com/ExaDev/documents.js/commit/f77ad3c6d29444840141309bc3729b7c0fed743d)), references [ExaDev/documents.js#994](https://github.com/ExaDev/documents.js/issues/994)
+* **epub-codec:** recover stray list content sitting before a list's first <li> ([8c27793](https://github.com/ExaDev/documents.js/commit/8c27793635ccac3ce293385560e993575a3ed7a8))
+* **epub-codec:** report a range footnote extent starting at the run count ([472a77f](https://github.com/ExaDev/documents.js/commit/472a77fb0f5e95fd13512688870e82c63291a5c1))
+* **epub-codec:** round-trip a <pre> or <hr> nested directly inside a list item ([8b41daa](https://github.com/ExaDev/documents.js/commit/8b41daa0e77c1986e1745a3e7525b7192d9d53ab))
+* **epub-codec:** round-trip a <pre> paragraph via its own preformatted flag, not run count ([3cee6a7](https://github.com/ExaDev/documents.js/commit/3cee6a73aa308a39cc545d5ca3ba0a6b590f19fe))
+* **epub-codec:** skip <script>/<template> subtrees when scanning for headings and ids ([2e6aa75](https://github.com/ExaDev/documents.js/commit/2e6aa759574cae5b12e516e189244705592d3110))
+* **epub-codec:** skip <style>/<noscript> in body content like <script>/<template> ([873520f](https://github.com/ExaDev/documents.js/commit/873520f6920c4cced01a9c8ff44e97bb7f04506d))
+* **epub-codec:** skip script/template content inside a pre block too ([b0374ad](https://github.com/ExaDev/documents.js/commit/b0374ad96ab800825dcc5f0d69b0e4260dc13f58))
+* **epub-codec:** skip whitespace and script-supporting elements in stray list content ([3583313](https://github.com/ExaDev/documents.js/commit/358331362359ce91466a21fcd22b781e8ea65451))
+* **epub-codec:** stop dropping a footnote extent nested inside a winning run range ([f814058](https://github.com/ExaDev/documents.js/commit/f814058ca2989136582c75efaadede848b164f69))
+* **epub-codec:** stop dropping stray list content whose text projection is empty ([ae15cee](https://github.com/ExaDev/documents.js/commit/ae15ceec5cd872829f14dc3a9ecc8b8a5c6d3e12))
+* **epub-codec:** stop four XHTML container readers from silently dropping content ([0329bae](https://github.com/ExaDev/documents.js/commit/0329baef34cd72d562a097a4dac972e0feb36d2b))
+* **epub-codec:** stop script/template content leaking into inline runs ([cd8364d](https://github.com/ExaDev/documents.js/commit/cd8364ddae15834780a98abdadae0fbef4a6c30e))
+* **epub-codec:** stop textContent from silently changing its decode contract ([7d60840](https://github.com/ExaDev/documents.js/commit/7d6084041d5376605aed6099763228467ff96239))
+* **epub-codec:** stop writeList fusing a multi-block list item's paragraphs ([736d5e2](https://github.com/ExaDev/documents.js/commit/736d5e2cf51299c8be609aa62147343a96ab7ba7))
+* **epub-codec:** write a heading's runs directly, not via the paragraph dispatcher ([455dcf0](https://github.com/ExaDev/documents.js/commit/455dcf06717a4f0c3ae32673e0e1e665c0e84cc1))
+
+### Code Refactoring
+
+* **epub-codec:** deduplicate the script/template inert-element predicate ([b41700a](https://github.com/ExaDev/documents.js/commit/b41700a71c2b37bf0c963ead363f02c47f33a999))
+
+### Documentation
+
+* **epub-codec:** correct constructsField's own pre-existing-callers count ([8067b32](https://github.com/ExaDev/documents.js/commit/8067b322b0154ed8487b654eea6f3e756370d6cc))
+* **epub-codec:** correct flushListStrayContent's browser-depth comment ([7e63157](https://github.com/ExaDev/documents.js/commit/7e63157cfb3ee95badd8932529e24025bc048068))
+* **epub-codec:** correct the <colgroup> content model's spec citation ([877e1c9](https://github.com/ExaDev/documents.js/commit/877e1c99a2835d04edb1b1205a997e299c67156b)), references [html.spec.whatwg.org/multipage/tables.html#the-colgroup-element](https://github.com/html.spec.whatwg.org/multipage/tables.html/issues/the-colgroup-element)
+* **epub-codec:** correct the <pre> content model claim to phrasing content ([f19171c](https://github.com/ExaDev/documents.js/commit/f19171c0a081f6403b9b9d25aa74489e83ce3678)), references [html.spec.whatwg.org/multipage/grouping-content.html#the-pre-element](https://github.com/html.spec.whatwg.org/multipage/grouping-content.html/issues/the-pre-element)
+* **epub-codec:** correct the docx run-level marker function's name in a comment ([679a12b](https://github.com/ExaDev/documents.js/commit/679a12b4f29723e71a6893724a12bf20fac2dbf7))
+* **epub-codec:** correct the image-pre-unsupported diagnostic's actual trigger ([4465991](https://github.com/ExaDev/documents.js/commit/4465991ec79fac44ad1ad97e4b59cceb9b455e67))
+* **epub-codec:** describe the caption empty-drop and construct-preservation behaviour ([5bf6569](https://github.com/ExaDev/documents.js/commit/5bf6569fb0d86c0507d224efbd00db0b43f0dd8b))
+* **epub-codec:** drop review-round pointer from textContent's docstring ([fea901c](https://github.com/ExaDev/documents.js/commit/fea901c861511f25cb4564f76afeacc92842b89c))
+* **epub-codec:** name <colgroup> as a location this diagnostic covers ([afa044d](https://github.com/ExaDev/documents.js/commit/afa044d6467ab74fc25306294b8dd951eb9ee8c1))
+* **epub-codec:** note the run-level construct walk's own footnote-only scope ([04fffcc](https://github.com/ExaDev/documents.js/commit/04fffcc5cabd5086b23ed6d54729f6a7e6342bf3))
+* **epub-codec:** reference tracked issue for unrebased nested inline construct offsets ([19c2509](https://github.com/ExaDev/documents.js/commit/19c2509593662052951840f9d4a67e191911bd46)), references [ExaDev/documents.js#1038](https://github.com/ExaDev/documents.js/issues/1038)
+* **epub-codec:** stop flushListStrayContent overclaiming an insulation guarantee ([6e0afe3](https://github.com/ExaDev/documents.js/commit/6e0afe39935b60dec61e1fa9b6db967f72892670))
+* **epub-codec:** stop the unrepresented-footnote diagnostic asserting one absolute cause ([311a283](https://github.com/ExaDev/documents.js/commit/311a283c2c84726ced89dfeb78410b1545461ebb))
+* **epub-codec:** update the gotchas bullet for the four gaps [#994](https://github.com/ExaDev/documents.js/issues/994) closed ([8275131](https://github.com/ExaDev/documents.js/commit/8275131c4ce1d2640bafe683ff43edd3648f8714))
+
+### Tests
+
+* **epub-codec:** add regression coverage for a heading's own footnote-reference construct ([96a1510](https://github.com/ExaDev/documents.js/commit/96a1510ad1b50a7a5feff0408b0cff96bb9a7a48))
+* **epub-codec:** cover the four recovered content-drop shapes from [#994](https://github.com/ExaDev/documents.js/issues/994) ([6504158](https://github.com/ExaDev/documents.js/commit/65041585a2ae26fec00688f278f6094ef6440d50))
+* **epub-codec:** cover writeTable dropping a stray cell's own construct marker ([6f54532](https://github.com/ExaDev/documents.js/commit/6f5453218eda25eb69df676dc130867956f64aab))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.2.0
+
 ## [1.1.0](https://github.com/ExaDev/documents.js/compare/epub-codec%401.0.5...epub-codec%401.1.0) (2026-09-06)
 
 ### Features

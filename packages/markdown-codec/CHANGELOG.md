@@ -1,3 +1,56 @@
+## [6.3.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.2.0...markdown-codec%406.3.0) (2026-09-06)
+
+### Features
+
+* **markdown-codec:** diagnose an ATX heading style silently overridden by a line break ([f7a1214](https://github.com/ExaDev/documents.js/commit/f7a121478a57b7ea5121eafe6f9f3d6138556da8))
+
+### Bug Fixes
+
+* **markdown-codec:** bound the setext leading-blank-line exemption to a single line ([4642da2](https://github.com/ExaDev/documents.js/commit/4642da251eaefc5bab658ad776dc3e3b17e6bc35))
+* **markdown-codec:** check a heading's first line for an interrupting construct ([5acf9ca](https://github.com/ExaDev/documents.js/commit/5acf9ca196a6753711e2c1db01df1bba03d23d72))
+* **markdown-codec:** collapse a bare CR or CRLF in a GFM table cell's line-ending run ([39beb08](https://github.com/ExaDev/documents.js/commit/39beb08845f9397ceb0f9b5348199ec7f0b45e77))
+* **markdown-codec:** collapse a table cell's soft-break residue to a space ([0e532bd](https://github.com/ExaDev/documents.js/commit/0e532bd281d331a582438a46a6f952283f4a6b99))
+* **markdown-codec:** key the list-item interrupt guard off a heading's actual setext rendering ([407d9a8](https://github.com/ExaDev/documents.js/commit/407d9a8e4ae62b84a0ce4e1fb20b10a639648f16))
+* **markdown-codec:** measure a setext underline against the CommonMark first line ([4a8d337](https://github.com/ExaDev/documents.js/commit/4a8d33705910b14402a2e726180fe9a631dcc610))
+* **markdown-codec:** normalise a bare CR/CRLF hard break to a single backslash-LF ([4ee33bb](https://github.com/ExaDev/documents.js/commit/4ee33bb36e5c10b17f9835bc865b3641252dc1a9))
+* **markdown-codec:** recognize a bare CR or CRLF as a heading's embedded break, not just LF ([64b6ae3](https://github.com/ExaDev/documents.js/commit/64b6ae36c235fffdfb948798b7ec1a6e7c8846f4))
+* **markdown-codec:** refuse setext promotion when a later line would itself start a block ([c14aad1](https://github.com/ExaDev/documents.js/commit/c14aad112d0a09a1b50a06e429262d193a9907a1))
+* **markdown-codec:** refuse setext promotion when it would leave a blank line before the underline ([70e350e](https://github.com/ExaDev/documents.js/commit/70e350e9542e8fcee1bbff6a5127916ad699d68a))
+* **markdown-codec:** refuse setext promotion when the first content line is indented 4+ columns ([4fca0db](https://github.com/ExaDev/documents.js/commit/4fca0db8b90b385f35c3363fddfbd4acf1a01ef0))
+* **markdown-codec:** report an unsafe setext promotion even without an embedded break ([59bbe23](https://github.com/ExaDev/documents.js/commit/59bbe2331a44a314eff039acef58329b91a4a6f7))
+* **markdown-codec:** restore soft line break as literal newline, not a space ([b4b303c](https://github.com/ExaDev/documents.js/commit/b4b303c3acaf6416c56430b6fe921ef312bffc58))
+* **markdown-codec:** stop a heading whose own text is entirely blank from promoting to setext ([3b091ae](https://github.com/ExaDev/documents.js/commit/3b091ae39ef6a312fbed7199b5251bf43973b9a1))
+* **markdown-codec:** stop claiming an absorbed leading heading break survives setext promotion ([5ec7403](https://github.com/ExaDev/documents.js/commit/5ec740318c7a93348c9b38a037ab01f83a835081))
+* **markdown-codec:** strip an escaped hard break's backslash with a line-ending-aware pattern ([c2e8428](https://github.com/ExaDev/documents.js/commit/c2e8428761230021539aec9b5c4b8879223fc37a))
+* **markdown-codec:** treat a math block and table delimiter row as setext-interrupting too ([161b938](https://github.com/ExaDev/documents.js/commit/161b93882a1a134b1144288f9f77413dd5a3ef62))
+* **markdown-codec:** treat a whitespace-only line as blank in the setext break-safety guard ([175343b](https://github.com/ExaDev/documents.js/commit/175343b8b8d7a514ce10a19061c7aa6c838d8560))
+* **markdown-codec:** trim only ASCII space/tab from a block's raw content ([0bc57d4](https://github.com/ExaDev/documents.js/commit/0bc57d46563f6a7327a971de38b80fabc3d9e1a8))
+
+### Code Refactoring
+
+* **markdown-codec:** extract shared LINE_ENDING_PATTERN constant ([4705f3c](https://github.com/ExaDev/documents.js/commit/4705f3c4664740e3c74feb731fb7de897c1c2791))
+
+### Documentation
+
+* **markdown-codec:** document the unsafe-break-placement collapse for level 1/2 headings ([4bcdac6](https://github.com/ExaDev/documents.js/commit/4bcdac6b0133ea00cecf2b71bd7961371a35ab4f))
+* **markdown-codec:** fix a stale cross-reference to the retired SOFT_BREAK exclusion reason ([588a53a](https://github.com/ExaDev/documents.js/commit/588a53aab598c6200ae59c5a86a50cabd38cb94d)), references [ExaDev/documents.js#940](https://github.com/ExaDev/documents.js/issues/940)
+* **markdown-codec:** fix remaining stale renderItems cross-references ([27910f7](https://github.com/ExaDev/documents.js/commit/27910f751e5efcde9e21172ad349d391cb50ef3d))
+* **markdown-codec:** heading-style-override diagnostic describes the effective style ([d8f3d04](https://github.com/ExaDev/documents.js/commit/d8f3d04e6ea28c68510f6f51792f9f36f40a6a2c))
+* **markdown-codec:** scope the leading-break setext exemption's own claim ([c37bf99](https://github.com/ExaDev/documents.js/commit/c37bf99441ed8e2455dd24c0ded859ef3b6f0905))
+* **markdown-codec:** update conformance numbers and document the two heading-line-break diagnostics ([1e3ffca](https://github.com/ExaDev/documents.js/commit/1e3ffca279573c0cd842f9b2956097a52361d420))
+
+### Tests
+
+* **markdown-codec:** cover soft-break, heading, and block-edge whitespace round trips ([9b719dd](https://github.com/ExaDev/documents.js/commit/9b719ddd9683f2554e4bca57b4954d9dbe136910))
+* **markdown-codec:** cover the setext leading-blank-line exemption with a genuinely bare newline ([70a3013](https://github.com/ExaDev/documents.js/commit/70a3013ecd61c67e6a2cb89397390b27f6d226e8))
+* **markdown-codec:** cover whitespace-only break lines and leading-break list/blockquote contexts ([dec32ed](https://github.com/ExaDev/documents.js/commit/dec32edb7fa079f81ee19a971d3c9b13bbb43281))
+* **markdown-codec:** drop conformance examples the soft-break fix now passes ([d4cfae9](https://github.com/ExaDev/documents.js/commit/d4cfae992dec279ccfd714bf281230ceab8437d9))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.2.0
+
 ## [6.2.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.1.7...markdown-codec%406.2.0) (2026-09-06)
 
 ### Features

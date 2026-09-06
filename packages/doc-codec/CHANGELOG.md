@@ -1,3 +1,20 @@
+## [2.2.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.1.1...doc-codec%402.2.0) (2026-09-06)
+
+### Features
+
+* **doc-codec:** write real PlfLst/PlfLfo numbering tables for list membership ([cb12d68](https://github.com/ExaDev/documents.js/commit/cb12d68477e67bf986bd92fccd167a8e584fbde6))
+* **doc-codec:** write sprmPDxaRight for paragraph right indent ([f18d988](https://github.com/ExaDev/documents.js/commit/f18d9888d90cfa0d0095930a5d5672a6481cfcb6))
+
+### Bug Fixes
+
+* **doc-codec:** reject numbering definition keys that collide once numeric ([02ae8a5](https://github.com/ExaDev/documents.js/commit/02ae8a5e5c2463345e10ffdc98c5631e018eeba9))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.2.0
+- Updated archive-codec to ^1.6.1
+
 ## [2.1.1](https://github.com/ExaDev/documents.js/compare/doc-codec%402.1.0...doc-codec%402.1.1) (2026-09-06)
 
 
