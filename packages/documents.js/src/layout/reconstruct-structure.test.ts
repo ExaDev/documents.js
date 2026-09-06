@@ -294,6 +294,122 @@ describe("reconstructWordprocessing: tagged table recovery (#760)", () => {
   it("removes the claimed text from the paragraph flow", () => {
     expect(paragraphTexts(tableDoc()).join("")).not.toContain("Alpha");
   });
+
+  it("merges several text-showing items sharing one tagged cell into that one cell, instead of splitting it into a bogus extra column per item", () => {
+    // A real PDF routinely splits one cell's prose across several separate text-showing operations (a font/style change, a kerning-driven TJ break) that all still belong to the same tagged TD -- unlike the fixture above, where every cell happens to be exactly one word. Cell "c1" here carries six such items; "c2" carries one. Grouping by item instead of by the cell each item belongs to would explode "c1" into six single-word columns and, since column position is purely positional, push "c2" out to a phantom seventh column -- scattering row 2's own second cell into an empty slot far from where row 1's second cell sits.
+    const doc = reconstructWordprocessing(
+      docFrom(
+        [
+          page([
+            text({
+              text: "Description",
+              xPt: 50,
+              yPt: 700,
+              widthPt: 70,
+              structure: "h1",
+            }),
+            text({
+              text: "Category",
+              xPt: 250,
+              yPt: 700,
+              widthPt: 50,
+              structure: "h2",
+            }),
+            text({
+              text: "Intrusion",
+              xPt: 50,
+              yPt: 670,
+              widthPt: 40,
+              structure: "c1",
+            }),
+            text({
+              text: "detector,",
+              xPt: 95,
+              yPt: 670,
+              widthPt: 40,
+              structure: "c1",
+            }),
+            text({
+              text: "not",
+              xPt: 140,
+              yPt: 670,
+              widthPt: 20,
+              structure: "c1",
+            }),
+            text({
+              text: "including",
+              xPt: 165,
+              yPt: 670,
+              widthPt: 45,
+              structure: "c1",
+            }),
+            text({
+              text: "processing",
+              xPt: 215,
+              yPt: 670,
+              widthPt: 50,
+              structure: "c1",
+            }),
+            text({
+              text: "capability",
+              xPt: 270,
+              yPt: 670,
+              widthPt: 45,
+              structure: "c1",
+            }),
+            text({
+              text: "Sensor",
+              xPt: 400,
+              yPt: 670,
+              widthPt: 30,
+              structure: "c2",
+            }),
+          ]),
+        ],
+        [
+          {
+            id: "t1",
+            type: "Table",
+            children: [
+              {
+                id: "r1",
+                type: "TR",
+                children: [
+                  { id: "h1", type: "TH", children: [] },
+                  { id: "h2", type: "TH", children: [] },
+                ],
+              },
+              {
+                id: "r2",
+                type: "TR",
+                children: [
+                  { id: "c1", type: "TD", children: [] },
+                  { id: "c2", type: "TD", children: [] },
+                ],
+              },
+            ],
+          },
+        ],
+      ),
+    );
+    const table = blocks(doc).find(
+      (b): b is Extract<ContentBlock, { kind: "table" }> => b.kind === "table",
+    );
+    expect(table).toBeDefined();
+    const rowTexts = table!.rows.map((row) =>
+      row.cells.map((cell) =>
+        cell.blocks
+          .map((b) =>
+            b.kind === "paragraph" ? b.runs.map((r) => r.text).join("") : "",
+          )
+          .join(""),
+      ),
+    );
+    expect(rowTexts).toEqual([
+      ["Description", "Category"],
+      ["Intrusion detector, not including processing capability", "Sensor"],
+    ]);
+  });
 });
 
 describe("reconstructWordprocessing: division constructs from tagged structure (#760)", () => {
