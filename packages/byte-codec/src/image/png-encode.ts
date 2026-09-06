@@ -11,6 +11,9 @@ const PNG_SIGNATURE = new Uint8Array([
 // PNG colour type 3 (indexed/palette) cannot address more entries than this -- one palette index per byte, per the PNG spec's own 8-bit-depth ceiling for colour type 3.
 const MAX_PALETTE_ENTRIES = 256;
 
+// The PNG spec's IHDR width/height fields are each a 'PNG four-byte unsigned integer', a datatype the spec (section 3, Terms and definitions) itself defines as "limited to the range 0 to 2^31-1 ... in order to accommodate languages that have difficulty with unsigned four-byte values" -- so 2^31 and above has no valid encoding, the same way zero, a fraction, or NaN doesn't.
+const PNG_MAX_DIMENSION = 0x7fffffff;
+
 export interface PngEncodeOptions {
   // 'adaptive' (the default) picks, per row, whichever of the five PNG filters minimises the sum of the filtered bytes' absolute values -- the PNG spec's own recommended heuristic. 'none' always emits filter type 0, useful for deterministic, human-auditable test output.
   readonly filter?: "none" | "adaptive";
@@ -169,7 +172,7 @@ function writeTruecolorPng(
   writeChunk(writer, "IDAT", deflate(filtered));
 }
 
-// Encodes normalised raw pixel data (8 bits per channel, optionally with a separate alpha plane) into PNG file bytes -- the exact inverse of decodePng's RawImage shape. A channels === 3 image is first checked for a lossless indexed-colour (colour type 3) representation, and encoded that way whenever its pixels reduce to 256 or fewer distinct colours -- indexed colour is substantially smaller than truecolour for the flat-colour images typical of diagrams and screenshots, and decodePng reconstructs the original RGB(A) data exactly via its own PLTE/tRNS lookup, so this never changes what decodePng(encodePng(image)) hands back. Every other image (grayscale, or a truecolour image with more than 256 distinct colours) falls back to the plain truecolour/greyscale path. Throws unless both width and height are finite positive integers: the PNG spec (section 11.2.1, IHDR) states zero is an invalid value for either, and IHDR's own 4-byte unsigned-integer field has no valid encoding for a negative, fractional, or non-finite (including NaN) dimension either -- a positive-integer check catches all of those in one place, rather than a `<= 0` check that NaN and fractional values silently pass straight through (NaN <= 0 is false, and a fractional value truncates on write into a dimension the caller never asked for).
+// Encodes normalised raw pixel data (8 bits per channel, optionally with a separate alpha plane) into PNG file bytes -- the exact inverse of decodePng's RawImage shape. A channels === 3 image is first checked for a lossless indexed-colour (colour type 3) representation, and encoded that way whenever its pixels reduce to 256 or fewer distinct colours -- indexed colour is substantially smaller than truecolour for the flat-colour images typical of diagrams and screenshots, and decodePng reconstructs the original RGB(A) data exactly via its own PLTE/tRNS lookup, so this never changes what decodePng(encodePng(image)) hands back. Every other image (grayscale, or a truecolour image with more than 256 distinct colours) falls back to the plain truecolour/greyscale path. Throws unless both width and height are integers in the PNG spec's own valid IHDR range: the spec (section 11.2.1, IHDR) states zero is an invalid value for either, and both fields are a 'PNG four-byte unsigned integer', a datatype the spec limits to 0 to 2^31-1 -- so a negative, fractional, non-finite (including NaN), or too-large dimension all have no valid IHDR encoding, and a single bounded-positive-integer check catches every one of them in one place, rather than a `<= 0` check that NaN and fractional values silently pass straight through (NaN <= 0 is false, and a fractional value truncates on write into a dimension the caller never asked for) or an unbounded check that lets a dimension at or above 2^31 through to an encoder loop sized by it.
 export function encodePng(
   image: RawImage,
   options: PngEncodeOptions = {},
@@ -177,11 +180,13 @@ export function encodePng(
   if (
     !Number.isInteger(image.width) ||
     image.width <= 0 ||
+    image.width > PNG_MAX_DIMENSION ||
     !Number.isInteger(image.height) ||
-    image.height <= 0
+    image.height <= 0 ||
+    image.height > PNG_MAX_DIMENSION
   ) {
     throw new Error(
-      `cannot encode a PNG with an invalid dimension (width=${image.width}, height=${image.height}); the PNG spec's IHDR section requires both width and height to be positive integers`,
+      `cannot encode a PNG with an invalid dimension (width=${image.width}, height=${image.height}); the PNG spec's IHDR section requires both width and height to be positive integers no greater than ${PNG_MAX_DIMENSION}`,
     );
   }
 
