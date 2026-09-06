@@ -1,3 +1,13 @@
+## [6.2.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%406.1.0...document-schema.js%406.2.0) (2026-09-06)
+
+### Features
+
+* **document-schema.js:** add preformatted flag distinguishing verbatim-whitespace paragraphs ([781cadc](https://github.com/ExaDev/documents.js/commit/781cadc4116834c8481634f73734103941721782))
+
+### Documentation
+
+* **document-schema.js:** note preformatted's actual reader coverage, not just its intent ([44f3c61](https://github.com/ExaDev/documents.js/commit/44f3c61e06ce32c64724a81f6862bd508cdf6c82)), references [ExaDev/documents.js#1020](https://github.com/ExaDev/documents.js/issues/1020)
+
 ## [6.1.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%406.0.0...document-schema.js%406.1.0) (2026-09-06)
 
 ### Features

@@ -1,3 +1,20 @@
+## [7.1.3](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.2...documents.js%407.1.3) (2026-09-06)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.2.0
+- Updated archive-codec to ^1.6.1
+- Updated markdown-codec to ^6.3.0
+- Updated odf.js to ^7.1.1
+- Updated pdf-codec to ^4.0.1
+- Updated doc-codec to ^2.2.0
+- Updated ooxml.js to ^7.1.2
+- Updated ppt-codec to ^1.2.2
+- Updated rtf-codec to ^3.0.1
+- Updated wpd-codec to ^2.1.2
+- Updated xls-codec to ^4.1.2
+
 ## [7.1.2](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.1...documents.js%407.1.2) (2026-09-06)
 
 
