@@ -448,6 +448,32 @@ describe("lists", () => {
     );
   });
 
+  it("skips a <noscript> sitting directly inside a <ul> entirely, but reports the drop unlike script/template", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<ul><li>a</li><noscript><li>fake</li></noscript><li>b</li></ul>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
+    );
+  });
+
   it("preserves a genuine inter-element space between two stray inline siblings rather than joining them", () => {
     const blocks = read(
       body("<ul><li>a</li><span>foo</span> <span>bar</span></ul>"),
@@ -628,30 +654,44 @@ describe("lists", () => {
 });
 
 describe("inert elements outside lists (script/template/style/noscript)", () => {
-  it("never leaks a <script>'s raw source as document text when it sits directly inside a <p>", () => {
-    const blocks = read(body("<p>before<script>var x=1;</script>after</p>"));
+  it("never leaks a <script>'s raw source as document text when it sits directly inside a <p>, firing no diagnostic", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<p>before<script>var x=1;</script>after</p>"),
+      sink,
+    );
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "before" }, { text: "after" }] },
     ]);
+    expect(sink).not.toHaveBeenCalled();
   });
 
-  it("never leaks a <style>'s own CSS text as document prose when it sits directly inside <body> content", () => {
+  it("never leaks a <style>'s own CSS text as document prose when it sits directly inside <body> content, firing no diagnostic", () => {
+    const sink = vi.fn();
     const blocks = read(
       body("<p>before</p><style>p{color:red}</style><p>after</p>"),
+      sink,
     );
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "before" }] },
       { kind: "paragraph", runs: [{ text: "after" }] },
     ]);
+    expect(sink).not.toHaveBeenCalled();
   });
 
-  it("never leaks a <noscript>'s fallback markup as document prose when it sits directly inside a <p>", () => {
+  // Unlike <script>/<template>/<style> (never legitimate content regardless of where reached), a <noscript>'s own children CAN be ordinary, genuinely renderable markup -- this package cannot tell that case apart from a producer's own "please enable JavaScript" placeholder from the markup alone, so it fires its own dedicated diagnostic naming the drop rather than staying silent about it the way the other three do.
+  it("never leaks a <noscript>'s fallback markup as document prose when it sits directly inside a <p>, but reports the drop unlike script/template/style", () => {
+    const sink = vi.fn();
     const blocks = read(
       body("<p>before<noscript>Enable JavaScript</noscript>after</p>"),
+      sink,
     );
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "before" }, { text: "after" }] },
     ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
+    );
   });
 
   it("does not treat an id living only inside a <noscript> as a resolvable footnote target", () => {
@@ -924,6 +964,28 @@ describe("definition lists", () => {
       expect.objectContaining({
         code: "epub/definition-list-content-outside-entry",
       }),
+    );
+  });
+
+  it("skips a <noscript> sitting directly inside a <dl>, but reports the drop unlike script", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<dl><dt>Term</dt><noscript>Enable JS</noscript><dd>Definition</dd></dl>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: "epub/definition-list-content-outside-entry",
+      }),
+    );
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
     );
   });
 
@@ -1434,6 +1496,31 @@ describe("tables", () => {
     );
   });
 
+  it("skips a <noscript> sitting directly inside a <tr>, but reports the drop unlike script", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><tr><noscript>Enable JS</noscript><td>x</td></tr></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-row-content-outside-cell" }),
+    );
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
+    );
+  });
+
   it("recovers a stray <p> sitting directly inside a <table> outside any row/caption, with a diagnostic, positioned immediately before the table", () => {
     const sink = vi.fn();
     const blocks = read(
@@ -1481,6 +1568,85 @@ describe("tables", () => {
     ]);
     expect(sink).not.toHaveBeenCalledWith(
       expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+  });
+
+  it("skips a <noscript> sitting directly inside a <table>, but reports the drop unlike script", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<table><noscript>Enable JS</noscript><tr><td>a</td></tr></table>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
+    );
+  });
+
+  it("skips a <noscript> sitting directly inside a <colgroup>, but reports the drop unlike script", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<table><colgroup><col/><noscript>Enable JS</noscript></colgroup><tr><td>a</td></tr></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
+    );
+  });
+
+  it("skips a <noscript> sitting directly inside a <tbody>, but reports the drop unlike script", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body(
+        "<table><tbody><noscript>Enable JS</noscript><tr><td>a</td></tr></tbody></table>",
+      ),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        rows: [
+          {
+            cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "a" }] }] }],
+          },
+        ],
+        columnWidthsPt: [CONTENT_WIDTH_PT],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
+    );
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
     );
   });
 
@@ -1635,6 +1801,38 @@ describe("pre / code blocks", () => {
         preformatted: true,
       },
     ]);
+  });
+
+  it("skips a <noscript>'s fallback markup when it sits directly inside a <pre>, but reports the drop unlike script/template", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body("<pre>before<noscript>Enable JS</noscript>after</pre>"),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "beforeafter", fontFamily: "Courier New" }],
+        preformatted: true,
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
+    );
+  });
+
+  it("skips a <noscript>'s fallback markup when it sits inside a <pre> that also carries a footnote reference (readPreRuns' own run-splitting path), but reports the drop", () => {
+    const sink = vi.fn();
+    read(
+      body(
+        '<pre>before<noscript>Enable JS</noscript><a epub:type="noteref" href="#fn1">1</a></pre>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+      sink,
+    );
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/noscript-content-skipped" }),
+    );
   });
 
   it("keeps a footnote reference construct carried by inline content inside a <pre>, rather than discarding it silently", () => {

@@ -4,7 +4,7 @@ import { isTextLikeNode, type XmlElement, type XmlNode } from "../xml/node";
 import { attrValue } from "../xml/query";
 import { decodeEntities, decodeTextLikeNode } from "../xml/entities";
 import type { InlineStyle, XhtmlReadContext } from "./context";
-import { isInertElement } from "./context";
+import { isInertElement, reportInertElementSkip } from "./context";
 import { isFootnoteReferenceAnchor, sameDocumentFragment } from "./footnote";
 import { MONOSPACE_FONT_FAMILY } from "./style-constants";
 
@@ -77,6 +77,7 @@ function appendElement(
 ): void {
   if (isInertElement(element.tag)) {
     // Never legitimate document text -- see context.ts's own isInertElement for why <script>/<template>/<style>/<noscript> all share this treatment. This is the universal safety net: it fires regardless of where one of these is reached from -- directly inside a <p>/<td>/<figcaption>, or several levels deep inside a stray <div> a container's own recovery path (e.g. src/xhtml/read.ts's readList/flushListStrayContent) has recursed into -- rather than only the single position a narrower, call-site-specific check would guard against.
+    reportInertElementSkip(element.tag, context);
     return;
   }
   switch (element.tag) {
