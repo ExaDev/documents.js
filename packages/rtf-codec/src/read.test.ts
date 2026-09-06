@@ -588,6 +588,21 @@ describe("embedded objects", () => {
     expect(cellText).not.toContain("fallback");
   });
 
+  // \result's own destination group inherits inTable=true by cloning \object's own para when \object sits in a table cell, but a \pard inside \result's own content (RTF 1.9.1's own \pard resets every paragraph property, \intbl included) resets a DESCENDANT group's copy of that same field to false -- and the paragraph it closes is filed under whichever of blocks/cellBlocks that descendant's own inTable says, not whatever \result's own outer group still (staled) says. Without \result's own scratch starting inTable at false regardless of \object's real placement, the write lands in `blocks` while endResultScratch reads back from `cellBlocks` (or vice versa), and the whole fallback is silently lost -- this combination (\objdata failing to decode, inside a table cell, \result opening with its own \pard) was untested before this fix.
+  it("recovers \\result's own fallback content when \\objdata fails to decode inside a table cell", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl before {\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result{\\pard\\plain FALLBACK\\par}}} after\\cell\\row\\pard x\\par}`,
+    );
+    const cellBlocks = table.rows[0]?.cells[0]?.blocks ?? [];
+    const cellText = cellBlocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("|");
+    expect(cellText).toContain("FALLBACK");
+    expect(cellText).toContain("before");
+    expect(cellText).toContain("after");
+  });
+
   // RTF's own <obj> grammar allows only one \result child, but a malformed producer can still write two -- the second sibling must not silently overwrite the first's own recovered content with no diagnostic, mirroring how a second \objdata sibling is already handled just below.
   it("keeps only the first of two \\result siblings, with a diagnostic noting the duplicate, when \\objdata cannot decode", () => {
     const { document, diagnostics } = readRtfContent(
