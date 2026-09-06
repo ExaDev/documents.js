@@ -544,7 +544,7 @@ importers:
         specifier: 0.13.4
         version: 0.13.4
       wpd-codec:
-        specifier: workspace:^
+        specifier: ^2.0.0
         version: link:../wpd-codec
       xls-codec:
         specifier: ^4.0.0
