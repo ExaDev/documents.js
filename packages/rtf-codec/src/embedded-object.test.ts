@@ -205,6 +205,42 @@ describe("readEmbeddedObjectData", () => {
     expect(readEmbeddedObjectData(Uint8Array.from([1, 2, 3]))).toBeUndefined();
   });
 
+  it("carries a legitimate SourceResidue source field through unchanged", () => {
+    const withSource: ContentEmbeddedObject = {
+      ...embedded,
+      source: { format: "rtf", xml: "{\\object\\objemb ...}" },
+    };
+    const bytes = buildEmbeddedObjectBytes({
+      formatId: 0x00000002,
+      className: "Package",
+      nativeData: packagedJson(withSource),
+    });
+    expect(readEmbeddedObjectData(bytes)).toEqual(withSource);
+  });
+
+  // isContentEmbeddedObject (the guard behind ContentEmbeddedObjectSchema.safeParse above) never inspects `source` at all, so a forged \objdata payload's `source` value reaches knownContentEmbeddedObjectFields exactly as a hostile author wrote it -- these shapes must all be dropped rather than carried through into the returned ContentEmbeddedObject, where a downstream same-format writer could otherwise be persuaded to re-emit them verbatim as if they were real quarantined residue.
+  it.each([
+    [
+      "a format string SourceResidueSchema does not enumerate",
+      { format: "not-a-real-format", xml: "<w:sdt/>" },
+    ],
+    ["a non-string xml field", { format: "docx", xml: 123 }],
+    ["a missing xml field", { format: "docx" }],
+    ["an array instead of an object", ["docx", "<w:sdt/>"]],
+    ["a bare string", "just a string"],
+    ["a bare number", 42],
+  ])("drops an unvalidated source field: %s", (_description, hostileSource) => {
+    const bytes = buildEmbeddedObjectBytes({
+      formatId: 0x00000002,
+      className: "Package",
+      nativeData: packagedJson({ ...embedded, source: hostileSource }),
+    });
+    const result = readEmbeddedObjectData(bytes);
+    expect(result).toBeDefined();
+    expect(result).not.toHaveProperty("source");
+    expect(result).toEqual(embedded);
+  });
+
   it("round-trips every optional field the envelope carries alongside a spreadsheet-anchored embed", () => {
     const anchored: ContentEmbeddedObject = {
       objectKind: "formula",
