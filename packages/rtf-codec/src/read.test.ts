@@ -1023,6 +1023,41 @@ describe("form fields", () => {
     ]);
   });
 
+  // Regression guard for the flip side of the nested-\*\fldinst-group guard above: formFieldControlType is anchored on a \b word boundary, and a field's instruction is read incrementally across however many "fieldInstruction"-destination groups it is split across (see startFormField's own call site comment on the nested-anonymous-group case). A group that closes with the instruction reading exactly "FORMTEXT" -- nothing following it yet -- satisfies \b via the end of the string read so far, opening the extent; if the SAME instruction later grows a further identifier character directly onto that word with no separating space or switch delimiter ("FORMTEXTBOX" here), \b no longer holds once the instruction is complete, and the field is correctly not a real form field after all. Before gating endFormField's own call on formFieldStarted rather than re-deriving the type a second time from the (by-then-different) complete instruction, this field's opened extent was never closed: it leaked as an unpopped entry on the shared open-form-fields stack instead of being reported and discarded, one push short of the pop every other field's own close still performed correctly around it.
+  it("drops a form field whose instruction stops matching a keyword once complete, without disturbing the fields around it", () => {
+    const good =
+      "{\\field{\\*\\fldinst {FORMTEXT }{\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname T}}}}{\\fldrslt X}}";
+    const growsPastBoundary =
+      "{\\field{\\*\\fldinst{FORMTEXT}BOX}{\\fldrslt Y}}";
+    const { document, diagnostics } = readRtfContent(
+      bytes(`${HEADER}\\pard ${good}${growsPastBoundary}${good}\\par}`),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const paragraph = document.sections[0]?.blocks[0] as
+      ContentParagraph | undefined;
+    expect(paragraph?.runs.map((run) => run.text)).toEqual(["X", "Y", "X"]);
+    // Both surviving contentControls still point at their own "X" run (index 0 and index 2), not shifted by the dropped field's leaked stack entry sitting between them.
+    expect(
+      paragraph?.constructs?.map((construct) => [
+        construct.startRun,
+        construct.endRun,
+      ]),
+    ).toEqual([
+      [0, 1],
+      [2, 3],
+    ]);
+    expect(diagnostics).toContainEqual({
+      code: RtfDiagnosticCodes.FORM_FIELD_KEYWORD_LOST,
+      severity: "warning",
+      message:
+        "a form field's contentControl is dropped: its \\*\\fldinst instruction matched a form-field keyword partway through parsing but no longer did once the complete instruction was read",
+    });
+  });
+
   it("swallows a stray \\par inside a \\*\\ffl entry instead of splitting the surrounding paragraph", () => {
     const blocks = blocksOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN {\\*\\formfield{\\fftype2\\fftypetxt0\\ffhaslistbox{\\*\\ffl item1\\par item2}}}}{\\fldrslt X}}\\par}`,
