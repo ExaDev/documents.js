@@ -1620,6 +1620,41 @@ describe("pre / code blocks", () => {
     });
   });
 
+  it("maps a <br> inside a <pre> to a literal newline rather than dropping the line break", () => {
+    const blocks = read(body("<pre>line1<br/>line2</pre>"));
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "line1\nline2", fontFamily: "Courier New" }],
+        preformatted: true,
+      },
+    ]);
+  });
+
+  it("maps a <br> inside a <pre> to a literal newline even when the block also carries a footnote reference, taking the run-splitting readPreRuns path", () => {
+    const blocks = read(
+      body(
+        '<pre>line1<br/>line2<a epub:type="noteref" href="#fn1">1</a></pre>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [
+        { text: "line1\nline2", fontFamily: "Courier New" },
+        { text: "1", fontFamily: "Courier New" },
+      ],
+      preformatted: true,
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ],
+    });
+  });
+
   it("preserves a CDATA section's own literal content inside a <pre>, rather than silently dropping it", () => {
     const blocks = read(body("<pre><![CDATA[a & b < c]]></pre>"));
     expect(blocks).toEqual([

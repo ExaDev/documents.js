@@ -490,6 +490,10 @@ function readPreRuns(
       buffer += decodeEntities(readPreImageFallbackText(node, context));
       continue;
     }
+    if (node.tag === "br") {
+      buffer += "\n";
+      continue;
+    }
     const footnoteName =
       node.tag === "a"
         ? isFootnoteReferenceAnchor(node, context.idElements)
@@ -528,7 +532,7 @@ function readPreRuns(
   return { runs, constructs };
 }
 
-// A <pre>/<code> block's own content model is plain text with whitespace preserved verbatim (this never routes through buildInlineRuns's own normalizeWhitespace) -- so an <img> found anywhere inside, at any depth, cannot become a real ContentImageBlock the way one reached transparently through readContainerChildren can: there is no block list here to insert a sibling image block into, the identical structural constraint appendImageFallback (src/xhtml/inline.ts) already applies to an <img> reached while building a flat run sequence. Its alt text is spliced into the extracted text in its place, with a diagnostic naming the loss -- mirroring textContent's own recursive walk (src/xml/query.ts) but for the one element kind that walk cannot represent as text at all. An inert element (context.ts's own isInertElement) is skipped for the identical reason src/xhtml/inline.ts's own appendElement skips it: none of <script>/<template>/<style>/<noscript>'s own content is ever legitimate document text -- this walk is its own separate recursion, not a call into appendElement, so it needs its own identical guard rather than inheriting one. A text node and a CDATA section (xml/node.ts's own isTextLikeNode) are both real, extractable <pre> content and decoded the same way this function has always decoded a text node -- except CDATA never through decodeEntities, since CDATA content was never entity-encoded to begin with (xml/entities.ts's own decodeTextLikeNode comment); every leaf this function returns is already decoded by the time it reaches its own return, which is why every caller uses that string as-is rather than decoding it again.
+// A <pre>/<code> block's own content model is plain text with whitespace preserved verbatim (this never routes through buildInlineRuns's own normalizeWhitespace) -- so an <img> found anywhere inside, at any depth, cannot become a real ContentImageBlock the way one reached transparently through readContainerChildren can: there is no block list here to insert a sibling image block into, the identical structural constraint appendImageFallback (src/xhtml/inline.ts) already applies to an <img> reached while building a flat run sequence. Its alt text is spliced into the extracted text in its place, with a diagnostic naming the loss -- mirroring textContent's own recursive walk (src/xml/query.ts) but for the one element kind that walk cannot represent as text at all. A <br> is mapped to a literal "\n" character rather than dropped, matching src/xhtml/inline.ts's own appendElement (which maps a <br> to its own run of "\n" for an ordinary paragraph) and the writer's own writePreRunsToNodes (src/xhtml/write.ts), which already emits an embedded newline in a <pre> run's text the identical literal way -- a <br> has no children of its own, so without this explicit case the recursive walk below would silently contribute nothing for it. An inert element (context.ts's own isInertElement) is skipped for the identical reason src/xhtml/inline.ts's own appendElement skips it: none of <script>/<template>/<style>/<noscript>'s own content is ever legitimate document text -- this walk is its own separate recursion, not a call into appendElement, so it needs its own identical guard rather than inheriting one. A text node and a CDATA section (xml/node.ts's own isTextLikeNode) are both real, extractable <pre> content and decoded the same way this function has always decoded a text node -- except CDATA never through decodeEntities, since CDATA content was never entity-encoded to begin with (xml/entities.ts's own decodeTextLikeNode comment); every leaf this function returns is already decoded by the time it reaches its own return, which is why every caller uses that string as-is rather than decoding it again.
 function readPreText(
   nodes: readonly XmlNode[],
   context: XhtmlReadContext,
@@ -537,6 +541,8 @@ function readPreText(
   for (const node of nodes) {
     if (isTextLikeNode(node)) {
       out += decodeTextLikeNode(node);
+    } else if (node.type === "element" && node.tag === "br") {
+      out += "\n";
     } else if (node.type === "element" && node.tag === "img") {
       out += decodeEntities(readPreImageFallbackText(node, context));
     } else if (node.type === "element" && isInertElement(node.tag)) {
