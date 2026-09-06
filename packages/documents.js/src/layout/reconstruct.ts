@@ -1700,7 +1700,7 @@ function recoverTaggedTables(
   }
   const cellsByTable = new Map<
     string,
-    { table: StructureNode; cells: TaggedCell[] }
+    { table: StructureNode; cellsById: Map<string, TaggedCell> }
   >();
   for (const item of page.items) {
     if (item.kind !== "text") {
@@ -1713,8 +1713,17 @@ function recoverTaggedTables(
     if (cell === undefined || row === undefined || table === undefined) {
       continue;
     }
-    const entry = cellsByTable.get(table.id) ?? { table, cells: [] };
-    entry.cells.push({ table, row, cell, items: [item] });
+    const entry = cellsByTable.get(table.id) ?? {
+      table,
+      cellsById: new Map<string, TaggedCell>(),
+    };
+    // Several text items -- one per PDF text-showing operation -- routinely share one tagged cell (any cell whose value is more than a single unstyled word), and must accumulate into that one cell's own items rather than each minting its own positional entry: keying by the item instead of by the cell it belongs to split every multi-run cell into several bogus single-item cells, pushing every later cell in the row out of its real column and scattering that row's own text across its neighbours' columns.
+    const existing = entry.cellsById.get(cell.id);
+    if (existing === undefined) {
+      entry.cellsById.set(cell.id, { table, row, cell, items: [item] });
+    } else {
+      existing.items.push(item);
+    }
     cellsByTable.set(table.id, entry);
   }
   if (cellsByTable.size === 0) {
@@ -1724,7 +1733,8 @@ function recoverTaggedTables(
   const latticeItems: ReadonlySet<LayoutItem> =
     detectGridLattice(page.items)?.sourceItems ?? NO_ITEMS;
   const recovered: RecoveredTable[] = [];
-  for (const { cells } of cellsByTable.values()) {
+  for (const { cellsById } of cellsByTable.values()) {
+    const cells = [...cellsById.values()];
     const rowsById = new Map<
       string,
       { row: StructureNode; cells: TaggedCell[] }
