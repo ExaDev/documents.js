@@ -153,8 +153,8 @@ function writeList(
     }
     const liChildren = items
       .slice(index, end)
-      .flatMap((item) => [
-        ...writeParagraphAsEmbeddedNodes(item.node, context),
+      .flatMap((item, position) => [
+        ...writeParagraphAsEmbeddedNodes(item.node, context, position > 0),
         ...writeSectionChildren(item.children, context),
       ]);
     liNodes.push(element("li", {}, liChildren));
@@ -274,9 +274,12 @@ function writeParagraph(
 }
 
 // The identical horizontal-rule/preformatted/ordinary-runs dispatch writeParagraph itself uses immediately above, reused by writeList to embed a paragraph's own body directly inside a container OTHER than a fresh <p> -- a list item's own anchor content. This dispatch is deliberately NOT used for a heading's own runs (writeHeading writes them directly via writeRunsToNodes): h1-h6 admit only phrasing content per the HTML Standard, and both <pre> and <hr> are flow content, so routing a heading through this dispatcher would let a foreign producer's input (e.g. a heading styled entirely in a monospace font with an embedded line break, tripping isPreBlockParagraph's own legacy heuristic) write a non-conformant <pre>/<hr> nested inside an <hN> -- a shape real EPUB validators reject. "This reader can't produce that shape" is not a safe argument for the writer, since the writer's own job is round-tripping whatever a foreign producer's document actually contains, and a heading's content model already rules the shape out unconditionally regardless of provenance. Before this existed, writeList built its own anchor content via writeRunsToNodes alone, so a <pre> or an <hr> nested directly inside an <li> -- both ordinary, real-world HTML, since <li>'s content model is flow content -- silently lost its own block shape on write despite reading back correctly as a preformatted or horizontal-rule paragraph: the reader's own list-membership decoration (decorateParagraph) applies uniformly to every paragraph shape reached inside a list item, but the writer's list path checked none of the shapes writeParagraph itself already knew how to recognise. The horizontal-rule and preformatted cases each return their own single, already-complete block element (<hr>, <pre><code>...); the ordinary case returns the paragraph's own inline run nodes with no wrapper, since the wrapper differs by call site (a fresh <p> in writeParagraph, nothing extra when embedding directly in <li>).
+//
+// `wrapOrdinaryInParagraph` exists for writeList's own itemId regrouping (the comment above writeList explains why several ListGroupNode entries sharing one itemId must land in a single <li>): the horizontal-rule and preformatted branches above already return their own self-delimiting block element, so concatenating one of THOSE after another entry's output never loses a boundary, but the ordinary branch's bare inline nodes have no delimiter of their own -- flattening a second entry's ordinary runs directly onto a first entry's, with nothing in between, silently fuses two distinct paragraphs into one undelimited text run (e.g. "First para" and "Second para" becoming the single word "First paraSecond para", with the word boundary itself destroyed rather than merely the paragraph break). <li>'s content model is Flow content per the HTML Standard, exactly like the <pre>/<hr> cases this function already embeds unwrapped, so wrapping a later entry's ordinary content in its own <p> is exactly as conformant as those. writeList passes `true` for every entry after a group's first and `false` for the first: the first entry has nothing preceding it inside the <li> for a missing delimiter to fuse with, so leaving it unwrapped preserves the plain `<li>text</li>` idiom the overwhelming majority of (single-block) list items already round-trip as.
 function writeParagraphAsEmbeddedNodes(
   paragraph: ContentParagraph,
   context: XhtmlWriteContext,
+  wrapOrdinaryInParagraph: boolean,
 ): XmlNode[] {
   if (isHorizontalRuleParagraph(paragraph)) {
     return [element("hr")];
@@ -284,7 +287,12 @@ function writeParagraphAsEmbeddedNodes(
   if (isPreBlockParagraph(paragraph)) {
     return [writePreElement(paragraph, context)];
   }
-  return writeRunsToNodes(paragraph.runs, paragraph.constructs, context);
+  const runNodes = writeRunsToNodes(
+    paragraph.runs,
+    paragraph.constructs,
+    context,
+  );
+  return wrapOrdinaryInParagraph ? [element("p", {}, runNodes)] : runNodes;
 }
 
 type FootnoteExtent = RunConstructExtent & {
