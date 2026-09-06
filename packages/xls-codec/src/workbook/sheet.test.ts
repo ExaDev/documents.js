@@ -801,6 +801,26 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
     expect(cells[1]?.value).toEqual({ kind: "number", value: 42 });
   });
+
+  it("does not abort the whole sheet read when a Formula record's own cce overruns the record", () => {
+    // The one remaining unguarded overrun path: unlike ShrFmla/Array (collectFormulaGroup's own try/catch) and unlike a lying token-internal length inside an already-correctly-bounded rgce (resolveFormulaText's own try/catch), an ordinary Formula record's own cce declaring more rgce bytes than the record actually carries throws BiffFormatError straight out of `cursor.take(cce)`, before resolveFormulaText is ever reached -- and readFormula is called with no try/catch of its own from readSheetRecords' per-record loop, so that error would otherwise abort the whole sheet read (and every other sheet in the workbook), not just this one cell.
+    const rgce = [0x41, 0, 0]; // only 3 bytes actually present
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(1000), // cce claims 1000 bytes of rgce -- far more than this record actually carries
+        ...rgce,
+      ]),
+      record(RECORD_NUMBER, [...cell(9, 9), ...f64(42)]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
+    expect(cells[1]?.value).toEqual({ kind: "number", value: 42 });
+  });
 });
 
 describe("readSheetRecords grid geometry", () => {
