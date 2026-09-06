@@ -330,10 +330,10 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     ["zero height", 3, 0],
     ["both zero", 0, 0],
   ])(
-    "rejects a zero-dimension image (%s) outright, since no valid PNG (indexed or truecolour) can represent one",
+    "rejects an invalid-dimension image (%s) outright, since no valid PNG (indexed or truecolour) can represent one",
     (_label, width, height) => {
       const image = rgbImage(width, height, []);
-      expect(() => encodePng(image)).toThrow(/zero-dimension/);
+      expect(() => encodePng(image)).toThrow(/invalid dimension/);
     },
   );
 });
