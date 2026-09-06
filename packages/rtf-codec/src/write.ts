@@ -488,10 +488,45 @@ function nameOf(descriptor: ConstructDescriptor): string {
   return isBookmarkAnchor(descriptor) ? descriptor.name : "";
 }
 
+type ContentControlExtent = RunConstructExtent & {
+  descriptor: ContentControlDescriptor;
+};
+
 function isContentControlExtent(
   extent: RunConstructExtent,
-): extent is RunConstructExtent & { descriptor: ContentControlDescriptor } {
+): extent is ContentControlExtent {
   return extent.descriptor.kind === "contentControl";
+}
+
+// Two contentControl extents "cross" when neither nests inside or around the other: one starts before the other ends but also ends after it does (e.g. {startRun:0,endRun:2} and {startRun:1,endRun:3}). RTF's own \*\formfield destination is a bracket, not a range -- a `{\field...}` group nests cleanly inside another `{\field...}` group's own \fldrslt, but two crossing groups have no valid brace sequence at all: whichever one physically closes second necessarily closes the OTHER one's own braces instead of its own, corrupting both (verified by execution against writeFormFieldBoundaries below: the pair above produced output where the first extent's own closing braces closed the second field's groups and vice versa, brace-balanced overall but mis-nested throughout). Detected and dropped HERE, before either extent's own open half is ever written, rather than at close time -- by then a crossing extent's own opening braces are already in the output and cannot be un-written. Processes extents sorted (startRun ascending, endRun descending, so a tied startRun opens the wider extent first) because that is also the order writeFormFieldBoundaries itself must open extents in to keep two same-position opens correctly nested -- an ordinary non-crossing extent (nested, disjoint, or sharing a boundary with another) passes through unchanged, in this order, for exactly that reason.
+function selectNestableFormFields(
+  extents: readonly ContentControlExtent[],
+  sink: RtfDiagnosticSink,
+): readonly ContentControlExtent[] {
+  const sorted = [...extents].sort(
+    (a, b) => a.startRun - b.startRun || b.endRun - a.endRun,
+  );
+  const stack: ContentControlExtent[] = [];
+  const accepted: ContentControlExtent[] = [];
+  for (const extent of sorted) {
+    let top = stack[stack.length - 1];
+    while (top !== undefined && top.endRun <= extent.startRun) {
+      stack.pop();
+      top = stack[stack.length - 1];
+    }
+    if (top !== undefined && extent.endRun > top.endRun) {
+      sink({
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        severity: "warning",
+        message:
+          "a contentControl construct is dropped: it crosses another contentControl extent in the same paragraph (starts before that extent ends but ends after it too), and RTF's \\*\\formfield destination can only nest properly, never cross",
+      });
+      continue;
+    }
+    stack.push(extent);
+    accepted.push(extent);
+  }
+  return accepted;
 }
 
 // Why a given descriptor kind has no RTF spelling, stated per kind rather than as one generic sentence, because the reasons genuinely differ: two of them are format gaps this package could close and two are gaps in RTF itself.
@@ -771,11 +806,12 @@ class RtfWriter {
     const revisions = (paragraph.constructs ?? []).filter(
       (extent) => extent.descriptor.kind === "provenance",
     );
-    const formFields = (paragraph.constructs ?? []).filter(
-      isContentControlExtent,
+    const formFields = selectNestableFormFields(
+      (paragraph.constructs ?? []).filter(isContentControlExtent),
+      this.sink,
     );
-    // Which of formFields actually had their open half written -- see writeFormFieldBoundaries below for why the close loop must consult this rather than assume every extent that reaches its endRun was opened.
-    const openedFormFields = new Set<RunConstructExtent>();
+    // The extents currently open with no close yet written, in actual open order (most-recently-opened last) -- a real stack, not a Set, because writeFormFieldBoundaries below must always close the TOP of it and nothing else: see that method's own comment for why scanning for "any extent whose endRun matches" independently of open order mis-nests two extents that share a boundary.
+    const openedFormFields: ContentControlExtent[] = [];
     for (const [index, run] of paragraph.runs.entries()) {
       this.writeRunBoundaries(bookmarks, index);
       this.writeFormFieldBoundaries(formFields, index, openedFormFields);
@@ -794,12 +830,12 @@ class RtfWriter {
     }
   }
 
-  private drainOpenedFormFields(opened: Set<RunConstructExtent>): void {
+  private drainOpenedFormFields(opened: ContentControlExtent[]): void {
     // Only the count matters here -- every remaining entry closes identically ("}}"), so there is nothing to read off any individual extent.
-    for (let remaining = opened.size; remaining > 0; remaining -= 1) {
+    for (let remaining = opened.length; remaining > 0; remaining -= 1) {
       this.raw("}}");
     }
-    opened.clear();
+    opened.length = 0;
   }
 
   private writeRunBoundaries(
@@ -824,23 +860,17 @@ class RtfWriter {
 
   // A form field's own two halves, matching writeRunBoundaries above but wrapping rather than flagging: the open is `{\field...}{\fldrslt ` left unclosed, so every run the extent covers lands inside \fldrslt's own destination, and the close is the matching `}}`. A controlType FORM_FIELD_SPEC does not cover degrades through describeFormFieldGap instead of minting nothing silently -- and, critically, mints NO open braces for that extent, so the close loop must only ever emit "}}" for an extent whose open half was actually written (tracked in `opened`). Emitting the close unconditionally would leave every degraded extent's would-be open half missing while its close half still lands, corrupting the document's brace balance for everything written afterwards.
   //
-  // `opened` holds exactly the extents currently open with no close yet written -- an entry is removed the moment its close is emitted, by either branch below -- which is what lets writeParagraph's own drainOpenedFormFields (after the final call for a paragraph) tell a genuinely still-open extent apart from one already closed. This matters for two shapes of malformed-looking input this writer must still round-trip to balanced output rather than crash or corrupt: an extent whose endRun exceeds paragraph.runs.length (this method is only ever called for positions 0..runs.length, so such a close position never arrives), and an extent with startRun > endRun (the close loop for its endRun runs before the open loop ever reaches its startRun, so `opened.has(extent)` is false there and the close is correctly skipped as "not yet opened" -- but nothing then revisits that endRun once the open finally happens at the later startRun position, so the close never fires from this method alone).
+  // `opened` is a real stack (most-recently-opened last), not a Set keyed by identity: the close loop below pops from its END and closes ONLY that entry, rather than scanning `extents` for "any extent whose endRun matches this position" independently of open order. That distinction matters the moment two extents share a boundary -- properly nested (one fully inside the other) or simply tied (identical range) -- because the physically innermost still-open `{\field...}{\fldrslt ` pair is always whichever one was opened LAST, and only its own `}}` can legitimately close next; closing by array order instead can close the wrong extent's braces while leaving the true innermost one's open forever (selectNestableFormFields above is what keeps `extents` itself free of the one shape -- crossing extents -- no open-order stack discipline could ever nest correctly to begin with). Popping only when the current top's own endRun matches is what lets writeParagraph's own drainOpenedFormFields (after the final call for a paragraph) tell a genuinely still-open extent apart from one already closed. This also matters for two shapes of malformed-looking input this writer must still round-trip to balanced output rather than crash or corrupt: an extent whose endRun exceeds paragraph.runs.length (this method is only ever called for positions 0..runs.length, so such a close position never arrives), and an extent with startRun > endRun (the close loop for its endRun runs before the open loop ever reaches its startRun, so it is not yet on the stack there and the close is correctly skipped as "not yet opened" -- but nothing then revisits that endRun once the open finally happens at the later startRun position, so the close never fires from this method alone).
   private writeFormFieldBoundaries(
-    extents: readonly (RunConstructExtent & {
-      descriptor: ContentControlDescriptor;
-    })[],
+    extents: readonly ContentControlExtent[],
     position: number,
-    opened: Set<RunConstructExtent>,
+    opened: ContentControlExtent[],
   ): void {
-    for (const extent of extents) {
-      if (
-        extent.endRun === position &&
-        extent.startRun !== position &&
-        opened.has(extent)
-      ) {
-        this.raw("}}");
-        opened.delete(extent);
-      }
+    let top = opened[opened.length - 1];
+    while (top?.endRun === position && top.startRun !== position) {
+      opened.pop();
+      this.raw("}}");
+      top = opened[opened.length - 1];
     }
     for (const extent of extents) {
       if (extent.startRun !== position) {
@@ -856,10 +886,10 @@ class RtfWriter {
         continue;
       }
       this.raw(open);
-      opened.add(extent);
+      opened.push(extent);
       if (extent.endRun === position) {
+        opened.pop();
         this.raw("}}");
-        opened.delete(extent);
       }
     }
   }
