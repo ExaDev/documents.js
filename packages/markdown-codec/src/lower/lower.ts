@@ -256,6 +256,8 @@ function lowerCodeBlock(
     kind: "paragraph",
     runs: [lowerCodeBlockRun(node.literal.replace(/\n$/, ""))],
     styleId: CODE_BLOCK_STYLE_ID,
+    // document-schema.js's own cross-format "whitespace inside this paragraph's runs is significant" signal -- set unconditionally, matching epub-codec's own readPre (every fenced/indented code block is preformatted regardless of run count), so a markdown -> odt/epub bridge carries the fact forward rather than losing it (ExaDev/documents.js#1020).
+    preformatted: true,
     ...(info.language !== undefined ? { codeLanguage: info.language } : {}),
     ...(info.remainder !== undefined
       ? { source: { format: "markdown", xml: info.remainder } }
