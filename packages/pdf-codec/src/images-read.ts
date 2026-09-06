@@ -349,6 +349,20 @@ function readJpeg2000Image(
     return undefined;
   }
 
+  // Mirrors readImageXObject's own /Width and /Height guard below (both the per-dimension PNG_MAX_DIMENSION ceiling and the PNG_MAX_PIXELS product ceiling): a JPXDecode codestream's SIZ marker is just as producer-controlled as a dictionary's /Width and /Height, and everything from here on -- the per-pixel colour-conversion loops below and encodePng itself -- is sized directly by image.width * image.height, so an oversized SIZ would otherwise reach encodePng's own throw uncaught, aborting the whole document parse instead of degrading to this function's usual "skip this image" diagnostic.
+  if (
+    image.width > PNG_MAX_DIMENSION ||
+    image.height > PNG_MAX_DIMENSION ||
+    image.width * image.height > PNG_MAX_PIXELS
+  ) {
+    sink({
+      code: "image/jpx-undecodable",
+      severity: "warning",
+      message: `JPXDecode image declares an unusably large size (${String(image.width)}x${String(image.height)}); skipping this image`,
+    });
+    return undefined;
+  }
+
   const kind = jpeg2000ChannelKind(image, dict, resolver, sink);
   const required = kind === "cmyk" ? 4 : kind === "rgb" ? 3 : 1;
   if (image.components.length < required) {
