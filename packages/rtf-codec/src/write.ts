@@ -512,6 +512,11 @@ function describeConstructGap(descriptor: ConstructDescriptor): string {
   }
 }
 
+// Why a contentControl that IS ALREADY run-scoped (an extent openConstruct/closeConstruct never sees, since it never reaches block level at all -- see the top-of-file comment on formFieldContentControl's own analogue in constructs.ts) still has no RTF spelling: writeFormFieldBoundaries below reaches this only once formFieldOpenGroup has already returned undefined for the extent's own controlType, i.e. its being run-scoped was never in question. describeConstructGap's own "contentControl" case above answers a different question -- why openConstruct, called for a genuinely block-scoped construct, has nothing block-scoped to open -- and leads with "RTF has no block-scoped ... equivalent", a fact that was never why THIS drop happened. Kept as its own function, not a case reused from describeConstructGap, so the two call sites (block-scoped open, run-scoped form field) each state the reason that is actually true of them.
+function describeFormFieldGap(descriptor: ContentControlDescriptor): string {
+  return `\\*\\formfield spelling for a '${descriptor.controlType}' controlType -- only plainText/checkbox/dropDown form fields mint one`;
+}
+
 class RtfWriter {
   private out = "";
   // One entry per open block-scoped construct, holding the bookmark name whose {\*\bkmkend ...} the matching close must write, or undefined for a construct with no RTF spelling. Tracked even for the undefined case so the two halves of a marker pair stay in step.
@@ -817,7 +822,7 @@ class RtfWriter {
     }
   }
 
-  // A form field's own two halves, matching writeRunBoundaries above but wrapping rather than flagging: the open is `{\field...}{\fldrslt ` left unclosed, so every run the extent covers lands inside \fldrslt's own destination, and the close is the matching `}}`. A controlType FORM_FIELD_SPEC does not cover degrades through describeConstructGap instead of minting nothing silently -- and, critically, mints NO open braces for that extent, so the close loop must only ever emit "}}" for an extent whose open half was actually written (tracked in `opened`). Emitting the close unconditionally would leave every degraded extent's would-be open half missing while its close half still lands, corrupting the document's brace balance for everything written afterwards.
+  // A form field's own two halves, matching writeRunBoundaries above but wrapping rather than flagging: the open is `{\field...}{\fldrslt ` left unclosed, so every run the extent covers lands inside \fldrslt's own destination, and the close is the matching `}}`. A controlType FORM_FIELD_SPEC does not cover degrades through describeFormFieldGap instead of minting nothing silently -- and, critically, mints NO open braces for that extent, so the close loop must only ever emit "}}" for an extent whose open half was actually written (tracked in `opened`). Emitting the close unconditionally would leave every degraded extent's would-be open half missing while its close half still lands, corrupting the document's brace balance for everything written afterwards.
   //
   // `opened` holds exactly the extents currently open with no close yet written -- an entry is removed the moment its close is emitted, by either branch below -- which is what lets writeParagraph's own drainOpenedFormFields (after the final call for a paragraph) tell a genuinely still-open extent apart from one already closed. This matters for two shapes of malformed-looking input this writer must still round-trip to balanced output rather than crash or corrupt: an extent whose endRun exceeds paragraph.runs.length (this method is only ever called for positions 0..runs.length, so such a close position never arrives), and an extent with startRun > endRun (the close loop for its endRun runs before the open loop ever reaches its startRun, so `opened.has(extent)` is false there and the close is correctly skipped as "not yet opened" -- but nothing then revisits that endRun once the open finally happens at the later startRun position, so the close never fires from this method alone).
   private writeFormFieldBoundaries(
@@ -846,7 +851,7 @@ class RtfWriter {
         this.sink({
           code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
           severity: "warning",
-          message: `a contentControl construct is dropped: RTF has no ${describeConstructGap(extent.descriptor)}`,
+          message: `a contentControl construct is dropped: RTF has no ${describeFormFieldGap(extent.descriptor)}`,
         });
         continue;
       }
