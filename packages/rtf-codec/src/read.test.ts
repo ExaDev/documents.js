@@ -970,6 +970,59 @@ describe("form fields", () => {
       options: ["item1item2"],
     });
   });
+
+  // Unlike \*\ffname/\*\ffhelptext/\*\ffl above, \fldrslt genuinely carries the field's own displayed content, so a \par or \cell inside it must still split the document the way it would anywhere else -- RTF 1.9.1's own <fieldrslt> production ('{' \fldrslt <para>+ '}') is grammatical for a multi-paragraph result even though real producers keep a form field inline. What this reader cannot do is keep the contentControl construct itself: a RunConstructExtent is scoped to one paragraph's own runs, so the construct is dropped, and endFormField reports why through the sink rather than disappearing silently.
+  it("splits the document at a \\par inside \\fldrslt and drops the contentControl, reporting why", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname Text1}}}}{\\fldrslt A\\par B}}\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const paragraphs = document.sections[0]?.blocks.filter(
+      (block): block is ContentParagraph => block.kind === "paragraph",
+    );
+    expect(paragraphs?.map((paragraph) => paragraph.runs[0]?.text)).toEqual([
+      "A",
+      "B",
+    ]);
+    expect(
+      paragraphs?.every((paragraph) => paragraph.constructs === undefined),
+    ).toBe(true);
+    expect(diagnostics).toContainEqual({
+      code: RtfDiagnosticCodes.FORM_FIELD_SPAN_DROPPED,
+      severity: "warning",
+      message:
+        "a form field's contentControl is dropped: its \\fldrslt content crossed a paragraph or table-cell boundary, and this reader's per-paragraph construct extent cannot span one",
+    });
+  });
+
+  it("splits a table cell at a \\cell inside \\fldrslt and drops the contentControl, reporting why", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx1440\\cellx2880\\pard\\intbl {\\field{\\*\\fldinst FORMTEXT {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname Text1}}}}{\\fldrslt A\\cell B\\cell}}\\row\\pard x\\par}`,
+      ),
+    );
+    const table = blocksOf(
+      `${HEADER}\\trowd\\trleft0\\cellx1440\\cellx2880\\pard\\intbl {\\field{\\*\\fldinst FORMTEXT {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname Text1}}}}{\\fldrslt A\\cell B\\cell}}\\row\\pard x\\par}`,
+    ).find((block): block is ContentTable => block.kind === "table");
+    expect(
+      table?.rows[0]?.cells.map(
+        (cell) =>
+          (cell.blocks[0] as ContentParagraph | undefined)?.runs[0]?.text,
+      ),
+    ).toEqual(["A", "B"]);
+    expect(diagnostics).toContainEqual({
+      code: RtfDiagnosticCodes.FORM_FIELD_SPAN_DROPPED,
+      severity: "warning",
+      message:
+        "a form field's contentControl is dropped: its \\fldrslt content crossed a paragraph or table-cell boundary, and this reader's per-paragraph construct extent cannot span one",
+    });
+  });
 });
 
 describe("byte runs larger than an argument list", () => {

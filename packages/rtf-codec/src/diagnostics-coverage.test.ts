@@ -118,6 +118,14 @@ describe("every read-side diagnostic code is reachable", () => {
       RtfDiagnosticCodes.NESTED_TABLE_FLATTENED,
     );
   });
+
+  it("rtf/form-field-span-dropped", () => {
+    expect(
+      readCodes(
+        `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname Text1}}}}{\\fldrslt A\\par B}}\\par}`,
+      ),
+    ).toContain(RtfDiagnosticCodes.FORM_FIELD_SPAN_DROPPED);
+  });
 });
 
 describe("every write-side diagnostic code is reachable", () => {
