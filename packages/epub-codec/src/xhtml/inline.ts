@@ -1,9 +1,10 @@
 import type { ContentRun, RunConstructExtent } from "document-schema.js";
 import { EpubDiagnosticCodes } from "../diagnostics";
-import type { XmlElement, XmlNode } from "../xml/node";
+import { isTextLikeNode, type XmlElement, type XmlNode } from "../xml/node";
 import { attrValue } from "../xml/query";
-import { decodeEntities } from "../xml/entities";
+import { decodeEntities, decodeTextLikeNode } from "../xml/entities";
 import type { InlineStyle, XhtmlReadContext } from "./context";
+import { isInertElement, reportInertElementSkip } from "./context";
 import { isFootnoteReferenceAnchor, sameDocumentFragment } from "./footnote";
 import { MONOSPACE_FONT_FAMILY } from "./style-constants";
 
@@ -50,8 +51,9 @@ export function buildInlineRuns(
   const constructs: RunConstructExtent[] = [];
 
   for (const node of nodes) {
-    if (node.type === "text") {
-      const text = normalizeWhitespace(decodeEntities(node.value));
+    if (isTextLikeNode(node)) {
+      // A text node and a CDATA section (xml/node.ts's own isTextLikeNode) are both real, extractable inline content -- a producer reaches for CDATA only when its own literal text would otherwise need escaping, never as a distinct kind of content -- decoded identically to how a text node has always been decoded here, except CDATA never through decodeEntities (xml/entities.ts's own decodeTextLikeNode comment: CDATA content was never entity-encoded to begin with).
+      const text = normalizeWhitespace(decodeTextLikeNode(node));
       if (text.length > 0) {
         runs.push(styledRun(text, style));
       }
@@ -73,6 +75,11 @@ function appendElement(
   runs: ContentRun[],
   constructs: RunConstructExtent[],
 ): void {
+  if (isInertElement(element.tag)) {
+    // Never legitimate document text -- see context.ts's own isInertElement for why <script>/<template>/<style>/<noscript> all share this treatment. This is the universal safety net: it fires regardless of where one of these is reached from -- directly inside a <p>/<td>/<figcaption>, or several levels deep inside a stray <div> a container's own recovery path (e.g. src/xhtml/read.ts's readList/flushListStrayContent) has recursed into -- rather than only the single position a narrower, call-site-specific check would guard against.
+    reportInertElementSkip(element.tag, context);
+    return;
+  }
   switch (element.tag) {
     case "strong":
     case "b":
@@ -175,6 +182,7 @@ function appendImageFallback(
   }
 }
 
+// Known gap tracked as https://github.com/ExaDev/documents.js/issues/1038: nested.constructs' own startRun/endRun are relative to this nested call's zero-based runs array and are not rebased onto the outer runs array's length here (unlike read.ts's readPreRuns, which does rebase). Pre-existing at the merge-base; not fixed in this change.
 function appendNested(
   element: XmlElement,
   style: InlineStyle,
@@ -199,7 +207,7 @@ function appendAnchor(
     const startRun = runs.length;
     const nested = buildInlineRuns(element.children, style, context);
     runs.push(...nested.runs);
-    constructs.push(...nested.constructs);
+    constructs.push(...nested.constructs); // same unrebased-offset gap as appendNested above -- see issue #1038
     constructs.push({
       descriptor: {
         kind: "anchor",
@@ -222,7 +230,7 @@ function appendAnchor(
   for (const run of nested.runs) {
     runs.push({ ...run, hyperlink: href });
   }
-  constructs.push(...nested.constructs);
+  constructs.push(...nested.constructs); // same unrebased-offset gap as appendNested above -- see issue #1038
   if (
     sameDocumentFragment(href) === undefined &&
     !/^[a-z][a-z0-9+.-]*:/iu.test(href)
