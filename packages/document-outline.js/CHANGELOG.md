@@ -1,3 +1,9 @@
+## [3.3.1](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.3.0...document-outline.js%403.3.1) (2026-09-06)
+
+### Bug Fixes
+
+* **document-outline.js:** raise the exhaustive graph-reconciliation test timeout to 120s ([9472f39](https://github.com/ExaDev/documents.js/commit/9472f39c33b9b0601fc9334788c708b5e8d1dbe3)), references [#997](https://github.com/ExaDev/documents.js/issues/997) [#1030](https://github.com/ExaDev/documents.js/issues/1030)
+
 ## [3.3.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.2.5...document-outline.js%403.3.0) (2026-09-06)
 
 ### Features

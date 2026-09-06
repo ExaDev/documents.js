@@ -239,13 +239,13 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       document-outline.js:
-        specifier: ^3.3.0
+        specifier: ^3.3.1
         version: link:../document-outline.js
       document-schema.js:
         specifier: ^6.0.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^7.0.1
+        specifier: ^7.0.2
         version: link:../documents.js
       ink:
         specifier: ^7.1.1
@@ -322,7 +322,7 @@ importers:
         specifier: ^26.1.2
         version: 26.2.0
       documents.js:
-        specifier: ^7.0.1
+        specifier: ^7.0.2
         version: link:../documents.js
       eslint:
         specifier: ^10.8.0
@@ -358,16 +358,16 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       document-compute.js:
-        specifier: ^1.2.21
+        specifier: ^1.2.22
         version: link:../document-compute.js
       document-outline.js:
-        specifier: ^3.3.0
+        specifier: ^3.3.1
         version: link:../document-outline.js
       document-schema.js:
         specifier: ^6.0.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^7.0.1
+        specifier: ^7.0.2
         version: link:../documents.js
       zod:
         specifier: ^4.2.0
@@ -547,7 +547,7 @@ importers:
         specifier: workspace:^
         version: link:../wpd-codec
       xls-codec:
-        specifier: ^3.0.0
+        specifier: ^4.0.0
         version: link:../xls-codec
       zod:
         specifier: ^4.4.3
@@ -1023,7 +1023,7 @@ importers:
         specifier: ^6.0.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^7.0.1
+        specifier: ^7.0.2
         version: link:../documents.js
       markdown-codec:
         specifier: ^6.1.7

@@ -1,3 +1,50 @@
+## [4.0.0](https://github.com/ExaDev/documents.js/compare/xls-codec%403.0.0...xls-codec%404.0.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* **xls-codec:** WorkbookGlobals.sheetRanges' element type (and biff/ptg.ts's mirrored
+  FormulaSheetContext.sheetRanges field) widens from `SheetRange | undefined` to `SheetRange |
+  ExternalSheetLabel | undefined`. A consumer that narrowed only on `!== undefined` and read a
+  SheetRange-only field (firstSheetIndex/lastSheetIndex) directly must now discriminate the two
+  shapes first, e.g. via `"label" in entry`, before accessing either shape's own fields.
+
+### Bug Fixes
+
+* **xls-codec:** abort an array literal on a SerNil element instead of an empty position ([b4f326f](https://github.com/ExaDev/documents.js/commit/b4f326fe4046b3e6d2a7265ad81d187e921fe876))
+* **xls-codec:** catch a malformed token inside an otherwise well-formed shared/array group ([ab78b78](https://github.com/ExaDev/documents.js/commit/ab78b78c05a21e10682d8e6b08c0902d207b8359))
+* **xls-codec:** catch malformed Ptg tokens in a Formula record's own rgce too ([3732069](https://github.com/ExaDev/documents.js/commit/37320695abc1b94fb48073d15ad9a90caabdf708))
+* **xls-codec:** check a virtPath's extracted final segment for brackets, not the path's own start ([2cd94e1](https://github.com/ExaDev/documents.js/commit/2cd94e189af4267c2a67587bd51a44e0be4eca66))
+* **xls-codec:** degrade a malformed SupBook or array trailer, not abort the read ([5a156d0](https://github.com/ExaDev/documents.js/commit/5a156d0d6d30178d7d4f56dabba23b2f631edbff))
+* **xls-codec:** degrade a ShrFmla/Array record whose declared length overruns its own bytes ([1117bad](https://github.com/ExaDev/documents.js/commit/1117bade58b3bedce21a01f526d963a4efd1e0c7))
+* **xls-codec:** explain the bracket-rejection check as ambiguity, not a spec violation ([ab302c0](https://github.com/ExaDev/documents.js/commit/ab302c0f429665056df352e58ef31a3f7862daa8))
+* **xls-codec:** guard an ordinary Formula record's own cce overrun ([e2d74a7](https://github.com/ExaDev/documents.js/commit/e2d74a7abf75adf1c7eceb9018a87aba2d7ddc5b))
+* **xls-codec:** resolve add-in/DDE/OLE SupBook kinds before the -2 sentinel ([a045eda](https://github.com/ExaDev/documents.js/commit/a045edac494685c9ec668c15cedd3be5464096d4))
+* **xls-codec:** resolve array formulas and array-constant literals via PtgArray/PtgExtraArray ([b728f2a](https://github.com/ExaDev/documents.js/commit/b728f2aa4060bd734d262adc345f7a3ded17b631))
+* **xls-codec:** resolve external 3D references via SUPBOOK/EXTERNSHEET ([18ffb95](https://github.com/ExaDev/documents.js/commit/18ffb95d39ffdac5312d5edb312d33b8352dd9a2))
+* **xls-codec:** resolve shared formulas via ShrFmla PtgExp join ([3c9ab40](https://github.com/ExaDev/documents.js/commit/3c9ab4045b856e561ea781115bd2975a7ffecafe))
+* **xls-codec:** stop mangling a virtPath's simple-file-path and bracketed forms ([bbe1483](https://github.com/ExaDev/documents.js/commit/bbe1483079d2b5bd80d49b593702e87a50f2eee6))
+* **xls-codec:** stop swallowing a genuine rgce-cursor bug in readFormula's own catch ([c85e539](https://github.com/ExaDev/documents.js/commit/c85e5397f783bf2fc3a24887f715134037619d6a))
+* **xls-codec:** stop wrapping an array (CSE) formula in display-only braces ([ee3392c](https://github.com/ExaDev/documents.js/commit/ee3392ce5081ca927ccbd60d1e7555702bc1b709))
+
+### Documentation
+
+* **xls-codec:** correct fileNameFromVirtPath's stale special-case claim ([151340f](https://github.com/ExaDev/documents.js/commit/151340f5823d83785831f7024033f485aec0a120))
+* **xls-codec:** document unresolvable 3D references and CSE bracing ([15bb7fb](https://github.com/ExaDev/documents.js/commit/15bb7fb8bf6f5645278f650358091a993542f0de))
+* **xls-codec:** fix circular cross-reference in SERAR_FIXED_PAYLOAD_BYTES ([8740bb1](https://github.com/ExaDev/documents.js/commit/8740bb1ed368cea52e38b1318e53210193baf2f4))
+* **xls-codec:** fix PtgRefN/PtgAreaN section citations ([8dbb1c4](https://github.com/ExaDev/documents.js/commit/8dbb1c44cbbdc6df7603ecf6458e9e8510bbc673))
+* **xls-codec:** fix resolveSheetLabel's comment to match its own return ([5a375c2](https://github.com/ExaDev/documents.js/commit/5a375c2922b3c453bf642220c3f7b10963b1fe4e))
+* **xls-codec:** fix VirtualPath bracket-ambiguity reasoning across a separator ([b4b5758](https://github.com/ExaDev/documents.js/commit/b4b57584011dac4e779dd3363c779d0121f4f118))
+* **xls-codec:** fix XLUnicodeStringNoCch section citation ([d56b5da](https://github.com/ExaDev/documents.js/commit/d56b5da404decdc9280bb1be4a1bff3189b66222))
+* **xls-codec:** justify the widened bracket rule by its real mangling hazard ([3760003](https://github.com/ExaDev/documents.js/commit/37600039ef1cd57f39436fea56af26406523ab9c))
+* **xls-codec:** name every cursor read collectFormulaGroup's catch covers ([9c743b2](https://github.com/ExaDev/documents.js/commit/9c743b2679ae085a0dd4e6f99d8d2b50cc5bfc10))
+* **xls-codec:** widen the README's bracket-rejection description to match the code ([c46f25f](https://github.com/ExaDev/documents.js/commit/c46f25fd9b5f9feaff37866cef615014ee5a1e7f))
+
+### Tests
+
+* **xls-codec:** cover a genuinely bracketed VirtualPath reached through a separator ([bed5ce5](https://github.com/ExaDev/documents.js/commit/bed5ce54e0eb415ae414b630183fdff73184f56b))
+* **xls-codec:** cover a lying-length token in an ordinary and an array-group rgce ([3ea4fd6](https://github.com/ExaDev/documents.js/commit/3ea4fd6ab62dab0379884ecb684abdeb41e30ad5))
+* **xls-codec:** cover a mixed absolute/relative shared formula and SerNil ([d811d2e](https://github.com/ExaDev/documents.js/commit/d811d2eefff005163bd67467fbf2e4391ff693e6))
+
 ## [3.0.0](https://github.com/ExaDev/documents.js/compare/xls-codec%402.0.2...xls-codec%403.0.0) (2026-09-06)
 
 ### ⚠ BREAKING CHANGES
