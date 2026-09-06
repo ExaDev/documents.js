@@ -6,11 +6,11 @@ import {
   MarkdownDiagnosticCodes,
   NOOP_MARKDOWN_DIAGNOSTIC_SINK,
 } from "../diagnostics/diagnostics";
+import { LINE_ENDING_PATTERN } from "../shared/line-ending";
 
 const LEADING_DELIMITER_PATTERN = /^---[ \t]*$/;
 const CLOSING_DELIMITER_PATTERN = /^(?:---|\.\.\.)[ \t]*$/;
 const KEY_VALUE_LINE_PATTERN = /^([A-Za-z_][A-Za-z0-9_-]*):[ \t]*(.*)$/;
-const LINE_ENDING_PATTERN = /\r\n|\n|\r/;
 
 export interface FrontMatterResult {
   readonly metadata: LayoutMetadata;

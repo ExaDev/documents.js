@@ -42,6 +42,7 @@ import { unescapeString } from "../inline/entity";
 import type { InlineParseOptions } from "../inline/inline";
 import { parseInlines } from "../inline/inline";
 import type { LinkReferenceDefinition, LinkReferenceMap } from "../inline/link";
+import { LINE_ENDING_PATTERN } from "../shared/line-ending";
 import { extractDefinitions } from "./definitions";
 import { CODE_INDENT_COLUMNS, LineCursor } from "./line";
 import { finalizeListTightness, listsMatch, parseListMarker } from "./list";
@@ -59,8 +60,6 @@ const TASK_LIST_MARKER_PATTERN = /^\[([ xX])\][ \t]/;
 // spec 0.31.2, "Insecure characters": U+0000 must be replaced with U+FFFD.
 const NUL_REPLACEMENT = "�";
 const NUL_PATTERN = /\0/g;
-
-const LINE_ENDING_PATTERN = /\r\n|\n|\r/;
 
 // A cheap first filter before the block-start list is tried at all: no block start, and no paragraph promotion, can begin with any other character. `|` and `:` are here for the GFM table delimiter row (`| --- |`, `:-: | ---:`), the only construct in this package that can start with either. `$` is here for a $$ math block's own opening line (ExaDev/markdown-codec#53), and `[` for a footnote definition's own `[^label]:` marker (ExaDev/markdown-codec#66).
 const MAYBE_SPECIAL_PATTERN = /^[#$`~*+_=<>[0-9|:-]/;
