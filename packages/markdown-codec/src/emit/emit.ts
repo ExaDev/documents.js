@@ -109,8 +109,8 @@ const MIN_SETEXT_UNDERLINE_LENGTH = 1;
 
 function renderSetextHeading(level: number, text: string): string {
   const underlineChar = level === 1 ? SETEXT_LEVEL_1_CHAR : SETEXT_LEVEL_2_CHAR;
-  // A setext underline's own length has no semantic meaning beyond "one or more" -- matching the heading text's own rendered length keeps the output visually tidy without claiming any significance for the exact count.
-  const firstLine = text.split("\n")[0] ?? "";
+  // A setext underline's own length has no semantic meaning beyond "one or more" -- matching the heading text's own rendered length keeps the output visually tidy without claiming any significance for the exact count, so a CR- or CRLF-delimited first line (LINE_ENDING_PATTERN, not a bare '\n' split) still measures the SAME first line the rest of this module's own line-ending-aware checks agree on, rather than treating the whole multi-line text as a single "line" whenever its own first break is not an LF.
+  const firstLine = text.split(LINE_ENDING_PATTERN)[0] ?? "";
   const underline = underlineChar.repeat(
     Math.max(MIN_SETEXT_UNDERLINE_LENGTH, firstLine.length),
   );
