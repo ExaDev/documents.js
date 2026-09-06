@@ -1,3 +1,37 @@
+## [1.4.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.3.0...byte-codec%401.4.0) (2026-09-06)
+
+### Features
+
+* **byte-codec:** encode indexed-colour PNGs when the palette is small enough ([3693ff9](https://github.com/ExaDev/documents.js/commit/3693ff917d80d73409a07a57e17aefb31c8c023e))
+
+### Bug Fixes
+
+* **byte-codec:** bound encodePng's pixel count, not just each dimension ([fcd60a9](https://github.com/ExaDev/documents.js/commit/fcd60a96d22c5f09fa3a70ddb5a57c072cd12b6c))
+* **byte-codec:** default a missing PNG sample to 0 in detectPalette, matching writeTruecolorPng ([dd08e0b](https://github.com/ExaDev/documents.js/commit/dd08e0bcd28cdfeedae855bdc9da07652c8b8932))
+* **byte-codec:** encode both indexed and truecolour, keep whichever is smaller ([2e56095](https://github.com/ExaDev/documents.js/commit/2e560954dbd7a2377f8fdf548669413979157582))
+* **byte-codec:** reject a PNG width or height at or above 2^31 ([6b1d6f9](https://github.com/ExaDev/documents.js/commit/6b1d6f9d64a2215b38cfe19faed7d9a168159bfe))
+* **byte-codec:** reject a zero-dimension image outright instead of an invalid truecolour fallback ([c956c70](https://github.com/ExaDev/documents.js/commit/c956c70685381eb82029feff49d1875b7ac1ecf3))
+* **byte-codec:** reject NaN and fractional PNG dimensions, not just non-positive ones ([6f38a41](https://github.com/ExaDev/documents.js/commit/6f38a41f5df187d4891edc2fd3ba5723b84b6547))
+* **byte-codec:** reject the indexed path for a zero-dimension image ([6128620](https://github.com/ExaDev/documents.js/commit/6128620963d6a60463eef7880f9fffc2a65ea1f2))
+* **byte-codec:** stop encodePng emitting an invalid zero-length tRNS chunk ([c89d64f](https://github.com/ExaDev/documents.js/commit/c89d64f8a9b1df1b385d17302bd0a10839b61f9a))
+
+### Documentation
+
+* **byte-codec:** cite libpng's real source instead of an in-file verification that doesn't exist ([7268133](https://github.com/ExaDev/documents.js/commit/7268133c42e08f7e4c6117b3a9d67d561d9aeb54))
+* **byte-codec:** correct PNG_MAX_PIXELS comment's sensor and timing claims ([00a6dec](https://github.com/ExaDev/documents.js/commit/00a6dec2a404be6547462d15769bc682a326f362))
+* **byte-codec:** describe encodePng's indexed-colour output ([66f175f](https://github.com/ExaDev/documents.js/commit/66f175f1a8780c3a1e704c6f8295c7da72a08eef))
+* **byte-codec:** document encodePng's throw-on-invalid-dimensions behaviour ([b507acd](https://github.com/ExaDev/documents.js/commit/b507acd7d90ea9ff93ccd614030d464bd73de4ef))
+* **byte-codec:** fix a fabricated libpng quote and a PNG-spec misattribution ([6105940](https://github.com/ExaDev/documents.js/commit/6105940508fe506c6c1437410a5c73aa1839ac7d))
+* **byte-codec:** fix a reintroduced IHDR spec-section citation ([96b3759](https://github.com/ExaDev/documents.js/commit/96b37591252d6ecf4f3cda9b9b35bd22e2296a25))
+* **byte-codec:** note encodePng's double-encode cost for indexed-eligible images ([d55c978](https://github.com/ExaDev/documents.js/commit/d55c978eae981c0b67fc3233fd24370bd3833cb8))
+
+### Tests
+
+* **byte-codec:** cover a short data or alpha plane through the indexed PNG path ([62d3334](https://github.com/ExaDev/documents.js/commit/62d3334c43caf06e7ded0f7f2966099feb15c81a))
+* **byte-codec:** cover generic PNG round-trips and cross-check IDAT against Node's own zlib ([e57fca0](https://github.com/ExaDev/documents.js/commit/e57fca091a2554029616122b924b4913869783a9))
+* **byte-codec:** cover NaN and fractional dimensions in the invalid-dimension regression test ([491dc18](https://github.com/ExaDev/documents.js/commit/491dc185e392b2a18d748f75497d7a12ff849667))
+* **byte-codec:** give the 256-colour indexed-selection test a longer timeout ([a9d2eb8](https://github.com/ExaDev/documents.js/commit/a9d2eb84f4fe03ac38177c7f162aeb2e746676fc))
+
 ## [1.3.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.2.2...byte-codec%401.3.0) (2026-09-06)
 
 ### Features

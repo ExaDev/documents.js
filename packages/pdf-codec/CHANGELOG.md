@@ -1,3 +1,29 @@
+## [4.0.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.7.0...pdf-codec%404.0.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* **pdf-codec:** the pdf-codec/image/png-encode subpath no longer
+  exists. Import encodePng (and PngEncodeOptions) from byte-codec
+  directly, or from pdf-codec's own root export, which already re-exports
+  the same function.
+
+### Bug Fixes
+
+* **pdf-codec:** bound the JPXDecode read path's own dimensions before encodePng ([5e98a1f](https://github.com/ExaDev/documents.js/commit/5e98a1f5e9f2bb3af1b6c9a61b267f234560d7ac))
+* **pdf-codec:** mirror encodePng's dimension and pixel-count ceilings ([6b2655a](https://github.com/ExaDev/documents.js/commit/6b2655a85bbd3c2ae6e68ffeaa3fb12c9ef967f0))
+* **pdf-codec:** re-encode extracted images through byte-codec's own encodePng ([955b139](https://github.com/ExaDev/documents.js/commit/955b13992721c328a0a10f3ec61354f5deba00d5))
+* **pdf-codec:** reject a fractional or NaN image /Width or /Height ([2cb8104](https://github.com/ExaDev/documents.js/commit/2cb8104a3205b4392a00beb4a88b678583c0b6a3))
+* **pdf-codec:** reject an oversized JPXDecode canvas before decodeJpeg2000 allocates it ([7b6ebfc](https://github.com/ExaDev/documents.js/commit/7b6ebfc527e121dd5ad55819018ced31a199f843))
+
+### Code Refactoring
+
+* **pdf-codec:** remove its own duplicate PNG encoder in favour of byte-codec's ([dfe053d](https://github.com/ExaDev/documents.js/commit/dfe053d1907063d8afe850316d02e12c9943737c))
+
+
+### Dependencies
+
+- Updated byte-codec to ^1.4.0
+
 ## [3.7.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.6.6...pdf-codec%403.7.0) (2026-09-06)
 
 ### Features
