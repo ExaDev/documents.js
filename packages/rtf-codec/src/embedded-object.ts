@@ -10,6 +10,7 @@ import {
 } from "archive-codec";
 import {
   ContentEmbeddedObjectSchema,
+  SourceResidueSchema,
   type ContentEmbeddedObject,
 } from "document-schema.js";
 
@@ -315,10 +316,11 @@ export function writeEmbeddedObjectData(
   return out;
 }
 
-// isContentEmbeddedObject (the guard ContentEmbeddedObjectSchema wraps, src/content.ts) is a predicate over an untrusted parsed value, not a reconstructive parse: it confirms the fields ContentEmbeddedObject actually needs are present and well-shaped, but says nothing about any OTHER key the same object happens to carry, so a hostile \objdata's JSON payload can smuggle an arbitrary extra field (a "kind" that would collide with ContentEmbeddedObjectBlock's own discriminant once buildEmbeddedObject adds it, or anything else) straight through a validated safeParse result untouched. Rebuilding the returned value from only the fields ContentEmbeddedObject actually declares -- mirroring writeEmbeddedObjectData's own payload object below field-for-field -- closes that off once, here, rather than leaving every caller to remember to strip it themselves.
+// isContentEmbeddedObject (the guard ContentEmbeddedObjectSchema wraps, src/content.ts) is a predicate over an untrusted parsed value, not a reconstructive parse: it confirms the fields ContentEmbeddedObject actually needs are present and well-shaped, but says nothing about any OTHER key the same object happens to carry, so a hostile \objdata's JSON payload can smuggle an arbitrary extra field (a "kind" that would collide with ContentEmbeddedObjectBlock's own discriminant once buildEmbeddedObject adds it, or anything else) straight through a validated safeParse result untouched. Rebuilding the returned value from only the fields ContentEmbeddedObject actually declares -- mirroring writeEmbeddedObjectData's own payload object below field-for-field -- closes that off once, here, rather than leaving every caller to remember to strip it themselves. `source` is the one declared field isContentEmbeddedObject's guard never actually inspects (it validates objectKind/frame/document/the four anchor fields, but stops there), so copying it through unconditionally would carry that same gap forward into this function's own result -- this function validates it independently against SourceResidueSchema (src/source.ts) before including it, and drops it silently otherwise, exactly like every other unrecognised key this function already excludes.
 function knownContentEmbeddedObjectFields(
   embedded: ContentEmbeddedObject,
 ): ContentEmbeddedObject {
+  const source = SourceResidueSchema.safeParse(embedded.source);
   return {
     objectKind: embedded.objectKind,
     document: embedded.document,
@@ -335,7 +337,7 @@ function knownContentEmbeddedObjectFields(
     ...(embedded.offsetYPt === undefined
       ? {}
       : { offsetYPt: embedded.offsetYPt }),
-    ...(embedded.source === undefined ? {} : { source: embedded.source }),
+    ...(source.success ? { source: source.data } : {}),
   };
 }
 
