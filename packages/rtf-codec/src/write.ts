@@ -319,8 +319,8 @@ function formFieldPayload(
         message: `a checkbox contentControl's value '${descriptor.value}' (its on-state export name) is dropped: RTF's \\ffres/\\ffdefres can only carry the field's boolean checked state, with no spelling for a named export value at all`,
       });
     }
-    if (descriptor.options !== undefined) {
-      // Nothing about a checkbox has a list to hold this -- `options` is the dropDown/comboBox choice list, and a producer handing this writer a checkbox descriptor that also carries one (a mis-typed reconstruction, or a shape shared with a sibling controlType upstream) has recorded data this control type cannot carry regardless of format, not merely one RTF can't spell -- reported the same way as the value case above, rather than the writer quietly reading past a field it has no use for.
+    if (descriptor.options !== undefined && descriptor.options.length > 0) {
+      // Nothing about a checkbox has a list to hold this -- `options` is the dropDown/comboBox choice list, and a producer handing this writer a checkbox descriptor that also carries one (a mis-typed reconstruction, or a shape shared with a sibling controlType upstream) has recorded data this control type cannot carry regardless of format, not merely one RTF can't spell -- reported the same way as the value case above, rather than the writer quietly reading past a field it has no use for. Gated on `.length > 0`, matching this function's own rule for every other value-shaped field (see the plainText `value` branch's comment below): an empty options array carries nothing that was actually dropped, so it reads as "never recorded" rather than firing a diagnostic over zero entries.
       sink({
         code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
         severity: "warning",
@@ -395,8 +395,8 @@ function formFieldPayload(
         message: `a plainText contentControl's checked state (${String(descriptor.checked)}) is dropped: a text field has no boolean checked state at all, in RTF or in the harmonised contentControl vocabulary itself`,
       });
     }
-    if (descriptor.options !== undefined) {
-      // Same shape again: `options` is the dropDown/comboBox choice list, and a plainText field has no list to hold it.
+    if (descriptor.options !== undefined && descriptor.options.length > 0) {
+      // Same shape again: `options` is the dropDown/comboBox choice list, and a plainText field has no list to hold it. Gated on `.length > 0` for the identical reason the checkbox branch's own `options` check above is: an empty array is nothing dropped.
       sink({
         code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
         severity: "warning",

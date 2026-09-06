@@ -411,6 +411,33 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // Regression guard: an empty `options` array carries nothing that was actually dropped, so it must read as "never recorded" -- matching this function's own established rule for every other value-shaped field (an empty `value` fires no diagnostic either) -- rather than firing the same diagnostic the test above correctly fires for a genuinely non-empty stray options list.
+  it("reports no diagnostic for a checkbox's empty options array", () => {
+    const codes: string[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "checkbox",
+                checked: true,
+                options: [],
+              },
+              startRun: 0,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+      { sink: (diagnostic) => codes.push(diagnostic.code) },
+    );
+    expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+  });
+
   // A plainText field carrying `checked`/`options` -- fields that name concepts a text field simply does not have -- is the same sibling gap in a third shape.
   it("reports a plainText field's checked state and options list through the diagnostic sink, rather than dropping either silently", () => {
     const diagnostics: string[] = [];
@@ -444,6 +471,37 @@ describe("body constructs", () => {
       ),
     ).toHaveLength(2);
     expectBalancedBraces(out);
+  });
+
+  // Regression guard, plainText side of the identical empty-options fix as the checkbox test above: a stray `checked` is still real dropped data (one diagnostic), but an empty `options` array is not (no second diagnostic) -- unlike the non-empty case above, which correctly reports both.
+  it("reports only the checked-state diagnostic, not an options one, for a plainText field with checked true and an empty options array", () => {
+    const codes: string[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "x" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                checked: true,
+                options: [],
+              },
+              startRun: 0,
+              endRun: 0,
+            },
+          ],
+        },
+      ]),
+      { sink: (diagnostic) => codes.push(diagnostic.code) },
+    );
+    expect(
+      codes.filter(
+        (code) => code === RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      ),
+    ).toHaveLength(1);
   });
 
   // The identical sibling gap in a fourth shape: `checked` is the checkbox/radio boolean, and a dropDown has no concept of it either -- the checkbox branch reports a stray `options`, the plainText branch reports a stray `checked` and `options`, and this closes the one remaining combination this function's own sink-reporting rule covers.
