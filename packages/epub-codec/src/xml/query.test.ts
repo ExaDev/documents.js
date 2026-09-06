@@ -48,6 +48,7 @@ describe("decodedTextContent", () => {
       text("caf&#233; &amp; "),
       el("code", [cdata("a && b")]),
     ]);
-    expect(decodedTextContent([tree])).toBe("caf&#233; & a && b");
+    // The text node's own numeric and named entities both decode (ExaDev/documents.js#1010); the CDATA section's literal "&&" stays untouched -- exactly the distinction this test exists to demonstrate.
+    expect(decodedTextContent([tree])).toBe("café & a && b");
   });
 });
