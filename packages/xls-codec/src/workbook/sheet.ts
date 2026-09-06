@@ -720,25 +720,24 @@ function readFormula(
   cursor.skip(FORMULA_FLAGS_BYTES);
   cursor.skip(FORMULA_CALC_CACHE_BYTES);
   const cce = cursor.u16();
-  const rgce = cursor.take(cce);
-  // This record's own rgcb trailer (present only when rgce contains an inline PtgArray, e.g. `=SUM({1,2,3})` in a cell that is not itself CSE-array-entered) is read past the point cce already bounds, and its own length is inferred the same way readArrayGroup's is -- so the same malformed-trailer risk applies. Caught here, and only here, rather than left to propagate: a bad rgcb degrades only its own PtgArray literal (and with it this one cell's formula) to absent, exactly like any other construct this reader cannot resolve, rather than aborting every other cell's read too. resolveFormulaText below draws its own, separate boundary around the malformed-token-length hazard in rgce itself (this record's own, or a joined group's) -- see its own comment for why that one guard covers every branch rather than just the group-joining ones.
+  // A cce claiming more rgce bytes than this record actually carries -- and, past that, the same malformed-trailer risk on rgcb's own inferred length (present only when rgce contains an inline PtgArray, e.g. `=SUM({1,2,3})` in a cell that is not itself CSE-array-entered, and never stated directly, only inferred the same way readArrayGroup's is) -- must degrade this one cell's formula to absent rather than throwing an uncaught BiffFormatError out of readSheetRecords and aborting every other cell (and every other sheet) in the workbook. This is the same per-record boundary collectFormulaGroup already draws around the identical `cursor.take(cce)` on the ShrFmla/Array side; resolveFormulaText below draws its own, separate boundary around the malformed-token-length hazard inside an already-correctly-bounded rgce (this record's own, or a joined group's) -- see its own comment for why that one guard covers every branch rather than just the group-joining ones.
+  let rgce: Uint8Array<ArrayBuffer> | undefined;
   let rgcb: Uint8Array<ArrayBuffer> | undefined;
   try {
+    rgce = cursor.take(cce);
     const rgcbLength = recordByteLength(record) - (FORMULA_HEADER_BYTES + cce);
     rgcb = rgcbLength > 0 ? cursor.take(rgcbLength) : undefined;
   } catch (error) {
     if (!(error instanceof BiffFormatError)) {
       throw error;
     }
+    rgce = undefined;
     rgcb = undefined;
   }
-  const formula = resolveFormulaText(
-    rgce,
-    rgcb,
-    header,
-    formulaSheets,
-    formulaGroups,
-  );
+  const formula =
+    rgce === undefined
+      ? undefined
+      : resolveFormulaText(rgce, rgcb, header, formulaSheets, formulaGroups);
   return formula === undefined
     ? { ...header, value, fromFormula: true }
     : { ...header, value, fromFormula: true, formula };
