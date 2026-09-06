@@ -2079,6 +2079,41 @@ describe("tables", () => {
     expect(markdown).toBe("| foo bar |\n| --- |");
     expect(markdown.split("\n")).toHaveLength(2);
   });
+
+  it.each([
+    { name: "a bare CR", xml: "\r" },
+    { name: "a bare CRLF", xml: "\r\n" },
+  ])(
+    "collapses $name residue run to a space rather than a raw line ending that would fracture the row (ExaDev/documents.js#940)",
+    ({ xml }) => {
+      // CommonMark's own line-ending grammar (spec 0.31.2, "Lines") is LF, CRLF, or a lone CR -- not LF alone. renderParagraphBody's own ATX-heading collapse already treats all three as a genuine line ending (LINE_ENDING_PATTERN); emitRunsSingleLine has to as well, since a foreign producer's own markdown residue (re-emitted verbatim, unescaped, by src/emit/inline.ts's renderLeaf) can carry a bare CR or CRLF just as legitimately as the LF the existing soft-break test above already covers, and an LF-only collapse would leak either one, un-collapsed, into what must be a single GFM table-row physical line. The residue channel (rather than embedding the CR/CRLF in a run's own plain text field) keeps this test scoped to emitRunsSingleLine's own collapse alone -- a literal CR/CRLF inside a PLAIN text run instead goes through escapeMarkdownText first, which escapes a bare LF but not a preceding bare CR, an entirely separate concern from the one under test here.
+      const table: ContentTable = {
+        kind: "table",
+        columnWidthsPt: [100],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  {
+                    kind: "paragraph",
+                    runs: [
+                      { text: "foo" },
+                      { text: " ", source: { format: "markdown", xml } },
+                      { text: "bar" },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const markdown = emitMarkdown(doc([table]));
+      expect(markdown).toBe("| foo bar |\n| --- |");
+      expect(markdown.split("\n")).toHaveLength(2);
+    },
+  );
 });
 
 describe("images", () => {
