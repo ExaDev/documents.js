@@ -4,7 +4,7 @@ import { icoColor, readColorRef } from "../color";
 import { DocFormatError } from "../errors";
 import { SGC, type Prl } from "./sprm";
 
-// Character properties, [MS-DOC] 2.6.2 -- the subset of the character-property sprm table this reader converts. Every opcode below was read off the specification's own table rather than recalled, and the ones this package does not yet act on (font selection through the font table, spacing, kerning, borders, revision marks, East Asian typography) are simply absent: an opcode present but ignored would read as support this package does not have.
+// Character properties, [MS-DOC] 2.6.1 -- the subset of the character-property sprm table this reader converts. Every opcode below was read off the specification's own table rather than recalled, and the ones this package does not yet act on (font selection through the font table, spacing, kerning, borders, revision marks, East Asian typography) are simply absent: an opcode present but ignored would read as support this package does not have.
 
 /** sprmCFBold: a ToggleOperand switching bold. */
 const SPRM_C_F_BOLD = 0x0835;
