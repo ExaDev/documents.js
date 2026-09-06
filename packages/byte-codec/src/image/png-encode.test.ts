@@ -100,6 +100,38 @@ function rgbImage(width: number, height: number, pixels: readonly number[]) {
   };
 }
 
+// Cycles through `rows` (each a flat [r, g, b, ...] pixel row of exactly `width` pixels) for `repeats` full passes, building a channels=3 RawImage tall enough that indexed colour's per-pixel IDAT savings outweigh its own PLTE (+ tRNS) chunk overhead -- see encodePng's own comment on why that crossover exists -- without changing how many distinct colours the image contains. Small, hand-verifiable colour patterns stay hand-verifiable; only the height grows.
+function repeatRows(
+  width: number,
+  rows: readonly (readonly number[])[],
+  repeats: number,
+) {
+  const pixels: number[] = [];
+  for (let i = 0; i < repeats; i++) {
+    for (const row of rows) {
+      pixels.push(...row);
+    }
+  }
+  return rgbImage(width, rows.length * repeats, pixels);
+}
+
+// Same idea as repeatRows, but also tiles a matching per-pixel alpha row alongside the colour rows, for tests that exercise the tRNS path at a size where indexed colour actually wins.
+function repeatRowsWithAlpha(
+  width: number,
+  rows: readonly (readonly number[])[],
+  alphaRows: readonly (readonly number[])[],
+  repeats: number,
+) {
+  const image = repeatRows(width, rows, repeats);
+  const alpha: number[] = [];
+  for (let i = 0; i < repeats; i++) {
+    for (const row of alphaRows) {
+      alpha.push(...row);
+    }
+  }
+  return { ...image, alpha: new Uint8Array(alpha) };
+}
+
 describe("encodePng basic round-trip (truecolour/greyscale)", () => {
   it("round-trips a gray+alpha image (colour type 4)", () => {
     const image = {
@@ -152,10 +184,15 @@ describe("encodePng basic round-trip (truecolour/greyscale)", () => {
 
 describe("encodePng indexed-colour (colour type 3)", () => {
   it("emits colour type 3 with a real PLTE chunk for a small-palette image, and decodePng reads it back exactly", () => {
-    const image = rgbImage(
+    // Tiled to a height where indexed colour's per-pixel savings outweigh its own PLTE overhead -- see encodePng's own comment on that crossover. Still exactly the same 4 distinct colours (red, green, blue, yellow) as a bare 2x2 tile of this pattern would have.
+    const repeats = 5000;
+    const image = repeatRows(
       2,
-      2,
-      [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0],
+      [
+        [255, 0, 0, 0, 255, 0],
+        [0, 0, 255, 255, 255, 0],
+      ],
+      repeats,
     );
     const png = encodePng(image);
 
@@ -167,17 +204,20 @@ describe("encodePng indexed-colour (colour type 3)", () => {
 
     const decoded = decodePng(png);
     expect(decoded.width).toBe(2);
-    expect(decoded.height).toBe(2);
+    expect(decoded.height).toBe(2 * repeats);
     expect(decoded.channels).toBe(3);
     expect(decoded.alpha).toBeUndefined();
     expect(Array.from(decoded.data)).toEqual(Array.from(image.data));
   });
 
   it("round-trips a palette image with genuine per-pixel transparency via tRNS", () => {
-    const image = {
-      ...rgbImage(2, 1, [255, 0, 0, 0, 255, 0]),
-      alpha: new Uint8Array([255, 0]), // opaque red, fully transparent green
-    };
+    // Tiled tall enough that indexed colour wins on size -- see repeatRowsWithAlpha's own comment.
+    const image = repeatRowsWithAlpha(
+      2,
+      [[255, 0, 0, 0, 255, 0]], // opaque red, fully transparent green
+      [[255, 0]],
+      5000,
+    );
     const png = encodePng(image);
 
     expect(colorTypeOf(png)).toBe(3);
@@ -192,10 +232,13 @@ describe("encodePng indexed-colour (colour type 3)", () => {
   });
 
   it("preserves a defined-but-fully-opaque alpha plane through the indexed path", () => {
-    const image = {
-      ...rgbImage(2, 1, [10, 20, 30, 40, 50, 60]),
-      alpha: new Uint8Array([255, 255]),
-    };
+    // Tiled tall enough that indexed colour wins on size -- see repeatRowsWithAlpha's own comment.
+    const image = repeatRowsWithAlpha(
+      2,
+      [[10, 20, 30, 40, 50, 60]],
+      [[255, 255]],
+      5000,
+    );
     const png = encodePng(image);
 
     expect(colorTypeOf(png)).toBe(3);
@@ -206,15 +249,16 @@ describe("encodePng indexed-colour (colour type 3)", () => {
 
     const decoded = decodePng(png);
     expect(decoded.alpha).toBeDefined();
-    expect(Array.from(decoded.alpha!)).toEqual([255, 255]);
+    expect(Array.from(decoded.alpha!)).toEqual(Array.from(image.alpha));
   });
 
   it("chooses indexed colour at exactly 256 distinct colours", () => {
-    const pixels: number[] = [];
+    const row: number[] = [];
     for (let i = 0; i < 256; i++) {
-      pixels.push(i, 0, 0); // 256 distinct shades of red
+      row.push(i, 0, 0); // 256 distinct shades of red
     }
-    const image = rgbImage(256, 1, pixels);
+    // Tiled down to a height where indexed colour's per-pixel savings outweigh its own PLTE overhead -- see repeatRows' own comment. A full 256-entry palette carries much more fixed overhead than a small one, so this needs far more repetition than the smaller-palette tests above before indexed colour wins. Every row repeats the same 256 colours, so the palette stays at exactly 256 entries regardless of height.
+    const image = repeatRows(256, [row], 2000);
     const png = encodePng(image);
 
     expect(colorTypeOf(png)).toBe(3);
@@ -271,10 +315,14 @@ describe("encodePng indexed-colour (colour type 3)", () => {
   });
 
   it("respects the 'none' filter option on the indexed path", () => {
-    const image = rgbImage(
+    // Tiled tall enough that indexed colour wins on size -- see repeatRows' own comment.
+    const image = repeatRows(
       2,
-      2,
-      [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0],
+      [
+        [255, 0, 0, 0, 255, 0],
+        [0, 0, 255, 255, 255, 0],
+      ],
+      5000,
     );
     const png = encodePng(image, { filter: "none" });
 
@@ -283,10 +331,13 @@ describe("encodePng indexed-colour (colour type 3)", () => {
   });
 
   it("retains partial (non-boolean) per-entry alpha values in tRNS, not just fully-opaque/fully-transparent", () => {
-    const image = {
-      ...rgbImage(2, 1, [10, 20, 30, 40, 50, 60]),
-      alpha: new Uint8Array([128, 200]),
-    };
+    // Tiled tall enough that indexed colour wins on size -- see repeatRowsWithAlpha's own comment.
+    const image = repeatRowsWithAlpha(
+      2,
+      [[10, 20, 30, 40, 50, 60]],
+      [[128, 200]],
+      5000,
+    );
     const png = encodePng(image);
 
     expect(colorTypeOf(png)).toBe(3);
@@ -298,23 +349,27 @@ describe("encodePng indexed-colour (colour type 3)", () => {
   });
 
   it("emits a real PNG signature and correct IHDR dimensions/colour type for a single-colour (indexed) image", () => {
-    const image = rgbImage(4, 3, new Array(4 * 3 * 3).fill(0)); // one solid colour -> the indexed path
+    // A wide-enough solid-colour image that indexed colour's single-entry PLTE overhead is repaid by its one-byte-per-pixel IDAT -- see repeatRows' own comment on the same crossover; a bare 4x3 tile of a single colour is smaller as truecolour.
+    const width = 100;
+    const height = 100;
+    const image = rgbImage(
+      width,
+      height,
+      new Array(width * height * 3).fill(0),
+    ); // one solid colour -> the indexed path
     const png = encodePng(image);
     assertSpecCompliantPng(png);
 
     const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
-    expect(view.getUint32(8 + 8)).toBe(4); // IHDR data starts after signature + length/type
-    expect(view.getUint32(8 + 8 + 4)).toBe(3);
+    expect(view.getUint32(8 + 8)).toBe(width); // IHDR data starts after signature + length/type
+    expect(view.getUint32(8 + 8 + 4)).toBe(height);
     expect(png[8 + 8 + 9]).toBe(3); // colour type 3: indexed -- a single distinct colour always reduces to a 1-entry palette
   });
 
   it("emits an indexed-colour IDAT that Node's own zlib.inflateSync (an external decoder, not this repo's own inflate) accepts, containing genuine one-byte-per-pixel palette indices rather than raw RGB samples", () => {
-    // Row-major: red, green, blue, red, green, blue -- palette assignment order is first-seen, so red/green/blue become indices 0/1/2.
-    const image = rgbImage(
-      3,
-      2,
-      [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255],
-    );
+    // Row-major: red, green, blue -- palette assignment order is first-seen, so red/green/blue become indices 0/1/2. Tiled tall enough that indexed colour wins on size -- see repeatRows' own comment.
+    const repeats = 5000;
+    const image = repeatRows(3, [[255, 0, 0, 0, 255, 0, 0, 0, 255]], repeats);
     const png = encodePng(image, { filter: "none" });
     expect(colorTypeOf(png)).toBe(3);
 
@@ -322,7 +377,9 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     expect(idat).toBeDefined();
     const inflated = zlib.inflateSync(Buffer.from(idat!));
     // Each row is a leading filter-type byte (0, 'none') followed by one palette-index byte per pixel -- 4 bytes per row, not the 10 a raw-RGB truecolour row of the same width would need.
-    expect(Array.from(inflated)).toEqual([0, 0, 1, 2, 0, 0, 1, 2]);
+    const expectedRow = [0, 0, 1, 2];
+    const expected = Array.from({ length: repeats }, () => expectedRow).flat();
+    expect(Array.from(inflated)).toEqual(expected);
   });
 
   it.each([
