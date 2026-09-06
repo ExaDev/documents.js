@@ -339,26 +339,16 @@ function readJpeg2000Image(
       onWarning: (message) => {
         sink({ code: "image/jpx-degraded", severity: "warning", message });
       },
+      // Mirrors readImageXObject's own /Width and /Height guard below (both the per-dimension PNG_MAX_DIMENSION ceiling and the PNG_MAX_PIXELS product ceiling): a JPXDecode codestream's SIZ marker is just as producer-controlled as a dictionary's /Width and /Height, and everything downstream -- the per-pixel colour-conversion loops below and encodePng itself -- is sized directly by image.width * image.height, so an oversized SIZ would otherwise reach encodePng's own throw uncaught, aborting the whole document parse instead of degrading to this function's usual "skip this image" diagnostic. Passed as decode options, rather than checked against decodeJpeg2000's return value, so an oversized canvas is rejected before decodeJpeg2000 allocates its own per-component sample planes for it, not after.
+      maxWidth: PNG_MAX_DIMENSION,
+      maxHeight: PNG_MAX_DIMENSION,
+      maxPixels: PNG_MAX_PIXELS,
     });
   } catch (error) {
     sink({
       code: "image/jpx-undecodable",
       severity: "warning",
       message: `JPXDecode image could not be decoded (${error instanceof Error ? error.message : String(error)}); skipping this image`,
-    });
-    return undefined;
-  }
-
-  // Mirrors readImageXObject's own /Width and /Height guard below (both the per-dimension PNG_MAX_DIMENSION ceiling and the PNG_MAX_PIXELS product ceiling): a JPXDecode codestream's SIZ marker is just as producer-controlled as a dictionary's /Width and /Height, and everything from here on -- the per-pixel colour-conversion loops below and encodePng itself -- is sized directly by image.width * image.height, so an oversized SIZ would otherwise reach encodePng's own throw uncaught, aborting the whole document parse instead of degrading to this function's usual "skip this image" diagnostic.
-  if (
-    image.width > PNG_MAX_DIMENSION ||
-    image.height > PNG_MAX_DIMENSION ||
-    image.width * image.height > PNG_MAX_PIXELS
-  ) {
-    sink({
-      code: "image/jpx-undecodable",
-      severity: "warning",
-      message: `JPXDecode image declares an unusably large size (${String(image.width)}x${String(image.height)}); skipping this image`,
     });
     return undefined;
   }
