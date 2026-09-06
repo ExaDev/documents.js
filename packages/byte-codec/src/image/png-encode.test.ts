@@ -346,4 +346,15 @@ describe("encodePng indexed-colour (colour type 3)", () => {
       expect(() => encodePng(image)).toThrow(/invalid dimension/);
     },
   );
+
+  it.each([
+    ["46341 x 46341", 46341, 46341],
+    ["65536 x 65536", 65536, 65536],
+  ])(
+    "rejects a %s image outright even though each dimension individually is within the PNG spec's own per-dimension limit, since their product would hang the per-pixel scan",
+    (_label, width, height) => {
+      const image = rgbImage(width, height, []);
+      expect(() => encodePng(image)).toThrow(/pixels/);
+    },
+  );
 });
