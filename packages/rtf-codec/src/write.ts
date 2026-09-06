@@ -1115,13 +1115,21 @@ class RtfWriter {
   private writeCellBlocks(blocks: readonly ContentBlock[]): void {
     let wroteParagraph = false;
     let paragraphPending = false;
-    for (const block of blocks) {
-      if (block.kind === "constructStart") {
-        this.openConstruct(block.descriptor);
-        continue;
-      }
-      if (block.kind === "constructEnd") {
-        this.closeConstruct();
+    for (const [index, block] of blocks.entries()) {
+      if (block.kind === "constructStart" || block.kind === "constructEnd") {
+        // A marker sitting between two cell paragraphs belongs between them, not folded into the paragraph before it -- so the \par this writer owes the preceding paragraph is flushed here, before the marker, whenever a later paragraph still needs that separator. A trailing marker with no paragraph left after it flushes nothing, so it adds no empty paragraph of its own.
+        if (
+          paragraphPending &&
+          blocks.slice(index + 1).some((later) => later.kind === "paragraph")
+        ) {
+          this.raw("\\par");
+          paragraphPending = false;
+        }
+        if (block.kind === "constructStart") {
+          this.openConstruct(block.descriptor);
+        } else {
+          this.closeConstruct();
+        }
         continue;
       }
       if (block.kind !== "paragraph") {
