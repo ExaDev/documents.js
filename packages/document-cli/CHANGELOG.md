@@ -1,3 +1,21 @@
+## [5.4.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.3.9...document-cli%405.4.0) (2026-09-06)
+
+### Features
+
+* **workspace:** add per-package Stryker mutation testing configuration ([ff3eacc](https://github.com/ExaDev/documents.js/commit/ff3eacc124577b163a1c13a63b83484d9611ae5a))
+
+### Bug Fixes
+
+* **workspace:** drop the unused per-package @stryker-mutator/api dependency ([69270b6](https://github.com/ExaDev/documents.js/commit/69270b6e7ad7163c3b76cd085f4e5f367433994c))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.1.0
+- Updated document-outline.js to ^3.4.0
+- Updated odf.js to ^7.1.0
+- Updated documents.js to ^7.1.0
+
 ## [5.3.9](https://github.com/ExaDev/documents.js/compare/document-cli%405.3.8...document-cli%405.3.9) (2026-09-06)
 
 
