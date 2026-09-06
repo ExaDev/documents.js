@@ -610,6 +610,30 @@ describe("writeXhtmlBody", () => {
     expect(xml).toContain("note");
   });
 
+  // ExaDev/documents.js#996's own round-7 regression: writeRunRangeNodes's own `index <= runs.length` bound (needed so a point anchor can sit at the very end of a paragraph) let a RANGE extent (endRun > startRun) whose own startRun sat exactly at that same boundary slip through the same path -- runs.slice(startRun, endRun) on a startRun === runs.length always yields an empty array, so the walk silently emitted a content-free <a> and never added the extent to `emittedExtents`' complement, meaning the post-walk sweep never reported it either. A range needs at least one real run at its own startRun to wrap; unlike a point extent, there is no legitimate reason for one to start exactly at the run count, so this is treated as the same kind of malformed extent an out-of-bounds startRun already was.
+  it("reports CONSTRUCT_UNREPRESENTED, rather than silently emitting an empty <a>, for a range extent whose startRun sits exactly at the paragraph's own run count", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        constructs: [
+          {
+            descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            startRun: 1,
+            endRun: 5,
+          },
+        ],
+      },
+    ];
+    const { xml, diagnostics } = writeWithSink(blocks, () => undefined);
+    expect(xml).not.toContain('epub:type="noteref"');
+    expect(
+      diagnostics.some(
+        (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      ),
+    ).toBe(true);
+  });
+
   it("writes an image using the registered manifest href", () => {
     const xml = write([
       {
