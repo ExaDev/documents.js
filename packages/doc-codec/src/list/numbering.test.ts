@@ -3,7 +3,7 @@ import { buildFib } from "../test-support/fib";
 import { parseFib } from "../fib/fib";
 import { readNumberingDefinitions } from "./numbering";
 
-// Hand-built PlfLst/PlfLfo byte sequences, assembled directly from [MS-DOC] 2.9.226 (PlfLst)/2.9.191 (LSTF)/2.9.196 (LVL)/2.9.148 (LVLF)/2.9.343 (Xst)/2.9.225 (PlfLfo)/2.9.181 (LFO)'s own field tables, independently of numbering.ts's own reader -- so a test asserting against these bytes is checking the reader's understanding of the spec, not agreement with a second copy of the same layout (the identical convention table/decoration.test.ts states for its own hand-built Brc80/Shd80 fixtures).
+// Hand-built PlfLst/PlfLfo byte sequences, assembled directly from [MS-DOC] 2.9.201 (PlfLst)/2.9.147 (LSTF)/2.9.149 (LVL)/2.9.150 (LVLF)/2.9.353 (Xst)/2.9.200 (PlfLfo)/2.9.181 (LFO)'s own field tables, independently of numbering.ts's own reader -- so a test asserting against these bytes is checking the reader's understanding of the spec, not agreement with a second copy of the same layout (the identical convention table/decoration.test.ts states for its own hand-built Brc80/Shd80 fixtures).
 
 function u16(value: number): number[] {
   return [value & 0xff, (value >>> 8) & 0xff];
@@ -20,7 +20,7 @@ function i32(value: number): number[] {
   return u32(value >>> 0);
 }
 
-/** One LSTF ([MS-DOC] 2.9.191): lsid(4) + tplc(4, zero -- UI-only) + rgistdPara(18, all 0x0FFF -- "no style linked") + a flags byte (only fSimpleList, bit 0) + grfhic(1, zero). */
+/** One LSTF ([MS-DOC] 2.9.147): lsid(4) + tplc(4, zero -- UI-only) + rgistdPara(18, all 0x0FFF -- "no style linked") + a flags byte (only fSimpleList, bit 0) + grfhic(1, zero). */
 function buildLstf(lsid: number, fSimpleList: boolean): number[] {
   const rgistdPara: number[] = [];
   for (let index = 0; index < 9; index += 1) {
@@ -40,7 +40,7 @@ interface XstPart {
   readonly placeholderLevel?: number;
 }
 
-/** An Xst ([MS-DOC] 2.9.343) plus the rgbxchNums positions a caller's own placeholder parts land at -- cch(2) then that many raw 16-bit code units, where a `{ placeholderLevel }` part writes the RAW zero-based level index as its own code unit rather than a literal character, exactly what [MS-DOC]'s own Xst field text describes ("Each placeholder is an unsigned 2-byte integer that specifies the zero-based level"). */
+/** An Xst ([MS-DOC] 2.9.353) plus the rgbxchNums positions a caller's own placeholder parts land at -- cch(2) then that many raw 16-bit code units, where a `{ placeholderLevel }` part writes the RAW zero-based level index as its own code unit rather than a literal character, exactly what [MS-DOC] 2.9.149's own LVL field text describes, not Xst's own (Xst is a generic length-prefixed string used all over the format for unrelated fields too): "Each placeholder is an unsigned 2-byte integer that specifies the zero-based level". */
 function buildXst(parts: readonly XstPart[]): {
   readonly bytes: number[];
   readonly rgbxchNums: number[];
@@ -65,7 +65,7 @@ interface LvlSpec {
   readonly text: readonly XstPart[];
 }
 
-/** One LVL ([MS-DOC] 2.9.196): a 28-byte LVLF (iStartAt, nfc, the jc/flags byte, rgbxchNums, ixchFollow, dxaIndentSav, unused2, cbGrpprlChpx=0, cbGrpprlPapx=0, ilvlRestartLim, grfhic=0) with grpprlPapx/grpprlChpx both empty (this reader never decodes them, and a real 0-length case is the simplest fixture that still exercises the Xst offset arithmetic correctly) followed immediately by its own Xst. */
+/** One LVL ([MS-DOC] 2.9.149): a 28-byte LVLF (iStartAt, nfc, the jc/flags byte, rgbxchNums, ixchFollow, dxaIndentSav, unused2, cbGrpprlChpx=0, cbGrpprlPapx=0, ilvlRestartLim, grfhic=0) with grpprlPapx/grpprlChpx both empty (this reader never decodes them, and a real 0-length case is the simplest fixture that still exercises the Xst offset arithmetic correctly) followed immediately by its own Xst. */
 function buildLvl(spec: LvlSpec): number[] {
   const { bytes: xstBytes, rgbxchNums } = buildXst(spec.text);
   const rgbxchNumsPadded = [...rgbxchNums];
@@ -95,7 +95,7 @@ interface LstfWithLevels {
   readonly levels: readonly LvlSpec[]; // 1 entry for a simple list, 9 for a multi-level one
 }
 
-/** PlfLst ([MS-DOC] 2.9.226): cLst(2, signed) then that many 28-byte LSTF entries, followed IMMEDIATELY (not accounted for by lcbPlfLst) by the appended LVL array in LSTF order -- exactly what FibRgFcLcb97's own fcPlfLst field text describes. Returns the two pieces separately since the caller has to place them at fc and fc+lcb respectively, with nothing in between. */
+/** PlfLst ([MS-DOC] 2.9.201): cLst(2, signed) then that many 28-byte LSTF entries, followed IMMEDIATELY (not accounted for by lcbPlfLst) by the appended LVL array in LSTF order -- exactly what FibRgFcLcb97's own fcPlfLst field text describes. Returns the two pieces separately since the caller has to place them at fc and fc+lcb respectively, with nothing in between. */
 function buildPlfLst(entries: readonly LstfWithLevels[]): {
   readonly plfLst: number[];
   readonly appendedLvls: number[];
@@ -110,7 +110,7 @@ function buildPlfLst(entries: readonly LstfWithLevels[]): {
   return { plfLst: [...cLst, ...rgLstf], appendedLvls };
 }
 
-/** PlfLfo ([MS-DOC] 2.9.225), rgLfo only ([MS-DOC] 2.9.181's own LFO: lsid(4) + unused1(4) + unused2(4) + clfolvl(1)=0 + ibstFltAutoNum(1)=0 + grfhic(1)=0 + unused3(1)) -- this reader never reads rgLfoData (see numbering.ts's own top comment), so the fixture never builds one either; a real file's own lcbPlfLfo would cover rgLfoData too, but nothing in this reader's own contract depends on that extra length being present. */
+/** PlfLfo ([MS-DOC] 2.9.200), rgLfo only ([MS-DOC] 2.9.181's own LFO: lsid(4) + unused1(4) + unused2(4) + clfolvl(1)=0 + ibstFltAutoNum(1)=0 + grfhic(1)=0 + unused3(1)) -- this reader never reads rgLfoData (see numbering.ts's own top comment), so the fixture never builds one either; a real file's own lcbPlfLfo would cover rgLfoData too, but nothing in this reader's own contract depends on that extra length being present. */
 function buildPlfLfo(lsids: readonly number[]): number[] {
   const rgLfo = lsids.flatMap((lsid) => [
     ...i32(lsid),
