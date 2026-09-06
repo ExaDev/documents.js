@@ -1280,6 +1280,16 @@ class ContentBuilder {
     return blocks;
   }
 
+  // A truncated or otherwise malformed input can leave one or more \result groups never closed at all (no matching '}' before the input ends), so endResultScratch above -- the only place that ever pops resultScratchStack -- never runs for them: the accumulator stays swapped to \result's own isolated scratch state, mid-render, forever. Were finish() to build the document from that state as-is, it would emit whatever \result's own truncated content happened to accumulate in place of the ENTIRE suspended real document \result's own \object was sitting inside -- fallback content kept, the real body silently discarded, exactly backwards from \object's own group-end preference (real \objdata over \result, real content over a still-open \result's placeholder). Restoring every still-suspended state here, most-recently-opened first, throws the incomplete scratch content away and hands the real accumulator back before finish() ever reads from it; well-formed input closes every \result group's own scratch normally, so resultScratchStack is already empty by the time this runs and the loop is a no-op.
+  private discardUnclosedResultScratches(): void {
+    while (this.resultScratchStack.length > 0) {
+      const saved = this.resultScratchStack.pop();
+      if (saved !== undefined) {
+        this.restoreAccumulatorState(saved);
+      }
+    }
+  }
+
   endSection(section: SectionState, para: ParagraphState): void {
     this.endParagraph(para, false);
     this.closeTable();
@@ -1321,6 +1331,7 @@ class ContentBuilder {
     section: SectionState,
     para: ParagraphState,
   ): ContentDocument {
+    this.discardUnclosedResultScratches();
     this.endSection(section, para);
     if (this.sections.length === 0) {
       this.sections.push({ ...sectionGeometry(section), blocks: [] });
