@@ -189,9 +189,20 @@ export interface NumberingTables {
 export function buildNumberingTables(
   definitions: NumberingDefinitions,
 ): NumberingTables | undefined {
-  const ilfos = Object.keys(definitions)
-    .map(Number)
-    .sort((a, b) => a - b);
+  const keys = Object.keys(definitions);
+  // Object keys are strings; distinctly-spelled keys that name the same integer ("1", "01", "001") all become the same lsid once Number() strips the leading zeros. [MS-DOC] 2.9.147 states lsid "MUST be unique for each LSTF", and numbering.ts's own readNumberingDefinitions resolves an LFO to its LSTF purely by matching lsid, so a collision here would silently make every one of the colliding lists resolve to whichever LSTF happens to be read first.
+  const keyByIlfo = new Map<number, string>();
+  for (const key of keys) {
+    const ilfo = Number(key);
+    const collidingKey = keyByIlfo.get(ilfo);
+    if (collidingKey !== undefined) {
+      throw new DocFormatError(
+        `numbering definition keys ${JSON.stringify(collidingKey)} and ${JSON.stringify(key)} both name lsid ${ilfo} once converted to a number -- [MS-DOC] 2.9.147 requires lsid to be unique for each LSTF`,
+      );
+    }
+    keyByIlfo.set(ilfo, key);
+  }
+  const ilfos = [...keyByIlfo.keys()].sort((a, b) => a - b);
   if (ilfos.length === 0) return undefined;
 
   const lstfBytes: number[] = [];
