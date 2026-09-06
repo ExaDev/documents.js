@@ -414,6 +414,51 @@ describe("headings", () => {
     });
   });
 
+  describe("an explicit headingStyle: 'setext' request against a break-free heading that is unsafe on its own terms is still refused, with a diagnostic (ExaDev/documents.js#940)", () => {
+    // Every OTHER unsafe-for-setext test in this file exercises a heading whose text embeds an actual line break -- the break itself is what makes setext a candidate rendering at all when headingStyle is left at its 'atx' default. This heading has NO embedded break anywhere: headingStyle: 'setext' is the ONLY reason setext is even attempted, and unsafeSetextBreakReason's own first-line-indentation check applies exactly as much to a single-line heading as to a multi-line one. Pre-fix, every heading-related diagnostic sat behind an `embedsLineBreak` guard, so this exact shape silently fell through to a bare, unmarked ATX heading -- an explicit caller preference honoured in appearance (setext was refused, correctly) but with zero signal that it happened.
+    it("collapses to ATX with HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT when the heading's own (break-free) text is indented 4 or more columns", () => {
+      const collector = createDiagnosticCollector();
+      const written = emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "    foo" }],
+            styleId: "Heading1",
+          },
+        ]),
+        { headingStyle: "setext", sink: collector.sink },
+      );
+      expect(written).toBe("#     foo");
+      expect(written).not.toContain("\n");
+      const diagnostic = collector.diagnostics.find(
+        (d) =>
+          d.code ===
+          MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+      );
+      expect(diagnostic).toBeDefined();
+      expect(diagnostic?.message).toContain("indentation");
+      expect(
+        collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+      ).toBe(false);
+      expect(
+        collector.has(
+          MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
+        ),
+      ).toBe(false);
+
+      const reparsed = lowerMarkdown(written);
+      if (reparsed.kind !== "wordprocessing") {
+        throw new Error("expected a wordprocessing ContentDocument");
+      }
+      const [headingBlock] = reparsed.sections[0]?.blocks ?? [];
+      if (headingBlock?.kind !== "paragraph") {
+        throw new Error("expected a paragraph block");
+      }
+      // Round-trips as one intact Heading1 -- not, as the setext promotion this test refuses would have produced, an indented code block ("    foo") followed by a stray "====" paragraph with the heading gone entirely.
+      expect(headingBlock.styleId).toBe("Heading1");
+    });
+  });
+
   describe("a level-1/2 heading whose own text STARTS with an embedded break stays eligible for setext (ExaDev/documents.js#940)", () => {
     // Unlike a TRAILING break, a LEADING one never leaves a blank line for setext to trip over: it sits BEFORE the heading's own run of text-then-underline lines even begins, so a reparse treats it as ordinary inter-block whitespace ahead of the heading -- exactly as a blank line ahead of any other block already works. Refusing setext here would be a strict regression for the escaped-hard-break spelling specifically: escapeMarkdownText always keeps a non-blank backslash on that first line, so the break survives losslessly through setext today, and collapsing to ATX would destroy it (ATX has no representation for a break at all).
     it("still promotes to setext when the leading blank line is a genuinely bare one (a soft-break markdown-residue newline, not the escaped hard-break spelling above) -- but, unlike the escaped spelling, absorbs the leading break itself as ordinary space ahead of the heading rather than reproducing it inside the heading (ExaDev/documents.js#940)", () => {
