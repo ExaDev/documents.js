@@ -1813,6 +1813,8 @@ function readRtfDetail(
         builder.beginResultScratch();
         child.resultOf = objectState;
         child.object = undefined;
+        // cloneGroupState just copied \object's own para onto this child, inTable included -- but \object's real placement (inside a table cell or not) is already captured correctly and permanently in `state.para.inTable` at \object's own group, read again once \object's own group-end decides where to splice this content (further down, addBlocks(objectState.resultBlocks, state.para.inTable)) and never touched again after \object opens. \result's own scratch rendering must not inherit that inTable value: freshAccumulatorState() gives the scratch empty cellBlocks/tableRows, so there is no real open cell for inherited-true content to belong to, yet a bare \pard with no matching \intbl deeper in \result's own body (RTF 1.9.1's \pard resets every paragraph property, \intbl included, and a producer's fallback text need not re-declare it) would flip a descendant's own inTable to false while this group's OWN para (what endResultScratch reads back from) kept the stale inherited true -- so endParagraph writes the finished paragraph into `blocks` while endResultScratch reads back from `cellBlocks`, losing it. Starting this child's own inTable at false makes the scratch's write side (wherever content actually lands, driven only by \result's own body) and endResultScratch's read side (this same para) agree by construction.
+        child.para = { ...child.para, inTable: false };
       }
       stack.push(child);
       state = child;
