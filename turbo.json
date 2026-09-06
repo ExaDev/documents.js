@@ -2,13 +2,15 @@
   "$schema": "https://turborepo.com/schema.json",
   // eslint.shared.ts is every package's lint configuration, imported by each package's own eslint.config.ts. It has to be a global dependency rather than a per-task input: `_lint`'s inputs are resolved relative to the package being linted, so a root file one directory up is invisible to them, and editing a rule there would otherwise leave all thirteen packages reporting a cache hit against results computed under the previous rule set.
   // prettier.config.ts joins them for the same reason: eslint-plugin-prettier reads it at lint time, so changing a formatting option changes every package's lint result, and a per-package input one directory down cannot see it.
+  // stryker.shared.ts is the identical shape one directory up from every package's own stryker.config.ts, for `_test:mutation`.
   "globalDependencies": [
     "pnpm-lock.yaml",
     ".tool-versions",
     "eslint.shared.ts",
     "prettier.config.ts",
     "knip.config.ts",
-    "tsconfig.base.json"
+    "tsconfig.base.json",
+    "stryker.shared.ts"
   ],
 
   // Every task name is the underscore-prefixed one each package already used for its real command (`_build` runs tsdown; the package's own `build` script was `turbo run _build`). Running the public names from here instead would make turbo invoke those wrapper scripts, which invoke turbo again -- the recursive-call case Turborepo's own docs warn against ("You should only define these commands in the root package.json"). The wrapper scripts stay in place and stay usable for a single package, but the root pipeline reaches straight past them to the leaf commands.
@@ -112,6 +114,21 @@
       ],
       "outputs": []
     },
+    "_test:mutation": {
+      "dependsOn": ["^_build"],
+      "inputs": [
+        "src/**",
+        "stryker.config.ts",
+        "vitest.config.ts",
+        "vitest.mutation.config.ts",
+        "vitest.unit.config.ts",
+        "vite.config.ts",
+        "tsconfig.json",
+        "package.json"
+      ],
+      // reports/stryker-incremental.json is Stryker's own cross-run cache (this workspace's CI restores/saves it separately via actions/cache, keyed independently of turbo's own cache), and the HTML/clear-text reports sit alongside it -- both worth keeping as a declared, replayable output rather than left for turbo to treat as untracked.
+      "outputs": ["reports/**"]
+    },
 
     "web#_build": {
       "dependsOn": ["^_build"],
@@ -200,7 +217,8 @@
         "commitlint.config.ts",
         "lint-staged.config.ts",
         "tsconfig.json",
-        "release-workspace.config.json"
+        "release-workspace.config.json",
+        "stryker.shared.ts"
       ],
       "outputs": []
     }
