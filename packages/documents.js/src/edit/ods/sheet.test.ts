@@ -151,9 +151,9 @@ describe("OdsSheet.mergeCells", () => {
     const start = performance.now();
     sheet.mergeCells(0, 0, 100, 100); // 10,000 covered positions, each stamped individually -- see mergeCells' own doc comment on why this is O(area), not O(1).
     const elapsedMs = performance.now() - start;
-    // The bound exists to catch accidental super-linearity (an O(area^2) or distance-proportional regression blows far past it), not to pin a wall-clock figure: nominal runtime is well under a second, and a CI runner contended by a concurrent release cascade has measured this same linear work at over five seconds -- ten gives an order of magnitude of headroom over that observed contention without losing any regression-detection power.
-    expect(elapsedMs).toBeLessThan(10000);
-  });
+    // The bound exists to catch accidental super-linearity (an O(area^2) or distance-proportional regression blows far past it), not to pin a wall-clock figure: nominal runtime is well under a second uninstrumented and idle. Raised from 10,000 to 60,000 (ExaDev/documents.js#1037) after Stryker's own coverageAnalysis:"perTest" dry run measured this same linear work at 14,210-14,452ms under CI contention -- the identical "wall-clock dominated by scheduling, not this test's own CPU work" shape already documented for document-outline.js's UNIT_TEST_TIMEOUT_MS (ExaDev/documents.js#997/#1030). Sixty seconds keeps an order of magnitude of headroom over every observed run without losing the ability to catch a genuine regression, which would blow past either bound by orders of magnitude regardless. The third `it()` argument raises this one test's own vitest timeout to match -- the file's shared CONVERSION_TEST_TIMEOUT_MS (10,000ms) exists for docx pagination fixtures elsewhere in this suite, not for this test, so it stays untouched.
+    expect(elapsedMs).toBeLessThan(60000);
+  }, 60_000);
 });
 
 const CUSTOM_PRINT_SETTINGS: ContentSheetPrintSettings = {
