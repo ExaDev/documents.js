@@ -294,13 +294,52 @@ describe("lists", () => {
     );
   });
 
+  it("mints a numId for a nested empty <ul> that is itself discarded as stray content, skipping a value in the outer numbering sequence -- cosmetic, since a numId is opaque", () => {
+    const blocks = read(
+      body("<ul><ul></ul><li>a</li></ul><ul><li>b</li></ul>"),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        list: { numId: "epub3:bullet", level: 0, itemId: "item2" },
+      },
+    ]);
+  });
+
+  it("fires only the stray image's own diagnostic, not an additional list-content-outside-item, when the stray content resolves to zero blocks", () => {
+    const sink = vi.fn();
+    const blocks = read(
+      body('<ul><li>a</li><img src="missing.png"/></ul>'),
+      sink,
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ]);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/image-unresolved" }),
+    );
+    expect(sink).not.toHaveBeenCalledWith(
+      expect.objectContaining({ code: "epub/list-content-outside-item" }),
+    );
+  });
+
   it("mints item ids and fires diagnostics in document order, never for a recovered read whose result is then discarded", () => {
     const sink = vi.fn<(d: EpubDiagnostic) => void>();
     const blocks = read(
       body('<ul><img src="before.png" alt="before"/><li>a</li><li>b</li></ul>'),
       sink,
     );
-    // "before" carries no list membership (recovered ahead of the first real <li>); "a" and "b" are item1/item2 in document order -- the minter is never advanced for a read whose result this function goes on to discard.
+    // "before" carries no list membership (recovered ahead of the first real <li>); "a" and "b" are item1/item2 in document order, with no gap -- an itemId is minted only for a genuine <li>, and this discarded stray content contains none (contrast a discarded stray *list* with no <li> of its own, which mints and then discards a numId; see flushListStrayContent's own comment).
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "before" }] },
       {
