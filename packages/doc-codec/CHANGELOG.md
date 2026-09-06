@@ -1,3 +1,117 @@
+## [2.0.0](https://github.com/ExaDev/documents.js/compare/doc-codec%401.1.2...doc-codec%402.0.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* **doc-codec:** readDocContent's ContentTableCell.background is now a
+  discriminated ContentCellFill rather than a bare Color, matching
+  document-schema.js's own breaking change to the shared schema.
+  writeDocContent's cell background parameter changes the same way. A
+  caller reading a solid background as a Color directly, or constructing
+  one, must wrap/unwrap it as { kind: 'solid', color }.
+
+### Features
+
+* **doc-codec:** add fitsAloneOnPapxPage to predict a lone paragraph's PapxFkp fit ([cf17003](https://github.com/ExaDev/documents.js/commit/cf17003686023d16f675e964b4541cc0397a0c1a))
+* **doc-codec:** read and write real pattern fills instead of dropping them ([c668c33](https://github.com/ExaDev/documents.js/commit/c668c33e5ceab7c18b12f9f479bf71f35b7c2431))
+
+### Bug Fixes
+
+* **doc-codec:** apply the rounding-aware write ceiling to dptLineWidthFor, not just its floor ([033ab54](https://github.com/ExaDev/documents.js/commit/033ab54fe9b5ee8d6ba0249bdbb4370b95e5543b))
+* **doc-codec:** apply the rounding-aware write floor to every border style, not double alone ([ea5f7d0](https://github.com/ExaDev/documents.js/commit/ea5f7d0d2b370547be83c5548e66c2156670949b))
+* **doc-codec:** assign each lost table boundary to one row instead of splitting every row ([b2daa42](https://github.com/ExaDev/documents.js/commit/b2daa4200c650273d0cc8fc75d54ee1f01a23b19)), references [#992](https://github.com/ExaDev/documents.js/issues/992)
+* **doc-codec:** capture sprmTTableBorders(80) and read sprmTSetShdTable ([8f3573f](https://github.com/ExaDev/documents.js/commit/8f3573fd10d1c457014629e3eaeb2c00a6b56bf8))
+* **doc-codec:** cascade row/table-level borders onto cells with none ([5b5f62a](https://github.com/ExaDev/documents.js/commit/5b5f62a13605cd4a560fef1ac6be33bcdf7be289))
+* **doc-codec:** cite TCGRF's own horzMerge value for a lost-boundary continuation cell ([322edca](https://github.com/ExaDev/documents.js/commit/322edca22ac6037cb3f93c1a115add196131fb78))
+* **doc-codec:** correct the lost-boundary trim comment's monotonicity claim ([11f386e](https://github.com/ExaDev/documents.js/commit/11f386e3c50aa7110177327e2276f8b416772b71))
+* **doc-codec:** fall back per row when a lost-boundary split overflows its PapxInFkp budget ([e3169f4](https://github.com/ExaDev/documents.js/commit/e3169f43df1f905ffc368e1aacc9af060d2b8db2)), references [#992](https://github.com/ExaDev/documents.js/issues/992) [#992](https://github.com/ExaDev/documents.js/issues/992) [pre-#992](https://github.com/pre-/issues/992) [#992](https://github.com/ExaDev/documents.js/issues/992)
+* **doc-codec:** give a ragged table's exposed non-merged cell the table's real bottom border ([cea5163](https://github.com/ExaDev/documents.js/commit/cea516309c9a230792072ab55e97cb04de02be34))
+* **doc-codec:** give a vertically merged anchor the table's real bottom border ([f6d6ed4](https://github.com/ExaDev/documents.js/commit/f6d6ed4cbf543583976d4272363b1d53720071a4))
+* **doc-codec:** let a double border's own width dip below the single-line minimum on write ([3ea18ad](https://github.com/ExaDev/documents.js/commit/3ea18ad3a8209615e3d3c04de896fe40b3e15d03))
+* **doc-codec:** name the degraded table in the lost-boundary onWarning message ([b29275b](https://github.com/ExaDev/documents.js/commit/b29275baf31dbe5d6b4c02b3176b8ebd9750110b))
+* **doc-codec:** parse TableBordersOperand and TableBordersOperand80 ([0cd6dc9](https://github.com/ExaDev/documents.js/commit/0cd6dc95adec8f80db997bd7a98c233ca2d4ade4))
+* **doc-codec:** preserve an explicit sprmTSetBrc border clear through the row cascade ([ea8661f](https://github.com/ExaDev/documents.js/commit/ea8661f0522405880c5b8ec5c089944c906be3a1))
+* **doc-codec:** read a vertically merged anchor's bottom border from the table's real last row ([5af9b94](https://github.com/ExaDev/documents.js/commit/5af9b945caec53d20a40cb1763e3010776737894))
+* **doc-codec:** read sprmTSetBrc80 into the row's per-cell border-clear path ([79beefa](https://github.com/ExaDev/documents.js/commit/79beefaaf8303938acdb095db015c8bdb81c6225))
+* **doc-codec:** recover colSpan and columnWidthsPt across a table-wide merged boundary ([a9639f0](https://github.com/ExaDev/documents.js/commit/a9639f0516f11c5442f70d06cae4005536c8e44a))
+* **doc-codec:** resolve a vertMerge chain's own last row before checking ragged-table coverage ([df82100](https://github.com/ExaDev/documents.js/commit/df82100530d13ecd6757415f0b8ae3f8686ddd4f))
+* **doc-codec:** state the true rounding-aware write floor for a double border's own width ([434d440](https://github.com/ExaDev/documents.js/commit/434d440dccaf281f53b64393b12c5a94b3dd2a18))
+* **doc-codec:** stop the per-row trim warning overclaiming a same-row, immediate throw ([99eb630](https://github.com/ExaDev/documents.js/commit/99eb6304c1ba370d21af63912b1bd8a1e80c3cb1))
+* **doc-codec:** stop the unsplit-fallback warning claiming success it can't guarantee ([96a5a2b](https://github.com/ExaDev/documents.js/commit/96a5a2b71c7572084476c3579374e905a1b83f04))
+* **doc-codec:** switch exhaustively on cell-fill kind instead of if/else ([dee6786](https://github.com/ExaDev/documents.js/commit/dee6786f4539646e7c596f2623dcf05351c1bf7c))
+* **doc-codec:** trim a row's lost-boundary split to what fits both format ceilings ([4e5859e](https://github.com/ExaDev/documents.js/commit/4e5859ec3ddd3f8aa8628eb257741eae3e6a7db8))
+* **doc-codec:** triple dptLineWidth into widthPt for double-line cell borders ([3a4bcf2](https://github.com/ExaDev/documents.js/commit/3a4bcf21a1b733de90eb38e8cae307c0305bd31e))
+
+### Code Refactoring
+
+* **doc-codec:** export the table row cell-count ceiling from tap-write.ts ([c71bdea](https://github.com/ExaDev/documents.js/commit/c71bdead986ebfb6dc040c698e17f6dce1a0d5ae))
+* **doc-codec:** make TapWriteRow's horzMerge required, dropping its unreachable default ([97005ee](https://github.com/ExaDev/documents.js/commit/97005eee3bf306e6c52f801433ed23b6f76f8627))
+* **document-schema.js:** host unrecognizedFillKind for every cell-fill writer ([855121a](https://github.com/ExaDev/documents.js/commit/855121a58523e0ad8f332e28be8def3454918bc7))
+
+### Documentation
+
+* **doc-codec:** attribute the "unless modified" clause to sprmTTableBorders alone ([7abd206](https://github.com/ExaDev/documents.js/commit/7abd206077a6de3bc218915848f61338ec3fbc1d))
+* **doc-codec:** attribute the grpprlTapx restriction to sprmTCellNoWrapStyle alone ([d203260](https://github.com/ExaDev/documents.js/commit/d203260d928f1b9051950637eacd1cc284944e04))
+* **doc-codec:** cite all three ECMA-376 sections MS-DOC's own border-precedence text names ([10f1c11](https://github.com/ExaDev/documents.js/commit/10f1c11c130656aed9d25752940ce9458ec59a43))
+* **doc-codec:** cite the correct [MS-DOC] section for NumberOfColumns's 63-cell ceiling ([1cd0f0b](https://github.com/ExaDev/documents.js/commit/1cd0f0bdf432c48f25a70dd0fe7d6ab5bbec16ca))
+* **doc-codec:** cite the MS-DOC text that justifies brcBottom reaching a vertMerge anchor ([11abeb6](https://github.com/ExaDev/documents.js/commit/11abeb6e52f15cc4026be4f6254908cf3857ff2c))
+* **doc-codec:** correct TableBrc80Operand's name and the TC80-alone overclaim ([00d3498](https://github.com/ExaDev/documents.js/commit/00d34981f75e80a54d1bd83e2934bd2943e8e0cb))
+* **doc-codec:** correct the double-border-width note's claim about the other 23 collapsed BrcTypes ([866f3c4](https://github.com/ExaDev/documents.js/commit/866f3c4e5a612b06fd0dceca5d9a7a7394e3efc9))
+* **doc-codec:** correct the lost-boundary trim's monotonicity claim ([eb0b82c](https://github.com/ExaDev/documents.js/commit/eb0b82cc2609cc17ce703ee5119761c39bc9ada5))
+* **doc-codec:** correct the lost-boundary trim's unreachable non-monotonicity claim ([2cfb75e](https://github.com/ExaDev/documents.js/commit/2cfb75e6606d288d3a7c83d63625afe5242fa932))
+* **doc-codec:** correct the OUTSET/INSET border-width formula and the double-floor unit claim ([1f794fb](https://github.com/ExaDev/documents.js/commit/1f794fb80bcad838ba03352cbe63ac8d647d5799))
+* **doc-codec:** correct the per-row 15-fixed-byte ceiling's own breakdown ([7dfc7a6](https://github.com/ExaDev/documents.js/commit/7dfc7a6c47d159087f49968083eefe4cfa5d5191))
+* **doc-codec:** correct the per-row column ceiling to 21 and document the budget fallback ([2e9a971](https://github.com/ExaDev/documents.js/commit/2e9a971f04e89927b7299926e15a18ec0a622fac))
+* **doc-codec:** describe the clearedSides fix the row-border cascade paragraph never got ([a65550c](https://github.com/ExaDev/documents.js/commit/a65550c32e6c52605fdaf218febee2014a5647bf))
+* **doc-codec:** describe the row-border cascade's real bottom-edge rule ([ab973c0](https://github.com/ExaDev/documents.js/commit/ab973c041759e1b1e1565a69c74364a31b5ec3e2))
+* **doc-codec:** describe the trimmed, dual-ceiling lost-boundary fallback ([87d837d](https://github.com/ExaDev/documents.js/commit/87d837db67c46f23befe912a3d3899d77c218bbc))
+* **doc-codec:** document the lost-boundary merge fallback and its LibreOffice trade-off ([3a1090b](https://github.com/ExaDev/documents.js/commit/3a1090bc5bb48f06a4fed5e250faabf53f533236))
+* **doc-codec:** document the row/table border cascade ([a721713](https://github.com/ExaDev/documents.js/commit/a721713218b7733fb12aed3212150f579e928bdc))
+* **doc-codec:** drop the false sprmTCellShdStyle/sprmTSetShdTable adjacency claim ([967b36e](https://github.com/ExaDev/documents.js/commit/967b36ef4aa66ff8eed706e0d4f343e50b422532))
+* **doc-codec:** drop the false sprmTCellVertAlignStyle adjacency claim ([3426b64](https://github.com/ExaDev/documents.js/commit/3426b6458162dc2fad67d19a8091962846ad8f98))
+* **doc-codec:** fix a self-quoting reference that pointed 'above' at content actually below it ([2b3714e](https://github.com/ExaDev/documents.js/commit/2b3714ec4952a2a6f140e085633e543889416166))
+* **doc-codec:** fix cellReachesTableBottom's self-contradictory ragged-cell claim ([10b5c95](https://github.com/ExaDev/documents.js/commit/10b5c957dfd25bf5a83717ec98d8dd354fa4c57f))
+* **doc-codec:** fix ipatPctNew* count in IPAT_TO_PATTERN_TYPE's doc comment ([3fe0e8f](https://github.com/ExaDev/documents.js/commit/3fe0e8f99cdff5848f4ae87d3c0110a98f3782ba))
+* **doc-codec:** fix ipatPctNew* mapped-range upper bound in README ([f3f86b3](https://github.com/ExaDev/documents.js/commit/f3f86b326aa9b04ce9111165094423f72d597799))
+* **doc-codec:** fix the vertically-merged-cells quote's misattribution to Figure 2's own caption ([f084a47](https://github.com/ExaDev/documents.js/commit/f084a47d7929cf4c7fb16ee0bfaf254a4aec3844))
+* **doc-codec:** link the style-inherited-formatting gap to its own issue ([e9939ab](https://github.com/ExaDev/documents.js/commit/e9939aba9ec2ab171ddf37cc1f4a1dc9772bdf45)), references [ExaDev/documents.js#1005](https://github.com/ExaDev/documents.js/issues/1005)
+* **doc-codec:** name the writer's own trim fallback as a source of unrecoverable column boundaries ([74054e3](https://github.com/ExaDev/documents.js/commit/74054e3eb944a58399b902d5f221e5360fa8bc96)), references [#1013](https://github.com/ExaDev/documents.js/issues/1013)
+* **doc-codec:** narrow brcBottom's clause to the two paths cellReachesTableBottom actually checks ([2bdfd39](https://github.com/ExaDev/documents.js/commit/2bdfd39517b1c3fce0681eb9cce6870f7d0abaf9))
+* **doc-codec:** narrow the TC80-alone border-clear claim to cover sprmTSetBrc80 too ([c70f626](https://github.com/ExaDev/documents.js/commit/c70f6269b72dafc79e5b7463380a6069772850aa))
+* **doc-codec:** point the lost-boundary comments at the README's real per-row arithmetic ([fcf6997](https://github.com/ExaDev/documents.js/commit/fcf6997eabf69da917b36d8650f69844850c1d9f))
+* **doc-codec:** point two remaining self-references at their real targets ([97eef83](https://github.com/ExaDev/documents.js/commit/97eef833e4d9d44f350900a4e9bc396eae1cd3de))
+* **doc-codec:** restore the ragged-table bottom-border path's real non-continuation scope ([1808e94](https://github.com/ExaDev/documents.js/commit/1808e94284c1733254c02522431942cc15e8b16b))
+* **doc-codec:** restore the sprmTMerge lost-boundary-fallback nuance lost in a rebase ([b8e44dd](https://github.com/ExaDev/documents.js/commit/b8e44dd1868b5ba47f093dcb1e0d5d15d847b8f2)), references [992/#1013](https://github.com/ExaDev/documents.js/issues/1013)
+* **doc-codec:** state sprmTSetShdTable's actual shading scope as per-row ([9feedba](https://github.com/ExaDev/documents.js/commit/9feedba0e446949e5c9f48cab02671dd9042736c))
+* **doc-codec:** state the ragged-table check's own start-grid-index scope ([3e60833](https://github.com/ExaDev/documents.js/commit/3e60833eafffed5ea6d807c9850854ad41227f50))
+* **doc-codec:** state the row-border cascade's real bcBottom rule everywhere it was described ([f926539](https://github.com/ExaDev/documents.js/commit/f926539b130b64949e5bb30186a88b89ed242b93))
+* **doc-codec:** state the true rounding-aware write ceiling, not the naive top value ([c86925e](https://github.com/ExaDev/documents.js/commit/c86925e323431b94cd6086283a831a70ed3c365d))
+* **doc-codec:** stop promising onWarning never precedes a hard failure ([f42ee75](https://github.com/ExaDev/documents.js/commit/f42ee754b02cdc5a59421494f88a993c61caa043))
+* **doc-codec:** trim trailing whitespace from the style-inherited-formatting table row ([5317c1f](https://github.com/ExaDev/documents.js/commit/5317c1fd192b30dec819b3c8b10cf3d8b839aa4e))
+* **doc-codec:** update TableBordersSet's stale brcBottom description ([f7453a8](https://github.com/ExaDev/documents.js/commit/f7453a8de93f4e244716618dcab843dbadf9f607))
+* **doc-codec:** update the double-line border width note to match the fix ([996d35b](https://github.com/ExaDev/documents.js/commit/996d35b3c65bb61e45aaa2783b37e63215ec1610))
+
+### Tests
+
+* **doc-codec:** correct the 64-cell test's NumberOfColumns citation ([e855d65](https://github.com/ExaDev/documents.js/commit/e855d65eacbe95696c6bd93d9e14acc013779290))
+* **doc-codec:** cover readShd80's packed ipat field against the new pattern entries ([8151ddd](https://github.com/ExaDev/documents.js/commit/8151ddd01985fe52907ffbb905ff57efa92915c0))
+* **doc-codec:** cover the 63-cell ceiling and partial-boundary-trim fallback paths ([f3ce882](https://github.com/ExaDev/documents.js/commit/f3ce882151e120f48c5912ee2e1e339e8361f8e4))
+* **doc-codec:** cover the per-row lost-boundary budget fallback and its degradation reporting ([3c18558](https://github.com/ExaDev/documents.js/commit/3c18558d5212ead62f815624cae21af30dfb70aa))
+* **doc-codec:** exercise cross-row grid resolution in the vertMerge bottom-border cascade ([ffd0948](https://github.com/ExaDev/documents.js/commit/ffd09480d03a27520130ad56c8b254bac1676792))
+* **doc-codec:** expect ContentCellFill's discriminated shape in the ([b993776](https://github.com/ExaDev/documents.js/commit/b993776c0444f938e9a77e8adaedea68ec2d2322)), references [#951](https://github.com/ExaDev/documents.js/issues/951) [#945](https://github.com/ExaDev/documents.js/issues/945)
+* **doc-codec:** fix two cell objects the rebase's textual merge left type-broken ([356794c](https://github.com/ExaDev/documents.js/commit/356794c885e67e86079d773de38c747265c0dc2f))
+* **doc-codec:** pin that a 0.5pt double border reads back as 0.75pt, not 0.5pt ([34b1c93](https://github.com/ExaDev/documents.js/commit/34b1c939fadde841827dd7ddd271d2866c553f21))
+* **doc-codec:** pin the corrected 0.1875pt write floor for both border-width branches ([083494d](https://github.com/ExaDev/documents.js/commit/083494d84b915242bfcab994b1c5a75005bd8aa1))
+
+### Build System
+
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+- Updated archive-codec to ^1.4.3
+
 ## [1.1.2](https://github.com/ExaDev/documents.js/compare/doc-codec%401.1.1...doc-codec%401.1.2) (2026-09-05)
 
 ### Continuous Integration

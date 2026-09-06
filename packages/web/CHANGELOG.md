@@ -1,3 +1,20 @@
+## [2.3.6](https://github.com/ExaDev/documents.js/compare/web%402.3.5...web%402.3.6) (2026-09-06)
+
+### Bug Fixes
+
+* **web:** render a discriminated cell fill in the spreadsheet preview ([39a142e](https://github.com/ExaDev/documents.js/commit/39a142e2f31f850805678ea52023ad82baa53927)), references [ExaDev/documents.js#951](https://github.com/ExaDev/documents.js/issues/951)
+
+### Documentation
+
+* **web:** correct SheetPreview's duplicated fill-colour comment to its real reason ([58b0703](https://github.com/ExaDev/documents.js/commit/58b0703f6c3467d687e61fb335fa3a62be8200e0))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+- Updated markdown-codec to ^6.1.7
+- Updated documents.js to ^7.0.0
+
 ## [2.3.5](https://github.com/ExaDev/documents.js/compare/web%402.3.4...web%402.3.5) (2026-09-05)
 
 

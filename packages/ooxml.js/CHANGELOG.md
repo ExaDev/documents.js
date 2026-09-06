@@ -1,3 +1,60 @@
+## [7.0.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.3.7...ooxml.js%407.0.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* **ooxml.js:** readDocxContent/readXlsxContent's ContentTableCell/
+  ContentSheetCell.background is now a discriminated ContentCellFill
+  rather than a bare Color, matching document-schema.js's own breaking
+  change to the shared schema. buildDocxPackageFromContent/
+  buildXlsxPackageFromContent's cell background parameter changes the
+  same way. A caller reading a solid background as a Color directly, or
+  constructing one, must wrap/unwrap it as { kind: 'solid', color }.
+
+### Features
+
+* **ooxml.js:** export readCellShading for consumers reading raw docx XML directly ([ee360ff](https://github.com/ExaDev/documents.js/commit/ee360ffdf31d955dc1799a6cb722f34d4440f846))
+* **ooxml.js:** patch docProps/core.xml in place without a full rebuild ([cb22eec](https://github.com/ExaDev/documents.js/commit/cb22eec3507aa772c54a80218fdfbcac119ed322))
+* **ooxml.js:** read and write real pattern fills for docx and xlsx table cells ([d2cc5fb](https://github.com/ExaDev/documents.js/commit/d2cc5fbda71d05e811d200bbf024c7ee8e713aa0))
+
+### Bug Fixes
+
+* **ooxml.js:** clamp xlsx column-width characters to a non-negative floor ([4516716](https://github.com/ExaDev/documents.js/commit/451671658e46567fdc527cb2c2392b9c353baaab))
+* **ooxml.js:** declare xmlns when patching creates a new core-properties element ([4fb8268](https://github.com/ExaDev/documents.js/commit/4fb826850648ef6f06bd0cd8eee061befb571ba7))
+* **ooxml.js:** read pptx table cell a:lnL/a:lnR/a:lnT/a:lnB borders ([9564498](https://github.com/ExaDev/documents.js/commit/9564498ccc6b26ef360b8460b2c5cbbc72e21a92))
+* **ooxml.js:** round xlsx column widths up so writes converge to a fixed point ([65cad4a](https://github.com/ExaDev/documents.js/commit/65cad4a93536176348df67fd41463c45a34b50e8))
+* **ooxml.js:** switch exhaustively on cell-fill kind instead of if/else ([e24a864](https://github.com/ExaDev/documents.js/commit/e24a8646e9862f42423475295e606a56bfa1e159))
+* **ooxml.js:** switch exhaustively on cell-fill kind instead of if/else ([ec7ab70](https://github.com/ExaDev/documents.js/commit/ec7ab703a7df296c610662bd34883bf19333fccb))
+* **ooxml.js:** treat a pptx cell border edge's zero or non-numeric width as no border ([94b5bfb](https://github.com/ExaDev/documents.js/commit/94b5bfb3373ae406950dd4b877fb896b80ea2277))
+
+### Code Refactoring
+
+* **document-schema.js:** host unrecognizedFillKind for every cell-fill writer ([855121a](https://github.com/ExaDev/documents.js/commit/855121a58523e0ad8f332e28be8def3454918bc7))
+* **ooxml.js:** extract unrecognizedFillKind to a shared cell-fill module ([1f6dd55](https://github.com/ExaDev/documents.js/commit/1f6dd55e70ba0cc3fb9c69bb145fc7eac2f6c008))
+
+### Documentation
+
+* **ooxml.js:** cite the correct ECMA-376 section for w:shd ([ff8e549](https://github.com/ExaDev/documents.js/commit/ff8e5499119e4321c3cb29df4b63eb73cb242256))
+* **ooxml.js:** describe xlsx column widths as settling to a fixed point ([ccca3d0](https://github.com/ExaDev/documents.js/commit/ccca3d0921dff26e53e12e1ddd3ece7cb04046db))
+* **ooxml.js:** fix fabricated docx precedent in border width guard comment ([4d4228a](https://github.com/ExaDev/documents.js/commit/4d4228a87907b117b52c8580384c1aed60a70e1f))
+* **ooxml.js:** split two comment paragraphs above readSectionHeaderFooters back apart ([c570fae](https://github.com/ExaDev/documents.js/commit/c570faef5caf57dc6b6dfe10ee6a35bf79998ff9))
+
+### Tests
+
+* **ooxml.js:** assert xlsx column-width read/write reaches a fixed point ([868ce2a](https://github.com/ExaDev/documents.js/commit/868ce2a975639ba100a389fd5daacf5caa51ad44))
+* **ooxml.js:** assert XML-encoding against serialized output, not the decoder ([72eac77](https://github.com/ExaDev/documents.js/commit/72eac77b4fd09e5f13b3733a6d4543c528306da1))
+* **ooxml.js:** cover a pptx cell border edge with a non-numeric width ([ac47b89](https://github.com/ExaDev/documents.js/commit/ac47b89462b790fe3e8f7520d00d4c89a8c457eb))
+* **ooxml.js:** cover pptx cell borders with unresolvable or zero-width edges ([14d0f87](https://github.com/ExaDev/documents.js/commit/14d0f87c50c053e70c52505e1d441ac3fd73e6c0))
+* **ooxml.js:** cover xlsx column-width convergence through the full write/read pipeline ([71cb2e3](https://github.com/ExaDev/documents.js/commit/71cb2e3119eb1e776078fa91964ed68002c6e67f))
+* **ooxml.js:** quantize xlsx column-width convergence checks at write precision ([f42eb0e](https://github.com/ExaDev/documents.js/commit/f42eb0e5dd4d3411baaabe5bfba573784fa95670))
+* **ooxml.js:** use genuinely drifting widths in the xlsx build regression test ([0b6e418](https://github.com/ExaDev/documents.js/commit/0b6e4183b19cae8458ce88866d7f02a551a4938c))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+- Updated excel-number-format to ^1.0.2
+- Updated archive-codec to ^1.4.3
+
 ## [6.3.7](https://github.com/ExaDev/documents.js/compare/ooxml.js%406.3.6...ooxml.js%406.3.7) (2026-09-05)
 
 

@@ -1,3 +1,38 @@
+## [6.1.7](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.1.6...markdown-codec%406.1.7) (2026-09-06)
+
+### Bug Fixes
+
+* **markdown-codec:** absorb a construct whose item's itemId resumes right after it ([afa87fd](https://github.com/ExaDev/documents.js/commit/afa87fd8befc84e40eb85af8a43565987e38b812))
+* **markdown-codec:** keep a construct nested inside a multi-block list item on write ([b7204fb](https://github.com/ExaDev/documents.js/commit/b7204fb61235d2d06a417ba72e5d100cfc7d70eb))
+* **markdown-codec:** match a resumed construct against every open list level ([55fa9af](https://github.com/ExaDev/documents.js/commit/55fa9af85ffd1dfd037e9cb6fc9ac21eac9294c6))
+* **markdown-codec:** preserve a multi-block list item's own boundary on write ([594b318](https://github.com/ExaDev/documents.js/commit/594b318aacc7cdd92a17e33cc7c64b61023f0e5a))
+* **markdown-codec:** report LIST_ITEM_MULTI_BLOCK_FLATTENED when a construct interrupts a list item ([80b65d9](https://github.com/ExaDev/documents.js/commit/80b65d9a9b260159f7010c125a0a0c655781aef4))
+* **markdown-codec:** require a blank line after any open HTML block regardless of what follows ([bdf0c70](https://github.com/ExaDev/documents.js/commit/bdf0c701557ad0b41d9b909eb24ae4a494d625f7))
+* **markdown-codec:** split requiresBlankLineBefore into two directional, option-aware checks ([9bbcab4](https://github.com/ExaDev/documents.js/commit/9bbcab46ecc888c06f2ed931a80019ba6b103cb5))
+* **markdown-codec:** stop merging a Quote-styled list block into its next sibling ([2fe0a28](https://github.com/ExaDev/documents.js/commit/2fe0a28e8e67bbcf4eeeb1a9bef2cd21fbde34de))
+* **markdown-codec:** tag a blockquote's fresh nested list with its enclosing item's own itemId ([063f98d](https://github.com/ExaDev/documents.js/commit/063f98dc4c564e4f47e0c48bebc39a8985184b72))
+
+### Code Refactoring
+
+* **markdown-codec:** drop the -1 sentinel from collectListItem's nested-level scan ([3013aad](https://github.com/ExaDev/documents.js/commit/3013aad624cb2328c0f5280ce0b8e1aa2e0da76c))
+
+### Documentation
+
+* **markdown-codec:** correct consumeSameItemRun's stale from-always-matches invariant ([b3ce00c](https://github.com/ExaDev/documents.js/commit/b3ce00cb73638cbf50266ead09dcf8810902c990))
+
+### Build System
+
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
+### Miscellaneous Chores
+
+* **markdown-codec:** remove LIST_ITEM_MULTI_BLOCK_FLATTENED, now unreachable ([8670a10](https://github.com/ExaDev/documents.js/commit/8670a102fb84d9069a4775d2919d644ca782aaba))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+
 ## [6.1.6](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.1.5...markdown-codec%406.1.6) (2026-09-05)
 
 

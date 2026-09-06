@@ -1,3 +1,32 @@
+## [1.0.5](https://github.com/ExaDev/documents.js/compare/epub-codec%401.0.4...epub-codec%401.0.5) (2026-09-06)
+
+### Bug Fixes
+
+* **epub-codec:** degrade a nested <img> in inline markup to alt text instead of dropping it ([0af341a](https://github.com/ExaDev/documents.js/commit/0af341aa72080f1c6ffa99fc735f908972699e1c))
+* **epub-codec:** describe the inline-image diagnostic without a false cause ([e78b832](https://github.com/ExaDev/documents.js/commit/e78b832f2f0b1f3aaa4f3d092617ec74ad01436e))
+* **epub-codec:** stop the inline-image diagnostic asserting a false cause and fabricating a src ([ec3c6c0](https://github.com/ExaDev/documents.js/commit/ec3c6c0ac1dfbe5550c061ddf9b9b12735f37065))
+
+### Documentation
+
+* **epub-codec:** broaden the direct-image-split gotcha to every non-container context ([712dd95](https://github.com/ExaDev/documents.js/commit/712dd955cff31608f475baaae1294f66468948b0))
+* **epub-codec:** describe the nested-<img> degrade instead of the old silent-drop gap ([e4efd8e](https://github.com/ExaDev/documents.js/commit/e4efd8e97d65ae45af82bd5c48d2bb7b39f8a74e))
+* **epub-codec:** name every container the direct-image split actually covers ([b2a4989](https://github.com/ExaDev/documents.js/commit/b2a4989db6fa869c25703f1b620ff5f04a5f6f0e))
+* **epub-codec:** name readList's nested-list drop as a fourth silent gap ([b8b4295](https://github.com/ExaDev/documents.js/commit/b8b429582fccbb951ce7e01dff72d9231fbe3bf1))
+* **epub-codec:** stop claiming the image-inline-unsupported diagnostic is universal ([3d1fc2f](https://github.com/ExaDev/documents.js/commit/3d1fc2ff8739f811bf5f985f6cbfd92426897965))
+
+### Tests
+
+* **epub-codec:** cover an <img> nested inside inline markup ([ee9dacd](https://github.com/ExaDev/documents.js/commit/ee9dacd4473d3551ba557d2722d7515aedf4cd77))
+
+### Build System
+
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+
 ## [1.0.4](https://github.com/ExaDev/documents.js/compare/epub-codec%401.0.3...epub-codec%401.0.4) (2026-09-05)
 
 ### Continuous Integration

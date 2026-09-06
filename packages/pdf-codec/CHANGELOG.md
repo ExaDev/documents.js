@@ -1,3 +1,20 @@
+## [3.6.6](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.6.5...pdf-codec%403.6.6) (2026-09-06)
+
+### Tests
+
+* **pdf-codec:** raise CI-flaky timeouts with real headroom over observed worst case ([d5742bb](https://github.com/ExaDev/documents.js/commit/d5742bbaf310e8b8c20af9d56bb18692e490d73d)), references [ExaDev/documents.js#1002](https://github.com/ExaDev/documents.js/issues/1002)
+
+### Build System
+
+* drop document-schema.js and pdf-codec from the test/workers typecheck fix ([6eb3f27](https://github.com/ExaDev/documents.js/commit/6eb3f2785e006481677cb73f6b802c5fd4bc3f53)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021), references [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
+
+### Dependencies
+
+- Updated byte-codec to ^1.2.2
+- Updated document-schema.js to ^6.0.0
+
 ## [3.6.5](https://github.com/ExaDev/documents.js/compare/pdf-codec%403.6.4...pdf-codec%403.6.5) (2026-09-05)
 
 

@@ -1,3 +1,31 @@
+## [5.3.6](https://github.com/ExaDev/documents.js/compare/document-cli%405.3.5...document-cli%405.3.6) (2026-09-06)
+
+### Bug Fixes
+
+* **document-cli:** drop the docx/setDocumentMetadata ternary set-metadata no longer needs ([d4d5dd1](https://github.com/ExaDev/documents.js/commit/d4d5dd1e86e1480301a88e265069e96fe3cf318a))
+* **document-cli:** preserve docx-extras data when patching a docx's metadata ([082955a](https://github.com/ExaDev/documents.js/commit/082955ad01d0c3002dde0972c98123a9698c3726)), closes [#966](https://github.com/ExaDev/documents.js/issues/966)
+
+### Documentation
+
+* **document-cli:** attribute outline test's heading-writer comments to the real setters ([37c393c](https://github.com/ExaDev/documents.js/commit/37c393c7f26d48f41bccc01ee56ca68a514ca97e))
+* **document-cli:** correct the outline command's stale docx/odt heading-nesting claim ([96ac6c4](https://github.com/ExaDev/documents.js/commit/96ac6c49ec34695cccc46482bb311bf3c97f2ed1))
+
+### Styles
+
+* **document-cli:** sort outline test's documents.js import alphabetically ([34a8975](https://github.com/ExaDev/documents.js/commit/34a8975c7c790f64b144c82c1e9e74124408f10f))
+
+### Tests
+
+* **document-cli:** pin docx/odt heading nesting through outline for editor-built documents ([2e73e4e](https://github.com/ExaDev/documents.js/commit/2e73e4e06d7d120705fb501a114739ab300ddd93))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+- Updated document-outline.js to ^3.3.0
+- Updated odf.js to ^7.0.0
+- Updated documents.js to ^7.0.0
+
 ## [5.3.5](https://github.com/ExaDev/documents.js/compare/document-cli%405.3.4...document-cli%405.3.5) (2026-09-05)
 
 
