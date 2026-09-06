@@ -661,6 +661,16 @@ describe("form fields", () => {
     });
   });
 
+  // Regression guard: \ffres/\ffdefres are RTF 1.9.1's own generic "Value" control words (Appendix B), exactly like \ffprot, so a bare occurrence must default to 0 per the spec's own "Change Formatting Property" convention -- not read as `undefined` and fall through to \ffdefres the way FORM_FIELD_RESULT_UNDEFINED's own sentinel handling does for a genuinely absent \ffres. A bare \ffres therefore means \ffres0, taking priority over \ffdefres1 exactly as an explicit \ffres0 already does above.
+  it("reads a bare \\ffres (no explicit parameter) as \\ffres0, not as absent", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres\\ffdefres1}}}{\\fldrslt }}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      checked: false,
+    });
+  });
+
   // \ffdefres0 names "Hello" (index 0) as the field's own recorded default selection -- the sentinel \ffres25 (see FORM_FIELD_RESULT_UNDEFINED in constructs.ts, and its own dropdown-branch comment) falls through to it exactly as a checkbox's sentinel \ffres falls through to \ffdefres, so `value` reads back "Hello" here even though the \fldrslt text shown ("Guten Tag") is a different entry -- \fldrslt is merely the field's last-rendered display text, not authoritative over \ffres/\ffdefres for which entry is "selected" in FFDataBits terms.
   it("reads a FORMDROPDOWN field's \\*\\ffl entries as the contentControl's options, falling through \\ffres25's undefined sentinel to \\ffdefres for the selected value, with its \\fldrslt as the wrapped run", () => {
     const paragraph = paragraphsOf(
@@ -712,6 +722,18 @@ describe("form fields", () => {
       kind: "contentControl",
       controlType: "dropDown",
       options: ["Hello", "Guten Tag"],
+    });
+  });
+
+  // Regression guard, dropdown side of the identical bare-Value-word-defaults-to-0 fix as the checkbox's own "reads a bare \ffres..." test above: a bare \ffdefres names index 0 ("Hello"), not "no default recorded" -- distinct from the "leaves...unset" fixture directly above, which has no \ffdefres control word at all rather than a bare one.
+  it("reads a bare \\ffdefres (no explicit parameter) as index 0, selecting the first \\*\\ffl entry", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN  {\\*\\formfield{\\fftype2\\ffdefres\\fftypetxt0\\ffhaslistbox{\\*\\ffl Hello}{\\*\\ffl Guten Tag}}}}{\\fldrslt Hello}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      controlType: "dropDown",
+      options: ["Hello", "Guten Tag"],
+      value: "Hello",
     });
   });
 
