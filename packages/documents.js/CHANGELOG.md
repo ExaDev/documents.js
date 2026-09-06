@@ -1,3 +1,9 @@
+## [7.0.3](https://github.com/ExaDev/documents.js/compare/documents.js%407.0.2...documents.js%407.0.3) (2026-09-06)
+
+### Bug Fixes
+
+* **documents.js:** declare wpd-codec as an ordinary semver range, not workspace:^ ([f4c21f8](https://github.com/ExaDev/documents.js/commit/f4c21f8e2b0fbddf1989ff2b38b5bde51da14f63))
+
 ## [7.0.2](https://github.com/ExaDev/documents.js/compare/documents.js%407.0.1...documents.js%407.0.2) (2026-09-06)
 
 
