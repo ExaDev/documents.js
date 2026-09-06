@@ -100,8 +100,7 @@ type DestinationKind =
   | "formField" // {\*\formfield ...}, nested inside \fldinst: no #PCDATA of its own, carried entirely by its own control words and the two destinations below
   | "formFieldName" // {\*\ffname ...}, whose text is the form field's own bookmark-style name
   | "formFieldHelpText" // {\*\ffhelptext ...}, whose text is the form field's own human-readable help text -- the closest RTF analogue to a contentControl's `alias`
-  | "formFieldListItem" // {\*\ffl ...}, whose text is a dropdown's own list entry
-  | "formFieldDefaultText"; // {\*\ffdeftext ...}, whose text is a plainText field's own default/reset text -- [MS-DOC] 2.9.78 FFData.xstzTextDef
+  | "formFieldListItem"; // {\*\ffl ...}, whose text is a dropdown's own list entry
 
 const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   // Transparent wrappers whose content is ordinary body flow.
@@ -119,7 +118,8 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["ffname", "formFieldName"],
   ["ffhelptext", "formFieldHelpText"],
   ["ffl", "formFieldListItem"],
-  ["ffdeftext", "formFieldDefaultText"],
+  // FFData.xstzTextDef, a plainText field's own default/reset text -- deliberately not captured: constructs.ts's own formFieldContentControl never promotes it onto a contentControl (a field's genuinely CURRENT text already rides the wrapped \fldrslt runs this destination sits alongside, and the default is a different fact -- see that function's own top comment), so there is no raw-data consumer left for a captured value to serve. Recognised and silently skipped rather than left unmapped, so a real producer's \ffdeftext reads as a known, deliberately-unused destination rather than an "unrecognised destination" diagnostic.
+  ["ffdeftext", "skip"],
   // Content this reader deliberately does not place. ContentDocument has no page furniture, note, or annotation position for any of these to land in: a header/footer is page furniture with no ContentSection field to carry it, and a footnote body's real home is document-schema.js's tree-only definitions table, which the flat form this reader produces cannot reach. Each is skipped with a diagnostic rather than silently, and each is listed in the README's own gap table.
   ["footnote", "skip"],
   ["header", "skip"],
@@ -174,7 +174,9 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
 //  - \falt, \panose and \fname are <fontinfo> sub-productions the header parser already consumed.
 //  - \atn*, \objclass/\objname/\objdata and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct.
 //  - The footnote and endnote separators are page furniture with no content of their own, and \xe/\tc/\tcn are index and table-of-contents entry markers whose text is derivable from the document they mark.
+//  - \ffdeftext is a plainText form field's own default/reset text (FFData.xstzTextDef), never promoted onto the field's contentControl by design -- its genuinely current text already rides the wrapped \fldrslt runs alongside it (see constructs.ts's own formFieldContentControl top comment).
 const SILENT_SKIP_DESTINATIONS: ReadonlySet<string> = new Set([
+  "ffdeftext",
   "pn",
   "pnseclvl",
   "nonshppict",
@@ -314,12 +316,11 @@ interface PictureState {
   binary: number[];
 }
 
-// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffhelptext/\*\ffl/\*\ffdeftext destinations close and its \ffres/\ffdefres/\ffprot/\ffownhelp control words apply.
+// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffhelptext/\*\ffl destinations close and its \ffres/\ffdefres/\ffprot/\ffownhelp control words apply. \*\ffdeftext is deliberately not one of these: its content is skipped whole (SILENT_SKIP_DESTINATIONS above), since nothing here consumes it.
 interface FormFieldState {
   name: string;
   helpText: string;
   ownHelp: boolean;
-  defaultText: string;
   listItems: string[];
   resultIndex: number | undefined;
   defaultResultIndex: number | undefined;
@@ -1350,14 +1351,7 @@ function readRtfDetail(
       }
       return;
     }
-    if (
-      state.destination === "formFieldDefaultText" &&
-      state.field?.formField !== undefined
-    ) {
-      state.field.formField.defaultText += text;
-      return;
-    }
-    // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText", "unicodeWrapper" and "formField" discard.
+    // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText", "unicodeWrapper" and "formField" discard -- \*\ffdeftext (FFData.xstzTextDef) is one of these now, per SILENT_SKIP_DESTINATIONS above.
   };
 
   let index = 0;
@@ -1427,7 +1421,6 @@ function readRtfDetail(
             name: "",
             helpText: "",
             ownHelp: false,
-            defaultText: "",
             listItems: [],
             resultIndex: undefined,
             defaultResultIndex: undefined,
