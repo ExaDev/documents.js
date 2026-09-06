@@ -164,6 +164,13 @@ describe("code spans and code blocks", () => {
     expect(indented.codeLanguage).toBeUndefined();
     expect(indented.source).toBeUndefined();
   });
+
+  it("sets preformatted: true unconditionally -- document-schema.js's own cross-format verbatim-whitespace signal, matching epub-codec's own readPre (ExaDev/documents.js#1020)", () => {
+    const fenced = paragraph(blocks("```\nfoo\n```")[0]);
+    expect(fenced.preformatted).toBe(true);
+    const indented = paragraph(blocks("    foo")[0]);
+    expect(indented.preformatted).toBe(true);
+  });
 });
 
 describe("math (ExaDev/markdown-codec#53)", () => {
