@@ -299,6 +299,47 @@ describe("headings", () => {
 
   describe("a level-1/2 heading whose own text STARTS with an embedded break stays eligible for setext (ExaDev/documents.js#940)", () => {
     // Unlike a TRAILING break, a LEADING one never leaves a blank line for setext to trip over: it sits BEFORE the heading's own run of text-then-underline lines even begins, so a reparse treats it as ordinary inter-block whitespace ahead of the heading -- exactly as a blank line ahead of any other block already works. Refusing setext here would be a strict regression for the escaped-hard-break spelling specifically: escapeMarkdownText always keeps a non-blank backslash on that first line, so the break survives losslessly through setext today, and collapsing to ATX would destroy it (ATX has no representation for a break at all).
+    it("still promotes to setext when the leading blank line is a genuinely bare one (a soft-break markdown-residue newline, not the escaped hard-break spelling above) -- but, unlike the escaped spelling, absorbs the leading break itself as ordinary space ahead of the heading rather than reproducing it inside the heading (ExaDev/documents.js#940)", () => {
+      // Every OTHER test in this describe block uses runs: [{ text: '\n' }, ...] -- a HARD break, which escapeMarkdownText always spells with a non-blank leading backslash ('\\\n'), so line 0 of the rendered text is never actually blank and never exercises embedsUnsafeBreakForSetext's own leading-run exemption at all. This one instead uses the bare soft-break residue spelling (src/emit/inline.ts's renderLeaf re-emitting run.source.xml verbatim, unescaped) -- the one input shape whose line 0 really is empty, and the only one the leading-run exemption is actually needed for.
+      const collector = createDiagnosticCollector();
+      const written = emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [
+              { text: " ", source: { format: "markdown", xml: "\n" } },
+              { text: "foo" },
+            ],
+            styleId: "Heading1",
+          },
+        ]),
+        { sink: collector.sink },
+      );
+      expect(written).toBe("\nfoo\n=");
+      const diagnostic = collector.diagnostics.find(
+        (d) =>
+          d.code ===
+          MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
+      );
+      // The diagnostic must not claim the break "survives" for this input -- it does not: reparsing below recovers "foo", not "\nfoo".
+      expect(diagnostic?.message).toContain("absorbed");
+      expect(diagnostic?.message).not.toContain("so the break survives");
+
+      const reparsed = lowerMarkdown(written);
+      if (reparsed.kind !== "wordprocessing") {
+        throw new Error("expected a wordprocessing ContentDocument");
+      }
+      const blocks = reparsed.sections[0]?.blocks ?? [];
+      // Still exactly one block, still a heading -- no corruption -- but its own text comes back as plain "foo": the leading blank line is genuinely lost, not merely reformatted, which is why the diagnostic above may not claim it survives.
+      expect(blocks).toHaveLength(1);
+      const [headingBlock] = blocks;
+      if (headingBlock?.kind !== "paragraph") {
+        throw new Error("expected a paragraph block");
+      }
+      expect(headingBlock.styleId).toBe("Heading1");
+      expect(headingBlock.runs.map((run) => run.text).join("")).toBe("foo");
+    });
+
     it.each([
       { level: "Heading1" as const, underline: "=" },
       { level: "Heading2" as const, underline: "-" },
@@ -398,6 +439,78 @@ describe("headings", () => {
         expect(headingBlock.runs.map((run) => run.text).join("")).toBe("\nfoo");
       },
     );
+  });
+
+  describe("a level-1/2 heading whose own rendered text is entirely blank never promotes to setext, even when explicitly requested (ExaDev/documents.js#940)", () => {
+    // The leading-run exemption two describe blocks above only ever exempts a run of blank lines that is followed by later, genuinely non-blank heading content -- when EVERY line renderSetextHeading would treat as the heading's own text is blank (a single whitespace-only run, a single tab, or no runs at all), there is no text left for the underline to attach to, and forcing setext regardless of headingStyle leaves the underline immediately following what a reparse reads as an ordinary blank line ahead of the NEXT block, not a heading of any kind -- the heading itself is silently dropped, not merely reformatted. None of these three inputs embeds an actual CommonMark line ending, so ATX's own single-physical-line limit was never the problem; falling through to a normal (blank-bodied) ATX heading is exactly as safe as any other zero-content heading.
+    it.each([
+      { name: "a single whitespace-only run", runs: [{ text: "   " }] },
+      { name: "a single tab run", runs: [{ text: "\t" }] },
+      { name: "zero runs", runs: [] },
+    ])(
+      "keeps $name as an ATX heading rather than losing it entirely, even with headingStyle: 'setext'",
+      ({ runs }) => {
+        const written = emitMarkdown(
+          doc([
+            { kind: "paragraph", runs, styleId: "Heading1" },
+            { kind: "paragraph", runs: [{ text: "tail" }] },
+          ]),
+          { headingStyle: "setext" },
+        );
+        // Never a setext promotion: renderSetextHeading would otherwise produce a blank (or whitespace-only) text line immediately followed by its own underline -- pre-fix, this wrote e.g. "   \n===\n\ntail", which a reparse reads as two plain paragraphs with the Heading1 gone entirely.
+        expect(written).not.toMatch(/^[ \t]*\n=+\n/);
+
+        const reparsed = lowerMarkdown(written);
+        if (reparsed.kind !== "wordprocessing") {
+          throw new Error("expected a wordprocessing ContentDocument");
+        }
+        const blocks = reparsed.sections[0]?.blocks ?? [];
+        expect(blocks).toHaveLength(2);
+        const [headingBlock, tailBlock] = blocks;
+        if (
+          headingBlock?.kind !== "paragraph" ||
+          tailBlock?.kind !== "paragraph"
+        ) {
+          throw new Error("expected two paragraph blocks");
+        }
+        expect(headingBlock.styleId).toBe("Heading1");
+        expect(tailBlock.runs.map((run) => run.text).join("")).toBe("tail");
+      },
+    );
+  });
+
+  describe("a level-1/2 heading whose own embedded break is a bare CR line ending, not merely LF (ExaDev/documents.js#940)", () => {
+    // CommonMark's own line-ending grammar (spec 0.31.2, "Lines") is LF, CRLF, or a lone CR -- not LF alone. A run's own plain text, or a foreign producer's own markdown residue (src/emit/inline.ts's renderLeaf, the run.source.xml case) can carry a bare CR just as legitimately as an LF, and embedsUnsafeBreakForSetext/the embedsLineBreak detection/the ATX-collapse fallback all have to treat it as a genuine line ending too -- an LF-only check lets a bare CR slip through unescaped and un-collapsed into what is meant to be a single ATX physical line, which the READ side's own line-ending-aware splitter (src/block/block.ts) then reads back as more than one line, fracturing the heading on reparse exactly as an un-caught blank line does.
+    it("collapses a CR-delimited interior blank stretch to ordinary ATX heading text instead of leaking a raw CR into a single physical line", () => {
+      const written = emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "head\r\rfoo" }],
+            styleId: "Heading1",
+          },
+          { kind: "paragraph", runs: [{ text: "tail" }] },
+        ]),
+      );
+      expect(written).not.toContain("\r");
+
+      const reparsed = lowerMarkdown(written);
+      if (reparsed.kind !== "wordprocessing") {
+        throw new Error("expected a wordprocessing ContentDocument");
+      }
+      const blocks = reparsed.sections[0]?.blocks ?? [];
+      // Exactly two blocks, matching the original document -- pre-fix, the raw CR pair reached the reparse as a genuine interior blank line the write side never accounted for, fracturing the heading into a bare "head" paragraph, a spurious "foo" paragraph carrying none of the heading's own styling, and the trailing "tail" paragraph (three blocks, not two).
+      expect(blocks).toHaveLength(2);
+      const [headingBlock, tailBlock] = blocks;
+      if (
+        headingBlock?.kind !== "paragraph" ||
+        tailBlock?.kind !== "paragraph"
+      ) {
+        throw new Error("expected two paragraph blocks");
+      }
+      expect(headingBlock.styleId).toBe("Heading1");
+      expect(tailBlock.runs.map((run) => run.text).join("")).toBe("tail");
+    });
   });
 
   it("keys canInterruptOpenParagraph off the ACTUAL (ATX-collapsed) rendering of a level-1/2 heading whose own trailing break makes setext unsafe, not just its level -- an unsafe-break heading interrupts an open list-item paragraph cleanly, needing no forced blank line, since it never actually renders as setext (ExaDev/documents.js#940)", () => {
