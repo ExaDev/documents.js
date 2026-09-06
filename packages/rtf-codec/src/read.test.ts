@@ -516,6 +516,16 @@ describe("fields and destinations", () => {
     expect(linked?.hyperlink).toBe("http://example.com/FORMTEXT");
   });
 
+  // Regression guard: an ordinary field (no FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction) must not fragment the runs around it. Every run of text here -- before the field, its own \fldrslt, and after it -- carries identical (default) formatting, so a reader that coalesces same-key text into one run produces exactly one run; one that force-flushes at every \field boundary regardless of whether it is a genuine form field produces three.
+  it("does not fragment identically-formatted text around an ordinary PAGE field into extra runs", () => {
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard Page {\\field{\\*\\fldinst PAGE}{\\fldrslt 1}} of many.\\par}`,
+      )[0]?.runs ?? [];
+    expect(runs.map((run) => run.text).join("")).toBe("Page 1 of many.");
+    expect(runs).toHaveLength(1);
+  });
+
   it("discards an unrecognised ignorable destination whole and says so", () => {
     const { diagnostics, document } = readRtfContent(
       bytes(`${HEADER}\\pard kept{\\*\\someunknowndest discarded}\\par}`),
