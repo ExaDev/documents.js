@@ -4,7 +4,7 @@
 //
 // THE STATE MACHINE. RTF's reader model is stated directly by the specification ("Conventions of an RTF Reader") and is what this module implements literally: an opening brace stores the current state on a stack, a closing brace retrieves it, a backslash collects a control word or symbol and dispatches on it, and anything else is text written "to the current destination using the current formatting properties". Four kinds of state ride that stack, exactly as the spec enumerates them -- the destination, character-formatting properties, paragraph-formatting properties, and table-formatting properties -- with one addition of this reader's own, the \ucN skip count, which the spec separately requires be stacked ("values are scoped like character properties ... On exiting the group, the previous \ucN value is restored").
 //
-// WHAT THE DESTINATION DOES. A destination is not merely a label: it decides what happens to text. Body text becomes runs; a \pict destination's text is hex picture payload; a \fldinst destination's text is a field instruction to be parsed rather than shown; a \listtext destination's text is the flat rendering of a list number that "should be ignored by any reader that understands Word 97 through Word 2007 numbering"; an unrecognised {\* destination's text is discarded whole. DESTINATION_KINDS below is that mapping, and it is the reason this reader can be a single pass with no lookahead beyond a group's own head.
+// WHAT THE DESTINATION DOES. A destination is not merely a label: it decides what happens to text. Body text becomes runs; a \pict destination's text is hex picture payload; an \objdata destination's text is the identical hex-or-binary payload for a whole embedded object; a \fldinst destination's text is a field instruction to be parsed rather than shown; a \listtext destination's text is the flat rendering of a list number that "should be ignored by any reader that understands Word 97 through Word 2007 numbering"; an unrecognised {\* destination's text is discarded whole. DESTINATION_KINDS below is that mapping, and it is the reason this reader can be a single pass with no lookahead beyond a group's own head.
 //
 // TABLES ARE PARAGRAPH PROPERTIES, NOT A GROUP. "There is no RTF table group; instead, tables are specified as paragraph properties." A row is a run of \intbl paragraphs terminated by \cell marks and closed by \row, with the row's own <tbldef> (\trowd ... \cellxN) sitting before it, after it, or -- for Word 2002 onward -- both. So the table builder here is driven by the \cell/\row marks in the text stream rather than by nesting, and a table closes when a non-table paragraph arrives or the section ends.
 //
@@ -20,6 +20,7 @@ import {
   type ContentBlock,
   type ContentCellBorders,
   type ContentDocument,
+  type ContentEmbeddedObjectBlock,
   type ContentImageBlock,
   type ContentParagraph,
   type ContentRun,
@@ -50,6 +51,7 @@ import {
   type RevisionState,
 } from "./constructs";
 import { bytesToBase64, hexToBytes } from "./base64";
+import { readEmbeddedObjectData } from "./embedded-object";
 import { appendBytes, asciiStringFromBytes, rtfBytesFromLatin1 } from "./bytes";
 import { decodeCodepageBytes } from "./codepage";
 import {
@@ -100,7 +102,9 @@ type DestinationKind =
   | "formField" // {\*\formfield ...}, nested inside \fldinst: no #PCDATA of its own, carried entirely by its own control words and the two destinations below
   | "formFieldName" // {\*\ffname ...}, whose text is the form field's own bookmark-style name
   | "formFieldHelpText" // {\*\ffhelptext ...}, whose text is the form field's own human-readable help text -- the closest RTF analogue to a contentControl's `alias`
-  | "formFieldListItem"; // {\*\ffl ...}, whose text is a dropdown's own list entry
+  | "formFieldListItem" // {\*\ffl ...}, whose text is a dropdown's own list entry
+  | "object" // \object itself: no text of its own (its content is the destinations below), just a non-skip wrapper so its children are actually read rather than jumped over whole
+  | "objectData"; // {\*\objdata ...}, hex or binary payload exactly like "picture"'s -- see buildEmbeddedObject
 
 const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   // Transparent wrappers whose content is ordinary body flow.
@@ -151,10 +155,19 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   // The bookmark halves, whose #PCDATA is the name the two are matched by (RTF 1.9.1, "Bookmarks").
   ["bkmkstart", "bookmarkStart"],
   ["bkmkend", "bookmarkEnd"],
-  ["object", "skip"],
-  ["objdata", "skip"],
+  // \object is not "skip" -- unlike a genuinely unhandled destination, a "skip" kind jumps straight to the group's own matching close (matchingGroupEnd) without ever looking at its children, which would drop the nested {\*\objdata ...} this reader now decodes along with everything else. "object" is a plain non-skip wrapper with no text of its own; the real handling is objdata's.
+  ["object", "object"],
+  ["objdata", "objectData"],
   ["objclass", "skip"],
   ["objname", "skip"],
+  // \oleclsid ("<objclsid> = '{\*' \oleclsid #PCDATA '}'") is \object's own optional CLSID sub-group, listed in RTF 1.9.1's <obj> grammar right alongside <objalias>/<objsect>/<objtime> below -- informational, with no position in ContentEmbeddedObjectBlock, but spec-legal \object content nonetheless, so it belongs here rather than left to trip UNKNOWN_DESTINATION_SKIPPED as if it were unrecognised.
+  ["oleclsid", "skip"],
+  // \objalias and \objsect are the two optional sub-groups \objdata's own grammar allows before its <data> ("<objdata> = '{\*' \objdata (<objalias>? & <objsect>?) <data> '}'"); \objtime is \object's own linked-object update timestamp. All three are informational sub-parts this reader has no position for, exactly like \objclass/\objname above -- listing them here (rather than leaving them as unrecognised ignorable destinations) keeps ordinary, spec-legal \object content from tripping UNKNOWN_DESTINATION_SKIPPED.
+  ["objalias", "skip"],
+  ["objsect", "skip"],
+  ["objtime", "skip"],
+  // \result is \object's own fallback rendering for a reader that cannot decode \object at all -- this reader always attempts \objdata first and prefers it, exactly as Word itself does, so this table's own "skip" is only the default: the group-start handler below overrides it to "body" (rendered into an isolated scratch accumulator -- see ContentBuilder's own beginResultScratch), and \object's own group-end handling either splices that scratch content in or discards it once \objdata's own fate is finally known.
+  ["result", "skip"],
   ["do", "skip"],
   ["shp", "skip"],
   ["shptxt", "skip"],
@@ -177,7 +190,7 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
 //  - \pn/\pnseclvl are Word 6/95 paragraph numbering, superseded by the \lsN/\ilvlN this reader does read.
 //  - \nonshppict is by definition the copy Word itself will not read ("Specifies that Word 97 through Word 2002 has written a {\pict destination that it will not read on input"), sitting beside the \*\shppict this reader does take.
 //  - \falt, \panose and \fname are <fontinfo> sub-productions the header parser already consumed.
-//  - \atn*, \objclass/\objname/\objdata and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct.
+//  - \atn*, \objclass/\objname/\oleclsid/\objalias/\objsect/\objtime/\result and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct (\objdata is no longer here -- it is real payload now, handled and reported on its own terms by buildEmbeddedObject; \result is silent here too even on the degrade path where it is read as body content, since \object's own group-end handling reports the object once, either via buildEmbeddedObject's own diagnostic on a decode failure or its own "no \objdata"/"no \objdata and no \result" diagnostic otherwise).
 //  - The footnote and endnote separators are page furniture with no content of their own, and \xe/\tc/\tcn are index and table-of-contents entry markers whose text is derivable from the document they mark.
 //  - \ffdeftext is a plainText form field's own default/reset text (FFData.xstzTextDef), never promoted onto the field's contentControl by design -- its genuinely current text already rides the wrapped \fldrslt runs alongside it (see constructs.ts's own formFieldContentControl top comment).
 //  - \ffformat/\ffstattext/\ffentrymcr/\ffexitmcr are the remaining <formstrings> destination strings alongside \ffdeftext: RtfFormFieldData carries no member for any of them, since ContentControlDescriptor has no field a form field's input-format mask, status text, or entry/exit macro name could land in.
@@ -201,7 +214,11 @@ const SILENT_SKIP_DESTINATIONS: ReadonlySet<string> = new Set([
   "atnicn",
   "objclass",
   "objname",
-  "objdata",
+  "oleclsid",
+  "objalias",
+  "objsect",
+  "objtime",
+  "result",
   "shpinst",
   "shptxt",
   "ftnsep",
@@ -345,6 +362,52 @@ interface FieldState {
   formFieldStarted: boolean;
 }
 
+// {\*\objdata ...}'s own (\binN #BDATA) | #SDATA payload, decoded into one ordered byte sequence as the token stream is actually read -- a \'hh escape is a generic RTF character escape valid anywhere in a destination's text (not only in a #SDATA-shaped one), so a real payload can legitimately interleave plain #SDATA hex-digit text with scattered \'hh escapes, and keeping two separate buffers (one for each source) would silently discard whichever one a naive "prefer binary if any, else hex" choice didn't pick. `pendingHexNibble` carries a #SDATA hex digit's value, seen without its pairing digit yet, across token boundaries, so a pair split between two "text" tokens still decodes. Unlike PictureState this carries no dimension/format fields: \object's own \objwN/\objhN are purely informational sizing for a reader that cannot decode \objdata (RTF 1.9.1, "Objects") -- captured instead on the enclosing \object's own ObjectState below -- and this reader's actual reconstruction gets objectKind/frame/document straight from the decoded payload itself -- see buildEmbeddedObject.
+interface ObjectDataState {
+  bytes: number[];
+  pendingHexNibble: number | undefined;
+}
+
+const OBJECT_DATA_HEX_DIGITS = "0123456789abcdef";
+
+// Decodes a run of #SDATA hex-digit text directly into `objectData.bytes`, in place, preserving its actual position relative to any \binN/\'hh bytes already appended or still to come -- the streaming counterpart of base64.ts's own hexToBytes, which only ever sees one destination's payload as a single already-concatenated string. Behaves identically to hexToBytes otherwise: a non-hex character (RTF's own recommended line-wrapping whitespace) is skipped rather than rejected, and a digit left unpaired at the very end of the whole destination is simply dropped, half a byte not being a byte.
+function appendObjectDataHexText(
+  objectData: ObjectDataState,
+  text: string,
+): void {
+  let high = objectData.pendingHexNibble;
+  for (const character of text) {
+    const value = OBJECT_DATA_HEX_DIGITS.indexOf(character.toLowerCase());
+    if (value === -1) {
+      continue;
+    }
+    if (high === undefined) {
+      high = value;
+      continue;
+    }
+    objectData.bytes.push(high * 16 + value);
+    high = undefined;
+  }
+  objectData.pendingHexNibble = high;
+}
+
+// One \object destination's own state, shared by reference across the whole {\object ...} group and every child destination nested inside it (\objdata, \result, and the informational \*\objclass/\*\objname sub-groups) -- the same "shared by reference" pattern FieldState already establishes for \fldinst/\fldrslt, so \result's own group can see whether its sibling \objdata already decoded without either needing to know the other's stack depth.
+//
+// RTF 1.9.1's own <obj> grammar does require <objdata> before <result>: its own Formal Syntax legend gives plain juxtaposition ("AB") as "Item A followed by item B", distinct from '&' ("A&B"), which it reserves for "Item A or item B, in any order" -- and the <obj> production itself writes `<objclsid>? <objdata> <result>` as plain juxtaposition, with no '&' between the last two. A real producer's ordering cannot be assumed to honour that, though: the same spec states its own robustness clause ("RTF readers should be robust enough to handle some minor variations"), and a producer that swaps two required siblings is exactly the kind of minor variation it has in mind -- so which sibling a producer actually wrote first cannot be known when \result's own group is seen. An earlier version of this reader resolved that with a lookahead, re-walking \objdata's own token range ahead of time to predict `decoded` before either sibling was actually read. That lookahead had to re-derive, on its own, every rule the real single-pass read below already applies -- and did so wrongly for a spec-legal \objdata carrying a nested {\*\objalias ...} or {\*\objsect ...} sub-group (RTF 1.9.1: `<objdata> = '{\*' \objdata (<objalias>? & <objsect>?) <data> '}'`), folding those sub-groups' own bytes into the payload it scanned while the real read correctly skips them -- so the two disagreed about whether \objdata would decode, and \result's fate was decided by whichever of them ran. `decoded` here is instead resolved by the SAME live read that will decide it anyway: \result's own content is rendered into a completely isolated scratch accumulator the moment its group is seen (see ContentBuilder's own beginResultScratch/endResultScratch), and only spliced into the real document -- at \object's own group end, once every child has actually been read and `decoded` is thus final -- if \objdata never went on to decode. This closes the whole category of lookahead-vs-real-parse disagreement rather than keeping a second implementation of the same decode in sync with the first, and it closes a second category besides: \result's scratch content shares no paragraph, block list, or table state with whatever was already accumulating around \object, so rendering it can neither destroy nor be destroyed by the surrounding document, regardless of where \object sits in a still-open paragraph or table cell.
+//
+// widthTwips/heightTwips capture \objwN/\objhN (the size hint RTF 1.9.1 says a producer supplies "to maintain backward compatibility" for a reader that cannot decode \objdata at all): this reader's own reconstruction never needs them when \objdata decodes, but the degrade path folds them into its diagnostic message instead of discarding them silently.
+interface ObjectState {
+  decoded: boolean;
+  // Whether an {\*\objdata ...} child has actually been read (not merely predicted) anywhere in this \object's own group, regardless of whether it goes on to decode -- distinct from `decoded`, since an \object whose \objdata genuinely fails to decode already reports that failure on its own terms (buildEmbeddedObject's own EMBEDDED_OBJECT_UNREADABLE), while an \object with no \objdata child at all is a different, otherwise-silent construct substitution that \object's own group-end handling below reports separately. Set the moment an \objdata child's group is actually entered, which is also what lets a second \objdata sibling (RTF's own grammar allows only one, but a malformed producer can still write two) be recognised as a duplicate and skipped rather than decoded twice into two identical blocks.
+  objectDataSeen: boolean;
+  // Whether an {\result ...} child has actually been read anywhere in this \object's own group -- distinct from whether its content was ultimately kept or discarded, since \object's own group-end diagnostic (below) needs to say which of \objdata/\result, if either, this \object actually had, and it is also how a second \result sibling (RTF's own grammar allows only one, but a malformed producer can still write two) is recognised as a duplicate and skipped, exactly like `objectDataSeen` does for \objdata.
+  resultSeen: boolean;
+  // The finished blocks \result's own scratch rendering produced, recorded once its group closes -- spliced into the real document at \object's own group end if `decoded` is still false then, discarded otherwise. Undefined until \result's group has actually closed, and left undefined forever if this \object has no \result child at all.
+  resultBlocks: ContentBlock[] | undefined;
+  widthTwips: number | undefined;
+  heightTwips: number | undefined;
+}
+
 // One {\*\bkmkstart ...} or {\*\bkmkend ...} group under construction: its #PCDATA name, plus the start half's optional table-column range.
 interface BookmarkState {
   name: string;
@@ -359,6 +422,16 @@ interface GroupState {
   para: ParagraphState;
   field: FieldState | undefined;
   picture: PictureState | undefined;
+  // The same ownership marker as objectDataOwner/objectOwner below, for {\pict ...} itself: `picture` is carried forward by reference so a \'hh/binary byte or a \picwN/\pichN control word inside a nested group still reaches the same PictureState, but the group-end handler that calls buildPicture must fire only once, when \pict's own group actually closes -- not on every plain sibling group nested directly inside it (a malformed producer can write one; RTF's own <pict> grammar has no legitimate use for one).
+  pictureOwner: boolean;
+  objectData: ObjectDataState | undefined;
+  object: ObjectState | undefined;
+  // True only on the one GroupState created directly for an {\*\objdata ...} destination's own group -- objectData itself is still carried forward BY REFERENCE across every descendant group (a stray \binN/\'hh byte inside a nested group must still land in the same accumulator the real \objdata group started), so the group-end handler that calls buildEmbeddedObject needs its own, non-inherited marker to fire exactly once per \objdata construct rather than once per descendant group that happens to close underneath it. Mirrors resultOf's own "set on the direct child, cleared by cloneGroupState" shape below, for the identical reason: a plain nested group inside \objdata's content (or a malformed one a hostile producer wrote) must not re-trigger this group's own finalisation when IT closes too.
+  objectDataOwner: boolean;
+  // The same ownership marker for {\object ...} itself: `object` is carried forward by reference so \objw/\objh control words and \objdata/\result's own group-open checks can reach the shared ObjectState from any depth inside \object's own group, but the group-end handler that splices \result's fallback in (or reports EMBEDDED_OBJECT_UNREADABLE) must fire only once, when \object's own group actually closes -- not on every plain sibling group nested directly inside it (RTF's own <obj> grammar allows only <objdata> and <result> there, but a malformed producer can write anything).
+  objectOwner: boolean;
+  // Set only on the one GroupState created directly for a \result destination's own group -- the enclosing \object's shared state to report the finished scratch blocks back to when this group closes. Deliberately NOT carried forward by cloneGroupState the way `object` is: a plain nested group inside \result's own content (every test fixture's `{\result{\pard\plain ...\par}}` has one) must not re-trigger this group's own finalisation a second time when IT closes, so only the direct child gets this field and every descendant clones it back to undefined.
+  resultOf: ObjectState | undefined;
   bookmark: BookmarkState | undefined;
   // Whether this group is a \upr wrapper's own child that must be discarded (the ANSI half). Set on the wrapper; consulted when a child group opens.
   inUnicodeWrapper: boolean;
@@ -406,6 +479,12 @@ function cloneGroupState(state: GroupState): GroupState {
     para: { ...state.para },
     field: state.field,
     picture: state.picture,
+    pictureOwner: false,
+    objectData: state.objectData,
+    object: state.object,
+    objectDataOwner: false,
+    objectOwner: false,
+    resultOf: undefined,
     bookmark: state.bookmark,
     inUnicodeWrapper: state.inUnicodeWrapper,
     isFieldGroup: state.isFieldGroup,
@@ -565,6 +644,57 @@ function horizontalSpanAt(
   return span;
 }
 
+// Every piece of mutable state a ContentBuilder holds while it accumulates one document's worth of content -- deliberately excluding `sections` (already-finished sections, never touched mid-accumulation) and the constructor-injected `header`/`sink` (read-only for the whole read). Bundled here so beginResultScratch/endResultScratch can swap the whole thing out for a fresh instance and back, rather than special-casing each field: see those two methods for why \result's own fallback content needs this.
+interface BuilderAccumulatorState {
+  blocks: ContentBlock[];
+  runs: ContentRun[];
+  pendingRunKey: string | undefined;
+  pendingRunText: string;
+  pendingRunFields: Omit<ContentRun, "text">;
+  runProvenance: ConstructDescriptor[][];
+  pendingRunProvenance: ConstructDescriptor[];
+  tableRows: RawTableRow[];
+  tableColumnRights: number[];
+  rowCells: ContentTableCell[];
+  cellBlocks: ContentBlock[];
+  pendingCellRights: number[];
+  pendingCellDefinitions: PendingCell[];
+  pendingCell: PendingCell;
+  rowLeftTwips: number;
+  paragraphSerial: number;
+  openBookmarks: Map<string, OpenBookmark>;
+  sectionBlockExtents: BlockConstructExtent[];
+  cellBlockExtents: BlockConstructExtent[];
+  pendingRunConstructs: RunConstructExtent[];
+  closingBookmarks: OpenBookmark[];
+}
+
+function freshAccumulatorState(): BuilderAccumulatorState {
+  return {
+    blocks: [],
+    runs: [],
+    pendingRunKey: undefined,
+    pendingRunText: "",
+    pendingRunFields: {},
+    runProvenance: [],
+    pendingRunProvenance: [],
+    tableRows: [],
+    tableColumnRights: [],
+    rowCells: [],
+    cellBlocks: [],
+    pendingCellRights: [],
+    pendingCellDefinitions: [],
+    pendingCell: newPendingCell(),
+    rowLeftTwips: 0,
+    paragraphSerial: 0,
+    openBookmarks: new Map(),
+    sectionBlockExtents: [],
+    cellBlockExtents: [],
+    pendingRunConstructs: [],
+    closingBookmarks: [],
+  };
+}
+
 class ContentBuilder {
   private readonly sections: ContentSection[] = [];
   private blocks: ContentBlock[] = [];
@@ -586,7 +716,7 @@ class ContentBuilder {
   private rowLeftTwips = 0;
   // Bookmark bookkeeping. A bookmark's two halves are matched by name and may bracket a sub-sequence of one paragraph's runs or a run of whole paragraphs, and document-schema.js gives those two scopes two different encodings -- a RunConstructExtent on the paragraph, or a constructStart/constructEnd marker pair in the block list. Which one applies is not knowable when the start is seen, only when its end arrives, so a start is held open here and resolved then.
   private paragraphSerial = 0;
-  private readonly openBookmarks = new Map<string, OpenBookmark>();
+  private openBookmarks = new Map<string, OpenBookmark>();
   // Extents whose two halves landed in different paragraphs of the same block list, waiting for that list to be finalised. Two lists, because a table cell's blocks and a section's blocks are separate bracket scopes and a pair may not straddle them.
   private sectionBlockExtents: BlockConstructExtent[] = [];
   private cellBlockExtents: BlockConstructExtent[] = [];
@@ -595,6 +725,8 @@ class ContentBuilder {
   private closingBookmarks: OpenBookmark[] = [];
   // Form fields, held open the same way as a bookmark, but stacked rather than named: a \field group's own open and close are one matched pair, not two independently placed halves. Real producers keep a form field's \fldrslt inline, within one paragraph, but RTF's own grammar permits a multi-paragraph result (see OpenFormField's own comment above), so the paragraphSerial check in endFormField below is a genuine cross-paragraph guard, not merely defensive: it catches that case and drops the contentControl with a diagnostic rather than producing an inverted or mis-attached range.
   private openFormFields: OpenFormField[] = [];
+  // Suspended accumulator states, one per \result currently rendering -- a stack rather than a single slot because a malformed producer can nest an \object (with its own \result) inside another \object's own \result content; see beginResultScratch/endResultScratch.
+  private resultScratchStack: BuilderAccumulatorState[] = [];
 
   constructor(
     private readonly header: RtfHeader,
@@ -1069,9 +1201,94 @@ class ContentBuilder {
     return widths;
   }
 
-  addBlock(block: ContentBlock): void {
+  // Splices zero or more already-finished blocks into place -- one at a time for a decoded \pict/\object, or a whole run at once for \result's own recovered fallback content (see endResultScratch) -- flushing whatever run is mid-accumulation first, exactly as a single addBlock always did, and targeting the open table cell's own list or the section's the same way endParagraph does. A no-op for an empty list, so callers never need to guard the \result case (which recovers nothing when \objdata decoded, or when \result itself had no content) with their own length check.
+  addBlocks(blocks: readonly ContentBlock[], inTable: boolean): void {
+    if (blocks.length === 0) {
+      return;
+    }
     this.flushRun();
-    this.blocks.push(block);
+    const target = inTable ? this.cellBlocks : this.blocks;
+    target.push(...blocks);
+  }
+
+  // Snapshots every field BuilderAccumulatorState names, by reference -- the arrays/map themselves move to the snapshot, not copies of their contents, so the fields below can be pointed at a fresh empty set without the old one changing shape underneath whoever holds the snapshot.
+  private captureAccumulatorState(): BuilderAccumulatorState {
+    return {
+      blocks: this.blocks,
+      runs: this.runs,
+      pendingRunKey: this.pendingRunKey,
+      pendingRunText: this.pendingRunText,
+      pendingRunFields: this.pendingRunFields,
+      runProvenance: this.runProvenance,
+      pendingRunProvenance: this.pendingRunProvenance,
+      tableRows: this.tableRows,
+      tableColumnRights: this.tableColumnRights,
+      rowCells: this.rowCells,
+      cellBlocks: this.cellBlocks,
+      pendingCellRights: this.pendingCellRights,
+      pendingCellDefinitions: this.pendingCellDefinitions,
+      pendingCell: this.pendingCell,
+      rowLeftTwips: this.rowLeftTwips,
+      paragraphSerial: this.paragraphSerial,
+      openBookmarks: this.openBookmarks,
+      sectionBlockExtents: this.sectionBlockExtents,
+      cellBlockExtents: this.cellBlockExtents,
+      pendingRunConstructs: this.pendingRunConstructs,
+      closingBookmarks: this.closingBookmarks,
+    };
+  }
+
+  private restoreAccumulatorState(saved: BuilderAccumulatorState): void {
+    this.blocks = saved.blocks;
+    this.runs = saved.runs;
+    this.pendingRunKey = saved.pendingRunKey;
+    this.pendingRunText = saved.pendingRunText;
+    this.pendingRunFields = saved.pendingRunFields;
+    this.runProvenance = saved.runProvenance;
+    this.pendingRunProvenance = saved.pendingRunProvenance;
+    this.tableRows = saved.tableRows;
+    this.tableColumnRights = saved.tableColumnRights;
+    this.rowCells = saved.rowCells;
+    this.cellBlocks = saved.cellBlocks;
+    this.pendingCellRights = saved.pendingCellRights;
+    this.pendingCellDefinitions = saved.pendingCellDefinitions;
+    this.pendingCell = saved.pendingCell;
+    this.rowLeftTwips = saved.rowLeftTwips;
+    this.paragraphSerial = saved.paragraphSerial;
+    this.openBookmarks = saved.openBookmarks;
+    this.sectionBlockExtents = saved.sectionBlockExtents;
+    this.cellBlockExtents = saved.cellBlockExtents;
+    this.pendingRunConstructs = saved.pendingRunConstructs;
+    this.closingBookmarks = saved.closingBookmarks;
+  }
+
+  // Begins rendering \result's own fallback content into a totally isolated accumulator, suspending whatever paragraph, block list, table, or bookmark state was already accumulating around \object -- so \result's content can neither destroy that state (a paragraph still open before \object started, as "before" is in `before {\object...}`) nor be destroyed by the block-index confusion a range-based retraction produced (a bare-inline \result closing no block of its own, or a second \result sibling overwriting the first's range). flushRun() first so a run already pending in the SUSPENDED paragraph is completed before it is set aside, rather than left half-built underneath the fresh state. endResultScratch, called when \result's own group closes, hands back whatever this produced and restores the suspended state.
+  beginResultScratch(): void {
+    this.flushRun();
+    this.resultScratchStack.push(this.captureAccumulatorState());
+    this.restoreAccumulatorState(freshAccumulatorState());
+  }
+
+  // Ends \result's own scratch rendering: force-closes whatever paragraph it was still accumulating -- RTF 1.9.1's own <result> = '{' \result <para>+ '}' lets the group's own closing brace stand in for the final paragraph's \par exactly as a table cell's \cell or the document's own end already do elsewhere in this reader (endParagraph's own force=false is exactly that "implicit boundary" case: it produces nothing new when \result's content already closed with its own explicit \par, and produces the one paragraph still pending when it did not) -- then hands back every block \result's content produced, from BOTH of the scratch's own block lists, before restoring the accumulator `beginResultScratch` suspended. Reading both rather than picking one by `para.inTable` matters because that flag can genuinely diverge from where a nested paragraph's own content actually landed: \intbl restated directly on \result's own group sets `para.inTable` here, but a child group nested inside \result (RTF 1.9.1's own <result> grammar admits \intbl among <parfmt>* on \result's own para, so this is spec-legal input, not malformed) can \pard-reset ITS OWN copy back to false before its own \par closes it into `blocks` instead of `cellBlocks` -- so `para.inTable` at this group's own end no longer says which list the content actually reached. Concatenating both sidesteps the question entirely: `beginResultScratch` started both empty and nothing outside \result's own content can write to either, so everything either list holds by now belongs to \result regardless of which one it is. `closeTable()` runs unconditionally first (matching endSection's own unconditional call, not gated on `para.inTable` either) so a table that genuinely closed inside \result (a real \trowd/\cellx/\cell/\row run) is already folded into `blocks` before the read, rather than left sitting in `tableRows` where neither returned list would surface it.
+  endResultScratch(para: ParagraphState): ContentBlock[] {
+    this.endParagraph(para, false);
+    this.closeTable();
+    const blocks = [...this.blocks, ...this.cellBlocks];
+    const saved = this.resultScratchStack.pop();
+    if (saved !== undefined) {
+      this.restoreAccumulatorState(saved);
+    }
+    return blocks;
+  }
+
+  // A truncated or otherwise malformed input can leave one or more \result groups never closed at all (no matching '}' before the input ends), so endResultScratch above -- the only place that ever pops resultScratchStack -- never runs for them: the accumulator stays swapped to \result's own isolated scratch state, mid-render, forever. Were finish() to build the document from that state as-is, it would emit whatever \result's own truncated content happened to accumulate in place of the ENTIRE suspended real document \result's own \object was sitting inside -- fallback content kept, the real body silently discarded, exactly backwards from \object's own group-end preference (real \objdata over \result, real content over a still-open \result's placeholder). Restoring every still-suspended state here, most-recently-opened first, throws the incomplete scratch content away and hands the real accumulator back before finish() ever reads from it; well-formed input closes every \result group's own scratch normally, so resultScratchStack is already empty by the time this runs and the loop is a no-op.
+  private discardUnclosedResultScratches(): void {
+    while (this.resultScratchStack.length > 0) {
+      const saved = this.resultScratchStack.pop();
+      if (saved !== undefined) {
+        this.restoreAccumulatorState(saved);
+      }
+    }
   }
 
   endSection(section: SectionState, para: ParagraphState): void {
@@ -1115,6 +1332,7 @@ class ContentBuilder {
     section: SectionState,
     para: ParagraphState,
   ): ContentDocument {
+    this.discardUnclosedResultScratches();
     this.endSection(section, para);
     if (this.sections.length === 0) {
       this.sections.push({ ...sectionGeometry(section), blocks: [] });
@@ -1256,6 +1474,59 @@ function defaultPictureState(): PictureState {
   };
 }
 
+// Formats \objwN/\objhN (captured on the enclosing \object's own ObjectState) as a diagnostic clause, reporting whichever of the two is actually present rather than requiring both -- the degrade path's own way of not discarding a size hint the producer genuinely stated, even a partial one, even though nothing in the ContentDocument has a position left to carry it once the real object cannot be decoded.
+function objectSizeHintClause(object: ObjectState | undefined): string {
+  const widthTwips = object?.widthTwips;
+  const heightTwips = object?.heightTwips;
+  if (widthTwips !== undefined && heightTwips !== undefined) {
+    const widthPt = twipsToPoints(widthTwips).toFixed(2);
+    const heightPt = twipsToPoints(heightTwips).toFixed(2);
+    return ` (the object's own \\objw/\\objh declared a ${widthPt}pt x ${heightPt}pt size)`;
+  }
+  if (widthTwips !== undefined) {
+    return ` (the object's own \\objw declared a ${twipsToPoints(widthTwips).toFixed(2)}pt width)`;
+  }
+  if (heightTwips !== undefined) {
+    return ` (the object's own \\objh declared a ${twipsToPoints(heightTwips).toFixed(2)}pt height)`;
+  }
+  return "";
+}
+
+// The payload an ObjectDataState carries, as real bytes -- `bytes` is already the fully decoded, ordered sequence by the time a \objdata destination's group closes, so this is a plain conversion rather than a decode.
+function objectDataBytes(objectData: ObjectDataState): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(objectData.bytes);
+}
+
+// Turns {\*\objdata ...}'s collected payload back into a ContentEmbeddedObjectBlock, or reports why it cannot and returns undefined -- the object-destination counterpart of buildPicture above. "no payload" and "not this package's own payload" are the two distinct failure shapes (matching buildPicture's own "no format" vs "no size" split): the first never reaches readEmbeddedObjectData at all, and the second is every way a real, foreign OLE object (or simply malformed \objdata) legitimately fails to parse as one. `object` is the enclosing \object's own state, consulted only for its \objw/\objh size hint on the degrade path -- readEmbeddedObjectData never needs it, since a decoded payload carries its own frame.
+function buildEmbeddedObject(
+  objectData: ObjectDataState,
+  object: ObjectState | undefined,
+  sink: RtfDiagnosticSink,
+): ContentEmbeddedObjectBlock | undefined {
+  const bytes = objectDataBytes(objectData);
+  if (bytes.length === 0) {
+    sink({
+      code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+      severity: "warning",
+      message: `an \\object destination's \\objdata carried no payload${objectSizeHintClause(object)}`,
+    });
+    return undefined;
+  }
+  const embedded = readEmbeddedObjectData(bytes);
+  if (embedded === undefined) {
+    sink({
+      code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+      severity: "warning",
+      message:
+        "an \\object destination's \\objdata is not a payload this reader produced (a real OLE object's OLESaveToStream data has no decoder here), so the object is dropped" +
+        `${objectSizeHintClause(object)}; its \\result fallback content, if any, is read in its place`,
+    });
+    return undefined;
+  }
+  // Spread first, literal last: `embedded` is a value this reader itself never controls the shape of once \objdata comes from an arbitrary (potentially hostile) input file, so a doctored payload carrying its own "kind" key must never be able to override the block's real discriminant.
+  return { ...embedded, kind: "embeddedObject" };
+}
+
 // A toggle control word is on when it carries no parameter or a non-zero one, and off at exactly 0 -- "\b turns on bold and \b0 turns off bold" (RTF 1.9.1, "Control Word").
 function toggleValue(param: number | undefined): boolean {
   return param === undefined || param !== 0;
@@ -1303,6 +1574,12 @@ function readRtfDetail(
     para: defaultParagraphState(),
     field: undefined,
     picture: undefined,
+    pictureOwner: false,
+    objectData: undefined,
+    object: undefined,
+    objectDataOwner: false,
+    objectOwner: false,
+    resultOf: undefined,
     bookmark: undefined,
     inUnicodeWrapper: false,
     isFieldGroup: false,
@@ -1402,11 +1679,49 @@ function readRtfDetail(
         head.destination !== undefined &&
         HEADER_DESTINATIONS.has(head.destination);
       const wrapperChild = state.inUnicodeWrapper;
+      // \result is \object's own fallback rendering for a reader that cannot decode \objdata at all -- this reader always prefers \objdata, so \result's content is rendered into a totally isolated scratch accumulator (ContentBuilder's own beginResultScratch, called below once this group is actually entered) and only spliced into the real document, at \object's own group-end handling further down, if \objdata never decodes. objectState is the enclosing \object's own shared-by-reference state.
+      const objectState = state.object;
+      const isResultDestination =
+        head.destination === "result" && objectState !== undefined;
+      // RTF's own <obj> grammar allows only one \result child, but a malformed producer can still write two -- recognised here, mirroring \objdata's own duplicate check just below, by resultSeen already being true from the first one, so the second is skipped whole rather than rendered into a scratch accumulator nothing will read.
+      // objectState is provably defined here: isResultDestination's own definition already asserts `objectState !== undefined`, and TypeScript's aliased-condition narrowing carries that through the `&&` below.
+      const isDuplicateResult = isResultDestination && objectState.resultSeen;
+      if (objectState !== undefined && isResultDestination) {
+        // Recorded regardless of whether this \result is ultimately kept or discarded: \object's own group-end diagnostic (below) needs to know whether a \result existed at all, distinctly from whether \objdata did, and the duplicate check just above needs it too.
+        objectState.resultSeen = true;
+      }
+      if (isDuplicateResult) {
+        sink({
+          code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+          severity: "warning",
+          message:
+            "an \\object destination has more than one \\result child, which RTF's own grammar does not allow; only the first is kept and this one is discarded",
+        });
+      }
+      // RTF's own <obj> grammar allows only one \objdata child, but a malformed producer can still write two -- recognised here (rather than left to decode twice into two identical embeddedObject blocks) by objectDataSeen already being true from the first one.
+      const isObjectDataDestination =
+        head.destination === "objdata" && known === "objectData";
+      const isDuplicateObjectData =
+        isObjectDataDestination && objectState?.objectDataSeen === true;
+      if (isDuplicateObjectData) {
+        sink({
+          code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+          severity: "warning",
+          message:
+            "an \\object destination has more than one \\objdata child, which RTF's own grammar does not allow; only the first is decoded and this one is discarded",
+        });
+      } else if (isObjectDataDestination && objectState !== undefined) {
+        objectState.objectDataSeen = true;
+      }
       // The ANSI half of a {\upr {ansi} {\*\ud unicode}} pair is discarded and the \ud half read, which is exactly what the spec says a Unicode-aware reader must do: the \upr destination "does not use the \* keyword; this forces the old RTF readers to pick up the ANSI representation and discard the Unicode one".
       const kind: DestinationKind =
         isHeaderTable || (wrapperChild && head.destination !== "ud")
           ? "skip"
-          : (known ?? (head.ignorable ? "skip" : state.destination));
+          : isDuplicateObjectData || isDuplicateResult
+            ? "skip"
+            : isResultDestination
+              ? "body"
+              : (known ?? (head.ignorable ? "skip" : state.destination));
       if (head.destination !== undefined && !isHeaderTable) {
         if (head.ignorable && known === undefined) {
           sink({
@@ -1468,6 +1783,23 @@ function readRtfDetail(
         }
         if (kind === "picture") {
           child.picture = defaultPictureState();
+          child.pictureOwner = true;
+        }
+        if (kind === "objectData") {
+          child.objectData = { bytes: [], pendingHexNibble: undefined };
+          child.objectDataOwner = true;
+        }
+        if (kind === "object") {
+          // Freshly resolved here as the group is actually entered, not predicted ahead of time -- \objdata and \result (below) each report into this same shared state as they are actually read, and \object's own group-end handling (further down) reads it back once every child has been.
+          child.object = {
+            decoded: false,
+            objectDataSeen: false,
+            resultSeen: false,
+            resultBlocks: undefined,
+            widthTwips: undefined,
+            heightTwips: undefined,
+          };
+          child.objectOwner = true;
         }
         if (kind === "bookmarkStart" || kind === "bookmarkEnd") {
           child.bookmark = {
@@ -1480,6 +1812,14 @@ function readRtfDetail(
       } else {
         index += 1;
       }
+      if (objectState !== undefined && isResultDestination) {
+        // Unreachable for a duplicate \result: isDuplicateResult forces kind to "skip" above, which continues the outer loop before this point is ever reached. \result's own content now builds into a totally isolated scratch accumulator (see ContentBuilder's own beginResultScratch) rather than the paragraph/block list/table state already accumulating around \object -- so it can neither destroy that state nor be destroyed by it, regardless of where \object sits (mid-paragraph, inside a table cell, or anywhere else). `object` is cleared on this child (rather than inherited, as cloneGroupState would otherwise carry it forward by reference) so that a malformed \objdata nested inside \result's own fallback content -- not itself wrapped in its own \object, which real RTF never does but a hostile or corrupt file could -- decodes or fails entirely on its own terms, without marking THIS \object decoded.
+        builder.beginResultScratch();
+        child.resultOf = objectState;
+        child.object = undefined;
+        // cloneGroupState just copied \object's own para onto this child, inTable included -- but \object's real placement (inside a table cell or not) is already captured correctly and permanently in `state.para.inTable` at \object's own group, read again once \object's own group-end decides where to splice this content (further down, addBlocks(objectState.resultBlocks, state.para.inTable)) and never touched again after \object opens. \result's own scratch rendering must not inherit that inTable value: freshAccumulatorState() gives the scratch empty cellBlocks/tableRows, so there is no real open cell for inherited-true content to belong to, and \result's own body may produce a run directly under this group (no nested braces, no \pard/\intbl of its own) before the group ever closes -- in that bare case this reset is the only thing standing between the correct default and an inherited true left over from \object's own placement. It does not make `para.inTable` a reliable signal of where \result's content ends up by the time this group closes, though: \result's own body can still restate \intbl directly (mutating this same para back to true) or open a nested group whose own \pard resets ITS copy independently of this one, so a paragraph produced deeper in \result's content can land in either `blocks` or `cellBlocks` regardless of what this group's own para says afterwards. endResultScratch reads back from both lists for exactly that reason, rather than trusting this value to pick one.
+        child.para = { ...child.para, inTable: false };
+      }
       stack.push(child);
       state = child;
       textOffset = 0;
@@ -1488,10 +1828,58 @@ function readRtfDetail(
 
     if (token.kind === "groupEnd") {
       flushBytes();
-      if (state.destination === "picture" && state.picture !== undefined) {
+      if (
+        state.destination === "picture" &&
+        state.picture !== undefined &&
+        state.pictureOwner
+      ) {
         const image = buildPicture(state.picture, sink);
         if (image !== undefined) {
-          builder.addBlock(image);
+          builder.addBlocks([image], state.para.inTable);
+        }
+      }
+      if (
+        state.destination === "objectData" &&
+        state.objectData !== undefined &&
+        state.objectDataOwner
+      ) {
+        const embedded = buildEmbeddedObject(
+          state.objectData,
+          state.object,
+          sink,
+        );
+        if (embedded !== undefined) {
+          builder.addBlocks([embedded], state.para.inTable);
+          // Marks the enclosing \object's shared state so \object's own group-end handling below discards \result's fallback content instead of splicing it in alongside the real decoded object -- this reader always prefers the real object over \object's own cached appearance, exactly as Word itself does.
+          if (state.object !== undefined) {
+            state.object.decoded = true;
+          }
+        }
+      }
+      if (state.resultOf !== undefined) {
+        // \result's own scratch accumulator (opened by beginResultScratch when this group started) is finished now: every \par it contained has already closed a real paragraph inside it, and endResultScratch force-closes whatever paragraph was still open otherwise. Recorded, not yet acted on: \object's own group-end handling further up the stack either splices these blocks in or discards them once \objdata's real decode's fate is finally known, and this \result's own group-end cannot know that outcome when \result comes first in the source -- \objdata may not even have been read yet.
+        state.resultOf.resultBlocks = builder.endResultScratch(state.para);
+      }
+      if (
+        state.destination === "object" &&
+        state.object !== undefined &&
+        state.objectOwner
+      ) {
+        // Every child \objdata/\result this \object's own group can legally contain has, by construction, already closed by the time \object's own closing brace is reached -- so `decoded`, `objectDataSeen` and `resultBlocks` are all final here, regardless of which sibling the source actually listed first.
+        const objectState = state.object;
+        if (!objectState.decoded && objectState.resultBlocks !== undefined) {
+          // \objdata never decoded (or never existed at all): \result's own recovered content is appended, via the same addBlocks a decoded \pict/\object already uses, to whichever block list \object itself sits in -- the open table cell's or the section's. That is not the same as splicing it into the exact position \object occupied: addBlocks only flushes the pending run, it does not end the paragraph \object was sitting inside, so an \object mid-paragraph (as in "before {\object...} after") gets its fallback content appended BEFORE that paragraph, once it eventually closes -- with the text on either side of \object merged into that one paragraph rather than split around the fallback.
+          builder.addBlocks(objectState.resultBlocks, state.para.inTable);
+        }
+        // An \object whose \objdata genuinely exists but fails to decode already reports that failure on its own terms (buildEmbeddedObject's own EMBEDDED_OBJECT_UNREADABLE, above) -- this diagnostic is only for the two cases where NOTHING already said so: no \objdata at all, with \result's content used in its place, or no \objdata AND no \result, where the whole construct is silently dropped.
+        if (!objectState.objectDataSeen) {
+          sink({
+            code: RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+            severity: "warning",
+            message: objectState.resultSeen
+              ? "an \\object destination has no \\objdata payload at all; its \\result fallback content is used in its place"
+              : "an \\object destination has neither \\objdata nor \\result content; the whole construct is dropped",
+          });
         }
       }
       if (state.bookmark !== undefined) {
@@ -1549,6 +1937,11 @@ function readRtfDetail(
         textOffset === 0 ? token.bytes : token.bytes.subarray(textOffset);
       if (state.destination === "picture" && state.picture !== undefined) {
         state.picture.hex += asciiStringFromBytes(slice);
+      } else if (
+        state.destination === "objectData" &&
+        state.objectData !== undefined
+      ) {
+        appendObjectDataHexText(state.objectData, asciiStringFromBytes(slice));
       } else {
         appendBytes(pendingBytes, slice);
       }
@@ -1560,6 +1953,11 @@ function readRtfDetail(
     if (token.kind === "binary") {
       if (state.destination === "picture" && state.picture !== undefined) {
         appendBytes(state.picture.binary, token.bytes);
+      } else if (
+        state.destination === "objectData" &&
+        state.objectData !== undefined
+      ) {
+        appendBytes(state.objectData.bytes, token.bytes);
       }
       index += 1;
       continue;
@@ -1569,6 +1967,11 @@ function readRtfDetail(
       if (state.destination === "picture" && state.picture !== undefined) {
         // A \'hh inside a picture destination is payload, not text: the hex digits themselves were already consumed by the tokenizer, so the byte goes straight into the binary buffer.
         state.picture.binary.push(token.byte);
+      } else if (
+        state.destination === "objectData" &&
+        state.objectData !== undefined
+      ) {
+        state.objectData.bytes.push(token.byte);
       } else {
         pendingBytes.push(token.byte);
       }
@@ -1966,7 +2369,7 @@ function applyStructureControlWord(
       return true;
     case "page":
       builder.endParagraph(state.para, false);
-      builder.addBlock({ kind: "pageBreak" });
+      builder.addBlocks([{ kind: "pageBreak" }], state.para.inTable);
       return true;
     case "sect":
       // "\sect End of section and paragraph" -- both, in that order: the paragraph closes into the section that is ending, not into the one about to begin.
@@ -1990,6 +2393,16 @@ function applyControlWord(
   const picture = state.picture;
   if (state.destination === "picture" && picture !== undefined) {
     applyPictureControlWord(name, param, picture);
+    return;
+  }
+  const object = state.object;
+  if (state.destination === "object" && object !== undefined) {
+    // \objwN/\objhN (RTF 1.9.1, "Objects": <objhw> = \objhN & \objwN, one member of the larger <objsize> production), the size hint captured here for objectSizeHintClause's own use on the degrade path -- every other word \object's own scope can carry (\objemb, \objautlink, \objlock, \objupdate, \objsub, ...) is a bare marker this reader does not otherwise act on, since a decoded \objdata carries its own frame and an undecodable one falls back to \result instead.
+    if (name === "objw") {
+      object.widthTwips = param;
+    } else if (name === "objh") {
+      object.heightTwips = param;
+    }
     return;
   }
   const bookmark = state.bookmark;
