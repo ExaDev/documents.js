@@ -1267,6 +1267,34 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // Regression guard: constructs.ts's own formFieldContentControl trims \ffname/\ffhelptext before gating on them (`name.trim().length > 0`), so a whitespace-only alias/tag reads back as absent on this codec's own reader. Before this fix, the writer gated on the untrimmed `.length > 0` instead, so a whitespace-only alias/tag still minted a real \ffownhelp1/{\*\ffhelptext} or {\*\ffname} destination -- content the reader would then drop on the way back in, an asymmetric round trip.
+  it("writes no \\ffownhelp/\\ffhelptext or \\ffname at all for a whitespace-only alias/tag", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Lorem ipsum." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "   ",
+                alias: "  ",
+              },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).not.toContain("\\ffownhelp");
+    expect(out).not.toContain("\\ffhelptext");
+    expect(out).not.toContain("\\ffname");
+    expectBalancedBraces(out);
+  });
+
   // Explicit \ffprot1, never a bare \ffprot: \ffprotN is a Value control word (RTF 1.9.1's own control-word-type table), not a Toggle word like \b/\i, so its bare form defaults to 0/off rather than "on" -- writing the explicit N form costs one character and matches every real fixture read.test.ts carries for this bit family (PHPRtfLite always writes the explicit form for the sibling \ffres/\ffdefres bits).
   it("writes the explicit \\ffprot1 (never a bare \\ffprot) for a contentControl locked as 'content'", () => {
     const out = write(

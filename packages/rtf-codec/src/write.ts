@@ -283,7 +283,7 @@ function formFieldPayload(
 
   // [MS-DOC] 2.9.78 FFData.xstzHelpText, gated by FFDataBits.fOwnHelp ("A bit that specifies whether the form field has custom help text in FFData.xstzHelpText. If fOwnHelp is 0, FFData.xstzHelpText contains an empty or auto-generated string."): RTF 1.9.1's own \ffhelptext ("Help text (string). This is a destination control word.") is this vocabulary's one human-readable descriptive-text slot for a form field, and the closest analogue RTF has to docx `w:alias`/PDF AcroForm's `/TU` alternate description -- both are a label shown to whoever is looking at the control, distinct from the control's own machine-readable name that \ffname/`w:tag`/AcroForm's `/T` already carry. \ffownhelp1 is minted alongside it, mirroring what a real producer does whenever xstzHelpText genuinely carries author-set text rather than an "empty or auto-generated string"; the help text itself is a string-destination member and so goes into `ffHelpTextString` instead, joined in with the rest only at the very end. Decided here, ahead of the controlType-specific block below, because this writer's own chosen order places \ffownhelp before every field that block decides (\ffprot, \ffhaslistbox, \ffdefres/\ffres) -- see this function's own top comment for why that order is this writer's convention, not a spec requirement.
   let ffOwnHelpFragment = "";
-  if (descriptor.alias !== undefined && descriptor.alias.length > 0) {
+  if (descriptor.alias !== undefined && descriptor.alias.trim().length > 0) {
     ffOwnHelpFragment = "\\ffownhelp1";
     ffHelpTextString = `{\\*\\ffhelptext ${escapeText(descriptor.alias)}}`;
   }
@@ -405,8 +405,8 @@ function formFieldPayload(
     }
   }
 
-  // The first of the string-destination members in this writer's own chosen order: the field's bookmark-style name, from \ffname.
-  if (descriptor.tag !== undefined && descriptor.tag.length > 0) {
+  // The first of the string-destination members in this writer's own chosen order: the field's bookmark-style name, from \ffname. Trimmed before the length check to match the reader's own convention (constructs.ts's formFieldContentControl trims \ffname/\ffhelptext before gating on them) -- otherwise a whitespace-only alias/tag would write as if it were real content but read back as absent, an asymmetric round trip.
+  if (descriptor.tag !== undefined && descriptor.tag.trim().length > 0) {
     ffNameString = `{\\*\\ffname ${escapeText(descriptor.tag)}}`;
   }
   // Concatenated in this writer's own chosen deterministic order: every formparams-shaped member first (fftype, ffownhelp, ffprot, then whatever controlTypeParams decided), then formstrings-shaped members in this writer's own order (ffname, ffdeftext, ffhelptext, ffl entries) -- see this function's own top comment for why that order is a convention, not a spec requirement.
