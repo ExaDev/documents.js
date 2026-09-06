@@ -169,14 +169,19 @@ function writeTruecolorPng(
   writeChunk(writer, "IDAT", deflate(filtered));
 }
 
-// Encodes normalised raw pixel data (8 bits per channel, optionally with a separate alpha plane) into PNG file bytes -- the exact inverse of decodePng's RawImage shape. A channels === 3 image is first checked for a lossless indexed-colour (colour type 3) representation, and encoded that way whenever its pixels reduce to 256 or fewer distinct colours -- indexed colour is substantially smaller than truecolour for the flat-colour images typical of diagrams and screenshots, and decodePng reconstructs the original RGB(A) data exactly via its own PLTE/tRNS lookup, so this never changes what decodePng(encodePng(image)) hands back. Every other image (grayscale, or a truecolour image with more than 256 distinct colours) falls back to the plain truecolour/greyscale path. Throws for a zero (or negative) width or height: the PNG spec (section 11.2.2, IHDR) states zero is an invalid value for either, so there is no valid PNG this function could produce for such an image.
+// Encodes normalised raw pixel data (8 bits per channel, optionally with a separate alpha plane) into PNG file bytes -- the exact inverse of decodePng's RawImage shape. A channels === 3 image is first checked for a lossless indexed-colour (colour type 3) representation, and encoded that way whenever its pixels reduce to 256 or fewer distinct colours -- indexed colour is substantially smaller than truecolour for the flat-colour images typical of diagrams and screenshots, and decodePng reconstructs the original RGB(A) data exactly via its own PLTE/tRNS lookup, so this never changes what decodePng(encodePng(image)) hands back. Every other image (grayscale, or a truecolour image with more than 256 distinct colours) falls back to the plain truecolour/greyscale path. Throws unless both width and height are finite positive integers: the PNG spec (section 11.2.2, IHDR) states zero is an invalid value for either, and IHDR's own 4-byte unsigned-integer field has no valid encoding for a negative, fractional, or non-finite (including NaN) dimension either -- a positive-integer check catches all of those in one place, rather than a `<= 0` check that NaN and fractional values silently pass straight through (NaN <= 0 is false, and a fractional value truncates on write into a dimension the caller never asked for).
 export function encodePng(
   image: RawImage,
   options: PngEncodeOptions = {},
 ): Uint8Array<ArrayBuffer> {
-  if (image.width <= 0 || image.height <= 0) {
+  if (
+    !Number.isInteger(image.width) ||
+    image.width <= 0 ||
+    !Number.isInteger(image.height) ||
+    image.height <= 0
+  ) {
     throw new Error(
-      `cannot encode a zero-dimension PNG (width=${image.width}, height=${image.height}); the PNG spec's IHDR section states zero is an invalid value for either`,
+      `cannot encode a PNG with an invalid dimension (width=${image.width}, height=${image.height}); the PNG spec's IHDR section requires both width and height to be positive integers`,
     );
   }
 
