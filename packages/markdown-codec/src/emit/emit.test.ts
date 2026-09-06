@@ -105,6 +105,21 @@ describe("headings", () => {
     ).toBe(true);
   });
 
+  it("measures the setext underline's length against the CommonMark first line even when its own embedded break is a bare CR, not an LF", () => {
+    // renderSetextHeading's own underline length tracks the heading's rendered FIRST LINE, per LINE_ENDING_PATTERN (LF, CRLF, or a lone CR) -- the same line-ending grammar every other check in this module already agrees on. A bare `text.split("\n")[0]` instead treats a CR-delimited break as ordinary text absent any LF at all, measuring the WHOLE multi-line string as "line one" rather than just its first line -- cosmetically wrong (a setext underline's own length carries no semantic meaning beyond "one or more", so the heading is still valid either way), but inconsistent with how every other line-ending decision in this file is made.
+    expect(
+      emitMarkdown(
+        doc([
+          {
+            kind: "paragraph",
+            runs: [{ text: "ab\rcd" }],
+            styleId: "Heading1",
+          },
+        ]),
+      ),
+    ).toBe("ab\rcd\n==");
+  });
+
   it("promotes a level-1/2 heading whose own runs embed a hard-break literal newline to setext too, with the backslash-escape spelling reflected in the underline length", () => {
     expect(
       emitMarkdown(
