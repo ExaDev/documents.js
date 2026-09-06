@@ -1,3 +1,4 @@
+import { PNG_MAX_DIMENSION, PNG_MAX_PIXELS } from "byte-codec";
 import { describe, expect, it } from "vitest";
 import { decodePng } from "./image/png-decode";
 import type { PdfDiagnostic, PdfDiagnosticSink } from "./diagnostics";
@@ -348,6 +349,61 @@ describe("readImageXObject: degradation", () => {
     const dict = pdfDict({
       Width: pdfNum(Number("-")), // mirrors readNumberToken's own Number(text) on a bare sign byte
       Height: pdfNum(1),
+      BitsPerComponent: pdfNum(8),
+      ColorSpace: pdfName("DeviceRGB"),
+    });
+    expect(() =>
+      readImageXObject(
+        dict,
+        new Uint8Array([10, 20, 30]),
+        EMPTY_RESOLVER,
+        sink,
+      ),
+    ).not.toThrow();
+    expect(
+      readImageXObject(
+        dict,
+        new Uint8Array([10, 20, 30]),
+        EMPTY_RESOLVER,
+        sink,
+      ),
+    ).toBeUndefined();
+    expect(diagnostics.some((d) => d.code === "image/undecodable")).toBe(true);
+  });
+
+  it("skips a /Width at or above the PNG spec's own IHDR ceiling (2^31) with a diagnostic rather than throwing out of encodePng", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const dict = pdfDict({
+      Width: pdfNum(PNG_MAX_DIMENSION + 1),
+      Height: pdfNum(1),
+      BitsPerComponent: pdfNum(8),
+      ColorSpace: pdfName("DeviceRGB"),
+    });
+    expect(() =>
+      readImageXObject(
+        dict,
+        new Uint8Array([10, 20, 30]),
+        EMPTY_RESOLVER,
+        sink,
+      ),
+    ).not.toThrow();
+    expect(
+      readImageXObject(
+        dict,
+        new Uint8Array([10, 20, 30]),
+        EMPTY_RESOLVER,
+        sink,
+      ),
+    ).toBeUndefined();
+    expect(diagnostics.some((d) => d.code === "image/undecodable")).toBe(true);
+  });
+
+  it("skips a /Width x /Height pair each individually within PNG_MAX_DIMENSION but whose product exceeds PNG_MAX_PIXELS, with a diagnostic rather than hanging or throwing out of encodePng", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const side = Math.ceil(Math.sqrt(PNG_MAX_PIXELS)) + 1; // side * side individually well under PNG_MAX_DIMENSION, but their product just exceeds PNG_MAX_PIXELS
+    const dict = pdfDict({
+      Width: pdfNum(side),
+      Height: pdfNum(side),
       BitsPerComponent: pdfNum(8),
       ColorSpace: pdfName("DeviceRGB"),
     });

@@ -1,5 +1,10 @@
 import type { JpegInfo, RawImage } from "byte-codec";
-import { encodePng, readJpegInfo } from "byte-codec";
+import {
+  encodePng,
+  PNG_MAX_DIMENSION,
+  PNG_MAX_PIXELS,
+  readJpegInfo,
+} from "byte-codec";
 import type { Jpeg2000Image } from "./image/jpeg2000";
 import { decodeJpeg2000 } from "./image/jpeg2000";
 import type { PdfDiagnosticSink } from "./diagnostics";
@@ -461,18 +466,23 @@ export function readImageXObject(
 
   const width = asNumber(dictGet(dict, "Width") ?? dictGet(dict, "W"));
   const height = asNumber(dictGet(dict, "Height") ?? dictGet(dict, "H"));
+  // Mirrors encodePng's own dimension guard exactly (both the per-dimension PNG_MAX_DIMENSION ceiling and the PNG_MAX_PIXELS product ceiling), rather than only the lower bound -- everything decoded past this point eventually reaches encodePng via buildRawImage's own width*height-sized allocation below, so a dict this guard lets through must already be a dimension pair encodePng is guaranteed to accept, or a malformed producer's out-of-range /Width or /Height would abort this document's entire parse instead of degrading to the diagnostic below.
   if (
     width === undefined ||
     height === undefined ||
     !Number.isInteger(width) ||
     !Number.isInteger(height) ||
     width <= 0 ||
-    height <= 0
+    height <= 0 ||
+    width > PNG_MAX_DIMENSION ||
+    height > PNG_MAX_DIMENSION ||
+    width * height > PNG_MAX_PIXELS
   ) {
     sink({
       code: "image/undecodable",
       severity: "warning",
-      message: "image XObject is missing a valid /Width or /Height; skipping",
+      message:
+        "image XObject has an invalid, out-of-range, or unusably large /Width or /Height; skipping",
     });
     return undefined;
   }
