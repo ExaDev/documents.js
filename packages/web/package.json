@@ -32,6 +32,8 @@
     "test:watch": "vitest --project unit",
     "test:coverage": "turbo run _test:coverage",
     "_test:coverage": "vitest run --project unit --coverage",
+    "test:mutation": "turbo run _test:mutation",
+    "_test:mutation": "stryker run stryker.config.mjs",
     "test:e2e": "playwright test",
     "prepare": "husky",
     "release": "semantic-release"
@@ -61,6 +63,10 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@stryker-mutator/api": "^10.0.0",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/typescript-checker": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
     "@tanstack/router-plugin": "^1.168.27",
     "@types/eslint-plugin-jsx-a11y": "^6.10.1",
     "@types/node": "^26.2.0",
@@ -76,6 +82,7 @@
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.9.0",
     "husky": "^9.1.7",
+    "jiti": "2.7.0",
     "jsdom": "^30.0.1",
     "semantic-release": "^25.0.9",
     "typescript": "^6.0.3",

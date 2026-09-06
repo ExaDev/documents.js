@@ -20,6 +20,7 @@
     "eslint.config.ts",
     "eslint.shared.ts",
     "prettier.config.ts",
+    "stryker.shared.ts",
     "knip.config.ts",
     "vitest.root.config.ts",
     "release-workspace.config.test.ts",
