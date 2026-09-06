@@ -1,4 +1,4 @@
-import type { EpubDiagnosticSink } from "../diagnostics";
+import { EpubDiagnosticCodes, type EpubDiagnosticSink } from "../diagnostics";
 import type { XmlElement } from "../xml/node";
 
 // Shared read-side context threaded through src/xhtml/read.ts and src/xhtml/inline.ts.
@@ -32,4 +32,21 @@ export function isInertElement(tag: string): boolean {
     tag === "style" ||
     tag === "noscript"
   );
+}
+
+// Every real content-discarding site that calls isInertElement above (as opposed to a pure prescan like buildIdElementMap/elementsWithTagSkippingInert/containsHeading/containsFootnoteReference in src/xhtml/read.ts, none of which drop content themselves -- the subtree they skip over is still read normally elsewhere) calls this immediately alongside it. <script>'s raw JS, <template>'s inert DOM, and body-level <style>'s CSS are never real content regardless of where they are found, so dropping them stays silent; <noscript> is the one member of the set whose own children genuinely can be ordinary, renderable document markup (isInertElement's own comment above), so discarding its subtree without a trace would contradict this package's documented degrade-with-diagnostic policy -- a real loss that happens to be indistinguishable, from the markup alone, from a producer's inert "please enable JavaScript" placeholder is still a loss worth naming.
+export function reportInertElementSkip(
+  tag: string,
+  context: XhtmlReadContext,
+): void {
+  if (tag !== "noscript") {
+    return;
+  }
+  context.sink({
+    code: EpubDiagnosticCodes.NOSCRIPT_CONTENT_SKIPPED,
+    severity: "info",
+    message:
+      "<noscript>'s own subtree is skipped rather than read as document content -- its markup can be a scripting-disabled reading system's genuine rendered content, or a producer's own 'please enable JavaScript' placeholder, and this package cannot tell the two apart from the markup alone",
+    href: context.sourceHref,
+  });
 }

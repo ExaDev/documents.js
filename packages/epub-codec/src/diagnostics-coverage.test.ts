@@ -184,6 +184,20 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
     expect(codes.has(EpubDiagnosticCodes.LINK_TARGET_EXTERNAL_ONLY)).toBe(true);
   });
 
+  it("NOSCRIPT_CONTENT_SKIPPED fires for a <noscript> sitting in body content", () => {
+    const { sink, codes } = collect();
+    readXhtmlBody(
+      "<html><body><noscript><p>enable JS</p></noscript><p>x</p></body></html>",
+      {
+        resolveImage: () => undefined,
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    expect(codes.has(EpubDiagnosticCodes.NOSCRIPT_CONTENT_SKIPPED)).toBe(true);
+  });
+
   it("IMAGE_INLINE_UNSUPPORTED fires for an <img> nested inside inline markup", () => {
     const { sink, codes } = collect();
     readXhtmlBody(

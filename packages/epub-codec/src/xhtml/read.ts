@@ -22,7 +22,7 @@ import { attrValue, findChildElement, rootElement } from "../xml/query";
 import { decodeEntities, decodeTextLikeNode } from "../xml/entities";
 import { parseXml } from "../xml/parse";
 import type { XhtmlReadContext } from "./context";
-import { isInertElement } from "./context";
+import { isInertElement, reportInertElementSkip } from "./context";
 import { isFootnoteAside, isFootnoteReferenceAnchor } from "./footnote";
 import { buildInlineRuns } from "./inline";
 import type { InlineResult } from "./inline";
@@ -483,7 +483,11 @@ function readPreRuns(
       buffer += decodeTextLikeNode(node);
       continue;
     }
-    if (node.type !== "element" || isInertElement(node.tag)) {
+    if (node.type !== "element") {
+      continue;
+    }
+    if (isInertElement(node.tag)) {
+      reportInertElementSkip(node.tag, context);
       continue;
     }
     if (node.tag === "img") {
@@ -546,6 +550,7 @@ function readPreText(
     } else if (node.type === "element" && node.tag === "img") {
       out += decodeEntities(readPreImageFallbackText(node, context));
     } else if (node.type === "element" && isInertElement(node.tag)) {
+      reportInertElementSkip(node.tag, context);
       continue;
     } else if (node.type === "element") {
       out += readPreText(node.children, context);
@@ -638,8 +643,9 @@ function readList(element: XmlElement, state: BuildState): ContentBlock[] {
       );
       continue;
     }
-    // The HTML Standard's own content model for <ul>/<ol> is "Zero or more li and script-supporting elements", explicitly naming <script>/<template> as legal direct children alongside <li> -- so those two are ignored entirely here: no stray collection, no diagnostic, and never routed through readContainerChildren (which has no case for either tag, and readList's own document-content mapping has no use for embedded script/template content regardless). This uses the shared isInertElement predicate (context.ts) rather than a narrower spec-accurate script/template-only check, deliberately extending the identical exemption to <style>/<noscript> too -- neither is actually legal here per the content model above, but both are just as unrepresentable and just as safe to skip silently as the two that are, and a single shared definition is worth more than a spec-perfect distinction no diagnostic here would ever need to draw. This check exists purely to suppress the LIST_CONTENT_OUTSIDE_ITEM diagnostic below for what is (for script/template) a legal child position; the actual leak this content would otherwise cause if it reached a run sequence some other way is closed universally by src/xhtml/inline.ts's own appendElement, which skips it the same way regardless of where it is reached from.
+    // The HTML Standard's own content model for <ul>/<ol> is "Zero or more li and script-supporting elements", explicitly naming <script>/<template> as legal direct children alongside <li> -- so those two are ignored entirely here: no stray collection, no LIST_CONTENT_OUTSIDE_ITEM diagnostic, and never routed through readContainerChildren (which has no case for either tag, and readList's own document-content mapping has no use for embedded script/template content regardless). This uses the shared isInertElement predicate (context.ts) rather than a narrower spec-accurate script/template-only check, deliberately extending the identical exemption to <style>/<noscript> too -- neither is actually legal here per the content model above, but both are just as unrepresentable and just as safe to skip silently as the two that are, and a single shared definition is worth more than a spec-perfect distinction no diagnostic here would ever need to draw. reportInertElementSkip still fires its own dedicated diagnostic for <noscript> specifically (the one member of the set whose subtree can be genuine document content) -- this filter only suppresses the unrelated stray-content diagnostic that would otherwise misrepresent a spec-legal position as malformed.
     if (child.type === "element" && isInertElement(child.tag)) {
+      reportInertElementSkip(child.tag, state.context);
       continue;
     }
     if (child.type === "element" || isTextLikeNode(child)) {
@@ -738,6 +744,7 @@ function readDefinitionListEntries(
       continue;
     }
     if (child.type === "element" && isInertElement(child.tag)) {
+      reportInertElementSkip(child.tag, state.context);
       continue;
     }
     if (child.type === "element" || isTextLikeNode(child)) {
@@ -789,10 +796,11 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
       continue;
     }
     if (section.tag === "colgroup") {
-      collectColgroupStrayContent(section, strayNodes);
+      collectColgroupStrayContent(section, strayNodes, state.context);
       continue;
     }
     if (isInertElement(section.tag)) {
+      reportInertElementSkip(section.tag, state.context);
       continue;
     }
     const rowContainers =
@@ -801,7 +809,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
         : section.tag === "thead" ||
             section.tag === "tbody" ||
             section.tag === "tfoot"
-          ? collectRowGroupRows(section, strayNodes)
+          ? collectRowGroupRows(section, strayNodes, state.context)
           : undefined;
     if (rowContainers === undefined) {
       strayNodes.push(section);
@@ -856,6 +864,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
           continue;
         }
         if (cellNode.type === "element" && isInertElement(cellNode.tag)) {
+          reportInertElementSkip(cellNode.tag, state.context);
           continue;
         }
         if (cellNode.type === "element" || isTextLikeNode(cellNode)) {
@@ -895,6 +904,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
 function collectRowGroupRows(
   section: XmlElement,
   strayNodes: XmlNode[],
+  context: XhtmlReadContext,
 ): XmlElement[] {
   const trs: XmlElement[] = [];
   for (const child of section.children) {
@@ -903,6 +913,7 @@ function collectRowGroupRows(
       continue;
     }
     if (child.type === "element" && isInertElement(child.tag)) {
+      reportInertElementSkip(child.tag, context);
       continue;
     }
     if (child.type === "element" || isTextLikeNode(child)) {
@@ -916,12 +927,14 @@ function collectRowGroupRows(
 function collectColgroupStrayContent(
   section: XmlElement,
   strayNodes: XmlNode[],
+  context: XhtmlReadContext,
 ): void {
   for (const child of section.children) {
     if (child.type === "element" && child.tag === "col") {
       continue;
     }
     if (child.type === "element" && isInertElement(child.tag)) {
+      reportInertElementSkip(child.tag, context);
       continue;
     }
     if (child.type === "element" || isTextLikeNode(child)) {
