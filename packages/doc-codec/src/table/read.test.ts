@@ -688,8 +688,14 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       }),
     );
     const cells = tableBlock(document).rows[0]?.cells ?? [];
-    expect(cells[0]?.background).toEqual({ r: 1, g: 1, b: 0 });
-    expect(cells[1]?.background).toEqual({ r: 1, g: 1, b: 0 });
+    expect(cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 1, b: 0 },
+    });
+    expect(cells[1]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 1, b: 0 },
+    });
   });
 
   it("lets a later, more specific sprmTDefTableShd override an earlier sprmTSetShdTable, the ordinary last-Prl-wins fold every other shading sprm already follows", () => {
@@ -721,8 +727,14 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       }),
     );
     const cells = tableBlock(document).rows[0]?.cells ?? [];
-    expect(cells[0]?.background).toEqual({ r: 0, g: 1, b: 0 });
-    expect(cells[1]?.background).toEqual({ r: 1, g: 1, b: 0 });
+    expect(cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 0, g: 1, b: 0 },
+    });
+    expect(cells[1]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 1, b: 0 },
+    });
   });
 
   // ExaDev/documents.js#945, round-1 review: a cell's own sprmTSetBrc explicitly clearing a side (a NilBrc) must never be refilled by the row-level cascade -- applyBrcToCell's own clearedSides is what makes this distinguishable from a side the cell simply never mentioned, since TC80's own Brc80 fields cannot state the difference on their own. A 1x2 row, every one of sprmTTableBorders's six sides red, plus sprmTSetBrc(itcFirst 0, itcLim 1, bordersToApply 0x01 [top], NilBrc) naming only cell 0's own top side.
