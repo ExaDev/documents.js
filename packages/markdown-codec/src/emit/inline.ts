@@ -14,7 +14,10 @@ import type {
 import type { MarkdownDiagnosticSink } from "../diagnostics/diagnostics";
 import { MarkdownDiagnosticCodes } from "../diagnostics/diagnostics";
 import { isValidFootnoteLabel } from "../inline/footnote";
-import { LINE_ENDING_PATTERN } from "../shared/line-ending";
+import {
+  ESCAPED_HARD_BREAK_PATTERN,
+  LINE_ENDING_PATTERN,
+} from "../shared/line-ending";
 import {
   MATH_INLINE_FONT_MARKER,
   MONOSPACE_FONT_FAMILY,
@@ -394,14 +397,14 @@ export function emitRuns(
   return out;
 }
 
-// The table-cell-specific variant (src/emit/table.ts): a GFM table row is exactly one physical line, so an embedded hard-break newline (rendered by emitRuns as a backslash-newline pair, matching escapeMarkdownText's own convention) cannot survive as-is -- it collapses to a single space instead. A bare (soft-break) newline is collapsed the same way, mirroring renderParagraphBody's own ATX-heading collapse (src/emit/emit.ts's own `text.replace(/\\\n/g, " ").split(LINE_ENDING_PATTERN).join(" ")`, in the same order: the escaped hard-break spelling first, so its backslash is consumed together with the line ending it precedes, THEN every remaining line ending) -- a table cell has no source-level line wrap to hold any of them. LINE_ENDING_PATTERN, not a bare '\n' check, because a run's own plain text field or a foreign producer's own markdown residue (renderLeaf below, the run.source.xml case) can carry a bare CR or CRLF just as legitimately as an LF -- an LF-only collapse would leave either one un-collapsed in what must be a single GFM table-row physical line, fracturing the row into extra lines on reparse exactly as an un-collapsed heading line break corrupts a heading.
+// The table-cell-specific variant (src/emit/table.ts): a GFM table row is exactly one physical line, so an embedded hard-break newline (rendered by emitRuns as a backslash-newline pair, matching escapeMarkdownText's own convention) cannot survive as-is -- it collapses to a single space instead. A bare (soft-break) newline is collapsed the same way, mirroring renderParagraphBody's own ATX-heading collapse (src/emit/emit.ts's own `text.replace(ESCAPED_HARD_BREAK_PATTERN, " ").split(LINE_ENDING_PATTERN).join(" ")`, in the same order: the escaped hard-break spelling first, so its backslash is consumed together with the line ending it precedes, THEN every remaining line ending) -- a table cell has no source-level line wrap to hold any of them. ESCAPED_HARD_BREAK_PATTERN and LINE_ENDING_PATTERN, not a bare '\n'/'\\\n' check, because a run's own plain text field or a foreign producer's own markdown residue (renderLeaf below, the run.source.xml case) can carry a bare CR or CRLF -- escaped or not -- just as legitimately as an LF: an LF-only collapse would leave either one un-collapsed in what must be a single GFM table-row physical line, fracturing the row into extra lines on reparse exactly as an un-collapsed heading line break corrupts a heading, and stripping only the LF-spelled escape would leave its backslash behind as a stray literal character once the wider LINE_ENDING_PATTERN split then removes a CRLF/CR line ending out from under it.
 export function emitRunsSingleLine(
   runs: readonly ContentRun[],
   context: InlineEmitContext,
   constructs?: readonly RunConstructExtent[],
 ): string {
   return emitRuns(runs, context, constructs)
-    .replace(/\\\n/g, " ")
+    .replace(ESCAPED_HARD_BREAK_PATTERN, " ")
     .split(LINE_ENDING_PATTERN)
     .join(" ");
 }
