@@ -83,10 +83,11 @@ function detectPalette(image: RawImage): PaletteEncoding | undefined {
 
   for (let i = 0; i < pixelCount; i++) {
     const base = i * 3;
-    const r = data[base]!;
-    const g = data[base + 1]!;
-    const b = data[base + 2]!;
-    const a = alpha === undefined ? 255 : alpha[i]!;
+    // `?? 0` rather than `!`: mirrors what writeTruecolorPng's own behaviour already implies for a data or alpha plane shorter than width*height(*channels) -- writing an out-of-range `undefined` sample into that function's Uint8Array coerces it to 0 via ToUint8(ToNumber(undefined)), so a short buffer there already degrades to a per-pixel 0, never a thrown error. Without the same default here, the same missing sample would instead feed `undefined` into the arithmetic below, producing NaN and colliding every such pixel onto one arbitrary shared palette entry regardless of its real RGB -- so encodePng's choice between the indexed and truecolour candidates would silently change what a short-buffered image decodes back to. Explicitly matching the default keeps that choice purely a size optimisation, never a content one.
+    const r = data[base] ?? 0;
+    const g = data[base + 1] ?? 0;
+    const b = data[base + 2] ?? 0;
+    const a = alpha === undefined ? 255 : (alpha[i] ?? 0);
     // A bijective encoding of the four 0..255 samples into one safe-integer key -- multiplication (not a `<<` shift) so the top channel never overflows into JS's 32-bit bitwise-operator truncation.
     const key = r + g * 256 + b * 65536 + a * 16777216;
 
