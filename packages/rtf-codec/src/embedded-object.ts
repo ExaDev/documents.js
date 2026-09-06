@@ -315,6 +315,30 @@ export function writeEmbeddedObjectData(
   return out;
 }
 
+// isContentEmbeddedObject (the guard ContentEmbeddedObjectSchema wraps, src/content.ts) is a predicate over an untrusted parsed value, not a reconstructive parse: it confirms the fields ContentEmbeddedObject actually needs are present and well-shaped, but says nothing about any OTHER key the same object happens to carry, so a hostile \objdata's JSON payload can smuggle an arbitrary extra field (a "kind" that would collide with ContentEmbeddedObjectBlock's own discriminant once buildEmbeddedObject adds it, or anything else) straight through a validated safeParse result untouched. Rebuilding the returned value from only the fields ContentEmbeddedObject actually declares -- mirroring writeEmbeddedObjectData's own payload object below field-for-field -- closes that off once, here, rather than leaving every caller to remember to strip it themselves.
+function knownContentEmbeddedObjectFields(
+  embedded: ContentEmbeddedObject,
+): ContentEmbeddedObject {
+  return {
+    objectKind: embedded.objectKind,
+    document: embedded.document,
+    frame: embedded.frame,
+    ...(embedded.anchorRow === undefined
+      ? {}
+      : { anchorRow: embedded.anchorRow }),
+    ...(embedded.anchorColumn === undefined
+      ? {}
+      : { anchorColumn: embedded.anchorColumn }),
+    ...(embedded.offsetXPt === undefined
+      ? {}
+      : { offsetXPt: embedded.offsetXPt }),
+    ...(embedded.offsetYPt === undefined
+      ? {}
+      : { offsetYPt: embedded.offsetYPt }),
+    ...(embedded.source === undefined ? {} : { source: embedded.source }),
+  };
+}
+
 // The mirror of writeEmbeddedObjectData: recovers a ContentEmbeddedObject from an \object's \objdata bytes when they are this package's own payload, or returns undefined for anything else -- a real OLE object's native data included -- rather than throwing, since one unreadable \object must not fail the whole document read. Every step below (ObjectHeader parse, compound-file parse, Package-stream unwrap, JSON parse, schema validation, Presentation-field parse) can fail independently on a foreign object; the single catch treats all of them alike, matching xls-codec's own container.ts precedent ("archive-codec's own reader can surface a raw RangeError ... which is a corrupt file rather than a bug here"). Presentation is validated last, after NativeData has already decoded successfully: a payload whose NativeData is genuinely this package's own JSON but whose mandatory fourth field is missing or malformed is not a shape this writer ever produced, so it is rejected here rather than accepted as a truncated match.
 export function readEmbeddedObjectData(
   bytes: Uint8Array<ArrayBuffer>,
@@ -354,7 +378,7 @@ export function readEmbeddedObjectData(
     }
     // The mandatory fourth field: confirmed present and well-formed, but never read back into anything -- nothing in ContentEmbeddedObject has a position for a placeholder preview image.
     skipPresentationObject(bytes, nativeDataStart + nativeDataSize);
-    return result.data;
+    return knownContentEmbeddedObjectFields(result.data);
   } catch {
     return undefined;
   }

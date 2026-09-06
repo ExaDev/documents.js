@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { writeCompoundFile, writeOlePackage } from "archive-codec";
 import type {
   ContentBlock,
   ContentImageBlock,
@@ -13,6 +14,45 @@ import { bytesToHex } from "./base64";
 import { writeEmbeddedObjectData } from "./embedded-object";
 import { readRtf, readRtfContent } from "./read";
 import { bytes, text } from "./test-support/bytes";
+
+// Stands in for a hostile producer who writes the identical spec-conformant ObjectHeader/NativeDataSize/NativeData/Presentation envelope writeEmbeddedObjectData produces, but wraps an arbitrary JSON payload inside NativeData's own Package stream instead of a genuine ContentEmbeddedObject -- writeEmbeddedObjectData itself always rebuilds its payload object field-by-field from a real ContentEmbeddedObject, so it cannot be used to smuggle an extra key the way a raw \objdata forged by hand can. Reuses a real envelope's own ObjectHeader and Presentation bytes verbatim (both fixed, independent of the JSON payload) and only replaces NativeData, so the forged bytes are byte-identical to a real \objdata this codec produced except for the one field under test.
+function forgeEmbeddedObjectData(payload: unknown): Uint8Array<ArrayBuffer> {
+  const base = writeEmbeddedObjectData({
+    objectKind: "spreadsheet",
+    document: { kind: "spreadsheet", metadata: {}, sheets: [] },
+    frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
+  });
+  const view = new DataView(base.buffer, base.byteOffset, base.byteLength);
+  // OLEVersion(4) + FormatID(4) + ClassName "Package" (length-prefix 4 + 8 bytes) + TopicName "" (4) + ItemName "" (4) -- see embedded-object.ts's own writeObjectHeader. Sanity-checked against the real FormatID this writer always emits, rather than assumed blind, so a future change to that layout fails loudly here instead of silently forging a bad envelope.
+  const headerLength = 28;
+  if (view.getUint32(4, true) !== 0x00000002) {
+    throw new Error(
+      "forgeEmbeddedObjectData's own ObjectHeader-length assumption no longer matches writeEmbeddedObjectData's output",
+    );
+  }
+  const originalNativeDataSize = view.getUint32(headerLength, true);
+  const nativeDataStart = headerLength + 4;
+  const presentationBytes = base.subarray(
+    nativeDataStart + originalNativeDataSize,
+  );
+  const packageBytes = writeOlePackage({
+    label: "rtf-codec-embedded-object.json",
+    sourcePath: "",
+    tempPath: "",
+    fileBytes: new TextEncoder().encode(JSON.stringify(payload)),
+  });
+  const nativeData = writeCompoundFile([
+    { path: "Package", bytes: packageBytes },
+  ]);
+  const out = new Uint8Array(
+    nativeDataStart + nativeData.length + presentationBytes.length,
+  );
+  out.set(base.subarray(0, headerLength), 0);
+  new DataView(out.buffer).setUint32(headerLength, nativeData.length, true);
+  out.set(nativeData, nativeDataStart);
+  out.set(presentationBytes, nativeDataStart + nativeData.length);
+  return out;
+}
 
 // The header prefix every body fixture below shares, so each test states only the construct it is about. It is the shape a real producer emits: version, character set, font table, colour table.
 const HEADER =
@@ -601,6 +641,27 @@ describe("embedded objects", () => {
     expect(cellText).toContain("FALLBACK");
     expect(cellText).toContain("before");
     expect(cellText).toContain("after");
+  });
+
+  // isContentEmbeddedObject (the guard behind ContentEmbeddedObjectSchema) is a predicate, not a reconstructive parse: it confirms the fields ContentEmbeddedObject needs are present and well-shaped, but does not strip any OTHER key the same parsed JSON object happens to carry. \objdata comes from an arbitrary, potentially hostile input file, so a doctored payload that is otherwise a valid ContentEmbeddedObject but also carries its own "kind" (plus arbitrary extra fields) must never let that "kind" override the real "embeddedObject" discriminant once buildEmbeddedObject adds it, and must never let the extra fields ride along into the returned block either.
+  it("never lets a doctored \\objdata payload's own \"kind\" field override the embeddedObject block's real discriminant", () => {
+    const forged = forgeEmbeddedObjectData({
+      objectKind: "spreadsheet",
+      document: { kind: "spreadsheet", metadata: {}, sheets: [] },
+      frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
+      kind: "paragraph",
+      runs: [{ text: "SMUGGLED" }],
+      extra: 1,
+    });
+    const object = blocksOf(
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${bytesToHex(forged)}}}\\par}`,
+    ).find(
+      (block): block is ContentEmbeddedObjectBlock =>
+        "objectKind" in block && block.objectKind === "spreadsheet",
+    );
+    expect(object?.kind).toBe("embeddedObject");
+    expect(object).not.toHaveProperty("runs");
+    expect(object).not.toHaveProperty("extra");
   });
 
   // RTF's own <obj> grammar allows only one \result child, but a malformed producer can still write two -- the second sibling must not silently overwrite the first's own recovered content with no diagnostic, mirroring how a second \objdata sibling is already handled just below.
