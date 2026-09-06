@@ -173,6 +173,41 @@ describe("writeXhtmlBody", () => {
     ]);
   });
 
+  // The comment above writeTable's own isTreeBlockLeaf filter used to claim this package's own reader never puts a construct-boundary marker inside a table cell's blocks -- it does, whenever read.ts's own flushStrayCell recovers a stray <blockquote> (or a footnote-target element) sitting directly inside a <tr>: readBlockquote wraps its recovered content in a division construct pair, and that recovered ContentBlock[] becomes the stray cell's own blocks. This exercises that exact path end to end.
+  it("drops a construct-boundary marker recovered into a stray table cell, with a diagnostic", () => {
+    const sink = () => undefined;
+    const blocks = readXhtmlBody(
+      xhtmlDocument(
+        "<table><tr><blockquote><p>q</p></blockquote><td>x</td></tr></table>",
+      ),
+      {
+        resolveImage: () => undefined,
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    ).blocks;
+    const table = blocks.find((b) => b.kind === "table");
+    if (table === undefined) {
+      throw new Error("expected a table block");
+    }
+    expect(
+      table.rows[0]?.cells[0]?.blocks.some(
+        (b) => b.kind === "constructStart" || b.kind === "constructEnd",
+      ),
+    ).toBe(true);
+    const { xml, diagnostics } = writeWithSink([table], () => undefined);
+    // One diagnostic per dropped marker (constructStart and constructEnd) -- the division construct's own pairing is lost, but the paragraph the pair wrapped is still a real leaf block and survives.
+    expect(
+      diagnostics.filter(
+        (d) =>
+          d.code === EpubDiagnosticCodes.ELEMENT_UNMAPPED &&
+          d.message.includes("construct-boundary marker inside a table cell"),
+      ),
+    ).toHaveLength(2);
+    expect(xml).toContain("<td><p>q</p></td>");
+  });
+
   it("writes and re-reads a horizontal rule", () => {
     const blocks: ContentBlock[] = [
       { kind: "paragraph", runs: [], styleId: "HorizontalRule" },
