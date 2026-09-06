@@ -6,10 +6,10 @@ on:
   push:
     branches: [main]
 
-# A new push to a pull request supersedes that PR's in-flight run, same as CI's own top-level group. A push to main never cancels, for the same reason CI's own group doesn't: a cancelled shard mid-run would leave that shard's incremental cache save skipped for no benefit.
+# One fixed group across every ref, not per-ref: a per-ref group only stops the SAME branch from running two overlapping mutation jobs, which does nothing to stop main and several PR branches each spinning up their own full 8-shard run at once -- exactly the shape that starved the shared runner pool of capacity every OTHER workflow (including required CI checks and main's own post-merge run) also needs, confirmed directly (ExaDev/documents.js, 2026-09-06: four simultaneous mutation runs across main/fix/epub-codec-silent-content-drops/fix/markdown-codec-soft-break-newline/feat/doc-codec-numbering-and-right-indent-write left every PR's required checks queued with zero progress for over an hour, and main's own post-merge CI queued behind them too). GitHub queues a superseding run behind whichever one is already active rather than running it at all, which is exactly what a non-required, tolerant-of-delay job like this one should do. Never cancels: a cancelled shard mid-run would leave that shard's incremental cache save skipped for no benefit, and this is a QUEUE, not a per-ref supersession, so there is nothing stale to cancel in the first place -- every queued run still runs eventually, just serialised.
 concurrency:
-  group: mutation-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: mutation-testing
+  cancel-in-progress: false
 
 permissions:
   contents: read
