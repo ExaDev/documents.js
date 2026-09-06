@@ -24,6 +24,7 @@ import {
   findConstructMarkerImbalance,
   findRunConstructFault,
 } from "document-schema.js";
+import { CODE_INDENT_COLUMNS } from "../block/line";
 import {
   MarkdownInvalidRunConstructExtentError,
   MarkdownUnbalancedConstructMarkersError,
@@ -44,6 +45,7 @@ import {
   DEFAULT_THEMATIC_BREAK_CHAR,
 } from "../defaults/defaults";
 import { isValidFootnoteLabel } from "../inline/footnote";
+import { MARKDOWN_TAB_STOP_WIDTH } from "../scan/scan";
 import type {
   MarkdownHeadingStyle,
   WriteMarkdownOptions,
@@ -170,29 +172,60 @@ function terminatesCleanly(styleId: string | undefined): boolean {
   );
 }
 
-// Whether promoting a level<=2 heading's own rendered TEXT to setext would leave a genuine blank line somewhere inside the run of lines renderSetextHeading treats as one unit -- CommonMark's own setext grammar (spec 0.31.2, "Setext headings") is exactly "one or more lines of text, not interrupted by a blank line", immediately followed by the underline, so a blank line anywhere in that run breaks the promotion. CommonMark's own blank-line definition (spec 0.31.2, "Blank lines") is "a line containing no characters, or only spaces or tabs", not merely a zero-length one, so the check below splits the rendered text on CommonMark's own line-ending grammar (LINE_ENDING_PATTERN -- LF, CRLF, or a lone CR, spec 0.31.2 "Lines"; a plain split on '\n' alone misses a classic-Mac-style lone-CR line ending the exact same way a literal-empty-line check misses a residual line of pure spaces or tabs) and tests every line the run of leading blank lines below does not already exempt against that same whitespace-only pattern. A TRAILING one (the run's own last line is blank) is the reachable, real-world case: an ordinary Word heading ending in a manual line break or page break lowers to a run whose literal '\n' escapeMarkdownText spells as a trailing '\\\n', and the identical hazard reappears whenever that trailing line is not fully empty but only whitespace -- a single trailing space is a routine Word artefact on exactly this shape of heading. Reparsing sees the real text close early into its own plain paragraph at the blank line, with the underline surviving as a spurious "===="/"----" paragraph of its own (or, when the underline character is '-', an outright thematic break instead) -- the heading itself is gone, not merely reformatted. An INTERIOR one (a blank or whitespace-only line sitting between two embedded breaks) fractures the heading into two blocks on reparse the same way, with only the LAST fragment keeping the heading-ness the underline actually attaches to and the first losing it outright; unlike the trailing case, this needs two breaks in a row to produce a genuinely empty interior line, since a single hard break's own escaping backslash sits at the END of the line the break TERMINATES, never on the line that follows it -- it protects nothing about that following line's own content, so a hard break immediately followed by incidental whitespace-only text hits this exact hazard too. A LEADING RUN of one or more blank lines is deliberately exempt from this check -- every line up to (but not including) the first genuinely non-blank one -- despite reading like it should fall under the identical spec wording: it sits BEFORE this run of lines even starts, so a reparse treats it as ordinary inter-block whitespace ahead of the heading, exactly as a blank line ahead of any other block already works, verified directly (this module's own test suite) across every context this renders through: top-level, inside a list item's own marker line (including the specific "item begins with a blank line" case CommonMark calls out separately), and inside a blockquote -- the heading always comes back intact in each. escapeMarkdownText never emits a bare leading '\n' for a hard break in the first place (its own backslash always precedes the newline it escapes), so a heading beginning with an escaped hard break round-trips losslessly rather than merely safely, and its own non-blank backslash line 0 never enters the exempt leading run at all; a heading beginning with a bare soft-break newline instead relies on the leading-run exemption itself, refusing it would be a real regression (ATX cannot represent the break at all), but the exemption is NOT lossless for that spelling -- the leading blank line is genuinely absorbed as ordinary space ahead of the heading on read-back rather than reproduced inside it (renderParagraphBody's own diagnostic message reflects this). The exemption has an outer bound the ORIGINAL index-0-only version missed entirely: if the leading run of blank lines consumes every line with nothing genuinely non-blank left afterwards -- the whole heading's own rendered text is blank, whether that is a single wholly-blank line or several -- there is no heading content left for the underline to attach to at all, and promoting still corrupts the reparse exactly as a trailing or interior blank would.
+// Whether promoting a level<=2 heading's own rendered TEXT to setext would violate either half of CommonMark's own setext grammar (spec 0.31.2, "Setext headings"): "one or more lines of text, not interrupted by a blank line, of which the first line does not have more than 3 spaces of indentation, followed by a setext heading underline". This checks BOTH clauses: no line in the run renderSetextHeading treats as one unit may be blank (see the blank-line half below), AND the run's own first content line may not open with 4 or more columns of indentation (leadingIndentColumns below, against CODE_INDENT_COLUMNS -- src/block/line.ts's own indented-code-block threshold, so the write side's promotion decision and the read side's reparse agree on exactly the same boundary). A first line indented that far reparses as an indented code block instead of heading text -- with the heading's own remaining lines and underline then read back as a stray paragraph and a spurious "===="/"----" of their own -- corrupting the heading exactly as an unsafe blank line does, just via a different CommonMark construct. CommonMark's own blank-line definition (spec 0.31.2, "Blank lines") is "a line containing no characters, or only spaces or tabs", not merely a zero-length one, so the blank-line check below splits the rendered text on CommonMark's own line-ending grammar (LINE_ENDING_PATTERN -- LF, CRLF, or a lone CR, spec 0.31.2 "Lines"; a plain split on '\n' alone misses a classic-Mac-style lone-CR line ending the exact same way a literal-empty-line check misses a residual line of pure spaces or tabs) and tests every line the run of leading blank lines below does not already exempt against that same whitespace-only pattern. A TRAILING one (the run's own last line is blank) is the reachable, real-world case: an ordinary Word heading ending in a manual line break or page break lowers to a run whose literal '\n' escapeMarkdownText spells as a trailing '\\\n', and the identical hazard reappears whenever that trailing line is not fully empty but only whitespace -- a single trailing space is a routine Word artefact on exactly this shape of heading. Reparsing sees the real text close early into its own plain paragraph at the blank line, with the underline surviving as a spurious "===="/"----" paragraph of its own (or, when the underline character is '-', an outright thematic break instead) -- the heading itself is gone, not merely reformatted. An INTERIOR one (a blank or whitespace-only line sitting between two embedded breaks) fractures the heading into two blocks on reparse the same way, with only the LAST fragment keeping the heading-ness the underline actually attaches to and the first losing it outright; unlike the trailing case, this needs two breaks in a row to produce a genuinely empty interior line, since a single hard break's own escaping backslash sits at the END of the line the break TERMINATES, never on the line that follows it -- it protects nothing about that following line's own content, so a hard break immediately followed by incidental whitespace-only text hits this exact hazard too. A LEADING RUN of one or more blank lines is deliberately exempt from the blank-line check -- every line up to (but not including) the first genuinely non-blank one -- despite reading like it should fall under the identical spec wording: it sits BEFORE this run of lines even starts, so a reparse treats it as ordinary inter-block whitespace ahead of the heading, exactly as a blank line ahead of any other block already works, verified directly (this module's own test suite) across every context this renders through: top-level, inside a list item's own marker line (including the specific "item begins with a blank line" case CommonMark calls out separately), and inside a blockquote -- the heading always comes back intact in each. escapeMarkdownText never emits a bare leading '\n' for a hard break in the first place (its own backslash always precedes the newline it escapes), so a heading beginning with an escaped hard break round-trips losslessly rather than merely safely, and its own non-blank backslash line 0 never enters the exempt leading run at all; a heading beginning with a bare soft-break newline instead relies on the leading-run exemption itself, refusing it would be a real regression (ATX cannot represent the break at all), but the exemption is NOT lossless for that spelling -- the leading blank line is genuinely absorbed as ordinary space ahead of the heading on read-back rather than reproduced inside it (renderParagraphBody's own diagnostic message reflects this). The exemption has an outer bound the ORIGINAL index-0-only version missed entirely: if the leading run of blank lines consumes every line with nothing genuinely non-blank left afterwards -- the whole heading's own rendered text is blank, whether that is a single wholly-blank line or several -- there is no heading content left for the underline to attach to at all, and promoting still corrupts the reparse exactly as a trailing or interior blank would.
 //
 // CommonMark's own blank-line definition (spec 0.31.2, "Blank lines"): a line containing no characters, or only spaces or tabs.
 const BLANK_OR_WHITESPACE_ONLY_LINE = /^[ \t]*$/;
 
-// The index, in text's own CommonMark line-ending split, of the first line that is NOT blank -- or -1 when every line is (including the single-line, wholly-blank case). Shared by embedsUnsafeBreakForSetext (is any line from that point on still blank?) and renderParagraphBody's own setext-promotion diagnostic (did a genuine, content-free leading line get silently absorbed rather than the break surviving as heading content?).
+// The index, in text's own CommonMark line-ending split, of the first line that is NOT blank -- or -1 when every line is (including the single-line, wholly-blank case). Used by renderParagraphBody's own setext-promotion diagnostic (did a genuine, content-free leading line get silently absorbed rather than the break surviving as heading content?); unsafeSetextBreakReason below answers a related but distinct question (does the run this index starts contain a hazard?) with its own single forward pass, rather than re-deriving a line at this index, since a plain string[] index access cannot be narrowed away from `string | undefined` without either an assertion or a redundant re-scan.
 function firstContentLineIndex(text: string): number {
   return text
     .split(LINE_ENDING_PATTERN)
     .findIndex((line) => !BLANK_OR_WHITESPACE_ONLY_LINE.test(line));
 }
 
-function embedsUnsafeBreakForSetext(text: string): boolean {
-  const lines = text.split(LINE_ENDING_PATTERN);
-  const firstContentIndex = firstContentLineIndex(text);
-  if (firstContentIndex === -1) {
-    // Every line is blank -- nothing survives as heading content for the underline to attach to.
-    return true;
+// The column width of a line's own leading run of spaces and tabs, expanded per CommonMark's own tab-stop rule (spec 0.31.2, "Tabs": "in contexts where spaces help to define block structure, tabs behave as if they were replaced by spaces with a tab stop of 4 characters", counted from the start of the LINE, not the whole document). Shares MARKDOWN_TAB_STOP_WIDTH with src/scan/scan.ts's own MarkdownScanCursor so a tab's width agrees with the read side's parse of the very text this function is predicting the reparse of.
+function leadingIndentColumns(line: string): number {
+  let column = 0;
+  for (const char of line) {
+    if (char === " ") {
+      column += 1;
+    } else if (char === "\t") {
+      column += MARKDOWN_TAB_STOP_WIDTH - (column % MARKDOWN_TAB_STOP_WIDTH);
+    } else {
+      break;
+    }
   }
-  // Every line strictly AFTER the first non-blank one; that line itself is, by construction, never blank.
-  return lines
-    .slice(firstContentIndex + 1)
-    .some((line) => BLANK_OR_WHITESPACE_ONLY_LINE.test(line));
+  return column;
+}
+
+// Which half of the setext grammar (if either) a promotion would violate -- undefined when promotion is safe. A single forward pass over text's own CommonMark line-ending split, rather than firstContentLineIndex above plus a slice/some pass: an indexed lookup back into the split for "the first content line's own text" is exactly the array access noUncheckedIndexedAccess cannot narrow to a definite string without an unjustified assertion, so this walks the lines once with a plain `for...of`, checking the first-line-indentation clause the moment a non-blank line is reached and the blank-line clause on every line after it.
+type UnsafeSetextBreakReason = "leading-indentation" | "blank-line" | undefined;
+
+function unsafeSetextBreakReason(text: string): UnsafeSetextBreakReason {
+  let sawContentLine = false;
+  for (const line of text.split(LINE_ENDING_PATTERN)) {
+    const isBlank = BLANK_OR_WHITESPACE_ONLY_LINE.test(line);
+    if (!sawContentLine) {
+      if (isBlank) {
+        continue;
+      }
+      sawContentLine = true;
+      if (leadingIndentColumns(line) >= CODE_INDENT_COLUMNS) {
+        return "leading-indentation";
+      }
+      continue;
+    }
+    if (isBlank) {
+      return "blank-line";
+    }
+  }
+  // Every line was blank -- nothing survives as heading content for the underline to attach to, the same corruption a trailing blank line causes.
+  return sawContentLine ? undefined : "blank-line";
+}
+
+function embedsUnsafeBreakForSetext(text: string): boolean {
+  return unsafeSetextBreakReason(text) !== undefined;
 }
 
 // Whether a level<=2 heading paragraph will ACTUALLY be written as a setext heading rather than ATX -- exactly mirroring renderParagraphBody's own promotion rule below (headingStyle: 'setext', OR the heading's own rendered text embeds a hard/soft break that ATX has no way to hold, AND EITHER WAY only when the resulting break placement is actually safe -- see embedsUnsafeBreakForSetext above), so canInterruptOpenParagraph can answer against the real spelling the heading is about to be written in, not just the configured style. This deliberately calls emitRuns a SECOND time, through a throwaway, diagnostic-free InlineEmitContext: this is a look-ahead check on content renderParagraphBody itself re-emits (through the real sink) moments later at the actual render call, and reporting the same run-level diagnostic (a monospace-styled code span, adjacent merged links) twice for one piece of content would be a duplicate finding, not a second real one -- emitRuns/renderNestedStyles read only InlineEmitContext's own two fields (sink, emphasisMarker) and mutate nothing on the wider EmitContext, so the two calls are independent and always agree on the text they produce. The blank-line safety check needs `text` even when headingStyle is explicitly 'setext', so unlike before, that branch no longer short-circuits ahead of computing it -- an explicit caller preference for setext still cannot promote a heading whose own break placement would corrupt the reparse.
@@ -307,7 +340,8 @@ function renderParagraphBody(
     const text = emitRuns(paragraph.runs, context, paragraph.constructs);
     // ATX is a single physical line; a hard OR soft break embedded in this heading's own runs (src/emit/inline.ts's renderLeaf) leaves a genuine CommonMark line ending in `text` regardless of the configured headingStyle, and ATX has no way to hold it -- writing it out anyway would split the ATX line in two on reparse rather than lose formatting, which is strictly worse. This is detected via LINE_ENDING_PATTERN, not a bare '\n' check: this package's own hard-break escaping (escapeMarkdownText) and soft-break residue always use LF, but a run's plain text field or a foreign producer's own markdown residue (src/emit/inline.ts's renderLeaf, the run.source.xml case) can carry a bare CR or CRLF just as legitimately -- an un-widened check would let that slip through to the plain `text` return at the very bottom of this function with the line ending never escaped or collapsed, embedding it unrepresented in what is supposed to be ATX's single physical line. Setext's own grammar is exactly "one or more lines of heading text", so promote to it whenever the level admits one (<=2), overriding the configured style; only a genuinely unrepresentable level 3-6 heading, OR a level<=2 heading whose own break placement would leave a blank line setext cannot survive (embedsUnsafeBreakForSetext above), falls through to the collapse-with-diagnostic path below.
     const embedsLineBreak = LINE_ENDING_PATTERN.test(text);
-    const unsafeForSetext = embedsUnsafeBreakForSetext(text);
+    const unsafeSetextReason = unsafeSetextBreakReason(text);
+    const unsafeForSetext = unsafeSetextReason !== undefined;
     if (
       (context.headingStyle === "setext" || embedsLineBreak) &&
       level <= MAX_SETEXT_LEVEL &&
@@ -331,7 +365,10 @@ function renderParagraphBody(
         context.sink({
           code: MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
           severity: "info",
-          message: `a level ${String(level)} heading's own content contains a line break that would leave a blank line immediately before the setext underline (or, for a genuinely interior break, in the middle of the heading's own text) if promoted -- setext's own grammar requires "one or more lines of text, not interrupted by a blank line", so ATX collapses it to a single space instead of promoting into a corrupt reparse`,
+          message:
+            unsafeSetextReason === "leading-indentation"
+              ? `a level ${String(level)} heading's own content contains a line break, but the line that would become the setext heading's first line of text opens with 4 or more columns of space/tab indentation -- setext's own grammar (spec 0.31.2) requires the first line to have "not more than 3 spaces of indentation", so promoting would read that line back as an indented code block instead of heading text; ATX collapses the break to a single space instead of promoting into a corrupt reparse`
+              : `a level ${String(level)} heading's own content contains a line break that would leave a blank line immediately before the setext underline (or, for a genuinely interior break, in the middle of the heading's own text) if promoted -- setext's own grammar requires "one or more lines of text, not interrupted by a blank line", so ATX collapses it to a single space instead of promoting into a corrupt reparse`,
         });
       } else {
         context.sink({

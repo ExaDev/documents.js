@@ -297,6 +297,108 @@ describe("headings", () => {
     );
   });
 
+  describe("a level-1/2 heading whose own first content line is indented 4 or more columns never promotes to setext (ExaDev/documents.js#940)", () => {
+    // CommonMark's own setext grammar (spec 0.31.2, "Setext headings") is "one or more lines of text, not interrupted by a blank line, of which the FIRST LINE DOES NOT HAVE MORE THAN 3 SPACES OF INDENTATION, followed by a setext heading underline" -- a wholly separate clause from the blank-line one every other describe block in this file exercises. The spec's own worked example ("Four spaces of indentation is too many") shows exactly this: a would-be setext heading's own first line, indented 4 spaces, reparses as an indented code block instead, with the underline surviving as a stray paragraph or thematic break of its own -- the identical corrupt-reparse shape a blank line produces, via a different CommonMark construct.
+    it.each([{ level: "Heading1" as const }, { level: "Heading2" as const }])(
+      "collapses to ATX with a diagnostic instead of promoting $level to setext when the heading's own first content line is indented 4 spaces",
+      ({ level }) => {
+        const collector = createDiagnosticCollector();
+        const softBreakRuns = [
+          { text: "    foo" },
+          { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+          { text: "bar" },
+        ];
+        const written = emitMarkdown(
+          doc([{ kind: "paragraph", runs: softBreakRuns, styleId: level }]),
+          { sink: collector.sink },
+        );
+        expect(written).toBe(
+          `${level === "Heading1" ? "#" : "##"}     foo bar`,
+        );
+        const diagnostic = collector.diagnostics.find(
+          (d) =>
+            d.code ===
+            MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        );
+        expect(diagnostic?.message).toContain("indentation");
+        expect(diagnostic?.message).toContain("indented code block");
+        expect(
+          collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+        ).toBe(false);
+      },
+    );
+
+    it.each([{ level: "Heading1" as const }, { level: "Heading2" as const }])(
+      "survives a full write-then-reread round trip as one intact $level heading, rather than being read back as an indented code block once the first content line is indented 4 spaces",
+      ({ level }) => {
+        const softBreakRuns = [
+          { text: "    foo" },
+          { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+          { text: "bar" },
+        ];
+        const written = emitMarkdown(
+          doc([
+            { kind: "paragraph", runs: softBreakRuns, styleId: level },
+            { kind: "paragraph", runs: [{ text: "next para" }] },
+          ]),
+        );
+        const reparsed = lowerMarkdown(written);
+        if (reparsed.kind !== "wordprocessing") {
+          throw new Error("expected a wordprocessing ContentDocument");
+        }
+        const blocks = reparsed.sections[0]?.blocks ?? [];
+        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId) and the trailing paragraph -- pre-fix, the 4-space-indented first line promoted into setext read back as an indented code block, a stray heading carrying only "bar", and the trailing paragraph, splitting the original heading's own content across two blocks.
+        expect(blocks).toHaveLength(2);
+        const [headingBlock, nextBlock] = blocks;
+        if (
+          headingBlock?.kind !== "paragraph" ||
+          nextBlock?.kind !== "paragraph"
+        ) {
+          throw new Error("expected two paragraph blocks");
+        }
+        expect(headingBlock.styleId).toBe(level);
+        expect(nextBlock.styleId).toBeUndefined();
+        expect(nextBlock.runs.map((run) => run.text).join("")).toBe(
+          "next para",
+        );
+      },
+    );
+
+    it("still promotes to setext when the first content line is indented exactly 3 spaces -- the boundary CommonMark's own grammar actually draws", () => {
+      const softBreakRuns = [
+        { text: "   foo" },
+        { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+        { text: "bar" },
+      ];
+      expect(
+        emitMarkdown(
+          doc([
+            { kind: "paragraph", runs: softBreakRuns, styleId: "Heading1" },
+          ]),
+        ),
+      ).toBe("   foo\nbar\n======");
+    });
+
+    it("treats a leading tab as 4 columns of indentation (CommonMark's own tab-stop rule, spec 0.31.2 'Tabs'), collapsing to ATX exactly as 4 leading spaces would", () => {
+      const softBreakRuns = [
+        { text: "\tfoo" },
+        { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+        { text: "bar" },
+      ];
+      const collector = createDiagnosticCollector();
+      const written = emitMarkdown(
+        doc([{ kind: "paragraph", runs: softBreakRuns, styleId: "Heading1" }]),
+        { sink: collector.sink },
+      );
+      expect(written).toBe("# \tfoo bar");
+      expect(
+        collector.has(
+          MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        ),
+      ).toBe(true);
+    });
+  });
+
   describe("a level-1/2 heading whose own text STARTS with an embedded break stays eligible for setext (ExaDev/documents.js#940)", () => {
     // Unlike a TRAILING break, a LEADING one never leaves a blank line for setext to trip over: it sits BEFORE the heading's own run of text-then-underline lines even begins, so a reparse treats it as ordinary inter-block whitespace ahead of the heading -- exactly as a blank line ahead of any other block already works. Refusing setext here would be a strict regression for the escaped-hard-break spelling specifically: escapeMarkdownText always keeps a non-blank backslash on that first line, so the break survives losslessly through setext today, and collapsing to ATX would destroy it (ATX has no representation for a break at all).
     it("still promotes to setext when the leading blank line is a genuinely bare one (a soft-break markdown-residue newline, not the escaped hard-break spelling above) -- but, unlike the escaped spelling, absorbs the leading break itself as ordinary space ahead of the heading rather than reproducing it inside the heading (ExaDev/documents.js#940)", () => {
