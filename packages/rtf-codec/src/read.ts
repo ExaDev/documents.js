@@ -160,6 +160,8 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["objdata", "objectData"],
   ["objclass", "skip"],
   ["objname", "skip"],
+  // \oleclsid ("<objclsid> = '{\*' \oleclsid #PCDATA '}'") is \object's own optional CLSID sub-group, listed in RTF 1.9.1's <obj> grammar right alongside <objalias>/<objsect>/<objtime> below -- informational, with no position in ContentEmbeddedObjectBlock, but spec-legal \object content nonetheless, so it belongs here rather than left to trip UNKNOWN_DESTINATION_SKIPPED as if it were unrecognised.
+  ["oleclsid", "skip"],
   // \objalias and \objsect are the two optional sub-groups \objdata's own grammar allows before its <data> ("<objdata> = '{\*' \objdata (<objalias>? & <objsect>?) <data> '}'"); \objtime is \object's own linked-object update timestamp. All three are informational sub-parts this reader has no position for, exactly like \objclass/\objname above -- listing them here (rather than leaving them as unrecognised ignorable destinations) keeps ordinary, spec-legal \object content from tripping UNKNOWN_DESTINATION_SKIPPED.
   ["objalias", "skip"],
   ["objsect", "skip"],
@@ -188,7 +190,7 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
 //  - \pn/\pnseclvl are Word 6/95 paragraph numbering, superseded by the \lsN/\ilvlN this reader does read.
 //  - \nonshppict is by definition the copy Word itself will not read ("Specifies that Word 97 through Word 2002 has written a {\pict destination that it will not read on input"), sitting beside the \*\shppict this reader does take.
 //  - \falt, \panose and \fname are <fontinfo> sub-productions the header parser already consumed.
-//  - \atn*, \objclass/\objname/\objalias/\objsect/\objtime/\result and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct (\objdata is no longer here -- it is real payload now, handled and reported on its own terms by buildEmbeddedObject; \result is silent here too even on the degrade path where it is read as body content, since \object's own group-end handling reports the object once, either via buildEmbeddedObject's own diagnostic on a decode failure or its own "no \objdata"/"no \objdata and no \result" diagnostic otherwise).
+//  - \atn*, \objclass/\objname/\oleclsid/\objalias/\objsect/\objtime/\result and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct (\objdata is no longer here -- it is real payload now, handled and reported on its own terms by buildEmbeddedObject; \result is silent here too even on the degrade path where it is read as body content, since \object's own group-end handling reports the object once, either via buildEmbeddedObject's own diagnostic on a decode failure or its own "no \objdata"/"no \objdata and no \result" diagnostic otherwise).
 //  - The footnote and endnote separators are page furniture with no content of their own, and \xe/\tc/\tcn are index and table-of-contents entry markers whose text is derivable from the document they mark.
 //  - \ffdeftext is a plainText form field's own default/reset text (FFData.xstzTextDef), never promoted onto the field's contentControl by design -- its genuinely current text already rides the wrapped \fldrslt runs alongside it (see constructs.ts's own formFieldContentControl top comment).
 //  - \ffformat/\ffstattext/\ffentrymcr/\ffexitmcr are the remaining <formstrings> destination strings alongside \ffdeftext: RtfFormFieldData carries no member for any of them, since ContentControlDescriptor has no field a form field's input-format mask, status text, or entry/exit macro name could land in.
@@ -212,6 +214,7 @@ const SILENT_SKIP_DESTINATIONS: ReadonlySet<string> = new Set([
   "atnicn",
   "objclass",
   "objname",
+  "oleclsid",
   "objalias",
   "objsect",
   "objtime",
