@@ -867,7 +867,7 @@ class RtfWriter {
     opened: ContentControlExtent[],
   ): void {
     let top = opened[opened.length - 1];
-    while (top?.endRun === position && top.startRun !== position) {
+    while (top?.endRun === position) {
       opened.pop();
       this.raw("}}");
       top = opened[opened.length - 1];
