@@ -486,7 +486,7 @@ function skipUnicodeFallback(
   return { index, textOffset };
 }
 
-// A \field group's own run range, open from its head brace to its closing one. paragraphSerial guards against the pathological (never seen in real RTF) case of a \par landing inside a \field group: without it, a stale runIndex captured before the paragraph reset could produce an inverted startRun/endRun pair.
+// A \field group's own run range, open from its head brace to its closing one. paragraphSerial guards against a \par or \cell landing inside \fldrslt: RTF 1.9.1's own <fieldrslt> production ('{' \fldrslt <para>+ '}') is grammatical for a multi-paragraph result even though real producers keep form fields inline in practice, and without this check a stale runIndex captured before the paragraph reset could produce an inverted startRun/endRun pair. When it fires, endFormField below drops the contentControl and reports why through the sink, rather than mis-attaching it to whichever paragraph happens to be open once the field closes.
 interface OpenFormField {
   readonly paragraphSerial: number;
   readonly runIndex: number;
@@ -591,7 +591,7 @@ class ContentBuilder {
   private pendingRunConstructs: RunConstructExtent[] = [];
   // Bookmarks whose end half arrived in the paragraph currently accumulating, having started in an earlier one -- resolvable only once that paragraph's own block index is known.
   private closingBookmarks: OpenBookmark[] = [];
-  // Form fields, held open the same way as a bookmark, but stacked rather than named: a \field group's own open and close are one matched pair, not two independently placed halves, so there is no genuine cross-paragraph case in real RTF. The paragraphSerial check below is kept anyway, as the same guard against an inverted range a pathological \par-inside-\field would otherwise produce.
+  // Form fields, held open the same way as a bookmark, but stacked rather than named: a \field group's own open and close are one matched pair, not two independently placed halves. Real producers keep a form field's \fldrslt inline, within one paragraph, but RTF's own grammar permits a multi-paragraph result (see OpenFormField's own comment above), so the paragraphSerial check in endFormField below is a genuine cross-paragraph guard, not merely defensive: it catches that case and drops the contentControl with a diagnostic rather than producing an inverted or mis-attached range.
   private openFormFields: OpenFormField[] = [];
 
   constructor(
@@ -661,6 +661,13 @@ class ContentBuilder {
       return;
     }
     if (open.paragraphSerial !== this.paragraphSerial) {
+      // A RunConstructExtent is scoped to one paragraph's own runs, so a \fldrslt whose content crossed a \par or \cell (see the comment on OpenFormField above) leaves no extent this reader can express -- the contentControl is dropped rather than mis-attached to whichever paragraph happens to be open now. Every other drop in this feature reports through the sink; this one must too rather than disappearing silently.
+      this.sink({
+        code: RtfDiagnosticCodes.FORM_FIELD_SPAN_DROPPED,
+        severity: "warning",
+        message:
+          "a form field's contentControl is dropped: its \\fldrslt content crossed a paragraph or table-cell boundary, and this reader's per-paragraph construct extent cannot span one",
+      });
       return;
     }
     this.pendingRunConstructs.push({
