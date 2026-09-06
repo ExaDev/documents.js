@@ -79,6 +79,7 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "document-schema.js": "^6.2.0",
+    "entities": "^8.0.0",
     "fast-xml-parser": "^5.10.1",
     "fflate": "^0.8.3",
     "zod": "^4.4.3"
