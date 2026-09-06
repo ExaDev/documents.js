@@ -119,6 +119,17 @@ function detectPalette(image: RawImage): PaletteEncoding | undefined {
   };
 }
 
+// Wraps a chunk-writing body between the PNG signature and IEND -- the framing every complete PNG file shares regardless of which colour-type body was written into it.
+function buildPng(
+  writeBody: (writer: ByteWriter) => void,
+): Uint8Array<ArrayBuffer> {
+  const writer = new ByteWriter();
+  writer.writeBytes(PNG_SIGNATURE);
+  writeBody(writer);
+  writeChunk(writer, "IEND", new Uint8Array(0));
+  return writer.toBytes();
+}
+
 function writeIndexedPng(
   writer: ByteWriter,
   width: number,
@@ -175,7 +186,7 @@ function writeTruecolorPng(
   writeChunk(writer, "IDAT", deflate(filtered));
 }
 
-// Encodes normalised raw pixel data (8 bits per channel, optionally with a separate alpha plane) into PNG file bytes -- the exact inverse of decodePng's RawImage shape. A channels === 3 image is first checked for a lossless indexed-colour (colour type 3) representation, and encoded that way whenever its pixels reduce to 256 or fewer distinct colours -- indexed colour is substantially smaller than truecolour for the flat-colour images typical of diagrams and screenshots, and decodePng reconstructs the original RGB(A) data exactly via its own PLTE/tRNS lookup, so this never changes what decodePng(encodePng(image)) hands back. Every other image (grayscale, or a truecolour image with more than 256 distinct colours) falls back to the plain truecolour/greyscale path. Throws unless both width and height are integers in the PNG spec's own valid IHDR range: the spec (section 11.2.1, IHDR) states zero is an invalid value for either, and both fields are a 'PNG four-byte unsigned integer', a datatype the spec limits to 0 to 2^31-1 -- so a negative, fractional, non-finite (including NaN), or too-large dimension all have no valid IHDR encoding, and a single bounded-positive-integer check catches every one of them in one place, rather than a `<= 0` check that NaN and fractional values silently pass straight through (NaN <= 0 is false, and a fractional value truncates on write into a dimension the caller never asked for) or an unbounded check that lets a dimension at or above 2^31 through to an encoder loop sized by it. Also throws when width * height exceeds PNG_MAX_PIXELS even though each dimension individually is in range -- see that constant's own comment for why.
+// Encodes normalised raw pixel data (8 bits per channel, optionally with a separate alpha plane) into PNG file bytes -- the exact inverse of decodePng's RawImage shape. A channels === 3 image whose pixels reduce to 256 or fewer distinct colours is encoded both ways -- indexed colour (colour type 3, with a PLTE and, where the source carried alpha, a tRNS chunk) and plain truecolour -- and whichever comes out smaller is returned. Indexed colour's one-byte-per-pixel IDAT savings are repaid many times over on the large flat-colour diagrams and screenshots this path exists for, but for small images the PLTE (and tRNS) chunk's own fixed overhead can outweigh those savings, so which one wins is measured rather than assumed. decodePng reconstructs the original RGB(A) data exactly from either representation, so this never changes what decodePng(encodePng(image)) hands back. Every other image (grayscale, or a truecolour image with more than 256 distinct colours) uses the plain truecolour/greyscale path outright, since there is no smaller alternative to compare it against. Throws unless both width and height are integers in the PNG spec's own valid IHDR range: the spec (section 11.2.1, IHDR) states zero is an invalid value for either, and both fields are a 'PNG four-byte unsigned integer', a datatype the spec limits to 0 to 2^31-1 -- so a negative, fractional, non-finite (including NaN), or too-large dimension all have no valid IHDR encoding, and a single bounded-positive-integer check catches every one of them in one place, rather than a `<= 0` check that NaN and fractional values silently pass straight through (NaN <= 0 is false, and a fractional value truncates on write into a dimension the caller never asked for) or an unbounded check that lets a dimension at or above 2^31 through to an encoder loop sized by it. Also throws when width * height exceeds PNG_MAX_PIXELS even though each dimension individually is in range -- see that constant's own comment for why.
 export function encodePng(
   image: RawImage,
   options: PngEncodeOptions = {},
@@ -202,9 +213,13 @@ export function encodePng(
   const paletteEncoding =
     image.channels === 3 ? detectPalette(image) : undefined;
 
-  const writer = new ByteWriter();
-  writer.writeBytes(PNG_SIGNATURE);
-  if (paletteEncoding !== undefined) {
+  if (paletteEncoding === undefined) {
+    return buildPng((writer) => {
+      writeTruecolorPng(writer, image, options);
+    });
+  }
+
+  const indexed = buildPng((writer) => {
     writeIndexedPng(
       writer,
       image.width,
@@ -212,9 +227,9 @@ export function encodePng(
       paletteEncoding,
       options,
     );
-  } else {
+  });
+  const truecolor = buildPng((writer) => {
     writeTruecolorPng(writer, image, options);
-  }
-  writeChunk(writer, "IEND", new Uint8Array(0));
-  return writer.toBytes();
+  });
+  return indexed.length <= truecolor.length ? indexed : truecolor;
 }
