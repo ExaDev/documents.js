@@ -1082,6 +1082,37 @@ describe("readOdtContent: office:forms in an ordinary text document", () => {
     expect(descriptors[4]?.source).toMatchObject({ format: "odt" });
     expect(descriptors[1]?.source).toBeUndefined();
   });
+
+  it("reads a form:listbox's own form:option children as the descriptor's options, and an empty listbox as options: []", () => {
+    const pkg = odtPackage([
+      el("office:forms", {}, [
+        el("form:form", { "form:name": "MainForm" }, [
+          el("form:listbox", { "form:name": "tier" }, [
+            el("form:option", { "form:label": "Bronze", "form:value": "1" }),
+            el("form:option", { "form:label": "Silver", "form:value": "2" }),
+            // No form:label at all -- falls back to form:value, matching ooxml.js's own displayText-then-value convention for the identical docx w:listItem concept.
+            el("form:option", { "form:value": "3" }),
+          ]),
+          el("form:listbox", { "form:name": "empty" }),
+        ]),
+      ]),
+    ]);
+    const descriptors = firstSectionBlocks(pkg)
+      .filter((block) => block.kind === "constructStart")
+      .map((block) => block.descriptor);
+    expect(descriptors[1]).toMatchObject({
+      kind: "contentControl",
+      controlType: "dropDown",
+      tag: "tier",
+      options: ["Bronze", "Silver", "3"],
+    });
+    expect(descriptors[2]).toMatchObject({
+      kind: "contentControl",
+      controlType: "dropDown",
+      tag: "empty",
+      options: [],
+    });
+  });
 });
 
 describe("readOdtContent: field master declarations as a definitions table", () => {

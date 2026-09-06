@@ -160,6 +160,19 @@ const CONTROL_TYPE_BY_TAG: ReadonlyMap<string, ContentControlType> = new Map([
   ["form:hidden", "richText"],
 ]);
 
+// A form:listbox's own literal option list ([OASIS ODF] 1.3, the form-listbox-elem/form-option-elem schema): zero or more form:option children, each a label/value pair (form:label the display text, form:value its underlying value -- the same displayText/value split ooxml.js's own readListItemOptions reads off w:listItem for the identical docx dropdown concept). A listbox bound to a live data source (form:list-source-type "sql"/"table"/"query" rather than the default "value-list") carries no literal form:option children at all, so this naturally reads as an empty list for that case too -- resolving a live query's own result set is out of this reader's reach regardless. Not read for form:combobox: that control's own child element is form:item, a distinct schema shape from form:listbox's form:option, and out of this fix's scope (ExaDev/documents.js#1016).
+function readListboxOptions(element: XmlElement): string[] {
+  const options: string[] = [];
+  for (const option of childrenWithTag(element, "form:option")) {
+    const text =
+      formAttr(option, "form:label") ?? formAttr(option, "form:value");
+    if (text !== undefined) {
+      options.push(text);
+    }
+  }
+  return options;
+}
+
 // The original form element a walker node came from is what residue serialises, so the construct builder walks the ELEMENTS directly rather than the projected nodes -- the projection loses the form:properties bag this mapping deliberately quarantines.
 function controlConstruct(
   element: XmlElement,
@@ -184,6 +197,9 @@ function controlConstruct(
     if (element.tag === "form:checkbox" || element.tag === "form:radio") {
       descriptor.checked =
         formAttr(element, "form:current-state") === "checked";
+    }
+    if (element.tag === "form:listbox") {
+      descriptor.options = readListboxOptions(element);
     }
     const properties = childrenWithTag(element, FORM_PROPERTIES_TAG)[0];
     if (properties !== undefined) {
