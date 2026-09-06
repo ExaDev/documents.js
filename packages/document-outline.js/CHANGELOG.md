@@ -1,3 +1,59 @@
+## [3.3.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.2.5...document-outline.js%403.3.0) (2026-09-06)
+
+### Features
+
+* **document-outline.js:** add insertNode/insertEdge write API to the property graph ([3d7970e](https://github.com/ExaDev/documents.js/commit/3d7970e1742a87281998377054aced3e6dea78f2))
+
+### Bug Fixes
+
+* **document-outline.js:** anchor reconcileChildren inserts to a specific edge, not an id value ([b955318](https://github.com/ExaDev/documents.js/commit/b955318b7f4f2e01f21bbf7205c66606919da732))
+* **document-outline.js:** insertEdge refuses an ambiguous before/after sibling ([7439155](https://github.com/ExaDev/documents.js/commit/7439155a68bd5034841373d12b653baaa1f2be1d))
+* **document-outline.js:** insertNode refuses a kind mismatch and reconciles children on a dedup hit ([eb7b648](https://github.com/ExaDev/documents.js/commit/eb7b648e73d95583bc9472148947e4c0dc89989c))
+* **document-outline.js:** make the CONTAINS-cycle check edge-only, not node-lookup-based ([29013b5](https://github.com/ExaDev/documents.js/commit/29013b5280f5a2fb1a585d758a5ff4365d248567))
+* **document-outline.js:** rebalance insertEdge when adjacent siblings already share one orderKey ([87e01ea](https://github.com/ExaDev/documents.js/commit/87e01ea49518ad3a3ef18c445582939be984a639))
+* **document-outline.js:** reconcile a dedup hit's missing children at their own requested position ([f5c1293](https://github.com/ExaDev/documents.js/commit/f5c12939711660e488995a26fe0d35b6f31b1434))
+* **document-outline.js:** reconcile children by global LCS, not per-id counts ([b78ada5](https://github.com/ExaDev/documents.js/commit/b78ada530b115d9a516378ccfa8e3c7101ca7c10))
+* **document-outline.js:** reconcile children by multiplicity, not set membership ([c1d2f36](https://github.com/ExaDev/documents.js/commit/c1d2f36904758d51a9303f2bc55ea4c5503ad93b))
+* **document-outline.js:** reconcile fresh-mint children against dangling CONTAINS edges ([500063f](https://github.com/ExaDev/documents.js/commit/500063f71d7a5c237326f9e14dba3aaa60ee4e1e))
+* **document-outline.js:** refuse to attach a CONTAINS edge that would close a cycle ([d6be9ea](https://github.com/ExaDev/documents.js/commit/d6be9ea739e19cd65793aae9ba56caf45a8f486d))
+* **document-outline.js:** scope AmbiguousSiblingError to a genuine orderKey tie ([0e28684](https://github.com/ExaDev/documents.js/commit/0e28684f785282d9114e0336cd1d917a45e198f5))
+* **document-outline.js:** throw a named UnknownSiblingError from insertEdge instead of a plain Error ([b302f83](https://github.com/ExaDev/documents.js/commit/b302f83a2ffe99c48864a75cd3163d223744f3aa))
+
+### Documentation
+
+* **document-outline.js:** correct reconcileChildren's LCS backtrack justification ([2cc9159](https://github.com/ExaDev/documents.js/commit/2cc9159ad7df58813f1a14c0e9af6defd0a111c2))
+* **document-outline.js:** correct reconciliation write-up for edge-anchored matching ([0defc4e](https://github.com/ExaDev/documents.js/commit/0defc4e061631dd04613f65e3141a4e5bf9d0fde))
+* **document-outline.js:** describe insertNode's dedup reconciliation as multiplicity-aware ([aac0d05](https://github.com/ExaDev/documents.js/commit/aac0d05ea91bd5a055317e1e4a28bf050fb5f54e))
+* **document-outline.js:** describe reconcileChildren's real LCS guarantee ([3333edc](https://github.com/ExaDev/documents.js/commit/3333edc0362ce25fba71ef4ffd725d22cda1689b))
+* **document-outline.js:** describe the unified CONTAINS-cycle mechanism honestly ([da1c292](https://github.com/ExaDev/documents.js/commit/da1c29207ad2b75db8e0f8ef29693060a5d92140))
+* **document-outline.js:** document the graph projection's write capability ([48a247f](https://github.com/ExaDev/documents.js/commit/48a247f550dabfd7a7933fcac97be5d9bc643a6b))
+* **document-outline.js:** document the write API's dedup, cycle, and ambiguous-sibling refusals ([ef1b19b](https://github.com/ExaDev/documents.js/commit/ef1b19b530c76786142de1f02dd9cb94b474660f))
+* **document-outline.js:** drop the variant test count from the timeout comment ([ad59d8e](https://github.com/ExaDev/documents.js/commit/ad59d8ec8d1afdd10e3e647e240d53ae0b97c64c))
+* **document-outline.js:** note insertEdge/insertNode's missing detach/replace-edge operation ([0e0b4ea](https://github.com/ExaDev/documents.js/commit/0e0b4ea0776f134cf3ae660c04809d42c75523d4)), references [ExaDev/documents.js#1004](https://github.com/ExaDev/documents.js/issues/1004)
+* **document-outline.js:** note reconcileChildren's DP table space cost ([e3f4ec7](https://github.com/ExaDev/documents.js/commit/e3f4ec7143ebef1d628639451d6fe839d992806d))
+* **document-outline.js:** note that a rebalanced sibling group lands back at the order-key floor ([71f7dce](https://github.com/ExaDev/documents.js/commit/71f7dceefb8385a1b9891459e1b048ab8098171f))
+* **document-outline.js:** note the mutation recipe leaves the old edge live ([5a9abf9](https://github.com/ExaDev/documents.js/commit/5a9abf9cbd5751774fef568adf7cc860476e76cd)), references [ExaDev/documents.js#1004](https://github.com/ExaDev/documents.js/issues/1004)
+* **document-outline.js:** state reconcileChildren's order guarantee precisely ([08edc3a](https://github.com/ExaDev/documents.js/commit/08edc3ad49e014def117eee4f5cb7a7e69877707))
+
+### Tests
+
+* **document-outline.js:** cover the anti-inflation pass's multi-occurrence bucket ([65b9663](https://github.com/ExaDev/documents.js/commit/65b9663f6760a5dc8cc392cef31f1cb6dab19532))
+* **document-outline.js:** cover the insertNode/insertEdge write API ([045c6cb](https://github.com/ExaDev/documents.js/commit/045c6cb71b9f6fd5cc89a78de9783b183fdd4be8)), references [#935](https://github.com/ExaDev/documents.js/issues/935)
+* **document-outline.js:** give coverage runs timeout headroom for the LCS reconciliation proof ([0ba2ed6](https://github.com/ExaDev/documents.js/commit/0ba2ed61d83568f6921e58bdfc4da8a216d90e84))
+* **document-outline.js:** name pinned graph.ts behaviour instead of citing review rounds ([d6ef96a](https://github.com/ExaDev/documents.js/commit/d6ef96adf31f133ba56081ce5e572a23d59e9062))
+* **document-outline.js:** prove reconcileChildren reproduces requested children exhaustively ([43f694c](https://github.com/ExaDev/documents.js/commit/43f694c639a32af27a362c2aea7c1fff9db41366))
+* **document-outline.js:** verify front-insert against a tied PROPERTY sibling still rebalances ([b44e46e](https://github.com/ExaDev/documents.js/commit/b44e46ee4ff81e7b9a635c72996872e0d471b03a))
+* **document-outline.js:** widen reconciliation proof to genuine subsequences ([16973e4](https://github.com/ExaDev/documents.js/commit/16973e476e404284dcf6ce2fb39fb56620453875))
+
+### Build System
+
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+
 ## [3.2.5](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.2.4...document-outline.js%403.2.5) (2026-09-05)
 
 ### Continuous Integration

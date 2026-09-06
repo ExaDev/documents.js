@@ -1,3 +1,62 @@
+## [6.0.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.6.0...document-schema.js%406.0.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* **document-schema.js:** ContentTableCell.background and ContentSheetCell.background
+  change type from Color to the discriminated ContentCellFill (a
+  'solid'/'pattern' union). A caller reading a cell's background as a
+  Color directly (e.g. cell.background.r) must switch on .kind and read
+  .color for a 'solid' fill, or use the new resolveCellFillColor() helper
+  to reduce either variant to a single representative Color. A caller
+  constructing a ContentTableCell/ContentSheetCell with a bare Color
+  background must wrap it as { kind: 'solid', color }.
+* **document-schema.js:** MathMlNodeSchema silently strips unrecognised keys on
+  parse instead of preserving them verbatim, now that plain z.object()
+  member schemas replaced the z.custom() predicate that returned its input
+  unchanged. The exported binding's type also narrowed from the concrete
+  ZodCustom<MathMlNode, MathMlNode> to the abstract
+  z.ZodType<MathMlNode, MathMlNode>, so code naming the concrete ZodCustom
+  type explicitly no longer typechecks against it.
+
+### Features
+
+* **document-schema.js:** add discriminated pattern-fill shape for cell backgrounds ([2f0b65a](https://github.com/ExaDev/documents.js/commit/2f0b65a5b1f47f415a4636928fd0e10b0438bc83)), closes [#951](https://github.com/ExaDev/documents.js/issues/951)
+
+### Bug Fixes
+
+* **document-schema.js:** annotate MathMlNodeSchema's z.ZodType input, not just its output ([99935a5](https://github.com/ExaDev/documents.js/commit/99935a5e45e2515d013860a7c48259e1b199e47c))
+* **document-schema.js:** defer MathML JSON Schema generation until first read ([fcb8429](https://github.com/ExaDev/documents.js/commit/fcb8429bb4b3f231d4d2a66bf13530615b4958f5))
+
+### Code Refactoring
+
+* **document-schema.js:** generate MathML JSON Schema $defs instead of hand-authoring them ([9d8e9ea](https://github.com/ExaDev/documents.js/commit/9d8e9ea3d70497d9b99d255ab1eac5db22104e3a))
+* **document-schema.js:** host unrecognizedFillKind for every cell-fill writer ([855121a](https://github.com/ExaDev/documents.js/commit/855121a58523e0ad8f332e28be8def3454918bc7))
+* **document-schema.js:** rewrite MathMlNodeSchema with z.lazy() instead of z.custom() ([4d235fe](https://github.com/ExaDev/documents.js/commit/4d235fe0d598d1ef25ad55262a4bcd2beb4cda90))
+
+### Documentation
+
+* **document-schema.js:** describe the MathML $defs accessors' real caching mechanism ([cd27fdf](https://github.com/ExaDev/documents.js/commit/cd27fdf5d4eeda2c5054f010414d13263d625d0a))
+* **document-schema.js:** document MathMlNode's now-silent unknown-key stripping ([dee3cf6](https://github.com/ExaDev/documents.js/commit/dee3cf6960b436305d6969c078ad3881069278a0)), references [ExaDev/documents.js#937](https://github.com/ExaDev/documents.js/issues/937)
+* **document-schema.js:** document the z.ZodType input-parameter gotcha z.codec() surfaced ([eb69229](https://github.com/ExaDev/documents.js/commit/eb692297c6d7359e332637463e8722767b58d42f))
+* **document-schema.js:** fix MathMlElement comment's stale single-parameter ZodType spelling ([1956e3d](https://github.com/ExaDev/documents.js/commit/1956e3dd73de33d49f584335836d51d876861f30))
+* **document-schema.js:** fix stale opaque-MathMlNodeSchema comment on ContentFormula ([6a176b9](https://github.com/ExaDev/documents.js/commit/6a176b9fb62fc11b9fd61357455d063b4fcc1443))
+* **document-schema.js:** fix wrong location claim for CONTENT_DEFS's MathML getters ([9e4ee67](https://github.com/ExaDev/documents.js/commit/9e4ee6724c409773c852371b1ac72184d3a632b0))
+* **document-schema.js:** mark the z.lazy() MathML rewrite as landed ([41a0c7c](https://github.com/ExaDev/documents.js/commit/41a0c7c4f980003b0b81cc6ca5d0b860e5187244)), references [ExaDev/documents.js#937](https://github.com/ExaDev/documents.js/issues/937)
+* **document-schema.js:** rename stale MATHML_JSON_DEFS references ([526b258](https://github.com/ExaDev/documents.js/commit/526b25886dbc457d461611b4e116f2cfa5616c75))
+* **document-schema.js:** stop claiming the MathML field-injection experiment left every test green ([598ac7e](https://github.com/ExaDev/documents.js/commit/598ac7e82980630029d5ae30f6b47d7f7701da1d))
+* **document-schema.js:** stop claiming the MathML live comparison independently verifies drift ([a61f281](https://github.com/ExaDev/documents.js/commit/a61f281ad89bbd4ef573540ead2b931de7e77c73))
+* **document-schema.js:** stop implying eager MathML JSON Schema generation ever shipped ([b97437a](https://github.com/ExaDev/documents.js/commit/b97437ac9c7abbc95bd95b779d11ada9277a252b)), references [ExaDev/documents.js#937](https://github.com/ExaDev/documents.js/issues/937)
+
+### Tests
+
+* **document-schema.js:** cover MathMlAttribute/Element/Node in the live JSON Schema comparison ([905014c](https://github.com/ExaDev/documents.js/commit/905014c540a722bc014bd329bbd093268a9a0d36))
+* **document-schema.js:** stop claiming the MathML live comparison catches drift it can't ([2b72cbd](https://github.com/ExaDev/documents.js/commit/2b72cbd80223243723a13bcaae7410d346db2f83))
+
+### Build System
+
+* drop document-schema.js and pdf-codec from the test/workers typecheck fix ([6eb3f27](https://github.com/ExaDev/documents.js/commit/6eb3f2785e006481677cb73f6b802c5fd4bc3f53)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021), references [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
 ## [5.6.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%405.5.1...document-schema.js%405.6.0) (2026-09-05)
 
 ### Features

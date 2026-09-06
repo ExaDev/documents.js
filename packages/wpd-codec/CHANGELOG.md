@@ -1,3 +1,27 @@
+## [2.0.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%401.1.3...wpd-codec%402.0.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* **wpd-codec:** readWpdContent's ContentTableCell.background is now a
+  discriminated ContentCellFill rather than a bare Color, matching
+  document-schema.js's own breaking change to the shared schema. A
+  caller reading a background as a Color directly must switch on .kind
+  and read .color for the 'solid' fill this reader always produces.
+
+### Bug Fixes
+
+* **wpd-codec:** adapt cell background to the new discriminated fill shape ([f3d17ae](https://github.com/ExaDev/documents.js/commit/f3d17aee3cd6c7af203372b70d372fd4ea474bf0)), references [ExaDev/documents.js#951](https://github.com/ExaDev/documents.js/issues/951)
+
+### Build System
+
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+- Updated archive-codec to ^1.4.3
+
 ## [1.1.3](https://github.com/ExaDev/documents.js/compare/wpd-codec%401.1.2...wpd-codec%401.1.3) (2026-09-05)
 
 

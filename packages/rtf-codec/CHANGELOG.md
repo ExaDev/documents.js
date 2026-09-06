@@ -1,3 +1,27 @@
+## [2.0.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%401.1.2...rtf-codec%402.0.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* **rtf-codec:** readRtfContent's ContentTableCell.background is now a
+  discriminated ContentCellFill rather than a bare Color, matching
+  document-schema.js's own breaking change to the shared schema.
+  writeRtfContent's cell background parameter changes the same way. A
+  caller reading a background as a Color directly, or constructing one,
+  must wrap/unwrap it as { kind: 'solid', color }.
+
+### Bug Fixes
+
+* **rtf-codec:** adapt cell background to the new discriminated fill shape ([f6de374](https://github.com/ExaDev/documents.js/commit/f6de3745a7b03e256c80eb20f38a1e0717daac1e)), references [ExaDev/documents.js#951](https://github.com/ExaDev/documents.js/issues/951)
+
+### Build System
+
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+
 ## [1.1.2](https://github.com/ExaDev/documents.js/compare/rtf-codec%401.1.1...rtf-codec%401.1.2) (2026-09-05)
 
 ### Bug Fixes

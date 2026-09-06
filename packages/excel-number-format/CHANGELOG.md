@@ -1,3 +1,9 @@
+## [1.0.2](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.0.1...excel-number-format%401.0.2) (2026-09-06)
+
+### Build System
+
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
 ## [1.0.1](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.0.0...excel-number-format%401.0.1) (2026-09-05)
 
 ### Continuous Integration

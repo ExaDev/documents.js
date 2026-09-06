@@ -1,3 +1,55 @@
+## [4.5.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.4.3...document-mcp%404.5.0) (2026-09-06)
+
+### Features
+
+* **document-mcp:** add compute_formula tool wiring document-compute.js's evaluate() ([2d9a4d7](https://github.com/ExaDev/documents.js/commit/2d9a4d7dda29cb30e8957eb67f5387f6482474bb))
+* **document-mcp:** declare compute_formula's output schema ([175c320](https://github.com/ExaDev/documents.js/commit/175c32077146d87c97941206d706d604dc09c023))
+* **document-mcp:** implement --transport http ([afa0632](https://github.com/ExaDev/documents.js/commit/afa0632300b7a42beae2fd9cb714bc6086503ab3))
+
+### Bug Fixes
+
+* **document-mcp:** correct routing comment and drop unreachable/defensive code in serve-http ([c661f04](https://github.com/ExaDev/documents.js/commit/c661f04d7ac521b64d2ee46ba74cdf8b3f16a9bc))
+* **document-mcp:** evaluate each formula against its own resolved symbol table ([f70f5d1](https://github.com/ExaDev/documents.js/commit/f70f5d192f9dba8fc3514b6e2b8e936fcb03502d))
+* **document-mcp:** key compute_formula's per-formula output on locate, not sourcePath ([288a79e](https://github.com/ExaDev/documents.js/commit/288a79e472680b0864c7127eec51ca683ec1f5b9))
+* **document-mcp:** walk a spreadsheet's cell-anchored formula objects in compute_formula ([e55dffe](https://github.com/ExaDev/documents.js/commit/e55dffe23df737002db8bec03fd12c93c639d923))
+
+### Code Refactoring
+
+* **document-mcp:** derive compute_formula's documentKind enum from schema ([0d16e2c](https://github.com/ExaDev/documents.js/commit/0d16e2cc6a010ae317a47e5b00924ab20343a799))
+* **document-mcp:** make evaluateFormula module-private ([2ce0dd5](https://github.com/ExaDev/documents.js/commit/2ce0dd54753a8588854232005ad2ffc65ac83eba))
+
+### Documentation
+
+* correct formula-walk exhaustiveness claims to name the nesting arm ([ff9960b](https://github.com/ExaDev/documents.js/commit/ff9960bbf07e804d4d57b75de40feb73d0e91937))
+* **document-mcp:** document the compute_formula tool ([73ab04a](https://github.com/ExaDev/documents.js/commit/73ab04a3efa903d716961a31d6cd1bb610c5fb7f))
+* **document-mcp:** document the implemented --transport http flag ([5c55643](https://github.com/ExaDev/documents.js/commit/5c556434f5a6d609bfbbbd202a0d2085bc487012))
+* **document-mcp:** drop rtf and overstated odg/table-cell claims from compute_formula ([ff4633b](https://github.com/ExaDev/documents.js/commit/ff4633b9cd295470f10b78a2d2687ef3c009ef5c))
+* **document-mcp:** fix a grammar slip describing the test-support fixture modules ([7721863](https://github.com/ExaDev/documents.js/commit/7721863ba0ac9dfadd7b07ef035d347fccc76c76))
+* **document-mcp:** list spreadsheet formula objects in compute_formula's row ([bd97002](https://github.com/ExaDev/documents.js/commit/bd970021974f36d3392795d48a97c26d435fdf3b))
+* **document-mcp:** restore table cells as a position compute_formula genuinely reaches ([5f3889c](https://github.com/ExaDev/documents.js/commit/5f3889ce9be91b4d95cf7d9be94a64a56babacad))
+
+### Tests
+
+* **document-mcp:** add compute_formula to the smoke test's expected tool list ([e1c8073](https://github.com/ExaDev/documents.js/commit/e1c8073a2f01cf0de48dad593dc1ab23d10d16ef))
+* **document-mcp:** add smoke coverage for the http transport ([47c8807](https://github.com/ExaDev/documents.js/commit/47c8807c384594d74e36c1ce234cc4217deac735))
+* **document-mcp:** assert the table-cell arm's own locate, not just its outcome ([8ca3e52](https://github.com/ExaDev/documents.js/commit/8ca3e52c82677c58f353bdff21db09812c9e4e52))
+* **document-mcp:** cover compute_formula evaluating a direct formula's own unit registry ([0067e0b](https://github.com/ExaDev/documents.js/commit/0067e0bc538288e40006b43502a6f299fb7cb094))
+* **document-mcp:** cover compute_formula evaluating a nested formula's own unit registry ([e9d2da0](https://github.com/ExaDev/documents.js/commit/e9d2da0eb52dd77c5589375c3be58a2705a9bfaa))
+* **document-mcp:** cover compute_formula's bindings, error, and empty-result paths ([942c2c5](https://github.com/ExaDev/documents.js/commit/942c2c52b74533be846afd30f71235291a461c6c))
+* **document-mcp:** cover compute_formula's spreadsheet and slide arms with real documents ([7f10ad0](https://github.com/ExaDev/documents.js/commit/7f10ad07e6cc6885f1122a6ca0522f6d4a888ff2))
+* **document-mcp:** cover the table-cell arm through a real docx byte round trip ([b17bef3](https://github.com/ExaDev/documents.js/commit/b17bef34488ca17ce48d7a53401bba018bfcdf13))
+* **document-mcp:** prove metadata_write preserves docx-extras data too ([7d60b45](https://github.com/ExaDev/documents.js/commit/7d60b45c010179eb6c5024ec0dc75463dec275df))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+- Updated document-outline.js to ^3.3.0
+- Updated odf.js to ^7.0.0
+- Updated wpd-codec to ^2.0.0
+- Updated documents.js to ^7.0.0
+- Updated document-compute.js to ^1.2.20
+
 ## [4.4.3](https://github.com/ExaDev/documents.js/compare/document-mcp%404.4.2...document-mcp%404.4.3) (2026-09-05)
 
 

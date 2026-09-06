@@ -1,3 +1,87 @@
+## [7.0.0](https://github.com/ExaDev/documents.js/compare/documents.js%406.5.3...documents.js%407.0.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* **documents.js:** this package re-exports ContentTableCell/
+  ContentSheetCell/ContentCellFill verbatim from document-schema.js, so
+  background's type change (Color to the discriminated ContentCellFill)
+  propagates to every consumer importing them from here. Any editable
+  document read through this package's own conversion pipeline now
+  carries the new shape on ContentTableCell/ContentSheetCell.background;
+  DocxTableCell/OdtTableCell/PptxTableCell's own background setters are
+  unaffected (still Color | undefined).
+
+### Features
+
+* **documents.js:** add patchDocxMetadata for lossless docx metadata patching ([722b086](https://github.com/ExaDev/documents.js/commit/722b086d2228f9ed5c44aee647ad8fb6f30d9726))
+* **documents.js:** extract collectDocumentFormulas as the shared cross-document formula walk ([fa37235](https://github.com/ExaDev/documents.js/commit/fa372352bd70be64d4ddc94e782c758bc49058fa))
+
+### Bug Fixes
+
+* **documents.js:** adapt cell background to the new discriminated fill shape ([235d8aa](https://github.com/ExaDev/documents.js/commit/235d8aa03ce01620822df44dc5905e79b4cc1e0a)), references [ExaDev/documents.js#951](https://github.com/ExaDev/documents.js/issues/951)
+* **documents.js:** carry table row height into odt from docx ([e7b53c9](https://github.com/ExaDev/documents.js/commit/e7b53c9a681807f88456683d32cbd42c5f68a024))
+* **documents.js:** key math-lint diagnostics on structural position, not sourcePath ([89b485f](https://github.com/ExaDev/documents.js/commit/89b485fceaf9da46d6b1cd1871a72d66e23318c3))
+* **documents.js:** merge a tagged cell's own multiple text items into one cell, not one per item ([e20238c](https://github.com/ExaDev/documents.js/commit/e20238cc524cb18a9060d76122c0113cc6bc4424))
+* **documents.js:** parse pptx cell border width with Number, not parseInt ([f3a988e](https://github.com/ExaDev/documents.js/commit/f3a988e4538f5b3d6d0b7357a15d77b21b60fc80))
+* **documents.js:** preserve existing odt row-style properties when writing row height ([5e8a233](https://github.com/ExaDev/documents.js/commit/5e8a233e39c0139e899288526e920979603b846f))
+* **documents.js:** preserve odt row-style children and clear stale auto-fit on heightPt ([4dea6b4](https://github.com/ExaDev/documents.js/commit/4dea6b4e4b4c852543052dcd731b9638f99808d7))
+* **documents.js:** read docx table-cell background via ooxml.js's shading reader ([8dbeb1d](https://github.com/ExaDev/documents.js/commit/8dbeb1d48bfe0680b7663d5a0c179f9a6b5e0c32))
+* **documents.js:** recurse the formula walk into a non-formula embedded object's own nested document ([d17159e](https://github.com/ExaDev/documents.js/commit/d17159e8445bd2a7fd4cc2d813e166709c657130))
+* **documents.js:** reject a non-positive or non-numeric pptx cell border width ([9fe9624](https://github.com/ExaDev/documents.js/commit/9fe9624c7798aa3bd32dd69d0387ad8c3575d9d0))
+* **documents.js:** resolve a directly embedded formula's own symbolTable ([4e8343a](https://github.com/ExaDev/documents.js/commit/4e8343aa1fb25d7d3833c3a1fddc095fc9dddb6f))
+* **documents.js:** resolve a nested formula's symbols and units against its own embedding document ([f0faeb3](https://github.com/ExaDev/documents.js/commit/f0faeb30749c13c4c63b53cc816a9a85f7d2efea))
+* **documents.js:** route setDocumentMetadata's docx branch through the in-place patch ([cdca40d](https://github.com/ExaDev/documents.js/commit/cdca40d67e3e4d4fa474ae47d85a097ee016933a))
+* **documents.js:** skip a cell background rect when its fill resolves to no colour ([69b83ad](https://github.com/ExaDev/documents.js/commit/69b83adc3ae8253ec75afa8e10b9065f7e5f3904))
+* **documents.js:** stop an empty keywords array from creating a docProps/core.xml part ([75359df](https://github.com/ExaDev/documents.js/commit/75359df5d8c80c980d77cb29fa5abe97a35da452))
+* **documents.js:** stop formula.test.ts's SHEET_DEFAULTS inferring a readonly images array ([359738b](https://github.com/ExaDev/documents.js/commit/359738ba60bb6d95e044c45e7370757fd1bfb1dd))
+
+### Code Refactoring
+
+* **documents.js:** consume the shared formula walk in the math coherence lint ([7127b9c](https://github.com/ExaDev/documents.js/commit/7127b9cceb342c4c2af03d64000ef1e57bca5e49))
+
+### Documentation
+
+* correct formula-walk exhaustiveness claims to name the nesting arm ([ff9960b](https://github.com/ExaDev/documents.js/commit/ff9960bbf07e804d4d57b75de40feb73d0e91937))
+* **documents.js:** correct stale claim that ooxml.js doesn't read cell borders ([9c028bc](https://github.com/ExaDev/documents.js/commit/9c028bc8a6894bcafc448e47bcfeb604adc14d07))
+* **documents.js:** correct stale docx row-height reader-gap comment ([e16b187](https://github.com/ExaDev/documents.js/commit/e16b1872903239636e899904f1a5b804a1cd58f5))
+* **documents.js:** correct which module leaves a formula's sourcePath unreliable ([9454b49](https://github.com/ExaDev/documents.js/commit/9454b496d5a0515481fdf66e1663fc0deb8a3bb2))
+* **documents.js:** correct which odt row-properties survive a heightPt write untouched ([5844a4c](https://github.com/ExaDev/documents.js/commit/5844a4cdca7d3ea47a955e7909d64d646bcd41e4))
+* **documents.js:** fix backwards claim about OdtTableRow's own accessors ([e4bf47f](https://github.com/ExaDev/documents.js/commit/e4bf47ffdbc4325d14089bbc8ba33bfe04ed4547))
+* **documents.js:** name collectDocumentFormulas's two real callers instead of overclaiming ([dd4092d](https://github.com/ExaDev/documents.js/commit/dd4092dedcfb4d9b38d21d7c512da18bd1996b9b))
+* **documents.js:** note writeDocContent's diagnostic sink in the doc node comment ([24352d9](https://github.com/ExaDev/documents.js/commit/24352d9cf23be49fc2c9de7f5a38f218587ade02))
+* **documents.js:** stop attributing table-cell end-to-end coverage to an unused fixture ([0f653b3](https://github.com/ExaDev/documents.js/commit/0f653b3f6f8eb939ccc4de393d8cb6c1061727c8))
+* **documents.js:** stop naming a line distance in the doc format-node comment ([5976dbe](https://github.com/ExaDev/documents.js/commit/5976dbe7859bbb71264986103c67c0e0dbde13fa))
+* **documents.js:** tighten document-compute.js's own dependency-order claim ([7cf7d26](https://github.com/ExaDev/documents.js/commit/7cf7d2633f541a917b95c425bb73a6c1f12916a1))
+
+### Tests
+
+* **documents.js:** assert the merge semantics a two-pass patch test names ([25caab3](https://github.com/ExaDev/documents.js/commit/25caab3942c7666436dfd634806754c444c7e3a3))
+* **documents.js:** correct a false premise about table-cell equation fixtures ([49fbd77](https://github.com/ExaDev/documents.js/commit/49fbd774c3516a7bbd75e60b6c6bf374e0d64121))
+* **documents.js:** cover a directly embedded formula's own symbolTable ([25538a6](https://github.com/ExaDev/documents.js/commit/25538a66e595aa1e1fcd9c68922b5b1fdd9c098c))
+* **documents.js:** cover collectDocumentFormulas across every ContentDocument arm ([370bf55](https://github.com/ExaDev/documents.js/commit/370bf555c3ac4cdd0f01ff0cfda01626fbfda91e))
+* **documents.js:** cover pptx cell border round-trip and invalid-width guard ([e61e6be](https://github.com/ExaDev/documents.js/commit/e61e6be033b77edebcc31a7c492a11ab2373be45))
+* **documents.js:** cover the coherence lint resolving a nested formula's own symbol table ([91e66c3](https://github.com/ExaDev/documents.js/commit/91e66c3fb857574fcd8fdd433ad404d4a97fb59a))
+* **documents.js:** cover the resolved-colour cell-fill guard in slides.ts and from-package.ts ([e9ac432](https://github.com/ExaDev/documents.js/commit/e9ac432a4c7bdd95d18b5c8c2657a60e8cd2033b))
+* **documents.js:** pin odt row-style child preservation and auto-fit clearing ([48864e2](https://github.com/ExaDev/documents.js/commit/48864e272fab0959f0b7b62e2f0fed682dd0cdff))
+* **documents.js:** pin the merge-preserving odt row-height behaviour ([030983d](https://github.com/ExaDev/documents.js/commit/030983d83fecbb5c073e2e55c8f139637d3f005b))
+* **documents.js:** prove row height survives the docx and odt bridge round trip ([fb74b29](https://github.com/ExaDev/documents.js/commit/fb74b294ef64b640b2eab9d582c29f811190da33))
+
+
+### Dependencies
+
+- Updated byte-codec to ^1.2.2
+- Updated document-schema.js to ^6.0.0
+- Updated archive-codec to ^1.4.3
+- Updated markdown-codec to ^6.1.7
+- Updated odf.js to ^7.0.0
+- Updated pdf-codec to ^3.6.6
+- Updated rtf-codec to ^2.0.0
+- Updated doc-codec to ^2.0.0
+- Updated ooxml.js to ^7.0.0
+- Updated ppt-codec to ^1.1.3
+- Updated wpd-codec to 2.0.0 (declared as `workspace:^`, resolved by pnpm at publish time)
+- Updated xls-codec to ^3.0.0
+
 ## [6.5.3](https://github.com/ExaDev/documents.js/compare/documents.js%406.5.2...documents.js%406.5.3) (2026-09-05)
 
 

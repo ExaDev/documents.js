@@ -1,3 +1,14 @@
+## [1.4.3](https://github.com/ExaDev/documents.js/compare/archive-codec%401.4.2...archive-codec%401.4.3) (2026-09-06)
+
+### Build System
+
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+
 ## [1.4.2](https://github.com/ExaDev/documents.js/compare/archive-codec%401.4.1...archive-codec%401.4.2) (2026-09-05)
 
 ### Continuous Integration

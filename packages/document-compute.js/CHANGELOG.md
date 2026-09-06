@@ -1,3 +1,21 @@
+## [1.2.20](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.2.19...document-compute.js%401.2.20) (2026-09-06)
+
+### Documentation
+
+* **document-compute.js:** state it is now wired into document-mcp ([70f6ce7](https://github.com/ExaDev/documents.js/commit/70f6ce7a27c2e9e2db4cc8ad8cd01142b70db53e))
+* **document-compute.js:** stop calling the worked-example harness test-only ([1e1bb39](https://github.com/ExaDev/documents.js/commit/1e1bb39d04e996dc51028e26916b8702303d3788))
+
+### Build System
+
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+- Updated markdown-codec to ^6.1.7
+- Updated documents.js to ^7.0.0
+
 ## [1.2.19](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.2.18...document-compute.js%401.2.19) (2026-09-05)
 
 ### Continuous Integration

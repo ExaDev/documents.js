@@ -1,3 +1,29 @@
+## [7.0.0](https://github.com/ExaDev/documents.js/compare/odf.js%406.4.1...odf.js%407.0.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* **odf.js:** readOdtContent/readOdsContent/readOdpContent/
+  readOdgContent's ContentTableCell/ContentSheetCell.background is now a
+  discriminated ContentCellFill rather than a bare Color, matching
+  document-schema.js's own breaking change to the shared schema. The
+  matching writeOdtContent/writeOdsContent/writeOdpContent/writeOdgContent
+  cell background parameter changes the same way. A caller reading a
+  background as a Color directly, or constructing one, must wrap/unwrap
+  it as { kind: 'solid', color }.
+
+### Bug Fixes
+
+* **odf.js:** adapt cell background to the new discriminated fill shape ([e19ed21](https://github.com/ExaDev/documents.js/commit/e19ed213682c1ccdba19410cb13d4510ceab0d9f)), references [ExaDev/documents.js#951](https://github.com/ExaDev/documents.js/issues/951)
+
+### Build System
+
+* typecheck test/workers across every package where it is currently clean ([f340428](https://github.com/ExaDev/documents.js/commit/f340428b51a669010c0c4e5edb4310fe6ea4789a)), closes [#1021](https://github.com/ExaDev/documents.js/issues/1021)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+
 ## [6.4.1](https://github.com/ExaDev/documents.js/compare/odf.js%406.4.0...odf.js%406.4.1) (2026-09-05)
 
 ### Bug Fixes

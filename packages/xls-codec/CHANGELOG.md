@@ -1,3 +1,42 @@
+## [3.0.0](https://github.com/ExaDev/documents.js/compare/xls-codec%402.0.2...xls-codec%403.0.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* **xls-codec:** readXlsContent's ContentSheetCell.background is now a
+  discriminated ContentCellFill rather than a bare Color, matching
+  document-schema.js's own breaking change to the shared schema.
+  writeXlsContent's cell background parameter changes the same way. A
+  caller reading a solid background as a Color directly, or constructing
+  one, must wrap/unwrap it as { kind: 'solid', color }.
+
+### Features
+
+* **xls-codec:** read and write real pattern fills instead of dropping them ([5bcc7f4](https://github.com/ExaDev/documents.js/commit/5bcc7f4cdcafb2e4365066087f0ce786d3c8caf9))
+
+### Bug Fixes
+
+* **xls-codec:** switch exhaustively on cell-fill kind instead of if/else ([bd87ce0](https://github.com/ExaDev/documents.js/commit/bd87ce0c9f2623199f7ac406ff1f13016fcc499e))
+* **xls-codec:** update workers write test to the discriminated cell-fill shape ([1eb8901](https://github.com/ExaDev/documents.js/commit/1eb8901955898a8192b7f397b8feb41cca17816c)), references [pre-#951](https://github.com/pre-/issues/951)
+
+### Code Refactoring
+
+* **document-schema.js:** host unrecognizedFillKind for every cell-fill writer ([855121a](https://github.com/ExaDev/documents.js/commit/855121a58523e0ad8f332e28be8def3454918bc7))
+
+### Documentation
+
+* **xls-codec:** correct the grey-shade count in the FillPattern breakdown ([4700477](https://github.com/ExaDev/documents.js/commit/470047700905990e6e040b874ae322b2b8e13b1e))
+
+### Build System
+
+* **xls-codec:** typecheck test/workers so a schema-shape break fails at typecheck time ([490808e](https://github.com/ExaDev/documents.js/commit/490808e5f7d393a3d24ab6193667c02d75bb641f))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.0.0
+- Updated excel-number-format to ^1.0.2
+- Updated archive-codec to ^1.4.3
+
 ## [2.0.2](https://github.com/ExaDev/documents.js/compare/xls-codec%402.0.1...xls-codec%402.0.2) (2026-09-05)
 
 ### Continuous Integration
