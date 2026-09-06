@@ -813,15 +813,30 @@ describe("form fields", () => {
     });
   });
 
-  // The identical Value-word classification and bare-form gap as \ffprot immediately above, for the sibling bit \ffownhelp.
-  it("reads a bare \\ffownhelp (no explicit parameter) as false, leaving the alias unset, since \\ffownhelp is a Value word whose bare form defaults to 0", () => {
+  // \ffownhelp shares \ffprot's own Value-word classification but is deliberately read differently: LibreOffice's real RTF exporter (sw/source/filter/ww8/rtfattributeoutput.cxx) emits this bare form unconditionally alongside genuine, non-empty HelpText, so a bare \ffownhelp reads as true here rather than following the Value-word literal 0-default \ffprot's bare form still uses -- see read.ts's own comment on applyFormFieldControlWord's "ffownhelp" case.
+  it("reads a bare \\ffownhelp (no explicit parameter) as true, promoting a non-empty \\ffhelptext to alias, matching real-world producers like LibreOffice that emit this bare form", () => {
     const paragraph = paragraphsOf(
-      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0\\ffownhelp{\\*\\ffhelptext Auto generated}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0\\ffownhelp{\\*\\ffhelptext Client name}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
     )[0];
     expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
       kind: "contentControl",
       controlType: "plainText",
       tag: "Text1",
+      alias: "Client name",
+    });
+  });
+
+  // Regression guard against silently discarding real LibreOffice output rather than merely a synthetic minimal fixture: this exact byte sequence, checkbox included, is what LibreOffice's sw/source/filter/ww8/rtfattributeoutput.cxx actually emits for a checked FORMCHECKBOX carrying custom help text -- \ffownhelp bare, immediately before a non-empty \*\ffhelptext.
+  it("reads a real LibreOffice-shaped FORMCHECKBOX's bare \\ffownhelp as carrying its \\ffhelptext through to alias", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffhps20{\\*\\ffname Check1}\\ffownhelp{\\*\\ffhelptext Tick if applicable}\\ffdefres0\\ffres1}}}{\\fldrslt X}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs?.[0]?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "checkbox",
+      tag: "Check1",
+      alias: "Tick if applicable",
+      checked: true,
     });
   });
 
