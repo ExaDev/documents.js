@@ -44,6 +44,7 @@ import {
   bookmarkAnchorDescriptor,
   coalesceRunConstructs,
   formFieldContentControl,
+  formFieldControlType,
   NO_REVISION,
   provenanceDescriptors,
   type RevisionState,
@@ -632,7 +633,7 @@ class ContentBuilder {
     this.closingBookmarks.push(open);
   }
 
-  // "{\field ..." -- flushing first for the same reason startBookmark does: the extent's boundary is a run boundary.
+  // Called only once a `\*\fldinst` destination's own close has confirmed the field is a genuine form field (FORMTEXT/FORMCHECKBOX/FORMDROPDOWN) -- never for an ordinary field (PAGE, DATE, NUMPAGES, REF, SEQ, TOC, MERGEFIELD, and the rest), which has no `\*\formfield` extent to open at all. Flushing first for the same reason startBookmark does: the extent's boundary is a run boundary. No text is appended between `{\field`'s own open and `\*\fldinst`'s close, so the run boundary this opens lands in exactly the same place it would if opened at `{\field` itself.
   startFormField(): void {
     this.flushRun();
     this.openFormFields.push({
@@ -641,11 +642,11 @@ class ContentBuilder {
     });
   }
 
-  // The matching "}" for a \field group. `descriptor` is undefined for an ordinary field (no FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction), in which case nothing is produced -- this reader's existing hyperlink-only handling for those fields is unchanged.
-  endFormField(descriptor: ConstructDescriptor | undefined): void {
+  // The matching "}" for a genuine form field's `\field` group -- the caller only invokes this once formFieldContentControl has already produced a real descriptor, matching startFormField above only ever having opened an extent for the same field, so `open` here is never undefined except for genuinely malformed, unbalanced RTF.
+  endFormField(descriptor: ConstructDescriptor): void {
     this.flushRun();
     const open = this.openFormFields.pop();
-    if (open === undefined || descriptor === undefined) {
+    if (open === undefined) {
       return;
     }
     if (open.paragraphSerial !== this.paragraphSerial) {
@@ -1417,8 +1418,8 @@ function readRtfDetail(
       if (known !== undefined) {
         child.destination = kind;
         if (child.isFieldGroup) {
+          // No `builder.startFormField()` here: the instruction (this field's own `\*\fldinst` content) is still empty at this point, so formFieldControlType has nothing to decide a genuine form field from yet. The extent opens later, at `\*\fldinst`'s own close below, once that decision is actually possible.
           child.field = { instruction: "", formField: undefined };
-          builder.startFormField();
         }
         if (head.destination === "formfield" && child.field !== undefined) {
           // Mutates the SAME FieldState object the enclosing \field group's own children all share by reference, so \*\ffname/\*\ffl (nested inside this group) and the \field group's own closing brace (which reads it back to build the descriptor) see the identical data.
@@ -1479,14 +1480,23 @@ function readRtfDetail(
           builder.endBookmark(bookmark.name);
         }
       }
+      if (
+        state.destination === "fieldInstruction" &&
+        state.field !== undefined &&
+        formFieldControlType(state.field.instruction) !== undefined
+      ) {
+        // \*\fldinst's own instruction text is complete now (it is the only destination that appends to it), so this is the earliest point a genuine form field (FORMTEXT/FORMCHECKBOX/FORMDROPDOWN) can be told apart from an ordinary field (PAGE, DATE, NUMPAGES, and the rest) -- opening the extent here, rather than unconditionally at \field's own open, means an ordinary field never calls startFormField/flushRun at all.
+        builder.startFormField();
+      }
       if (state.isFieldGroup && state.field !== undefined) {
-        // The whole field is read by now -- \*\fldinst and \*\formfield are this group's own earlier children, already closed -- so this is the one point that knows both the instruction and whatever form-field data it carried.
-        builder.endFormField(
-          formFieldContentControl(
-            state.field.instruction,
-            state.field.formField,
-          ),
+        // The whole field is read by now -- \*\fldinst and \*\formfield are this group's own earlier children, already closed -- so this is the one point that knows both the instruction and whatever form-field data it carried. `descriptor` is undefined for an ordinary field, matching startFormField above never having opened an extent for it either, so endFormField is skipped rather than called with nothing to close.
+        const descriptor = formFieldContentControl(
+          state.field.instruction,
+          state.field.formField,
         );
+        if (descriptor !== undefined) {
+          builder.endFormField(descriptor);
+        }
       }
       if (stack.length > 1) {
         stack.pop();

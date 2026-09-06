@@ -260,8 +260,8 @@ const FORM_FIELD_CHECKBOX_INSTRUCTION = /^\s*FORMCHECKBOX\b/i;
 const FORM_FIELD_DROPDOWN_INSTRUCTION = /^\s*FORMDROPDOWN\b/i;
 const FORM_FIELD_TEXT_INSTRUCTION = /^\s*FORMTEXT\b/i;
 
-// The one place a form field's instruction keyword decides its controlType, so the reader and the write-side keyword table (FORM_FIELD_SPEC in write.ts) stay the two ends of one mapping rather than two independent guesses. Order matters only in that FORMCHECKBOX and FORMDROPDOWN are checked before the FORMTEXT fallback would otherwise never apply -- the three keywords do not overlap as substrings, so no ordering is actually load-bearing, but checking the two more specific keywords first reads as the intended precedence.
-function formFieldControlType(
+// The one place a form field's instruction keyword decides its controlType, so the reader and the write-side keyword table (FORM_FIELD_SPEC in write.ts) stay the two ends of one mapping rather than two independent guesses. Order matters only in that FORMCHECKBOX and FORMDROPDOWN are checked before the FORMTEXT fallback would otherwise never apply -- the three keywords do not overlap as substrings, so no ordering is actually load-bearing, but checking the two more specific keywords first reads as the intended precedence. Exported so read.ts can decide, at a `\*\fldinst` destination's own close (the earliest point the instruction is complete), whether a field is a genuine form field before opening the run-construct extent for it -- an ordinary field (PAGE, DATE, NUMPAGES, and the rest) never matches any of the three keywords, and read.ts uses that to skip the extent open/close entirely rather than fragment an ordinary field's surrounding runs for no reason.
+export function formFieldControlType(
   instruction: string,
 ): ContentControlType | undefined {
   if (FORM_FIELD_CHECKBOX_INSTRUCTION.test(instruction)) {
