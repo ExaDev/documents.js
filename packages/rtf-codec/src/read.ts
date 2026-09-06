@@ -1522,7 +1522,8 @@ function buildEmbeddedObject(
     });
     return undefined;
   }
-  return { kind: "embeddedObject", ...embedded };
+  // Spread first, literal last: `embedded` is a value this reader itself never controls the shape of once \objdata comes from an arbitrary (potentially hostile) input file, so a doctored payload carrying its own "kind" key must never be able to override the block's real discriminant.
+  return { ...embedded, kind: "embeddedObject" };
 }
 
 // A toggle control word is on when it carries no parameter or a non-zero one, and off at exactly 0 -- "\b turns on bold and \b0 turns off bold" (RTF 1.9.1, "Control Word").
