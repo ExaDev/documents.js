@@ -1076,13 +1076,16 @@ describe("tables", () => {
     );
   });
 
-  it("recovers a stray <p> sitting directly inside a <colgroup> outside any <col>, with a diagnostic", () => {
-    const sink = vi.fn();
+  // The message's own wording must actually cover this origin: content sitting INSIDE a <colgroup> fires this exact diagnostic, so a message that lists "colgroup" only as an exclusion ("outside any row, caption, or colgroup") would misstate where this instance's own content sits (ExaDev/documents.js#996's own round-7 wording fix).
+  it("recovers a stray <p> sitting directly inside a <colgroup> outside any <col>, with a diagnostic naming <colgroup> as the content's own location", () => {
+    let diagnostic: EpubDiagnostic | undefined;
     const blocks = read(
       body(
         "<table><colgroup><p>stray</p><col/></colgroup><tr><td>x</td></tr></table>",
       ),
-      sink,
+      (d) => {
+        diagnostic = d;
+      },
     );
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "stray" }] },
@@ -1096,9 +1099,8 @@ describe("tables", () => {
         columnWidthsPt: [CONTENT_WIDTH_PT],
       },
     ]);
-    expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/table-content-unrecognized" }),
-    );
+    expect(diagnostic?.code).toBe("epub/table-content-unrecognized");
+    expect(diagnostic?.message).toContain("inside a <colgroup> itself");
   });
 
   it("recovers stray text sitting directly inside a <tbody> outside any <tr>, with a diagnostic, positioned immediately before the table", () => {
