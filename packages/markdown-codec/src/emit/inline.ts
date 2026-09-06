@@ -67,10 +67,10 @@ export function escapeMarkdownText(text: string): string {
   let index = 0;
   while (index < text.length) {
     const char = text.charAt(index);
-    if (char === "\n") {
-      // A hard line break's own literal '\n' (src/lower/inline.ts's own mapping) -- rendered as a backslash immediately before a real newline, CommonMark's own unambiguous hard-break spelling (as opposed to the whitespace-sensitive "two trailing spaces" form).
+    if (char === "\n" || char === "\r") {
+      // A hard line break's own literal line ending (src/lower/inline.ts's own mapping) -- rendered as a backslash immediately before a real newline, CommonMark's own unambiguous hard-break spelling (as opposed to the whitespace-sensitive "two trailing spaces" form). This package's own lower.ts always spells its own hard breaks with a bare LF, but run.text is a schema-level field a foreign producer can populate with any of CommonMark's other two line-ending forms (spec 0.31.2, "Lines": a CR not followed by an LF, or a CRLF pair) just as legitimately -- normalising every one of the three to the SAME "\\\n" spelling here, rather than reproducing the input's own CR/CRLF/LF choice verbatim, is what keeps every LINE_ENDING_PATTERN/ESCAPED_HARD_BREAK_PATTERN-based collapse downstream of this function (renderParagraphBody's ATX-heading fallback, emitRunsSingleLine's table-cell collapse) working against a single guaranteed shape instead of having to re-detect all three again. Consuming a CRLF's own LF here, together with its CR, in the SAME step is what a naive `char === "\n"`-only check missed: left as two independent single-character branches, a literal CR falls through as an unescaped literal character first, and the LF immediately after it is escaped on its own -- correct as backslash-then-LF in isolation, but now with the CR's own line-ending-ness stranded one character behind that backslash instead of consumed by it, which is exactly what let a single hard break collapse into TWO spaces downstream instead of one (ESCAPED_HARD_BREAK_PATTERN's own "\\\\(?:\\r\\n|\\n|\\r)" strips the backslash+LF pair as designed, but the CR ahead of it survives as a second, separate line ending for the following LINE_ENDING_PATTERN split to also collapse).
       out += "\\\n";
-      index += 1;
+      index += char === "\r" && text.charAt(index + 1) === "\n" ? 2 : 1;
       continue;
     }
     if (ESCAPE_CHARS.has(char)) {

@@ -106,13 +106,17 @@ describe("headings", () => {
   });
 
   it("measures the setext underline's length against the CommonMark first line even when its own embedded break is a bare CR, not an LF", () => {
-    // renderSetextHeading's own underline length tracks the heading's rendered FIRST LINE, per LINE_ENDING_PATTERN (LF, CRLF, or a lone CR) -- the same line-ending grammar every other check in this module already agrees on. A bare `text.split("\n")[0]` instead treats a CR-delimited break as ordinary text absent any LF at all, measuring the WHOLE multi-line string as "line one" rather than just its first line -- cosmetically wrong (a setext underline's own length carries no semantic meaning beyond "one or more", so the heading is still valid either way), but inconsistent with how every other line-ending decision in this file is made.
+    // renderSetextHeading's own underline length tracks the heading's rendered FIRST LINE, per LINE_ENDING_PATTERN (LF, CRLF, or a lone CR) -- the same line-ending grammar every other check in this module already agrees on. A bare `text.split("\n")[0]` instead treats a CR-delimited break as ordinary text absent any LF at all, measuring the WHOLE multi-line string as "line one" rather than just its first line -- cosmetically wrong (a setext underline's own length carries no semantic meaning beyond "one or more", so the heading is still valid either way), but inconsistent with how every other line-ending decision in this file is made. The bare CR has to arrive via a markdown-residue soft break (re-emitted verbatim, unescaped) rather than a run's own plain text field: escapeMarkdownText now normalises a bare CR carried there to the same backslash-LF hard-break spelling an ordinary embedded '\n' gets (see the plain-text-run hard-break coverage in the tables describe block below), so a plain-text run can no longer land a raw, un-escaped CR in the assembled text for this check to measure against.
     expect(
       emitMarkdown(
         doc([
           {
             kind: "paragraph",
-            runs: [{ text: "ab\rcd" }],
+            runs: [
+              { text: "ab" },
+              { text: " ", source: { format: "markdown" as const, xml: "\r" } },
+              { text: "cd" },
+            ],
             styleId: "Heading1",
           },
         ]),
@@ -2455,7 +2459,7 @@ describe("tables", () => {
   ])(
     "collapses $name residue run to a space rather than a raw line ending that would fracture the row (ExaDev/documents.js#940)",
     ({ xml }) => {
-      // CommonMark's own line-ending grammar (spec 0.31.2, "Lines") is LF, CRLF, or a lone CR -- not LF alone. renderParagraphBody's own ATX-heading collapse already treats all three as a genuine line ending (LINE_ENDING_PATTERN); emitRunsSingleLine has to as well, since a foreign producer's own markdown residue (re-emitted verbatim, unescaped, by src/emit/inline.ts's renderLeaf) can carry a bare CR or CRLF just as legitimately as the LF the existing soft-break test above already covers, and an LF-only collapse would leak either one, un-collapsed, into what must be a single GFM table-row physical line. The residue channel (rather than embedding the CR/CRLF in a run's own plain text field) keeps this test scoped to emitRunsSingleLine's own collapse alone -- a literal CR/CRLF inside a PLAIN text run instead goes through escapeMarkdownText first, which escapes a bare LF but not a preceding bare CR, an entirely separate concern from the one under test here.
+      // CommonMark's own line-ending grammar (spec 0.31.2, "Lines") is LF, CRLF, or a lone CR -- not LF alone. renderParagraphBody's own ATX-heading collapse already treats all three as a genuine line ending (LINE_ENDING_PATTERN); emitRunsSingleLine has to as well, since a foreign producer's own markdown residue (re-emitted verbatim, unescaped, by src/emit/inline.ts's renderLeaf) can carry a bare CR or CRLF just as legitimately as the LF the existing soft-break test above already covers, and an LF-only collapse would leak either one, un-collapsed, into what must be a single GFM table-row physical line. The residue channel (rather than embedding the CR/CRLF in a run's own plain text field) keeps this test scoped to emitRunsSingleLine's own collapse alone -- a literal CR/CRLF inside a PLAIN text run instead goes through escapeMarkdownText first, which normalises it to the same backslash-LF hard-break spelling a literal '\n' gets (see the plain-text-run describe block below for that path's own coverage).
       const table: ContentTable = {
         kind: "table",
         columnWidthsPt: [100],
@@ -2516,6 +2520,24 @@ describe("tables", () => {
       const markdown = emitMarkdown(doc([table]));
       expect(markdown).toBe("| foo bar |\n| --- |");
       expect(markdown).not.toContain("\\");
+    },
+  );
+
+  it.each([
+    { name: "a bare CR", text: "foo\rbar" },
+    { name: "a CRLF", text: "foo\r\nbar" },
+  ])(
+    "collapses $name hard break in a run's own PLAIN text field to a single space, not two (ExaDev/documents.js#940)",
+    ({ text }) => {
+      // Unlike the residue-run cases above, this hard break lives in the run's own `text` field and goes through escapeMarkdownText first. That function used to recognise only a bare '\n' as a hard break, leaving a preceding lone CR (from a bare CR, or from the first half of a CRLF) to fall through unescaped as a literal character; ESCAPED_HARD_BREAK_PATTERN then collapsed the backslash-LF pair it produced for the second half into one space, and the LINE_ENDING_PATTERN split immediately after collapsed the still-unescaped, un-consumed CR into a SECOND space -- doubling a single hard break into two spaces in this single-physical-line table-cell context. escapeMarkdownText now recognises a bare CR as a hard break in its own right (and consumes both halves of a CRLF together), so it always spells the break as a single backslash-LF pair regardless of which of the three line-ending forms the source used, leaving nothing for the LINE_ENDING_PATTERN split to double-collapse.
+      const table: ContentTable = {
+        kind: "table",
+        columnWidthsPt: [100],
+        rows: [
+          { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text }] }] }] },
+        ],
+      };
+      expect(emitMarkdown(doc([table]))).toBe("| foo bar |\n| --- |");
     },
   );
 });
