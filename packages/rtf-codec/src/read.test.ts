@@ -651,6 +651,58 @@ describe("embedded objects", () => {
     expect(cellText).toContain("after");
   });
 
+  // The mirror-image direction of the fix above: there, \result inherited inTable=true by cloning \object's own para and a descendant \pard reset its own copy back to false. Here \result's own group starts at inTable=false (that inherited case is already closed), but \result's own body restates \intbl directly on that SAME group's para before any nested group opens -- RTF 1.9.1's own <result> grammar admits \intbl among <parfmt>* on \result's own para, so this is spec-legal input, not malformed. A nested {\pard\plain ...} child still clones that now-true value and still resets its OWN copy to false via \pard, so the finished paragraph is filed into `blocks` while \result's own group-end reads back a para whose inTable is still true -- the opposite list from where content actually landed, silently losing it, and it is the divergence itself (not which side ends up true or false) that endResultScratch's own read must not depend on.
+  it("recovers \\result's own fallback content when \\intbl is restated directly on \\result's own group, not inherited from \\object", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl before {\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result\\intbl{\\pard\\plain FALLBACK\\par}}} after\\cell\\row\\pard x\\par}`,
+    );
+    const cellBlocks = table.rows[0]?.cells[0]?.blocks ?? [];
+    const cellText = cellBlocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("|");
+    expect(cellText).toContain("FALLBACK");
+    expect(cellText).toContain("before");
+    expect(cellText).toContain("after");
+    const unreadable = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl before {\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result\\intbl{\\pard\\plain FALLBACK\\par}}} after\\cell\\row\\pard x\\par}`,
+      ),
+    ).diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(unreadable[0]?.message).toContain(
+      "its \\result fallback content, if any, is read in its place",
+    );
+  });
+
+  // The identical \intbl-restated-directly-on-\result divergence, on the OTHER of the two EMBEDDED_OBJECT_UNREADABLE messages: an \object with no \objdata destination at all states its own diagnostic unconditionally ("its \result fallback content is used in its place", no hedge), unlike buildEmbeddedObject's own decode-failure message above. Before the fix, that unconditional wording was flatly false whenever this divergence lost the fallback silently -- it is only accurate once the content is actually recovered.
+  it("recovers \\result's own fallback content, with an accurate diagnostic, when an \\object has no \\objdata at all and \\intbl is restated directly on \\result's own group", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl before {\\object\\objemb{\\result\\intbl{\\pard\\plain FALLBACK\\par}}} after\\cell\\row\\pard x\\par}`,
+    );
+    const cellBlocks = table.rows[0]?.cells[0]?.blocks ?? [];
+    const cellText = cellBlocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("|");
+    expect(cellText).toContain("FALLBACK");
+    expect(cellText).toContain("before");
+    expect(cellText).toContain("after");
+    const unreadable = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl before {\\object\\objemb{\\result\\intbl{\\pard\\plain FALLBACK\\par}}} after\\cell\\row\\pard x\\par}`,
+      ),
+    ).diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+    );
+    expect(unreadable[0]?.message).toContain(
+      "its \\result fallback content is used in its place",
+    );
+  });
+
   // isContentEmbeddedObject (the guard behind ContentEmbeddedObjectSchema) is a predicate, not a reconstructive parse: it confirms the fields ContentEmbeddedObject needs are present and well-shaped, but does not strip any OTHER key the same parsed JSON object happens to carry. \objdata comes from an arbitrary, potentially hostile input file, so a doctored payload that is otherwise a valid ContentEmbeddedObject but also carries its own "kind" (plus arbitrary extra fields) must never let that "kind" override the real "embeddedObject" discriminant once buildEmbeddedObject adds it, and must never let the extra fields ride along into the returned block either.
   it("never lets a doctored \\objdata payload's own \"kind\" field override the embeddedObject block's real discriminant", () => {
     const forged = forgeEmbeddedObjectData({
