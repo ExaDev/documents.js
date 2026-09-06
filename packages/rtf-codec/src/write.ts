@@ -1111,29 +1111,36 @@ class RtfWriter {
     return `${out}\\cellx${String(rightTwips)}`;
   }
 
-  // A cell's own content is a run of \intbl paragraphs -- RTF's own <celldef>/<cell> grammar is built around exactly that, with no room for a nested destination that isn't one. A non-paragraph block (embeddedObject, image, table, pageBreak) placed directly in a cell is therefore dropped, but reported rather than silently filtered out: see writeBlock's own top-level handling of the identical block kinds for what this cannot yet do here.
+  // A cell's own content is a run of \intbl paragraphs -- RTF's own <celldef>/<cell> grammar is built around exactly that, with no room for a nested destination that isn't one. A non-paragraph block (embeddedObject, image, table, pageBreak) placed directly in a cell is therefore dropped, but reported rather than silently filtered out: see writeBlock's own top-level handling of the identical block kinds for what this cannot yet do here. constructStart/constructEnd are a different case entirely, not a nested destination at all: they are the same zero-width bracket markers openConstruct/closeConstruct already splice inline into the top-level block flow (a bookmark's `{\*\bkmkstart ...}`/`{\*\bkmkend ...}` group, or nothing for a descriptor kind RTF has no spelling for), and read.ts's own cellBlockExtents/insertConstructMarkers already reconstructs exactly this pair back out of a table cell's own block list -- so a bookmark bracketing whole paragraphs inside a cell is a real, already-round-trippable shape, handled here the same way writeBlock handles it at the top level rather than reported as unrepresented.
   private writeCellBlocks(blocks: readonly ContentBlock[]): void {
-    const paragraphs: ContentParagraph[] = [];
+    let wroteParagraph = false;
+    let paragraphPending = false;
     for (const block of blocks) {
-      if (block.kind === "paragraph") {
-        paragraphs.push(block);
+      if (block.kind === "constructStart") {
+        this.openConstruct(block.descriptor);
         continue;
       }
-      this.sink({
-        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
-        severity: "warning",
-        message: `a ${block.kind} block inside a table cell is dropped: this writer's own cell content is \\intbl paragraphs only, and RTF's table-cell grammar has no room for a nested destination that isn't one`,
-      });
-    }
-    if (paragraphs.length === 0) {
-      this.raw("\\pard\\plain\\intbl ");
-      return;
-    }
-    for (const [index, paragraph] of paragraphs.entries()) {
-      this.writeParagraph(paragraph, true);
-      if (index < paragraphs.length - 1) {
+      if (block.kind === "constructEnd") {
+        this.closeConstruct();
+        continue;
+      }
+      if (block.kind !== "paragraph") {
+        this.sink({
+          code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+          severity: "warning",
+          message: `a ${block.kind} block inside a table cell is dropped: this writer's own cell content is \\intbl paragraphs only, and RTF's table-cell grammar has no room for a nested destination that isn't one`,
+        });
+        continue;
+      }
+      if (paragraphPending) {
         this.raw("\\par");
       }
+      this.writeParagraph(block, true);
+      wroteParagraph = true;
+      paragraphPending = true;
+    }
+    if (!wroteParagraph) {
+      this.raw("\\pard\\plain\\intbl ");
     }
   }
 
