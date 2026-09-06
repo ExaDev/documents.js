@@ -512,6 +512,90 @@ describe("headings", () => {
       { level: "Heading1" as const, underline: "=" },
       { level: "Heading2" as const, underline: "-" },
     ])(
+      "still promotes $level to setext and round-trips a genuinely bare leading newline (soft-break residue, not the escaped hard-break spelling above) as a list item's own marker line, retaining the item's own list membership",
+      ({ level, underline }) => {
+        // Every OTHER list-item test in this describe block uses runs: [{ text: '\n' }, ...] -- a HARD break, whose escaped '\\\n' spelling never leaves line 0 of the rendered text genuinely blank (see this file's own top-level bare-newline test above for why that never exercises the leading-run exemption at all). This one uses the bare soft-break residue spelling instead, the one shape whose line 0 really is empty and genuinely exercises the exemption inside a list item specifically.
+        const written = emitMarkdown(
+          doc([
+            {
+              kind: "paragraph",
+              runs: [
+                {
+                  text: " ",
+                  source: { format: "markdown" as const, xml: "\n" },
+                },
+                { text: "foo" },
+              ],
+              styleId: level,
+              list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+            },
+          ]),
+        );
+        expect(written).toBe(`- \n  foo\n  ${underline}`);
+
+        const reparsed = lowerMarkdown(written);
+        if (reparsed.kind !== "wordprocessing") {
+          throw new Error("expected a wordprocessing ContentDocument");
+        }
+        const blocks = reparsed.sections[0]?.blocks ?? [];
+        // Exactly one block, still carrying its own list membership -- a single leading blank line is CommonMark's own documented "a list item can begin with at most one blank line" allowance (spec 0.31.2, section 5.2), so the item's marker line legitimately starts blank without closing the item.
+        expect(blocks).toHaveLength(1);
+        const [headingBlock] = blocks;
+        if (headingBlock?.kind !== "paragraph") {
+          throw new Error("expected a paragraph block");
+        }
+        expect(headingBlock.styleId).toBe(level);
+        expect(headingBlock.list).toBeDefined();
+        expect(headingBlock.runs.map((run) => run.text).join("")).toBe("foo");
+      },
+    );
+
+    it.each([{ level: "Heading1" as const }, { level: "Heading2" as const }])(
+      "collapses $level to ATX rather than promoting to setext when the heading's own text carries TWO consecutive leading bare newlines as a list item's own marker line, since a second leading blank line would close the item as empty and spill the heading out with its list membership lost (ExaDev/documents.js#940)",
+      ({ level }) => {
+        const written = emitMarkdown(
+          doc([
+            {
+              kind: "paragraph",
+              runs: [
+                {
+                  text: " ",
+                  source: { format: "markdown" as const, xml: "\n" },
+                },
+                {
+                  text: " ",
+                  source: { format: "markdown" as const, xml: "\n" },
+                },
+                { text: "foo" },
+              ],
+              styleId: level,
+              list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+            },
+          ]),
+        );
+        // Never a setext promotion: two leading blank lines in a row inside a list item's own marker line is the exact shape CommonMark's own "at most one blank line" list-item rule (spec 0.31.2, section 5.2) closes the item on -- pre-fix, this wrote a setext heading here, and reparsing it split into an EMPTY list item plus a stray top-level Heading1 that had lost its own list membership entirely.
+        expect(written).toBe(`- ${level === "Heading1" ? "#" : "##"}   foo`);
+
+        const reparsed = lowerMarkdown(written);
+        if (reparsed.kind !== "wordprocessing") {
+          throw new Error("expected a wordprocessing ContentDocument");
+        }
+        const blocks = reparsed.sections[0]?.blocks ?? [];
+        expect(blocks).toHaveLength(1);
+        const [headingBlock] = blocks;
+        if (headingBlock?.kind !== "paragraph") {
+          throw new Error("expected a paragraph block");
+        }
+        expect(headingBlock.styleId).toBe(level);
+        expect(headingBlock.list).toBeDefined();
+        expect(headingBlock.runs.map((run) => run.text).join("")).toBe("foo");
+      },
+    );
+
+    it.each([
+      { level: "Heading1" as const, underline: "=" },
+      { level: "Heading2" as const, underline: "-" },
+    ])(
       "still promotes $level to setext and round-trips the leading break losslessly inside a blockquote",
       ({ level, underline }) => {
         const written = emitMarkdown(
