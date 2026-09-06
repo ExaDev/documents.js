@@ -874,7 +874,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
       code: EpubDiagnosticCodes.TABLE_CONTENT_UNRECOGNIZED,
       severity: "info",
       message:
-        "content sits directly inside a <table> (or one of its <thead>/<tbody>/<tfoot> row groups) outside any row, caption, or colgroup (not valid HTML5); recovered as ordinary content immediately before the table",
+        "content sits directly inside a <table> (or one of its <thead>/<tbody>/<tfoot> row groups) outside any row, caption, or colgroup, or inside a <colgroup> itself (not valid HTML5); recovered as ordinary content immediately before the table",
       href: state.context.sourceHref,
     });
   }
