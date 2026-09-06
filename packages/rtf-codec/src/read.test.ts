@@ -670,6 +670,31 @@ describe("embedded objects", () => {
     ).toBe(false);
   });
 
+  // \result's own content builds into a totally isolated scratch accumulator that beginResultScratch swaps in place of the real one, restored only when \result's own group closes (endResultScratch). A truncated file can leave \result's group -- and therefore every group around it -- open at end of input with no closing brace at all, so endResultScratch never runs and the swap is never undone: finish() must not build the final document from that abandoned scratch state, or the real body accumulated before \object ever opened is silently replaced by whatever \result's own truncated content happened to hold, exactly backwards from \object's own real-content-over-fallback preference.
+  it("keeps the real document body, not \\result's own scratch content, when \\result's group never closes", () => {
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        "{\\rtf1\\ansi before{\\object\\objemb{\\result\\pard\\plain scratch",
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error(
+        `expected a wordprocessing document, got ${document.kind}`,
+      );
+    }
+    const text = document.sections[0]?.blocks
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
+      .join("|");
+    expect(text).toContain("before");
+    expect(text).not.toContain("scratch");
+    expect(
+      diagnostics.some(
+        (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
+      ),
+    ).toBe(true);
+  });
+
   it("folds the object's own \\objw/\\objh size hint into the degrade diagnostic instead of discarding it", () => {
     const { diagnostics } = readRtfContent(
       bytes(
