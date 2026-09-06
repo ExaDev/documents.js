@@ -8,6 +8,11 @@ import { writeXhtmlBody } from "./write";
 
 const CONTENT_WIDTH_PT = 451.28;
 
+// A minimal XHTML content document wrapping raw <body> content, for the one test below that needs to read a hand-written fragment rather than a hand-built ContentBlock[] -- matching read.test.ts's own identical helper.
+function xhtmlDocument(inner: string): string {
+  return `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body>${inner}</body></html>`;
+}
+
 function write(blocks: ContentBlock[]): string {
   return writeWithSink(blocks, () => undefined).xml;
 }
@@ -266,7 +271,44 @@ describe("writeXhtmlBody", () => {
     expect(roundTrip(blocks)).toEqual(blocks);
   });
 
-  // The one gap the round-11 itemId-grouping fix above does NOT close, pinned here rather than fixed: a document-schema.js decomposeSection defect (ExaDev/documents.js#1022), not something writeList alone can correct. walkSectionBlocks only closes list nesting on a heading or a PLAIN paragraph -- never on a constructStart -- so a footnote reference sitting in the last block of a list item, with that footnote's own body immediately following in the flat stream and nothing plain in between to close the list first, attaches the footnote's own construct group as a CHILD of that still-open list item rather than at the section root. The output below is the current, known-incorrect shape (the <aside> nested inside the <li>) -- tracked in #1022 as a decompose-level fix affecting every codec built on decomposeSection, not an epub-codec-only one.
+  // ExaDev/documents.js#996's own round-7 regression: the round-11 fix above regrouped a multi-block list item's entries correctly, but writeParagraphAsEmbeddedNodes returns an ORDINARY paragraph's own run nodes bare, with no wrapper -- so flattening a second entry's bare nodes straight onto a first entry's, with nothing in between, silently fused two distinct paragraphs into one undelimited text run: "First para" and "Second para" became the single word "First paraSecond para", losing the word boundary itself, not merely the paragraph break. The pre-round-11 output (two sibling <li> elements) at least kept every word readable; this was strictly worse. <li>'s content model is Flow content per the HTML Standard, so wrapping every entry after a group's first in its own <p> closes this the same way the horizontal-rule/preformatted cases above are already wrapped in their own self-delimiting elements.
+  it("writes and re-reads a multi-paragraph list item without fusing the paragraphs' own text together", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [{ text: "First para" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "Second para" }],
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+    ];
+    const xml = write(blocks);
+    expect(xml).not.toContain("First paraSecond para");
+    expect(xml.match(/<li>/gu)).toHaveLength(1);
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  // The identical fusion, reached from raw XHTML input rather than a hand-built ContentBlock[] -- an EPUB->EPUB round trip through a <li> that already wraps each of its own blocks in a <p>, exactly as ExaDev/documents.js#996's own reported repro described.
+  it("re-reads a written multi-<p> list item as two separate paragraphs, not one fused run", () => {
+    const { blocks } = readXhtmlBody(
+      xhtmlDocument("<ul><li><p>Alpha</p><p>Beta</p></li></ul>"),
+      {
+        resolveImage: () => undefined,
+        sink: () => undefined,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
+    );
+    const xml = write(blocks);
+    expect(xml).not.toContain("AlphaBeta");
+    expect(xml.match(/<li>/gu)).toHaveLength(1);
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
+  // The one gap the round-11 itemId-grouping fix above does NOT close, pinned here rather than fixed: a document-schema.js decomposeSection defect (ExaDev/documents.js#1022), not something writeList alone can correct. walkSectionBlocks only closes list nesting on a heading or a PLAIN paragraph -- never on a constructStart -- so a footnote reference sitting in the last block of a list item, with that footnote's own body immediately following in the flat stream and nothing plain in between to close the list first, attaches the footnote's own construct group as a CHILD of that still-open list item rather than at the section root. The output below is the current, known-incorrect shape (the <aside> nested inside the <li>) -- tracked in #1022 as a decompose-level fix affecting every codec built on decomposeSection, not an epub-codec-only one. The second grouped entry's own noteref anchor is wrapped in a <p> (ExaDev/documents.js#996's own round-7 fix, unrelated to #1022): it is the second of two entries sharing itemId "item1", and every entry after a group's first is now delimited this way to stop it fusing with the entry before it.
   it("nests a footnote's own aside inside the enclosing <li> when it immediately follows a list item's last block (ExaDev/documents.js#1022, tracked separately)", () => {
     const blocks: ContentBlock[] = [
       {
@@ -295,7 +337,7 @@ describe("writeXhtmlBody", () => {
     ];
     const xml = write(blocks);
     expect(xml).toContain(
-      '<li>before<a epub:type="noteref" href="#fn1"></a><aside epub:type="footnote" id="fn1"><p>Note body.</p></aside></li>',
+      '<li>before<p><a epub:type="noteref" href="#fn1"></a></p><aside epub:type="footnote" id="fn1"><p>Note body.</p></aside></li>',
     );
   });
 
