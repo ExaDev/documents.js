@@ -240,6 +240,21 @@ function embedsUnsafeBreakForSetext(text: string): boolean {
   return unsafeSetextBreakReason(text) !== undefined;
 }
 
+// The MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT message for whichever of the two ways this path is actually reached: a level<=2 heading whose own embedded break placement setext cannot survive (embedsLineBreak true -- the break itself is the reason setext was even attempted), or -- just as unsafe, but with no break anywhere in the text -- an explicit headingStyle: 'setext' request against heading text that is already unsafe on its own (a first line indented 4+ columns, or wholly blank text with nothing for the underline to attach to); a break-free heading only ever reaches this function when headingStyle: 'setext' was requested outright, since willRenderAsSetext's own eligibility check requires either that option or an embedded break. unsafeSetextBreakReason's own "blank-line" result already covers both an interior/trailing break's own blank line AND a heading whose entire rendered text is blank (see that function's own comment), so the blank-line half of this message is phrased to cover either shape rather than presuming a break exists.
+function unsafeSetextDiagnosticMessage(
+  level: number,
+  reason: UnsafeSetextBreakReason,
+  embedsLineBreak: boolean,
+): string {
+  const hazard =
+    reason === "leading-indentation"
+      ? `the line that would become the setext heading's own first line of text opens with 4 or more columns of space/tab indentation -- setext's own grammar (spec 0.31.2) requires the first line to have "not more than 3 spaces of indentation", so promoting would read that line back as an indented code block instead of heading text`
+      : `promoting would leave the setext underline with no heading text of its own to attach to -- either a blank line immediately before it (a trailing break), a blank line in the middle of the heading's own text (a genuinely interior break), or the heading's own rendered text being entirely blank to begin with -- setext's own grammar requires "one or more lines of text, not interrupted by a blank line"`;
+  return embedsLineBreak
+    ? `a level ${String(level)} heading's own content contains a line break, but ${hazard}; ATX collapses the break to a single space instead of promoting into a corrupt reparse`
+    : `the effective WriteMarkdownOptions.headingStyle is 'setext' (an explicit caller choice -- a break-free heading only reaches this path when requested outright), but ${hazard}; rendered as ATX instead of promoting into a corrupt reparse`;
+}
+
 // Whether a level<=2 heading paragraph will ACTUALLY be written as a setext heading rather than ATX -- exactly mirroring renderParagraphBody's own promotion rule below (headingStyle: 'setext', OR the heading's own rendered text embeds a hard/soft break that ATX has no way to hold, AND EITHER WAY only when the resulting break placement is actually safe -- see embedsUnsafeBreakForSetext above), so canInterruptOpenParagraph can answer against the real spelling the heading is about to be written in, not just the configured style. This deliberately calls emitRuns a SECOND time, through a throwaway, diagnostic-free InlineEmitContext: this is a look-ahead check on content renderParagraphBody itself re-emits (through the real sink) moments later at the actual render call, and reporting the same run-level diagnostic (a monospace-styled code span, adjacent merged links) twice for one piece of content would be a duplicate finding, not a second real one -- emitRuns/renderNestedStyles read only InlineEmitContext's own two fields (sink, emphasisMarker) and mutate nothing on the wider EmitContext, so the two calls are independent and always agree on the text they produce. The blank-line safety check needs `text` even when headingStyle is explicitly 'setext', so unlike before, that branch no longer short-circuits ahead of computing it -- an explicit caller preference for setext still cannot promote a heading whose own break placement would corrupt the reparse.
 function willRenderAsSetext(
   paragraph: ContentParagraph,
@@ -350,15 +365,14 @@ function renderParagraphBody(
       });
     }
     const text = emitRuns(paragraph.runs, context, paragraph.constructs);
-    // ATX is a single physical line; a hard OR soft break embedded in this heading's own runs (src/emit/inline.ts's renderLeaf) leaves a genuine CommonMark line ending in `text` regardless of the configured headingStyle, and ATX has no way to hold it -- writing it out anyway would split the ATX line in two on reparse rather than lose formatting, which is strictly worse. This is detected via LINE_ENDING_PATTERN, not a bare '\n' check: this package's own hard-break escaping (escapeMarkdownText) and soft-break residue always use LF, but a run's plain text field or a foreign producer's own markdown residue (src/emit/inline.ts's renderLeaf, the run.source.xml case) can carry a bare CR or CRLF just as legitimately -- an un-widened check would let that slip through to the plain `text` return at the very bottom of this function with the line ending never escaped or collapsed, embedding it unrepresented in what is supposed to be ATX's single physical line. Setext's own grammar is exactly "one or more lines of heading text", so promote to it whenever the level admits one (<=2), overriding the configured style; only a genuinely unrepresentable level 3-6 heading, OR a level<=2 heading whose own break placement would leave a blank line setext cannot survive (embedsUnsafeBreakForSetext above), falls through to the collapse-with-diagnostic path below.
+    // ATX is a single physical line; a hard OR soft break embedded in this heading's own runs (src/emit/inline.ts's renderLeaf) leaves a genuine CommonMark line ending in `text` regardless of the configured headingStyle, and ATX has no way to hold it -- writing it out anyway would split the ATX line in two on reparse rather than lose formatting, which is strictly worse. This is detected via LINE_ENDING_PATTERN, not a bare '\n' check: this package's own hard-break escaping (escapeMarkdownText) and soft-break residue always use LF, but a run's plain text field or a foreign producer's own markdown residue (src/emit/inline.ts's renderLeaf, the run.source.xml case) can carry a bare CR or CRLF just as legitimately -- an un-widened check would let that slip through to the plain `text` return at the very bottom of this function with the line ending never escaped or collapsed, embedding it unrepresented in what is supposed to be ATX's single physical line. Setext's own grammar is exactly "one or more lines of heading text", so promote to it whenever the level admits one (<=2), overriding the configured style; only a genuinely unrepresentable level 3-6 heading, OR a level<=2 heading whose own break placement would leave a blank line setext cannot survive (embedsUnsafeBreakForSetext above), falls through to the collapse-with-diagnostic path below. A level<=2 heading with NO embedded break at all can still fall through the same unsafe path: headingStyle: 'setext' is itself a second, independent trigger for candidacy (setextRequested below), so an explicit caller request against an already-unsafe break-free heading (a 4+-column-indented or wholly blank first line) is refused with the identical diagnostic rather than being silently written as an unmarked ATX fallback.
     const embedsLineBreak = LINE_ENDING_PATTERN.test(text);
     const unsafeSetextReason = unsafeSetextBreakReason(text);
     const unsafeForSetext = unsafeSetextReason !== undefined;
-    if (
-      (context.headingStyle === "setext" || embedsLineBreak) &&
-      level <= MAX_SETEXT_LEVEL &&
-      !unsafeForSetext
-    ) {
+    // Setext is even a candidate rendering here under either of two independent triggers -- an explicit headingStyle: 'setext' request, or (regardless of the configured style) the text embedding a break ATX cannot hold at all -- and unsafeForSetext can refuse EITHER trigger, not just the break one: a break-free heading explicitly requesting setext is exactly as capable of being unsafe (a 4+-column-indented or wholly blank first line) as one forced into candidacy by its own embedded break.
+    const setextRequested =
+      context.headingStyle === "setext" || embedsLineBreak;
+    if (setextRequested && level <= MAX_SETEXT_LEVEL && !unsafeForSetext) {
       if (context.headingStyle !== "setext") {
         // A break at the very START of the heading's own text is the one case setext promotion does not actually reproduce: firstContentLineIndex > 0 means a genuinely blank leading line was exempted from embedsUnsafeBreakForSetext's own check above, and that line is absorbed as ordinary inter-block whitespace ahead of the heading on read-back, not carried inside it (unlike an escaped hard break's own non-blank backslash line, which never needs the exemption and round-trips inside the heading losslessly).
         const leadingBreakAbsorbed = firstContentLineIndex(text) > 0;
@@ -372,24 +386,30 @@ function renderParagraphBody(
       }
       return renderSetextHeading(level, text);
     }
-    if (embedsLineBreak) {
-      if (level <= MAX_SETEXT_LEVEL && unsafeForSetext) {
-        context.sink({
-          code: MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
-          severity: "info",
-          message:
-            unsafeSetextReason === "leading-indentation"
-              ? `a level ${String(level)} heading's own content contains a line break, but the line that would become the setext heading's first line of text opens with 4 or more columns of space/tab indentation -- setext's own grammar (spec 0.31.2) requires the first line to have "not more than 3 spaces of indentation", so promoting would read that line back as an indented code block instead of heading text; ATX collapses the break to a single space instead of promoting into a corrupt reparse`
-              : `a level ${String(level)} heading's own content contains a line break that would leave a blank line immediately before the setext underline (or, for a genuinely interior break, in the middle of the heading's own text) if promoted -- setext's own grammar requires "one or more lines of text, not interrupted by a blank line", so ATX collapses it to a single space instead of promoting into a corrupt reparse`,
-        });
-      } else {
-        context.sink({
-          code: MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED,
-          severity: "info",
-          message: `a level ${String(level)} heading's own content contains a line break; only setext's own level-1/2 grammar can hold one, so ATX collapses it to a single space`,
-        });
+    if (setextRequested && level <= MAX_SETEXT_LEVEL && unsafeForSetext) {
+      // Setext was a genuine candidate here (an explicit caller request, an embedded break, or both) but unsafeSetextBreakReason refused it -- report the hazard regardless of which of the two triggers brought this heading here, rather than only when an embedded break is also present (a caller-requested setext against an already-unsafe break-free heading is silently overridden exactly as unsafely otherwise).
+      context.sink({
+        code: MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        severity: "info",
+        message: unsafeSetextDiagnosticMessage(
+          level,
+          unsafeSetextReason,
+          embedsLineBreak,
+        ),
+      });
+      if (embedsLineBreak) {
+        // The escaped hard-break spelling (backslash immediately before the line ending) is stripped first via ESCAPED_HARD_BREAK_PATTERN, together with the line ending it precedes, in one collapse -- this package's own escapeMarkdownText always spells it with a trailing LF, but a run's own markdown residue can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately, and an LF-only strip would leave that backslash behind as a stray literal character once the LINE_ENDING_PATTERN split below removes the CRLF/CR out from under it. Everything left over is then split on LINE_ENDING_PATTERN and rejoined with spaces, collapsing every remaining line ending -- a bare soft-break LF exactly as before, plus a bare CR or CRLF a run's own text or markdown residue can carry -- to the single space ATX's own single-physical-line grammar requires.
+        return `${"#".repeat(level)} ${text.replace(ESCAPED_HARD_BREAK_PATTERN, " ").split(LINE_ENDING_PATTERN).join(" ")}`;
       }
-      // The escaped hard-break spelling (backslash immediately before the line ending) is stripped first via ESCAPED_HARD_BREAK_PATTERN, together with the line ending it precedes, in one collapse -- this package's own escapeMarkdownText always spells it with a trailing LF, but a run's own markdown residue can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately, and an LF-only strip would leave that backslash behind as a stray literal character once the LINE_ENDING_PATTERN split below removes the CRLF/CR out from under it. Everything left over is then split on LINE_ENDING_PATTERN and rejoined with spaces, collapsing every remaining line ending -- a bare soft-break LF exactly as before, plus a bare CR or CRLF a run's own text or markdown residue can carry -- to the single space ATX's own single-physical-line grammar requires.
+      // No break to collapse -- the hazard here is the break-free heading's own first-line indentation or wholly blank text, and `text` already has no CommonMark line ending in it for the ATX single-physical-line grammar to trip over.
+      return `${"#".repeat(level)} ${text}`;
+    }
+    if (embedsLineBreak) {
+      context.sink({
+        code: MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED,
+        severity: "info",
+        message: `a level ${String(level)} heading's own content contains a line break; only setext's own level-1/2 grammar can hold one, so ATX collapses it to a single space`,
+      });
       return `${"#".repeat(level)} ${text.replace(ESCAPED_HARD_BREAK_PATTERN, " ").split(LINE_ENDING_PATTERN).join(" ")}`;
     }
     return `${"#".repeat(level)} ${text}`;
