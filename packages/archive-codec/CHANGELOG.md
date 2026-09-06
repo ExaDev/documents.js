@@ -1,3 +1,13 @@
+## [1.6.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.5.0...archive-codec%401.6.0) (2026-09-06)
+
+### Features
+
+* **archive-codec:** add writeOlePackage, the mirror of readOlePackage ([ed1e771](https://github.com/ExaDev/documents.js/commit/ed1e7714fd0ec506bceaeb0de1c5f941a3d81fdb))
+
+### Bug Fixes
+
+* **archive-codec:** reject an embedded NUL byte in a Package stream string field ([96181b1](https://github.com/ExaDev/documents.js/commit/96181b148c2a362e9c5c5b5c98443971341ad2ea))
+
 ## [1.5.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.4.3...archive-codec%401.5.0) (2026-09-06)
 
 ### Features

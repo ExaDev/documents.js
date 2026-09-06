@@ -107,10 +107,10 @@ describe("links, autolinks, breaks", () => {
     ]);
   });
 
-  it("maps a soft line break to a single space, as its own run", () => {
+  it("maps a soft line break to a space run carrying the source newline as markdown residue, as its own run", () => {
     expect(paragraph(blocks("a\nb")[0]).runs).toEqual([
       { text: "a" },
-      { text: " " },
+      { text: " ", source: { format: "markdown", xml: "\n" } },
       { text: "b" },
     ]);
   });

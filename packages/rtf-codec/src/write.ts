@@ -12,6 +12,7 @@ import {
   type ContentControlDescriptor,
   type ContentControlType,
   type ContentDocument,
+  type ContentEmbeddedObjectBlock,
   type ContentImageBlock,
   type ContentParagraph,
   type ContentRun,
@@ -35,6 +36,7 @@ import {
   isBookmarkAnchor,
 } from "./constructs";
 import { base64ToBytes, bytesToHex } from "./base64";
+import { writeEmbeddedObjectData } from "./embedded-object";
 import {
   RtfDiagnosticCodes,
   RtfUnsupportedDocumentKindError,
@@ -63,6 +65,13 @@ const ARABIC_LEVEL_TEXT = "\\'02\\'00.";
 
 // The document code page the writer declares. cp1252 is what \ansi itself means in practice and what every consumer handles; nothing depends on it beyond the ASCII range, since the writer emits no byte above 0x7F.
 const OUTPUT_CODEPAGE = 1252;
+
+// The block kinds writeCellBlocks can splice into a table cell's own \intbl flow -- a plain paragraph, or a \pict/\object group wrapped in the identical \pard\plain\intbl shell writeParagraph itself uses. Every other kind (table, pageBreak) has no such shell to borrow and is dropped with a diagnostic instead.
+const CELL_BLOCK_KINDS: ReadonlySet<ContentBlock["kind"]> = new Set([
+  "paragraph",
+  "image",
+  "embeddedObject",
+]);
 
 // The inverse of the reader's own SECTION_BREAK_TYPES. `nextPage` is deliberately absent rather than mapped to \sbkpage: \sbkpage is RTF's own default, so restating it would emit a control word carrying no information -- exactly the reason ContentSection.breakType spells that case as an absent key.
 const SECTION_BREAK_CONTROL_WORDS: ReadonlyMap<string, string> = new Map([
@@ -752,11 +761,7 @@ class RtfWriter {
         this.line("\\page\\pard");
         return;
       case "embeddedObject":
-        this.sink({
-          code: RtfDiagnosticCodes.EMBEDDED_OBJECT_DROPPED,
-          severity: "warning",
-          message: `an embedded ${block.objectKind} object is dropped: writing it as an RTF \\object would need the OLE container this package does not build`,
-        });
+        this.writeEmbeddedObjectBlock(block);
         return;
       case "constructStart":
         this.openConstruct(block.descriptor);
@@ -1113,26 +1118,76 @@ class RtfWriter {
     return `${out}\\cellx${String(rightTwips)}`;
   }
 
+  // A cell's own content is a run of \intbl <pict>/<obj>/paragraph groups -- read.ts's own reader already proves a \pict or \object group living inside an ordinary \intbl paragraph reads back as a real image/embeddedObject block positioned within the cell's own block list, so writeImagePict and writeEmbeddedObjectBlock are given the identical \intbl variant writeParagraph(paragraph, inTable) already takes. A table or pageBreak block placed directly in a cell has no such shape to borrow -- a nested table needs its own \itapN row grammar this writer does not build, and a mid-row \page would \pard-reset the row's own \intbl state -- so those two kinds are dropped, but reported rather than silently filtered out: see writeBlock's own top-level handling of the identical block kinds for what this cannot yet do here. constructStart/constructEnd are a different case entirely, not a nested destination at all: they are the same zero-width bracket markers openConstruct/closeConstruct already splice inline into the top-level block flow (a bookmark's `{\*\bkmkstart ...}`/`{\*\bkmkend ...}` group, or nothing for a descriptor kind RTF has no spelling for), and read.ts's own cellBlockExtents/insertConstructMarkers already reconstructs exactly this pair back out of a table cell's own block list -- so a bookmark bracketing whole paragraphs inside a cell is a real, already-round-trippable shape, handled here the same way writeBlock handles it at the top level rather than reported as unrepresented.
+  //
+  // `blockPending` tracks something narrower than "something was written": whether the OUTPUT currently ends mid-paragraph, with real run text sitting in the reader's own pending-run buffer that only an explicit \par (read.ts's own endParagraph, called with force=true) turns into a committed ContentParagraph block. A written paragraph leaves exactly that behind, since writeParagraph(paragraph, true) never emits its own trailing \par. An image or embeddedObject leaves nothing behind: read.ts's own addBlocks (fired when the \pict/\object destination's group closes) flushes any pending run first but pushes the image/object block directly, with no endParagraph call of its own -- so it neither needs a \par to close it out, nor would emitting one after it do anything but force-commit an empty paragraph from the (by-then-empty) pending-run buffer, splicing a spurious blank paragraph in behind it. A leading \par is still owed before an image/embeddedObject exactly as before a paragraph, though: without it, a real pending paragraph's text would sit uncommitted in the pending-run buffer through addBlocks's own flush and surface, out of order, as a stray paragraph appended AFTER whatever comes next instead of before it -- confirmed directly: an earlier version of this method set blockPending after an image too, and a "before" paragraph immediately followed by an image and an "after" paragraph round-tripped as paragraph/image/paragraph/paragraph, the fourth an empty paragraph the trailing \par manufactured out of nothing.
   private writeCellBlocks(blocks: readonly ContentBlock[]): void {
-    const paragraphs = blocks.filter(
-      (block): block is ContentParagraph => block.kind === "paragraph",
-    );
-    if (paragraphs.length === 0) {
-      this.raw("\\pard\\plain\\intbl ");
-      return;
-    }
-    for (const [index, paragraph] of paragraphs.entries()) {
-      this.writeParagraph(paragraph, true);
-      if (index < paragraphs.length - 1) {
+    let wroteBlock = false;
+    let blockPending = false;
+    for (const [index, block] of blocks.entries()) {
+      if (block.kind === "constructStart" || block.kind === "constructEnd") {
+        // A marker sitting between two cell blocks belongs between them, not folded into the block before it -- so the \par a pending paragraph owes is flushed here, before the marker, whenever a later block still needs that paragraph properly closed first (a later paragraph would otherwise merge into it; a later image/embeddedObject would otherwise commit it out of order via its own addBlocks flush -- see the note above). A trailing marker with no block left after it flushes nothing, so it adds no empty paragraph of its own.
+        if (
+          blockPending &&
+          blocks
+            .slice(index + 1)
+            .some((later) => CELL_BLOCK_KINDS.has(later.kind))
+        ) {
+          this.raw("\\par");
+          blockPending = false;
+        }
+        if (block.kind === "constructStart") {
+          this.openConstruct(block.descriptor);
+        } else {
+          this.closeConstruct();
+        }
+        continue;
+      }
+      if (!CELL_BLOCK_KINDS.has(block.kind)) {
+        this.sink({
+          code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+          severity: "warning",
+          message: `a ${block.kind} block inside a table cell is dropped: this writer cannot yet splice a ${block.kind}'s own destination grammar into a table row's own \\intbl flow`,
+        });
+        continue;
+      }
+      // An image's payload is decoded before the pending separator is flushed, not after: a \pict that turns out unwritable (an unsupported format, an undecodable payload) writes nothing at all, and flushing \par first would leave that separator stranded with no content of its own following it.
+      if (block.kind === "image") {
+        const decoded = this.decodeImageOrWarn(block);
+        if (decoded === undefined) {
+          continue;
+        }
+        if (blockPending) {
+          this.raw("\\par");
+        }
+        this.writeImagePict(decoded, block, true);
+        wroteBlock = true;
+        blockPending = false;
+        continue;
+      }
+      if (blockPending) {
         this.raw("\\par");
       }
+      if (block.kind === "paragraph") {
+        this.writeParagraph(block, true);
+        blockPending = true;
+      } else if (block.kind === "embeddedObject") {
+        this.writeEmbeddedObjectBlock(block, true);
+        blockPending = false;
+      }
+      wroteBlock = true;
+    }
+    if (!wroteBlock) {
+      this.raw("\\pard\\plain\\intbl ");
     }
   }
 
-  private writeImageParagraph(
-    base64: string,
-    image: Pick<ContentImageBlock, "format" | "widthPt" | "heightPt">,
-  ): void {
+  // The two failure cases a \pict destination can hit: a format RTF has no picture-type keyword for, or a base64 payload that does not decode to anything. Both write nothing at all, so this is checked before any surrounding separator is committed rather than after.
+  private decodeImageOrWarn(
+    image: Pick<ContentImageBlock, "format" | "widthPt" | "heightPt"> & {
+      base64: string;
+    },
+  ): Uint8Array | undefined {
     // RTF's \pict destination has no picture-type keyword for either format: it predates SVG entirely, and GIF is not among the classic \emfblip/\pngblip/\jpegblip/\macpict/\pmmetafile/\wmetafile/\dibitmap/\wbitmap set. Writing one as \jpegblip (as this writer once silently did for anything that was not exactly "png") would mislabel the payload's own encoding to any reader that takes the keyword at its word.
     if (image.format === "svg" || image.format === "gif") {
       this.sink({
@@ -1140,9 +1195,9 @@ class RtfWriter {
         severity: "warning",
         message: `an image block in ${image.format} format cannot be written: RTF's \\pict destination has no picture-type keyword for it, so the image is dropped rather than mislabelled as a format it is not`,
       });
-      return;
+      return undefined;
     }
-    const bytes = base64ToBytes(base64);
+    const bytes = base64ToBytes(image.base64);
     if (bytes === undefined || bytes.length === 0) {
       this.sink({
         code: RtfDiagnosticCodes.UNSUPPORTED_PICTURE_FORMAT,
@@ -1150,15 +1205,60 @@ class RtfWriter {
         message:
           "an image block's base64 payload could not be decoded, so no \\pict destination is written for it",
       });
-      return;
+      return undefined;
     }
+    return bytes;
+  }
+
+  // Emits the \pict destination itself from an already-decoded payload -- `inTable` gives the outer \pard the same \intbl variant writeParagraph(paragraph, inTable) takes.
+  private writeImagePict(
+    bytes: Uint8Array,
+    image: Pick<ContentImageBlock, "format" | "widthPt" | "heightPt">,
+    inTable: boolean,
+  ): void {
     const widthTwips = pointsToTwips(image.widthPt);
     const heightTwips = pointsToTwips(image.heightPt);
-    this.line(
-      `\\pard\\plain {\\*\\shppict{\\pict\\${image.format === "png" ? "pngblip" : "jpegblip"}` +
-        `\\picwgoal${String(widthTwips)}\\pichgoal${String(heightTwips)}${this.lineEnding}` +
-        `${wrapHex(bytesToHex(bytes), this.lineEnding)}}}\\par`,
-    );
+    const pict =
+      `\\pard\\plain${inTable ? "\\intbl" : ""} {\\*\\shppict{\\pict\\${image.format === "png" ? "pngblip" : "jpegblip"}` +
+      `\\picwgoal${String(widthTwips)}\\pichgoal${String(heightTwips)}${this.lineEnding}` +
+      `${wrapHex(bytesToHex(bytes), this.lineEnding)}}}`;
+    if (inTable) {
+      this.raw(pict);
+    } else {
+      this.line(`${pict}\\par`);
+    }
+  }
+
+  private writeImageParagraph(
+    base64: string,
+    image: Pick<ContentImageBlock, "format" | "widthPt" | "heightPt">,
+  ): void {
+    const bytes = this.decodeImageOrWarn({ ...image, base64 });
+    if (bytes === undefined) {
+      return;
+    }
+    this.writeImagePict(bytes, image, false);
+  }
+
+  // RTF 1.9.1's own <obj> grammar: '{' \object (<objtype> & ... & <objsize>?) <objdata> <result> '}' -- \objemb (this is always an embedded object, never a link: ContentEmbeddedObjectBlock has no linked-object variant), the <objhw> size hint (\objwN\objhN, informational only -- a reader that decodes \objdata below never consults it), {\*\objclass ...} naming the payload's own objectKind, {\*\objdata ...}'s hex payload -- a full [MS-OLEDS] EmbeddedObject envelope (ObjectHeader + NativeDataSize + the real [MS-CFB] container as NativeData + a mandatory Presentation field) that embedded-object.ts's own writeEmbeddedObjectData builds, not the compound file alone -- and a minimal {\result ...} fallback paragraph for a reader that does not decode \object at all (the spec: "This allows RTF readers that do not understand objects ... to use the current result, in place of the object, to maintain appearance"). `inTable` gives the outer \pard the same \intbl variant writeParagraph(paragraph, inTable) takes -- read.ts's own \object handling already proves an \object group sitting inside an ordinary \intbl paragraph reads back positioned within the cell's own block list.
+  private writeEmbeddedObjectBlock(
+    block: ContentEmbeddedObjectBlock,
+    inTable = false,
+  ): void {
+    const widthTwips = pointsToTwips(block.frame.widthPt);
+    const heightTwips = pointsToTwips(block.frame.heightPt);
+    const objdataBytes = writeEmbeddedObjectData(block);
+    const object =
+      `\\pard\\plain${inTable ? "\\intbl" : ""} {\\object\\objemb\\objw${String(widthTwips)}\\objh${String(heightTwips)}` +
+      `{\\*\\objclass ${escapeText(block.objectKind)}}` +
+      `{\\*\\objdata${this.lineEnding}` +
+      `${wrapHex(bytesToHex(objdataBytes), this.lineEnding)}}` +
+      `{\\result{\\pard\\plain ${escapeText(`[embedded ${block.objectKind} object]`)}\\par}}}`;
+    if (inTable) {
+      this.raw(object);
+    } else {
+      this.line(`${object}\\par`);
+    }
   }
 }
 

@@ -42,6 +42,7 @@ import { unescapeString } from "../inline/entity";
 import type { InlineParseOptions } from "../inline/inline";
 import { parseInlines } from "../inline/inline";
 import type { LinkReferenceDefinition, LinkReferenceMap } from "../inline/link";
+import { LINE_ENDING_PATTERN } from "../shared/line-ending";
 import { extractDefinitions } from "./definitions";
 import { CODE_INDENT_COLUMNS, LineCursor } from "./line";
 import { finalizeListTightness, listsMatch, parseListMarker } from "./list";
@@ -60,29 +61,27 @@ const TASK_LIST_MARKER_PATTERN = /^\[([ xX])\][ \t]/;
 const NUL_REPLACEMENT = "�";
 const NUL_PATTERN = /\0/g;
 
-const LINE_ENDING_PATTERN = /\r\n|\n|\r/;
-
 // A cheap first filter before the block-start list is tried at all: no block start, and no paragraph promotion, can begin with any other character. `|` and `:` are here for the GFM table delimiter row (`| --- |`, `:-: | ---:`), the only construct in this package that can start with either. `$` is here for a $$ math block's own opening line (ExaDev/markdown-codec#53), and `[` for a footnote definition's own `[^label]:` marker (ExaDev/markdown-codec#66).
 const MAYBE_SPECIAL_PATTERN = /^[#$`~*+_=<>[0-9|:-]/;
 
-// spec 0.31.2, "ATX headings": one to six `#` characters, followed by spaces/tabs or the end of the line.
-const ATX_MARKER_PATTERN = /^#{1,6}(?:[ \t]+|$)/;
+// spec 0.31.2, "ATX headings": one to six `#` characters, followed by spaces/tabs or the end of the line. Exported for src/emit/emit.ts's own setext-safety check (the setext grammar's third clause, spec 0.31.2 "Setext headings": a non-first line of a would-be setext heading's text may not itself be interpretable as an ATX heading among other constructs) -- reusing this pattern rather than restating it there is what keeps the write side's promotion refusal and this module's own reparse from ever drifting apart.
+export const ATX_MARKER_PATTERN = /^#{1,6}(?:[ \t]+|$)/;
 const ATX_ONLY_CLOSING_SEQUENCE_PATTERN = /^[ \t]*#+[ \t]*$/;
 const ATX_TRAILING_CLOSING_SEQUENCE_PATTERN = /[ \t]+#+[ \t]*$/;
 
-// spec 0.31.2, "Fenced code blocks": at least three backticks or tildes. A backtick fence's own info string may not contain a backtick, which the lookahead enforces at the point of matching rather than after the fact.
-const CODE_FENCE_PATTERN = /^`{3,}(?!.*`)|^~{3,}/;
+// spec 0.31.2, "Fenced code blocks": at least three backticks or tildes. A backtick fence's own info string may not contain a backtick, which the lookahead enforces at the point of matching rather than after the fact. Exported for the same setext-safety reuse as ATX_MARKER_PATTERN above.
+export const CODE_FENCE_PATTERN = /^`{3,}(?!.*`)|^~{3,}/;
 const CLOSING_CODE_FENCE_PATTERN = /^(?:`{3,}|~{3,})(?=[ \t]*$)/;
 
-// Pandoc/GitHub math-extension display math (ExaDev/markdown-codec#53): a line consisting of exactly $$, optionally followed by trailing spaces/tabs and nothing else -- deliberately stricter than the code-fence pattern above (no "info string", no variable length): both the opening and the closing line must match this exact shape, which is what makes a bare "$$" line on its own unambiguous rather than colliding with GFM's own single-dollar-free inline math (this package never adds inline $$ recognition at all, only \( \)).
-const MATH_BLOCK_MARKER_PATTERN = /^\$\$[ \t]*$/;
+// Pandoc/GitHub math-extension display math (ExaDev/markdown-codec#53): a line consisting of exactly $$, optionally followed by trailing spaces/tabs and nothing else -- deliberately stricter than the code-fence pattern above (no "info string", no variable length): both the opening and the closing line must match this exact shape, which is what makes a bare "$$" line on its own unambiguous rather than colliding with GFM's own single-dollar-free inline math (this package never adds inline $$ recognition at all, only \( \)). Exported for the same setext-safety reuse as ATX_MARKER_PATTERN above: a $$ line interrupts an open paragraph exactly as a code fence does (see src/emit/emit.ts's own canInterruptOpenParagraph), so a would-be setext heading's own line matching it is just as much a paragraph-interrupting construct as the six CommonMark names explicitly.
+export const MATH_BLOCK_MARKER_PATTERN = /^\$\$[ \t]*$/;
 const MATH_BLOCK_MARKER_LENGTH = 2;
 
 // spec 0.31.2, "Setext headings": a sequence of `=` or of `-`, optionally followed by spaces/tabs, and nothing else.
 const SETEXT_UNDERLINE_PATTERN = /^(?:=+|-+)[ \t]*$/;
 
-// spec 0.31.2, "Thematic breaks": three or more matching `*`, `-`, or `_` characters, with optional spaces/tabs between and after them.
-const THEMATIC_BREAK_PATTERN =
+// spec 0.31.2, "Thematic breaks": three or more matching `*`, `-`, or `_` characters, with optional spaces/tabs between and after them. Exported for the same setext-safety reuse as ATX_MARKER_PATTERN above.
+export const THEMATIC_BREAK_PATTERN =
   /^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$|^(?:-[ \t]*){3,}$/;
 
 const BLANK_CONTENT_PATTERN = /^[ \t\n]*$/;
@@ -851,13 +850,28 @@ interface AstConversionContext {
   readonly options: MarkdownParseOptions;
 }
 
+// Every line addLine appends (including a leaf block's own LAST line) carries a synthetic trailing '\n' -- bookkeeping internal to accumulation, present unconditionally whether or not the ORIGINAL source line it came from was itself followed by one (see Parser.parse above: the source's own final line ending, if any, is deliberately excluded from the split before a single addLine call ever runs). Left in place, that trailing artifact reaches parseInlines indistinguishable from a genuine line ending BETWEEN two real lines of content, and parseLineBreak has no way to tell "nothing follows, this is bookkeeping" apart from "another line of this same block follows, this is a real soft/hard break" -- so a block ending exactly at end-of-input would mint a spurious trailing softBreak/hardBreak node with nothing on its far side (ExaDev/documents.js#940's own debug-softbreak.mjs exploration: `parseLineBreak` fires unconditionally on any '\n' it scans, with no end-of-content lookahead). A leaf block built by some other path than addLine (an ATX heading's single-line content, sliced directly off its own source line -- tryAtxHeadingStart above) never carries this artifact in the first place, so stripping it is conditional on it actually being present, not an unconditional slice.
+//
+// Once that artifact is gone, what remains is spec 0.31.2's own "Paragraphs" rule: the raw content is formed "by concatenating the lines and removing initial and final spaces or tabs" -- ASCII space (U+0020) and tab (U+0009) ONLY, not the broader Unicode whitespace category JavaScript's own String.prototype.trim() strips (NBSP U+00A0, the various em/en spaces, line/paragraph separators, BOM...). That distinction is load-bearing too: an entity reference decodes to its literal character during INLINE parsing, which runs AFTER this trim -- but this package's own writer re-emits that decoded character verbatim, so a paragraph or heading whose rendered markdown happens to START or END with, say, a &nbsp;-derived U+00A0 reaches this exact trim again on reparse, this time as a literal character already sitting at the block's own edge. A plain .trim() would silently swallow it there, misreading real content as insignificant padding.
+const BLOCK_EDGE_SPACE_OR_TAB_PATTERN = /^[ \t]+|[ \t]+$/g;
+
+function trimBlockContent(text: string): string {
+  const withoutTrailingArtifactNewline = text.endsWith("\n")
+    ? text.slice(0, -1)
+    : text;
+  return withoutTrailingArtifactNewline.replace(
+    BLOCK_EDGE_SPACE_OR_TAB_PATTERN,
+    "",
+  );
+}
+
 function toInlineChildren(
   content: string,
   context: AstConversionContext,
 ): MarkdownInlineNode[] {
   // A leaf block's accumulated content keeps the line endings that separated its source lines but not the whitespace around the block itself: leading indentation was stripped as each line was added, and trailing whitespace at the very end of the block is not a hard line break.
   return parseInlines(
-    content.trim(),
+    trimBlockContent(content),
     context.references,
     context.footnotes,
     context.options,

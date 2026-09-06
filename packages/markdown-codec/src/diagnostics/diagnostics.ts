@@ -52,6 +52,11 @@ export const MarkdownDiagnosticCodes = {
   ADJACENT_LINKS_MERGED: "md/adjacent-links-merged",
   CODE_SPAN_AS_MONOSPACE_RUN: "md/code-span-as-monospace-run",
   PARAGRAPH_INDENT_DROPPED: "md/paragraph-indent-dropped",
+  HEADING_LINE_BREAK_COLLAPSED: "md/heading-line-break-collapsed",
+  HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT:
+    "md/heading-line-break-unsafe-for-setext",
+  HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK:
+    "md/heading-style-overridden-for-line-break",
   LIST_NUMID_FALLBACK: "md/list-numid-fallback",
   TABLE_CELL_FORMATTING_DROPPED: "md/table-cell-formatting-dropped",
   TABLE_CELL_MULTI_PARAGRAPH_JOINED: "md/table-cell-multi-paragraph-joined",

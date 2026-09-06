@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ContentDocument, ContentSection } from "document-schema.js";
+import type {
+  ContentDocument,
+  ContentParagraph,
+  ContentSection,
+} from "document-schema.js";
 import {
   RtfDiagnosticCodes,
   RtfUnsupportedDocumentKindError,
@@ -1695,6 +1699,33 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // writeCellBlocks writes a cell's own content as \intbl <pict>/<obj>/paragraph groups -- image and embeddedObject blocks borrow the identical \pard\plain\intbl shell a paragraph gets (see the "round trip" describe block below for both), since read.ts's own reader already proves that shape round-trips. A table or pageBreak block placed directly in a cell has no such shell to borrow -- a nested table needs its own \itapN row grammar this writer does not build, and a mid-row \page would \pard-reset the row's own \intbl state -- so those two kinds are still dropped rather than embedded, reported through CONSTRUCT_UNREPRESENTED rather than filtered out with no diagnostic at all.
+  it("reports rather than silently dropping a page break placed directly in a table cell", () => {
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(
+        wordprocessing([
+          {
+            kind: "table",
+            columnWidthsPt: [72],
+            rows: [
+              {
+                cells: [
+                  {
+                    blocks: [{ kind: "pageBreak" }],
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+        { sink: (diagnostic) => codes.push(diagnostic.code) },
+      ),
+    );
+    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(out).not.toContain("\\page");
+  });
+
   it("writes a page break as \\page", () => {
     expect(write(wordprocessing([{ kind: "pageBreak" }]))).toContain("\\page");
   });
@@ -1718,6 +1749,25 @@ describe("body constructs", () => {
       "{\\*\\shppict{\\pict\\pngblip\\picwgoal1440\\pichgoal720",
     );
     expect(out).toContain("89504e470d0a1a0a");
+  });
+
+  it("writes an embedded object as a real [MS-CFB] compound file inside \\object's \\objdata", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "embeddedObject",
+          objectKind: "spreadsheet",
+          frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+          document: { kind: "spreadsheet", metadata: {}, sheets: [] },
+        },
+      ]),
+    );
+    expect(out).toContain("{\\object\\objemb\\objw2000\\objh1000");
+    expect(out).toContain("{\\*\\objclass spreadsheet}");
+    expect(out).toContain("{\\*\\objdata");
+    // The [MS-CFB] magic bytes (D0 CF 11 E0 A1 B1 1A E1) -- proof the \objdata payload is a genuine compound file, not a placeholder or an opaque blob.
+    expect(out).toContain("d0cf11e0a1b11ae1");
+    expect(out).toContain("{\\result{\\pard\\plain");
   });
 
   it("reports rather than silently dropping a construct boundary marker RTF cannot spell", () => {
@@ -2535,6 +2585,104 @@ describe("round trip through this package's own reader", () => {
     ).toBe(2);
   });
 
+  // constructStart/constructEnd are not a nested destination the way embeddedObject/image/table/pageBreak are: they are the same zero-width bookmark bracket writeBlock already splices into the top-level flow, and read.ts's own cellBlockExtents/insertConstructMarkers (src/read.ts) already reconstructs the pair back out of a cell's own block list. This proves the write side can produce it, not just that the reader tolerates it.
+  it("round-trips a block-scoped bookmark bracketing whole paragraphs inside a table cell", () => {
+    const document = wordprocessing([
+      {
+        kind: "table",
+        columnWidthsPt: [72],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  {
+                    kind: "constructStart",
+                    descriptor: {
+                      kind: "anchor",
+                      anchorType: "bookmark",
+                      name: "cellspan",
+                    },
+                  },
+                  { kind: "paragraph", runs: [{ text: "One" }] },
+                  { kind: "paragraph", runs: [{ text: "Two" }] },
+                  { kind: "constructEnd" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(document, {
+        sink: (diagnostic) => codes.push(diagnostic.code),
+      }),
+    );
+    expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(out).toContain("{\\*\\bkmkstart cellspan}");
+    expect(out).toContain("{\\*\\bkmkend cellspan}");
+
+    const back = roundTrip(document);
+    const table = (
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks : []
+    )?.find((block) => block.kind === "table");
+    const cellBlocks =
+      table?.kind === "table" ? table.rows[0]?.cells[0]?.blocks : undefined;
+    expect(cellBlocks?.map((block) => block.kind)).toEqual([
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
+  });
+
+  // A marker at index 0 (the case above) can never expose a bug in flushing the PRECEDING paragraph's deferred \par, since there is no preceding paragraph. This cell instead opens the bookmark strictly between the first and second of three paragraphs, so the deferred \par writeCellBlocks owes paragraph one must be flushed before the marker rather than after it -- getting this wrong widens the bookmark to cover paragraph one as well once read back.
+  it("round-trips a block-scoped bookmark that starts between two cell paragraphs, not at the cell's start", () => {
+    const document = wordprocessing([
+      {
+        kind: "table",
+        columnWidthsPt: [72],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  { kind: "paragraph", runs: [{ text: "One" }] },
+                  {
+                    kind: "constructStart",
+                    descriptor: {
+                      kind: "anchor",
+                      anchorType: "bookmark",
+                      name: "midcell",
+                    },
+                  },
+                  { kind: "paragraph", runs: [{ text: "Two" }] },
+                  { kind: "paragraph", runs: [{ text: "Three" }] },
+                  { kind: "constructEnd" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const back = roundTrip(document);
+    const table = (
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks : []
+    )?.find((block) => block.kind === "table");
+    const cellBlocks =
+      table?.kind === "table" ? table.rows[0]?.cells[0]?.blocks : undefined;
+    expect(cellBlocks?.map((block) => block.kind)).toEqual([
+      "paragraph",
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
+  });
+
   it("round-trips several sections, each keeping its own geometry and break kind", () => {
     const document: ContentDocument = {
       kind: "wordprocessing",
@@ -2581,5 +2729,133 @@ describe("round trip through this package's own reader", () => {
     expect(out).toContain("\\marglsxn720");
     // The document-level geometry is stated once, in the header, from the first section -- not restated per section.
     expect(out.match(/\\paperw/g)).toHaveLength(1);
+  });
+
+  it("preserves an embedded object's kind, frame, and nested document through a real OLE compound file", () => {
+    const embedded: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: { title: "Embedded sheet" },
+      sheets: [],
+    };
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "embeddedObject",
+          objectKind: "spreadsheet",
+          frame: { xPt: 1, yPt: 2, widthPt: 100, heightPt: 50 },
+          document: embedded,
+        },
+      ]),
+    );
+    const block =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks[0] : undefined;
+    expect(block?.kind).toBe("embeddedObject");
+    if (block?.kind !== "embeddedObject")
+      throw new Error("expected an embeddedObject block");
+    expect(block.objectKind).toBe("spreadsheet");
+    expect(block.frame).toEqual({ xPt: 1, yPt: 2, widthPt: 100, heightPt: 50 });
+    expect(block.document).toEqual(embedded);
+  });
+
+  // Regression test: writeCellBlocks once dropped an image placed directly in a table cell's own block list outright (it wrote \intbl paragraphs only), so a \pict read out of a cell round-tripped to nothing. writeImagePict now gives the \pict destination the same \intbl variant a cell paragraph gets, and this proves it survives a full write-then-read cycle positioned correctly between the cell's own surrounding text.
+  it("preserves an image placed directly inside a table cell, alongside the cell's own surrounding text", () => {
+    const base64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [
+                    { kind: "paragraph", runs: [{ text: "before" }] },
+                    {
+                      kind: "image",
+                      format: "png",
+                      base64,
+                      widthPt: 72,
+                      heightPt: 36,
+                    },
+                    { kind: "paragraph", runs: [{ text: "after" }] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const blocks =
+      back.kind === "wordprocessing" ? (back.sections[0]?.blocks ?? []) : [];
+    const table = blocks.find((block) => block.kind === "table");
+    const cellBlocks =
+      table?.kind === "table" ? table.rows[0]?.cells[0]?.blocks : undefined;
+    expect(cellBlocks?.map((block) => block.kind)).toEqual([
+      "paragraph",
+      "image",
+      "paragraph",
+    ]);
+    const image = cellBlocks?.find((block) => block.kind === "image");
+    expect(image?.kind === "image" ? image.format : undefined).toBe("png");
+    const cellText = (cellBlocks ?? [])
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text));
+    expect(cellText).toEqual(["before", "after"]);
+  });
+
+  // The identical regression as the image case above, for the PR's own headline construct: writeCellBlocks once dropped an \object placed directly in a table cell too, discarding a decoded embedded object entirely on write. writeEmbeddedObjectBlock's own \intbl variant fixes it the same way.
+  it("preserves an embedded object placed directly inside a table cell, alongside the cell's own surrounding text", () => {
+    const embedded: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: { title: "Embedded sheet" },
+      sheets: [],
+    };
+    const back = roundTrip(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [
+                    { kind: "paragraph", runs: [{ text: "before" }] },
+                    {
+                      kind: "embeddedObject",
+                      objectKind: "spreadsheet",
+                      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+                      document: embedded,
+                    },
+                    { kind: "paragraph", runs: [{ text: "after" }] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    const blocks =
+      back.kind === "wordprocessing" ? (back.sections[0]?.blocks ?? []) : [];
+    const table = blocks.find((block) => block.kind === "table");
+    const cellBlocks =
+      table?.kind === "table" ? table.rows[0]?.cells[0]?.blocks : undefined;
+    expect(cellBlocks?.map((block) => block.kind)).toEqual([
+      "paragraph",
+      "embeddedObject",
+      "paragraph",
+    ]);
+    const object = cellBlocks?.find((block) => block.kind === "embeddedObject");
+    expect(
+      object?.kind === "embeddedObject" ? object.objectKind : undefined,
+    ).toBe("spreadsheet");
+    const cellText = (cellBlocks ?? [])
+      .filter((block): block is ContentParagraph => block.kind === "paragraph")
+      .flatMap((paragraph) => paragraph.runs.map((run) => run.text));
+    expect(cellText).toEqual(["before", "after"]);
   });
 });

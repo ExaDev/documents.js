@@ -1,6 +1,6 @@
 {
   "name": "rtf-codec",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "Hand-written Rich Text Format (RTF 1.9.1) reader and writer against the shared document-schema.js content pivot.",
   "type": "module",
   "repository": {
@@ -80,6 +80,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
+    "archive-codec": "^1.6.0",
     "document-schema.js": "^6.1.0",
     "zod": "^4.4.3"
   },
