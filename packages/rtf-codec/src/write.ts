@@ -1159,16 +1159,16 @@ class RtfWriter {
     );
   }
 
-  // RTF 1.9.1's own <obj> grammar: '{' \object (<objtype> & ... & <objsize>?) <objdata> <result> '}' -- \objemb (this is always an embedded object, never a link: ContentEmbeddedObjectBlock has no linked-object variant), the <objhw> size hint (\objwN\objhN, informational only -- a reader that decodes \objdata below never consults it), {\*\objclass ...} naming the payload's own objectKind, the real [MS-CFB] container embedded-object.ts builds as {\*\objdata ...}'s hex payload, and a minimal {\result ...} fallback paragraph for a reader that does not decode \object at all (the spec: "This allows RTF readers that do not understand objects ... to use the current result, in place of the object, to maintain appearance").
+  // RTF 1.9.1's own <obj> grammar: '{' \object (<objtype> & ... & <objsize>?) <objdata> <result> '}' -- \objemb (this is always an embedded object, never a link: ContentEmbeddedObjectBlock has no linked-object variant), the <objhw> size hint (\objwN\objhN, informational only -- a reader that decodes \objdata below never consults it), {\*\objclass ...} naming the payload's own objectKind, {\*\objdata ...}'s hex payload -- a full [MS-OLEDS] EmbeddedObject envelope (ObjectHeader + NativeDataSize + the real [MS-CFB] container as NativeData + a mandatory Presentation field) that embedded-object.ts's own writeEmbeddedObjectData builds, not the compound file alone -- and a minimal {\result ...} fallback paragraph for a reader that does not decode \object at all (the spec: "This allows RTF readers that do not understand objects ... to use the current result, in place of the object, to maintain appearance").
   private writeEmbeddedObjectBlock(block: ContentEmbeddedObjectBlock): void {
     const widthTwips = pointsToTwips(block.frame.widthPt);
     const heightTwips = pointsToTwips(block.frame.heightPt);
-    const cfbBytes = writeEmbeddedObjectData(block);
+    const objdataBytes = writeEmbeddedObjectData(block);
     this.line(
       `\\pard\\plain {\\object\\objemb\\objw${String(widthTwips)}\\objh${String(heightTwips)}` +
         `{\\*\\objclass ${escapeText(block.objectKind)}}` +
         `{\\*\\objdata${this.lineEnding}` +
-        `${wrapHex(bytesToHex(cfbBytes), this.lineEnding)}}` +
+        `${wrapHex(bytesToHex(objdataBytes), this.lineEnding)}}` +
         `{\\result{\\pard\\plain ${escapeText(`[embedded ${block.objectKind} object]`)}\\par}}}\\par`,
     );
   }
