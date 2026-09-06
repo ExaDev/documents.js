@@ -1402,7 +1402,7 @@ describe("body constructs", () => {
   });
 
   it("reports a contentControl controlType RTF's own form-field vocabulary does not cover, rather than minting nothing silently -- and mints no unbalanced braces for it", () => {
-    const codes: string[] = [];
+    const diagnostics: { code: string; message: string }[] = [];
     const out = text(
       writeRtfContent(
         wordprocessing([
@@ -1421,10 +1421,23 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) =>
+            diagnostics.push({
+              code: diagnostic.code,
+              message: diagnostic.message,
+            }),
+        },
       ),
     );
-    expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    // The dropped extent is run-scoped -- it never reaches openConstruct/closeConstruct's own block-scoped handling at all -- so the message must lead with the reason that is actually true of it (no \*\formfield spelling for this controlType), not describeConstructGap's block-scoped wording, which answers why a genuinely block-scoped construct has nothing to open in the first place.
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a contentControl construct is dropped: RTF has no \\*\\formfield spelling for a 'richText' controlType -- only plainText/checkbox/dropDown form fields mint one",
+      },
+    ]);
     // The regression this guards: an unrepresentable controlType must mint no open half either, or the writer emits the extent's close "}}" unpaired and corrupts the rest of the document's brace balance.
     expectBalancedBraces(out);
   });
