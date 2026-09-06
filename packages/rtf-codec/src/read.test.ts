@@ -710,7 +710,7 @@ describe("embedded objects", () => {
     ).toBe(true);
   });
 
-  // A real Word-authored \object's OLESaveToStream data (a genuine embedded .xls range, an Equation Editor formula, ...) has no JSON envelope inside its NativeData and so never decodes here -- "hello" stands in for that: real bytes, wrong shape. This is exactly the case RTF 1.9.1's own advice for \result exists for -- "This allows RTF readers that do not understand objects ... to use the current result, in place of the object, to maintain appearance" -- so the fallback preview paragraph is what a real Word-shaped, undecodable \object should recover as, in the object's own place in the surrounding paragraph flow.
+  // A real Word-authored \object's OLESaveToStream data (a genuine embedded .xls range, an Equation Editor formula, ...) has no JSON envelope inside its NativeData and so never decodes here -- "hello" stands in for that: real bytes, wrong shape. This is exactly the case RTF 1.9.1's own advice for \result exists for -- "This allows RTF readers that do not understand objects ... to use the current result, in place of the object, to maintain appearance" -- so the fallback preview paragraph is what a real Word-shaped, undecodable \object should recover as, appended to the surrounding section rather than dropped.
   it("recovers \\result's own fallback paragraphs when \\objdata cannot be decoded", () => {
     const { document, diagnostics } = readRtfContent(
       bytes(
@@ -723,15 +723,16 @@ describe("embedded objects", () => {
       );
     }
     const blocks = document.sections[0]?.blocks ?? [];
-    // No embeddedObject block -- the real object never decoded -- but its \result content lands as an ordinary paragraph in its place, and the surrounding text ("before "/" after") survives untouched around it: recovering the fallback must not corrupt the paragraph flow the \object sat inside.
+    // No embeddedObject block -- the real object never decoded -- and \result's own recovered content survives as an ordinary paragraph, but not truly spliced into \object's own former position: addBlocks appends the fallback to the section's own block list without ending the paragraph still accumulating "before "/" after" around \object (no \pard/\par appears between them), so the fallback paragraph lands as its own block BEFORE that paragraph closes, and "before "/" after" end up as two runs of that one surrounding paragraph rather than split into separate blocks around the fallback -- asserted here by exact block order/content, not merely by substring presence, since a substring check alone cannot tell "spliced in place" from "appended first".
     expect(blocks.some((block) => block.kind === "embeddedObject")).toBe(false);
-    const text = blocks
-      .filter((block): block is ContentParagraph => block.kind === "paragraph")
-      .map((paragraph) => paragraph.runs.map((run) => run.text).join(""))
-      .join("|");
-    expect(text).toContain("before");
-    expect(text).toContain("[Embedded worksheet]");
-    expect(text).toContain("after");
+    const paragraphs = blocks.filter(
+      (block): block is ContentParagraph => block.kind === "paragraph",
+    );
+    expect(
+      paragraphs.map((paragraph) =>
+        paragraph.runs.map((run) => run.text).join(""),
+      ),
+    ).toEqual(["[Embedded worksheet]", "before  after"]);
     expect(
       diagnostics.some(
         (diagnostic) =>
