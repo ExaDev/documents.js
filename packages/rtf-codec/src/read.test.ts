@@ -506,6 +506,16 @@ describe("fields and destinations", () => {
     expect(runs[0]?.hyperlink).toBe("#section2");
   });
 
+  // Regression guard: formFieldControlType (constructs.ts) must anchor on the instruction's own leading token, not merely find FORMTEXT/FORMCHECKBOX/FORMDROPDOWN anywhere in the string -- an unanchored match would fire on the identical word sitting inside an unrelated field's own switch argument, here a HYPERLINK target that happens to end in "FORMTEXT".
+  it("does not mistake a HYPERLINK target containing the word FORMTEXT for a form field", () => {
+    const paragraph = paragraphsOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst{HYPERLINK "http://example.com/FORMTEXT"}}{\\fldrslt here}}\\par}`,
+    )[0];
+    expect(paragraph?.constructs ?? []).toEqual([]);
+    const linked = paragraph?.runs.find((run) => run.hyperlink !== undefined);
+    expect(linked?.hyperlink).toBe("http://example.com/FORMTEXT");
+  });
+
   it("discards an unrecognised ignorable destination whole and says so", () => {
     const { diagnostics, document } = readRtfContent(
       bytes(`${HEADER}\\pard kept{\\*\\someunknowndest discarded}\\par}`),
