@@ -190,6 +190,113 @@ describe("headings", () => {
     );
   });
 
+  describe("a level-1/2 heading whose own break is followed by a whitespace-only line, not a literally empty one (ExaDev/documents.js#940)", () => {
+    // CommonMark's own blank-line definition (spec 0.31.2, "Blank lines") is "a line containing no characters, or only spaces or tabs" -- a residual line of pure whitespace is just as unsafe for setext as a literally empty one, whether that whitespace comes from a hard break's own escape spelling (the backslash lands on the line the break TERMINATES, never on the line that follows) or from an un-escaped soft-break residue newline.
+    it.each([
+      {
+        level: "Heading1" as const,
+        spelling: "hard-break",
+        runs: [{ text: "foo" }, { text: "\n" }, { text: " " }],
+      },
+      {
+        level: "Heading2" as const,
+        spelling: "hard-break",
+        runs: [{ text: "foo" }, { text: "\n" }, { text: " " }],
+      },
+      {
+        level: "Heading1" as const,
+        spelling: "soft-break",
+        runs: [
+          { text: "foo" },
+          { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+          { text: " " },
+        ],
+      },
+      {
+        level: "Heading2" as const,
+        spelling: "soft-break",
+        runs: [
+          { text: "foo" },
+          { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+          { text: " " },
+        ],
+      },
+    ])(
+      "collapses to ATX with a diagnostic instead of promoting $level to setext for a $spelling break followed by a trailing space",
+      ({ level, runs }) => {
+        const collector = createDiagnosticCollector();
+        emitMarkdown(doc([{ kind: "paragraph", runs, styleId: level }]), {
+          sink: collector.sink,
+        });
+        expect(
+          collector.has(
+            MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+          ),
+        ).toBe(true);
+      },
+    );
+
+    it.each([
+      {
+        level: "Heading1" as const,
+        spelling: "hard-break",
+        runs: [{ text: "foo" }, { text: "\n" }, { text: " " }],
+      },
+      {
+        level: "Heading2" as const,
+        spelling: "hard-break",
+        runs: [{ text: "foo" }, { text: "\n" }, { text: " " }],
+      },
+      {
+        level: "Heading1" as const,
+        spelling: "soft-break",
+        runs: [
+          { text: "foo" },
+          { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+          { text: " " },
+        ],
+      },
+      {
+        level: "Heading2" as const,
+        spelling: "soft-break",
+        runs: [
+          { text: "foo" },
+          { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+          { text: " " },
+        ],
+      },
+    ])(
+      "survives a full write-then-reread round trip as one intact $level heading for a $spelling break followed by a trailing space, rather than fracturing into a plain paragraph plus a spurious block or thematic break",
+      ({ level, runs }) => {
+        const written = emitMarkdown(
+          doc([
+            { kind: "paragraph", runs, styleId: level },
+            { kind: "paragraph", runs: [{ text: "next para" }] },
+          ]),
+        );
+        const reparsed = lowerMarkdown(written);
+        if (reparsed.kind !== "wordprocessing") {
+          throw new Error("expected a wordprocessing ContentDocument");
+        }
+        const blocks = reparsed.sections[0]?.blocks ?? [];
+        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId) and the trailing paragraph -- pre-fix, a whitespace-only (as opposed to literally empty) residual line slipped past the zero-length-only guard and fractured this into THREE (the heading text as a bare paragraph, a spurious "===="/"----" paragraph or thematic break invented from the stray underline, and the trailing paragraph).
+        expect(blocks).toHaveLength(2);
+        const [headingBlock, nextBlock] = blocks;
+        if (
+          headingBlock?.kind !== "paragraph" ||
+          nextBlock?.kind !== "paragraph"
+        ) {
+          throw new Error("expected two paragraph blocks");
+        }
+        expect(headingBlock.styleId).toBe(level);
+        expect(nextBlock.styleId).toBeUndefined();
+        expect(nextBlock.runs.map((run) => run.text).join("")).toBe(
+          "next para",
+        );
+      },
+    );
+  });
+
   describe("a level-1/2 heading whose own text STARTS with an embedded break stays eligible for setext (ExaDev/documents.js#940)", () => {
     // Unlike a TRAILING break, a LEADING one never leaves a blank line for setext to trip over: it sits BEFORE the heading's own run of text-then-underline lines even begins, so a reparse treats it as ordinary inter-block whitespace ahead of the heading -- exactly as a blank line ahead of any other block already works. Refusing setext here would be a strict regression for the escaped-hard-break spelling specifically: escapeMarkdownText always keeps a non-blank backslash on that first line, so the break survives losslessly through setext today, and collapsing to ATX would destroy it (ATX has no representation for a break at all).
     it.each([
@@ -220,6 +327,74 @@ describe("headings", () => {
           throw new Error("expected a paragraph block");
         }
         expect(headingBlock.styleId).toBe(level);
+        expect(headingBlock.runs.map((run) => run.text).join("")).toBe("\nfoo");
+      },
+    );
+
+    it.each([
+      { level: "Heading1" as const, underline: "=" },
+      { level: "Heading2" as const, underline: "-" },
+    ])(
+      "still promotes $level to setext and round-trips the leading break losslessly as a list item's own marker line",
+      ({ level, underline }) => {
+        const written = emitMarkdown(
+          doc([
+            {
+              kind: "paragraph",
+              runs: [{ text: "\n" }, { text: "foo" }],
+              styleId: level,
+              list: { numId: "md1:bullet", level: 0, itemId: "i1" },
+            },
+          ]),
+        );
+        expect(written).toBe(`- \\\n  foo\n  ${underline}`);
+
+        const reparsed = lowerMarkdown(written);
+        if (reparsed.kind !== "wordprocessing") {
+          throw new Error("expected a wordprocessing ContentDocument");
+        }
+        const blocks = reparsed.sections[0]?.blocks ?? [];
+        expect(blocks).toHaveLength(1);
+        const [headingBlock] = blocks;
+        if (headingBlock?.kind !== "paragraph") {
+          throw new Error("expected a paragraph block");
+        }
+        expect(headingBlock.styleId).toBe(level);
+        expect(headingBlock.list).toBeDefined();
+        expect(headingBlock.runs.map((run) => run.text).join("")).toBe("\nfoo");
+      },
+    );
+
+    it.each([
+      { level: "Heading1" as const, underline: "=" },
+      { level: "Heading2" as const, underline: "-" },
+    ])(
+      "still promotes $level to setext and round-trips the leading break losslessly inside a blockquote",
+      ({ level, underline }) => {
+        const written = emitMarkdown(
+          doc([
+            {
+              kind: "paragraph",
+              runs: [{ text: "\n" }, { text: "foo" }],
+              styleId: level,
+              indentLeftPt: 36,
+            },
+          ]),
+        );
+        expect(written).toBe(`> \\\n> foo\n> ${underline}`);
+
+        const reparsed = lowerMarkdown(written);
+        if (reparsed.kind !== "wordprocessing") {
+          throw new Error("expected a wordprocessing ContentDocument");
+        }
+        const blocks = reparsed.sections[0]?.blocks ?? [];
+        expect(blocks).toHaveLength(1);
+        const [headingBlock] = blocks;
+        if (headingBlock?.kind !== "paragraph") {
+          throw new Error("expected a paragraph block");
+        }
+        expect(headingBlock.styleId).toBe(level);
+        expect(headingBlock.indentLeftPt).toBeGreaterThan(0);
         expect(headingBlock.runs.map((run) => run.text).join("")).toBe("\nfoo");
       },
     );
