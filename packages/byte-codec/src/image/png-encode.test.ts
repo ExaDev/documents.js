@@ -257,14 +257,14 @@ describe("encodePng indexed-colour (colour type 3)", () => {
     for (let i = 0; i < 256; i++) {
       row.push(i, 0, 0); // 256 distinct shades of red
     }
-    // Tiled down to a height where indexed colour's per-pixel savings outweigh its own PLTE overhead -- see repeatRows' own comment. A full 256-entry palette carries much more fixed overhead than a small one, so this needs far more repetition than the smaller-palette tests above before indexed colour wins. Every row repeats the same 256 colours, so the palette stays at exactly 256 entries regardless of height.
+    // Tiled down to a height where indexed colour's per-pixel savings outweigh its own PLTE overhead -- see repeatRows' own comment. A full 256-entry palette carries much more fixed overhead than a small one, so this needs far more repetition than the smaller-palette tests above before indexed colour wins. Every row repeats the same 256 colours, so the palette stays at exactly 256 entries regardless of height. A longer explicit timeout (matching the convention document.test.ts already uses for its own heavier tests): encoding this many pixels twice over, once for each candidate encoding, comfortably clears vitest's 5s default without coverage instrumentation but not under it, where v8's per-statement counters make the same deflate-heavy loops run several times slower.
     const image = repeatRows(256, [row], 2000);
     const png = encodePng(image);
 
     expect(colorTypeOf(png)).toBe(3);
     expect(readChunks(png).get("PLTE")!.length).toBe(256 * 3);
     expect(Array.from(decodePng(png).data)).toEqual(Array.from(image.data));
-  });
+  }, 30000);
 
   it("falls back to truecolour at 257 distinct colours", () => {
     const pixels: number[] = [];
