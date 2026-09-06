@@ -2593,6 +2593,59 @@ describe("round trip through this package's own reader", () => {
     ).toBe(2);
   });
 
+  // constructStart/constructEnd are not a nested destination the way embeddedObject/image/table/pageBreak are: they are the same zero-width bookmark bracket writeBlock already splices into the top-level flow, and read.ts's own cellBlockExtents/insertConstructMarkers (src/read.ts) already reconstructs the pair back out of a cell's own block list. This proves the write side can produce it, not just that the reader tolerates it.
+  it("round-trips a block-scoped bookmark bracketing whole paragraphs inside a table cell", () => {
+    const document = wordprocessing([
+      {
+        kind: "table",
+        columnWidthsPt: [72],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  {
+                    kind: "constructStart",
+                    descriptor: {
+                      kind: "anchor",
+                      anchorType: "bookmark",
+                      name: "cellspan",
+                    },
+                  },
+                  { kind: "paragraph", runs: [{ text: "One" }] },
+                  { kind: "paragraph", runs: [{ text: "Two" }] },
+                  { kind: "constructEnd" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const codes: string[] = [];
+    const out = text(
+      writeRtfContent(document, {
+        sink: (diagnostic) => codes.push(diagnostic.code),
+      }),
+    );
+    expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+    expect(out).toContain("{\\*\\bkmkstart cellspan}");
+    expect(out).toContain("{\\*\\bkmkend cellspan}");
+
+    const back = roundTrip(document);
+    const table = (
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks : []
+    )?.find((block) => block.kind === "table");
+    const cellBlocks =
+      table?.kind === "table" ? table.rows[0]?.cells[0]?.blocks : undefined;
+    expect(cellBlocks?.map((block) => block.kind)).toEqual([
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
+  });
+
   it("round-trips several sections, each keeping its own geometry and break kind", () => {
     const document: ContentDocument = {
       kind: "wordprocessing",
