@@ -73,8 +73,8 @@ const ATX_TRAILING_CLOSING_SEQUENCE_PATTERN = /[ \t]+#+[ \t]*$/;
 export const CODE_FENCE_PATTERN = /^`{3,}(?!.*`)|^~{3,}/;
 const CLOSING_CODE_FENCE_PATTERN = /^(?:`{3,}|~{3,})(?=[ \t]*$)/;
 
-// Pandoc/GitHub math-extension display math (ExaDev/markdown-codec#53): a line consisting of exactly $$, optionally followed by trailing spaces/tabs and nothing else -- deliberately stricter than the code-fence pattern above (no "info string", no variable length): both the opening and the closing line must match this exact shape, which is what makes a bare "$$" line on its own unambiguous rather than colliding with GFM's own single-dollar-free inline math (this package never adds inline $$ recognition at all, only \( \)).
-const MATH_BLOCK_MARKER_PATTERN = /^\$\$[ \t]*$/;
+// Pandoc/GitHub math-extension display math (ExaDev/markdown-codec#53): a line consisting of exactly $$, optionally followed by trailing spaces/tabs and nothing else -- deliberately stricter than the code-fence pattern above (no "info string", no variable length): both the opening and the closing line must match this exact shape, which is what makes a bare "$$" line on its own unambiguous rather than colliding with GFM's own single-dollar-free inline math (this package never adds inline $$ recognition at all, only \( \)). Exported for the same setext-safety reuse as ATX_MARKER_PATTERN above: a $$ line interrupts an open paragraph exactly as a code fence does (see src/emit/emit.ts's own canInterruptOpenParagraph), so a would-be setext heading's own line matching it is just as much a paragraph-interrupting construct as the six CommonMark names explicitly.
+export const MATH_BLOCK_MARKER_PATTERN = /^\$\$[ \t]*$/;
 const MATH_BLOCK_MARKER_LENGTH = 2;
 
 // spec 0.31.2, "Setext headings": a sequence of `=` or of `-`, optionally followed by spaces/tabs, and nothing else.
