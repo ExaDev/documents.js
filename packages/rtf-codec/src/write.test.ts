@@ -1532,6 +1532,117 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  // Regression guard: two contentControl extents that CROSS (neither nests inside or around the other) have no valid brace sequence in RTF at all -- verified by execution before this fix existed: {startRun:0,endRun:2} and {startRun:1,endRun:3} on three runs produced output where the first extent's own closing braces closed the second field's groups and vice versa, brace-balanced overall but mis-nested throughout. The correct behaviour is to keep the earlier-starting extent intact, drop the one that crosses it (reporting why), and never let run 'c' -- outside both extents' own union -- end up trapped inside either field's \fldrslt.
+  it("drops a contentControl extent that crosses another rather than mis-nesting both", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }, { text: "c" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "F1",
+              },
+              startRun: 0,
+              endRun: 2,
+            },
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "F2",
+              },
+              startRun: 1,
+              endRun: 3,
+            },
+          ],
+        },
+      ]),
+    );
+    expectBalancedBraces(out);
+    // F1 alone wraps runs 0 and 1 ('a','b'); F2 never opens at all, so run 'c' sits outside any field rather than trapped inside a mis-closed one.
+    expect(out).toContain("{\\*\\ffname F1}");
+    expect(out).not.toContain("{\\*\\ffname F2}");
+    expect(out.indexOf("{a}")).toBeLessThan(out.indexOf("{b}"));
+    expect(out.indexOf("{b}")).toBeLessThan(out.indexOf("}}{c}"));
+  });
+
+  it("reports the crossing drop above through the diagnostic sink, naming why", () => {
+    const diagnostics: { code: string; message: string }[] = [];
+    writeRtfContent(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }, { text: "c" }],
+          constructs: [
+            {
+              descriptor: { kind: "contentControl", controlType: "plainText" },
+              startRun: 0,
+              endRun: 2,
+            },
+            {
+              descriptor: { kind: "contentControl", controlType: "plainText" },
+              startRun: 1,
+              endRun: 3,
+            },
+          ],
+        },
+      ]),
+      {
+        sink: (diagnostic) =>
+          diagnostics.push({
+            code: diagnostic.code,
+            message: diagnostic.message,
+          }),
+      },
+    );
+    expect(diagnostics).toEqual([
+      {
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        message:
+          "a contentControl construct is dropped: it crosses another contentControl extent in the same paragraph (starts before that extent ends but ends after it too), and RTF's \\*\\formfield destination can only nest properly, never cross",
+      },
+    ]);
+  });
+
+  // The non-crossing counterpart to the two tests above: one contentControl extent properly NESTED inside another (not merely overlapping) is a shape RTF's own bracket structure handles natively, so both must still be written -- this pins that selectNestableFormFields's crossing check does not also reject legitimate nesting.
+  it("keeps both contentControl extents when one is properly nested inside the other, not merely overlapping", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }, { text: "b" }, { text: "c" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Outer",
+              },
+              startRun: 0,
+              endRun: 3,
+            },
+            {
+              descriptor: {
+                kind: "contentControl",
+                controlType: "plainText",
+                tag: "Inner",
+              },
+              startRun: 1,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("{\\*\\ffname Outer}");
+    expect(out).toContain("{\\*\\ffname Inner}");
+    expectBalancedBraces(out);
+  });
+
   it("writes a table as \\trowd/\\cellxN row definitions with \\cell and \\row marks", () => {
     const out = write(
       wordprocessing([
