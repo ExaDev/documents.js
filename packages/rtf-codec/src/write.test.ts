@@ -2646,6 +2646,51 @@ describe("round trip through this package's own reader", () => {
     ]);
   });
 
+  // A marker at index 0 (the case above) can never expose a bug in flushing the PRECEDING paragraph's deferred \par, since there is no preceding paragraph. This cell instead opens the bookmark strictly between the first and second of three paragraphs, so the deferred \par writeCellBlocks owes paragraph one must be flushed before the marker rather than after it -- getting this wrong widens the bookmark to cover paragraph one as well once read back.
+  it("round-trips a block-scoped bookmark that starts between two cell paragraphs, not at the cell's start", () => {
+    const document = wordprocessing([
+      {
+        kind: "table",
+        columnWidthsPt: [72],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [
+                  { kind: "paragraph", runs: [{ text: "One" }] },
+                  {
+                    kind: "constructStart",
+                    descriptor: {
+                      kind: "anchor",
+                      anchorType: "bookmark",
+                      name: "midcell",
+                    },
+                  },
+                  { kind: "paragraph", runs: [{ text: "Two" }] },
+                  { kind: "paragraph", runs: [{ text: "Three" }] },
+                  { kind: "constructEnd" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const back = roundTrip(document);
+    const table = (
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks : []
+    )?.find((block) => block.kind === "table");
+    const cellBlocks =
+      table?.kind === "table" ? table.rows[0]?.cells[0]?.blocks : undefined;
+    expect(cellBlocks?.map((block) => block.kind)).toEqual([
+      "paragraph",
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
+  });
+
   it("round-trips several sections, each keeping its own geometry and break kind", () => {
     const document: ContentDocument = {
       kind: "wordprocessing",
