@@ -4,7 +4,7 @@
 
 import { expect } from "vitest";
 
-export function countGroupBraces(rtf: string): {
+function countGroupBraces(rtf: string): {
   readonly open: number;
   readonly close: number;
 } {
