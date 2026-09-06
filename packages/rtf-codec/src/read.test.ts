@@ -937,6 +937,21 @@ describe("embedded objects", () => {
     ).toBe(false);
   });
 
+  // RTF 1.9.1's own <obj> production lists <objclsid> ('{\*' \oleclsid #PCDATA '}') as a direct, optional child of \object, right alongside <objalias>/<objsect>/<objtime> -- ordinary, spec-legal \object content, not an unrecognised destination this reader happens to tolerate.
+  it("does not report UNKNOWN_DESTINATION_SKIPPED for a spec-legal {\\*\\oleclsid ...} sub-group", () => {
+    const { diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\oleclsid {00020810-0000-0000-C000-000000000046}}{\\*\\objdata ${OBJDATA_HEX}}}\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.UNKNOWN_DESTINATION_SKIPPED,
+      ),
+    ).toBe(false);
+  });
+
   // \object's own group can legally close having found neither an \objdata nor a \result child at all (a producer that wrote only the informational \objw/\objh size hint and nothing else) -- a distinct, otherwise-silent construct substitution from either "objdata exists but fails to decode" (buildEmbeddedObject's own diagnostic) or "no objdata, but result recovers instead" (the sibling test above), and previously the only one of the three that produced no diagnostic at all.
   it("reports a diagnostic when an \\object has neither \\objdata nor \\result content at all", () => {
     const { document, diagnostics } = readRtfContent(
