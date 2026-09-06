@@ -14,13 +14,20 @@ const config: KnipConfig = {
   ignoreBinaries: ["qpdf", "info"],
 
   // release-workspace.config.json names the conventionalcommits preset as a string, and @semantic-release/release-notes-generator loads it by deriving the package name from that string at runtime. There is no import anywhere for knip to follow, and knip's own semantic-release plugin cannot help: it reads semantic-release's `plugins` array, whereas this file is @exadev/semantic-release-workspace's own schema. The dependency is declared directly rather than left to pnpm's hoisted store, because resolution through the store depends on it staying a transitive dependency of @commitlint/config-conventional -- true today, and nothing enforces it.
-  ignoreDependencies: ["conventional-changelog-conventionalcommits"],
+  //
+  // @stryker-mutator/core, typescript-checker, and vitest-runner are declared at the root even though no root file imports any of the three: stryker.shared.ts names typescript-checker and vitest-runner by string in its own `plugins` array (loaded by Stryker's own plugin resolver at runtime, not by an import statement knip can trace), and removing any of the three from the root manifest reproducibly breaks every package's own `stryker run` with "Cannot find Checker plugin \"typescript\"" -- confirmed by removing them and re-running. Each package also declares its own copy (needed for pnpm to resolve the `stryker` binary and these same plugins from that package's own node_modules when its `_test:mutation` script runs `stryker run` from its own directory), so this is a real, load-bearing duplication rather than dead weight at either level.
+  ignoreDependencies: [
+    "conventional-changelog-conventionalcommits",
+    "@stryker-mutator/core",
+    "@stryker-mutator/typescript-checker",
+    "@stryker-mutator/vitest-runner",
+  ],
 
   workspaces: {
     // The workspace root builds nothing. Its files are the tooling configs, which are entry points by definition -- each is loaded by the tool it configures, never imported.
     ".": {
-      // eslint.shared.ts is imported by the other root configs rather than loaded by a tool, so nothing else marks it reachable. The .github/scripts entries are the opposite case: CI invokes each as a `node` entry point and nothing imports them, so without naming them knip reports both the scripts and everything they import as unused -- which is how `semver` first looked dead here.
-      entry: ["eslint.shared.ts", ".github/scripts/*.ts"],
+      // eslint.shared.ts and stryker.shared.ts are each imported by every package's own config rather than loaded by a tool directly, so nothing else marks them reachable. The .github/scripts entries are the opposite case: CI invokes each as a `node` entry point and nothing imports them, so without naming them knip reports both the scripts and everything they import as unused -- which is how `semver` first looked dead here.
+      entry: ["eslint.shared.ts", "stryker.shared.ts", ".github/scripts/*.ts"],
       // `*.ts` alone is not recursive, so it never reached .github/scripts and the scripts' own imports were invisible.
       project: ["*.ts", ".github/scripts/**/*.ts"],
     },

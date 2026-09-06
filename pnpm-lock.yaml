@@ -143,9 +143,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.20.1
         version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -195,9 +192,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.20.1
         version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -250,9 +244,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.20.1
         version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -320,9 +311,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.20.2
         version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -387,9 +375,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.20.1
         version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -463,9 +448,6 @@ importers:
       '@modelcontextprotocol/client':
         specifier: ^2.0.0
         version: 2.0.0
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -527,9 +509,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.20.1
         version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -582,9 +561,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.21.2
         version: 0.21.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -682,9 +658,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.21.2
         version: 0.21.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -749,9 +722,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.20.1
         version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -797,9 +767,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.20.1
         version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -852,9 +819,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.21.2
         version: 0.21.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -919,9 +883,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.20.2
         version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -995,9 +956,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.21.2
         version: 0.21.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -1065,9 +1023,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.21.2
         version: 0.21.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -1129,9 +1084,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.20.1
         version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -1184,9 +1136,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.21.2
         version: 0.21.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -1299,9 +1248,6 @@ importers:
       '@playwright/test':
         specifier: ^1.62.1
         version: 1.62.1
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -1399,9 +1345,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.21.2
         version: 0.21.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
@@ -1463,9 +1406,6 @@ importers:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.20.1
         version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
-      '@stryker-mutator/api':
-        specifier: ^10.0.0
-        version: 10.0.0
       '@stryker-mutator/core':
         specifier: ^10.0.0
         version: 10.0.0(@types/node@26.2.0)
