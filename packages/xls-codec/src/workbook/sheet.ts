@@ -721,7 +721,7 @@ function readFormula(
   cursor.skip(FORMULA_CALC_CACHE_BYTES);
   const cce = cursor.u16();
   const rgce = cursor.take(cce);
-  // This record's own rgcb trailer (present only when rgce contains an inline PtgArray, e.g. `=SUM({1,2,3})` in a cell that is not itself CSE-array-entered) is read past the point cce already bounds, and its own length is inferred the same way readArrayGroup's is -- so the same malformed-trailer risk applies. Caught here, and only here, rather than left to propagate: a bad rgcb degrades only its own PtgArray literal (and with it this one cell's formula) to absent, exactly like any other construct this reader cannot resolve, rather than aborting every other cell's read too. resolveFormulaText below is deliberately OUTSIDE this try: for THIS record's own rgce (the `base === undefined` branch inside resolveFormulaText), a BiffFormatError from parseFormulaText's cursor means the cursor ran past a length THIS record itself declared, which per biff/ptg.ts's own module comment marks this reader's own byte-width bug, worth failing loudly on rather than swallowing. resolveFormulaText's other branches -- joining a PtgExp against a shared/array group's own rgce, extracted from a DIFFERENT record entirely -- carry no such guarantee and catch their own BiffFormatError instead; see resolveFormulaText's own comment for why.
+  // This record's own rgcb trailer (present only when rgce contains an inline PtgArray, e.g. `=SUM({1,2,3})` in a cell that is not itself CSE-array-entered) is read past the point cce already bounds, and its own length is inferred the same way readArrayGroup's is -- so the same malformed-trailer risk applies. Caught here, and only here, rather than left to propagate: a bad rgcb degrades only its own PtgArray literal (and with it this one cell's formula) to absent, exactly like any other construct this reader cannot resolve, rather than aborting every other cell's read too. resolveFormulaText below draws its own, separate boundary around the malformed-token-length hazard in rgce itself (this record's own, or a joined group's) -- see its own comment for why that one guard covers every branch rather than just the group-joining ones.
   let rgcb: Uint8Array<ArrayBuffer> | undefined;
   try {
     const rgcbLength = recordByteLength(record) - (FORMULA_HEADER_BYTES + cce);
@@ -747,7 +747,7 @@ function readFormula(
 /**
  * A Formula record's rgce resolves one of three ways: a lone PtgExp pointing back to a shared-formula base cell, whose real expression (a ShrFmla's SharedParsedFormula) is expanded relative to THIS cell's own position; a lone PtgExp pointing back to an array-formula base cell, whose real expression (an Array's ArrayParsedFormula) is identical for every cell in the range and is returned as-is, with no CSE bracing (see ArrayFormulaGroup's own comment for why); or an ordinary rgce, handed to parseFormulaText as-is (with this record's own rgcb, for an inline array-constant literal). A PtgExp with no matching group -- a dangling or malformed reference this reader cannot join -- resolves to undefined exactly like any other unsupported construct.
  *
- * The two group-joining branches catch a BiffFormatError parseFormulaText raises and degrade to undefined, the ordinary-rgce branch does not. `group.rgce` was already extracted, by collectFormulaGroups, as a byte range this same reader believes is correctly bounded by its OWN record's declared cce -- but a token inside it can still carry a lying embedded length (a PtgStr's own character count is the reachable case: [MS-XLS] 2.5.240's cch is read straight from the file with nothing to cross-check it against), which runs the cursor past the end of that already-cce-bounded buffer for reasons that are file-controlled malformed input, not a bug in this reader's own token walking. Left uncaught, that error would propagate out of readFormula for whichever cell's PtgExp happens to join this group and abort every other cell on the sheet along with it -- exactly the failure collectFormulaGroup already prevents for a group whose OWN record is malformed, extended here to a group whose record is well-formed but whose token content is not. The ordinary-rgce branch has no equivalent risk to guard against yet: it parses the current record's own rgce directly, which is the case biff/ptg.ts's own module comment already treats as this reader's responsibility to get right.
+ * All three branches share the same hazard and are wrapped in one catch below: a token's own embedded length (a PtgStr's character count is the reachable case, [MS-XLS] 2.5.240's cch, read straight from the file with nothing to cross-check it against) can claim more bytes than the buffer parseFormulaText's cursor was actually handed, running that cursor past its end -- for the group-joining branches because `group.rgce` was extracted from a DIFFERENT, well-formed record whose own cce correctly bounds it, and for the ordinary-rgce branch because THIS record's own cce can just as easily be too short for the token it claims to end after (or a token inside an otherwise-correctly-bounded rgce can lie the same way `group.rgce`'s can). Neither case is a bug in this reader's own token walking; both are file-controlled malformed input, and left uncaught either would propagate out of readFormula and abort every other cell on the sheet along with the one cell whose formula this is -- exactly the failure collectFormulaGroup already prevents for a group whose OWN record is malformed, extended here to malformed token content reached through any of the three paths above.
  */
 function resolveFormulaText(
   rgce: Uint8Array<ArrayBuffer>,
@@ -757,14 +757,14 @@ function resolveFormulaText(
   formulaGroups: ReadonlyMap<string, FormulaGroup>,
 ): string | undefined {
   const base = readPtgExpBase(rgce);
-  if (base === undefined) {
-    return parseFormulaText(rgce, formulaSheets, { rgcb });
-  }
-  const group = formulaGroups.get(groupKey(base.row, base.column));
-  if (group === undefined) {
-    return undefined;
-  }
   try {
+    if (base === undefined) {
+      return parseFormulaText(rgce, formulaSheets, { rgcb });
+    }
+    const group = formulaGroups.get(groupKey(base.row, base.column));
+    if (group === undefined) {
+      return undefined;
+    }
     return group.kind === "shared"
       ? parseFormulaText(group.rgce, formulaSheets, { relativeTo: header })
       : parseFormulaText(group.rgce, formulaSheets, { rgcb: group.rgcb });
