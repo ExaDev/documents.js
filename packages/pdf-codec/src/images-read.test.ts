@@ -793,10 +793,10 @@ describe("readImageXObject: JPXDecode", () => {
     ).toContain("sub-sampled");
   });
 
-  it("skips a JPXDecode image whose SIZ marker declares dimensions whose product exceeds PNG_MAX_PIXELS, with a diagnostic rather than throwing out of encodePng", () => {
+  it("skips a JPXDecode image whose SIZ marker declares dimensions whose product exceeds PNG_MAX_PIXELS, with a diagnostic rather than decoding or throwing out of encodePng", () => {
     const entry = fixture("ramp-basic");
     const codestream = jpeg2000FixtureBytes(entry.codestream);
-    // Xsiz and Ysiz: SOC and the SIZ marker are two bytes each, then SIZ's own length and Rsiz, each two bytes -- landing on the first of the eight 32-bit geometry fields, Xsiz, immediately followed by Ysiz. Overwriting only these two (leaving XTsiz/YTsiz and the tile's own entropy-coded data untouched) is enough on its own to make decodeJpeg2000 report a canvas this much larger than what it actually decoded -- exactly the producer-controlled value readImageXObject's own /Width and /Height guard below exists to bound, but here reaching encodePng one branch earlier, through the JPXDecode path.
+    // Xsiz and Ysiz: SOC and the SIZ marker are two bytes each, then SIZ's own length and Rsiz, each two bytes -- landing on the first of the eight 32-bit geometry fields, Xsiz, immediately followed by Ysiz. Overwriting only these two (leaving XTsiz/YTsiz and the tile's own entropy-coded data untouched) is enough on its own to make the SIZ marker declare a canvas this much larger than what the tile-part data actually carries -- exactly the producer-controlled value readJpeg2000Image passes to decodeJpeg2000 as its own maxWidth/maxHeight/maxPixels bound, so decodeJpeg2000 rejects it immediately after parsing SIZ, before allocating a single per-component sample plane, rather than reaching encodePng one branch further on through the JPXDecode path.
     const oversized = new Uint8Array(codestream);
     const view = new DataView(oversized.buffer);
     const side = Math.ceil(Math.sqrt(PNG_MAX_PIXELS)) + 1; // side * side individually well under PNG_MAX_DIMENSION, but their product just exceeds PNG_MAX_PIXELS

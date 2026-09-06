@@ -74,6 +74,10 @@ export interface Jpeg2000Metadata {
 
 export interface Jpeg2000DecodeOptions {
   readonly onWarning?: (message: string) => void;
+  // Caller-supplied resource bounds, checked against the codestream's own declared canvas size (SIZ's Xsiz/Ysiz less Xosiz/Yosiz) before this function allocates its own per-component sample planes below -- rejecting a producer-declared size the caller considers unusably large before paying for that allocation, rather than after decoding has already done the work. Each is undefined (no bound) by default.
+  readonly maxWidth?: number;
+  readonly maxHeight?: number;
+  readonly maxPixels?: number;
 }
 
 export interface Jpeg2000Image {
@@ -563,6 +567,15 @@ export function decodeJpeg2000(
   const siz = codestream.siz;
   const width = siz.xsiz - siz.xosiz;
   const height = siz.ysiz - siz.yosiz;
+  if (
+    (options.maxWidth !== undefined && width > options.maxWidth) ||
+    (options.maxHeight !== undefined && height > options.maxHeight) ||
+    (options.maxPixels !== undefined && width * height > options.maxPixels)
+  ) {
+    throw new Error(
+      `cannot decode a ${String(width)}x${String(height)} JPEG 2000 canvas; this exceeds the caller's configured size bound`,
+    );
+  }
   const componentCount = siz.components.length;
   const first = siz.components[0];
   if (first === undefined) {
