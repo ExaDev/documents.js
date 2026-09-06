@@ -1111,10 +1111,20 @@ class RtfWriter {
     return `${out}\\cellx${String(rightTwips)}`;
   }
 
+  // A cell's own content is a run of \intbl paragraphs -- RTF's own <celldef>/<cell> grammar is built around exactly that, with no room for a nested destination that isn't one. A non-paragraph block (embeddedObject, image, table, pageBreak) placed directly in a cell is therefore dropped, but reported rather than silently filtered out: see writeBlock's own top-level handling of the identical block kinds for what this cannot yet do here.
   private writeCellBlocks(blocks: readonly ContentBlock[]): void {
-    const paragraphs = blocks.filter(
-      (block): block is ContentParagraph => block.kind === "paragraph",
-    );
+    const paragraphs: ContentParagraph[] = [];
+    for (const block of blocks) {
+      if (block.kind === "paragraph") {
+        paragraphs.push(block);
+        continue;
+      }
+      this.sink({
+        code: RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+        severity: "warning",
+        message: `a ${block.kind} block inside a table cell is dropped: this writer's own cell content is \\intbl paragraphs only, and RTF's table-cell grammar has no room for a nested destination that isn't one`,
+      });
+    }
     if (paragraphs.length === 0) {
       this.raw("\\pard\\plain\\intbl ");
       return;
