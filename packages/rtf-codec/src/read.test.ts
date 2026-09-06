@@ -908,6 +908,46 @@ describe("form fields", () => {
     )[0];
     expect(paragraph?.constructs ?? []).toEqual([]);
   });
+
+  // Regression guard: \*\ffname/\*\ffhelptext/\*\ffl/\*\formfield itself carry a name, a help string, a list entry, or nothing but their own control words -- never formatted document flow -- so a stray \par/\page/\sect inside any of them must be swallowed exactly like the analogous stray word already is inside \*\bkmkstart/\*\bkmkend, not applied to the paragraph/section/document surrounding the field. Before this guard, a \par here split the surrounding paragraph in two and a \page injected a top-level pageBreak block that does not belong to the field at all.
+  it("swallows a stray \\par inside \\*\\ffname instead of splitting the surrounding paragraph", () => {
+    const blocks = blocksOf(
+      `${HEADER}\\pard before {\\field{\\*\\fldinst FORMTEXT {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname a\\par b}}}}{\\fldrslt X}} after\\par}`,
+    );
+    expect(blocks).toHaveLength(1);
+    const paragraph = blocks[0] as ContentParagraph;
+    expect(paragraph.constructs?.[0]?.descriptor).toMatchObject({
+      tag: "ab",
+    });
+    expect(paragraph.runs.map((run) => run.text).join("")).toBe(
+      "before X after",
+    );
+  });
+
+  it("swallows a stray \\page inside \\*\\ffhelptext instead of injecting a spurious pageBreak block", () => {
+    const blocks = blocksOf(
+      `${HEADER}\\pard before\\par {\\field{\\*\\fldinst FORMTEXT {\\*\\formfield{\\fftype0\\fftypetxt0\\ffownhelp1{\\*\\ffhelptext h\\page t}{\\*\\ffname Text1}}}}{\\fldrslt X}} after\\par}`,
+    );
+    expect(blocks.some((block) => block.kind === "pageBreak")).toBe(false);
+    const paragraphs = blocks.filter(
+      (block): block is ContentParagraph => block.kind === "paragraph",
+    );
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[1]?.constructs?.[0]?.descriptor).toMatchObject({
+      alias: "ht",
+    });
+  });
+
+  it("swallows a stray \\par inside a \\*\\ffl entry instead of splitting the surrounding paragraph", () => {
+    const blocks = blocksOf(
+      `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN {\\*\\formfield{\\fftype2\\fftypetxt0\\ffhaslistbox{\\*\\ffl item1\\par item2}}}}{\\fldrslt X}}\\par}`,
+    );
+    expect(blocks).toHaveLength(1);
+    const paragraph = blocks[0] as ContentParagraph;
+    expect(paragraph.constructs?.[0]?.descriptor).toMatchObject({
+      options: ["item1item2"],
+    });
+  });
 });
 
 describe("byte runs larger than an argument list", () => {

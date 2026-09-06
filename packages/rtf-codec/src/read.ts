@@ -1977,6 +1977,15 @@ function applyControlWord(
   ) {
     return;
   }
+  if (
+    state.destination === "formField" ||
+    state.destination === "formFieldName" ||
+    state.destination === "formFieldHelpText" ||
+    state.destination === "formFieldListItem"
+  ) {
+    // Mirrors the bookmarkStart/bookmarkEnd guard above: \*\formfield carries no #PCDATA of its own (its content is entirely its own \ffres/\ffdefres/\ffprot/\ffownhelp control words, already handled above), and \*\ffname/\*\ffhelptext/\*\ffl's content is a name or help string, not formatted text -- so a stray character, paragraph, or structure control word inside any of the four (\par, \page, \sect, \b, ...) is ignored here rather than applied to the paragraph/section/document surrounding the field.
+    return;
+  }
   if (applyCharacterControlWord(name, param, state, header)) {
     return;
   }
