@@ -87,6 +87,11 @@ function asciiZeroTerminated(
   const bytes = new Uint8Array(value.length + 1); // +1 for the terminator, already zero from the Uint8Array's own zero-fill
   for (let index = 0; index < value.length; index++) {
     const code = value.charCodeAt(index);
+    if (code === 0) {
+      throw new OlePackageWriteError(
+        `Package stream's ${fieldName} contains an embedded NUL byte, which this field's own null-terminated encoding cannot carry: it would silently truncate the field and mis-frame every field written after it`,
+      );
+    }
     if (code > 0x7f) {
       throw new OlePackageWriteError(
         `Package stream's ${fieldName} contains a character (U+${code.toString(16).padStart(4, "0")}) outside ASCII; encoding it to an arbitrary windows-1252 byte would need a full codepage table this package does not carry`,

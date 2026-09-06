@@ -162,4 +162,35 @@ describe("writeOlePackage", () => {
       }),
     ).toThrow(OlePackageWriteError);
   });
+
+  // A NUL byte is itself ASCII (U+0000, well under 0x7f), so the non-ASCII check above cannot catch it -- but this field's own encoding is null-terminated, so an embedded NUL would silently truncate the field and mis-frame every field written after it, exactly the round-trip guarantee this function's own doc comment states.
+  it("throws OlePackageWriteError when label contains an embedded NUL byte", () => {
+    expect(() =>
+      writeOlePackage({
+        label: "a\u0000b",
+        sourcePath: "",
+        tempPath: "",
+        fileBytes: new Uint8Array(0),
+      }),
+    ).toThrow(OlePackageWriteError);
+  });
+
+  it("throws OlePackageWriteError when sourcePath or tempPath contains an embedded NUL byte", () => {
+    expect(() =>
+      writeOlePackage({
+        label: "a",
+        sourcePath: "C:\\a\u0000b.docx",
+        tempPath: "",
+        fileBytes: new Uint8Array(0),
+      }),
+    ).toThrow(OlePackageWriteError);
+    expect(() =>
+      writeOlePackage({
+        label: "a",
+        sourcePath: "",
+        tempPath: "C:\\a\u0000b.docx",
+        fileBytes: new Uint8Array(0),
+      }),
+    ).toThrow(OlePackageWriteError);
+  });
 });
