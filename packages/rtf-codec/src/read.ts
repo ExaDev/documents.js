@@ -421,6 +421,10 @@ interface GroupState {
   picture: PictureState | undefined;
   objectData: ObjectDataState | undefined;
   object: ObjectState | undefined;
+  // True only on the one GroupState created directly for an {\*\objdata ...} destination's own group -- objectData itself is still carried forward BY REFERENCE across every descendant group (a stray \binN/\'hh byte inside a nested group must still land in the same accumulator the real \objdata group started), so the group-end handler that calls buildEmbeddedObject needs its own, non-inherited marker to fire exactly once per \objdata construct rather than once per descendant group that happens to close underneath it. Mirrors resultOf's own "set on the direct child, cleared by cloneGroupState" shape below, for the identical reason: a plain nested group inside \objdata's content (or a malformed one a hostile producer wrote) must not re-trigger this group's own finalisation when IT closes too.
+  objectDataOwner: boolean;
+  // The same ownership marker for {\object ...} itself: `object` is carried forward by reference so \objw/\objh control words and \objdata/\result's own group-open checks can reach the shared ObjectState from any depth inside \object's own group, but the group-end handler that splices \result's fallback in (or reports EMBEDDED_OBJECT_UNREADABLE) must fire only once, when \object's own group actually closes -- not on every plain sibling group nested directly inside it (RTF's own <obj> grammar allows only <objdata> and <result> there, but a malformed producer can write anything).
+  objectOwner: boolean;
   // Set only on the one GroupState created directly for a \result destination's own group -- the enclosing \object's shared state to report the finished scratch blocks back to when this group closes. Deliberately NOT carried forward by cloneGroupState the way `object` is: a plain nested group inside \result's own content (every test fixture's `{\result{\pard\plain ...\par}}` has one) must not re-trigger this group's own finalisation a second time when IT closes, so only the direct child gets this field and every descendant clones it back to undefined.
   resultOf: ObjectState | undefined;
   bookmark: BookmarkState | undefined;
@@ -472,6 +476,8 @@ function cloneGroupState(state: GroupState): GroupState {
     picture: state.picture,
     objectData: state.objectData,
     object: state.object,
+    objectDataOwner: false,
+    objectOwner: false,
     resultOf: undefined,
     bookmark: state.bookmark,
     inUnicodeWrapper: state.inUnicodeWrapper,
@@ -1554,6 +1560,8 @@ function readRtfDetail(
     picture: undefined,
     objectData: undefined,
     object: undefined,
+    objectDataOwner: false,
+    objectOwner: false,
     resultOf: undefined,
     bookmark: undefined,
     inUnicodeWrapper: false,
@@ -1761,6 +1769,7 @@ function readRtfDetail(
         }
         if (kind === "objectData") {
           child.objectData = { bytes: [], pendingHexNibble: undefined };
+          child.objectDataOwner = true;
         }
         if (kind === "object") {
           // Freshly resolved here as the group is actually entered, not predicted ahead of time -- \objdata and \result (below) each report into this same shared state as they are actually read, and \object's own group-end handling (further down) reads it back once every child has been.
@@ -1772,6 +1781,7 @@ function readRtfDetail(
             widthTwips: undefined,
             heightTwips: undefined,
           };
+          child.objectOwner = true;
         }
         if (kind === "bookmarkStart" || kind === "bookmarkEnd") {
           child.bookmark = {
@@ -1806,7 +1816,8 @@ function readRtfDetail(
       }
       if (
         state.destination === "objectData" &&
-        state.objectData !== undefined
+        state.objectData !== undefined &&
+        state.objectDataOwner
       ) {
         const embedded = buildEmbeddedObject(
           state.objectData,
@@ -1825,7 +1836,11 @@ function readRtfDetail(
         // \result's own scratch accumulator (opened by beginResultScratch when this group started) is finished now: every \par it contained has already closed a real paragraph inside it, and endResultScratch force-closes whatever paragraph was still open otherwise. Recorded, not yet acted on: \object's own group-end handling further up the stack either splices these blocks in or discards them once \objdata's real decode's fate is finally known, and this \result's own group-end cannot know that outcome when \result comes first in the source -- \objdata may not even have been read yet.
         state.resultOf.resultBlocks = builder.endResultScratch(state.para);
       }
-      if (state.destination === "object" && state.object !== undefined) {
+      if (
+        state.destination === "object" &&
+        state.object !== undefined &&
+        state.objectOwner
+      ) {
         // Every child \objdata/\result this \object's own group can legally contain has, by construction, already closed by the time \object's own closing brace is reached -- so `decoded`, `objectDataSeen` and `resultBlocks` are all final here, regardless of which sibling the source actually listed first.
         const objectState = state.object;
         if (!objectState.decoded && objectState.resultBlocks !== undefined) {

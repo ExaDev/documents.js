@@ -990,6 +990,65 @@ describe("embedded objects", () => {
       ),
     ).toBe(true);
   });
+
+  // cloneGroupState carries `destination`/`objectData`/`object` forward BY REFERENCE to every descendant group, including a plain, unrecognised nested group RTF's own <obj>/<objdata> grammar does not allow but a malformed producer can still write. Without an ownership marker distinguishing the group that actually opened a destination from a descendant that merely inherited it, the group-end handlers below would fire once per descendant that happens to close underneath a shared \objdata/\object, not once per construct.
+  describe("a stray nested group inside \\objdata or \\object", () => {
+    it("does not duplicate the decoded embeddedObject block", () => {
+      const object = blocksOf(
+        `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${OBJDATA_HEX}{\\b x}}}\\par}`,
+      ).filter((block) => block.kind === "embeddedObject");
+      expect(object).toHaveLength(1);
+    });
+
+    it("does not duplicate the EMBEDDED_OBJECT_UNREADABLE warning for an undecodable payload", () => {
+      const { diagnostics } = readRtfContent(
+        bytes(
+          `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f{\\b x}}}\\par}`,
+        ),
+      );
+      expect(
+        diagnostics.filter(
+          (diagnostic) =>
+            diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+        ),
+      ).toHaveLength(1);
+    });
+
+    it("does not splice \\result's fallback content in twice", () => {
+      const { document } = readRtfContent(
+        bytes(
+          `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 0102030405}{\\result{\\pard\\plain FALLBACK\\par}}{\\b y}}\\par}`,
+        ),
+      );
+      if (document.kind !== "wordprocessing") {
+        throw new Error(
+          `expected a wordprocessing document, got ${document.kind}`,
+        );
+      }
+      const fallbackParagraphs = document.sections[0]?.blocks.filter(
+        (block) =>
+          block.kind === "paragraph" &&
+          block.runs.some((run) => run.text.includes("FALLBACK")),
+      );
+      expect(fallbackParagraphs).toHaveLength(1);
+    });
+
+    it("does not report a false 'no \\objdata and no \\result' diagnostic when \\result exists later in the source", () => {
+      const { diagnostics } = readRtfContent(
+        bytes(
+          `${HEADER}\\pard{\\object\\objemb{\\b y}{\\result{\\pard\\plain FALLBACK\\par}}}\\par}`,
+        ),
+      );
+      const embeddedObjectDiagnostics = diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
+      );
+      expect(embeddedObjectDiagnostics).toHaveLength(1);
+      expect(embeddedObjectDiagnostics[0]?.message).toContain(
+        "its \\result fallback content is used in its place",
+      );
+    });
+  });
 });
 
 describe("fields and destinations", () => {
