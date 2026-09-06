@@ -43,6 +43,8 @@ import {
 import {
   bookmarkAnchorDescriptor,
   coalesceRunConstructs,
+  formFieldContentControl,
+  formFieldControlType,
   NO_REVISION,
   provenanceDescriptors,
   type RevisionState,
@@ -94,7 +96,11 @@ type DestinationKind =
   | "listText" // the flat rendering of a list number, which a numbering-aware reader must ignore
   | "unicodeWrapper" // \upr, whose ANSI half is discarded and whose \ud half is read
   | "bookmarkStart" // {\*\bkmkstart ...}, whose text is the bookmark's own name
-  | "bookmarkEnd"; // {\*\bkmkend ...}, likewise
+  | "bookmarkEnd" // {\*\bkmkend ...}, likewise
+  | "formField" // {\*\formfield ...}, nested inside \fldinst: no #PCDATA of its own, carried entirely by its own control words and the two destinations below
+  | "formFieldName" // {\*\ffname ...}, whose text is the form field's own bookmark-style name
+  | "formFieldHelpText" // {\*\ffhelptext ...}, whose text is the form field's own human-readable help text -- the closest RTF analogue to a contentControl's `alias`
+  | "formFieldListItem"; // {\*\ffl ...}, whose text is a dropdown's own list entry
 
 const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   // Transparent wrappers whose content is ordinary body flow.
@@ -108,6 +114,17 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["listtext", "listText"],
   ["pntext", "listText"],
   ["upr", "unicodeWrapper"],
+  ["formfield", "formField"],
+  ["ffname", "formFieldName"],
+  ["ffhelptext", "formFieldHelpText"],
+  ["ffl", "formFieldListItem"],
+  // FFData.xstzTextDef, a plainText field's own default/reset text -- deliberately not captured: constructs.ts's own formFieldContentControl never promotes it onto a contentControl (a field's genuinely CURRENT text already rides the wrapped \fldrslt runs this destination sits alongside, and the default is a different fact -- see that function's own top comment), so there is no raw-data consumer left for a captured value to serve. Recognised and silently skipped rather than left unmapped, so a real producer's \ffdeftext reads as a known, deliberately-unused destination rather than an "unrecognised destination" diagnostic.
+  ["ffdeftext", "skip"],
+  // The remaining four <formstrings> destination strings RTF's own Form Fields table names alongside \ffname/\ffdeftext/\ffhelptext/\ffl (write.ts's own top-of-file comment on formFieldPayload quotes the full <formstrings> production): \ffformat (a text field's own input-format mask), \ffstattext (status-line text, gated by \ffownstat exactly as \ffhelptext is gated by \ffownhelp), \ffentrymcr and \ffexitmcr (entry/exit macro names). RtfFormFieldData (below) has no member for any of the four -- document-schema.js's ContentControlDescriptor has no format-mask, status-text, or macro-name field for a form field construct to carry them in -- so, like \ffdeftext, each is recognised and silently skipped rather than left unmapped.
+  ["ffformat", "skip"],
+  ["ffstattext", "skip"],
+  ["ffentrymcr", "skip"],
+  ["ffexitmcr", "skip"],
   // Content this reader deliberately does not place. ContentDocument has no page furniture, note, or annotation position for any of these to land in: a header/footer is page furniture with no ContentSection field to carry it, and a footnote body's real home is document-schema.js's tree-only definitions table, which the flat form this reader produces cannot reach. Each is skipped with a diagnostic rather than silently, and each is listed in the README's own gap table.
   ["footnote", "skip"],
   ["header", "skip"],
@@ -162,7 +179,14 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
 //  - \falt, \panose and \fname are <fontinfo> sub-productions the header parser already consumed.
 //  - \atn*, \objclass/\objname/\objdata and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct.
 //  - The footnote and endnote separators are page furniture with no content of their own, and \xe/\tc/\tcn are index and table-of-contents entry markers whose text is derivable from the document they mark.
+//  - \ffdeftext is a plainText form field's own default/reset text (FFData.xstzTextDef), never promoted onto the field's contentControl by design -- its genuinely current text already rides the wrapped \fldrslt runs alongside it (see constructs.ts's own formFieldContentControl top comment).
+//  - \ffformat/\ffstattext/\ffentrymcr/\ffexitmcr are the remaining <formstrings> destination strings alongside \ffdeftext: RtfFormFieldData carries no member for any of them, since ContentControlDescriptor has no field a form field's input-format mask, status text, or entry/exit macro name could land in.
 const SILENT_SKIP_DESTINATIONS: ReadonlySet<string> = new Set([
+  "ffdeftext",
+  "ffformat",
+  "ffstattext",
+  "ffentrymcr",
+  "ffexitmcr",
   "pn",
   "pnseclvl",
   "nonshppict",
@@ -302,9 +326,23 @@ interface PictureState {
   binary: number[];
 }
 
-// Shared by reference across a field group and its children, so a \fldrslt group reads the instruction its sibling \fldinst already collected without either needing to know the other's stack depth.
+// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffhelptext/\*\ffl destinations close and its \ffres/\ffdefres/\ffprot/\ffownhelp control words apply. \*\ffdeftext and its four <formstrings> siblings (\*\ffformat/\*\ffstattext/\*\ffentrymcr/\*\ffexitmcr) are deliberately not one of these: each one's content is skipped whole (SILENT_SKIP_DESTINATIONS above), since nothing here consumes any of them.
+interface FormFieldState {
+  name: string;
+  helpText: string;
+  ownHelp: boolean;
+  listItems: string[];
+  resultIndex: number | undefined;
+  defaultResultIndex: number | undefined;
+  protectedField: boolean;
+}
+
+// Shared by reference across a field group and its children, so a \fldrslt group reads the instruction its sibling \fldinst already collected without either needing to know the other's stack depth. `formField` is `undefined` until a nested \*\formfield destination opens -- a legacy field with no \*\formfield group at all still has an instruction, just no further form-field data.
 interface FieldState {
   instruction: string;
+  formField: FormFieldState | undefined;
+  // Guards startFormField below against firing twice for the one field: a real Word-authored \field wraps its own \*\fldinst instruction text in an anonymous nested group (e.g. `{\*\fldinst {FORMTEXT }...}`), and that nested group inherits the enclosing "fieldInstruction" destination just like the \*\fldinst group itself does -- so both the nested group's own close and \*\fldinst's own close see formFieldControlType return a real controlType and would otherwise each open their own extent for what is really one field. Set true the first time startFormField is actually called for this field, since FieldState is the one object shared by reference across the whole \field group's subtree.
+  formFieldStarted: boolean;
 }
 
 // One {\*\bkmkstart ...} or {\*\bkmkend ...} group under construction: its #PCDATA name, plus the start half's optional table-column range.
@@ -324,6 +362,8 @@ interface GroupState {
   bookmark: BookmarkState | undefined;
   // Whether this group is a \upr wrapper's own child that must be discarded (the ANSI half). Set on the wrapper; consulted when a child group opens.
   inUnicodeWrapper: boolean;
+  // Whether this group's own head is \field itself, set explicitly on every group open (never inherited) exactly like inUnicodeWrapper above -- state.field is shared by reference down through \field's own descendants, so this is the one flag that tells the group-close handler "this closing brace is the field's own, not one of its children's".
+  isFieldGroup: boolean;
 }
 
 function defaultCharacterState(): CharacterState {
@@ -368,6 +408,7 @@ function cloneGroupState(state: GroupState): GroupState {
     picture: state.picture,
     bookmark: state.bookmark,
     inUnicodeWrapper: state.inUnicodeWrapper,
+    isFieldGroup: state.isFieldGroup,
   };
 }
 
@@ -445,6 +486,12 @@ function skipUnicodeFallback(
     textOffset = 0;
   }
   return { index, textOffset };
+}
+
+// A \field group's own run range, open from its head brace to its closing one. paragraphSerial guards against a \par or \cell landing inside \fldrslt: RTF 1.9.1's own <fieldrslt> production ('{' \fldrslt <para>+ '}') is grammatical for a multi-paragraph result even though real producers keep form fields inline in practice, and without this check a stale runIndex captured before the paragraph reset could produce an inverted startRun/endRun pair. When it fires, endFormField below drops the contentControl and reports why through the sink, rather than mis-attaching it to whichever paragraph happens to be open once the field closes.
+interface OpenFormField {
+  readonly paragraphSerial: number;
+  readonly runIndex: number;
 }
 
 // A bookmark start held open until its end arrives, at which point the pair's own scope decides its encoding. `blockIndex` is filled in when the paragraph the start sits in takes its place in a block list, and stays undefined for a pair that opens and closes inside one paragraph.
@@ -546,6 +593,8 @@ class ContentBuilder {
   private pendingRunConstructs: RunConstructExtent[] = [];
   // Bookmarks whose end half arrived in the paragraph currently accumulating, having started in an earlier one -- resolvable only once that paragraph's own block index is known.
   private closingBookmarks: OpenBookmark[] = [];
+  // Form fields, held open the same way as a bookmark, but stacked rather than named: a \field group's own open and close are one matched pair, not two independently placed halves. Real producers keep a form field's \fldrslt inline, within one paragraph, but RTF's own grammar permits a multi-paragraph result (see OpenFormField's own comment above), so the paragraphSerial check in endFormField below is a genuine cross-paragraph guard, not merely defensive: it catches that case and drops the contentControl with a diagnostic rather than producing an inverted or mis-attached range.
+  private openFormFields: OpenFormField[] = [];
 
   constructor(
     private readonly header: RtfHeader,
@@ -595,6 +644,49 @@ class ContentBuilder {
       return;
     }
     this.closingBookmarks.push(open);
+  }
+
+  // Called only once a `\*\fldinst` destination's own close has confirmed the field is a genuine form field (FORMTEXT/FORMCHECKBOX/FORMDROPDOWN) -- never for an ordinary field (PAGE, DATE, NUMPAGES, REF, SEQ, TOC, MERGEFIELD, and the rest), which has no `\*\formfield` extent to open at all. Flushing first for the same reason startBookmark does: the extent's boundary is a run boundary. No text is appended between `{\field`'s own open and `\*\fldinst`'s close, so the run boundary this opens lands in exactly the same place it would if opened at `{\field` itself.
+  startFormField(): void {
+    this.flushRun();
+    this.openFormFields.push({
+      paragraphSerial: this.paragraphSerial,
+      runIndex: this.runs.length,
+    });
+  }
+
+  // The matching "}" for a `\field` group startFormField above already opened an extent for -- the caller invokes this whenever FieldState.formFieldStarted is true, so `open` here is never undefined except for genuinely malformed, unbalanced RTF. `descriptor` can still be undefined: startFormField fires as soon as an EARLY, partial instruction (read at some nested \*\fldinst-destination group's own close) names a form-field keyword, but a real Word-authored instruction can keep growing after that point (see startFormField's own call site comment), and RTF's word-boundary anchoring in formFieldControlType means appending more identifier characters directly after the keyword -- with no separating space or switch delimiter -- can make the COMPLETE instruction stop matching a pattern a strictly shorter prefix of it satisfied. Popping unconditionally here, rather than only when a descriptor happens to still be available, is what keeps this stack's own push and pop provably paired regardless of that edge case.
+  endFormField(descriptor: ConstructDescriptor | undefined): void {
+    this.flushRun();
+    const open = this.openFormFields.pop();
+    if (open === undefined) {
+      return;
+    }
+    if (descriptor === undefined) {
+      // The word-boundary edge case above: this field's own instruction named a recognised form-field keyword at some intermediate point, opening the extent, but no longer does now that it is complete. There is no contentControl left to attach the extent to, so it is dropped -- reported through the sink like every other drop this feature makes, rather than disappearing silently.
+      this.sink({
+        code: RtfDiagnosticCodes.FORM_FIELD_KEYWORD_LOST,
+        severity: "warning",
+        message:
+          "a form field's contentControl is dropped: its \\*\\fldinst instruction matched a form-field keyword partway through parsing but no longer did once the complete instruction was read",
+      });
+      return;
+    }
+    if (open.paragraphSerial !== this.paragraphSerial) {
+      // A RunConstructExtent is scoped to one paragraph's own runs, so a \fldrslt whose content crossed a \par or \cell (see the comment on OpenFormField above) leaves no extent this reader can express -- the contentControl is dropped rather than mis-attached to whichever paragraph happens to be open now. Every other drop in this feature reports through the sink; this one must too rather than disappearing silently.
+      this.sink({
+        code: RtfDiagnosticCodes.FORM_FIELD_SPAN_DROPPED,
+        severity: "warning",
+        message:
+          "a form field's contentControl is dropped: its \\fldrslt content crossed a paragraph or table-cell boundary, and this reader's per-paragraph construct extent cannot span one",
+      });
+      return;
+    }
+    this.pendingRunConstructs.push({
+      descriptor,
+      startRun: open.runIndex,
+      endRun: this.runs.length,
+    });
   }
 
   appendText(
@@ -1169,6 +1261,16 @@ function toggleValue(param: number | undefined): boolean {
   return param === undefined || param !== 0;
 }
 
+// \ffownhelpN and \ffprotN are classified as "Value" control words, not "Toggle" words like \b/\i, in RTF 1.9.1's own Appendix B ("Index of RTF Control Words") -- and Appendix B's own "Value"/"Toggle" definitions there are what settle which of the two defaults actually applies. "Value: This control word requires a parameter" states no default of its own for an omitted parameter. "Toggle: This control word distinguishes between the ON and OFF states for the given property. The control word with no parameter or a nonzero parameter is used to turn on the property, while the control word with a zero parameter is used to turn it off" -- quoted here in full, since an earlier version of this comment elided exactly this clause -- DOES state one: a bare Toggle word defaults ON, not off. \ffownhelp/\ffprot are Value words, not Toggle ones, so it is the Value entry's own silence that governs them, and that silence is exactly why the real 0-default has to come from a genuinely separate part of the spec: "Conventions of an RTF Reader"'s own "Change Formatting Property" entry, which states it in full: "If a parameter is needed and not specified, then a default value is used... If the control word does not specify a default, then RTF readers should assume a default of 0 except for the toggle control words (like \b), which have a default of 1." RTF's own Form Fields table states the identical 0-default fact for this specific pair without ever describing a bare-word meaning of its own: "\ffownhelpN: 1 if there is associated help text, 0 otherwise" and "\ffprotN: 1 if this field is protected, 0 otherwise" name only an explicit 0/1 parameter -- unlike \b, whose own bare-word meaning IS stated right where its own table entry lives: \b's row ("\b* Bold.") sits in the "Font (Character) Formatting Properties" section, whose own immediately preceding preamble states the rule directly: "A control word preceding plain text turns on the specified attribute. Some control words (indicated in the following table by an asterisk following the description) can be turned off by appending 0 to the control word. For example, \b turns on bold, while \b0 turns off bold." (A near-identical sentence, "For example, \b turns on bold and \b0 turns off bold", also appears much earlier, in the "Control Word" section of the spec's Introduction -- illustrating the general toggle-word convention there, not \b's own table-adjacent meaning; an earlier version of this comment misattributed that Introduction sentence to a preamble "two sections" before \b's own entry, when the actually on-point preamble sits immediately beside it, in the same section.) A bare \ffprot therefore reads as 0/false here, not true, via this function. \ffownhelp is classified identically by the spec but is deliberately NOT read via this function -- see the comment on applyFormFieldControlWord's own "ffownhelp" case below for why a bare \ffownhelp reads as true in practice despite sharing this classification.
+function formFieldValueBit(param: number | undefined): boolean {
+  return param !== undefined && param !== 0;
+}
+
+// \ffresN/\ffdefresN are classified identically to \ffownhelpN/\ffprotN in RTF 1.9.1's own Appendix B -- generic "Value" control words -- so the same "Change Formatting Property" 0-default formFieldValueBit's own comment quotes in full applies to them too: a bare \ffres/\ffdefres means \ffresN0/\ffdefres0, not "no result recorded". [MS-DOC] 2.9.79 FFDataBits.iRes/iDef are integers rather than the single bit \ffprot carries, so the bare-defaults-to-0 rule is expressed as a number here rather than formFieldValueBit's own boolean, but it is the identical rule. Confusing a bare occurrence with the word's total absence would bypass FORM_FIELD_RESULT_UNDEFINED's own sentinel-then-\ffdefres fallback in constructs.ts: that fallback treats `undefined` as "this word never appeared, keep looking for a recorded value", so storing `undefined` for a bare \ffres/\ffdefres would misreport a producer's real, explicit 0 as if the field recorded no result at all -- letting a checkbox's bare \ffres fall through to an unrelated \ffdefres instead of reading as the unchecked state the bare word actually spells.
+function formFieldValueNumber(param: number | undefined): number {
+  return param ?? 0;
+}
+
 function readRtfDetail(
   input: Uint8Array,
   options: ReadRtfOptions,
@@ -1203,6 +1305,7 @@ function readRtfDetail(
     picture: undefined,
     bookmark: undefined,
     inUnicodeWrapper: false,
+    isFieldGroup: false,
   };
   const stack: GroupState[] = [root];
   let state = root;
@@ -1250,7 +1353,34 @@ function readRtfDetail(
       state.bookmark.name += text;
       return;
     }
-    // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText" and "unicodeWrapper" discard.
+    if (
+      state.destination === "formFieldName" &&
+      state.field?.formField !== undefined
+    ) {
+      state.field.formField.name += text;
+      return;
+    }
+    if (
+      state.destination === "formFieldHelpText" &&
+      state.field?.formField !== undefined
+    ) {
+      state.field.formField.helpText += text;
+      return;
+    }
+    if (
+      state.destination === "formFieldListItem" &&
+      state.field?.formField !== undefined
+    ) {
+      // Appends to the LAST item: a \*\ffl group's own open pushed one empty entry per occurrence, so several sibling \*\ffl groups (a dropdown's list) each accumulate into their own slot rather than one shared string.
+      const items = state.field.formField.listItems;
+      const last = items.length - 1;
+      const current = items[last];
+      if (current !== undefined) {
+        items[last] = current + text;
+      }
+      return;
+    }
+    // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText", "unicodeWrapper" and "formField" discard -- \*\ffdeftext (FFData.xstzTextDef) is one of these now, per SILENT_SKIP_DESTINATIONS above.
   };
 
   let index = 0;
@@ -1306,10 +1436,35 @@ function readRtfDetail(
       }
       const child = cloneGroupState(state);
       child.inUnicodeWrapper = kind === "unicodeWrapper";
+      // Recomputed on every group open rather than inherited from the clone, exactly like inUnicodeWrapper above: state.field is shared by reference down through a \field group's whole subtree, so without an explicit reset here every descendant group (\*\fldinst, \*\formfield, \fldrslt) would also read as "is the field's own group" and the close handler below would fire once per descendant instead of once for the field itself.
+      child.isFieldGroup = head.destination === "field";
       if (known !== undefined) {
         child.destination = kind;
-        if (head.destination === "field") {
-          child.field = { instruction: "" };
+        if (child.isFieldGroup) {
+          // No `builder.startFormField()` here: the instruction (this field's own `\*\fldinst` content) is still empty at this point, so formFieldControlType has nothing to decide a genuine form field from yet. The extent opens later, at `\*\fldinst`'s own close below, once that decision is actually possible.
+          child.field = {
+            instruction: "",
+            formField: undefined,
+            formFieldStarted: false,
+          };
+        }
+        if (head.destination === "formfield" && child.field !== undefined) {
+          // Mutates the SAME FieldState object the enclosing \field group's own children all share by reference, so \*\ffname/\*\ffl (nested inside this group) and the \field group's own closing brace (which reads it back to build the descriptor) see the identical data.
+          child.field.formField = {
+            name: "",
+            helpText: "",
+            ownHelp: false,
+            listItems: [],
+            resultIndex: undefined,
+            defaultResultIndex: undefined,
+            protectedField: false,
+          };
+        }
+        if (
+          head.destination === "ffl" &&
+          child.field?.formField !== undefined
+        ) {
+          child.field.formField.listItems.push("");
         }
         if (kind === "picture") {
           child.picture = defaultPictureState();
@@ -1350,6 +1505,24 @@ function readRtfDetail(
         } else if (state.destination === "bookmarkEnd") {
           builder.endBookmark(bookmark.name);
         }
+      }
+      if (
+        state.destination === "fieldInstruction" &&
+        state.field !== undefined &&
+        !state.field.formFieldStarted &&
+        formFieldControlType(state.field.instruction) !== undefined
+      ) {
+        // \*\fldinst's own instruction text is complete now (it is the only destination that appends to it), so this is the earliest point a genuine form field (FORMTEXT/FORMCHECKBOX/FORMDROPDOWN) can be told apart from an ordinary field (PAGE, DATE, NUMPAGES, and the rest) -- opening the extent here, rather than unconditionally at \field's own open, means an ordinary field never calls startFormField/flushRun at all. Guarded on formFieldStarted (see FieldState's own comment) because a real Word-authored \*\fldinst wraps its instruction text in its own anonymous nested group, which inherits this same "fieldInstruction" destination and would otherwise reach this branch a second time when it closes.
+        builder.startFormField();
+        state.field.formFieldStarted = true;
+      }
+      if (state.isFieldGroup && state.field?.formFieldStarted === true) {
+        // The whole field is read by now -- \*\fldinst and \*\formfield are this group's own earlier children, already closed -- so this is the one point that knows both the instruction and whatever form-field data it carried. Gated on formFieldStarted, not on `descriptor` being defined: startFormField above already opened this field's extent (an ordinary field, which never does, correctly never reaches endFormField either), and endFormField's own job is closing whatever startFormField opened -- not re-deciding whether it should have been opened from a second, independently re-derived read of the instruction, which is exactly what let open and close firing conditions drift apart (see endFormField's own comment on `descriptor` possibly being undefined here).
+        const descriptor = formFieldContentControl(
+          state.field.instruction,
+          state.field.formField,
+        );
+        builder.endFormField(descriptor);
       }
       if (stack.length > 1) {
         stack.pop();
@@ -1518,6 +1691,30 @@ function applyPictureControlWord(
       return;
     default:
       return;
+  }
+}
+
+// RTF 1.5's own Form Fields table states \ffresN/\ffdefresN only in list-field terms ("Result field for a form field. Values from 0 to N-1, where N is the number of \ffl entries" / "Default entry for list field"), but \ffres/\ffdefres are RTF's own serialisation of the binary FFDataBits structure [MS-DOC] 2.9.79 defines, and that structure spells out a checkbox's own iRes meaning explicitly: 0 (unchecked), 1 (checked), or the reserved sentinel 25 (undefined, treated as unchecked). Both control words are captured here via formFieldValueNumber's own bare-defaults-to-0 Value-word rule, regardless of the field's iType; formFieldContentControl in constructs.ts is where the checkbox-specific sentinel handling and the dropdown's own zero-based-index reading of the identical \ffres are actually decided. \ffprot ("1 if this field is protected, 0 otherwise" -- RTF 1.9.1's own Form Fields table, mirroring [MS-DOC] 2.9.79 FFDataBits.fProt) is read via formFieldValueBit above, matching its own Value-word classification's literal 0-default for a bare occurrence -- see formFieldValueBit's own comment for the exact citations. \ffownhelp is deliberately NOT read the same way, despite carrying the identical Value-word classification: LibreOffice's own RTF exporter (sw/source/filter/ww8/rtfattributeoutput.cxx, confirmed against its published source) emits the BARE control word, with no numeric parameter, whenever the control model exposes a HelpText property at all -- every one of its three FFOWNHELP emission sites gates on `xPropSetInfo->hasPropertyByName("HelpText")`, a property-existence check, not a literal unconditional emission -- immediately before a `{\*\ffhelptext ...}` destination that actually carries the control's real HelpText property -- so treating a bare occurrence as the Value-word literal default of false, the way \ffprot's bare form correctly does, silently discards genuine author-set help text from this real producer on every read, with the reader's own downstream `helpText.trim().length > 0` check in constructs.ts already filtering out the empty/absent case the spec's 0-default exists to describe. \ffownhelp is read via toggleValue instead, exactly like a bare `\b`/`\i`: this is a considered divergence from its own literal Value-word default, not an oversight, made for the identical real-world-producer reason FORM_FIELD_RESULT_UNDEFINED's own \ffres25-to-\ffdefres fallback exists above -- do not "simplify" this back to formFieldValueBit, that would re-break the LibreOffice case this divergence exists for. An explicit \ffownhelp0 still reads as false (a producer that spells out the zero is making an explicit claim the reader still honours), and a field that never mentions \ffownhelp at all still defaults to false via FormFieldState's own initial value; only the bare, unparameterised form's own default changes.
+function applyFormFieldControlWord(
+  name: string,
+  param: number | undefined,
+  formField: FormFieldState,
+): boolean {
+  switch (name) {
+    case "ffres":
+      formField.resultIndex = formFieldValueNumber(param);
+      return true;
+    case "ffdefres":
+      formField.defaultResultIndex = formFieldValueNumber(param);
+      return true;
+    case "ffprot":
+      formField.protectedField = formFieldValueBit(param);
+      return true;
+    case "ffownhelp":
+      formField.ownHelp = toggleValue(param);
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -1803,6 +2000,23 @@ function applyControlWord(
     return;
   }
   if (state.destination === "bookmarkEnd") {
+    return;
+  }
+  const formField = state.field?.formField;
+  if (
+    state.destination === "formField" &&
+    formField !== undefined &&
+    applyFormFieldControlWord(name, param, formField)
+  ) {
+    return;
+  }
+  if (
+    state.destination === "formField" ||
+    state.destination === "formFieldName" ||
+    state.destination === "formFieldHelpText" ||
+    state.destination === "formFieldListItem"
+  ) {
+    // Mirrors the bookmarkStart/bookmarkEnd guard above: \*\formfield carries no #PCDATA of its own (its content is entirely its own \ffres/\ffdefres/\ffprot/\ffownhelp control words, already handled above), and \*\ffname/\*\ffhelptext/\*\ffl's content is a name or help string, not formatted text -- so a stray character, paragraph, or structure control word inside any of the four (\par, \page, \sect, \b, ...) is ignored here rather than applied to the paragraph/section/document surrounding the field.
     return;
   }
   if (applyCharacterControlWord(name, param, state, header)) {
