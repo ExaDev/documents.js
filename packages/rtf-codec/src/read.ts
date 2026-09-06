@@ -2376,7 +2376,7 @@ function applyControlWord(
   }
   const object = state.object;
   if (state.destination === "object" && object !== undefined) {
-    // \objwN/\objhN (RTF 1.9.1, "Objects": <objsize> = \objw \objh), the size hint captured here for objectSizeHintClause's own use on the degrade path -- every other word \object's own scope can carry (\objemb, \objautlink, \objlock, \objupdate, \objsub, ...) is a bare marker this reader does not otherwise act on, since a decoded \objdata carries its own frame and an undecodable one falls back to \result instead.
+    // \objwN/\objhN (RTF 1.9.1, "Objects": <objhw> = \objhN & \objwN, one member of the larger <objsize> production), the size hint captured here for objectSizeHintClause's own use on the degrade path -- every other word \object's own scope can carry (\objemb, \objautlink, \objlock, \objupdate, \objsub, ...) is a bare marker this reader does not otherwise act on, since a decoded \objdata carries its own frame and an undecodable one falls back to \result instead.
     if (name === "objw") {
       object.widthTwips = param;
     } else if (name === "objh") {
