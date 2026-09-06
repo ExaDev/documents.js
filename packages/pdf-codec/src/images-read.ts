@@ -464,6 +464,8 @@ export function readImageXObject(
   if (
     width === undefined ||
     height === undefined ||
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
     width <= 0 ||
     height <= 0
   ) {

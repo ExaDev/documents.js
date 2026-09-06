@@ -316,6 +316,60 @@ describe("readImageXObject: degradation", () => {
     expect(diagnostics.some((d) => d.code === "image/undecodable")).toBe(true);
   });
 
+  it("skips a fractional /Width with a diagnostic rather than throwing out of encodePng", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const dict = pdfDict({
+      Width: pdfNum(1.5),
+      Height: pdfNum(1),
+      BitsPerComponent: pdfNum(8),
+      ColorSpace: pdfName("DeviceRGB"),
+    });
+    expect(() =>
+      readImageXObject(
+        dict,
+        new Uint8Array([10, 20, 30]),
+        EMPTY_RESOLVER,
+        sink,
+      ),
+    ).not.toThrow();
+    expect(
+      readImageXObject(
+        dict,
+        new Uint8Array([10, 20, 30]),
+        EMPTY_RESOLVER,
+        sink,
+      ),
+    ).toBeUndefined();
+    expect(diagnostics.some((d) => d.code === "image/undecodable")).toBe(true);
+  });
+
+  it("skips a NaN /Width (as produced by a lexer token of a bare '+', '-', or '.') with a diagnostic rather than throwing", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const dict = pdfDict({
+      Width: pdfNum(Number("-")), // mirrors readNumberToken's own Number(text) on a bare sign byte
+      Height: pdfNum(1),
+      BitsPerComponent: pdfNum(8),
+      ColorSpace: pdfName("DeviceRGB"),
+    });
+    expect(() =>
+      readImageXObject(
+        dict,
+        new Uint8Array([10, 20, 30]),
+        EMPTY_RESOLVER,
+        sink,
+      ),
+    ).not.toThrow();
+    expect(
+      readImageXObject(
+        dict,
+        new Uint8Array([10, 20, 30]),
+        EMPTY_RESOLVER,
+        sink,
+      ),
+    ).toBeUndefined();
+    expect(diagnostics.some((d) => d.code === "image/undecodable")).toBe(true);
+  });
+
   it("skips an /ImageMask stencil with an informational diagnostic", () => {
     const { sink, diagnostics } = collectDiagnostics();
     const dict = pdfDict({
