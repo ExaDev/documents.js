@@ -181,6 +181,7 @@ function appendImageFallback(
   }
 }
 
+// Known gap tracked as https://github.com/ExaDev/documents.js/issues/1038: nested.constructs' own startRun/endRun are relative to this nested call's zero-based runs array and are not rebased onto the outer runs array's length here (unlike read.ts's readPreRuns, which does rebase). Pre-existing at the merge-base; not fixed in this change.
 function appendNested(
   element: XmlElement,
   style: InlineStyle,
@@ -205,7 +206,7 @@ function appendAnchor(
     const startRun = runs.length;
     const nested = buildInlineRuns(element.children, style, context);
     runs.push(...nested.runs);
-    constructs.push(...nested.constructs);
+    constructs.push(...nested.constructs); // same unrebased-offset gap as appendNested above -- see issue #1038
     constructs.push({
       descriptor: {
         kind: "anchor",
@@ -228,7 +229,7 @@ function appendAnchor(
   for (const run of nested.runs) {
     runs.push({ ...run, hyperlink: href });
   }
-  constructs.push(...nested.constructs);
+  constructs.push(...nested.constructs); // same unrebased-offset gap as appendNested above -- see issue #1038
   if (
     sameDocumentFragment(href) === undefined &&
     !/^[a-z][a-z0-9+.-]*:/iu.test(href)
