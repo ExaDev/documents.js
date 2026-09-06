@@ -1,7 +1,7 @@
 import { readUint16LE, readUint8, slice } from "../bytes";
 import { DocFormatError, DocUnsupportedError } from "../errors";
 
-// The Sprm ("Single Property Modifier"), [MS-DOC] 2.6.1 and 2.9.244 -- the two-byte opcode every formatting change in the format is expressed as, and the Prl that pairs it with an operand. A grpprl is just a run of Prls back to back, with nothing marking where one ends: the only way to find the next is to size the current one's operand from its own opcode. Get one size wrong and every Prl after it in that grpprl is read from the wrong offset, so the operand-size table below is the single most load-bearing piece of arithmetic in this package after the piece table.
+// The Sprm ("Single Property Modifier"), [MS-DOC] 2.2.5.1 -- the two-byte opcode every formatting change in the format is expressed as, and the Prl that pairs it with an operand. A grpprl is just a run of Prls back to back, with nothing marking where one ends: the only way to find the next is to size the current one's operand from its own opcode. Get one size wrong and every Prl after it in that grpprl is read from the wrong offset, so the operand-size table below is the single most load-bearing piece of arithmetic in this package after the piece table.
 
 export interface Sprm {
   /** The raw 16-bit opcode, which is what the property tables in [MS-DOC] 2.6.1-2.6.5 are keyed on. */
@@ -17,7 +17,7 @@ export interface Prl {
   readonly operand: Uint8Array;
 }
 
-/** Sprm.sgc, [MS-DOC] 2.6.1 -- which property family the opcode belongs to. */
+/** Sprm.sgc, [MS-DOC] 2.2.5.1 -- which property family the opcode belongs to. */
 export const SGC = {
   paragraph: 1,
   character: 2,
@@ -26,7 +26,7 @@ export const SGC = {
   table: 5,
 } as const;
 
-// sprmTDefTable and sprmPChgTabs are the two opcodes [MS-DOC] 2.6.1's spra table singles out by name: "Operand is of variable length. The first byte of the operand indicates the size of the rest of the operand, except in the cases of sprmTDefTable and sprmPChgTabs." Both are named here rather than pattern-matched, because their exceptions differ in kind from each other as well as from the rule.
+// sprmTDefTable and sprmPChgTabs are the two opcodes [MS-DOC] 2.2.5.1's spra table singles out by name: "Operand is of variable length. The first byte of the operand indicates the size of the rest of the operand, except in the cases of sprmTDefTable and sprmPChgTabs." Both are named here rather than pattern-matched, because their exceptions differ in kind from each other as well as from the rule.
 const SPRM_T_DEF_TABLE = 0xd608;
 const SPRM_P_CHG_TABS = 0xc615;
 /** PChgTabsOperand.cb: "A value of 255 specifies that this instance of sprmPChgTabs MAY be ignored and that the size of the remainder of this operand ... is calculated by using the following formula". */
