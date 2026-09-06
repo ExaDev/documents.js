@@ -220,7 +220,7 @@ describe("the documents.js/read entry module graph excludes every X-to-PDF rende
     expect(
       readDocumentMetadata("pdf", docxToPdf(minimalDocxBytes())).producer,
     ).toBe("documents.js");
-  });
+  }, 60_000); // A real docxToPdf conversion plus a metadata read, timed out at almost exactly vitest's default 10s ceiling under CI/local contention (measured 10008-10016ms wall clock, but only ~5.5s of combined user+system CPU time -- 19% average utilization) rather than any genuine slowness in the code under test: a clean re-run of the identical, unmodified test with no timeout override completed in ~28s wall clock for that same ~5.5s of real work (ExaDev/documents.js#1039). Raised well past every observed contended run, the same "wall-clock dominated by scheduling, not this test's own CPU work" shape already documented for document-outline.js's UNIT_TEST_TIMEOUT_MS (ExaDev/documents.js#997/#1030) and this file's own sibling ODS mergeCells test (ExaDev/documents.js#1037).
 
   it("the package.json ./read export maps onto the read entry, pinning documents.js/read", () => {
     const parsed: unknown = JSON.parse(
