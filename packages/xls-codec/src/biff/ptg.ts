@@ -335,7 +335,7 @@ function quoteSheetLabel(label: string): string {
     : `'${label.replaceAll("'", "''")}'`;
 }
 
-/** The `'Sheet'!`, `'First:Last'!`, `'[Book]Sheet'!`, or `'#REF!(reason)'!` prefix a 3D reference's own ixti resolves to, or undefined only when this reader has nothing at all to say about it (an ixti past the end of EXTERNSHEET's own array) -- see WorkbookGlobals.sheetRanges. An external or otherwise-unresolved reference no longer aborts the whole formula's parse the way a genuinely unresolvable ixti still does: ExternalSheetLabel always carries a fully-formatted label, diagnostic placeholder included, so the formula stays present with whatever this reader could recover. */
+/** The `'Sheet'!`, `'First:Last'!`, or `'[Book]Sheet'!` prefix a 3D reference's own ixti resolves to, or undefined whenever this reader has nothing real to say about it -- an ixti past the end of EXTERNSHEET's own array, or an ExternalSheetLabel carrying a diagnostic placeholder rather than a genuinely recovered name (see WorkbookGlobals.sheetRanges). Either way the containing formula still aborts its whole parse, exactly like meeting any other construct this reader cannot turn into real formula text, rather than splicing a fabricated `#REF!(reason)` placeholder into what a spreadsheet application would otherwise treat as live formula content -- see ExternalSheetLabel's own doc comment for why. */
 function resolveSheetLabel(
   ixti: number,
   context: FormulaSheetContext,
