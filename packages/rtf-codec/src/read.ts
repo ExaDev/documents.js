@@ -120,6 +120,11 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
   ["ffl", "formFieldListItem"],
   // FFData.xstzTextDef, a plainText field's own default/reset text -- deliberately not captured: constructs.ts's own formFieldContentControl never promotes it onto a contentControl (a field's genuinely CURRENT text already rides the wrapped \fldrslt runs this destination sits alongside, and the default is a different fact -- see that function's own top comment), so there is no raw-data consumer left for a captured value to serve. Recognised and silently skipped rather than left unmapped, so a real producer's \ffdeftext reads as a known, deliberately-unused destination rather than an "unrecognised destination" diagnostic.
   ["ffdeftext", "skip"],
+  // The remaining four <formstrings> destination strings RTF's own Form Fields table names alongside \ffname/\ffdeftext/\ffhelptext/\ffl (write.ts's own top-of-file comment on formFieldPayload quotes the full <formstrings> production): \ffformat (a text field's own input-format mask), \ffstattext (status-line text, gated by \ffownstat exactly as \ffhelptext is gated by \ffownhelp), \ffentrymcr and \ffexitmcr (entry/exit macro names). RtfFormFieldData (below) has no member for any of the four -- document-schema.js's ContentControlDescriptor has no format-mask, status-text, or macro-name field for a form field construct to carry them in -- so, like \ffdeftext, each is recognised and silently skipped rather than left unmapped.
+  ["ffformat", "skip"],
+  ["ffstattext", "skip"],
+  ["ffentrymcr", "skip"],
+  ["ffexitmcr", "skip"],
   // Content this reader deliberately does not place. ContentDocument has no page furniture, note, or annotation position for any of these to land in: a header/footer is page furniture with no ContentSection field to carry it, and a footnote body's real home is document-schema.js's tree-only definitions table, which the flat form this reader produces cannot reach. Each is skipped with a diagnostic rather than silently, and each is listed in the README's own gap table.
   ["footnote", "skip"],
   ["header", "skip"],
@@ -175,8 +180,13 @@ const DESTINATION_KINDS: ReadonlyMap<string, DestinationKind> = new Map([
 //  - \atn*, \objclass/\objname/\objdata and \shpinst/\shptxt are sub-parts of \annotation, \object and \shp, each of which reports once for the whole construct.
 //  - The footnote and endnote separators are page furniture with no content of their own, and \xe/\tc/\tcn are index and table-of-contents entry markers whose text is derivable from the document they mark.
 //  - \ffdeftext is a plainText form field's own default/reset text (FFData.xstzTextDef), never promoted onto the field's contentControl by design -- its genuinely current text already rides the wrapped \fldrslt runs alongside it (see constructs.ts's own formFieldContentControl top comment).
+//  - \ffformat/\ffstattext/\ffentrymcr/\ffexitmcr are the remaining <formstrings> destination strings alongside \ffdeftext: RtfFormFieldData carries no member for any of them, since ContentControlDescriptor has no field a form field's input-format mask, status text, or entry/exit macro name could land in.
 const SILENT_SKIP_DESTINATIONS: ReadonlySet<string> = new Set([
   "ffdeftext",
+  "ffformat",
+  "ffstattext",
+  "ffentrymcr",
+  "ffexitmcr",
   "pn",
   "pnseclvl",
   "nonshppict",
@@ -316,7 +326,7 @@ interface PictureState {
   binary: number[];
 }
 
-// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffhelptext/\*\ffl destinations close and its \ffres/\ffdefres/\ffprot/\ffownhelp control words apply. \*\ffdeftext is deliberately not one of these: its content is skipped whole (SILENT_SKIP_DESTINATIONS above), since nothing here consumes it.
+// One \*\formfield group's own accumulating data (RtfFormFieldData's mutable twin), built up as its nested \*\ffname/\*\ffhelptext/\*\ffl destinations close and its \ffres/\ffdefres/\ffprot/\ffownhelp control words apply. \*\ffdeftext and its four <formstrings> siblings (\*\ffformat/\*\ffstattext/\*\ffentrymcr/\*\ffexitmcr) are deliberately not one of these: each one's content is skipped whole (SILENT_SKIP_DESTINATIONS above), since nothing here consumes any of them.
 interface FormFieldState {
   name: string;
   helpText: string;

@@ -796,6 +796,28 @@ describe("form fields", () => {
     });
   });
 
+  // Regression guard: \*\ffformat/\*\ffstattext/\*\ffentrymcr/\*\ffexitmcr are RTF's own remaining <formstrings> destination strings alongside \*\ffdeftext (RTF 1.5's own Form Fields table), which this reader already recognises and silently skips (SILENT_SKIP_DESTINATIONS in read.ts) for the identical reason -- no ContentControlDescriptor field exists to carry a text field's input-format mask, status-line text, or entry/exit macro name. A fully-populated real-world text field naming all five siblings must produce no UNKNOWN_DESTINATION_SKIPPED diagnostic for any of them.
+  it("stays silent about \\*\\ffformat/\\*\\ffstattext/\\*\\ffentrymcr/\\*\\ffexitmcr, the remaining <formstrings> siblings of \\*\\ffdeftext", () => {
+    const { diagnostics, document } = readRtfContent(
+      bytes(
+        `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname Text1}{\\*\\ffdeftext Jane Doe}{\\*\\ffformat 0}{\\*\\ffhelptext Client name}{\\*\\ffstattext Status}{\\*\\ffentrymcr Entry}{\\*\\ffexitmcr Exit}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
+      ),
+    );
+    expect(
+      diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === RtfDiagnosticCodes.UNKNOWN_DESTINATION_SKIPPED,
+      ),
+    ).toEqual([]);
+    const paragraph =
+      document.kind === "wordprocessing"
+        ? (document.sections[0]?.blocks[0] as ContentParagraph | undefined)
+        : undefined;
+    expect(paragraph?.constructs?.[0]?.descriptor).toMatchObject({
+      tag: "Text1",
+    });
+  });
+
   it("reads a FORMTEXT field's \\*\\ffhelptext as the contentControl's alias", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0\\ffownhelp1{\\*\\ffhelptext Client name}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
