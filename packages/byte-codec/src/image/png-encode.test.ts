@@ -76,8 +76,8 @@ function assertSpecCompliantPng(png: Uint8Array): void {
 
   expect(width).toBeDefined();
   expect(height).toBeDefined();
-  expect(width!).toBeGreaterThan(0); // PNG spec section 11.2.2 (IHDR): zero is an invalid value for width
-  expect(height!).toBeGreaterThan(0); // PNG spec section 11.2.2 (IHDR): zero is an invalid value for height
+  expect(width!).toBeGreaterThan(0); // PNG spec section 11.2.1 (IHDR): zero is an invalid value for width
+  expect(height!).toBeGreaterThan(0); // PNG spec section 11.2.1 (IHDR): zero is an invalid value for height
 
   if (colorType === 3) {
     expect(paletteEntryCount).toBeDefined();
