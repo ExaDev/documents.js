@@ -750,6 +750,57 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
     expect(cells[1]?.value).toEqual({ kind: "number", value: 42 });
   });
+
+  it("does not abort the whole sheet read when an array group's own rgce carries a token with a lying embedded length", () => {
+    // The same malformed-token-length hazard as the ShrFmla case above, joined through an Array group instead: the Array record's own cce (4) correctly bounds the 4 bytes of rgce that follow, so collectFormulaGroup's cursor reads all succeed and a group IS recovered for this base cell. The malformed part is inside that already-correctly-bounded rgce: a PtgStr token (0x17) whose own ShortXLUnicodeString cch claims 200 characters when only one byte of character data actually follows.
+    const arrayRgce = [0x17, 200, 0, 0x41];
+    const ptgExpToBase = [0x01, ...u16(1), ...u16(0)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(1, 0),
+        ...f64(2),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_ARRAY, [
+        ...u16(1),
+        ...u16(2),
+        0,
+        0, // ref: rwFirst=1, rwLast=2, colFirst=0, colLast=0
+        ...u16(0), // flags word
+        ...u32(0), // unused
+        ...u16(arrayRgce.length),
+        ...arrayRgce,
+      ]),
+      record(RECORD_NUMBER, [...cell(9, 9), ...f64(99)]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 2 });
+    expect(cells[1]?.value).toEqual({ kind: "number", value: 99 });
+  });
+
+  it("does not abort the whole sheet read when an ordinary (non-shared) Formula record's own rgce carries a token with a lying embedded length", () => {
+    // The same malformed-token-length hazard as the two group-joining cases above, but reached with no PtgExp at all -- this record's own rgce is handed to parseFormulaText directly (resolveFormulaText's `base === undefined` branch). The record's own cce (4) correctly bounds the 4 bytes of rgce that follow; the malformed part is inside that already-correctly-bounded rgce, the identical PtgStr (0x17) whose own ShortXLUnicodeString cch claims 200 characters when only one byte of character data actually follows. This degrades only this one cell's formula to absent rather than throwing an uncaught BiffFormatError out of readSheetRecords and aborting every other cell (and every other sheet) in the workbook.
+    const rgce = [0x17, 200, 0, 0x41];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 0),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(rgce.length),
+        ...rgce,
+      ]),
+      record(RECORD_NUMBER, [...cell(9, 9), ...f64(42)]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
+    expect(cells[1]?.value).toEqual({ kind: "number", value: 42 });
+  });
 });
 
 describe("readSheetRecords grid geometry", () => {
