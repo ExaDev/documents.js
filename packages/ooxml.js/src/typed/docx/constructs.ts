@@ -329,7 +329,8 @@ function readListItemOptions(sdtPr: XmlElement): string[] | undefined {
       options.push(decodeEntities(value));
     }
   }
-  return options.length === 0 ? undefined : options;
+  // A present-but-empty w:dropDownList/w:comboBox (a real, common shape: a list-type control authored with no items yet) is a list field with zero options, distinct from `list === undefined` above (not a list field at all) -- collapsing both onto `undefined` here would make the two indistinguishable (ExaDev/documents.js#1016).
+  return options;
 }
 
 // w14:checkbox's own w14:checked/@w14:val, accepting the plain-w spelling too for the same reason readControlType does. ECMA-376's ST_OnOff spelling ('0'/'false'/'off' being the only false values) matches the toggle convention used throughout typed/docx/styles.ts.
@@ -516,9 +517,8 @@ export function readFormControlDescriptor(
           options.push(decodeEntities(value));
         }
       }
-      if (options.length > 0) {
-        descriptor.options = options;
-      }
+      // Reaching this branch at all already means the field is w:ddList -- a list-type field with zero w:listItem children is still a list field, so options is always set here, never gated on length (ExaDev/documents.js#1016).
+      descriptor.options = options;
     }
     break;
   }

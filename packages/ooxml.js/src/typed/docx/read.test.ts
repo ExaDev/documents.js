@@ -1111,6 +1111,18 @@ describe("readDocxContent: legacy w:ffData form fields", () => {
     });
   });
 
+  it("reads a drop-down form field with no listItem entries as options: [], not an absent options field", () => {
+    const ffData = el("w:ffData", {}, [el("w:ddList", {}, [])]);
+    const paragraphRead = firstParagraph(
+      readDocxContent(formFieldPackage(ffData, " FORMDROPDOWN ", "")),
+    );
+    expect(paragraphRead.constructs?.[0]?.descriptor).toMatchObject({
+      kind: "contentControl",
+      controlType: "dropDown",
+      options: [],
+    });
+  });
+
   it("reads a text-input form field as a plainText contentControl", () => {
     const ffData = el("w:ffData", {}, [
       el("w:textInput", {}, [el("w:default", { "w:val": "typed" })]),
