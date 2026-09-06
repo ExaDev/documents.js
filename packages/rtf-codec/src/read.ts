@@ -655,11 +655,21 @@ class ContentBuilder {
     });
   }
 
-  // The matching "}" for a genuine form field's `\field` group -- the caller only invokes this once formFieldContentControl has already produced a real descriptor, matching startFormField above only ever having opened an extent for the same field, so `open` here is never undefined except for genuinely malformed, unbalanced RTF.
-  endFormField(descriptor: ConstructDescriptor): void {
+  // The matching "}" for a `\field` group startFormField above already opened an extent for -- the caller invokes this whenever FieldState.formFieldStarted is true, so `open` here is never undefined except for genuinely malformed, unbalanced RTF. `descriptor` can still be undefined: startFormField fires as soon as an EARLY, partial instruction (read at some nested \*\fldinst-destination group's own close) names a form-field keyword, but a real Word-authored instruction can keep growing after that point (see startFormField's own call site comment), and RTF's word-boundary anchoring in formFieldControlType means appending more identifier characters directly after the keyword -- with no separating space or switch delimiter -- can make the COMPLETE instruction stop matching a pattern a strictly shorter prefix of it satisfied. Popping unconditionally here, rather than only when a descriptor happens to still be available, is what keeps this stack's own push and pop provably paired regardless of that edge case.
+  endFormField(descriptor: ConstructDescriptor | undefined): void {
     this.flushRun();
     const open = this.openFormFields.pop();
     if (open === undefined) {
+      return;
+    }
+    if (descriptor === undefined) {
+      // The word-boundary edge case above: this field's own instruction named a recognised form-field keyword at some intermediate point, opening the extent, but no longer does now that it is complete. There is no contentControl left to attach the extent to, so it is dropped -- reported through the sink like every other drop this feature makes, rather than disappearing silently.
+      this.sink({
+        code: RtfDiagnosticCodes.FORM_FIELD_KEYWORD_LOST,
+        severity: "warning",
+        message:
+          "a form field's contentControl is dropped: its \\*\\fldinst instruction matched a form-field keyword partway through parsing but no longer did once the complete instruction was read",
+      });
       return;
     }
     if (open.paragraphSerial !== this.paragraphSerial) {
@@ -1506,15 +1516,13 @@ function readRtfDetail(
         builder.startFormField();
         state.field.formFieldStarted = true;
       }
-      if (state.isFieldGroup && state.field !== undefined) {
-        // The whole field is read by now -- \*\fldinst and \*\formfield are this group's own earlier children, already closed -- so this is the one point that knows both the instruction and whatever form-field data it carried. `descriptor` is undefined for an ordinary field, matching startFormField above never having opened an extent for it either, so endFormField is skipped rather than called with nothing to close.
+      if (state.isFieldGroup && state.field?.formFieldStarted === true) {
+        // The whole field is read by now -- \*\fldinst and \*\formfield are this group's own earlier children, already closed -- so this is the one point that knows both the instruction and whatever form-field data it carried. Gated on formFieldStarted, not on `descriptor` being defined: startFormField above already opened this field's extent (an ordinary field, which never does, correctly never reaches endFormField either), and endFormField's own job is closing whatever startFormField opened -- not re-deciding whether it should have been opened from a second, independently re-derived read of the instruction, which is exactly what let open and close firing conditions drift apart (see endFormField's own comment on `descriptor` possibly being undefined here).
         const descriptor = formFieldContentControl(
           state.field.instruction,
           state.field.formField,
         );
-        if (descriptor !== undefined) {
-          builder.endFormField(descriptor);
-        }
+        builder.endFormField(descriptor);
       }
       if (stack.length > 1) {
         stack.pop();

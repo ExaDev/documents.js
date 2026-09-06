@@ -126,6 +126,15 @@ describe("every read-side diagnostic code is reachable", () => {
       ),
     ).toContain(RtfDiagnosticCodes.FORM_FIELD_SPAN_DROPPED);
   });
+
+  it("rtf/form-field-keyword-lost", () => {
+    // A nested anonymous group closes with the instruction reading exactly "FORMTEXT" (matching via the word boundary at the end of the string read so far, opening the extent), then the outer \*\fldinst group appends "BOX" directly onto it with no separator -- once complete, "FORMTEXTBOX" no longer matches any form-field keyword's own \b boundary.
+    expect(
+      readCodes(
+        `${HEADER}\\pard {\\field{\\*\\fldinst{FORMTEXT}BOX}{\\fldrslt Y}}\\par}`,
+      ),
+    ).toContain(RtfDiagnosticCodes.FORM_FIELD_KEYWORD_LOST);
+  });
 });
 
 describe("every write-side diagnostic code is reachable", () => {

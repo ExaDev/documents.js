@@ -37,6 +37,7 @@ export const RtfDiagnosticCodes = {
   SECTION_BREAK_UNREPRESENTED: "rtf/section-break-unrepresented",
   BOOKMARK_UNPAIRED: "rtf/bookmark-unpaired",
   FORM_FIELD_SPAN_DROPPED: "rtf/form-field-span-dropped",
+  FORM_FIELD_KEYWORD_LOST: "rtf/form-field-keyword-lost",
   // Write side: a ContentDocument fact RTF's own vocabulary cannot state, or that this writer does not yet state.
   CONSTRUCT_UNREPRESENTED: "rtf/construct-unrepresented",
   EMBEDDED_OBJECT_DROPPED: "rtf/embedded-object-dropped",
