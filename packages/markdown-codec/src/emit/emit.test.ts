@@ -414,6 +414,122 @@ describe("headings", () => {
     });
   });
 
+  describe("a level-1/2 heading whose own break-following line would itself start an interrupting block construct never promotes to setext (ExaDev/documents.js#940)", () => {
+    // CommonMark's own setext grammar (spec 0.31.2, "Setext headings") has a third clause beyond the blank-line and first-line-indentation ones exercised above, in the same sentence: "The lines of text must be such that, were they not followed by the setext heading underline, they would be interpreted as a paragraph: they cannot be interpretable as a code fence, ATX heading, block quote, thematic break, list item, or HTML block." A bold or strikethrough run that becomes EMPTY immediately after a break lowers to a bare pair of emphasis markers with nothing between them -- "____" (a thematic break, the default '_' emphasisMarker doubled for bold) or "~~~~" (a code-fence opener, GFM's own fixed strikethrough marker) -- and reparsing either one back as its own construct destroys the heading rather than merely losing fidelity: pre-fix, "foo\n____\n===" read back as a plain paragraph "foo" plus TWO thematic breaks (the invented "____" one and the "===" underline, which is itself a valid thematic break once no open paragraph remains for it to become a setext underline of), and "foo\n~~~~\n===" read back as a plain paragraph "foo" plus a fenced code block swallowing the "===" underline whole -- both confirmed directly against the reference CommonMark implementation, and both WORSE than the merge-base's own pre-existing gap for the identical input (which lost fidelity but at least kept the heading level).
+    it.each([
+      {
+        level: "Heading1" as const,
+        shape: "bold run emptied by a soft break",
+        runs: [
+          { text: "foo" },
+          { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+          { text: "", bold: true },
+        ],
+      },
+      {
+        level: "Heading2" as const,
+        shape: "bold run emptied by a hard break",
+        runs: [{ text: "foo" }, { text: "\n" }, { text: "", bold: true }],
+      },
+      {
+        level: "Heading1" as const,
+        shape: "strikethrough run emptied by a soft break",
+        runs: [
+          { text: "foo" },
+          { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+          { text: "", strike: true },
+        ],
+      },
+    ])(
+      "collapses to ATX with a diagnostic instead of promoting $level to setext for a $shape",
+      ({ level, runs }) => {
+        const collector = createDiagnosticCollector();
+        const written = emitMarkdown(
+          doc([{ kind: "paragraph", runs, styleId: level }]),
+          {
+            sink: collector.sink,
+          },
+        );
+        expect(written).not.toContain("\n");
+        const diagnostic = collector.diagnostics.find(
+          (d) =>
+            d.code ===
+            MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        );
+        expect(diagnostic?.message).toContain("code fence");
+        expect(diagnostic?.message).toContain("thematic break");
+        expect(
+          collector.has(MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED),
+        ).toBe(false);
+      },
+    );
+
+    it.each([
+      {
+        level: "Heading1" as const,
+        shape: "bold run emptied by a soft break, thematic-break-shaped",
+        runs: [
+          { text: "foo" },
+          { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+          { text: "", bold: true },
+        ],
+      },
+      {
+        level: "Heading1" as const,
+        shape: "strikethrough run emptied by a soft break, code-fence-shaped",
+        runs: [
+          { text: "foo" },
+          { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+          { text: "", strike: true },
+        ],
+      },
+    ])(
+      "survives a full write-then-reread round trip as one intact $level heading for a $shape, rather than fracturing into a paragraph plus a stray thematic break or code block that swallows the trailing paragraph",
+      ({ level, runs }) => {
+        const written = emitMarkdown(
+          doc([
+            { kind: "paragraph", runs, styleId: level },
+            { kind: "paragraph", runs: [{ text: "next para" }] },
+          ]),
+        );
+        const reparsed = lowerMarkdown(written);
+        if (reparsed.kind !== "wordprocessing") {
+          throw new Error("expected a wordprocessing ContentDocument");
+        }
+        const blocks = reparsed.sections[0]?.blocks ?? [];
+        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId and level) and the trailing paragraph -- pre-fix, the heading fractured into a bare paragraph plus either two thematic breaks (bold) or a code block that swallowed the trailing paragraph entirely (strikethrough), losing the heading level and the trailing paragraph both.
+        expect(blocks).toHaveLength(2);
+        const [headingBlock, nextBlock] = blocks;
+        if (
+          headingBlock?.kind !== "paragraph" ||
+          nextBlock?.kind !== "paragraph"
+        ) {
+          throw new Error("expected two paragraph blocks");
+        }
+        expect(headingBlock.styleId).toBe(level);
+        expect(nextBlock.styleId).toBeUndefined();
+        expect(nextBlock.runs.map((run) => run.text).join("")).toBe(
+          "next para",
+        );
+      },
+    );
+
+    it("still promotes a break-following line to setext when it is ordinary text that would merely be absorbed as paragraph continuation, not one of the six interrupting constructs", () => {
+      const softBreakRuns = [
+        { text: "foo" },
+        { text: " ", source: { format: "markdown" as const, xml: "\n" } },
+        { text: "bar" },
+      ];
+      expect(
+        emitMarkdown(
+          doc([
+            { kind: "paragraph", runs: softBreakRuns, styleId: "Heading1" },
+          ]),
+        ),
+      ).toBe("foo\nbar\n===");
+    });
+  });
+
   describe("an explicit headingStyle: 'setext' request against a break-free heading that is unsafe on its own terms is still refused, with a diagnostic (ExaDev/documents.js#940)", () => {
     // Every OTHER unsafe-for-setext test in this file exercises a heading whose text embeds an actual line break -- the break itself is what makes setext a candidate rendering at all when headingStyle is left at its 'atx' default. This heading has NO embedded break anywhere: headingStyle: 'setext' is the ONLY reason setext is even attempted, and unsafeSetextBreakReason's own first-line-indentation check applies exactly as much to a single-line heading as to a multi-line one. Pre-fix, every heading-related diagnostic sat behind an `embedsLineBreak` guard, so this exact shape silently fell through to a bare, unmarked ATX heading -- an explicit caller preference honoured in appearance (setext was refused, correctly) but with zero signal that it happened.
     it("collapses to ATX with HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT when the heading's own (break-free) text is indented 4 or more columns", () => {
