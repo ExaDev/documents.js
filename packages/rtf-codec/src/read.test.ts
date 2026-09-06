@@ -845,7 +845,7 @@ describe("form fields", () => {
     });
   });
 
-  // \ffownhelp shares \ffprot's own Value-word classification but is deliberately read differently: LibreOffice's real RTF exporter (sw/source/filter/ww8/rtfattributeoutput.cxx) emits this bare form unconditionally alongside genuine, non-empty HelpText, so a bare \ffownhelp reads as true here rather than following the Value-word literal 0-default \ffprot's bare form still uses -- see read.ts's own comment on applyFormFieldControlWord's "ffownhelp" case.
+  // \ffownhelp shares \ffprot's own Value-word classification but is deliberately read differently: LibreOffice's real RTF exporter (sw/source/filter/ww8/rtfattributeoutput.cxx) emits this bare form whenever the control model exposes a HelpText property at all, alongside that genuine, non-empty HelpText, so a bare \ffownhelp reads as true here rather than following the Value-word literal 0-default \ffprot's bare form still uses -- see read.ts's own comment on applyFormFieldControlWord's "ffownhelp" case.
   it("reads a bare \\ffownhelp (no explicit parameter) as true, promoting a non-empty \\ffhelptext to alias, matching real-world producers like LibreOffice that emit this bare form", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0\\ffownhelp{\\*\\ffhelptext Client name}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
