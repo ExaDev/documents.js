@@ -460,7 +460,7 @@ function writeTable(
         const attrs: Record<string, string> = {};
         if (cell.colSpan !== undefined) attrs.colspan = String(cell.colSpan);
         if (cell.rowSpan !== undefined) attrs.rowspan = String(cell.rowSpan);
-        // A cell's own blocks are never decomposed (document-schema.js's own decompose treats a table as one leaf and never descends into its cells -- see package-node.ts's SheetChild/TreeLeaf commentary), so this is a raw ContentBlock[] that could in principle carry a construct-boundary marker; this package's own reader never puts one there, but a foreign producer's document might. isTreeBlockLeaf filters those out (with a diagnostic) rather than asserting the array's shape.
+        // A cell's own blocks are never decomposed (document-schema.js's own decompose treats a table as one leaf and never descends into its cells -- see package-node.ts's SheetChild/TreeLeaf commentary), so this is a raw ContentBlock[] that could in principle carry a construct-boundary marker; this package's own reader can produce exactly that when read.ts's flushStrayCell recovers a stray <blockquote> or footnote-target <aside> sitting directly inside a <tr> (readBlockquote/readBlockElement wrap their own recovered content in a division or footnote-anchor marker pair, and that recovered ContentBlock[] lands straight in the cell's own blocks), and a foreign producer's document might do the same by other means. isTreeBlockLeaf filters those out (with a diagnostic) rather than asserting the array's shape.
         for (const block of cell.blocks) {
           if (!isTreeBlockLeaf(block)) {
             context.sink({
