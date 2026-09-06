@@ -50,7 +50,10 @@ import type {
   MarkdownHeadingStyle,
   WriteMarkdownOptions,
 } from "../options/options";
-import { LINE_ENDING_PATTERN } from "../shared/line-ending";
+import {
+  ESCAPED_HARD_BREAK_PATTERN,
+  LINE_ENDING_PATTERN,
+} from "../shared/line-ending";
 import type { ListNumIdInfo } from "../shared/list-id";
 import { parseListNumId } from "../shared/list-id";
 import {
@@ -386,8 +389,8 @@ function renderParagraphBody(
           message: `a level ${String(level)} heading's own content contains a line break; only setext's own level-1/2 grammar can hold one, so ATX collapses it to a single space`,
         });
       }
-      // The escaped hard-break spelling (backslash immediately before the line ending) is always this package's own LF-only convention (escapeMarkdownText), so its backslash is stripped first, together with the newline it precedes, in one collapse; everything left over is then split on LINE_ENDING_PATTERN and rejoined with spaces, collapsing every remaining line ending -- a bare soft-break LF exactly as before, plus a bare CR or CRLF a run's own text or markdown residue can carry -- to the single space ATX's own single-physical-line grammar requires.
-      return `${"#".repeat(level)} ${text.replace(/\\\n/g, " ").split(LINE_ENDING_PATTERN).join(" ")}`;
+      // The escaped hard-break spelling (backslash immediately before the line ending) is stripped first via ESCAPED_HARD_BREAK_PATTERN, together with the line ending it precedes, in one collapse -- this package's own escapeMarkdownText always spells it with a trailing LF, but a run's own markdown residue can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately, and an LF-only strip would leave that backslash behind as a stray literal character once the LINE_ENDING_PATTERN split below removes the CRLF/CR out from under it. Everything left over is then split on LINE_ENDING_PATTERN and rejoined with spaces, collapsing every remaining line ending -- a bare soft-break LF exactly as before, plus a bare CR or CRLF a run's own text or markdown residue can carry -- to the single space ATX's own single-physical-line grammar requires.
+      return `${"#".repeat(level)} ${text.replace(ESCAPED_HARD_BREAK_PATTERN, " ").split(LINE_ENDING_PATTERN).join(" ")}`;
     }
     return `${"#".repeat(level)} ${text}`;
   }
