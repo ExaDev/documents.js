@@ -852,7 +852,7 @@ describe("embedded objects", () => {
     ).toBe(false);
   });
 
-  // Both orderings of <objdata> and <result> are legal RTF: RTF 1.9.1's own <obj> grammar lists <objdata> first, but does not forbid a producer writing the other way around. A reader that decides \result's fate from whichever sibling it happens to read first would double-render (or silently drop) content depending on order alone.
+  // RTF 1.9.1's own <obj> grammar juxtaposes <objdata> and <result> with no '&' between them, so its own Formal Syntax legend ("AB" = "Item A followed by item B") states \objdata before \result as the required order -- but the spec's own robustness clause ("RTF readers should be robust enough to handle some minor variations") means a real producer's <result>-before-\objdata ordering must still be tolerated, not rejected as malformed. A reader that decides \result's fate from whichever sibling it happens to read first would double-render (or silently drop) content depending on order alone.
   it("renders the decoded object exactly once when \\result appears before \\objdata in the source", () => {
     const { document, diagnostics } = readRtfContent(
       bytes(
