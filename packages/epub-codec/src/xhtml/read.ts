@@ -143,7 +143,7 @@ function buildIdElementMap(nodes: readonly XmlNode[]): Map<string, XmlElement> {
   return map;
 }
 
-// A depth-first descendant search for every element with the given tag, mirroring src/xml/query.ts's own generic elementsWithTag -- but scoped to this module's own inert-content policy above, since elementsWithTag is shared by callers elsewhere in this package (src/nav, src/opf) with no reason to assume the same policy. Used only by readXhtmlBody's own footnote-anchor prescan: an <a> nested inside an inert element (<template>, <noscript>, ...) is never real, readable document content (it is skipped entirely wherever buildInlineRuns would otherwise reach it), so it must not be allowed to seed footnoteTargetIds and cause some unrelated, genuinely live body element sharing its target id to be wrapped as a footnote body it was never really referenced by.
+// A depth-first descendant search for every element with the given tag, mirroring src/xml/query.ts's own generic elementsWithTag -- but scoped to this module's own inert-content policy above, since elementsWithTag is shared by callers elsewhere in this package (src/nav) with no reason to assume the same policy. Used only by readXhtmlBody's own footnote-anchor prescan: an <a> nested inside an inert element (<template>, <noscript>, ...) is never real, readable document content (it is skipped entirely wherever buildInlineRuns would otherwise reach it), so it must not be allowed to seed footnoteTargetIds and cause some unrelated, genuinely live body element sharing its target id to be wrapped as a footnote body it was never really referenced by.
 function elementsWithTagSkippingInert(
   nodes: readonly XmlNode[],
   tag: string,
