@@ -1,0 +1,90 @@
+name: Mutation testing
+
+# Repo-wide, sharded, incrementally-cached mutation testing via Stryker. Deliberately not yet a required check (see the ruleset docs / repo-setup skill's stryker-mutation-testing reference): no package here has a measured thresholds.break yet, and stryker.shared.ts's packageStrykerConfig sets none, so this job reports real mutation scores without ever failing the build on them -- the correct default until a real baseline exists to gate against. Promote it once scores are measured and a break threshold is deliberately chosen per package.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to a pull request supersedes that PR's in-flight run, same as CI's own top-level group. A push to main never cancels, for the same reason CI's own group doesn't: a cancelled shard mid-run would leave that shard's incremental cache save skipped for no benefit.
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Mirrors ci.yml's own TURBO_FLAGS exactly: a PR scopes to the packages it actually touches (and their dependents, via turbo's own dependency-aware --affected), main runs the whole workspace.
+  TURBO_FLAGS: ${{ github.event_name == 'pull_request' && '--affected' || '' }}
+
+jobs:
+  plan:
+    name: Plan mutation shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has-packages: ${{ steps.plan.outputs.has-packages }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # --affected compares against the base branch; the plan script's own turbo dry-run needs that history present, same reason ci.yml's own affected-scoped jobs fetch it.
+          fetch-depth: 0
+      # Not the setup-workspace composite action here: it declares no outputs of its own, so a step's $GITHUB_OUTPUT writes inside it never reach this job's `outputs:` block above -- confirmed the hard way in audit-autofix.ts's own GITHUB_OUTPUT comment. commitlint's own affected-range step has the identical shape (needs both install and a step output) and solves it the same way: plain checkout/setup/install, then a separate `id:`-bearing step.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Compute weighted mutation shards
+        id: plan
+        run: node --experimental-strip-types .github/scripts/compute-mutation-shards.ts $TURBO_FLAGS
+
+  mutation-test:
+    name: Mutation test (shard ${{ matrix.index }})
+    needs: plan
+    if: needs.plan.outputs.has-packages == 'true'
+    runs-on: ubuntu-latest
+    # Generous, deliberately: a shard's incremental cache can only ever help (see the caching step below), never hurt, so a cold run -- no prior cache to restore, e.g. this workflow's first ever run, or a shard whose package assignment shifted since the last one that covered it -- pays the full mutation-test cost for whichever packages landed in it. documents.js alone (the single largest package, ~44k mutatable source lines) is sharded onto its own shard for exactly this reason; the timeout has to fit its cold-run cost, not a warm one.
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # Stryker's own incremental report: reuses a prior run's per-mutant kill/survive result for anything unchanged since it was written, instead of re-testing every mutant every run -- the difference between a full run and a genuinely incremental one on a workspace this size.
+      #
+      # matrix.index in the SAVE key, not just run_id: every shard within one workflow run shares an identical run_id, so without the index every shard racing to save its own results at the end of the same run would collide on one identical key -- actions/cache silently DROPS a save whose key already exists rather than erroring, so that collision would mean only the first shard to finish ever actually persisted anything.
+      #
+      # restore-keys deliberately stays the broad "mutation-incremental-" prefix, not further scoped by shard index: which packages land in which shard index is not stable run to run (it depends on which packages are affected and their currently-measured weights each time), so a shard-index-scoped restore-keys would often miss a package's own prior incremental history the moment its shard assignment shifts to a different index on a later run. The broad prefix can only help, never hurt: it restores whichever cache was saved most recently, from any shard of any prior run; a package whose data isn't in that blob just starts cold, exactly as if this caching didn't exist.
+      - uses: actions/cache@v6
+        with:
+          path: packages/*/reports/stryker-incremental.json
+          key: mutation-incremental-${{ github.run_id }}-${{ matrix.index }}
+          restore-keys: |
+            mutation-incremental-
+      - uses: ./.github/actions/setup-workspace
+        with:
+          # matrix.index in the turbo cache's own task name too, for the identical reason as the Stryker cache key above: every shard shares one run_id, and the composite action's own cache key is task-scoped, so an unqualified shared task name would let every shard's save collide on the same key.
+          task: mutation-shard-${{ matrix.index }}
+          # Within a shard, packages run strictly sequentially (--concurrency=1), not turbo's normal per-task parallelism: a standard GitHub-hosted runner has few cores, and Stryker layers its own subprocess pool on top of each package's own Vitest pool -- running several packages' pools concurrently on one runner causes real, measurable thread contention. Parallelism instead comes from separate shard jobs, which genuinely run on separate runners.
+          #
+          # --continue=dependencies-successful, not turbo's own default (never, which stops ALL further scheduling the moment one task in the run fails): confirmed directly elsewhere in this family of CI designs that the default leaves a multi-package run reporting only the first package's own failure and never even attempting the rest. dependencies-successful still correctly skips a package whose own _build failed (mutating code that doesn't build is meaningless) -- it just stops one broken sibling from blocking every unrelated package after it in the same shard.
+          #
+          # matrix.packages is a space-separated package-name list this workflow's own plan job produced (compute-mutation-shards.ts's shardMatrix), never attacker-influenced PR content -- the same trust level ci.yml already extends to other workflow-computed values interpolated directly into a run: command (e.g. steps.lint-range.outputs.from).
+          command: |
+            filters=()
+            for pkg in ${{ matrix.packages }}; do
+              filters+=("--filter=$pkg")
+            done
+            pnpm exec turbo run _test:mutation --concurrency=1 --continue=dependencies-successful "${filters[@]}"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutation-report-shard-${{ matrix.index }}
+          path: packages/*/reports/mutation/mutation.html
+          if-no-files-found: ignore
