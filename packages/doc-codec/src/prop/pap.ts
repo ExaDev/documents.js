@@ -2,7 +2,7 @@ import type { Alignment } from "document-schema.js";
 import { readInt16LE, readUint16LE, readUint32LE, readUint8 } from "../bytes";
 import { SGC, type Prl } from "./sprm";
 
-// Paragraph properties, [MS-DOC] 2.6.3 -- the subset of the paragraph-property sprm table this reader converts. As with the character side, an opcode this package does not act on is absent rather than present-and-ignored.
+// Paragraph properties, [MS-DOC] 2.6.2 -- the subset of the paragraph-property sprm table this reader converts. As with the character side, an opcode this package does not act on is absent rather than present-and-ignored.
 //
 // Several properties exist in two spellings: a "physical" or "80" form kept for compatibility with pre-2000 producers, and a "logical" form that supersedes it. Both are read, in the table order the specification lists them, so a later logical sprm naturally wins over an earlier physical one through the same last-Prl-wins fold every other property uses -- no precedence special case needed.
 

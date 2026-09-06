@@ -18,7 +18,7 @@ const KUL_SINGLE = 0x01;
 const SPRM_C_HPS = 0x4a43;
 /** sprmCCv: a 4-byte COLORREF (r, g, b, fAuto). fAuto 0x00 means "use these components", the only form this writer emits. */
 const SPRM_C_CV = 0x6870;
-/** sprmCRgFtc0: a 2-byte signed index into the font table, [MS-DOC] 2.6.2 -- see style/fonts.ts. */
+/** sprmCRgFtc0: a 2-byte signed index into the font table, [MS-DOC] 2.6.1 -- see style/fonts.ts. */
 const SPRM_C_RG_FTC_0 = 0x4a4f;
 
 const HALF_POINTS_PER_POINT = 2;
