@@ -25,6 +25,15 @@ import {
   findRunConstructFault,
 } from "document-schema.js";
 import {
+  ATX_MARKER_PATTERN,
+  CODE_FENCE_PATTERN,
+  MATH_BLOCK_MARKER_PATTERN,
+  THEMATIC_BREAK_PATTERN,
+} from "../block/block";
+import { CODE_INDENT_COLUMNS, LineCursor } from "../block/line";
+import { parseListMarker } from "../block/list";
+import { parseTableDelimiterRow, splitTableRow } from "../block/table";
+import {
   MarkdownInvalidRunConstructExtentError,
   MarkdownUnbalancedConstructMarkersError,
   MarkdownUnsupportedDocumentKindError,
@@ -43,11 +52,17 @@ import {
   DEFAULT_ORDERED_LIST_DELIMITER,
   DEFAULT_THEMATIC_BREAK_CHAR,
 } from "../defaults/defaults";
+import { matchHtmlBlockStart } from "../html/html";
 import { isValidFootnoteLabel } from "../inline/footnote";
+import { MARKDOWN_TAB_STOP_WIDTH } from "../scan/scan";
 import type {
   MarkdownHeadingStyle,
   WriteMarkdownOptions,
 } from "../options/options";
+import {
+  ESCAPED_HARD_BREAK_PATTERN,
+  LINE_ENDING_PATTERN,
+} from "../shared/line-ending";
 import type { ListNumIdInfo } from "../shared/list-id";
 import { parseListNumId } from "../shared/list-id";
 import {
@@ -103,8 +118,8 @@ const MIN_SETEXT_UNDERLINE_LENGTH = 1;
 
 function renderSetextHeading(level: number, text: string): string {
   const underlineChar = level === 1 ? SETEXT_LEVEL_1_CHAR : SETEXT_LEVEL_2_CHAR;
-  // A setext underline's own length has no semantic meaning beyond "one or more" -- matching the heading text's own rendered length keeps the output visually tidy without claiming any significance for the exact count.
-  const firstLine = text.split("\n")[0] ?? "";
+  // A setext underline's own length has no semantic meaning beyond "one or more" -- matching the heading text's own rendered length keeps the output visually tidy without claiming any significance for the exact count, so a CR- or CRLF-delimited first line (LINE_ENDING_PATTERN, not a bare '\n' split) still measures the SAME first line the rest of this module's own line-ending-aware checks agree on, rather than treating the whole multi-line text as a single "line" whenever its own first break is not an LF.
+  const firstLine = text.split(LINE_ENDING_PATTERN)[0] ?? "";
   const underline = underlineChar.repeat(
     Math.max(MIN_SETEXT_UNDERLINE_LENGTH, firstLine.length),
   );
@@ -169,11 +184,170 @@ function terminatesCleanly(styleId: string | undefined): boolean {
   );
 }
 
-// Whether a rendered block of this styleId can safely open right where an OPEN (non-terminated) paragraph left off, per CommonMark's own "these constructs interrupt a paragraph" rules, rather than being read as more of that paragraph's own text. This is the "safe as NEXT" half, and -- unlike terminatesCleanly -- genuinely depends on the emit options actually in force: a fenced code block and a math block always interrupt (their own opening delimiter is unambiguous either way); a thematic break interrupts UNLESS its rendered character is SETEXT_LEVEL_2_CHAR ('-'), which a reparse reads as a setext level-2 underline for the paragraph it follows instead of a fresh thematic break (context.thematicBreakChar's other two legal values, '_' and '*', are never a setext underline character and interrupt cleanly); an ATX heading always interrupts, but a SETEXT-rendered one (headingStyle 'setext', level <= MAX_SETEXT_LEVEL) is the opposite of an interrupt -- its own text line reads as more of the preceding paragraph, which the underline line then retroactively converts whole into the heading, exactly the case this function exists to catch. HTML_PREFORMATTED_STYLE_ID never interrupts: CommonMark's own HTML-block start condition 7 (a lone start/end tag on its own line) is explicitly barred from interrupting a paragraph, and this package cannot tell that condition apart from the other six that can, at the point this needs an answer, so it always assumes the unsafe one.
-function canInterruptOpenParagraph(
-  styleId: string | undefined,
+// Whether promoting a level<=2 heading's own rendered TEXT to setext would violate any of the three clauses CommonMark's own setext grammar packs into one sentence (spec 0.31.2, "Setext headings"): "one or more lines of text, not interrupted by a blank line, of which the first line does not have more than 3 spaces of indentation, followed by a setext heading underline. The lines of text must be such that, were they not followed by the setext heading underline, they would be interpreted as a paragraph: they cannot be interpretable as a code fence, ATX heading, block quote, thematic break, list item, or HTML block." This checks all three: no line in the run renderSetextHeading treats as one unit may be blank (see the blank-line half below); the run's own first content line may not open with 4 or more columns of indentation (leadingIndentColumns below, against CODE_INDENT_COLUMNS -- src/block/line.ts's own indented-code-block threshold, so the write side's promotion decision and the read side's reparse agree on exactly the same boundary); and, the spec's own third clause, no line -- including the first -- may itself be interpretable as one of the six constructs the spec names, plus two of this package's own GFM/math extensions that behave the same way for a non-first line (interruptsSetextParagraph below, and tableDelimiterRowPromotesPrecedingLine for the table case specifically, which is a paragraph PROMOTION rather than a block start and so never applies to the first line, which has no preceding line of its own to promote). The first line is checked against the stricter, genuine BLOCK-START sense of that test (atBlockStart: true below), not the paragraph-continuation sense a non-first line gets: canInterruptOpenParagraph/requiresBlankLineBefore already guarantee a setext-rendered heading's own first line is never left lazily continuing a PRECEDING open block on reparse (a blank line is always forced ahead of it when that would otherwise happen), so it starts a fresh block exactly as a document's own first line would, with none of CommonMark's paragraph-interruption exceptions (HTML block condition 7, an ordered list not starting at 1, an empty list item) in play. An earlier version of this check skipped the first line entirely, reasoning that a first line matching one of these constructs would never have opened as a paragraph to begin with -- true of an already-existing document being READ, but backwards for this WRITE-side decision about whether to promote freshly rendered content into a paragraph at all: a bold or strikethrough run emptied by a LEADING break (rather than a trailing one) renders its empty-emphasis shape as the heading's own first line, with real heading text only arriving after the break, and promoting it reads back as a single fenced code block or thematic break swallowing the heading, its underline, and every block that follows it -- reproduced directly against this package's own reader, and strictly worse than the merge-base's own ATX-fallback output for the identical input. A first line indented 4+ columns reparses as an indented code block instead of heading text -- with the heading's own remaining lines and underline then read back as a stray paragraph and a spurious "===="/"----" of their own -- corrupting the heading exactly as an unsafe blank line does, just via a different CommonMark construct. The third clause's own hazard is REACHABLE from a real document, not merely a corpus edge case: a bold or strikethrough run that becomes empty immediately after a soft or hard break lowers to a bare pair of emphasis markers with nothing between them -- "____"/"****" (a thematic break) or "~~~~" (a code-fence opener) -- exactly the shape documents.js's own docx-to-markdown path produces for a Word run that becomes empty after a manual line break; left unchecked, that line's own construct-start reading destroys the heading on reparse (into a HorizontalRule/CodeBlock plus a stray paragraph) rather than merely losing fidelity the way an unpromoted ATX collapse would, which is why this is a genuine regression against the merge-base behaviour for the identical input, not just an inherited gap. CommonMark's own blank-line definition (spec 0.31.2, "Blank lines") is "a line containing no characters, or only spaces or tabs", not merely a zero-length one, so the blank-line check below splits the rendered text on CommonMark's own line-ending grammar (LINE_ENDING_PATTERN -- LF, CRLF, or a lone CR, spec 0.31.2 "Lines"; a plain split on '\n' alone misses a classic-Mac-style lone-CR line ending the exact same way a literal-empty-line check misses a residual line of pure spaces or tabs) and tests every line the run of leading blank lines below does not already exempt against that same whitespace-only pattern. A TRAILING one (the run's own last line is blank) is the reachable, real-world case: an ordinary Word heading ending in a manual line break or page break lowers to a run whose literal '\n' escapeMarkdownText spells as a trailing '\\\n', and the identical hazard reappears whenever that trailing line is not fully empty but only whitespace -- a single trailing space is a routine Word artefact on exactly this shape of heading. Reparsing sees the real text close early into its own plain paragraph at the blank line, with the underline surviving as a spurious "===="/"----" paragraph of its own (or, when the underline character is '-', an outright thematic break instead) -- the heading itself is gone, not merely reformatted. An INTERIOR one (a blank or whitespace-only line sitting between two embedded breaks) fractures the heading into two blocks on reparse the same way, with only the LAST fragment keeping the heading-ness the underline actually attaches to and the first losing it outright; unlike the trailing case, this needs two breaks in a row to produce a genuinely empty interior line, since a single hard break's own escaping backslash sits at the END of the line the break TERMINATES, never on the line that follows it -- it protects nothing about that following line's own content, so a hard break immediately followed by incidental whitespace-only text hits this exact hazard too. A LEADING RUN of blank lines is exempt from the blank-line check, but ONLY UP TO A SINGLE LINE (MAX_LEADING_BLANK_LINES_FOR_SETEXT below) -- despite reading like the whole run should fall under the identical spec wording, one leading blank line sits BEFORE this run of lines even starts, so a reparse treats it as ordinary inter-block whitespace ahead of the heading, exactly as a blank line ahead of any other block already works, verified directly (this module's own test suite) across every context this renders through: top-level, inside a blockquote, and as a list item's own marker line -- the heading always comes back intact, with its own list membership retained, in each. A SECOND consecutive leading blank line is NOT exempt, even though it is equally harmless at top level and inside a blockquote: CommonMark's own list-item grammar (spec 0.31.2, section 5.2 "List items") is "a list item can begin with at most one blank line" -- a second one instead closes the item as empty right there, spilling the heading's own real text and underline out as unrelated top-level content that has LOST the list membership entirely (verified directly: this module's own test suite constructs exactly this two-blank-line shape inside a list item and confirms the pre-fix corruption). This function has no visibility into which of the three contexts its own caller is about to render through, so the tighter, list-item-driven bound of one line is applied universally rather than per-context -- always safe (a second leading blank line falling through to the ATX-collapse path is merely a missed optimisation at top level or in a blockquote, never a correctness bug there), and it is what actually prevents the list-item corruption the unbounded original version had. escapeMarkdownText never emits a bare leading '\n' for a hard break in the first place (its own backslash always precedes the newline it escapes), so a heading beginning with an escaped hard break round-trips losslessly rather than merely safely, and its own non-blank backslash line 0 never enters the exempt leading line at all; a heading beginning with a bare soft-break newline instead relies on the leading-line exemption itself, refusing it would be a real regression (ATX cannot represent the break at all), but the exemption is NOT lossless for that spelling -- the leading blank line is genuinely absorbed as ordinary space ahead of the heading on read-back rather than reproduced inside it (renderParagraphBody's own diagnostic message reflects this). The exemption has an outer bound the ORIGINAL index-0-only version missed entirely: if the leading blank line(s) consume every line with nothing genuinely non-blank left afterwards -- the whole heading's own rendered text is blank, whether that is a single wholly-blank line or several -- there is no heading content left for the underline to attach to at all, and promoting still corrupts the reparse exactly as a trailing or interior blank would.
+//
+// CommonMark's own blank-line definition (spec 0.31.2, "Blank lines"): a line containing no characters, or only spaces or tabs.
+const BLANK_OR_WHITESPACE_ONLY_LINE = /^[ \t]*$/;
+
+// The index, in text's own CommonMark line-ending split, of the first line that is NOT blank -- or -1 when every line is (including the single-line, wholly-blank case). Used by renderParagraphBody's own setext-promotion diagnostic (did a genuine, content-free leading line get silently absorbed rather than the break surviving as heading content?); unsafeSetextBreakReason below answers a related but distinct question (does the run this index starts contain a hazard?) with its own single forward pass, rather than re-deriving a line at this index, since a plain string[] index access cannot be narrowed away from `string | undefined` without either an assertion or a redundant re-scan.
+function firstContentLineIndex(text: string): number {
+  return text
+    .split(LINE_ENDING_PATTERN)
+    .findIndex((line) => !BLANK_OR_WHITESPACE_ONLY_LINE.test(line));
+}
+
+// The column width of a line's own leading run of spaces and tabs, expanded per CommonMark's own tab-stop rule (spec 0.31.2, "Tabs": "in contexts where spaces help to define block structure, tabs behave as if they were replaced by spaces with a tab stop of 4 characters", counted from the start of the LINE, not the whole document). Shares MARKDOWN_TAB_STOP_WIDTH with src/scan/scan.ts's own MarkdownScanCursor so a tab's width agrees with the read side's parse of the very text this function is predicting the reparse of.
+function leadingIndentColumns(line: string): number {
+  let column = 0;
+  for (const char of line) {
+    if (char === " ") {
+      column += 1;
+    } else if (char === "\t") {
+      column += MARKDOWN_TAB_STOP_WIDTH - (column % MARKDOWN_TAB_STOP_WIDTH);
+    } else {
+      break;
+    }
+  }
+  return column;
+}
+
+// CommonMark's own list-item grammar (spec 0.31.2, section 5.2 "List items"): "A list item can begin with at most one blank line." -- the bound the leading-run exemption above is held to, applied universally regardless of which context (top-level, blockquote, list item) the heading being checked is actually about to render through, since this function cannot see that and the bound is harmless where it is not strictly required.
+const MAX_LEADING_BLANK_LINES_FOR_SETEXT = 1;
+
+// Whether `line` would itself be read as one of CommonMark's block-start constructs, checked in whichever of the two senses the setext grammar's third clause needs (spec 0.31.2, "Setext headings", the clause immediately quoted on unsafeSetextBreakReason above): for a NON-FIRST line of a would-be setext heading's own text (`atBlockStart: false`), whether it can INTERRUPT the paragraph the earlier lines have already opened, rather than being lazily absorbed as more of the paragraph the underline is about to convert -- CommonMark's own paragraph-interruption exceptions (HTML block condition 7, an ordered list not starting at 1, an empty list item) correctly leave a line matching only one of those absorbed as continuation text instead, confirmed directly against the reference implementation ("Foo\n    bar\n---" and "Foo\n<a>\n---" both still parse as one intact setext heading, indented/tag line included verbatim); for the run's own FIRST line (`atBlockStart: true`), whether it would be read as that construct at genuine BLOCK-START position instead, where none of those paragraph-interruption exceptions apply -- see unsafeSetextBreakReason's own comment above for why the first line is never itself a paragraph-continuation position on reparse. Reuses the read side's own matchers rather than re-deriving the grammars locally -- src/block/block.ts's ATX_MARKER_PATTERN/CODE_FENCE_PATTERN/THEMATIC_BREAK_PATTERN/MATH_BLOCK_MARKER_PATTERN, src/block/list.ts's parseListMarker, src/html/html.ts's matchHtmlBlockStart -- against a throwaway LineCursor for this one line, so the write side's promotion refusal and the read side's actual reparse can never drift apart. Indented code (4+ columns) is excluded from both senses: absorbed as ordinary paragraph continuation mid-heading exactly as CommonMark's own paragraph-interruption exceptions require, and for the first line this package's own leading-indentation clause (unsafeSetextBreakReason's own dedicated check, against the same CODE_INDENT_COLUMNS threshold) has already answered that question before this function is ever consulted for it, so `cursor.indented` is always false on the one call this function gets for a first line. `matchHtmlBlockStart`'s own `interruptsParagraph` parameter and `parseListMarker`'s own `containerIsParagraph` parameter are exactly this atBlockStart/non-atBlockStart distinction, so each is passed the negation of `atBlockStart` directly rather than re-deriving the same split locally.
+function interruptsSetextParagraph(
+  line: string,
+  atBlockStart: boolean,
+): boolean {
+  const cursor = new LineCursor(line);
+  if (cursor.indented) {
+    return false;
+  }
+  if (cursor.peekNextNonspace() === ">") {
+    return true;
+  }
+  const rest = cursor.restFromNextNonspace();
+  if (
+    ATX_MARKER_PATTERN.test(rest) ||
+    CODE_FENCE_PATTERN.test(rest) ||
+    THEMATIC_BREAK_PATTERN.test(rest) ||
+    MATH_BLOCK_MARKER_PATTERN.test(rest) ||
+    matchHtmlBlockStart(rest, !atBlockStart) !== undefined
+  ) {
+    return true;
+  }
+  // Last, since parseListMarker mutates the cursor it is given (advancing past the marker on a match) and nothing here reads `cursor` again afterwards.
+  return parseListMarker(cursor, !atBlockStart) !== undefined;
+}
+
+// Whether `line` is a GFM table delimiter row that would PROMOTE `precedingLine` -- the line immediately before it in a would-be setext heading's own text -- into a table header, converting the open paragraph exactly as src/block/block.ts's own tryTableHeader does (github.github.com/gfm, "Tables (extension)"): the header row and the delimiter row must share the same number of cells, or no table is recognised at all and the delimiter row stays ordinary paragraph text (src/block/table.ts's own top-of-file note on why a bare `---` line can never itself be a delimiter row). Unlike interruptsSetextParagraph above, this is never checked for the run's own first line: a table delimiter row is a paragraph PROMOTION, not a block start (src/block/block.ts's own top-of-file note on the distinction) -- it converts a line that came before it, and the first line has none.
+function tableDelimiterRowPromotesPrecedingLine(
+  line: string,
+  precedingLine: string,
+): boolean {
+  const cursor = new LineCursor(line);
+  if (cursor.indented) {
+    return false;
+  }
+  const alignments = parseTableDelimiterRow(cursor.restFromNextNonspace());
+  return alignments?.length === splitTableRow(precedingLine).length;
+}
+
+// Which clause of the setext grammar (if any) a promotion would violate -- undefined when promotion is safe. A single forward pass over text's own CommonMark line-ending split, rather than firstContentLineIndex above plus a slice/some pass: an indexed lookup back into the split for "the first content line's own text" is exactly the array access noUncheckedIndexedAccess cannot narrow to a definite string without an unjustified assertion, so this walks the lines once with a plain `for...of`, checking, the moment a non-blank line is reached, both the first-line-indentation clause and the interrupting-construct clause in its genuine-block-start sense (interruptsSetextParagraph below, atBlockStart: true), and on every line after it, the blank-line clause (now including the leading-run's own MAX_LEADING_BLANK_LINES_FOR_SETEXT bound), the interrupting-construct clause in its paragraph-continuation sense (interruptsSetextParagraph, atBlockStart: false), and the table-delimiter-row promotion clause (tableDelimiterRowPromotesPrecedingLine above) together.
+type UnsafeSetextBreakReason =
+  "leading-indentation" | "blank-line" | "interrupting-line" | undefined;
+
+function unsafeSetextBreakReason(text: string): UnsafeSetextBreakReason {
+  let sawContentLine = false;
+  let leadingBlankLines = 0;
+  // The immediately preceding CONTENT line's own text -- unset until sawContentLine's own first line, and updated on every content line thereafter -- so tableDelimiterRowPromotesPrecedingLine can check a delimiter row against the exact line it would promote, the same pairing src/block/block.ts's own tryTableHeader checks at reparse.
+  let precedingLine = "";
+  for (const line of text.split(LINE_ENDING_PATTERN)) {
+    const isBlank = BLANK_OR_WHITESPACE_ONLY_LINE.test(line);
+    if (!sawContentLine) {
+      if (isBlank) {
+        leadingBlankLines += 1;
+        if (leadingBlankLines > MAX_LEADING_BLANK_LINES_FOR_SETEXT) {
+          // A second consecutive leading blank line closes a list item as empty (CommonMark spec 0.31.2, section 5.2), spilling this heading's own real text and underline out as separate content that has lost the item's own list membership entirely -- unsafe universally, not just inside a list item, since this function has no visibility into which context it is actually about to render through.
+          return "blank-line";
+        }
+        continue;
+      }
+      sawContentLine = true;
+      if (leadingIndentColumns(line) >= CODE_INDENT_COLUMNS) {
+        return "leading-indentation";
+      }
+      if (interruptsSetextParagraph(line, true)) {
+        return "interrupting-line";
+      }
+      precedingLine = line;
+      continue;
+    }
+    if (isBlank) {
+      return "blank-line";
+    }
+    if (
+      interruptsSetextParagraph(line, false) ||
+      tableDelimiterRowPromotesPrecedingLine(line, precedingLine)
+    ) {
+      return "interrupting-line";
+    }
+    precedingLine = line;
+  }
+  // Every line was blank -- nothing survives as heading content for the underline to attach to, the same corruption a trailing blank line causes.
+  return sawContentLine ? undefined : "blank-line";
+}
+
+function embedsUnsafeBreakForSetext(text: string): boolean {
+  return unsafeSetextBreakReason(text) !== undefined;
+}
+
+// The MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT message for whichever of the two ways this path is actually reached: a level<=2 heading whose own embedded break placement setext cannot survive (embedsLineBreak true -- the break itself is the reason setext was even attempted), or -- just as unsafe, but with no break anywhere in the text -- an explicit headingStyle: 'setext' request against heading text that is already unsafe on its own (the first line, or any line after it, that itself starts an interrupting construct or a table-delimiter-row promotion; a first line indented 4+ columns; or wholly blank text with nothing for the underline to attach to); a break-free heading only ever reaches this function when headingStyle: 'setext' was requested outright, since willRenderAsSetext's own eligibility check requires either that option or an embedded break. unsafeSetextBreakReason's own "blank-line" result already covers both an interior/trailing break's own blank line AND a heading whose entire rendered text is blank (see that function's own comment), so the blank-line half of this message is phrased to cover either shape rather than presuming a break exists.
+function unsafeSetextDiagnosticMessage(
+  level: number,
+  reason: UnsafeSetextBreakReason,
+  embedsLineBreak: boolean,
+): string {
+  const hazard =
+    reason === "leading-indentation"
+      ? `the line that would become the setext heading's own first line of text opens with 4 or more columns of space/tab indentation -- setext's own grammar (spec 0.31.2) requires the first line to have "not more than 3 spaces of indentation", so promoting would read that line back as an indented code block instead of heading text`
+      : reason === "interrupting-line"
+        ? `a line of the heading's own text -- including possibly its first -- would itself be interpretable as a code fence, ATX heading, block quote, thematic break, list item, HTML block, math block, or GFM table delimiter row -- setext's own grammar (spec 0.31.2) requires every one of the heading's lines to instead read as ordinary paragraph text, so promoting would read that line back as the start of a fresh, unrelated block (or, for a table delimiter row, a conversion of the line before it) rather than more of the heading`
+        : `promoting would leave the setext underline with no heading text of its own to attach to -- either a blank line immediately before it (a trailing break), a blank line in the middle of the heading's own text (a genuinely interior break), or the heading's own rendered text being entirely blank to begin with -- setext's own grammar requires "one or more lines of text, not interrupted by a blank line"`;
+  return embedsLineBreak
+    ? `a level ${String(level)} heading's own content contains a line break, but ${hazard}; ATX collapses the break to a single space instead of promoting into a corrupt reparse`
+    : `the effective WriteMarkdownOptions.headingStyle is 'setext' (an explicit caller choice -- a break-free heading only reaches this path when requested outright), but ${hazard}; rendered as ATX instead of promoting into a corrupt reparse`;
+}
+
+// Whether a level<=2 heading paragraph will ACTUALLY be written as a setext heading rather than ATX -- exactly mirroring renderParagraphBody's own promotion rule below (headingStyle: 'setext', OR the heading's own rendered text embeds a hard/soft break that ATX has no way to hold, AND EITHER WAY only when the resulting break placement is actually safe -- see embedsUnsafeBreakForSetext above), so canInterruptOpenParagraph can answer against the real spelling the heading is about to be written in, not just the configured style. This deliberately calls emitRuns a SECOND time, through a throwaway, diagnostic-free InlineEmitContext: this is a look-ahead check on content renderParagraphBody itself re-emits (through the real sink) moments later at the actual render call, and reporting the same run-level diagnostic (a monospace-styled code span, adjacent merged links) twice for one piece of content would be a duplicate finding, not a second real one -- emitRuns/renderNestedStyles read only InlineEmitContext's own two fields (sink, emphasisMarker) and mutate nothing on the wider EmitContext, so the two calls are independent and always agree on the text they produce. The blank-line safety check needs `text` even when headingStyle is explicitly 'setext', so unlike before, that branch no longer short-circuits ahead of computing it -- an explicit caller preference for setext still cannot promote a heading whose own break placement would corrupt the reparse.
+function willRenderAsSetext(
+  paragraph: ContentParagraph,
+  level: number,
   context: EmitContext,
 ): boolean {
+  if (level > MAX_SETEXT_LEVEL) {
+    return false;
+  }
+  const text = emitRuns(
+    paragraph.runs,
+    {
+      sink: NOOP_MARKDOWN_DIAGNOSTIC_SINK,
+      emphasisMarker: context.emphasisMarker,
+    },
+    paragraph.constructs,
+  );
+  if (embedsUnsafeBreakForSetext(text)) {
+    return false;
+  }
+  return context.headingStyle === "setext" || LINE_ENDING_PATTERN.test(text);
+}
+
+// Whether a rendered block of this paragraph's own styleId can safely open right where an OPEN (non-terminated) paragraph left off, per CommonMark's own "these constructs interrupt a paragraph" rules, rather than being read as more of that paragraph's own text. This is the "safe as NEXT" half, and -- unlike terminatesCleanly -- genuinely depends on the emit options actually in force: a fenced code block and a math block always interrupt (their own opening delimiter is unambiguous either way); a thematic break interrupts UNLESS its rendered character is SETEXT_LEVEL_2_CHAR ('-'), which a reparse reads as a setext level-2 underline for the paragraph it follows instead of a fresh thematic break (context.thematicBreakChar's other two legal values, '_' and '*', are never a setext underline character and interrupt cleanly); an ATX heading always interrupts, but one that will actually be WRITTEN as setext (willRenderAsSetext above -- either headingStyle: 'setext', or a level<=2 heading whose own content embeds a break that forces the promotion regardless of the configured style) is the opposite of an interrupt -- its own text line reads as more of the preceding paragraph, which the underline line then retroactively converts whole into the heading, exactly the case this function exists to catch. Keying this off the paragraph's actual embedded-break state, not merely the configured headingStyle, is load-bearing: a level 1/2 heading forced into setext by its own content is exactly as unsafe to follow an open paragraph with, unmarked, as one setext by explicit configuration -- treating it as an always-interrupting ATX heading (the configured style alone) lets its own first line get silently absorbed as a continuation of whatever precedes it, with the setext underline then retroactively swallowing that preceding block into the heading on reparse. HTML_PREFORMATTED_STYLE_ID never interrupts: CommonMark's own HTML-block start condition 7 (a lone start/end tag on its own line) is explicitly barred from interrupting a paragraph, and this package cannot tell that condition apart from the other six that can, at the point this needs an answer, so it always assumes the unsafe one.
+function canInterruptOpenParagraph(
+  paragraph: ContentParagraph,
+  context: EmitContext,
+): boolean {
+  const styleId = paragraph.styleId;
   if (
     styleId === undefined ||
     styleId === QUOTE_STYLE_ID ||
@@ -189,8 +363,10 @@ function canInterruptOpenParagraph(
   }
   const headingLevel = parseHeadingStyleId(styleId);
   if (headingLevel !== undefined) {
-    return !(
-      context.headingStyle === "setext" && headingLevel <= MAX_SETEXT_LEVEL
+    return !willRenderAsSetext(
+      paragraph,
+      clampHeadingLevel(headingLevel),
+      context,
     );
   }
   return false;
@@ -253,8 +429,52 @@ function renderParagraphBody(
       });
     }
     const text = emitRuns(paragraph.runs, context, paragraph.constructs);
-    if (context.headingStyle === "setext" && level <= MAX_SETEXT_LEVEL) {
+    // ATX is a single physical line; a hard OR soft break embedded in this heading's own runs (src/emit/inline.ts's renderLeaf) leaves a genuine CommonMark line ending in `text` regardless of the configured headingStyle, and ATX has no way to hold it -- writing it out anyway would split the ATX line in two on reparse rather than lose formatting, which is strictly worse. This is detected via LINE_ENDING_PATTERN, not a bare '\n' check: this package's own hard-break escaping (escapeMarkdownText) and soft-break residue always use LF, but a run's plain text field or a foreign producer's own markdown residue (src/emit/inline.ts's renderLeaf, the run.source.xml case) can carry a bare CR or CRLF just as legitimately -- an un-widened check would let that slip through to the plain `text` return at the very bottom of this function with the line ending never escaped or collapsed, embedding it unrepresented in what is supposed to be ATX's single physical line. Setext's own grammar is exactly "one or more lines of heading text", so promote to it whenever the level admits one (<=2), overriding the configured style; only a genuinely unrepresentable level 3-6 heading, OR a level<=2 heading whose own break placement would leave a blank line setext cannot survive (embedsUnsafeBreakForSetext above), falls through to the collapse-with-diagnostic path below. A level<=2 heading with NO embedded break at all can still fall through the same unsafe path: headingStyle: 'setext' is itself a second, independent trigger for candidacy (setextRequested below), so an explicit caller request against an already-unsafe break-free heading (a 4+-column-indented or wholly blank first line) is refused with the identical diagnostic rather than being silently written as an unmarked ATX fallback.
+    const embedsLineBreak = LINE_ENDING_PATTERN.test(text);
+    const unsafeSetextReason = unsafeSetextBreakReason(text);
+    const unsafeForSetext = unsafeSetextReason !== undefined;
+    // Setext is even a candidate rendering here under either of two independent triggers -- an explicit headingStyle: 'setext' request, or (regardless of the configured style) the text embedding a break ATX cannot hold at all -- and unsafeForSetext can refuse EITHER trigger, not just the break one: a break-free heading explicitly requesting setext is exactly as capable of being unsafe (a 4+-column-indented or wholly blank first line) as one forced into candidacy by its own embedded break.
+    const setextRequested =
+      context.headingStyle === "setext" || embedsLineBreak;
+    if (setextRequested && level <= MAX_SETEXT_LEVEL && !unsafeForSetext) {
+      if (context.headingStyle !== "setext") {
+        // A break at the very START of the heading's own text is the one case setext promotion does not actually reproduce: firstContentLineIndex > 0 means a genuinely blank leading line was exempted from embedsUnsafeBreakForSetext's own check above, and that line is absorbed as ordinary inter-block whitespace ahead of the heading on read-back, not carried inside it (unlike an escaped hard break's own non-blank backslash line, which never needs the exemption and round-trips inside the heading losslessly).
+        const leadingBreakAbsorbed = firstContentLineIndex(text) > 0;
+        context.sink({
+          code: MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
+          severity: "info",
+          message: leadingBreakAbsorbed
+            ? `the effective WriteMarkdownOptions.headingStyle is 'atx' (its own default, or an explicit caller choice), but this level ${String(level)} heading's own content contains a line break ATX has no way to hold -- rendered as setext instead, though the heading's own leading blank line is absorbed as ordinary space ahead of it on read-back rather than reproduced inside it`
+            : `the effective WriteMarkdownOptions.headingStyle is 'atx' (its own default, or an explicit caller choice), but this level ${String(level)} heading's own content contains a line break ATX has no way to hold -- rendered as setext instead so the break survives`,
+        });
+      }
       return renderSetextHeading(level, text);
+    }
+    if (setextRequested && level <= MAX_SETEXT_LEVEL && unsafeForSetext) {
+      // Setext was a genuine candidate here (an explicit caller request, an embedded break, or both) but unsafeSetextBreakReason refused it -- report the hazard regardless of which of the two triggers brought this heading here, rather than only when an embedded break is also present (a caller-requested setext against an already-unsafe break-free heading is silently overridden exactly as unsafely otherwise).
+      context.sink({
+        code: MarkdownDiagnosticCodes.HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT,
+        severity: "info",
+        message: unsafeSetextDiagnosticMessage(
+          level,
+          unsafeSetextReason,
+          embedsLineBreak,
+        ),
+      });
+      if (embedsLineBreak) {
+        // The escaped hard-break spelling (backslash immediately before the line ending) is stripped first via ESCAPED_HARD_BREAK_PATTERN, together with the line ending it precedes, in one collapse -- this package's own escapeMarkdownText always spells it with a trailing LF, but a run's own markdown residue can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately, and an LF-only strip would leave that backslash behind as a stray literal character once the LINE_ENDING_PATTERN split below removes the CRLF/CR out from under it. Everything left over is then split on LINE_ENDING_PATTERN and rejoined with spaces, collapsing every remaining line ending -- a bare soft-break LF exactly as before, plus a bare CR or CRLF a run's own text or markdown residue can carry -- to the single space ATX's own single-physical-line grammar requires.
+        return `${"#".repeat(level)} ${text.replace(ESCAPED_HARD_BREAK_PATTERN, " ").split(LINE_ENDING_PATTERN).join(" ")}`;
+      }
+      // No break to collapse -- the hazard here is the break-free heading's own first-line indentation or wholly blank text, and `text` already has no CommonMark line ending in it for the ATX single-physical-line grammar to trip over.
+      return `${"#".repeat(level)} ${text}`;
+    }
+    if (embedsLineBreak) {
+      context.sink({
+        code: MarkdownDiagnosticCodes.HEADING_LINE_BREAK_COLLAPSED,
+        severity: "info",
+        message: `a level ${String(level)} heading's own content contains a line break; only setext's own level-1/2 grammar can hold one, so ATX collapses it to a single space`,
+      });
+      return `${"#".repeat(level)} ${text.replace(ESCAPED_HARD_BREAK_PATTERN, " ").split(LINE_ENDING_PATTERN).join(" ")}`;
     }
     return `${"#".repeat(level)} ${text}`;
   }
@@ -520,11 +740,11 @@ function collectListItem(
   return { segments, next: index };
 }
 
-// Whether an EmitItem's own rendered spelling unconditionally interrupts an open paragraph when it immediately follows one, with no blank line between them -- generalises canInterruptOpenParagraph (styleId-keyed, paragraph-only) to a construct too. A materialised division's '> ' marker interrupts regardless of what it wraps (CommonMark spec 0.31.2's own list of blocks that can interrupt a paragraph includes block quotes -- confirmed directly by spec example 245, "foo\n> bar\n", where "> bar" opens a fresh blockquote with no blank line needed). A construct rendering TRANSPARENTLY (no marker of its own to interrupt with -- see isMaterialisedDivision) is not itself a boundary at all, so the question passes straight through, recursively, to its own first child.
+// Whether an EmitItem's own rendered spelling unconditionally interrupts an open paragraph when it immediately follows one, with no blank line between them -- generalises canInterruptOpenParagraph (paragraph-keyed, checking its own actual rendered heading spelling too, not just its styleId) to a construct too. A materialised division's '> ' marker interrupts regardless of what it wraps (CommonMark spec 0.31.2's own list of blocks that can interrupt a paragraph includes block quotes -- confirmed directly by spec example 245, "foo\n> bar\n", where "> bar" opens a fresh blockquote with no blank line needed). A construct rendering TRANSPARENTLY (no marker of its own to interrupt with -- see isMaterialisedDivision) is not itself a boundary at all, so the question passes straight through, recursively, to its own first child.
 function emitItemCanInterrupt(item: EmitItem, context: EmitContext): boolean {
   if (!isConstructItem(item)) {
     return item.block.kind === "paragraph"
-      ? canInterruptOpenParagraph(item.block.styleId, context)
+      ? canInterruptOpenParagraph(item.block, context)
       : true;
   }
   if (isMaterialisedDivision(item)) {
@@ -848,7 +1068,7 @@ function isInheritedListMembership(
   return list.itemId !== undefined && list.itemId === context.enclosingItemId;
 }
 
-// A consecutive run of quoted top-level blocks at the SAME depth is genuinely ambiguous once lowered -- ContentParagraph.indentLeftPt has no field distinguishing "one blockquote containing several blocks" from "several independent blockquotes back to back at the same depth" (document-schema.js carries no ContentBlockquote container of its own; src/lower/lower.ts flattens both shapes identically). Joining every top-level block with a bare blank line, as below, resolves that ambiguity by always choosing the "independent blockquotes" reading -- the correctness-preserving default, since re-joining two ADJACENT SAME-depth quoted blocks into one blockquote (tried and reverted here) fixed no example this package's own soft-line-break handling (src/lower/inline.ts's own softBreak -> ' ' mapping, see src/test-support/conformance-exclusions.ts) did not already fail on for an unrelated reason, while genuinely breaking two real cases (two independent same-depth blockquotes with nothing between them) that this simpler join gets right.
+// A consecutive run of quoted top-level blocks at the SAME depth is genuinely ambiguous once lowered -- ContentParagraph.indentLeftPt has no field distinguishing "one blockquote containing several blocks" from "several independent blockquotes back to back at the same depth" (document-schema.js carries no ContentBlockquote container of its own; src/lower/lower.ts flattens both shapes identically). Joining every top-level block with a bare blank line, as below, resolves that ambiguity by always choosing the "independent blockquotes" reading -- the correctness-preserving default, since re-joining two ADJACENT SAME-depth quoted blocks into one blockquote (tried and reverted here) fixes no example src/test-support/conformance-exclusions.ts's own exclusion list was not already going to fail on for some other, already-documented reason (see that module's own ADJACENT_SAME_DEPTH reason, which cross-references this exact comment), while genuinely breaking two real cases (two independent same-depth blockquotes with nothing between them) that this simpler join gets right.
 function renderItems(items: readonly EmitItem[], context: EmitContext): string {
   const parts: string[] = [];
   let index = 0;
