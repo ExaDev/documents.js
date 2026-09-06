@@ -460,9 +460,34 @@ describe("readWorkbookGlobals", () => {
     ]);
   });
 
-  it("declines a bracketed sheet name reached through a directory separator, not just one at the very start of the path", () => {
-    // A start-of-path-only bracket check misses this: "sub" then a directory separator then a bracketed segment leaves the leading character "s", not "[", so a check scoped to the path's own start would fall through and return "[Book.xlsx]Sheet1" itself as the file name -- doubling up with the caller's own `[fileName]sheet` bracketing into a mangled label, and with `diagnostic` wrongly left false since fileNameFromVirtPath would have reported success.
+  it("declines a plain multi-directory path whose own final directory is itself a legally bracket-named file, not just a bracket leading the whole path", () => {
+    // A whole-path-leading-character check would correctly rule this OUT as the bracketed form: "sub" then a directory separator then "[Book.xlsx]Sheet1" leaves the WHOLE path's own leading character "s", not "[", so per [MS-XLS] 480c3d2a's own grammar (file-path = relative-path / "[" relative-path "]" sheet-name) this is production 1 all the way through -- "[Book.xlsx]Sheet1" here is simply a legally bracket-named file sitting in directory "sub", never a real bracketed sheet-name reference. Even so, this final directory-turned-file-name still carries a bracket, and returning it as-is would double up with the caller's own `[fileName]sheet` bracketing into a mangled label, and leave `diagnostic` wrongly false since fileNameFromVirtPath would have reported success -- so it is declined anyway. See the next test for the genuinely bracketed form reached through a directory separator, which this same final-segment check also has to catch.
     const virtPath = "sub\u0003[Book.xlsx]Sheet1";
+    const globals = readWorkbookGlobals(
+      groupsOf(
+        record(RECORD_SUPBOOK, [
+          ...u16(1),
+          ...u16(virtPath.length),
+          ...xlUnicodeStringNoCch(virtPath),
+          ...xlUnicodeString("Sheet1"),
+        ]),
+        record(RECORD_EXTERNSHEET, [
+          ...u16(1),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+    );
+
+    expect(globals.sheetRanges).toEqual([
+      { label: "[EXTERNAL]Sheet1", diagnostic: true },
+    ]);
+  });
+
+  it("declines a genuinely bracketed sheet name whose workbook sits in a subdirectory, whose closing bracket lands non-leading in the final segment", () => {
+    // [MS-XLS] 480c3d2a: file-path = relative-path / "[" relative-path "]" sheet-name, and relative-path = directory *(0x03 directory) -- the bracketed alternative's own relative-path can itself span several directories, so a workbook "Book.xlsx" inside directory "sub", referencing "Sheet1", genuinely encodes with the leading "[" before any directory at all: "[sub" + a directory separator + "Book.xlsx]Sheet1". Splitting on the separator to find the trailing segment puts the closing "]" NON-LEADING in that final segment ("Book.xlsx]Sheet1") -- a real instance of the bracketed form is not limited to a bracket leading the segment this reader isolates, unlike the plain bracket-named-file case in the previous test, which this string is deliberately the mirror image of.
+    const virtPath = "[sub\u0003Book.xlsx]Sheet1";
     const globals = readWorkbookGlobals(
       groupsOf(
         record(RECORD_SUPBOOK, [
