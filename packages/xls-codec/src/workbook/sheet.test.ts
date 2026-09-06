@@ -719,6 +719,37 @@ describe("readSheetRecords formula cells", () => {
     expect(cells[0]?.value).toEqual({ kind: "number", value: 2 });
     expect(cells[1]?.value).toEqual({ kind: "number", value: 99 });
   });
+
+  it("does not abort the whole sheet read when a shared group's own rgce carries a token with a lying embedded length", () => {
+    // The ShrFmla record itself is perfectly well-formed here -- its own cce (4) correctly bounds the 4 bytes of rgce that follow, so collectFormulaGroup's cursor reads all succeed and a group IS recovered for this base cell. The malformed part is inside that already-correctly-bounded rgce: a PtgStr token (0x17) whose own ShortXLUnicodeString cch claims 200 characters when only one byte of character data actually follows. Joining this group against the base cell's PtgExp runs parseFormulaText's cursor past the end of that 4-byte buffer for reasons that are pure file-controlled malformed input (a lying token-internal length), not a bug in this reader's own token walking -- so it must degrade this one cell's formula to absent, not abort the whole sheet the way an uncaught BiffFormatError would.
+    const shrFmlaRgce = [0x17, 200, 0, 0x41];
+    const ptgExpToBase = [0x01, ...u16(0), ...u16(1)];
+    const cells = readCells(
+      record(RECORD_FORMULA, [
+        ...cell(0, 1),
+        ...f64(1),
+        ...u16(0),
+        ...u32(0),
+        ...u16(ptgExpToBase.length),
+        ...ptgExpToBase,
+      ]),
+      record(RECORD_SHRFMLA, [
+        ...u16(0), // rwFirst
+        ...u16(0), // rwLast
+        1, // colFirst
+        1, // colLast
+        0, // reserved
+        1, // cUse
+        ...u16(shrFmlaRgce.length),
+        ...shrFmlaRgce,
+      ]),
+      record(RECORD_NUMBER, [...cell(9, 9), ...f64(42)]),
+    );
+
+    expect(cells[0]?.formula).toBeUndefined();
+    expect(cells[0]?.value).toEqual({ kind: "number", value: 1 });
+    expect(cells[1]?.value).toEqual({ kind: "number", value: 42 });
+  });
 });
 
 describe("readSheetRecords grid geometry", () => {
