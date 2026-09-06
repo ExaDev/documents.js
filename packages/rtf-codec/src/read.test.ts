@@ -527,6 +527,14 @@ describe("pictures", () => {
     ).filter((block) => block.kind === "image");
     expect(images).toHaveLength(1);
   });
+
+  // `picture` is carried forward by reference across every descendant group inside {\pict ...} (a stray hex byte in a nested group must still reach the same PictureState the real \pict destination started), which means a plain nested group with no destination of its own -- a malformed producer's stray "{}", not RTF's own <pict> grammar, which has no legitimate use for one -- inherits destination "picture" too. Without an ownership marker analogous to objectDataOwner/objectOwner, that nested group's own closing brace re-fires buildPicture on the identical PictureState the outer \pict group will fire on again when IT closes, doubling the image.
+  it("builds one image, not two, when a plain nested group closes inside \\pict after the payload", () => {
+    const images = blocksOf(
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720 ${PNG_HEX}{}}\\par}`,
+    ).filter((block) => block.kind === "image");
+    expect(images).toHaveLength(1);
+  });
 });
 
 describe("embedded objects", () => {

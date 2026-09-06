@@ -422,6 +422,8 @@ interface GroupState {
   para: ParagraphState;
   field: FieldState | undefined;
   picture: PictureState | undefined;
+  // The same ownership marker as objectDataOwner/objectOwner below, for {\pict ...} itself: `picture` is carried forward by reference so a \'hh/binary byte or a \picwN/\pichN control word inside a nested group still reaches the same PictureState, but the group-end handler that calls buildPicture must fire only once, when \pict's own group actually closes -- not on every plain sibling group nested directly inside it (a malformed producer can write one; RTF's own <pict> grammar has no legitimate use for one).
+  pictureOwner: boolean;
   objectData: ObjectDataState | undefined;
   object: ObjectState | undefined;
   // True only on the one GroupState created directly for an {\*\objdata ...} destination's own group -- objectData itself is still carried forward BY REFERENCE across every descendant group (a stray \binN/\'hh byte inside a nested group must still land in the same accumulator the real \objdata group started), so the group-end handler that calls buildEmbeddedObject needs its own, non-inherited marker to fire exactly once per \objdata construct rather than once per descendant group that happens to close underneath it. Mirrors resultOf's own "set on the direct child, cleared by cloneGroupState" shape below, for the identical reason: a plain nested group inside \objdata's content (or a malformed one a hostile producer wrote) must not re-trigger this group's own finalisation when IT closes too.
@@ -477,6 +479,7 @@ function cloneGroupState(state: GroupState): GroupState {
     para: { ...state.para },
     field: state.field,
     picture: state.picture,
+    pictureOwner: false,
     objectData: state.objectData,
     object: state.object,
     objectDataOwner: false,
@@ -1573,6 +1576,7 @@ function readRtfDetail(
     para: defaultParagraphState(),
     field: undefined,
     picture: undefined,
+    pictureOwner: false,
     objectData: undefined,
     object: undefined,
     objectDataOwner: false,
@@ -1781,6 +1785,7 @@ function readRtfDetail(
         }
         if (kind === "picture") {
           child.picture = defaultPictureState();
+          child.pictureOwner = true;
         }
         if (kind === "objectData") {
           child.objectData = { bytes: [], pendingHexNibble: undefined };
@@ -1825,7 +1830,11 @@ function readRtfDetail(
 
     if (token.kind === "groupEnd") {
       flushBytes();
-      if (state.destination === "picture" && state.picture !== undefined) {
+      if (
+        state.destination === "picture" &&
+        state.picture !== undefined &&
+        state.pictureOwner
+      ) {
         const image = buildPicture(state.picture, sink);
         if (image !== undefined) {
           builder.addBlocks([image], state.para.inTable);
