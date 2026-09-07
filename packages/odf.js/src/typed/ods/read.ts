@@ -6,6 +6,7 @@ import type {
   ContentRun,
   ContentSheet,
   ContentSheetCell,
+  ContentSheetCellComment,
   ContentSheetColumn,
   ContentSheetImage,
   ContentSheetPrintRange,
@@ -32,6 +33,7 @@ import { readOdfMetadata } from "../shared/metadata";
 import { resolvePageLayoutProperties } from "../shared/masterpage";
 import { parseMargins, parsePageSize } from "../shared/geometry";
 import { parseOdfLength } from "../shared/units";
+import { decodeOdfText } from "../shared/text";
 import { readOdfParagraph } from "../shared/paragraph";
 import { readCellStyleDecoration } from "../shared/table";
 import type { OdfTransformFunction } from "../shared/transform";
@@ -181,6 +183,32 @@ function readCellText(
   });
   const displayText = runs.map((run) => run.text).join("");
   return { runs, displayText };
+}
+
+// A cell's own annotation ([OASIS ODF] office:annotation, a direct child of table:table-cell alongside its text:p content): the note text, joined from its own text:p children the same way readCellText above joins a multi-paragraph cell's text -- with a bare '\n' between paragraphs, decodeOdfText already resolving any text:line-break WITHIN one paragraph to the same character, so the two paragraph-break spellings a real producer might use are read identically. dc:creator/dc:date are ODF's own author/timestamp child elements for an annotation (the same pair typed/shared/constructs.ts's collectOdfProvenanceRegions already reads off office:change-info, moved from OpenOffice.org's own attribute spelling into child elements the way transform.ts's own top comment documents) -- createdAt is carried verbatim, exactly as parsed, matching ContentSheetCellCommentSchema's own "source format's own spelling and precision" contract for it. ContentSheetCellComment.replies is never populated: ODF's own annotation model has no thread/reply concept, unlike xlsx's [MS-XLSX] extension.
+function readCellComment(
+  cellElement: XmlElement,
+): ContentSheetCellComment | undefined {
+  const annotation = findChildElement(
+    cellElement.children,
+    "office:annotation",
+  );
+  if (annotation === undefined) {
+    return undefined;
+  }
+  const text = childrenWithTag(annotation, "text:p")
+    .map((paragraph) => decodeOdfText(paragraph))
+    .join("\n");
+  const comment: ContentSheetCellComment = { text };
+  const creator = findChildElement(annotation.children, "dc:creator");
+  if (creator !== undefined) {
+    comment.author = decodeOdfText(creator);
+  }
+  const date = findChildElement(annotation.children, "dc:date");
+  if (date !== undefined) {
+    comment.createdAt = decodeOdfText(date);
+  }
+  return comment;
 }
 
 // Maps a table:table-cell's own office:value-type (and its corresponding office:value/office:boolean-value/office:date-value/office:time-value/office:currency attribute) to document-schema.js's ContentCellValue. Confirmed against real LibreOffice 26.2 output: the wire value-type string for a plain number is "float", NOT "number" -- ContentCellValueSchema's own kind enum uses "number" (a cross-format canonical name), so this function TRANSLATES "float" -> kind:'number' rather than copying the wire string through; every other kind name matches its own wire value-type string directly. A "string" cell carries office:string-value only when its value differs from its own rendered text (confirmed: an ordinary text cell's office:value-type="string" has NO office:string-value attribute at all, only its text:p content) -- per the OASIS spec, the cell's own text content IS the value when office:string-value is absent, so this falls back to displayText, exactly mirroring how office:date-value/office:time-value being absent (a malformed producer) falls back to the same displayText rather than a fabricated empty string. A numeric/percentage/currency value-type whose own required office:value is missing or unparseable degrades to kind:'string' (value: displayText) rather than fabricating a 0 -- an honest "we don't have a genuine number" rather than a silently wrong one. ODF itself has no "error" value-type in its own enumeration at all (confirmed: a genuine #DIV/0! formula cell serializes as office:value-type="string" office:string-value="" -- LibreOffice's own calcext:value-type="error" extension is the only place "error" appears, and this reader deliberately does not chase private vendor extensions, matching table.ts's own established fo:background-color-over-loext: precedent) -- ContentCellValueSchema's own 'error' kind therefore never gets produced by this reader; the formula's own cached #DIV/0! text still survives, verbatim, as displayText.
@@ -473,12 +501,14 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
 
         const formula = attrValue(child, "table:formula");
         const { runs, displayText } = readCellText(child, pkg);
+        const comment = readCellComment(child);
         const hasValueType =
           attrValue(child, "office:value-type") !== undefined;
         if (
           !hasValueType &&
           formula === undefined &&
-          displayText.length === 0
+          displayText.length === 0 &&
+          comment === undefined
         ) {
           // A genuinely empty cell (the common case for a huge trailing repeat block) -- skip entirely, never materialized.
           continue;
@@ -508,6 +538,9 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
         }
         if (rowSpan !== undefined) {
           cell.rowSpan = rowSpan;
+        }
+        if (comment !== undefined) {
+          cell.comment = comment;
         }
 
         // background/borders/alignment/verticalAlignment resolve through the SAME table:style-name -> table-cell family cascade readColumnLayout/readRowLayout resolve their own dimensional properties through -- but via resolveStyleElementChain's full root-to-target chain (family default-style, then each style:parent-style-name ancestor, then the cell's own referenced style last), not findStyleElement's single-level lookup: real-world spreadsheet cell styles routinely DO chain via style:parent-style-name (confirmed against this package's own kitchen-sink.ods fixture -- every table-cell style there sets style:parent-style-name="Default", and styles.xml's own style:default-style style:family="table-cell" carries a real style:paragraph-properties child), unlike the "standalone in practice" convention typed/shared/table.ts documents for odt/odp table-cell styles. readCellStyleDecoration (typed/shared/table.ts) does the actual fold; see that module's own top-of-file note for the loext:/vertical-align/fo:text-align caveats -- the loext: cell-fill quirk documented there is specific to presentation tables, not spreadsheets, and was NOT observed in this reader's own real fixture.

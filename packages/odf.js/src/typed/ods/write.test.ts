@@ -417,3 +417,94 @@ describe("writeOdsContent XML shapes", () => {
     expect(childrenWithTag(headerRows, "table:table-row")).toHaveLength(2);
   });
 });
+
+describe("writeOdsContent: cell comments (ExaDev/documents.js#949)", () => {
+  it("writes office:annotation as the cell's first child, with dc:creator before dc:date before its own text:p", () => {
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf([
+          {
+            row: 0,
+            column: 0,
+            value: { kind: "string", value: "x" },
+            displayText: "x",
+            comment: {
+              text: "A real note",
+              author: "Alice",
+              createdAt: "2026-01-02T03:04:05",
+            },
+          },
+        ]),
+      ]),
+    );
+    const row = childrenWithTag(firstTable(pkg), "table:table-row")[0]!;
+    const cell = childrenWithTag(row, "table:table-cell")[0]!;
+    expect(cell.children[0]).toMatchObject({
+      type: "element",
+      tag: "office:annotation",
+    });
+    const annotation = findChildElement(cell.children, "office:annotation")!;
+    expect(
+      annotation.children.map((child) => child.type === "element" && child.tag),
+    ).toEqual(["dc:creator", "dc:date", "text:p"]);
+    expect(findChildElement(annotation.children, "dc:creator")).toMatchObject({
+      children: [{ type: "text", value: "Alice" }],
+    });
+    expect(findChildElement(annotation.children, "dc:date")).toMatchObject({
+      children: [{ type: "text", value: "2026-01-02T03:04:05" }],
+    });
+    const annotationParagraph = childrenWithTag(annotation, "text:p")[0]!;
+    expect(annotationParagraph).toMatchObject({
+      children: [{ type: "text", value: "A real note" }],
+    });
+  });
+
+  it("writes no office:annotation at all for a cell with no comment", () => {
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf([
+          {
+            row: 0,
+            column: 0,
+            value: { kind: "string", value: "x" },
+            displayText: "x",
+          },
+        ]),
+      ]),
+    );
+    const row = childrenWithTag(firstTable(pkg), "table:table-row")[0]!;
+    const cell = childrenWithTag(row, "table:table-cell")[0]!;
+    expect(
+      findChildElement(cell.children, "office:annotation"),
+    ).toBeUndefined();
+  });
+
+  it("writes one text:p per '\\n'-separated line of a multi-paragraph comment, with no author/date elements when neither is present", () => {
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf([
+          {
+            row: 0,
+            column: 0,
+            value: { kind: "string", value: "x" },
+            displayText: "x",
+            comment: { text: "First line\nSecond line" },
+          },
+        ]),
+      ]),
+    );
+    const row = childrenWithTag(firstTable(pkg), "table:table-row")[0]!;
+    const cell = childrenWithTag(row, "table:table-cell")[0]!;
+    const annotation = findChildElement(cell.children, "office:annotation")!;
+    expect(findChildElement(annotation.children, "dc:creator")).toBeUndefined();
+    expect(findChildElement(annotation.children, "dc:date")).toBeUndefined();
+    const paragraphs = childrenWithTag(annotation, "text:p");
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0]).toMatchObject({
+      children: [{ type: "text", value: "First line" }],
+    });
+    expect(paragraphs[1]).toMatchObject({
+      children: [{ type: "text", value: "Second line" }],
+    });
+  });
+});

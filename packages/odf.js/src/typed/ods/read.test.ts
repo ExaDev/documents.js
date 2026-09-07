@@ -1338,3 +1338,125 @@ describe("readOds: the package-native reader over the same real fixtures", () =>
     });
   });
 });
+
+describe("readOdsContent: cell comments (ExaDev/documents.js#949, synthetic packages)", () => {
+  function annotationPackage(table: XmlElement): Package {
+    return {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: [
+            el("office:document-content", {}, [
+              el("office:body", {}, [el("office:spreadsheet", {}, [table])]),
+            ]),
+          ],
+        },
+      },
+    };
+  }
+
+  function cellWithAnnotation(
+    annotationChildren: XmlElement[],
+    valueAttrs: Record<string, string> = {
+      "office:value-type": "string",
+    },
+  ): XmlElement {
+    return el("table:table-cell", valueAttrs, [
+      el("office:annotation", {}, annotationChildren),
+      el("text:p", {}, [txt("42")]),
+    ]);
+  }
+
+  it("reads a comment's text, author, and timestamp off office:annotation's own dc:creator/dc:date and text:p", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}, [
+        cellWithAnnotation([
+          el("dc:creator", {}, [txt("Alice")]),
+          el("dc:date", {}, [txt("2026-01-02T03:04:05")]),
+          el("text:p", {}, [txt("A real note")]),
+        ]),
+      ]),
+    ]);
+    const { sheets } = readOdsContent(annotationPackage(table));
+    expect(sheets[0]?.cells[0]?.comment).toEqual({
+      text: "A real note",
+      author: "Alice",
+      createdAt: "2026-01-02T03:04:05",
+    });
+  });
+
+  it("reads a comment with no author and no date as text alone, never fabricating either", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}, [
+        cellWithAnnotation([el("text:p", {}, [txt("No metadata")])]),
+      ]),
+    ]);
+    const { sheets } = readOdsContent(annotationPackage(table));
+    expect(sheets[0]?.cells[0]?.comment).toEqual({ text: "No metadata" });
+  });
+
+  it("joins multiple text:p children with a bare newline, the identical convention readCellText already uses for a cell's own multi-paragraph text", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}, [
+        cellWithAnnotation([
+          el("text:p", {}, [txt("First paragraph")]),
+          el("text:p", {}, [txt("Second paragraph")]),
+        ]),
+      ]),
+    ]);
+    const { sheets } = readOdsContent(annotationPackage(table));
+    expect(sheets[0]?.cells[0]?.comment?.text).toBe(
+      "First paragraph\nSecond paragraph",
+    );
+  });
+
+  it("resolves a text:line-break WITHIN one annotation paragraph to the same '\\n' a paragraph boundary produces", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}, [
+        cellWithAnnotation([
+          el("text:p", {}, [
+            txt("Line one"),
+            el("text:line-break"),
+            txt("Line two"),
+          ]),
+        ]),
+      ]),
+    ]);
+    const { sheets } = readOdsContent(annotationPackage(table));
+    expect(sheets[0]?.cells[0]?.comment?.text).toBe("Line one\nLine two");
+  });
+
+  it("materialises an empty cell for a comment anchored to a position with no office:value-type and no rendered text at all", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}, [
+        el("table:table-cell", {}, [
+          el("office:annotation", {}, [
+            el("text:p", {}, [txt("Floating note")]),
+          ]),
+        ]),
+      ]),
+    ]);
+    const { sheets } = readOdsContent(annotationPackage(table));
+    expect(sheets[0]?.cells).toEqual([
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "empty" },
+        displayText: "",
+        comment: { text: "Floating note" },
+      },
+    ]);
+  });
+
+  it("leaves comment undefined for an ordinary cell carrying no office:annotation at all", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}, [
+        el("table:table-cell", { "office:value-type": "string" }, [
+          el("text:p", {}, [txt("Plain cell")]),
+        ]),
+      ]),
+    ]);
+    const { sheets } = readOdsContent(annotationPackage(table));
+    expect(sheets[0]?.cells[0]?.comment).toBeUndefined();
+  });
+});
