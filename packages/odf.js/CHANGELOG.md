@@ -1,3 +1,14 @@
+## [7.1.3](https://github.com/ExaDev/documents.js/compare/odf.js%407.1.2...odf.js%407.1.3) (2026-09-07)
+
+### Bug Fixes
+
+* **odf.js:** recognise and write ODF's Preformatted_20_Text paragraph style ([8b2d518](https://github.com/ExaDev/documents.js/commit/8b2d518f2df6e5aad4a59aff6a3daded4263f5db)), closes [ExaDev/documents.js#1020](https://github.com/ExaDev/documents.js/issues/1020), references [994/#996](https://github.com/ExaDev/documents.js/issues/996)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.2.1
+
 ## [7.1.2](https://github.com/ExaDev/documents.js/compare/odf.js%407.1.1...odf.js%407.1.2) (2026-09-07)
 
 ### Bug Fixes

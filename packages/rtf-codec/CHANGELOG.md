@@ -1,3 +1,15 @@
+## [3.0.2](https://github.com/ExaDev/documents.js/compare/rtf-codec%403.0.1...rtf-codec%403.0.2) (2026-09-07)
+
+### Bug Fixes
+
+* **rtf-codec:** drop the later of two crossing bookmark block extents ([8b4800c](https://github.com/ExaDev/documents.js/commit/8b4800cc3187655be2c1f293a7cec203727b38c1)), closes [ExaDev/documents.js#1040](https://github.com/ExaDev/documents.js/issues/1040)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.2.1
+- Updated archive-codec to ^1.6.2
+
 ## [3.0.1](https://github.com/ExaDev/documents.js/compare/rtf-codec%403.0.0...rtf-codec%403.0.1) (2026-09-06)
 
 
