@@ -58,13 +58,14 @@ function isSheetFormat(format: string | null): boolean {
   );
 }
 
-// doc (readDocContent) is the same wordprocessing-kind ContentDocument as docx/odt/rtf.
+// doc (readDocContent) and epub (readEpubContent) are the same wordprocessing-kind ContentDocument as docx/odt/rtf.
 function isWordProcessingFormat(format: string | null): boolean {
   return (
     format === "docx" ||
     format === "odt" ||
     format === "rtf" ||
-    format === "doc"
+    format === "doc" ||
+    format === "epub"
   );
 }
 
