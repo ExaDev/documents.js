@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { writeXlsContent } from "xls-codec";
 import {
+  docxWithLegacyOleObjectPackage,
   docxWithTableCellEquationPackage,
   minimalDocxPackage,
 } from "../../test-support/docx";
@@ -68,5 +70,59 @@ describe("readDocxContent", () => {
           block.kind === "embeddedObject" && block.objectKind === "formula",
       ),
     ).toBe(true);
+  });
+
+  // ExaDev/documents.js#921: a w:object whose payload is a classic OLE compound file holding native legacy streams (not a ZIP, and not a ZIP wrapped in the compound file's own "Package" stream) used to stay opaque -- ooxml.js's own readDocxContent has no reader for that shape at all, so the paragraph carrying the w:object recovered nothing. This second-pass splice (embedded-objects.ts's collectParagraphOleObjects/resolveLegacyOleObject) recovers it by trying doc-codec/xls-codec/ ppt-codec directly on the payload bytes.
+  it("recovers a classic-OLE-compound-file .xls embedding as an embeddedObject block, consuming its own now-empty paragraph", () => {
+    const payload = writeXlsContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [
+            {
+              row: 0,
+              column: 0,
+              value: { kind: "string", value: "Legacy cell" },
+              displayText: "Legacy cell",
+            },
+          ],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: { topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 50.4 },
+            gridlines: false,
+            headers: false,
+            pageOrder: "downThenOver",
+          },
+        },
+      ],
+    });
+    const doc = readDocxContent(docxWithLegacyOleObjectPackage(payload));
+    if (doc.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing document");
+    }
+    // The w:object was the paragraph's own only content, so the recovered block replaces it rather than sitting alongside an empty paragraph -- the same consumption rule an equation-only or vector-only paragraph already gets.
+    expect(doc.sections[0]?.blocks).toHaveLength(1);
+    const embedded = doc.sections[0]?.blocks[0];
+    if (embedded?.kind !== "embeddedObject") {
+      throw new Error("expected an embeddedObject block");
+    }
+    expect(embedded.objectKind).toBe("spreadsheet");
+    // w:object's own w:dxaOrig="1920"/w:dyaOrig="1200" (twips) size the block.
+    expect(embedded.frame).toEqual({
+      xPt: 0,
+      yPt: 0,
+      widthPt: 96,
+      heightPt: 60,
+    });
+    expect(
+      embedded.document.kind === "spreadsheet"
+        ? embedded.document.sheets[0]?.cells[0]?.value
+        : undefined,
+    ).toEqual({ kind: "string", value: "Legacy cell" });
   });
 });

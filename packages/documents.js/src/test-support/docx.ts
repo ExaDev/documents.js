@@ -137,3 +137,31 @@ export function docxWithTableCellEquationPackage(): Package {
     }),
   );
 }
+
+// A one-paragraph body carrying nothing but a w:object -- the real-world spelling a classic OLE compound-file embedding takes (o:OLEObject/@r:id names the embeddings part relationship, w:dxaOrig/w:dyaOrig its own twips size), mirroring ooxml.js's own oleObjectFixturePackage (typed/docx/read.test.ts) but with no VML preview picture -- documents.js's own splice pass (ExaDev/documents.js#921) recovers a legacy-native payload from the r:id/relationship/part chain alone, so the preview a real producer would also ship adds nothing this fixture needs to exercise.
+const LEGACY_OLE_CONTENT_TYPES_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="bin" ContentType="application/vnd.openxmlformats-officedocument.oleObject"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
+);
+
+const LEGACY_OLE_DOCUMENT_RELS_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdOle" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject" Target="embeddings/oleObject1.bin"/></Relationships>',
+);
+
+const LEGACY_OLE_DOCUMENT_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:o="urn:schemas-microsoft-com:office:office"><w:body><w:p><w:r><w:object w:dxaOrig="1920" w:dyaOrig="1200"><o:OLEObject Type="Embed" ProgID="Excel.Sheet.8" r:id="rIdOle" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/></w:object></w:r></w:p><w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>',
+);
+
+export function docxWithLegacyOleObjectPackage(
+  payloadBytes: Uint8Array<ArrayBuffer>,
+): Package {
+  return decodePackage(
+    zipPackage({
+      "[Content_Types].xml": LEGACY_OLE_CONTENT_TYPES_XML,
+      "_rels/.rels": ROOT_RELS_XML,
+      "word/document.xml": LEGACY_OLE_DOCUMENT_XML,
+      "word/_rels/document.xml.rels": LEGACY_OLE_DOCUMENT_RELS_XML,
+      "word/styles.xml": STYLES_XML,
+      "word/embeddings/oleObject1.bin": payloadBytes,
+    }),
+  );
+}
