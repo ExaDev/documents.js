@@ -11,6 +11,7 @@ import {
 import type { OmmlDiagnosticSink } from "./formula";
 import { spliceSlideFormulas } from "./formula";
 import { collapseVectorShapeRuns } from "./vector";
+import { spliceSlideLegacyEmbeddedObjects } from "./legacy-embedded";
 
 export interface ReadPptxContentOptions {
   readonly onMathDiagnostic?: OmmlDiagnosticSink;
@@ -42,7 +43,7 @@ function slidePathsInOrder(pkg: Package): readonly string[] {
 
 // Package -> ContentDocument (the presentation variant). A thin adapter over ooxml.js's own readPptxContent (imported here as readPptxFlat because this module's own export already holds that name; ooxml.js 4.0.0 renamed this flat reader to readPptxContent and gave the bare readPptx name to its tree-form DocumentTree counterpart): placeholder -> layout -> master -> theme inheritance, the run-property cascade, group-transform flattening, and slide ordering via p:sldIdLst all live upstream in ooxml.js (the upstream reader used to be a lossy, geometry-free projection unusable as a layout basis; it no longer is).
 //
-// An embedded OOXML equation (ExaDev/documents.js#563) and a vector-only p:sp -- one the upstream reader itself always reads as an ordinary, empty ContentShape regardless of content -- are each carried through too, as second, independent passes over each slide's own raw p:sld: ./formula.ts's own spliceSlideFormulas (a real 'formula'-kind embedded object) runs FIRST, then ./vector.ts's own collapseVectorShapeRuns (a real 'drawing'-kind embedded object collapsing the run of shape slots it occupied) -- that ordering is load-bearing, not incidental, since the vector pass can shrink the shapes array and would invalidate the formula pass's own shape-index correspondence if it ran first (see spliceSlideFormulas's own comment). The upstream reader has no vector-geometry or embedded-equation handling at all, mirroring how src/ooxml/docx/vector.ts and src/odf/vector/detect.ts recover the same geometry ooxml.js's/odf.js's own readers do not.
+// An embedded OOXML equation (ExaDev/documents.js#563), a legacy-OLE-compound-file embedding (ExaDev/documents.js#921), and a vector-only p:sp -- one the upstream reader itself always reads as an ordinary, empty ContentShape regardless of content -- are each carried through too, as second, independent passes over each slide's own raw p:sld: ./formula.ts's own spliceSlideFormulas (a real 'formula'-kind embedded object) and ./legacy-embedded.ts's own spliceSlideLegacyEmbeddedObjects (a real 'wordprocessing'/'spreadsheet'/'presentation'-kind embedded object, appended to whichever p:graphicFrame shape's own OLE payload turned out to be a classic compound file ooxml.js's own ZIP/CFB-Package-stream decoding cannot place) run FIRST, then ./vector.ts's own collapseVectorShapeRuns (a real 'drawing'-kind embedded object collapsing the run of shape slots it occupied) -- that ordering is load-bearing, not incidental, since the vector pass can shrink the shapes array and would invalidate the other two passes' own shape-index correspondence if it ran first (see spliceSlideFormulas's own comment). Formula and legacy-embedding recovery can run in either order relative to each other: a formula-only shape is always a p:sp and a legacy embedding always a p:graphicFrame, so the two detectors never target the same shape slot. The upstream reader has no vector-geometry or embedded-equation handling at all, mirroring how src/ooxml/docx/vector.ts and src/odf/vector/detect.ts recover the same geometry ooxml.js's/odf.js's own readers do not.
 export function readPptxContent(
   pkg: Package,
   options?: ReadPptxContentOptions,
@@ -51,8 +52,10 @@ export function readPptxContent(
   const slidePaths = slidePathsInOrder(pkg);
   const slides = pptxDoc.slides.map((slide, slideIndex) => {
     const slidePath = slidePaths[slideIndex];
-    const slideRoot =
-      slidePath === undefined ? undefined : rootElement(pkg.parts[slidePath]);
+    if (slidePath === undefined) {
+      return slide;
+    }
+    const slideRoot = rootElement(pkg.parts[slidePath]);
     const cSld =
       slideRoot === undefined
         ? undefined
@@ -68,7 +71,17 @@ export function readPptxContent(
       spTree.children,
       options?.onMathDiagnostic,
     );
-    return collapseVectorShapeRuns(withFormulas, slideIndex, spTree.children);
+    const withLegacyEmbeddings = spliceSlideLegacyEmbeddedObjects(
+      withFormulas,
+      spTree.children,
+      resolveRelationships(pkg, slidePath),
+      pkg,
+    );
+    return collapseVectorShapeRuns(
+      withLegacyEmbeddings,
+      slideIndex,
+      spTree.children,
+    );
   });
   return { kind: "presentation", metadata: { ...pptxDoc.metadata }, slides };
 }
