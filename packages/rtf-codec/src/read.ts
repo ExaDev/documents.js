@@ -589,18 +589,45 @@ interface BlockConstructExtent {
   readonly endIndex: number;
 }
 
+// A constructStart/constructEnd marker pair can only ever express proper nesting or disjointness -- document-schema.js's own construct.ts states plainly that two block-scoped extents whose ranges genuinely cross have "no encoding in either form", since the tree side would need two subtrees crossing (which no tree holds) and the flat side's bracket matching re-pairs a crossing couple into a nesting the source never had. Two block-scoped bookmarks whose real ranges are adjacent-but-disjoint in the source can still produce crossing block extents here, because a paragraph is this reader's finest addressable unit: when one bookmark's \bkmkend and a later bookmark's own \bkmkstart both land inside the SAME paragraph, that paragraph's own block index is claimed by both extents even though neither bookmark's real text ever overlapped the other's (ExaDev/documents.js#1040). Detects exactly that shape -- extent B starts strictly before extent A ends, but ends strictly after A does, so B neither nests inside A nor sits disjoint from it -- and drops the later-starting extent of the crossing pair, keeping the earlier (outer) one intact and self-consistent; the dropped one is reported through the sink rather than silently vanishing, since it degrades real content exactly like every other unrepresentable construct this reader names.
+function dropCrossingExtents(
+  ordered: readonly BlockConstructExtent[],
+  sink: RtfDiagnosticSink,
+): readonly BlockConstructExtent[] {
+  const kept: BlockConstructExtent[] = [];
+  for (const candidate of ordered) {
+    const crossesKept = kept.some(
+      (extent) =>
+        candidate.startIndex < extent.endIndex &&
+        candidate.endIndex > extent.endIndex,
+    );
+    if (crossesKept) {
+      sink({
+        code: RtfDiagnosticCodes.BLOCK_CONSTRUCT_EXTENTS_CROSSED,
+        severity: "warning",
+        message: `a '${candidate.descriptor.kind}' construct's own block extent crosses an already-open one instead of nesting inside or sitting disjoint from it -- both bookmarks likely closed and opened within the same paragraph, which this reader cannot express as two separate extents, so this one is dropped`,
+      });
+      continue;
+    }
+    kept.push(candidate);
+  }
+  return kept;
+}
+
 // Splices each extent's constructStart/constructEnd pair into one block list, the flat form's own encoding of a block-scoped construct. Outermost first at a shared boundary -- longer extents open earlier and close later -- so bracket matching re-derives the same nesting document-schema.js's decompose() will promote back into groups.
 function insertConstructMarkers(
   blocks: readonly ContentBlock[],
   extents: readonly BlockConstructExtent[],
+  sink: RtfDiagnosticSink,
 ): ContentBlock[] {
   if (extents.length === 0) {
     return [...blocks];
   }
-  const ordered = [...extents].sort(
+  const sorted = [...extents].sort(
     (left, right) =>
       left.startIndex - right.startIndex || right.endIndex - left.endIndex,
   );
+  const ordered = dropCrossingExtents(sorted, sink);
   const closing = [...ordered].reverse();
   const out: ContentBlock[] = [];
   for (let index = 0; index <= blocks.length; index += 1) {
@@ -1037,7 +1064,11 @@ class ContentBuilder {
     this.endParagraph(para, false);
     this.flushClosingBookmarks(true, this.cellBlocks.length);
     this.rowCells.push({
-      blocks: insertConstructMarkers(this.cellBlocks, this.cellBlockExtents),
+      blocks: insertConstructMarkers(
+        this.cellBlocks,
+        this.cellBlockExtents,
+        this.sink,
+      ),
     });
     this.cellBlocks = [];
     this.cellBlockExtents = [];
@@ -1299,6 +1330,7 @@ class ContentBuilder {
     const blocks = insertConstructMarkers(
       this.blocks,
       this.sectionBlockExtents,
+      this.sink,
     );
     this.sectionBlockExtents = [];
     if (blocks.length === 0 && this.sections.length > 0) {
