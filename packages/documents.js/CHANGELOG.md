@@ -1,3 +1,9 @@
+## [7.2.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.15...documents.js%407.2.0) (2026-09-07)
+
+### Features
+
+* **documents.js:** support INNER JOIN in the odb SQL engine ([7271dfb](https://github.com/ExaDev/documents.js/commit/7271dfbe89a887916755d1059df190b243886452))
+
 ## [7.1.15](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.14...documents.js%407.1.15) (2026-09-07)
 
 

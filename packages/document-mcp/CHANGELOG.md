@@ -1,3 +1,15 @@
+## [4.6.17](https://github.com/ExaDev/documents.js/compare/document-mcp%404.6.16...document-mcp%404.6.17) (2026-09-07)
+
+### Documentation
+
+* **document-mcp:** document odb_query's new INNER JOIN support ([6413b18](https://github.com/ExaDev/documents.js/commit/6413b18707a88ca09c05891f35a3b7434a457d95))
+
+
+### Dependencies
+
+- Updated documents.js to ^7.2.0
+- Updated document-compute.js to ^1.3.16
+
 ## [4.6.16](https://github.com/ExaDev/documents.js/compare/document-mcp%404.6.15...document-mcp%404.6.16) (2026-09-07)
 
 
