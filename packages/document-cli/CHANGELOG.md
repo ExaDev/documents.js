@@ -1,3 +1,11 @@
+## [5.4.19](https://github.com/ExaDev/documents.js/compare/document-cli%405.4.18...document-cli%405.4.19) (2026-09-07)
+
+
+### Dependencies
+
+- Updated odf.js to ^7.2.0
+- Updated documents.js to ^7.2.2
+
 ## [5.4.18](https://github.com/ExaDev/documents.js/compare/document-cli%405.4.17...document-cli%405.4.18) (2026-09-07)
 
 

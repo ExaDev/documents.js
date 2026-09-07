@@ -1,3 +1,9 @@
+## [7.2.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.1.6...odf.js%407.2.0) (2026-09-07)
+
+### Features
+
+* **odf.js:** read and write cell comments (office:annotation) ([b13f2a8](https://github.com/ExaDev/documents.js/commit/b13f2a8ad568e6e61f45ddf6a7a1b7526323e8b7))
+
 ## [7.1.6](https://github.com/ExaDev/documents.js/compare/odf.js%407.1.5...odf.js%407.1.6) (2026-09-07)
 
 

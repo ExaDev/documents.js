@@ -1,3 +1,13 @@
+## [8.1.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.0.1...ooxml.js%408.1.0) (2026-09-07)
+
+### Features
+
+* **ooxml.js:** write cell comments as xlsx threaded comments ([bb4cc65](https://github.com/ExaDev/documents.js/commit/bb4cc658329ef50ea83c05b9a9b78a71e0f39659))
+
+### Bug Fixes
+
+* **ooxml.js:** decode XML entities in a threaded comment's inline author name ([c7160bb](https://github.com/ExaDev/documents.js/commit/c7160bbb5b59fe10c879d78a40dea1c93f02543f))
+
 ## [8.0.1](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.0.0...ooxml.js%408.0.1) (2026-09-07)
 
 
