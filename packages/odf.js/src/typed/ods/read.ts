@@ -11,6 +11,7 @@ import type {
   ContentSheetImage,
   ContentSheetPrintRange,
   ContentSheetPrintSettings,
+  ContentSheetRange,
   ContentSheetRepeatRange,
   ContentSheetRow,
   DocumentTree,
@@ -36,6 +37,11 @@ import { parseOdfLength } from "../shared/units";
 import { decodeOdfText } from "../shared/text";
 import { readOdfParagraph } from "../shared/paragraph";
 import { readCellStyleDecoration } from "../shared/table";
+import {
+  readContentValidationDefinitions,
+  resolveSheetDataValidations,
+  type ParsedContentValidation,
+} from "./data-validation";
 import type { OdfTransformFunction } from "../shared/transform";
 import { parseOdfTransform } from "../shared/transform";
 import { readDrawFrame } from "../draw/shapes";
@@ -339,6 +345,8 @@ interface TableWalkResult {
   repeatRows: ContentSheetRepeatRange | undefined;
   manualBreakRows: number[];
   manualBreakColumns: number[];
+  // Every cell in this table carrying a table:content-validation-name, keyed by that name, as the single-cell range it occupies -- one entry per referencing cell, not merged into larger rectangles (ContentSheetDataValidation.ranges is a plain list; a real producer's own validated area reading back as several 1x1 ranges instead of one bigger one is still a faithful, if unminified, restatement of exactly which cells the rule applies to). Resolved against the document-wide rule definitions in readSheet below, since one name can be referenced from more than one sheet.
+  validationRefs: Map<string, ContentSheetRange[]>;
 }
 
 // One anchored draw:frame -> whichever of `images`/`embeddedObjects` it belongs in, at the anchor position the caller resolved for it (the enclosing cell's own cursor row/column, or 0/0 for a page-anchored frame -- see this module's own top-of-file note on the two anchoring conventions). The frame itself is read by shapes.ts's readDrawFrame, so its resolved box already carries the group-composed offsets and the frame-sized ContentImageBlock this function only has to re-shape into a ContentSheetImage. An embedded sub-document dispatches through typed/draw/embedded.ts's own readEmbeddedObjectDocument -- the one shared kind -> reader table every frame-reading format hands its references to, so this module imports no sibling format reader (see that module's top-of-file note for why the dispatch is inverted into it).
@@ -449,6 +457,7 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
   const embeddedObjects: ContentEmbeddedObject[] = [];
   const manualBreakRows: number[] = [];
   const manualBreakColumns: number[] = [];
+  const validationRefs = new Map<string, ContentSheetRange[]>();
   let repeatColumns: ContentSheetRepeatRange | undefined;
   let repeatRows: ContentSheetRepeatRange | undefined;
 
@@ -502,13 +511,33 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
         const formula = attrValue(child, "table:formula");
         const { runs, displayText } = readCellText(child, pkg);
         const comment = readCellComment(child);
+        // Collected independently of whether the cell itself ends up materialized below: a cell whose only content is a validation reference (no value, formula, text, or comment) still carries a real rule the sheet-level dataValidations array must not lose, exactly the same "the cell may vanish, the fact about it must not" reasoning collectAnchoredFrames above already applies to an anchored image.
+        const validationName = attrValue(
+          child,
+          "table:content-validation-name",
+        );
+        if (validationName !== undefined) {
+          const range: ContentSheetRange = {
+            startRow: rowIndex,
+            startColumn: columnIndex,
+            endRow: rowIndex,
+            endColumn: columnIndex,
+          };
+          const existing = validationRefs.get(validationName);
+          if (existing === undefined) {
+            validationRefs.set(validationName, [range]);
+          } else {
+            existing.push(range);
+          }
+        }
         const hasValueType =
           attrValue(child, "office:value-type") !== undefined;
         if (
           !hasValueType &&
           formula === undefined &&
           displayText.length === 0 &&
-          comment === undefined
+          comment === undefined &&
+          validationName === undefined
         ) {
           // A genuinely empty cell (the common case for a huge trailing repeat block) -- skip entirely, never materialized.
           continue;
@@ -642,6 +671,7 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
     repeatRows,
     manualBreakRows,
     manualBreakColumns,
+    validationRefs,
   };
 }
 
@@ -750,6 +780,7 @@ function readPrintSettings(
 function readSheet(
   tableElement: XmlElement,
   pkg: Package,
+  validationDefinitions: ReadonlyMap<string, ParsedContentValidation>,
 ): ContentSheet | undefined {
   const name = attrValue(tableElement, "table:name");
   if (name === undefined) {
@@ -765,6 +796,7 @@ function readSheet(
     repeatRows,
     manualBreakRows,
     manualBreakColumns,
+    validationRefs,
   } = readTable(tableElement, pkg);
   const printSettings = readPrintSettings(
     tableElement,
@@ -785,6 +817,13 @@ function readSheet(
   if (embeddedObjects.length > 0) {
     // Optional in ContentSheetSchema, so it is set only when the sheet genuinely has one -- matching how every other optional field in this reader is omitted rather than written as an empty value.
     sheet.embeddedObjects = embeddedObjects;
+  }
+  const dataValidations = resolveSheetDataValidations(
+    validationRefs,
+    validationDefinitions,
+  );
+  if (dataValidations.length > 0) {
+    sheet.dataValidations = dataValidations;
   }
   return sheet;
 }
@@ -818,9 +857,13 @@ export function readOdsContent(pkg: Package): OdsDocument {
       ? []
       : childrenWithTag(spreadsheet, "table:table");
 
+  const validationDefinitions =
+    spreadsheet === undefined
+      ? new Map<string, ParsedContentValidation>()
+      : readContentValidationDefinitions(spreadsheet);
   const sheets: ContentSheet[] = [];
   for (const table of tables) {
-    const sheet = readSheet(table, pkg);
+    const sheet = readSheet(table, pkg, validationDefinitions);
     if (sheet !== undefined) {
       sheets.push(sheet);
     }
