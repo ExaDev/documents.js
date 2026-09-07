@@ -235,26 +235,68 @@ export function headingLevelFromIstd(istd: number): number | undefined {
   return istd >= 1 && istd <= 9 ? istd : undefined;
 }
 
-// A minimal, genuinely spec-conformant STSH carrying zero styles ([MS-DOC] 2.9.271's own "cstd" MAY be 0; no MUST-clause requires a document to define even one). write.ts always writes one, never omits fcStshf/lcbStshf entirely, because FibRgFcLcb97's own lcbStshf field "MUST be a nonzero value" -- a document with no style sheet at all is not a construct [MS-DOC] permits, even though this package's own reader tolerates lcbStshf 0 (see read.ts). Every field is the same fixed Stshif header parseStsh's own STSHIF_SIZE check requires, populated with the values Word's own default document carries when nothing overrides them; there are no styles for it to also fold and, in turn, nothing for a paragraph's own sprmPIstd to resolve a name or heading level through -- see the README's own scope note on paragraph styles.
-export function buildEmptyStsh(): Uint8Array {
+// Mints a real STSH from a set of paragraph-kind style names, keyed by the istd each occupies -- a heading-implied istd 1-9 per headingLevelFromIstd's own rule, every other named style at its own istd >= 10 in whatever order the caller assigned. An istd this map has no entry for -- including istd 0 whenever no paragraph's own styleId is genuinely "Normal" -- is left an empty hole ([MS-DOC] 2.9.271's own "A style definition can be empty, in which case cbStd MUST be 0"), so a heading level (or istd 0) the document never names need not occupy real bytes; an empty names map (cstd 0) is the same genuinely spec-conformant zero-style STSH this package always wrote before #1059 minted real entries at all -- write.ts always writes one, never omits fcStshf/lcbStshf entirely, because FibRgFcLcb97's own lcbStshf field "MUST be a nonzero value" (a document with no style sheet at all is not a construct [MS-DOC] permits, even though this package's own reader tolerates lcbStshf 0 -- see read.ts). Every entry is written with an empty grLPUpxSw -- two LPUpxPapx/LPUpxChpx entries, both zero-length -- since writeDocContent has no style-vs-direct-formatting split to draw a real one from: every property it writes is already, unconditionally, a paragraph's or run's own direct exception (see the README's own scope note). This mints style IDENTITY only, so a paragraph's own styleId/headingLevel round-trips through a real STSH entry instead of always reading back istd 0 (ExaDev/documents.js#1059).
+export function buildStshForStyles(
+  names: ReadonlyMap<number, string>,
+): Uint8Array {
+  const cstd = names.size === 0 ? 0 : Math.max(...names.keys()) + 1;
   const stshi: number[] = [];
-  const push16 = (value: number): void => {
-    stshi.push(value & 0xff, (value >> 8) & 0xff);
+  const push16 = (target: number[], value: number): void => {
+    target.push(value & 0xff, (value >> 8) & 0xff);
   };
-  push16(0); // cstd: no styles.
-  push16(STDF_SIZE_WITHOUT_POST_2000); // cbSTDBaseInFile.
-  push16(0x0001); // fStdStylenamesWritten, which [MS-DOC] requires to be 1.
-  push16(0); // stiMaxWhenSaved.
-  push16(0x000f); // istdMaxFixedWhenSaved, which [MS-DOC] requires to be 0x000F.
-  push16(0); // nVerBuiltInNamesWhenSaved.
-  push16(0); // ftcAsci.
-  push16(0); // ftcFE.
-  push16(0); // ftcOther.
-  push16(0); // ftcBi.
-  push16(4); // StshiLsd.cbLSD, which [MS-DOC] requires to be 4.
-  return new Uint8Array([
+  push16(stshi, cstd);
+  push16(stshi, STDF_SIZE_WITHOUT_POST_2000); // cbSTDBaseInFile.
+  push16(stshi, 0x0001); // fStdStylenamesWritten, which [MS-DOC] requires to be 1.
+  push16(stshi, 0); // stiMaxWhenSaved.
+  push16(stshi, 0x000f); // istdMaxFixedWhenSaved, which [MS-DOC] requires to be 0x000F.
+  push16(stshi, 0); // nVerBuiltInNamesWhenSaved.
+  push16(stshi, 0); // ftcAsci.
+  push16(stshi, 0); // ftcFE.
+  push16(stshi, 0); // ftcOther.
+  push16(stshi, 0); // ftcBi.
+  push16(stshi, 4); // StshiLsd.cbLSD, which [MS-DOC] requires to be 4.
+
+  const out: number[] = [
     stshi.length & 0xff,
     (stshi.length >> 8) & 0xff,
     ...stshi,
-  ]);
+  ];
+
+  // One LPUpxPapx/LPUpxChpx entry: a 2-byte cbUpx (the payload's own length, excluding padding) followed by the payload, then one zero pad byte if that length is odd -- [MS-DOC] 2.9.140/2.9.138's own "padded to an even length, but the length in cbUpx MUST NOT include this padding".
+  const pushLpUpx = (target: number[], payload: readonly number[]): void => {
+    push16(target, payload.length);
+    target.push(...payload);
+    if (payload.length % 2 === 1) target.push(0);
+  };
+
+  for (let istd = 0; istd < cstd; istd += 1) {
+    const name = names.get(istd);
+    if (name === undefined) {
+      out.push(0, 0); // cbStd 0: an empty style-sheet hole, [MS-DOC] 2.9.271's own "MAY be empty".
+      continue;
+    }
+    const std: number[] = [];
+    // StdfBase: sti (STI_USER_DEFINED -- this mints a style identity, not a known application-defined one), stk (paragraph), istdBase (none), cupx/istdNext (unused), bchUpe/grfstd (zero).
+    const word0 = STI_USER_DEFINED & 0x0fff;
+    const word1 = (STK.paragraph & 0x000f) | (ISTD_BASE_NONE << 4);
+    push16(std, word0);
+    push16(std, word1);
+    push16(std, 0); // cupx and istdNext.
+    push16(std, 0); // bchUpe.
+    push16(std, 0); // grfstd.
+    // xstzName: an Xst (a character count then that many 16-bit code units) followed by a 2-byte null terminator.
+    push16(std, name.length);
+    for (const character of name) {
+      push16(std, character.charCodeAt(0));
+    }
+    push16(std, 0);
+    // grLPUpxSw: StkParaGRLPUPX's own two members, both empty -- UpxPapx's own istd (redundant with this entry's own position in the array, [MS-DOC] 2.9.338's own "MUST be equal to the current style") plus a zero-length grpprlPapx, then a zero-length grpprlChpx.
+    pushLpUpx(std, [istd & 0xff, (istd >> 8) & 0xff]);
+    pushLpUpx(std, []);
+    push16(out, std.length);
+    out.push(...std);
+    // "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding."
+    if (std.length % 2 === 1) out.push(0);
+  }
+  return new Uint8Array(out);
 }
