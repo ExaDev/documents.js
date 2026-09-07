@@ -2003,6 +2003,47 @@ describe("bookmarks", () => {
     ).toEqual({ kind: "anchor", anchorType: "bookmark", name: "span" });
   });
 
+  it("drops the later of two disjoint bookmarks that share a paragraph boundary, rather than reconstructing them as overlapping", () => {
+    // A's own \bkmkend and B's own \bkmkstart both land in the second paragraph of the same table cell -- the shape ExaDev/documents.js#1040 names: block-granularity cannot express "A ends immediately before this paragraph's own remainder, which is B's" as two separate extents, since the paragraph is this reader's finest addressable unit. The two source ranges never actually overlap (A: "one"/"two", B: "three"/"four"), but a naive block-extent reconstruction would otherwise splice B nested inside A and silently reassign B's own trailing paragraph to A.
+    const { document, diagnostics } = readRtfContent(
+      bytes(
+        `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl{\\*\\bkmkstart A}one\\par\\pard\\intbl two{\\*\\bkmkend A}{\\*\\bkmkstart B}three\\par\\pard\\intbl{\\*\\bkmkend B}four\\cell\\row\\pard x\\par}`,
+      ),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing document");
+    }
+    const table = document.sections[0]?.blocks.find(
+      (block): block is ContentTable => block.kind === "table",
+    );
+    const cellBlocks = table?.rows[0]?.cells[0]?.blocks ?? [];
+    expect(cellBlocks.map((block) => block.kind)).toEqual([
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+      "paragraph",
+    ]);
+    const start = cellBlocks[0];
+    expect(
+      start?.kind === "constructStart" ? start.descriptor : undefined,
+    ).toEqual({ kind: "anchor", anchorType: "bookmark", name: "A" });
+    // B's own text still reads correctly -- only its own bookmark construct is dropped, not its content.
+    const paragraphs = cellBlocks.filter(
+      (block): block is ContentParagraph => block.kind === "paragraph",
+    );
+    expect(paragraphs.map((p) => p.runs.map((r) => r.text).join(""))).toEqual([
+      "one",
+      "twothree",
+      "four",
+    ]);
+    // Adjacent runs, split apart only because startBookmark/endBookmark each flush the pending run at the marker's own position -- not two genuinely different formatting spans.
+    expect(paragraphs[1]?.runs).toHaveLength(2);
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      RtfDiagnosticCodes.BLOCK_CONSTRUCT_EXTENTS_CROSSED,
+    );
+  });
+
   it("quarantines \\bkmkcolfN/\\bkmkcollN as rtf residue, which no ContentDocument field carries", () => {
     // The spec's own example: "{\*\bkmkstart\bkmkcolf2\bkmkcoll5 Table1} places the bookmark 'Table1' in columns 2 through 5 of a table."
     const paragraph = paragraphsOf(
