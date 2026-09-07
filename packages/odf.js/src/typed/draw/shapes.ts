@@ -2,6 +2,8 @@ import type {
   Box,
   Color,
   ContentBlock,
+  ContentFloatOrigin,
+  ContentFloatPosition,
   ContentImageBlock,
   ContentShape,
   ContentStroke,
@@ -114,6 +116,34 @@ function readFrameAltText(frame: XmlElement): string | undefined {
 }
 
 // draw:image is a direct child of draw:frame, referencing its media part by a plain package path via xlink:href -- ODF has no relationships mechanism (see this package's own top-level README), so this IS the reference, not an indirection to resolve. Real saved .odp packages always use xlink:href against a real Pictures/ part (confirmed against a real LibreOffice-produced .odp); the flat-XML office:binary-data inline form is specific to the .fodp/.fods/.fodt single-file variants this reader (operating on a decoded zip-of-XML Package) never encounters, so it is not handled here. The frame is passed alongside its own draw:image purely for alt text, which lives on the FRAME (see readFrameAltText above), never on the image element.
+// ODF's text:anchor-type states what a draw:frame's own svg:x/svg:y are measured from -- meaningful only inside text-document flow content (a frame anchored into a slide's own shape tree, or a table cell's, never carries this attribute at all, so this lookup naturally resolves to undefined there with no extra context-awareness needed). "char"/"as-char" are the flow-anchored case (flow-anchor.ts's own top-of-file note): the frame has no position of its own to record, its svg:x/svg:y absent by the ODF schema itself, so those two are deliberately NOT members here -- only the three anchor types that genuinely carry a real, meaningful svg:x/svg:y populate a floatPosition. document-schema.js's own "frame" origin member exists for exactly text:anchor-type="frame" (ExaDev/documents.js#1087 added it with no docx equivalent), so the three map onto the shared enum with no translation needed beyond the name difference between "page"/"paragraph" (identical in both vocabularies) and ODF's own "frame".
+const FLOAT_ORIGIN_BY_ANCHOR_TYPE: Readonly<
+  Partial<Record<string, ContentFloatOrigin>>
+> = {
+  page: "page",
+  frame: "frame",
+  paragraph: "paragraph",
+};
+
+// A positioned draw:frame's own floating position, document-schema.js's format-agnostic ContentFloatPosition (ExaDev/documents.js#1087/#1094) -- undefined for a frame with no text:anchor-type at all (a slide or table-cell shape, where the attribute is never written) or one anchored "char"/"as-char" (inline in text flow, no position of its own). ODF's svg:x/svg:y are always a literal point offset on both axes -- there is no alignment-keyword concept the way docx's wp:align is -- so both axes always take ContentFloatAxisSchema's offsetPt branch, never its align branch.
+function readFloatPosition(
+  frame: XmlElement,
+  frameBox: Box,
+): ContentFloatPosition | undefined {
+  const anchorType = attrValue(frame, "text:anchor-type");
+  const origin =
+    anchorType === undefined
+      ? undefined
+      : FLOAT_ORIGIN_BY_ANCHOR_TYPE[anchorType];
+  if (origin === undefined) {
+    return undefined;
+  }
+  return {
+    horizontal: { relativeTo: origin, offsetPt: frameBox.xPt },
+    vertical: { relativeTo: origin, offsetPt: frameBox.yPt },
+  };
+}
+
 export function readDrawImageBlock(
   image: XmlElement,
   frame: XmlElement,
@@ -141,6 +171,10 @@ export function readDrawImageBlock(
   const altText = readFrameAltText(frame);
   if (altText !== undefined) {
     block.altText = altText;
+  }
+  const floatPosition = readFloatPosition(frame, frameBox);
+  if (floatPosition !== undefined) {
+    block.floatPosition = floatPosition;
   }
   return block;
 }
