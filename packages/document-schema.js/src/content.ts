@@ -986,6 +986,10 @@ export const ContentSheetConditionalFormatSchema = z.discriminatedUnion(
         "thisWeek",
         "lastWeek",
         "nextWeek",
+        // Reachable only from odf.js's own calcext:date-is reading (ExaDev/documents.js#1075) -- ECMA-376's own ST_TimePeriod enum has no year-scoped member, so xlsx never produces these, but LibreOffice's calcext extension genuinely does (verified against sc/source/filter/xml/xmlcondformat.cxx's own calcext:date-is/@date reading: "this-year"/"last-year"/"next-year" are real, recognised values, not a guess).
+        "thisYear",
+        "lastYear",
+        "nextYear",
       ]),
       style: ContentSheetConditionalFormatStyleSchema.optional(),
     }),
