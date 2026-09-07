@@ -3,7 +3,7 @@ import type { MathMlNode } from "documents.js";
 export const MATHML_NS = "http://www.w3.org/1998/Math/MathML";
 
 // Real MathML producers write element tags with a "math:" namespace prefix when math is not the document's default namespace (<math:mfrac>, <math:mrow>). The browser's MathML parser expects unprefixed tags inside a namespaced <math>, so the prefix must be stripped.
-export function stripMathMlNamespace(tag: string): string {
+function stripMathMlNamespace(tag: string): string {
   const colonIndex = tag.indexOf(":");
   return colonIndex === -1 ? tag : tag.slice(colonIndex + 1);
 }
