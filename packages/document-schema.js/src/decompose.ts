@@ -11,7 +11,6 @@ import {
   type ContentSheet,
   type ContentSlide,
 } from "./content";
-import type { ConstructDescriptor } from "./construct";
 import type {
   DrawPageGroupNode,
   HeadingGroupNode,
@@ -128,7 +127,12 @@ function walkSectionBlocks(cursor: BlockCursor): SectionChild[] {
       return root;
     }
     if (block.kind === "constructStart") {
-      openConstructGroup(block.descriptor, cursor, listStack, headingScope());
+      // ExaDev/document-schema.js#1022: a constructStart closes any open list scope exactly as a plain paragraph does, before the group itself attaches. A block-level construct's own extent is a self-contained region walked with fresh stacks (below), never a continuation of the enclosing list item's own content -- so a construct sitting at the tail of a list, with nothing after it that would have continued that list, no longer strands as a phantom child of the last item it happens to follow. A list genuinely still open on the far side of the region (the group's own subsequent list-level paragraph) simply reopens its own nesting from the section root once the construct closes, which flatten's document-order/embedded-field reconstruction reproduces identically either way.
+      listStack.length = 0;
+      headingScope().push({
+        node: block.descriptor,
+        children: walkSectionBlocks(cursor),
+      });
       continue;
     }
     if (block.kind !== "paragraph") {
@@ -204,11 +208,9 @@ function walkShapeBlocks(cursor: BlockCursor): ShapeChild[] {
       return root;
     }
     if (block.kind === "constructStart") {
-      const parent = listStack.at(-1);
-      (parent !== undefined ? parent.children : root).push({
-        node: block.descriptor,
-        children: walkShapeBlocks(cursor),
-      });
+      // ExaDev/document-schema.js#1022: closes any open list scope first, on the identical reasoning walkSectionBlocks's own constructStart branch states.
+      listStack.length = 0;
+      root.push({ node: block.descriptor, children: walkShapeBlocks(cursor) });
       continue;
     }
     if (block.kind !== "paragraph") {
@@ -225,24 +227,6 @@ function walkShapeBlocks(cursor: BlockCursor): ShapeChild[] {
     root.push(block);
   }
   return root;
-}
-
-// Attaches the construct region a section-flow constructStart opened, recursing over the cursor to build its children and resuming the caller past the close marker that recursion consumed. Two things follow from a construct being a semantic wrapper rather than a container: it attaches at the CURRENT scope exactly as any other non-paragraph block does (the innermost open list group, else the innermost open heading scope), and it disturbs neither stack -- content after the close marker resumes at the same heading depth and the same list depth as content before the open marker. Its own children walk with FRESH stacks, the same reset a section boundary already performs, because the region is its own flow. Which stack it lands in also decides which group type it is, and the schema states both halves of that: the section flow's SectionChild admits a SectionConstructGroupNode (whose children are a full section flow, headings included), while a list group's ListChild admits only a ShapeConstructGroupNode (whose children are a list/shape flow, where a heading paragraph is ordinary content) -- a construct inside a list therefore groups its interior by list level alone, which is exactly the vocabulary a list group's subtree already has.
-function openConstructGroup(
-  descriptor: ConstructDescriptor,
-  cursor: BlockCursor,
-  listStack: readonly ListGroupNode[],
-  headingScope: SectionChild[],
-): void {
-  const parent = listStack.at(-1);
-  if (parent === undefined) {
-    headingScope.push({
-      node: descriptor,
-      children: walkSectionBlocks(cursor),
-    });
-    return;
-  }
-  parent.children.push({ node: descriptor, children: walkShapeBlocks(cursor) });
 }
 
 // Opens a list-item group anchored on `paragraph` at its list.level under the deepest open list group with a strictly shallower level (or directly under `scopeChildren` when none is open), popping equal-or-deeper groups closed -- the same stack semantics heading groups follow, on list.level's 0-based scale, so a level jump nests directly under the nearest shallower item with no synthetic intermediates.
