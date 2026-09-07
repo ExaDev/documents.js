@@ -16,6 +16,7 @@ import {
   XlsxBytesSchema,
 } from "../model/bytes";
 import { RtfBytesSchema } from "rtf-codec";
+import { EpubBytesSchema } from "epub-codec";
 import {
   csvToMarkdown,
   csvToOds,
@@ -25,6 +26,7 @@ import {
   docxToMarkdown,
   docxToOdt,
   docxToPdf,
+  epubToPdf,
   markdownToCsv,
   markdownToDocx,
   markdownToOdt,
@@ -56,6 +58,7 @@ import {
   pdfToCsv,
   pdfToDoc,
   pdfToDocx,
+  pdfToEpub,
   pdfToMarkdown,
   pdfToOdg,
   pdfToOdp,
@@ -128,6 +131,12 @@ export const xlsPdfCodec = z.codec(XlsBytesSchema, PdfBytesSchema, {
 export const pptPdfCodec = z.codec(PptBytesSchema, PdfBytesSchema, {
   decode: (pptBytes) => pptToPdf(pptBytes),
   encode: (pdfBytes) => pdfToPpt(pdfBytes),
+});
+
+// epub bytes <-> PDF bytes: a schema-validated z.codec() pair over epubToPdf/pdfToEpub (convert.ts), the same shape as rtfPdfCodec/docPdfCodec above -- epub-codec has no layout engine of its own either, so it composes a same-variant docx bridge with the docx<->pdf layout pair internally. EpubBytesSchema is epub-codec's own zip-header check re-exported directly, since epub-codec, like rtf-codec, already exports its own Zod schema.
+export const epubPdfCodec = z.codec(EpubBytesSchema, PdfBytesSchema, {
+  decode: (epubBytes) => epubToPdf(epubBytes),
+  encode: (pdfBytes) => pdfToEpub(pdfBytes),
 });
 
 // markdown bytes <-> PDF bytes: a schema-validated z.codec() pair over markdownToPdf/pdfToMarkdown (convert.ts), which -- unlike xlsxPdfCodec above -- DOES lay markdown out directly (markdownToPdf reuses convertWordprocessingToLayout unmodified, the same engine docxPdfCodec/odtPdfCodec above feed). Still the no-options form only, and still fully subject to the "not round-trip-lossless" caveat every PDF-pivot codec carries -- more so than any other codec in this file, in fact: pdfToMarkdown is the single lossiest conversion in the whole package (see convert.ts's own top-of-file comment and the README's Fidelity section).
