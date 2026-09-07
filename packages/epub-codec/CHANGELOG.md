@@ -1,3 +1,9 @@
+## [1.2.2](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.1...epub-codec%401.2.2) (2026-09-07)
+
+### Bug Fixes
+
+* **epub-codec:** report a run-level bookmark/endnote/comment anchor ([09f27ad](https://github.com/ExaDev/documents.js/commit/09f27ad9a0883db3fc55d51a0ee47593ae35dc50)), closes [ExaDev/documents.js#1025](https://github.com/ExaDev/documents.js/issues/1025)
+
 ## [1.2.1](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.0...epub-codec%401.2.1) (2026-09-07)
 
 ### Bug Fixes
