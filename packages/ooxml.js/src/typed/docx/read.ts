@@ -13,6 +13,7 @@ import type {
   ContentImageBlock,
   ContentListMembership,
   ContentParagraph,
+  ContentParagraphBorders,
   ContentRun,
   ContentSection,
   ContentStrokeStyle,
@@ -735,6 +736,7 @@ function readParagraph(
     lineSpacing: props.lineSpacing,
     indentLeftPt: props.indentLeftPt,
     indentFirstLinePt: props.indentFirstLinePt,
+    borders: readParagraphBorders(pPr),
   };
 }
 
@@ -809,6 +811,35 @@ function readCellBorders(
     readCellBorderEdge(tcBorders, "w:end");
   const top = readCellBorderEdge(tcBorders, "w:top");
   const bottom = readCellBorderEdge(tcBorders, "w:bottom");
+  if (left !== undefined) {
+    borders.left = left;
+  }
+  if (right !== undefined) {
+    borders.right = right;
+  }
+  if (top !== undefined) {
+    borders.top = top;
+  }
+  if (bottom !== undefined) {
+    borders.bottom = bottom;
+  }
+  return Object.keys(borders).length === 0 ? undefined : borders;
+}
+
+// w:pBdr's own child tags are top/left/bottom/right (plus between/bar, neither read here -- both describe borders shared with an adjacent paragraph, not this paragraph's own frame). Unlike w:tcBorders, CT_PBdr has no w:start/w:end RTL-neutral aliases (ECMA-376 Part 1 17.3.1.24), so readParagraphBorders reads w:left/w:right directly rather than falling back to them the way readCellBorders does. Reuses readCellBorderEdge's identical val/sz/color parsing -- the two element shapes share the same attribute vocabulary, only the parent tag and the member set differ.
+function readParagraphBorders(
+  pPr: XmlElement | undefined,
+): ContentParagraphBorders | undefined {
+  const pBdr =
+    pPr === undefined ? undefined : childrenWithTag(pPr, "w:pBdr")[0];
+  if (pBdr === undefined) {
+    return undefined;
+  }
+  const borders: ContentParagraphBorders = {};
+  const left = readCellBorderEdge(pBdr, "w:left");
+  const right = readCellBorderEdge(pBdr, "w:right");
+  const top = readCellBorderEdge(pBdr, "w:top");
+  const bottom = readCellBorderEdge(pBdr, "w:bottom");
   if (left !== undefined) {
     borders.left = left;
   }
