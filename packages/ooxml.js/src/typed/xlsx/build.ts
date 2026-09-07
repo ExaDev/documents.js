@@ -57,8 +57,9 @@ import {
   DxfTable,
 } from "./conditional-format";
 import { buildDataValidationsElement } from "./data-validation";
+import { buildThreadedCommentsRoot, sheetHasComments } from "./comments-write";
 
-// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, through the same number-format vocabulary that reader classifies (see renderCellValue and typed/xlsx/number-format.ts's own write-side section), and honestly re-approximating the one lossy conversion left on the way in (column-width characters). The read-side exceptions are cell comments and the drawing layer: the reader reads cell comments (typed/xlsx/comments.ts) but this writer emits no comments or threaded-comments part, so ContentSheetCell.comment does not survive a round trip through this pair, and the reader's drawing rows -- chart graphic frames (embeddedObjects) and pictures (images), typed/xlsx/drawings.ts -- likewise have no write side, this writer emitting no drawing part. See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
+// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, through the same number-format vocabulary that reader classifies (see renderCellValue and typed/xlsx/number-format.ts's own write-side section), and honestly re-approximating the one lossy conversion left on the way in (column-width characters). ContentSheetCell.comment now survives a round trip too, via the threaded-comments part comments-write.ts builds (see buildWorksheetPart's own note below). The one remaining read-side exception is the drawing layer: the reader's drawing rows -- chart graphic frames (embeddedObjects) and pictures (images), typed/xlsx/drawings.ts -- have no write side, this writer emitting no drawing part. See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
 //
 // This is the flat, content-level half of the xlsx write pair: buildXlsxPackage (typed/document-tree.ts) is the primary name, flattening a tree-form DocumentTree (styles-table refs materialised away) and handing the result straight to this function.
 
@@ -89,6 +90,7 @@ const CT_CORE_PROPS =
   "application/vnd.openxmlformats-package.core-properties+xml";
 const CT_EXTENDED_PROPS =
   "application/vnd.openxmlformats-officedocument.extended-properties+xml";
+const CT_THREADED_COMMENTS = "application/vnd.ms-excel.threadedcomments+xml";
 
 const REL_OFFICE_DOCUMENT = `${REL_NS}/officeDocument`;
 const REL_CORE_PROPS = `${PKG_RELS_NS}/metadata/core-properties`;
@@ -96,6 +98,9 @@ const REL_EXTENDED_PROPS = `${REL_NS}/extended-properties`;
 const REL_WORKSHEET = `${REL_NS}/worksheet`;
 const REL_STYLES = `${REL_NS}/styles`;
 const REL_SHARED_STRINGS = `${REL_NS}/sharedStrings`;
+// Matches typed/xlsx/comments.ts's own REL_THREADED_COMMENTS exactly -- the read side already reads whatever this writer emits under this relationship type, so the two must stay identical.
+const REL_THREADED_COMMENTS =
+  "http://schemas.microsoft.com/office/2017/10/relationships/threadedComment";
 
 // 0-based indices of the last column (XFD, the 16384th) and the last row (the 1,048,576th) -- the current OOXML worksheet size limits, used as rowBreaks/colBreaks' own <brk max="..."> extent (the full width/height of the sheet the break spans), per ECMA-376 Part 1 SS18.3.1.2's own min/max attribute semantics documented in print-settings.ts's readManualBreaks.
 const MAX_COLUMN_INDEX = 16383;
@@ -118,7 +123,10 @@ function xmlPart(root: XmlElement): XmlPart {
 
 // --- [Content_Types].xml -----------------------------------------------------------------------------------------
 
-function buildContentTypesPart(sheetCount: number): XmlPart {
+function buildContentTypesPart(
+  sheetCount: number,
+  commentedSheetIndices: readonly number[],
+): XmlPart {
   const overrides: XmlElement[] = [
     el("Override", { PartName: "/xl/workbook.xml", ContentType: CT_WORKBOOK }),
     el("Override", { PartName: "/xl/styles.xml", ContentType: CT_STYLES }),
@@ -132,6 +140,14 @@ function buildContentTypesPart(sheetCount: number): XmlPart {
       el("Override", {
         PartName: `/xl/worksheets/sheet${index + 1}.xml`,
         ContentType: CT_WORKSHEET,
+      }),
+    );
+  }
+  for (const index of commentedSheetIndices) {
+    overrides.push(
+      el("Override", {
+        PartName: `/xl/threadedComments/threadedComment${index + 1}.xml`,
+        ContentType: CT_THREADED_COMMENTS,
       }),
     );
   }
@@ -862,6 +878,18 @@ function buildBreaksElements(settings: ContentSheetPrintSettings): {
   return result;
 }
 
+// A worksheet part only ever needs its own .rels when something on the sheet relates to a sibling part outside xl/worksheets/ -- today, that is exactly a sheet carrying at least one commented cell (sheetHasComments, comments-write.ts), addressed by the SAME relative-target convention typed/xlsx/util.ts's own resolveRelTarget already resolves back through: "../threadedComments/threadedComment{N}.xml" from xl/worksheets/_rels/sheet{N}.xml.rels resolves to xl/threadedComments/threadedComment{N}.xml.
+function buildWorksheetRelsPart(sheetIndex: number): XmlPart {
+  const root = el("Relationships", { xmlns: PKG_RELS_NS }, [
+    el("Relationship", {
+      Id: "rId1",
+      Type: REL_THREADED_COMMENTS,
+      Target: `../threadedComments/threadedComment${sheetIndex + 1}.xml`,
+    }),
+  ]);
+  return xmlPart(root);
+}
+
 // CT_Worksheet's own required child element ORDER (ECMA-376 Part 1 SS18.3.1.99): sheetPr?, dimension?, sheetViews?, sheetFormatPr?, cols*, sheetData, ..., mergeCells?, conditionalFormatting*, dataValidations?, ..., printOptions?, pageMargins?, pageSetup?, headerFooter?, rowBreaks?, colBreaks?, ... -- every element this writer emits follows that relative order (sheetViews and headerFooter are both skipped entirely: pure UI/print-preview state this package's own content model carries no data for), confirmed against real-producer-validation-and-cellis.xlsx's own emitted order: mergeCells (this fixture has none), conditionalFormatting, dataValidations, printOptions/pageMargins/pageSetup.
 function buildWorksheetPart(
   sheet: ContentSheet,
@@ -937,9 +965,15 @@ export function buildXlsxPackageFromContent(
   const worksheetParts = sheets.map((sheet) =>
     buildWorksheetPart(sheet, sharedStrings, cellFormats, dxfTable),
   );
+  const commentedSheetIndices = sheets
+    .map((sheet, index) => (sheetHasComments(sheet) ? index : undefined))
+    .filter((index): index is number => index !== undefined);
 
   const parts: Package["parts"] = {
-    "[Content_Types].xml": buildContentTypesPart(sheets.length),
+    "[Content_Types].xml": buildContentTypesPart(
+      sheets.length,
+      commentedSheetIndices,
+    ),
     "_rels/.rels": buildPackageRelsPart(),
     "xl/workbook.xml": buildWorkbookPart(sheets),
     "xl/_rels/workbook.xml.rels": buildWorkbookRelsPart(sheets.length),
@@ -951,6 +985,17 @@ export function buildXlsxPackageFromContent(
   worksheetParts.forEach((part, index) => {
     parts[`xl/worksheets/sheet${index + 1}.xml`] = part;
   });
+  for (const index of commentedSheetIndices) {
+    const sheet = sheets[index];
+    if (sheet === undefined) {
+      continue;
+    }
+    parts[`xl/worksheets/_rels/sheet${index + 1}.xml.rels`] =
+      buildWorksheetRelsPart(index);
+    parts[`xl/threadedComments/threadedComment${index + 1}.xml`] = xmlPart(
+      buildThreadedCommentsRoot(sheet),
+    );
+  }
 
   return { parts };
 }
