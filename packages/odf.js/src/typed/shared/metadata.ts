@@ -8,7 +8,7 @@ import {
 } from "../../xml/query";
 import { decodeXmlText, encodeXmlText } from "../../xml/entities";
 import { el, txt } from "../../xml/fragment";
-import { xmlnsAttributes } from "../../ns";
+import { ODF_NAMESPACES, xmlnsAttributes } from "../../ns";
 
 // Reads meta.xml (office:document-meta / office:meta) into document-schema.js's LayoutMetadata shape. Every element name below was verified against real LibreOffice 26.2 output -- both genuine user-authored documents (LibreOffice's own bundled .ott/.ots/.otp templates under /Applications/LibreOffice.app/Contents/Resources/template/**, which carry real author/date metadata from having actually been edited and saved) and the OASIS ODF schema itself (datypic.com's office:meta content-model reference) -- rather than assumed to mirror OOXML's docProps/core.xml one-for-one. Two mappings are genuinely non-obvious and were confirmed, not guessed:
 // - ODF's `dc:creator` is NOT "the document's author" the way OOXML's dc:creator is -- confirmed from several real LibreOffice-authored templates (e.g. CV.ott, the l10n normal templates): `dc:creator` records whoever most recently saved the document (Dublin Core's own "responsible for producing the resource's current content"), while `meta:initial-creator` records whoever first created it. LayoutMetadata's `author` field maps to meta:initial-creator, mirroring the ROLE ooxml.js's own DocumentMetadata.author plays for OOXML's dc:creator (the original, byline-style author) -- not to ODF's own dc:creator, which has no equivalent field in LayoutMetadata at all (there is no "last modified by" field, matching how OOXML's cp:lastModifiedBy is likewise never read into DocumentMetadata).
@@ -160,4 +160,109 @@ export function writeOdfMetadata(
     kind: "xml",
     nodes: buildOdfMetaNodes(metadata, version),
   };
+}
+
+// --- in-place patching: the live-editor counterpart to writeOdfMetadata's from-scratch rebuild ---
+//
+// True when the package already carries a real meta.xml XML part -- the precondition patchOdfMetadata requires below, mirroring ooxml.js's own hasCoreProperties exactly (typed/shared/metadata.ts there). A package that has never had any metadata set genuinely lacks this part (meta.xml is entirely optional ODF, per this module's own top comment), and creating one from nothing is writeOdfMetadata's job, not a patch's.
+export function hasOdfMetadata(pkg: Package): boolean {
+  return pkg.parts[META_PART]?.kind === "xml";
+}
+
+export interface OdfMetadataOverrides {
+  readonly title?: string;
+  readonly author?: string;
+  readonly subject?: string;
+  readonly keywords?: readonly string[];
+}
+
+// The namespace prefixes patchOdfMetadata might newly introduce onto a source document's own office:document-meta root -- every element this module's own patch path can create fresh (dc:title/dc:subject, meta:initial-creator/meta:keyword) uses one of these two, reusing ODF_NAMESPACES' own verified URIs (ns.ts) rather than restating them. meta:generator/meta:creation-date/dc:date are read-only here (patchOdfMetadata never creates them), so office: itself never needs declaring afresh either -- a document with a real meta.xml part always already has it, being office:document-meta's own required namespace.
+const META_NAMESPACE_URI_FOR_PREFIX: Readonly<Record<string, string>> = {
+  dc: ODF_NAMESPACES.dc,
+  meta: ODF_NAMESPACES.meta,
+};
+
+// Ensures `root` (office:document-meta) declares the xmlns binding a newly appended element's prefix needs -- the ODF-side mirror of ooxml.js's own ensureNamespaceDeclared. A legally-minimal meta.xml declaring only office:+dc: (a producer that has only ever written dc:title) would otherwise gain an unbound meta:initial-creator/meta:keyword child on its first author/keywords patch -- a fatal XML namespace well-formedness error real consumers (LibreOffice) reject outright.
+function ensureNamespaceDeclared(root: XmlElement, tag: string): void {
+  const colonIndex = tag.indexOf(":");
+  if (colonIndex === -1) {
+    return;
+  }
+  const prefix = tag.slice(0, colonIndex);
+  const uri = META_NAMESPACE_URI_FOR_PREFIX[prefix];
+  if (uri === undefined) {
+    return;
+  }
+  const attrName = `xmlns:${prefix}`;
+  if (root.attributes.some((a) => a.name === attrName)) {
+    return;
+  }
+  root.attributes.push({ name: attrName, value: uri });
+}
+
+// Replaces (or creates) one direct child element's sole text content, in place -- the ODF-side mirror of ooxml.js's own setElementText. `parent` is always office:meta itself in this module's own callers, so a newly created element's namespace is declared on the enclosing office:document-meta root, matching where buildOdfMetaNodes itself declares every prefix.
+function setElementText(
+  documentMetaRoot: XmlElement,
+  parent: XmlElement,
+  tag: string,
+  value: string,
+): void {
+  const existing = childrenWithTag(parent, tag)[0];
+  const textNode = txt(encodeXmlText(value));
+  if (existing !== undefined) {
+    existing.children = [textNode];
+    return;
+  }
+  ensureNamespaceDeclared(documentMetaRoot, tag);
+  parent.children.push(el(tag, {}, [textNode]));
+}
+
+function removeChildrenWithTag(parent: XmlElement, tag: string): void {
+  parent.children = parent.children.filter(
+    (child) => !(child.type === "element" && child.tag === tag),
+  );
+}
+
+// Patches meta.xml IN PLACE: for each of title/author/subject/keywords present on `overrides`, this replaces (or creates) the matching element and leaves every other element under office:meta -- meta:generator, meta:creation-date, dc:date, meta:document-statistic, meta:user-defined, and anything else the source producer wrote -- completely untouched. The write-side counterpart to readOdfMetadata above, mirroring ooxml.js's own patchCoreProperties field-for-field: title/subject write even when the override is an empty string (author does too, matching meta:initial-creator's own optionality), while an empty keywords array removes every meta:keyword element rather than leaving a stale one, matching how buildOdfMetaNodes never emits one for an empty list. keywords is one element PER keyword on ODF (readOdfMetadata's own top comment states why, confirmed against real LibreOffice output) -- not the single comma-joined element OOXML's cp:keywords is -- so a keywords override removes every existing meta:keyword element first and then appends one per entry, rather than patching a single element's text. Throws if the package has no meta.xml XML part at all -- see hasOdfMetadata above.
+export function patchOdfMetadata(
+  pkg: Package,
+  overrides: OdfMetadataOverrides,
+): void {
+  const part = pkg.parts[META_PART];
+  if (part?.kind !== "xml") {
+    throw new Error(
+      `patchOdfMetadata: package has no '${META_PART}' XML part to patch -- check hasOdfMetadata first, or build one from scratch instead (writeOdfMetadata)`,
+    );
+  }
+  const documentMetaRoot = rootElement(part.nodes);
+  if (documentMetaRoot === undefined) {
+    throw new Error(`patchOdfMetadata: '${META_PART}' has no root element`);
+  }
+  const meta = findChildElement(documentMetaRoot.children, "office:meta");
+  if (meta === undefined) {
+    throw new Error(
+      `patchOdfMetadata: '${META_PART}' has no office:meta element`,
+    );
+  }
+  if (overrides.title !== undefined) {
+    setElementText(documentMetaRoot, meta, "dc:title", overrides.title);
+  }
+  if (overrides.author !== undefined) {
+    setElementText(
+      documentMetaRoot,
+      meta,
+      "meta:initial-creator",
+      overrides.author,
+    );
+  }
+  if (overrides.subject !== undefined) {
+    setElementText(documentMetaRoot, meta, "dc:subject", overrides.subject);
+  }
+  if (overrides.keywords !== undefined) {
+    removeChildrenWithTag(meta, "meta:keyword");
+    for (const keyword of overrides.keywords) {
+      ensureNamespaceDeclared(documentMetaRoot, "meta:keyword");
+      meta.children.push(metaElement("meta:keyword", keyword));
+    }
+  }
 }
