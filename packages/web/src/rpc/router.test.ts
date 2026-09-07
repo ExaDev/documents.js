@@ -119,7 +119,7 @@ describe("normalizeContentForSource", () => {
     expect(firstStyleId(result)).toBeUndefined();
   });
 
-  it("the border-only detection is generic to both formats, not docx-specific, so it is ready the moment odf.js's own reader populates ContentParagraph.borders for odt (a separate, tracked gap: odf.js does not read fo:border-* yet)", () => {
+  it("the border-only detection is generic to both formats, not docx-specific, so it also matches an odt-sourced paragraph -- odf.js's own reader now populates ContentParagraph.borders from fo:border-* (ExaDev/documents.js#1086), the identical shape docx's own w:pBdr reading (#1082) already produces", () => {
     const content = wordprocessingWith({
       kind: "paragraph",
       runs: [],
