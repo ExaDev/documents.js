@@ -38,6 +38,7 @@ import {
   applyCellDefinitionControlWord,
   newPendingCell,
   resolveBorder,
+  resolveCellFill,
   type CellBorderSide,
   type PendingCell,
 } from "./cell-format";
@@ -1162,18 +1163,18 @@ class ContentBuilder {
             }
           }
           const borders = this.resolveBorders(definition);
-          const backgroundColor =
-            definition?.backgroundIndex === undefined
+          const background =
+            definition === undefined
               ? undefined
-              : this.header.colors[definition.backgroundIndex];
-          // ContentTableCell.background is document-schema.js's discriminated ContentCellFill (ExaDev/documents.js#951); \clcbpatN names only a flat colour (\clshdngN's own shading percentage is a real pattern this package does not yet resolve -- see this package's own README, "Deliberately not handled"), so it always wraps as a 'solid' fill.
+              : resolveCellFill(
+                  definition,
+                  (index) => this.header.colors[index],
+                );
           return {
             blocks: cell.blocks,
             ...(colSpan > 1 ? { colSpan } : {}),
             ...(rowSpan > 1 ? { rowSpan } : {}),
-            ...(backgroundColor === undefined
-              ? {}
-              : { background: { kind: "solid", color: backgroundColor } }),
+            ...(background === undefined ? {} : { background }),
             ...(borders === undefined ? {} : { borders }),
           };
         }),

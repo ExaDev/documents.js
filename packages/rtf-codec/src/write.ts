@@ -27,9 +27,8 @@ import {
   clampHeadingLevel,
   colorToRgbHex,
   flattenTree,
-  resolveCellFillColor,
 } from "document-schema.js";
-import { borderControlWords } from "./cell-format";
+import { borderControlWords, cellFillControlWords } from "./cell-format";
 import {
   bookmarkResidueControlWords,
   dttmFromIso,
@@ -190,12 +189,13 @@ function collectTables(document: ContentDocument): DocumentTables {
     if (block.kind === "table") {
       for (const row of block.rows) {
         for (const cell of row.cells) {
-          // A cell's own colours reference the same \colortbl the runs do, so they must be minted here or a \clcbpatN/\brdrcfN would name an index the table never defines. \clcbpatN names only a flat colour, so a 'pattern' fill (ExaDev/documents.js#951) notes resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern this package does not yet write (see this package's own README, "Deliberately not handled").
-          noteColor(
-            cell.background === undefined
-              ? undefined
-              : resolveCellFillColor(cell.background),
-          );
+          // A cell's own colours reference the same \colortbl the runs do, so they must be minted here or a \clcbpatN/\clcfpatN/\brdrcfN would name an index the table never defines. A 'pattern' fill (ExaDev/documents.js#1024) mints both its foreground and background colours -- \clcbpatN/\clcfpatN are two independent colour-table references, not one representative colour standing in for the whole fill.
+          if (cell.background?.kind === "solid") {
+            noteColor(cell.background.color);
+          } else if (cell.background?.kind === "pattern") {
+            noteColor(cell.background.foregroundColor);
+            noteColor(cell.background.backgroundColor);
+          }
           for (const side of CELL_BORDER_ORDER) {
             noteColor(cell.borders?.[side]?.color);
           }
@@ -1105,15 +1105,10 @@ class RtfWriter {
         }
       }
     }
-    const cellBackgroundColor =
-      cell.background === undefined
-        ? undefined
-        : resolveCellFillColor(cell.background);
-    if (cellBackgroundColor !== undefined) {
-      const index = colorIndexOf(cellBackgroundColor, this.tables.colors);
-      if (index !== undefined) {
-        out += `\\clcbpat${String(index)}`;
-      }
+    if (cell.background !== undefined) {
+      out += cellFillControlWords(cell.background, (color) =>
+        colorIndexOf(color, this.tables.colors),
+      );
     }
     return `${out}\\cellx${String(rightTwips)}`;
   }
