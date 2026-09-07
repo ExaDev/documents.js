@@ -1,3 +1,10 @@
+## [3.5.3](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.5.2...document-outline.js%403.5.3) (2026-09-07)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.2.3
+
 ## [3.5.2](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.5.1...document-outline.js%403.5.2) (2026-09-07)
 
 

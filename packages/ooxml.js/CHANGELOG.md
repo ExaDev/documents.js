@@ -1,3 +1,15 @@
+## [7.1.6](https://github.com/ExaDev/documents.js/compare/ooxml.js%407.1.5...ooxml.js%407.1.6) (2026-09-07)
+
+### Bug Fixes
+
+* **workspace:** narrow discriminated unions and Uint8Array generics in worker tests ([54e92fa](https://github.com/ExaDev/documents.js/commit/54e92fad8aabe767b3f8a33423de819468fb1b54))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.2.3
+- Updated archive-codec to ^1.6.4
+
 ## [7.1.5](https://github.com/ExaDev/documents.js/compare/ooxml.js%407.1.4...ooxml.js%407.1.5) (2026-09-07)
 
 
