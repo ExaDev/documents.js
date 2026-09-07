@@ -669,6 +669,34 @@ describe("writeXhtmlBody", () => {
     ).toBe(true);
   });
 
+  // ExaDev/documents.js#1025: a run-level anchor extent whose anchorType is anything but "footnote" (a bookmark or comment range docx documents can and do carry at run scope, e.g. ooxml.js's own runRangeMarkerExtents) has no representable EPUB spelling this reader's own read side understands yet, so it is reported through the diagnostic sink rather than silently dropped with nothing in the output naming it ever happened. The run text it wraps is unaffected either way -- only the anchor's own marker goes unwritten.
+  it.each(["bookmark", "endnote", "comment"] as const)(
+    "reports CONSTRUCT_UNREPRESENTED for a run-level '%s' anchor extent, preserving the run text underneath it",
+    (anchorType) => {
+      const blocks: ContentBlock[] = [
+        {
+          kind: "paragraph",
+          runs: [{ text: "marked" }],
+          constructs: [
+            {
+              descriptor: { kind: "anchor", anchorType, name: "x1" },
+              startRun: 0,
+              endRun: 1,
+            },
+          ],
+        },
+      ];
+      const { xml, diagnostics } = writeWithSink(blocks, () => undefined);
+      expect(xml).toContain("marked");
+      expect(xml).not.toContain('href="#x1"');
+      const diagnostic = diagnostics.find(
+        (d) => d.code === EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      );
+      expect(diagnostic).toBeDefined();
+      expect(diagnostic?.message).toContain(anchorType);
+    },
+  );
+
   it("writes an image using the registered manifest href", () => {
     const xml = write([
       {

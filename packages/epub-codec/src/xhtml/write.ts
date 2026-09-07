@@ -299,7 +299,7 @@ type FootnoteExtent = RunConstructExtent & {
   descriptor: { kind: "anchor"; anchorType: "footnote"; name: string };
 };
 
-// Only the "footnote" member of document-schema.js's own AnchorTypeSchema ("bookmark" | "footnote" | "endnote" | "comment") is recognised here -- a run-level construct extent whose anchorType is anything else (a bookmark or comment range that ooxml.js's own docx reader can and does emit at run scope, e.g. runRangeMarkerExtents in src/typed/docx/constructs.ts) is filtered out below with no representation and no diagnostic at all. Tracked as ExaDev/documents.js#1025 rather than fixed here: a genuinely distinct construct-kind gap, not a bug in this function's own footnote handling.
+// Only the "footnote" member of document-schema.js's own AnchorTypeSchema ("bookmark" | "footnote" | "endnote" | "comment") is recognised here -- a run-level construct extent whose anchorType is anything else (a bookmark or comment range that ooxml.js's own docx reader can and does emit at run scope, e.g. runRangeMarkerExtents in src/typed/docx/constructs.ts) has no established EPUB spelling this reader's own read side already understands: this package's own reader never produces a run-level bookmark/endnote/comment extent from real EPUB content today, so inventing one here would be an unverified new write-only shape rather than a round-trippable convention. Reported through CONSTRUCT_UNREPRESENTED (reportUnhandledAnchorExtents below) rather than silently dropped -- the fix ExaDev/documents.js#1025 itself names as the acceptable alternative to full representation.
 function isFootnoteExtent(
   construct: RunConstructExtent,
 ): construct is FootnoteExtent {
@@ -307,6 +307,27 @@ function isFootnoteExtent(
     construct.descriptor.kind === "anchor" &&
     construct.descriptor.anchorType === "footnote"
   );
+}
+
+// The mirror image of isFootnoteExtent: every anchor-kind extent this function's own caller does NOT already handle, reported once per extent rather than silently dropped. Runs are unaffected either way -- only the extent's own marker (and, for a comment, the definitions-table link a same-format write would need) is missing from the output.
+function reportUnhandledAnchorExtents(
+  constructs: readonly RunConstructExtent[] | undefined,
+  context: XhtmlWriteContext,
+): void {
+  for (const construct of constructs ?? []) {
+    if (
+      construct.descriptor.kind !== "anchor" ||
+      construct.descriptor.anchorType === "footnote"
+    ) {
+      continue;
+    }
+    context.sink({
+      code: EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+      severity: "info",
+      message: `a run-level '${construct.descriptor.anchorType}' anchor ('${construct.descriptor.name}') has no representable EPUB spelling this writer states yet, so its own marker is dropped -- the run text it wraps is unaffected`,
+      href: context.sourceHref,
+    });
+  }
 }
 
 // Describes, for CONSTRUCT_UNREPRESENTED's own message field, what actually happens to one footnote-reference extent writeRunRangeNodes below could not emit as its own <a> element -- covering every extent its own post-walk sweep finds unemitted, whatever the reason. A point extent (startRun === endRun) goes unemitted either because it sits strictly inside another extent's own winning run range (the walk advances straight from that winning extent's own startRun to its endRun and never revisits any index in between, so the point's own boundary is simply never checked against the current index at all), or because its own startRun sits beyond this paragraph's actual run count, past every index the walk's own 0..runs.length range ever visits. Since a point anchor wraps zero runs of its own, nothing besides its own <a> link marker is missing from the output either way. A range extent (endRun > startRun) goes unemitted for any of several reasons: another extent sharing its exact startRun was tried first (a same-startRun collision), another extent's own winning range already claims part of the run sequence before this one's startRun would otherwise be reached (a crossing overlap), or its own run range is malformed -- a startRun at or beyond this paragraph's actual run count (writeRunRangeNodes's own `index < runs.length` guard on primaryRange selection is what makes the boundary case, startRun === runs.length, malformed rather than a silently-emitted empty <a>: a range extent needs at least one real run at its own startRun to wrap, unlike a point extent, which validly marks a zero-width boundary there), or an endRun smaller than its own startRun (an inverted range, which still reaches this branch rather than the point one above, since only a strict startRun === endRun check routes an extent there). In the first two cases the run text underneath its own range is never lost: every run in it is still written, wrapped by whichever extent's range actually claims it, or written unwrapped by the ordinary per-run path wherever no extent's range reaches it. In the malformed-range cases there is no other extent actually responsible for the omission. Either way, only this specific reference's own <a> link is not emitted.
@@ -331,6 +352,7 @@ function writeRunRangeNodes(
   renderExtentRange: (rangeRuns: readonly ContentRun[]) => XmlNode[],
   context: XhtmlWriteContext,
 ): XmlNode[] {
+  reportUnhandledAnchorExtents(constructs, context);
   const footnoteExtents = (constructs ?? []).filter(isFootnoteExtent);
   const emittedExtents = new Set<FootnoteExtent>();
   const out: XmlNode[] = [];
