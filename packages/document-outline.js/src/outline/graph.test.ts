@@ -13,6 +13,7 @@ import {
 import { effectivePackage } from "./effective";
 import { OrderKeyBudgetExhaustedError } from "./order-keys";
 import {
+  AmbiguousEdgeError,
   AmbiguousSiblingError,
   contentHashV1,
   ContainsCycleError,
@@ -22,6 +23,9 @@ import {
   NodeKindMismatchError,
   orderKeys,
   projectDocumentGraph,
+  removeEdge,
+  replaceEdge,
+  UnknownEdgeError,
   UnknownSiblingError,
   walkPropertyGraph,
   type ExtractionPolicy,
@@ -2898,5 +2902,206 @@ describe("write API: reconcileChildren reproduces every requested children list 
     expect(bOnlyContains).toHaveLength(3);
     expect(bOnlyContains.filter((edge) => edge.to === a)).toHaveLength(2);
     expect(bOnlyContains.filter((edge) => edge.to === b)).toHaveLength(1);
+  });
+});
+
+describe("write API: removeEdge / replaceEdge (#1004)", () => {
+  const EMPTY_GRAPH: PropertyGraph = { nodes: [], edges: [] };
+
+  it("removeEdge detaches the one matching CONTAINS edge and leaves every other edge and every node untouched", () => {
+    const a = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const b = insertNode(a.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const wired = insertEdge(
+      insertEdge(b.graph, "parent", a.id),
+      "parent",
+      b.id,
+    );
+
+    const bEdgeBefore = wired.edges.find(
+      (edge) => edge.from === "parent" && edge.to === b.id,
+    )!;
+
+    const result = removeEdge(wired, "parent", a.id);
+    const contains = result.edges.filter(
+      (edge) => edge.from === "parent" && edge.kind === "CONTAINS",
+    );
+    expect(contains).toEqual([bEdgeBefore]);
+    // Nodes are never pruned by removeEdge -- the detached edge's own target, however unreferenced it may now be, is exactly the orphan this module's own top comment already treats as intentional free version history.
+    expect(result.nodes).toEqual(wired.nodes);
+  });
+
+  it("removeEdge throws UnknownEdgeError, naming the fields that produced the refusal, when no edge matches (from, to, kind)", () => {
+    const a = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    let caught: unknown;
+    try {
+      removeEdge(a.graph, "parent", a.id);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(UnknownEdgeError);
+    const unknown = caught as UnknownEdgeError;
+    expect(unknown.from).toBe("parent");
+    expect(unknown.to).toBe(a.id);
+    expect(unknown.kind).toBe("CONTAINS");
+    expect(unknown.path).toBeUndefined();
+  });
+
+  it("removeEdge disambiguates two PROPERTY edges sharing (from, to, kind) via path, and throws AmbiguousEdgeError naming the match count when path is omitted", () => {
+    const v = insertNode(EMPTY_GRAPH, {
+      kind: "value",
+      properties: { value: "shared" },
+    });
+    let graph = insertEdge(v.graph, "owner", v.id, {
+      kind: "PROPERTY",
+      path: ["a"],
+    });
+    graph = insertEdge(graph, "owner", v.id, { kind: "PROPERTY", path: ["b"] });
+
+    let caught: unknown;
+    try {
+      removeEdge(graph, "owner", v.id, { kind: "PROPERTY" });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(AmbiguousEdgeError);
+    const ambiguous = caught as AmbiguousEdgeError;
+    expect(ambiguous.from).toBe("owner");
+    expect(ambiguous.to).toBe(v.id);
+    expect(ambiguous.kind).toBe("PROPERTY");
+    expect(ambiguous.matchCount).toBe(2);
+
+    // Naming the exact path resolves it unambiguously.
+    const result = removeEdge(graph, "owner", v.id, {
+      kind: "PROPERTY",
+      path: ["a"],
+    });
+    const remaining = result.edges.filter(
+      (edge) => edge.from === "owner" && edge.kind === "PROPERTY",
+    );
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]!.path).toEqual(["b"]);
+  });
+
+  it("replaceEdge repoints an edge onto a new target while reusing the OLD edge's own orderKey and path unchanged, rather than appending at a fresh position", () => {
+    const a = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const b = insertNode(a.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    const c = insertNode(b.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "C." }] },
+    });
+    // Three siblings under "parent": a, b, c -- b is the one being replaced.
+    let graph = insertEdge(c.graph, "parent", a.id);
+    graph = insertEdge(graph, "parent", b.id);
+    graph = insertEdge(graph, "parent", c.id);
+    const before = graph.edges.find(
+      (edge) => edge.from === "parent" && edge.to === b.id,
+    )!;
+
+    const replacement = insertNode(graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B, revised." }] },
+    });
+    const result = replaceEdge(
+      replacement.graph,
+      "parent",
+      b.id,
+      replacement.id,
+    );
+
+    const ordered = result.edges
+      .filter((edge) => edge.from === "parent" && edge.kind === "CONTAINS")
+      .sort((x, y) => (x.orderKey < y.orderKey ? -1 : 1));
+    // Same three-slot order (a, replacement, c) -- the replacement lands exactly where b sat, not appended after c.
+    expect(ordered.map((edge) => edge.to)).toEqual([
+      a.id,
+      replacement.id,
+      c.id,
+    ]);
+    const replaced = ordered.find((edge) => edge.to === replacement.id)!;
+    expect(replaced.orderKey).toBe(before.orderKey);
+    // The old edge to b is gone; b itself is still an untouched, unreferenced orphan in graph.nodes.
+    expect(result.edges.some((edge) => edge.to === b.id)).toBe(false);
+    expect(result.nodes.some((node) => node.id === b.id)).toBe(true);
+  });
+
+  it("replaceEdge carries an edge's own path over unchanged onto the new target", () => {
+    const v = insertNode(EMPTY_GRAPH, {
+      kind: "value",
+      properties: { value: "old" },
+    });
+    const graph = insertEdge(v.graph, "owner", v.id, {
+      kind: "PROPERTY",
+      path: ["metadata", "title"],
+    });
+    const w = insertNode(graph, {
+      kind: "value",
+      properties: { value: "new" },
+    });
+    const oldEdge = graph.edges.find(
+      (edge) => edge.from === "owner" && edge.kind === "PROPERTY",
+    )!;
+    const result = replaceEdge(w.graph, "owner", v.id, w.id, {
+      kind: "PROPERTY",
+      path: ["metadata", "title"],
+    });
+    const edges = result.edges.filter(
+      (edge) => edge.from === "owner" && edge.kind === "PROPERTY",
+    );
+    expect(edges).toEqual([{ ...oldEdge, to: w.id }]);
+  });
+
+  it("replaceEdge refuses a CONTAINS replacement that would close a self-loop cycle, but allows a genuine no-op replacement onto the SAME target -- proving the cycle check runs with the edge being replaced already excluded, not the raw pre-replace edge set", () => {
+    const leaf = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "Leaf." }] },
+    });
+    const group = insertNode(leaf.graph, {
+      kind: "section",
+      properties: { kind: "section" },
+      children: [leaf.id],
+    });
+
+    // group -[CONTAINS]-> leaf already exists; replacing it with group -[CONTAINS]-> group would make group contain itself.
+    expect(() => replaceEdge(group.graph, group.id, leaf.id, group.id)).toThrow(
+      ContainsCycleError,
+    );
+
+    // A genuine no-op replacement (new target identical to the old one) must NOT be refused as a self-cycle: with the edge being replaced excluded from the check, leaf has no remaining CONTAINS children of its own, so nothing reaches back to group.
+    const noOp = replaceEdge(group.graph, group.id, leaf.id, leaf.id);
+    expect(
+      noOp.edges.filter(
+        (edge) => edge.from === group.id && edge.to === leaf.id,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("replaceEdge throws UnknownEdgeError when the old edge does not exist, and never mints a fresh unrelated edge in its place", () => {
+    const a = insertNode(EMPTY_GRAPH, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "A." }] },
+    });
+    const b = insertNode(a.graph, {
+      kind: "paragraph",
+      properties: { kind: "paragraph", runs: [{ text: "B." }] },
+    });
+    expect(() => replaceEdge(b.graph, "parent", a.id, b.id)).toThrow(
+      UnknownEdgeError,
+    );
+    expect(b.graph.edges.some((edge) => edge.from === "parent")).toBe(false);
   });
 });
