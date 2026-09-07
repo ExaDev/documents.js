@@ -1,3 +1,13 @@
+## [7.1.8](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.7...documents.js%407.1.8) (2026-09-07)
+
+### Bug Fixes
+
+* **documents.js:** route spreadsheet formats to markdown via a direct transform ([a44dc56](https://github.com/ExaDev/documents.js/commit/a44dc56f8ccbae26ae135557a0d46d4ab709d959))
+
+### Documentation
+
+* **documents.js:** document the direct spreadsheet -> wordprocessing markdown route ([e5b4e4c](https://github.com/ExaDev/documents.js/commit/e5b4e4cbb6d60192d5b3203334536eb75638376b)), references [ExaDev/documents.js#1043](https://github.com/ExaDev/documents.js/issues/1043)
+
 ## [7.1.7](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.6...documents.js%407.1.7) (2026-09-07)
 
 ### Bug Fixes
