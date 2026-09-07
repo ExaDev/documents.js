@@ -1,3 +1,9 @@
+## [7.2.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.1.0...document-schema.js%407.2.0) (2026-09-07)
+
+### Features
+
+* **document-schema.js:** add a format-agnostic floating-image position ([45193f1](https://github.com/ExaDev/documents.js/commit/45193f1be507372c65b28a37d59f36cac016fcce))
+
 ## [7.1.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.0.0...document-schema.js%407.1.0) (2026-09-07)
 
 ### Features

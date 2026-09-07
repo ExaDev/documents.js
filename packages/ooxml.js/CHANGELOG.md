@@ -1,3 +1,15 @@
+## [8.6.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.5.0...ooxml.js%408.6.0) (2026-09-07)
+
+### Features
+
+* **ooxml.js:** read wp:anchor's own floating position into ContentImageBlock ([ef73e0d](https://github.com/ExaDev/documents.js/commit/ef73e0d7eaa8b556235dc58929d7073c09b8c0d4))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^7.2.0
+- Updated archive-codec to ^1.6.7
+
 ## [8.5.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.4.0...ooxml.js%408.5.0) (2026-09-07)
 
 ### Features
