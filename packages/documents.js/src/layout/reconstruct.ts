@@ -75,8 +75,63 @@ interface TextLine {
 // Baseline-proximity tolerance of 0.5x font size -- wide enough to catch superscripts into their own line, tight enough to never merge two genuinely separate lines (plan Step 10).
 const LINE_BASELINE_TOLERANCE_FACTOR = 0.5;
 
+// --- Duplicate-paint collapsing (ExaDev/documents.js#1062) ---
+//
+// Some PDF producers' content streams paint the exact same text-showing operation more than once at the exact same position -- confirmed against a real corpus PDF assembled from several merged source editions, where whole sentences were redrawn two to four times, each repeat landing within a thousandth of a point of the last (float noise from re-deriving the identical operator's own position, not a deliberate second location). A viewer only ever sees the LAST paint; repeated ink at the same pixels changes nothing on the rendered page. Counting each repeat as separate content corrupts reading order the moment it matters: every text-showing operation on the page is duplicated the same way, so a densely-packed region (a table row, several short adjacent labels) ends up with many runs sharing one clustered line, each with its own two to four near-identical copies -- clusterIntoLines groups them all onto that one line by baseline alone, sorts strictly by x, and pushRunsForLine's own zero-gap "no space needed" rule (items this close together are read as the same word) then concatenates each run's own repeats back-to-back before moving on to the next run's repeats, producing exactly the "wordwordword" then "nextrunnextrunnextrun" pattern that reads as scrambled interleaving once several such runs share a baseline.
+//
+// A tenth of a point is comfortably above the sub-thousandth-point float noise a duplicate paint's own repeated interpretation introduces, and comfortably below the smallest real spacing this package's own layout ever produces between two genuinely distinct pieces of content (MIN_WORD_GAP_PT alone is 0.5pt) -- so bucketing position to this precision can never merge two adjacent-but-distinct occurrences of the same word, only a paint of the identical text repeated on top of itself.
+const DUPLICATE_PAINT_BUCKET_PT = 0.1;
+
+// Trimmed, not the raw string: two paints of what is otherwise the identical run sometimes differ by only a trailing space (confirmed directly -- two items at the exact same xPt/yPt, one measuring 10pt wider than the other purely from that one extra character), which is itself further evidence these are two independent re-derivations of the same content rather than two Tj calls sharing a literal byte-for-byte-identical operand. Requiring exact equality would let a repeat like that survive both of this section's dedup passes solely because of a trailing space neither reader nor writer would ever notice.
+function duplicatePaintKey(item: LayoutText): string {
+  const xBucket = Math.round(item.xPt / DUPLICATE_PAINT_BUCKET_PT);
+  const yBucket = Math.round(item.yPt / DUPLICATE_PAINT_BUCKET_PT);
+  return `${item.text.trim()}|${String(xBucket)}|${String(yBucket)}`;
+}
+
+// Keeps each item's first occurrence and drops every later one whose text and position both land in the same duplicate-paint bucket as something already kept -- an O(n) pass (a Set lookup per item) rather than an O(n^2) nested scan, since a page carrying this defect can hold thousands of text items and every one of them needs checking.
+function dropDuplicatePaints(
+  items: readonly LayoutText[],
+): readonly LayoutText[] {
+  const seen = new Set<string>();
+  const kept: LayoutText[] = [];
+  for (const item of items) {
+    const key = duplicatePaintKey(item);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    kept.push(item);
+  }
+  return kept;
+}
+
+// A second, coarser duplicate-paint case dropDuplicatePaints' own tight position bucket deliberately does not catch: the SAME complete text-showing run redrawn several times across a wider span, one paint per underlying table column, rather than once as a genuinely spanning cell -- confirmed directly against the source PDF's own content stream, which wraps every text run in its own self-contained `q <rect> re W n BT ... Tj ET Q` block, each already correctly and tightly clipped to its own content. Clipping is not the mechanism producing the repeats (every clip already fully contains its own text, so none of this is a truncated sliver of a longer string); the content stream genuinely repeats the whole block, verbatim, several times at different x positions.
+//
+// Two occurrences of the identical text sharing one already-clustered line are treated as one such repeat, not two independently laid-out cells that merely happen to hold the same short value, exactly when the earlier occurrence's own rendered width already extends past where the next one starts -- a real table never lays out two cells so close together that their own text would visually collide, so an overlap this direct is only possible when both paint the identical content on top of, or straddling into, one another. A short status code genuinely repeated once per column (a grade table's "NP"/"Op" across several narrow columns) never trips this: its own rendered width sits well inside the gap to the next column, with no overlap at all -- so this rule can tell a redundant redraw of a long fragment apart from a legitimately repeated short cell value without needing a length threshold of its own.
+function dropOverlappingRepeatsWithinLine(
+  items: readonly LayoutText[],
+): LayoutText[] {
+  const rightEdgeByText = new Map<string, number>();
+  const kept: LayoutText[] = [];
+  for (const item of items) {
+    // Trimmed for the same reason duplicatePaintKey above trims: two repeats of one run sometimes differ by only a trailing space.
+    const textKey = item.text.trim();
+    const priorRightEdge = rightEdgeByText.get(textKey);
+    if (priorRightEdge !== undefined && item.xPt < priorRightEdge) {
+      continue;
+    }
+    rightEdgeByText.set(textKey, item.xPt + (item.widthPt ?? 0));
+    kept.push(item);
+  }
+  return kept;
+}
+
+// The one place every reconstruction direction clusters positioned text into lines -- wordprocessing paragraphs and presentation blocks call this directly, and both table-cell paths (recoverTaggedTables, recoverTable) reach it indirectly through cellBlocksFromItems -- so collapsing duplicate paints here, before any of them sees the items, fixes every one of those consumers from one place rather than needing a matching guard at each call site.
 function clusterIntoLines(items: readonly LayoutText[]): TextLine[] {
-  const sorted = [...items].sort((a, b) => b.yPt - a.yPt || a.xPt - b.xPt);
+  const sorted = [...dropDuplicatePaints(items)].sort(
+    (a, b) => b.yPt - a.yPt || a.xPt - b.xPt,
+  );
   const working: { items: LayoutText[]; baselineY: number }[] = [];
   for (const item of sorted) {
     const tolerance = LINE_BASELINE_TOLERANCE_FACTOR * item.sizePt;
@@ -91,6 +146,7 @@ function clusterIntoLines(items: readonly LayoutText[]): TextLine[] {
   }
   for (const line of working) {
     line.items.sort((a, b) => a.xPt - b.xPt);
+    line.items = dropOverlappingRepeatsWithinLine(line.items);
   }
   working.sort((a, b) => b.baselineY - a.baselineY);
   return working;
