@@ -1325,6 +1325,95 @@ describe("ContentImageBlock format", () => {
   });
 });
 
+describe("ContentImageBlock floatPosition", () => {
+  function image(floatPosition?: unknown) {
+    return {
+      kind: "image",
+      format: "png",
+      base64: "",
+      widthPt: 10,
+      heightPt: 10,
+      ...(floatPosition === undefined ? {} : { floatPosition }),
+    };
+  }
+
+  it("accepts an offset-based position on both axes -- the shape ODF's draw:frame always takes, and docx's wp:anchor takes when wp:posOffset is used", () => {
+    const result = ContentImageBlockSchema.parse(
+      image({
+        horizontal: { relativeTo: "page", offsetPt: 36 },
+        vertical: { relativeTo: "paragraph", offsetPt: -12 },
+      }),
+    );
+    expect(result.floatPosition).toEqual({
+      horizontal: { relativeTo: "page", offsetPt: 36 },
+      vertical: { relativeTo: "paragraph", offsetPt: -12 },
+    });
+  });
+
+  it("accepts an align-based position on both axes -- the shape docx's wp:anchor takes when wp:align is used instead of wp:posOffset", () => {
+    const result = ContentImageBlockSchema.parse(
+      image({
+        horizontal: { relativeTo: "margin", align: "right" },
+        vertical: { relativeTo: "margin", align: "top" },
+      }),
+    );
+    expect(result.floatPosition).toEqual({
+      horizontal: { relativeTo: "margin", align: "right" },
+      vertical: { relativeTo: "margin", align: "top" },
+    });
+  });
+
+  it("accepts one axis offset-based and the other align-based -- docx's own wp:positionH/wp:positionV choose independently per axis", () => {
+    expect(
+      ContentImageBlockSchema.safeParse(
+        image({
+          horizontal: { relativeTo: "column", offsetPt: 18 },
+          vertical: { relativeTo: "line", align: "bottom" },
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("refuses an axis carrying both offsetPt and align at once -- a state neither docx's wp:positionH/wp:positionV nor ODF's draw:frame can actually produce", () => {
+    expect(
+      ContentImageBlockSchema.safeParse(
+        image({
+          horizontal: { relativeTo: "page", offsetPt: 36, align: "left" },
+          vertical: { relativeTo: "page", offsetPt: 0 },
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("refuses an axis carrying neither offsetPt nor align", () => {
+    expect(
+      ContentImageBlockSchema.safeParse(
+        image({
+          horizontal: { relativeTo: "page" },
+          vertical: { relativeTo: "page", offsetPt: 0 },
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("refuses an origin outside the closed vocabulary", () => {
+    expect(
+      ContentImageBlockSchema.safeParse(
+        image({
+          horizontal: { relativeTo: "bogus", offsetPt: 0 },
+          vertical: { relativeTo: "page", offsetPt: 0 },
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("is absent by default -- an inline image has no anchored position of its own to record", () => {
+    expect(
+      ContentImageBlockSchema.parse(image()).floatPosition,
+    ).toBeUndefined();
+  });
+});
+
 describe("ContentCellBorders diagonals", () => {
   it("parses diagonalUp and diagonalDown alongside the four sides", () => {
     const border = { color: COLOR_BLACK, widthPt: 1 };
