@@ -1,3 +1,9 @@
+## [7.1.11](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.10...documents.js%407.1.11) (2026-09-07)
+
+### Bug Fixes
+
+* **documents.js:** collapse duplicate content-stream text paints in PDF reconstruction ([461031a](https://github.com/ExaDev/documents.js/commit/461031a1d9242ae583d25517e64af5ba4c7c9bd8)), closes [ExaDev/documents.js#1062](https://github.com/ExaDev/documents.js/issues/1062)
+
 ## [7.1.10](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.9...documents.js%407.1.10) (2026-09-07)
 
 
