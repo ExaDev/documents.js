@@ -458,6 +458,104 @@ describe("reconstructWordprocessing: duplicate-paint collapsing", () => {
   });
 });
 
+describe("reconstructWordprocessing: fuzzy redraw collapsing (ExaDev/documents.js#1066)", () => {
+  it("collapses a sentence redrawn with different Tj-fragment boundaries down to one clean copy, even though no individual fragment matches another exactly", () => {
+    const pg = page(612, 792, [
+      // Redraw 1 (kept): "Access"+"control"+"policies", split at the word boundaries.
+      text({ text: "Access", xPt: 50, yPt: 700, widthPt: 36 }),
+      text({ text: "control", xPt: 86, yPt: 700, widthPt: 42 }),
+      text({ text: "policies", xPt: 128, yPt: 700, widthPt: 48 }),
+      // Redraw 2 (dropped): the identical sentence, but split at different points and drifted slightly in x -- the shape a different kerning pass through the same content stream produces. No fragment here shares an exact position or exact text with any fragment above, so neither dropDuplicatePaints nor dropOverlappingRepeatsWithinLine would ever collapse this pair.
+      text({ text: "Acce", xPt: 50.3, yPt: 700, widthPt: 24 }),
+      text({ text: "sscontrolpo", xPt: 74.3, yPt: 700, widthPt: 66 }),
+      text({ text: "licies", xPt: 140.3, yPt: 700, widthPt: 36 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text).join("")).toBe(
+      "Accesscontrolpolicies",
+    );
+  });
+
+  it("collapses a redraw that differs from the kept occurrence by a little wording drift, not just fragment boundaries (regression: novus-power/hive#1543 -- source editions merged into the corpus PDF disagree by a character where the same sentence is redrawn)", () => {
+    const pg = page(612, 792, [
+      text({
+        text: "Access control policies remain effective for compliance",
+        xPt: 50,
+        yPt: 700,
+        widthPt: 300,
+      }),
+      text({
+        text: "Access control policies remains effective for compliance",
+        xPt: 52,
+        yPt: 700,
+        widthPt: 304,
+      }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual([
+      "Access control policies remain effective for compliance",
+    ]);
+  });
+
+  it("leaves genuinely distinct prose on a nearby line untouched while still collapsing the redraw on its own line (an editorial amendment sentence physically adjacent to a redrawn passage must survive intact)", () => {
+    const pg = page(612, 792, [
+      text({ text: "Access", xPt: 50, yPt: 700, widthPt: 36 }),
+      text({ text: "control", xPt: 86, yPt: 700, widthPt: 42 }),
+      text({ text: "policies", xPt: 128, yPt: 700, widthPt: 48 }),
+      text({ text: "Acce", xPt: 50.3, yPt: 700, widthPt: 24 }),
+      text({ text: "sscontrolpo", xPt: 74.3, yPt: 700, widthPt: 66 }),
+      text({ text: "licies", xPt: 140.3, yPt: 700, widthPt: 36 }),
+      text({
+        text: "Replace the content of this subclause by new text",
+        xPt: 50,
+        yPt: 686,
+        widthPt: 260,
+      }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    const allText = paras.flatMap((p) => p.runs.map((r) => r.text));
+    expect(allText.join("")).toBe(
+      "Accesscontrolpolicies Replace the content of this subclause by new text",
+    );
+  });
+
+  it("never collapses two genuinely different sentences that happen to share a baseline and restart in x, even though the second starts well behind where the first ends", () => {
+    const pg = page(612, 792, [
+      text({
+        text: "The annual compliance review covers every operational site",
+        xPt: 50,
+        yPt: 700,
+        widthPt: 300,
+      }),
+      text({
+        text: "Replace the content of this subclause including the table by new text",
+        xPt: 54,
+        yPt: 700,
+        widthPt: 360,
+      }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual([
+      "The annual compliance review covers every operational site",
+      "Replace the content of this subclause including the table by new text",
+    ]);
+  });
+
+  it("never touches a short redraw-like restart below the sentence-length floor, leaving it for dropOverlappingRepeatsWithinLine's own exact-match rule to decide", () => {
+    const pg = page(612, 792, [
+      text({ text: "NP", xPt: 50, yPt: 700, widthPt: 12 }),
+      text({ text: "NP", xPt: 50.5, yPt: 700, widthPt: 12 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(["NP"]);
+  });
+});
+
 describe("reconstructWordprocessing: images and page structure", () => {
   it("interleaves an image block by vertical position among paragraphs", () => {
     const pg = page(612, 792, [

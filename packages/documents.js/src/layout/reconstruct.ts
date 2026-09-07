@@ -127,9 +127,165 @@ function dropOverlappingRepeatsWithinLine(
   return kept;
 }
 
+// --- Fuzzy duplicate-redraw collapsing (ExaDev/documents.js#1066) ---
+//
+// dropDuplicatePaints and dropOverlappingRepeatsWithinLine above both assume a repeated paint tokenizes identically each time it is redrawn: the same text-showing operator boundaries, producing items whose text (once trimmed) matches exactly. Some PDF producers redraw the same underlying sentence several times with DIFFERENT operator boundaries per redraw -- confirmed against a real production PDF (novus-power/hive#1543) where kerning/positioning differs enough between redraws that no two occurrences ever land at the same position or split the sentence into the same fragments, so neither dedup pass above ever fires; sorted by x, the redraws' fragments interleave with each other exactly the way #1062's same-position repeats used to, except here the corruption survives that fix too.
+//
+// This pass runs on items in their ORIGINAL document-encounter order -- the order interpret.ts's own content-stream walk produced them in, preserved end to end through page.items into reconstructPageBlocks' own textItems filter above -- before anything sorts by position. Within one baseline, a legitimate paint pass advances left to right; a later item whose x has fallen well behind the rightmost extent the current pass had already reached is the signature of a fresh redraw beginning again near the same left margin, not of the same sentence continuing. Two such passes on one baseline, occupying overlapping x-ranges, whose concatenated text is a close (not necessarily exact) match, are the redraw this section exists to collapse -- every later matching pass is dropped, keeping only the first, the same convention dropOverlappingRepeatsWithinLine above already uses.
+//
+// The corpus PDF this was confirmed against is a confidential licensed standard and could not be attached to this package's own test fixtures -- the tests below instead model the reported failure shape directly (a sentence redrawn with different fragment splits and a little wording drift, with legitimate distinct prose left untouched nearby).
+
+// Comfortably above the sub-thousandth-point float noise a paint's own repeated interpretation introduces (see DUPLICATE_PAINT_BUCKET_PT above), and comfortably below any genuine redraw restart, which begins again from (approximately) the same left margin the current pass itself started from -- tens of points behind wherever the pass has already reached. A within-pass kerning wobble never falls back this far; only a fresh redraw does.
+const REDRAW_PASS_REWIND_TOLERANCE_PT = 2;
+
+// Below this length, two short strings can land close in edit distance by coincidence (e.g. "Op"/"No"), and dropOverlappingRepeatsWithinLine above already owns genuinely repeated short values -- restricting this pass to sentence-length text keeps it from ever competing with that decision.
+const MIN_REDRAW_PASS_TEXT_LENGTH = 12;
+
+// A redraw re-deriving the same underlying content can differ from the occurrence kept -- not just in fragment boundaries, but in the odd character here and there (confirmed directly against the corpus PDF: its own repeats sometimes disagree by a character where source editions were merged). Requiring more than half of each pass's own text to participate in transforming one into the other is comfortably above what two unrelated sentences of comparable length would share by chance, and comfortably below where two independent re-derivations of the same content, drift and all, actually land.
+const REDRAW_PASS_SIMILARITY_THRESHOLD = 0.6;
+
+interface RedrawPass {
+  readonly items: LayoutText[];
+  readonly startXPt: number;
+  endXPt: number;
+}
+
+// Mirrors clusterIntoLines' own baseline-tolerance bucketing below, but walks items in the order given rather than sorting first -- each group's own items therefore stay in document order, which splitIntoPasses needs to detect a restart.
+function groupByBaselineInDocumentOrder(
+  items: readonly LayoutText[],
+): LayoutText[][] {
+  const groups: { baselineY: number; items: LayoutText[] }[] = [];
+  for (const item of items) {
+    const tolerance = LINE_BASELINE_TOLERANCE_FACTOR * item.sizePt;
+    const group = groups.find(
+      (g) => Math.abs(g.baselineY - item.yPt) <= tolerance,
+    );
+    if (group === undefined) {
+      groups.push({ baselineY: item.yPt, items: [item] });
+    } else {
+      group.items.push(item);
+    }
+  }
+  return groups.map((g) => g.items);
+}
+
+// Splits one baseline's items (in document order) into candidate redraw passes: a new pass starts whenever an item's x has fallen well behind the rightmost extent the current pass has already reached (see REDRAW_PASS_REWIND_TOLERANCE_PT above).
+function splitIntoPasses(group: readonly LayoutText[]): RedrawPass[] {
+  const passes: RedrawPass[] = [];
+  for (const item of group) {
+    const current = passes.at(-1);
+    const itemRightPt = item.xPt + (item.widthPt ?? 0);
+    if (
+      current !== undefined &&
+      item.xPt >= current.endXPt - REDRAW_PASS_REWIND_TOLERANCE_PT
+    ) {
+      current.items.push(item);
+      current.endXPt = Math.max(current.endXPt, itemRightPt);
+    } else {
+      passes.push({
+        items: [item],
+        startXPt: item.xPt,
+        endXPt: itemRightPt,
+      });
+    }
+  }
+  return passes;
+}
+
+// Raw concatenation, not the gap-aware spacing pushRunsForLine below produces -- this text exists only to compare two passes for similarity, and different redraws sometimes insert whitespace differently around the same words, which a fuzzy comparison already absorbs without needing faithful spacing.
+function passText(pass: RedrawPass): string {
+  return pass.items
+    .map((item) => item.text)
+    .join("")
+    .trim();
+}
+
+// Whether two passes on the same baseline occupy overlapping page-space -- the same "would visually collide" reasoning dropOverlappingRepeatsWithinLine above uses, applied to a pass' full span rather than one item's own width.
+function passesOverlap(a: RedrawPass, b: RedrawPass): boolean {
+  return a.startXPt < b.endXPt && b.startXPt < a.endXPt;
+}
+
+// Classic memoized edit distance. Recurses on plain string indices rather than indexing into a rolling DP array or a character array, using String.prototype.charAt (always a string, empty past the end -- never undefined) for the per-character comparison and a Map keyed by "i:j" for memoization, so this needs neither a non-null assertion nor a type assertion to satisfy noUncheckedIndexedAccess.
+function levenshteinDistance(a: string, b: string): number {
+  const memo = new Map<string, number>();
+  function distance(i: number, j: number): number {
+    if (i === 0) {
+      return j;
+    }
+    if (j === 0) {
+      return i;
+    }
+    const key = `${String(i)}:${String(j)}`;
+    const cached = memo.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
+    const result = Math.min(
+      distance(i - 1, j) + 1,
+      distance(i, j - 1) + 1,
+      distance(i - 1, j - 1) + cost,
+    );
+    memo.set(key, result);
+    return result;
+  }
+  return distance(a.length, b.length);
+}
+
+function textSimilarity(a: string, b: string): number {
+  const maxLength = Math.max(a.length, b.length);
+  if (maxLength === 0) {
+    return 1;
+  }
+  return 1 - levenshteinDistance(a, b) / maxLength;
+}
+
+// Drops every later pass on a baseline that is a fuzzy redraw of the first: a restart in x within one baseline's own document-order sequence (splitIntoPasses), long enough text on both sides to rule out coincidental short-string similarity, overlapping x-ranges, and a similarity ratio clearing REDRAW_PASS_SIMILARITY_THRESHOLD against the first (kept) pass. Falling short of any one of these leaves every item on that baseline untouched -- this pass would rather miss a real redraw than risk dropping content that only looked like one, exactly the "editorial amendment text, not corrupted noise" distinction ExaDev/documents.js#1066 itself calls for.
+function dropFuzzyRedrawnPasses(
+  items: readonly LayoutText[],
+): readonly LayoutText[] {
+  const toDrop = new Set<LayoutText>();
+  for (const group of groupByBaselineInDocumentOrder(items)) {
+    const passes = splitIntoPasses(group);
+    if (passes.length < 2) {
+      continue;
+    }
+    const [first, ...rest] = passes;
+    if (first === undefined) {
+      continue;
+    }
+    const firstText = passText(first);
+    if (firstText.length < MIN_REDRAW_PASS_TEXT_LENGTH) {
+      continue;
+    }
+    for (const candidate of rest) {
+      const candidateText = passText(candidate);
+      if (candidateText.length < MIN_REDRAW_PASS_TEXT_LENGTH) {
+        continue;
+      }
+      if (!passesOverlap(first, candidate)) {
+        continue;
+      }
+      if (
+        textSimilarity(firstText, candidateText) <
+        REDRAW_PASS_SIMILARITY_THRESHOLD
+      ) {
+        continue;
+      }
+      for (const item of candidate.items) {
+        toDrop.add(item);
+      }
+    }
+  }
+  if (toDrop.size === 0) {
+    return items;
+  }
+  return items.filter((item) => !toDrop.has(item));
+}
+
 // The one place every reconstruction direction clusters positioned text into lines -- wordprocessing paragraphs and presentation blocks call this directly, and both table-cell paths (recoverTaggedTables, recoverTable) reach it indirectly through cellBlocksFromItems -- so collapsing duplicate paints here, before any of them sees the items, fixes every one of those consumers from one place rather than needing a matching guard at each call site.
 function clusterIntoLines(items: readonly LayoutText[]): TextLine[] {
-  const sorted = [...dropDuplicatePaints(items)].sort(
+  const sorted = [...dropDuplicatePaints(dropFuzzyRedrawnPasses(items))].sort(
     (a, b) => b.yPt - a.yPt || a.xPt - b.xPt,
   );
   const working: { items: LayoutText[]; baselineY: number }[] = [];
