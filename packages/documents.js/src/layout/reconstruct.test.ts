@@ -369,6 +369,95 @@ describe("reconstructWordprocessing: runs within a line", () => {
   });
 });
 
+describe("reconstructWordprocessing: duplicate-paint collapsing", () => {
+  it("collapses an exact duplicate paint of the same text at (nearly) the same position to a single run", () => {
+    const pg = page(612, 792, [
+      text({ text: "Hello", xPt: 50, yPt: 700, widthPt: 30 }),
+      // Float-noise-level repeat of the identical paint -- the shape a repeated content-stream operator produces, not a deliberate second location.
+      text({ text: "Hello", xPt: 50.001, yPt: 700.0008, widthPt: 30 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(["Hello"]);
+  });
+
+  it("collapses a duplicate paint that differs from the kept occurrence only by a trailing space", () => {
+    const pg = page(612, 792, [
+      text({ text: "Hello ", xPt: 50, yPt: 700, widthPt: 32 }),
+      text({ text: "Hello", xPt: 50, yPt: 700, widthPt: 30 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(["Hello "]);
+  });
+
+  it("keeps two genuinely distinct words that merely sit close together, never merging them as if one were a repeat of the other", () => {
+    const pg = page(612, 792, [
+      text({ text: "Hello", xPt: 50, yPt: 700, widthPt: 30 }),
+      text({ text: "World", xPt: 81, yPt: 700, widthPt: 30 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(["Hello ", "World"]);
+  });
+
+  it("collapses several duplicated sub-word fragments sharing one position down to coherent text (regression: novus-power/hive#1543 -- an untagged table region whose duplicated paints previously spliced into scrambled output once several such runs shared a baseline)", () => {
+    const pg = page(612, 792, [
+      // "co"+"mp" -> "comp", each half independently repainted several times at (almost) the same position -- the exact shape the corrupted source produced ("cocococompmpmpmp") before this collapsing existed.
+      text({ text: "co", xPt: 50, yPt: 700, widthPt: 10 }),
+      text({ text: "co", xPt: 50.001, yPt: 700, widthPt: 10 }),
+      text({ text: "co", xPt: 49.999, yPt: 700.002, widthPt: 10 }),
+      text({ text: "co", xPt: 50, yPt: 700, widthPt: 10 }),
+      text({ text: "mp", xPt: 60, yPt: 700, widthPt: 10 }),
+      text({ text: "mp", xPt: 60.001, yPt: 700, widthPt: 10 }),
+      text({ text: "mp", xPt: 59.999, yPt: 700.002, widthPt: 10 }),
+      text({ text: "mp", xPt: 60, yPt: 700, widthPt: 10 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text).join("")).toBe("comp");
+  });
+
+  it("collapses a long run redrawn across a wider span (one paint per underlying table column) once its own width overlaps the next occurrence", () => {
+    const pg = page(612, 792, [
+      // Width (150) far exceeds the 35pt spacing to the next copy -- the two occurrences would visually collide if both were genuinely distinct content, so this is the same repeated-block defect as the exact-position case above, just spread wider.
+      text({
+        text: "Long repeated phrase",
+        xPt: 50,
+        yPt: 700,
+        widthPt: 150,
+      }),
+      text({
+        text: "Long repeated phrase",
+        xPt: 85,
+        yPt: 700,
+        widthPt: 150,
+      }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(["Long repeated phrase"]);
+  });
+
+  it("keeps a short value genuinely repeated across separate, non-overlapping table columns on one line (never collapsed merely for repeating)", () => {
+    const pg = page(612, 792, [
+      // Each occurrence's own width (10) sits well inside the 35pt gap to the next -- no overlap at all, unlike the long-run case above, so this is a real repeated cell value (e.g. a grade table's "Op" column), not a redundant redraw.
+      text({ text: "Op", xPt: 50, yPt: 700, widthPt: 10 }),
+      text({ text: "Op", xPt: 85, yPt: 700, widthPt: 10 }),
+      text({ text: "Op", xPt: 120, yPt: 700, widthPt: 10 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual([
+      "Op",
+      "\t",
+      "Op",
+      "\t",
+      "Op",
+    ]);
+  });
+});
+
 describe("reconstructWordprocessing: images and page structure", () => {
   it("interleaves an image block by vertical position among paragraphs", () => {
     const pg = page(612, 792, [
