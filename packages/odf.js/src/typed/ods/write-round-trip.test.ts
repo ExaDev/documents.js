@@ -547,3 +547,74 @@ describe("writeOdsContent round trip", () => {
     });
   });
 });
+
+describe("writeOdsContent round trip: cell comments (ExaDev/documents.js#949)", () => {
+  it("round-trips a full comment (text, author, createdAt) alongside the cell's own value", () => {
+    const cells: ContentSheetCell[] = [
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "number", value: 42 },
+        displayText: "42",
+        comment: {
+          text: "A real note",
+          author: "Alice",
+          createdAt: "2026-01-02T03:04:05",
+        },
+      },
+    ];
+    expectRoundTrip(documentOf([sheetOf("Sheet1", cells)]));
+  });
+
+  it("round-trips a comment with no author and no createdAt", () => {
+    const cells: ContentSheetCell[] = [
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+        comment: { text: "Just text" },
+      },
+    ];
+    expectRoundTrip(documentOf([sheetOf("Sheet1", cells)]));
+  });
+
+  it("round-trips a multi-paragraph comment", () => {
+    const cells: ContentSheetCell[] = [
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+        comment: { text: "First paragraph\nSecond paragraph" },
+      },
+    ];
+    expectRoundTrip(documentOf([sheetOf("Sheet1", cells)]));
+  });
+
+  it("round-trips a comment on an otherwise genuinely empty cell -- a note pinned to a cell with no value, formula, or text of its own", () => {
+    const cells: ContentSheetCell[] = [
+      {
+        row: 3,
+        column: 2,
+        value: { kind: "empty" },
+        displayText: "",
+        comment: { text: "Floating note" },
+      },
+    ];
+    expectRoundTrip(documentOf([sheetOf("Sheet1", cells)]));
+  });
+
+  it("round-trips a comment whose text needs XML escaping in its own text:p and whose author needs it in dc:creator", () => {
+    const cells: ContentSheetCell[] = [
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+        comment: { text: "Tom & Jerry <b>bold</b>", author: "A & B" },
+      },
+    ];
+    expectRoundTrip(documentOf([sheetOf("Sheet1", cells)]));
+  });
+});

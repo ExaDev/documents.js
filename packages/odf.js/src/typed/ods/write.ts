@@ -7,6 +7,7 @@ import type {
   ContentRun,
   ContentSheet,
   ContentSheetCell,
+  ContentSheetCellComment,
   ContentSheetColumn,
   ContentSheetImage,
   ContentSheetPrintSettings,
@@ -39,6 +40,7 @@ import {
   writeOdfParagraph,
   segmentOdfParagraphRuns,
 } from "../shared/paragraph";
+import { buildOdfInlineNodes, segmentOdfText } from "../shared/text";
 import { cellReference } from "../shared/a1";
 import {
   BORDER_EDGE_ATTRS,
@@ -49,7 +51,7 @@ import { DEFAULT_COLUMN_WIDTH_PT, DEFAULT_ROW_HEIGHT_PT } from "./read";
 
 // ContentDocument (the 'spreadsheet' arm) -> a real .ods Package: the inverse of typed/ods/read.ts, and the second content WRITER in this package's typed layer (the first, typed/odt/write.ts, states the philosophy this module follows in full and is worth reading first). Every mapping below is stated as the exact inverse of the corresponding read in that module rather than as an independent idea of what an .ods should look like -- the correctness property this writer is held to is that its own package reads back as the document it was given (see normaliseOdsContent below for the one canonical form that equality is stated against, and write.test.ts / write-round-trip.test.ts for both halves).
 //
-// WHAT THIS WRITER DOES NOT WRITE, and why: dataValidations and conditionalFormats are refused BY NAME when present -- readOdsContent never populates either field (it has no table:content-validation or calcext:conditional-formats reading at all today, only a whole-element residue quarantine for the latter), so a document carrying either is semantic content this writer has no inverse for; writing one would either drop it silently or misrepresent it, and the odt writer's own stated stance ("writing a document that silently lost semantic content is worse than not writing it at all") applies here too. embeddedObjects (including the 'chart' kind) are refused BY NAME for every sheet, matching the odt writer's own blanket refusal of every embedded-object kind -- odf.js's typed layer has no write-side embedded-sub-document machinery at all yet (no writer builds an "Object N/" package, wires its manifest entries, or emits a draw:object reference), and building that from scratch is a substantial undertaking of its own, out of scope for landing the first genuine .ods writer at the same scope the odt writer itself first landed at. The one deliberate exception, shared with the odt writer, is the quarantined residue channel: `sheet.source` is dropped on write, a known, tracked, restorable-fidelity gap rather than a silent one. A cell's own `numberFormatCode` is likewise not written as a `number:*` data-style/`style:data-style-name` reference: readOdsContent does not populate that field for any cell today (it has no data-style reading wired into its own walk at all, unlike readOdtContent's field-master reading), so there is no genuine inverse to write against or verify -- every cell value kind still writes back with the correct `office:value-type` regardless, which is the fact that actually round-trips. A cell's `comment` is likewise not written -- readOdsContent never populates it either.
+// WHAT THIS WRITER DOES NOT WRITE, and why: dataValidations and conditionalFormats are refused BY NAME when present -- readOdsContent never populates either field (it has no table:content-validation or calcext:conditional-formats reading at all today, only a whole-element residue quarantine for the latter), so a document carrying either is semantic content this writer has no inverse for; writing one would either drop it silently or misrepresent it, and the odt writer's own stated stance ("writing a document that silently lost semantic content is worse than not writing it at all") applies here too. embeddedObjects (including the 'chart' kind) are refused BY NAME for every sheet, matching the odt writer's own blanket refusal of every embedded-object kind -- odf.js's typed layer has no write-side embedded-sub-document machinery at all yet (no writer builds an "Object N/" package, wires its manifest entries, or emits a draw:object reference), and building that from scratch is a substantial undertaking of its own, out of scope for landing the first genuine .ods writer at the same scope the odt writer itself first landed at. The one deliberate exception, shared with the odt writer, is the quarantined residue channel: `sheet.source` is dropped on write, a known, tracked, restorable-fidelity gap rather than a silent one. A cell's own `numberFormatCode` is likewise not written as a `number:*` data-style/`style:data-style-name` reference: readOdsContent does not populate that field for any cell today (it has no data-style reading wired into its own walk at all, unlike readOdtContent's field-master reading), so there is no genuine inverse to write against or verify -- every cell value kind still writes back with the correct `office:value-type` regardless, which is the fact that actually round-trips. A cell's `comment` DOES now round-trip (ExaDev/documents.js#949) -- see writeCellAnnotation below and readCellComment in ./read.ts.
 //
 // THE ONE FORCED ASYMMETRY THIS WRITER CANNOT PAPER OVER: a 'time' cell's ISO 8601 HH:MM:SS wall-clock value (document-schema.js's own documented wire contract for ContentCellValueSchema's 'time' kind) has no direct ODF spelling -- office:time-value is an xsd:duration ("PT13H30M00S"), and a conformant producer must convert between the two. This writer performs that conversion on write (see formatOdfDuration), because writing the ISO clock string directly into office:time-value would be invalid ODF that no real spreadsheet application could open correctly. readOdsContent, however, does not perform the inverse conversion today (see that module's own readCellValue: `attrValue(cellElement, "office:time-value") ?? displayText`, carried through unconverted) -- a narrow, pre-existing, unrelated reader gap this writer's own correctness cannot depend on being fixed. normaliseOdsContent states the resulting canonical form precisely (the raw xsd:duration string, not the ISO clock string) rather than hand-waving it, and the gap is tracked as a follow-up rather than silently worked around by emitting non-conformant XML to make today's reader happy.
 
@@ -200,6 +202,27 @@ function writeCellParagraphs(
   return planCellTextGroups(cell).map((group) =>
     writeOdfParagraph({ kind: "paragraph", runs: group }, registry),
   );
+}
+
+// --- a cell's own annotation: ContentSheetCellComment -> office:annotation, a direct child of table:table-cell preceding its own text:p content ---
+//
+// dc:creator before dc:date is the order ODF's own schema states, per this package's own ooo1/transform.ts MOVED_TO_CHILD_ELEMENT map (office:author -> dc:creator listed before office:create-date -> dc:date, "in the order ODF's own schema puts them"), confirmed there against real LibreOffice source and the OpenOffice.org DTD -- unlike whether the metadata pair precedes or follows the text:p content itself, which this package has no fixture carrying a comment to confirm and readCellComment's own tag-based lookup does not care about either way.
+//
+// Plain text, not runs -- ContentSheetCellCommentSchema.text is a bare string, so this goes through segmentOdfText/buildOdfInlineNodes directly (the same pair readCellComment's own decodeOdfText already inverts for one text:p's content) rather than through the ContentRun-based writeCellParagraphs/planCellTextGroups pipeline built for a cell's own, possibly-rich, VALUE text. Each '\n'-separated line becomes its own text:p, mirroring how readCellComment (typed/ods/read.ts) joins one annotation's own multiple text:p children back into one string with '\n' between them -- the identical convention readCellText/writeCellParagraphs already establish for a cell's own multi-paragraph text, just without the run-formatting layer a comment has no schema field for.
+function writeCellAnnotation(comment: ContentSheetCellComment): XmlElement {
+  const children: XmlNode[] = [];
+  if (comment.author !== undefined) {
+    children.push(el("dc:creator", {}, [txt(encodeXmlText(comment.author))]));
+  }
+  if (comment.createdAt !== undefined) {
+    children.push(el("dc:date", {}, [txt(encodeXmlText(comment.createdAt))]));
+  }
+  for (const line of comment.text.split("\n")) {
+    children.push(
+      el("text:p", {}, buildOdfInlineNodes(segmentOdfText(line, true, true))),
+    );
+  }
+  return el("office:annotation", {}, children);
 }
 
 // --- cell decoration: background/borders/alignment/verticalAlignment -> one table-cell-family automatic style ---------
@@ -599,8 +622,14 @@ function writeRowCells(
           attributes["table:style-name"] = encodeXmlText(styleName);
         }
       }
-      const children: XmlNode[] =
-        cell === undefined ? [] : writeCellParagraphs(cell, state.registry);
+      const children: XmlNode[] = [];
+      if (cell?.comment !== undefined) {
+        // Precedes the cell's own text:p content, matching ODF's general metadata-before-content convention (the same order office:change-info's own dc:creator/dc:date precede a tracked change's content) -- none of this package's own real fixtures happens to carry a cell comment to confirm the exact order against, and readCellComment's own findChildElement-based lookup is order-independent regardless, so this ordering affects compatibility with other ODF consumers, not round-trip correctness through this pair.
+        children.push(writeCellAnnotation(cell.comment));
+      }
+      if (cell !== undefined) {
+        children.push(...writeCellParagraphs(cell, state.registry));
+      }
       for (const image of images ?? []) {
         children.push(writeSheetImageFrame(image, state));
       }
@@ -832,7 +861,8 @@ function canonicalCell(cell: ContentSheetCell): ContentSheetCell | undefined {
   if (
     cell.value.kind === "empty" &&
     cell.formula === undefined &&
-    displayText.length === 0
+    displayText.length === 0 &&
+    cell.comment === undefined
   ) {
     return undefined;
   }
@@ -877,6 +907,9 @@ function canonicalCell(cell: ContentSheetCell): ContentSheetCell | undefined {
   }
   if (cell.verticalAlignment !== undefined) {
     canonical.verticalAlignment = cell.verticalAlignment;
+  }
+  if (cell.comment !== undefined) {
+    canonical.comment = cell.comment;
   }
   return canonical;
 }
