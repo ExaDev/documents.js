@@ -792,42 +792,54 @@ describe("definition lists", () => {
     ]);
   });
 
-  it("degrades a dt's own direct-child <img> to alt text with a diagnostic", () => {
-    const sink = vi.fn();
-    const blocks = read(
+  // <dt>/<dd> are Flow content (ExaDev/documents.js#1023): a direct-child <img> now splits into its own real ContentImageBlock via readContainerChildren, the same treatment a <p>'s own direct-child <img> already gets, rather than being flattened to alt text inline as if <dt>/<dd> had no block list of their own to insert it into.
+  it("splits a dt's own direct-child <img> into its own real image block, not flattened to alt text", () => {
+    const bytes = fakePng(96, 96);
+    const { blocks } = readXhtmlBody(
       body(
         '<dl><dt>Term <img src="a.png" alt="term pic"/></dt><dd>Definition</dd></dl>',
       ),
-      sink,
+      {
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink: () => undefined,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
+      },
     );
-    expect(blocks).toEqual([
-      { kind: "paragraph", runs: [{ text: "Term " }, { text: "term pic" }] },
-      { kind: "paragraph", runs: [{ text: "Definition" }], indentLeftPt: 36 },
-    ]);
-    expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
-    );
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Term " }],
+    });
+    expect(blocks[1]).toMatchObject({ kind: "image" });
+    expect(blocks[2]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Definition" }],
+      indentLeftPt: 36,
+    });
   });
 
-  it("degrades a dd's own direct-child <img> to alt text with a diagnostic", () => {
-    const sink = vi.fn();
-    const blocks = read(
+  it("splits a dd's own direct-child <img> into its own real image block, indented like the rest of the dd's own content", () => {
+    const bytes = fakePng(96, 96);
+    const { blocks } = readXhtmlBody(
       body(
         '<dl><dt>Term</dt><dd>Definition <img src="a.png" alt="def pic"/></dd></dl>',
       ),
-      sink,
-    );
-    expect(blocks).toEqual([
-      { kind: "paragraph", runs: [{ text: "Term" }] },
       {
-        kind: "paragraph",
-        runs: [{ text: "Definition " }, { text: "def pic" }],
-        indentLeftPt: 36,
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink: () => undefined,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
       },
-    ]);
-    expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0]).toEqual({ kind: "paragraph", runs: [{ text: "Term" }] });
+    expect(blocks[1]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Definition " }],
+      indentLeftPt: 36,
+    });
+    expect(blocks[2]).toMatchObject({ kind: "image" });
   });
 
   it("recurses into a <div> wrapping a dt/dd pair, a legal HTML5 per-entry styling hook", () => {
@@ -1268,61 +1280,58 @@ describe("tables", () => {
     );
   });
 
-  it("degrades a table cell's own direct-child <img> to alt text with a diagnostic, rather than treating it as a schema limitation", () => {
-    const sink = vi.fn();
-    const blocks = read(
+  // <td>/<th> are Flow content (ExaDev/documents.js#1023): a direct-child <img> now splits into its own real ContentImageBlock in the cell's own blocks array via readContainerChildren, rather than being flattened to alt text as if a cell had no block list of its own to insert it into.
+  it("splits a table cell's own direct-child <img> into its own real image block in the cell's blocks", () => {
+    const bytes = fakePng(96, 96);
+    const { blocks } = readXhtmlBody(
       body(
         '<table><tr><td><img src="a.png" alt="cell pic"/></td></tr></table>',
       ),
-      sink,
-    );
-    expect(blocks).toEqual([
       {
-        kind: "table",
-        rows: [
-          {
-            cells: [
-              {
-                blocks: [{ kind: "paragraph", runs: [{ text: "cell pic" }] }],
-              },
-            ],
-          },
-        ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink: () => undefined,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
       },
-    ]);
-    expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
+    expect(blocks).toHaveLength(1);
+    const table = blocks[0] as { rows: { cells: { blocks: unknown[] }[] }[] };
+    expect(table.rows[0]?.cells[0]?.blocks).toHaveLength(1);
+    expect(table.rows[0]?.cells[0]?.blocks[0]).toMatchObject({
+      kind: "image",
+    });
   });
 
-  it("reads a <caption> as a paragraph before the table, with a diagnostic, instead of dropping it", () => {
+  it("reads a <caption> as one or more paragraphs before the table, splitting a direct-child <img> into its own real image block, with a diagnostic", () => {
+    const bytes = fakePng(96, 96);
     const sink = vi.fn();
-    const blocks = read(
+    const { blocks } = readXhtmlBody(
       body(
         '<table><caption>Cap <img src="a.png" alt="cappic"/></caption><tr><td>cell</td></tr></table>',
       ),
-      sink,
-    );
-    expect(blocks).toEqual([
-      { kind: "paragraph", runs: [{ text: "Cap " }, { text: "cappic" }] },
       {
-        kind: "table",
-        rows: [
-          {
-            cells: [
-              { blocks: [{ kind: "paragraph", runs: [{ text: "cell" }] }] },
-            ],
-          },
-        ],
-        columnWidthsPt: [CONTENT_WIDTH_PT],
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
       },
-    ]);
+    );
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0]).toEqual({ kind: "paragraph", runs: [{ text: "Cap " }] });
+    expect(blocks[1]).toMatchObject({ kind: "image" });
+    expect(blocks[2]).toEqual({
+      kind: "table",
+      rows: [
+        {
+          cells: [
+            { blocks: [{ kind: "paragraph", runs: [{ text: "cell" }] }] },
+          ],
+        },
+      ],
+      columnWidthsPt: [CONTENT_WIDTH_PT],
+    });
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({ code: "epub/table-caption-unsupported" }),
-    );
-    expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
   });
 
@@ -2096,23 +2105,26 @@ describe("figure/figcaption", () => {
     ]);
   });
 
-  it("degrades a figcaption's own direct-child <img> to alt text with a diagnostic", () => {
-    const sink = vi.fn();
-    const blocks = read(
+  // <figcaption> is Flow content (ExaDev/documents.js#1023): a direct-child <img> now splits into its own real ContentImageBlock via readContainerChildren, the same treatment a <p>'s own direct-child <img> already gets, rather than being flattened to alt text as if <figcaption> had no block list of its own to insert it into.
+  it("splits a figcaption's own direct-child <img> into its own real image block, not flattened to alt text", () => {
+    const bytes = fakePng(96, 96);
+    const { blocks } = readXhtmlBody(
       body(
         '<figure><figcaption>Caption <img src="a.png" alt="inline pic"/></figcaption></figure>',
       ),
-      sink,
-    );
-    expect(blocks).toEqual([
       {
-        kind: "paragraph",
-        runs: [{ text: "Caption " }, { text: "inline pic" }],
+        resolveImage: (href) => (href === "a.png" ? bytes : undefined),
+        sink: () => undefined,
+        sourceHref: "chapter1.xhtml",
+        contentWidthPt: CONTENT_WIDTH_PT,
       },
-    ]);
-    expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/image-inline-unsupported" }),
     );
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [{ text: "Caption " }],
+    });
+    expect(blocks[1]).toMatchObject({ kind: "image" });
   });
 
   it("keeps a footnote reference construct carried by a <figcaption>'s own inline content, rather than discarding it", () => {
@@ -2244,5 +2256,104 @@ describe("footnotes: EPUB 2 linked-anchor idiom", () => {
       kind: "constructStart",
       descriptor: { kind: "anchor", anchorType: "footnote", name: "note1" },
     });
+  });
+});
+
+// A <caption>/<dt>/<dd>/<figcaption>/<td>/<th> is Flow content per the HTML Standard, so a <pre>, a nested list, or more than one paragraph inside one is real, conformant markup -- these six containers used to build their content via one bare buildInlineRuns call each, flattening any of that block structure into a single paragraph (or, worse, fusing sibling paragraphs into one undelimited run with the word boundary between them lost). ExaDev/documents.js#1023's own two minimal repros, run against every one of the six containers it names.
+describe("block content inside table cells, captions, dt/dd, figcaption (#1023)", () => {
+  it("keeps a <pre> inside a table cell preformatted, rather than flattening it to a plain paragraph with its internal newline collapsed", () => {
+    const blocks = read(
+      body(
+        "<table><tr><td><pre><code>line one\nline two</code></pre></td></tr></table>",
+      ),
+    );
+    const table = blocks[0] as { rows: { cells: { blocks: unknown[] }[] }[] };
+    expect(table.rows[0]?.cells[0]?.blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [{ text: "line one\nline two", fontFamily: "Courier New" }],
+        preformatted: true,
+      },
+    ]);
+  });
+
+  it("reads two sibling <p>s inside a <caption> as two distinct paragraphs, not fused into one run with the word boundary lost", () => {
+    const blocks = read(
+      body(
+        "<table><caption><p>Alpha</p><p>Beta</p></caption><tr><td>x</td></tr></table>",
+      ),
+    );
+    expect(blocks[0]).toEqual({ kind: "paragraph", runs: [{ text: "Alpha" }] });
+    expect(blocks[1]).toEqual({ kind: "paragraph", runs: [{ text: "Beta" }] });
+  });
+
+  it("fires table-caption-unsupported exactly once for a multi-paragraph caption, not once per resulting paragraph", () => {
+    const sink = vi.fn();
+    read(
+      body(
+        "<table><caption><p>Alpha</p><p>Beta</p></caption><tr><td>x</td></tr></table>",
+      ),
+      sink,
+    );
+    const captionDiagnostics = sink.mock.calls.filter(
+      ([diagnostic]) =>
+        (diagnostic as { code: string }).code ===
+        "epub/table-caption-unsupported",
+    );
+    expect(captionDiagnostics).toHaveLength(1);
+  });
+
+  it("keeps a nested list inside a <dd> as real list structure, not concatenated inline text", () => {
+    const blocks = read(
+      body("<dl><dt>Term</dt><dd><ul><li>a</li><li>b</li></ul></dd></dl>"),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      {
+        kind: "paragraph",
+        runs: [{ text: "a" }],
+        indentLeftPt: 36,
+        list: { numId: "epub1:bullet", level: 0, itemId: "item1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "b" }],
+        indentLeftPt: 36,
+        list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
+      },
+    ]);
+  });
+
+  it("reads two sibling <p>s inside a <figcaption> as two distinct paragraphs, not fused into one run", () => {
+    const blocks = read(
+      body("<figure><figcaption><p>Alpha</p><p>Beta</p></figcaption></figure>"),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Alpha" }] },
+      { kind: "paragraph", runs: [{ text: "Beta" }] },
+    ]);
+  });
+
+  it("reads two sibling <p>s inside a <dt> as two distinct paragraphs, not fused into one run", () => {
+    const blocks = read(body("<dl><dt><p>Alpha</p><p>Beta</p></dt></dl>"));
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Alpha" }] },
+      { kind: "paragraph", runs: [{ text: "Beta" }] },
+    ]);
+  });
+
+  it("keeps a <pre> inside a <dd> preformatted", () => {
+    const blocks = read(
+      body("<dl><dt>Term</dt><dd><pre>line one\nline two</pre></dd></dl>"),
+    );
+    expect(blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "Term" }] },
+      {
+        kind: "paragraph",
+        runs: [{ text: "line one\nline two", fontFamily: "Courier New" }],
+        preformatted: true,
+        indentLeftPt: 36,
+      },
+    ]);
   });
 });
