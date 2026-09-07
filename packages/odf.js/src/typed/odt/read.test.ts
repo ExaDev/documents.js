@@ -583,6 +583,79 @@ describe("readOdtContent: error and fallback paths (synthetic packages -- not so
   });
 });
 
+describe("readOdtContent: fo:border-* on a paragraph's own automatic style (ExaDev/documents.js#1086 -- the odt half of #1082's own docx w:pBdr reading)", () => {
+  function packageWithParagraphStyle(styleProperties: XmlElement): Package {
+    return {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: [
+            el("office:document-content", {}, [
+              el("office:automatic-styles", {}, [
+                el(
+                  "style:style",
+                  { "style:name": "P1", "style:family": "paragraph" },
+                  [styleProperties],
+                ),
+              ]),
+              el("office:body", {}, [
+                el("office:text", {}, [
+                  el("text:p", { "text:style-name": "P1" }, [txt("Rule")]),
+                ]),
+              ]),
+            ]),
+          ],
+        },
+      },
+    };
+  }
+
+  it("reads a bottom-only fo:border-* into ContentParagraph.borders -- the exact shape a border-only horizontal rule takes", () => {
+    const pkg = packageWithParagraphStyle(
+      el("style:paragraph-properties", {
+        "fo:border-bottom": "0.75pt solid #000000",
+      }),
+    );
+    const { sections } = readOdtContent(pkg);
+    const paragraph = sections[0]?.blocks[0];
+    expect(paragraph?.kind).toBe("paragraph");
+    expect(paragraph?.kind === "paragraph" && paragraph.borders).toEqual({
+      bottom: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75, style: "solid" },
+    });
+  });
+
+  it("reads all four fo:border-* edges into ContentParagraph.borders.left/right/top/bottom", () => {
+    const pkg = packageWithParagraphStyle(
+      el("style:paragraph-properties", {
+        "fo:border-left": "1pt dashed #ff0000",
+        "fo:border-right": "1pt dashed #ff0000",
+        "fo:border-top": "1pt dashed #ff0000",
+        "fo:border-bottom": "1pt dashed #ff0000",
+      }),
+    );
+    const { sections } = readOdtContent(pkg);
+    const paragraph = sections[0]?.blocks[0];
+    const edge = { color: { r: 1, g: 0, b: 0 }, widthPt: 1, style: "dashed" };
+    expect(paragraph?.kind === "paragraph" && paragraph.borders).toEqual({
+      left: edge,
+      right: edge,
+      top: edge,
+      bottom: edge,
+    });
+  });
+
+  it("leaves ContentParagraph.borders undefined for a paragraph whose style carries no fo:border-* at all", () => {
+    const pkg = packageWithParagraphStyle(
+      el("style:paragraph-properties", { "fo:text-align": "center" }),
+    );
+    const { sections } = readOdtContent(pkg);
+    const paragraph = sections[0]?.blocks[0];
+    expect(
+      paragraph?.kind === "paragraph" && paragraph.borders,
+    ).toBeUndefined();
+  });
+});
+
 describe("readOdt: the package-native reader over the same real fixtures", () => {
   it("assembles kitchen-sink.odt into a wordprocessing package whose tree flattens back to readOdtContent output exactly", () => {
     const pkg = loadFixture("kitchen-sink.odt");
