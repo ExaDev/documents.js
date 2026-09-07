@@ -329,6 +329,16 @@ describe("lists", () => {
     expect(membership?.itemId).toMatch(/^md-i\d+$/);
     expect(paragraph(placeholder).runs).toEqual([]);
   });
+
+  // ExaDev/documents.js#1012: the same placeholder mechanism the test above pins for a nested-list-only item, extended to a construct-only item (most commonly a blockquote's division pair). Without it, the item's own membership had nowhere to attach except the construct's own dual-carried interior paragraph -- which src/emit/emit.ts's renderItems cannot read back before it has already decided how to open the region, indistinguishably from a genuinely unrelated construct that merely wraps a fresh list of its own.
+  it("carries itemId on an empty placeholder too, when the item's only content is a construct", () => {
+    const result = blocks("* > quote");
+    const [placeholder, constructStart] = result;
+    const membership = paragraph(placeholder).list;
+    expect(membership?.itemId).toMatch(/^md-i\d+$/);
+    expect(paragraph(placeholder).runs).toEqual([]);
+    expect(constructStart?.kind).toBe("constructStart");
+  });
 });
 
 describe("GFM tables", () => {
