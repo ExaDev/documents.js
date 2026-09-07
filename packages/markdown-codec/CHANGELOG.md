@@ -1,3 +1,9 @@
+## [6.4.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.3.7...markdown-codec%406.4.0) (2026-09-07)
+
+### Features
+
+* **markdown-codec:** stop dropping table cell images, join cells with a real line break ([5e3b337](https://github.com/ExaDev/documents.js/commit/5e3b3371820a97c419cb4f55c17bbe92de40e421)), references [#1089](https://github.com/ExaDev/documents.js/issues/1089)
+
 ## [6.3.7](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.3.6...markdown-codec%406.3.7) (2026-09-07)
 
 

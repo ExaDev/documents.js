@@ -1,3 +1,10 @@
+## [5.5.3](https://github.com/ExaDev/documents.js/compare/document-cli%405.5.2...document-cli%405.5.3) (2026-09-07)
+
+
+### Dependencies
+
+- Updated documents.js to ^7.6.3
+
 ## [5.5.2](https://github.com/ExaDev/documents.js/compare/document-cli%405.5.1...document-cli%405.5.2) (2026-09-07)
 
 
