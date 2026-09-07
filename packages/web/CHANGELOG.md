@@ -1,3 +1,21 @@
+## [2.8.0](https://github.com/ExaDev/documents.js/compare/web%402.7.2...web%402.8.0) (2026-09-07)
+
+### Features
+
+* **web:** add a Playwright config and real e2e specs ([c481d36](https://github.com/ExaDev/documents.js/commit/c481d36d4316fb129b1c95d3fe423d41421f722c))
+* **web:** wire test:e2e into turbo and run it in CI ([53ccb8e](https://github.com/ExaDev/documents.js/commit/53ccb8e6ee8e38f64ccdde52e2de6c441c995ba8))
+
+### Bug Fixes
+
+* **web:** add the .ts extension to the design-tokens import in vite.config.ts ([8f18c39](https://github.com/ExaDev/documents.js/commit/8f18c3956ed16b3ab5f3f575459deb4ced8ce42e))
+* **web:** give the e2e global setup's own waits an explicit 60s timeout ([6c94875](https://github.com/ExaDev/documents.js/commit/6c948755e82dba2722a22364eac88c30b7d98d08))
+* **web:** keep the dev server off the GitHub Pages base path in CI ([69f457e](https://github.com/ExaDev/documents.js/commit/69f457e49cb1cf0f405851ae81e4a1fab3e3bce2))
+
+
+### Dependencies
+
+- Updated documents.js to ^7.8.0
+
 ## [2.7.2](https://github.com/ExaDev/documents.js/compare/web%402.7.1...web%402.7.2) (2026-09-07)
 
 

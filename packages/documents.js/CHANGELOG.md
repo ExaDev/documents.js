@@ -1,3 +1,14 @@
+## [7.8.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.7.2...documents.js%407.8.0) (2026-09-07)
+
+### Features
+
+* **odf.js:** read a positioned draw:frame's own svg:x/svg:y into ContentImageBlock.floatPosition ([8f331ba](https://github.com/ExaDev/documents.js/commit/8f331bac9a4b99fee2d575ee53ca91c60adc7336)), references [ExaDev/documents.js#1087](https://github.com/ExaDev/documents.js/issues/1087)
+
+
+### Dependencies
+
+- Updated odf.js to ^7.6.0
+
 ## [7.7.2](https://github.com/ExaDev/documents.js/compare/documents.js%407.7.1...documents.js%407.7.2) (2026-09-07)
 
 
