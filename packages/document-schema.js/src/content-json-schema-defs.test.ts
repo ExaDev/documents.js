@@ -2,12 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { ColorSchema } from "./color";
 import {
+  ContentBlockSchema,
   ContentBorderSchema,
   ContentCellBordersSchema,
   ContentCellFillSchema,
   ContentCellPatternTypeSchema,
   ContentConstructEndSchema,
   ContentConstructStartSchema,
+  ContentEmbeddedObjectBlockSchema,
+  ContentEmbeddedObjectSchema,
+  ContentFormulaSchema,
   ContentImageBlockSchema,
   ContentListMembershipSchema,
   ContentPageBreakSchema,
@@ -15,6 +19,9 @@ import {
   ContentPathPointSchema,
   ContentPathSegmentSchema,
   ContentRunSchema,
+  ContentTableCellSchema,
+  ContentTableRowSchema,
+  ContentTableSchema,
   RunConstructExtentSchema,
   ContentSheetCellCommentSchema,
   ContentSheetCellSchema,
@@ -63,11 +70,16 @@ import {
 import {
   DimensionVectorSchema,
   ExactRationalSchema,
+  MathAppSchema,
+  MathExpressionSchema,
+  MathMatrixSchema,
   MathNormalisationContextSchema,
   MathNumSchema,
   MathPresentationSchema,
+  MathProdSchema,
   MathProvenanceSchema,
   MathQtySchema,
+  MathSumSchema,
   MathSymbolEntrySchema,
   MathSymSchema,
   MathUncertaintySchema,
@@ -92,9 +104,9 @@ import {
 import { AlignmentSchema } from "./style";
 import { SourceResidueSchema } from "./source";
 
-// This is the regression test scripts/generate-json-schemas.mjs's own top comment calls for: the only structural defence that generator has against silently drifting away from src/content.ts/src/color.ts/src/geometry.ts/src/style.ts/src/math.ts/src/package-node.ts/src/definitions.ts/src/mathml.ts, since CONTENT_DEFS (content-json-schema-defs.ts) is transcribed by hand rather than generated. Not every entry in CONTENT_DEFS can be checked this way -- ContentBlock/ContentTable/ContentTableRow/ContentTableCell/ContentEmbeddedObject(Block) sit downstream of one of the genuinely un-representable z.custom() nodes (ContentBlockSchema, ContentEmbeddedObjectSchema), the nine package-tree group wrappers sit downstream of the tree's own per-kind group schemas (src/package-node.ts, z.custom over recursive guards, reached only through the hand fragments' own children pointers), and ContentFormula/MathExpression/MathApp/MathSum/MathProd/MathMatrix sit downstream of the third opaque node (MathExpressionSchema, reached through ContentFormulaSchema.content for the first and through the grammar's own recursion for the rest) -- see that module's own top comment -- so a bare z.toJSONSchema() call over their real schema counterpart either throws or degrades to `{}` for the recursive/custom part, which is exactly the problem CONTENT_DEFS exists to work around in the first place. MathMlNode/MathMlElement/MathMlAttribute left that un-checkable bucket in ExaDev/documents.js#937 -- MathMlNodeSchema is a real, self-recursive z.discriminatedUnion() now (src/mathml.ts), not a z.custom() node -- but they did not become entries of the same kind as everything below: CONTENT_DEFS's own MathMlAttribute/MathMlElement/MathMlNode fragments are themselves computed from a live z.toJSONSchema() call over that schema (content-json-schema-defs.ts's own getMathMlJsonSchemas()), not hand-transcribed. Registering MathMlAttributeSchema/MathMlElementSchema/MathMlNodeSchema here and comparing the result against CONTENT_DEFS does NOT independently re-derive anything and does NOT catch drift in mathml.ts's own field shapes, because both sides of that comparison call z.toJSONSchema() over the identical schema objects -- a field added to or removed from any of the three changes both sides identically and the comparison stays green regardless. Confirmed empirically: injecting a required `prefix: z.string()` field into MathMlAttributeSchema left the live comparison below entirely green -- the hard-coded describe block further down, added alongside this note, is what actually catches it. What that comparison DOES verify, and it is real, is narrower: that content-json-schema-defs.ts's own generation is deterministic and reproducible -- a second, separately-constructed z.toJSONSchema() call over the same three schemas (this file's own REGISTERED_SCHEMAS registry, built independently of the local registry getMathMlJsonSchemas() constructs inside content-json-schema-defs.ts) produces byte-identical output, catching a bug in the generation plumbing itself (a stale cache, a wrong uri callback, a registry built over the wrong schema instance) rather than a bug in mathml.ts's own fields. Genuine field-shape coverage for these three entries -- the kind every other schema below gets from the live comparison -- lives instead in the separate `CONTENT_DEFS's generated MathML fragments` describe block further down this file: fixed, hand-coded expected keys/types with no dependency on any z.toJSONSchema() call at all, so a field actually added to, removed from, or renamed on one of the three does fail it.
+// This is the regression test scripts/generate-json-schemas.mjs's own top comment calls for: the only structural defence that generator has against silently drifting away from src/content.ts/src/color.ts/src/geometry.ts/src/style.ts/src/math.ts/src/package-node.ts/src/definitions.ts/src/mathml.ts, since CONTENT_DEFS (content-json-schema-defs.ts) is transcribed by hand rather than generated. What's left that CANNOT be checked this way, after ExaDev/documents.js#1009: the nine package-tree group wrappers sit downstream of the tree's own per-kind group schemas (src/package-node.ts, z.custom over recursive tree-of-groups guards, a genuinely separate recursion axis #1009 does not touch, reached only through the hand fragments' own children pointers), and ContentEmbeddedObject/ContentEmbeddedObjectBlock -- both real schemas since #1009, and registerable here in principle -- are excluded for a narrower, empirically-confirmed reason: their `document` field's cross-file cycle back to ContentDocumentSchema produces an anonymous `#/$defs/__shared#/$defs/schemaN`-shaped ref under this test's own multi-schema registry (Zod's own cyclic-schema handling colliding with a locally-registered ContentDocumentSchema in a way a throwaway scratch spike confirmed does NOT occur when ContentDocumentSchema is registered alone alongside just one of the two, only once joined by the rest of this registry's ~90 other entries) rather than the CONTENT_DOCUMENT_URI the hand-authored fragment states -- a real, narrow Zod interaction to revisit separately, not equivalent to the opacity that used to exclude every entry below. MathMlNode/MathMlElement/MathMlAttribute left the un-checkable bucket earlier, in #937 -- MathMlNodeSchema is a real, self-recursive z.discriminatedUnion() now (src/mathml.ts), not a z.custom() node -- but they did not become entries of the same kind as everything below: CONTENT_DEFS's own MathMlAttribute/MathMlElement/MathMlNode fragments are themselves computed from a live z.toJSONSchema() call over that schema (content-json-schema-defs.ts's own getMathMlJsonSchemas()), not hand-transcribed. Registering MathMlAttributeSchema/MathMlElementSchema/MathMlNodeSchema here and comparing the result against CONTENT_DEFS does NOT independently re-derive anything and does NOT catch drift in mathml.ts's own field shapes, because both sides of that comparison call z.toJSONSchema() over the identical schema objects -- a field added to or removed from any of the three changes both sides identically and the comparison stays green regardless. Confirmed empirically: injecting a required `prefix: z.string()` field into MathMlAttributeSchema left the live comparison below entirely green -- the hard-coded describe block further down, added alongside this note, is what actually catches it. What that comparison DOES verify, and it is real, is narrower: that content-json-schema-defs.ts's own generation is deterministic and reproducible -- a second, separately-constructed z.toJSONSchema() call over the same three schemas (this file's own REGISTERED_SCHEMAS registry, built independently of the local registry getMathMlJsonSchemas() constructs inside content-json-schema-defs.ts) produces byte-identical output, catching a bug in the generation plumbing itself (a stale cache, a wrong uri callback, a registry built over the wrong schema instance) rather than a bug in mathml.ts's own fields. Genuine field-shape coverage for these three entries -- the kind every other schema below gets from the live comparison -- lives instead in the separate `CONTENT_DEFS's generated MathML fragments` describe block further down this file: fixed, hand-coded expected keys/types with no dependency on any z.toJSONSchema() call at all, so a field actually added to, removed from, or renamed on one of the three does fail it.
 //
-// What CAN be checked against a live schema in that same genuine, independent sense -- because a real, non-recursive, non-custom exported Zod schema exists for it, and CONTENT_DEFS's own value is still transcribed by hand rather than computed from that same schema -- is every leaf and near-leaf fragment: Color, Box, LayoutFrame, Alignment, SourceResidue, ContentStrokeStyle, ContentBorder, ContentCellBorders, ContentCellPatternType, ContentCellFill, ContentListMembership, ContentRun, ContentParagraph, ContentImageBlock, ContentPageBreak, PageSize, Margins, SectionDescriptor, SlideDescriptor, SheetDescriptor, DrawPageDescriptor, ShapeDescriptor, HeadingParagraph, ListParagraph, the whole construct descriptor vocabulary (ContentControlDescriptor, FieldDescriptor, AnchorDescriptor, LinkTarget, LinkDescriptor, ProvenanceDescriptor, DivisionSource, DivisionDescriptor, and the ConstructDescriptor union over them -- each a plain z.strictObject or a union of them, reaching no opaque node), the flat form's two construct boundary markers (ContentConstructStart, whose only non-literal field is that same ConstructDescriptor union, and ContentConstructEnd, whose kind literal is its whole payload), ContentSheetCell, ContentCellValue, ContentSheetCellComment, ContentSheetColumn, ContentSheetRow, ContentSheetPrintSettings, ContentSheetPrintRange, ContentSheetRepeatRange, ContentSheetImage, ContentStroke, ContentPathPoint, ContentPathSegment, ContentSubpath, ContentVector, StyleParagraphProperties, StyleRunProperties, StyleEntry, DefinitionEntry, ExactRational, DimensionVector, MathPresentation, MathProvenance, MathUncertainty, MathNum, MathQty, MathSym, MathUnparsed, MathSymbolEntry, MathUnit, MathNormalisationContext, SymbolTable. None of these reaches ContentBlockSchema, ContentEmbeddedObjectSchema, MathExpressionSchema, or a tree group schema from anywhere in its own field tree, so each can be generated live and compared directly against a hand-authored fragment that could actually have drifted from it.
+// What CAN be checked against a live schema in that same genuine, independent sense -- because a real, exported Zod schema exists for it, and CONTENT_DEFS's own value is still transcribed by hand rather than computed from that same schema -- is every leaf and near-leaf fragment (Color, Box, LayoutFrame, Alignment, SourceResidue, ContentStrokeStyle, ContentBorder, ContentCellBorders, ContentCellPatternType, ContentCellFill, ContentListMembership, ContentRun, ContentParagraph, ContentImageBlock, ContentPageBreak, PageSize, Margins, SectionDescriptor, SlideDescriptor, SheetDescriptor, DrawPageDescriptor, ShapeDescriptor, HeadingParagraph, ListParagraph, the whole construct descriptor vocabulary, the flat form's two construct boundary markers, ContentSheetCell, ContentCellValue, ContentSheetCellComment, ContentSheetColumn, ContentSheetRow, ContentSheetPrintSettings, ContentSheetPrintRange, ContentSheetRepeatRange, ContentSheetImage, ContentStroke, ContentPathPoint, ContentPathSegment, ContentSubpath, ContentVector, StyleParagraphProperties, StyleRunProperties, StyleEntry, DefinitionEntry, ExactRational, DimensionVector, MathPresentation, MathProvenance, MathUncertainty, MathNum, MathQty, MathSym, MathUnparsed, MathSymbolEntry, MathUnit, MathNormalisationContext, SymbolTable) plus, since #1009 made ContentBlockSchema/MathExpressionSchema real and self-recursive, the whole family reachable through them: ContentTableCell, ContentTableRow, ContentTable, ContentBlock, ContentFormula, MathApp, MathSum, MathProd, MathMatrix, MathExpression. None of these reaches a tree group schema, or ContentEmbeddedObject(Block)'s own cross-file cycle, from anywhere in its own field tree, so each can be generated live and compared directly against a hand-authored fragment that could actually have drifted from it.
 //
 // Comparison strategy: a bare `z.toJSONSchema(SomeSchema)` call, run in isolation, would INLINE every nested schema it encounters (ColorSchema inside ContentRunSchema, AlignmentSchema inside ContentParagraphSchema, etc.) rather than emit the `{ $ref: '#/$defs/X' }` pointers CONTENT_DEFS itself uses -- because those nested schemas aren't registered anywhere. To reproduce the exact cross-reference shape CONTENT_DEFS hand-authors, this test registers the identical set of real schemas under the identical id strings CONTENT_DEFS uses as its own $defs keys, with a `uri` callback matching the `#/$defs/<id>` convention CONTENT_DEFS was written against -- confirmed empirically (see this file's own construction) to make Zod's registry-based multi-schema generation emit exactly that $ref shape for every registered schema referenced from within another. Each per-schema result still carries its own top-level `$schema`/`$id` (since z.toJSONSchema(registry, ...) treats every registered schema as its own standalone root), which CONTENT_DEFS's own nested fragments never have -- those two keys are stripped before comparison, since they're an artefact of testing each fragment as a registry root rather than a real structural difference.
 
@@ -175,6 +187,19 @@ const REGISTERED_SCHEMAS = {
   MathMlAttribute: MathMlAttributeSchema,
   MathMlElement: MathMlElementSchema,
   MathMlNode: MathMlNodeSchema,
+  // Real, self-recursive schemas since ExaDev/documents.js#1009 (ContentBlockSchema/ContentEmbeddedObjectSchema/MathExpressionSchema left the z.custom() set #937 already moved MathMlNodeSchema out of) -- registered alongside their own already-registered sibling fragments above (ContentParagraph, ContentImageBlock, MathNum, ...) so this registry's own cross-references resolve to the identical named $refs CONTENT_DEFS's hand-transcribed fragments already use, exactly like every other entry in this map. ContentEmbeddedObject/ContentEmbeddedObjectBlock are registered too -- ContentBlock's own union needs the latter registered for ITS OWN $ref to resolve correctly -- but excluded from the comparison loop below (CONTENT_EMBEDDED_OBJECT_CYCLE_IDS); see this file's own top comment for why comparing either of them directly, on its own, does not currently work.
+  ContentTableCell: ContentTableCellSchema,
+  ContentTableRow: ContentTableRowSchema,
+  ContentTable: ContentTableSchema,
+  ContentEmbeddedObject: ContentEmbeddedObjectSchema,
+  ContentEmbeddedObjectBlock: ContentEmbeddedObjectBlockSchema,
+  ContentBlock: ContentBlockSchema,
+  ContentFormula: ContentFormulaSchema,
+  MathApp: MathAppSchema,
+  MathSum: MathSumSchema,
+  MathProd: MathProdSchema,
+  MathMatrix: MathMatrixSchema,
+  MathExpression: MathExpressionSchema,
 };
 
 const registry = z.registry<{ id: string }>();
@@ -213,10 +238,18 @@ function assertFragmentMatchesLiveSchema(id: string): void {
 // CONTENT_DEFS's own MathMlAttribute/MathMlElement/MathMlNode entries are generated (content-json-schema-defs.ts's own getMathMlJsonSchemas()), not hand-authored, so the comparison below is a generation-determinism check for these three ids, not the independent drift check every other id gets -- see this file's own top comment for the full reasoning and the empirical proof.
 const MATHML_GENERATED_IDS = ["MathMlAttribute", "MathMlElement", "MathMlNode"];
 
+// Registered above (so ContentBlock's own union member $ref resolves correctly), but excluded here: comparing either directly produces an anonymous #/$defs/__shared#/$defs/schemaN ref for the `document` field's cross-file cycle back to ContentDocumentSchema, once ContentDocumentSchema is reachable through this registry's other ~90 entries -- see this file's own top comment.
+const CONTENT_EMBEDDED_OBJECT_CYCLE_IDS = [
+  "ContentEmbeddedObject",
+  "ContentEmbeddedObjectBlock",
+];
+
 describe("CONTENT_DEFS vs live z.toJSONSchema() output", () => {
   it.each(
     Object.keys(REGISTERED_SCHEMAS).filter(
-      (id) => !MATHML_GENERATED_IDS.includes(id),
+      (id) =>
+        !MATHML_GENERATED_IDS.includes(id) &&
+        !CONTENT_EMBEDDED_OBJECT_CYCLE_IDS.includes(id),
     ),
   )(
     "%s: hand-authored fragment matches a live z.toJSONSchema() call over its real schema",
