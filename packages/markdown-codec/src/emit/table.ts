@@ -1,6 +1,6 @@
 // ContentTable -> a GFM table: rows[0] is always treated as the header row (GFM requires exactly one), each column's own alignment read from that header row's own cell.blocks[0].alignment (a ContentTable carries no column-level alignment field of its own -- src/lower/table.ts's own mapping choice was to carry it per-cell instead, so the write side reads it back from the same place). Absolute column widths (ContentTable.columnWidthsPt) have no GFM equivalent at all and are dropped without comment -- a GFM table was never able to carry them to begin with, so this is not a fidelity loss introduced by this package.
 //
-// A markdown table cell holds inline content only: MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED fires when a cell carries more than one block (their own rendered text is space-joined into the one line a GFM cell allows), and MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED fires for anything a GFM cell cannot represent at all: a non-paragraph block (a nested table, an image, anything else -- dropped entirely, contributing no text), or colSpan/rowSpan/background on the cell itself (the cell still renders, just as an ordinary unmerged, unstyled one).
+// A markdown table cell holds inline content only. Two degradations are real improvements over dropping, not the ceiling of what this package attempts: MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED fires when a cell carries more than one block, joined with a literal `<br>` -- raw inline HTML, universally rendered as a real line break by every GFM table renderer (GitHub/GitLab included), and already round-trips safely as quarantined residue on its own run (src/lower/inline.ts's rawHtml case) rather than corrupting anything on read-back. An `image`-kind block emits inline via emitImage, the identical degradation src/lower/inline.ts's own "nested image" case already gives an image inside emphasis/a link elsewhere in this package: it reads back as a run carrying the alt text as its own visible text with the image's data: URI riding as that run's hyperlink, not as a lost block -- MarkdownDiagnosticCodes.TABLE_CELL_IMAGE_DEGRADED reports this explicitly, distinct from FORMATTING_DROPPED's true silent loss. FORMATTING_DROPPED itself still fires for what pure GFM syntax genuinely cannot express at all -- a nested table or any other non-paragraph, non-image block, and colSpan/rowSpan/background on the cell itself (the cell still renders, just as an ordinary unmerged, unstyled one) -- a real ceiling of the GFM table grammar, not a narrowing this module chose.
 
 import type {
   Alignment,
@@ -10,11 +10,13 @@ import type {
 import type { MarkdownTableAlignment } from "../ast/ast";
 import type { MarkdownDiagnosticSink } from "../diagnostics/diagnostics";
 import { MarkdownDiagnosticCodes } from "../diagnostics/diagnostics";
+import { emitImage } from "./image";
 import type { InlineEmitContext } from "./inline";
 import { emitRunsSingleLine } from "./inline";
 
 export interface TableEmitContext extends InlineEmitContext {
   readonly sink: MarkdownDiagnosticSink;
+  readonly embedImages: boolean;
 }
 
 function toMarkdownAlignment(
@@ -80,11 +82,21 @@ function renderCellText(
     context.sink({
       code: MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED,
       severity: "info",
-      message: `a table cell with ${String(cell.blocks.length)} blocks has no multi-paragraph equivalent in a GFM table cell; their own rendered text is space-joined into the one line a cell allows`,
+      message: `a table cell with ${String(cell.blocks.length)} blocks has no multi-paragraph equivalent in a GFM table cell; their own rendered text is joined with a literal <br> line break`,
     });
   }
   const parts: string[] = [];
   for (const block of cell.blocks) {
+    if (block.kind === "image") {
+      context.sink({
+        code: MarkdownDiagnosticCodes.TABLE_CELL_IMAGE_DEGRADED,
+        severity: "info",
+        message:
+          "a table cell's own image block has no GFM table equivalent; it emits inline instead, degrading on read-back to a run carrying the alt text with the image's data as that run's hyperlink",
+      });
+      parts.push(emitImage(block, context.embedImages));
+      continue;
+    }
     if (block.kind !== "paragraph") {
       context.sink({
         code: MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED,
@@ -98,7 +110,7 @@ function renderCellText(
       parts.push(text);
     }
   }
-  return escapeUnescapedPipes(parts.join(" "));
+  return escapeUnescapedPipes(parts.join("<br>"));
 }
 
 export function emitTable(

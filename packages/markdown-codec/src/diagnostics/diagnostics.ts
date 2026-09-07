@@ -60,6 +60,7 @@ export const MarkdownDiagnosticCodes = {
   LIST_NUMID_FALLBACK: "md/list-numid-fallback",
   TABLE_CELL_FORMATTING_DROPPED: "md/table-cell-formatting-dropped",
   TABLE_CELL_MULTI_PARAGRAPH_JOINED: "md/table-cell-multi-paragraph-joined",
+  TABLE_CELL_IMAGE_DEGRADED: "md/table-cell-image-degraded",
 } as const;
 
 // The throw tier: input this package cannot meaningfully process at all, regardless of what a diagnostic sink could report about it. Carries the same `code` vocabulary as MarkdownDiagnostic so a caller can distinguish failure reasons programmatically, not just by message text.
