@@ -13,6 +13,8 @@ import {
   RECORD_BOF,
   RECORD_BOOLERR,
   RECORD_BOUNDSHEET8,
+  RECORD_CF,
+  RECORD_CONDFMT,
   RECORD_DATE1904,
   RECORD_DV,
   RECORD_EOF,
@@ -478,6 +480,64 @@ describe("readXlsContent", () => {
         operator: "greaterThan",
         formula1: "0",
         ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+      },
+    ]);
+  });
+
+  it("reads a CondFmt/CF group into ContentSheet.conditionalFormats, resolving its own dxf font colour through the icv fixed table (ExaDev/documents.js#1102) -- workbook/conditional-format.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
+    // DXFN ([MS-XLS] 2.4.97): the 6-byte flags header (ibitAtrFnt at bit 26) then a 122-byte DXFFntD whose icvFore sits at byte offset 80 -- every other byte is zero, since only the font colour is under test here.
+    const fontBlock = new Array<number>(122).fill(0);
+    const icvForeBytes = new Uint8Array(4);
+    new DataView(icvForeBytes.buffer).setInt32(0, 0x02, true); // icv 2, Red -- a fixed-table colour, no Palette record needed
+    fontBlock.splice(80, 4, ...icvForeBytes);
+    const dxf = [
+      ...u32(1 << 26), // flags1: ibitAtrFnt only
+      ...u16(0), // flags2: fIfmtUser unset
+      ...fontBlock,
+    ];
+
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_CONDFMT, [
+                ...u16(1), // ccf -- one CF record follows
+                ...u16(0), // fToughRecalc + nID, unused
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0), // refBound (Ref8U), unused
+                ...u16(1), // one range
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+              ]),
+              record(RECORD_CF, [
+                0x01, // ct: comparison
+                0x05, // cp: greaterThan
+                ...u16(3), // cce1
+                ...u16(0), // cce2
+                ...dxf,
+                0x1e,
+                ...u16(10), // PtgInt 10
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(readXlsContent(bytes).sheets[0]?.conditionalFormats).toEqual([
+      {
+        type: "cellIs",
+        operator: "greaterThan",
+        formula1: "10",
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+        style: { textColor: { r: 1, g: 0, b: 0 } },
       },
     ]);
   });
