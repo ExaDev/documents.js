@@ -34,7 +34,8 @@
     "_test:coverage": "vitest run --project unit --coverage",
     "test:mutation": "turbo run _test:mutation",
     "_test:mutation": "stryker run stryker.config.mjs",
-    "test:e2e": "playwright test",
+    "test:e2e": "turbo run _test:e2e",
+    "_test:e2e": "playwright test",
     "prepare": "husky",
     "release": "semantic-release"
   },
