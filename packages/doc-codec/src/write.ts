@@ -22,14 +22,14 @@ import {
 import { encodeParagraphGrpprl } from "./prop/pap-write";
 import { buildPlcfSed, buildSepx, encodeSectionGrpprl } from "./prop/sep-write";
 import { buildFontTable } from "./style/fonts";
-import { buildEmptyStsh } from "./style/stsh";
+import { buildStshForStyles } from "./style/stsh";
 import { flattenSectionBlocks, type WriteWarning } from "./table/write";
 import { buildTextClx } from "./text/piece-table-write";
 import { PARAGRAPH_MARK } from "./text/special";
 
 // The top-level write: a wordprocessing ContentDocument to real [MS-DOC] bytes, wrapped in a real [MS-CFB] compound file. Every step below inverts one of read.ts's own -- the text stream is laid out and the paragraph/character formatting encoded into grpprls first (write.ts, prop/chp-write.ts, prop/pap-write.ts, table/write.ts), then packed into the piece table, the two property bin tables and their formatted disk pages, an empty-but-conformant style sheet, and (when a run names one) a font table (text/piece-table-write.ts, prop/fkp-write.ts, style/stsh.ts, style/fonts.ts) -- the identical structures readDocContent (read.ts) consumes, so a document this writer produces is verified by reading it back through this package's own reader rather than by inspecting its bytes in isolation. A ContentTable block is expanded by table/write.ts's flattenSectionBlocks into the same flat paragraph sequence every other block already is, each with its own terminator (a cell/row mark's own cell-mark character rather than the ordinary paragraph mark) and extra grpprl bytes (sprmPFInTable, and on a row's own mark, sprmPFTtp plus its whole TAP) -- so table paragraphs flow through the identical Chpx/Papx paging logic below as every other paragraph, not a separate table-only path.
 //
-// What this writer does NOT do is stated in full in the README's own scope section, not only here: no images, no footnotes/headers/endnotes, no section boundaries beyond refusing more than one section (the one section's own page size and margins are written for real -- see below), no numbering, no paragraph styles (every paragraph is istd 0, "Normal", with every property carried as a direct exception), and no hyperlinks or fields. Each is a genuine layer of the format this writer does not implement; none is silently approximated. Tables are written, but only at depth 1 (see table/write.ts) and without cell shading/borders or any other TAP layer document-schema.js's own ContentTable/ContentTableCell has no field for.
+// What this writer does NOT do is stated in full in the README's own scope section, not only here: no images, no footnotes/headers/endnotes, no section boundaries beyond refusing more than one section (the one section's own page size and margins are written for real -- see below), no numbering, and no hyperlinks or fields. Each is a genuine layer of the format this writer does not implement; none is silently approximated. Tables are written, but only at depth 1 (see table/write.ts) and without cell shading/borders or any other TAP layer document-schema.js's own ContentTable/ContentTableCell has no field for. Every paragraph's own styleId/headingLevel now mints a real STSH entry (ExaDev/documents.js#1059) -- but with no formatting of its own: every property this writer emits is already, unconditionally, a direct exception, so a style's own identity round-trips while its formatting stays entirely direct-exception-based, exactly as before.
 
 /** Where the text is written in the WordDocument stream: past the FIB (which needs under 900 bytes for the fields this writer populates), on a page boundary though not required to be. */
 const TEXT_FC = 0x400;
@@ -86,6 +86,38 @@ export function writeDocContent(
       terminator: PARAGRAPH_MARK,
     });
   }
+
+  // 1a. Mint a real istd for every distinct paragraph style: a headingLevel of 1-9 maps directly to that istd (headingLevelFromIstd's own read-side rule, so a re-read derives the identical headingLevel back regardless of what styleId names it), and every other named styleId gets its own istd starting at 10. This mints style IDENTITY only -- name, kind, istd -- with no formatting of its own: every property this writer emits is already, unconditionally, a direct exception (see buildStshForStyles's own comment and the README's scope note, ExaDev/documents.js#1059). A paragraph with neither styleId nor an in-range headingLevel gets istd 0, left an empty hole rather than a real "Normal" entry -- minting one there unconditionally would round-trip an absent styleId into a real "Normal" string on the next read, which is not what the source document stated. A paragraph whose own styleId literally IS "Normal" is treated like any other named style and mints its own real entry (not necessarily at istd 0), so that distinction survives. A headingLevel outside 1-9 (the schema's own field is unbounded, "ODF alone permits ten levels") has no istd slot to round-trip through at all -- a genuine format-boundary limit, so such a paragraph falls back to its styleId (or istd 0) exactly as if it carried no headingLevel.
+  const FIRST_NON_HEADING_ISTD = 10;
+  const MAX_HEADING_ISTD = 9;
+  const styleNames = new Map<number, string>();
+  const istdByStyleId = new Map<string, number>();
+  let nextNonHeadingIstd = FIRST_NON_HEADING_ISTD;
+  const istdOf = (properties: {
+    readonly styleId?: string;
+    readonly headingLevel?: number;
+  }): number => {
+    const heading = properties.headingLevel;
+    if (heading !== undefined && heading >= 1 && heading <= MAX_HEADING_ISTD) {
+      if (!styleNames.has(heading)) {
+        styleNames.set(
+          heading,
+          properties.styleId ?? `Heading ${String(heading)}`,
+        );
+      }
+      return heading;
+    }
+    const styleId = properties.styleId;
+    if (styleId === undefined) return 0;
+    const existing = istdByStyleId.get(styleId);
+    if (existing !== undefined) return existing;
+    const istd = nextNonHeadingIstd;
+    nextNonHeadingIstd += 1;
+    istdByStyleId.set(styleId, istd);
+    styleNames.set(istd, styleId);
+    return istd;
+  };
+  const istds = writeParagraphs.map((entry) => istdOf(entry.properties));
 
   // 1. Assign every distinct font name its own font-table index, in first-use order.
   const fontNames: string[] = [];
@@ -197,7 +229,13 @@ export function writeDocContent(
           "internal defect: writeDocContent lost a paragraph's own start position",
         );
       }
-      return { fc: characterFc(start), istd: 0, grpprl: paragraph.grpprl };
+      const istd = istds[index];
+      if (istd === undefined) {
+        throw new DocFormatError(
+          "internal defect: writeDocContent lost a paragraph's own minted istd",
+        );
+      }
+      return { fc: characterFc(start), istd, grpprl: paragraph.grpprl };
     },
   );
   const papxPages = buildPapxPages(papxParagraphSpecs, textFcLim);
@@ -229,7 +267,7 @@ export function writeDocContent(
     [...papxPages.map(firstFcOfPage), textFcLim],
     papxPages.map((_, index) => papxPageStart + index),
   );
-  const stsh = buildEmptyStsh();
+  const stsh = buildStshForStyles(styleNames);
   const fontTable =
     fontNames.length > 0 ? buildFontTable(fontNames) : undefined;
   const plcfSed = buildPlcfSed(text.length, fcSepx);
