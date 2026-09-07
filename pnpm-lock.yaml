@@ -293,8 +293,8 @@ importers:
         specifier: ^7.1.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^7.6.2
-        version: 7.6.3
+        specifier: ^7.6.3
+        version: link:../documents.js
       ink:
         specifier: ^7.1.1
         version: 7.1.1(@types/react@19.2.18)(react@19.2.8)
@@ -388,8 +388,8 @@ importers:
         specifier: ^26.1.2
         version: 26.2.0
       documents.js:
-        specifier: ^7.6.2
-        version: 7.6.3
+        specifier: ^7.6.3
+        version: link:../documents.js
       eslint:
         specifier: ^10.8.0
         version: 10.8.1(jiti@2.7.0)
@@ -397,8 +397,8 @@ importers:
         specifier: ^9.1.7
         version: 9.1.7
       markdown-codec:
-        specifier: ^6.3.7
-        version: 6.4.0
+        specifier: ^6.4.0
+        version: link:../markdown-codec
       publint:
         specifier: ^0.3.21
         version: 0.3.24
@@ -424,8 +424,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       document-compute.js:
-        specifier: ^1.3.27
-        version: 1.3.28
+        specifier: ^1.3.28
+        version: link:../document-compute.js
       document-outline.js:
         specifier: ^3.5.5
         version: link:../document-outline.js
@@ -433,8 +433,8 @@ importers:
         specifier: ^7.1.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^7.6.2
-        version: 7.6.3
+        specifier: ^7.6.3
+        version: link:../documents.js
       zod:
         specifier: ^4.2.0
         version: 4.4.3
@@ -625,8 +625,8 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
       markdown-codec:
-        specifier: ^6.3.7
-        version: 6.4.0
+        specifier: ^6.4.0
+        version: link:../markdown-codec
       odf.js:
         specifier: ^7.4.1
         version: link:../odf.js
@@ -1239,11 +1239,11 @@ importers:
         specifier: ^7.1.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^7.6.2
-        version: 7.6.3
+        specifier: ^7.6.3
+        version: link:../documents.js
       markdown-codec:
-        specifier: ^6.3.7
-        version: 6.4.0
+        specifier: ^6.4.0
+        version: link:../markdown-codec
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -4578,10 +4578,6 @@ packages:
   anynum@1.0.1:
     resolution: {integrity: sha512-N6//FLET/tXYNM/F6ABca1oH6fWB+KlTt909Le28WMDBk8oaT4vY17DCrwg2MvmuqUKt3Ni4N5dGJ/EoBgcO6A==}
 
-  archive-codec@1.6.6:
-    resolution: {integrity: sha512-EgWqMsNRyEuaPf+jm3cag5WseoSiiPKXjl7ksaq79l2iYKNmq+bf0nmOzFbF5vPj2kTjEzNIgKdtpH5EAz6CeQ==}
-    engines: {node: '>=20'}
-
   argparse@2.0.1:
     resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
 
@@ -4733,10 +4729,6 @@ packages:
 
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
-
-  byte-codec@1.4.0:
-    resolution: {integrity: sha512-jd1/I1syXeccuExQ92bTyVE0W1CDTsocCScF7vmZbiaLFWIEHji+qHcLS2nq3rf94X2jnfPSdRSZYlwWrU0kvQ==}
-    engines: {node: '>=20'}
 
   cac@7.0.0:
     resolution: {integrity: sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==}
@@ -5112,23 +5104,6 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  doc-codec@2.3.2:
-    resolution: {integrity: sha512-uSw64zJ5NEIMlX/QRh+lORtt1B5CvOyFRWLHdS8ZqmVbMUXi+/GLrkGlQAcIPApUyRrkbRGaJQNcyCn83jvr3g==}
-    engines: {node: '>=20'}
-
-  document-compute.js@1.3.28:
-    resolution: {integrity: sha512-2c6ZqU2fUf7siPJ7VY45LGX2ubXIhIW7WXOdp6PCFJEdbPxILLHhBCavTVTF9O6zNxYJZAmn8aNjBglKPVglEA==}
-    engines: {node: '>=20'}
-
-  document-schema.js@7.1.0:
-    resolution: {integrity: sha512-GM3z2dC0slXbX4ggraoxJrsFvsRCNBjFVD2GiFK9FiSGL/Ci9teWnyT5YuecOu4HIxqUhrnJVMUVSOKMkari8w==}
-    engines: {node: '>=20'}
-
-  documents.js@7.6.3:
-    resolution: {integrity: sha512-gu4dPUnPzjIWsDDjLcLD/IioaAx4Kjl7b1Y9O6MIwuJom5GddfjYYGv4WfdARlPwdQfULn9jNlX46tkNLGJ/kA==}
-    engines: {node: '>=20'}
-    hasBin: true
-
   dom-helpers@5.2.1:
     resolution: {integrity: sha512-nRCa7CK3VTrM2NmGkIy4cbK7IZlgBE/PYMn55rrXefr5xXDP0LdtfPnblFDoVdcAfslJ7or6iqAUnx0CCGIWQA==}
 
@@ -5403,10 +5378,6 @@ packages:
   eventsource@3.0.7:
     resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
     engines: {node: '>=18.0.0'}
-
-  excel-number-format@1.1.0:
-    resolution: {integrity: sha512-f8l37AhmSwXLw31Jnc93GpZBiMKu0IREAGCylx2au+syrmhdCKYuOq4jHcmQqZ2s4dhFCRIiO55e+JaiKrWISg==}
-    engines: {node: '>=20'}
 
   execa@10.0.1:
     resolution: {integrity: sha512-ge98qjkRK4IB7tL7Ju/6qmm5LHoH1eEMt5FNZrz3f4UIYhF28lggX20z3FaX1sgc67msLEn0N0BscOs29iuwyw==}
@@ -6308,10 +6279,6 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  markdown-codec@6.4.0:
-    resolution: {integrity: sha512-9FJuZVikLiIoLuKb/Qn1xYoCS0Gkijgfmuwn7Tn9eNaLVjPqd+MOykeS2wDux3ONmmlGSv+l9y5FldCu1EwcNg==}
-    engines: {node: '>=20'}
-
   markdown-table@3.0.4:
     resolution: {integrity: sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==}
 
@@ -6704,10 +6671,6 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@7.4.1:
-    resolution: {integrity: sha512-0BuiOxFpjP14aOc2W/FF4eFq29eH0O9DACjaKXk5YiCHtr/yW7R2/8AU/qwYvkmr7dCBeWxXnfSLtXjvz/BjaQ==}
-    engines: {node: '>=20'}
-
   onetime@5.1.2:
     resolution: {integrity: sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg==}
     engines: {node: '>=6'}
@@ -6715,10 +6678,6 @@ packages:
   onetime@6.0.0:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
-
-  ooxml.js@8.5.0:
-    resolution: {integrity: sha512-SnMdvBz+wAossiItFTKxbrblCodXmxM8ZCgRnLdrsXPLQnM5+jdGRiOg8YHCmUgOtB21u4WGXyZF+UbD9kgKOQ==}
-    engines: {node: '>=20'}
 
   openapi-types@12.1.3:
     resolution: {integrity: sha512-N4YtSYJqghVu4iek2ZUvcN/0aqH1kRDuNqzcycDxhOUpg7GdvLa2F3DgS6yBNhInhv2r/6I0Flkn7CqL8+nIcw==}
@@ -6861,10 +6820,6 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@4.0.6:
-    resolution: {integrity: sha512-le75pQjR3EB7ekkJyt6YDDjWjRaVPlLARsb2pL6lqeml5V0s2Wlng7muB8wBQA2TGzjdTl6cxYW3h8lxVtnyGA==}
-    engines: {node: '>=20'}
-
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
@@ -6912,10 +6867,6 @@ packages:
   postcss@8.5.26:
     resolution: {integrity: sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ==}
     engines: {node: ^10 || ^12 || >=14}
-
-  ppt-codec@1.2.7:
-    resolution: {integrity: sha512-CACd+ReUeVND8xwcXbjok7PO2JmqstyqfponUkexyjIwGKVqExHKABaCIZfKPROpfc2hjcoI1NhnUbTdpCNBVw==}
-    engines: {node: '>=20'}
 
   prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
@@ -7166,10 +7117,6 @@ packages:
     resolution: {integrity: sha512-3Df9jsstwhccuEfmAMi9l8XUh/GOkVObmFTU7CCVBysEbcOZLl84jCtaAZMcPiMz2EGKsATzQcU+Xr3n/wU6cg==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
-
-  rtf-codec@4.0.2:
-    resolution: {integrity: sha512-0gABVuk/XDuRbcJF50XHqYllSvsafHoP+EVIFDEcZj/siNEdJyKPPHWGcua4it+cqcPSgHrxPM3GzE7rIwFOYw==}
-    engines: {node: '>=20'}
 
   rxjs@7.8.2:
     resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
@@ -8116,10 +8063,6 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  wpd-codec@3.0.2:
-    resolution: {integrity: sha512-SUa9bQyh9G3mv5YJmTWHBr03Khucf03P/kT0nzpeC/5oOewAWPGHSeHbqyRu6/emiBNf7hDHVN+pNogKO2d4kg==}
-    engines: {node: '>=20'}
-
   wrangler@4.120.0:
     resolution: {integrity: sha512-cBmu/MeaB/fPacC0JpATs4duTOCagBxrZo+vBzuTX06tLzwSyAHE1drlHUZ8rP0VqVz1fy3ReGYTiHdKkoHltg==}
     engines: {node: '>=22.0.0'}
@@ -8175,10 +8118,6 @@ packages:
         optional: true
       utf-8-validate:
         optional: true
-
-  xls-codec@4.2.1:
-    resolution: {integrity: sha512-EJNYM5z/TiM17N93sWZGeg+spBPoeRaNdikkNQqtybtUVkuQrQoAs8iKU+UbLSM12vZZ78BdXcuWTe30seYJpw==}
-    engines: {node: '>=20'}
 
   xml-name-validator@5.0.0:
     resolution: {integrity: sha512-EvGK8EJ3DhaHfbRlETOWAS5pO9MZITeauHKJyb8wyajUfQUenkIg2MvLDTZ4T/TgIcm3HU0TFBgWWboAZ30UHg==}
@@ -11374,11 +11313,6 @@ snapshots:
 
   anynum@1.0.1: {}
 
-  archive-codec@1.6.6:
-    dependencies:
-      document-schema.js: 7.1.0
-      fflate: 0.8.3
-
   argparse@2.0.1: {}
 
   argue-cli@3.1.0: {}
@@ -11542,10 +11476,6 @@ snapshots:
       update-browserslist-db: 1.3.2(browserslist@4.28.9)
 
   buffer-from@1.1.2: {}
-
-  byte-codec@1.4.0:
-    dependencies:
-      fflate: 0.8.3
 
   cac@7.0.0: {}
 
@@ -11880,37 +11810,6 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
-
-  doc-codec@2.3.2:
-    dependencies:
-      archive-codec: 1.6.6
-      document-schema.js: 7.1.0
-
-  document-compute.js@1.3.28:
-    dependencies:
-      document-schema.js: 7.1.0
-
-  document-schema.js@7.1.0:
-    dependencies:
-      zod: 4.4.3
-
-  documents.js@7.6.3:
-    dependencies:
-      archive-codec: 1.6.6
-      byte-codec: 1.4.0
-      doc-codec: 2.3.2
-      document-schema.js: 7.1.0
-      fflate: 0.8.3
-      markdown-codec: 6.4.0
-      odf.js: 7.4.1
-      ooxml.js: 8.5.0
-      pdf-codec: 4.0.6
-      ppt-codec: 1.2.7
-      rtf-codec: 4.0.2
-      temml: 0.13.4
-      wpd-codec: 3.0.2
-      xls-codec: 4.2.1
-      zod: 4.4.3
 
   dom-helpers@5.2.1:
     dependencies:
@@ -12337,8 +12236,6 @@ snapshots:
   eventsource@3.0.7:
     dependencies:
       eventsource-parser: 3.1.1
-
-  excel-number-format@1.1.0: {}
 
   execa@10.0.1:
     dependencies:
@@ -13237,11 +13134,6 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  markdown-codec@6.4.0:
-    dependencies:
-      document-schema.js: 7.1.0
-      zod: 4.4.3
-
   markdown-table@3.0.4: {}
 
   marked-terminal@7.3.0(marked@15.0.12):
@@ -13778,13 +13670,6 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@7.4.1:
-    dependencies:
-      document-schema.js: 7.1.0
-      fast-xml-parser: 5.11.0
-      fflate: 0.8.3
-      zod: 4.4.3
-
   onetime@5.1.2:
     dependencies:
       mimic-fn: 2.1.0
@@ -13792,15 +13677,6 @@ snapshots:
   onetime@6.0.0:
     dependencies:
       mimic-fn: 4.0.0
-
-  ooxml.js@8.5.0:
-    dependencies:
-      archive-codec: 1.6.6
-      document-schema.js: 7.1.0
-      excel-number-format: 1.1.0
-      fast-xml-parser: 5.11.0
-      fflate: 0.8.3
-      zod: 4.4.3
 
   openapi-types@12.1.3: {}
 
@@ -13965,13 +13841,6 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@4.0.6:
-    dependencies:
-      byte-codec: 1.4.0
-      document-schema.js: 7.1.0
-      fflate: 0.8.3
-      zod: 4.4.3
-
   picocolors@1.1.1: {}
 
   picomatch@2.3.2: {}
@@ -14010,11 +13879,6 @@ snapshots:
       nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
-
-  ppt-codec@1.2.7:
-    dependencies:
-      archive-codec: 1.6.6
-      document-schema.js: 7.1.0
 
   prelude-ls@1.2.1: {}
 
@@ -14307,12 +14171,6 @@ snapshots:
       '@rollup/rollup-win32-x64-gnu': 4.63.1
       '@rollup/rollup-win32-x64-msvc': 4.63.1
       fsevents: 2.3.3
-
-  rtf-codec@4.0.2:
-    dependencies:
-      archive-codec: 1.6.6
-      document-schema.js: 7.1.0
-      zod: 4.4.3
 
   rxjs@7.8.2:
     dependencies:
@@ -15343,12 +15201,6 @@ snapshots:
       '@cloudflare/workerd-linux-arm64': 1.20260811.1
       '@cloudflare/workerd-windows-64': 1.20260811.1
 
-  wpd-codec@3.0.2:
-    dependencies:
-      archive-codec: 1.6.6
-      document-schema.js: 7.1.0
-      zod: 4.4.3
-
   wrangler@4.120.0:
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
@@ -15401,12 +15253,6 @@ snapshots:
   ws@8.21.0: {}
 
   ws@8.21.3: {}
-
-  xls-codec@4.2.1:
-    dependencies:
-      archive-codec: 1.6.6
-      document-schema.js: 7.1.0
-      excel-number-format: 1.1.0
 
   xml-name-validator@5.0.0: {}
 
