@@ -204,7 +204,9 @@ Every construct `src/lower`/`src/emit` cannot represent losslessly is a document
 - **`md/paragraph-indent-dropped`** — `indentLeftPt` without a recognised styleId; indent dropped, paragraph renders.
 - **`md/list-numid-fallback`** — a foreign or absent `numId` (depth-only `ContentListMembership`) falls back to a plain bullet list.
 - **`md/raw-html-preserved-as-text`** — see the raw-HTML entry above.
-- **`md/table-cell-formatting-dropped`** / **`md/table-cell-multi-paragraph-joined`** — GFM cells have no rich-formatting or multi-paragraph representation.
+- **`md/table-cell-formatting-dropped`** — colSpan/rowSpan/background, or a non-paragraph, non-image block (a nested table, say), have no GFM cell representation at all; the cell still renders, unmerged/unstyled, with that content dropped.
+- **`md/table-cell-multi-paragraph-joined`** — a cell carrying more than one block joins their rendered text with a literal `<br>`, real inline HTML every GFM table renderer treats as a genuine line break.
+- **`md/table-cell-image-degraded`** — an `image`-kind cell block emits inline (`![alt](data:...)`) rather than being dropped; on read-back it degrades to a run carrying the alt text with the image's own data URI as that run's hyperlink, the same "nested image" shape an image inside emphasis/a link already degrades to elsewhere in this package.
 - **`md/duplicate-footnote-definition`** — two definitions share a label; every reference resolves to the first, both are kept as written.
 - **`md/footnote-body-heading-flattened`** — a heading inside a definition body is carried as literal ATX text, since a construct extent may not open or close a heading scope.
 - **`md/construct-unrepresented`** — a construct kind markdown has no syntax for renders transparently: its extent still appears, the construct itself does not.

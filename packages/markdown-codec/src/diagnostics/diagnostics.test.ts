@@ -352,6 +352,37 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     reached.add(MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED);
   });
 
+  it("TABLE_CELL_IMAGE_DEGRADED: a cell holding an image block", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "image",
+                  format: "png",
+                  base64: "aGVsbG8=",
+                  widthPt: 10,
+                  heightPt: 10,
+                  altText: "x",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    emitMarkdown(minimalDocument([table]), { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_CELL_IMAGE_DEGRADED),
+    ).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.TABLE_CELL_IMAGE_DEGRADED);
+  });
+
   it("DUPLICATE_FOOTNOTE_DEFINITION: two definitions sharing one label", () => {
     const collector = createDiagnosticCollector();
     parseMarkdown("[^1]: first\n\n[^1]: second", { sink: collector.sink });
