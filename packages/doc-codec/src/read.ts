@@ -18,13 +18,22 @@ import {
   readNumberingDefinitions,
   type NumberingDefinitions,
 } from "./list/numbering";
-import { applyCharacterSprms, type CharacterProperties } from "./prop/chp";
+import {
+  applyCharacterSprms,
+  characterIstdFromGrpprl,
+  type CharacterProperties,
+} from "./prop/chp";
 import { PropertyBinTable } from "./prop/fkp";
 import { applyParagraphSprms, type ParagraphProperties } from "./prop/pap";
 import { readSectionProperties } from "./prop/sep";
 import { readGrpprl, type Prl } from "./prop/sprm";
 import { parseFontTable } from "./style/fonts";
-import { headingLevelFromIstd, parseStsh, type StyleSheet } from "./style/stsh";
+import {
+  headingLevelFromIstd,
+  parseStsh,
+  resolveStyleFormatting,
+  type StyleSheet,
+} from "./style/stsh";
 import { assembleBlocks } from "./table/read";
 import { readTextRange } from "./text/characters";
 import { parseClx } from "./text/piece-table";
@@ -40,7 +49,7 @@ import {
 
 // The top-level read: a .doc's bytes to a ContentDocument. Every step below is one of [MS-DOC]'s own algorithms, in the order the specification chains them -- the compound-file container gives the WordDocument and Table streams, the FIB gives the offsets, the piece table turns character positions into bytes, and the two bin tables turn byte offsets into formatting. readParagraphs itself only ever produces flat ParagraphEntry values (one per paragraph/cell/row mark, whatever its own table depth); table/read.ts's assembleBlocks is what folds a contiguous run of table-depth paragraphs into a real ContentTable, so this module carries no table-specific logic of its own.
 //
-// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images, no footnotes/headers/endnotes, no section boundaries beyond the whole document's own page size and margins, no style-inherited formatting, and no decryption. Each of those is a genuine layer of the format, and each is absent rather than approximated. Tables are read, but only at depth 1 -- a table nested inside a table cell is refused (table/read.ts) rather than mis-read. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like -- see DocContent's own comment below for why that rides outside ContentDocument's shared shape.
+// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images, no footnotes/headers/endnotes, no section boundaries beyond the whole document's own page size and margins, no table/numbering style formatting, and no decryption. Each of those is a genuine layer of the format, and each is absent rather than approximated. A paragraph or character style's own formatting IS resolved, up its full istdBase inheritance chain (style/stsh.ts's resolveStyleFormatting, ExaDev/documents.js#1005). Tables are read, but only at depth 1 -- a table nested inside a table cell is refused (table/read.ts) rather than mis-read. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like -- see DocContent's own comment below for why that rides outside ContentDocument's shared shape.
 
 /** Word's own default for a new document (US Letter, one-inch margins) -- what a field this reader resolves from PlcfSed/Sepx (prop/sep.ts's readSectionProperties) falls back to when the file states nothing for it, exactly as it would fall back to Word's own implementation-dependent default for that one unstated sprm. */
 const DEFAULT_PAGE_SIZE: PageSize = { widthPt: 612, heightPt: 792 };
@@ -262,12 +271,19 @@ function buildParagraph(
   if (papx !== undefined) {
     // The istd comes from the GrpPrlAndIstd's own field, and a sprmPIstd inside the grpprl can then replace it -- so it is seeded first and the fold is allowed to overwrite it.
     properties.istd = papx.istd;
+    // The paragraph style's own formatting is resolved and folded in BEFORE the direct PAPX exception, [MS-DOC] 2.4.6.6 Part 2's own order -- style first, then the paragraph's own grpprl on top, so the direct exception can override whatever the style (and its own base-style chain) supplied. Resolved from papx.istd specifically, not properties.istd, since a rare embedded sprmPIstd inside grpprl replaces what gets reported going forward without retroactively changing which style's formatting was already applied beneath it (see #1005's own README scope note).
+    if (context.styles !== undefined) {
+      applyParagraphSprms(
+        resolveStyleFormatting(context.styles, papx.istd).paragraphPrls,
+        properties,
+      );
+    }
     applyParagraphSprms(grpprl, properties);
   }
 
   const paragraph: ContentParagraph = {
     kind: "paragraph",
-    runs: buildRuns(text, fcs, context),
+    runs: buildRuns(text, fcs, context, papx?.istd),
   };
   return {
     paragraph: { ...paragraph, ...paragraphAttributes(properties, context) },
@@ -328,16 +344,22 @@ function paragraphAttributes(
   return attributes;
 }
 
-// Groups the paragraph's characters into runs of identical direct character formatting. The grouping key is the identity of the Chpx covering each character -- its position and length within the WordDocument stream -- rather than the resolved properties, so two runs that happen to resolve to the same values but come from different exceptions stay distinct, exactly as the file states them.
+// Groups the paragraph's characters into runs of identical direct character formatting. The grouping key is the identity of the Chpx covering each character -- its position and length within the WordDocument stream -- rather than the resolved properties, so two runs that happen to resolve to the same values but come from different exceptions stay distinct, exactly as the file states them. The paragraph's own istd joins the key too: the SAME raw Chpx bytes routinely cover runs in different paragraphs (a Chpx exception spans until the next one, paragraph boundaries notwithstanding), and since a paragraph's style now contributes character defaults, two paragraphs in different styles sharing one Chpx no longer resolve to the same properties.
 function buildRuns(
   text: string,
   fcs: readonly number[],
   context: ReadContext,
+  paragraphIstd: number | undefined,
 ): ContentRun[] {
   const runs: ContentRun[] = [];
   let currentKey: string | undefined;
   let currentText = "";
   let currentProperties: CharacterProperties = {};
+  // The paragraph style's own character defaults (StkParaGRLPUPX.lpUpxChpx), resolved once per paragraph rather than per run -- every run in this paragraph starts from the identical base, [MS-DOC] 2.4.6.6 Part 2 step 4's own "obtain any character property modifications specified by GrpprlAndIstd.istd... apply [them] to the character properties" applied before step 5's direct formatting.
+  const paragraphStyleCharacterPrls: readonly Prl[] =
+    context.styles !== undefined && paragraphIstd !== undefined
+      ? resolveStyleFormatting(context.styles, paragraphIstd).characterPrls
+      : [];
   // Field state, per [MS-DOC] 2.8.25's field characters: everything between a begin (0x13) and a separator (0x14) is the field's instruction rather than its displayed result, and a field with no separator displays nothing at all.
   //
   // A stack rather than a depth counter, because fields nest and the enclosing field's own state has to survive the inner one. A nested field appears inside the OUTER field's instruction as often as inside its result, so on reaching the inner field's end, whether text resumes depends on which side of its own separator the outer field had reached -- a counter cannot express that, and would resume in instruction mode (dropping real text) whenever an inner field closed inside an outer field's result.
@@ -377,18 +399,35 @@ function buildRuns(
       );
     }
     const grpprl = context.chpxTable.chpxGrpprl(fc);
-    const key =
+    const chpxKey =
       grpprl === undefined
         ? "none"
         : `${grpprl.byteOffset}:${grpprl.byteLength}`;
+    const key = `${paragraphIstd ?? "none"}:${chpxKey}`;
     if (key !== currentKey) {
       flush();
       currentKey = key;
       let properties = context.characterProperties.get(key);
       if (properties === undefined) {
         properties = {};
+        applyCharacterSprms(
+          paragraphStyleCharacterPrls,
+          properties,
+          context.fonts,
+        );
         if (grpprl !== undefined) {
-          applyCharacterSprms(readGrpprl(grpprl), properties, context.fonts);
+          const runPrls = readGrpprl(grpprl);
+          // A run's own sprmCIstd names a character style, which is resolved and folded in AFTER the paragraph style's own defaults but BEFORE the run's direct exceptions -- the same "more specific wins" precedence the paragraph/direct-exception layering above already follows, applied one level deeper.
+          const characterIstd = characterIstdFromGrpprl(runPrls);
+          if (characterIstd !== undefined && context.styles !== undefined) {
+            applyCharacterSprms(
+              resolveStyleFormatting(context.styles, characterIstd)
+                .characterPrls,
+              properties,
+              context.fonts,
+            );
+          }
+          applyCharacterSprms(runPrls, properties, context.fonts);
         }
         context.characterProperties.set(key, properties);
       }

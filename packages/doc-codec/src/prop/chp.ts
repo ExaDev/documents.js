@@ -114,3 +114,16 @@ export function applyCharacterSprms(
   }
   return into;
 }
+
+// The istd of the character style sprmCIstd applies to this run, if any -- the last one wins, matching every other property's own last-Prl-wins fold. Scanned ahead of applyCharacterSprms's own fold rather than read from its result, since the caller needs the style's own formatting resolved and folded in BEFORE the run's direct exceptions apply, and applyCharacterSprms only produces into.istd as part of that same fold it would then need to have already run.
+export function characterIstdFromGrpprl(
+  prls: readonly Prl[],
+): number | undefined {
+  let istd: number | undefined;
+  for (const prl of prls) {
+    if (prl.sprm.sgc === SGC.character && prl.sprm.value === SPRM_C_ISTD) {
+      istd = readUint16LE(prl.operand, 0);
+    }
+  }
+  return istd;
+}
