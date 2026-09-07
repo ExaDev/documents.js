@@ -30,6 +30,12 @@ export interface DocStyleSpec {
   readonly name: string;
   readonly sti?: number;
   readonly stk?: number;
+  /** The istd this style inherits from -- StdfBase.istdBase -- or absent for "does not inherit from any other style" (0x0FFF). */
+  readonly istdBase?: number;
+  /** The style's own UpxPapx.grpprlPapx (StkParaGRLPUPX), written only for stk 1 (paragraph); ignored otherwise. Absent writes an empty grpprlPapx, exactly like a style with no paragraph-formatting exceptions of its own. */
+  readonly papxGrpprl?: readonly number[];
+  /** The style's own UpxChpx.grpprlChpx (StkParaGRLPUPX/StkCharGRLPUPX), written for stk 1 and 2. Absent writes an empty grpprlChpx. */
+  readonly chpxGrpprl?: readonly number[];
 }
 
 export interface DocSpec {
@@ -317,10 +323,18 @@ function buildStsh(styles: readonly DocStyleSpec[]): Uint8Array {
     (stshiBytes.length >> 8) & 0xff,
     ...stshiBytes,
   ];
+  // One LPUpxPapx/LPUpxChpx entry: a 2-byte cbUpx (the payload's own length, excluding padding) followed by the payload, followed by one zero pad byte if that length is odd -- [MS-DOC] 2.9.140/2.9.138's own "padded to an even length, but the length in cbUpx MUST NOT include this padding".
+  const pushLpUpx = (out: number[], payload: readonly number[]): void => {
+    out.push(payload.length & 0xff, (payload.length >> 8) & 0xff, ...payload);
+    if (payload.length % 2 === 1) out.push(0);
+  };
+
   styles.forEach((style, istd) => {
     const std: number[] = [];
+    const stk = style.stk ?? 1;
+    const istdBase = style.istdBase ?? 0x0fff;
     const word0 = (style.sti ?? istd) & 0x0fff;
-    const word1 = ((style.stk ?? 1) & 0x000f) | (0x0fff << 4);
+    const word1 = (stk & 0x000f) | ((istdBase & 0x0fff) << 4);
     std.push(word0 & 0xff, (word0 >> 8) & 0xff);
     std.push(word1 & 0xff, (word1 >> 8) & 0xff);
     std.push(0, 0); // cupx and istdNext.
@@ -333,6 +347,18 @@ function buildStsh(styles: readonly DocStyleSpec[]): Uint8Array {
       std.push(code & 0xff, (code >> 8) & 0xff);
     }
     std.push(0, 0);
+    // grLPUpxSw, [MS-DOC] 2.9.113: StkParaGRLPUPX (lpUpxPapx then lpUpxChpx) for a paragraph style, StkCharGRLPUPX (lpUpxChpx alone) for a character style -- every real producer writes these regardless of whether the style itself carries any exceptions, so the fixture always does too, matching a real .doc's own STSH shape rather than the pre-#1005 fixture's own omission of grLPUpxSw entirely.
+    if (stk === 1) {
+      // UpxPapx: a 2-byte istd ("MUST be equal to the current style") then grpprlPapx.
+      pushLpUpx(std, [
+        istd & 0xff,
+        (istd >> 8) & 0xff,
+        ...(style.papxGrpprl ?? []),
+      ]);
+      pushLpUpx(std, [...(style.chpxGrpprl ?? [])]);
+    } else if (stk === 2) {
+      pushLpUpx(std, [...(style.chpxGrpprl ?? [])]);
+    }
     out.push(std.length & 0xff, (std.length >> 8) & 0xff, ...std);
     // "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding."
     if (std.length % 2 === 1) out.push(0);

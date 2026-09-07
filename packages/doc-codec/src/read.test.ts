@@ -314,6 +314,152 @@ describe("readDocContent", () => {
     expect(paragraphAt(document, 0).styleId).toBe("heading 1");
   });
 
+  // Issue #1005: a style's own grLPUpxSw was read for identity only (name, kind, base) and never for its own formatting sets, so a "heading 1" paragraph carried its styleId but none of the boldness, size, or spacing the style itself supplies. These pin the fix -- both the paragraph-level and run-level halves of a style's own formatting, the "more specific wins" precedence up an istdBase inheritance chain, and every layer's own precedence over the one beneath it.
+  describe("resolves a style's own formatting (#1005)", () => {
+    it("folds a paragraph style's own grpprlPapx into the paragraph, with no direct exception present", () => {
+      const document = readDocContent(
+        buildDoc({
+          styles: [
+            { name: "Normal" },
+            { name: "heading 1", papxGrpprl: SPACE_BEFORE_12PT },
+          ],
+          paragraphs: [{ runs: [{ text: "Title" }], istd: 1 }],
+        }),
+      );
+      expect(paragraphAt(document, 0).spacingBeforePt).toBe(12);
+    });
+
+    it("folds a paragraph style's own grpprlChpx into every run of the paragraph, with no direct run exception present", () => {
+      const document = readDocContent(
+        buildDoc({
+          styles: [
+            { name: "Normal" },
+            { name: "heading 1", chpxGrpprl: [...BOLD_ON, ...SIZE_24PT] },
+          ],
+          paragraphs: [{ runs: [{ text: "Title" }], istd: 1 }],
+        }),
+      );
+      const run = paragraphAt(document, 0).runs[0];
+      expect(run?.bold).toBe(true);
+      expect(run?.sizePt).toBe(24);
+    });
+
+    it("lets a paragraph's own direct PAPX exception override its style's grpprlPapx", () => {
+      const document = readDocContent(
+        buildDoc({
+          styles: [
+            { name: "Normal" },
+            { name: "heading 1", papxGrpprl: SPACE_BEFORE_12PT },
+          ],
+          paragraphs: [{ runs: [{ text: "Title" }], istd: 1, grpprl: CENTRED }],
+        }),
+      );
+      const paragraph = paragraphAt(document, 0);
+      // The style's own spacing still applies -- direct formatting overrides only the properties it actually touches, not the whole style.
+      expect(paragraph.spacingBeforePt).toBe(12);
+      expect(paragraph.alignment).toBe("center");
+    });
+
+    it("lets a run's own direct CHPX exception override its paragraph style's grpprlChpx", () => {
+      const document = readDocContent(
+        buildDoc({
+          styles: [
+            { name: "Normal" },
+            { name: "heading 1", chpxGrpprl: [...BOLD_ON, ...SIZE_24PT] },
+          ],
+          paragraphs: [
+            {
+              istd: 1,
+              runs: [{ text: "Title", grpprl: ITALIC_ON }],
+            },
+          ],
+        }),
+      );
+      const run = paragraphAt(document, 0).runs[0];
+      // The style's own bold and size still apply -- the run's own exception only touches italic.
+      expect(run?.bold).toBe(true);
+      expect(run?.sizePt).toBe(24);
+      expect(run?.italic).toBe(true);
+    });
+
+    it("resolves an istdBase inheritance chain with the more specific (derived) style's own property winning", () => {
+      const document = readDocContent(
+        buildDoc({
+          styles: [
+            { name: "Normal" },
+            // heading 1: bold + 24pt, no base.
+            { name: "heading 1", chpxGrpprl: [...BOLD_ON, ...SIZE_24PT] },
+            // heading 2: based on heading 1, overrides only the size to 12pt (half-points 24) -- bold must still come from the base, and 12pt (not 24pt) must win for size.
+            {
+              name: "heading 2",
+              istdBase: 1,
+              chpxGrpprl: [0x43, 0x4a, 0x18, 0x00],
+            },
+          ],
+          paragraphs: [{ runs: [{ text: "Subtitle" }], istd: 2 }],
+        }),
+      );
+      const run = paragraphAt(document, 0).runs[0];
+      expect(run?.bold).toBe(true);
+      expect(run?.sizePt).toBe(12);
+    });
+
+    it("folds a run's own referenced character style (sprmCIstd) between the paragraph style and the run's own direct exception", () => {
+      const CHARACTER_STYLE_ISTD = [0x30, 0x4a, 0x02, 0x00]; // sprmCIstd, istd 2.
+      const document = readDocContent(
+        buildDoc({
+          styles: [
+            { name: "Normal" },
+            { name: "heading 1", chpxGrpprl: [...BOLD_ON] },
+            { name: "Strong", stk: 2, chpxGrpprl: [...SIZE_24PT] },
+          ],
+          paragraphs: [
+            {
+              istd: 1,
+              runs: [
+                {
+                  text: "Title",
+                  grpprl: [...CHARACTER_STYLE_ISTD, ...ITALIC_ON],
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      const run = paragraphAt(document, 0).runs[0];
+      // heading 1's own bold, Strong's own size, and the run's own direct italic all survive together.
+      expect(run?.bold).toBe(true);
+      expect(run?.sizePt).toBe(24);
+      expect(run?.italic).toBe(true);
+    });
+
+    it("resolves no formatting at all for a table- or numbering-kind style, without throwing", () => {
+      // stk 3 (table) and 4 (numbering) carry StkTableGRLPUPX/StkListGRLPUPX, a differently-shaped formatting set parseGrLPUpxSw does not read -- a paragraph naming one as its istd (an unusual document, but not a malformed one) must still read cleanly, with nothing folded in from the style.
+      const document = readDocContent(
+        buildDoc({
+          styles: [{ name: "Normal" }, { name: "Table Grid", stk: 3 }],
+          paragraphs: [{ runs: [{ text: "Cell text" }], istd: 1 }],
+        }),
+      );
+      const paragraph = paragraphAt(document, 0);
+      expect(paragraph.styleId).toBe("Table Grid");
+      expect(paragraph.runs[0]?.bold).toBeUndefined();
+    });
+
+    it("throws when an istdBase chain loops back on itself, rather than recursing forever", () => {
+      const document = buildDoc({
+        styles: [
+          { name: "Normal" },
+          { name: "A", istdBase: 2 },
+          { name: "B", istdBase: 1 },
+        ],
+        paragraphs: [{ runs: [{ text: "Text" }], istd: 1 }],
+      });
+      expect(() => readDocContent(document)).toThrow(DocFormatError);
+      expect(() => readDocContent(document)).toThrow(/loops back/);
+    });
+  });
+
   // No sprmPFInTable is set on either paragraph here, so these cell marks sit outside any table -- the case this asserts is a bare cell-mark character still ending a paragraph on its own account (endsParagraph's own rule), not table grouping, which table/read.test.ts covers directly.
   it("treats a cell mark outside a table as an ordinary paragraph end", () => {
     const document = readDocContent(
