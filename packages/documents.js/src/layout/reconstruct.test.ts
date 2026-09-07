@@ -1718,6 +1718,76 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
       ["Acme", "10"],
     ]);
   });
+
+  // ExaDev/documents.js#1077: a real production document's every page carried a full-width header rule and footer rule, so the "table" bounding box the old whole-page detector picked became the whole page (the header/footer rules closing the top/bottom edges, nothing ever closing the sides) -- recovering zero tables from a document whose entire payload was six ruled tables. Header and footer rules never cross any of the table's own column lines, so they now fall into their own rejected clusters instead of contaminating the real one.
+  it("still recovers the table when the page also carries a header rule and a footer rule (regression: ExaDev/documents.js#1077)", () => {
+    const items: LayoutItem[] = [
+      ...latticeItems(),
+      line(0, 280, 300, 280), // header rule, full page width, well above the table
+      line(0, 20, 300, 20), // footer rule, full page width, well below the table
+      text({ text: "Name", xPt: 10, yPt: 180, widthPt: 30 }),
+      text({ text: "Total", xPt: 130, yPt: 180, widthPt: 30 }),
+      text({ text: "Acme", xPt: 10, yPt: 130, widthPt: 30 }),
+      text({ text: "10", xPt: 130, yPt: 130, widthPt: 15 }),
+    ];
+    const blocks = blocksOf(
+      reconstructWordprocessing(docFrom([page(300, 300, items)])),
+    );
+    const table = blocks.find((b) => b.kind === "table");
+    if (table?.kind !== "table") {
+      throw new Error("expected a recovered table block");
+    }
+    expect(table.columnWidthsPt).toEqual([120, 180]);
+    expect(table.rows.map((r) => r.heightPt)).toEqual([50, 50]);
+  });
+
+  // ExaDev/documents.js#1077: a caption sitting immediately above a real table (its own underline sorting above the table's real top edge in descending-y order) used to become rowLines[0] itself, scoring the real top edge's coverage against the caption's own narrow width. The underline never reaches either of the table's column lines, so it now falls into its own rejected cluster instead.
+  it("still recovers the table when a caption's own underline sits just above its top edge (regression: ExaDev/documents.js#1077)", () => {
+    const items: LayoutItem[] = [
+      ...latticeItems(),
+      line(90, 214, 170, 214), // caption underline, narrower than the table, 14pt above its real top edge
+      text({ text: "Table 1", xPt: 90, yPt: 220, widthPt: 60 }),
+      text({ text: "Name", xPt: 10, yPt: 180, widthPt: 30 }),
+      text({ text: "Total", xPt: 130, yPt: 180, widthPt: 30 }),
+      text({ text: "Acme", xPt: 10, yPt: 130, widthPt: 30 }),
+      text({ text: "10", xPt: 130, yPt: 130, widthPt: 15 }),
+    ];
+    const blocks = blocksOf(
+      reconstructWordprocessing(docFrom([page(300, 300, items)])),
+    );
+    const table = blocks.find((b) => b.kind === "table");
+    if (table?.kind !== "table") {
+      throw new Error("expected a recovered table block");
+    }
+    expect(table.columnWidthsPt).toEqual([120, 180]);
+    expect(table.rows.map((r) => r.heightPt)).toEqual([50, 50]);
+  });
+
+  // ExaDev/documents.js#1077: a border interrupted by one real gap (a single row whose own side rule a producer never drew) is still overwhelmingly a drawn boundary -- scoring it by its longest unbroken run alone (the old bestRunCoverageRatio) rejected an edge that was ~97% drawn.
+  it("still recovers the table when one edge is drawn as two segments with a small real gap between them (regression: ExaDev/documents.js#1077)", () => {
+    const items: LayoutItem[] = [
+      line(0, 300, 300, 300),
+      line(0, 200, 300, 200),
+      line(0, 100, 300, 100),
+      line(0, 100, 0, 197), // left column, lower segment
+      line(0, 203, 0, 300), // left column, upper segment -- 6pt gap out of a 200pt span
+      line(150, 100, 150, 300),
+      line(300, 100, 300, 300),
+      text({ text: "Name", xPt: 10, yPt: 280, widthPt: 30 }),
+      text({ text: "Total", xPt: 160, yPt: 280, widthPt: 30 }),
+      text({ text: "Acme", xPt: 10, yPt: 130, widthPt: 30 }),
+      text({ text: "10", xPt: 160, yPt: 130, widthPt: 15 }),
+    ];
+    const blocks = blocksOf(
+      reconstructWordprocessing(docFrom([page(300, 300, items)])),
+    );
+    const table = blocks.find((b) => b.kind === "table");
+    if (table?.kind !== "table") {
+      throw new Error("expected a recovered table block");
+    }
+    expect(table.columnWidthsPt).toEqual([150, 150]);
+    expect(table.rows.map((r) => r.heightPt)).toEqual([100, 100]);
+  });
 });
 
 // --- Irregular per-row/per-column gridlines: colSpan/rowSpan recovery (ExaDev/documents.js#810) ---------------
