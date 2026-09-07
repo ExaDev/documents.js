@@ -645,7 +645,7 @@ export function walkPropertyGraph(
 //
 // Mutating a node is not a separate operation: content-addressing already means "mutate" is "mint a new version" (this module's own top comment, EDITS), so a caller mutates by calling insertNode again with the changed content, getting back a new id, then insertEdge-ing that new id in wherever the old one was referenced. The old node and its edges are left exactly as they were -- neither function ever removes or rewrites existing graph state -- which is the free version history the top comment already promises orphans deliver.
 //
-// That recipe covers minting the new version and attaching it, but not detaching the old one: insertEdge-ing the new id adds a second edge from the same parent alongside the old edge, it does not remove or repoint the old edge, so a caller who wants the new version to REPLACE the old one at that position -- not sit beside it -- has no primitive here for the second half. There is no removeEdge/replaceEdge in this module (ExaDev/documents.js#1004, filed as this gap): the parent ends up with both the old and the new version attached, which reads identically to two deliberately-added siblings rather than one version replacing another. Free version history for the ORPHANED node (nothing referencing the old id) is unaffected by this gap and remains exactly as described above; the gap is specifically the still-live edge from an ANCESTOR that a caller intending a true in-place replacement has no way to remove.
+// That recipe covers minting the new version and attaching it; detaching the old one is `replaceEdge`'s own job (ExaDev/documents.js#1004): insertEdge-ing the new id alone would add a second edge from the same parent alongside the old edge rather than removing or repointing it, so a caller wanting the new version to REPLACE the old one at that position -- not sit beside it -- calls `replaceEdge(graph, from, oldId, newId, { kind })` instead of a second `insertEdge`. `replaceEdge` reuses the replaced edge's own orderKey (and path) rather than mining a fresh position, so the new version lands in exactly the slot the old one held. Free version history for the ORPHANED node (nothing referencing the old id) is unaffected either way and remains exactly as described above; `replaceEdge` only ever changes the edge set, never `graph.nodes` -- pruning an orphan it creates is deliberately out of scope, same as every other orphan this module leaves alone.
 //
 // Neither function recomputes an ANCESTOR's id when a new child is attached beneath it: a compound node's id was folded from whatever children list it was minted with (the Merkle-DAG rule projectGroup applies), and attaching one more CONTAINS edge to an already-minted node does not retroactively change that node's own id, exactly as adding a blob to a git tree does not change a tree object already written to the object store in place -- git mints a new tree object instead, and a ref is what moves to point at it. A caller wanting an ancestor's id to reflect a new descendant re-mints that ancestor with insertNode (its own unchanged `properties` plus the updated `children` list) and re-wires whichever of ITS OWN referrers should see the new version, one level at a time, up to (never including) the document root -- whose id is caller-assigned and content-independent for exactly this reason, so a root-level insertion needs no cascade at all: mint the new subtree, then insertEdge it under the root id directly.
 //
@@ -1096,4 +1096,139 @@ export function insertEdge(
     ...(options.path === undefined ? {} : { path: options.path }),
   };
   return { nodes: graph.nodes, edges: [...graph.edges, edge] };
+}
+
+// Whether two edges' own `path` fields name the same property path -- `undefined` matches only `undefined` (an edge with no path is not "the same path" as one carrying an empty array, exactly as edgeKey's own `path === undefined ? "" : JSON.stringify(path)` split already treats the two differently), otherwise structural equality via JSON.stringify, the same comparison edgeKey itself already relies on for its own dedup key.
+function pathsEqual(
+  a: PropertyPath | undefined,
+  b: PropertyPath | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+// Thrown by selectEdge (removeEdge/replaceEdge's own shared resolution, just below) when the requested (from, to, kind[, path]) names no edge in `graph.edges` -- there is no edge to remove or replace otherwise, so this module refuses loudly rather than silently no-op'ing on `removeEdge` or silently minting a fresh, unrelated edge on `replaceEdge`, in the identical UnknownSiblingError tradition above. A named class carrying the fields that produced the refusal as structured data rather than only a formatted message, matching this module's own UnknownSiblingError/AmbiguousSiblingError/ContainsCycleError convention.
+export class UnknownEdgeError extends Error {
+  readonly from: string;
+  readonly to: string;
+  readonly kind: GraphEdgeKind;
+  readonly path: PropertyPath | undefined;
+
+  constructor(
+    from: string,
+    to: string,
+    kind: GraphEdgeKind,
+    path: PropertyPath | undefined,
+  ) {
+    super(
+      `no ${kind} edge from "${from}" to "${to}"${path === undefined ? "" : ` at path ${JSON.stringify(path)}`} exists to select`,
+    );
+    this.name = "UnknownEdgeError";
+    this.from = from;
+    this.to = to;
+    this.kind = kind;
+    this.path = path;
+  }
+}
+
+// Thrown by selectEdge when (from, to, kind[, path]) names more than one edge -- a parent can carry more than one edge of the same kind to the same target (two identical CONTAINS children under one section, or two PROPERTY/DEFINED_BY edges from one owner extracting to one shared value node), and `path` is the one field left to disambiguate once (from, to, kind) alone does not; when `path` was already supplied and matches STILL number more than one, the edges are identical in every field selectEdge can compare -- nothing left to disambiguate against, only the caller's own knowledge of orderKey could pick one, and this module deliberately does not ask a caller of removeEdge/replaceEdge to already know an edge's current orderKey (unlike insertEdge's own before/after sibling positioning, which is a different operation resolving a NEW edge's position, not an existing edge's identity). Refused loudly either way, in the identical "resolves to exactly one thing or not at all" tradition AmbiguousSiblingError already established.
+export class AmbiguousEdgeError extends Error {
+  readonly from: string;
+  readonly to: string;
+  readonly kind: GraphEdgeKind;
+  readonly path: PropertyPath | undefined;
+  readonly matchCount: number;
+
+  constructor(
+    from: string,
+    to: string,
+    kind: GraphEdgeKind,
+    path: PropertyPath | undefined,
+    matchCount: number,
+  ) {
+    super(
+      path === undefined
+        ? `${String(matchCount)} ${kind} edges from "${from}" to "${to}" match -- pass \`path\` to disambiguate`
+        : `${String(matchCount)} ${kind} edges from "${from}" to "${to}" at path ${JSON.stringify(path)} match -- these edges are identical in every field removeEdge/replaceEdge can compare, so none of them can be selected unambiguously`,
+    );
+    this.name = "AmbiguousEdgeError";
+    this.from = from;
+    this.to = to;
+    this.kind = kind;
+    this.path = path;
+    this.matchCount = matchCount;
+  }
+}
+
+// Resolves (from, to, kind[, path]) against `edges` to the one GraphEdge it names -- the shared selection removeEdge and replaceEdge both build on, so the two can never drift into two different notions of "the edge this call means". Deliberately keyed on (from, to, kind, path) rather than the full edgeKey tuple: a caller wanting to detach or repoint an edge is not expected to already know its current orderKey (that is exactly the field a caller of insertEdge never supplies either -- it is this module's own bookkeeping for document order, not part of an edge's logical identity), so orderKey plays no part in selection here, only in what replaceEdge later carries over unchanged. Zero matches refuses as UnknownEdgeError; more than one refuses as AmbiguousEdgeError -- both classes' own comments above explain why "pick the first match" is never the right silent fallback for either failure.
+function selectEdge(
+  edges: readonly GraphEdge[],
+  from: string,
+  to: string,
+  kind: GraphEdgeKind,
+  path: PropertyPath | undefined,
+): GraphEdge {
+  const matches = edges.filter(
+    (edge) =>
+      edge.from === from &&
+      edge.to === to &&
+      edge.kind === kind &&
+      (path === undefined || pathsEqual(edge.path, path)),
+  );
+  if (matches.length === 0) throw new UnknownEdgeError(from, to, kind, path);
+  if (matches.length > 1) {
+    throw new AmbiguousEdgeError(from, to, kind, path, matches.length);
+  }
+  return matches[0]!;
+}
+
+export interface RemoveEdgeOptions {
+  readonly kind?: GraphEdgeKind;
+  readonly path?: PropertyPath;
+}
+
+// Detaches one existing edge from `graph`, resolved via selectEdge's (from, to, kind[, path]) lookup -- the "detach" primitive #1004 names as missing from insertNode/insertEdge's own pair, which together could mint and attach a new node but never remove or repoint what an ancestor already pointed at. Deliberately leaves `graph.nodes` untouched: the detached edge's own `to` node, quite possibly unreferenced now, is exactly the "orphan = free version history" case this module's top comment already documents as intentional -- cascading the removal to prune that node is explicitly out of scope (#1004's own stated exclusion), same as it is for every other node that ends up unreferenced by any other means. Never mutates `graph`; returns a new PropertyGraph, the same pure-function discipline insertNode/insertEdge follow.
+export function removeEdge(
+  graph: PropertyGraph,
+  from: string,
+  to: string,
+  options: RemoveEdgeOptions = {},
+): PropertyGraph {
+  const kind = options.kind ?? "CONTAINS";
+  const edge = selectEdge(graph.edges, from, to, kind, options.path);
+  return {
+    nodes: graph.nodes,
+    edges: graph.edges.filter((candidate) => candidate !== edge),
+  };
+}
+
+export interface ReplaceEdgeOptions {
+  readonly kind?: GraphEdgeKind;
+  readonly path?: PropertyPath;
+}
+
+// Atomically repoints one existing edge from `oldTo` to `newTo`, settling #1004's own open question ("what happens to the position slot when replacing in place") in the direction its issue text already named as the natural answer: the selected edge's own orderKey -- and path -- carry over onto `newTo` UNCHANGED, rather than routing through insertEdge's bisection/rebalance machinery to mint a fresh position, so the new version lands in exactly the slot the old one held, not appended after it. This is deliberately one atomic call rather than a caller composing `removeEdge` then `insertEdge` themselves: two separate calls leave a window in which some other mutation (another insertEdge landing on the same sibling list, say) could run between them and invalidate the position the caller meant to preserve, or -- for CONTAINS -- a cycle check that only sees the fully-detached state one of the two calls produces, never the other. One call resolves the old edge and produces its replacement from that exact same GraphEdge, with nothing else able to interleave.
+//
+// A CONTAINS replacement re-checks acyclicity exactly like insertEdge does, but against `graph.edges` with the edge BEING replaced already excluded -- not the raw pre-replace edge set -- since that edge is being atomically removed as part of this same call and must not count as a pre-existing path when asking whether `newTo` would close a cycle back to `from`; counting it would make every genuine no-op replacement (newTo identical to oldTo) look like it closes a cycle through itself, and would also block legitimate replacements where the only path from newTo back to from ran through the very edge being removed.
+export function replaceEdge(
+  graph: PropertyGraph,
+  from: string,
+  oldTo: string,
+  newTo: string,
+  options: ReplaceEdgeOptions = {},
+): PropertyGraph {
+  const kind = options.kind ?? "CONTAINS";
+  const edge = selectEdge(graph.edges, from, oldTo, kind, options.path);
+  const withoutOld = graph.edges.filter((candidate) => candidate !== edge);
+  if (kind === "CONTAINS") {
+    assertNoContainsCycle(withoutOld, from, newTo);
+  }
+  const replacement: GraphEdge = {
+    from,
+    to: newTo,
+    kind,
+    orderKey: edge.orderKey,
+    ...(edge.path === undefined ? {} : { path: edge.path }),
+  };
+  return { nodes: graph.nodes, edges: [...withoutOld, replacement] };
 }

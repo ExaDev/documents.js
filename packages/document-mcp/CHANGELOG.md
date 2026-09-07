@@ -1,3 +1,10 @@
+## [4.6.5](https://github.com/ExaDev/documents.js/compare/document-mcp%404.6.4...document-mcp%404.6.5) (2026-09-07)
+
+
+### Dependencies
+
+- Updated document-outline.js to ^3.5.0
+
 ## [4.6.4](https://github.com/ExaDev/documents.js/compare/document-mcp%404.6.3...document-mcp%404.6.4) (2026-09-07)
 
 

@@ -1,3 +1,9 @@
+## [3.5.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.4.1...document-outline.js%403.5.0) (2026-09-07)
+
+### Features
+
+* **document-outline.js:** add removeEdge/replaceEdge to the graph write API ([3b3bebd](https://github.com/ExaDev/documents.js/commit/3b3bebdccbdb415f27db3e1302fe970c651b04a0))
+
 ## [3.4.1](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.4.0...document-outline.js%403.4.1) (2026-09-06)
 
 
