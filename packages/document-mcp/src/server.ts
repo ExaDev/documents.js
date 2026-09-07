@@ -5,6 +5,7 @@ import { version } from "../package.json";
 import { registerComputeFormulaTools } from "./tools/compute-formula";
 import { registerConvertTools } from "./tools/convert";
 import { registerDocxExtrasTools } from "./tools/docx-extras";
+import { registerEditorTools } from "./tools/editor";
 import { registerFontTools } from "./tools/fonts";
 import { registerFromPackageTools } from "./tools/from-package";
 import { registerMetadataTools } from "./tools/metadata";
@@ -21,6 +22,7 @@ export function createServer(): McpServer {
   registerComputeFormulaTools(server);
   registerConvertTools(server);
   registerDocxExtrasTools(server);
+  registerEditorTools(server);
   registerFontTools(server);
   registerFromPackageTools(server);
   registerMetadataTools(server);
