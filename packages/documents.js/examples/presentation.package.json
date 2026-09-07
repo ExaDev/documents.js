@@ -1,5 +1,5 @@
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@6.0.0/schemas/document-tree.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@7.0.0/schemas/document-tree.schema.json",
   "kind": "presentation",
   "metadata": {},
   "pages": [
