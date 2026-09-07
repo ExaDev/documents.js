@@ -1,3 +1,9 @@
+## [6.3.6](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.3.5...markdown-codec%406.3.6) (2026-09-07)
+
+### Bug Fixes
+
+* **markdown-codec:** anchor a list item whose entire content is a construct ([fab3277](https://github.com/ExaDev/documents.js/commit/fab3277d7ab809e180ea1b991cebfda8cd05760d))
+
 ## [6.3.5](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.3.4...markdown-codec%406.3.5) (2026-09-07)
 
 
