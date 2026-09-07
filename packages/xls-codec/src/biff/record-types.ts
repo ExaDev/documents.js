@@ -50,6 +50,10 @@ export const RECORD_DEFCOLWIDTH = 0x0055;
 export const RECORD_DEFAULTROWHEIGHT = 0x0225;
 /** Merged cell ranges ([MS-XLS] 2.4.168). */
 export const RECORD_MERGECELLS = 0x00e5;
+/** Marks the start of a collection of Dv records and carries only input-window UI state (position, drop-down Obj reference) this reader does not model ([MS-XLS] 2.4.96). Not read for its own fields -- the Dv records that follow it are found by type, not counted against DVal's own idvMac. */
+export const RECORD_DVAL = 0x01b2;
+/** One data-validation rule: its type/operator/error-style/flags, prompt and error text, one or two formulas, and the cell ranges it applies to ([MS-XLS] 2.4.95). */
+export const RECORD_DV = 0x01be;
 /** A cell comment's anchor -- row, column, and its own author, linking to the Obj record that names its text ([MS-XLS] 2.4.179). */
 export const RECORD_NOTE = 0x001c;
 /** A drawing object's common properties (id, type) and, for a comment, its FtNts sub-structure ([MS-XLS] 2.4.181). */
