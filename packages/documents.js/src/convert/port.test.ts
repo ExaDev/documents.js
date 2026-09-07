@@ -20,6 +20,7 @@ describe("DocumentFormatSchema / DOCUMENT_FORMATS", () => {
       "xls",
       "ppt",
       "wpd",
+      "epub",
       "pdf",
     ]);
     expect(DOCUMENT_FORMATS).toEqual(DocumentFormatSchema.options);

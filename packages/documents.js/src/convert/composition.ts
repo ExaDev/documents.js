@@ -54,6 +54,7 @@ import { readSvgContent } from "../svg/read";
 import { buildSvgText } from "../svg/write";
 import { readRtfContent, rtfBytesFromLatin1, writeRtfContent } from "rtf-codec";
 import { readDocContent, writeDocContent } from "doc-codec";
+import { readEpubContent, writeEpubContent } from "epub-codec";
 import { readXlsContent, writeXlsContent } from "xls-codec";
 import { readPptContent } from "../ppt/read";
 import { writePptContent } from "../ppt/write";
@@ -126,7 +127,8 @@ export type ContentFormat =
   | "rtf"
   | "doc"
   | "xls"
-  | "ppt";
+  | "ppt"
+  | "epub";
 
 // The explicit, typed list of content formats, kept in sync with FORMAT_NODES' own keys. Used for iteration in the graph builder in place of `Object.keys(FORMAT_NODES)` (which returns `string[]` and would need a cast back to ContentFormat), so the registry stays cast-free end to end.
 const CONTENT_FORMATS: readonly ContentFormat[] = [
@@ -144,6 +146,7 @@ const CONTENT_FORMATS: readonly ContentFormat[] = [
   "doc",
   "xls",
   "ppt",
+  "epub",
 ];
 
 // The four ContentDocument variants a layout engine exists for. 'formula' is the fifth ContentVariant member but has no layout engine of its own (odfToPdf renders through writePdf's formula positioning, not a ContentDocument -> LayoutDocument pass), so it is excluded from this engine's layout/reconstruct registries.
@@ -171,7 +174,8 @@ interface PackageFormatNode {
 // rtf/doc/xls/ppt are the four members whose decode/encode are not a genuine text conversion: their own read/write pairs (rtf-codec's readRtfContent/writeRtfContent; doc-codec's readDocContent/writeDocContent; xls-codec's readXlsContent/writeXlsContent; this package's own src/ppt/read.ts+write.ts wrapping ppt-codec's readPptContent/writePptContent) all operate on raw bytes directly -- none of the four is UTF-8 text (rtf's \binN run can carry arbitrary raw picture bytes; the other three are genuinely binary containers, [MS-DOC]/BIFF8/[MS-PPT] each wrapped in an [MS-CFB] compound file), so unlike markdown/csv/svg there is no well-formed-UTF-8 decode any of their own bytes always survive. Widening decode/read/build/encode's shared TMiddle type to accommodate that honestly (a second FormatNode variant, or a generic TextFormatNode<TMiddle>) breaks executeBridge's and executeToPdf's generic "decode then read" dispatch over the whole ContentFormat space: FORMAT_NODES[format] for a non-literal format widens to the union of every member's node type, and calling a union of methods whose parameter types differ per member (string here, Uint8Array there) requires the argument to satisfy every member's parameter type at once, which TypeScript correctly rejects. So each of the four instead wraps and unwraps the identical lossless byte<->code-unit mapping bytesToLatin1/latin1ToBytes below implement -- "the one string form that genuinely still holds bytes" per rtf-codec's own rtfBytesFromLatin1 doc comment (the function rtf's own encode leg still calls directly, since rtf-codec already exports it; doc/xls/ppt have no such export of their own, hence the local generic pair) -- a sanctioned, lossless representation, not a workaround invented here.
 interface TextFormatNode {
   readonly variant: LayoutVariant;
-  readonly family: "markdown" | "csv" | "svg" | "rtf" | "doc" | "xls" | "ppt";
+  readonly family:
+    "markdown" | "csv" | "svg" | "rtf" | "doc" | "xls" | "ppt" | "epub";
   readonly decode: (bytes: Uint8Array<ArrayBuffer>) => string;
   readonly read: (
     text: string,
@@ -423,6 +427,19 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
     encode: (text) => latin1ToBytes(text),
     hasSourcePackage: false,
   },
+  // epub reads/writes a real wordprocessing ContentDocument directly (epub-codec's readEpubContent/writeEpubContent), so it same-variant bridges to docx/odt/markdown/rtf/doc at cost 1 -- but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.epub), so it is deliberately absent from LAYOUT_CAPABLE below: epub <-> pdf routes through one of those bridges plus that format's own toPdf/fromPdf edge, never a direct epub <-> LayoutDocument pipeline. epub's bytes are a zip archive, not text, so it takes doc's own latin1-wrapping route rather than rtf's -- epub-codec, like doc-codec/xls-codec/ppt-codec, has no xBytesFromLatin1 export of its own to reuse, so decode/build/encode go through this module's local bytesToLatin1/latin1ToBytes pair instead. readEpubContent/writeEpubContent take no signal at all (unlike readRtfContent/writeRtfContent), so read checks it once via throwIfAborted before decoding -- the identical no-loop-format shape doc/xls/ppt get above. epub-codec's own read>write version asymmetry (EPUB 2/3 in, EPUB 3 only out) is entirely internal to writeEpubContent and needs no modelling here: it always succeeds for a wordprocessing ContentDocument regardless of which EPUB version originally produced it.
+  epub: {
+    variant: "wordprocessing",
+    family: "epub",
+    decode: (bytes) => bytesToLatin1(bytes),
+    read: (text, options) => {
+      throwIfAborted(options?.signal);
+      return readEpubContent(latin1ToBytes(text));
+    },
+    build: (content) => bytesToLatin1(writeEpubContent(content)),
+    encode: (text) => latin1ToBytes(text),
+    hasSourcePackage: false,
+  },
   // xls reads/writes a real spreadsheet ContentDocument directly (xls-codec's readXlsContent/writeXlsContent, over XlsContentDocument -- a plain Extract<ContentDocument, {kind:'spreadsheet'}>, fully interchangeable with the shared type at this boundary), so it same-variant bridges to xlsx/ods/csv at cost 1 -- but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.xls), so it follows xlsx/csv's own routing exactly: xls <-> pdf goes through the ods bridge + ods's own layout engine. writeXlsContent's own parameter type is the narrowed XlsContentDocument rather than the bare ContentDocument doc-codec's writeDocContent accepts, so build narrows with a real runtime check (matching this module's own TRANSFORMS narrowing convention) rather than a cast -- a throw here is an internal-invariant guard, since executeBridge only ever calls build after confirming the content's variant already matches this node's own.
   xls: {
     variant: "spreadsheet",
@@ -458,7 +475,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
   },
 };
 
-// The formats that have a direct layout-engine path to/from PDF (convertXToLayout + writePdf). xlsx and csv are deliberately absent: neither has a layout engine of its own, so the pathfinder routes each <-> pdf through ods instead (e.g. csv -> ods bridge, then ods -> pdf toPdf), reproducing the composed route xlsxToPdf/pdfToXlsx already hard-code in convert.ts. rtf is absent for the identical reason, routed through a same-variant bridge to docx/odt/markdown instead -- and doc/xls/ppt join it there for the same reason again: none of the three legacy binary codecs has a layout engine of its own, so each routes through a same-variant bridge (doc to docx/odt/markdown/rtf, xls to ods, ppt to pptx/odp) plus that bridge target's own toPdf/fromPdf edge. svg is present: its read half produces a drawing ContentDocument whose page geometry comes from the svg root's own viewBox/width/height, and convertDrawingToLayout renders it unmodified. Exported because composition-to-pdf.ts's executeToPdf is the executor that enforces it.
+// The formats that have a direct layout-engine path to/from PDF (convertXToLayout + writePdf). xlsx and csv are deliberately absent: neither has a layout engine of its own, so the pathfinder routes each <-> pdf through ods instead (e.g. csv -> ods bridge, then ods -> pdf toPdf), reproducing the composed route xlsxToPdf/pdfToXlsx already hard-code in convert.ts. rtf is absent for the identical reason, routed through a same-variant bridge to docx/odt/markdown instead -- and doc/xls/ppt join it there for the same reason again: none of the three legacy binary codecs has a layout engine of its own, so each routes through a same-variant bridge (doc to docx/odt/markdown/rtf, xls to ods, ppt to pptx/odp) plus that bridge target's own toPdf/fromPdf edge. epub joins the same group for the same reason: epub-codec has no layout engine of its own either, so epub <-> pdf routes through a same-variant bridge to docx/odt/markdown/rtf/doc plus that bridge target's own toPdf/fromPdf edge. svg is present: its read half produces a drawing ContentDocument whose page geometry comes from the svg root's own viewBox/width/height, and convertDrawingToLayout renders it unmodified. Exported because composition-to-pdf.ts's executeToPdf is the executor that enforces it.
 //
 // wpd is present, and being read-only is exactly why. For a read-and-write format the entry is a judgement between two working routes -- rtf reaches pdf through a docx bridge at a cost the hand-written rtfToPdf already accepted -- but for a read-only one there is no reverse direction to keep symmetrical, and the only question left is markdown's own: does its read produce a ContentDocument the variant's layout engine consumes unmodified? readWpdContent produces a wordprocessing document that convertWordprocessingToLayout renders exactly as it renders docx's, so routing wpd -> pdf through a docx bridge instead would build and re-read an OOXML package for nothing, losing whatever that builder cannot express on the way through.
 export const LAYOUT_CAPABLE: ReadonlySet<SourceContentFormat> =

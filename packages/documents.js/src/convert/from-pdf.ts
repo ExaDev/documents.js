@@ -190,3 +190,11 @@ export function pdfToPpt(
 ): Uint8Array<ArrayBuffer> {
   return convertDocumentFromPdf("ppt", bytes, options);
 }
+
+// pdf bytes -> epub bytes: the reverse of epubToPdf (convert.ts) -- epub has no fromPdf edge of its own, so the pathfinder resolves this as [pdf -> docx fromPdf, docx -> epub bridge] rather than a single hop, the identical two-hop shape pdfToRtf above has.
+export function pdfToEpub(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: PdfToDocumentOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocumentFromPdf("epub", bytes, options);
+}

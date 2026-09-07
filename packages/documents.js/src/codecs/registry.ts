@@ -17,6 +17,7 @@ import { encodeSvgText } from "../svg/text";
 import { buildSvgText } from "../svg/write";
 import { writeRtfContent } from "rtf-codec";
 import { writeDocContent } from "doc-codec";
+import { writeEpubContent } from "epub-codec";
 import { writeXlsContent } from "xls-codec";
 import { writePptContent } from "../ppt/write";
 import { encodeDocumentPackage } from "../package-codec";
@@ -123,6 +124,13 @@ export const DOCUMENT_FORMAT_CODECS: Readonly<
     content: {
       read: CONTENT_READERS.doc,
       write: (content) => writeDocContent(content),
+    },
+  },
+  // epub is doc's structural twin too: epub-codec's readEpubContent/writeEpubContent operate on raw zip bytes directly, with writeEpubContent already typed against the bare ContentDocument (it narrows to 'wordprocessing' internally, throwing EpubUnsupportedDocumentKindError for anything else), so there is nothing for this entry to unwrap or narrow.
+  epub: {
+    content: {
+      read: CONTENT_READERS.epub,
+      write: (content) => writeEpubContent(content),
     },
   },
   // xls is doc's spreadsheet-variant counterpart: xls-codec's readXlsContent/writeXlsContent operate on raw [MS-CFB]+BIFF8 bytes directly -- but unlike writeDocContent, writeXlsContent's own parameter type is the narrowed XlsContentDocument rather than the bare ContentDocument, so this entry narrows with a real runtime check (matching composition.ts's own FORMAT_NODES.xls.build) rather than a cast. The throw is an internal-invariant guard: every caller reaching this write half (buildDocumentBytes, setDocumentMetadata's rebuild path) already holds a genuine spreadsheet ContentDocument by construction.
