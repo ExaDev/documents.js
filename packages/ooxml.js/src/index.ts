@@ -270,6 +270,7 @@ export type { ColorTransform } from "./typed/shared/color";
 export { DocumentMetadataSchema } from "./typed/shared/metadata";
 export type { DocumentMetadata } from "./typed/shared/metadata";
 export {
+  readCoreProperties,
   hasCoreProperties,
   patchCoreProperties,
 } from "./typed/shared/metadata";
