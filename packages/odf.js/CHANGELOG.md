@@ -1,3 +1,9 @@
+## [7.4.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.3.0...odf.js%407.4.0) (2026-09-07)
+
+### Features
+
+* **odf.js:** add patchOdfMetadata/hasOdfMetadata for in-place meta.xml editing ([9477a19](https://github.com/ExaDev/documents.js/commit/9477a191cb015b889d2daf326c974931b89d342a))
+
 ## [7.3.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.2.0...odf.js%407.3.0) (2026-09-07)
 
 ### Features

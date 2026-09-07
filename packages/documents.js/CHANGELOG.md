@@ -1,3 +1,15 @@
+## [7.4.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.3.0...documents.js%407.4.0) (2026-09-07)
+
+### Features
+
+* **documents.js:** add a live metadata getter/setter to all six editors ([89bdd7e](https://github.com/ExaDev/documents.js/commit/89bdd7e787c1726feb6305b54ab8851b00cd2a0f)), closes [ExaDev/documents.js#933](https://github.com/ExaDev/documents.js/issues/933)
+
+
+### Dependencies
+
+- Updated odf.js to ^7.4.0
+- Updated ooxml.js to ^8.3.0
+
 ## [7.3.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.2.5...documents.js%407.3.0) (2026-09-07)
 
 ### Features

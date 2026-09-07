@@ -1,3 +1,9 @@
+## [8.3.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.2.0...ooxml.js%408.3.0) (2026-09-07)
+
+### Features
+
+* **ooxml.js:** export readCoreProperties from the public API ([bff268e](https://github.com/ExaDev/documents.js/commit/bff268e716b5238ca588053eee089edf0bf9cc8e)), references [ExaDev/documents.js#933](https://github.com/ExaDev/documents.js/issues/933)
+
 ## [8.2.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.1.0...ooxml.js%408.2.0) (2026-09-07)
 
 ### Features

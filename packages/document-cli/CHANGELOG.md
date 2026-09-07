@@ -1,3 +1,15 @@
+## [5.4.24](https://github.com/ExaDev/documents.js/compare/document-cli%405.4.23...document-cli%405.4.24) (2026-09-07)
+
+### Documentation
+
+* **document-cli:** correct the now-stale claim that no editor has a metadata setter ([14395f2](https://github.com/ExaDev/documents.js/commit/14395f214294628596d2864425bd5f504f9133d5)), references [ExaDev/documents.js#933](https://github.com/ExaDev/documents.js/issues/933) [ExaDev/documents.js#1080](https://github.com/ExaDev/documents.js/issues/1080)
+
+
+### Dependencies
+
+- Updated odf.js to ^7.4.0
+- Updated documents.js to ^7.4.0
+
 ## [5.4.23](https://github.com/ExaDev/documents.js/compare/document-cli%405.4.22...document-cli%405.4.23) (2026-09-07)
 
 
