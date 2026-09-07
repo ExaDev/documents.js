@@ -114,6 +114,22 @@ describe("resolveRunProperties: toggle properties", () => {
     });
     expect(props.bold).toBeUndefined();
   });
+
+  it("a sibling property (colour) forcing a non-empty w:rPr still leaves every absent toggle undefined, not false (regression: ExaDev/documents.js#962's own 4th claim -- confirmed stale, not a live bug: readRunPropertiesLayer/mergeRunLayer already propagate an absent toggle through every cascade layer correctly)", () => {
+    const { paragraph, run } = paragraphWithRun(
+      [],
+      runEl([el("w:color", { "w:val": "FF0000" })]),
+    );
+    const props = resolveRunProperties(run, paragraph, {
+      stylesRoot: undefined,
+      theme: EMPTY_THEME,
+    });
+    expect(props.color).toBeDefined();
+    expect(props.bold).toBeUndefined();
+    expect(props.italic).toBeUndefined();
+    expect(props.underline).toBeUndefined();
+    expect(props.strike).toBeUndefined();
+  });
 });
 
 describe("resolveRunProperties: underline", () => {
@@ -218,6 +234,132 @@ describe("resolveRunProperties: colour", () => {
         theme: themedTheme,
       }).color,
     ).toEqual({ r: 1, g: 1, b: 1 });
+  });
+
+  it("w:themeTint byte 0xFF leaves the resolved theme colour unchanged (regression: ExaDev/documents.js#962 -- previously ignored entirely)", () => {
+    const themedTheme = {
+      colorScheme: new Map([["accent1", { r: 0.2, g: 0.4, b: 0.6 }]]),
+      majorFont: "Major Font",
+      minorFont: "Minor Font",
+    };
+    const { paragraph, run } = paragraphWithRun(
+      [],
+      runEl([
+        el("w:color", { "w:themeColor": "accent1", "w:themeTint": "FF" }),
+      ]),
+    );
+    const color = resolveRunProperties(run, paragraph, {
+      stylesRoot: undefined,
+      theme: themedTheme,
+    }).color;
+    expect(color?.r).toBeCloseTo(0.2, 5);
+    expect(color?.g).toBeCloseTo(0.4, 5);
+    expect(color?.b).toBeCloseTo(0.6, 5);
+  });
+
+  it("w:themeTint byte 0x00 lightens the resolved theme colour fully to white, hue and saturation notwithstanding", () => {
+    const themedTheme = {
+      colorScheme: new Map([["accent1", { r: 0.2, g: 0.4, b: 0.6 }]]),
+      majorFont: "Major Font",
+      minorFont: "Minor Font",
+    };
+    const { paragraph, run } = paragraphWithRun(
+      [],
+      runEl([
+        el("w:color", { "w:themeColor": "accent1", "w:themeTint": "00" }),
+      ]),
+    );
+    const color = resolveRunProperties(run, paragraph, {
+      stylesRoot: undefined,
+      theme: themedTheme,
+    }).color;
+    expect(color?.r).toBeCloseTo(1, 5);
+    expect(color?.g).toBeCloseTo(1, 5);
+    expect(color?.b).toBeCloseTo(1, 5);
+  });
+
+  it("w:themeShade byte 0x00 darkens the resolved theme colour fully to black", () => {
+    const themedTheme = {
+      colorScheme: new Map([["accent1", { r: 0.2, g: 0.4, b: 0.6 }]]),
+      majorFont: "Major Font",
+      minorFont: "Minor Font",
+    };
+    const { paragraph, run } = paragraphWithRun(
+      [],
+      runEl([
+        el("w:color", { "w:themeColor": "accent1", "w:themeShade": "00" }),
+      ]),
+    );
+    const color = resolveRunProperties(run, paragraph, {
+      stylesRoot: undefined,
+      theme: themedTheme,
+    }).color;
+    expect(color?.r).toBeCloseTo(0, 5);
+    expect(color?.g).toBeCloseTo(0, 5);
+    expect(color?.b).toBeCloseTo(0, 5);
+  });
+
+  it("w:themeShade byte 0xFF leaves the resolved theme colour unchanged", () => {
+    const themedTheme = {
+      colorScheme: new Map([["accent1", { r: 0.2, g: 0.4, b: 0.6 }]]),
+      majorFont: "Major Font",
+      minorFont: "Minor Font",
+    };
+    const { paragraph, run } = paragraphWithRun(
+      [],
+      runEl([
+        el("w:color", { "w:themeColor": "accent1", "w:themeShade": "FF" }),
+      ]),
+    );
+    const color = resolveRunProperties(run, paragraph, {
+      stylesRoot: undefined,
+      theme: themedTheme,
+    }).color;
+    expect(color?.r).toBeCloseTo(0.2, 5);
+    expect(color?.g).toBeCloseTo(0.4, 5);
+    expect(color?.b).toBeCloseTo(0.6, 5);
+  });
+
+  it("a mid-range w:themeTint noticeably lightens the colour without reaching white", () => {
+    const themedTheme = {
+      colorScheme: new Map([["accent1", { r: 0.2, g: 0.4, b: 0.6 }]]),
+      majorFont: "Major Font",
+      minorFont: "Minor Font",
+    };
+    const { paragraph, run } = paragraphWithRun(
+      [],
+      runEl([
+        el("w:color", { "w:themeColor": "accent1", "w:themeTint": "80" }),
+      ]),
+    );
+    const color = resolveRunProperties(run, paragraph, {
+      stylesRoot: undefined,
+      theme: themedTheme,
+    }).color;
+    // Lighter than the base colour on every channel, but not fully white.
+    expect(color!.r).toBeGreaterThan(0.2);
+    expect(color!.g).toBeGreaterThan(0.4);
+    expect(color!.b).toBeGreaterThan(0.6);
+    expect(color!.r).toBeLessThan(1);
+  });
+
+  it("ignores a malformed w:themeShade/w:themeTint (not a two-hex-digit byte) rather than throwing or silently miscolouring", () => {
+    const themedTheme = {
+      colorScheme: new Map([["accent1", { r: 0.2, g: 0.4, b: 0.6 }]]),
+      majorFont: "Major Font",
+      minorFont: "Minor Font",
+    };
+    const { paragraph, run } = paragraphWithRun(
+      [],
+      runEl([
+        el("w:color", { "w:themeColor": "accent1", "w:themeTint": "not-hex" }),
+      ]),
+    );
+    const color = resolveRunProperties(run, paragraph, {
+      stylesRoot: undefined,
+      theme: themedTheme,
+    }).color;
+    expect(color).toEqual({ r: 0.2, g: 0.4, b: 0.6 });
   });
 
   it("falls back to w:val when the theme colour reference does not resolve", () => {

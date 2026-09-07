@@ -10,7 +10,7 @@ export interface ColorTransform {
   readonly value: number;
 }
 
-function clamp01(x: number): number {
+export function clamp01(x: number): number {
   return Math.max(0, Math.min(1, x));
 }
 
@@ -41,14 +41,14 @@ function applyShadeOrTint(
   };
 }
 
-interface Hsl {
+export interface Hsl {
   readonly h: number; // degrees, [0, 360)
   readonly s: number; // [0, 1]
   readonly l: number; // [0, 1]
 }
 
 // Standard sRGB <-> HSL conversion (CSS Color Module Level 3 / W3C), operating on the gamma-encoded components directly -- distinct from, and applied after, the linear-space shade/tint transform above, matching Apache POI's own RGB2HSL/HSL2RGB (which run on the already-gamma-corrected result of any preceding shade/tint pass).
-function rgbToHsl(color: Color): Hsl {
+export function rgbToHsl(color: Color): Hsl {
   const { r, g, b } = color;
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
@@ -89,7 +89,7 @@ function hueToRgbComponent(p: number, q: number, hue: number): number {
   return p;
 }
 
-function hslToRgb(hsl: Hsl): Color {
+export function hslToRgb(hsl: Hsl): Color {
   const { h, s, l } = hsl;
   if (s === 0) {
     return { r: l, g: l, b: l };
