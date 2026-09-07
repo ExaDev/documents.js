@@ -1871,6 +1871,36 @@ describe("lists", () => {
     expect(written).toBe("- a\n- b\n\n> quote\n\n- c\n- d");
   });
 
+  // ExaDev/documents.js#1012: a list item whose entire content is a construct, with no leading plain paragraph of its own to trigger renderItems' region-collection scan in the first place -- the simplest shape being a bare `* > quote` with nothing else in the item. Fixed at src/lower/lower.ts's own lowerListItem, which now gives such an item the same empty-placeholder anchor a nested-list-only item already gets (see lower.test.ts's own "carries itemId on an empty placeholder too, when the item's only content is a construct"), rather than at emit.ts: a construct sitting at an item's own head is otherwise indistinguishable, from the flat block data alone, from a genuinely unrelated construct that merely wraps a fresh list of its own (CommonMark spec 0.31.2 example 235, `> - foo\n- bar`, is exactly that unrelated shape -- see the test just below, which must keep rendering unchanged).
+  it("nests a list item's own construct correctly when the item has no other content at all -- the bullet is no longer emitted inside the blockquote (ExaDev/documents.js#1012)", () => {
+    const source = "* > quote\n";
+    const written = emitMarkdown(lowerMarkdown(source));
+    expect(written).toBe("- \n  > quote");
+
+    // A stable fixed point: writing the reparsed output again reproduces the identical text.
+    const rewritten = emitMarkdown(lowerMarkdown(`${written}\n`));
+    expect(rewritten).toBe(written);
+
+    const reparsed = lowerMarkdown(written);
+    if (reparsed.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const paragraphs = (reparsed.sections[0]?.blocks ?? []).filter(
+      (block) => block.kind === "paragraph",
+    );
+    const [placeholder, quote] = paragraphs;
+    expect(paragraphs).toHaveLength(2);
+    expect(placeholder?.list?.itemId).toBeDefined();
+    // "quote" is the SAME item continuing into the construct's own dual-carried interior, not a fresh nested one.
+    expect(quote?.list?.itemId).toBe(placeholder?.list?.itemId);
+  });
+
+  it("still renders a bare blockquote wrapping only a single-item fresh list as itself, with no borrowed outer item to attach it to (CommonMark spec 0.31.2 example 235) -- the exact shape ExaDev/documents.js#1012's own fix must not misidentify as a construct-only list item", () => {
+    const source = "> - foo\n- bar\n";
+    const written = emitMarkdown(lowerMarkdown(source));
+    expect(written).toBe("> - foo\n\n- bar");
+  });
+
   it("keeps a Quote-styled block and a following plain block of the same item as two separate blocks on write-then-reparse -- Quote is NOT self-delimiting inside a list region: renderListRegion renders every block through renderParagraphBody, which never applies a '> ' prefix, so a Quote-styled block reads back identically to a plain one and the two would otherwise merge into one paragraph via CommonMark's lazy continuation", () => {
     const source = doc([
       {
