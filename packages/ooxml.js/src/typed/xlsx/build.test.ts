@@ -1155,3 +1155,253 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips a genuine 
     ).toThrow(/diagonalCross/);
   });
 });
+
+describe("buildXlsxPackageFromContent: cell comments (ExaDev/documents.js#949)", () => {
+  it("writes no threadedComments part, no worksheet rels, and no Content_Types override at all when no cell carries a comment", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "x" },
+          displayText: "x",
+        },
+      ]),
+    );
+    expect(Object.keys(pkg.parts)).not.toContain(
+      "xl/worksheets/_rels/sheet1.xml.rels",
+    );
+    expect(Object.keys(pkg.parts)).not.toContain(
+      "xl/threadedComments/threadedComment1.xml",
+    );
+    const contentTypes = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (contentTypes === undefined) {
+      throw new Error("expected [Content_Types].xml to have a root element");
+    }
+    const overrides = childrenWithTag(contentTypes, "Override").map((el) =>
+      attr(el, "PartName"),
+    );
+    expect(overrides.some((name) => name?.includes("threadedComment"))).toBe(
+      false,
+    );
+  });
+
+  it("writes a worksheet rels part, a threadedComments part, and a matching Content_Types override for a sheet carrying a commented cell", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "x" },
+          displayText: "x",
+          comment: { text: "A note" },
+        },
+      ]),
+    );
+    expect(Object.keys(pkg.parts)).toContain(
+      "xl/worksheets/_rels/sheet1.xml.rels",
+    );
+    expect(Object.keys(pkg.parts)).toContain(
+      "xl/threadedComments/threadedComment1.xml",
+    );
+    const contentTypes = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (contentTypes === undefined) {
+      throw new Error("expected [Content_Types].xml to have a root element");
+    }
+    const overrides = childrenWithTag(contentTypes, "Override").map((el) =>
+      attr(el, "PartName"),
+    );
+    expect(overrides).toContain("/xl/threadedComments/threadedComment1.xml");
+    const rels = rootElement(pkg.parts["xl/worksheets/_rels/sheet1.xml.rels"]);
+    if (rels === undefined) {
+      throw new Error(
+        "expected the worksheet rels part to have a root element",
+      );
+    }
+    const relationship = childrenWithTag(rels, "Relationship")[0];
+    if (relationship === undefined) {
+      throw new Error(
+        "expected the worksheet rels part to have a Relationship",
+      );
+    }
+    expect(attr(relationship, "Target")).toBe(
+      "../threadedComments/threadedComment1.xml",
+    );
+  });
+
+  it("round-trips through the lossless byte codec (encodePackage -> parsePackage -> byte-identical structure) once comments are in play", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "x" },
+          displayText: "x",
+          comment: {
+            text: "Root note",
+            author: "Alice",
+            createdAt: "2026-01-02T03:04:05Z",
+            replies: [{ text: "A reply", author: "Bob" }],
+          },
+        },
+      ]),
+    );
+    const bytes = encodePackage(pkg);
+    const reparsed = parsePackage(bytes);
+    expect(reparsed).toEqual(pkg);
+  });
+
+  it("round-trips a full comment thread (text, author, createdAt, replies) back through readXlsxContent", () => {
+    const cells: ContentSheet["cells"] = [
+      {
+        row: 0,
+        column: 0,
+        value: { kind: "string", value: "x" },
+        displayText: "x",
+        comment: {
+          text: "Root note",
+          author: "Alice",
+          createdAt: "2026-01-02T03:04:05Z",
+          replies: [
+            { text: "First reply", author: "Bob" },
+            { text: "Second reply, no author" },
+          ],
+        },
+      },
+    ];
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument(cells));
+    const roundTripped = readXlsxContent(pkg);
+    if (roundTripped.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const cell = roundTripped.sheets[0]?.cells[0];
+    expect(cell?.comment).toEqual({
+      text: "Root note",
+      author: "Alice",
+      createdAt: "2026-01-02T03:04:05Z",
+      replies: [
+        { text: "First reply", author: "Bob" },
+        { text: "Second reply, no author" },
+      ],
+    });
+  });
+
+  it("round-trips a comment whose text needs XML escaping (& < > carried through the thread's own <text> element)", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 2,
+          column: 1,
+          value: { kind: "string", value: "x" },
+          displayText: "x",
+          comment: { text: "Tom & Jerry <b>bold</b>", author: "A & B" },
+        },
+      ]),
+    );
+    const roundTripped = readXlsxContent(pkg);
+    if (roundTripped.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const cell = roundTripped.sheets[0]?.cells[0];
+    expect(cell?.comment).toEqual({
+      text: "Tom & Jerry <b>bold</b>",
+      author: "A & B",
+    });
+  });
+
+  it("only writes a threadedComments part for the sheet that actually has a commented cell, correctly indexed, in a multi-sheet workbook", () => {
+    const document: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [
+            {
+              row: 0,
+              column: 0,
+              value: { kind: "string", value: "x" },
+              displayText: "x",
+            },
+          ],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+        {
+          name: "Sheet2",
+          cells: [
+            {
+              row: 0,
+              column: 0,
+              value: { kind: "string", value: "y" },
+              displayText: "y",
+              comment: { text: "Only on sheet 2" },
+            },
+          ],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    };
+    const pkg = buildXlsxPackageFromContent(document);
+    expect(Object.keys(pkg.parts)).not.toContain(
+      "xl/threadedComments/threadedComment1.xml",
+    );
+    expect(Object.keys(pkg.parts)).toContain(
+      "xl/threadedComments/threadedComment2.xml",
+    );
+    const roundTripped = readXlsxContent(pkg);
+    if (roundTripped.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    expect(roundTripped.sheets[0]?.cells[0]?.comment).toBeUndefined();
+    expect(roundTripped.sheets[1]?.cells[0]?.comment).toEqual({
+      text: "Only on sheet 2",
+    });
+  });
+
+  it("gives each reply its own id and points it back at its own thread's root via parentId, never at another cell's thread", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "x" },
+          displayText: "x",
+          comment: {
+            text: "First cell",
+            replies: [{ text: "Reply to first" }],
+          },
+        },
+        {
+          row: 1,
+          column: 0,
+          value: { kind: "string", value: "y" },
+          displayText: "y",
+          comment: {
+            text: "Second cell",
+            replies: [{ text: "Reply to second" }],
+          },
+        },
+      ]),
+    );
+    const roundTripped = readXlsxContent(pkg);
+    if (roundTripped.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const firstCell = roundTripped.sheets[0]?.cells[0];
+    const secondCell = roundTripped.sheets[0]?.cells[1];
+    expect(firstCell?.comment).toEqual({
+      text: "First cell",
+      replies: [{ text: "Reply to first" }],
+    });
+    expect(secondCell?.comment).toEqual({
+      text: "Second cell",
+      replies: [{ text: "Reply to second" }],
+    });
+  });
+});
