@@ -1,3 +1,12 @@
+## [7.1.12](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.11...documents.js%407.1.12) (2026-09-07)
+
+
+### Dependencies
+
+- Updated ooxml.js to ^8.0.0
+- Updated rtf-codec to ^4.0.0
+- Updated wpd-codec to ^3.0.0
+
 ## [7.1.11](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.10...documents.js%407.1.11) (2026-09-07)
 
 ### Bug Fixes
