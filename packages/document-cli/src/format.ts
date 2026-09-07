@@ -30,6 +30,7 @@ const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   doc: "doc",
   xls: "xls",
   ppt: "ppt",
+  epub: "epub",
   pdf: "pdf",
 };
 
@@ -50,6 +51,7 @@ const FORMAT_TO_EXTENSION: Readonly<Record<DocumentFormat, string>> = {
   doc: "doc",
   xls: "xls",
   ppt: "ppt",
+  epub: "epub",
   pdf: "pdf",
 };
 

@@ -14,6 +14,7 @@ import {
   decodeOdbPackage,
   docToPdf,
   encodeMarkdownText,
+  epubToPdf,
   openDocx,
   openMarkdown,
   openOdg,
@@ -130,6 +131,9 @@ export async function openDocumentAtPath(
       return { format, layout: readPdf(xlsToPdf(bytes)), bytes, path };
     case "ppt":
       return { format, layout: readPdf(pptToPdf(bytes)), bytes, path };
+    // epub mirrors rtf/doc/ppt: no live-view editor, but a genuine epubToPdf conversion, opened read-only through the identical to-Pdf-then-readPdf shape.
+    case "epub":
+      return { format, layout: readPdf(epubToPdf(bytes)), bytes, path };
     case "odf":
       throw new Error(
         "A standalone .odf formula document has no editor; convert it to PDF (odfToPdf) instead",
@@ -183,7 +187,8 @@ export async function saveDocumentTo(
     openDocument.format === "wpd" ||
     openDocument.format === "doc" ||
     openDocument.format === "xls" ||
-    openDocument.format === "ppt"
+    openDocument.format === "ppt" ||
+    openDocument.format === "epub"
   ) {
     throw new Error(
       `A ${openDocument.format} document is opened read-only and cannot be written back`,

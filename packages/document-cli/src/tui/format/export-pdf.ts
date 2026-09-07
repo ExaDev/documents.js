@@ -5,6 +5,7 @@ import {
   docToPdf,
   docxToPdf,
   encodeMarkdownText,
+  epubToPdf,
   markdownToPdf,
   odgToPdf,
   odpToPdf,
@@ -125,6 +126,11 @@ export async function exportToPdf(
   }
   if (openDocument.format === "ppt") {
     const pdfBytes = pptToPdf(openDocument.bytes, pdfOptions);
+    await writeFile(destinationPath, pdfBytes);
+    return;
+  }
+  if (openDocument.format === "epub") {
+    const pdfBytes = epubToPdf(openDocument.bytes, pdfOptions);
     await writeFile(destinationPath, pdfBytes);
     return;
   }

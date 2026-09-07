@@ -216,6 +216,14 @@ export interface PptOpenDocument {
   readonly path: string;
 }
 
+// epub mirrors rtf/doc/ppt: no live-view editor (epub-codec has no EpubEditor), but a genuine epubToPdf conversion, opened read-only as its own readPdf result through the shared pdf screen family.
+export interface EpubOpenDocument {
+  readonly format: "epub";
+  readonly layout: LayoutDocument;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly path: string;
+}
+
 // The seven formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx`/`csv`/`svg`/`rtf` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` -- see PdfOpenDocument's own doc comment. `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one -- editing and saving a PDF in place needs no conversion step at all.
 export type EditableOpenDocument =
   | DocxOpenDocument
@@ -239,7 +247,8 @@ export type OpenDocument =
   | WpdOpenDocument
   | DocOpenDocument
   | XlsOpenDocument
-  | PptOpenDocument;
+  | PptOpenDocument
+  | EpubOpenDocument;
 
 export type EditableFormat = EditableOpenDocument["format"];
 
@@ -430,6 +439,7 @@ export function rootScreenForFormat(format: OpenDocumentFormat): Screen {
     case "doc":
     case "xls":
     case "ppt":
+    case "epub":
       return { kind: "pdfPageList" };
   }
 }
