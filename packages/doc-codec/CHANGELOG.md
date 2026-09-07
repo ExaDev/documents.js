@@ -1,3 +1,17 @@
+## [2.3.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.2.5...doc-codec%402.3.0) (2026-09-07)
+
+### Features
+
+* **doc-codec:** round-trip a paragraph's styleId/headingLevel through a real STSH entry ([c99a3a6](https://github.com/ExaDev/documents.js/commit/c99a3a6dced3037ab12a5b3824f11dec23b37c00))
+
+### Documentation
+
+* **doc-codec:** document styleId/headingLevel round-tripping through the style sheet ([86b78e1](https://github.com/ExaDev/documents.js/commit/86b78e1d0a67df1880e0d8ca382f63fe03edb185)), references [#1059](https://github.com/ExaDev/documents.js/issues/1059)
+
+### Tests
+
+* **doc-codec:** cover styleId/headingLevel round-tripping through a real STSH entry ([6a67003](https://github.com/ExaDev/documents.js/commit/6a67003f6c1a0a335376101e5c3a5be7b5ff86ca))
+
 ## [2.2.5](https://github.com/ExaDev/documents.js/compare/doc-codec%402.2.4...doc-codec%402.2.5) (2026-09-07)
 
 ### Bug Fixes
