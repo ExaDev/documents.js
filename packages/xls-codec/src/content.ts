@@ -27,6 +27,7 @@ import {
 } from "./biff/substreams";
 import { resolveFillBackground, resolveBorderEdge } from "./biff/xf-colors";
 import { readWorkbookStreams } from "./container";
+import { readSheetComments, type SheetCellComment } from "./workbook/comments";
 import { classifyNumberFormat } from "excel-number-format";
 import {
   serialToIsoDate,
@@ -230,9 +231,15 @@ function readSheet(
           sheets: globals.sheets,
           sheetRanges: globals.sheetRanges,
         });
+  const comments =
+    substream === undefined
+      ? new Map<string, SheetCellComment>()
+      : readSheetComments(substream.records);
+  const cells = mapCells(raw, globals);
+  applyCellComments(comments, cells);
   return {
     name: entry.name,
-    cells: mapCells(raw, globals),
+    cells,
     columns: mapColumns(raw),
     rows: mapRows(raw),
     images: [],
@@ -292,6 +299,36 @@ function mapCells(raw: RawSheet, globals: WorkbookGlobals): ContentSheetCell[] {
   }
   applyMerges(cells, raw);
   return cells;
+}
+
+// Comments are read from their own Note/Obj/TxO records (workbook/comments.ts), entirely separate from the CELLTABLE cells above, so they attach after the fact -- the same "comments live in their own parts, attach after cells are read" ordering ooxml.js's own content.ts uses for xlsx's own comment mechanism. A comment anchored to a position no cell record ever occupied (a note pinned to an otherwise-empty cell) still carries real content worth keeping, materialised the same way an <f>-only formula cell or a decorated blank cell already is: an empty value with the annotation attached.
+function applyCellComments(
+  comments: ReadonlyMap<string, SheetCellComment>,
+  cells: ContentSheetCell[],
+): void {
+  if (comments.size === 0) {
+    return;
+  }
+  const byPosition = new Map<string, ContentSheetCell>();
+  for (const cell of cells) {
+    byPosition.set(`${cell.row}:${cell.column}`, cell);
+  }
+  for (const [key, { row, column, comment }] of comments) {
+    const existing = byPosition.get(key);
+    if (existing !== undefined) {
+      existing.comment = comment;
+      continue;
+    }
+    const materialised: ContentSheetCell = {
+      row,
+      column,
+      value: { kind: "empty" },
+      displayText: "",
+      comment,
+    };
+    cells.push(materialised);
+    byPosition.set(key, materialised);
+  }
 }
 
 /**

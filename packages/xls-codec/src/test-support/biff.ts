@@ -2,6 +2,13 @@
 //
 // Test-support only: excluded from the published dist by tsdown.config.ts, and exempt from the Worker-isomorphism lint rule.
 
+import {
+  RECORD_CONTINUE,
+  RECORD_NOTE,
+  RECORD_OBJ,
+  RECORD_TXO,
+} from "../biff/record-types";
+
 /** A record's three-component framing ([MS-XLS] 2.1.4): a little-endian type, a little-endian size, then the data. */
 export function record(
   type: number,
@@ -179,4 +186,83 @@ export function cellXfTrailer(decoration: XfTestDecoration = {}): number[] {
     (decoration.fillBackgroundIcv ?? ICV_DEFAULT_BACKGROUND) & 0x7f;
   const word4 = icvFore | (icvBack << 7);
   return [...u32(word1), ...u32(word2), ...u32(word3), ...u16(word4)];
+}
+
+// --- Cell comments: Note/Obj/TxO ([MS-XLS] 2.4.179/2.4.181/2.4.329) -- see workbook/comments.ts's own top comment for how the three join. ---
+
+/** [MS-XLS] 2.5.92 FtCmo (22 bytes): ft (reserved 0x15), cb (reserved 0x12), ot (object type -- 0x19 is Note), id, a 16-bit flags word workbook/comments.ts never reads, then three reserved 4-byte fields. */
+export function ftCmo(ot: number, id: number): number[] {
+  return [
+    ...u16(0x0015),
+    ...u16(0x0012),
+    ...u16(ot),
+    ...u16(id),
+    ...u16(0), // flags
+    ...u32(0), // unused8
+    ...u32(0), // unused9
+    ...u32(0), // unused10
+  ];
+}
+
+/** [MS-XLS] 2.5.87 FtNts (26 bytes): ft (reserved 0x0D), cb (reserved 0x16), a 16-byte guid workbook/comments.ts never reads, fSharedNote, and a reserved 4-byte trailer. */
+export function ftNts(): number[] {
+  return [
+    ...u16(0x000d),
+    ...u16(0x0016),
+    ...new Array<number>(16).fill(0),
+    ...u16(0), // fSharedNote
+    ...u32(0), // unused
+  ];
+}
+
+/** An Obj record ([MS-XLS] 2.4.181) for a Note-type shape: cmo then nts, nothing else -- the fields gated on any other cmo.ot value never apply to a comment's own Obj record. */
+export function noteObjRecord(id: number): Uint8Array<ArrayBuffer> {
+  return record(RECORD_OBJ, [...ftCmo(0x0019, id), ...ftNts()]);
+}
+
+/** An Obj record for some OTHER shape type (e.g. ot 0x06, a text box), for a test proving a following TxO is never mistaken for a Note's own text just because some Obj record preceded it. */
+export function otherObjRecord(
+  ot: number,
+  id: number,
+): Uint8Array<ArrayBuffer> {
+  return record(RECORD_OBJ, ftCmo(ot, id));
+}
+
+/**
+ * A TxO record ([MS-XLS] 2.4.329) plus the Continue record carrying its text.
+ *
+ * cbRuns is left at 0 (no TxORuns bytes at all) rather than the >=16-and-a-multiple-of-8 a real producer always writes -- workbook/comments.ts only ever skips cbRuns bytes verbatim, never validates the constraint, so a shorter run table exercises the same code path with a simpler fixture.
+ */
+export function noteTxoRecords(
+  text: string,
+): readonly Uint8Array<ArrayBuffer>[] {
+  const fixed = [
+    ...u16(0), // grbit
+    ...u16(0), // rot
+    ...new Array<number>(6).fill(0), // reserved4 + reserved5
+    ...u16(text.length), // cchText
+    ...u16(0), // cbRuns
+    ...u16(0), // ifntEmpty
+    ...u16(0), // cbFmla -- no formula
+  ];
+  return [
+    record(RECORD_TXO, fixed),
+    record(RECORD_CONTINUE, xlUnicodeStringNoCch(text)),
+  ];
+}
+
+/** A Note record ([MS-XLS] 2.4.179, wrapping a NoteSh): row, col, a flags word workbook/comments.ts never reads, idObj, and stAuthor -- omit author entirely by leaving it undefined. */
+export function noteRecord(
+  row: number,
+  column: number,
+  idObj: number,
+  author?: string,
+): Uint8Array<ArrayBuffer> {
+  return record(RECORD_NOTE, [
+    ...u16(row),
+    ...u16(column),
+    ...u16(0), // flags
+    ...u16(idObj),
+    ...xlUnicodeString(author ?? ""),
+  ]);
 }
