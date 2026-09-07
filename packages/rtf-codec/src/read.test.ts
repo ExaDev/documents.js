@@ -2251,6 +2251,50 @@ describe("table cell formatting", () => {
     });
   });
 
+  // ExaDev/documents.js#1024: \clcbpatN/\clcfpatN/\clshdngN together state a real two-colour pattern fill, not just a flat background colour.
+  it("reads \\clshdngN between 0 and 10000 as a genuine two-colour pattern fill", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clcbpat1\\clcfpat2\\clshdng2500\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.background).toEqual({
+      kind: "pattern",
+      patternType: "percent25",
+      foregroundColor: { r: 1, g: 0, b: 0 },
+      backgroundColor: { r: 0, g: 0, b: 0 },
+    });
+  });
+
+  it("reads \\clshdng0 (or its absence) as a flat background colour, the same shape \\clcbpatN alone already produces", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clcbpat2\\clshdng0\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
+  });
+
+  it("reads \\clshdng10000 (100%) as a flat fill of the foreground colour instead", () => {
+    const table = firstTable(
+      `${HEADER}\\trowd\\trleft0\\clcbpat1\\clcfpat2\\clshdng10000\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
+    );
+    expect(table.rows[0]?.cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
+    });
+  });
+
+  it("snaps an odd \\clshdngN value to its nearest percentN member", () => {
+    const table = firstTable(
+      // 2222/100 = 22.22%, nearest to 20 (2) rather than 25 (3).
+      `${HEADER}\\trowd\\trleft0\\clcbpat1\\clcfpat2\\clshdng2222\\cellx1440\\pard\\intbl A\\cell\\row\\pard x\\par}`,
+    );
+    const background = table.rows[0]?.cells[0]?.background;
+    expect(
+      background?.kind === "pattern" ? background.patternType : undefined,
+    ).toBe("percent20");
+  });
+
   it("derives rowSpan from \\clvmgf and the \\clvmrg cells beneath it", () => {
     const table = firstTable(
       HEADER +
