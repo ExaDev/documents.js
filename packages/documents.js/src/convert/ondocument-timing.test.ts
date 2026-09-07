@@ -34,7 +34,8 @@ describe("onDocument fires on the last hop of a composed path", () => {
     expect(captured.kind).toBe("spreadsheet");
   });
 
-  it("xlsxToMarkdown reports a package from the pdfToMarkdown hop (wordprocessing content + pages)", () => {
+  it("xlsxToMarkdown reports a package with content only (the spreadsheetToWordprocessing bridge hop), pages undefined", () => {
+    // Since ExaDev/documents.js#1043, xlsxToMarkdown resolves as a single cross-variant bridge hop (spreadsheet -> wordprocessing, no PDF pivot), so onDocument reports the bridge's own content-only package -- the identical shape pdfToXlsx's own bridge-hop test above asserts.
     const xlsxBytes = odsToXlsx(gridOdsBytes());
     let captured: DocumentTree | undefined;
     xlsxToMarkdown(xlsxBytes, {
@@ -43,8 +44,7 @@ describe("onDocument fires on the last hop of a composed path", () => {
       },
     });
     if (captured === undefined) throw new Error("onDocument was not called");
-    // The last hop is pdfToMarkdown (fromPdf), which reconstructs wordprocessing content with frames attached and carries the read pages.
     expect(captured.kind).toBe("wordprocessing");
-    expect(captured.pages).toBeDefined();
+    expect(captured.pages).toBeUndefined();
   });
 });

@@ -90,8 +90,26 @@ describe("resolveCompositionPlan route verification", () => {
     expect(pdfToCsv.hops.map((h) => h.executor)).toEqual(["fromPdf", "bridge"]);
   });
 
-  it("xlsx -> markdown composes through ods and pdf (3 hops)", () => {
-    const plan = resolveCompositionPlan("xlsx", "markdown")!;
+  // spreadsheet -> wordprocessing is a one-way cross-variant transform (ExaDev/documents.js#1043): every spreadsheet format reaches every wordprocessing format directly, at the same single-bridge-hop cost every other TRANSFORMS entry gets, no PDF layout pass required.
+  it("spreadsheet -> wordprocessing pairs resolve as a single bridge hop (never through PDF)", () => {
+    const spreadsheetToWordprocessing: [DocumentFormat, DocumentFormat][] = [
+      ["xlsx", "markdown"],
+      ["xls", "markdown"],
+      ["csv", "markdown"],
+      ["ods", "markdown"],
+      ["xlsx", "docx"],
+      ["xlsx", "odt"],
+    ];
+    for (const [s, t] of spreadsheetToWordprocessing) {
+      const plan = resolveCompositionPlan(s, t)!;
+      expect(plan.hops.length, `${s} -> ${t}`).toBe(1);
+      expect(plan.hops[0]!.executor, `${s} -> ${t}`).toBe("bridge");
+    }
+  });
+
+  // The reverse direction has no registered transform (a wordprocessing table has no cell types, formulas, or geometry to recover), so markdown -> xlsx is unaffected by the new one-way edge and keeps composing through ods and pdf exactly as before.
+  it("markdown -> xlsx still composes through pdf and ods (3 hops), unaffected by the new one-way spreadsheet -> wordprocessing edge", () => {
+    const plan = resolveCompositionPlan("markdown", "xlsx")!;
     expect(plan.hops).toHaveLength(3);
   });
 

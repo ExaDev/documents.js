@@ -39,8 +39,11 @@ describe("createLocalDocumentConverter: shape", () => {
     const converter = createLocalDocumentConverter();
     // 7, not 6: ConversionResult.package changed TYPE to the tree-form DocumentTree of document-schema.js 4.0.0 (children carry the decomposed group tree plus the minted styles table, where it previously carried the flat { content, pages } envelope) -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
     expect(converter.contractVersion).toBe(7);
-    // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats within the 3-hop cap, plus the special-case odf -> pdf pair -- 208 pairs total, sorted by source then target for determinism. csv joins as a full spreadsheet-variant member: same-variant bridges to ods/xlsx directly, everything else composed through the identical ods pivot xlsx uses. svg joins as the drawing family's plain-text member the same way: a same-variant bridge to odg directly plus its own pdf layout pair, everything else composed through those two edges. rtf joins the wordprocessing family the same way again -- same-variant bridges to docx/odt/markdown, everything else composed through those plus each target's own pdf layout pair -- except rtf<->csv and rtf<->xlsx, the one pair family the pathfinder genuinely cannot route: reaching either needs rtf -> {docx|odt|markdown} (bridge) -> pdf (toPdf) -> ods (fromPdf) -> {csv|xlsx} (bridge), four hops, one more than resolveCompositionPlan's own cap allows (the bound stated on that function: "the most any real route needs... xlsx -> markdown... three hops"). This is the pathfinder correctly reporting "unsupported" for a genuinely-too-indirect pair, not a gap in this wiring -- rtf has no toPdf/fromPdf edge of its own (capability.ts's own FORMAT_CAPABILITIES.rtf) the way markdown does, so it costs one more hop than markdown needs for the identical csv/xlsx pairs. wpd joins as the wordprocessing family's read-only member (see composition.ts's own ReadOnlyContentFormat): a directed edge to every other member of this table at the identical cost a read-and-write wordprocessing member would carry, but only ever as a source -- there is no reverse direction to list, since wpd-codec ships no writer at all. doc/xls/ppt join the same way rtf did, one variant each (wordprocessing/spreadsheet/presentation) -- and each hits the identical one-hop-too-many gap rtf<->csv/xlsx has, for the same reason (no toPdf/fromPdf edge of its own): doc<->csv, doc<->xlsx, doc<->xls, xls<->doc, xls<->rtf, xls<->ppt, ppt<->csv, and ppt<->xlsx are all absent, each needing a fourth hop past the cap.
+    // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats within the 3-hop cap, plus the special-case odf -> pdf pair -- 216 pairs total, sorted by source then target for determinism. csv joins as a full spreadsheet-variant member: same-variant bridges to ods/xlsx directly, everything else composed through the identical ods pivot xlsx uses. svg joins as the drawing family's plain-text member the same way: a same-variant bridge to odg directly plus its own pdf layout pair, everything else composed through those two edges. rtf joins the wordprocessing family the same way again -- same-variant bridges to docx/odt/markdown, everything else composed through those plus each target's own pdf layout pair. wpd joins as the wordprocessing family's read-only member (see composition.ts's own ReadOnlyContentFormat): a directed edge to every other member of this table at the identical cost a read-and-write wordprocessing member would carry, but only ever as a source -- there is no reverse direction to list, since wpd-codec ships no writer at all. doc/xls/ppt join the same way rtf did, one variant each (wordprocessing/spreadsheet/presentation).
+    //
+    // Nine pairs are asymmetric rather than absent, since ExaDev/documents.js#1043 registered a one-way spreadsheet -> wordprocessing content transform (spreadsheetToWordprocessing, src/convert/variant-bridges.ts): csv/xlsx/xls -> rtf and csv/xlsx/xls -> doc now resolve as a single cross-variant bridge hop (the identical mechanism csv/xlsx/xls -> docx/odt/markdown already used), and csv/xlsx/xls -> ppt resolves as two bridge hops through a wordprocessing pivot (spreadsheet -> {docx|odt|markdown|rtf|doc} -> ppt), each cheaper than the four-hop PDF-composed route the 3-hop cap was blocking. The reverse direction has no registered transform -- a wordprocessing/presentation source has no cell types, formulas, or geometry of its own to recover into a spreadsheet -- so rtf<->csv, rtf<->xlsx, doc<->csv, doc<->xlsx, doc<->xls, xls<->rtf (via doc/rtf being wordprocessing-sourced), xls<->ppt, ppt<->csv, and ppt<->xlsx each keep exactly one direction absent: rtf->csv, rtf->xlsx, doc->csv, doc->xlsx, doc->xls, rtf->xls, ppt->xls, ppt->csv, and ppt->xlsx are still one hop past resolveCompositionPlan's own cap (the bound stated on that function).
     expect(converter.conversions).toEqual([
+      { source: "csv", target: "doc" },
       { source: "csv", target: "docx" },
       { source: "csv", target: "markdown" },
       { source: "csv", target: "odg" },
@@ -48,7 +51,9 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "csv", target: "ods" },
       { source: "csv", target: "odt" },
       { source: "csv", target: "pdf" },
+      { source: "csv", target: "ppt" },
       { source: "csv", target: "pptx" },
+      { source: "csv", target: "rtf" },
       { source: "csv", target: "svg" },
       { source: "csv", target: "xls" },
       { source: "csv", target: "xlsx" },
@@ -228,6 +233,7 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "wpd", target: "xls" },
       { source: "wpd", target: "xlsx" },
       { source: "xls", target: "csv" },
+      { source: "xls", target: "doc" },
       { source: "xls", target: "docx" },
       { source: "xls", target: "markdown" },
       { source: "xls", target: "odg" },
@@ -235,10 +241,13 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "xls", target: "ods" },
       { source: "xls", target: "odt" },
       { source: "xls", target: "pdf" },
+      { source: "xls", target: "ppt" },
       { source: "xls", target: "pptx" },
+      { source: "xls", target: "rtf" },
       { source: "xls", target: "svg" },
       { source: "xls", target: "xlsx" },
       { source: "xlsx", target: "csv" },
+      { source: "xlsx", target: "doc" },
       { source: "xlsx", target: "docx" },
       { source: "xlsx", target: "markdown" },
       { source: "xlsx", target: "odg" },
@@ -246,7 +255,9 @@ describe("createLocalDocumentConverter: shape", () => {
       { source: "xlsx", target: "ods" },
       { source: "xlsx", target: "odt" },
       { source: "xlsx", target: "pdf" },
+      { source: "xlsx", target: "ppt" },
       { source: "xlsx", target: "pptx" },
+      { source: "xlsx", target: "rtf" },
       { source: "xlsx", target: "svg" },
       { source: "xlsx", target: "xls" },
     ]);

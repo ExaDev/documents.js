@@ -168,7 +168,7 @@ export const markdownOdtCodec = z.codec(MarkdownBytesSchema, OdtBytesSchema, {
   encode: (odtBytes) => odtToMarkdown(odtBytes),
 });
 
-// xlsx bytes <-> markdown bytes: the no-options form over the two pdf-composed bridge functions (convert.ts), schema-validated both ways. The most lossy codec in this file by some margin -- decode stacks xlsxToPdf's spreadsheet render on top of pdfToMarkdown's geometry reconstruction, and encode stacks markdownToPdf's render on top of pdfToXlsx's reconstruction -- so neither direction is remotely round-trip-lossless; see convert.ts's own xlsxToMarkdown/markdownToXlsx comment for why this last-resort pair exists at all (a caller with xlsx bytes wanting text who cannot read the cells directly via readXlsxContent).
+// xlsx bytes <-> markdown bytes: the no-options form over xlsxToMarkdown/markdownToXlsx (convert.ts), schema-validated both ways, and genuinely asymmetric since ExaDev/documents.js#1043 -- decode (xlsx -> markdown) is now a direct cross-variant content bridge (spreadsheetToWordprocessing, no PDF pivot at all), losing only what a wordprocessing document has no field for (formulas, print settings, comments, anchored images/embedded objects). encode (markdown -> xlsx) has no reverse transform to take -- a markdown table has no cell types, formulas, or geometry of its own to recover -- so it still composes markdownToPdf's render on top of pdfToXlsx's reconstruction, the same PDF-pivot lossiness this pair always had on that side. Neither direction is round-trip-lossless, but only encode is geometry-based; see convert.ts's own xlsxToMarkdown/markdownToXlsx comment for the full asymmetry and why this pair exists at all (a caller with xlsx bytes wanting text who cannot read the cells directly via readXlsxContent).
 export const xlsxMarkdownCodec = z.codec(XlsxBytesSchema, MarkdownBytesSchema, {
   decode: (xlsxBytes) => xlsxToMarkdown(xlsxBytes),
   encode: (markdownBytes) => markdownToXlsx(markdownBytes),
@@ -197,7 +197,7 @@ export const odgSvgCodec = z.codec(OdgBytesSchema, SvgBytesSchema, {
   encode: (svgBytes) => svgToOdg(svgBytes),
 });
 
-// csv bytes <-> markdown bytes: the no-options form over the two pdf-composed bridge functions (convert.ts), routing csv -> ods -> pdf -> markdown and markdown -> pdf -> ods -> csv. Lossy in the same stacked way as xlsxMarkdownCodec above -- the spreadsheet render and the markdown reconstruction each add their own loss -- with csv read's heuristic re-typing on top on the decode side.
+// csv bytes <-> markdown bytes: the no-options form over csvToMarkdown/markdownToCsv (convert.ts), asymmetric exactly like xlsxMarkdownCodec above (ExaDev/documents.js#1043) -- decode (csv -> markdown) is a direct cross-variant content bridge with csv read's own heuristic re-typing on top, no PDF pivot at all; encode (markdown -> csv) still routes markdown -> ods -> pdf -> csv, since the reverse direction has no registered transform to take instead.
 export const csvMarkdownCodec = z.codec(CsvBytesSchema, MarkdownBytesSchema, {
   decode: (csvBytes) => csvToMarkdown(csvBytes),
   encode: (markdownBytes) => markdownToCsv(markdownBytes),
