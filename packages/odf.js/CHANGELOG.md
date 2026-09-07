@@ -1,3 +1,13 @@
+## [7.3.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.2.0...odf.js%407.3.0) (2026-09-07)
+
+### Features
+
+* **odf.js:** read table:content-validation into ContentSheet.dataValidations ([4ab941e](https://github.com/ExaDev/documents.js/commit/4ab941e33417c51d8d40d79b0e26ae6ee5a59fb4)), closes [ExaDev/documents.js#925](https://github.com/ExaDev/documents.js/issues/925)
+
+### Bug Fixes
+
+* **odf.js:** drop the always-true undefined guard around readContentValidation ([71637d5](https://github.com/ExaDev/documents.js/commit/71637d57f19e1cb054d177fbae16a4d2a2d41828))
+
 ## [7.2.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.1.6...odf.js%407.2.0) (2026-09-07)
 
 ### Features
