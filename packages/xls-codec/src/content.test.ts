@@ -46,6 +46,9 @@ import {
   cellXfTrailer,
   concat,
   f64,
+  noteObjRecord,
+  noteRecord,
+  noteTxoRecords,
   record,
   richExtendedString,
   shortXlUnicodeString,
@@ -1234,5 +1237,63 @@ describe("readXlsContent print settings", () => {
       endRow: 4,
       endColumn: 1,
     });
+  });
+});
+
+describe("readXlsContent: cell comments (ExaDev/documents.js#949)", () => {
+  it("attaches a comment to an existing cell, alongside its own value", () => {
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_NUMBER, [...cell(0, 0), ...f64(42)]),
+              noteObjRecord(1),
+              ...noteTxoRecords("A real note"),
+              noteRecord(0, 0, 1, "Alice"),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(readXlsContent(bytes).sheets[0]?.cells[0]).toEqual({
+      row: 0,
+      column: 0,
+      value: { kind: "number", value: 42 },
+      displayText: "42",
+      numberFormatCode: "General",
+      comment: { text: "A real note", author: "Alice" },
+    });
+  });
+
+  it("materialises an empty cell for a comment anchored to a position no cell record ever occupied", () => {
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              noteObjRecord(1),
+              ...noteTxoRecords("Floating note"),
+              noteRecord(5, 2, 1),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(readXlsContent(bytes).sheets[0]?.cells).toEqual([
+      {
+        row: 5,
+        column: 2,
+        value: { kind: "empty" },
+        displayText: "",
+        comment: { text: "Floating note" },
+      },
+    ]);
   });
 });

@@ -50,6 +50,12 @@ export const RECORD_DEFCOLWIDTH = 0x0055;
 export const RECORD_DEFAULTROWHEIGHT = 0x0225;
 /** Merged cell ranges ([MS-XLS] 2.4.168). */
 export const RECORD_MERGECELLS = 0x00e5;
+/** A cell comment's anchor -- row, column, and its own author, linking to the Obj record that names its text ([MS-XLS] 2.4.179). */
+export const RECORD_NOTE = 0x001c;
+/** A drawing object's common properties (id, type) and, for a comment, its FtNts sub-structure ([MS-XLS] 2.4.181). */
+export const RECORD_OBJ = 0x005d;
+/** The rich text of a text box or comment, its characters and formatting runs carried in trailing Continue records ([MS-XLS] 2.4.329). */
+export const RECORD_TXO = 0x01b6;
 
 // --- Print settings: the worksheet substream's own GLOBALS and PAGESETUP productions ([MS-XLS] 2.1.7.20.6's Common Productions), the records a sheet's page setup lives in. `GLOBALS = CalcMode CalcCount CalcRefMode CalcIter CalcDelta CalcSaveRecalc PrintRowCol PrintGrid GridSet Guts DefaultRowHeight WsBool [Sync] [LPr] [HorizontalPageBreaks] [VerticalPageBreaks]`, and `PAGESETUP = Header Footer HCenter VCenter [LeftMargin] [RightMargin] [TopMargin] [BottomMargin] [Pls *Continue] [Setup]`. The remaining half of a sheet's print settings -- its print range and its repeated header rows/columns -- is not in the worksheet substream at all: it lives in the globals substream, as the built-in defined names RECORD_LBL above carries.
 
