@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig } from "vitest/config";
 
-import { BACKGROUND_COLOR, BRAND_COLOR } from "./src/design-tokens";
+import { BACKGROUND_COLOR, BRAND_COLOR } from "./src/design-tokens.ts";
 import { name as packageName } from "./package.json" with { type: "json" };
 
 // The sidebar's version link needs the real commit this build was produced from, and whether it happens to be an exact release tag -- read here rather than dry-running semantic-release, because CI's own job graph already guarantees the answer is sitting on disk by build time: the deploy job's checkout runs strictly after the release job (`needs: [..., release]`), re-fetching `ref: main` fresh, so if semantic-release just cut a release its version-bump commit and tag are already the checked-out HEAD. A dry run would only ever predict what real git state already states outright.
