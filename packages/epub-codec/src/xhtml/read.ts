@@ -24,7 +24,7 @@ import { parseXml } from "../xml/parse";
 import type { InlineStyle, XhtmlReadContext } from "./context";
 import { isInertElement, reportInertElementSkip } from "./context";
 import { isFootnoteAside, isFootnoteReferenceAnchor } from "./footnote";
-import { buildInlineRuns } from "./inline";
+import { buildInlineRuns, rebaseConstructs } from "./inline";
 import type { InlineResult } from "./inline";
 import type { MintListNumIdOptions } from "./list-id";
 import { mintListNumId } from "./list-id";
@@ -518,13 +518,7 @@ function readPreRuns(
     const startRun = runs.length;
     const nested = readPreRuns(node.children, context);
     runs.push(...nested.runs);
-    for (const construct of nested.constructs) {
-      constructs.push({
-        ...construct,
-        startRun: construct.startRun + startRun,
-        endRun: construct.endRun + startRun,
-      });
-    }
+    constructs.push(...rebaseConstructs(nested.constructs, startRun));
     if (footnoteName !== undefined) {
       constructs.push({
         descriptor: {
