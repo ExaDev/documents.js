@@ -1,19 +1,15 @@
-import type { ContentDocument, LayoutMetadata } from "document-schema.js";
+import type { ContentDocument } from "document-schema.js";
 import type { MarkdownImageResolver } from "markdown-codec";
-import {
-  decodePackage,
-  encodePackage,
-  hasCoreProperties,
-  patchCoreProperties,
-} from "ooxml.js";
+import { decodePackage, encodePackage } from "ooxml.js";
 import { readPdf, writePdf } from "pdf-codec";
 import { DOCUMENT_FORMAT_CODECS } from "../codecs/registry";
 import type { DocumentCodecOptions } from "../codecs/read";
-import { addCoreProperties } from "../opc/core-properties";
 import { requireArrayBufferBytes } from "../model/bytes";
 import type { DocumentFormat } from "../convert/port";
 import { throwIfAborted } from "../ports/abort";
 import type { LayoutDocument } from "pdf-codec";
+import { mergeMetadata, patchOoxmlCorePropertiesOnPackage } from "./core-patch";
+import type { MetadataOverrides } from "./core-patch";
 
 // Every format whose own ContentDocument setDocumentMetadata can patch a metadata field on and rebuild from scratch through -- the eight formats sharing the readXContent -> buildXPackage round trip. xlsx joined this set once DOCUMENT_FORMAT_CODECS.xlsx.content gained a real read/write pair (src/codecs/registry.ts): it now fits the identical shape pptx/odt/odp/ods/odg/markdown already share, so there is no reason left to special-case it out. rtf joined the same way: readRtfContent/writeRtfContent round-trip title/author/subject/keywords through RTF's own \info group (rtf-codec's README Scope table), so a source/target of 'rtf' rebuilds through DOCUMENT_FORMAT_CODECS.rtf.content exactly like every other member here. Deliberately does NOT include 'docx': classifyWritePath routes a docx/docx pair to its own dedicated "docx-patch" path below (patchDocxMetadata, patching docProps/core.xml directly on the decoded Package) rather than this rebuild path -- the two write paths used to be a caller-side choice (setDocumentMetadata's own docx branch rebuilt, and document-cli's set-metadata command special-cased itself around that to call patchDocxMetadata instead whenever source and target were both docx); routing it inside classifyWritePath means every caller of setDocumentMetadata gets the lossless docx behaviour for free, with no caller-side special-casing needed at all (ExaDev/documents.js#966). Nor 'pdf': a PDF's metadata is patched directly on its own LayoutDocument (see setDocumentMetadata below), never through this ContentDocument rebuild path at all. Nor 'csv': a csv round trip technically exists through the registry codec, but RFC 4180 text has no metadata container at all -- a rebuild would "succeed" and silently drop the override -- so classifyWritePath rejects it explicitly below with that reason rather than letting it fall through to the generic format-mismatch message. Nor 'svg': its round trip technically exists too, but this package's SVG metadata surface is the root <title> element alone (mapped to/from metadata.title), so every other override would be silently dropped by the rebuild -- rejected below for the identical reason. Nor 'doc'/'xls'/'ppt': each of the three legacy binary codecs has a genuine content round trip through DOCUMENT_FORMAT_CODECS now, but none of the three reads or writes any document-property metadata at all -- doc-codec's readDocContent and xls-codec's readXlsContent both always return an empty metadata object on read, and their own writers (writeDocContent, writeXlsContent) never reference document.metadata at all; ppt-codec's readPptContent hardcodes `metadata: {}` on read (its own README notes document properties live in the compound file's own SummaryInformation stream, which it does not read) and writePptStreams likewise never references it -- so a rebuild through any of the three would "succeed" while silently dropping every override, the identical csv/svg failure mode, rejected below with the same explicit-reason treatment rather than the generic format-mismatch message.
 const REBUILD_FORMATS: Readonly<
@@ -66,40 +62,6 @@ function buildBytesForRebuildFormat(
   return requireArrayBufferBytes(codec.write(content));
 }
 
-export interface MetadataOverrides {
-  readonly title?: string;
-  readonly author?: string;
-  readonly subject?: string;
-  // Mutable, matching LayoutMetadataSchema's own `keywords?: string[]` (document-schema.js) -- mergeMetadata's return must satisfy that shape exactly, and a `readonly string[]` here would not.
-  readonly keywords?: string[];
-}
-
-// Object-spreads the current metadata with only the overrides the caller actually passed. A field genuinely absent from `overrides` (as opposed to present with an empty-string/empty-array value) leaves that field exactly as the source document already had it, rather than clearing it -- each override is its own conditional spread rather than a bare `title: overrides.title ?? current.title`, so a caller that never mentions a field cannot be told apart from one that explicitly wants it set to empty.
-function mergeMetadata(
-  current: LayoutMetadata,
-  overrides: MetadataOverrides,
-): LayoutMetadata {
-  return {
-    ...current,
-    ...(overrides.title !== undefined ? { title: overrides.title } : {}),
-    ...(overrides.author !== undefined ? { author: overrides.author } : {}),
-    ...(overrides.subject !== undefined ? { subject: overrides.subject } : {}),
-    ...(overrides.keywords !== undefined
-      ? { keywords: overrides.keywords }
-      : {}),
-  };
-}
-
-// Whether `overrides` would actually cause the addCoreProperties fallback below to write at least one element -- NOT merely whether a field is present in `overrides` at all. An empty keywords array is the gap this distinction closes: overrides.keywords !== undefined is true for `keywords: []`, but addCoreProperties itself only ever emits cp:keywords when the array's length is nonzero (mirroring how a from-scratch build never writes an empty keywords element), so treating "the key is present" as "something will be written" created a real docProps/core.xml (plus its Content_Types override and package-root relationship) out of an empty root element, on a document that had none -- contradicting patchDocxMetadata's own contract that a document with no requested change stays byte-for-byte free of a part it never had. This predicate mirrors addCoreProperties' own per-field write conditions exactly: title/author/subject count on mere presence (addCoreProperties writes an empty-string element too), keywords counts only with at least one entry.
-function hasWritableMetadataOverride(overrides: MetadataOverrides): boolean {
-  return (
-    overrides.title !== undefined ||
-    overrides.author !== undefined ||
-    overrides.subject !== undefined ||
-    (overrides.keywords !== undefined && overrides.keywords.length > 0)
-  );
-}
-
 export interface PatchDocxMetadataOptions {
   readonly signal?: AbortSignal;
 }
@@ -112,11 +74,7 @@ export function patchDocxMetadata(
 ): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const pkg = decodePackage(bytes);
-  if (hasCoreProperties(pkg)) {
-    patchCoreProperties(pkg, overrides);
-  } else if (hasWritableMetadataOverride(overrides)) {
-    addCoreProperties(pkg, mergeMetadata({}, overrides));
-  }
+  patchOoxmlCorePropertiesOnPackage(pkg, overrides);
   return encodePackage(pkg);
 }
 

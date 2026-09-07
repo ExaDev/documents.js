@@ -20,7 +20,7 @@ const OF_NAMESPACE_ATTR = {
   "xmlns:of": "urn:oasis:names:tc:opendocument:xmlns:of:1.2",
 };
 
-const ODF_VERSION = "1.3";
+export const ODF_VERSION = "1.3";
 
 // style:page-layout/@style:name, style:master-page/@style:name, and the shared table-family style every sheet this editor creates references via table:table/@table:style-name -- exported so editor.ts's own addSheet can mint the identical reference for every sheet it creates after the first (the scaffold's own default sheet, and every later addSheet call, must all point at the SAME style, not one each, mirroring odp/scaffold.ts's own single shared PAGE_LAYOUT_NAME/MASTER_PAGE_NAME pair for exactly the same reason).
 export const PAGE_LAYOUT_NAME = "PM1";

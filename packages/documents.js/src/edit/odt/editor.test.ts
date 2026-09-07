@@ -139,3 +139,47 @@ describe("full editor round trip: open a real odt, mutate an existing run, add a
     expect(reopened.tables()[0]?.cell(0, 0).text).toContain("A1");
   });
 });
+
+// ExaDev/documents.js#933: an already-open live editor previously exposed no metadata setter at all. `editor.metadata = {...}` patches the live package's own meta.xml directly, mirroring DocxEditor's own identical getter/setter (src/edit/docx/editor.ts).
+describe("OdtEditor.metadata", () => {
+  it("creates no meta.xml part at all for a package that had none, when the setter's own value would write nothing", () => {
+    const editor = openOdt(minimalOdtBytes());
+    editor.metadata = { keywords: [] };
+    expect(editor.toPackage().parts["meta.xml"]).toBeUndefined();
+  });
+
+  it("creates meta.xml from scratch when the package had none, readable back through the same editor", () => {
+    const editor = openOdt(minimalOdtBytes());
+    editor.metadata = { title: "New title", author: "New author" };
+    expect(editor.metadata.title).toBe("New title");
+    expect(editor.metadata.author).toBe("New author");
+  });
+
+  it("leaves a field the setter's own value omits exactly as it already was, rather than clearing it", () => {
+    const editor = openOdt(minimalOdtBytes());
+    editor.metadata = { title: "Title", author: "Author" };
+    editor.metadata = { title: "New title" };
+    expect(editor.metadata.author).toBe("Author");
+  });
+
+  it("clears keywords via an empty array", () => {
+    const editor = openOdt(minimalOdtBytes());
+    editor.metadata = { title: "Title", keywords: ["alpha", "beta"] };
+    editor.metadata = { keywords: [] };
+    expect(editor.metadata.keywords).toBeUndefined();
+    expect(editor.metadata.title).toBe("Title");
+  });
+
+  it("silently writes nothing for a field meta.xml has no ODF spelling for", () => {
+    const editor = openOdt(minimalOdtBytes());
+    editor.metadata = { title: "Title", producer: "Some PDF tool" };
+    expect(editor.metadata.producer).toBeUndefined();
+  });
+
+  it("round-trips through toBytes()/openOdt", () => {
+    const editor = openOdt(minimalOdtBytes());
+    editor.metadata = { title: "Round-tripped title" };
+    const reopened = openOdt(editor.toBytes());
+    expect(reopened.metadata.title).toBe("Round-tripped title");
+  });
+});

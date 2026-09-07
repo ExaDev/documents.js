@@ -1,7 +1,12 @@
-import type { ContentFormula, ContentVector } from "document-schema.js";
+import type {
+  ContentFormula,
+  ContentVector,
+  LayoutMetadata,
+} from "document-schema.js";
 import type { Package, XmlElement } from "odf.js";
-import { decodePackage, encodePackage } from "odf.js";
+import { decodePackage, encodePackage, readOdfMetadata } from "odf.js";
 import type { Box } from "document-schema.js";
+import { patchOdfMetadataOnPackage } from "../../metadata/core-patch";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
@@ -11,7 +16,7 @@ import { insertFormulaFrameMedia } from "./formula";
 import { buildList, OdtList } from "./list";
 import type { ParagraphInit } from "./paragraph";
 import { buildParagraph, OdtParagraph } from "./paragraph";
-import { createEmptyOdtPackage } from "./scaffold";
+import { createEmptyOdtPackage, ODF_VERSION } from "./scaffold";
 import type { TableInit } from "./table";
 import { buildTable, OdtTable } from "./table";
 
@@ -138,6 +143,15 @@ export class OdtEditor {
     this.pkg = pkg;
     const officeText = findOfficeText(findContentRoot(pkg));
     this.body = new OdtBodyImpl(officeText, pkg);
+  }
+
+  // Reads/patches meta.xml directly on the live package -- ExaDev/documents.js#933's own "editor.metadata = {...}" gap, the ODF-side mirror of DocxEditor's own identical getter/setter (src/edit/docx/editor.ts's own comment states the full title/author/subject/keywords-only rationale). Only those four fields are ever written -- meta.xml has no ODF spelling for LayoutMetadata's other fields (producer, publisher, ...), so a setter value naming one of those silently writes nothing for it, exactly as readOdfMetadata itself never populates them. title/author/subject can be CHANGED but not REMOVED once a document has one (patchOdfMetadata's own documented limitation, mirroring patchCoreProperties'); keywords can be cleared to none via an empty array.
+  get metadata(): LayoutMetadata {
+    return readOdfMetadata(this.pkg);
+  }
+
+  set metadata(value: LayoutMetadata) {
+    patchOdfMetadataOnPackage(this.pkg, value, ODF_VERSION);
   }
 
   // Direct paragraph-level children of office:text -- text:p and text:h both, exactly the two tags odf.js's own office:text walk reads (src/typed/odt/read.ts), so a heading written through OdtParagraph's headingLevel setter or buildOdtPackage is visible here with its headingLevel readable, the same way a heading-styled w:p is visible in DocxEditor.paragraphs (in WordprocessingML a heading IS a w:p; in ODF it is a distinct tag, but the editor surface treats both as paragraphs). A paragraph nested inside a text:list-item (see list.ts) is reached via OdtList/OdtListItem, and a paragraph inside a table:table-cell (see table.ts) via OdtTable, mirroring DocxEditor.paragraphs' own direct-children-only scope (src/edit/docx/editor.ts).

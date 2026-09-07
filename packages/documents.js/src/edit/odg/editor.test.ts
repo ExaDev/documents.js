@@ -518,3 +518,32 @@ describe("full editor round trip: open a real odg, add shapes and vectors includ
     expect(newImageShape.length).toBeGreaterThanOrEqual(1);
   });
 });
+
+// ExaDev/documents.js#933: an already-open live editor previously exposed no metadata setter at all. `editor.metadata = {...}` patches the live package's own meta.xml directly.
+describe("OdgEditor.metadata", () => {
+  it("reads the fixture's own real dc:title", () => {
+    const editor = openOdg(minimalOdgBytes());
+    expect(editor.metadata.title).toBe("My Drawing");
+  });
+
+  it("patches author onto an existing meta.xml that declared only dc:, not meta:", () => {
+    const editor = openOdg(minimalOdgBytes());
+    editor.metadata = { author: "New author" };
+    expect(editor.metadata.author).toBe("New author");
+    expect(editor.metadata.title).toBe("My Drawing");
+  });
+
+  it("silently writes nothing for a field meta.xml has no ODF spelling for", () => {
+    const editor = openOdg(minimalOdgBytes());
+    editor.metadata = { producer: "Some PDF tool" };
+    expect(editor.metadata.producer).toBeUndefined();
+  });
+
+  it("round-trips through toBytes()/openOdg, leaving the pages untouched", () => {
+    const editor = openOdg(minimalOdgBytes());
+    editor.metadata = { title: "Round-tripped title" };
+    const reopened = openOdg(editor.toBytes());
+    expect(reopened.metadata.title).toBe("Round-tripped title");
+    expect(reopened.pages()).toHaveLength(editor.pages().length);
+  });
+});

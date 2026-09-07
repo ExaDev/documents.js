@@ -1,5 +1,12 @@
+import type { LayoutMetadata } from "document-schema.js";
 import type { Package, XmlElement } from "ooxml.js";
-import { decodePackage, encodePackage, rootElement } from "ooxml.js";
+import {
+  decodePackage,
+  encodePackage,
+  readCoreProperties,
+  rootElement,
+} from "ooxml.js";
+import { patchOoxmlCorePropertiesOnPackage } from "../../metadata/core-patch";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
@@ -121,6 +128,15 @@ export class DocxEditor {
       media: { pkg, partPath: DOCUMENT_PART_PATH, mediaDir: MEDIA_DIR },
     };
     this.body = new DocxBodyImpl(body, imageContext, this.pkg);
+  }
+
+  // Reads/patches docProps/core.xml directly on the live package -- ExaDev/documents.js#933's own "editor.metadata = {...}" gap, the same live-view/patch-in-place pattern this ecosystem's set-metadata CLI command already gets through patchDocxMetadata (src/metadata/write.ts), now available on an already-open editor with no re-decode required. Only title/author/subject/keywords are ever written -- docProps/core.xml has no OOXML spelling for LayoutMetadata's other fields (producer, language, publisher, ...), so a setter value naming one of those silently writes nothing for it, exactly as readCoreProperties itself never populates them (see that function's own comment). title/author/subject can be CHANGED but not REMOVED once a document has one (patchCoreProperties' own documented limitation); keywords can be cleared to none via an empty array.
+  get metadata(): LayoutMetadata {
+    return readCoreProperties(this.pkg);
+  }
+
+  set metadata(value: LayoutMetadata) {
+    patchOoxmlCorePropertiesOnPackage(this.pkg, value);
   }
 
   paragraphs(): DocxParagraph[] {

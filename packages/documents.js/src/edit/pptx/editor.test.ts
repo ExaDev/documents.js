@@ -212,3 +212,46 @@ describe("live-view fidelity for pptx", () => {
     ]);
   });
 });
+
+// ExaDev/documents.js#933: an already-open live editor previously exposed no metadata setter at all. `editor.metadata = {...}` patches the live package's own docProps/core.xml directly, in place -- never a rebuild through setDocumentMetadata's own pptx REBUILD_FORMATS path, which would discard every other pending edit made through the same editor instance.
+describe("PptxEditor.metadata", () => {
+  it("reads an empty object from a package carrying no docProps/core.xml at all", () => {
+    const editor = openPptx(minimalPptxBytes());
+    expect(editor.metadata).toEqual({});
+  });
+
+  it("creates docProps/core.xml from scratch when the package had none, readable back through the same editor", () => {
+    const editor = openPptx(minimalPptxBytes());
+    editor.metadata = { title: "New title", author: "New author" };
+    expect(editor.metadata.title).toBe("New title");
+    expect(editor.metadata.author).toBe("New author");
+  });
+
+  it("leaves a field the setter's own value omits exactly as it already was, rather than clearing it", () => {
+    const editor = openPptx(minimalPptxBytes());
+    editor.metadata = { title: "Title", author: "Author" };
+    editor.metadata = { title: "New title" };
+    expect(editor.metadata.author).toBe("Author");
+  });
+
+  it("clears keywords via an empty array", () => {
+    const editor = openPptx(minimalPptxBytes());
+    editor.metadata = { title: "Title", keywords: ["alpha", "beta"] };
+    editor.metadata = { keywords: [] };
+    expect(editor.metadata.keywords).toBeUndefined();
+  });
+
+  it("silently writes nothing for a field docProps/core.xml has no OOXML spelling for", () => {
+    const editor = openPptx(minimalPptxBytes());
+    editor.metadata = { title: "Title", producer: "Some PDF tool" };
+    expect(editor.metadata.producer).toBeUndefined();
+  });
+
+  it("round-trips through toBytes()/openPptx, leaving the slides untouched", () => {
+    const editor = openPptx(minimalPptxBytes());
+    editor.metadata = { title: "Round-tripped title" };
+    const reopened = openPptx(editor.toBytes());
+    expect(reopened.metadata.title).toBe("Round-tripped title");
+    expect(reopened.slides()).toHaveLength(editor.slides().length);
+  });
+});
