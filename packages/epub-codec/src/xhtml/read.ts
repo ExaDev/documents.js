@@ -21,7 +21,7 @@ import { isTextLikeNode, type XmlElement, type XmlNode } from "../xml/node";
 import { attrValue, findChildElement, rootElement } from "../xml/query";
 import { decodeEntities, decodeTextLikeNode } from "../xml/entities";
 import { parseXml } from "../xml/parse";
-import type { XhtmlReadContext } from "./context";
+import type { InlineStyle, XhtmlReadContext } from "./context";
 import { isInertElement, reportInertElementSkip } from "./context";
 import { isFootnoteAside, isFootnoteReferenceAnchor } from "./footnote";
 import { buildInlineRuns } from "./inline";
@@ -69,11 +69,12 @@ function createIdMinter(): IdMinter {
   };
 }
 
-// Per-call build state that isn't part of the shared read-only XhtmlReadContext (image/diagnostic/id-map port), since it changes as the block walk descends -- quote depth, the current list membership, and the running content-width used to divide a table's columns evenly.
+// Per-call build state that isn't part of the shared read-only XhtmlReadContext (image/diagnostic/id-map port), since it changes as the block walk descends -- quote depth, a flat extra indent unrelated to quote depth, the current list membership, and the running content-width used to divide a table's columns evenly. extraIndentPt is additive with quoteDepth's own contribution (see decorateParagraph) rather than a replacement for it, so a <dd> nested inside a <blockquote> keeps both its definition-body offset and its quote indent.
 interface BuildState {
   readonly context: XhtmlReadContext;
   readonly minter: IdMinter;
   readonly quoteDepth: number;
+  readonly extraIndentPt: number;
   readonly listItem: ListItemContext | undefined;
   readonly list: ListContext | undefined;
   readonly contentWidthPt: number;
@@ -81,6 +82,11 @@ interface BuildState {
 
 function withQuote(state: BuildState): BuildState {
   return { ...state, quoteDepth: state.quoteDepth + 1 };
+}
+
+// A flat additional indent applied to every paragraph a descent produces, on top of quoteDepth's own multiplier -- <dd>'s own DEFINITION_BODY_INDENT_PT offset, threaded through exactly like withQuote threads its own increment, so it reaches every paragraph readContainerChildren builds while descending through a <dd>'s content, not only a single top-level one.
+function withExtraIndent(state: BuildState, pt: number): BuildState {
+  return { ...state, extraIndentPt: state.extraIndentPt + pt };
 }
 
 function withListItem(
@@ -103,9 +109,11 @@ function decorateParagraph(
   if (state.quoteDepth > 0) {
     decorated = {
       ...decorated,
-      indentLeftPt: state.quoteDepth * QUOTE_INDENT_PT,
+      indentLeftPt: state.quoteDepth * QUOTE_INDENT_PT + state.extraIndentPt,
       styleId: decorated.styleId ?? QUOTE_STYLE_ID,
     };
+  } else if (state.extraIndentPt > 0) {
+    decorated = { ...decorated, indentLeftPt: state.extraIndentPt };
   }
   if (state.listItem !== undefined) {
     const membership: ContentListMembership = {
@@ -118,7 +126,7 @@ function decorateParagraph(
   return decorated;
 }
 
-// The spreadable `constructs` field for a paragraph built directly from one buildInlineRuns result -- shared by every call site that turns a flat inline result into a ContentParagraph (a heading, a table caption, a table cell, a <dt>/<dd>, a <figcaption>), so a run-level construct extent (most commonly a footnote reference) collected while walking that inline content is never silently dropped just because the paragraph itself carries no other property worth spreading in. Before this helper existed, three call sites already got this right -- readContainerChildren's own segment flush, the heading case, and the table caption (ExaDev/documents.js#994's own caption fix); a <figcaption>, a <dt>/<dd>, and a table cell all built `{ kind: "paragraph", runs: inline.runs }` directly, discarding inline.constructs outright -- the identical defect shape reproduced four more times rather than fixed once.
+// The spreadable `constructs` field for a paragraph built directly from one buildInlineRuns result -- shared by every call site that turns a flat inline result into a ContentParagraph, so a run-level construct extent (most commonly a footnote reference) collected while walking that inline content is never silently dropped just because the paragraph itself carries no other property worth spreading in. Two call sites use it directly today: the heading case, and readContainerChildren's own segment flush (ExaDev/documents.js#994's own fix). A table caption, a table cell, a <dt>/<dd>, and a <figcaption> all used to build `{ kind: "paragraph", runs: inline.runs }` directly instead -- the identical defect shape reproduced four more times rather than fixed once -- until ExaDev/documents.js#1023 routed all four through readContainerChildren instead, which carries this helper's own fix (and real block-structure recognition besides) to each of them for free.
 function constructsField(
   inline: InlineResult,
 ): Pick<ContentParagraph, "constructs"> | Record<string, never> {
@@ -241,6 +249,7 @@ export function readXhtmlBody(
     context,
     minter: createIdMinter(),
     quoteDepth: 0,
+    extraIndentPt: 0,
     listItem: undefined,
     list: undefined,
     contentWidthPt: options.contentWidthPt,
@@ -279,6 +288,8 @@ const BLOCK_LEVEL_TAGS = new Set([
 function readContainerChildren(
   nodes: readonly XmlNode[],
   state: BuildState,
+  // The base inline style every direct-child phrasing segment starts from -- <th>'s own implied bold, threaded no further than this function's own buildInlineRuns call. A block-level child reached via readBlockElement below (a nested <ul>, another <table>) builds its own runs through its own dispatch, which has no style-injection parameter of its own, so this base style does not reach content nested that deep -- a narrow, documented degrade for a genuinely rare shape (rich block structure inside a <th>), not a silent one.
+  baseStyle: InlineStyle = {},
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   let segment: XmlNode[] = [];
@@ -286,7 +297,7 @@ function readContainerChildren(
     if (segment.length === 0) {
       return;
     }
-    const inline = buildInlineRuns(segment, {}, state.context);
+    const inline = buildInlineRuns(segment, baseStyle, state.context);
     segment = [];
     // A segment whose only content, once built, is whitespace produces no visible paragraph -- the common real-world case being pretty-printed XHTML's own indentation landing as a bare text node between two block-level siblings (e.g. the newline-plus-indent between <body> and its first real child), which every browser's own block-formatting context already collapses to nothing rather than an empty line. The identical rule also covers a producer's own literal `<p> </p>`/`<p></p>` (used for CSS spacing): both read as "no content here" rather than a bogus empty ContentParagraph, matching this package's own documented choice to drop an empty paragraph entirely on read. The construct check alongside it exists for the identical reason readTable's own caption guard needs one: a segment carrying only a footnote-reference anchor with empty text (`<a epub:type="noteref" href="#fn1"></a>` sitting bare between two block siblings) produces zero text runs but one real RunConstructExtent, and text-emptiness alone would drop that construct along with the whitespace it is vacuously indistinguishable from.
     if (
@@ -388,15 +399,9 @@ function readBlockElementInner(
       return readTable(element, state);
     case "figure":
       return readContainerChildren(element.children, state);
-    case "figcaption": {
-      const inline = buildInlineRuns(element.children, {}, state.context);
-      const paragraph: ContentParagraph = {
-        kind: "paragraph",
-        runs: inline.runs,
-        ...constructsField(inline),
-      };
-      return [decorateParagraph(paragraph, state)];
-    }
+    case "figcaption":
+      // <figcaption> is Flow content per the HTML Standard: a <pre>, a nested list, or more than one paragraph is real, conformant markup, not something this reader can flatten to one buildInlineRuns call without losing block shape and fusing sibling paragraphs together with no break between them (ExaDev/documents.js#1023).
+      return readContainerChildren(element.children, state);
     case "img": {
       const block = readImage(element, state);
       return block === undefined ? [] : [block];
@@ -712,28 +717,17 @@ function readDefinitionListEntries(
   for (const child of nodes) {
     if (child.type === "element" && child.tag === "dt") {
       flushStray();
-      const inline = buildInlineRuns(child.children, {}, state.context);
-      blocks.push(
-        decorateParagraph(
-          { kind: "paragraph", runs: inline.runs, ...constructsField(inline) },
-          state,
-        ),
-      );
+      // <dt> is Flow content per the HTML Standard: block-level content inside one is real, conformant markup, not something to flatten to a single inline paragraph and lose (ExaDev/documents.js#1023).
+      blocks.push(...readContainerChildren(child.children, state));
       continue;
     }
     if (child.type === "element" && child.tag === "dd") {
       flushStray();
-      const inline = buildInlineRuns(child.children, {}, state.context);
+      // Same reasoning as <dt> above, plus DEFINITION_BODY_INDENT_PT threaded through withExtraIndent so every paragraph the descent produces -- not only a single top-level one -- picks up the definition-body offset.
       blocks.push(
-        decorateParagraph(
-          {
-            kind: "paragraph",
-            runs: inline.runs,
-            ...constructsField(inline),
-            indentLeftPt:
-              DEFINITION_BODY_INDENT_PT + state.quoteDepth * QUOTE_INDENT_PT,
-          },
-          state,
+        ...readContainerChildren(
+          child.children,
+          withExtraIndent(state, DEFINITION_BODY_INDENT_PT),
         ),
       );
       continue;
@@ -844,20 +838,16 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
           flushStrayCell();
           const isHeader = cellNode.tag === "th";
           const cellStyle = isHeader ? { bold: true } : {};
-          const inline = buildInlineRuns(
+          // <td>/<th> are Flow content per the HTML Standard: a <pre>, a nested list, or more than one paragraph is real, conformant markup, not something to flatten and lose (ExaDev/documents.js#1023). An empty or whitespace-only cell produces no blocks at all here, matching readContainerChildren's own empty-segment rule elsewhere, rather than the single bogus empty paragraph a bare buildInlineRuns call used to always produce.
+          const cellBlocks = readContainerChildren(
             cellNode.children,
+            state,
             cellStyle,
-            state.context,
           );
-          const paragraph: ContentParagraph = {
-            kind: "paragraph",
-            runs: inline.runs,
-            ...constructsField(inline),
-          };
           const colSpan = positiveIntAttr(cellNode, "colspan");
           const rowSpan = positiveIntAttr(cellNode, "rowspan");
           cells.push({
-            blocks: [paragraph],
+            blocks: cellBlocks,
             ...(colSpan !== undefined ? { colSpan } : {}),
             ...(rowSpan !== undefined ? { rowSpan } : {}),
           });
@@ -943,22 +933,15 @@ function collectColgroupStrayContent(
   }
 }
 
-// A <caption>'s own content, read as an ordinary paragraph immediately before the table it describes -- document-schema.js's ContentTable carries no field of its own for a caption distinct from an ordinary paragraph, exactly like readBlockElementInner's own <figcaption> case. Any <img> the caption itself carries degrades to alt text via the same inline-recursion path (and epub/image-inline-unsupported diagnostic) a <figcaption>'s own direct-child <img> already does, rather than becoming a real image block, for the identical reason -- buildInlineRuns has already committed to a flat run sequence by the time it reaches one. `isDuplicate` fires an additional diagnostic for every caption beyond the first: HTML5 permits at most one <caption> per <table>, so a second is a producer mistake this package now recovers rather than silently discards -- readTable used to resolve its caption via findChildElement, which only ever returns the first match for a given tag, so a second <caption> was lost with no trace and no diagnostic at all.
+// A <caption>'s own content, read as one or more ordinary blocks immediately before the table it describes, via readContainerChildren -- document-schema.js's ContentTable carries no field of its own for a caption distinct from ordinary content, exactly like readBlockElementInner's own <figcaption> case. <caption> is Flow content per the HTML Standard (ExaDev/documents.js#1023), so a <pre>, a nested list, more than one paragraph, or a direct-child <img> (split into its own real ContentImageBlock, the same treatment a <p>'s own direct-child <img> already gets) are all recognised rather than flattened into one undelimited inline run. `isDuplicate` fires an additional diagnostic for every caption beyond the first: HTML5 permits at most one <caption> per <table>, so a second is a producer mistake this package now recovers rather than silently discards -- readTable used to resolve its caption via findChildElement, which only ever returns the first match for a given tag, so a second <caption> was lost with no trace and no diagnostic at all.
 function readTableCaption(
   captionElement: XmlElement,
   isDuplicate: boolean,
   state: BuildState,
 ): ContentBlock[] {
-  const captionInline = buildInlineRuns(
-    captionElement.children,
-    {},
-    state.context,
-  );
-  // An empty or whitespace-only <caption> that also carries no run-level construct of its own (a footnote reference whose own anchor text is empty is the real-world case: `<caption><a epub:type="noteref" href="#fn1"></a></caption>` produces zero text runs but one real RunConstructExtent) genuinely carries nothing to lose -- dropped entirely, with no diagnostic, matching this package's own documented rule that an empty or whitespace-only paragraph is dropped entirely on read rather than becoming a bogus empty ContentParagraph. Checking text emptiness alone would drop the construct along with it: `Array.prototype.every` on the empty runs array such an anchor-only caption produces is vacuously true, which is exactly how this guard used to defeat this package's own construct-preservation fix -- a construct with nothing else to carry it is still real content.
-  if (
-    captionInline.runs.every((run) => run.text.trim().length === 0) &&
-    captionInline.constructs.length === 0
-  ) {
+  // <caption> is Flow content per the HTML Standard: a <pre>, a nested list, or more than one paragraph is real, conformant markup (ExaDev/documents.js#1023). readContainerChildren's own empty-segment rule already drops an empty or whitespace-only caption with no construct of its own to lose, matching this function's prior dedicated check.
+  const captionBlocks = readContainerChildren(captionElement.children, state);
+  if (captionBlocks.length === 0) {
     return [];
   }
   if (isDuplicate) {
@@ -977,12 +960,7 @@ function readTableCaption(
       "<caption> has no document-schema.js table-caption field to carry its own distinct tag; read as an ordinary paragraph immediately before the table",
     href: state.context.sourceHref,
   });
-  const captionParagraph: ContentParagraph = {
-    kind: "paragraph",
-    runs: captionInline.runs,
-    ...constructsField(captionInline),
-  };
-  return [decorateParagraph(captionParagraph, state)];
+  return captionBlocks;
 }
 
 function positiveIntAttr(
