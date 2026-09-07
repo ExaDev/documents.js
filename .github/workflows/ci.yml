@@ -145,7 +145,8 @@ jobs:
       - uses: ./.github/actions/setup-workspace
         with:
           task: test-e2e
-          command: pnpm exec playwright install --with-deps chromium && pnpm test:e2e $TURBO_FLAGS
+          # --filter=web, not a bare `pnpm exec`: the composite action's own command step runs from the repo root, and playwright's CLI binary is only linked into packages/web's own node_modules/.bin, not the root's -- a root-scoped `pnpm exec playwright` can't find it at all ([ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] "playwright" not found).
+          command: pnpm --filter web exec playwright install --with-deps chromium && pnpm test:e2e $TURBO_FLAGS
       - uses: actions/upload-artifact@v7
         if: always()
         with:
