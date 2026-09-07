@@ -10,6 +10,10 @@ import type {
   ContentCellFill,
   ContentControlDescriptor,
   ContentEmbeddedObjectBlock,
+  ContentFloatAlign,
+  ContentFloatAxis,
+  ContentFloatOrigin,
+  ContentFloatPosition,
   ContentImageBlock,
   ContentListMembership,
   ContentParagraph,
@@ -27,6 +31,8 @@ import type {
 import {
   COLOR_BLACK,
   ContentBlockSchema,
+  ContentFloatAlignSchema,
+  ContentFloatOriginSchema,
   ContentSectionSchema,
   PAGE_SIZE_LETTER,
   clampHeadingLevel,
@@ -268,7 +274,62 @@ function findRunPageBreakOffset(run: XmlElement): number | undefined {
   return undefined;
 }
 
-// A w:drawing wraps exactly one wp:inline (in-flow) or wp:anchor (floating/wrapped) container, both of which share the same wp:extent (EMU size) and wp:docPr (name/alt-text) children, and both of which reach the actual picture through an identical a:graphic/a:graphicData/pic:pic/pic:blipFill/a:blip chain -- so both placements resolve through one function. wp:anchor's own wp:positionH/wp:positionV (page/margin/paragraph-relative offset) is read by nothing here: ContentImageBlock has no absolute x/y positioning field at all (unlike ContentShape's frame), so a floating image has nowhere to record its real anchored position -- it is deliberately placed in the block flow at the point its own w:drawing was encountered, i.e. exactly where an inline image would land. This is a real, honest scope narrowing (a floating image's on-page position is lost, not silently wrong), not an attempt at true anchored placement.
+// document-schema.js's ContentFloatOrigin/ContentFloatAlign enums were deliberately spelled to match ECMA-376's own ST_RelFromH/ST_RelFromV/ST_AlignH/ST_AlignV tokens verbatim (Part 1, 20.4.2.7-20.4.2.10) -- every value docx's wp:positionH/wp:positionV can carry is already a literal member of the shared enum under the identical name, so reading one is a narrowing membership check, never a translation table. Guards, not casts, matching this reader's own established convention (isVerticalAlign in typed/shared/table.ts is the identical pattern one package over).
+const FLOAT_ORIGIN_VALUES: ReadonlySet<string> = new Set(
+  ContentFloatOriginSchema.options,
+);
+function isContentFloatOrigin(value: string): value is ContentFloatOrigin {
+  return FLOAT_ORIGIN_VALUES.has(value);
+}
+const FLOAT_ALIGN_VALUES: ReadonlySet<string> = new Set(
+  ContentFloatAlignSchema.options,
+);
+function isContentFloatAlign(value: string): value is ContentFloatAlign {
+  return FLOAT_ALIGN_VALUES.has(value);
+}
+
+// One axis of wp:anchor's own wp:positionH/wp:positionV: relativeFrom is required by the ECMA-376 schema on both, and the element's content is a CHOICE of exactly one child, wp:posOffset (a signed EMU integer, converted to pt here) or wp:align (a keyword) -- never both, never neither, matching ContentFloatAxisSchema's own XOR shape exactly. Returns undefined for anything the choice-of-one contract doesn't hold (a missing/unrecognised relativeFrom, neither child present, a malformed posOffset, an unrecognised align keyword) -- the caller drops the whole floatPosition rather than emit one axis without the other, since a position with only one axis resolved is not a real position.
+function readFloatAxis(
+  positionElement: XmlElement,
+): ContentFloatAxis | undefined {
+  const relativeFromRaw = attr(positionElement, "relativeFrom");
+  if (relativeFromRaw === undefined || !isContentFloatOrigin(relativeFromRaw)) {
+    return undefined;
+  }
+  const posOffset = childrenWithTag(positionElement, "wp:posOffset")[0];
+  if (posOffset !== undefined) {
+    const offsetEmu = Number(textContent(posOffset));
+    if (!Number.isFinite(offsetEmu)) {
+      return undefined;
+    }
+    return { relativeTo: relativeFromRaw, offsetPt: emuToPt(offsetEmu) };
+  }
+  const align = childrenWithTag(positionElement, "wp:align")[0];
+  const alignValue = align === undefined ? undefined : textContent(align);
+  if (alignValue !== undefined && isContentFloatAlign(alignValue)) {
+    return { relativeTo: relativeFromRaw, align: alignValue };
+  }
+  return undefined;
+}
+
+// wp:anchor's own wp:positionH/wp:positionV, read into document-schema.js's format-agnostic ContentFloatPosition -- undefined for a wp:inline container (which carries neither element at all, an inline image having no anchored position by definition), for a wp:anchor whose position elements are missing entirely, or for one where either axis fails to resolve (see readFloatAxis above) -- a position with only one axis honestly resolved is not emitted as a partial one.
+function readFloatPosition(
+  container: XmlElement,
+): ContentFloatPosition | undefined {
+  const positionH = childrenWithTag(container, "wp:positionH")[0];
+  const positionV = childrenWithTag(container, "wp:positionV")[0];
+  if (positionH === undefined || positionV === undefined) {
+    return undefined;
+  }
+  const horizontal = readFloatAxis(positionH);
+  const vertical = readFloatAxis(positionV);
+  if (horizontal === undefined || vertical === undefined) {
+    return undefined;
+  }
+  return { horizontal, vertical };
+}
+
+// A w:drawing wraps exactly one wp:inline (in-flow) or wp:anchor (floating/wrapped) container, both of which share the same wp:extent (EMU size) and wp:docPr (name/alt-text) children, and both of which reach the actual picture through an identical a:graphic/a:graphicData/pic:pic/pic:blipFill/a:blip chain -- so both placements resolve through one function. wp:anchor's own wp:positionH/wp:positionV (page/margin/paragraph-relative offset) is read into ContentImageBlock.floatPosition (document-schema.js, ExaDev/documents.js#1087) via readFloatPosition above; a wp:inline container never carries either element, so floatPosition is simply absent for an inline image, placed in the block flow at the point its own w:drawing was encountered, exactly as it always was.
 function readDrawingImage(
   drawing: XmlElement,
   ctx: DocxReadContext,
@@ -317,6 +378,12 @@ function readDrawingImage(
   };
   if (altText !== undefined) {
     image.altText = decodeEntities(altText);
+  }
+  if (container.tag === "wp:anchor") {
+    const floatPosition = readFloatPosition(container);
+    if (floatPosition !== undefined) {
+      image.floatPosition = floatPosition;
+    }
   }
   return image;
 }
@@ -1708,7 +1775,7 @@ function readNotesPart(
   return out;
 }
 
-// Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution (including w:themeColor run-colour references, resolved against the theme's own colour scheme), ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables, with cell background AND border styling read from w:tcBorders), the block-scoped fidelity constructs (structured document tags, fields, bookmarks, tracked changes) as constructStart/constructEnd marker pairs, plus comments, footnotes, header/footer parts, and word/numbering.xml's own abstractNum/num level definitions (numbering.ts's readNumberingDefinitions). An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image. A w:object/o:OLEObject whose payload part is itself a ZIP archive (a modern producer's embedded xlsx/docx/pptx) is decoded through the shared embedded-object helper (typed/embedded.ts) into a sibling ContentEmbeddedObjectBlock sized from w:dxaOrig/w:dyaOrig and lifted through the same convention as an image block; a payload that does not decode as one of the three OOXML flavours degrades to no embedded block rather than failing the read.
+// Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution (including w:themeColor run-colour references, resolved against the theme's own colour scheme), ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables, with cell background AND border styling read from w:tcBorders), the block-scoped fidelity constructs (structured document tags, fields, bookmarks, tracked changes) as constructStart/constructEnd marker pairs, plus comments, footnotes, header/footer parts, and word/numbering.xml's own abstractNum/num level definitions (numbering.ts's readNumberingDefinitions). An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type; a floating image's own wp:anchor position (wp:positionH/wp:positionV) is read into ContentImageBlock.floatPosition (document-schema.js, ExaDev/documents.js#1087), while an inline image simply has none, landing in the block flow at the point its w:drawing was encountered instead. A w:object/o:OLEObject whose payload part is itself a ZIP archive (a modern producer's embedded xlsx/docx/pptx) is decoded through the shared embedded-object helper (typed/embedded.ts) into a sibling ContentEmbeddedObjectBlock sized from w:dxaOrig/w:dyaOrig and lifted through the same convention as an image block; a payload that does not decode as one of the three OOXML flavours degrades to no embedded block rather than failing the read.
 //
 // Information not modelled here is still dropped: live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; a w:object's VML preview picture (v:imagedata -- no VML reader exists here, and real producers ship WMF/EMF previews anyway); a w:object sitting inside a footnote (footnotes ride DocxDocument.footnotes as text, so there is no block flow to lift an object into -- a header/footer's own objects DO recover now, since those parts are walked as block flow); the evenAndOddHeaders setting in word/settings.xml that gates whether a section's even-page slot renders (the references themselves are recorded as spelled); Word's header/footer slot-inheritance rule (a section reusing the previous section's part when it spells no reference of its own -- a consumer concern, since this records exactly what the file spells); the classic non-ZIP OLE compound-file payload (.bin -- opaque external-application data, left skipped exactly as unhandled markup) and a ZIP payload that does not decode as one of the three OOXML flavours (both degrade to no embedded block, never a failed read); and the run-level construct occurrences still without an encoding here -- an inline SDT or partial tracked change, and a bookmark whose two halves sit in different paragraphs (a same-paragraph bookmark pair, crossing included, lands on ContentParagraph.constructs; see typed/docx/constructs.ts for the scope rules, and typed/docx/write.ts for the write side of what does survive).
 export function readDocxContent(pkg: Package): DocxDocument {
