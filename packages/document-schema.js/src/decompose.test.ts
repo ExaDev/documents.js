@@ -440,7 +440,7 @@ describe("construct-boundary promotion", () => {
     ]);
   });
 
-  it("leaves the enclosing heading and list stacks exactly where they were", () => {
+  it("leaves the enclosing heading stack where it was, but closes the list stack the same way a plain paragraph would (ExaDev/document-schema.js#1022)", () => {
     const h1 = paragraph("Chapter", { headingLevel: 1 });
     const first = paragraph("A", { listLevel: 0 });
     const second = paragraph("B", { listLevel: 1 });
@@ -464,22 +464,14 @@ describe("construct-boundary promotion", () => {
         children: [
           {
             node: h1,
+            // A no longer holds the construct, and B no longer nests under A: constructStart closed the list stack before the bookmark group attached, so the bookmark group and B both land as H1's own direct children -- B reopens its own list nesting from scratch, which is exactly why its own listLevel of 1 does not nest it under anything here (there is nothing shallower still open to nest under). Document order survives regardless, which is what flatten actually depends on.
             children: [
+              { node: first, children: [] },
               {
-                node: first,
-                // B still nests under A across the intervening construct: stepping through a region neither pops the list stack (as a plain paragraph would) nor the heading stack.
-                children: [
-                  {
-                    node: {
-                      kind: "anchor",
-                      anchorType: "bookmark",
-                      name: "b1",
-                    },
-                    children: [paragraph("inside")],
-                  },
-                  { node: second, children: [] },
-                ],
+                node: { kind: "anchor", anchorType: "bookmark", name: "b1" },
+                children: [paragraph("inside")],
               },
+              { node: second, children: [] },
             ],
           },
         ],
@@ -487,11 +479,11 @@ describe("construct-boundary promotion", () => {
     ]);
   });
 
-  it("groups a construct inside a list item by list level alone -- the list-flow vocabulary its position admits", () => {
-    // A list group's children are ListChild, which admits a ShapeConstructGroupNode and no heading group at all, so a heading paragraph inside a construct inside a list is ordinary content -- exactly what it already is anywhere else in a list group's subtree. The section-root case above shows the other half: there the position is SectionChild, so the same marker pair promotes to a SectionConstructGroupNode whose interior does group headings.
+  it("attaches a construct at the tail of a list beside the item it follows, not nested inside it (ExaDev/document-schema.js#1022)", () => {
+    // Nothing follows the construct's own close marker to signal the list continues -- the same shape epub-codec's own footnote-after-list reproduction in #1022 hit -- so constructStart closes the list scope first, exactly like a plain paragraph would, and the group promotes as a SectionConstructGroupNode (headings admitted in its own interior) rather than the list-flow ShapeConstructGroupNode a genuinely-nested construct gets. headingInside's own headingLevel is therefore a real heading group here, not ordinary content the way it would be inside a list item's own subtree.
     const item = paragraph("A", { listLevel: 0 });
     const headingInside = paragraph(
-      "a heading-styled paragraph is an ordinary leaf here",
+      "a heading-styled paragraph groups here, since this construct's interior is section flow, not list flow",
       { headingLevel: 2 },
     );
     const doc = wordprocessingDoc([
@@ -510,14 +502,54 @@ describe("construct-boundary promotion", () => {
           margins: SECTION_GEOMETRY.margins,
         },
         children: [
+          { node: item, children: [] },
           {
-            node: item,
-            children: [
-              {
-                node: { kind: "contentControl", controlType: "richText" },
-                children: [headingInside],
-              },
-            ],
+            node: { kind: "contentControl", controlType: "richText" },
+            children: [{ node: headingInside, children: [] }],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("attaches a footnote's own out-of-flow body at the section root rather than inside the list item its reference sat in (ExaDev/document-schema.js#1022's own repro)", () => {
+    // epub-codec's writeList/writeSectionChildren hit exactly this shape: a footnote reference rides the list item's own paragraph as a run-level construct extent (ContentParagraph.constructs, unrelated to the block-level marker pair below and never touched by list-stack handling), while the footnote's own body is a SEPARATE, later, block-level constructStart/constructEnd region -- a ranged anchor, not the point anchor a bare reference would be. Before the fix, that body promoted as a child of the list item purely because nothing between the item and the constructStart had popped the list stack; the item's own paragraph carrying a run-level extent already proves the two mechanisms are independent; the item never carried a block-level marker of its own.
+    const item = paragraph("before", { listLevel: 0 });
+    const itemWithReference: ContentBlock = {
+      kind: "paragraph",
+      runs: [],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 0,
+          endRun: 0,
+        },
+      ],
+      list: { level: 0 },
+    };
+    const noteBody = paragraph("Note body.");
+    const doc = wordprocessingDoc([
+      [
+        item,
+        itemWithReference,
+        constructStart({ kind: "anchor", anchorType: "footnote", name: "fn1" }),
+        noteBody,
+        CONSTRUCT_END,
+      ],
+    ]);
+    expect(decompose(doc)).toEqual([
+      {
+        node: {
+          kind: "section",
+          pageSize: SECTION_GEOMETRY.pageSize,
+          margins: SECTION_GEOMETRY.margins,
+        },
+        children: [
+          { node: item, children: [] },
+          { node: itemWithReference, children: [] },
+          {
+            node: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+            children: [noteBody],
           },
         ],
       },
