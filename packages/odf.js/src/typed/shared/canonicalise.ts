@@ -90,6 +90,9 @@ export function canonicalParagraph(
   if (paragraph.alignment !== undefined) {
     canonical.alignment = paragraph.alignment;
   }
+  if (paragraph.preformatted !== undefined) {
+    canonical.preformatted = paragraph.preformatted;
+  }
   if (listNumId !== undefined && paragraph.list !== undefined) {
     canonical.list = { numId: listNumId, level: paragraph.list.level };
   }
