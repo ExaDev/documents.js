@@ -14,6 +14,7 @@ import {
   odgToSvg,
   odsToXlsx,
   writeDocContent,
+  writeEpubContent,
   writePptContent,
   writeXlsContent,
 } from "documents.js";
@@ -233,7 +234,7 @@ function buildFormatFixtures(): Record<
     return odsToXlsx(editor.toBytes());
   })();
 
-  // doc/xls/ppt have no live-view editor the way docx/odt/pptx/odp above do -- both codecs' own writers take a plain ContentDocument literal directly, matching this file's own inline-construction convention for the formats that need one.
+  // doc/xls/ppt/epub have no live-view editor the way docx/odt/pptx/odp above do -- each codec's own writer takes a plain ContentDocument literal directly, matching this file's own inline-construction convention for the formats that need one.
   const docBytes = writeDocContent({
     kind: "wordprocessing",
     metadata: {},
@@ -300,6 +301,23 @@ function buildFormatFixtures(): Record<
     ],
   });
 
+  const epubBytes = writeEpubContent({
+    kind: "wordprocessing",
+    metadata: {},
+    sections: [
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        blocks: [
+          {
+            kind: "paragraph",
+            runs: [{ text: "A paragraph of ordinary body text." }],
+          },
+        ],
+      },
+    ],
+  });
+
   return {
     csv: {
       bytes: new TextEncoder().encode("Name,Age\nAlice,30\n"),
@@ -307,6 +325,7 @@ function buildFormatFixtures(): Record<
     },
     doc: { bytes: docBytes, kind: "wordprocessing" },
     docx: { bytes: docxBytes, kind: "wordprocessing" },
+    epub: { bytes: epubBytes, kind: "wordprocessing" },
     odf: { bytes: odfFormulaBytes(), kind: "formula" },
     odp: { bytes: odpBytes, kind: "presentation" },
     odt: { bytes: odtBytes, kind: "wordprocessing" },
