@@ -405,6 +405,71 @@ describe("writeDocContent", () => {
   });
 });
 
+// ExaDev/documents.js#1059: writeDocContent used to hardcode istd 0 for every paragraph, so styleId/headingLevel never round-tripped at all. These pin the mint-a-real-STSH-entry fix -- identity only, no formatting of a style's own (every property still writes as a direct exception, unchanged).
+describe("writeDocContent style identity", () => {
+  it("round-trips a heading's own styleId and headingLevel through a real STSH entry", () => {
+    const input = document([
+      paragraph([{ text: "Title" }], { styleId: "heading 1", headingLevel: 1 }),
+      paragraph([{ text: "Body" }]),
+    ]);
+    const result = roundTrip(input);
+    expect(paragraphAt(result, 0).styleId).toBe("heading 1");
+    expect(paragraphAt(result, 0).headingLevel).toBe(1);
+    // An ordinary paragraph with neither field keeps neither -- istd 0 stays an unnamed hole rather than a real "Normal" entry, so an absent styleId round-trips as absent, not as the string "Normal".
+    expect(paragraphAt(result, 1).styleId).toBeUndefined();
+    expect(paragraphAt(result, 1).headingLevel).toBeUndefined();
+  });
+
+  it("mints one real STSH entry per distinct named style, reused across every paragraph that shares it", () => {
+    const input = document([
+      paragraph([{ text: "First" }], { styleId: "Quote" }),
+      paragraph([{ text: "Second" }], { styleId: "Quote" }),
+      paragraph([{ text: "Third" }], { styleId: "Caption" }),
+    ]);
+    const result = roundTrip(input);
+    expect(paragraphAt(result, 0).styleId).toBe("Quote");
+    expect(paragraphAt(result, 1).styleId).toBe("Quote");
+    expect(paragraphAt(result, 2).styleId).toBe("Caption");
+  });
+
+  it("round-trips several distinct heading levels each to their own istd, honouring headingLevelFromIstd's 1-9 rule", () => {
+    const input = document([
+      paragraph([{ text: "Title" }], { styleId: "heading 1", headingLevel: 1 }),
+      paragraph([{ text: "Subtitle" }], {
+        styleId: "heading 2",
+        headingLevel: 2,
+      }),
+      paragraph([{ text: "Body" }]),
+    ]);
+    const result = roundTrip(input);
+    expect(paragraphAt(result, 0).headingLevel).toBe(1);
+    expect(paragraphAt(result, 1).headingLevel).toBe(2);
+    expect(paragraphAt(result, 2).headingLevel).toBeUndefined();
+  });
+
+  it("treats a styleId of literally 'Normal' as an ordinary named style, distinct from an absent styleId", () => {
+    const input = document([
+      paragraph([{ text: "Explicit" }], { styleId: "Normal" }),
+      paragraph([{ text: "Implicit" }]),
+    ]);
+    const result = roundTrip(input);
+    expect(paragraphAt(result, 0).styleId).toBe("Normal");
+    expect(paragraphAt(result, 1).styleId).toBeUndefined();
+  });
+
+  it("writes every paragraph's own properties as a direct exception regardless of its styleId, since a mint-only style carries no formatting of its own", () => {
+    const input = document([
+      paragraph([{ text: "Title" }], {
+        styleId: "heading 1",
+        headingLevel: 1,
+        alignment: "center",
+      }),
+    ]);
+    const result = roundTrip(input);
+    expect(paragraphAt(result, 0).alignment).toBe("center");
+  });
+});
+
 describe("writeDocContent numbering", () => {
   it("writes a multi-level numbered list and reads back every level's own format and text", () => {
     const input = document([
