@@ -1,3 +1,9 @@
+## [1.2.5](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.4...epub-codec%401.2.5) (2026-09-07)
+
+### Bug Fixes
+
+* **epub-codec:** rebase nested construct offsets in appendNested/appendAnchor ([7231101](https://github.com/ExaDev/documents.js/commit/7231101c595bc3465e1c81a13d90d079d86d7d43))
+
 ## [1.2.4](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.3...epub-codec%401.2.4) (2026-09-07)
 
 ### Bug Fixes
