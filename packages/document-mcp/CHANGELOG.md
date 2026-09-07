@@ -1,3 +1,19 @@
+## [4.7.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.6.25...document-mcp%404.7.0) (2026-09-07)
+
+### Features
+
+* **document-mcp:** add document_create and document_append_paragraphs editor tools ([2e407b6](https://github.com/ExaDev/documents.js/commit/2e407b6b369e40d9c7a16e33f2f4acbb16a600b2))
+
+### Tests
+
+* **document-mcp:** add the two new editor tools to the smoke test's expected tool list ([42488d4](https://github.com/ExaDev/documents.js/commit/42488d4164cf5fc11215de34ab7cf78393425c43))
+
+
+### Dependencies
+
+- Updated documents.js to ^7.6.0
+- Updated document-compute.js to ^1.3.25
+
 ## [4.6.25](https://github.com/ExaDev/documents.js/compare/document-mcp%404.6.24...document-mcp%404.6.25) (2026-09-07)
 
 
