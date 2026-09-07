@@ -16,6 +16,7 @@ import {
   RECORD_BOOLERR,
   RECORD_BOTTOMMARGIN,
   RECORD_COLINFO,
+  RECORD_CONDFMT,
   RECORD_DIMENSIONS,
   RECORD_DV,
   RECORD_FORMULA,
@@ -45,6 +46,10 @@ import { decodeRkNumber } from "../biff/rk";
 import { readXLUnicodeString } from "../biff/strings";
 import { recordByteLength, type RecordGroup } from "../biff/substreams";
 import { columnWidthToPoints, inchesToPoints, twipsToPoints } from "../units";
+import {
+  readCondFmtGroup,
+  type RawConditionalFormat,
+} from "./conditional-format";
 import { readDv, type RawDataValidation } from "./data-validation";
 
 // The worksheet substream ([MS-XLS] 2.1.7.20.5): the grid geometry and the cell table for one sheet. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/f41c06f2-9057-49a1-8c3f-a4a4d211fc56
@@ -137,6 +142,7 @@ export interface RawSheet {
   readonly columns: readonly RawColumn[];
   readonly merges: readonly RawRange[];
   readonly dataValidations: readonly RawDataValidation[];
+  readonly conditionalFormats: readonly RawConditionalFormat[];
   /** The used range from the Dimensions record ([MS-XLS] 2.4.90), when the sheet declared one. */
   readonly usedRange?: RawRange;
   /** The sheet's own page setup, as far as its records state it. */
@@ -281,6 +287,7 @@ export function readSheetRecords(
   const columns: RawColumn[] = [];
   const merges: RawRange[] = [];
   const dataValidations: RawDataValidation[] = [];
+  const conditionalFormats: RawConditionalFormat[] = [];
   let usedRange: RawRange | undefined;
   const marginsPt: {
     left?: number;
@@ -318,6 +325,13 @@ export function readSheetRecords(
         if (validation !== undefined) {
           dataValidations.push(validation);
         }
+        break;
+      }
+      case RECORD_CONDFMT: {
+        const group = readCondFmtGroup(records, index, formulaSheets);
+        conditionalFormats.push(...group.formats);
+        // A CondFmt's own CF children are consumed here, not re-visited by this same loop -- they carry no case of their own (a stray CF this group's own bounds-checking rejected simply falls through to `default` next iteration).
+        index += group.recordsConsumed - 1;
         break;
       }
       case RECORD_BLANK:
@@ -409,8 +423,25 @@ export function readSheetRecords(
   };
 
   return usedRange === undefined
-    ? { cells, rows, columns, merges, dataValidations, print }
-    : { cells, rows, columns, merges, dataValidations, usedRange, print };
+    ? {
+        cells,
+        rows,
+        columns,
+        merges,
+        dataValidations,
+        conditionalFormats,
+        print,
+      }
+    : {
+        cells,
+        rows,
+        columns,
+        merges,
+        dataValidations,
+        conditionalFormats,
+        usedRange,
+        print,
+      };
 }
 
 /** Setup ([MS-XLS] 2.4.257): iPaperSize, iScale, iPageStart, iFitWidth, iFitHeight, a flags word, iRes, iVRes, an eight-byte header margin, an eight-byte footer margin, and iCopies. The starting page number, the two print resolutions, the header/footer margins, and the copy count are read past: ContentSheetPrintSettings has no field for any of them, and Margins models only the four page edges. */

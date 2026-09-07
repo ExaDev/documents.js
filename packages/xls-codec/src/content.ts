@@ -4,6 +4,7 @@ import {
 } from "archive-codec";
 import type {
   Alignment,
+  Color,
   ContentCellBorders,
   ContentCellFill,
   ContentCellValue,
@@ -11,6 +12,8 @@ import type {
   ContentSheet,
   ContentSheetCell,
   ContentSheetColumn,
+  ContentSheetConditionalFormat,
+  ContentSheetConditionalFormatStyle,
   ContentSheetDataValidation,
   ContentSheetPrintSettings,
   ContentSheetRow,
@@ -26,7 +29,11 @@ import {
   splitSubstreams,
   type Substream,
 } from "./biff/substreams";
-import { resolveFillBackground, resolveBorderEdge } from "./biff/xf-colors";
+import {
+  resolveFillBackground,
+  resolveBorderEdge,
+  resolveIcvColor,
+} from "./biff/xf-colors";
 import { readWorkbookStreams } from "./container";
 import { readSheetComments, type SheetCellComment } from "./workbook/comments";
 import { classifyNumberFormat } from "excel-number-format";
@@ -49,6 +56,10 @@ import {
   type RawSheet,
 } from "./workbook/sheet";
 import type { RawDataValidation } from "./workbook/data-validation";
+import type {
+  RawConditionalFormat,
+  RawConditionalFormatStyle,
+} from "./workbook/conditional-format";
 import { inchesToPoints } from "./units";
 
 // The join between the BIFF8 record readers and document-schema.js's own spreadsheet vocabulary.
@@ -234,6 +245,7 @@ function readSheet(
           columns: [],
           merges: [],
           dataValidations: [],
+          conditionalFormats: [],
           print: emptyPrint,
         }
       : readSheetRecords(substream.records, globals.sharedStrings, {
@@ -247,6 +259,10 @@ function readSheet(
   const cells = mapCells(raw, globals);
   applyCellComments(comments, cells);
   const dataValidations = mapDataValidations(raw.dataValidations);
+  const conditionalFormats = mapConditionalFormats(
+    raw.conditionalFormats,
+    globals.palette,
+  );
   return {
     name: entry.name,
     cells,
@@ -259,6 +275,56 @@ function readSheet(
       globals.printNames.get(sheetIndex),
     ),
     ...(dataValidations.length > 0 ? { dataValidations } : {}),
+    ...(conditionalFormats.length > 0 ? { conditionalFormats } : {}),
+  };
+}
+
+// Base BIFF8 conditional formatting only ever produces a 'cellIs' rule (ExaDev/documents.js#1102's own scope -- every richer type is a CF12/CFEx extension, #1100). icv colour resolution is deferred to here, not workbook/conditional-format.ts, matching how a regular cell's own fill/border already resolve through globals.palette at this same layer (mapCellDecoration below).
+function mapConditionalFormats(
+  raw: readonly RawConditionalFormat[],
+  palette: readonly Color[] | undefined,
+): ContentSheetConditionalFormat[] {
+  return raw.map((format) => {
+    const style = mapConditionalFormatStyle(format.style, palette);
+    return {
+      type: "cellIs" as const,
+      ranges: format.ranges,
+      operator: format.operator,
+      formula1: format.formula1,
+      ...(format.formula2 !== undefined ? { formula2: format.formula2 } : {}),
+      ...(style !== undefined ? { style } : {}),
+    };
+  });
+}
+
+function mapConditionalFormatStyle(
+  raw: RawConditionalFormatStyle | undefined,
+  palette: readonly Color[] | undefined,
+): ContentSheetConditionalFormatStyle | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  const textColor =
+    raw.fontColorIcv === undefined
+      ? undefined
+      : resolveIcvColor(raw.fontColorIcv, palette);
+  // ContentSheetConditionalFormatStyleSchema.background is a plain colour (the two properties actually observed on a real dxf, per that schema's own top comment); resolveFillBackground's own richer solid/pattern ContentCellFill is narrowed to the 'solid' case only, the same narrowing odf.js's own conditional-format.ts already applies for the identical schema field.
+  const fill =
+    raw.fill === undefined
+      ? undefined
+      : resolveFillBackground(
+          raw.fill.fillPattern,
+          raw.fill.fillForegroundIcv,
+          raw.fill.fillBackgroundIcv,
+          palette,
+        );
+  const background = fill?.kind === "solid" ? fill.color : undefined;
+  if (textColor === undefined && background === undefined) {
+    return undefined;
+  }
+  return {
+    ...(textColor !== undefined ? { textColor } : {}),
+    ...(background !== undefined ? { background } : {}),
   };
 }
 

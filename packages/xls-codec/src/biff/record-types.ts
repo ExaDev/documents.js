@@ -54,6 +54,10 @@ export const RECORD_MERGECELLS = 0x00e5;
 export const RECORD_DVAL = 0x01b2;
 /** One data-validation rule: its type/operator/error-style/flags, prompt and error text, one or two formulas, and the cell ranges it applies to ([MS-XLS] 2.4.95). */
 export const RECORD_DV = 0x01be;
+/** Marks the start of a collection of 1-3 CF records and carries their own shared cell-range list (a bounding Ref8U plus a SqRefU) and a rule-set id CFEx can later extend ([MS-XLS] 2.4.56). */
+export const RECORD_CONDFMT = 0x01b0;
+/** One conditional-formatting rule: a comparison ("Cell Value Is") or formula condition, one or two Ptg-encoded formulas, and a DXFN structure naming the resulting cell's own font/fill override ([MS-XLS] 2.4.42). Every richer rule type (top10, aboveAverage, colour scale, data bar, icon set, …) is a CF12/CFEx extension instead -- not this record. */
+export const RECORD_CF = 0x01b1;
 /** A cell comment's anchor -- row, column, and its own author, linking to the Obj record that names its text ([MS-XLS] 2.4.179). */
 export const RECORD_NOTE = 0x001c;
 /** A drawing object's common properties (id, type) and, for a comment, its FtNts sub-structure ([MS-XLS] 2.4.181). */

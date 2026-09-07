@@ -5,7 +5,9 @@ import {
   RECORD_BLANK,
   RECORD_BOOLERR,
   RECORD_BOTTOMMARGIN,
+  RECORD_CF,
   RECORD_COLINFO,
+  RECORD_CONDFMT,
   RECORD_DIMENSIONS,
   RECORD_DV,
   RECORD_FORMULA,
@@ -1040,6 +1042,53 @@ describe("readSheetRecords grid geometry", () => {
         ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
       },
     ]);
+  });
+
+  it("reads a CondFmt/CF group into conditionalFormats, including the lookahead skip past its own CF children (conditional-format.test.ts covers the field mapping itself in full; this proves the record dispatch)", () => {
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_CONDFMT, [
+          ...u16(1), // ccf -- one CF record follows
+          ...u16(0), // fToughRecalc + nID, unused
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0), // refBound (Ref8U), unused
+          ...u16(1), // one range
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+        record(RECORD_CF, [
+          0x01, // ct: comparison
+          0x05, // cp: greaterThan
+          ...u16(3), // cce1
+          ...u16(0), // cce2
+          0x1e,
+          ...u16(10), // PtgInt 10
+        ]),
+        record(RECORD_DIMENSIONS, [...u32(0), ...u32(2), ...u16(0), ...u16(2)]),
+      ),
+      [],
+    );
+
+    expect(sheet.conditionalFormats).toEqual([
+      {
+        operator: "greaterThan",
+        formula1: "10",
+        formula2: undefined,
+        style: undefined,
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+      },
+    ]);
+    // Dimensions, the record right after the CF this CondFmt claimed, is still read on the following loop iteration -- proving the lookahead skip advanced past exactly the CondFmt's own group and nothing more.
+    expect(sheet.usedRange).toEqual({
+      startRow: 0,
+      endRow: 1,
+      startColumn: 0,
+      endColumn: 1,
+    });
   });
 
   it("ignores records it has no use for", () => {
