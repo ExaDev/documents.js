@@ -107,6 +107,15 @@ describe("every read-side diagnostic code is reachable", () => {
     ).toContain(RtfDiagnosticCodes.BOOKMARK_UNPAIRED);
   });
 
+  it("rtf/block-construct-extents-crossed", () => {
+    // Two bookmarks whose \bkmkend/\bkmkstart both land in the same paragraph produce genuinely crossing block extents (ExaDev/documents.js#1040) -- see read.test.ts's own "bookmarks" describe block for the full round-trip assertion.
+    expect(
+      readCodes(
+        `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl{\\*\\bkmkstart A}one\\par\\pard\\intbl two{\\*\\bkmkend A}{\\*\\bkmkstart B}three\\par\\pard\\intbl{\\*\\bkmkend B}four\\cell\\row\\pard x\\par}`,
+      ),
+    ).toContain(RtfDiagnosticCodes.BLOCK_CONSTRUCT_EXTENTS_CROSSED);
+  });
+
   it("rtf/section-break-unrepresented", () => {
     expect(
       readCodes(`${HEADER}\\pard A\\par\\sect\\sectd\\sbkcol\\pard B\\par}`),
