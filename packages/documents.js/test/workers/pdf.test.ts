@@ -6,7 +6,7 @@ import { pdfToMarkdown } from '../../src/convert/from-pdf';
 // Proves documents.js's PDF-pivot conversions execute inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only API usage -- the coverage documents.test.ts deliberately left out when it scoped itself to the PDF-bypassing paths. The read test imports through src/convert/from-pdf.ts, the module behind the package.json `documents.js/read` entry point, so one test proves both that pdfToMarkdown executes in the isolate and that the read-only entry itself works (the entry's graph-width guarantee is held separately by src/read-graph.test.ts). The write test goes through the root barrel on purpose: markdownToPdf runs the full write path -- markdown read, font-registry construction, measurement, the wordprocessing layout engine, and writePdf -- which is exactly the half the read entry excludes. The PDF fixture is built inline (workerd exposes no node:fs), the same literal-construction approach pdf-codec's own workerd suite uses.
 
 // A minimal, structurally ordinary single-page PDF built by literal ASCII concatenation with inline byte-offset tracking (object table, classic ISO 32000-1 7.5.4 cross-reference, a parenthesised content-stream string) -- deliberately NOT produced by this package's own markdownToPdf, so a writer bug cannot cancel out against a reader bug the way a write-then-read fixture can.
-function minimalClassicXrefPdf(): Uint8Array {
+function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
   const enc = new TextEncoder();
   const chunks: Uint8Array[] = [];
   const offsets = new Map<number, number>();

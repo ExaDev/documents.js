@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import type { Package } from '../../src';
+import type { ContentDocument, Package } from '../../src';
 import { buildDocxPackageFromContent, buildXlsxPackage, bytesToBase64, decodePackage, el, encodePackage, flattenTree, readDocxContent, readPptxContent, readXlsx, readXlsxContent, zipPackage } from '../../src';
 import { oleObjectBin } from '../../src/test-support/cfb';
 import { minimalXlsxBytes } from '../../src/test-support/embedded';
 
+function assertSpreadsheet(
+  document: ContentDocument,
+): asserts document is Extract<ContentDocument, { kind: 'spreadsheet' }> {
+  expect(document.kind).toBe('spreadsheet');
+}
+
 // Proves ooxml.js's xlsx decode path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The path under test -- zipPackage (fflate, pure JS) -> decodePackage -> readXlsxContent (fast-xml-parser, pure JS) -- is deliberately Node-free; if any step touched node:fs/Buffer/process the workerd isolate would throw rather than these passing. The minimal xlsx parts are built inline as a Record<string, Uint8Array> (no node:fs/readFileSync -- workerd has no fs) and round-trip through the same zip/decode path src/typed/xlsx.test.ts already exercises under node. This is the runtime proof for ooxml.js issue #17. The second test extends the same proof to the DocumentTree boundary readXlsx/buildXlsxPackage sit on, since a structural transform is exactly the sort of pure-object code that could quietly acquire a Node dependency without any test noticing under node.
-const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
+const enc = (s: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(s);
 
 // A complete minimal xlsx package: the parts every spreadsheet reader needs (root content-types, root rels, workbook, workbook rels, one worksheet). The worksheet carries a single row with a single inline-string cell (t="inlineStr") so no shared-strings part is required -- the cell's own <is><t> holds its value directly.
-function minimalXlsxParts(): Record<string, Uint8Array> {
+function minimalXlsxParts(): Record<string, Uint8Array<ArrayBuffer>> {
   return {
     '[Content_Types].xml': enc(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
@@ -35,7 +41,7 @@ describe('ooxml.js xlsx decode and package assembly under the Cloudflare Workers
     const pkg = decodePackage(bytes);
     const document = readXlsxContent(pkg);
 
-    expect(document.kind).toBe('spreadsheet');
+    assertSpreadsheet(document);
     expect(document.sheets).toHaveLength(1);
     expect(document.sheets[0]?.name).toBe('Sheet1');
     // ContentSheet.cells is a flat array indexed by position, each carrying its own row/column indices -- the inline-string cell at A1 reads as a string ContentCellValue at row 0, column 0.
