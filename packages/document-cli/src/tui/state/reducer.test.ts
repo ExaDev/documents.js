@@ -201,7 +201,7 @@ function markdownDocument(state: AppState): MarkdownOpenDocument {
   return doc;
 }
 
-// There is no CREATE_DOCUMENT path for markdown (EditableFormat doesn't include it) -- a MarkdownOpenDocument only ever comes from opening a real file, so tests seed one directly through OPEN_FILE_SUCCESS, the same action openDocumentAtPath's own real caller dispatches, with a genuine live-view MarkdownEditor built via openMarkdown -- the same one open-document.ts's own markdown branch builds.
+// A MarkdownOpenDocument seeded from real source text (as opposed to CREATE_DOCUMENT's fresh, empty one -- see the "creates a new markdown document" test below) via OPEN_FILE_SUCCESS, the same action openDocumentAtPath's own real caller dispatches, with a genuine live-view MarkdownEditor built via openMarkdown -- the same one open-document.ts's own markdown branch builds.
 function openMarkdownDocument(
   source: string,
   path = "/tmp/notes.md",
@@ -274,6 +274,7 @@ describe("appReducer document lifecycle", () => {
       [{ type: "CREATE_DOCUMENT", format: "odp" }, "slideList"],
       [{ type: "CREATE_DOCUMENT", format: "ods" }, "sheetList"],
       [{ type: "CREATE_DOCUMENT", format: "odg" }, "pageList"],
+      [{ type: "CREATE_DOCUMENT", format: "markdown" }, "bodyList"],
     ];
     for (const [action, expectedKind] of cases) {
       const state = appReducer(createInitialState(), action);
@@ -281,6 +282,20 @@ describe("appReducer document lifecycle", () => {
       expect(state.openDocument?.format).toBe(action.format);
       expect(state.hasUnsavedChanges).toBe(false);
     }
+  });
+
+  it("creates a new markdown document with a genuine live-view editor and no original text to compare against", () => {
+    const state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "markdown",
+    });
+    const doc = markdownDocument(state);
+    expect(doc.originalText).toBeUndefined();
+    expect(doc.path).toBeUndefined();
+
+    // Genuinely live: mutating through the editor is visible without any further dispatch, exactly as CREATE_DOCUMENT's own docx/odt/... branches already are.
+    doc.editor.body.appendParagraph({ text: "Hello" });
+    expect(doc.editor.toMarkdownText()).toContain("Hello");
   });
 
   it("clears the document and history on close", () => {
@@ -298,6 +313,61 @@ describe("appReducer document lifecycle", () => {
     expect(closed.undoStack).toEqual([]);
     expect(closed.hasUnsavedChanges).toBe(false);
     expect(closed.stack.map((screen) => screen.kind)).toEqual(["launcher"]);
+  });
+});
+
+describe("appReducer SET_METADATA", () => {
+  it("patches a real docx document's metadata through the live editor.metadata setter", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const edited = appReducer(created, {
+      type: "SET_METADATA",
+      overrides: { title: "A real title", author: "Ada Lovelace" },
+    });
+    expect(edited.hasUnsavedChanges).toBe(true);
+    expect(docxDocument(edited).editor.metadata.title).toBe("A real title");
+    expect(docxDocument(edited).editor.metadata.author).toBe("Ada Lovelace");
+  });
+
+  it("patches a real odt document's metadata too, matching MetadataOverrides across every editable format", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "odt",
+    });
+    const edited = appReducer(created, {
+      type: "SET_METADATA",
+      overrides: { subject: "A subject" },
+    });
+    expect(edited.hasUnsavedChanges).toBe(true);
+    expect(odtDocument(edited).editor.metadata.subject).toBe("A subject");
+  });
+
+  it("only overwrites the fields explicitly present, leaving the rest untouched (partial-merge semantics)", () => {
+    const created = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const first = appReducer(created, {
+      type: "SET_METADATA",
+      overrides: { title: "First title", author: "Original author" },
+    });
+    const second = appReducer(first, {
+      type: "SET_METADATA",
+      overrides: { title: "Second title" },
+    });
+    expect(docxDocument(second).editor.metadata.title).toBe("Second title");
+    expect(docxDocument(second).editor.metadata.author).toBe("Original author");
+  });
+
+  it("warns instead of mutating when there is no open document", () => {
+    const result = appReducer(createInitialState(), {
+      type: "SET_METADATA",
+      overrides: { title: "x" },
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.hasUnsavedChanges).toBe(false);
   });
 });
 
@@ -748,6 +818,88 @@ describe("appReducer ADD_LIST on odt", () => {
     expect(result.status?.severity).toBe("warning");
     expect(result.status?.text).toContain("odt");
     expect(result.hasUnsavedChanges).toBe(false);
+  });
+});
+
+describe("appReducer INDENT_LIST_ITEM on odt", () => {
+  it("nests a real item under its preceding sibling and the change round-trips through re-decoding the package", () => {
+    const editor = createOdt();
+    const list = editor.body.appendList();
+    list.addItem().appendParagraph({ text: "first" });
+    list.addItem().appendParagraph({ text: "second" });
+    const opened = openOdtDocument(editor.toBytes());
+    const blockIndex = odtDocument(opened).editor.lists().length - 1;
+
+    const indented = appReducer(opened, {
+      type: "INDENT_LIST_ITEM",
+      blockIndex,
+      itemIndex: 1,
+    });
+    expect(indented.hasUnsavedChanges).toBe(true);
+    const doc = odtDocument(indented);
+    const list0 = doc.editor.lists()[blockIndex];
+    expect(list0?.items().map((i) => i.text)).toEqual(["first"]);
+    expect(
+      list0
+        ?.items()[0]
+        ?.nestedLists()[0]
+        ?.items()
+        .map((i) => i.text),
+    ).toEqual(["second"]);
+
+    const reopened = openOdt(doc.editor.toBytes());
+    const reopenedList = reopened.lists()[blockIndex];
+    expect(reopenedList?.items().map((i) => i.text)).toEqual(["first"]);
+    expect(
+      reopenedList
+        ?.items()[0]
+        ?.nestedLists()[0]
+        ?.items()
+        .map((i) => i.text),
+    ).toEqual(["second"]);
+  });
+
+  it("warns rather than crashing for the first item, which has no preceding sibling", () => {
+    const editor = createOdt();
+    editor.body.appendList().addItem().appendParagraph({ text: "only" });
+    const opened = openOdtDocument(editor.toBytes());
+    const blockIndex = odtDocument(opened).editor.lists().length - 1;
+
+    const result = appReducer(opened, {
+      type: "INDENT_LIST_ITEM",
+      blockIndex,
+      itemIndex: 0,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it("warns rather than crashing for a list index that does not exist", () => {
+    const editor = createOdt();
+    editor.body.appendList().addItem().appendParagraph({ text: "only" });
+    const opened = openOdtDocument(editor.toBytes());
+
+    const result = appReducer(opened, {
+      type: "INDENT_LIST_ITEM",
+      blockIndex: 5,
+      itemIndex: 0,
+    });
+    expect(result.status?.severity).toBe("warning");
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it("warns instead of mutating when the open document is docx (lists are an odt-only concept)", () => {
+    const state = appReducer(createInitialState(), {
+      type: "CREATE_DOCUMENT",
+      format: "docx",
+    });
+    const warned = appReducer(state, {
+      type: "INDENT_LIST_ITEM",
+      blockIndex: 0,
+      itemIndex: 0,
+    });
+    expect(warned.status?.severity).toBe("warning");
+    expect(warned.hasUnsavedChanges).toBe(false);
   });
 });
 

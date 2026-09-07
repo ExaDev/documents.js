@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import {
   convertDocument,
   createDocx,
+  createMarkdownEditor,
   createOdg,
   createOdp,
   createOds,
@@ -33,8 +34,8 @@ import {
 } from "documents.js";
 import type {
   Diagnostic,
-  EditableFormat,
   OpenDocument,
+  WritableFormat,
 } from "../state/types.js";
 import { detectFormat } from "./detect-format.js";
 
@@ -136,10 +137,17 @@ export async function openDocumentAtPath(
   }
 }
 
-export function createNewDocument(format: EditableFormat): OpenDocument {
+export function createNewDocument(format: WritableFormat): OpenDocument {
   switch (format) {
     case "docx":
       return { format, editor: createDocx(), path: undefined };
+    case "markdown":
+      return {
+        format,
+        editor: createMarkdownEditor(),
+        originalText: undefined,
+        path: undefined,
+      };
     case "pptx":
       return { format, editor: createPptx(), path: undefined };
     case "odt":
