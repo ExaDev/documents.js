@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/document-cli) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-cli) [![npm version](https://img.shields.io/npm/v/document-cli)](https://www.npmjs.com/package/document-cli) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> A command-line interface and an interactive terminal (Ink) app for [`documents.js`](https://github.com/ExaDev/documents.js): every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/csv/svg/markdown/rtf/wpd/doc/xls/ppt conversion, bridge, and editor documents.js exposes, plus the outline projection [`document-outline.js`](../document-outline.js/README.md) builds over any readable document, wired up as a scriptable subcommand or a full-screen terminal editor. Installs as either `document-cli` or `doculi`.
+> A command-line interface and an interactive terminal (Ink) app for [`documents.js`](https://github.com/ExaDev/documents.js): every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/csv/svg/markdown/rtf/wpd/doc/xls/ppt/epub conversion, bridge, and editor documents.js exposes, plus the outline projection [`document-outline.js`](../document-outline.js/README.md) builds over any readable document, wired up as a scriptable subcommand or a full-screen terminal editor. Installs as either `document-cli` or `doculi`.
 
 `document-cli` adds no conversion or editing logic of its own — it is a dispatch layer over `documents.js`'s existing conversion functions, `DocumentConverter` port, live-view editors, and `.odb`/PDF readers. What it adds is two ways to drive them without writing TypeScript: a scriptable, Unix-shaped CLI (stdin/stdout, exit codes, `--json` diagnostics) for pipelines, and a full-screen Ink terminal app for browsing and editing a document interactively.
 
@@ -143,7 +143,7 @@ document-cli pdf-inspect report.pdf
 document-cli pdf-inspect report.pdf --json
 ```
 
-**`fonts <input>`** — lists every source-embedded font face a docx/pptx/odt/odp/ods/odg document carries (family, weight/style, byte length) — the same embedded faces every `<format>-to-pdf` conversion already extracts and renders through automatically (see [Real fonts](#real-fonts) below); this command just reports what's there without converting anything. Rejects a format with no source-embedded-font concept at all (xlsx, csv, svg, pdf, markdown, odf, rtf, wpd, doc, xls, ppt), naming it:
+**`fonts <input>`** — lists every source-embedded font face a docx/pptx/odt/odp/ods/odg document carries (family, weight/style, byte length) — the same embedded faces every `<format>-to-pdf` conversion already extracts and renders through automatically (see [Real fonts](#real-fonts) below); this command just reports what's there without converting anything. Rejects a format with no source-embedded-font concept at all (xlsx, csv, svg, pdf, markdown, odf, rtf, wpd, doc, xls, ppt) or with no font-embedding support in this ecosystem's own reader yet (epub — EPUB 3 can embed fonts via CSS `@font-face`, but epub-codec's own reader doesn't extract them), naming it:
 
 ```sh
 document-cli fonts report.docx
@@ -155,7 +155,7 @@ document-cli fonts report.docx
 document-cli docx-extras report.docx
 ```
 
-**`metadata <input>`** — prints a document's own title/author/subject/keywords/creator/producer/created/modified metadata, for any of the seventeen supported formats (docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, pdf); csv, svg, doc, xls, and ppt carry no metadata container of their own (doc-codec/xls-codec/ppt-codec don't read one yet — see each package's own README), so they always report none. `--json` emits the raw metadata object:
+**`metadata <input>`** — prints a document's own title/author/subject/keywords/creator/producer/created/modified metadata, for any of the eighteen supported formats (docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, epub, pdf); csv, svg, doc, xls, and ppt carry no metadata container of their own (doc-codec/xls-codec/ppt-codec don't read one yet — see each package's own README), so they always report none, and epub reports title/author/keywords but never subject (epub-codec's OPF reader has no Dublin Core mapping for it). `--json` emits the raw metadata object:
 
 ```sh
 document-cli metadata report.pdf
