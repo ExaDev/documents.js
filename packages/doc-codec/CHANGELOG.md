@@ -1,3 +1,10 @@
+## [2.2.1](https://github.com/ExaDev/documents.js/compare/doc-codec%402.2.0...doc-codec%402.2.1) (2026-09-07)
+
+### Documentation
+
+* **doc-codec:** correct numbering.ts's [MS-DOC] 2.9.x structure citations ([613957b](https://github.com/ExaDev/documents.js/commit/613957b42cd28012e92b80127edc829b4b7085af)), closes [ExaDev/documents.js#1027](https://github.com/ExaDev/documents.js/issues/1027)
+* **doc-codec:** correct swapped [MS-DOC] 2.6.1/2.6.2 property citations ([17e5602](https://github.com/ExaDev/documents.js/commit/17e5602a195a6c98a1d331d595282ba0d0c7da89)), closes [ExaDev/documents.js#1042](https://github.com/ExaDev/documents.js/issues/1042)
+
 ## [2.2.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.1.1...doc-codec%402.2.0) (2026-09-06)
 
 ### Features

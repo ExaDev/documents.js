@@ -1,3 +1,9 @@
+## [6.3.1](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.3.0...markdown-codec%406.3.1) (2026-09-07)
+
+### Bug Fixes
+
+* **markdown-codec:** set preformatted: true on a code block's paragraph ([16d6220](https://github.com/ExaDev/documents.js/commit/16d6220424151e65f11da55ecb45683c84a60dc9))
+
 ## [6.3.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.2.0...markdown-codec%406.3.0) (2026-09-06)
 
 ### Features

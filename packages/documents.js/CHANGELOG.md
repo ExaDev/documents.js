@@ -1,3 +1,18 @@
+## [7.1.4](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.3...documents.js%407.1.4) (2026-09-07)
+
+### Bug Fixes
+
+* **documents.js:** raise OdsSheet.mergeCells' CI-safe-time bound to 60s ([7a454f5](https://github.com/ExaDev/documents.js/commit/7a454f528a07c7a7e8c735368db4842966b9d0f6))
+* **documents.js:** raise read-graph.test.ts's readDocumentMetadata timeout to 60s ([c5493ca](https://github.com/ExaDev/documents.js/commit/c5493cae7cecad07ea2f5a28bcf86ee837584ab5))
+
+
+### Dependencies
+
+- Updated markdown-codec to ^6.3.1
+- Updated odf.js to ^7.1.2
+- Updated doc-codec to ^2.2.1
+- Updated ooxml.js to ^7.1.3
+
 ## [7.1.3](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.2...documents.js%407.1.3) (2026-09-06)
 
 
