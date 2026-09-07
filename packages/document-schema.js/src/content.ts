@@ -281,16 +281,6 @@ function isContentEmbeddedObject(
   );
 }
 
-function isContentEmbeddedObjectBlock(
-  value: unknown,
-): value is ContentEmbeddedObjectBlock {
-  return (
-    isRecord(value) &&
-    value.kind === "embeddedObject" &&
-    isContentEmbeddedObject(value)
-  );
-}
-
 // The two marker guards, exported for the consumers that have to recognise a boundary without parsing the whole block: the package tree's leaf predicates, which reject them (src/package-node.ts), and findConstructMarkerImbalance below, which walks a block list looking for exactly these two kinds.
 export function isContentConstructStart(
   value: unknown,
@@ -368,16 +358,40 @@ export function isContentBlock(value: unknown): value is ContentBlock {
   return false;
 }
 
-export const ContentBlockSchema = z.custom<ContentBlock>(isContentBlock);
+// ContentBlockSchema itself is defined further down this file (after ContentTableSchema, one of its own recursive members) as a real, self-recursive z.discriminatedUnion() -- ExaDev/documents.js#1009's z.lazy() rewrite, the identical treatment #937 already applied to MathMlNodeSchema (src/mathml.ts) and this file's own MathExpressionSchema import now shares (src/math.ts). isContentBlock (above) stays exported as a standalone type guard regardless, the same "kept, no longer backing a z.custom() node" treatment isMathExpression/isMathMlNode already got.
 
-// Standalone schema for an embedded object on its own, independent of the block-level wrapper below -- this is what ContentSheetSchema.embeddedObjects (a sheet has no block-flow concept to anchor into) validates each entry against.
-export const ContentEmbeddedObjectSchema = z.custom<ContentEmbeddedObject>(
-  isContentEmbeddedObject,
-);
+// The shared field set between ContentEmbeddedObjectSchema (the standalone schema ContentSheetSchema.embeddedObjects validates each entry against -- a sheet has no block-flow concept to anchor an embedded object into) and ContentEmbeddedObjectBlockSchema (the ContentBlock 'embeddedObject' variant, which reuses these fields directly rather than nesting a separate `embeddedObject` field, mirroring the ContentEmbeddedObjectBlock interface's own `extends` relationship above). document is the genuine mutual-recursion edge back to a whole ContentDocument (an embedded object can carry another embedded object nested inside it), so it goes through z.lazy() exactly like ContentTableCellSchema's own `blocks` field below -- ContentDocumentSchema is not yet a binding at this point in the module, and by the time either lazy thunk is actually called to validate something, the whole module has finished evaluating.
+const CONTENT_EMBEDDED_OBJECT_FIELDS = {
+  objectKind: z.enum([
+    "formula",
+    "wordprocessing",
+    "presentation",
+    "spreadsheet",
+    "drawing",
+    "chart",
+  ]),
+  document: z.lazy(() => ContentDocumentSchema),
+  frame: BoxSchema,
+  anchorRow: z.number().int().nonnegative().optional(),
+  anchorColumn: z.number().int().nonnegative().optional(),
+  offsetXPt: z.number().optional(),
+  offsetYPt: z.number().optional(),
+  source: SourceResidueSchema.optional(),
+};
 
-// Standalone schema for the ContentBlock 'embeddedObject' variant, matching the sibling per-kind block schemas above (ContentParagraphSchema, ContentImageBlockSchema, ContentPageBreakSchema) even though ContentBlockSchema itself validates every kind, embeddedObject included, through the single custom guard above.
-export const ContentEmbeddedObjectBlockSchema =
-  z.custom<ContentEmbeddedObjectBlock>(isContentEmbeddedObjectBlock);
+// Standalone schema for an embedded object on its own, independent of the block-level wrapper below. Annotated with both z.ZodType type parameters for the identical reason MathExpressionSchema is (see that schema's own comment in src/math.ts): this schema has no transform, so Input and Output are genuinely identical, and supplying only Output would leave Input at `unknown` -- invisible to this package's own tests but not to a z.codec() consumer elsewhere in the workspace. Not itself a member of any z.discriminatedUnion (only ContentEmbeddedObjectBlockSchema, its own extended sibling below, is), so annotating it directly carries none of the propValues-widening risk that rules out annotating a union member.
+export const ContentEmbeddedObjectSchema: z.ZodType<
+  ContentEmbeddedObject,
+  ContentEmbeddedObject
+> = z.object(CONTENT_EMBEDDED_OBJECT_FIELDS);
+
+// Standalone schema for the ContentBlock 'embeddedObject' variant, matching the sibling per-kind block schemas above (ContentParagraphSchema, ContentImageBlockSchema, ContentPageBreakSchema). Deliberately its own z.object() spreading CONTENT_EMBEDDED_OBJECT_FIELDS rather than ContentEmbeddedObjectSchema.extend({...}): ContentEmbeddedObjectSchema is annotated z.ZodType<ContentEmbeddedObject, ContentEmbeddedObject> above, which has no .extend() method of its own (that is a ZodObject-specific method the generic ZodType base does not expose) -- and this schema needs to stay an unannotated, plain z.object() regardless, since it is a ContentBlockSchema union member (the identical "leave every discriminated-union member unannotated" rule the math/mathml recursive variants already follow).
+export const ContentEmbeddedObjectBlockSchema = z.object({
+  kind: z.literal("embeddedObject"),
+  ...CONTENT_EMBEDDED_OBJECT_FIELDS,
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  frames: z.array(LayoutFrameSchema).optional(), // this embedded object's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
+});
 
 // Where a block list's construct markers stop balancing: an `unmatchedEnd` is a close with no construct open at that point, an `unclosedStart` is an open still standing when the list ended. `index` is the offending block's own position in the list -- the close itself for the first, and for the second the OUTERMOST still-open start, since that is where the unbalanced region begins rather than where the walk happened to notice it.
 export type ConstructMarkerImbalance =
@@ -541,7 +555,7 @@ export function unrecognizedFillKind(fill: { kind?: unknown }): string {
 }
 
 export const ContentTableCellSchema = z.object({
-  blocks: z.array(ContentBlockSchema),
+  blocks: z.lazy(() => z.array(ContentBlockSchema)),
   colSpan: z.number().int().positive().optional(),
   rowSpan: z.number().int().positive().optional(),
   background: ContentCellFillSchema.optional(),
@@ -561,17 +575,32 @@ export const ContentTableRowSchema = z.object({
 export const ContentTableSchema = z.object({
   kind: z.literal("table"),
   rows: z.array(ContentTableRowSchema),
-  columnWidthsPt: z.array(z.number().positive()),
+  // nonnegative, not positive: both ooxml.js's docx reader (a w:gridCol with no w:w attribute) and odf.js's table reader (a table:table-column resolving no style-column-width) deliberately default an unresolvable column's own width to 0 rather than omitting it or guessing -- a real, common shape in real-world documents, not a defect this constraint should reject. Confirmed against this package's own real-corpus bijection gate (ExaDev/documents.js#1009 -- ContentBlockSchema's z.lazy() rewrite was the first time this field was ever actually validated at runtime, since the opaque z.custom() guard it replaced never checked column-width positivity at all).
+  columnWidthsPt: z.array(z.number().nonnegative()),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this table's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 
+// The real, self-recursive z.discriminatedUnion() ContentBlockSchema's own doc comment (above, where the old z.custom() binding used to live) points to -- placed here, after ContentTableSchema, because this is the first point in the module every one of its seven members already exists as a real binding (ContentTableSchema, defined immediately above, is the last of the seven to become available; ContentParagraphSchema/ContentImageBlockSchema/ContentPageBreakSchema/ContentEmbeddedObjectBlockSchema/ContentConstructStartSchema/ContentConstructEndSchema all sit earlier in the file). Every member is deliberately left unannotated -- the same "annotate only the outer union's own binding, not its members" rule MathExpressionSchema/MathMlNodeSchema already follow, since annotating a member widens it so z.discriminatedUnion (which needs each member's own propValues) rejects the union.
+//
+// Both z.ZodType type arguments are ContentBlock -- not just the first (Output). Supplying only one would leave Input at its own default of `unknown`, invisible to this package's own tests (which read Output alone via z.infer<>) but not to a z.codec() consumer elsewhere in the workspace -- the identical MathMlNodeSchema/MathExpressionSchema gotcha (#937/#1009). ContentBlockSchema has no transform, so Input and Output are genuinely identical, and annotating both is correct rather than merely defensive.
+export const ContentBlockSchema: z.ZodType<ContentBlock, ContentBlock> =
+  z.discriminatedUnion("kind", [
+    ContentParagraphSchema,
+    ContentTableSchema,
+    ContentImageBlockSchema,
+    ContentPageBreakSchema,
+    ContentEmbeddedObjectBlockSchema,
+    ContentConstructStartSchema,
+    ContentConstructEndSchema,
+  ]);
+
 // A docx section: a run of pages sharing one page size/margins (a w:sectPr boundary starts a new one).
 export const ContentSectionSchema = z.object({
   pageSize: PageSizeSchema,
   margins: MarginsSchema,
-  blocks: z.array(ContentBlockSchema),
+  blocks: z.lazy(() => z.array(ContentBlockSchema)),
   // How this section begins relative to the one before it, in the producer's own four-word vocabulary (docx w:sectPr/w:type's nextPage/continuous/evenPage/oddPage; an ODF page style's break-before rule narrows onto the same members). Absent means the format's own default break -- nextPage in WordprocessingML -- rather than a stored default: an absent key and a key restating the default are one fact, and only the spelled members carry information.
   breakType: z
     .enum(["nextPage", "continuous", "evenPage", "oddPage"])
@@ -595,7 +624,7 @@ export const ContentShapeSchema = z.object({
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this shape's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
-  blocks: z.array(ContentBlockSchema),
+  blocks: z.lazy(() => z.array(ContentBlockSchema)),
 });
 export type ContentShape = z.infer<typeof ContentShapeSchema>;
 

@@ -332,7 +332,7 @@ describe("the MathExpression grammar", () => {
     ).toBe(true);
   });
 
-  it("validates a deep recursive expression through the z.custom union", () => {
+  it("validates a deep recursive expression through both the standalone guard and the real, self-recursive schema", () => {
     expect(isMathExpression(pythagoras)).toBe(true);
     expect(MathExpressionSchema.safeParse(pythagoras).success).toBe(true);
   });
@@ -447,6 +447,162 @@ describe("the MathExpression grammar", () => {
   it("survives a JSON round trip unchanged, exact rationals included", () => {
     const roundTripped: unknown = JSON.parse(JSON.stringify(pythagoras));
     expect(MathExpressionSchema.parse(roundTripped)).toEqual(pythagoras);
+  });
+});
+
+// isMathExpression stopped backing MathExpressionSchema in ExaDev/documents.js#1009 (the schema is a real, self-recursive z.discriminatedUnion() now, mirroring isMathMlNode's own identical demotion to a standalone guard in #937 -- see mathml.test.ts's own dedicated describe block for the precedent this one follows) -- kept exported regardless, for a caller narrowing an unknown value with no Zod import in hand. Every branch below is exercised directly against the guard, not through the schema, since the two no longer share one code path.
+describe("isMathExpression", () => {
+  it("accepts a valid num, and rejects a malformed numerator/denominator", () => {
+    expect(
+      isMathExpression({ kind: "num", numerator: "1", denominator: "2" }),
+    ).toBe(true);
+    expect(
+      isMathExpression({ kind: "num", numerator: "01", denominator: "2" }),
+    ).toBe(false);
+    expect(
+      isMathExpression({ kind: "num", numerator: "1", denominator: "0" }),
+    ).toBe(false);
+    expect(
+      isMathExpression({ kind: "num", numerator: 1, denominator: "2" }),
+    ).toBe(false);
+  });
+
+  it("accepts a valid qty, with and without uncertainty, and rejects a malformed one", () => {
+    expect(
+      isMathExpression({
+        kind: "qty",
+        value: { numerator: "5", denominator: "1" },
+        unit: "si:metre",
+      }),
+    ).toBe(true);
+    expect(
+      isMathExpression({
+        kind: "qty",
+        value: { numerator: "5", denominator: "1" },
+        unit: "si:metre",
+        uncertainty: { magnitude: { numerator: "1", denominator: "10" } },
+      }),
+    ).toBe(true);
+    expect(
+      isMathExpression({
+        kind: "qty",
+        value: { numerator: "5", denominator: "1" },
+        unit: "si:metre",
+        uncertainty: { magnitude: "not-a-rational" },
+      }),
+    ).toBe(false);
+    expect(
+      isMathExpression({
+        kind: "qty",
+        value: "not-a-rational",
+        unit: "si:metre",
+      }),
+    ).toBe(false);
+    expect(
+      isMathExpression({
+        kind: "qty",
+        value: { numerator: "5", denominator: "1" },
+        unit: 5,
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts a valid sym, and rejects a non-string id", () => {
+    expect(isMathExpression({ kind: "sym", id: "symbols:mass" })).toBe(true);
+    expect(isMathExpression({ kind: "sym", id: 5 })).toBe(false);
+  });
+
+  it("accepts a valid app, and rejects a non-string operator, a non-array args, or an invalid arg at any position", () => {
+    expect(
+      isMathExpression({
+        kind: "app",
+        operator: "math:add",
+        args: [
+          { kind: "num", numerator: "1", denominator: "1" },
+          { kind: "sym", id: "x" },
+        ],
+      }),
+    ).toBe(true);
+    expect(isMathExpression({ kind: "app", operator: 5, args: [] })).toBe(
+      false,
+    );
+    expect(
+      isMathExpression({
+        kind: "app",
+        operator: "math:add",
+        args: "not-an-array",
+      }),
+    ).toBe(false);
+    expect(
+      isMathExpression({
+        kind: "app",
+        operator: "math:add",
+        args: [
+          { kind: "num", numerator: "1", denominator: "1" },
+          { kind: "bogus" },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts valid sum/prod binders, and rejects a non-string binder or an invalid lower/upper/body", () => {
+    const validBinder = (kind: "sum" | "prod") => ({
+      kind,
+      binder: "i",
+      lower: { kind: "num", numerator: "0", denominator: "1" },
+      upper: { kind: "sym", id: "N" },
+      body: { kind: "sym", id: "i" },
+    });
+    expect(isMathExpression(validBinder("sum"))).toBe(true);
+    expect(isMathExpression(validBinder("prod"))).toBe(true);
+    expect(isMathExpression({ ...validBinder("sum"), binder: 5 })).toBe(false);
+    expect(
+      isMathExpression({ ...validBinder("sum"), lower: { kind: "bogus" } }),
+    ).toBe(false);
+    expect(
+      isMathExpression({ ...validBinder("sum"), upper: { kind: "bogus" } }),
+    ).toBe(false);
+    expect(
+      isMathExpression({ ...validBinder("sum"), body: { kind: "bogus" } }),
+    ).toBe(false);
+  });
+
+  it("accepts a rectangular matrix, and rejects a non-array rows, a non-array row, an invalid cell, and a ragged matrix", () => {
+    const cell = { kind: "num", numerator: "1", denominator: "1" };
+    expect(
+      isMathExpression({
+        kind: "matrix",
+        rows: [
+          [cell, cell],
+          [cell, cell],
+        ],
+      }),
+    ).toBe(true);
+    expect(isMathExpression({ kind: "matrix", rows: "not-an-array" })).toBe(
+      false,
+    );
+    expect(
+      isMathExpression({ kind: "matrix", rows: ["not-an-array-row"] }),
+    ).toBe(false);
+    expect(
+      isMathExpression({ kind: "matrix", rows: [[{ kind: "bogus" }]] }),
+    ).toBe(false);
+    expect(
+      isMathExpression({ kind: "matrix", rows: [[cell, cell], [cell]] }),
+    ).toBe(false);
+  });
+
+  it("accepts a valid unparsed fallback, and rejects a non-string latex", () => {
+    expect(isMathExpression({ kind: "unparsed", latex: "\\oint" })).toBe(true);
+    expect(isMathExpression({ kind: "unparsed", latex: 5 })).toBe(false);
+  });
+
+  it("rejects an unrecognised kind and every non-record input", () => {
+    expect(isMathExpression({ kind: "bogus" })).toBe(false);
+    expect(isMathExpression(null)).toBe(false);
+    expect(isMathExpression(undefined)).toBe(false);
+    expect(isMathExpression("num")).toBe(false);
+    expect(isMathExpression(["num"])).toBe(false);
   });
 });
 
