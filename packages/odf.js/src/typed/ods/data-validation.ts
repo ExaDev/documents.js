@@ -285,7 +285,7 @@ export type ParsedContentValidation = Omit<
 
 function readContentValidation(
   validationEl: XmlElement,
-): ParsedContentValidation | undefined {
+): ParsedContentValidation {
   const condition = attrValue(validationEl, "table:condition");
   const parsed =
     condition === undefined
@@ -376,10 +376,7 @@ export function readContentValidationDefinitions(
     if (name === undefined) {
       continue;
     }
-    const rule = readContentValidation(validationEl);
-    if (rule !== undefined) {
-      definitions.set(name, rule);
-    }
+    definitions.set(name, readContentValidation(validationEl));
   }
   return definitions;
 }
