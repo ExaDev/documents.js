@@ -44,10 +44,10 @@ function parseGitHubRepo(remoteUrl: string): { repo: string; url: string } {
 const { repo: repoNameFromRemote, url: repoUrl } = parseGitHubRepo(
   execGit(["remote", "get-url", "origin"]),
 );
-// GitHub Pages serves a project site at /<repo-name>/ (exadev.github.io is already the org's own Pages root, so this app can never live at the bare domain). GITHUB_REPOSITORY (owner/repo, set automatically by every Actions run) is the primary source, since it names the actual repository this build is running in; the git-remote-derived name above is only a fallback for a context where that env var happens to be unset. Deriving this rather than writing the path segment as a literal is deliberate: a hardcoded path silently drifts the moment the repo is renamed, and every asset the build emits then 404s once deployed, since the browser never sees the mismatch until it tries to load them. Local dev stays at '/'.
-const base = process.env.CI
-  ? `/${process.env.GITHUB_REPOSITORY?.split("/")[1] ?? repoNameFromRemote}/`
-  : "/";
+// GitHub Pages serves a project site at /<repo-name>/ (exadev.github.io is already the org's own Pages root, so this app can never live at the bare domain). GITHUB_REPOSITORY (owner/repo, set automatically by every Actions run) is the primary source, since it names the actual repository this build is running in; the git-remote-derived name above is only a fallback for a context where that env var happens to be unset. Deriving this rather than writing the path segment as a literal is deliberate: a hardcoded path silently drifts the moment the repo is renamed, and every asset the build emits then 404s once deployed, since the browser never sees the mismatch until it tries to load them.
+function pagesBase(): string {
+  return `/${process.env.GITHUB_REPOSITORY?.split("/")[1] ?? repoNameFromRemote}/`;
+}
 
 const commitSha = execGit(["rev-parse", "HEAD"]);
 // @exadev/semantic-release-workspace's tagFormat is '${pkg.name}@${version}' (see release-workspace.config.json and the orchestrator's own release.ts), not semantic-release's bare 'v${version}' default -- validated here so an unrelated tag some clone happens to have checked out, or a sibling package's release tag reachable from this same commit, can't be mistaken for this package's own release.
@@ -111,8 +111,9 @@ const pwa = VitePWA({
   },
 });
 
-export default defineConfig({
-  base,
+export default defineConfig(({ command }) => ({
+  // Only the production build serves from GitHub Pages' project-site subpath. Base was previously computed from CI alone, at module scope, and applied unconditionally to `vite` (dev) too -- every CI run of the e2e suite starts the dev server under the same CI=true env var the real Pages build reads, so the dev server silently served every asset from /<repo>/ while the browser requested them from /, and the app never rendered at all. Gating on `command` (vite's own build/serve discriminator) instead of the env var alone is the actual fix, not a workaround: dev must always stay at '/' regardless of which environment it runs in.
+  base: command === "build" && process.env.CI ? pagesBase() : "/",
   define: {
     __APP_COMMIT_SHA__: JSON.stringify(commitSha),
     __APP_RELEASE_TAG__: JSON.stringify(releaseTag),
@@ -176,4 +177,4 @@ export default defineConfig({
       },
     ],
   },
-});
+}));
