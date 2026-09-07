@@ -1,3 +1,17 @@
+## [2.2.5](https://github.com/ExaDev/documents.js/compare/doc-codec%402.2.4...doc-codec%402.2.5) (2026-09-07)
+
+### Bug Fixes
+
+* **doc-codec:** resolve a style's own inherited formatting on read ([6cbbb18](https://github.com/ExaDev/documents.js/commit/6cbbb18873906cad0e594f670655f48b1e32a3ba))
+
+### Documentation
+
+* **doc-codec:** document style-inherited formatting resolution and split the write-side gap ([38a6575](https://github.com/ExaDev/documents.js/commit/38a657569315364be88719e96312a984703a16a3)), references [#1005](https://github.com/ExaDev/documents.js/issues/1005) [ExaDev/documents.js#1059](https://github.com/ExaDev/documents.js/issues/1059)
+
+### Tests
+
+* **doc-codec:** cover style formatting resolution, including inheritance precedence ([f87e27d](https://github.com/ExaDev/documents.js/commit/f87e27dd9f14ddeff53744773d97e0ac911d003b))
+
 ## [2.2.4](https://github.com/ExaDev/documents.js/compare/doc-codec%402.2.3...doc-codec%402.2.4) (2026-09-07)
 
 
