@@ -1822,6 +1822,240 @@ describe("readDocxContent: w:pBdr (direct paragraph border formatting)", () => {
   });
 });
 
+describe("readDocxContent: a mid-run page-type w:br splits the paragraph", () => {
+  it("splits a paragraph with a page break inside one run's text into [before, pageBreak, after]", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("before")]),
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("after")]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(3);
+    expect(asParagraph(blocks[0]).runs.map((r) => r.text)).toEqual(["before"]);
+    expect(blocks[1]?.kind).toBe("pageBreak");
+    expect(asParagraph(blocks[2]).runs.map((r) => r.text)).toEqual(["after"]);
+  });
+
+  it("splits across separate runs too, keeping every run entirely on its own side of the break", () => {
+    const paragraph = el("w:p", {}, [
+      textRun("first run"),
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("mid before")]),
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("mid after")]),
+      ]),
+      textRun("last run"),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(3);
+    expect(asParagraph(blocks[0]).runs.map((r) => r.text)).toEqual([
+      "first run",
+      "mid before",
+    ]);
+    expect(blocks[1]?.kind).toBe("pageBreak");
+    expect(asParagraph(blocks[2]).runs.map((r) => r.text)).toEqual([
+      "mid after",
+      "last run",
+    ]);
+  });
+
+  it("both halves inherit the original paragraph's own paragraph-level formatting unchanged", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, [
+        el("w:pStyle", { "w:val": "IntenseQuote" }),
+        el("w:jc", { "w:val": "center" }),
+      ]),
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("before")]),
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("after")]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    const before = asParagraph(blocks[0]);
+    const after = asParagraph(blocks[2]);
+    expect(before.styleId).toBe("IntenseQuote");
+    expect(after.styleId).toBe("IntenseQuote");
+    expect(before.alignment).toBe("center");
+    expect(after.alignment).toBe("center");
+  });
+
+  it("both halves of the split run keep its own bold/italic/colour formatting", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:rPr", {}, [el("w:b"), el("w:i")]),
+        el("w:t", { "xml:space": "preserve" }, [txt("before")]),
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("after")]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    const beforeRun = asParagraph(blocks[0]).runs[0];
+    const afterRun = asParagraph(blocks[2]).runs[0];
+    expect(beforeRun?.bold).toBe(true);
+    expect(beforeRun?.italic).toBe(true);
+    expect(afterRun?.bold).toBe(true);
+    expect(afterRun?.italic).toBe(true);
+  });
+
+  it("does not leave an empty stand-in run when the break sits at the very start of a run's own text", () => {
+    const paragraph = el("w:p", {}, [
+      textRun("earlier run"),
+      el("w:r", {}, [
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("after")]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(asParagraph(blocks[0]).runs.map((r) => r.text)).toEqual([
+      "earlier run",
+    ]);
+    expect(asParagraph(blocks[2]).runs.map((r) => r.text)).toEqual(["after"]);
+  });
+
+  it("does not leave an empty stand-in run when the break sits at the very end of a run's own text", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("before")]),
+        el("w:br", { "w:type": "page" }),
+      ]),
+      textRun("later run"),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(asParagraph(blocks[0]).runs.map((r) => r.text)).toEqual(["before"]);
+    expect(asParagraph(blocks[2]).runs.map((r) => r.text)).toEqual([
+      "later run",
+    ]);
+  });
+
+  it("does not split on a w:br with no @w:type (textWrapping, the default) -- it still reads back as a literal newline", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("before")]),
+        el("w:br"),
+        el("w:t", { "xml:space": "preserve" }, [txt("after")]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(1);
+    expect(asParagraph(blocks[0]).runs[0]?.text).toBe("before\nafter");
+  });
+
+  it('does not split on a column break (@w:type="column") either', () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("before")]),
+        el("w:br", { "w:type": "column" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("after")]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(1);
+    expect(asParagraph(blocks[0]).runs[0]?.text).toBe("before\nafter");
+  });
+
+  it("splits only on the FIRST page-type break in the paragraph -- a second one reads back as an ordinary newline in the after-half", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("first")]),
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("second")]),
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("third")]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(3);
+    expect(asParagraph(blocks[0]).runs[0]?.text).toBe("first");
+    expect(blocks[1]?.kind).toBe("pageBreak");
+    expect(asParagraph(blocks[2]).runs[0]?.text).toBe("second\nthird");
+  });
+
+  it("keeps a bookmark extent entirely before the split run on the before-half, unchanged", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:bookmarkStart", { "w:id": "1", "w:name": "early" }),
+      textRun("bookmarked"),
+      el("w:bookmarkEnd", { "w:id": "1" }),
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("before")]),
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("after")]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    const before = asParagraph(blocks[0]);
+    expect(before.constructs).toEqual([
+      {
+        descriptor: { kind: "anchor", anchorType: "bookmark", name: "early" },
+        startRun: 0,
+        endRun: 1,
+      },
+    ]);
+    expect(asParagraph(blocks[2]).constructs).toBeUndefined();
+  });
+
+  it("keeps a bookmark extent entirely after the split run on the after-half, re-indexed from zero", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("before")]),
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("after")]),
+      ]),
+      el("w:bookmarkStart", { "w:id": "2", "w:name": "late" }),
+      textRun("bookmarked"),
+      el("w:bookmarkEnd", { "w:id": "2" }),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(asParagraph(blocks[0]).constructs).toBeUndefined();
+    const after = asParagraph(blocks[2]);
+    expect(after.runs.map((r) => r.text)).toEqual(["after", "bookmarked"]);
+    // "bookmarked" is re-indexed run 1 in the after-half's own numbering (afterHalf itself occupies run 0), not run 0 -- the after-half's own run array is [afterHalf, ...original runs from pageBreak.runIndex+1 onward].
+    expect(after.constructs).toEqual([
+      {
+        descriptor: { kind: "anchor", anchorType: "bookmark", name: "late" },
+        startRun: 1,
+        endRun: 2,
+      },
+    ]);
+  });
+
+  it("drops a bookmark extent that spans across the split run itself, rather than mis-encoding it onto either half", () => {
+    // "lead"/"trail" runs keep both bookmark halves inside the paragraph's own content range (not its very first/last child), so this is a genuine run-scoped extent rather than the whole-paragraph block-scoped shape recordParagraphRangeMarkers encodes separately.
+    const paragraph = el("w:p", {}, [
+      textRun("lead"),
+      el("w:bookmarkStart", { "w:id": "3", "w:name": "spanning" }),
+      el("w:r", {}, [
+        el("w:t", { "xml:space": "preserve" }, [txt("before")]),
+        el("w:br", { "w:type": "page" }),
+        el("w:t", { "xml:space": "preserve" }, [txt("after")]),
+      ]),
+      textRun("tail"),
+      el("w:bookmarkEnd", { "w:id": "3" }),
+      textRun("trail"),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(blocks).toHaveLength(3);
+    expect(asParagraph(blocks[0]).constructs).toBeUndefined();
+    const after = asParagraph(blocks[2]);
+    expect(after.runs.map((r) => r.text)).toEqual(["after", "tail", "trail"]);
+    expect(after.constructs).toBeUndefined();
+  });
+});
+
 describe("readDocxContent: comments, footnotes, header and footer parts", () => {
   it("reads comment author and text from word/comments.xml", () => {
     const pkg = buildFixturePackage();

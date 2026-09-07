@@ -227,7 +227,7 @@ function hasPageBreakBefore(paragraph: XmlElement): boolean {
   );
 }
 
-// A run's own w:t/w:delText/w:tab/w:br children are ordered and interleaved (e.g. "text" w:tab "more text" within one w:r) -- concatenating only w:t would silently drop the tab. w:delText is the spelling a run takes inside a tracked deletion or move-from, and is read identically: a deletion's text is the whole point of carrying the deletion at all. w:tab becomes a literal '\t', w:br/w:cr a literal '\n' (every w:br type, including an explicit page break, is treated as a plain line break here -- splitting one paragraph into two at a mid-run page break is a real but rare-enough case to defer).
+// A run's own w:t/w:delText/w:tab/w:br children are ordered and interleaved (e.g. "text" w:tab "more text" within one w:r) -- concatenating only w:t would silently drop the tab. w:delText is the spelling a run takes inside a tracked deletion or move-from, and is read identically: a deletion's text is the whole point of carrying the deletion at all. w:tab becomes a literal '\t', w:br/w:cr a literal '\n' -- every w:br type, including an explicit page break, still contributes that same literal '\n' to this run's own text (a mid-run page break's real, structural handling -- splitting the paragraph in two -- is findRunPageBreakOffset below plus splitParagraphAtPageBreak's own post-processing pass, not this function; readRunText stays the single "flatten this run to plain text" primitive every caller, including that split, shares).
 function readRunText(run: XmlElement): string {
   let text = "";
   for (const child of run.children) {
@@ -243,6 +243,29 @@ function readRunText(run: XmlElement): string {
     }
   }
   return text;
+}
+
+// The character offset within readRunText(run)'s own return value that the run's FIRST page-type w:br (@w:type="page") falls at, or undefined when the run carries none. A run's w:br/w:cr children all become a literal '\n' in readRunText, indistinguishable from each other by text alone -- this walks the identical children in the identical order, but stops accumulating the moment it meets a page-type break, so the caller learns exactly where in the flattened text that specific break sits without readRunText itself needing to know or care about break kinds.
+function findRunPageBreakOffset(run: XmlElement): number | undefined {
+  let offset = 0;
+  for (const child of run.children) {
+    if (child.type !== "element") {
+      continue;
+    }
+    if (child.tag === "w:t" || child.tag === "w:delText") {
+      offset += textContent(child).length;
+    } else if (child.tag === "w:tab") {
+      offset += 1;
+    } else if (child.tag === "w:br") {
+      if (attr(child, "w:type") === "page") {
+        return offset;
+      }
+      offset += 1;
+    } else if (child.tag === "w:cr") {
+      offset += 1;
+    }
+  }
+  return undefined;
 }
 
 // A w:drawing wraps exactly one wp:inline (in-flow) or wp:anchor (floating/wrapped) container, both of which share the same wp:extent (EMU size) and wp:docPr (name/alt-text) children, and both of which reach the actual picture through an identical a:graphic/a:graphicData/pic:pic/pic:blipFill/a:blip chain -- so both placements resolve through one function. wp:anchor's own wp:positionH/wp:positionV (page/margin/paragraph-relative offset) is read by nothing here: ContentImageBlock has no absolute x/y positioning field at all (unlike ContentShape's frame), so a floating image has nowhere to record its real anchored position -- it is deliberately placed in the block flow at the point its own w:drawing was encountered, i.e. exactly where an inline image would land. This is a real, honest scope narrowing (a floating image's on-page position is lost, not silently wrong), not an attempt at true anchored placement.
@@ -428,12 +451,19 @@ interface RunLinkEvent {
 }
 
 // Everything one paragraph's run walk collects beside its runs, assembled into ContentParagraph.constructs by assembleRunConstructs once the walk (and the paragraph's content index) exists.
+// The paragraph's own FIRST mid-run page-type break, if it has one: which run (by the index it will occupy in the walk's own `runs` array) and which character offset within that run's own text (findRunPageBreakOffset's return value). Only ever the first -- a second page-type break within the same paragraph is real but rare enough to defer, the same "real but rare-enough" framing readRunText's own top comment already gives every w:br kind, so it is left as an ordinary '\n' inside whichever half it lands in rather than triggering a further split.
+interface ParagraphPageBreakEvent {
+  readonly runIndex: number;
+  readonly charIndex: number;
+}
+
 interface ParagraphRunEvents {
   halves: ParagraphRangeMarkerHalf[];
   fields: RunFieldEvent[];
   simpleFields: RunSimpleFieldEvent[];
   pointAnchors: RunPointAnchorEvent[];
   links: RunLinkEvent[];
+  pageBreak: ParagraphPageBreakEvent | undefined;
 }
 
 function newParagraphRunEvents(): ParagraphRunEvents {
@@ -443,6 +473,7 @@ function newParagraphRunEvents(): ParagraphRunEvents {
     simpleFields: [],
     pointAnchors: [],
     links: [],
+    pageBreak: undefined,
   };
 }
 
@@ -555,6 +586,12 @@ function readParagraphRuns(
             open.instruction += runInstructionText(node);
           }
           continue;
+        }
+        if (events.pageBreak === undefined) {
+          const charIndex = findRunPageBreakOffset(node);
+          if (charIndex !== undefined) {
+            events.pageBreak = { runIndex: runs.length, charIndex };
+          }
         }
         const run = readRun(node, paragraph, ctx.styles);
         runs.push(
@@ -703,11 +740,16 @@ function assembleRunConstructs(
   return extents;
 }
 
+interface ReadParagraphResult {
+  readonly paragraph: ContentParagraph;
+  readonly pageBreak: ParagraphPageBreakEvent | undefined;
+}
+
 function readParagraph(
   paragraph: XmlElement,
   ctx: DocxReadContext,
   carryDeletions: boolean,
-): ContentParagraph {
+): ReadParagraphResult {
   const pPr = childrenWithTag(paragraph, "w:pPr")[0];
   const pStyleEl =
     pPr === undefined ? undefined : childrenWithTag(pPr, "w:pStyle")[0];
@@ -720,24 +762,115 @@ function readParagraph(
     indexParagraphContent(paragraph),
   );
   return {
-    kind: "paragraph",
-    runs,
-    ...(constructs.length > 0 ? { constructs } : {}),
-    styleId: pStyleEl === undefined ? undefined : attr(pStyleEl, "w:val"),
-    // w:outlineLvl is 0-based (0 is a level-1 heading). Word's own outline levels run 1-9 while the schema's heading domain is 1-6, so clampHeadingLevel narrows levels 7-9 onto 6 -- the same closest-matching-value convention readAlignment (styles.ts) applies to w:jc's both/distribute.
-    headingLevel:
-      props.outlineLvl === undefined
-        ? undefined
-        : clampHeadingLevel(props.outlineLvl + 1),
-    alignment: props.alignment,
-    list: readListMembership(pPr),
-    spacingBeforePt: props.spacingBeforePt,
-    spacingAfterPt: props.spacingAfterPt,
-    lineSpacing: props.lineSpacing,
-    indentLeftPt: props.indentLeftPt,
-    indentFirstLinePt: props.indentFirstLinePt,
-    borders: readParagraphBorders(pPr),
+    paragraph: {
+      kind: "paragraph",
+      runs,
+      ...(constructs.length > 0 ? { constructs } : {}),
+      styleId: pStyleEl === undefined ? undefined : attr(pStyleEl, "w:val"),
+      // w:outlineLvl is 0-based (0 is a level-1 heading). Word's own outline levels run 1-9 while the schema's heading domain is 1-6, so clampHeadingLevel narrows levels 7-9 onto 6 -- the same closest-matching-value convention readAlignment (styles.ts) applies to w:jc's both/distribute.
+      headingLevel:
+        props.outlineLvl === undefined
+          ? undefined
+          : clampHeadingLevel(props.outlineLvl + 1),
+      alignment: props.alignment,
+      list: readListMembership(pPr),
+      spacingBeforePt: props.spacingBeforePt,
+      spacingAfterPt: props.spacingAfterPt,
+      lineSpacing: props.lineSpacing,
+      indentLeftPt: props.indentLeftPt,
+      indentFirstLinePt: props.indentFirstLinePt,
+      borders: readParagraphBorders(pPr),
+    },
+    pageBreak: events.pageBreak,
   };
+}
+
+// Splits a single run at the character offset a mid-run page-type w:br was found at (findRunPageBreakOffset), returning the run's own text before and after the break as two ContentRuns sharing every OTHER field of the original (bold/italic/colour/hyperlink/...) unchanged -- a page break splits a run's text, never its formatting. Either half is omitted from the result when the break sits at that half's own edge (charIndex 0 has no "before" text; charIndex === text.length has no "after" text), so a run that happens to end or begin exactly at the break contributes only the one real half rather than an empty stand-in run.
+function splitRunAtOffset(
+  run: ContentRun,
+  charIndex: number,
+): {
+  readonly before: ContentRun | undefined;
+  readonly after: ContentRun | undefined;
+} {
+  const beforeText = run.text.slice(0, charIndex);
+  // The break's own character (readRunText's unconditional single '\n' for any w:br, page-type included) belongs to neither half -- it is the split point itself, not literal content -- so the after-text starts one character past charIndex, not at it.
+  const afterText = run.text.slice(charIndex + 1);
+  return {
+    before: beforeText.length > 0 ? { ...run, text: beforeText } : undefined,
+    after: afterText.length > 0 ? { ...run, text: afterText } : undefined,
+  };
+}
+
+// Splits one already-assembled ContentParagraph into [before, pageBreak, after] at a mid-run page-type w:br, or returns it unchanged as a single-element array when the paragraph carries none. Both halves inherit the original paragraph's own paragraph-level formatting (styleId/alignment/spacing/borders/...) unchanged -- a page break inside one paragraph does not create two logically distinct paragraph styles in Word, so nothing here invents a difference between them. A run-level construct extent (bookmark, field, internal link, footnote/endnote/comment anchor -- every RunConstructExtent, since assembleRunConstructs has already folded all of them into this one array by the time this runs) that sits entirely before or after the split run keeps its own descriptor, re-indexed onto whichever half it landed in; one that spans the split run itself is dropped rather than mis-encoded, mirroring constructs.ts's own established "a crossing extent has no clean encoding, so it is dropped, not guessed at" rule for the analogous block-boundary case.
+function splitParagraphAtPageBreak(
+  paragraph: ContentParagraph,
+  pageBreak: ParagraphPageBreakEvent,
+): ContentBlock[] {
+  const splitRun = paragraph.runs[pageBreak.runIndex];
+  if (splitRun === undefined) {
+    return [paragraph];
+  }
+  const { before: beforeHalf, after: afterHalf } = splitRunAtOffset(
+    splitRun,
+    pageBreak.charIndex,
+  );
+
+  const runsBefore = [
+    ...paragraph.runs.slice(0, pageBreak.runIndex),
+    ...(beforeHalf === undefined ? [] : [beforeHalf]),
+  ];
+  const runsAfter = [
+    ...(afterHalf === undefined ? [] : [afterHalf]),
+    ...paragraph.runs.slice(pageBreak.runIndex + 1),
+  ];
+  const afterRunOffset =
+    pageBreak.runIndex + 1 - (afterHalf === undefined ? 0 : 1);
+
+  const constructsBefore: RunConstructExtent[] = [];
+  const constructsAfter: RunConstructExtent[] = [];
+  for (const extent of paragraph.constructs ?? []) {
+    if (extent.endRun <= pageBreak.runIndex) {
+      constructsBefore.push(extent);
+    } else if (extent.startRun >= pageBreak.runIndex + 1) {
+      constructsAfter.push({
+        ...extent,
+        startRun: extent.startRun - afterRunOffset,
+        endRun: extent.endRun - afterRunOffset,
+      });
+    }
+    // The remaining case -- startRun <= pageBreak.runIndex && endRun > pageBreak.runIndex -- spans the split run itself and is dropped, per this function's own doc comment.
+  }
+
+  return [
+    {
+      ...paragraph,
+      runs: runsBefore,
+      constructs: constructsBefore.length > 0 ? constructsBefore : undefined,
+    },
+    { kind: "pageBreak" },
+    {
+      ...paragraph,
+      runs: runsAfter,
+      constructs: constructsAfter.length > 0 ? constructsAfter : undefined,
+    },
+  ];
+}
+
+// The one entry point collectParagraph calls: reads a w:p as its own real ContentBlock array, honouring a mid-run page-type w:br by splitting into [before, pageBreak, after] rather than folding it into one paragraph's own literal '\n' text.
+function readParagraphBlocks(
+  paragraph: XmlElement,
+  ctx: DocxReadContext,
+  carryDeletions: boolean,
+): ContentBlock[] {
+  const { paragraph: block, pageBreak } = readParagraph(
+    paragraph,
+    ctx,
+    carryDeletions,
+  );
+  return pageBreak === undefined
+    ? [block]
+    : splitParagraphAtPageBreak(block, pageBreak);
 }
 
 // WordprocessingML's own ST_Border enumeration has several dozen decorative line styles (wave, threeDEmboss, dashDotStroked, ...) that ContentBorder's four-member ContentStrokeStyle can't distinguish individually -- each maps to whichever of solid/dashed/dotted/double it visually resembles most closely, the same "narrow to the closest matching value" convention readAlignment (styles.ts) already applies to w:jc's own both/distribute -> justify. Anything unmapped defaults to 'solid' rather than being dropped, since a border with an unrecognised style is still visually a border.
@@ -1225,9 +1358,9 @@ function collectParagraph(
   if (hasPageBreakBefore(paragraph)) {
     state.blocks.push({ kind: "pageBreak" });
   }
-  // The pageBreak block above sits outside every extent recorded here: it is the paragraph's own w:pageBreakBefore rendered as a preceding block, not part of any construct that brackets the paragraph.
+  // The pageBreak block above sits outside every extent recorded here: it is the paragraph's own w:pageBreakBefore rendered as a preceding block, not part of any construct that brackets the paragraph. A mid-run page-type w:br produces its own pageBreak block too, spliced between the two ContentParagraph halves readParagraphBlocks returns for it -- see that function's own doc comment.
   const paragraphIndex = state.blocks.length;
-  state.blocks.push(readParagraph(paragraph, ctx, paragraphDeleted));
+  state.blocks.push(...readParagraphBlocks(paragraph, ctx, paragraphDeleted));
   state.blocks.push(
     ...readParagraphLiftedBlocks(paragraph, ctx, paragraphDeleted),
   );
