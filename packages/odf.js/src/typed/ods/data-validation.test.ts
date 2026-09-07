@@ -126,6 +126,24 @@ describe("readContentValidationDefinitions", () => {
     });
   });
 
+  it("decodes an XML-escaped comparison operator in table:condition (this package parses with processEntities:false, so a producer that escapes '>' as '&gt;' -- confirmed real behaviour, see conditional-format.ts's own sibling fix -- must be undone before the mini-language parser ever sees the string)", () => {
+    const definitions = readContentValidationDefinitions(
+      contentValidationsElement(
+        el("table:content-validation", {
+          "table:name": "val1",
+          "table:condition":
+            "of:cell-content-is-whole-number() and cell-content()&gt;=1",
+        }),
+      ),
+    );
+    expect(definitions.get("val1")).toEqual({
+      type: "whole",
+      operator: "greaterThanOrEqual",
+      formula1: "1",
+      allowBlank: true,
+    });
+  });
+
   it("allow-empty-cell defaults to true when absent, ODF's own default", () => {
     const definitions = readContentValidationDefinitions(
       contentValidationsElement(

@@ -6,6 +6,7 @@ import type {
 } from "document-schema.js";
 import type { XmlElement } from "../../model/node";
 import { attrValue, childrenWithTag, findChildElement } from "../../xml/query";
+import { decodeXmlText } from "../../xml/entities";
 import { takeExpression } from "../shared/expression";
 import { decodeOdfText } from "../shared/text";
 
@@ -251,7 +252,7 @@ function readContentValidation(
   const parsed =
     condition === undefined
       ? undefined
-      : parseContentValidationCondition(condition);
+      : parseContentValidationCondition(decodeXmlText(condition));
   const rule: ParsedContentValidation = {
     type: parsed?.type ?? "custom",
   };
