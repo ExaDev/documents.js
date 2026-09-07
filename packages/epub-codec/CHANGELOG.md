@@ -1,3 +1,14 @@
+## [1.2.8](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.7...epub-codec%401.2.8) (2026-09-07)
+
+### Tests
+
+* **epub-codec:** pin the corrected footnote-after-list output ([5c9fc92](https://github.com/ExaDev/documents.js/commit/5c9fc925cb12469f697824a1a030ce7bead8b12a)), closes [ExaDev/document-schema.js#1022](https://github.com/ExaDev/document-schema.js/issues/1022)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^7.0.0
+
 ## [1.2.7](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.6...epub-codec%401.2.7) (2026-09-07)
 
 
