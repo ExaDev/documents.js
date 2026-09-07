@@ -774,15 +774,18 @@ function constructCorpus(): readonly CorpusEntry[] {
       CONSTRUCT_END,
       constructParagraph("after the control, still under the heading"),
     ]),
-    constructSectionEntry("construct nested inside a list group", [
-      constructParagraph("item one", { listLevel: 0 }),
-      constructStart({ kind: "anchor", anchorType: "bookmark", name: "b1" }),
-      constructParagraph("in a bookmark", { indentLeftPt: 24 }),
-      constructParagraph("still in it", { indentLeftPt: 24 }),
-      CONSTRUCT_END,
-      // A deeper item after the region: the round trip only reproduces it in place if stepping through the construct left the list stack alone.
-      constructParagraph("item two, nested", { listLevel: 1 }),
-    ]),
+    constructSectionEntry(
+      "construct at the tail of a list, followed by a further list item",
+      [
+        constructParagraph("item one", { listLevel: 0 }),
+        constructStart({ kind: "anchor", anchorType: "bookmark", name: "b1" }),
+        constructParagraph("in a bookmark", { indentLeftPt: 24 }),
+        constructParagraph("still in it", { indentLeftPt: 24 }),
+        CONSTRUCT_END,
+        // ExaDev/document-schema.js#1022: constructStart closes the list scope the same way a plain paragraph would, so decompose does NOT nest the bookmark group inside "item one", and this item does not nest under it either -- both land as section-root siblings, "item two" reopening its own list nesting from scratch. The round trip still reproduces every block in place regardless: list.level rides the paragraph object itself, not the tree's own nesting depth, so flatten's document-order walk restores it identically either way.
+        constructParagraph("item two, nested", { listLevel: 1 }),
+      ],
+    ),
     constructSectionEntry(
       "two constructs of different kinds nested inside each other",
       [
