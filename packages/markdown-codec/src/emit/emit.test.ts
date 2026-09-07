@@ -3007,7 +3007,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     ).toBeGreaterThanOrEqual(2);
   });
 
-  it("TABLE_CELL_MULTI_PARAGRAPH_JOINED fires for a cell with more than one paragraph, and the text space-joins", () => {
+  it("TABLE_CELL_MULTI_PARAGRAPH_JOINED fires for a cell with more than one paragraph, and the text joins with a literal <br>", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
@@ -3027,9 +3027,123 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
       ],
     };
     const markdown = emitMarkdown(doc([table]), { sink: collector.sink });
-    expect(markdown).toContain("one two");
+    expect(markdown).toContain("one<br>two");
     expect(
       collector.has(MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED),
     ).toBe(true);
+  });
+
+  it("TABLE_CELL_IMAGE_DEGRADED fires for an image-kind cell block, which emits inline rather than being dropped", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "image",
+                  format: "png",
+                  base64: "aGVsbG8=",
+                  widthPt: 10,
+                  heightPt: 10,
+                  altText: "a cell image",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const markdown = emitMarkdown(doc([table]), { sink: collector.sink });
+    expect(markdown).toContain(
+      "![a cell image](data:image/png;base64,aGVsbG8=)",
+    );
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_CELL_IMAGE_DEGRADED),
+    ).toBe(true);
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED),
+    ).toBe(false);
+  });
+
+  it("round-trips a table cell image as a run carrying the alt text with the image's own data as that run's hyperlink, the same shape a nested image inside emphasis/a link already degrades to", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "image",
+                  format: "png",
+                  base64: "aGVsbG8=",
+                  widthPt: 10,
+                  heightPt: 10,
+                  altText: "a cell image",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const markdown = emitMarkdown(doc([table]));
+    const reread = lowerMarkdown(markdown);
+    if (reread.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const rereadTable = reread.sections[0]?.blocks[0];
+    if (rereadTable?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    const cell = rereadTable.rows[1]?.cells[0];
+    const run =
+      cell?.blocks[0]?.kind === "paragraph"
+        ? cell.blocks[0].runs[0]
+        : undefined;
+    expect(run?.text).toBe("a cell image");
+    expect(run?.hyperlink).toBe("data:image/png;base64,aGVsbG8=");
+  });
+
+  it("round-trips a <br>-joined multi-paragraph cell as one run whose text contains a literal <br>, quarantined as raw-HTML residue rather than corrupting the surrounding text", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        { cells: [{ blocks: [{ kind: "paragraph", runs: [{ text: "h" }] }] }] },
+        {
+          cells: [
+            {
+              blocks: [
+                { kind: "paragraph", runs: [{ text: "one" }] },
+                { kind: "paragraph", runs: [{ text: "two" }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const markdown = emitMarkdown(doc([table]));
+    const reread = lowerMarkdown(markdown);
+    if (reread.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const rereadTable = reread.sections[0]?.blocks[0];
+    if (rereadTable?.kind !== "table") {
+      throw new Error("expected a table block");
+    }
+    const cell = rereadTable.rows[1]?.cells[0];
+    const text =
+      cell?.blocks[0]?.kind === "paragraph"
+        ? cell.blocks[0].runs.map((run) => run.text).join("")
+        : undefined;
+    expect(text).toBe("one<br>two");
   });
 });

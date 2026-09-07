@@ -99,7 +99,6 @@ interface EmitContext extends TableEmitContext {
   readonly codeFenceChar: string;
   readonly thematicBreakChar: string;
   readonly headingStyle: MarkdownHeadingStyle;
-  readonly embedImages: boolean;
   readonly orderedCounters: Map<string, number>;
   readonly reportedFallbackNumIds: Set<string>;
   // One-shot latch for the no-numId-at-all fallback diagnostic -- reportedFallbackNumIds cannot key an absent numId without inventing a sentinel string, so this is a mutable flag where its sibling is a mutable-by-reference collection.
