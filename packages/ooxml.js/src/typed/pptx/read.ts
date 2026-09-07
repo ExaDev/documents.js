@@ -7,6 +7,8 @@ import type {
   ContentBlock,
   ContentBorder,
   ContentCellBorders,
+  ContentCellFill,
+  ContentCellPatternType,
   ContentEmbeddedObjectBlock,
   ContentImageBlock,
   ContentParagraph,
@@ -629,6 +631,79 @@ function readTableCellBorders(
   return borders;
 }
 
+// DrawingML's a:pattFill preset pattern vocabulary (ECMA-376 Part 1 20.1.8.36, ST_PresetPatternVal) has 54 members -- directional hatches (horz/vert/diag and their light/dark/narrow/dashed variants), checks, grids, bricks, diamonds, and pictorial fills (sphere/wave/weave/divot/shingle/plaid/zigZag/confetti among them) -- but ContentCellPatternTypeSchema is deliberately closed to exactly two other vocabularies (WordprocessingML's ST_Shd and SpreadsheetML's ST_PatternType, per that schema's own comment in document-schema.js), which the two share only their dozen percentage-density members. Only that overlap maps; every other preset resolves to no background at all, matching the existing "unrecognised token -> no fill" convention this reader already applies to an a:solidFill it cannot resolve to a Color.
+const DRAWINGML_PATTERN_PERCENT_MAP: ReadonlyMap<
+  string,
+  ContentCellPatternType
+> = new Map([
+  ["pct5", "percent5"],
+  ["pct10", "percent10"],
+  ["pct20", "percent20"],
+  ["pct25", "percent25"],
+  ["pct30", "percent30"],
+  ["pct40", "percent40"],
+  ["pct50", "percent50"],
+  ["pct60", "percent60"],
+  ["pct70", "percent70"],
+  ["pct75", "percent75"],
+  ["pct80", "percent80"],
+  ["pct90", "percent90"],
+]);
+
+// A DrawingML a:pattFill's own two-colour density fill (ECMA-376 20.1.8.36 CT_PatternFillProperties): @prst names the pattern, and a:fgClr/a:bgClr each wrap a colour choice the same way a:solidFill itself does, so both resolve through the same scheme-colour-aware readSolidFillColor a cell's own solid background and border colours already use. Returns undefined for a preset outside DRAWINGML_PATTERN_PERCENT_MAP's mapped subset -- ContentCellFillSchema's 'pattern' variant needs a real patternType to be worth constructing at all, and there is no member here to fall back to.
+function readPatternFill(
+  pattFillEl: XmlElement,
+  context: SlideInheritanceContext,
+): ContentCellFill | undefined {
+  const patternType = DRAWINGML_PATTERN_PERCENT_MAP.get(
+    attr(pattFillEl, "prst") ?? "",
+  );
+  if (patternType === undefined) {
+    return undefined;
+  }
+  const fgClr = childrenWithTag(pattFillEl, "a:fgClr")[0];
+  const bgClr = childrenWithTag(pattFillEl, "a:bgClr")[0];
+  const foregroundColor = readSolidFillColor(
+    fgClr,
+    context.colorMap,
+    context.theme,
+  );
+  const backgroundColor = readSolidFillColor(
+    bgClr,
+    context.colorMap,
+    context.theme,
+  );
+  return {
+    kind: "pattern",
+    patternType,
+    ...(foregroundColor === undefined ? {} : { foregroundColor }),
+    ...(backgroundColor === undefined ? {} : { backgroundColor }),
+  };
+}
+
+// A cell's own background fill: a:solidFill first (the common case, and the only one #951 originally wired up), falling back to a:pattFill so a genuine two-colour pattern (ExaDev/documents.js#1024) reads as a real 'pattern' ContentCellFill rather than as no background at all. The two are mutually exclusive DrawingML fill choices, so checking solidFill's presence to decide which to read is safe.
+function readTableCellFill(
+  tcPr: XmlElement | undefined,
+  context: SlideInheritanceContext,
+): ContentCellFill | undefined {
+  if (tcPr === undefined) {
+    return undefined;
+  }
+  const solidFill = childrenWithTag(tcPr, "a:solidFill")[0];
+  if (solidFill !== undefined) {
+    const color = readSolidFillColor(
+      solidFill,
+      context.colorMap,
+      context.theme,
+    );
+    return color === undefined ? undefined : { kind: "solid", color };
+  }
+  const pattFill = childrenWithTag(tcPr, "a:pattFill")[0];
+  return pattFill === undefined
+    ? undefined
+    : readPatternFill(pattFill, context);
+}
+
 function readTableCell(
   tc: XmlElement,
   context: SlideInheritanceContext,
@@ -641,13 +716,7 @@ function readTableCell(
     return { blocks: [] };
   }
   const tcPr = childrenWithTag(tc, "a:tcPr")[0];
-  const solidFill =
-    tcPr === undefined ? undefined : childrenWithTag(tcPr, "a:solidFill")[0];
-  const backgroundColor = readSolidFillColor(
-    solidFill,
-    context.colorMap,
-    context.theme,
-  );
+  const background = readTableCellFill(tcPr, context);
   const borders = readTableCellBorders(tcPr, context);
   const txBody = childrenWithTag(tc, "a:txBody")[0];
   const gridSpan = attr(tc, "gridSpan");
@@ -656,10 +725,7 @@ function readTableCell(
     blocks: textBodyParagraphs(txBody, undefined, context, slideRels),
     colSpan: gridSpan === undefined ? undefined : Number(gridSpan),
     rowSpan: rowSpan === undefined ? undefined : Number(rowSpan),
-    background:
-      backgroundColor === undefined
-        ? undefined
-        : { kind: "solid", color: backgroundColor },
+    background,
     borders,
   };
 }
