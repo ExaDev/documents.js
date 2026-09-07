@@ -11,6 +11,7 @@ import type {
   ContentSheet,
   ContentSheetCell,
   ContentSheetColumn,
+  ContentSheetDataValidation,
   ContentSheetPrintSettings,
   ContentSheetRow,
   DocumentTree,
@@ -47,6 +48,7 @@ import {
   type RawPrintSettings,
   type RawSheet,
 } from "./workbook/sheet";
+import type { RawDataValidation } from "./workbook/data-validation";
 import { inchesToPoints } from "./units";
 
 // The join between the BIFF8 record readers and document-schema.js's own spreadsheet vocabulary.
@@ -226,7 +228,14 @@ function readSheet(
   };
   const raw: RawSheet =
     substream === undefined
-      ? { cells: [], rows: [], columns: [], merges: [], print: emptyPrint }
+      ? {
+          cells: [],
+          rows: [],
+          columns: [],
+          merges: [],
+          dataValidations: [],
+          print: emptyPrint,
+        }
       : readSheetRecords(substream.records, globals.sharedStrings, {
           sheets: globals.sheets,
           sheetRanges: globals.sheetRanges,
@@ -237,6 +246,7 @@ function readSheet(
       : readSheetComments(substream.records);
   const cells = mapCells(raw, globals);
   applyCellComments(comments, cells);
+  const dataValidations = mapDataValidations(raw.dataValidations);
   return {
     name: entry.name,
     cells,
@@ -248,7 +258,41 @@ function readSheet(
       raw.print,
       globals.printNames.get(sheetIndex),
     ),
+    ...(dataValidations.length > 0 ? { dataValidations } : {}),
   };
+}
+
+// ContentSheetDataValidationSchema's own optional fields all follow the same "true/present means state it, false/empty means omit" convention ooxml.js's own xlsx dataValidation reader established (ExaDev/documents.js#758) -- errorStyle additionally omits its default value ('stop') outright, matching that schema field's own "absent means stop" comment.
+function mapDataValidations(
+  raw: readonly RawDataValidation[],
+): ContentSheetDataValidation[] {
+  return raw.map((validation) => ({
+    ranges: validation.ranges,
+    type: validation.type,
+    ...(validation.operator === undefined
+      ? {}
+      : { operator: validation.operator }),
+    ...(validation.formula1 === undefined
+      ? {}
+      : { formula1: validation.formula1 }),
+    ...(validation.formula2 === undefined
+      ? {}
+      : { formula2: validation.formula2 }),
+    ...(validation.allowBlank ? { allowBlank: true } : {}),
+    ...(validation.showInputMessage ? { showInputMessage: true } : {}),
+    ...(validation.promptTitle.length > 0
+      ? { promptTitle: validation.promptTitle }
+      : {}),
+    ...(validation.prompt.length > 0 ? { prompt: validation.prompt } : {}),
+    ...(validation.showErrorMessage ? { showErrorMessage: true } : {}),
+    ...(validation.errorStyle === "stop"
+      ? {}
+      : { errorStyle: validation.errorStyle }),
+    ...(validation.errorTitle.length > 0
+      ? { errorTitle: validation.errorTitle }
+      : {}),
+    ...(validation.error.length > 0 ? { error: validation.error } : {}),
+  }));
 }
 
 function mapRows(raw: RawSheet): ContentSheetRow[] {

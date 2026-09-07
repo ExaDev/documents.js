@@ -7,6 +7,7 @@ import {
   RECORD_BOTTOMMARGIN,
   RECORD_COLINFO,
   RECORD_DIMENSIONS,
+  RECORD_DV,
   RECORD_FORMULA,
   RECORD_HORIZONTALPAGEBREAKS,
   RECORD_LABEL,
@@ -992,6 +993,52 @@ describe("readSheetRecords grid geometry", () => {
     expect(sheet.merges).toEqual([
       { startRow: 0, endRow: 1, startColumn: 0, endColumn: 2 },
       { startRow: 5, endRow: 5, startColumn: 3, endColumn: 4 },
+    ]);
+  });
+
+  it("reads a Dv record into dataValidations (data-validation.test.ts covers the field mapping itself in full; this proves the record dispatch)", () => {
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_DV, [
+          ...u32(0x1), // valType 1 (whole), typOperator 0 (between), no flags
+          ...xlUnicodeString(""),
+          ...xlUnicodeString(""),
+          ...xlUnicodeString(""),
+          ...xlUnicodeString(""),
+          ...u16(3), // formula1 cce
+          ...u16(0),
+          0x1e,
+          ...u16(1), // PtgInt 1
+          ...u16(3), // formula2 cce
+          ...u16(0),
+          0x1e,
+          ...u16(10), // PtgInt 10
+          ...u16(1), // one range
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+      ),
+      [],
+    );
+
+    expect(sheet.dataValidations).toEqual([
+      {
+        type: "whole",
+        operator: "between",
+        formula1: "1",
+        formula2: "10",
+        allowBlank: false,
+        showInputMessage: false,
+        showErrorMessage: false,
+        errorStyle: "stop",
+        promptTitle: "",
+        errorTitle: "",
+        prompt: "",
+        error: "",
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+      },
     ]);
   });
 
