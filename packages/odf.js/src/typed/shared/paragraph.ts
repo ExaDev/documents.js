@@ -405,6 +405,17 @@ function runFromText(text: string, properties: StyleProperties): ContentRun {
   };
 }
 
+// ODF's predefined "Preformatted Text" paragraph style, spelled the way LibreOffice actually writes it: a predefined common-style name with a space in its display name is serialised with the space encoded as "_20_", never a literal space or underscore -- confirmed against this package's own odt fixtures, whose styles.xml carries "Heading_20_1" for "Heading 1", "Text_20_body" for "Text body", and "Table_20_Contents" for "Table Contents", all the identical convention. "Preformatted_Text" (the spelling ExaDev/documents.js#1020 guessed at) is not real ODF output.
+const PREFORMATTED_STYLE_NAME = "Preformatted_20_Text";
+
+// A bare marker element for PREFORMATTED_STYLE_NAME: no properties of its own, matching this package's own established minimal-infra-style convention (typed/odt/write.ts's sectionBreakStyleElement carries nothing but the one attribute it exists to trigger) -- visual formatting for a preformatted paragraph still comes entirely from its own runs and its own interned automatic style, never from this marker's own defaults. Exists purely so resolveStyleElementChain's by-name lookup succeeds when a written paragraph's own style (or an ancestor of it) names PREFORMATTED_STYLE_NAME as its parent -- without a real element here, the chain walk stops at the missing name and readOdfParagraph's own preformatted check never sees it. A caller of writeOdfParagraph is responsible for pushing this into its own document's office:styles exactly once (idempotently or not -- ODF tolerates a style:name appearing only once per family regardless, so a caller that already knows it writes at most once per document, as typed/odt/write.ts's own top-level setup does, needs no existence check of its own).
+export function preformattedStyleElement(): XmlElement {
+  return el("style:style", {
+    "style:name": PREFORMATTED_STYLE_NAME,
+    "style:family": "paragraph",
+  });
+}
+
 // Reads one text:p element (the caller is responsible for confirming it IS a text:p before calling -- this module has no opinion on where in a document's tree that element sits). Paragraph-level fields (alignment, spacing, indents) come only from the paragraph's OWN resolved 'paragraph'-family properties, never from a span: a text:span's style-name always resolves against the 'text' family, which style.ts/registry.ts's own STYLE_FAMILIES never lets carry paragraph-level properties in practice. The optional context supplies the document-level facts a paragraph cannot know on its own -- the tracked-change regions its change markers resolve against, and the out-array its block-edge marker halves are reported to for the reader that owns the block flow to pair.
 export function readOdfParagraph(
   pElement: XmlElement,
@@ -417,6 +428,15 @@ export function readOdfParagraph(
     "paragraph",
     pkg,
   ).properties;
+  const styleChain = resolveStyleElementChain(
+    styleName,
+    "paragraph",
+    pkg,
+  ).elements;
+  // document-schema.js's own cross-format "whitespace inside this paragraph's own runs is significant" signal (ExaDev/documents.js#1020): true when the paragraph's own style, or any ancestor reached via style:parent-style-name, IS PREFORMATTED_STYLE_NAME. Checked against the whole resolved chain rather than only the paragraph's own direct styleName, since real content pasted as preformatted text typically references an automatic style (style:name="P3", say) whose style:parent-style-name resolves to the predefined style rather than naming it directly.
+  const isPreformatted = styleChain.some(
+    (style) => attrValue(style, "style:name") === PREFORMATTED_STYLE_NAME,
+  );
 
   const runs: ContentRun[] = [];
   const walk: RunWalkState = {
@@ -436,11 +456,7 @@ export function readOdfParagraph(
     const residueElements: XmlElement[] = [];
     if (styleName !== undefined) {
       residueElements.push(
-        ...resolveStyleElementChain(
-          styleName,
-          "paragraph",
-          pkg,
-        ).elements.flatMap((style) => [
+        ...styleChain.flatMap((style) => [
           ...childrenWithTag(style, "style:paragraph-properties").filter(
             (properties) => parseParagraphProperties(properties).hasUnknown,
           ),
@@ -494,6 +510,7 @@ export function readOdfParagraph(
     ...(source !== undefined ? { source } : {}),
     ...(walk.extents.length > 0 ? { constructs: walk.extents } : {}),
     styleId: styleName,
+    ...(isPreformatted ? { preformatted: true } : {}),
     alignment: paragraphProperties.alignment,
     spacingBeforePt: paragraphProperties.spacingBeforePt,
     spacingAfterPt: paragraphProperties.spacingAfterPt,
@@ -745,18 +762,20 @@ export function writeOdfParagraph(
 ): XmlElement {
   const properties = odfParagraphProperties(paragraph);
   const attributes: Record<string, string> = {};
+  // A preformatted paragraph from a foreign producer (markdown-codec's fenced code block, an EPUB <pre>, ...) has no ODF attribute of its own to carry the fact forward -- the only way readOdfParagraph recognises it on the way back in is by finding PREFORMATTED_STYLE_NAME somewhere in the resolved style chain, so it is referenced here as this paragraph's own parent style, exactly like any other parentStyleName request. options.parentStyleName -- the odt writer's own page-style-switch mechanism, whose style:master-page-name is reachable only through one specific shared, per-section named style -- wins when both are requested on the identical paragraph: ODF's style:parent-style-name is single-valued, so the two facts cannot both be encoded through this one slot at once, and losing a section's own page geometry is the more damaging loss of the two. That collision is narrow (only the very FIRST paragraph of a second-or-later section can ever carry a page-style-switch request at all) and is a documented, non-silent trade-off, not a bug -- every other preformatted paragraph in the document still round-trips normally. Actually resolving PREFORMATTED_STYLE_NAME back on read depends on that style existing as a real element in the target part's own office:styles -- see preformattedStyleElement below; a caller of this shared function is responsible for ensuring one is present exactly once wherever it mints its own document-level named styles.
+  const parentStyleName =
+    options.parentStyleName ??
+    (paragraph.preformatted === true ? PREFORMATTED_STYLE_NAME : undefined);
   if (Object.keys(properties).length > 0) {
     attributes["text:style-name"] = encodeXmlText(
       registry.intern({
         properties,
         family: "paragraph",
-        ...(options.parentStyleName === undefined
-          ? {}
-          : { parentStyleName: options.parentStyleName }),
+        ...(parentStyleName === undefined ? {} : { parentStyleName }),
       }),
     );
-  } else if (options.parentStyleName !== undefined) {
-    attributes["text:style-name"] = encodeXmlText(options.parentStyleName);
+  } else if (parentStyleName !== undefined) {
+    attributes["text:style-name"] = encodeXmlText(parentStyleName);
   }
   if (paragraph.headingLevel !== undefined) {
     attributes["text:outline-level"] = String(paragraph.headingLevel);

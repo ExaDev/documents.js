@@ -783,8 +783,11 @@ describe("writeOdtContent: page geometry and section boundaries", () => {
   // The placement this test pins was verified against LibreOffice itself, not against this package's own reader: a flat-ODF document carrying style:master-page-name on style:style renders its second page at the second master page's own size and survives a re-save verbatim, while the identical document carrying it on style:paragraph-properties renders one page and has the attribute stripped outright. Writing it in the second position would round-trip perfectly through odf.js and open as a single-page document everywhere else.
   it("states a section's page-style switch as style:master-page-name on the style:style element itself", () => {
     const named = findChildElement(stylesRoot.children, "office:styles");
+    // Preformatted_20_Text is minted unconditionally, once per document (ExaDev/documents.js#1020) -- it precedes MP2Start here only because it is pushed first, not because ordering is itself load-bearing for either style.
     expect(buildXml(childrenWithTag(named!, "style:style"))).toBe(
-      '<style:style style:name="MP2Start" style:family="paragraph"' +
+      '<style:style style:name="Preformatted_20_Text"' +
+        ' style:family="paragraph"></style:style>' +
+        '<style:style style:name="MP2Start" style:family="paragraph"' +
         ' style:master-page-name="MP2"></style:style>',
     );
   });

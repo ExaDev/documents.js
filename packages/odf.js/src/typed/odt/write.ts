@@ -26,7 +26,10 @@ import { encodeXmlText } from "../../xml/entities";
 import { formatOdfLength } from "../shared/units";
 import { imageExtension } from "../shared/image";
 import { writeOdfMetadata } from "../shared/metadata";
-import { writeOdfParagraph } from "../shared/paragraph";
+import {
+  preformattedStyleElement,
+  writeOdfParagraph,
+} from "../shared/paragraph";
 import { writeOdfTable } from "../shared/table";
 import {
   canonicalImage,
@@ -498,6 +501,8 @@ export function writeOdtContent(
     nextListStyle: 1,
     listStyleByKind: new Map(),
   };
+  // Minted unconditionally, once per document, rather than only when a preformatted paragraph is actually found: a document-wide pre-scan just to decide whether to skip one small, otherwise-inert element is more machinery than the element itself costs. writeOdfParagraph references this style's own name for ANY paragraph.preformatted paragraph it writes -- body text here, and (via typed/shared/table.ts's own writeOdfParagraph calls, sharing this exact registry/part) a document table cell's paragraphs too -- so it must already exist by the time the first such paragraph is written.
+  state.stylesNamedStyles.children.push(preformattedStyleElement());
 
   const planned = planDocument(document.sections);
   for (const [index, section] of planned.entries()) {
