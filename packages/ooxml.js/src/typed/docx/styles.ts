@@ -7,6 +7,7 @@ import {
   twipsToPt,
 } from "../shared/units";
 import type { DrawingTheme } from "../shared/drawingml";
+import { clamp01, hslToRgb, rgbToHsl } from "../shared/color";
 import { attr, childrenWithTag, elementsWithTag } from "../util";
 
 // The WordprocessingML style cascade: docDefaults -> the default paragraph/character style -> a paragraph or run's own named style resolved through its w:basedOn chain (root-first, cycle-guarded) -> the paragraph's own direct w:pPr/w:rPr. Skipping the paragraph-mark run properties (w:pPr/w:rPr, a run-level baseline every run in the paragraph inherits before its own character style/direct formatting) is exactly why naive converters render headings at body size -- ECMA-376 defines it as part of CT_PPr precisely so a paragraph style like "Heading1" can set a heading-sized default for runs that don't override it themselves. Ported from documents.js's src/ooxml/docx/styles.ts.
@@ -107,7 +108,33 @@ const THEME_COLOR_SLOT: ReadonlyMap<string, string> = new Map([
   ["text2", "dk2"],
 ]);
 
-// w:color/@w:val is a 6-hex-digit RGB string or the literal "auto" (the automatic/theme-inherited colour, almost always rendering as black-on-white in practice). "auto" defers to a lower-priority layer rather than asserting black outright, since a lower layer (or the final default) may already resolve to the right colour. w:color/@w:themeColor references a theme colour scheme slot instead of a literal value (see THEME_COLOR_SLOT); when present it takes precedence over w:val, per ECMA-376 -- w:val in that case is merely Word's own cached fallback for a consumer that can't resolve the theme, so it's only consulted here if the theme reference itself fails to resolve (an unknown themeColor value, or a theme missing that slot entirely). w:themeShade/w:themeTint (a further shade/tint refinement of the resolved theme colour) are deliberately not applied -- a real, tracked scope narrowing, not a silent approximation: WordprocessingML encodes these as a raw 00-FF byte fraction, a materially different convention from DrawingML's own thousandths-of-a-percent a:shade/a:tint (shared/color.ts's applyColorTransforms), so reusing that module's algorithm without first verifying WordprocessingML's own byte-domain formula against real Word-rendered output would risk silently miscolouring text; the base theme colour itself still resolves correctly, only this secondary refinement is skipped.
+// w:themeShade/w:themeTint (ST_UcharHexNumber, a two-hex-digit 0x00-0xFF byte) refine a resolved theme colour's own lightness -- WordprocessingML's own convention, genuinely different from DrawingML's thousandths-of-a-percent a:shade/a:tint (shared/color.ts's applyColorTransforms, which transforms gamma-linearised R/G/B channels independently, verified against Apache POI's DrawPaint.java): this one operates purely on the HSL lightness channel, hue and saturation untouched, verified against LibreOffice's own writerfilter/dmapper implementation (sw/source/writerfilter/dmapper/DomainMapper.cxx's ThemeColorHandler consumer feeds (255-byte)*10000/255 as a 100ths-of-a-percent magnitude into tools/source/generic/color.cxx's Color::ApplyTintOrShade) -- a different reference implementation from the DrawingML transform above because the two are genuinely different XML vocabularies sharing a name, not because of any inconsistency within this package. That 100ths-of-a-percent magnitude, converted back to a plain [0,1] factor, algebraically simplifies to exactly byteValue/255: tint blends lightness toward white by (1-factor), shade scales it toward black by factor -- byte 0xFF means "no change" either way, byte 0x00 means the theme colour's own hue/saturation survive but lightness goes fully to white (tint) or fully to black (shade).
+function applyWordThemeShadeOrTint(
+  color: Color,
+  kind: "shade" | "tint",
+  byteValue: number,
+): Color {
+  const factor = clamp01(byteValue / 255);
+  const hsl = rgbToHsl(color);
+  const l = clamp01(
+    kind === "tint" ? hsl.l * factor + (1 - factor) : hsl.l * factor,
+  );
+  return hslToRgb({ ...hsl, l });
+}
+
+// ST_UcharHexNumber: exactly two hexadecimal digits. Anything else (absent, malformed, out of range) is not a value this reader trusts enough to shade/tint a colour with.
+function readThemeShadeOrTintByte(
+  colorEl: XmlElement,
+  attrName: "w:themeShade" | "w:themeTint",
+): number | undefined {
+  const raw = attr(colorEl, attrName);
+  if (raw === undefined || !/^[0-9a-fA-F]{2}$/.test(raw)) {
+    return undefined;
+  }
+  return Number.parseInt(raw, 16);
+}
+
+// w:color/@w:val is a 6-hex-digit RGB string or the literal "auto" (the automatic/theme-inherited colour, almost always rendering as black-on-white in practice). "auto" defers to a lower-priority layer rather than asserting black outright, since a lower layer (or the final default) may already resolve to the right colour. w:color/@w:themeColor references a theme colour scheme slot instead of a literal value (see THEME_COLOR_SLOT); when present it takes precedence over w:val, per ECMA-376 -- w:val in that case is merely Word's own cached fallback for a consumer that can't resolve the theme, so it's only consulted here if the theme reference itself fails to resolve (an unknown themeColor value, or a theme missing that slot entirely). Once a theme colour resolves, w:themeTint is applied before w:themeShade if a producer states both (LibreOffice's own writerfilter applies them in that same order) -- a case ECMA-376 does not really expect in practice, since the two are conceptually exclusive refinements of the same base colour.
 function readRunColor(
   colorEl: XmlElement | undefined,
   theme: DrawingTheme,
@@ -121,7 +148,16 @@ function readRunColor(
     const resolved =
       slot === undefined ? undefined : theme.colorScheme.get(slot);
     if (resolved !== undefined) {
-      return resolved;
+      let shaded = resolved;
+      const tint = readThemeShadeOrTintByte(colorEl, "w:themeTint");
+      if (tint !== undefined) {
+        shaded = applyWordThemeShadeOrTint(shaded, "tint", tint);
+      }
+      const shade = readThemeShadeOrTintByte(colorEl, "w:themeShade");
+      if (shade !== undefined) {
+        shaded = applyWordThemeShadeOrTint(shaded, "shade", shade);
+      }
+      return shaded;
     }
   }
   const val = attr(colorEl, "w:val");
