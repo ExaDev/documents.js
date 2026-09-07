@@ -12,9 +12,46 @@
 import type {
   Color,
   ContentBorder,
+  ContentCellFill,
+  ContentCellPatternType,
   ContentStrokeStyle,
 } from "document-schema.js";
+import { unrecognizedFillKind } from "document-schema.js";
 import { twipsToPoints, pointsToTwips } from "./units";
+
+// Every percentN member ContentCellPatternTypeSchema defines, ascending -- the discrete steps RTF's own continuous \clshdngN percentage (0-10000, i.e. 0-100% in hundredths) snaps onto, since the schema states a two-colour pattern fill only as one of these named densities, never an arbitrary float. A real producer overwhelmingly writes one of these exact values already (5/10/25/50/75/... are the common Word UI presets), so the snap is exact for the common case and a defensible nearest-match for the rare exact value this vocabulary has no member for.
+const PERCENT_STEPS: readonly [number, ContentCellPatternType][] = [
+  [5, "percent5"],
+  [10, "percent10"],
+  [12, "percent12"],
+  [15, "percent15"],
+  [20, "percent20"],
+  [25, "percent25"],
+  [30, "percent30"],
+  [35, "percent35"],
+  [37, "percent37"],
+  [40, "percent40"],
+  [45, "percent45"],
+  [50, "percent50"],
+  [55, "percent55"],
+  [60, "percent60"],
+  [62, "percent62"],
+  [65, "percent65"],
+  [70, "percent70"],
+  [75, "percent75"],
+  [80, "percent80"],
+  [85, "percent85"],
+  [87, "percent87"],
+  [90, "percent90"],
+  [95, "percent95"],
+];
+
+// The nearest percentN member to an arbitrary 0-100 shading percentage.
+function nearestPercentType(percent: number): ContentCellPatternType {
+  return PERCENT_STEPS.reduce((best, step) =>
+    Math.abs(step[0] - percent) < Math.abs(best[0] - percent) ? step : best,
+  )[1];
+}
 
 export type CellBorderSide = "top" | "left" | "bottom" | "right";
 
@@ -83,6 +120,10 @@ export interface PendingCell {
   side: CellBorderSide | undefined;
   // \clcbpatN -- "N is the background color of the background pattern", an index into the colour table.
   backgroundIndex: number | undefined;
+  // \clcfpatN -- the pattern's own foreground colour index, the other half of the two-colour pattern \clshdngN's percentage blends against.
+  foregroundIndex: number | undefined;
+  // \clshdngN -- the shading percentage, in hundredths of a percent (0-10000 per the control word's own definition), 0-100 once divided down. Undefined (not stated at all) means 0, matching the same "clcbpat alone is a flat background colour" shape every RTF cell without genuine two-colour shading already writes.
+  shadingPercent: number | undefined;
   // "\clvmgf The first cell in a range of table cells to be vertically merged" / "\clvmrg Contents of the table cell are vertically merged with those of the preceding cell."
   verticalMergeFirst: boolean;
   verticalMergeContinuation: boolean;
@@ -96,6 +137,8 @@ export function newPendingCell(): PendingCell {
     borders: {},
     side: undefined,
     backgroundIndex: undefined,
+    foregroundIndex: undefined,
+    shadingPercent: undefined,
     verticalMergeFirst: false,
     verticalMergeContinuation: false,
     horizontalMergeFirst: false,
@@ -135,6 +178,13 @@ export function applyCellDefinitionControlWord(
       return true;
     case "clcbpat":
       cell.backgroundIndex = param;
+      return true;
+    case "clcfpat":
+      cell.foregroundIndex = param;
+      return true;
+    case "clshdng":
+      // "N is defined in hundredths of a percent, from 0 to 10000" -- divided down to the same 0-100 scale nearestPercentType and resolveCellFill both work in.
+      cell.shadingPercent = param === undefined ? undefined : param / 100;
       return true;
     default:
       break;
@@ -189,6 +239,38 @@ export function resolveBorder(
   };
 }
 
+// The cell's own background fill, resolved from \clcbpatN/\clcfpatN/\clshdngN together (ExaDev/documents.js#1024): \clshdngN's own percentage states how much of the pattern's foreground (\clcfpatN) shows over its background (\clcbpatN) -- the identical weighted-blend convention LibreOffice's own RTF import filter uses ("nColor*nShading/100 + nFillColor*(100-nShading)/100"), confirmed against that real, independent implementation rather than assumed. A shading of 0 (or, as every RTF cell without \clshdngN at all writes it, simply absent) is the pre-existing "flat background colour" shape -- \clcbpatN alone, no pattern -- and a shading of 100 is the mirror case, a flat fill of the foreground colour instead; only a shading strictly between the two is a genuine two-colour pattern, snapped to the nearest percentN member via nearestPercentType. Returns undefined when the cell states no background at all (\clcbpatN absent), matching resolveBorder's own "nothing stated, nothing returned" convention.
+export function resolveCellFill(
+  pending: PendingCell,
+  colorAt: (index: number) => Color | undefined,
+): ContentCellFill | undefined {
+  if (pending.backgroundIndex === undefined) {
+    return undefined;
+  }
+  const backgroundColor = colorAt(pending.backgroundIndex);
+  const shading = pending.shadingPercent ?? 0;
+  if (shading <= 0) {
+    return backgroundColor === undefined
+      ? undefined
+      : { kind: "solid", color: backgroundColor };
+  }
+  const foregroundColor =
+    pending.foregroundIndex === undefined
+      ? undefined
+      : colorAt(pending.foregroundIndex);
+  if (shading >= 100) {
+    return foregroundColor === undefined
+      ? undefined
+      : { kind: "solid", color: foregroundColor };
+  }
+  return {
+    kind: "pattern",
+    patternType: nearestPercentType(shading),
+    ...(foregroundColor === undefined ? {} : { foregroundColor }),
+    ...(backgroundColor === undefined ? {} : { backgroundColor }),
+  };
+}
+
 // The inverse, for the writer: one side's own `\clbrdr* <brdr>` text.
 export function borderControlWords(
   side: CellBorderSide,
@@ -217,3 +299,51 @@ const BORDER_STYLE_CONTROL_WORDS: Readonly<Record<ContentStrokeStyle, string>> =
     dotted: "brdrdot",
     double: "brdrdb",
   };
+
+/** The inverse of PERCENT_STEPS, keyed by patternType. */
+const PERCENT_TYPE_TO_VALUE: ReadonlyMap<ContentCellPatternType, number> =
+  new Map(
+    PERCENT_STEPS.map(([percent, patternType]) => [patternType, percent]),
+  );
+
+// The inverse of resolveCellFill: a ContentCellFill's own \clcbpatN/\clcfpatN/\clshdngN text. A 'solid' fill writes \clcbpatN alone -- the identical shape every RTF cell with a flat background colour and no genuine shading already writes, so this does not regress the pre-#1024 output for the overwhelmingly common case. A 'pattern' fill writes all three: \clcbpatN for backgroundColor, \clcfpatN for foregroundColor, and \clshdngN for the percentage PERCENT_TYPE_TO_VALUE names for that patternType, scaled back up to hundredths of a percent. RTF's own shading model is a flat two-colour percentage blend with no named stripe/cross/grid concept at all -- unlike ST_Shd/ST_PatternType, which this same pattern-fill vocabulary also serves and which DO have real tokens for those -- so a patternType outside the percentN family throws rather than silently collapsing to one colour the way this writer did before #1024, the identical "throw for a construct this format's own vocabulary cannot state" contract buildCellShading (ooxml.js's docx side) already keeps for the mirror case (a SpreadsheetML-only pattern name ST_Shd has no member for). colorIndexOf resolves each half's own colour to its table index; a fill whose colour resolves to no index at all (the colour table has no room, or the caller's own colorIndexOf declines it) writes no control word for that half, exactly as the pre-existing \clcbpat writer already did.
+export function cellFillControlWords(
+  fill: ContentCellFill,
+  colorIndexOf: (color: Color) => number | undefined,
+): string {
+  switch (fill.kind) {
+    case "solid": {
+      const index = colorIndexOf(fill.color);
+      return index === undefined ? "" : `\\clcbpat${String(index)}`;
+    }
+    case "pattern": {
+      const percent = PERCENT_TYPE_TO_VALUE.get(fill.patternType);
+      if (percent === undefined) {
+        throw new Error(
+          `rtf-codec cannot write a '${fill.patternType}' cell fill: RTF's own \\clshdngN is a flat two-colour percentage blend with no named stripe/cross/grid pattern of its own, and that pattern name belongs only to the ST_Shd/ST_PatternType half of ContentCellPatternType's shared vocabulary`,
+        );
+      }
+      const backgroundIndex =
+        fill.backgroundColor === undefined
+          ? undefined
+          : colorIndexOf(fill.backgroundColor);
+      const foregroundIndex =
+        fill.foregroundColor === undefined
+          ? undefined
+          : colorIndexOf(fill.foregroundColor);
+      return (
+        (backgroundIndex === undefined
+          ? ""
+          : `\\clcbpat${String(backgroundIndex)}`) +
+        (foregroundIndex === undefined
+          ? ""
+          : `\\clcfpat${String(foregroundIndex)}`) +
+        `\\clshdng${String(percent * 100)}`
+      );
+    }
+    default:
+      throw new Error(
+        `rtf-codec cannot write a cell fill with kind '${unrecognizedFillKind(fill)}': ContentCellFillSchema's discriminated union only defines 'solid' and 'pattern'`,
+      );
+  }
+}

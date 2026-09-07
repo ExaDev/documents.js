@@ -2585,6 +2585,70 @@ describe("round trip through this package's own reader", () => {
     ).toBe(2);
   });
 
+  // ExaDev/documents.js#1024: a 'pattern' cell fill now writes its own genuine two-colour \clcbpatN/\clcfpatN/\clshdngN, not just resolveCellFillColor's single representative colour collapsed into \clcbpatN alone.
+  it("round-trips a 'pattern' cell fill through \\clcbpatN/\\clcfpatN/\\clshdngN", () => {
+    const document = wordprocessing([
+      {
+        kind: "table",
+        columnWidthsPt: [72],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
+                background: {
+                  kind: "pattern",
+                  patternType: "percent25",
+                  foregroundColor: { r: 1, g: 0, b: 0 },
+                  backgroundColor: { r: 0, g: 0, b: 1 },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const out = write(document);
+    expect(out).toContain("\\clcbpat");
+    expect(out).toContain("\\clcfpat");
+    expect(out).toContain("\\clshdng2500");
+
+    const back = roundTrip(document);
+    const table = (
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks : []
+    )?.find((block) => block.kind === "table");
+    const cell = table?.kind === "table" ? table.rows[0]?.cells[0] : undefined;
+    expect(cell?.background).toEqual({
+      kind: "pattern",
+      patternType: "percent25",
+      foregroundColor: { r: 1, g: 0, b: 0 },
+      backgroundColor: { r: 0, g: 0, b: 1 },
+    });
+  });
+
+  it("throws when asked to write a cell fill pattern RTF's own flat shading percentage cannot state", () => {
+    const document = wordprocessing([
+      {
+        kind: "table",
+        columnWidthsPt: [72],
+        rows: [
+          {
+            cells: [
+              {
+                blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
+                background: {
+                  kind: "pattern",
+                  patternType: "horizontalStripe",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(() => write(document)).toThrow(/horizontalStripe/);
+  });
+
   // constructStart/constructEnd are not a nested destination the way embeddedObject/image/table/pageBreak are: they are the same zero-width bookmark bracket writeBlock already splices into the top-level flow, and read.ts's own cellBlockExtents/insertConstructMarkers (src/read.ts) already reconstructs the pair back out of a cell's own block list. This proves the write side can produce it, not just that the reader tolerates it.
   it("round-trips a block-scoped bookmark bracketing whole paragraphs inside a table cell", () => {
     const document = wordprocessing([
