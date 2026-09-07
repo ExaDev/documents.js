@@ -1,8 +1,8 @@
 // The three failure classes src/odb/sql/'s bounded SELECT engine can report, shared by its lexer, parser, and evaluator. Every one of them is a hard failure: this engine never degrades an input it cannot fully handle into a best-effort or partial result set.
 //
-// The policy being followed here is src/hsqldb/script.ts's own, stated in that module's top-of-file comment: "Statement recognition is a closed allowlist on both sides ... A statement matching NEITHER list throws HsqldbScriptParseError rather than being silently skipped -- an unrecognised statement might carry data this bounded parser doesn't know how to interpret, and silently dropping it would risk exactly the 'accuracy compromised' failure mode this module is required to avoid." The same reasoning applies with more force to a query engine: silently ignoring a JOIN, a DISTINCT, or a HAVING clause would return rows that look plausible and are wrong, which is strictly worse than returning nothing at all.
+// The policy being followed here is src/hsqldb/script.ts's own, stated in that module's top-of-file comment: "Statement recognition is a closed allowlist on both sides ... A statement matching NEITHER list throws HsqldbScriptParseError rather than being silently skipped -- an unrecognised statement might carry data this bounded parser doesn't know how to interpret, and silently dropping it would risk exactly the 'accuracy compromised' failure mode this module is required to avoid." The same reasoning applies with more force to a query engine: silently ignoring an OUTER JOIN, a DISTINCT, or a HAVING clause would return rows that look plausible and are wrong, which is strictly worse than returning nothing at all.
 //
-// Where script.ts has two lists (statements it extracts data from, and statements it deliberately skips), this engine has two too, and they map onto the two error classes below: HsqldbSqlUnsupportedError is thrown for real SQL that this engine RECOGNISES and deliberately does not implement (JOIN, subquery, UNION, DISTINCT, HAVING, a scalar function, an alias, arithmetic -- each named individually in the message), and HsqldbSqlParseError for input that is not well-formed SQL at all under this grammar. HsqldbSqlEvaluationError is the third, later failure: a statement that parsed cleanly but cannot be executed against the table it was given (an unknown table or column, a type mismatch across a comparison, an aggregate misuse).
+// Where script.ts has two lists (statements it extracts data from, and statements it deliberately skips), this engine has two too, and they map onto the two error classes below: HsqldbSqlUnsupportedError is thrown for real SQL that this engine RECOGNISES and deliberately does not implement (an OUTER/LEFT/RIGHT/FULL/CROSS/NATURAL join, subquery, UNION, DISTINCT, HAVING, a scalar function, an alias, arithmetic -- each named individually in the message), and HsqldbSqlParseError for input that is not well-formed SQL at all under this grammar. HsqldbSqlEvaluationError is the third, later failure: a statement that parsed cleanly but cannot be executed against the table(s) it was given (an unknown table or column, an ambiguous unqualified column two joined tables both declare, a type mismatch across a comparison, an aggregate misuse).
 
 const MESSAGE_SQL_PREVIEW_LENGTH = 200;
 
@@ -19,7 +19,7 @@ export class HsqldbSqlUnsupportedError extends Error {
 
   constructor(construct: string, sql: string) {
     super(
-      `HSQLDB SQL: ${construct} is not supported by this bounded single-table query engine -- in statement: ${truncateForMessage(sql)}`,
+      `HSQLDB SQL: ${construct} is not supported by this bounded query engine -- in statement: ${truncateForMessage(sql)}`,
     );
     this.name = "HsqldbSqlUnsupportedError";
     this.construct = construct;

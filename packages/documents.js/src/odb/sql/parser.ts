@@ -2,9 +2,11 @@ import { HsqldbSqlParseError, HsqldbSqlUnsupportedError } from "./errors";
 import type { SqlComparisonOperator, SqlToken } from "./lexer";
 import { tokenizeSql } from "./lexer";
 
-// A real recursive-descent grammar for the one statement shape src/odb/sql/ implements -- a single-table SELECT:
+// A real recursive-descent grammar for the one statement shape src/odb/sql/ implements -- a SELECT over one table plus zero or more INNER JOINs:
 //
-// - statement  := SELECT selectList FROM table [WHERE predicate] [GROUP BY columnList] [ORDER BY orderTerm {, orderTerm}] [;]
+// - statement  := SELECT selectList FROM tableRef {joinClause} [WHERE predicate] [GROUP BY columnList] [ORDER BY orderTerm {, orderTerm}] [;]
+// - joinClause := [INNER] JOIN tableRef ON predicate
+// - tableRef   := identifier
 // - selectList := '*' | selectItem {, selectItem}
 // - selectItem := columnRef | COUNT '(' ('*' | columnRef) ')' | (SUM|AVG|MIN|MAX) '(' columnRef ')'
 // - predicate  := orExpr ; orExpr := andExpr {OR andExpr} ; andExpr := notExpr {AND notExpr} ; notExpr := NOT notExpr | primary
@@ -13,7 +15,11 @@ import { tokenizeSql } from "./lexer";
 // - operand    := columnRef | literal ; literal := ['-'] number | string | TRUE | FALSE | NULL
 // - columnRef  := identifier ['.' identifier] ; orderTerm := columnRef [ASC | DESC]
 //
-// JOINs, subqueries, UNION/INTERSECT/EXCEPT, DISTINCT, HAVING, row limits, aliases, CASE expressions, and every scalar function (anything beyond the five aggregates above) are deliberately NOT supported, and none of them is silently ignored: each is recognised by name and throws HsqldbSqlUnsupportedError. This is src/hsqldb/script.ts's own closed-allowlist policy applied to a grammar rather than to a statement list -- see src/odb/sql/errors.ts's top-of-file comment, which quotes that module's policy statement in full as the precedent being followed. Anything that is neither in the grammar above nor in the recognised out-of-scope vocabulary throws HsqldbSqlParseError. There is no path through this parser that discards part of a statement and returns the rest.
+// ON's own predicate is the identical `predicate` production WHERE uses -- there is no separate join-condition grammar, so anything a WHERE clause can express (comparisons, AND/OR/NOT, IS NULL, LIKE, IN, BETWEEN) an ON clause can too.
+//
+// OUTER/LEFT/RIGHT/FULL/CROSS/NATURAL joins, USING, subqueries, UNION/INTERSECT/EXCEPT, DISTINCT, HAVING, row limits, table and column aliases, CASE expressions, and every scalar function (anything beyond the five aggregates above) are deliberately NOT supported, and none of them is silently ignored: each is recognised by name and throws HsqldbSqlUnsupportedError. This is src/hsqldb/script.ts's own closed-allowlist policy applied to a grammar rather than to a statement list -- see src/odb/sql/errors.ts's top-of-file comment, which quotes that module's policy statement in full as the precedent being followed. Anything that is neither in the grammar above nor in the recognised out-of-scope vocabulary throws HsqldbSqlParseError. There is no path through this parser that discards part of a statement and returns the rest.
+//
+// No table aliases means every column reference past a single-table FROM must be qualified by the table's OWN name (SALES.AMOUNT, not S.AMOUNT), which also settles self-joins without a dedicated check: FROM T JOIN T ON ... has no way to name "the first T" apart from "the second", so any reference to either resolves to two candidate columns under the identical table name and src/odb/sql/evaluate.ts's own ambiguity check refuses it -- exactly the same mechanism that already refuses an unqualified column two DIFFERENT joined tables both happen to declare.
 
 export type SqlAggregateFunction = "COUNT" | "SUM" | "AVG" | "MIN" | "MAX";
 
@@ -118,27 +124,35 @@ export interface SqlOrderByTerm {
   readonly direction: SqlSortDirection;
 }
 
+// One `[INNER] JOIN table ON predicate` clause, in the order it was written -- src/odb/sql/evaluate.ts folds joins left to right, each one widening the row set the NEXT join clause (and the statement's own WHERE/select list) sees.
+export interface SqlJoinClause {
+  readonly table: SqlNameRef;
+  readonly on: SqlPredicate;
+}
+
+export interface SqlFromClause {
+  readonly table: SqlNameRef;
+  readonly joins: readonly SqlJoinClause[];
+}
+
 export interface SqlSelectStatement {
   // The statement's own source text, verbatim -- carried through so an evaluation failure can quote the statement that produced it.
   readonly sql: string;
   readonly items: readonly SqlSelectItem[];
-  readonly from: SqlNameRef;
+  readonly from: SqlFromClause;
   readonly where: SqlPredicate | undefined;
   readonly groupBy: readonly SqlColumnRef[];
   readonly orderBy: readonly SqlOrderByTerm[];
 }
 
-// Every keyword this engine recognises as real SQL and deliberately does not implement, mapped to the construct name reported to the caller. Scanned across the whole token stream before parsing starts (see rejectOutOfScopeConstructs), so a JOIN or a HAVING is named as itself rather than surfacing as a baffling "unexpected keyword" from wherever the recursive descent happened to stop.
+// Every keyword this engine recognises as real SQL and deliberately does not implement, mapped to the construct name reported to the caller. Scanned across the whole token stream before parsing starts (see rejectOutOfScopeConstructs), so a HAVING or an OUTER JOIN is named as itself rather than surfacing as a baffling "unexpected keyword" from wherever the recursive descent happened to stop. JOIN, INNER, and ON are deliberately absent from this map -- they are real grammar now (see this module's own top-of-file note) -- but every OTHER join spelling stays here: OUTER/LEFT/RIGHT/FULL/CROSS/NATURAL/USING all name a join kind (or a join-condition form) this engine's nested-loop INNER JOIN evaluator does not implement.
 const OUT_OF_SCOPE_KEYWORDS: ReadonlyMap<string, string> = new Map([
-  ["JOIN", "a JOIN"],
-  ["INNER", "a JOIN"],
   ["OUTER", "a JOIN"],
   ["LEFT", "a JOIN"],
   ["RIGHT", "a JOIN"],
   ["FULL", "a JOIN"],
   ["CROSS", "a JOIN"],
   ["NATURAL", "a JOIN"],
-  ["ON", "a JOIN"],
   ["USING", "a JOIN"],
   ["UNION", "UNION"],
   ["INTERSECT", "INTERSECT"],
@@ -637,6 +651,45 @@ class SqlParser {
     return { column, direction: "asc" };
   }
 
+  // One table name in FROM or a JOIN clause -- the identical checks apply to both, since neither admits a derived table, a schema qualifier, or an alias. The comma-separated-FROM-list check is NOT here: it only ever applies right after the very first table (a JOIN clause's own table can never be followed by a bare comma, since parseJoins' own loop condition already requires INNER/JOIN or nothing next), so it stays in parseStatement/parseJoins where that distinction is visible.
+  private parseTableRef(): SqlNameRef {
+    if (this.atPunctuation("(")) {
+      throw new HsqldbSqlUnsupportedError("a derived table in FROM", this.sql);
+    }
+    const name = this.takeName("a table name");
+    if (this.atPunctuation(".")) {
+      // A schema-qualified table name (PUBLIC.SALES) resolves against a schema catalogue this engine has no model of at all -- readOdbTables hands it a flat table list with no schema dimension.
+      throw new HsqldbSqlUnsupportedError(
+        "a schema-qualified table name",
+        this.sql,
+      );
+    }
+    if (this.peek().kind === "identifier") {
+      throw new HsqldbSqlUnsupportedError("a table alias", this.sql);
+    }
+    return name;
+  }
+
+  // Zero or more `[INNER] JOIN table ON predicate` clauses, folded left to right by src/odb/sql/evaluate.ts. Stops the moment neither INNER nor JOIN is next -- including at a bare comma, which parseStatement's own caller checks for and reports as the deliberately-unsupported comma-separated FROM list.
+  private parseJoins(): readonly SqlJoinClause[] {
+    const joins: SqlJoinClause[] = [];
+    for (;;) {
+      if (this.atKeyword("INNER")) {
+        this.advance();
+        this.takeKeyword("JOIN");
+      } else if (this.atKeyword("JOIN")) {
+        this.advance();
+      } else {
+        break;
+      }
+      const table = this.parseTableRef();
+      this.takeKeyword("ON");
+      const on = this.parsePredicate();
+      joins.push({ table, on });
+    }
+    return joins;
+  }
+
   parseStatement(): SqlSelectStatement {
     const first = this.peek();
     if (!(first.kind === "keyword" && first.keyword === "SELECT")) {
@@ -646,22 +699,15 @@ class SqlParser {
 
     const items = this.parseSelectList();
     this.takeKeyword("FROM");
-    if (this.atPunctuation("(")) {
-      throw new HsqldbSqlUnsupportedError("a derived table in FROM", this.sql);
-    }
-    const from = this.takeName("a table name");
-    if (this.atPunctuation(".")) {
-      // A schema-qualified table name (PUBLIC.SALES) resolves against a schema catalogue this engine has no model of at all -- readOdbTables hands it a flat table list with no schema dimension.
+    const from: SqlFromClause = {
+      table: this.parseTableRef(),
+      joins: this.parseJoins(),
+    };
+    if (this.atPunctuation(",")) {
       throw new HsqldbSqlUnsupportedError(
-        "a schema-qualified table name",
+        "a comma-separated FROM list (write an explicit JOIN instead)",
         this.sql,
       );
-    }
-    if (this.atPunctuation(",")) {
-      throw new HsqldbSqlUnsupportedError("a JOIN", this.sql);
-    }
-    if (this.peek().kind === "identifier") {
-      throw new HsqldbSqlUnsupportedError("a table alias", this.sql);
     }
 
     let where: SqlPredicate | undefined;

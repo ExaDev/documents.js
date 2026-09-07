@@ -203,18 +203,98 @@ describe("parseSelect: GROUP BY and ORDER BY", () => {
 
   it("accepts one trailing semicolon", () => {
     expect(parseSelect("SELECT * FROM SALES;").from).toEqual({
-      name: "SALES",
-      quoted: false,
+      table: { name: "SALES", quoted: false },
+      joins: [],
     });
+  });
+});
+
+describe("parseSelect: JOIN", () => {
+  it("parses a bare JOIN as an inner join, requiring ON", () => {
+    expect(parseSelect("SELECT A FROM T1 JOIN T2 ON T1.A = T2.A").from).toEqual(
+      {
+        table: { name: "T1", quoted: false },
+        joins: [
+          {
+            table: { name: "T2", quoted: false },
+            on: {
+              kind: "comparison",
+              operator: "=",
+              left: {
+                kind: "column",
+                column: {
+                  qualifier: { name: "T1", quoted: false },
+                  column: { name: "A", quoted: false },
+                  text: "T1.A",
+                },
+              },
+              right: {
+                kind: "column",
+                column: {
+                  qualifier: { name: "T2", quoted: false },
+                  column: { name: "A", quoted: false },
+                  text: "T2.A",
+                },
+              },
+            },
+          },
+        ],
+      },
+    );
+  });
+
+  it("parses an explicit INNER JOIN identically to a bare JOIN", () => {
+    expect(
+      parseSelect("SELECT A FROM T1 INNER JOIN T2 ON T1.A = T2.A").from,
+    ).toEqual(parseSelect("SELECT A FROM T1 JOIN T2 ON T1.A = T2.A").from);
+  });
+
+  it("parses several JOIN clauses in the order written", () => {
+    const from = parseSelect(
+      "SELECT A FROM T1 JOIN T2 ON T1.A = T2.A JOIN T3 ON T2.B = T3.B",
+    ).from;
+    expect(from.joins.map((join) => join.table.name)).toEqual(["T2", "T3"]);
+  });
+
+  it("accepts an ON predicate using the identical grammar WHERE does -- AND, comparisons, IS NULL", () => {
+    const from = parseSelect(
+      "SELECT A FROM T1 JOIN T2 ON T1.A = T2.A AND T2.B IS NOT NULL",
+    ).from;
+    expect(from.joins[0]?.on.kind).toBe("and");
+  });
+
+  it("rejects a table alias on a JOIN clause's own table, exactly as it does on the base FROM table", () => {
+    expect(() =>
+      parseSelect("SELECT A FROM T1 JOIN T2 t ON T1.A = t.A"),
+    ).toThrow(HsqldbSqlUnsupportedError);
+  });
+
+  it("rejects a schema-qualified table name on a JOIN clause's own table", () => {
+    expect(() =>
+      parseSelect("SELECT A FROM T1 JOIN PUBLIC.T2 ON T1.A = T2.A"),
+    ).toThrow("a schema-qualified table name");
+  });
+
+  it("requires ON after a JOIN's own table", () => {
+    expect(() =>
+      parseSelect("SELECT A FROM T1 JOIN T2 WHERE T1.A = 1"),
+    ).toThrow(HsqldbSqlParseError);
   });
 });
 
 describe("parseSelect: deliberately unsupported constructs", () => {
   it.each([
-    ["SELECT A FROM T1 JOIN T2 ON T1.A = T2.A", "a JOIN"],
-    ["SELECT A FROM T1 INNER JOIN T2 ON T1.A = T2.A", "a JOIN"],
+    ["SELECT A FROM T1 LEFT JOIN T2 ON T1.A = T2.A", "a JOIN"],
     ["SELECT A FROM T1 LEFT OUTER JOIN T2 ON T1.A = T2.A", "a JOIN"],
-    ["SELECT A FROM T1, T2", "a JOIN"],
+    ["SELECT A FROM T1 RIGHT JOIN T2 ON T1.A = T2.A", "a JOIN"],
+    ["SELECT A FROM T1 FULL JOIN T2 ON T1.A = T2.A", "a JOIN"],
+    ["SELECT A FROM T1 CROSS JOIN T2", "a JOIN"],
+    ["SELECT A FROM T1 NATURAL JOIN T2", "a JOIN"],
+    ["SELECT A FROM T1 JOIN T2 USING (A)", "a JOIN"],
+    [
+      "SELECT A FROM T1, T2",
+      "a comma-separated FROM list (write an explicit JOIN instead)",
+    ],
     ["SELECT A FROM T WHERE A IN (SELECT B FROM U)", "a subquery"],
     ["SELECT A FROM (SELECT B FROM U)", "a subquery"],
     ["SELECT A FROM T WHERE EXISTS (SELECT 1 FROM U)", "an EXISTS subquery"],
