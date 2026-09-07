@@ -1,3 +1,9 @@
+## [6.2.3](https://github.com/ExaDev/documents.js/compare/document-schema.js%406.2.2...document-schema.js%406.2.3) (2026-09-07)
+
+### Bug Fixes
+
+* **workspace:** narrow discriminated unions and Uint8Array generics in worker tests ([54e92fa](https://github.com/ExaDev/documents.js/commit/54e92fad8aabe767b3f8a33423de819468fb1b54))
+
 ## [6.2.2](https://github.com/ExaDev/documents.js/compare/document-schema.js%406.2.1...document-schema.js%406.2.2) (2026-09-07)
 
 ### Bug Fixes

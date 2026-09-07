@@ -1,3 +1,24 @@
+## [7.1.7](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.6...documents.js%407.1.7) (2026-09-07)
+
+### Bug Fixes
+
+* **workspace:** narrow discriminated unions and Uint8Array generics in worker tests ([54e92fa](https://github.com/ExaDev/documents.js/commit/54e92fad8aabe767b3f8a33423de819468fb1b54))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.2.3
+- Updated archive-codec to ^1.6.4
+- Updated markdown-codec to ^6.3.4
+- Updated odf.js to ^7.1.5
+- Updated pdf-codec to ^4.0.4
+- Updated doc-codec to ^2.2.4
+- Updated ooxml.js to ^7.1.6
+- Updated ppt-codec to ^1.2.5
+- Updated rtf-codec to ^3.0.4
+- Updated wpd-codec to ^2.1.5
+- Updated xls-codec to ^4.1.5
+
 ## [7.1.6](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.5...documents.js%407.1.6) (2026-09-07)
 
 

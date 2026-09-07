@@ -1,3 +1,14 @@
+## [4.0.4](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.0.3...pdf-codec%404.0.4) (2026-09-07)
+
+### Bug Fixes
+
+* **workspace:** narrow discriminated unions and Uint8Array generics in worker tests ([54e92fa](https://github.com/ExaDev/documents.js/commit/54e92fad8aabe767b3f8a33423de819468fb1b54))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.2.3
+
 ## [4.0.3](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.0.2...pdf-codec%404.0.3) (2026-09-07)
 
 
