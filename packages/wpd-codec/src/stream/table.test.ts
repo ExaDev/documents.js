@@ -233,17 +233,39 @@ describe("readCellSpanning", () => {
 
 describe("readCellFill", () => {
   // "<foreground color (RGBS)> x 4, <background color (RGBS)> x 4" -- red, green, blue, and a shading percentage per colour, "where 255 is 100%".
-  it("reads the background colour of a fully-shaded fill", () => {
+  it("reads a fully-shaded fill as a flat 'solid' background colour", () => {
     expect(
       readCellFill(new Uint8Array([0, 0, 0, 255, 255, 0, 0, 255])),
-    ).toEqual({ background: { r: 1, g: 0, b: 0 }, blended: false });
+    ).toEqual({
+      fill: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+      blended: false,
+    });
   });
 
-  it("reports a partially-shaded fill as a blend the schema cannot express", () => {
-    expect(
-      readCellFill(new Uint8Array([255, 255, 255, 255, 0, 0, 255, 128]))
-        ?.blended,
-    ).toBe(true);
+  // ExaDev/documents.js#1024: a partially-shaded fill now resolves to a real two-colour 'pattern', not just its background colour with the blend flagged and dropped.
+  it("resolves a partially-shaded fill to a real 'pattern' carrying both colours", () => {
+    const result = readCellFill(
+      new Uint8Array([255, 255, 255, 255, 0, 0, 255, 128]),
+    );
+    expect(result?.blended).toBe(true);
+    expect(result?.fill).toEqual({
+      kind: "pattern",
+      // backgroundShade 128 -> ~49.8% background opacity -> ~50.2% foreground coverage -> nearest percentN is 50.
+      patternType: "percent50",
+      foregroundColor: { r: 1, g: 1, b: 1 },
+      backgroundColor: { r: 0, g: 0, b: 1 },
+    });
+  });
+
+  it("falls back to a 'solid' background fill when the shading byte itself is missing", () => {
+    // Exactly 7 bytes: the background's own RGB triple (indices 4-6) is readable, but its shade byte at index 7 is out of bounds.
+    const result = readCellFill(
+      new Uint8Array([255, 255, 255, 255, 0, 0, 255]),
+    );
+    expect(result).toEqual({
+      fill: { kind: "solid", color: { r: 0, g: 0, b: 1 } },
+      blended: false,
+    });
   });
 });
 

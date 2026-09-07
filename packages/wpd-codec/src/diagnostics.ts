@@ -18,7 +18,7 @@ export const WpdDiagnosticCodes = {
   ColumnBreakFlattened: "wpd/column-break-flattened",
   // A cell's or row's embedded subfunction list ran into a record whose size the specification does not state, so the walk stopped. Everything before it was read; the attributes after it (spanning, fill, justification) are not available for that cell.
   TableAttributesTruncated: "wpd/table-attributes-truncated",
-  // A cell's fill is a two-colour pattern at a partial shading percentage, which a single flat background colour cannot express. The background half is used and the blend is not reproduced.
+  // A cell's fill is a two-colour pattern at a partial shading percentage: both colours are resolved into a real 'pattern' ContentCellFill (ExaDev/documents.js#1024), but the WordPerfect SDK reference this reader is built against (see stream/table.ts's own top-of-file citation) does not document the shading byte's exact compositing formula, so the pattern's own density is a best-effort derivation (the background colour's own shade byte read as its opacity, snapped to the nearest percentN step) rather than a value confirmed against a specification.
   CellFillBlended: "wpd/cell-fill-blended",
   // The form names a landscape orientation. PageSize carries no orientation of its own, so the form's stated width and length are used exactly as written rather than rotated.
   LandscapeOrientationUnmapped: "wpd/landscape-orientation-unmapped",
