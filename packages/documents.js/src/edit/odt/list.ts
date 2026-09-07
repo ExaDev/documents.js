@@ -150,6 +150,27 @@ export class OdtList {
     removeChild(this.container, this.live());
     this.removed = true;
   }
+
+  // Nests the item at `index` one level deeper, moving its text:list-item element into the immediately preceding sibling's own nested list -- appending to that sibling's LAST existing nested list if it has one, or minting a fresh one via addNestedList() otherwise. Matches every real editor's own Tab-to-indent convention: a run of consecutive indents on adjacent items collects under the one nested list rather than each indent minting its own empty text:list. Throws for index 0 (or any other item without a preceding sibling), since there is nothing to nest under -- callers report this as a normal "can't do that" status rather than letting it escape as an unhandled exception (see document-cli's reducer.ts, INDENT_LIST_ITEM).
+  indentItem(index: number): void {
+    const itemNodes = this.live().children.filter(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "text:list-item",
+    );
+    const itemNode = itemNodes[index];
+    if (index <= 0 || itemNode === undefined) {
+      throw new Error(
+        `cannot indent list item ${String(index)}: it has no preceding sibling to nest under`,
+      );
+    }
+    const previousItem = new OdtListItem(itemNodes[index - 1]!, this.pkg);
+    const existingNestedLists = previousItem.nestedLists();
+    const nestedList =
+      existingNestedLists[existingNestedLists.length - 1] ??
+      previousItem.addNestedList();
+    removeChild(this.live().children, itemNode);
+    nestedList.node.children.push(itemNode);
+  }
 }
 
 // Builds a fresh, top-level text:list from scratch (not a live view), minting its own bullet list-style. Used by OdtBody.appendList (editor.ts); addNestedList above builds a nested one the identical way, one level deeper in the tree.

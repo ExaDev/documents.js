@@ -83,6 +83,96 @@ describe("OdtList / OdtListItem: structural nesting", () => {
     expect(editor.lists()).toHaveLength(0);
     expect(() => list.items()).toThrow(/removed/);
   });
+
+  describe("indentItem", () => {
+    it("moves the item out of the top-level list and into a fresh nested list under its preceding sibling", () => {
+      const editor = createOdt();
+      const list = editor.body.appendList();
+      list.addItem().appendParagraph({ text: "One" });
+      list.addItem().appendParagraph({ text: "Two" });
+
+      list.indentItem(1);
+
+      expect(list.items().map((i) => i.text)).toEqual(["One"]);
+      const nested = list.items()[0]?.nestedLists();
+      expect(nested?.[0]?.items().map((i) => i.text)).toEqual(["Two"]);
+    });
+
+    it("reads back with the correct ContentParagraph.list.level after indenting", () => {
+      const editor = createOdt();
+      const list = editor.body.appendList();
+      list.addItem().appendParagraph({ text: "One" });
+      list.addItem().appendParagraph({ text: "Two" });
+      list.indentItem(1);
+
+      const paragraphs = paragraphsOf(editor.toPackage());
+      const levels = new Map(
+        paragraphs.map((p) => [
+          p.runs.map((r) => r.text).join(""),
+          p.list?.level,
+        ]),
+      );
+      expect(levels.get("One")).toBe(0);
+      expect(levels.get("Two")).toBe(1);
+    });
+
+    it("indenting a second consecutive sibling appends into the SAME nested list rather than minting a second one", () => {
+      const editor = createOdt();
+      const list = editor.body.appendList();
+      list.addItem().appendParagraph({ text: "One" });
+      list.addItem().appendParagraph({ text: "Two" });
+      list.addItem().appendParagraph({ text: "Three" });
+
+      list.indentItem(1); // "Two" nests under "One"
+      list.indentItem(1); // "Three" is now index 1 (top-level), nests under "One" too
+
+      expect(list.items().map((i) => i.text)).toEqual(["One"]);
+      const nested = list.items()[0]?.nestedLists();
+      expect(nested).toHaveLength(1);
+      expect(nested?.[0]?.items().map((i) => i.text)).toEqual(["Two", "Three"]);
+    });
+
+    it("indenting an item whose preceding sibling already has a nested list appends into that EXISTING nested list", () => {
+      const editor = createOdt();
+      const list = editor.body.appendList();
+      const first = list.addItem();
+      first.appendParagraph({ text: "One" });
+      first
+        .addNestedList()
+        .addItem()
+        .appendParagraph({ text: "Pre-existing nested" });
+      list.addItem().appendParagraph({ text: "Two" });
+
+      list.indentItem(1);
+
+      const nested = list.items()[0]?.nestedLists();
+      expect(nested).toHaveLength(1);
+      expect(nested?.[0]?.items().map((i) => i.text)).toEqual([
+        "Pre-existing nested",
+        "Two",
+      ]);
+    });
+
+    it("throws for the first item, which has no preceding sibling to nest under", () => {
+      const editor = createOdt();
+      const list = editor.body.appendList();
+      list.addItem().appendParagraph({ text: "Only item" });
+
+      expect(() => {
+        list.indentItem(0);
+      }).toThrow(/no preceding sibling/);
+    });
+
+    it("throws for an out-of-range index", () => {
+      const editor = createOdt();
+      const list = editor.body.appendList();
+      list.addItem().appendParagraph({ text: "One" });
+
+      expect(() => {
+        list.indentItem(5);
+      }).toThrow(/no preceding sibling/);
+    });
+  });
 });
 
 describe("OdtListItem: reading back its own content", () => {
