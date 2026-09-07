@@ -4,14 +4,14 @@ import { formatToExtension } from "../../format.js";
 import { ListView } from "../components/list-view.js";
 import { useNavigationInput } from "../keybindings/use-navigation-input.js";
 import { useAppDispatch, useAppState } from "../state/context.js";
-import { anyOverlayOpen, type EditableFormat } from "../state/types.js";
+import { anyOverlayOpen, type WritableFormat } from "../state/types.js";
 
 interface CreatableFormat {
-  readonly format: EditableFormat;
+  readonly format: WritableFormat;
   readonly description: string;
 }
 
-// The six formats this picker offers as a genuinely useful "start from a blank document" flow. `.odb` is excluded because it has no write direction at all (it only extracts an embedded database's tables). `.pdf` is a real `EditableFormat` too now (documents.js's `createPdf()` produces a live-view `PdfEditor` exactly like the six below) and `createNewDocument` handles it -- it is left off THIS list on UX grounds rather than a technical one: a blank single-page PDF with nothing on it is a far less useful starting point than opening an existing PDF and editing it (the pdf page-list/page-items/item-detail screens), so this picker does not surface it as a "new document" option.
+// The seven formats this picker offers as a genuinely useful "start from a blank document" flow. `.odb` is excluded because it has no write direction at all (it only extracts an embedded database's tables). `.pdf` is a real `EditableFormat` too now (documents.js's `createPdf()` produces a live-view `PdfEditor` exactly like the six below) and `createNewDocument` handles it -- it is left off THIS list on UX grounds rather than a technical one: a blank single-page PDF with nothing on it is a far less useful starting point than opening an existing PDF and editing it (the pdf page-list/page-items/item-detail screens), so this picker does not surface it as a "new document" option.
 const CREATABLE_FORMATS: readonly CreatableFormat[] = [
   { format: "docx", description: "Word-processing document (OOXML)" },
   { format: "pptx", description: "Presentation slide deck (OOXML)" },
@@ -19,6 +19,7 @@ const CREATABLE_FORMATS: readonly CreatableFormat[] = [
   { format: "odp", description: "Presentation slide deck (OpenDocument)" },
   { format: "ods", description: "Spreadsheet workbook (OpenDocument)" },
   { format: "odg", description: "Vector drawing (OpenDocument)" },
+  { format: "markdown", description: "Markdown document" },
 ];
 
 const EXTENSION_COLUMN_WIDTH = 8;

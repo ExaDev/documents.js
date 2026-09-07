@@ -10,7 +10,7 @@ import { RunTextEditor } from "../docx/run-editor.js";
 
 // OdtListItem (documents.js) now exposes `.text` (its own paragraphs, newline-joined -- the same convention OdtTableCell.text/OdpShape.text already use) alongside `appendParagraph()`/`addNestedList()`, so an item's real content is readable and editable here, not just countable.
 //
-// Indenting an item into a new nested list (`item.addNestedList()`) is deliberately left out of scope: state/actions.ts has no Action for it at all -- `ADD_LIST_ITEM` only ever appends a sibling to the TOP-LEVEL list addressed by `blockIndex`, never a nested one -- and `SET_LIST_ITEM_TEXT` (this file's own addition) only replaces an existing item's text, it does not restructure the list tree. Pressing the indent/outdent keys reports why through the status line, the same way the reducer itself reports "can't do that" for every other out-of-reach action, rather than doing nothing silently.
+// Tab/">" indents the selected item into the preceding sibling's nested list (INDENT_LIST_ITEM, OdtList.indentItem). Outdent ("<") and navigating INTO an already-nested list are deliberately out of scope here: this screen only ever addresses a TOP-LEVEL list (`doc.editor.lists()[screen.blockIndex]`), with no route to drill into an item's own nestedLists(), so there is nothing reachable from this screen for outdent to act on yet -- tracked as its own follow-up.
 export function ListEditorScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -23,9 +23,11 @@ export function ListEditorScreen(): ReactElement {
 
   const screen = currentScreen(state);
   const doc = paragraphFamilyDocument(state.openDocument);
+  const blockIndex =
+    screen.kind === "listEditor" ? screen.blockIndex : undefined;
   const list =
-    screen.kind === "listEditor" && doc?.format === "odt"
-      ? doc.editor.lists()[screen.blockIndex]
+    blockIndex !== undefined && doc?.format === "odt"
+      ? doc.editor.lists()[blockIndex]
       : undefined;
   // Fresh every render, matching this codebase's own live-view rule (state/types.ts's top-of-file note) -- never cached in useState/useMemo, since any mutation elsewhere invalidates an array captured on an earlier render.
   const items = list === undefined ? [] : list.items();
@@ -51,11 +53,18 @@ export function ListEditorScreen(): ReactElement {
 
   useInput(
     (input, key) => {
-      if (key.tab || input === ">" || input === "<") {
+      if (key.tab || input === ">") {
+        if (blockIndex === undefined) return;
+        dispatch({
+          type: "INDENT_LIST_ITEM",
+          blockIndex,
+          itemIndex: selectedIndex,
+        });
+      } else if (input === "<") {
         dispatch({
           type: "SET_STATUS",
           severity: "warning",
-          text: "Indenting a list item needs a new reducer action this pass didn't add -- OdtListItem.addNestedList() has no wiring yet",
+          text: "Outdenting isn't reachable from this screen yet -- it only browses top-level lists, with no route into an item's own nested list",
         });
       }
     },
@@ -154,7 +163,9 @@ export function ListEditorScreen(): ReactElement {
           />
         </Box>
       ) : (
-        <Text dimColor>Enter to edit an item, a to add, Esc back</Text>
+        <Text dimColor>
+          Enter to edit an item, a to add, Tab/&gt; to indent, Esc back
+        </Text>
       )}
     </Box>
   );
