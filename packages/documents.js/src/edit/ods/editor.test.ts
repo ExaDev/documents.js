@@ -94,3 +94,32 @@ describe("live-view fidelity: editing one sheet must not disturb another part of
     expect(after.parts["meta.xml"]).toEqual(before.parts["meta.xml"]);
   });
 });
+
+// ExaDev/documents.js#933: an already-open live editor previously exposed no metadata setter at all. `editor.metadata = {...}` patches the live package's own meta.xml directly.
+describe("OdsEditor.metadata", () => {
+  it("reads the fixture's own real dc:title", () => {
+    const editor = openOds(minimalOdsBytes());
+    expect(editor.metadata.title).toBe("My Spreadsheet");
+  });
+
+  it("patches author onto an existing meta.xml that declared only dc:, not meta:", () => {
+    const editor = openOds(minimalOdsBytes());
+    editor.metadata = { author: "New author" };
+    expect(editor.metadata.author).toBe("New author");
+    expect(editor.metadata.title).toBe("My Spreadsheet");
+  });
+
+  it("silently writes nothing for a field meta.xml has no ODF spelling for", () => {
+    const editor = openOds(minimalOdsBytes());
+    editor.metadata = { producer: "Some PDF tool" };
+    expect(editor.metadata.producer).toBeUndefined();
+  });
+
+  it("round-trips through toBytes()/openOds, leaving the sheets untouched", () => {
+    const editor = openOds(minimalOdsBytes());
+    editor.metadata = { title: "Round-tripped title" };
+    const reopened = openOds(editor.toBytes());
+    expect(reopened.metadata.title).toBe("Round-tripped title");
+    expect(reopened.sheets()).toHaveLength(editor.sheets().length);
+  });
+});

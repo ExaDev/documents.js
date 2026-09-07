@@ -2,10 +2,12 @@ import type { Package, XmlElement } from "ooxml.js";
 import {
   decodePackage,
   encodePackage,
+  readCoreProperties,
   resolveRelationships,
   rootElement,
 } from "ooxml.js";
-import type { PageSize } from "document-schema.js";
+import type { LayoutMetadata, PageSize } from "document-schema.js";
+import { patchOoxmlCorePropertiesOnPackage } from "../../metadata/core-patch";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import { emuToPt, ptToEmu } from "../../model/units";
 import type { ClockPort } from "../../ports/clock";
@@ -130,6 +132,15 @@ export class PptxEditor {
 
   constructor(pkg: Package) {
     this.pkg = pkg;
+  }
+
+  // Reads/patches docProps/core.xml directly on the live package -- ExaDev/documents.js#933's own "editor.metadata = {...}" gap, mirroring DocxEditor's own identical getter/setter exactly (src/edit/docx/editor.ts's own comment states the full title/author/subject/keywords-only rationale). setDocumentMetadata's own bytes-level API rebuilds a whole fresh pptx from its ContentDocument for a pptx/pptx pair (src/metadata/write.ts's own REBUILD_FORMATS) -- wrong for a LIVE editor, which would discard every other pending edit the caller made through this same editor instance -- so this patches docProps/core.xml in place instead, via the identical pkg-level primitive DocxEditor uses.
+  get metadata(): LayoutMetadata {
+    return readCoreProperties(this.pkg);
+  }
+
+  set metadata(value: LayoutMetadata) {
+    patchOoxmlCorePropertiesOnPackage(this.pkg, value);
   }
 
   slides(): PptxSlide[] {

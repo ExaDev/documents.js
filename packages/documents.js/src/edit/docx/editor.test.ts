@@ -95,3 +95,58 @@ describe("live-view fidelity: mutating one run must not change any other part", 
     ]);
   });
 });
+
+// ExaDev/documents.js#933: an already-open live editor previously exposed no metadata setter at all -- a caller had to re-decode the whole document through setDocumentMetadata/patchDocxMetadata (src/metadata/write.ts) to change it, discarding every other pending edit made through the SAME editor instance. `editor.metadata = {...}` patches the live package directly, the same primitive patchDocxMetadata itself now shares (src/metadata/core-patch.ts's own patchOoxmlCorePropertiesOnPackage).
+describe("DocxEditor.metadata", () => {
+  it("reads an empty object from a package carrying no docProps/core.xml at all", () => {
+    const editor = openDocx(minimalDocxBytes());
+    expect(editor.metadata).toEqual({});
+  });
+
+  it("creates docProps/core.xml from scratch when the package had none, readable back through the same editor", () => {
+    const editor = openDocx(minimalDocxBytes());
+    editor.metadata = { title: "New title", author: "New author" };
+    expect(editor.metadata.title).toBe("New title");
+    expect(editor.metadata.author).toBe("New author");
+  });
+
+  it("patches an existing docProps/core.xml in place, leaving every other part byte-for-byte unchanged", () => {
+    const editor = openDocx(minimalDocxBytes());
+    editor.metadata = { title: "First title" };
+    const before = editor.toPackage();
+    const beforeStyles = before.parts["word/styles.xml"];
+
+    editor.metadata = { title: "Second title" };
+
+    expect(editor.metadata.title).toBe("Second title");
+    expect(editor.toPackage().parts["word/styles.xml"]).toEqual(beforeStyles);
+  });
+
+  it("leaves a field the setter's own value omits exactly as it already was, rather than clearing it", () => {
+    const editor = openDocx(minimalDocxBytes());
+    editor.metadata = { title: "Title", author: "Author" };
+    editor.metadata = { title: "New title" };
+    expect(editor.metadata.author).toBe("Author");
+  });
+
+  it("clears keywords via an empty array, but cannot remove title/author once set (patchCoreProperties' own documented limitation)", () => {
+    const editor = openDocx(minimalDocxBytes());
+    editor.metadata = { title: "Title", keywords: ["alpha", "beta"] };
+    editor.metadata = { keywords: [] };
+    expect(editor.metadata.keywords).toBeUndefined();
+    expect(editor.metadata.title).toBe("Title");
+  });
+
+  it("silently writes nothing for a field docProps/core.xml has no OOXML spelling for", () => {
+    const editor = openDocx(minimalDocxBytes());
+    editor.metadata = { title: "Title", producer: "Some PDF tool" };
+    expect(editor.metadata.producer).toBeUndefined();
+  });
+
+  it("round-trips through toBytes()/openDocx", () => {
+    const editor = openDocx(minimalDocxBytes());
+    editor.metadata = { title: "Round-tripped title" };
+    const reopened = openDocx(editor.toBytes());
+    expect(reopened.metadata.title).toBe("Round-tripped title");
+  });
+});

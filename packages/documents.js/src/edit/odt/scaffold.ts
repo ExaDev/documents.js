@@ -34,7 +34,7 @@ const STYLES_NS_PREFIXES = [
 ] as const;
 const META_NS_PREFIXES = ["office", "meta", "dc"] as const;
 
-const ODF_VERSION = "1.3";
+export const ODF_VERSION = "1.3";
 const PAGE_LAYOUT_NAME = "PM1";
 const MASTER_PAGE_NAME = "Standard";
 

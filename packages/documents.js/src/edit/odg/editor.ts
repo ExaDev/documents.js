@@ -4,9 +4,11 @@ import {
   encodePackage,
   formatOdfLength,
   parseOdfLength,
+  readOdfMetadata,
 } from "odf.js";
 import { attr } from "ooxml.js";
-import type { PageSize } from "document-schema.js";
+import type { LayoutMetadata, PageSize } from "document-schema.js";
+import { patchOdfMetadataOnPackage } from "../../metadata/core-patch";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
@@ -14,6 +16,7 @@ import { el } from "../../xml/fragment";
 import {
   createEmptyOdgPackage,
   MASTER_PAGE_NAME,
+  ODF_VERSION,
   PAGE_LAYOUT_NAME,
 } from "./scaffold";
 import type { PageContext } from "./page";
@@ -84,6 +87,15 @@ export class OdgEditor {
 
   constructor(pkg: Package) {
     this.pkg = pkg;
+  }
+
+  // Reads/patches meta.xml directly on the live package -- ExaDev/documents.js#933's own "editor.metadata = {...}" gap, mirroring OdtEditor's own identical getter/setter exactly (src/edit/odt/editor.ts's own comment states the full title/author/subject/keywords-only rationale).
+  get metadata(): LayoutMetadata {
+    return readOdfMetadata(this.pkg);
+  }
+
+  set metadata(value: LayoutMetadata) {
+    patchOdfMetadataOnPackage(this.pkg, value, ODF_VERSION);
   }
 
   pages(): OdgPage[] {
