@@ -1,3 +1,13 @@
+## [1.2.1](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.0...epub-codec%401.2.1) (2026-09-07)
+
+### Bug Fixes
+
+* **epub-codec:** decode numeric and HTML named character references ([e465959](https://github.com/ExaDev/documents.js/commit/e4659599c1388dad3f4ef17fc376edf4d62596ea)), closes [ExaDev/documents.js#1010](https://github.com/ExaDev/documents.js/issues/1010), references [#160](https://github.com/ExaDev/documents.js/issues/160) [#x2014](https://github.com/ExaDev/documents.js/issues/x2014)
+
+### Tests
+
+* **epub-codec:** update decodedTextContent fixture for full entity decoding ([6b8aa81](https://github.com/ExaDev/documents.js/commit/6b8aa81643370155c96f4dddbe328a9775f2dbd3)), references [pre-#1010](https://github.com/pre-/issues/1010) [#233](https://github.com/ExaDev/documents.js/issues/233) [#233](https://github.com/ExaDev/documents.js/issues/233)
+
 ## [1.2.0](https://github.com/ExaDev/documents.js/compare/epub-codec%401.1.0...epub-codec%401.2.0) (2026-09-06)
 
 ### Features

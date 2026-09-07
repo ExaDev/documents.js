@@ -1,3 +1,9 @@
+## [7.1.3](https://github.com/ExaDev/documents.js/compare/ooxml.js%407.1.2...ooxml.js%407.1.3) (2026-09-07)
+
+### Bug Fixes
+
+* **ooxml.js:** set options: [] for a dropdown/combo field with no items ([657b513](https://github.com/ExaDev/documents.js/commit/657b5132b73f38575c2576592830401d76ad4d8f))
+
 ## [7.1.2](https://github.com/ExaDev/documents.js/compare/ooxml.js%407.1.1...ooxml.js%407.1.2) (2026-09-06)
 
 

@@ -1,3 +1,9 @@
+## [7.1.2](https://github.com/ExaDev/documents.js/compare/odf.js%407.1.1...odf.js%407.1.2) (2026-09-07)
+
+### Bug Fixes
+
+* **odf.js:** read a form:listbox's own option list ([519beec](https://github.com/ExaDev/documents.js/commit/519beec6cc5bd8c5d000b72e2031b2fa3e1fec28)), closes [ExaDev/documents.js#1016](https://github.com/ExaDev/documents.js/issues/1016)
+
 ## [7.1.1](https://github.com/ExaDev/documents.js/compare/odf.js%407.1.0...odf.js%407.1.1) (2026-09-06)
 
 
