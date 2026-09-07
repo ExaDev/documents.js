@@ -1,3 +1,9 @@
+## [4.2.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.1.6...xls-codec%404.2.0) (2026-09-07)
+
+### Features
+
+* **xls-codec:** read cell comments (Note/Obj/Txo) ([e9accbe](https://github.com/ExaDev/documents.js/commit/e9accbecefc474fcbc39202115df8c82d6c8fe00))
+
 ## [4.1.6](https://github.com/ExaDev/documents.js/compare/xls-codec%404.1.5...xls-codec%404.1.6) (2026-09-07)
 
 
