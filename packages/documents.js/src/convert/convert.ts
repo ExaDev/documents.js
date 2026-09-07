@@ -260,7 +260,7 @@ export interface DocumentBridgeOptions {
   readonly images?: MarkdownImageResolver;
 }
 
-// Options for a composed edge whose two formats share no ContentDocument variant, so the only route is through PDF (today: xlsx <-> markdown, csv <-> markdown). These are 'bridge' hops from the composition engine's point of view (neither endpoint is pdf), but internally they compose a toPdf leg -- which lays content out, so fonts/onFontSubstitution/onSubstitution/clock reach it -- with a fromPdf leg, which reconstructs, so sink reaches it. That is a wider shape than the PDF-bypassing DocumentBridgeOptions above, and every field is optional deliberately: a DocumentBridgeOptions (what local.ts's port passes to any bridge hop) is assignable to this, which is exactly what lets these run as ordinary bridge hops without a new hop kind -- through the port they run with fonts/sink undefined (the defaults), while a direct ergonomic caller can supply them for finer control over the layout and reconstruction legs.
+// Options for a composed edge whose two formats share no ContentDocument variant and have no registered TRANSFORMS entry between them, so the only route is through PDF (today: markdown -> xlsx, markdown -> csv -- the reverse xlsx/csv -> markdown directions cross via the one-way spreadsheet -> wordprocessing transform instead, see DocumentBridgeOptions' own precedent for docxToPptx below). These are 'bridge' hops from the composition engine's point of view (neither endpoint is pdf), but internally they compose a toPdf leg -- which lays content out, so fonts/onFontSubstitution/onSubstitution/clock reach it -- with a fromPdf leg, which reconstructs, so sink reaches it. That is a wider shape than the PDF-bypassing DocumentBridgeOptions above, and every field is optional deliberately: a DocumentBridgeOptions (what local.ts's port passes to any bridge hop) is assignable to this, which is exactly what lets these run as ordinary bridge hops without a new hop kind -- through the port they run with fonts/sink undefined (the defaults), while a direct ergonomic caller can supply them for finer control over the layout and reconstruction legs.
 export interface ComposedDocumentOptions extends DocumentFontRegistryOptions {
   readonly signal?: AbortSignal;
   readonly onSubstitution?: (
@@ -489,15 +489,25 @@ export function pptToPdf(
   return convertDocument("ppt", "pdf", bytes, options);
 }
 
-// xlsx <-> markdown: xlsx and markdown share no ContentDocument variant (spreadsheet vs wordprocessing), so convertDocument's pathfinder resolves this as [xlsx -> ods, ods -> pdf, pdf -> markdown] -- three hops, both legs' lossiness inherited in full (the single lossiest path in the package). onDocument reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention.
+// xlsx -> markdown and csv -> markdown: spreadsheet -> wordprocessing is a one-way cross-variant content bridge (src/convert/variant-bridges.ts's spreadsheetToWordprocessing, ExaDev/documents.js#1043), which convertDocument's pathfinder resolves as a single cross-variant bridge hop -- no PDF layout pass, no geometry reconstruction. Each sheet becomes an H2-headed section carrying one table (hidden rows/columns excluded); a sheet's own formulas, print settings, comments, and anchored images/embedded objects have no wordprocessing counterpart and are silently out of scope, the same APPROXIMATION class docxToPptx/pptxToDocx above already carry for their own dropped fields.
 
 // Forwards to convertDocument (src/convert/composition.ts).
 export function xlsxToMarkdown(
   bytes: Uint8Array<ArrayBuffer>,
-  options?: ComposedDocumentOptions,
+  options?: DocumentBridgeOptions,
 ): Uint8Array<ArrayBuffer> {
   return convertDocument("xlsx", "markdown", bytes, options);
 }
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function csvToMarkdown(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: DocumentBridgeOptions & CsvReadOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocument("csv", "markdown", bytes, options);
+}
+
+// markdown -> xlsx and markdown -> csv: the reverse direction has no registered transform -- a markdown table has no cell types, formulas, or geometry of its own to recover, so wordprocessing -> spreadsheet stays a separate question with no honest answer (see variant-bridges.ts's own module comment). convertDocument's pathfinder therefore still resolves these through PDF: markdownToXlsx as [markdown -> ods, ods -> pdf, pdf -> xlsx], markdownToCsv as [markdown -> ods, ods -> pdf, pdf -> csv] -- both legs' lossiness inherited in full. onDocument reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention.
 
 // Forwards to convertDocument (src/convert/composition.ts).
 export function markdownToXlsx(
@@ -505,16 +515,6 @@ export function markdownToXlsx(
   options?: ComposedDocumentOptions,
 ): Uint8Array<ArrayBuffer> {
   return convertDocument("markdown", "xlsx", bytes, options);
-}
-
-// csv <-> markdown: csv and markdown share no ContentDocument variant (spreadsheet vs wordprocessing), so convertDocument's pathfinder resolves these the same three-hop way as xlsx <-> markdown above -- csvToMarkdown as [csv -> ods, ods -> pdf, pdf -> markdown], markdownToCsv as [markdown -> pdf, pdf -> ods, ods -> csv] -- with both legs' lossiness inherited in full. onDocument reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention.
-
-// Forwards to convertDocument (src/convert/composition.ts).
-export function csvToMarkdown(
-  bytes: Uint8Array<ArrayBuffer>,
-  options?: ComposedDocumentOptions & CsvReadOptions,
-): Uint8Array<ArrayBuffer> {
-  return convertDocument("csv", "markdown", bytes, options);
 }
 
 // Forwards to convertDocument (src/convert/composition.ts).

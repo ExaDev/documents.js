@@ -75,6 +75,7 @@ import {
   drawingToPresentation,
   presentationToDrawing,
   presentationToWordprocessing,
+  spreadsheetToWordprocessing,
   wordprocessingToPresentation,
 } from "./variant-bridges";
 import { type ContentVariant, UnsupportedConversionError } from "./capability";
@@ -473,7 +474,7 @@ export const LAYOUT_CAPABLE: ReadonlySet<SourceContentFormat> =
     "wpd",
   ]);
 
-// Cross-variant transforms keyed by `${fromVariant}->${toVariant}`. Each wrapper narrows its input with a runtime kind guard so the underlying transform receives its exact concrete variant type -- the same "no cast, narrow at the boundary" discipline every read/build closure above follows. Today wordprocessing <-> presentation and drawing <-> presentation transforms exist (src/convert/variant-bridges.ts); the pathfinder derives its cross-variant edges from this object's keys, so adding a transform here is the single change needed to teach both the pathfinder and the bridge executor a new variant crossing.
+// Cross-variant transforms keyed by `${fromVariant}->${toVariant}`. Each wrapper narrows its input with a runtime kind guard so the underlying transform receives its exact concrete variant type -- the same "no cast, narrow at the boundary" discipline every read/build closure above follows. The pathfinder derives its cross-variant edges from this object's keys, so adding a transform here is the single change needed to teach both the pathfinder and the bridge executor a new variant crossing. A key need not have a reverse entry -- buildCompositionGraph adds a DIRECTED edge per key, so a one-way transform like spreadsheet->wordprocessing below reaches every format of the target variant without implying a reverse crossing this object never registered.
 const TRANSFORMS: Readonly<
   Record<string, (doc: ContentDocument) => ContentDocument>
 > = {
@@ -508,6 +509,15 @@ const TRANSFORMS: Readonly<
       );
     }
     return presentationToDrawing(doc);
+  },
+  // No reverse entry: a markdown/docx/odt/rtf/doc table has no cell types, formulas, or geometry of its own to recover, so wordprocessing->spreadsheet stays on its current toPdf/fromPdf route (ExaDev/documents.js#1043's own stated scope).
+  "spreadsheet->wordprocessing": (doc) => {
+    if (doc.kind !== "spreadsheet") {
+      throw new Error(
+        "spreadsheetToWordprocessing: expected a spreadsheet ContentDocument",
+      );
+    }
+    return spreadsheetToWordprocessing(doc);
   },
 };
 
@@ -629,7 +639,7 @@ interface GraphEdge {
   readonly cost: number;
 }
 
-// Builds the composition graph's adjacency list from the registry, with fidelity-ordered edge costs: a same-variant bridge (cost 1, lossless) always beats a cross-variant transform (cost 2, approximate), which always beats a toPdf/fromPdf edge (cost 3, geometry-based render or reconstruction). Edges are bidirectional with symmetric costs. The toPdf/fromPdf edges cover exactly LAYOUT_CAPABLE (xlsx and csv absent -- each routes through ods), and cross-variant transform edges are derived from TRANSFORMS' own keys so the graph cannot drift from the registered transforms.
+// Builds the composition graph's adjacency list from the registry, with fidelity-ordered edge costs: a same-variant bridge (cost 1, lossless) always beats a cross-variant transform (cost 2, approximate), which always beats a toPdf/fromPdf edge (cost 3, geometry-based render or reconstruction). Same-variant bridges and toPdf/fromPdf edges are genuinely bidirectional with symmetric costs; cross-variant transform edges are DIRECTED per TRANSFORMS key instead, since a variant pair is bidirectional only when both directions are registered as separate keys -- a one-way transform (spreadsheet->wordprocessing) must not open a same-cost edge back the other way with no transform to execute it. The toPdf/fromPdf edges cover exactly LAYOUT_CAPABLE (xlsx and csv absent -- each routes through ods), and cross-variant transform edges are derived from TRANSFORMS' own keys so the graph cannot drift from the registered transforms.
 function buildCompositionGraph(): ReadonlyMap<
   DocumentFormat,
   readonly GraphEdge[]
@@ -668,7 +678,7 @@ function buildCompositionGraph(): ReadonlyMap<
     }
   }
 
-  // Cross-variant transforms (cost 2): every format of the source variant <-> every format of the target variant, for each direction registered in TRANSFORMS.
+  // Cross-variant transforms (cost 2): every format of the source variant -> every format of the target variant, for each direction registered in TRANSFORMS. DIRECTED, not addEdge's bidirectional pair: a TRANSFORMS key states one direction, and a pair like wordprocessing<->presentation is bidirectional only because both directions are registered as separate keys above -- registering just one direction (spreadsheet->wordprocessing, with no reverse) must NOT silently open a same-cost edge back the other way, since executeBridge would then look up a TRANSFORMS entry that was never registered and throw at runtime for a route the pathfinder itself proposed.
   for (const key of Object.keys(TRANSFORMS)) {
     const parts = key.split("->");
     const fromVariant = parts[0];
@@ -684,7 +694,7 @@ function buildCompositionGraph(): ReadonlyMap<
         if (FORMAT_NODES[b].variant !== toVariant) {
           continue;
         }
-        addEdge(a, b, 2);
+        addDirected(a, b, 2);
       }
     }
   }
@@ -766,7 +776,7 @@ function shortestPath(
   return path;
 }
 
-// Resolves the minimum-cost path between two DocumentFormats as an ordered hop list, or undefined if no route exists. Each hop is tagged with the executor that runs it (derivable from which endpoint is pdf: target pdf -> toPdf, source pdf -> fromPdf, otherwise bridge). Capped at 3 hops -- the most any real route needs (xlsx -> markdown = xlsx -> ods -> pdf -> markdown, three hops), and the bound beyond which a composed route would stack more lossy layers than any existing conversion in this package does today. Reproduces every route convert.ts's own functions handle: docx -> pdf is a direct toPdf hop; odt -> docx is a same-variant bridge; docx -> pptx is a cross-variant transform bridge; xlsx -> pdf is [xlsx -> ods bridge, ods -> pdf toPdf]; xlsx -> markdown is [xlsx -> ods, ods -> pdf, pdf -> markdown].
+// Resolves the minimum-cost path between two DocumentFormats as an ordered hop list, or undefined if no route exists. Each hop is tagged with the executor that runs it (derivable from which endpoint is pdf: target pdf -> toPdf, source pdf -> fromPdf, otherwise bridge). Capped at 3 hops -- the most any real route needs (markdown -> xlsx = markdown -> ods bridge, ods -> pdf toPdf, pdf -> xlsx fromPdf, three hops; the reverse xlsx -> markdown is a single bridge hop instead, since ExaDev/documents.js#1043's one-way spreadsheet->wordprocessing transform has no reverse entry to route markdown -> xlsx through), and the bound beyond which a composed route would stack more lossy layers than any existing conversion in this package does today. Reproduces every route convert.ts's own functions handle: docx -> pdf is a direct toPdf hop; odt -> docx is a same-variant bridge; docx -> pptx is a cross-variant transform bridge; xlsx -> pdf is [xlsx -> ods bridge, ods -> pdf toPdf]; markdown -> xlsx is [markdown -> ods, ods -> pdf, pdf -> xlsx].
 export function resolveCompositionPlan(
   source: DocumentFormat,
   target: DocumentFormat,
