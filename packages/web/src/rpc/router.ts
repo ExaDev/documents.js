@@ -87,8 +87,23 @@ function normalizeMarkdownStyling(document: ContentDocument): ContentDocument {
   };
 }
 
-// docx and odt heading paragraphs are identified primarily by the schema's ContentParagraph.headingLevel (docx: ooxml.js resolves w:outlineLvl through the style chain; odt: odf.js reads text:outline-level), with the "Heading1".."Heading6" styleId pattern as a fallback because the two signals have different coverage: a style NAMED "Heading3" can carry no outline level (caught only by the pattern), and a custom style can inherit an outline level while having a non-Heading name (caught only by the field). Rewritten here into the same "heading-{N}" convention normalizeMarkdownStyling produces. Blockquote and code-block styleIds are detected by heuristic name matching (docx: "Quote"/"IntenseQuote"; odt: "Quotations"; both: any styleId containing "Code"/"Source"/"Preformatted"), rewritten into the same "quote"/"code-block" convention markdown-codec uses. Horizontal rule is detected the same way for odt: LibreOffice/OpenOffice's built-in "Horizontal Line" paragraph style has the raw ODF style:name "Horizontal_20_Line" (ODF's predefined-style space-escaping convention, the same "_20_" Preformatted_20_Text/Heading_20_1 already use), matched heuristically here as any styleId containing both "Horizontal" and "Line" rather than the exact escaped string, in case a producer spells it slightly differently. docx has no equivalent named style to match against: Word's own AutoCorrect-inserted horizontal rule ("---" then Enter) is direct paragraph border formatting (w:pBdr/w:bottom on an otherwise unstyled paragraph), which ContentParagraph does not carry today -- tracked separately (ExaDev/documents.js#1082) rather than attempted here as a styleId heuristic that cannot work for it.
+// docx and odt heading paragraphs are identified primarily by the schema's ContentParagraph.headingLevel (docx: ooxml.js resolves w:outlineLvl through the style chain; odt: odf.js reads text:outline-level), with the "Heading1".."Heading6" styleId pattern as a fallback because the two signals have different coverage: a style NAMED "Heading3" can carry no outline level (caught only by the pattern), and a custom style can inherit an outline level while having a non-Heading name (caught only by the field). Rewritten here into the same "heading-{N}" convention normalizeMarkdownStyling produces. Blockquote and code-block styleIds are detected by heuristic name matching (docx: "Quote"/"IntenseQuote"; odt: "Quotations"; both: any styleId containing "Code"/"Source"/"Preformatted"), rewritten into the same "quote"/"code-block" convention markdown-codec uses. Horizontal rule is detected two different ways for the two formats, since they build the construct two different ways: odt matches LibreOffice/OpenOffice's built-in "Horizontal Line" paragraph style by its raw ODF style:name "Horizontal_20_Line" (ODF's predefined-style space-escaping convention, the same "_20_" Preformatted_20_Text/Heading_20_1 already use, matched heuristically here as any styleId containing both "Horizontal" and "Line" in case a producer spells it slightly differently); docx has no equivalent named style to match against at all -- Word's own AutoCorrect-inserted rule ("---" then Enter) is direct paragraph border formatting with no named style involved, so isBorderOnlyHorizontalRule below matches the SHAPE instead: an otherwise-empty paragraph whose only border formatting is a bottom edge (ExaDev/documents.js#1082's own ContentParagraph.borders field, added for exactly this).
 const WORDPROCESSING_HEADING_PATTERN = /^Heading([1-6])$/;
+
+// The shape Word's own AutoCorrect produces for "---" + Enter: a paragraph with no visible text and a bottom border but no top/left/right border. Text is checked via the joined, trimmed run text rather than an empty runs array, since a real AutoCorrect-produced rule still carries the run(s) the "---" itself was typed into before AutoCorrect replaced the pilcrow's own formatting -- Word clears the text on replacement, but a producer that preserves a lone space or similar near-empty remnant should still read as a rule, not as accidental body text.
+function isBorderOnlyHorizontalRule(paragraph: ContentParagraph): boolean {
+  const borders = paragraph.borders;
+  if (borders?.bottom === undefined) return false;
+  if (borders.top !== undefined) return false;
+  if (borders.left !== undefined) return false;
+  if (borders.right !== undefined) return false;
+  return (
+    paragraph.runs
+      .map((run) => run.text)
+      .join("")
+      .trim().length === 0
+  );
+}
 
 function normalizeWordprocessingSemantics(
   document: ContentDocument,
@@ -130,6 +145,9 @@ function normalizeWordprocessingBlock(block: ContentBlock): ContentBlock {
       ) {
         return { ...block, styleId: "horizontal-rule" };
       }
+    }
+    if (isBorderOnlyHorizontalRule(block)) {
+      return { ...block, styleId: "horizontal-rule" };
     }
     return block;
   }
