@@ -1,3 +1,9 @@
+## [7.3.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.2.5...documents.js%407.3.0) (2026-09-07)
+
+### Features
+
+* **documents.js:** recover classic-OLE-compound-file embeddings via the legacy codecs ([e31b8df](https://github.com/ExaDev/documents.js/commit/e31b8df06ce74d0cbfad010ba4048e9d700448ba)), closes [ExaDev/documents.js#921](https://github.com/ExaDev/documents.js/issues/921)
+
 ## [7.2.5](https://github.com/ExaDev/documents.js/compare/documents.js%407.2.4...documents.js%407.2.5) (2026-09-07)
 
 ### Bug Fixes
