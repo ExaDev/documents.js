@@ -1460,3 +1460,153 @@ describe("readOdsContent: cell comments (ExaDev/documents.js#949, synthetic pack
     expect(sheets[0]?.cells[0]?.comment).toBeUndefined();
   });
 });
+
+describe("readOdsContent: data validation (ExaDev/documents.js#925, synthetic packages)", () => {
+  function odsValidationPackage(...children: readonly XmlElement[]): Package {
+    return {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: [
+            el("office:document-content", {}, [
+              el("office:body", {}, [
+                el("office:spreadsheet", {}, [...children]),
+              ]),
+            ]),
+          ],
+        },
+      },
+    };
+  }
+
+  function contentValidations(
+    ...validations: readonly XmlElement[]
+  ): XmlElement {
+    return el("table:content-validations", {}, [...validations]);
+  }
+
+  it("attaches a validation rule to every cell that references its own table:content-validation-name", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}, [
+        el(
+          "table:table-cell",
+          {
+            "office:value-type": "float",
+            "office:value": "5",
+            "table:content-validation-name": "val1",
+          },
+          [el("text:p", {}, [txt("5")])],
+        ),
+      ]),
+    ]);
+    const pkg = odsValidationPackage(
+      contentValidations(
+        el("table:content-validation", {
+          "table:name": "val1",
+          "table:condition":
+            "of:cell-content-is-whole-number() and cell-content()>=1",
+        }),
+      ),
+      table,
+    );
+    const { sheets } = readOdsContent(pkg);
+    expect(sheets[0]?.dataValidations).toEqual([
+      {
+        type: "whole",
+        operator: "greaterThanOrEqual",
+        formula1: "1",
+        allowBlank: true,
+        ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+      },
+    ]);
+  });
+
+  it("collects every referencing cell's own position into that rule's ranges, one 1x1 range per cell", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}, [
+        el("table:table-cell", {
+          "office:value-type": "float",
+          "office:value": "1",
+          "table:content-validation-name": "val1",
+        }),
+        el("table:table-cell", {
+          "office:value-type": "float",
+          "office:value": "2",
+          "table:content-validation-name": "val1",
+        }),
+      ]),
+    ]);
+    const pkg = odsValidationPackage(
+      contentValidations(
+        el("table:content-validation", {
+          "table:name": "val1",
+          "table:condition": "of:cell-content-is-whole-number()",
+        }),
+      ),
+      table,
+    );
+    const { sheets } = readOdsContent(pkg);
+    expect(sheets[0]?.dataValidations?.[0]?.ranges).toEqual([
+      { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+      { startRow: 0, startColumn: 1, endRow: 0, endColumn: 1 },
+    ]);
+  });
+
+  it("materialises an empty cell for a validation reference on a cell with no value, formula, or text of its own", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}, [
+        el("table:table-cell", {
+          "table:content-validation-name": "val1",
+        }),
+      ]),
+    ]);
+    const pkg = odsValidationPackage(
+      contentValidations(
+        el("table:content-validation", {
+          "table:name": "val1",
+          "table:condition": "of:cell-content-is-whole-number()",
+        }),
+      ),
+      table,
+    );
+    const { sheets } = readOdsContent(pkg);
+    expect(sheets[0]?.cells).toEqual([
+      { row: 0, column: 0, value: { kind: "empty" }, displayText: "" },
+    ]);
+    expect(sheets[0]?.dataValidations?.[0]?.ranges).toEqual([
+      { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 },
+    ]);
+  });
+
+  it("sets no dataValidations field at all on a sheet whose cells reference none", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}, [
+        el(
+          "table:table-cell",
+          { "office:value-type": "float", "office:value": "1" },
+          [el("text:p", {}, [txt("1")])],
+        ),
+      ]),
+    ]);
+    const { sheets } = readOdsContent(odsValidationPackage(table));
+    expect(sheets[0]?.dataValidations).toBeUndefined();
+  });
+
+  it("a validation-name reference with no matching definition contributes nothing to dataValidations, rather than throwing", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}, [
+        el(
+          "table:table-cell",
+          {
+            "office:value-type": "float",
+            "office:value": "1",
+            "table:content-validation-name": "does-not-exist",
+          },
+          [el("text:p", {}, [txt("1")])],
+        ),
+      ]),
+    ]);
+    const { sheets } = readOdsContent(odsValidationPackage(table));
+    expect(sheets[0]?.dataValidations).toBeUndefined();
+  });
+});
