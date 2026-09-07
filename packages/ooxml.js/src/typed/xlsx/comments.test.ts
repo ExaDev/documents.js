@@ -391,6 +391,86 @@ describe("readXlsxContent: cell comments -- threaded comments ([MS-XLSX], synthe
       replies: [{ text: "Reply" }],
     });
   });
+
+  it("decodes an XML entity in an inline displayName attribute, not just in <text> element content (regression: attr() returns the raw, still-encoded attribute value -- only textContent() decodes automatically -- so a name like this genuinely arrives as literal '&amp;' from a real parser and needs decodeEntities applied explicitly, exactly as resolveRelationships already does for a relationship Target)", () => {
+    const cells = readCommentedCells(
+      [
+        el("Relationship", {
+          Id: "rId1",
+          Type: REL_THREADED_COMMENTS,
+          Target: "../threadedComments/threadedComment1.xml",
+        }),
+      ],
+      {
+        "xl/threadedComments/threadedComment1.xml": {
+          kind: "xml",
+          nodes: [
+            el("ThreadedComments", {}, [
+              el(
+                "threadedComment",
+                { ref: "A1", displayName: "A &amp; B", id: "tc-root" },
+                [el("text", {}, [txt("Note")])],
+              ),
+            ]),
+          ],
+        },
+      },
+    );
+    expect(findCell(cells, 0, 0).comment).toEqual({
+      text: "Note",
+      author: "A & B",
+    });
+  });
+
+  it("decodes an XML entity in a persons-part displayName attribute the same way, resolved through personId rather than written inline", () => {
+    const cells = readCommentedCells(
+      [
+        el("Relationship", {
+          Id: "rId1",
+          Type: REL_THREADED_COMMENTS,
+          Target: "../threadedComments/threadedComment1.xml",
+        }),
+        el("Relationship", {
+          Id: "rId2",
+          Type: REL_PERSON,
+          Target: "../persons/person1.xml",
+        }),
+      ],
+      {
+        "xl/threadedComments/threadedComment1.xml": {
+          kind: "xml",
+          nodes: [
+            el("ThreadedComments", {}, [
+              el(
+                "threadedComment",
+                {
+                  ref: "A1",
+                  personId: "{4A6B5D62-8EC5-4C85-BC1F-7B9E2A25C111}",
+                  id: "tc-root",
+                },
+                [el("text", {}, [txt("Note")])],
+              ),
+            ]),
+          ],
+        },
+        "xl/persons/person1.xml": {
+          kind: "xml",
+          nodes: [
+            el("personList", {}, [
+              el("person", {
+                displayName: "Smith &amp; Sons",
+                id: "4a6b5d62-8ec5-4c85-bc1f-7b9e2a25c111",
+              }),
+            ]),
+          ],
+        },
+      },
+    );
+    expect(findCell(cells, 0, 0).comment).toEqual({
+      text: "Note",
+      author: "Smith & Sons",
+    });
+  });
 });
 
 describe("readXlsxContent: cell comments -- part resolution and tolerance boundaries (synthetic packages)", () => {
