@@ -1,3 +1,15 @@
+## [4.8.0](https://github.com/ExaDev/documents.js/compare/document-mcp%404.7.3...document-mcp%404.8.0) (2026-09-07)
+
+### Features
+
+* **document-mcp:** recognise .epub in convert_document and file input ([ae451da](https://github.com/ExaDev/documents.js/commit/ae451da35614dd8a01980f8ede31d1a8de0e282b))
+
+
+### Dependencies
+
+- Updated documents.js to ^7.7.0
+- Updated document-compute.js to ^1.3.29
+
 ## [4.7.3](https://github.com/ExaDev/documents.js/compare/document-mcp%404.7.2...document-mcp%404.7.3) (2026-09-07)
 
 

@@ -1,3 +1,14 @@
+## [2.7.0](https://github.com/ExaDev/documents.js/compare/web%402.6.2...web%402.7.0) (2026-09-07)
+
+### Features
+
+* **web:** preview and convert epub documents ([c752b2a](https://github.com/ExaDev/documents.js/commit/c752b2aaaecbfcbf41bae24de0c386e003773309))
+
+
+### Dependencies
+
+- Updated documents.js to ^7.7.0
+
 ## [2.6.2](https://github.com/ExaDev/documents.js/compare/web%402.6.1...web%402.6.2) (2026-09-07)
 
 

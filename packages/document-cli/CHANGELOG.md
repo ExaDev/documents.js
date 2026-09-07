@@ -1,3 +1,14 @@
+## [5.6.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.5.3...document-cli%405.6.0) (2026-09-07)
+
+### Features
+
+* **document-cli:** open epub documents as a read-only PDF preview ([fa0979b](https://github.com/ExaDev/documents.js/commit/fa0979b3345d861c3a32303cc3df90c414c45086))
+
+
+### Dependencies
+
+- Updated documents.js to ^7.7.0
+
 ## [5.5.3](https://github.com/ExaDev/documents.js/compare/document-cli%405.5.2...document-cli%405.5.3) (2026-09-07)
 
 

@@ -1,3 +1,9 @@
+## [7.7.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.6.3...documents.js%407.7.0) (2026-09-07)
+
+### Features
+
+* **documents.js:** wire epub-codec into the conversion registry and pathfinder ([b5ccf47](https://github.com/ExaDev/documents.js/commit/b5ccf479ce2a8c3e608985c7f50425b073a53ef6))
+
 ## [7.6.3](https://github.com/ExaDev/documents.js/compare/documents.js%407.6.2...documents.js%407.6.3) (2026-09-07)
 
 
