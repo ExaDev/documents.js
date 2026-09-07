@@ -5,6 +5,7 @@ import type { XmlElement } from "../../model/node";
 import {
   attr,
   childrenWithTag,
+  decodeEntities,
   elementsWithTag,
   resolveRelationships,
   rootElement,
@@ -152,7 +153,7 @@ function readPersons(pkg: Package, sheetPath: string): Map<string, string> {
       const id = attr(person, "id");
       const displayName = attr(person, "displayName");
       if (id !== undefined && displayName !== undefined) {
-        persons.set(normalizeGuid(id), displayName);
+        persons.set(normalizeGuid(id), decodeEntities(displayName));
       }
     }
   }
@@ -166,7 +167,7 @@ function readThreadedAuthor(
 ): string | undefined {
   const displayName = attr(element, "displayName");
   if (displayName !== undefined) {
-    return displayName;
+    return decodeEntities(displayName);
   }
   const personId = attr(element, "personId");
   return personId === undefined
