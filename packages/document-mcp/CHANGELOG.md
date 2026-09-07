@@ -1,3 +1,11 @@
+## [4.8.5](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.4...document-mcp%404.8.5) (2026-09-07)
+
+
+### Dependencies
+
+- Updated documents.js to ^7.8.2
+- Updated document-compute.js to ^1.3.34
+
 ## [4.8.4](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.3...document-mcp%404.8.4) (2026-09-07)
 
 

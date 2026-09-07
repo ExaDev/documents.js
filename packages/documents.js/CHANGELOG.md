@@ -1,3 +1,10 @@
+## [7.8.2](https://github.com/ExaDev/documents.js/compare/documents.js%407.8.1...documents.js%407.8.2) (2026-09-07)
+
+
+### Dependencies
+
+- Updated xls-codec to ^4.3.0
+
 ## [7.8.1](https://github.com/ExaDev/documents.js/compare/documents.js%407.8.0...documents.js%407.8.1) (2026-09-07)
 
 
