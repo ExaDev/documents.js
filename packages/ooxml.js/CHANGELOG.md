@@ -1,3 +1,13 @@
+## [8.2.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.1.0...ooxml.js%408.2.0) (2026-09-07)
+
+### Features
+
+* **ooxml.js:** apply w:themeShade/w:themeTint to a resolved theme colour ([1ca08ad](https://github.com/ExaDev/documents.js/commit/1ca08ad2853f898400bf548b90dd34efc492b6a6))
+
+### Documentation
+
+* **ooxml.js:** remove a stale claim about run boolean properties reading back false ([2bdc29e](https://github.com/ExaDev/documents.js/commit/2bdc29e83df6d80bc3bf449ecdf2a75e3a60a40b))
+
 ## [8.1.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.0.1...ooxml.js%408.1.0) (2026-09-07)
 
 ### Features
