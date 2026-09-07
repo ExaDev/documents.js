@@ -337,6 +337,127 @@ describe("parseParagraphProperties", () => {
       expect(result.hasUnknown).toBe(true);
     }
   });
+
+  // fo:border-* parsing, added for ExaDev/documents.js#1086 -- the odt half of #1082's own docx w:pBdr reading, so a border-only paragraph (Word's AutoCorrect "---" horizontal rule, or LibreOffice's own equivalent) is detected the same way regardless of source format.
+  it("parses a bottom-only border -- the exact shape a border-only horizontal rule takes", () => {
+    const element = el("style:paragraph-properties", {
+      "fo:border-bottom": "0.75pt solid #000000",
+    });
+    expect(parseParagraphProperties(element)).toEqual({
+      properties: {
+        borderBottom: {
+          color: { r: 0, g: 0, b: 0 },
+          widthPt: 0.75,
+          style: "solid",
+        },
+      },
+      hasUnknown: false,
+    });
+  });
+
+  it("parses all four discrete fo:border-* edges independently, each with its own width/style/colour", () => {
+    const element = el("style:paragraph-properties", {
+      "fo:border-left": "1pt dashed #ff0000",
+      "fo:border-right": "2pt dotted #00ff00",
+      "fo:border-top": "0.5pt double #0000ff",
+      "fo:border-bottom": "0.75pt solid #000000",
+    });
+    expect(parseParagraphProperties(element)).toEqual({
+      properties: {
+        borderLeft: {
+          color: { r: 1, g: 0, b: 0 },
+          widthPt: 1,
+          style: "dashed",
+        },
+        borderRight: {
+          color: { r: 0, g: 1, b: 0 },
+          widthPt: 2,
+          style: "dotted",
+        },
+        borderTop: {
+          color: { r: 0, g: 0, b: 1 },
+          widthPt: 0.5,
+          style: "double",
+        },
+        borderBottom: {
+          color: { r: 0, g: 0, b: 0 },
+          widthPt: 0.75,
+          style: "solid",
+        },
+      },
+      hasUnknown: false,
+    });
+  });
+
+  it("seeds all four edges from the fo:border shorthand, then lets a per-edge attribute on the same element override just that one edge", () => {
+    const element = el("style:paragraph-properties", {
+      "fo:border": "0.5pt solid #808080",
+      "fo:border-bottom": "1pt solid #000000",
+    });
+    const result = parseParagraphProperties(element);
+    expect(result.properties.borderLeft).toEqual({
+      color: {
+        r: 0.5019607843137255,
+        g: 0.5019607843137255,
+        b: 0.5019607843137255,
+      },
+      widthPt: 0.5,
+      style: "solid",
+    });
+    expect(result.properties.borderTop).toEqual({
+      color: {
+        r: 0.5019607843137255,
+        g: 0.5019607843137255,
+        b: 0.5019607843137255,
+      },
+      widthPt: 0.5,
+      style: "solid",
+    });
+    expect(result.properties.borderBottom).toEqual({
+      color: { r: 0, g: 0, b: 0 },
+      widthPt: 1,
+      style: "solid",
+    });
+    expect(result.hasUnknown).toBe(false);
+  });
+
+  it("recovers width and colour for an fo:border-* value whose style token this model has no member for (groove/ridge/inset/outset), leaving style unset and NOT flagging hasUnknown -- the border itself is fully recovered, only its style keyword has no equivalent", () => {
+    const element = el("style:paragraph-properties", {
+      "fo:border-bottom": "0.75pt groove #000000",
+    });
+    const result = parseParagraphProperties(element);
+    expect(result.properties.borderBottom).toEqual({
+      color: { r: 0, g: 0, b: 0 },
+      widthPt: 0.75,
+    });
+    expect(result.hasUnknown).toBe(false);
+  });
+
+  it("flags hasUnknown and leaves the field untouched for a malformed fo:border-* value (wrong token count, unparseable length/colour)", () => {
+    for (const value of [
+      "not-three-tokens",
+      "0.75pt solid",
+      "notalength solid #000000",
+    ]) {
+      const result = parseParagraphProperties(
+        el("style:paragraph-properties", { "fo:border-bottom": value }),
+      );
+      expect(result.properties.borderBottom).toBeUndefined();
+      expect(result.hasUnknown).toBe(true);
+    }
+  });
+
+  it('parses a style token of "none"/"hidden" as an explicit absence, distinct from the attribute never being present at all', () => {
+    for (const token of ["none", "hidden"]) {
+      const element = el("style:paragraph-properties", {
+        "fo:border-bottom": `0.75pt ${token} #000000`,
+      });
+      const result = parseParagraphProperties(element);
+      expect("borderBottom" in result.properties).toBe(true);
+      expect(result.properties.borderBottom).toBeUndefined();
+      expect(result.hasUnknown).toBe(false);
+    }
+  });
 });
 
 describe("parseStyleElementProperties", () => {

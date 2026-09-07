@@ -191,6 +191,49 @@ describe("resolveStyle: parent chain, root-first application", () => {
     });
   });
 
+  it("merges a parent style's border edge with a child style's own DIFFERENT edge, rather than the child's borderX fields wholesale replacing the parent's -- proving StyleProperties keeps border edges as separate flat fields specifically so this shallow field-by-field cascade merges them correctly (ExaDev/documents.js#1086)", () => {
+    const parent = styleStyle("P", "paragraph", {}, [
+      paragraphProps({ "fo:border-bottom": "0.75pt solid #000000" }),
+    ]);
+    const child = styleStyle(
+      "C",
+      "paragraph",
+      { "style:parent-style-name": "P" },
+      [paragraphProps({ "fo:border-top": "1pt dashed #ff0000" })],
+    );
+    const pkg: Package = {
+      parts: { "styles.xml": stylesPackage([parent, child]) },
+    };
+    const { properties } = resolveStyle("C", "paragraph", pkg);
+    expect(properties.borderBottom).toEqual({
+      color: { r: 0, g: 0, b: 0 },
+      widthPt: 0.75,
+      style: "solid",
+    });
+    expect(properties.borderTop).toEqual({
+      color: { r: 1, g: 0, b: 0 },
+      widthPt: 1,
+      style: "dashed",
+    });
+  });
+
+  it('lets a child style explicitly clear an inherited border edge (fo:border-bottom="none"), not merely leave it unmentioned', () => {
+    const parent = styleStyle("P", "paragraph", {}, [
+      paragraphProps({ "fo:border-bottom": "0.75pt solid #000000" }),
+    ]);
+    const child = styleStyle(
+      "C",
+      "paragraph",
+      { "style:parent-style-name": "P" },
+      [paragraphProps({ "fo:border-bottom": "0.75pt none #000000" })],
+    );
+    const pkg: Package = {
+      parts: { "styles.xml": stylesPackage([parent, child]) },
+    };
+    const { properties } = resolveStyle("C", "paragraph", pkg);
+    expect(properties.borderBottom).toBeUndefined();
+  });
+
   it('applies no fourth "direct formatting" layer -- the referenced style\'s own properties are the final word, exactly as parsed', () => {
     const parent = styleStyle("P", "paragraph", {}, [
       paragraphProps({ "fo:text-align": "left" }),

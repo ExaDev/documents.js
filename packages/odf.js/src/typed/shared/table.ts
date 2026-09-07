@@ -5,7 +5,6 @@ import type {
   ContentBorder,
   ContentCellBorders,
   ContentCellFill,
-  ContentStrokeStyle,
   ContentTable,
   ContentTableCell,
   ContentTableRow,
@@ -20,6 +19,13 @@ import { attrValue, childrenWithTag } from "../../xml/query";
 import { formatOdfLength, parseOdfLength } from "./units";
 import { formatOdfColor, parseOdfColor } from "./color";
 import { findStyleElement } from "./cascade";
+import {
+  BORDER_EDGE_ATTRS,
+  BORDER_EDGE_KEYS,
+  type BorderEdgeKey,
+  formatBorderEdge,
+  parseBorderEdge,
+} from "./border";
 import {
   readParagraphOrHeading,
   readOdfParagraph,
@@ -76,56 +82,9 @@ function resolveRowHeightPt(
 
 // style:table-cell-properties/@fo:background-color is the standard, portable OASIS attribute for a cell's own fill, and the one this reader resolves. Real LibreOffice-generated PRESENTATION tables specifically favour their own loext:graphic-properties/@draw:fill-color extension instead when SAVING (confirmed via a controlled round trip: a cell written with the standard fo:background-color came back re-serialized under loext: on the very next LibreOffice save) -- a private, unstable vendor namespace this package deliberately does not chase (this package's own convention is OASIS-spec-grounded; see this repository's README on "ground truth over memory"). A cell whose only fill information lives in that loext: extension reads with no background here: a real, verified, narrow gap, not a silently guessed one.
 //
-// BORDERS/ALIGNMENT/VERTICAL-ALIGNMENT (added alongside background for document-schema.js 2.0.0's Release A, which gave ContentTableCell a `borders` field and ContentSheetCell its own `borders`/`alignment`/`verticalAlignment` fields): fo:border and its four per-edge siblings (fo:border-left/right/top/bottom) share ODF's fixed-order XSL-FO border shorthand -- exactly THREE space-separated tokens, "<length> <border-style> <color>", in that fixed order (this is XSL-FO's own <border> shorthand, not CSS's permutation-tolerant one; e.g. `fo:border="0.05pt solid #000000"`). A border-style token of "none"/"hidden" means the edge genuinely carries NO border at all -- distinct from the attribute being absent entirely, which means "say nothing about this edge, whatever a less specific link in the style chain already set stays in effect" -- so an explicit override can clear an inherited edge, not just add one. A border-style ODF allows but ContentBorderSchema's own vocabulary has no member for (groove/ridge/inset/outset) still yields a real border -- width and colour are both genuine values read straight off the attribute -- just with `style` left unset (ContentBorderSchema's own documented "absent means 'solid'" default), the same "read what's real, leave what doesn't map unmapped rather than fabricating or discarding" precedent typed/draw/shapes.ts's own readOdfFillAndStroke already established for draw:stroke. style:vertical-align is enumerated to "top"/"middle"/"bottom"/"automatic" per the OASIS schema; "automatic" has no member in ContentSheetCell's own three-value verticalAlignment enum, so it is left unread (undefined) rather than guessed at. fo:text-align on a table-cell style's OWN style:paragraph-properties child (confirmed as real, valid structure against real LibreOffice 26.2 output -- style:default-style style:family="table-cell" in a genuine .ods's styles.xml carries a style:paragraph-properties child directly, setting the cell's own default paragraph formatting) is that same four-value vocabulary properties.ts's parseParagraphProperties already restricts to (left/center/right/justify) -- anything else (ODF's own "start"/"end" logical values included) is left unread rather than guessed at.
-const BORDER_STYLE_MAP: Readonly<Partial<Record<string, ContentStrokeStyle>>> =
-  { solid: "solid", dashed: "dashed", dotted: "dotted", double: "double" };
-export type BorderEdgeKey = "left" | "right" | "top" | "bottom";
-export const BORDER_EDGE_KEYS: readonly BorderEdgeKey[] = [
-  "left",
-  "right",
-  "top",
-  "bottom",
-];
-export const BORDER_EDGE_ATTRS: Readonly<Record<BorderEdgeKey, string>> = {
-  left: "fo:border-left",
-  right: "fo:border-right",
-  top: "fo:border-top",
-  bottom: "fo:border-bottom",
-};
-// A narrowing guard rather than a Set-membership check + type assertion (this package's own established "no type assertions" convention -- see registry.ts's isStyleFamily for the identical pattern applied to StyleFamily).
+// BORDERS/ALIGNMENT/VERTICAL-ALIGNMENT (added alongside background for document-schema.js 2.0.0's Release A, which gave ContentTableCell a `borders` field and ContentSheetCell its own `borders`/`alignment`/`verticalAlignment` fields): fo:border and its four per-edge siblings (fo:border-left/right/top/bottom) share ODF's fixed-order XSL-FO border shorthand -- see typed/shared/border.ts's own top-of-file note for the grammar and parseBorderEdge/formatBorderEdge, now shared with styles/properties.ts's paragraph-level border reading and typed/ods/write.ts's sheet-cell border writing. style:vertical-align is enumerated to "top"/"middle"/"bottom"/"automatic" per the OASIS schema; "automatic" has no member in ContentSheetCell's own three-value verticalAlignment enum, so it is left unread (undefined) rather than guessed at. fo:text-align on a table-cell style's OWN style:paragraph-properties child (confirmed as real, valid structure against real LibreOffice 26.2 output -- style:default-style style:family="table-cell" in a genuine .ods's styles.xml carries a style:paragraph-properties child directly, setting the cell's own default paragraph formatting) is that same four-value vocabulary properties.ts's parseParagraphProperties already restricts to (left/center/right/justify) -- anything else (ODF's own "start"/"end" logical values included) is left unread rather than guessed at. A narrowing guard rather than a Set-membership check + type assertion (this package's own established "no type assertions" convention -- see registry.ts's isStyleFamily for the identical pattern applied to StyleFamily).
 function isVerticalAlign(value: string): value is "top" | "middle" | "bottom" {
   return value === "top" || value === "middle" || value === "bottom";
-}
-
-// One edge's own parsed fo:border(-*) value: a real border, an explicit "no border" (style token "none"/"hidden"), or undefined for anything this reader cannot interpret (a malformed value, a token count other than three, an unparseable length/colour) -- undefined is deliberately treated by the caller as "this attribute said nothing usable", never as "clear this edge", so a malformed override can never silently erase a perfectly good inherited border.
-function parseBorderEdge(
-  value: string,
-): { border: ContentBorder } | { none: true } | undefined {
-  const tokens = value.trim().split(/\s+/);
-  if (tokens.length !== 3) {
-    return undefined;
-  }
-  const [widthToken, styleToken, colorToken] = tokens;
-  if (
-    widthToken === undefined ||
-    styleToken === undefined ||
-    colorToken === undefined
-  ) {
-    return undefined;
-  }
-  if (styleToken === "none" || styleToken === "hidden") {
-    return { none: true };
-  }
-  const widthPt = parseOdfLength(widthToken);
-  const color = parseOdfColor(colorToken);
-  if (widthPt === undefined || widthPt <= 0 || color === undefined) {
-    return undefined;
-  }
-  const style = BORDER_STYLE_MAP[styleToken];
-  return {
-    border:
-      style === undefined ? { color, widthPt } : { color, widthPt, style },
-  };
 }
 
 // Applies one style:table-cell-properties element's own fo:border/fo:border-* onto the running per-edge accumulator: the shorthand (if present) seeds all four edges first, then each per-edge attribute (if present on this SAME element) overrides just that one edge -- matching how a single real style element can legitimately carry both (three sides via the shorthand, one side overridden individually).
@@ -361,11 +320,6 @@ function tableRowStyle(
       }),
     ],
   });
-}
-
-// One border edge in ODF's own fixed-order XSL-FO shorthand -- exactly three space-separated tokens, "<length> <border-style> <color>", the same grammar parseBorderEdge above reads. An absent ContentBorder.style is written as "solid", which is what ContentBorderSchema already documents an absent style to mean, so the value written says what the value read says. Exported for typed/ods/write.ts, which writes the identical fo:border-*/style:table-cell-properties shorthand for ContentSheetCell.borders -- the same XSL-FO grammar, on a different content leaf, so the formatting is shared rather than duplicated.
-export function formatBorderEdge(border: ContentBorder): string {
-  return `${formatOdfLength(border.widthPt)} ${border.style ?? "solid"} ${formatOdfColor(border.color)}`;
 }
 
 function tableCellStyle(
