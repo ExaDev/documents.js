@@ -1,3 +1,15 @@
+## [8.4.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.3.0...ooxml.js%408.4.0) (2026-09-07)
+
+### Features
+
+* **ooxml.js:** read w:pBdr into ContentParagraph.borders for docx ([1c0b93c](https://github.com/ExaDev/documents.js/commit/1c0b93c18a2b7990400ae848e48218a564b775c4))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^7.1.0
+- Updated archive-codec to ^1.6.6
+
 ## [8.3.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.2.0...ooxml.js%408.3.0) (2026-09-07)
 
 ### Features

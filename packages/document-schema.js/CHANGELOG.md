@@ -1,3 +1,9 @@
+## [7.1.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.0.0...document-schema.js%407.1.0) (2026-09-07)
+
+### Features
+
+* **document-schema.js:** add ContentParagraph.borders for direct paragraph border formatting ([abd7bd1](https://github.com/ExaDev/documents.js/commit/abd7bd175e6ac93beb3791f25726f1679aac720e))
+
 ## [7.0.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%406.2.3...document-schema.js%407.0.0) (2026-09-07)
 
 ### ⚠ BREAKING CHANGES

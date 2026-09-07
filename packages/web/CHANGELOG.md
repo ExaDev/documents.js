@@ -1,3 +1,16 @@
+## [2.6.0](https://github.com/ExaDev/documents.js/compare/web%402.5.1...web%402.6.0) (2026-09-07)
+
+### Features
+
+* **web:** detect docx AutoCorrect horizontal rules via border shape ([9192fb0](https://github.com/ExaDev/documents.js/commit/9192fb055f849f363b8833bbdc2d1e0e5421622c))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^7.1.0
+- Updated markdown-codec to ^6.3.7
+- Updated documents.js to ^7.6.1
+
 ## [2.5.1](https://github.com/ExaDev/documents.js/compare/web%402.5.0...web%402.5.1) (2026-09-07)
 
 
