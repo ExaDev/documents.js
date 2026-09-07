@@ -180,6 +180,8 @@ function documentWithPath(doc: OpenDocument, path: string): OpenDocument {
       return { format: "xls", layout: doc.layout, bytes: doc.bytes, path };
     case "ppt":
       return { format: "ppt", layout: doc.layout, bytes: doc.bytes, path };
+    case "epub":
+      return { format: "epub", layout: doc.layout, bytes: doc.bytes, path };
   }
 }
 
@@ -815,7 +817,7 @@ export function appReducer(state: AppState, action: Action): AppState {
           stack: [rootScreenForFormat(action.doc.format)],
         },
         "info",
-        // xlsx, csv, svg, rtf, wpd, doc, xls, and ppt have no editor to open at all -- action.doc is already a read-only PDF-preview conversion by the time it reaches here (see format/open-document.ts) -- so these are the formats whose "opened" message doubles as pointing the way to the one thing that can actually be done with them next.
+        // xlsx, csv, svg, rtf, wpd, doc, xls, ppt, and epub have no editor to open at all -- action.doc is already a read-only PDF-preview conversion by the time it reaches here (see format/open-document.ts) -- so these are the formats whose "opened" message doubles as pointing the way to the one thing that can actually be done with them next.
         action.doc.format === "xlsx" ||
           action.doc.format === "csv" ||
           action.doc.format === "svg" ||
@@ -823,7 +825,8 @@ export function appReducer(state: AppState, action: Action): AppState {
           action.doc.format === "wpd" ||
           action.doc.format === "doc" ||
           action.doc.format === "xls" ||
-          action.doc.format === "ppt"
+          action.doc.format === "ppt" ||
+          action.doc.format === "epub"
           ? `Opened ${action.path} as a read-only PDF preview -- press ':' then 'export pdf' to save it as a real PDF`
           : `Opened ${action.path}`,
       );
@@ -2094,7 +2097,8 @@ export function appReducer(state: AppState, action: Action): AppState {
         doc.format === "wpd" ||
         doc.format === "doc" ||
         doc.format === "xls" ||
-        doc.format === "ppt"
+        doc.format === "ppt" ||
+        doc.format === "epub"
       ) {
         return withStatus(
           state,
