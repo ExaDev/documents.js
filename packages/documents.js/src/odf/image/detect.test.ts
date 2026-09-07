@@ -151,3 +151,76 @@ describe("collectImageFrames", () => {
     expect(collectImageFrames([frame], pkg)).toEqual([]);
   });
 });
+
+describe("collectImageFrames: floatPosition (ExaDev/documents.js#1094, the odt half of #1087)", () => {
+  it.each(["page", "frame", "paragraph"] as const)(
+    "reads a text:anchor-type=\"%s\" frame's own svg:x/svg:y into ContentImageBlock.floatPosition, both axes offset-based -- ODF has no alignment-keyword concept the way docx's wp:align is",
+    (anchorType) => {
+      const pkg = packageWithImage();
+      const frame = el(
+        "draw:frame",
+        {
+          "text:anchor-type": anchorType,
+          "svg:x": "36pt",
+          "svg:y": "-12pt",
+          "svg:width": "100pt",
+          "svg:height": "50pt",
+        },
+        [el("draw:image", { "xlink:href": "Pictures/image1.png" })],
+      );
+      const [detected] = collectImageFrames([frame], pkg);
+      expect(detected!.image.floatPosition).toEqual({
+        horizontal: { relativeTo: anchorType, offsetPt: 36 },
+        vertical: { relativeTo: anchorType, offsetPt: -12 },
+      });
+    },
+  );
+
+  it('has no floatPosition for a text:anchor-type="as-char" frame -- inline in text flow, no position of its own to record', () => {
+    const pkg = packageWithImage();
+    const frame = el(
+      "draw:frame",
+      {
+        "text:anchor-type": "as-char",
+        "svg:width": "100pt",
+        "svg:height": "50pt",
+      },
+      [el("draw:image", { "xlink:href": "Pictures/image1.png" })],
+    );
+    const [detected] = collectImageFrames([frame], pkg);
+    expect(detected!.image.floatPosition).toBeUndefined();
+  });
+
+  it('has no floatPosition for a text:anchor-type="char" frame either', () => {
+    const pkg = packageWithImage();
+    const frame = el(
+      "draw:frame",
+      {
+        "text:anchor-type": "char",
+        "svg:x": "10pt",
+        "svg:y": "10pt",
+        "svg:width": "100pt",
+        "svg:height": "50pt",
+      },
+      [el("draw:image", { "xlink:href": "Pictures/image1.png" })],
+    );
+    const [detected] = collectImageFrames([frame], pkg);
+    expect(detected!.image.floatPosition).toBeUndefined();
+  });
+
+  it("has no floatPosition for a frame carrying no text:anchor-type at all", () => {
+    const pkg = packageWithImage();
+    const frame = el(
+      "draw:frame",
+      {
+        "svg:x": "10pt",
+        "svg:y": "10pt",
+        "svg:width": "100pt",
+        "svg:height": "50pt",
+      },
+      [el("draw:image", { "xlink:href": "Pictures/image1.png" })],
+    );
+    const [detected] = collectImageFrames([frame], pkg);
+    expect(detected!.image.floatPosition).toBeUndefined();
+  });
+});
