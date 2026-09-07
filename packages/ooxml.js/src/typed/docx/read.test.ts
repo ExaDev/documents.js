@@ -1721,6 +1721,107 @@ describe("readDocxContent: malformed image geometry", () => {
   });
 });
 
+describe("readDocxContent: w:pBdr (direct paragraph border formatting)", () => {
+  it("reads a bottom-only border, the exact shape Word's AutoCorrect horizontal rule produces", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, [
+        el("w:pBdr", {}, [
+          el("w:bottom", {
+            "w:val": "single",
+            "w:sz": "6",
+            "w:color": "000000",
+          }),
+        ]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const borders = firstParagraph(doc).borders;
+    expect(borders?.bottom).toEqual({
+      color: { r: 0, g: 0, b: 0 },
+      widthPt: 0.75,
+      style: "solid",
+    });
+    expect(borders?.top).toBeUndefined();
+    expect(borders?.left).toBeUndefined();
+    expect(borders?.right).toBeUndefined();
+  });
+
+  it("reads all four edges independently, mapping style keywords and resolving an auto colour to black", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, [
+        el("w:pBdr", {}, [
+          el("w:top", { "w:val": "single", "w:sz": "8", "w:color": "00FF00" }),
+          el("w:left", { "w:val": "dashed", "w:color": "auto" }),
+          el("w:bottom", {
+            "w:val": "double",
+            "w:sz": "12",
+            "w:color": "0000FF",
+          }),
+          el("w:right", { "w:val": "dotted", "w:color": "FF0000" }),
+        ]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    const borders = firstParagraph(doc).borders;
+    expect(borders?.top).toEqual({
+      color: { r: 0, g: 1, b: 0 },
+      widthPt: 1,
+      style: "solid",
+    });
+    expect(borders?.left).toEqual({
+      color: { r: 0, g: 0, b: 0 },
+      widthPt: 0.5,
+      style: "dashed",
+    });
+    expect(borders?.bottom).toEqual({
+      color: { r: 0, g: 0, b: 1 },
+      widthPt: 1.5,
+      style: "double",
+    });
+    expect(borders?.right).toEqual({
+      color: { r: 1, g: 0, b: 0 },
+      widthPt: 0.5,
+      style: "dotted",
+    });
+  });
+
+  it("has no w:start/w:end RTL-alias fallback, unlike w:tcBorders -- a paragraph carrying only those is read as having no left/right border", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, [
+        el("w:pBdr", {}, [
+          el("w:start", {
+            "w:val": "single",
+            "w:sz": "8",
+            "w:color": "000000",
+          }),
+          el("w:end", { "w:val": "single", "w:sz": "8", "w:color": "000000" }),
+        ]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    expect(firstParagraph(doc).borders).toBeUndefined();
+  });
+
+  it("leaves borders undefined when the paragraph carries no w:pBdr at all", () => {
+    const paragraph = el("w:p", {}, [textRun("Plain paragraph")]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    expect(firstParagraph(doc).borders).toBeUndefined();
+  });
+
+  it("leaves borders undefined when w:pBdr's own edges are all nil, matching readCellBorders' identical treatment", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, [
+        el("w:pBdr", {}, [
+          el("w:top", { "w:val": "nil" }),
+          el("w:bottom", { "w:val": "none" }),
+        ]),
+      ]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    expect(firstParagraph(doc).borders).toBeUndefined();
+  });
+});
+
 describe("readDocxContent: comments, footnotes, header and footer parts", () => {
   it("reads comment author and text from word/comments.xml", () => {
     const pkg = buildFixturePackage();
