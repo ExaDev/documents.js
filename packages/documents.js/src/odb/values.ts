@@ -1,6 +1,6 @@
 import type { ContentCellValue } from "document-schema.js";
 
-// The ContentCellValue comparison and aggregation semantics shared by both .odb expression engines: src/odb/sql/ (a bounded single-table SELECT) and src/odb/formula/ (Report Builder rpt formulas). Both compare values, both implement the identical five aggregates over the identical NULL-skipping rules, and both are handed exactly the ContentCellValue[] rows readOdbTables produces -- so the semantics live here once rather than being restated in each, where a fix to one would silently leave the other wrong.
+// The ContentCellValue comparison and aggregation semantics shared by both .odb expression engines: src/odb/sql/ (a bounded SELECT, with optional INNER JOINs) and src/odb/formula/ (Report Builder rpt formulas). Both compare values, both implement the identical five aggregates over the identical NULL-skipping rules, and both are handed exactly the ContentCellValue[] rows readOdbTables produces -- so the semantics live here once rather than being restated in each, where a fix to one would silently leave the other wrong.
 //
 // The one thing this module deliberately does NOT own is which error a violation raises: a comparison failure inside a SELECT is an HsqldbSqlEvaluationError quoting the offending statement, and the same failure inside a report formula is an RptFormulaEvaluationError quoting the offending formula. Each function therefore takes a `fail` factory and throws what the caller builds, rather than owning an error type neither engine would want.
 //

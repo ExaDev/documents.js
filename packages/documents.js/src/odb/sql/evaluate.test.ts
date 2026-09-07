@@ -435,6 +435,132 @@ describe("evaluateSelect: GROUP BY and aggregates", () => {
   });
 });
 
+// A second table sharing a column NAME with EMPLOYEES on purpose -- both the deliberate ambiguity trap (an unqualified reference to NAME after a JOIN) and the ordinary disambiguation path (EMPLOYEES.NAME vs DEPARTMENTS.NAME) need a real name collision to exercise, not two tables that happen never to clash. MARKETING has no matching employee at all, which is what proves INNER JOIN excludes an unmatched row on either side rather than padding it with NULLs.
+const DEPARTMENTS: HsqldbTable = {
+  tableName: "DEPARTMENTS",
+  columns: [
+    { name: "NAME", type: "VARCHAR(20)" },
+    { name: "BUDGET", type: "DECIMAL(10,2)" },
+  ],
+  rows: [
+    [text("Sales"), num(50000)],
+    [text("Eng"), num(80000)],
+    [text("Marketing"), num(30000)],
+  ],
+};
+
+const JOIN_TABLES: readonly HsqldbTable[] = [EMPLOYEES, DEPARTMENTS];
+
+function runJoin(sql: string) {
+  return run(sql, JOIN_TABLES);
+}
+
+describe("evaluateSelect: JOIN", () => {
+  it("pairs matching rows and drops rows with no match on either side", () => {
+    const result = runJoin(
+      "SELECT EMPLOYEES.NAME, DEPARTMENTS.NAME FROM EMPLOYEES JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME ORDER BY EMPLOYEES.NAME",
+    );
+    // Erin and Frank (DEPT is NULL) never match anything -- NULL = anything is UNKNOWN, never TRUE, exactly as in WHERE -- and Marketing (no employee in it) never appears either: this is INNER JOIN, not an outer join padding the unmatched side with NULLs.
+    expect(result.rows).toEqual([
+      [text("Alice"), text("Sales")],
+      [text("Bob"), text("Sales")],
+      [text("Carol"), text("Eng")],
+      [text("Dave"), text("Eng")],
+    ]);
+  });
+
+  it("lays SELECT * out as the base table's own columns followed by each JOIN's, in the order written", () => {
+    const result = runJoin(
+      "SELECT * FROM EMPLOYEES JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME WHERE EMPLOYEES.NAME = 'Alice'",
+    );
+    expect(result.columns).toEqual([
+      "NAME",
+      "DEPT",
+      "SALARY",
+      "ACTIVE",
+      "HIRED",
+      "NAME",
+      "BUDGET",
+    ]);
+    expect(result.rows).toEqual([
+      [
+        text("Alice"),
+        text("Sales"),
+        num(1000),
+        bool(true),
+        date("2024-01-15"),
+        text("Sales"),
+        num(50000),
+      ],
+    ]);
+  });
+
+  it("throws rather than guessing when an unqualified column name is genuinely ambiguous across joined tables", () => {
+    expect(() =>
+      runJoin(
+        "SELECT NAME FROM EMPLOYEES JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME",
+      ),
+    ).toThrow(/column "NAME" is ambiguous/);
+  });
+
+  it("filters the joined row set with WHERE, after the join has already run", () => {
+    expect(
+      runJoin(
+        "SELECT EMPLOYEES.NAME FROM EMPLOYEES JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME WHERE DEPARTMENTS.BUDGET > 60000",
+      ).rows,
+    ).toEqual([[text("Carol")], [text("Dave")]]);
+  });
+
+  it("groups and aggregates over a joined row set", () => {
+    expect(
+      runJoin(
+        "SELECT DEPARTMENTS.NAME, COUNT(*) FROM EMPLOYEES JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME GROUP BY DEPARTMENTS.NAME ORDER BY DEPARTMENTS.NAME",
+      ).rows,
+    ).toEqual([
+      [text("Eng"), num(2)],
+      [text("Sales"), num(2)],
+    ]);
+  });
+
+  it("folds several JOIN clauses left to right, each seeing every table joined so far", () => {
+    const highBudget: HsqldbTable = {
+      tableName: "HIGH_BUDGET",
+      columns: [{ name: "DEPT_NAME", type: "VARCHAR(20)" }],
+      rows: [[text("Eng")]],
+    };
+    const result = run(
+      "SELECT EMPLOYEES.NAME FROM EMPLOYEES JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME JOIN HIGH_BUDGET ON DEPARTMENTS.NAME = HIGH_BUDGET.DEPT_NAME ORDER BY EMPLOYEES.NAME",
+      [EMPLOYEES, DEPARTMENTS, highBudget],
+    );
+    expect(result.rows).toEqual([[text("Carol")], [text("Dave")]]);
+  });
+
+  it("refuses an ON predicate whose own table qualifier names a table this statement never joined", () => {
+    expect(() =>
+      runJoin(
+        "SELECT EMPLOYEES.NAME FROM EMPLOYEES JOIN DEPARTMENTS ON EMPLOYEES.DEPT = NONEXISTENT.NAME",
+      ),
+    ).toThrow(HsqldbSqlEvaluationError);
+  });
+
+  it("refuses an unqualified column reference in ON that is ambiguous across the tables joined so far, on the identical rule an ordinary select-list column already follows", () => {
+    expect(() =>
+      runJoin(
+        "SELECT EMPLOYEES.NAME FROM EMPLOYEES JOIN DEPARTMENTS ON DEPT = NAME",
+      ),
+    ).toThrow(/column "DEPT" not found|column "NAME" is ambiguous/);
+  });
+
+  it("makes a self-join's own unqualified table name ambiguous rather than silently picking one occurrence -- there is no alias to tell the two apart", () => {
+    expect(() =>
+      run(
+        "SELECT EMPLOYEES.NAME FROM EMPLOYEES JOIN EMPLOYEES ON EMPLOYEES.DEPT = EMPLOYEES.DEPT",
+        [EMPLOYEES],
+      ),
+    ).toThrow(/is ambiguous/);
+  });
+});
+
 describe("evaluateSelect: failures that must never become a wrong answer", () => {
   it.each([
     ["SELECT * FROM NOPE", 'table "NOPE" not found'],
@@ -501,7 +627,7 @@ describe("evaluateSelect: failures that must never become a wrong answer", () =>
       rows: [[num(1)]],
     };
     expect(() => run("SELECT B FROM MALFORMED", [malformed])).toThrow(
-      'malformed table "MALFORMED"',
+      "malformed joined row",
     );
   });
 });

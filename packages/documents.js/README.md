@@ -606,7 +606,7 @@ import { readFirebirdBackup } from "documents.js";
 const { summary, tables } = readFirebirdBackup(firebirdBackupBytes);
 ```
 
-**SQL `SELECT` engine** — `parseSelect`/`evaluateSelect` run a bounded single-table `SELECT` over `readOdbTables`' output. Closed allowlist grammar: column list or `*` or aggregates (`COUNT`/`SUM`/`AVG`/`MIN`/`MAX`), `FROM` one table, optional `WHERE`/`GROUP BY`/`ORDER BY`. Everything else throws `HsqldbSqlUnsupportedError`:
+**SQL `SELECT` engine** — `parseSelect`/`evaluateSelect` run a bounded `SELECT` over `readOdbTables`' output. Closed allowlist grammar: column list or `*` or aggregates (`COUNT`/`SUM`/`AVG`/`MIN`/`MAX`), `FROM` one table plus zero or more `[INNER] JOIN table ON predicate` clauses (a plain nested-loop inner join; a column past the first table must be qualified by its own table name, since there is no alias grammar), optional `WHERE`/`GROUP BY`/`ORDER BY`. OUTER/LEFT/RIGHT/FULL/CROSS/NATURAL joins, subqueries, and everything else outside the grammar throws `HsqldbSqlUnsupportedError`:
 
 ```ts
 import { decodePackage, readOdbInventory } from "odf.js";
