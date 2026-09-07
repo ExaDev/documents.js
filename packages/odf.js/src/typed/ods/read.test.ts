@@ -877,14 +877,6 @@ describe("readOdsContent: residue rows", () => {
       "Sheet2.A1:Sheet2.A1",
     );
   });
-
-  it("quarantines the REAL conditional-format.ods fixture's calcext:conditional-formats written inside its table:table", () => {
-    const { source } = readOdsContent(loadFixture("conditional-format.ods"));
-    expect(source?.["calcext:conditional-formats"]?.format).toBe("ods");
-    expect(source?.["calcext:conditional-formats"]?.xml).toContain(
-      "<calcext:conditional-format",
-    );
-  });
 });
 
 describe("readOdsContent: named expressions (synthetic packages -- the declarations real fixture output leaves empty)", () => {
@@ -1608,5 +1600,86 @@ describe("readOdsContent: data validation (ExaDev/documents.js#925, synthetic pa
     ]);
     const { sheets } = readOdsContent(odsValidationPackage(table));
     expect(sheets[0]?.dataValidations).toBeUndefined();
+  });
+});
+
+describe("readOdsContent: conditional formatting wiring (ExaDev/documents.js#1075, synthetic packages) -- conditional-format.test.ts covers the reading logic itself in full; this block proves readOdsContent actually calls it and routes the two outcomes correctly, not just that the reader function works in isolation", () => {
+  function conditionalFormatsPackage(table: XmlElement): Package {
+    return {
+      parts: {
+        "content.xml": {
+          kind: "xml",
+          nodes: [
+            el("office:document-content", {}, [
+              el("office:body", {}, [el("office:spreadsheet", {}, [table])]),
+            ]),
+          ],
+        },
+      },
+    };
+  }
+
+  it("sets sheet.conditionalFormats from a table's own calcext:conditional-formats", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("calcext:conditional-formats", {}, [
+        el(
+          "calcext:conditional-format",
+          { "calcext:target-range-address": "Sheet1.A1:Sheet1.A1" },
+          [el("calcext:condition", { "calcext:value": "unique" })],
+        ),
+      ]),
+    ]);
+    const { sheets } = readOdsContent(conditionalFormatsPackage(table));
+    expect(sheets[0]?.conditionalFormats).toEqual([
+      {
+        type: "uniqueValues",
+        ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+      },
+    ]);
+  });
+
+  it("sets no conditionalFormats field at all on a sheet with no calcext:conditional-formats element", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("table:table-row", {}),
+    ]);
+    const { sheets } = readOdsContent(conditionalFormatsPackage(table));
+    expect(sheets[0]?.conditionalFormats).toBeUndefined();
+  });
+
+  it("quarantines an unpromotable rule as whole-element residue instead of double-counting it via the generic vendor-extension sweep", () => {
+    const table = el("table:table", { "table:name": "Sheet1" }, [
+      el("calcext:conditional-formats", {}, [
+        el(
+          "calcext:conditional-format",
+          { "calcext:target-range-address": "Sheet1.A1:Sheet1.A1" },
+          [
+            el("calcext:condition", {
+              "calcext:value": "formula-is(A1>B1)",
+            }),
+          ],
+        ),
+      ]),
+    ]);
+    const { sheets, source } = readOdsContent(conditionalFormatsPackage(table));
+    expect(sheets[0]?.conditionalFormats).toBeUndefined();
+    expect(source?.["calcext:conditional-formats"]).toBeDefined();
+    expect(source?.["calcext:conditional-formats"]?.xml).toContain(
+      "formula-is(A1>B1)",
+    );
+  });
+});
+
+describe("readOdsContent: conditional-format.ods (real LibreOffice output)", () => {
+  const { sheets } = readOdsContent(loadFixture("conditional-format.ods"));
+
+  it("promotes the fixture's own >3 cellIs rule, with no style field at all -- its apply-style-name references the built-in 'Default' table-cell style, which is genuinely empty (no fo:color/fo:background-color of its own, and the table-cell family default-style carries only text-properties), so there is nothing observable to report", () => {
+    expect(sheets[0]?.conditionalFormats).toEqual([
+      {
+        type: "cellIs",
+        ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 1 }],
+        operator: "greaterThan",
+        formula1: "3",
+      },
+    ]);
   });
 });
