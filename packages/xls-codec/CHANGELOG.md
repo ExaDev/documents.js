@@ -1,3 +1,9 @@
+## [4.3.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.2.3...xls-codec%404.3.0) (2026-09-07)
+
+### Features
+
+* **xls-codec:** read BIFF8 Dv/DVal records into ContentSheet.dataValidations ([1a99e61](https://github.com/ExaDev/documents.js/commit/1a99e61f028600b96f13bc1c5be11a9793d13e39))
+
 ## [4.2.3](https://github.com/ExaDev/documents.js/compare/xls-codec%404.2.2...xls-codec%404.2.3) (2026-09-07)
 
 
