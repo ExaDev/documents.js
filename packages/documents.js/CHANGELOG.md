@@ -1,3 +1,9 @@
+## [7.5.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.4.0...documents.js%407.5.0) (2026-09-07)
+
+### Features
+
+* **documents.js:** export ContentEmbeddedObject types from the public API ([2fd70a0](https://github.com/ExaDev/documents.js/commit/2fd70a09aa8a92cc4e6d55a2edbb4c5560194bc5))
+
 ## [7.4.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.3.0...documents.js%407.4.0) (2026-09-07)
 
 ### Features

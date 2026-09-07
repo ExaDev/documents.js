@@ -1,3 +1,18 @@
+## [2.5.0](https://github.com/ExaDev/documents.js/compare/web%402.4.23...web%402.5.0) (2026-09-07)
+
+### Features
+
+* **web:** render horizontal rules, page breaks, and embedded objects in previews ([d947167](https://github.com/ExaDev/documents.js/commit/d947167348f88e80c764084f803b72917c3453a9)), references [ExaDev/documents.js#1082](https://github.com/ExaDev/documents.js/issues/1082)
+
+### Bug Fixes
+
+* **web:** stop exporting stripMathMlNamespace from mathml.ts ([aa01ced](https://github.com/ExaDev/documents.js/commit/aa01cedea685e7bd03fe8a485d89307a7fbe1cd8))
+
+
+### Dependencies
+
+- Updated documents.js to ^7.5.0
+
 ## [2.4.23](https://github.com/ExaDev/documents.js/compare/web%402.4.22...web%402.4.23) (2026-09-07)
 
 
