@@ -168,8 +168,11 @@ export {
   readOdfMetadata,
   writeOdfMetadata,
   buildOdfMetaNodes,
+  hasOdfMetadata,
+  patchOdfMetadata,
   META_PART,
 } from "./typed/shared/metadata";
+export type { OdfMetadataOverrides } from "./typed/shared/metadata";
 
 export {
   readOdfParagraph,

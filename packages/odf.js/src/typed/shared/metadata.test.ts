@@ -1,18 +1,52 @@
 import { describe, expect, it } from "vitest";
 import type { Package } from "../../model/package";
+import type { XmlElement } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
-import { readOdfMetadata, META_PART } from "./metadata";
+import {
+  readOdfMetadata,
+  hasOdfMetadata,
+  patchOdfMetadata,
+  META_PART,
+} from "./metadata";
 
-function metaPackage(metaChildren: Parameters<typeof el>[2] = []): Package {
+function metaPackage(
+  metaChildren: Parameters<typeof el>[2] = [],
+  rootAttributes: Parameters<typeof el>[1] = {},
+): Package {
   const meta = el("office:meta", {}, metaChildren);
   return {
     parts: {
       [META_PART]: {
         kind: "xml",
-        nodes: [el("office:document-meta", {}, [meta])],
+        nodes: [el("office:document-meta", rootAttributes, [meta])],
       },
     },
   };
+}
+
+function documentMetaRootOf(pkg: Package): XmlElement {
+  const part = pkg.parts[META_PART];
+  if (part?.kind !== "xml") {
+    throw new Error("expected an XML meta.xml part");
+  }
+  const root = part.nodes.find(
+    (node): node is XmlElement => node.type === "element",
+  );
+  if (root === undefined) {
+    throw new Error("expected an office:document-meta root element");
+  }
+  return root;
+}
+
+function officeMetaOf(pkg: Package): XmlElement {
+  const meta = documentMetaRootOf(pkg).children.find(
+    (child): child is XmlElement =>
+      child.type === "element" && child.tag === "office:meta",
+  );
+  if (meta === undefined) {
+    throw new Error("expected an office:meta element");
+  }
+  return meta;
 }
 
 describe("readOdfMetadata", () => {
@@ -178,5 +212,159 @@ describe("readOdfMetadata", () => {
   it("omits keywords entirely when there are no meta:keyword elements", () => {
     const pkg = metaPackage([el("dc:title", {}, [txt("No keywords here")])]);
     expect(readOdfMetadata(pkg).keywords).toBeUndefined();
+  });
+});
+
+describe("hasOdfMetadata", () => {
+  it("is true for a package carrying a real meta.xml XML part", () => {
+    expect(hasOdfMetadata(metaPackage())).toBe(true);
+  });
+
+  it("is false when the package has no meta.xml part at all", () => {
+    expect(hasOdfMetadata({ parts: {} })).toBe(false);
+  });
+
+  it("is false when meta.xml is not an XML part", () => {
+    expect(
+      hasOdfMetadata({
+        parts: { [META_PART]: { kind: "binary", base64: "" } },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("patchOdfMetadata", () => {
+  it("creates dc:title on an office:meta that had none, reading back through readOdfMetadata", () => {
+    const pkg = metaPackage([]);
+    patchOdfMetadata(pkg, { title: "New title" });
+    expect(readOdfMetadata(pkg).title).toBe("New title");
+  });
+
+  it("replaces an existing dc:title's text in place, rather than appending a second element", () => {
+    const pkg = metaPackage([el("dc:title", {}, [txt("Old title")])]);
+    patchOdfMetadata(pkg, { title: "New title" });
+    expect(readOdfMetadata(pkg).title).toBe("New title");
+    expect(
+      officeMetaOf(pkg).children.filter(
+        (c) => c.type === "element" && c.tag === "dc:title",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("patches author onto meta:initial-creator, never dc:creator", () => {
+    const pkg = metaPackage([]);
+    patchOdfMetadata(pkg, { author: "New author" });
+    expect(readOdfMetadata(pkg).author).toBe("New author");
+  });
+
+  it("patches subject onto dc:subject", () => {
+    const pkg = metaPackage([]);
+    patchOdfMetadata(pkg, { subject: "New subject" });
+    expect(readOdfMetadata(pkg).subject).toBe("New subject");
+  });
+
+  it("leaves every element the patch does not name completely untouched -- meta:generator, meta:creation-date, dc:date, and an unrecognised producer field alike", () => {
+    const pkg = metaPackage([
+      el("meta:generator", {}, [txt("Some Producer 1.0")]),
+      el("meta:creation-date", {}, [txt("2020-01-01T00:00:00")]),
+      el("dc:date", {}, [txt("2020-06-01T00:00:00")]),
+      el("meta:document-statistic", { "meta:page-count": "3" }),
+    ]);
+    patchOdfMetadata(pkg, { title: "Only the title changes" });
+    const meta = readOdfMetadata(pkg);
+    expect(meta.title).toBe("Only the title changes");
+    expect(meta.creator).toBe("Some Producer 1.0");
+    expect(meta.createdIso).toBe("2020-01-01T00:00:00");
+    expect(meta.modifiedIso).toBe("2020-06-01T00:00:00");
+    expect(
+      officeMetaOf(pkg).children.some(
+        (c) => c.type === "element" && c.tag === "meta:document-statistic",
+      ),
+    ).toBe(true);
+  });
+
+  it("replaces every existing meta:keyword with one element per new keyword", () => {
+    const pkg = metaPackage([
+      el("meta:keyword", {}, [txt("old-alpha")]),
+      el("meta:keyword", {}, [txt("old-beta")]),
+    ]);
+    patchOdfMetadata(pkg, { keywords: ["new-alpha", "new-beta", "new-gamma"] });
+    expect(readOdfMetadata(pkg).keywords).toEqual([
+      "new-alpha",
+      "new-beta",
+      "new-gamma",
+    ]);
+  });
+
+  it("removes every meta:keyword element when patched with an empty array, rather than leaving a stale one", () => {
+    const pkg = metaPackage([
+      el("meta:keyword", {}, [txt("alpha")]),
+      el("meta:keyword", {}, [txt("beta")]),
+    ]);
+    patchOdfMetadata(pkg, { keywords: [] });
+    expect(readOdfMetadata(pkg).keywords).toBeUndefined();
+    expect(
+      officeMetaOf(pkg).children.some(
+        (c) => c.type === "element" && c.tag === "meta:keyword",
+      ),
+    ).toBe(false);
+  });
+
+  it("leaves keywords entirely alone when the override omits the field", () => {
+    const pkg = metaPackage([el("meta:keyword", {}, [txt("alpha")])]);
+    patchOdfMetadata(pkg, { title: "New title" });
+    expect(readOdfMetadata(pkg).keywords).toEqual(["alpha"]);
+  });
+
+  it("declares xmlns:meta on office:document-meta when patching author into a meta.xml that only ever declared dc:, rather than emitting an unbound prefix", () => {
+    const pkg = metaPackage([el("dc:title", {}, [txt("Existing title")])], {
+      "xmlns:office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+      "xmlns:dc": "http://purl.org/dc/elements/1.1/",
+    });
+    patchOdfMetadata(pkg, { author: "New author" });
+    const root = documentMetaRootOf(pkg);
+    expect(root.attributes.find((a) => a.name === "xmlns:meta")?.value).toBe(
+      "urn:oasis:names:tc:opendocument:xmlns:meta:1.0",
+    );
+    expect(readOdfMetadata(pkg).author).toBe("New author");
+  });
+
+  it("does not duplicate an xmlns declaration the root already carries", () => {
+    const pkg = metaPackage([], {
+      "xmlns:office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+      "xmlns:meta": "urn:oasis:names:tc:opendocument:xmlns:meta:1.0",
+    });
+    patchOdfMetadata(pkg, { author: "New author" });
+    const root = documentMetaRootOf(pkg);
+    expect(root.attributes.filter((a) => a.name === "xmlns:meta")).toHaveLength(
+      1,
+    );
+  });
+
+  it("throws when the package has no meta.xml part at all", () => {
+    expect(() => {
+      patchOdfMetadata({ parts: {} }, { title: "x" });
+    }).toThrow(/has no 'meta\.xml' XML part/);
+  });
+
+  it("throws when meta.xml has no office:meta element", () => {
+    const pkg: Package = {
+      parts: {
+        [META_PART]: { kind: "xml", nodes: [el("office:document-meta")] },
+      },
+    };
+    expect(() => {
+      patchOdfMetadata(pkg, { title: "x" });
+    }).toThrow(/has no office:meta element/);
+  });
+
+  it("writes even an empty-string title/author/subject, matching buildOdfMetaNodes' own field-presence convention", () => {
+    const pkg = metaPackage([el("dc:title", {}, [txt("Something")])]);
+    patchOdfMetadata(pkg, { title: "" });
+    expect(
+      officeMetaOf(pkg).children.some(
+        (c) => c.type === "element" && c.tag === "dc:title",
+      ),
+    ).toBe(true);
   });
 });
