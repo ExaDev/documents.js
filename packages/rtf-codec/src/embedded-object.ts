@@ -316,11 +316,10 @@ export function writeEmbeddedObjectData(
   return out;
 }
 
-// isContentEmbeddedObject (the guard ContentEmbeddedObjectSchema wraps, src/content.ts) is a predicate over an untrusted parsed value, not a reconstructive parse: it confirms the fields ContentEmbeddedObject actually needs are present and well-shaped, but says nothing about any OTHER key the same object happens to carry, so a hostile \objdata's JSON payload can smuggle an arbitrary extra field (a "kind" that would collide with ContentEmbeddedObjectBlock's own discriminant once buildEmbeddedObject adds it, or anything else) straight through a validated safeParse result untouched. Rebuilding the returned value from only the fields ContentEmbeddedObject actually declares -- mirroring writeEmbeddedObjectData's own payload object below field-for-field -- closes that off once, here, rather than leaving every caller to remember to strip it themselves. `source` is the one declared field isContentEmbeddedObject's guard never actually inspects (it validates objectKind/frame/document/the four anchor fields, but stops there), so copying it through unconditionally would carry that same gap forward into this function's own result -- this function validates it independently against SourceResidueSchema (src/source.ts) before including it, and drops it silently otherwise, exactly like every other unrecognised key this function already excludes.
+// ContentEmbeddedObjectSchema is a real, self-recursive z.object() now (ExaDev/documents.js#1009 -- it used to be a z.custom() guard, isContentEmbeddedObject, that validated objectKind/frame/document/the four anchor fields but never inspected `source` at all), so every field it declares, source included, is now genuinely schema-validated by the safeParse call in readEmbeddedObjectData below. Rebuilding the returned value from only the fields ContentEmbeddedObject actually declares -- mirroring writeEmbeddedObjectData's own payload object below field-for-field -- still closes off a hostile \objdata payload smuggling an arbitrary extra key (a "kind" that would collide with ContentEmbeddedObjectBlock's own discriminant once buildEmbeddedObject adds it, or anything else) straight through a validated parse result, exactly as it always did; `source`, now schema-validated up front rather than re-validated here, is simply copied through.
 function knownContentEmbeddedObjectFields(
   embedded: ContentEmbeddedObject,
 ): ContentEmbeddedObject {
-  const source = SourceResidueSchema.safeParse(embedded.source);
   return {
     objectKind: embedded.objectKind,
     document: embedded.document,
@@ -337,8 +336,29 @@ function knownContentEmbeddedObjectFields(
     ...(embedded.offsetYPt === undefined
       ? {}
       : { offsetYPt: embedded.offsetYPt }),
-    ...(source.success ? { source: source.data } : {}),
+    ...(embedded.source === undefined ? {} : { source: embedded.source }),
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// A hostile or malformed \objdata JSON payload's own `source` value used to reach knownContentEmbeddedObjectFields untouched, because isContentEmbeddedObject's guard never inspected it -- that function validated and dropped it independently. Now that ContentEmbeddedObjectSchema validates `source` as a genuine field of its own (see that schema's own comment in document-schema.js's src/content.ts), a hostile source would instead fail the WHOLE object's validation at the safeParse call below, discarding an otherwise perfectly well-formed embedded object over one bad metadata field -- a real behavioural regression from the original, more lenient "drop the bad field, keep the rest" contract this reader has always offered. Stripping an invalid `source` key before that validation runs restores it: a payload whose `source` doesn't parse loses only that field, exactly as before, rather than the whole read.
+function withoutInvalidSource(value: unknown): unknown {
+  if (!isRecord(value) || !("source" in value)) {
+    return value;
+  }
+  if (SourceResidueSchema.safeParse(value.source).success) {
+    return value;
+  }
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (key !== "source") {
+      sanitized[key] = entry;
+    }
+  }
+  return sanitized;
 }
 
 // The mirror of writeEmbeddedObjectData: recovers a ContentEmbeddedObject from an \object's \objdata bytes when they are this package's own payload, or returns undefined for anything else -- a real OLE object's native data included -- rather than throwing, since one unreadable \object must not fail the whole document read. Every step below (ObjectHeader parse, compound-file parse, Package-stream unwrap, JSON parse, schema validation, Presentation-field parse) can fail independently on a foreign object; the single catch treats all of them alike, matching xls-codec's own container.ts precedent ("archive-codec's own reader can surface a raw RangeError ... which is a corrupt file rather than a bug here"). Presentation is validated last, after NativeData has already decoded successfully: a payload whose NativeData is genuinely this package's own JSON but whose mandatory fourth field is missing or malformed is not a shape this writer ever produced, so it is rejected here rather than accepted as a truncated match.
@@ -374,7 +394,9 @@ export function readEmbeddedObjectData(
     const olePackage = readOlePackage(packageStream.bytes);
     const text = new TextDecoder("utf-8").decode(olePackage.fileBytes);
     const parsed: unknown = JSON.parse(text);
-    const result = ContentEmbeddedObjectSchema.safeParse(parsed);
+    const result = ContentEmbeddedObjectSchema.safeParse(
+      withoutInvalidSource(parsed),
+    );
     if (!result.success) {
       return undefined;
     }
