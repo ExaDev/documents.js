@@ -504,6 +504,28 @@ export function readOdfParagraph(
     context.markersOut.push(...walk.halves);
   }
 
+  // Assembled from the four flat borderLeft/Right/Top/Bottom StyleProperties fields (properties.ts's own top-of-file note on why they stay flat through cascade resolution rather than living as one nested object) into document-schema.js's own nested ContentParagraphBordersSchema shape -- only once, here, after resolveStyle has already folded the whole style chain down to one final, effective set of edges. Omitted entirely (not `borders: {}`) when no edge survived resolution, matching source/constructs' own conditional-spread convention just above.
+  const borders =
+    paragraphProperties.borderLeft !== undefined ||
+    paragraphProperties.borderRight !== undefined ||
+    paragraphProperties.borderTop !== undefined ||
+    paragraphProperties.borderBottom !== undefined
+      ? {
+          ...(paragraphProperties.borderLeft !== undefined
+            ? { left: paragraphProperties.borderLeft }
+            : {}),
+          ...(paragraphProperties.borderRight !== undefined
+            ? { right: paragraphProperties.borderRight }
+            : {}),
+          ...(paragraphProperties.borderTop !== undefined
+            ? { top: paragraphProperties.borderTop }
+            : {}),
+          ...(paragraphProperties.borderBottom !== undefined
+            ? { bottom: paragraphProperties.borderBottom }
+            : {}),
+        }
+      : undefined;
+
   return {
     kind: "paragraph",
     runs,
@@ -519,6 +541,7 @@ export function readOdfParagraph(
     indentFirstLinePt: paragraphProperties.indentFirstLinePt,
     pageBreakBefore: paragraphProperties.pageBreakBefore,
     pageBreakAfter: paragraphProperties.pageBreakAfter,
+    ...(borders !== undefined ? { borders } : {}),
   };
 }
 

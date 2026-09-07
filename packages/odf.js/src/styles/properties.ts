@@ -1,9 +1,15 @@
 import { z } from "zod";
-import { AlignmentSchema, ColorSchema } from "document-schema.js";
+import {
+  AlignmentSchema,
+  ColorSchema,
+  type ContentBorder,
+  ContentBorderSchema,
+} from "document-schema.js";
 import type { Attribute, XmlElement } from "../model/node";
 import { decodeXmlText, encodeXmlText } from "../xml/entities";
 import { parseOdfLength, formatOdfLength } from "../typed/shared/units";
 import { parseOdfColor, formatOdfColor } from "../typed/shared/color";
+import { parseBorderEdge } from "../typed/shared/border";
 
 // ODF has no direct/inline formatting at all: a docx run can carry bold/color/size straight on w:rPr, but an ODF text:span can only ever reference a NAMED style by @text:style-name -- every formatting difference becomes (or reuses) a named "automatic style" declared in <office:automatic-styles>. This module is the property-bag half of that machinery: a plain, serializable value covering the paragraph/run-level fields document-schema.js's ContentRun/ContentParagraph need to round-trip, plus the parse (style:style attributes -> bag) and build (bag -> style:style attributes) directions between it and real ODF XML. registry.ts and serialize.ts (siblings in this directory) are the callers; span.ts is the sibling that actually wraps a character range in a text:span referencing an interned style name.
 //
@@ -27,6 +33,11 @@ export const StylePropertiesSchema = z.object({
   indentFirstLinePt: z.number().optional(),
   pageBreakBefore: z.boolean().optional(),
   pageBreakAfter: z.boolean().optional(),
+  // The four fo:border-* edges as separate flat fields, deliberately NOT grouped into one nested ContentParagraphBordersSchema-shaped object the way the final ContentParagraph.borders field is: registry.ts/cascade.ts's own style-resolution cascade merges a chain of StyleProperties results with a plain shallow `{...previous, ...next}` spread (cascade.ts's own resolveStyle), which is correct per-field for every OTHER property here but would be wrong for a single nested `borders` object -- a child style overriding only its own bottom edge would silently wipe out a parent's left/right/top edges too, since the whole object would replace rather than merge. Four flat fields let the existing shallow-merge cascade already do the right per-edge override for free, matching how every other multi-facet property here (spacingBeforePt/spacingAfterPt, indentLeftPt/indentFirstLinePt) is already flat rather than grouped. Assembled into the nested ContentParagraphBordersSchema shape only once, at the very end of readOdfParagraph (typed/shared/paragraph.ts), after cascade resolution has finished.
+  borderLeft: ContentBorderSchema.optional(),
+  borderRight: ContentBorderSchema.optional(),
+  borderTop: ContentBorderSchema.optional(),
+  borderBottom: ContentBorderSchema.optional(),
 });
 export type StyleProperties = z.infer<typeof StylePropertiesSchema>;
 
@@ -55,6 +66,11 @@ const ATTR = {
   textIndent: "fo:text-indent",
   breakBefore: "fo:break-before",
   breakAfter: "fo:break-after",
+  borderShorthand: "fo:border",
+  borderLeft: "fo:border-left",
+  borderRight: "fo:border-right",
+  borderTop: "fo:border-top",
+  borderBottom: "fo:border-bottom",
 } as const;
 
 const TEXT_ATTR_NAMES: ReadonlySet<string> = new Set([
@@ -79,6 +95,11 @@ const PARAGRAPH_ATTR_NAMES: ReadonlySet<string> = new Set([
   ATTR.textIndent,
   ATTR.breakBefore,
   ATTR.breakAfter,
+  ATTR.borderShorthand,
+  ATTR.borderLeft,
+  ATTR.borderRight,
+  ATTR.borderTop,
+  ATTR.borderBottom,
 ]);
 
 function attributeMap(element: XmlElement): Map<string, string> {
@@ -329,6 +350,49 @@ export function parseParagraphProperties(
     properties.pageBreakAfter = false;
   } else if (breakAfter !== undefined) {
     hasUnknown = true;
+  }
+
+  // fo:border and its four per-edge siblings share ODF's XSL-FO border shorthand (typed/shared/border.ts's own top-of-file note has the grammar) -- the shorthand seeds all four edges first, then each more-specific per-edge attribute (if present on this SAME element) overrides just that one edge, the identical two-pass order typed/shared/table.ts's own applyBorderEdgeUpdates already establishes for table-cell borders. A style-style token of "none"/"hidden" clears the edge explicitly: properties.borderX is set to undefined as a real own-property, distinct from the field never having been touched at all, so registry.ts's cascade.ts (whose resolveStyle folds a chain of these ParsedProperties results with a plain shallow spread) correctly overrides an inherited border away to nothing rather than silently leaving it in place. A malformed value instead flags hasUnknown and leaves whatever the shorthand already set for that edge untouched.
+  const setBorderField = (
+    field: "borderLeft" | "borderRight" | "borderTop" | "borderBottom",
+    parsed: { border: ContentBorder } | { none: true },
+  ): void => {
+    properties[field] = "none" in parsed ? undefined : parsed.border;
+  };
+
+  const shorthandValue = attrs.get(ATTR.borderShorthand);
+  if (shorthandValue !== undefined) {
+    const parsed = parseBorderEdge(shorthandValue);
+    if (parsed === undefined) {
+      hasUnknown = true;
+    } else {
+      setBorderField("borderLeft", parsed);
+      setBorderField("borderRight", parsed);
+      setBorderField("borderTop", parsed);
+      setBorderField("borderBottom", parsed);
+    }
+  }
+
+  const edgeAttrs: readonly [
+    string,
+    "borderLeft" | "borderRight" | "borderTop" | "borderBottom",
+  ][] = [
+    [ATTR.borderLeft, "borderLeft"],
+    [ATTR.borderRight, "borderRight"],
+    [ATTR.borderTop, "borderTop"],
+    [ATTR.borderBottom, "borderBottom"],
+  ];
+  for (const [attrName, field] of edgeAttrs) {
+    const raw = attrs.get(attrName);
+    if (raw === undefined) {
+      continue;
+    }
+    const parsed = parseBorderEdge(raw);
+    if (parsed === undefined) {
+      hasUnknown = true;
+      continue;
+    }
+    setBorderField(field, parsed);
   }
 
   return { properties, hasUnknown };
