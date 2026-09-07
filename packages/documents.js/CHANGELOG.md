@@ -1,3 +1,9 @@
+## [7.2.1](https://github.com/ExaDev/documents.js/compare/documents.js%407.2.0...documents.js%407.2.1) (2026-09-07)
+
+### Bug Fixes
+
+* **documents.js:** collapse a redraw whose Tj fragments split differently each time ([2bb4700](https://github.com/ExaDev/documents.js/commit/2bb4700dde667ce03f5a44b968da7786ac068b02)), closes [#1066](https://github.com/ExaDev/documents.js/issues/1066)
+
 ## [7.2.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.15...documents.js%407.2.0) (2026-09-07)
 
 ### Features
