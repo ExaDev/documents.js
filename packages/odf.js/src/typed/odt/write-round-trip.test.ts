@@ -12,6 +12,7 @@ import {
 import type { Package } from "../../model/package";
 import { decodePackage, encodePackage } from "../../codec";
 import { parsePackage } from "../../package-io/read";
+import { buildXml } from "../../xml/build";
 import { readOdt, readOdtContent } from "./read";
 import { normaliseOdtContent, writeOdt, writeOdtContent } from "./write";
 
@@ -530,3 +531,62 @@ describe("real LibreOffice documents survive a read, a write, and a read", () =>
     expect(flatten(written)).toEqual(flatten(normaliseOdtContent(document)));
   });
 });
+
+describe("preformatted (#1020)", () => {
+  it("round-trips a preformatted paragraph with no other formatting of its own by referencing Preformatted_20_Text directly as text:style-name", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "paragraph",
+          runs: [{ text: "$ echo hi" }],
+          preformatted: true,
+        },
+      ]),
+    );
+    const pkg = writeOdtContent(
+      documentOf([
+        {
+          kind: "paragraph",
+          runs: [{ text: "$ echo hi" }],
+          preformatted: true,
+        },
+      ]),
+    );
+    const content = decodePackage(encodePackage(pkg)).parts["content.xml"];
+    if (content?.kind !== "xml") {
+      throw new Error("expected content.xml to be an XML part");
+    }
+    expect(buildXml(content.nodes)).toContain(
+      'text:style-name="Preformatted_20_Text"',
+    );
+  });
+
+  it("round-trips a preformatted paragraph that ALSO carries real formatting of its own, via an interned automatic style parented to Preformatted_20_Text", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "paragraph",
+          runs: [{ text: "  indented", bold: true }],
+          alignment: "center",
+          preformatted: true,
+        },
+      ]),
+    );
+  });
+
+  it("does not mark an ordinary paragraph preformatted just because a preformatted paragraph exists elsewhere in the same document", () => {
+    const roundTripped = roundTrip(
+      documentOf([
+        { kind: "paragraph", runs: [{ text: "code" }], preformatted: true },
+        { kind: "paragraph", runs: [{ text: "ordinary prose" }] },
+      ]),
+    );
+    const [preformattedBlock, ordinaryBlock] = roundTrippedBlocks(roundTripped);
+    expect(preformattedBlock).toMatchObject({ preformatted: true });
+    expect(ordinaryBlock && "preformatted" in ordinaryBlock).toBe(false);
+  });
+});
+
+function roundTrippedBlocks(document: WordprocessingDocument): ContentBlock[] {
+  return document.sections.flatMap((section) => section.blocks);
+}

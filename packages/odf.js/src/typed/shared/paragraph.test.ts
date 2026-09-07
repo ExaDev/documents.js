@@ -189,6 +189,78 @@ describe("readOdfParagraph: paragraph-level formatting", () => {
   });
 });
 
+// document-schema.js's own field comment states the raw ODF style:name as "Preformatted_20_Text" -- LibreOffice's "_20_" space encoding, not a literal "Preformatted_Text" -- confirmed against this package's own odt fixtures in the fix that added this describe block (ExaDev/documents.js#1020).
+function officeStylesPackage(children: XmlElement[]): Package["parts"][string] {
+  return {
+    kind: "xml",
+    nodes: [
+      el("office:document-styles", {}, [el("office:styles", {}, children)]),
+    ],
+  };
+}
+
+describe("readOdfParagraph: preformatted (#1020)", () => {
+  it("sets preformatted: true when the paragraph directly references the predefined Preformatted_20_Text style", () => {
+    const preformatted = styleStyle("Preformatted_20_Text", "paragraph", {});
+    const pkg: Package = {
+      parts: { "styles.xml": officeStylesPackage([preformatted]) },
+    };
+    const p = el("text:p", { "text:style-name": "Preformatted_20_Text" }, [
+      txt("$ echo hi"),
+    ]);
+    expect(readOdfParagraph(p, pkg).preformatted).toBe(true);
+  });
+
+  it("sets preformatted: true when an automatic style's own parent-style-name resolves to Preformatted_20_Text -- the shape real pasted-preformatted content actually takes", () => {
+    const preformatted = styleStyle("Preformatted_20_Text", "paragraph", {});
+    const automatic = styleStyle("P3", "paragraph", {
+      "style:parent-style-name": "Preformatted_20_Text",
+    });
+    const pkg: Package = {
+      parts: {
+        "content.xml": contentPackage([automatic]),
+        "styles.xml": officeStylesPackage([preformatted]),
+      },
+    };
+    const p = el("text:p", { "text:style-name": "P3" }, [txt("verbatim")]);
+    expect(readOdfParagraph(p, pkg).preformatted).toBe(true);
+  });
+
+  it("sets preformatted: true through a multi-level style:parent-style-name chain, not only a direct parent", () => {
+    const preformatted = styleStyle("Preformatted_20_Text", "paragraph", {});
+    const derived = styleStyle("MyCode", "paragraph", {
+      "style:parent-style-name": "Preformatted_20_Text",
+    });
+    const automatic = styleStyle("P4", "paragraph", {
+      "style:parent-style-name": "MyCode",
+    });
+    const pkg: Package = {
+      parts: {
+        "content.xml": contentPackage([automatic]),
+        "styles.xml": officeStylesPackage([preformatted, derived]),
+      },
+    };
+    const p = el("text:p", { "text:style-name": "P4" }, [txt("verbatim")]);
+    expect(readOdfParagraph(p, pkg).preformatted).toBe(true);
+  });
+
+  it("omits preformatted entirely (not false) for an ordinary paragraph whose style chain never reaches Preformatted_20_Text", () => {
+    const standard = styleStyle("Standard", "paragraph", {});
+    const pkg: Package = {
+      parts: { "styles.xml": officeStylesPackage([standard]) },
+    };
+    const p = el("text:p", { "text:style-name": "Standard" }, [
+      txt("ordinary"),
+    ]);
+    expect("preformatted" in readOdfParagraph(p, pkg)).toBe(false);
+  });
+
+  it("omits preformatted for a bare, unstyled paragraph with no text:style-name at all", () => {
+    const p = el("text:p", {}, [txt("bare")]);
+    expect("preformatted" in readOdfParagraph(p, { parts: {} })).toBe(false);
+  });
+});
+
 describe("readOdfParagraph: text:span run formatting", () => {
   it("a text:span's own resolved \"text\"-family properties override the paragraph's own base for exactly the span's own text", () => {
     const p1 = styleStyle("P1", "paragraph", {}, [
