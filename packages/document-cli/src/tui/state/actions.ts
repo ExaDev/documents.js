@@ -7,6 +7,7 @@ import type {
   LayoutColor,
   LayoutFont,
   MathMlNode,
+  MetadataOverrides,
   OdgBoxVector,
   OdgBoxVectorInit,
   OdgLineVector,
@@ -23,11 +24,11 @@ import type {
 } from "documents.js";
 import type {
   Diagnostic,
-  EditableFormat,
   OpenDocument,
   OverlayName,
   Screen,
   StatusMessage,
+  WritableFormat,
 } from "./types.js";
 
 // HOW A MUTATING ACTION ADDRESSES ITS TARGET. The rule is: address by index wherever the editor exposes an enumeration accessor to resolve that index against, and carry the live object itself only where it does not.
@@ -61,7 +62,7 @@ export type Action =
       readonly message: string;
       readonly detail: string | undefined;
     }
-  | { readonly type: "CREATE_DOCUMENT"; readonly format: EditableFormat }
+  | { readonly type: "CREATE_DOCUMENT"; readonly format: WritableFormat }
   | { readonly type: "SAVE_SUCCESS"; readonly path: string }
   | { readonly type: "SAVE_ERROR"; readonly message: string }
   | { readonly type: "SAVE_AS_REQUEST" }
@@ -155,6 +156,12 @@ export type Action =
     }
   // odt-only, matching ADD_LIST_ITEM/SET_LIST_ITEM_TEXT's own "lists are a genuinely separate ODF concept" framing: creates a brand-new, empty text:list via OdtBody.appendList() -- no payload, since there is nothing to seed a fresh list with beyond the empty list itself (the first item is added afterwards, via ADD_LIST_ITEM against the new list's own index).
   | { readonly type: "ADD_LIST" }
+  // odt-only: nests the item at `itemIndex` one level deeper, into the immediately preceding sibling's own nested list (OdtList.indentItem, documents.js's edit/odt/list.ts) -- the reducer counterpart to the list-editor screen's Tab/">" key. `blockIndex` addresses the TOP-LEVEL list the same way ADD_LIST_ITEM/SET_LIST_ITEM_TEXT do; there is no INDENT target for an item already inside a nested list, since the list-editor screen has no navigation into one yet -- tracked as its own follow-up.
+  | {
+      readonly type: "INDENT_LIST_ITEM";
+      readonly blockIndex: number;
+      readonly itemIndex: number;
+    }
   // Free-form font styling for a single run, resolved through the same withRun helper TOGGLE_RUN_BOLD/SET_RUN_COLOR already use -- both DocxRun and OdtRun carry real fontFamily/sizePt getters and setters (documents.js's src/edit/{docx,odt}/run.ts), so one action pair covers both formats identically.
   | {
       readonly type: "SET_RUN_FONT_FAMILY";
@@ -549,6 +556,8 @@ export type Action =
       readonly widthPt: number;
       readonly heightPt: number;
     }
+  // Format-agnostic: every EditableOpenDocument's own `editor.metadata` setter (docx/pptx/odt/odp/ods/odg/pdf, ExaDev/documents.js#933) takes the identical MetadataOverrides shape, so one action covers all seven the same way SET_RUN_FONT_FAMILY covers docx/odt with one shared setter -- see reducer.ts's own MetadataScreen handling for the mutate call.
+  | { readonly type: "SET_METADATA"; readonly overrides: MetadataOverrides }
   | { readonly type: "APPEND_DIAGNOSTIC"; readonly diagnostic: Diagnostic }
   | { readonly type: "DISMISS_DIAGNOSTIC"; readonly index: number }
   | { readonly type: "CLEAR_DIAGNOSTICS" }

@@ -227,7 +227,7 @@ Diagnostics and the summary line always go to stderr; stdout is reserved for the
 
 Launch it either bare (`document-cli`, with no arguments) or explicitly with `document-cli tui [file]` — both open the same app; the explicit form additionally opens `file` immediately, skipping the launcher screen. The TUI needs an interactive terminal: a bare invocation with redirected stdout prints help text instead, and an explicit `tui` invocation with redirected stdout fails outright, since there's no terminal for Ink to draw into.
 
-It supports the same seven formats documents.js's live-view editors cover — docx, pptx, odt, odp, ods, odg, markdown — each with a full navigate/edit/save experience built on that format's editor (paragraphs and runs for docx/odt/markdown, slides and shapes for pptx/odp, sheets and cells for ods, pages and vectors/shapes for odg), plus undo (whole-document snapshots taken before each committed mutation), search, a command palette, and PDF export straight from the open document. On a pptx or odp slide, `a` from the shape list also adds a real table (rows then columns, a two-step prompt) alongside the existing textbox/image choices, and `n` opens the slide's own speaker notes for either format — `PptxSlide` and `OdpSlide` both carry a real `.notes` getter/setter, so notes editing was never odp-specific, only gated that way until this phase removed the gate. On a docx document, `x` from the paragraph/table list opens a read-only view of the document's own comments, footnotes, headers/footers, and numbering definitions — a docx-only concept with no odt equivalent, and the TUI counterpart to the `docx-extras` command, rendered through the identical `src/docx-extras-format.ts` line formatter so the two can't drift apart. `m`, global to every screen with a document open, shows that document's own title/author/subject/keywords/etc metadata read-only — every format the `metadata` command covers, including `.odb`/`.pdf`/`.xlsx`. documents.js's own DocxEditor/OdtEditor/PptxEditor/OdpEditor/OdsEditor/OdgEditor now each carry a real `.metadata` getter/setter (ExaDev/documents.js#933), but this TUI has not yet wired an edit flow through it, so `m` still has no matching write screen here (use the `set-metadata` command for that).
+It supports the same seven formats documents.js's live-view editors cover — docx, pptx, odt, odp, ods, odg, markdown — each with a full navigate/edit/save experience built on that format's editor (paragraphs and runs for docx/odt/markdown, slides and shapes for pptx/odp, sheets and cells for ods, pages and vectors/shapes for odg), plus undo (whole-document snapshots taken before each committed mutation), search, a command palette, and PDF export straight from the open document. On a pptx or odp slide, `a` from the shape list also adds a real table (rows then columns, a two-step prompt) alongside the existing textbox/image choices, and `n` opens the slide's own speaker notes for either format — `PptxSlide` and `OdpSlide` both carry a real `.notes` getter/setter, so notes editing was never odp-specific, only gated that way until this phase removed the gate. On a docx document, `x` from the paragraph/table list opens a read-only view of the document's own comments, footnotes, headers/footers, and numbering definitions — a docx-only concept with no odt equivalent, and the TUI counterpart to the `docx-extras` command, rendered through the identical `src/docx-extras-format.ts` line formatter so the two can't drift apart. `m`, global to every screen with a document open, shows that document's own title/author/subject/keywords/etc metadata — every format the `metadata` command covers, including `.odb`/`.pdf`/`.xlsx`. For the seven live-view-editor formats, title/author/subject/keywords are editable in place through documents.js's own `editor.metadata` setter (ExaDev/documents.js#933): select a field and Enter opens it for editing, committing a partial merge that leaves every other field untouched. Every other format (and creator/producer/created/modified on the editable formats too, since those are derived/producer-stamped rather than user-authored) stays read-only here — use the `set-metadata` command for a format with no live-view editor.
 
 Markdown (`.md`/`.markdown`) shares the same paragraph/run/table body-list screens docx and odt already use, through documents.js's own `MarkdownEditor` (`openMarkdown`/`createMarkdownEditor`) — a genuine live view over a mutable `ContentDocument`, the same live-view contract every other editor here follows, even though there is no `XmlElement` tree underneath it the way there is for docx/odt (`MarkdownEditor.toMarkdownText()` re-serialises the whole document fresh on every call, rather than exposing a `toBytes()`). Appending a paragraph, appending a run, and toggling bold/italic all go through the identical reducer actions docx/odt use; a markdown run has no underline, colour, font family, or font size at all (CommonMark/GFM has no construct for any of the four), so those keys — along with image insertion, which `MarkdownParagraph` has no counterpart for — are simply absent from a markdown paragraph's own key hints rather than opening a prompt that could only end in a warning. A markdown table can be created and its cells edited through the same 'T' wizard and table-view screens docx/odt use, but GFM tables have no cell-merge concept, so a merge requested alongside table creation still creates the table (unmerged) and reports why the merge itself didn't happen. `:view-source` (markdown documents only) shows the literal text the document was opened with side by side with what a save would write right now — these can genuinely differ even with no edits made this session, from a heading-style, bullet-marker, or line-ending choice the writer normalises. Every save re-serialises the whole document fresh through `buildMarkdownText`, a deliberate, permanent consequence of structured editing rather than something to work around. Diagnostics from the read side (a clamped heading level, a dropped front-matter key, a fenced code block's own info string with nowhere to go, …) now surface into the same diagnostics panel a PDF export's own substitutions already populate, the moment a `.md` file is opened, not only on export. documents.js's own `createMarkdownEditor()` exists now, but this TUI does not yet wire a "new markdown document" flow into `:new`/the new-document picker, so a markdown document can still only be opened from an existing file.
 
@@ -239,24 +239,24 @@ The export-to-PDF screen (`e` from any editor screen) is a two-field form: a des
 
 The global bindings below apply everywhere; individual screens (a docx run's own bold/italic toggles, an ods cell's own value-kind picker) add their own on top:
 
-| Keys                  | Action                                        |
-| --------------------- | --------------------------------------------- |
-| `↑` / `k`             | Move the selection up                         |
-| `↓` / `j`             | Move the selection down                       |
-| `Enter` / `→` / `l`   | Open or edit the selected item                |
-| `Esc` / `←` / `h`     | Go back to the previous screen                |
-| `PageUp` / `PageDown` | Scroll a page at a time                       |
-| `Home` / `End`        | Jump to the first or last item                |
-| `a`                   | Append a new item to the current list         |
-| `m`                   | Show the open document's metadata (read-only) |
-| `Ctrl+S`              | Save the open document                        |
-| `Ctrl+W`              | Close the open document                       |
-| `Ctrl+Z`              | Undo the last change                          |
-| `q` / `Ctrl+C`        | Quit                                          |
-| `:`                   | Open the command palette                      |
-| `/`                   | Search within the current screen              |
-| `?`                   | Show this help                                |
-| `Ctrl+D`              | Show the diagnostics panel                    |
+| Keys                  | Action                                                                         |
+| --------------------- | ------------------------------------------------------------------------------ |
+| `↑` / `k`             | Move the selection up                                                          |
+| `↓` / `j`             | Move the selection down                                                        |
+| `Enter` / `→` / `l`   | Open or edit the selected item                                                 |
+| `Esc` / `←` / `h`     | Go back to the previous screen                                                 |
+| `PageUp` / `PageDown` | Scroll a page at a time                                                        |
+| `Home` / `End`        | Jump to the first or last item                                                 |
+| `a`                   | Append a new item to the current list                                          |
+| `m`                   | Show the open document's metadata (editable for docx/pptx/odt/odp/ods/odg/pdf) |
+| `Ctrl+S`              | Save the open document                                                         |
+| `Ctrl+W`              | Close the open document                                                        |
+| `Ctrl+Z`              | Undo the last change                                                           |
+| `q` / `Ctrl+C`        | Quit                                                                           |
+| `:`                   | Open the command palette                                                       |
+| `/`                   | Search within the current screen                                               |
+| `?`                   | Show this help                                                                 |
+| `Ctrl+D`              | Show the diagnostics panel                                                     |
 
 ## Architecture
 

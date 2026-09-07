@@ -41,6 +41,7 @@ import {
 import { createNewDocument } from "../format/open-document.js";
 import type { Action } from "./actions.js";
 import {
+  isEditableDocument,
   rootScreenForFormat,
   type AppState,
   type DocxOpenDocument,
@@ -1151,6 +1152,31 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
+    // odt-only, matching SET_LIST_ITEM_TEXT's own narrowing: nests the item one level deeper via OdtList.indentItem, which throws for the first item (no preceding sibling to nest under) -- reported through the status line via mutateGuarded, the same way mergeCells' own out-of-range throw already is, rather than an unhandled exception reaching the UI.
+    case "INDENT_LIST_ITEM": {
+      const doc = wordprocessingDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, "a docx, odt or markdown document");
+      }
+      if (doc.format !== "odt") {
+        return wrongDocument(
+          state,
+          "an odt document (lists are an odt-only concept)",
+        );
+      }
+      const list = doc.editor.lists()[action.blockIndex];
+      if (list === undefined) {
+        return withStatus(
+          state,
+          "warning",
+          `There is no list at index ${action.blockIndex}`,
+        );
+      }
+      return mutateGuarded(state, doc, () => {
+        list.indentItem(action.itemIndex);
+      });
+    }
+
     // odt-only, matching SET_LIST_ITEM_TEXT's own narrowing: creates a real, brand-new, empty text:list via OdtBody.appendList() -- docx has no ADD_LIST_ITEM-shaped anchor to create a fresh list against (a docx paragraph gains list membership by copying an EXISTING paragraph's own numId/level, see ADD_LIST_ITEM above), so there is no equivalent "create a list from nothing" action to share.
     case "ADD_LIST": {
       const doc = wordprocessingDocument(state);
@@ -2013,6 +2039,17 @@ export function appReducer(state: AppState, action: Action): AppState {
           item.heightPt = action.heightPt;
         },
       );
+
+    // Every EditableOpenDocument's own `editor.metadata` setter (docx/pptx/odt/odp/ods/odg/pdf) takes the identical MetadataOverrides shape and patches the live package in place -- one action covers all seven, matching how mutate/mutateGuarded already take the format-agnostic WritableOpenDocument. Markdown is excluded: MarkdownEditor has no metadata setter (ExaDev/documents.js#933's own resolution never added one, since markdown carries no docProps/core.xml or meta.xml to patch), so it is not part of EditableOpenDocument's own metadata surface.
+    case "SET_METADATA": {
+      const doc = state.openDocument;
+      if (doc === undefined || !isEditableDocument(doc)) {
+        return wrongDocument(state, "an editable document");
+      }
+      return mutate(state, doc, () => {
+        doc.editor.metadata = action.overrides;
+      });
+    }
 
     case "APPEND_DIAGNOSTIC":
       return {

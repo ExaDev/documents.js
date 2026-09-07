@@ -1,4 +1,5 @@
 import { createOdt, openOdt } from "documents.js";
+import { Text } from "ink";
 import { render } from "ink-testing-library";
 import { useEffect, type ReactElement } from "react";
 import { describe, expect, it } from "vitest";
@@ -130,6 +131,37 @@ describe("ListEditorScreen", () => {
     const committed = await waitForText(lastFrame, "second item, EDITED");
     expect(committed).toContain("first item");
     expect(committed).toContain("third item");
+  });
+
+  it("indents the selected item on '>' into a nested list, dropping this screen's own item count", async () => {
+    const { lastFrame, stdin } = renderListEditor(buildThreeItemListBytes());
+    await waitForText(lastFrame, "List 0 (3 items)");
+
+    // Move to the second item, then indent it into the first's nested list.
+    await sendKey(stdin, "j");
+    await sendKey(stdin, ">");
+    const afterIndent = await waitForText(lastFrame, "List 0 (2 items)");
+    expect(afterIndent).toContain("first item");
+    expect(afterIndent).toContain("third item");
+    expect(afterIndent).not.toContain("second item");
+  });
+
+  it("reports a warning through the status line rather than crashing when indenting the first item", async () => {
+    function StatusProbe(): ReactElement {
+      const state = useAppState();
+      return <Text>status:{state.status?.text ?? "none"}</Text>;
+    }
+    const { lastFrame, stdin } = render(
+      <AppStateProvider>
+        <Harness bytes={buildThreeItemListBytes()} />
+        <StatusProbe />
+      </AppStateProvider>,
+    );
+    await waitForText(lastFrame, "List 0 (3 items)");
+
+    await sendKey(stdin, ">");
+    const frame = await waitForText(lastFrame, "status:cannot indent");
+    expect(frame).toContain("List 0 (3 items)");
   });
 
   it("cancels the edit on Esc without committing a change", async () => {
