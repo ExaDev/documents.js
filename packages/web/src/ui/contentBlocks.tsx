@@ -1,5 +1,6 @@
 import type {
   ContentBlock,
+  ContentEmbeddedObjectKind,
   ContentImageBlock,
   ContentParagraph,
   ContentRun,
@@ -10,6 +11,8 @@ import type { ReactNode } from "react";
 import {
   blockquote as blockquoteStyle,
   codeBlock as codeBlockStyle,
+  embeddedFormula as embeddedFormulaStyle,
+  embeddedObject as embeddedObjectStyle,
   heading as headingStyle,
   hr as hrStyle,
   image as imageStyle,
@@ -17,10 +20,12 @@ import {
   list as listStyle,
   neutralList,
   neutralListItem,
+  pageBreak as pageBreakStyle,
   paragraph as paragraphStyle,
   table as tableStyle,
   tableCell as tableCellStyle,
 } from "./contentBlocks.css";
+import { MathMlView } from "./MathMlView";
 
 // router.ts normalizes both markdown-codec's and docx/odt's real heading styleIds into this one lowercase-hyphenated convention, so a single client-side regex works for every wordprocessing-kind source.
 export const HEADING_STYLE_PATTERN = /^heading-([1-6])$/;
@@ -104,7 +109,7 @@ export interface ListItemNode {
   readonly children: ListItemNode[];
 }
 
-// Reconstructs a nested list tree from a flat run of list-membership paragraphs via a level stack. For markdown, the ordered-vs-bullet distinction is read per item from its numId's "ordered:"/"bullet:" prefix (router.ts's normalizeMarkdownStyling convention); for docx/odt, numId is opaque (no ordered/bullet info available in ContentDocument today), so `ordered` is always false and the caller renders with a neutral marker rather than trusting it. A membership with no numId carries only a depth (no numbering identity the source ever had) and takes the same neutral-marker path.
+// Reconstructs a nested list tree from a flat run of list-membership paragraphs via a level stack. The ordered-vs-bullet distinction is read per item from its numId's "ordered:"/"bullet:" prefix -- a convention every source now carries into ContentDocument by the time this runs: markdown-codec and odf.js's odt/odp list readers mint it natively (ODF's text:list-style resolves the kind at read time, ExaDev/documents.js's odf.js typed/shared/list.ts), and router.ts's normalizeDocxListKinds resolves docx's own opaque w:numId against NumberingDefinitions into the identical prefix before this ever runs. A membership with no numId, or one whose source genuinely never stated a kind, carries neither prefix and takes the neutral-marker path below rather than a guessed one.
 export function buildListForest(
   items: readonly ContentParagraph[],
 ): ListItemNode[] {
@@ -158,33 +163,82 @@ export function collectBlockGroups(
 
 // --- Complete neutral block renderer (shared by WordProcessingPreview and SlidesPreview) ---
 
+// A page break rendered as a layout event, not document content -- distinct from the horizontal-rule styling above. Shared by the standalone "pageBreak" block kind (docx's own w:pageBreakBefore, spliced in as a preceding block by ooxml.js's reader) and by a paragraph's own pageBreakBefore/pageBreakAfter flags (ODF's fo:break-before/fo:break-after, which odf.js surfaces onto the paragraph itself rather than as a separate block -- see ContentParagraphSchema's own doc comment on why the two formats encode the identical concept two different ways).
+function renderPageBreak(key?: string): ReactNode {
+  return (
+    <div key={key} className={pageBreakStyle} role="separator">
+      Page break
+    </div>
+  );
+}
+
+// Human-readable labels for every ContentEmbeddedObjectKind, used as a placeholder for everything this preview does not lay out inline -- document-schema.js's own ContentEmbeddedObject doc comment states only 'formula' is expected to be laid out and rendered (handled via MathMlView below whenever its document actually carries one); the rest round-trip losslessly without ever being rendered, so a labelled placeholder is the correct treatment, not a missing feature. 'formula' stays in this map as the fallback label for the one case objectKind and document.kind can genuinely disagree -- nothing in the schema ties them together statically, so an objectKind of 'formula' whose document is not actually a formula document falls through to this map rather than crashing.
+const EMBEDDED_OBJECT_LABELS: Record<ContentEmbeddedObjectKind, string> = {
+  formula: "Embedded formula",
+  wordprocessing: "Embedded document",
+  presentation: "Embedded presentation",
+  spreadsheet: "Embedded spreadsheet",
+  drawing: "Embedded drawing",
+  chart: "Embedded chart",
+};
+
+// The styleId-dispatch half of a paragraph's rendering, factored out of renderBlockNeutral so the pageBreakBefore/pageBreakAfter wrapping below applies uniformly regardless of which shape the paragraph's own content takes.
+function renderParagraphContent(block: ContentParagraph): ReactNode {
+  const match = HEADING_STYLE_PATTERN.exec(block.styleId ?? "");
+  if (match !== null) {
+    const Tag = HEADING_TAGS[Number(match[1])];
+    if (Tag !== undefined)
+      return <Tag className={headingStyle}>{renderRuns(block.runs)}</Tag>;
+  }
+  if (block.styleId === "quote")
+    return (
+      <blockquote className={blockquoteStyle}>
+        {renderRuns(block.runs)}
+      </blockquote>
+    );
+  if (block.styleId === "code-block") {
+    return (
+      <pre className={codeBlockStyle}>
+        <code>{block.runs.map((run) => run.text).join("")}</code>
+      </pre>
+    );
+  }
+  if (block.styleId === "horizontal-rule") return <hr className={hrStyle} />;
+  return <p className={paragraphStyle}>{renderRuns(block.runs)}</p>;
+}
+
 // Renders blocks with heading detection (via the shared heading-{N} convention), no quote/code/hr specialisation, and neutral list markers. This is the full block-to-JSX pipeline for any non-markdown flowing content -- a wordprocessing section, a presentation shape's text body, etc. MarkdownPreview has its own pipeline with markdown-specific quote/code/hr and ordered/bullet list handling.
 function renderBlockNeutral(block: ContentBlock): ReactNode {
   if (block.kind === "paragraph") {
-    const match = HEADING_STYLE_PATTERN.exec(block.styleId ?? "");
-    if (match !== null) {
-      const Tag = HEADING_TAGS[Number(match[1])];
-      if (Tag !== undefined)
-        return <Tag className={headingStyle}>{renderRuns(block.runs)}</Tag>;
-    }
-    if (block.styleId === "quote")
-      return (
-        <blockquote className={blockquoteStyle}>
-          {renderRuns(block.runs)}
-        </blockquote>
-      );
-    if (block.styleId === "code-block") {
-      return (
-        <pre className={codeBlockStyle}>
-          <code>{block.runs.map((run) => run.text).join("")}</code>
-        </pre>
-      );
-    }
-    if (block.styleId === "horizontal-rule") return <hr className={hrStyle} />;
-    return <p className={paragraphStyle}>{renderRuns(block.runs)}</p>;
+    const content = renderParagraphContent(block);
+    if (block.pageBreakBefore !== true && block.pageBreakAfter !== true)
+      return content;
+    return (
+      <>
+        {block.pageBreakBefore === true && renderPageBreak("before")}
+        {content}
+        {block.pageBreakAfter === true && renderPageBreak("after")}
+      </>
+    );
   }
   if (block.kind === "table") return renderTable(block, renderBlocksNeutral);
   if (block.kind === "image") return renderImage(block);
+  if (block.kind === "pageBreak") return renderPageBreak();
+  if (block.kind === "embeddedObject") {
+    if (block.objectKind === "formula" && block.document.kind === "formula") {
+      return (
+        <MathMlView
+          mathml={block.document.formula.mathml}
+          className={embeddedFormulaStyle}
+        />
+      );
+    }
+    return (
+      <div className={embeddedObjectStyle}>
+        {EMBEDDED_OBJECT_LABELS[block.objectKind]}
+      </div>
+    );
+  }
   return null;
 }
 
