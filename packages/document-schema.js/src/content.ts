@@ -137,6 +137,56 @@ export function clampHeadingLevel(level: number): number {
   return Math.min(6, Math.max(1, Math.round(level)));
 }
 
+// Where a floating image's position is measured FROM, on one axis -- the union of every real origin docx's wp:positionH/wp:positionV (ECMA-376 Part 1 20.4.2.7/20.4.2.8, ST_RelFromH/ST_RelFromV) and ODF's own draw:frame anchoring (text:anchor-type="page"/"paragraph"/"frame", the anchor point svg:x/svg:y is itself measured from) between them use. docx's own two axes don't share one flat enum in ECMA-376 -- ST_RelFromH has leftMargin/rightMargin/insideMargin/outsideMargin/column/character, ST_RelFromV has topMargin/bottomMargin/insideMargin/outsideMargin/paragraph/line -- but nothing here is axis-specific in what it MEANS (leftMargin is still "the page's own left margin" on whichever axis it appears), so one shared enum covers both rather than forcing two near-identical ones a reader would otherwise have to keep in sync by hand.
+export const ContentFloatOriginSchema = z.enum([
+  "page",
+  "margin",
+  "leftMargin",
+  "rightMargin",
+  "topMargin",
+  "bottomMargin",
+  "insideMargin",
+  "outsideMargin",
+  "column",
+  "character",
+  "paragraph",
+  "line",
+  "frame", // ODF's text:anchor-type="frame" -- anchored to a containing frame's own coordinate system, a case docx's relativeFrom vocabulary has no member for at all
+]);
+export type ContentFloatOrigin = z.infer<typeof ContentFloatOriginSchema>;
+
+// docx's own wp:align keyword vocabulary (ECMA-376 ST_AlignH/ST_AlignV) -- again one shared enum rather than two near-identical axis-specific ones, since "left"/"right" only ever appear on the horizontal axis and "top"/"bottom" only ever on the vertical in real producer output, so nothing is lost by not splitting them.
+export const ContentFloatAlignSchema = z.enum([
+  "left",
+  "right",
+  "top",
+  "bottom",
+  "center",
+  "inside",
+  "outside",
+]);
+export type ContentFloatAlign = z.infer<typeof ContentFloatAlignSchema>;
+
+// One axis of a floating image's anchored position: an explicit point offset (docx's wp:posOffset, converted from EMU; ODF's svg:x/svg:y, already points) XOR a named alignment keyword (docx's wp:align only -- ODF's draw:frame has no alignment-keyword concept at all, so an odt-sourced axis is always the offsetPt branch). offsetPt/align are genuinely mutually exclusive in both source formats (docx's own wp:positionH/wp:positionV schema is itself a choice between the two, never both at once), so this is a plain union of two strict, structurally-distinguished shapes rather than one object with both fields optional -- an object naming both would be a state neither format can actually produce.
+export const ContentFloatAxisSchema = z.union([
+  z.strictObject({
+    relativeTo: ContentFloatOriginSchema,
+    offsetPt: z.number(),
+  }),
+  z.strictObject({
+    relativeTo: ContentFloatOriginSchema,
+    align: ContentFloatAlignSchema,
+  }),
+]);
+export type ContentFloatAxis = z.infer<typeof ContentFloatAxisSchema>;
+
+// A floating/anchored image's real position, independent of any layout pass -- the source format's own native anchoring metadata (docx's wp:anchor, ODF's draw:frame with a paragraph/page/frame anchor type), as opposed to `frames` below (a rendered position a LAYOUT ENGINE computed, which this is not). Both axes are always present together: neither docx's wp:anchor nor ODF's positioned draw:frame ever states only one.
+export const ContentFloatPositionSchema = z.object({
+  horizontal: ContentFloatAxisSchema,
+  vertical: ContentFloatAxisSchema,
+});
+export type ContentFloatPosition = z.infer<typeof ContentFloatPositionSchema>;
+
 export const ContentImageBlockSchema = z.object({
   kind: z.literal("image"),
   format: z.enum(["png", "jpeg", "svg", "gif"]), // svg/gif added for epub's own manifest image kinds; a codec whose reader cannot yet decode one of the four degrades to alt text with a diagnostic exactly as it did before this field existed, rather than being forced to adopt them the moment they exist here
@@ -144,6 +194,7 @@ export const ContentImageBlockSchema = z.object({
   widthPt: z.number().positive(),
   heightPt: z.number().positive(),
   altText: z.string().optional(),
+  floatPosition: ContentFloatPositionSchema.optional(), // this image's own source-native anchored position (docx w:drawing/wp:anchor; ODF draw:frame) -- absent for an inline image (docx wp:inline; ODF text:anchor-type="as-char"/"char"), which has no anchored position of its own to record, placed in block flow at the point it was encountered instead
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this image's own rendered position(s), once a layout pass has fused one in -- see FusedNode above

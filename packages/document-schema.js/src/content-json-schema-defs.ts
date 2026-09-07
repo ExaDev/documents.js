@@ -375,6 +375,59 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["kind", "runs"],
     additionalProperties: false,
   },
+  ContentFloatOrigin: {
+    type: "string",
+    enum: [
+      "page",
+      "margin",
+      "leftMargin",
+      "rightMargin",
+      "topMargin",
+      "bottomMargin",
+      "insideMargin",
+      "outsideMargin",
+      "column",
+      "character",
+      "paragraph",
+      "line",
+      "frame",
+    ],
+  },
+  ContentFloatAlign: {
+    type: "string",
+    enum: ["left", "right", "top", "bottom", "center", "inside", "outside"],
+  },
+  ContentFloatAxis: {
+    anyOf: [
+      {
+        type: "object",
+        properties: {
+          relativeTo: { $ref: "#/$defs/ContentFloatOrigin" },
+          offsetPt: { type: "number" },
+        },
+        required: ["relativeTo", "offsetPt"],
+        additionalProperties: false,
+      },
+      {
+        type: "object",
+        properties: {
+          relativeTo: { $ref: "#/$defs/ContentFloatOrigin" },
+          align: { $ref: "#/$defs/ContentFloatAlign" },
+        },
+        required: ["relativeTo", "align"],
+        additionalProperties: false,
+      },
+    ],
+  },
+  ContentFloatPosition: {
+    type: "object",
+    properties: {
+      horizontal: { $ref: "#/$defs/ContentFloatAxis" },
+      vertical: { $ref: "#/$defs/ContentFloatAxis" },
+    },
+    required: ["horizontal", "vertical"],
+    additionalProperties: false,
+  },
   ContentImageBlock: {
     type: "object",
     properties: {
@@ -384,6 +437,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       widthPt: { type: "number", exclusiveMinimum: 0 },
       heightPt: { type: "number", exclusiveMinimum: 0 },
       altText: { type: "string" },
+      floatPosition: { $ref: "#/$defs/ContentFloatPosition" },
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
@@ -1277,6 +1331,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       widthPt: { type: "number", exclusiveMinimum: 0 },
       heightPt: { type: "number", exclusiveMinimum: 0 },
       altText: { type: "string" },
+      floatPosition: { $ref: "#/$defs/ContentFloatPosition" },
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
