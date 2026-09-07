@@ -1,5 +1,11 @@
-import type { Alignment, Color } from "document-schema.js";
+import type {
+  Alignment,
+  Color,
+  ContentCellFill,
+  ContentCellPatternType,
+} from "document-schema.js";
 import { uint16At } from "../bytes/view";
+import { WpdFormatError } from "../errors";
 import { pointsFromWpu } from "./units";
 
 // -- Tables, per WPFF "D4 Character Functions" (the definition) and "D0 EOL Functions" (the cell and row boundaries) --
@@ -234,16 +240,49 @@ export function readCellSpanning(
 //
 // RGBS is four bytes: red, green, blue, and a shading percentage. "Each color takes one byte with a range from 0 to 255 (0xFF) where 255 is 100%", the same statement the character-colour function rests on, so each component divides by 255 into the shared schema's 0..1 Color.
 //
-// The BACKGROUND colour is the one this reader resolves into the shared schema's ContentTableCell.background (always as a 'solid' ContentCellFill -- see read.ts's own closeCell). WordPerfect's foreground/background pair with a shading percentage describes a genuine two-colour pattern fill, which document-schema.js's ContentCellFill can now express as its own 'pattern' variant (ExaDev/documents.js#951) -- this reader does not yet parse the foreground half or resolve the shading percentage into that shape, so a cell whose shading says it is a genuine blend is reported rather than flattened to whichever half looks closer.
+// WordPerfect's foreground/background pair with a shading percentage describes a genuine two-colour pattern fill, which document-schema.js's ContentCellFill expresses as its own 'pattern' variant (ExaDev/documents.js#951/#1024). The WPFF reference this reader is built against (see this file's own top-of-file citation) documents the byte layout but not the shading byte's own compositing formula, so the derivation below is this reader's own best-effort reasoning, not a cited specification value: a shading of 255 ("100%") on a colour is read as that colour fully opaque, matching the existing "255 is fully stated" convention every other percentage-style byte in this format already follows (e.g. the character-colour function this same comment already rests on); the background's own shade byte is therefore read as the background layer's own opacity, drawn over the (implicitly fully opaque) foreground beneath it, so a background shade below 255 lets a proportional amount of the foreground show through -- 100% minus the background's own opacity is the foreground's implied coverage, snapped to the nearest percentN member ContentCellPatternTypeSchema defines. A cell whose shade is unreadable, or whose foreground colour is unreadable, still resolves to a 'solid' fill of the background alone -- the identical shape this reader always produced before #1024, rather than guessing at a pattern with only half the colours it needs.
 
 const COLOR_COMPONENT_MAX = 255;
 const RGBS_SIZE = 4;
 const SHADE_OFFSET = 3;
 const FULL_SHADE = 255;
 
+// Every percentN member ContentCellPatternTypeSchema defines, ascending -- the discrete steps this reader's own derived foreground-coverage percentage (see this file's own top-of-file note) snaps onto, since the schema states a two-colour pattern fill only as one of these named densities, never an arbitrary float.
+const PERCENT_STEPS: readonly [number, ContentCellPatternType][] = [
+  [5, "percent5"],
+  [10, "percent10"],
+  [12, "percent12"],
+  [15, "percent15"],
+  [20, "percent20"],
+  [25, "percent25"],
+  [30, "percent30"],
+  [35, "percent35"],
+  [37, "percent37"],
+  [40, "percent40"],
+  [45, "percent45"],
+  [50, "percent50"],
+  [55, "percent55"],
+  [60, "percent60"],
+  [62, "percent62"],
+  [65, "percent65"],
+  [70, "percent70"],
+  [75, "percent75"],
+  [80, "percent80"],
+  [85, "percent85"],
+  [87, "percent87"],
+  [90, "percent90"],
+  [95, "percent95"],
+];
+
+function nearestPercentType(percent: number): ContentCellPatternType {
+  return PERCENT_STEPS.reduce((best, step) =>
+    Math.abs(step[0] - percent) < Math.abs(best[0] - percent) ? step : best,
+  )[1];
+}
+
 export interface WpdCellFill {
-  readonly background: Color;
-  // True when the fill's own shading percentage is neither fully opaque nor fully absent, so the rendered colour is a blend of the pair rather than either one of them.
+  readonly fill: ContentCellFill;
+  // True when the fill's own shading percentage is neither fully opaque nor fully absent, so `fill` is a 'pattern' rather than a 'solid' -- kept separately from `fill.kind` so a caller can report the diagnostic without re-deriving it.
   readonly blended: boolean;
 }
 
@@ -267,8 +306,25 @@ export function readCellFill(data: Uint8Array): WpdCellFill | undefined {
     return undefined;
   }
   const backgroundShade = data[RGBS_SIZE + SHADE_OFFSET];
+  if (backgroundShade === undefined || backgroundShade === FULL_SHADE) {
+    return { fill: { kind: "solid", color: background }, blended: false };
+  }
+  const foreground = colorAt(data, 0);
+  if (foreground === undefined) {
+    // Believed unreachable: foreground occupies the buffer's first three bytes, background occupies the four bytes right after foreground's own RGBS quad, and background's own shade byte was just read above at offset RGBS_SIZE + SHADE_OFFSET (7) -- so data already has at least eight bytes by this point, which foreground's own bytes at offsets 0-2 are well within. The check exists because noUncheckedIndexedAccess cannot see that positional invariant, not because it can genuinely fire; if it ever does, the record is corrupt in a way worth surfacing rather than papering over with a guessed colour.
+    throw new WpdFormatError(
+      "Cell fill has a readable background colour but an unreadable foreground colour, which the RGBS pair's own contiguous layout should make impossible.",
+    );
+  }
+  const foregroundCoveragePercent =
+    100 - (backgroundShade / COLOR_COMPONENT_MAX) * 100;
   return {
-    background,
-    blended: backgroundShade !== undefined && backgroundShade !== FULL_SHADE,
+    fill: {
+      kind: "pattern",
+      patternType: nearestPercentType(foregroundCoveragePercent),
+      foregroundColor: foreground,
+      backgroundColor: background,
+    },
+    blended: true,
   };
 }

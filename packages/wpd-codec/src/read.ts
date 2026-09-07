@@ -2,6 +2,7 @@ import type {
   Alignment,
   Color,
   ContentBlock,
+  ContentCellFill,
   ContentDocument,
   ContentParagraph,
   ContentRun,
@@ -169,7 +170,7 @@ interface PageState {
 // The cell attributes an End-of-Line function's own embedded subfunctions state about the cell it closes.
 interface CellAttributes {
   readonly alignment: Alignment | undefined;
-  readonly background: Color | undefined;
+  readonly background: ContentCellFill | undefined;
   readonly columnSpan: number;
   readonly rowSpan: number;
   readonly covered: boolean;
@@ -364,7 +365,7 @@ function readCellAttributes(
       state,
       sink,
       WpdDiagnosticCodes.CellFillBlended,
-      "A cell is filled with a shaded blend of two colours; its background colour is used and the blend is not reproduced.",
+      "A cell is filled with a shaded blend of two colours, resolved to a 'pattern' fill whose density is this reader's own best-effort derivation, not a value confirmed against a specification.",
     );
   }
 
@@ -374,7 +375,7 @@ function readCellAttributes(
         information === undefined
           ? undefined
           : readCellInformation(information)?.alignment,
-      background: cellFill?.background,
+      background: cellFill?.fill,
       columnSpan: cellSpanning?.columnSpan ?? NO_SPAN,
       rowSpan: cellSpanning?.rowSpan ?? NO_SPAN,
       covered:
@@ -412,10 +413,10 @@ function closeCell(
       ? { colSpan: attributes.columnSpan }
       : {}),
     ...(attributes.rowSpan > NO_SPAN ? { rowSpan: attributes.rowSpan } : {}),
-    // ContentTableCell.background is document-schema.js's discriminated ContentCellFill (ExaDev/documents.js#951); this reader's own background is always the flat colour readCellFill resolves (see that function's own top-of-file note on why the blend itself is not reproduced), so it always wraps as a 'solid' fill, never a 'pattern' one.
+    // ContentTableCell.background is document-schema.js's discriminated ContentCellFill (ExaDev/documents.js#951); readCellFill (stream/table.ts) already resolves the real 'solid'/'pattern' shape, including a genuine two-colour blend (ExaDev/documents.js#1024), so this just passes it through.
     ...(attributes.background === undefined
       ? {}
-      : { background: { kind: "solid", color: attributes.background } }),
+      : { background: attributes.background }),
   };
   table.cells.push(cell);
 }
