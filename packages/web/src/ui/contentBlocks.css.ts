@@ -45,6 +45,45 @@ export const hr = style({
   borderTop: `1px solid ${vars.colors.defaultBorder}`,
   margin: "1em 0",
 });
+// A page break's own visual, distinct from hr above (a page break is a layout event, not document content) -- a dashed rule flanking a small "Page break" caption, built from ::before/::after so no extra wrapper markup is needed.
+export const pageBreak = style({
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  margin: "1em 0",
+  color: vars.colors.dimmed,
+  fontSize: "0.75em",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  "::before": {
+    content: '""',
+    flex: 1,
+    borderTop: `1px dashed ${vars.colors.defaultBorder}`,
+  },
+  "::after": {
+    content: '""',
+    flex: 1,
+    borderTop: `1px dashed ${vars.colors.defaultBorder}`,
+  },
+});
+
+// An embedded object this preview cannot lay out inline (a nested wordprocessing/presentation/spreadsheet/drawing document, or a chart's cached data) -- document-schema.js's own ContentEmbeddedObject doc comment states only a 'formula' object is expected to be laid out and rendered; the rest round-trip losslessly without ever being rendered, so a labelled placeholder is the correct treatment here, not a missing feature.
+export const embeddedObject = style({
+  margin: "0.6em 0",
+  padding: "12px 16px",
+  border: `1px dashed ${vars.colors.defaultBorder}`,
+  borderRadius: 4,
+  color: vars.colors.dimmed,
+  fontSize: "0.9em",
+  fontStyle: "italic",
+});
+
+// The one embedded-object kind that IS rendered inline (a formula, via MathMlView) -- block-level spacing to match paragraph/blockquote/codeBlock above, plus horizontal scroll for an equation wider than the preview column.
+export const embeddedFormula = style({
+  margin: "0.6em 0",
+  overflowX: "auto",
+});
+
 export const neutralList = style({
   margin: "0.3em 0",
   paddingLeft: 24,
