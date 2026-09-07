@@ -14,6 +14,7 @@ import {
   RECORD_BOOLERR,
   RECORD_BOUNDSHEET8,
   RECORD_DATE1904,
+  RECORD_DV,
   RECORD_EOF,
   RECORD_EXTERNSHEET,
   RECORD_FILEPASS,
@@ -437,6 +438,48 @@ describe("readXlsContent", () => {
       rowSpan: 2,
       colSpan: 3,
     });
+  });
+
+  it("reads a Dv record into ContentSheet.dataValidations (ExaDev/documents.js#1098) -- workbook/data-validation.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_DV, [
+                ...u32(0x400002), // valType 2 (decimal), typOperator 4 (greaterThan)
+                ...xlUnicodeString(""),
+                ...xlUnicodeString(""),
+                ...xlUnicodeString(""),
+                ...xlUnicodeString(""),
+                ...u16(3),
+                ...u16(0),
+                0x1e,
+                ...u16(0),
+                ...u16(0), // formula2 cce: 0, no second bound
+                ...u16(0), // formula2's own unused field -- DVParsedFormula always carries it, even when cce is 0
+                ...u16(1),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(readXlsContent(bytes).sheets[0]?.dataValidations).toEqual([
+      {
+        type: "decimal",
+        operator: "greaterThan",
+        formula1: "0",
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+      },
+    ]);
   });
 
   it("materialises an empty anchor for a merged range whose top-left cell has no value", () => {

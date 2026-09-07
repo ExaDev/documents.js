@@ -17,6 +17,7 @@ import {
   RECORD_BOTTOMMARGIN,
   RECORD_COLINFO,
   RECORD_DIMENSIONS,
+  RECORD_DV,
   RECORD_FORMULA,
   RECORD_HORIZONTALPAGEBREAKS,
   RECORD_LABEL,
@@ -44,6 +45,7 @@ import { decodeRkNumber } from "../biff/rk";
 import { readXLUnicodeString } from "../biff/strings";
 import { recordByteLength, type RecordGroup } from "../biff/substreams";
 import { columnWidthToPoints, inchesToPoints, twipsToPoints } from "../units";
+import { readDv, type RawDataValidation } from "./data-validation";
 
 // The worksheet substream ([MS-XLS] 2.1.7.20.5): the grid geometry and the cell table for one sheet. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/f41c06f2-9057-49a1-8c3f-a4a4d211fc56
 //
@@ -134,6 +136,7 @@ export interface RawSheet {
   readonly rows: readonly RawRow[];
   readonly columns: readonly RawColumn[];
   readonly merges: readonly RawRange[];
+  readonly dataValidations: readonly RawDataValidation[];
   /** The used range from the Dimensions record ([MS-XLS] 2.4.90), when the sheet declared one. */
   readonly usedRange?: RawRange;
   /** The sheet's own page setup, as far as its records state it. */
@@ -277,6 +280,7 @@ export function readSheetRecords(
   const rows: RawRow[] = [];
   const columns: RawColumn[] = [];
   const merges: RawRange[] = [];
+  const dataValidations: RawDataValidation[] = [];
   let usedRange: RawRange | undefined;
   const marginsPt: {
     left?: number;
@@ -309,6 +313,13 @@ export function readSheetRecords(
       case RECORD_MERGECELLS:
         merges.push(...readMergeCells(record));
         break;
+      case RECORD_DV: {
+        const validation = readDv(record, formulaSheets);
+        if (validation !== undefined) {
+          dataValidations.push(validation);
+        }
+        break;
+      }
       case RECORD_BLANK:
         cells.push(readBlank(record));
         break;
@@ -398,8 +409,8 @@ export function readSheetRecords(
   };
 
   return usedRange === undefined
-    ? { cells, rows, columns, merges, print }
-    : { cells, rows, columns, merges, usedRange, print };
+    ? { cells, rows, columns, merges, dataValidations, print }
+    : { cells, rows, columns, merges, dataValidations, usedRange, print };
 }
 
 /** Setup ([MS-XLS] 2.4.257): iPaperSize, iScale, iPageStart, iFitWidth, iFitHeight, a flags word, iRes, iVRes, an eight-byte header margin, an eight-byte footer margin, and iCopies. The starting page number, the two print resolutions, the header/footer margins, and the copy count are read past: ContentSheetPrintSettings has no field for any of them, and Margins models only the four page edges. */
