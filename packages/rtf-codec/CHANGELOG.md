@@ -1,3 +1,15 @@
+## [3.0.3](https://github.com/ExaDev/documents.js/compare/rtf-codec%403.0.2...rtf-codec%403.0.3) (2026-09-07)
+
+### Bug Fixes
+
+* **rtf-codec:** sanitize invalid source residue before validating embedded objects ([174a098](https://github.com/ExaDev/documents.js/commit/174a09898b18e462bebd5931f4bcabe24705357a))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^6.2.2
+- Updated archive-codec to ^1.6.3
+
 ## [3.0.2](https://github.com/ExaDev/documents.js/compare/rtf-codec%403.0.1...rtf-codec%403.0.2) (2026-09-07)
 
 ### Bug Fixes

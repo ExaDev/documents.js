@@ -1,6 +1,6 @@
 {
   "name": "doc-codec",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "A hand-written reader for the Word Binary File Format ([MS-DOC], .doc) against the shared document-schema.js content pivot: FIB parsing, piece-table text reconstruction, and CHPX/PAPX formatting exceptions.",
   "type": "module",
   "repository": {
@@ -78,8 +78,8 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "archive-codec": "^1.6.2",
-    "document-schema.js": "^6.2.1"
+    "archive-codec": "^1.6.3",
+    "document-schema.js": "^6.2.2"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
