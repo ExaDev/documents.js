@@ -87,7 +87,7 @@ function normalizeMarkdownStyling(document: ContentDocument): ContentDocument {
   };
 }
 
-// docx and odt heading paragraphs are identified primarily by the schema's ContentParagraph.headingLevel (docx: ooxml.js resolves w:outlineLvl through the style chain; odt: odf.js reads text:outline-level), with the "Heading1".."Heading6" styleId pattern as a fallback because the two signals have different coverage: a style NAMED "Heading3" can carry no outline level (caught only by the pattern), and a custom style can inherit an outline level while having a non-Heading name (caught only by the field). Rewritten here into the same "heading-{N}" convention normalizeMarkdownStyling produces. Blockquote and code-block styleIds are detected by heuristic name matching (docx: "Quote"/"IntenseQuote"; odt: "Quotations"; both: any styleId containing "Code"/"Source"/"Preformatted"), rewritten into the same "quote"/"code-block" convention markdown-codec uses.
+// docx and odt heading paragraphs are identified primarily by the schema's ContentParagraph.headingLevel (docx: ooxml.js resolves w:outlineLvl through the style chain; odt: odf.js reads text:outline-level), with the "Heading1".."Heading6" styleId pattern as a fallback because the two signals have different coverage: a style NAMED "Heading3" can carry no outline level (caught only by the pattern), and a custom style can inherit an outline level while having a non-Heading name (caught only by the field). Rewritten here into the same "heading-{N}" convention normalizeMarkdownStyling produces. Blockquote and code-block styleIds are detected by heuristic name matching (docx: "Quote"/"IntenseQuote"; odt: "Quotations"; both: any styleId containing "Code"/"Source"/"Preformatted"), rewritten into the same "quote"/"code-block" convention markdown-codec uses. Horizontal rule is detected the same way for odt: LibreOffice/OpenOffice's built-in "Horizontal Line" paragraph style has the raw ODF style:name "Horizontal_20_Line" (ODF's predefined-style space-escaping convention, the same "_20_" Preformatted_20_Text/Heading_20_1 already use), matched heuristically here as any styleId containing both "Horizontal" and "Line" rather than the exact escaped string, in case a producer spells it slightly differently. docx has no equivalent named style to match against: Word's own AutoCorrect-inserted horizontal rule ("---" then Enter) is direct paragraph border formatting (w:pBdr/w:bottom on an otherwise unstyled paragraph), which ContentParagraph does not carry today -- tracked separately (ExaDev/documents.js#1082) rather than attempted here as a styleId heuristic that cannot work for it.
 const WORDPROCESSING_HEADING_PATTERN = /^Heading([1-6])$/;
 
 function normalizeWordprocessingSemantics(
@@ -111,14 +111,24 @@ function normalizeWordprocessingBlock(block: ContentBlock): ContentBlock {
       const headingMatch = WORDPROCESSING_HEADING_PATTERN.exec(block.styleId);
       if (headingMatch !== null)
         return { ...block, styleId: `heading-${headingMatch[1]}` };
-      if (block.styleId.includes("Quote"))
+      if (
+        block.styleId.includes("Quote") ||
+        block.styleId.includes("Quotation")
+      ) {
         return { ...block, styleId: "quote" };
+      }
       if (
         block.styleId.includes("Code") ||
         block.styleId.includes("Source") ||
         block.styleId.includes("Preformatted")
       ) {
         return { ...block, styleId: "code-block" };
+      }
+      if (
+        block.styleId.includes("Horizontal") &&
+        block.styleId.includes("Line")
+      ) {
+        return { ...block, styleId: "horizontal-rule" };
       }
     }
     return block;
@@ -186,8 +196,8 @@ function normalizeDocxListKinds(
   };
 }
 
-// Dispatches source-format-specific ContentDocument normalization. Each branch rewrites format-specific styleId vocabulary into the app's own convention; formats with no private vocabulary (pdf, pptx, odp, etc.) pass through unchanged. bytes is needed only for docx list-kind resolution (readDocxExtras); other formats don't use it.
-function normalizeContentForSource(
+// Dispatches source-format-specific ContentDocument normalization. Each branch rewrites format-specific styleId vocabulary into the app's own convention; formats with no private vocabulary (pdf, pptx, odp, etc.) pass through unchanged. bytes is needed only for docx list-kind resolution (readDocxExtras); other formats don't use it. Exported (this module is otherwise router-object-only, per the top-of-file note) purely so router.test.ts can exercise the normalization rules directly against plain ContentDocument fixtures, without round-tripping real docx/odt bytes through the full worker-only conversion path.
+export function normalizeContentForSource(
   content: ContentDocument,
   source: DocumentFormat,
   bytes?: Uint8Array<ArrayBuffer>,
