@@ -8,6 +8,7 @@ import type {
   ContentSheetCell,
   ContentSheetCellComment,
   ContentSheetColumn,
+  ContentSheetConditionalFormat,
   ContentSheetImage,
   ContentSheetPrintRange,
   ContentSheetPrintSettings,
@@ -42,6 +43,7 @@ import {
   resolveSheetDataValidations,
   type ParsedContentValidation,
 } from "./data-validation";
+import { readConditionalFormats } from "./conditional-format";
 import type { OdfTransformFunction } from "../shared/transform";
 import { parseOdfTransform } from "../shared/transform";
 import { readDrawFrame } from "../draw/shapes";
@@ -347,6 +349,9 @@ interface TableWalkResult {
   manualBreakColumns: number[];
   // Every cell in this table carrying a table:content-validation-name, keyed by that name, as the single-cell range it occupies -- one entry per referencing cell, not merged into larger rectangles (ContentSheetDataValidation.ranges is a plain list; a real producer's own validated area reading back as several 1x1 ranges instead of one bigger one is still a faithful, if unminified, restatement of exactly which cells the rule applies to). Resolved against the document-wide rule definitions in readSheet below, since one name can be referenced from more than one sheet.
   validationRefs: Map<string, ContentSheetRange[]>;
+  conditionalFormats: ContentSheetConditionalFormat[];
+  // A calcext:conditional-formats rule this table's own conditional-format.ts could not promote -- fed to readOdsContent's own whole-element residue collection instead of the generic vendor-extension sweep, since the tag has already been consumed here.
+  conditionalFormatResidue: XmlElement[];
 }
 
 // One anchored draw:frame -> whichever of `images`/`embeddedObjects` it belongs in, at the anchor position the caller resolved for it (the enclosing cell's own cursor row/column, or 0/0 for a page-anchored frame -- see this module's own top-of-file note on the two anchoring conventions). The frame itself is read by shapes.ts's readDrawFrame, so its resolved box already carries the group-composed offsets and the frame-sized ContentImageBlock this function only has to re-shape into a ContentSheetImage. An embedded sub-document dispatches through typed/draw/embedded.ts's own readEmbeddedObjectDocument -- the one shared kind -> reader table every frame-reading format hands its references to, so this module imports no sibling format reader (see that module's top-of-file note for why the dispatch is inverted into it).
@@ -661,6 +666,11 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
     }
   }
 
+  const {
+    formats: conditionalFormats,
+    residueElements: conditionalFormatResidue,
+  } = readConditionalFormats(tableElement, pkg);
+
   return {
     columns,
     rows,
@@ -672,6 +682,8 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
     manualBreakRows,
     manualBreakColumns,
     validationRefs,
+    conditionalFormats,
+    conditionalFormatResidue,
   };
 }
 
@@ -777,15 +789,17 @@ function readPrintSettings(
   return settings;
 }
 
+interface ReadSheetResult {
+  sheet: ContentSheet | undefined;
+  conditionalFormatResidue: XmlElement[];
+}
+
 function readSheet(
   tableElement: XmlElement,
   pkg: Package,
   validationDefinitions: ReadonlyMap<string, ParsedContentValidation>,
-): ContentSheet | undefined {
+): ReadSheetResult {
   const name = attrValue(tableElement, "table:name");
-  if (name === undefined) {
-    return undefined;
-  }
   const {
     columns,
     rows,
@@ -797,7 +811,12 @@ function readSheet(
     manualBreakRows,
     manualBreakColumns,
     validationRefs,
+    conditionalFormats,
+    conditionalFormatResidue,
   } = readTable(tableElement, pkg);
+  if (name === undefined) {
+    return { sheet: undefined, conditionalFormatResidue };
+  }
   const printSettings = readPrintSettings(
     tableElement,
     pkg,
@@ -825,20 +844,30 @@ function readSheet(
   if (dataValidations.length > 0) {
     sheet.dataValidations = dataValidations;
   }
-  return sheet;
+  if (conditionalFormats.length > 0) {
+    sheet.conditionalFormats = conditionalFormats;
+  }
+  return { sheet, conditionalFormatResidue };
 }
 
-// Vendor-extension elements of a spreadsheet body, the ods spelling of the same quarantine-everywhere policy the odt block walk applies -- keyed by their own tag, same-tag occurrences concatenated. readOdsContent walks BOTH containers real producer output splits across: LibreOffice Calc writes its calcext:conditional-formats as the last child of EACH table:table (verified against real Calc output), while office:spreadsheet's own direct children stay checked for any producer-private element sitting there.
+// Vendor-extension elements of a spreadsheet body, the ods spelling of the same quarantine-everywhere policy the odt block walk applies -- keyed by their own tag, same-tag occurrences concatenated. readOdsContent walks BOTH containers real producer output splits across: LibreOffice Calc writes its calcext:conditional-formats as the last child of EACH table:table (verified against real Calc output), while office:spreadsheet's own direct children stay checked for any producer-private element sitting there. skipTags excludes tags a caller has already given individual, structured handling to (conditional-format.ts's own calcext:conditional-formats, per table) -- this generic sweep would otherwise re-quarantine an element that was already promoted into real ContentSheet data, doubling it up as both interpreted content and opaque residue.
 function collectOdsExtensionElementResidue(
   children: readonly XmlNode[],
   source: Record<string, SourceResidue>,
+  skipTags: ReadonlySet<string> = new Set(),
 ): void {
   for (const child of children) {
-    if (child.type === "element" && isOdfExtensionElement(child)) {
+    if (
+      child.type === "element" &&
+      isOdfExtensionElement(child) &&
+      !skipTags.has(child.tag)
+    ) {
       addOdfPackageResidue(source, child.tag, "ods", child);
     }
   }
 }
+
+const CONDITIONAL_FORMATS_TAG = new Set(["calcext:conditional-formats"]);
 
 export function readOdsContent(pkg: Package): OdsDocument {
   const contentPart = pkg.parts[CONTENT_PART];
@@ -862,11 +891,13 @@ export function readOdsContent(pkg: Package): OdsDocument {
       ? new Map<string, ParsedContentValidation>()
       : readContentValidationDefinitions(spreadsheet);
   const sheets: ContentSheet[] = [];
+  const conditionalFormatResidue: XmlElement[] = [];
   for (const table of tables) {
-    const sheet = readSheet(table, pkg, validationDefinitions);
-    if (sheet !== undefined) {
-      sheets.push(sheet);
+    const result = readSheet(table, pkg, validationDefinitions);
+    if (result.sheet !== undefined) {
+      sheets.push(result.sheet);
     }
+    conditionalFormatResidue.push(...result.conditionalFormatResidue);
   }
 
   const definitions: Record<string, DefinitionEntry> = {};
@@ -882,8 +913,18 @@ export function readOdsContent(pkg: Package): OdsDocument {
     );
     collectOdsExtensionElementResidue(spreadsheet.children, source);
     for (const table of tables) {
-      collectOdsExtensionElementResidue(table.children, source);
+      collectOdsExtensionElementResidue(
+        table.children,
+        source,
+        CONDITIONAL_FORMATS_TAG,
+      );
     }
+    addOdfPackageResidue(
+      source,
+      "calcext:conditional-formats",
+      "ods",
+      ...conditionalFormatResidue,
+    );
   }
   collectOdfNonContentPartResidue(pkg, "ods", source);
 
