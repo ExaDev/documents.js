@@ -1,3 +1,22 @@
+## [7.7.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.6.0...odf.js%407.7.0) (2026-09-07)
+
+### Features
+
+* **odf.js:** read calcext:conditional-formats into ContentSheet.conditionalFormats ([dcc7f9c](https://github.com/ExaDev/documents.js/commit/dcc7f9ccc4d1dee43fa479d0f913894090724e73))
+
+### Bug Fixes
+
+* **odf.js:** decode XML entities in table:condition before parsing it ([fdafb3d](https://github.com/ExaDev/documents.js/commit/fdafb3d15619d9e6a56815b657f379f29911a5b4))
+
+### Code Refactoring
+
+* **odf.js:** extract the balanced-paren expression parser into a shared module ([8a1cf22](https://github.com/ExaDev/documents.js/commit/8a1cf229f3656569f624e51805d1b711712b6f5f))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^7.3.0
+
 ## [7.6.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.5.1...odf.js%407.6.0) (2026-09-07)
 
 ### Features

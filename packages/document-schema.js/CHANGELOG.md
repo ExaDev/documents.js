@@ -1,3 +1,9 @@
+## [7.3.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.2.0...document-schema.js%407.3.0) (2026-09-07)
+
+### Features
+
+* **document-schema.js:** add year-scoped time periods to ContentSheetConditionalFormat ([b38e855](https://github.com/ExaDev/documents.js/commit/b38e855b12a6a92e270ec592c34b0e3e0c8a8d54))
+
 ## [7.2.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.1.0...document-schema.js%407.2.0) (2026-09-07)
 
 ### Features
