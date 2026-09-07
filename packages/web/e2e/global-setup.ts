@@ -6,8 +6,13 @@ async function globalSetup(config: FullConfig) {
   const browser = await chromium.launch();
   const page = await browser.newPage();
   await page.goto(`${baseURL}/convert`);
-  await page.getByRole("heading", { name: "Convert a document" }).waitFor();
-  await page.getByRole("combobox", { name: "From" }).waitFor();
+  // Explicit, generous timeouts, not the library's own unconfigurable-from-here 30s default: this script runs outside the test fixtures, so playwright.config.ts's own expect.timeout doesn't reach it, and a CI runner's shared, weaker CPU can take meaningfully longer than a local machine to finish the same cold compile -- confirmed directly (ExaDev/documents.js#1097's own first CI run of this file: the identical wait that took under a second locally still hadn't resolved at the 30s default on the runner).
+  await page
+    .getByRole("heading", { name: "Convert a document" })
+    .waitFor({ timeout: 60_000 });
+  await page
+    .getByRole("combobox", { name: "From" })
+    .waitFor({ timeout: 60_000 });
   await browser.close();
 }
 
