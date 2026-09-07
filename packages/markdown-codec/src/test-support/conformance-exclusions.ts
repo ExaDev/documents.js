@@ -13,8 +13,6 @@ const NESTED_LIST_LOOSENESS_SHARED =
   "a nested list's own tight/loose spacing cannot diverge from its enclosing list's: src/shared/list-id.ts's own numId grammar mints exactly one loose flag per TOP-LEVEL list, and a nested list deliberately reuses that SAME numId rather than minting a second one (see that module's own top-of-file note on why nesting never mints again), so a genuinely tight nested list sitting under a genuinely loose outer item renders with the outer item's own loose spacing between its own siblings instead of its own real tight spacing";
 const MARKER_TYPE_CONFLICT =
   "a nested list disagreeing with its enclosing list's own minted marker type is resolved first-wins, not preserved (MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT) -- reusing the enclosing numId is itself the correct, tested design (src/shared/list-id.ts), just lossy for a genuinely mixed-type nesting";
-const BLOCKQUOTE_STRUCTURE =
-  "a blockquote directly containing more than one block, or nested beyond one level, has no ContentBlockquote container of its own to preserve that structure on -- indentLeftPt only encodes a nesting DEPTH (MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH beyond level 1), never a container boundary";
 const BLOCKQUOTE_HEADING_CONTAINER_SKIPPED =
   "a blockquote containing a heading anywhere in its subtree cannot carry its own division construct pair (a marker extent may not open a heading scope), so the whole quote degrades to indent-only structure while the heading itself keeps its own fidelity (MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED) -- and a plain paragraph rendered this way immediately after the heading, at the same indent depth with a blank line between them (src/emit/emit.ts's own comment directly above renderItems on why two same-depth quoted blocks always render as independent blockquotes), reparses as a SECOND, sibling blockquote rather than a continuation of the first";
 const ADJACENT_SAME_DEPTH =
@@ -55,8 +53,6 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [230, BLOCKQUOTE_HEADING_CONTAINER_SKIPPED],
   [232, BLOCKQUOTE_HEADING_CONTAINER_SKIPPED],
   // List items
-  [292, BLOCKQUOTE_STRUCTURE],
-  [293, BLOCKQUOTE_STRUCTURE],
   [296, MARKER_TYPE_CONFLICT],
   [299, MARKER_TYPE_CONFLICT],
   // Lists

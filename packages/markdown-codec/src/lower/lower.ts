@@ -406,6 +406,7 @@ function lowerListItem(
   const itemContext: BlockLowerContext = { ...context, list: membership };
   const blocks: ContentBlock[] = [];
   let ownLevelBlockCount = 0;
+  let firstOwnBlock: ContentBlock | undefined;
   for (const child of item.children) {
     if (child.type === "list") {
       blocks.push(
@@ -415,10 +416,11 @@ function lowerListItem(
     }
     const childBlocks = lowerBlock(child, itemContext, contentWidthPt);
     ownLevelBlockCount += childBlocks.length;
+    firstOwnBlock ??= childBlocks[0];
     blocks.push(...childBlocks);
   }
-  if (ownLevelBlockCount === 0) {
-    // A truly empty item (no children at all), or one whose sole content is a nested list, has nothing of its own to carry ContentListMembership(numId, level) on -- without a placeholder paragraph here, the item's own existence (and, when a nested list follows, that list's own nesting anchor) is lost entirely rather than degraded. The placeholder carries the full membership, checked state included, so a task item wrapping only a nested list keeps its checkbox.
+  if (ownLevelBlockCount === 0 || firstOwnBlock?.kind === "constructStart") {
+    // A truly empty item (no children at all), one whose sole content is a nested list, or one whose own first block is a construct (ExaDev/documents.js#1012 -- most commonly a blockquote's division pair) all share the same gap: none of them has an ORDINARY paragraph of its own to carry ContentListMembership(numId, level) on directly. Without a placeholder here, the item's own existence -- and, for the construct case, which item its dual-carried interior paragraph even belongs to -- has nowhere to attach except the construct's own interior, which src/emit/emit.ts's renderItems cannot read back before it has already decided how to open the region: a construct sitting at an item's own head is, at that point, indistinguishable from a genuinely fresh, unrelated construct that merely happens to wrap a list of its own (CommonMark spec 0.31.2 example 235, `> - foo\n- bar`, is exactly that unrelated shape, and must keep rendering as a bare quote with no borrowed item to attach it to). The placeholder carries the full membership, checked state included, so a task item wrapping only a nested list (or only a construct) keeps its checkbox; the construct's own interior still carries the SAME membership too (lowerBlockquote's own dual carry, unchanged), which is what lets emit.ts's existing constructCarriesListItemId absorb it as an ordinary continuation once the placeholder has established the item.
     blocks.unshift(
       decorateParagraph({ kind: "paragraph", runs: [] }, itemContext),
     );
