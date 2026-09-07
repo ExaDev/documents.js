@@ -39,7 +39,7 @@ const PICTURE_GRAPHIC_URI =
 const TINY_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
-// wp:inline and wp:anchor share the identical wp:extent/wp:docPr/a:graphic/a:graphicData/pic:pic/pic:blipFill/a:blip shape -- only the outer container tag (and, for wp:anchor, the positioning elements readDrawingImage deliberately never reads) differs.
+// wp:inline and wp:anchor share the identical wp:extent/wp:docPr/a:graphic/a:graphicData/pic:pic/pic:blipFill/a:blip shape -- only the outer container tag differs (and, for wp:anchor, the wp:positionH/wp:positionV elements this fixture doesn't set -- see the dedicated "wp:anchor floating image position" describe block below for those).
 function drawingElement(
   containerTag: "wp:inline" | "wp:anchor",
   rId: string,
@@ -1191,11 +1191,12 @@ describe("readDocxContent: images", () => {
     );
   });
 
-  it("reads a floating/anchored (wp:anchor) w:drawing as a real ContentImageBlock too, falling back to inline block-flow placement since ContentImageBlock has no absolute position field", () => {
+  it("reads a floating/anchored (wp:anchor) w:drawing as a real ContentImageBlock too, still placed in block flow at the point the w:drawing was encountered (floatPosition records the source's own anchored position separately -- see the dedicated describe block below; this fixture's own wp:anchor carries neither wp:positionH nor wp:positionV, so floatPosition stays absent here)", () => {
     const doc = readDocxContent(buildFixturePackage());
     const image = asImage(doc.sections[1]?.blocks[4]);
     expect(image.format).toBe("png");
     expect(image.altText).toBe("Floating alt text");
+    expect(image.floatPosition).toBeUndefined();
   });
 
   it("assigns the image its own sourcePath alongside its containing paragraph", () => {
@@ -1718,6 +1719,232 @@ describe("readDocxContent: malformed image geometry", () => {
     const doc = readDocxContent(pkg);
     // No embeddings part ships, so the object contributes nothing either -- the paragraph's own block is all that remains.
     expect(doc.sections[0]?.blocks).toHaveLength(1);
+  });
+});
+
+// A wp:anchor whose wp:positionH/wp:positionV carry whatever position children the caller supplies -- everything else (extent, docPr, the picture chain, the relationship, the media part) is the identical minimal shape drawingElement builds above, just with the position elements spliced in.
+function anchoredImagePackage(
+  positionH: XmlElement,
+  positionV: XmlElement,
+): Package {
+  const drawing = el("w:drawing", {}, [
+    el("wp:anchor", {}, [
+      positionH,
+      positionV,
+      el("wp:extent", { cx: "914400", cy: "457200" }),
+      el("wp:docPr", { id: "1", name: "Picture 1" }),
+      el("a:graphic", {}, [
+        el("a:graphicData", { uri: PICTURE_GRAPHIC_URI }, [
+          el("pic:pic", {}, [
+            el("pic:blipFill", {}, [
+              el("a:blip", { "r:embed": "rIdAnchoredImage" }),
+            ]),
+          ]),
+        ]),
+      ]),
+    ]),
+  ]);
+  const paragraph = el("w:p", {}, [el("w:r", {}, [drawing])]);
+  const body = el("w:body", {}, [
+    paragraph,
+    el("w:sectPr", {}, [el("w:pgSz", { "w:w": "12240", "w:h": "15840" })]),
+  ]);
+  return {
+    parts: {
+      "word/document.xml": {
+        kind: "xml",
+        nodes: [el("w:document", {}, [body])],
+      },
+      "word/_rels/document.xml.rels": {
+        kind: "xml",
+        nodes: [
+          rels([
+            {
+              id: "rIdAnchoredImage",
+              type: IMAGE_REL,
+              target: "media/anchored.png",
+            },
+          ]),
+        ],
+      },
+      "word/media/anchored.png": { kind: "binary", base64: TINY_PNG_BASE64 },
+    },
+  };
+}
+
+describe("readDocxContent: wp:anchor floating image position (ExaDev/documents.js#1087)", () => {
+  it("reads an offset-based position on both axes -- wp:posOffset, an EMU integer converted to points", () => {
+    const pkg = anchoredImagePackage(
+      el("wp:positionH", { relativeFrom: "page" }, [
+        el("wp:posOffset", {}, [txt("914400")]), // 1in -> 72pt
+      ]),
+      el("wp:positionV", { relativeFrom: "paragraph" }, [
+        el("wp:posOffset", {}, [txt("-457200")]), // -0.5in -> -36pt, a real negative offset docx permits
+      ]),
+    );
+    const image = asImage(readDocxContent(pkg).sections[0]?.blocks[1]);
+    expect(image.floatPosition).toEqual({
+      horizontal: { relativeTo: "page", offsetPt: 72 },
+      vertical: { relativeTo: "paragraph", offsetPt: -36 },
+    });
+  });
+
+  it("reads an align-based position on both axes -- wp:align, a keyword", () => {
+    const pkg = anchoredImagePackage(
+      el("wp:positionH", { relativeFrom: "margin" }, [
+        el("wp:align", {}, [txt("right")]),
+      ]),
+      el("wp:positionV", { relativeFrom: "margin" }, [
+        el("wp:align", {}, [txt("top")]),
+      ]),
+    );
+    const image = asImage(readDocxContent(pkg).sections[0]?.blocks[1]);
+    expect(image.floatPosition).toEqual({
+      horizontal: { relativeTo: "margin", align: "right" },
+      vertical: { relativeTo: "margin", align: "top" },
+    });
+  });
+
+  it("reads one axis offset-based and the other align-based independently -- docx's own wp:positionH/wp:positionV choose per axis", () => {
+    const pkg = anchoredImagePackage(
+      el("wp:positionH", { relativeFrom: "column" }, [
+        el("wp:posOffset", {}, [txt("228600")]), // 0.25in -> 18pt
+      ]),
+      el("wp:positionV", { relativeFrom: "line" }, [
+        el("wp:align", {}, [txt("bottom")]),
+      ]),
+    );
+    const image = asImage(readDocxContent(pkg).sections[0]?.blocks[1]);
+    expect(image.floatPosition).toEqual({
+      horizontal: { relativeTo: "column", offsetPt: 18 },
+      vertical: { relativeTo: "line", align: "bottom" },
+    });
+  });
+
+  it.each([
+    "leftMargin",
+    "rightMargin",
+    "insideMargin",
+    "outsideMargin",
+    "character",
+  ] as const)(
+    "recognises the horizontal-only relativeFrom value %s",
+    (relativeFrom) => {
+      const pkg = anchoredImagePackage(
+        el("wp:positionH", { relativeFrom }, [
+          el("wp:posOffset", {}, [txt("0")]),
+        ]),
+        el("wp:positionV", { relativeFrom: "page" }, [
+          el("wp:posOffset", {}, [txt("0")]),
+        ]),
+      );
+      const image = asImage(readDocxContent(pkg).sections[0]?.blocks[1]);
+      expect(image.floatPosition?.horizontal.relativeTo).toBe(relativeFrom);
+    },
+  );
+
+  it.each(["topMargin", "bottomMargin", "line"] as const)(
+    "recognises the vertical-only relativeFrom value %s",
+    (relativeFrom) => {
+      const pkg = anchoredImagePackage(
+        el("wp:positionH", { relativeFrom: "page" }, [
+          el("wp:posOffset", {}, [txt("0")]),
+        ]),
+        el("wp:positionV", { relativeFrom }, [
+          el("wp:posOffset", {}, [txt("0")]),
+        ]),
+      );
+      const image = asImage(readDocxContent(pkg).sections[0]?.blocks[1]);
+      expect(image.floatPosition?.vertical.relativeTo).toBe(relativeFrom);
+    },
+  );
+
+  it("has no floatPosition when wp:positionH/wp:positionV are absent entirely, even inside a real wp:anchor", () => {
+    const drawing = el("w:drawing", {}, [
+      el("wp:anchor", {}, [
+        el("wp:extent", { cx: "914400", cy: "457200" }),
+        el("wp:docPr", { id: "1", name: "Picture 1" }),
+        el("a:graphic", {}, [
+          el("a:graphicData", { uri: PICTURE_GRAPHIC_URI }, [
+            el("pic:pic", {}, [
+              el("pic:blipFill", {}, [
+                el("a:blip", { "r:embed": "rIdAnchoredImage" }),
+              ]),
+            ]),
+          ]),
+        ]),
+      ]),
+    ]);
+    const paragraph = el("w:p", {}, [el("w:r", {}, [drawing])]);
+    const body = el("w:body", {}, [
+      paragraph,
+      el("w:sectPr", {}, [el("w:pgSz", { "w:w": "12240", "w:h": "15840" })]),
+    ]);
+    const pkg: Package = {
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [el("w:document", {}, [body])],
+        },
+        "word/_rels/document.xml.rels": {
+          kind: "xml",
+          nodes: [
+            rels([
+              {
+                id: "rIdAnchoredImage",
+                type: IMAGE_REL,
+                target: "media/anchored.png",
+              },
+            ]),
+          ],
+        },
+        "word/media/anchored.png": {
+          kind: "binary",
+          base64: TINY_PNG_BASE64,
+        },
+      },
+    };
+    const image = asImage(readDocxContent(pkg).sections[0]?.blocks[1]);
+    expect(image.floatPosition).toBeUndefined();
+  });
+
+  it("drops the whole floatPosition, not just the malformed axis, when relativeFrom is missing or unrecognised on one axis", () => {
+    const pkg = anchoredImagePackage(
+      el("wp:positionH", { relativeFrom: "notARealValue" }, [
+        el("wp:posOffset", {}, [txt("0")]),
+      ]),
+      el("wp:positionV", { relativeFrom: "page" }, [
+        el("wp:posOffset", {}, [txt("0")]),
+      ]),
+    );
+    const image = asImage(readDocxContent(pkg).sections[0]?.blocks[1]);
+    expect(image.floatPosition).toBeUndefined();
+  });
+
+  it("drops the whole floatPosition when an axis carries neither wp:posOffset nor a recognised wp:align", () => {
+    const pkg = anchoredImagePackage(
+      el("wp:positionH", { relativeFrom: "page" }, [
+        el("wp:align", {}, [txt("not-a-real-align-value")]),
+      ]),
+      el("wp:positionV", { relativeFrom: "page" }, [
+        el("wp:posOffset", {}, [txt("0")]),
+      ]),
+    );
+    const image = asImage(readDocxContent(pkg).sections[0]?.blocks[1]);
+    expect(image.floatPosition).toBeUndefined();
+  });
+
+  it("drops the whole floatPosition when wp:posOffset carries a non-numeric value", () => {
+    const pkg = anchoredImagePackage(
+      el("wp:positionH", { relativeFrom: "page" }, [
+        el("wp:posOffset", {}, [txt("not-a-number")]),
+      ]),
+      el("wp:positionV", { relativeFrom: "page" }, [
+        el("wp:posOffset", {}, [txt("0")]),
+      ]),
+    );
+    const image = asImage(readDocxContent(pkg).sections[0]?.blocks[1]);
+    expect(image.floatPosition).toBeUndefined();
   });
 });
 
