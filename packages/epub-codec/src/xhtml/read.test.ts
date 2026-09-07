@@ -2210,6 +2210,55 @@ describe("footnotes: EPUB 3 aside + noteref", () => {
       { kind: "constructEnd" },
     ]);
   });
+
+  // ExaDev/documents.js#1038's own repro: a footnote-reference anchor nested inside a <strong> (appendNested's own recursive buildInlineRuns call) at a point where the OUTER runs array already holds a preceding text run. The nested call counts its own runs from zero ("world" at 0, "1" at 1), so its own construct comes back as {startRun: 1, endRun: 2} relative to itself -- rebasing that onto the outer array's own length (1, for "hello ") is what turns it into the correct {startRun: 2, endRun: 3} bracketing "1", not the unrebased {startRun: 1, endRun: 2} that would incorrectly bracket "world" instead.
+  it("rebases a footnote-reference construct nested inside a <strong> onto the outer run array's own length, rather than leaving it relative to the nested call's zero-based count", () => {
+    const blocks = read(
+      body(
+        '<p>hello <strong>world<a epub:type="noteref" href="#fn1">1</a></strong></p>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [
+        { text: "hello " },
+        { text: "world", bold: true },
+        { text: "1", bold: true },
+      ],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 2,
+          endRun: 3,
+        },
+      ],
+    });
+  });
+
+  it("rebases a footnote-reference construct nested inside a plain hyperlink onto the outer run array's own length", () => {
+    const blocks = read(
+      body(
+        '<p>hello <a href="https://example.invalid/">world<a epub:type="noteref" href="#fn1">1</a></a></p>' +
+          '<aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
+      ),
+    );
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      runs: [
+        { text: "hello " },
+        { text: "world", hyperlink: "https://example.invalid/" },
+        { text: "1", hyperlink: "https://example.invalid/" },
+      ],
+      constructs: [
+        {
+          descriptor: { kind: "anchor", anchorType: "footnote", name: "fn1" },
+          startRun: 2,
+          endRun: 3,
+        },
+      ],
+    });
+  });
 });
 
 describe("footnotes: EPUB 2 linked-anchor idiom", () => {

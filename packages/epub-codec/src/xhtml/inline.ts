@@ -182,7 +182,18 @@ function appendImageFallback(
   }
 }
 
-// Known gap tracked as https://github.com/ExaDev/documents.js/issues/1038: nested.constructs' own startRun/endRun are relative to this nested call's zero-based runs array and are not rebased onto the outer runs array's length here (unlike read.ts's readPreRuns, which does rebase). Pre-existing at the merge-base; not fixed in this change.
+// A nested buildInlineRuns (or readPreRuns) call always starts counting its own runs from zero, so its constructs' startRun/endRun are relative to ITS OWN runs array, not the outer one they are about to be spliced into -- shifting each by however many runs the outer array already held before the splice is what src/xhtml/read.ts's own readPreRuns already does inline; exported so appendNested and both appendAnchor branches below can share the identical fix rather than each reimplementing it (ExaDev/documents.js#1038).
+export function rebaseConstructs(
+  constructs: readonly RunConstructExtent[],
+  offset: number,
+): RunConstructExtent[] {
+  return constructs.map((construct) => ({
+    ...construct,
+    startRun: construct.startRun + offset,
+    endRun: construct.endRun + offset,
+  }));
+}
+
 function appendNested(
   element: XmlElement,
   style: InlineStyle,
@@ -190,9 +201,10 @@ function appendNested(
   runs: ContentRun[],
   constructs: RunConstructExtent[],
 ): void {
+  const offset = runs.length;
   const nested = buildInlineRuns(element.children, style, context);
   runs.push(...nested.runs);
-  constructs.push(...nested.constructs);
+  constructs.push(...rebaseConstructs(nested.constructs, offset));
 }
 
 function appendAnchor(
@@ -207,7 +219,7 @@ function appendAnchor(
     const startRun = runs.length;
     const nested = buildInlineRuns(element.children, style, context);
     runs.push(...nested.runs);
-    constructs.push(...nested.constructs); // same unrebased-offset gap as appendNested above -- see issue #1038
+    constructs.push(...rebaseConstructs(nested.constructs, startRun));
     constructs.push({
       descriptor: {
         kind: "anchor",
@@ -226,11 +238,12 @@ function appendAnchor(
     return;
   }
   // Every href round-trips through ContentRun.hyperlink regardless of whether it names an external URI or a same-/cross-document fragment -- a deliberate simplification over document-schema.js's own internal/external `link` construct split (see README Architecture): building the full same-document anchor-target bookkeeping a genuine internal `link` construct needs is a real feature this package does not attempt, and every href still restores byte-for-byte either way. A same-document fragment already recognised as a footnote reference above never reaches this branch.
+  const offset = runs.length;
   const nested = buildInlineRuns(element.children, style, context);
   for (const run of nested.runs) {
     runs.push({ ...run, hyperlink: href });
   }
-  constructs.push(...nested.constructs); // same unrebased-offset gap as appendNested above -- see issue #1038
+  constructs.push(...rebaseConstructs(nested.constructs, offset));
   if (
     sameDocumentFragment(href) === undefined &&
     !/^[a-z][a-z0-9+.-]*:/iu.test(href)
