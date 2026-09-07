@@ -1,3 +1,9 @@
+## [7.2.5](https://github.com/ExaDev/documents.js/compare/documents.js%407.2.4...documents.js%407.2.5) (2026-09-07)
+
+### Bug Fixes
+
+* **documents.js:** scope gridline-lattice detection to connected components ([274b79d](https://github.com/ExaDev/documents.js/commit/274b79dce2d1f7f7ef7c7b50df4ada38cb9abc05)), closes [ExaDev/documents.js#1077](https://github.com/ExaDev/documents.js/issues/1077)
+
 ## [7.2.4](https://github.com/ExaDev/documents.js/compare/documents.js%407.2.3...documents.js%407.2.4) (2026-09-07)
 
 
