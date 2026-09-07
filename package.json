@@ -29,6 +29,7 @@
     "test:smoke": "turbo run _test:smoke",
     "test:corpus": "turbo run _test:corpus",
     "test:mutation": "turbo run _test:mutation",
+    "test:e2e": "turbo run _test:e2e",
     "_lint": "eslint . --cache --max-warnings 0",
     "_typecheck": "tsc -p tsconfig.json",
     "release": "semantic-release-workspace release --config release-workspace.config.ts",

@@ -133,6 +133,26 @@ jobs:
           task: test-smoke
           command: pnpm test:smoke $TURBO_FLAGS
 
+  test-e2e:
+    name: E2E test (web)
+    # Not yet a required check, matching mutation.yml's own precedent: the suite is new (ExaDev/documents.js#932) and hasn't run unattended in CI before, so it needs a run of real-world flakiness data before gating merges on it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+        with:
+          task: test-e2e
+          command: pnpm exec playwright install --with-deps chromium && pnpm test:e2e $TURBO_FLAGS
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: playwright-report
+          path: packages/web/playwright-report/
+          if-no-files-found: ignore
+
   knip:
     name: Knip
     runs-on: ubuntu-latest
