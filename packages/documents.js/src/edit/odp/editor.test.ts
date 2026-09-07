@@ -265,3 +265,39 @@ describe("full editor round trip: build a presentation from scratch, save, rerea
     expect(readImage).toBeDefined();
   });
 });
+
+// ExaDev/documents.js#933: an already-open live editor previously exposed no metadata setter at all. `editor.metadata = {...}` patches the live package's own meta.xml directly.
+describe("OdpEditor.metadata", () => {
+  it("reads the fixture's own real dc:title", () => {
+    const editor = openOdp(minimalOdpBytes());
+    expect(editor.metadata.title).toBe("My Presentation");
+  });
+
+  it("patches author onto an existing meta.xml that declared only dc:, not meta: -- exercising the namespace-declaration edge case", () => {
+    const editor = openOdp(minimalOdpBytes());
+    editor.metadata = { author: "New author" };
+    expect(editor.metadata.author).toBe("New author");
+    expect(editor.metadata.title).toBe("My Presentation");
+  });
+
+  it("clears keywords via an empty array", () => {
+    const editor = openOdp(minimalOdpBytes());
+    editor.metadata = { keywords: ["alpha", "beta"] };
+    editor.metadata = { keywords: [] };
+    expect(editor.metadata.keywords).toBeUndefined();
+  });
+
+  it("silently writes nothing for a field meta.xml has no ODF spelling for", () => {
+    const editor = openOdp(minimalOdpBytes());
+    editor.metadata = { producer: "Some PDF tool" };
+    expect(editor.metadata.producer).toBeUndefined();
+  });
+
+  it("round-trips through toBytes()/openOdp, leaving the slides untouched", () => {
+    const editor = openOdp(minimalOdpBytes());
+    editor.metadata = { title: "Round-tripped title" };
+    const reopened = openOdp(editor.toBytes());
+    expect(reopened.metadata.title).toBe("Round-tripped title");
+    expect(reopened.slides()).toHaveLength(editor.slides().length);
+  });
+});

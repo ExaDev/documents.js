@@ -34,7 +34,7 @@ const STYLES_NS_PREFIXES = [
 ] as const;
 const META_NS_PREFIXES = ["office", "meta", "dc"] as const;
 
-const ODF_VERSION = "1.3";
+export const ODF_VERSION = "1.3";
 
 // style:page-layout/@style:name and style:master-page/@style:name for the one shared page geometry every page this editor creates references via draw:page/@draw:master-page-name -- mirroring odp/scaffold.ts's own identical PAGE_LAYOUT_NAME/MASTER_PAGE_NAME pair and reasoning (OdgEditor.pageSize, editor.ts, needs this exact style:page-layout back by name to update it; OdgEditor.addPage needs this exact master-page name to reference on every new draw:page).
 export const PAGE_LAYOUT_NAME = "PM1";

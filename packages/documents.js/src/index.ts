@@ -936,11 +936,11 @@ export { readDocumentMetadata } from "./convert/from-pdf";
 export type { ReadNativeDocumentTreeOptions } from "./convert/from-pdf";
 export { readNativeDocumentTree } from "./convert/from-pdf";
 export type {
-  MetadataOverrides,
   PatchDocxMetadataOptions,
   SetDocumentMetadataOptions,
 } from "./metadata/write";
 export { patchDocxMetadata, setDocumentMetadata } from "./metadata/write";
+export type { MetadataOverrides } from "./metadata/core-patch";
 
 // --- Ports a caller can inject: deterministic clocks (for reproducible PDF output in tests) and cancellation. ---
 export type { ClockPort } from "./ports/clock";
