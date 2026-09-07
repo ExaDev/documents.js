@@ -37,6 +37,7 @@ export function readDocxContent(
       : spliceDocxEmbeddedObjects(
           docxDoc.sections,
           body.children,
+          pkg,
           options?.onMathDiagnostic,
         );
   return {

@@ -1,16 +1,25 @@
 import type {
   ContentBlock,
+  ContentEmbeddedObjectBlock,
   ContentSection,
   ContentTable,
   PageSize,
 } from "document-schema.js";
-import type { XmlElement, XmlNode } from "ooxml.js";
-import { childrenWithTag } from "ooxml.js";
+import type { Package, Relationship, XmlElement, XmlNode } from "ooxml.js";
+import {
+  attr,
+  base64ToBytes,
+  childrenWithTag,
+  elementsWithTag,
+  resolveRelationships,
+} from "ooxml.js";
 import { buildDrawingBlock } from "../../model/embedded-drawing";
 import { buildFormulaBlock } from "../../model/formula";
 import type { BlockPlacement } from "../../model/block-splice";
 import { spliceBlocks } from "../../model/block-splice";
+import { twipsToPt } from "../../model/units";
 import { collectOfficeMathElements, readOfficeMath } from "../../omml/read";
+import { decodeLegacyEmbeddedObject } from "../legacy-embedded";
 import type { DetectedParagraphVector } from "./vector";
 import { collectParagraphVectors } from "./vector";
 import type { OmmlDiagnosticSink } from "./formula";
@@ -21,9 +30,12 @@ import {
   PARAGRAPH_NON_CONTENT_TAGS,
 } from "./formula";
 
-// A second, independent pass over the SAME word/document.xml the upstream reader already read, splicing every OOXML math equation AND every recovered vector-only shape it found into the ContentSections that reader produced -- the docx-side counterpart to src/odf/odt/read.ts's own combined embedded-formula/vector pass, and the direct replacement of what used to be a formula-only spliceDocxFormulas (src/ooxml/docx/formula.ts). Merging the two into ONE splice pass rather than running two sequential ones is load-bearing, not tidiness: a second pass run against the ALREADY-spliced block array would count paragraph ordinals against the wrong (post-formula-splice) indices, since formula.ts's own paragraph-to-block ordinal correspondence assumes nothing has moved yet.
+// A second, independent pass over the SAME word/document.xml the upstream reader already read, splicing every OOXML math equation, every recovered vector-only shape, AND every classic-OLE-compound-file embedding it found into the ContentSections that reader produced -- the docx-side counterpart to src/odf/odt/read.ts's own combined embedded-formula/vector pass, and the direct replacement of what used to be a formula-only spliceDocxFormulas (src/ooxml/docx/formula.ts). Merging these into ONE splice pass rather than running several sequential ones is load-bearing, not tidiness: a second pass run against the ALREADY-spliced block array would count paragraph ordinals against the wrong (post-splice) indices, since this pass's own paragraph-to-block ordinal correspondence assumes nothing has moved yet.
 //
-// A formula's own detection (collectOfficeMathElements/readOfficeMath) is unchanged from the old spliceDocxFormulas; collectParagraphVectors (./vector.ts) is the vector-side detector, mirroring src/odf/odt/read.ts's own collectContainerVectors call exactly one paragraph at a time. This pass now also descends into every table's cells (and any table nested in a cell, recursively): collectBodyParagraphs/collectBodyTables were extended to collect w:tbl alongside w:p, and a table block is rebuilt with each of its cells' own blocks spliced independently -- so an equation inside a table cell is recovered into THAT cell's blocks, not dropped the way it was when this pass walked only top-level paragraphs.
+// A formula's own detection (collectOfficeMathElements/readOfficeMath) is unchanged from the old spliceDocxFormulas; collectParagraphVectors (./vector.ts) is the vector-side detector, mirroring src/odf/odt/read.ts's own collectContainerVectors call exactly one paragraph at a time; collectParagraphOleObjects (below) is the legacy-embedding detector (ExaDev/documents.js#921) -- a w:object/o:OLEObject whose payload is a classic OLE compound file holding native Word 97/Excel 97/PowerPoint 97 streams (no "Package" stream a ZIP could sit in) leaves no trace in ooxml.js's own readDocxContent at all, exactly the gap a vector-only w:drawing leaves, so recovering it needs the identical second-pass treatment. This pass now also descends into every table's cells (and any table nested in a cell, recursively): collectBodyParagraphs/collectBodyTables were extended to collect w:tbl alongside w:p, and a table block is rebuilt with each of its cells' own blocks spliced independently -- so an equation, vector, or legacy embedding inside a table cell is recovered into THAT cell's blocks, not dropped the way it was when this pass walked only top-level paragraphs.
+
+// The one document-level relationship part every w:object in the body resolves r:id against -- headers/footers carry their own separate relationship parts and are out of scope here, the same pre-existing limit the formula/vector detectors above already have (see this module's own README gotcha list).
+const DOCUMENT_PART_PATH = "word/document.xml";
 
 function isVectorOnlyRun(
   run: XmlElement,
@@ -46,13 +58,105 @@ function isVectorOnlyRun(
   );
 }
 
-// The generalisation of the old isEquationOnlyParagraph: a paragraph carrying nothing but non-content markers, recognised equations, and recognised vector-only runs is itself the embedded object(s), not a paragraph that merely contains one.
+interface DetectedParagraphOleObject {
+  readonly objectElement: XmlElement;
+  readonly block: ContentEmbeddedObjectBlock;
+}
+
+// w:object's own w:dxaOrig/w:dyaOrig (twips) size the frame, mirroring ooxml.js's own readObjectEmbeddedObject exactly (typed/docx/read.ts) -- an inline flow object has no absolute position of its own, so the frame sits at the origin, positioned by the flow like every other block this pass inserts. Malformed geometry (a non-numeric ST_TwipsMeasure) degrades to no block rather than emitting one no geometry schema accepts, the same guard the upstream reader applies before it will even resolve the payload.
+function objectFrame(
+  object: XmlElement,
+): { widthPt: number; heightPt: number } | undefined {
+  const dxaOrig = attr(object, "w:dxaOrig");
+  const dyaOrig = attr(object, "w:dyaOrig");
+  if (dxaOrig === undefined || dyaOrig === undefined) {
+    return undefined;
+  }
+  const widthPt = twipsToPt(Number(dxaOrig));
+  const heightPt = twipsToPt(Number(dyaOrig));
+  return Number.isFinite(widthPt) && Number.isFinite(heightPt)
+    ? { widthPt, heightPt }
+    : undefined;
+}
+
+// Resolves one w:object's payload through the identical r:id -> relationship -> part chain ooxml.js's own readObjectEmbeddedObject uses, but for the shape that reader's own ZIP/CFB-Package-stream decode never recovers: a classic compound file whose root storage carries native Word 97/Excel 97/PowerPoint 97 streams directly, with no "Package" stream a ZIP could sit in at all (ExaDev/documents.js#921). Undefined for every non-recovery shape: no o:OLEObject, no matching relationship (including an externally-linked object, whose target is a URI no part key matches), a non-binary part, or a payload none of the three legacy readers can place -- exactly the same degrade-tier the upstream reader's own embedded-object resolution already applies, so one unrecoverable legacy embedding never fails the host document's own read.
+function resolveLegacyOleObject(
+  object: XmlElement,
+  rels: ReadonlyMap<string, Relationship>,
+  pkg: Package,
+): ContentEmbeddedObjectBlock | undefined {
+  const oleObject = elementsWithTag([object], "o:OLEObject")[0];
+  const rId = oleObject === undefined ? undefined : attr(oleObject, "r:id");
+  const rel = rId === undefined ? undefined : rels.get(rId);
+  const payloadPart = rel === undefined ? undefined : pkg.parts[rel.target];
+  if (payloadPart?.kind !== "binary") {
+    return undefined;
+  }
+  const frame = objectFrame(object);
+  if (frame === undefined) {
+    return undefined;
+  }
+  const payload = decodeLegacyEmbeddedObject(base64ToBytes(payloadPart.base64));
+  return payload === undefined
+    ? undefined
+    : {
+        kind: "embeddedObject",
+        objectKind: payload.objectKind,
+        document: payload.document,
+        frame: { xPt: 0, yPt: 0, ...frame },
+      };
+}
+
+// Every w:object anywhere inside this paragraph (mirroring collectParagraphVectors' own per-paragraph scope) that resolves to a genuine legacy embedding, in document order.
+function collectParagraphOleObjects(
+  paragraph: XmlElement,
+  rels: ReadonlyMap<string, Relationship>,
+  pkg: Package,
+): readonly DetectedParagraphOleObject[] {
+  const out: DetectedParagraphOleObject[] = [];
+  for (const object of elementsWithTag(paragraph.children, "w:object")) {
+    const block = resolveLegacyOleObject(object, rels, pkg);
+    if (block !== undefined) {
+      out.push({ objectElement: object, block });
+    }
+  }
+  return out;
+}
+
+// The w:object-run counterpart to isVectorOnlyRun: a run whose one element child is a recognised legacy embedding, and which carries no other text.
+function isOleObjectOnlyRun(
+  run: XmlElement,
+  oleObjects: readonly DetectedParagraphOleObject[],
+): boolean {
+  const elementChildren = run.children.filter(
+    (child): child is XmlElement => child.type === "element",
+  );
+  if (elementChildren.length !== 1) {
+    return false;
+  }
+  const hasNonWhitespaceText = run.children.some(
+    (child) => child.type === "text" && child.value.trim().length > 0,
+  );
+  if (hasNonWhitespaceText) {
+    return false;
+  }
+  return oleObjects.some(
+    (detected) => detected.objectElement === elementChildren[0],
+  );
+}
+
+// The generalisation of the old isEquationOnlyParagraph: a paragraph carrying nothing but non-content markers, recognised equations, recognised vector-only runs, and recognised legacy-embedding-only runs is itself the embedded object(s), not a paragraph that merely contains one.
 function isEmbeddedObjectOnlyParagraph(
   paragraph: XmlElement,
   equations: readonly XmlElement[],
   vectors: readonly DetectedParagraphVector[],
+  oleObjects: readonly DetectedParagraphOleObject[],
 ): boolean {
-  if (equations.length === 0 && vectors.length === 0) {
+  if (
+    equations.length === 0 &&
+    vectors.length === 0 &&
+    oleObjects.length === 0
+  ) {
     return false;
   }
   for (const child of paragraph.children) {
@@ -83,6 +187,9 @@ function isEmbeddedObjectOnlyParagraph(
     if (child.tag === "w:r" && isVectorOnlyRun(child, vectors)) {
       continue;
     }
+    if (child.tag === "w:r" && isOleObjectOnlyRun(child, oleObjects)) {
+      continue;
+    }
     return false;
   }
   return true;
@@ -93,16 +200,23 @@ interface ParagraphEmbeddings {
   readonly consume: boolean;
 }
 
-// The shared paragraph-detection both the section-level walk and the per-cell recursion go through: given one paragraph block and its matching w:p element, recover every equation and vector-only shape it carries, returning the placements to splice in immediately AFTER it (index: blockIndex + 1) and whether the paragraph itself is consumed (it carried nothing but the recovered objects). Diagnostics for an equation that produced no MathML are reported eagerly against the block's own sourcePath, whether or not the paragraph is consumed.
+// The shared paragraph-detection both the section-level walk and the per-cell recursion go through: given one paragraph block and its matching w:p element, recover every equation, vector-only shape, and legacy-embedding it carries, returning the placements to splice in immediately AFTER it (index: blockIndex + 1) and whether the paragraph itself is consumed (it carried nothing but the recovered objects). Diagnostics for an equation that produced no MathML are reported eagerly against the block's own sourcePath, whether or not the paragraph is consumed.
 function paragraphEmbeddings(
   block: Extract<ContentBlock, { kind: "paragraph" }>,
   paragraph: XmlElement,
   blockIndex: number,
+  rels: ReadonlyMap<string, Relationship>,
+  pkg: Package,
   onMathDiagnostic?: OmmlDiagnosticSink,
 ): ParagraphEmbeddings {
   const equations = collectOfficeMathElements(paragraph.children);
   const vectors = collectParagraphVectors(paragraph);
-  if (equations.length === 0 && vectors.length === 0) {
+  const oleObjects = collectParagraphOleObjects(paragraph, rels, pkg);
+  if (
+    equations.length === 0 &&
+    vectors.length === 0 &&
+    oleObjects.length === 0
+  ) {
     return { placements: [], consume: false };
   }
 
@@ -112,7 +226,11 @@ function paragraphEmbeddings(
   }));
   const rendered = converted.filter((result) => result.mathml.length > 0);
 
-  if (rendered.length === 0 && vectors.length === 0) {
+  if (
+    rendered.length === 0 &&
+    vectors.length === 0 &&
+    oleObjects.length === 0
+  ) {
     for (const result of converted) {
       for (const diagnostic of result.diagnostics) {
         onMathDiagnostic?.(diagnostic, { sourcePath: block.sourcePath });
@@ -158,10 +276,21 @@ function paragraphEmbeddings(
       }),
     });
   }
+  for (const detected of oleObjects) {
+    placements.push({
+      index: insertAt,
+      build: (sourcePath) => ({ ...detected.block, sourcePath }),
+    });
+  }
 
   return {
     placements,
-    consume: isEmbeddedObjectOnlyParagraph(paragraph, equations, vectors),
+    consume: isEmbeddedObjectOnlyParagraph(
+      paragraph,
+      equations,
+      vectors,
+      oleObjects,
+    ),
   };
 }
 
@@ -171,6 +300,8 @@ function spliceContainerBlocks(
   containerChildren: readonly XmlNode[],
   pageSize: PageSize,
   sourcePathPrefix: string,
+  rels: ReadonlyMap<string, Relationship>,
+  pkg: Package,
   onMathDiagnostic?: OmmlDiagnosticSink,
 ): ContentBlock[] {
   const paragraphElements: XmlElement[] = [];
@@ -194,6 +325,8 @@ function spliceContainerBlocks(
         block,
         paragraph,
         blockIndex,
+        rels,
+        pkg,
         onMathDiagnostic,
       );
       if (paragraphPlacements.length > 0) {
@@ -215,6 +348,8 @@ function spliceContainerBlocks(
         tableElement,
         pageSize,
         `${sourcePathPrefix}[${blockIndex}]`,
+        rels,
+        pkg,
         onMathDiagnostic,
       );
     }
@@ -242,6 +377,8 @@ function rebuildTable(
   tblElement: XmlElement,
   pageSize: PageSize,
   blockPath: string,
+  rels: ReadonlyMap<string, Relationship>,
+  pkg: Package,
   onMathDiagnostic?: OmmlDiagnosticSink,
 ): ContentTable {
   const rowElements = childrenWithTag(tblElement, "w:tr");
@@ -259,6 +396,8 @@ function rebuildTable(
         cellElement.children,
         pageSize,
         `${blockPath}.rows[${rowIndex}].cells[${cellIndex}].blocks`,
+        rels,
+        pkg,
         onMathDiagnostic,
       );
       return blocks === cell.blocks ? cell : { ...cell, blocks };
@@ -273,16 +412,18 @@ function rebuildTable(
     : table;
 }
 
-// Rebuilds every section's block list with each recovered equation and vector-only shape spliced in at its own true position, descending into every table's cells (and nested tables) along the way. Returns the sections unchanged (a fresh array, never the input array) when the document carries no OOXML math and no recovered vectors at all, which is the overwhelmingly common case and costs one shallow walk to establish.
+// Rebuilds every section's block list with each recovered equation, vector-only shape, and legacy embedding spliced in at its own true position, descending into every table's cells (and nested tables) along the way. Returns the sections unchanged (a fresh array, never the input array) when the document carries no OOXML math, no recovered vectors, and no legacy embeddings at all, which is the overwhelmingly common case and costs one shallow walk to establish.
 export function spliceDocxEmbeddedObjects(
   sections: readonly ContentSection[],
   bodyChildren: readonly XmlNode[],
+  pkg: Package,
   onMathDiagnostic?: OmmlDiagnosticSink,
 ): ContentSection[] {
   const paragraphElements: XmlElement[] = [];
   collectBodyParagraphs(bodyChildren, paragraphElements);
   const tableElements: XmlElement[] = [];
   collectBodyTables(bodyChildren, tableElements);
+  const rels = resolveRelationships(pkg, DOCUMENT_PART_PATH);
 
   let paragraphOrdinal = 0;
   let tableOrdinal = 0;
@@ -300,7 +441,14 @@ export function spliceDocxEmbeddedObjects(
             return block;
           }
           const { placements: paragraphPlacements, consume } =
-            paragraphEmbeddings(block, paragraph, blockIndex, onMathDiagnostic);
+            paragraphEmbeddings(
+              block,
+              paragraph,
+              blockIndex,
+              rels,
+              pkg,
+              onMathDiagnostic,
+            );
           if (paragraphPlacements.length > 0) {
             placements.push(...paragraphPlacements);
           }
@@ -320,6 +468,8 @@ export function spliceDocxEmbeddedObjects(
             tableElement,
             section.pageSize,
             `sections[${sectionIndex}].blocks`,
+            rels,
+            pkg,
             onMathDiagnostic,
           );
         }
