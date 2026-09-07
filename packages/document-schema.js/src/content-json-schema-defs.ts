@@ -99,7 +99,7 @@ function mathBinderDef(kind: "sum" | "prod"): JsonSchema {
 
 // -- Hand-authored $defs, spliced into content-document.schema.json only (via scripts/generate-json-schemas.mjs's own ContentDocumentSchema override branch) --
 //
-// The fragments below are transcribed by hand, field-for-field, from src/content.ts's real Zod object definitions (ContentParagraphSchema, ContentTableSchema/ContentTableRowSchema/ContentTableCellSchema, ContentImageBlockSchema, ContentPageBreakSchema, ContentRunSchema, ContentListMembershipSchema, ColorSchema, BoxSchema, LayoutFrameSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, ContentCellPatternTypeSchema, ContentCellFillSchema -- each cross-checked directly against a real z.toJSONSchema() call over that exact exported schema, and the ones with a real, non-recursive, non-custom counterpart are held to that comparison as a running test by content-json-schema-defs.test.ts) plus the ContentEmbeddedObject/ContentEmbeddedObjectBlock TS interfaces, which have no exported z.object() counterpart at all (both are validated only via the isContentEmbeddedObject*() z.custom() guards), plus the math value schemas of src/math.ts (the semantic half of the two-layer formula model -- see that file's own top comment for how the layers divide). Re-verify this block against src/content.ts/src/math.ts whenever those files' field shapes change -- nothing here is generated or checked against the real schemas at build time, other than the leaf/near-leaf fragments the regression test below does cover.
+// The fragments below are transcribed by hand, field-for-field, from src/content.ts's real Zod object definitions (ContentParagraphSchema, ContentTableSchema/ContentTableRowSchema/ContentTableCellSchema, ContentImageBlockSchema, ContentPageBreakSchema, ContentRunSchema, ContentListMembershipSchema, ColorSchema, BoxSchema, LayoutFrameSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, ContentParagraphBordersSchema, ContentCellPatternTypeSchema, ContentCellFillSchema -- each cross-checked directly against a real z.toJSONSchema() call over that exact exported schema, and the ones with a real, non-recursive, non-custom counterpart are held to that comparison as a running test by content-json-schema-defs.test.ts) plus the ContentEmbeddedObject/ContentEmbeddedObjectBlock TS interfaces, which have no exported z.object() counterpart at all (both are validated only via the isContentEmbeddedObject*() z.custom() guards), plus the math value schemas of src/math.ts (the semantic half of the two-layer formula model -- see that file's own top comment for how the layers divide). Re-verify this block against src/content.ts/src/math.ts whenever those files' field shapes change -- nothing here is generated or checked against the real schemas at build time, other than the leaf/near-leaf fragments the regression test below does cover.
 export const CONTENT_DEFS: Record<string, JsonSchema> = {
   Color: {
     type: "object",
@@ -189,6 +189,16 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       bottom: { $ref: "#/$defs/ContentBorder" },
       diagonalUp: { $ref: "#/$defs/ContentBorder" }, // bottom-left to top-right
       diagonalDown: { $ref: "#/$defs/ContentBorder" }, // top-left to bottom-right
+    },
+    additionalProperties: false,
+  },
+  ContentParagraphBorders: {
+    type: "object",
+    properties: {
+      left: { $ref: "#/$defs/ContentBorder" },
+      right: { $ref: "#/$defs/ContentBorder" },
+      top: { $ref: "#/$defs/ContentBorder" },
+      bottom: { $ref: "#/$defs/ContentBorder" },
     },
     additionalProperties: false,
   },
@@ -357,6 +367,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       direction: { type: "string", enum: ["ltr", "rtl"] }, // RTF's \rtlpar/\ltrpar scope -- see src/content.ts's own field comment
       pageBreakBefore: { type: "boolean" }, // explicit page boundaries a paragraph style forces around its own paragraph
       pageBreakAfter: { type: "boolean" },
+      borders: { $ref: "#/$defs/ContentParagraphBorders" }, // direct paragraph-level border formatting -- see src/content.ts's own field comment
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
@@ -641,6 +652,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       direction: { type: "string", enum: ["ltr", "rtl"] },
       pageBreakBefore: { type: "boolean" }, // explicit page boundaries a paragraph style forces around its own paragraph
       pageBreakAfter: { type: "boolean" },
+      borders: { $ref: "#/$defs/ContentParagraphBorders" },
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
@@ -677,6 +689,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       direction: { type: "string", enum: ["ltr", "rtl"] },
       pageBreakBefore: { type: "boolean" }, // explicit page boundaries a paragraph style forces around its own paragraph
       pageBreakAfter: { type: "boolean" },
+      borders: { $ref: "#/$defs/ContentParagraphBorders" },
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },

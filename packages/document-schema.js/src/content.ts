@@ -77,6 +77,34 @@ export const RunConstructExtentSchema = z.object({
 });
 export type RunConstructExtent = z.infer<typeof RunConstructExtentSchema>;
 
+// Shared stroke/border style vocabulary -- reused by ContentStrokeSchema (drawing vector primitives, defined further down alongside them) and by ContentTableCellSchema/ContentSheetCellSchema's own per-side border fields further down, so a border always carries the same solid/dashed/dotted/double vocabulary regardless of which content leaf it decorates. Absent means 'solid' wherever this is optional.
+export const ContentStrokeStyleSchema = z.enum([
+  "solid",
+  "dashed",
+  "dotted",
+  "double",
+]);
+export type ContentStrokeStyle = z.infer<typeof ContentStrokeStyleSchema>;
+
+// A single border edge -- distinct from ContentStrokeSchema only in that a border is always exactly one side of a rectangular cell, never a freestanding line/path stroke; both share the same colour/width/style vocabulary.
+export const ContentBorderSchema = z.object({
+  color: ColorSchema,
+  widthPt: z.number().positive(),
+  style: ContentStrokeStyleSchema.optional(), // absent means 'solid'
+});
+export type ContentBorder = z.infer<typeof ContentBorderSchema>;
+
+// Per-side borders directly on a paragraph (WordprocessingML's own w:pBdr; ODF's fo:border-top/right/bottom/left) -- no diagonals, unlike ContentCellBordersSchema (further down, alongside the table/sheet cell schemas it decorates), since a paragraph is not a rectangular cell with corner-to-corner rules. An otherwise-empty paragraph carrying only `bottom` is the exact shape Word's AutoCorrect "---" then Enter produces (a horizontal rule), and LibreOffice can produce the identical border-only shape without going through a named "Horizontal Line" style.
+export const ContentParagraphBordersSchema = z.object({
+  left: ContentBorderSchema.optional(),
+  right: ContentBorderSchema.optional(),
+  top: ContentBorderSchema.optional(),
+  bottom: ContentBorderSchema.optional(),
+});
+export type ContentParagraphBorders = z.infer<
+  typeof ContentParagraphBordersSchema
+>;
+
 export const ContentParagraphSchema = z.object({
   kind: z.literal("paragraph"),
   runs: z.array(ContentRunSchema),
@@ -97,6 +125,7 @@ export const ContentParagraphSchema = z.object({
   // Explicit page boundaries a paragraph style forces around its own paragraph (docx w:pageBreakBefore, ODF fo:break-before/fo:break-after="page"). A break INSIDE one page style is this per-paragraph flag; a break that SWITCHES page geometry is a section boundary (ContentSection.breakType), and the two never encode one occurrence between them -- the same split w:pageBreakBefore and w:sectPr already make in WordprocessingML.
   pageBreakBefore: z.boolean().optional(),
   pageBreakAfter: z.boolean().optional(),
+  borders: ContentParagraphBordersSchema.optional(), // direct paragraph-level border formatting (w:pBdr; fo:border-*) -- distinct from any table/cell border this paragraph might separately sit inside, and from styleId: a producer can apply a border as direct formatting with no named style involved at all, which is exactly how Word's own AutoCorrect horizontal rule is built
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this paragraph's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
@@ -442,23 +471,6 @@ export function findRunConstructFault(
   }
   return undefined;
 }
-
-// Shared stroke/border style vocabulary -- reused by ContentStrokeSchema (drawing vector primitives, defined further down alongside them) and by ContentTableCellSchema/ContentSheetCellSchema's own per-side border fields immediately below, so a border always carries the same solid/dashed/dotted/double vocabulary regardless of which content leaf it decorates. Absent means 'solid' wherever this is optional.
-export const ContentStrokeStyleSchema = z.enum([
-  "solid",
-  "dashed",
-  "dotted",
-  "double",
-]);
-export type ContentStrokeStyle = z.infer<typeof ContentStrokeStyleSchema>;
-
-// A single border edge -- distinct from ContentStrokeSchema only in that a border is always exactly one side of a rectangular cell, never a freestanding line/path stroke; both share the same colour/width/style vocabulary.
-export const ContentBorderSchema = z.object({
-  color: ColorSchema,
-  widthPt: z.number().positive(),
-  style: ContentStrokeStyleSchema.optional(), // absent means 'solid'
-});
-export type ContentBorder = z.infer<typeof ContentBorderSchema>;
 
 // Per-side borders for a rectangular cell (table or sheet) -- each side independently optional, since a real cell frequently has some sides bordered and others not. diagonalUp/diagonalDown name the two corner-to-corner rules a cell can carry independently of its four sides (OOXML's own xlsx cell-border vocabulary already names them this way; RTF's \cldglu/\cldgll state the identical pair for a table cell) -- "up" runs bottom-left to top-right, "down" runs top-left to bottom-right.
 export const ContentCellBordersSchema = z.object({
