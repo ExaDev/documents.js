@@ -108,6 +108,7 @@ pnpm test:workers     # the same code inside workerd, the real Cloudflare Worker
 pnpm test:smoke       # each package's built dist/ exercised as a real artifact
 pnpm test:corpus      # the real-world conformance corpora (gitignored, so local only)
 pnpm test:mutation    # Stryker mutation testing, sharded and cached in CI; not yet a required check (no package has a measured break threshold yet)
+pnpm test:e2e         # the web UI driven through a real browser (Playwright); not yet a required check (new suite, no unattended CI run history yet)
 ```
 
 Every one of these runs through turbo, so a package whose inputs have not changed replays a cached result rather than re-running.

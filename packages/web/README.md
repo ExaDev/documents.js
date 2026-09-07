@@ -25,12 +25,12 @@ pnpm lint            # eslint . --cache --max-warnings 0
 pnpm test            # vitest run --project unit
 pnpm test:watch      # vitest --project unit
 pnpm test:coverage   # vitest run --project unit --coverage
-pnpm test:e2e        # playwright test
+pnpm test:e2e        # playwright test, against the real app served by `pnpm dev`
 ```
 
 To run a single unit test file, pass its path: `pnpm exec vitest run --project unit src/shared/transferables.test.ts`.
 
-`test:e2e` has no Playwright config or spec files in the repository yet — the script is wired up but there is nothing for it to run until both exist.
+`test:e2e`'s specs live in `e2e/` and drive a real Chromium instance against the Vite dev server (`playwright.config.ts`'s own `webServer`), covering the routed navigation and the drag-and-drop conversion flow that unit tests can't reach -- the native file-picker path and the browser's own drag events. It runs in CI (`test-e2e` in `ci.yml`) but is not yet a required check.
 
 ## Architecture
 

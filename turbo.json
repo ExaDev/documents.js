@@ -172,6 +172,12 @@
       "inputs": ["src/**", "vite.config.ts", "package.json"],
       "outputs": ["coverage/**"]
     },
+    "web#_test:e2e": {
+      // The webServer runs `pnpm dev` (vite) straight against src/, not web's own dist/ -- so this depends on siblings' builds (^_build), not web#_build.
+      "dependsOn": ["^_build"],
+      "inputs": ["src/**", "e2e/**", "playwright.config.ts", "package.json"],
+      "outputs": ["playwright-report/**"]
+    },
 
     // The workspace root's own tooling files (eslint.config.ts, commitlint.config.ts, lint-staged.config.ts) are held to the same lint and typecheck gates as package code. Registered as root tasks so `turbo run _lint` and `turbo run _typecheck` cover them without a separate command.
     "//#_lint": {
