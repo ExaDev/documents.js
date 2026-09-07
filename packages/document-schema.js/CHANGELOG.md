@@ -1,3 +1,13 @@
+## [6.2.2](https://github.com/ExaDev/documents.js/compare/document-schema.js%406.2.1...document-schema.js%406.2.2) (2026-09-07)
+
+### Bug Fixes
+
+* **document-schema.js:** make MathExpression and ContentBlock genuinely self-recursive schemas ([b785474](https://github.com/ExaDev/documents.js/commit/b785474ff3cd014b237dff43db66d8baf784fa86))
+
+### Code Refactoring
+
+* **document-schema.js:** compare generated JSON schema against live z.toJSONSchema() output ([596b627](https://github.com/ExaDev/documents.js/commit/596b627634256202bc715fa3b7b177a7401e435b))
+
 ## [6.2.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%406.2.0...document-schema.js%406.2.1) (2026-09-07)
 
 ### Bug Fixes
