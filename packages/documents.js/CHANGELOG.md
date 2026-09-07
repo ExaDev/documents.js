@@ -1,3 +1,9 @@
+## [7.1.14](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.13...documents.js%407.1.14) (2026-09-07)
+
+### Bug Fixes
+
+* **documents.js:** regenerate example dumps for document-schema.js@7.0.0 ([5d6472d](https://github.com/ExaDev/documents.js/commit/5d6472dab47740ae014c778936de58528ae2fc44))
+
 ## [7.1.13](https://github.com/ExaDev/documents.js/compare/documents.js%407.1.12...documents.js%407.1.13) (2026-09-07)
 
 
