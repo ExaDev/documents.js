@@ -1,3 +1,13 @@
+## [3.0.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%402.1.5...wpd-codec%403.0.0) (2026-09-07)
+
+### ⚠ BREAKING CHANGES
+
+* **wpd-codec:** resolve partially-shaded cell fills to real pattern fills
+
+### Features
+
+* **wpd-codec:** resolve partially-shaded cell fills to real pattern fills ([ab0ad52](https://github.com/ExaDev/documents.js/commit/ab0ad52721d76e1ff7c17fe1500d051fc920909c))
+
 ## [2.1.5](https://github.com/ExaDev/documents.js/compare/wpd-codec%402.1.4...wpd-codec%402.1.5) (2026-09-07)
 
 

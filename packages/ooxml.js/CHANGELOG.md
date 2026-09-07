@@ -1,3 +1,13 @@
+## [8.0.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%407.1.6...ooxml.js%408.0.0) (2026-09-07)
+
+### ⚠ BREAKING CHANGES
+
+* **ooxml.js:** resolve pptx table cell a:pattFill to a real pattern fill
+
+### Features
+
+* **ooxml.js:** resolve pptx table cell a:pattFill to a real pattern fill ([fd2d558](https://github.com/ExaDev/documents.js/commit/fd2d5589013eb95ae656b5887c37cf36d891f4c7))
+
 ## [7.1.6](https://github.com/ExaDev/documents.js/compare/ooxml.js%407.1.5...ooxml.js%407.1.6) (2026-09-07)
 
 ### Bug Fixes

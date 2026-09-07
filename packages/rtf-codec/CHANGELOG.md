@@ -1,3 +1,13 @@
+## [4.0.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%403.0.4...rtf-codec%404.0.0) (2026-09-07)
+
+### ⚠ BREAKING CHANGES
+
+* **rtf-codec:** resolve partially-shaded cell fills to real pattern fills
+
+### Features
+
+* **rtf-codec:** resolve partially-shaded cell fills to real pattern fills ([dc97e88](https://github.com/ExaDev/documents.js/commit/dc97e88b61c988ed29aeebe2ccb082feab417413))
+
 ## [3.0.4](https://github.com/ExaDev/documents.js/compare/rtf-codec%403.0.3...rtf-codec%403.0.4) (2026-09-07)
 
 
