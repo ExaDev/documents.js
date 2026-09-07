@@ -1,3 +1,9 @@
+## [8.5.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.4.0...ooxml.js%408.5.0) (2026-09-07)
+
+### Features
+
+* **ooxml.js:** split a docx paragraph at a mid-run page-type w:br ([902b235](https://github.com/ExaDev/documents.js/commit/902b2355e3ac1b172e2722fe609823bdb96b58d4))
+
 ## [8.4.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.3.0...ooxml.js%408.4.0) (2026-09-07)
 
 ### Features
