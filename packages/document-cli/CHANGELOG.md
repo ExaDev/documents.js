@@ -1,3 +1,14 @@
+## [5.5.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.4.25...document-cli%405.5.0) (2026-09-07)
+
+### Features
+
+* **document-cli:** wire markdown creation, list indenting, and metadata editing into the TUI ([3b5953d](https://github.com/ExaDev/documents.js/commit/3b5953de318d7a3a546614244f414a981a4d57c8)), references [#1080](https://github.com/ExaDev/documents.js/issues/1080) [#933](https://github.com/ExaDev/documents.js/issues/933)
+
+
+### Dependencies
+
+- Updated documents.js to ^7.6.0
+
 ## [5.4.25](https://github.com/ExaDev/documents.js/compare/document-cli%405.4.24...document-cli%405.4.25) (2026-09-07)
 
 

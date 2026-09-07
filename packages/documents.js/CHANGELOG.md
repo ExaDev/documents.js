@@ -1,3 +1,9 @@
+## [7.6.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.5.0...documents.js%407.6.0) (2026-09-07)
+
+### Features
+
+* **documents.js:** add OdtList.indentItem for nesting a list item under its preceding sibling ([f94f926](https://github.com/ExaDev/documents.js/commit/f94f9267dbbb70e204960085fcb32b453120f57e))
+
 ## [7.5.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.4.0...documents.js%407.5.0) (2026-09-07)
 
 ### Features
