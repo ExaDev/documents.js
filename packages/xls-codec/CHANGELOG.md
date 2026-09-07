@@ -1,3 +1,9 @@
+## [4.4.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.3.0...xls-codec%404.4.0) (2026-09-07)
+
+### Features
+
+* **xls-codec:** read BIFF8 CondFmt/CF records into ContentSheet.conditionalFormats ([aa65310](https://github.com/ExaDev/documents.js/commit/aa65310c05fc78e6f5646b95aa55bb70e65e83fa))
+
 ## [4.3.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.2.3...xls-codec%404.3.0) (2026-09-07)
 
 ### Features
