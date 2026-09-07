@@ -1,3 +1,9 @@
+## [1.2.4](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.3...epub-codec%401.2.4) (2026-09-07)
+
+### Bug Fixes
+
+* **epub-codec:** recognise block content inside caption/dt/dd/figcaption/td/th ([5389557](https://github.com/ExaDev/documents.js/commit/53895573e2b67eda73a0561578c0cbfee300e4df)), closes [ExaDev/documents.js#1023](https://github.com/ExaDev/documents.js/issues/1023)
+
 ## [1.2.3](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.2...epub-codec%401.2.3) (2026-09-07)
 
 
