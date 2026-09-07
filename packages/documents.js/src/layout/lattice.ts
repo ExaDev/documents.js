@@ -4,7 +4,7 @@ import type { LayoutItem } from "pdf-codec";
 //
 // Every threshold here is a deliberately conservative one: a false negative leaves content as ordinary paragraphs/cells, which is merely a missed improvement, while a false positive invents a structure the source never had. The bar is therefore "unambiguously a grid", not "plausibly a grid".
 //
-// A real printed table's rows do not all have to share one uniform column layout (ExaDev/documents.js#810): a title-block or "field: value" style table routinely has some cells spanning several of the table's own columns or rows, so an individual boundary segment genuinely only needs to run as far as the cells either side of it actually require -- not the whole table's own width or height. Detection therefore works in two passes: first, does the outer perimeter close into one genuine rectangle at all (hasClosedOuterRectangle); second, for every pair of atomic cells inside that rectangle, is there an actual drawn stroke separating them (findCellRegions) -- two atomic cells with no stroke between them are one merged cell (a colSpan/rowSpan region), not two. This replaces an earlier, simpler rule that compared every candidate boundary's own span against the single longest one found anywhere on the axis, which rejected a genuine table the moment any one row or column's own cells were narrower than the table's widest row.
+// A real printed table's rows do not all have to share one uniform column layout (ExaDev/documents.js#810): a title-block or "field: value" style table routinely has some cells spanning several of the table's own columns or rows, so an individual boundary segment genuinely only needs to run as far as the cells either side of it actually require -- not the whole table's own width or height. Detection therefore works in three passes: first, every candidate line on the page is partitioned into the connected components its own crossings define (clusterSegments), so a page-wide header/footer rule or a caption underline that never actually reaches the table's own column lines cannot contaminate it (ExaDev/documents.js#1077); second, within each cluster, does its outer perimeter close into one genuine rectangle at all (hasClosedOuterRectangle); third, for every pair of atomic cells inside that rectangle, is there an actual drawn stroke separating them (findCellRegions) -- two atomic cells with no stroke between them are one merged cell (a colSpan/rowSpan region), not two. The perimeter/cell-region checks replace an earlier, simpler rule that compared every candidate boundary's own span against the single longest one found anywhere on the axis, which rejected a genuine table the moment any one row or column's own cells were narrower than the table's widest row.
 
 export interface LineSegment {
   readonly item: LayoutItem;
@@ -188,8 +188,8 @@ const MIN_GRIDLINE_COUNT_PER_AXIS = 3;
 // How much of a target stretch (the outer perimeter's own opposite extent, or one atomic cell's own edge) a single drawn run must cover before it counts as genuinely closing/dividing there. Applied at two different scales by the two checks below -- the outer rectangle's own four sides, and every interior cell-to-cell edge -- but it is the same question at heart: is there a real, (near-)unbroken stroke across this stretch, or only a fragment of one. 0.9 is generous enough to tolerate the sub-point rounding a real round trip introduces while still rejecting a scatter of unrelated short strokes.
 const EDGE_COVERAGE_RATIO = 0.9;
 
-// The best single run's own overlap with [aPt, bPt], as a fraction of that target's length -- never the SUM of several disjoint runs, so a boundary broken by a real gap (as opposed to touching segments mergedRanges already fused) is never credited with covering more than its own longest unbroken piece.
-function bestRunCoverageRatio(
+// The total drawn overlap with [aPt, bPt], as a fraction of that target's length -- the SUM of every range's own intersection with the target, not just the longest single run (ExaDev/documents.js#1077: a real border interrupted by one genuine gap -- e.g. a single row whose own side rule a producer never drew -- is still overwhelmingly a drawn boundary, and scoring it by its longest unbroken piece alone halves its coverage for one missing segment out of many). Ranges arrive from mergedRanges, which has already fused every pair that touches or overlaps, so whatever gaps remain between them are real and this sum can never double-count.
+function unionCoverageRatio(
   ranges: readonly Range[],
   aPt: number,
   bPt: number,
@@ -199,15 +199,15 @@ function bestRunCoverageRatio(
   if (hi <= lo) {
     return 1;
   }
-  let bestPt = 0;
+  let coveredPt = 0;
   for (const range of ranges) {
     const overlapLo = Math.max(range.startPt, lo);
     const overlapHi = Math.min(range.endPt, hi);
     if (overlapHi > overlapLo) {
-      bestPt = Math.max(bestPt, overlapHi - overlapLo);
+      coveredPt += overlapHi - overlapLo;
     }
   }
-  return bestPt / (hi - lo);
+  return coveredPt / (hi - lo);
 }
 
 // The lattice's own outer perimeter must be a genuinely closed rectangle: the topmost and bottommost row boundaries must each nearly fully span the columns' own outer extent, and the leftmost and rightmost column boundaries must each nearly fully span the rows' own outer extent. This is the "these are unrelated strokes that happen to coexist on the page" guard the old whole-axis span-consistency rule used to provide -- but scoped to the four edges that actually decide whether a table's own outer box exists, so an interior row or column genuinely narrower than its neighbours (ExaDev/documents.js#810) is no longer judged by the same yardstick.
@@ -220,16 +220,16 @@ function hasClosedOuterRectangle(
   const topYPt = rowLines[0]!.position;
   const bottomYPt = rowLines[rowLines.length - 1]!.position;
   return (
-    bestRunCoverageRatio(rowLines[0]!.ranges, leftXPt, rightXPt) >=
+    unionCoverageRatio(rowLines[0]!.ranges, leftXPt, rightXPt) >=
       EDGE_COVERAGE_RATIO &&
-    bestRunCoverageRatio(
+    unionCoverageRatio(
       rowLines[rowLines.length - 1]!.ranges,
       leftXPt,
       rightXPt,
     ) >= EDGE_COVERAGE_RATIO &&
-    bestRunCoverageRatio(columnLines[0]!.ranges, bottomYPt, topYPt) >=
+    unionCoverageRatio(columnLines[0]!.ranges, bottomYPt, topYPt) >=
       EDGE_COVERAGE_RATIO &&
-    bestRunCoverageRatio(
+    unionCoverageRatio(
       columnLines[columnLines.length - 1]!.ranges,
       bottomYPt,
       topYPt,
@@ -287,7 +287,7 @@ export function findCellRegions(
     for (let j = 0; j < colCount - 1; j++) {
       const divider = columnLines[j + 1]!;
       if (
-        bestRunCoverageRatio(divider.ranges, rowBottomPt, rowTopPt) <
+        unionCoverageRatio(divider.ranges, rowBottomPt, rowTopPt) <
         EDGE_COVERAGE_RATIO
       ) {
         union(parents, indexOf(i, j), indexOf(i, j + 1));
@@ -300,7 +300,7 @@ export function findCellRegions(
     for (let i = 0; i < rowCount - 1; i++) {
       const divider = rowLines[i + 1]!;
       if (
-        bestRunCoverageRatio(divider.ranges, colLeftPt, colRightPt) <
+        unionCoverageRatio(divider.ranges, colLeftPt, colRightPt) <
         EDGE_COVERAGE_RATIO
       ) {
         union(parents, indexOf(i, j), indexOf(i + 1, j));
@@ -347,6 +347,43 @@ export function findCellRegions(
   return regions;
 }
 
+// A horizontal and a vertical candidate belong to the same printed grid only if they actually meet -- the vertical's own fixed x sits within the horizontal's drawn x-extent, and the horizontal's own fixed y sits within the vertical's drawn y-extent, both within the same rounding tolerance dedupeAxisLines/mergedRanges already use for "this is the same drawn boundary". That is exactly a real grid corner: two segments that cross or touch. Two segments on the SAME axis are never joined directly here; a table's own rows tie together only via a shared column line crossing both, which is also exactly why a rule that no column line ever reaches -- a page-wide header/footer rule, a caption underline sitting above a table's own top edge -- ends up with no crossing at all (ExaDev/documents.js#1077).
+function segmentsCross(h: AxisSegment, v: AxisSegment): boolean {
+  return (
+    v.position >= h.startPt - POSITION_DEDUPE_TOLERANCE_PT &&
+    v.position <= h.endPt + POSITION_DEDUPE_TOLERANCE_PT &&
+    h.position >= v.startPt - POSITION_DEDUPE_TOLERANCE_PT &&
+    h.position <= v.endPt + POSITION_DEDUPE_TOLERANCE_PT
+  );
+}
+
+// Partitions every classified line candidate on the page into the connected components its own crossings define (via the same union-find findCellRegions above already uses for atomic-cell merging), so detectGridLattice can test closure per cluster's own extent rather than the whole page's at once. A page routinely carries more than one genuinely unrelated set of ruled lines -- a real table plus a page-wide header/footer rule, a real table plus a caption underline immediately above it that never actually reaches any of the table's own column lines -- and merging every candidate on the page into one shared rowLines/columnLines set (the pre-#1077 behaviour) let page furniture define, or a caption line corrupt, the one real table's own outer rectangle. Clustering first is what keeps them apart.
+function clusterSegments(
+  horizontal: readonly AxisSegment[],
+  vertical: readonly AxisSegment[],
+): AxisSegment[][] {
+  const all: AxisSegment[] = [...horizontal, ...vertical];
+  const parents = unionFind(all.length);
+  for (let i = 0; i < horizontal.length; i++) {
+    for (let j = 0; j < vertical.length; j++) {
+      if (segmentsCross(horizontal[i]!, vertical[j]!)) {
+        union(parents, i, horizontal.length + j);
+      }
+    }
+  }
+  const clusters = new Map<number, AxisSegment[]>();
+  for (let i = 0; i < all.length; i++) {
+    const root = findRoot(parents, i);
+    const cluster = clusters.get(root);
+    if (cluster === undefined) {
+      clusters.set(root, [all[i]!]);
+    } else {
+      cluster.push(all[i]!);
+    }
+  }
+  return [...clusters.values()];
+}
+
 export interface GridLattice {
   readonly rowBoundariesDescPt: readonly number[]; // top-to-bottom, PDF y descending
   readonly columnBoundariesAscPt: readonly number[]; // left-to-right, PDF x ascending
@@ -356,6 +393,7 @@ export interface GridLattice {
   readonly sourceItems: ReadonlySet<LayoutItem>;
 }
 
+// A page can carry more than one geometrically valid lattice at once (see clusterSegments above) -- every caller here wants exactly one, the way a single detected grid always has, so this keeps whichever valid cluster spans the largest area (width x height of its own outer rectangle) and discards the rest. A real printed table dwarfs the kind of incidental clusters page furniture can otherwise form, so the largest valid cluster is reliably the genuine one.
 export function detectGridLattice(
   items: readonly LayoutItem[],
 ): GridLattice | undefined {
@@ -368,33 +406,49 @@ export function detectGridLattice(
     }
     (classified.axis === "horizontal" ? horizontal : vertical).push(classified);
   }
-  const rowLines = dedupeAxisLines(horizontal, true);
-  const columnLines = dedupeAxisLines(vertical, false);
-  if (
-    rowLines.length < MIN_GRIDLINE_COUNT_PER_AXIS ||
-    columnLines.length < MIN_GRIDLINE_COUNT_PER_AXIS
-  ) {
-    return undefined;
-  }
-  if (!hasClosedOuterRectangle(rowLines, columnLines)) {
-    return undefined;
-  }
-  const regions = findCellRegions(rowLines, columnLines);
-  if (regions === undefined) {
-    return undefined;
-  }
-  const sourceItems = new Set<LayoutItem>();
-  for (const line of [...rowLines, ...columnLines]) {
-    for (const item of line.items) {
-      sourceItems.add(item);
+  let best: GridLattice | undefined;
+  let bestAreaPt2 = 0;
+  for (const cluster of clusterSegments(horizontal, vertical)) {
+    const clusterHorizontal = cluster.filter((s) => s.axis === "horizontal");
+    const clusterVertical = cluster.filter((s) => s.axis === "vertical");
+    const rowLines = dedupeAxisLines(clusterHorizontal, true);
+    const columnLines = dedupeAxisLines(clusterVertical, false);
+    if (
+      rowLines.length < MIN_GRIDLINE_COUNT_PER_AXIS ||
+      columnLines.length < MIN_GRIDLINE_COUNT_PER_AXIS
+    ) {
+      continue;
     }
+    if (!hasClosedOuterRectangle(rowLines, columnLines)) {
+      continue;
+    }
+    const regions = findCellRegions(rowLines, columnLines);
+    if (regions === undefined) {
+      continue;
+    }
+    const widthPt =
+      columnLines[columnLines.length - 1]!.position - columnLines[0]!.position;
+    const heightPt =
+      rowLines[0]!.position - rowLines[rowLines.length - 1]!.position;
+    const areaPt2 = widthPt * heightPt;
+    if (best !== undefined && areaPt2 <= bestAreaPt2) {
+      continue;
+    }
+    const sourceItems = new Set<LayoutItem>();
+    for (const line of [...rowLines, ...columnLines]) {
+      for (const item of line.items) {
+        sourceItems.add(item);
+      }
+    }
+    best = {
+      rowBoundariesDescPt: rowLines.map((l) => l.position),
+      columnBoundariesAscPt: columnLines.map((l) => l.position),
+      regions,
+      sourceItems,
+    };
+    bestAreaPt2 = areaPt2;
   }
-  return {
-    rowBoundariesDescPt: rowLines.map((l) => l.position),
-    columnBoundariesAscPt: columnLines.map((l) => l.position),
-    regions,
-    sourceItems,
-  };
+  return best;
 }
 
 // Only the OUTER edge of the whole lattice gets any tolerance -- generous enough to keep an item sitting just past the grid's own outermost boundary (sub-point PDF-round-trip rounding) inside it. An INTERIOR boundary gets none at all: giving one would open an ambiguous zone straddling two adjacent bands (a real, caught bug -- a column narrow enough that cell-padding-scale tolerance on both sides of its own shared boundary let a neighbouring column's own text match the WRONG band first). A cell's own text sits comfortably away from its own band's far edge under ordinary conditions (near the bottom of its own row, near the left of its own column, per sheets.ts's own vertical-bottom alignment and per-cell inset), so a bare half-open partition at every interior boundary is both correct and unambiguous.
