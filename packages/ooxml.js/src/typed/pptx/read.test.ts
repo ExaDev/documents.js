@@ -270,6 +270,29 @@ function buildFixturePackage(): Package {
       el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("F")])])]),
     ]),
   ]);
+  const cellPatternFill = el("a:tc", {}, [
+    el("a:tcPr", {}, [
+      el("a:pattFill", { prst: "pct25" }, [
+        el("a:fgClr", {}, [el("a:srgbClr", { val: "00FF00" })]),
+        el("a:bgClr", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]),
+    ]),
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("G")])])]),
+    ]),
+  ]);
+  const cellUnmappedPatternFill = el("a:tc", {}, [
+    el("a:tcPr", {}, [
+      // ST_PresetPatternVal has 54 members; "sphere" is one of the 42 with no ContentCellPatternTypeSchema counterpart.
+      el("a:pattFill", { prst: "sphere" }, [
+        el("a:fgClr", {}, [el("a:srgbClr", { val: "00FF00" })]),
+        el("a:bgClr", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]),
+    ]),
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("H")])])]),
+    ]),
+  ]);
   const tbl = el("a:tbl", {}, [
     el("a:tblGrid", {}, [
       el("a:gridCol", { w: "1270000" }),
@@ -279,6 +302,7 @@ function buildFixturePackage(): Package {
     el("a:tr", {}, [cellA, cellB]),
     el("a:tr", {}, [cellAllEdgesUnresolvable, cellZeroWidthAndUnknownDash]),
     el("a:tr", {}, [cellNonNumericWidth, cellF]),
+    el("a:tr", {}, [cellPatternFill, cellUnmappedPatternFill]),
   ]);
   const tableFrame = el("p:graphicFrame", {}, [
     el("p:nvGraphicFramePr", {}, [el("p:cNvPr", { id: "5", name: "Table 1" })]),
@@ -720,6 +744,26 @@ describe("readPptxContent: tables", () => {
       kind: "solid",
       color: { r: 1, g: 0, b: 0 },
     });
+  });
+
+  // ExaDev/documents.js#1024: a genuine a:pattFill, not just a:solidFill, now resolves to a real 'pattern' ContentCellFill.
+  it("resolves an a:pattFill with a mapped percentage preset to a 'pattern' fill", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[4]?.cells[0]?.background).toEqual({
+      kind: "pattern",
+      patternType: "percent25",
+      foregroundColor: { r: 0, g: 1, b: 0 },
+      backgroundColor: { r: 0, g: 0, b: 1 },
+    });
+  });
+
+  it("reads an a:pattFill preset outside the mapped percentage subset as no background", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[4]?.cells[1]?.background).toBeUndefined();
   });
 
   it("reads a cell's four a:lnL/a:lnR/a:lnT/a:lnB border edges, each edge's colour, width, and preset dash pattern", () => {
