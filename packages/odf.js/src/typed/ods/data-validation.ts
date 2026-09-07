@@ -6,6 +6,7 @@ import type {
 } from "document-schema.js";
 import type { XmlElement } from "../../model/node";
 import { attrValue, childrenWithTag, findChildElement } from "../../xml/query";
+import { takeExpression } from "../shared/expression";
 import { decodeOdfText } from "../shared/text";
 
 // table:content-validation reading -- ODF's own equivalent of xlsx's dataValidation, but structurally inverted: xlsx states a rule's own cell ranges directly (sqref); ODF mints one table:content-validation per RULE, document-wide (a direct child of office:spreadsheet, inside table:content-validations, sibling to every table:table -- confirmed against a real LibreOffice-produced .fods fixture, not assumed), and each table:table-cell that the rule applies to carries a table:content-validation-name reference back to it. This module owns reading the document-wide rule definitions; table/read.ts's own cell walk collects which cells reference which name, and joins the two per sheet (readSheet, ./read.ts) since a rule's own applicable ranges are scoped to whichever sheet(s) actually reference it, not to the rule definition itself.
@@ -66,46 +67,6 @@ const OPERATOR_TO_RULE: ReadonlyMap<string, SheetRuleOperator> = new Map([
   [">", "greaterThan"],
   [">=", "greaterThanOrEqual"],
 ]);
-
-// Skips one formula expression starting at `start`, honouring nested parentheses/braces and quoted strings (a comma or closing paren inside either must not end the expression) -- transcribed from XMLConverter.cxx's own lclSkipExpression/lclSkipExpressionString. Returns the index of the first unnested occurrence of `endChar`, or `text.length` if the expression runs to the end unterminated.
-function skipExpression(text: string, start: number, endChar: string): number {
-  let index = start;
-  while (index < text.length) {
-    const ch = text[index];
-    if (ch === endChar) {
-      return index;
-    }
-    if (ch === "(") {
-      index = skipExpression(text, index + 1, ")") + 1;
-      continue;
-    }
-    if (ch === "{") {
-      index = skipExpression(text, index + 1, "}") + 1;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      const closeQuote = text.indexOf(ch, index + 1);
-      index = (closeQuote === -1 ? text.length : closeQuote) + 1;
-      continue;
-    }
-    index += 1;
-  }
-  return text.length;
-}
-
-// Extracts and trims one expression, advancing past its own terminator -- XMLConverter.cxx's own getExpression. Returns undefined (never an empty string) when the expression is empty, matching that function's own "empty means failure" contract for a FUNCTION1/FUNCTION2 operand.
-function takeExpression(
-  text: string,
-  start: number,
-  endChar: string,
-): { value: string | undefined; nextIndex: number } {
-  const endIndex = skipExpression(text, start, endChar);
-  const raw = text.slice(start, endIndex).trim();
-  return {
-    value: raw.length > 0 ? raw : undefined,
-    nextIndex: endIndex + 1,
-  };
-}
 
 interface ParsedToken {
   readonly info: ConditionInfo;
