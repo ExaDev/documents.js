@@ -343,8 +343,8 @@ describe("writeXhtmlBody", () => {
     expect(roundTrip(blocks)).toEqual(blocks);
   });
 
-  // The one gap the round-11 itemId-grouping fix above does NOT close, pinned here rather than fixed: a document-schema.js decomposeSection defect (ExaDev/documents.js#1022), not something writeList alone can correct. walkSectionBlocks only closes list nesting on a heading or a PLAIN paragraph -- never on a constructStart -- so a footnote reference sitting in the last block of a list item, with that footnote's own body immediately following in the flat stream and nothing plain in between to close the list first, attaches the footnote's own construct group as a CHILD of that still-open list item rather than at the section root. The output below is the current, known-incorrect shape (the <aside> nested inside the <li>) -- tracked in #1022 as a decompose-level fix affecting every codec built on decomposeSection, not an epub-codec-only one. The second grouped entry's own noteref anchor is wrapped in a <p> (ExaDev/documents.js#996's own round-7 fix, unrelated to #1022): it is the second of two entries sharing itemId "item1", and every entry after a group's first is now delimited this way to stop it fusing with the entry before it.
-  it("nests a footnote's own aside inside the enclosing <li> when it immediately follows a list item's last block (ExaDev/documents.js#1022, tracked separately)", () => {
+  // ExaDev/documents.js#1022, now fixed at the document-schema.js decomposeSection level: walkSectionBlocks previously closed list nesting on a heading or a plain paragraph, but never on a constructStart, so a footnote reference sitting in the last block of a list item -- with that footnote's own body immediately following in the flat stream and nothing plain in between to close the list first -- attached the footnote's own construct group as a CHILD of that still-open list item rather than at the section root. constructStart now closes the list scope the same way a plain paragraph already did, so the <aside> lands as a section-level sibling after </ul> closes, exactly where it belongs. The fix lives in decomposeSection, not writeList -- this pins the effect through the whole pipeline, on every codec built on it, not just here. The noteref anchor's own <p> wrapper is ExaDev/documents.js#996's round-7 fix (unrelated): it is the second of two entries sharing itemId "item1", and every entry after a group's first is delimited this way to stop it fusing with the entry before it.
+  it("attaches a footnote's own aside as a section-level sibling after the list, not nested inside the <li> it follows (ExaDev/documents.js#1022)", () => {
     const blocks: ContentBlock[] = [
       {
         kind: "paragraph",
@@ -372,7 +372,7 @@ describe("writeXhtmlBody", () => {
     ];
     const xml = write(blocks);
     expect(xml).toContain(
-      '<li>before<p><a epub:type="noteref" href="#fn1"></a></p><aside epub:type="footnote" id="fn1"><p>Note body.</p></aside></li>',
+      '<ul><li>before<p><a epub:type="noteref" href="#fn1"></a></p></li></ul><aside epub:type="footnote" id="fn1"><p>Note body.</p></aside>',
     );
   });
 
