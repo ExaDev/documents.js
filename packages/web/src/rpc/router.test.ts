@@ -63,4 +63,69 @@ describe("normalizeContentForSource", () => {
     const result = normalizeContentForSource(content, "odt");
     expect(firstStyleId(result)).toBe("quote");
   });
+
+  const BOTTOM_BORDER = {
+    color: { r: 0, g: 0, b: 0 },
+    widthPt: 0.75,
+  };
+
+  it("rewrites a docx paragraph with no text and only a bottom border into the horizontal-rule convention, the shape Word's AutoCorrect produces", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [],
+      borders: { bottom: BOTTOM_BORDER },
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBe("horizontal-rule");
+  });
+
+  it("still detects the border-only rule when a whitespace-only run remains, not just a genuinely empty runs array", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "  " }],
+      borders: { bottom: BOTTOM_BORDER },
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBe("horizontal-rule");
+  });
+
+  it("does not treat a paragraph with real text and a bottom border as a horizontal rule", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [{ text: "Real content" }],
+      borders: { bottom: BOTTOM_BORDER },
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBeUndefined();
+  });
+
+  it("does not treat an empty paragraph carrying a top/left/right border (not bottom-only) as a horizontal rule", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [],
+      borders: { top: BOTTOM_BORDER },
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBeUndefined();
+  });
+
+  it("does not treat an empty paragraph with a bottom border AND another edge as a horizontal rule", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [],
+      borders: { bottom: BOTTOM_BORDER, left: BOTTOM_BORDER },
+    });
+    const result = normalizeContentForSource(content, "docx");
+    expect(firstStyleId(result)).toBeUndefined();
+  });
+
+  it("the border-only detection is generic to both formats, not docx-specific, so it is ready the moment odf.js's own reader populates ContentParagraph.borders for odt (a separate, tracked gap: odf.js does not read fo:border-* yet)", () => {
+    const content = wordprocessingWith({
+      kind: "paragraph",
+      runs: [],
+      borders: { bottom: BOTTOM_BORDER },
+    });
+    const result = normalizeContentForSource(content, "odt");
+    expect(firstStyleId(result)).toBe("horizontal-rule");
+  });
 });
