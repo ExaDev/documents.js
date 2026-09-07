@@ -1,3 +1,9 @@
+## [7.5.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.4.1...odf.js%407.5.0) (2026-09-07)
+
+### Features
+
+* **odf.js:** read fo:border-* into ContentParagraph.borders ([ffb1b29](https://github.com/ExaDev/documents.js/commit/ffb1b29ac1f5dad22c24f86a72bd4c9d44af4298)), references [#1082](https://github.com/ExaDev/documents.js/issues/1082)
+
 ## [7.4.1](https://github.com/ExaDev/documents.js/compare/odf.js%407.4.0...odf.js%407.4.1) (2026-09-07)
 
 

@@ -1,3 +1,14 @@
+## [2.7.1](https://github.com/ExaDev/documents.js/compare/web%402.7.0...web%402.7.1) (2026-09-07)
+
+### Documentation
+
+* **web:** update border-only horizontal-rule comments now odt reads borders too ([565a676](https://github.com/ExaDev/documents.js/commit/565a676161b2b441103856989c236996ad04a70c)), references [#1086](https://github.com/ExaDev/documents.js/issues/1086)
+
+
+### Dependencies
+
+- Updated documents.js to ^7.7.1
+
 ## [2.7.0](https://github.com/ExaDev/documents.js/compare/web%402.6.2...web%402.7.0) (2026-09-07)
 
 ### Features

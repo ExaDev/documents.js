@@ -1,3 +1,10 @@
+## [7.7.1](https://github.com/ExaDev/documents.js/compare/documents.js%407.7.0...documents.js%407.7.1) (2026-09-07)
+
+
+### Dependencies
+
+- Updated odf.js to ^7.5.0
+
 ## [7.7.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.6.3...documents.js%407.7.0) (2026-09-07)
 
 ### Features
