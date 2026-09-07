@@ -58,6 +58,10 @@ export const RECORD_DV = 0x01be;
 export const RECORD_CONDFMT = 0x01b0;
 /** One conditional-formatting rule: a comparison ("Cell Value Is") or formula condition, one or two Ptg-encoded formulas, and a DXFN structure naming the resulting cell's own font/fill override ([MS-XLS] 2.4.42). Every richer rule type (top10, aboveAverage, colour scale, data bar, icon set, …) is a CF12/CFEx extension instead -- not this record. */
 export const RECORD_CF = 0x01b1;
+/** Marks the start of a collection of CF12 records, the "future record" (FRT) equivalent of CondFmt for the rule types Excel 97's own CF record cannot express ([MS-XLS] 2.4.57). Wraps a CondFmtStructure -- the same ccf/flags/refBound/sqref shape CondFmt's own body carries, just prefixed by a 12-byte FrtRefHeaderU this reader never needs to read. */
+export const RECORD_CONDFMT12 = 0x0879;
+/** One extended conditional-formatting rule: colour scale, data bar, icon set, a filter-dispatched template (top10, aboveAverage, contains-text, a date/time period, …), or a plain comparison/formula rule re-expressed in the newer record shape ([MS-XLS] 2.4.43). This reader only promotes the three rule types with a genuine array-of-thresholds shape already shared with ooxml.js's xlsx cfRule reading -- colour scale, data bar, icon set (ExaDev/documents.js#1104); the filter-template family stays unread (ExaDev/documents.js#1100). */
+export const RECORD_CF12 = 0x087a;
 /** A cell comment's anchor -- row, column, and its own author, linking to the Obj record that names its text ([MS-XLS] 2.4.179). */
 export const RECORD_NOTE = 0x001c;
 /** A drawing object's common properties (id, type) and, for a comment, its FtNts sub-structure ([MS-XLS] 2.4.181). */

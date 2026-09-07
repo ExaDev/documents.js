@@ -14,6 +14,7 @@ import type {
   ContentSheetColumn,
   ContentSheetConditionalFormat,
   ContentSheetConditionalFormatStyle,
+  ContentSheetConditionalFormatValue,
   ContentSheetDataValidation,
   ContentSheetPrintSettings,
   ContentSheetRow,
@@ -60,6 +61,11 @@ import type {
   RawConditionalFormat,
   RawConditionalFormatStyle,
 } from "./workbook/conditional-format";
+import type {
+  RawCfColor,
+  RawColorScaleFormat,
+  RawConditionalFormat12,
+} from "./workbook/conditional-format-12";
 import { inchesToPoints } from "./units";
 
 // The join between the BIFF8 record readers and document-schema.js's own spreadsheet vocabulary.
@@ -246,6 +252,7 @@ function readSheet(
           merges: [],
           dataValidations: [],
           conditionalFormats: [],
+          conditionalFormats12: [],
           print: emptyPrint,
         }
       : readSheetRecords(substream.records, globals.sharedStrings, {
@@ -259,10 +266,10 @@ function readSheet(
   const cells = mapCells(raw, globals);
   applyCellComments(comments, cells);
   const dataValidations = mapDataValidations(raw.dataValidations);
-  const conditionalFormats = mapConditionalFormats(
-    raw.conditionalFormats,
-    globals.palette,
-  );
+  const conditionalFormats = [
+    ...mapConditionalFormats(raw.conditionalFormats, globals.palette),
+    ...mapConditionalFormats12(raw.conditionalFormats12, globals.palette),
+  ];
   return {
     name: entry.name,
     cells,
@@ -279,7 +286,7 @@ function readSheet(
   };
 }
 
-// Base BIFF8 conditional formatting only ever produces a 'cellIs' rule (ExaDev/documents.js#1102's own scope -- every richer type is a CF12/CFEx extension, #1100). icv colour resolution is deferred to here, not workbook/conditional-format.ts, matching how a regular cell's own fill/border already resolve through globals.palette at this same layer (mapCellDecoration below).
+// Base BIFF8 conditional formatting only ever produces a 'cellIs' rule (ExaDev/documents.js#1102's own scope). icv colour resolution is deferred to here, not workbook/conditional-format.ts, matching how a regular cell's own fill/border already resolve through globals.palette at this same layer (mapCellDecoration below).
 function mapConditionalFormats(
   raw: readonly RawConditionalFormat[],
   palette: readonly Color[] | undefined,
@@ -295,6 +302,76 @@ function mapConditionalFormats(
       ...(style !== undefined ? { style } : {}),
     };
   });
+}
+
+// CF12's colour scale/data bar/icon set rules (ExaDev/documents.js#1104's own scope -- the ct 0x05 filter-dispatched template family, top10/aboveAverage/containsText/etc., stays unread, ExaDev/documents.js#1100). A rule whose own colour cannot be resolved (an automatic or theme colour reference, this package has no BIFF8 Theme reader) is dropped whole rather than promoted with a missing or wrong colour, mirroring the same "narrow rather than guess" boundary the base CF/DXFN reading above already draws.
+function mapConditionalFormats12(
+  raw: readonly RawConditionalFormat12[],
+  palette: readonly Color[] | undefined,
+): ContentSheetConditionalFormat[] {
+  const results: ContentSheetConditionalFormat[] = [];
+  for (const format of raw) {
+    const common = {
+      ranges: format.ranges,
+      priority: format.priority,
+      ...(format.stopIfTrue ? { stopIfTrue: true } : {}),
+    };
+    if (format.kind === "colorScale") {
+      const stops = mapColorScaleStops(format.stops, palette);
+      if (stops === undefined) {
+        continue;
+      }
+      results.push({ type: "colorScale", stops, ...common });
+      continue;
+    }
+    if (format.kind === "dataBar") {
+      const color = mapCfColor(format.color, palette);
+      if (color === undefined) {
+        continue;
+      }
+      results.push({
+        type: "dataBar",
+        min: format.min,
+        max: format.max,
+        color,
+        ...(format.showValue ? {} : { showValue: false }),
+        ...common,
+      });
+      continue;
+    }
+    results.push({
+      type: "iconSet",
+      iconSetType: format.iconSetType,
+      thresholds: [...format.thresholds],
+      ...(format.reverse ? { reverse: true } : {}),
+      ...(format.showValue ? {} : { showValue: false }),
+      ...common,
+    });
+  }
+  return results;
+}
+
+function mapCfColor(
+  raw: RawCfColor,
+  palette: readonly Color[] | undefined,
+): Color | undefined {
+  return raw.kind === "rgb" ? raw.color : resolveIcvColor(raw.icv, palette);
+}
+
+function mapColorScaleStops(
+  stops: RawColorScaleFormat["stops"],
+  palette: readonly Color[] | undefined,
+): { value: ContentSheetConditionalFormatValue; color: Color }[] | undefined {
+  const mapped: { value: ContentSheetConditionalFormatValue; color: Color }[] =
+    [];
+  for (const stop of stops) {
+    const color = mapCfColor(stop.color, palette);
+    if (color === undefined) {
+      return undefined;
+    }
+    mapped.push({ value: stop.value, color });
+  }
+  return mapped;
 }
 
 function mapConditionalFormatStyle(

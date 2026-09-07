@@ -6,8 +6,10 @@ import {
   RECORD_BOOLERR,
   RECORD_BOTTOMMARGIN,
   RECORD_CF,
+  RECORD_CF12,
   RECORD_COLINFO,
   RECORD_CONDFMT,
+  RECORD_CONDFMT12,
   RECORD_DIMENSIONS,
   RECORD_DV,
   RECORD_FORMULA,
@@ -1083,6 +1085,83 @@ describe("readSheetRecords grid geometry", () => {
       },
     ]);
     // Dimensions, the record right after the CF this CondFmt claimed, is still read on the following loop iteration -- proving the lookahead skip advanced past exactly the CondFmt's own group and nothing more.
+    expect(sheet.usedRange).toEqual({
+      startRow: 0,
+      endRow: 1,
+      startColumn: 0,
+      endColumn: 1,
+    });
+  });
+
+  it("reads a CondFmt12/CF12 group into conditionalFormats, including the lookahead skip past its own CF12 children (conditional-format-12.test.ts covers the field mapping itself in full; this proves the record dispatch)", () => {
+    const sheet = readSheetRecords(
+      groupsOf(
+        record(RECORD_CONDFMT12, [
+          ...new Array<number>(12).fill(0), // frtRefHeaderU
+          ...u16(1), // ccf -- one CF12 record follows
+          ...u16(0), // fToughRecalc + nID, unused
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0), // refBound (Ref8U), unused
+          ...u16(1), // one range
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+          ...u16(0),
+        ]),
+        record(RECORD_CF12, [
+          ...new Array<number>(12).fill(0), // frtRefHeader
+          0x03, // ct: colour scale
+          0x00, // cp
+          ...u16(0), // cce1
+          ...u16(0), // cce2
+          ...u32(0), // cbDxf
+          ...u16(0), // fmlaActive cce
+          0x00, // flags
+          ...u16(0), // ipriority
+          ...u16(0), // icfTemplate
+          16, // cbTemplateParm
+          ...new Array<number>(16).fill(0), // rgbTemplateParms
+          // CFGradient: two stops, min/max, indexed colours
+          ...u16(0), // unused
+          0x00, // reserved1
+          2, // cInterpCurve
+          2, // cGradientCurve
+          0x03, // fClamp + fBackground
+          0x02,
+          ...u16(0),
+          ...f64(0), // cfvo(min) + numDomain
+          0x03,
+          ...u16(0),
+          ...f64(0), // cfvo(max) + numDomain
+          ...f64(0),
+          ...u32(0x00000001),
+          ...u32(2),
+          ...f64(0), // numGrange + CFColor(icv 2)
+          ...f64(0),
+          ...u32(0x00000001),
+          ...u32(3),
+          ...f64(0), // numGrange + CFColor(icv 3)
+        ]),
+        record(RECORD_DIMENSIONS, [...u32(0), ...u32(2), ...u16(0), ...u16(2)]),
+      ),
+      [],
+    );
+
+    expect(sheet.conditionalFormats12).toEqual([
+      {
+        kind: "colorScale",
+        stops: [
+          { value: { type: "min" }, color: { kind: "icv", icv: 2 } },
+          { value: { type: "max" }, color: { kind: "icv", icv: 3 } },
+        ],
+        priority: 0,
+        stopIfTrue: false,
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+      },
+    ]);
+    // Dimensions, the record right after the CF12 this CondFmt12 claimed, is still read on the following loop iteration -- proving the lookahead skip advanced past exactly the CondFmt12's own group and nothing more.
     expect(sheet.usedRange).toEqual({
       startRow: 0,
       endRow: 1,

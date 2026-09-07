@@ -14,7 +14,9 @@ import {
   RECORD_BOOLERR,
   RECORD_BOUNDSHEET8,
   RECORD_CF,
+  RECORD_CF12,
   RECORD_CONDFMT,
+  RECORD_CONDFMT12,
   RECORD_DATE1904,
   RECORD_DV,
   RECORD_EOF,
@@ -538,6 +540,81 @@ describe("readXlsContent", () => {
         formula1: "10",
         ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
         style: { textColor: { r: 1, g: 0, b: 0 } },
+      },
+    ]);
+  });
+
+  it("reads a CondFmt12/CF12 colour-scale rule into ContentSheet.conditionalFormats, resolving its own indexed colours through the icv fixed table (ExaDev/documents.js#1104) -- workbook/conditional-format-12.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_CONDFMT12, [
+                ...new Array<number>(12).fill(0), // frtRefHeaderU
+                ...u16(1), // ccf -- one CF12 record follows
+                ...u16(0), // fToughRecalc + nID, unused
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0), // refBound (Ref8U), unused
+                ...u16(1), // one range
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+              ]),
+              record(RECORD_CF12, [
+                ...new Array<number>(12).fill(0), // frtRefHeader
+                0x03, // ct: colour scale
+                0x00, // cp
+                ...u16(0), // cce1
+                ...u16(0), // cce2
+                ...u32(0), // cbDxf -- MUST be zero for a colour scale rule
+                ...u16(0), // fmlaActive cce
+                0x00, // flags
+                ...u16(0), // ipriority
+                ...u16(0), // icfTemplate
+                16, // cbTemplateParm
+                ...new Array<number>(16).fill(0), // rgbTemplateParms
+                // CFGradient: two stops, min (icv 2, Red) -> max (icv 3, Green)
+                ...u16(0), // unused
+                0x00, // reserved1
+                2, // cInterpCurve
+                2, // cGradientCurve
+                0x03, // fClamp + fBackground
+                0x02,
+                ...u16(0),
+                ...f64(0), // cfvo(min) + numDomain
+                0x03,
+                ...u16(0),
+                ...f64(0), // cfvo(max) + numDomain
+                ...f64(0),
+                ...u32(0x00000001),
+                ...u32(2),
+                ...f64(0), // numGrange + CFColor(icv 2, Red)
+                ...f64(0),
+                ...u32(0x00000001),
+                ...u32(3),
+                ...f64(0), // numGrange + CFColor(icv 3, Green)
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(readXlsContent(bytes).sheets[0]?.conditionalFormats).toEqual([
+      {
+        type: "colorScale",
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+        stops: [
+          { value: { type: "min" }, color: { r: 1, g: 0, b: 0 } },
+          { value: { type: "max" }, color: { r: 0, g: 1, b: 0 } },
+        ],
+        priority: 0,
       },
     ]);
   });
