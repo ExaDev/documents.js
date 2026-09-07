@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import type { ContentDocument } from '../../src';
 import { decodeMarkdownText, decodePackage, encodeMarkdownText, markdownToDocx, readDocxContent } from '../../src';
+
+function assertWordprocessing(
+  document: ContentDocument,
+): asserts document is Extract<ContentDocument, { kind: 'wordprocessing' }> {
+  expect(document.kind).toBe('wordprocessing');
+}
 
 // Proves documents.js's PDF-bypassing paths execute inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only API usage. The functions exercised here -- markdownToDocx (a markdown-codec read -> buildDocxPackage composition that never touches a layout engine or pdf-codec's read/write), encodeMarkdownText/decodeMarkdownText (a TextEncoder/TextDecoder boundary), decodePackage (ooxml.js's OPC zip handling, fflate-backed), and readDocxContent (an ooxml.js readDocx adapter) -- are the PDF-free edge of the package; the PDF pivot itself (pdfToMarkdown through the read-only entry module, markdownToPdf through the full write path) is covered by this directory's own pdf.test.ts. If any exercised path (or its fflate/ooxml.js/markdown-codec dependency) touched node:fs/Buffer/process at module top level, the workerd isolate would throw at import rather than these passing.
 describe('documents.js PDF-bypassing paths under the Cloudflare Workers runtime', () => {
@@ -22,9 +29,9 @@ describe('documents.js PDF-bypassing paths under the Cloudflare Workers runtime'
     const docxBytes = markdownToDocx(markdownBytes);
     const pkg = decodePackage(docxBytes);
     const content = readDocxContent(pkg);
-    expect(content.kind).toBe('wordprocessing');
+    assertWordprocessing(content);
     // The heading + one paragraph survive the markdown -> docx -> ContentDocument round trip into the section's blocks.
     expect(content.sections.length).toBeGreaterThan(0);
-    expect(content.sections[0].blocks.length).toBeGreaterThanOrEqual(2);
+    expect(content.sections[0]?.blocks.length).toBeGreaterThanOrEqual(2);
   });
 });

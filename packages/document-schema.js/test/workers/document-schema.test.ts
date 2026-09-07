@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import type { ContentDocument, DocumentTree } from '../../src';
 import { assembleTree, ContentDocumentSchema, decompose, DocumentTreeSchema, factorStyles, findConstructMarkerImbalance, flattenTree, resolveStyleChain } from '../../src';
+
+function assertWordprocessing(
+  document: ContentDocument,
+): asserts document is Extract<ContentDocument, { kind: 'wordprocessing' }> {
+  expect(document.kind).toBe('wordprocessing');
+}
+
+function assertWordprocessingTree(
+  tree: DocumentTree,
+): asserts tree is Extract<DocumentTree, { kind: 'wordprocessing' }> {
+  expect(tree.kind).toBe('wordprocessing');
+}
 
 // Proves document-schema.js's Zod schemas and helpers parse inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The package is pure Zod by design -- no node:fs, no Buffer, no process -- and zod is isomorphic, so if any schema (or its zod dependency) touched a Node-only API the workerd isolate would throw rather than these passing. This is the runtime complement to the static node test suite.
 describe('document-schema.js under the Cloudflare Workers runtime', () => {
@@ -16,7 +29,7 @@ describe('document-schema.js under the Cloudflare Workers runtime', () => {
       ],
     };
     const parsed = ContentDocumentSchema.parse(document);
-    expect(parsed.kind).toBe('wordprocessing');
+    assertWordprocessing(parsed);
     expect(parsed.sections[0]?.blocks).toEqual([]);
   });
 
@@ -87,6 +100,7 @@ describe('document-schema.js under the Cloudflare Workers runtime', () => {
       ],
     });
     expect(parsed.destinations?.ch1).toEqual({ kind: 'destination', pageIndex: 0 });
+    assertWordprocessingTree(parsed);
     expect(parsed.children[0]?.children).toHaveLength(1);
   });
 
