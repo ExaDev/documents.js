@@ -1,3 +1,13 @@
+## [7.0.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%406.2.3...document-schema.js%407.0.0) (2026-09-07)
+
+### ⚠ BREAKING CHANGES
+
+* **document-schema.js:** close list nesting on a construct boundary in decomposeSection
+
+### Bug Fixes
+
+* **document-schema.js:** close list nesting on a construct boundary in decomposeSection ([9e2ee14](https://github.com/ExaDev/documents.js/commit/9e2ee14314774c3f85b619b14fcd2da4d050cb4d))
+
 ## [6.2.3](https://github.com/ExaDev/documents.js/compare/document-schema.js%406.2.2...document-schema.js%406.2.3) (2026-09-07)
 
 ### Bug Fixes
