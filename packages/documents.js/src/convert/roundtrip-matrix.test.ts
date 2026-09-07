@@ -13,6 +13,7 @@ import { openPptx } from "../edit/pptx/editor";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
 import { rtfBytesFromLatin1 } from "rtf-codec";
 import { DocUnsupportedError, writeDocContent } from "doc-codec";
+import { writeEpubContent } from "epub-codec";
 import { writeXlsContent } from "xls-codec";
 import { writePptContent } from "../ppt/write";
 import { requireArrayBufferBytes } from "../model/bytes";
@@ -607,6 +608,25 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
           },
         ],
       });
+    case "epub":
+      // Built through epub-codec's own writeEpubContent directly (not through this package's FORMAT_NODES.epub.build, the very wiring several sweep pairs exercise), matching doc's own independence-from-the-wiring-under-test rationale above -- a heading paragraph and a plain paragraph.
+      return writeEpubContent({
+        kind: "wordprocessing",
+        metadata: {},
+        sections: [
+          {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+            blocks: [
+              { kind: "paragraph", runs: [{ text: "Heading", bold: true }] },
+              {
+                kind: "paragraph",
+                runs: [{ text: "A paragraph of text." }],
+              },
+            ],
+          },
+        ],
+      });
     case "xls":
       // Built through xls-codec's own writeXlsContent directly, matching doc's own independence-from-the-wiring-under-test rationale above -- one sheet, two plain cells.
       return writeXlsContent({
@@ -694,8 +714,9 @@ function isValidOutput(
     case "odt":
     case "odp":
     case "ods":
-    case "odg": {
-      // All package formats are ZIP containers (PK magic bytes).
+    case "odg":
+    case "epub": {
+      // All package formats are ZIP containers (PK magic bytes) -- epub joins them here too, since epub-codec's own EpubBytesSchema checks the identical signature.
       return bytes[0] === 0x50 && bytes[1] === 0x4b;
     }
     case "markdown":

@@ -125,6 +125,13 @@ export const FORMAT_CAPABILITIES: Readonly<
     hasLayoutPath: true,
     readOnly: true,
   },
+  // epub shares the wordprocessing variant with docx/odt/markdown/rtf/doc (epub-codec's readEpubContent/writeEpubContent, flowable EPUB 2/3) and follows rtf/doc's routing exactly: epub-codec has no layout engine of its own, so hasLayoutPath stays false and epub <-> pdf routes through a same-variant bridge plus that format's own toPdf/fromPdf edge. readOnly is false: epub-codec's writeEpubContent is a real writer -- narrower than the reader (it always emits EPUB 3, where the reader accepts EPUB 2 or 3), but that asymmetry is internal to epub-codec's own writer and needs no capability-level modelling, since writeEpubContent succeeds for any wordprocessing ContentDocument regardless of which EPUB version originally produced it.
+  epub: {
+    format: "epub",
+    variant: "wordprocessing",
+    hasLayoutPath: false,
+    readOnly: false,
+  },
   pdf: { format: "pdf", hasLayoutPath: false, readOnly: false },
 };
 

@@ -215,6 +215,8 @@ export {
 } from "./model/bytes";
 // RtfBytesSchema is rtf-codec's own schema, re-exported directly from that package rather than routed through src/model/bytes.ts -- RTF has a real magic-byte header ('{\rtf'), so it needs no well-formed-UTF-8 fallback the way markdown/csv do, and rtf-codec already exports the exact check. DocBytesSchema/XlsBytesSchema/PptBytesSchema above have no such upstream export to re-export instead -- doc-codec's isDocBytes and xls-codec's isXlsFile are plain boolean detectors, not Zod schemas, and ppt-codec ships no detector at all -- so all three are built locally in src/model/bytes.ts, matching that module's own Docx/Pptx/XlsxBytesSchema precedent (a real magic-byte check the format's own package doesn't already expose as a schema).
 export { RtfBytesSchema } from "rtf-codec";
+// EpubBytesSchema is epub-codec's own schema, re-exported directly for the identical reason RtfBytesSchema is above: it checks the zip local-file-header magic bytes ('PK\x03\x04'), and epub-codec already exports the exact check.
+export { EpubBytesSchema } from "epub-codec";
 
 // --- The live-view read+write editors: a real manipulation API for docx/pptx content, since ooxml.js's own typed readers explicitly forbid write-back. ---
 export type { CreateEmptyDocxPackageOptions } from "./edit/docx/scaffold";
@@ -559,6 +561,8 @@ export { readRtfContent, writeRtfContent } from "rtf-codec";
 export { readWpdContent } from "wpd-codec";
 // doc has no documents.js-local wrapper either, for the identical reason rtf/xlsx above does not: doc-codec's own readDocContent/writeDocContent already read/write a real wordprocessing ContentDocument directly, the same read/write pair CONTENT_READERS.doc (src/codecs/read.ts) and DOCUMENT_FORMAT_CODECS.doc (src/codecs/registry.ts) already use internally, now reachable without going through either. Unlike markdown/csv/svg, doc takes bytes directly rather than decoded text -- the pre-2007 Word Binary File Format ([MS-DOC], wrapped in an [MS-CFB] compound file) is byte-oriented, not UTF-8 text -- so there is no decodeDocText/encodeDocText byte<->text boundary to export alongside it.
 export { readDocContent, writeDocContent } from "doc-codec";
+// epub has no documents.js-local wrapper either, for the identical reason doc above does not: epub-codec's own readEpubContent/writeEpubContent already read/write a real wordprocessing ContentDocument directly, the same read/write pair CONTENT_READERS.epub (src/codecs/read.ts) and DOCUMENT_FORMAT_CODECS.epub (src/codecs/registry.ts) already use internally, now reachable without going through either. Genuinely binary bytes too (a zip archive), so there is no byte<->text boundary here either.
+export { readEpubContent, writeEpubContent } from "epub-codec";
 // xls has no documents.js-local wrapper for the identical reason doc above does not: xls-codec's own readXlsContent/writeXlsContent already read/write a real spreadsheet ContentDocument directly -- XlsContentDocument, a plain Extract<ContentDocument, {kind:'spreadsheet'}>, fully interchangeable with the shared type at every call site that consumes it. Genuinely binary bytes too (the legacy Excel Binary File Format, BIFF8, wrapped in the identical [MS-CFB] container doc uses), so there is no byte<->text boundary here either.
 export { readXlsContent, writeXlsContent } from "xls-codec";
 export type { XlsContentDocument } from "xls-codec";
@@ -631,7 +635,7 @@ export { inferCellValue } from "./layout/cell-typing";
 export type { GridLattice } from "./layout/lattice";
 export { detectGridLattice } from "./layout/lattice";
 
-// --- The ergonomic X <-> PDF conversions (docx/pptx/odt/odp/ods/odg/xlsx/markdown/csv/svg/rtf/doc/xls/ppt <-> PDF, all round-trip both ways). xlsx<->pdf and csv<->pdf each compose their same-variant ods bridge with the ods<->pdf layout pair internally -- neither xlsx nor csv has a layout engine of its own -- but both are real, direct, single-call conversion pairs from a caller's own point of view. rtf<->pdf and doc<->pdf compose a same-variant docx bridge with the docx<->pdf layout pair the identical way, xls<->pdf composes an ods bridge the same way xlsx does, and ppt<->pdf composes a pptx bridge the same way again -- none of the four legacy/plain-text formats has a layout engine of its own. The csv pairs intersect convert.ts's own CsvReadOptions (delimiter, onCellTypeInference) / CsvWriteOptions (delimiter, sheet) into the shared options type each already uses -- the two option groups every csv-sourced/csv-targeted conversion consumes -- and the svg pairs intersect SvgReadOptions (onSvgDiagnostic) / SvgWriteOptions (page, onSvgDiagnostic) the same way. markdown<->pdf (markdownToPdf/pdfToMarkdown) DOES lay markdown out directly, reusing convertWordprocessingToLayout/reconstructWordprocessing completely unmodified -- but pdfToMarkdown is the single lossiest conversion in the whole package (see convert.ts's own top-of-file comment and the README's Fidelity section). svg<->pdf lays out directly too (the same convertDrawingToLayout/reconstructDrawing pair odg feeds), with the reader's scope limits as its only lossiness. ---
+// --- The ergonomic X <-> PDF conversions (docx/pptx/odt/odp/ods/odg/xlsx/markdown/csv/svg/rtf/doc/xls/ppt/epub <-> PDF, all round-trip both ways). xlsx<->pdf and csv<->pdf each compose their same-variant ods bridge with the ods<->pdf layout pair internally -- neither xlsx nor csv has a layout engine of its own -- but both are real, direct, single-call conversion pairs from a caller's own point of view. rtf<->pdf, doc<->pdf, and epub<->pdf compose a same-variant docx bridge with the docx<->pdf layout pair the identical way, xls<->pdf composes an ods bridge the same way xlsx does, and ppt<->pdf composes a pptx bridge the same way again -- none of the five legacy/plain-text formats has a layout engine of its own. The csv pairs intersect convert.ts's own CsvReadOptions (delimiter, onCellTypeInference) / CsvWriteOptions (delimiter, sheet) into the shared options type each already uses -- the two option groups every csv-sourced/csv-targeted conversion consumes -- and the svg pairs intersect SvgReadOptions (onSvgDiagnostic) / SvgWriteOptions (page, onSvgDiagnostic) the same way. markdown<->pdf (markdownToPdf/pdfToMarkdown) DOES lay markdown out directly, reusing convertWordprocessingToLayout/reconstructWordprocessing completely unmodified -- but pdfToMarkdown is the single lossiest conversion in the whole package (see convert.ts's own top-of-file comment and the README's Fidelity section). svg<->pdf lays out directly too (the same convertDrawingToLayout/reconstructDrawing pair odg feeds), with the reader's scope limits as its only lossiness. ---
 export type {
   CsvReadOptions,
   CsvWriteOptions,
@@ -644,6 +648,7 @@ export {
   csvToPdf,
   docToPdf,
   docxToPdf,
+  epubToPdf,
   markdownToPdf,
   odgToPdf,
   odpToPdf,
@@ -660,6 +665,7 @@ export {
   pdfToCsv,
   pdfToDoc,
   pdfToDocx,
+  pdfToEpub,
   pdfToMarkdown,
   pdfToOdg,
   pdfToOdp,
@@ -676,11 +682,12 @@ export {
 // --- odf (a standalone ODF formula document) -> PDF: not one of the round-trip conversions above (there is no pdfToOdf -- see convert.ts's own module comment on odfToPdf for why: recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem, not a geometry-reconstruction one). Renders via src/mathml's layoutFormula and the embedded STIX Two Math font, the same pipeline the odt/odp embedded-formula paths use. ---
 export { odfToPdf } from "./convert/convert";
 
-// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg/xlsx/markdown/csv/svg/rtf/doc/xls/ppt bytes <-> PDF bytes), the no-extra-options form -- use the named conversion functions directly for cancellation, diagnostics, the csv delimiter/sheet options, or the svg page/onSvgDiagnostic options.
+// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg/xlsx/markdown/csv/svg/rtf/doc/xls/ppt/epub bytes <-> PDF bytes), the no-extra-options form -- use the named conversion functions directly for cancellation, diagnostics, the csv delimiter/sheet options, or the svg page/onSvgDiagnostic options.
 export {
   csvPdfCodec,
   docPdfCodec,
   docxPdfCodec,
+  epubPdfCodec,
   markdownPdfCodec,
   odgPdfCodec,
   odpPdfCodec,

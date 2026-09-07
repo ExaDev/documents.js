@@ -106,6 +106,7 @@
     "byte-codec": "^1.4.0",
     "doc-codec": "^2.3.2",
     "document-schema.js": "^7.1.0",
+    "epub-codec": "^1.2.9",
     "fflate": "^0.8.3",
     "markdown-codec": "^6.4.0",
     "odf.js": "^7.4.1",

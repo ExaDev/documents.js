@@ -489,6 +489,16 @@ export function pptToPdf(
   return convertDocument("ppt", "pdf", bytes, options);
 }
 
+// epub bytes -> PDF bytes: epub has no layout engine of its own either (capability.ts's own FORMAT_CAPABILITIES.epub), so convertDocument's pathfinder resolves this the same shape as rtf/doc above -- [epub -> docx bridge, docx -> pdf toPdf]. The reverse direction (pdfToEpub) lives in from-pdf.ts with the rest of the pdf-sourced family.
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function epubToPdf(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: DocumentToPdfOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocument("epub", "pdf", bytes, options);
+}
+
 // xlsx -> markdown and csv -> markdown: spreadsheet -> wordprocessing is a one-way cross-variant content bridge (src/convert/variant-bridges.ts's spreadsheetToWordprocessing, ExaDev/documents.js#1043), which convertDocument's pathfinder resolves as a single cross-variant bridge hop -- no PDF layout pass, no geometry reconstruction. Each sheet becomes an H2-headed section carrying one table (hidden rows/columns excluded); a sheet's own formulas, print settings, comments, and anchored images/embedded objects have no wordprocessing counterpart and are silently out of scope, the same APPROXIMATION class docxToPptx/pptxToDocx above already carry for their own dropped fields.
 
 // Forwards to convertDocument (src/convert/composition.ts).

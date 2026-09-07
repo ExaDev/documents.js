@@ -12,6 +12,7 @@ import { decodeSvgText } from "../svg/text";
 import { readSvgContent } from "../svg/read";
 import { readRtfContent } from "rtf-codec";
 import { readDocContent } from "doc-codec";
+import { readEpubContent } from "epub-codec";
 import { readXlsContent } from "xls-codec";
 import { readPptContent } from "../ppt/read";
 import { readWpdContent } from "wpd-codec";
@@ -120,6 +121,11 @@ export const CONTENT_READERS: Readonly<
   ppt: (bytes, options) => {
     throwIfAborted(options?.signal);
     return readPptContent(requireArrayBufferBytes(bytes));
+  },
+  // epub-codec's readEpubContent takes bytes directly and no options -- EPUB is a zip archive, not text, matching doc's own no-decode-step, no-signal-of-its-own shape above.
+  epub: (bytes, options) => {
+    throwIfAborted(options?.signal);
+    return readEpubContent(requireArrayBufferBytes(bytes));
   },
   // readWpdContent takes bytes directly -- a WordPerfect file is a prefix and a function-code stream, not a package this workspace's own decodeDocumentPackage knows, and its own container detection (a bare file versus an OLE compound wrapper) happens inside the reader. It has no loop of its own to hook a signal into, so its read checks the signal once before decoding, the shape every no-package format above gets from throwIfAborted. There is no matching entry in the registry's write half at all: wpd-codec ships no writer, which is what makes wpd a read-only format everywhere else in this package.
   wpd: (bytes, options) => {
