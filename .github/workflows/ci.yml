@@ -317,6 +317,40 @@ jobs:
             echo "attest-matrix=$ATTEST"
           } >> "$GITHUB_OUTPUT"
 
+  # Everything the release job gates on (commitlint/lint/typecheck/test/test-workers/test-smoke/knip) validates the commit BEFORE release bumps any versions -- never the workspace state AFTER. The orchestrator's own release/dependency-bump commits are pushed with `[skip ci]` (deliberately: a push authenticated this way would otherwise re-trigger this same workflow and risk a concurrent release racing itself, per the release job's own comment above), so nothing else ever runs CI against post-release main either. A package released with a breaking (major) change is therefore never checked against its own workspace-local dependents until whichever of THEIR test suites next happens to run for an unrelated reason -- exactly what caught document-schema.js's 7.0.0 major landing with documents.js's own committed example dumps still pinned to 6.0.0 (ExaDev/documents.js, 2026-09-07): main was red from the moment that release commit landed, silently, until a later PR's own turbo --affected run (which doesn't even touch documents.js on an unrelated branch) happened not to catch it either. This job closes that gap: re-run every check that already exists above, against the real post-release commit on main, so a release that breaks a sibling package inside this same workspace fails LOUDLY on this same workflow run's own summary rather than staying invisible until someone else's unrelated work trips over it. It cannot un-publish a release that already went out -- nothing running after the fact can -- but a red run here is exactly the loud, immediate signal that should prompt a same-day follow-up fix, the way this file's own commit history already shows one landing for the 7.0.0 case.
+  verify-release:
+    name: Verify release (${{ matrix.task }})
+    needs: [release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - task: lint
+            command: pnpm lint
+          - task: typecheck
+            command: pnpm typecheck
+          - task: test
+            command: pnpm test:coverage
+          - task: test-workers
+            command: pnpm test:workers
+          - task: test-smoke
+            command: pnpm test:smoke
+          - task: knip
+            command: pnpm knip
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # ref: main, not the bare event SHA -- the release job's own version-bump and dependency-bump commits landed on main AFTER the commit that triggered this workflow run, and validating that new state is the entire point of this job.
+          ref: main
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+        with:
+          task: verify-release-${{ matrix.task }}
+          # No $TURBO_FLAGS: this job only ever runs from a push-to-main trigger (inherited via `needs: [release]`, itself gated the same way), where that variable is already empty -- the whole point here is checking the WHOLE workspace's post-release state, the identical scope its non-verify counterpart above already runs with on main.
+          command: ${{ matrix.command }}
+
   # Backfills the three post-release jobs below for releases whose own run never reached the "Collect the packages this run released" step -- e.g. a release job cancelled by its own timeout after the per-package publish work had already completed (ExaDev/documents.js#835). A plain re-run can't recover this: that step diffs tags against a before/after snapshot taken within the same job run, so a later run sees every already-existing tag as pre-existing, not new. This job instead builds the identical matrices directly from an explicit tag list, without re-running the release itself.
   collect-backfill-matrix:
     name: Collect backfill matrix
