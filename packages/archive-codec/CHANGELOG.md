@@ -1,3 +1,13 @@
+## [1.7.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.6.8...archive-codec%401.7.0) (2026-09-08)
+
+### Features
+
+* **archive-codec:** add RC4/MD5 primitives for legacy Office encryption ([8f4ee3d](https://github.com/ExaDev/documents.js/commit/8f4ee3de5bb3b66972473efd40d88a9c27fc4c89))
+
+### Documentation
+
+* document RC4 decryption for encrypted xls workbooks ([268cbd3](https://github.com/ExaDev/documents.js/commit/268cbd342b080a0d23754d5b78e4fa87ebf17acf))
+
 ## [1.6.8](https://github.com/ExaDev/documents.js/compare/archive-codec%401.6.7...archive-codec%401.6.8) (2026-09-07)
 
 
