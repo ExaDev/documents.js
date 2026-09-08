@@ -985,7 +985,7 @@ describe("writeOdtContent: what it refuses rather than dropping", () => {
     ).toThrow(/construct boundary marker/);
   });
 
-  it("refuses a run-level construct extent", () => {
+  it("refuses a run-level construct extent no writer resolves yet", () => {
     expect(() =>
       writeOdtContent(
         documentOf([
@@ -994,7 +994,12 @@ describe("writeOdtContent: what it refuses rather than dropping", () => {
             runs: [{ text: "x" }],
             constructs: [
               {
-                descriptor: { kind: "field", instruction: "<text:date/>" },
+                descriptor: {
+                  kind: "anchor",
+                  anchorType: "footnote",
+                  name: "note1",
+                  definition: "note:note1",
+                },
                 startRun: 0,
                 endRun: 1,
               },
@@ -1002,7 +1007,7 @@ describe("writeOdtContent: what it refuses rather than dropping", () => {
           },
         ]),
       ),
-    ).toThrow(/run-level construct extents/);
+    ).toThrow(/run-level construct extent this writer does not spell back yet/);
   });
 
   it("refuses an embedded object", () => {
