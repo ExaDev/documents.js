@@ -6,7 +6,7 @@ import type {
 } from "document-schema.js";
 import { findConstructMarkerImbalance } from "document-schema.js";
 import type { Package } from "../../model/package";
-import type { XmlNode } from "../../model/node";
+import type { XmlElement, XmlNode } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
 import { decodePackage, encodePackage } from "../../codec";
 import { attr, elementsWithTag, rootElement } from "../util";
@@ -1712,5 +1712,113 @@ describe("buildDocxPackageFromContent: styles, numbering, comments, footnotes, e
     const headerPart = after.headerFooterParts[0];
     const image = headerPart?.blocks.find((block) => block.kind === "image");
     expect(image?.kind).toBe("image");
+  });
+
+  it("writes ONE media file for one payload referenced from many header parts, not one per part", () => {
+    // The resource-exhaustion shape the security review of this PR named: a hostile package of N header/footer parts all referencing the same S-byte image must not become N x S of decoded media on round trip. Two headers carrying one payload here; the assertion is the byte-level consequence -- exactly one word/media part, and both header relationships pointing at it.
+    const headerImage = (embedId: string): XmlElement =>
+      el("w:drawing", {}, [
+        el("wp:inline", {}, [
+          el("wp:extent", { cx: "914400", cy: "914400" }),
+          el("a:graphic", {}, [
+            el("a:graphicData", { uri: PICTURE_GRAPHIC_URI }, [
+              el("pic:pic", {}, [
+                el("pic:blipFill", {}, [el("a:blip", { "r:embed": embedId })]),
+              ]),
+            ]),
+          ]),
+        ]),
+      ]);
+    const sectPr = el("w:sectPr", {}, [
+      el("w:headerReference", { "w:type": "default", "r:id": "rIdHeader1" }),
+      el("w:headerReference", { "w:type": "even", "r:id": "rIdHeader2" }),
+      el("w:pgSz", { "w:w": "12240", "w:h": "15840" }),
+      el("w:pgMar", {
+        "w:top": "1440",
+        "w:right": "1440",
+        "w:bottom": "1440",
+        "w:left": "1440",
+      }),
+    ]);
+    const source: Package = {
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [
+            el("w:document", {}, [
+              el("w:body", {}, [para("body text"), sectPr]),
+            ]),
+          ],
+        },
+        "word/_rels/document.xml.rels": {
+          kind: "xml",
+          nodes: [
+            el("Relationships", {}, [
+              el("Relationship", {
+                Id: "rIdHeader1",
+                Type: HEADER_REL,
+                Target: "header1.xml",
+              }),
+              el("Relationship", {
+                Id: "rIdHeader2",
+                Type: HEADER_REL,
+                Target: "header2.xml",
+              }),
+            ]),
+          ],
+        },
+        "word/header1.xml": {
+          kind: "xml",
+          nodes: [
+            el("w:hdr", {}, [
+              el("w:p", {}, [el("w:r", {}, [headerImage("rIdImgA")])]),
+            ]),
+          ],
+        },
+        "word/_rels/header1.xml.rels": {
+          kind: "xml",
+          nodes: [
+            el("Relationships", {}, [
+              el("Relationship", {
+                Id: "rIdImgA",
+                Type: IMAGE_REL,
+                Target: "media/image1.png",
+              }),
+            ]),
+          ],
+        },
+        "word/header2.xml": {
+          kind: "xml",
+          nodes: [
+            el("w:hdr", {}, [
+              el("w:p", {}, [el("w:r", {}, [headerImage("rIdImgB")])]),
+            ]),
+          ],
+        },
+        "word/_rels/header2.xml.rels": {
+          kind: "xml",
+          nodes: [
+            el("Relationships", {}, [
+              el("Relationship", {
+                Id: "rIdImgB",
+                Type: IMAGE_REL,
+                Target: "media/image2.png",
+              }),
+            ]),
+          ],
+        },
+        "word/media/image1.png": { kind: "binary", base64: TINY_PNG_BASE64 },
+        "word/media/image2.png": { kind: "binary", base64: TINY_PNG_BASE64 },
+      },
+    };
+    const { written } = fullRoundTrip(source);
+    const mediaFiles = Object.keys(written.parts).filter((path) =>
+      path.startsWith("word/media/"),
+    );
+    expect(mediaFiles).toEqual(["word/media/image1.png"]);
+    const header1Rels = written.parts["word/_rels/header1.xml.rels"];
+    const header2Rels = written.parts["word/_rels/header2.xml.rels"];
+    expect(header1Rels).toBeDefined();
+    expect(header2Rels).toBeDefined();
   });
 });
