@@ -810,6 +810,46 @@ describe("evaluateSelect: NATURAL JOIN and JOIN ... USING", () => {
   });
 });
 
+describe("evaluateSelect: a derived table in FROM", () => {
+  it("evaluates the inner query and treats its result as an ordinary table under its own alias", () => {
+    expect(
+      run(
+        "SELECT NAME FROM (SELECT NAME, SALARY FROM EMPLOYEES WHERE SALARY > 1000) high_earners ORDER BY NAME",
+      ).rows,
+    ).toEqual([[text("Carol")], [text("Dave")]]);
+  });
+
+  it("lets the inner query itself JOIN, filter, group, and order, exactly as a top-level statement can", () => {
+    const result = run(
+      'SELECT DEPT, "SUM(SALARY)" FROM (SELECT DEPT, SUM(SALARY) FROM EMPLOYEES GROUP BY DEPT) dept_totals ORDER BY DEPT',
+    );
+    expect(result.columns).toEqual(["DEPT", "SUM(SALARY)"]);
+    expect(result.rows).toEqual([
+      [text("Eng"), num(3500)],
+      [text("Sales"), num(1000)],
+      [NULL_VALUE, num(1250)],
+    ]);
+  });
+
+  it("qualifies a column reference by the derived table's own alias, exactly as it would a real table's name", () => {
+    const result = runJoin(
+      "SELECT high.NAME, DEPARTMENTS.BUDGET FROM (SELECT NAME, DEPT FROM EMPLOYEES WHERE SALARY > 1000) high JOIN DEPARTMENTS ON high.DEPT = DEPARTMENTS.NAME ORDER BY high.NAME",
+    );
+    expect(result.rows).toEqual([
+      [text("Carol"), num(80000)],
+      [text("Dave"), num(80000)],
+    ]);
+  });
+
+  it("nests a derived table inside a derived table's own FROM", () => {
+    expect(
+      run(
+        "SELECT NAME FROM (SELECT NAME FROM (SELECT NAME FROM EMPLOYEES WHERE SALARY > 1000) inner1) outer1 ORDER BY NAME",
+      ).rows,
+    ).toEqual([[text("Carol")], [text("Dave")]]);
+  });
+});
+
 describe("evaluateSelect: failures that must never become a wrong answer", () => {
   it.each([
     ["SELECT * FROM NOPE", 'table "NOPE" not found'],
