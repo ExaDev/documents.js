@@ -30,7 +30,7 @@ import {
   preformattedStyleElement,
   writeOdfParagraph,
 } from "../shared/paragraph";
-import { writeOdfTable } from "../shared/table";
+import { writeOdfTable, type OdfTableWriteContext } from "../shared/table";
 import { writeOdfPackageResidue } from "../shared/constructs";
 import {
   canonicalImage,
@@ -203,7 +203,8 @@ function planSection(
     if (block.kind === "table") {
       flushPendingPageBreak();
       closeListRun();
-      blocks.push({ kind: "table", table: block });
+      // canonicalTable renumbers any list membership a cell's own paragraphs carry onto this SAME listState, in document order, exactly as the paragraph branch above does for body-level membership -- a list minted inside a cell needs an identity as unique as one minted anywhere else in the document, and readOdtContent's own listIdState mints in this identical interleaved order on the way back in.
+      blocks.push({ kind: "table", table: canonicalTable(block, listState) });
       continue;
     }
     // An image: ODF anchors a draw:frame inside a paragraph, never beside one, so an image with no paragraph before it in this section opens an empty one to hang off. The anchor paragraph doubles as the page break's own host when one is pending.
@@ -266,7 +267,8 @@ export function normaliseOdtContent(
           case "paragraph":
             return block.paragraph;
           case "table":
-            return canonicalTable(block.table);
+            // Already canonical: planSection ran canonicalTable when it planned this block, threading the SAME listState its own paragraph branch renumbers body-level list membership through.
+            return block.table;
           case "image":
             return canonicalImage(block.image);
         }
@@ -347,6 +349,19 @@ function listStyleNameFor(
   state.listStyleByKind.set(kind, name);
   state.contentAutomaticStyles.children.push(buildOdfListStyle(name, kind));
   return name;
+}
+
+// The OdfTableWriteContext (typed/shared/table.ts) a table:table write threads through: table:name minting off this document's own nextTable counter -- the SAME counter for a top-level table and for any table nested inside one of its own cells, so the two can never collide -- and list-style minting off this document's own listStyleByKind cache, so a list run inside a cell reuses the identical style a body-level list of the same kind would.
+function tableWriteContext(state: OdtWriteState): OdfTableWriteContext {
+  return {
+    registry: state.registry,
+    mintTableName: () => {
+      const name = `Table${state.nextTable}`;
+      state.nextTable += 1;
+      return name;
+    },
+    mintListStyleName: (kind) => listStyleNameFor(kind, state),
+  };
 }
 
 // An image's own package part plus the draw:frame that references it. The frame carries only svg:width/svg:height and an as-char anchor: an inline image's position IS the character flow, which is the geometry shape readDrawFrame's own flow-positioning path reads back (a frame with a size and no svg:x/svg:y).
@@ -446,10 +461,7 @@ function writeSectionBlocks(
     if (block.kind === "table") {
       closeList();
       anchorParagraph = undefined;
-      out.push(
-        writeOdfTable(block.table, state.registry, `Table${state.nextTable}`),
-      );
-      state.nextTable += 1;
+      out.push(writeOdfTable(block.table, tableWriteContext(state)));
       continue;
     }
     if (anchorParagraph === undefined) {

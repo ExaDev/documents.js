@@ -230,6 +230,67 @@ describe("writeOdpContent: the round-trip law", () => {
     );
   });
 
+  it("round-trips a shape's table cell carrying a nested list and a nested table", () => {
+    expectRoundTrip(
+      documentOf([
+        slide([
+          shape({}, [
+            {
+              kind: "table",
+              columnWidthsPt: [240],
+              rows: [
+                {
+                  cells: [
+                    {
+                      blocks: [
+                        {
+                          kind: "paragraph",
+                          runs: [{ text: "Item one" }],
+                          list: { numId: "bullet:list1", level: 0 },
+                        },
+                        {
+                          kind: "paragraph",
+                          runs: [{ text: "Item two" }],
+                          list: { numId: "bullet:list1", level: 0 },
+                        },
+                        {
+                          kind: "table",
+                          columnWidthsPt: [100, 100],
+                          rows: [
+                            {
+                              cells: [
+                                {
+                                  blocks: [
+                                    {
+                                      kind: "paragraph",
+                                      runs: [{ text: "Nested A" }],
+                                    },
+                                  ],
+                                },
+                                {
+                                  blocks: [
+                                    {
+                                      kind: "paragraph",
+                                      runs: [{ text: "Nested B" }],
+                                    },
+                                  ],
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ]),
+        ]),
+      ]),
+    );
+  });
+
   it("round-trips a shape carrying an image as its sole content", () => {
     expectRoundTrip(
       documentOf([

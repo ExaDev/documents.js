@@ -5,12 +5,13 @@ import type {
   ContentBorder,
   ContentCellBorders,
   ContentCellFill,
+  ContentParagraph,
   ContentTable,
   ContentTableCell,
   ContentTableRow,
 } from "document-schema.js";
 import { resolveCellFillColor } from "document-schema.js";
-import type { XmlElement } from "../../model/node";
+import type { XmlElement, XmlNode } from "../../model/node";
 import type { Package } from "../../model/package";
 import type { StyleRegistry } from "../../styles/registry";
 import { el } from "../../xml/fragment";
@@ -31,8 +32,16 @@ import {
   readOdfParagraph,
   writeOdfParagraph,
 } from "./paragraph";
+import {
+  mintOdfListNumId,
+  readOdfListParagraphs,
+  listKindOf,
+  writeOdfList,
+  type OdfListIdState,
+  type OdfListEntry,
+} from "./list";
 
-// Reads a table:table element into document-schema.js's ContentTable -- the same table:table/table:table-row/table:table-cell/table:covered-table-cell markup ODF uses identically across odt/ods/odp (verified against real LibreOffice output: a presentation's own draw:frame-wrapped table uses the exact grammar below, including table:number-columns-spanned/table:covered-table-cell for merged cells), so this module is written to be reusable by a future odt/ods reader rather than living inside typed/draw/shapes.ts, even though odp is this module's only caller today.
+// Reads a table:table element into document-schema.js's ContentTable -- the same table:table/table:table-row/table:table-cell/table:covered-table-cell markup ODF uses identically across odt/ods/odp (verified against real LibreOffice output: a presentation's own draw:frame-wrapped table uses the exact grammar below, including table:number-columns-spanned/table:covered-table-cell for merged cells), so this module is shared rather than living inside typed/draw/shapes.ts: odt's own office:text walk reads a top-level table:table straight through it, and typed/draw/shapes.ts/typed/draw/embedded.ts read the identical grammar for a table nested inside an odp/odg draw:frame or an embedded chart's own local data cache.
 //
 // Column widths and row heights are dimensional/decorative properties (style:table-column-properties/@style:column-width, style:table-row-properties/@style:row-height) that styles/properties.ts deliberately does not model (see its own top-of-file note: this package's StyleProperties covers only paragraph/run-level text-document formatting) -- so this module resolves them directly via cascade.ts's findStyleElement, a single-level (family, name) lookup with no parent-chain walk, matching how real ODF table-column/table-row/table-cell automatic styles are standalone with no style:parent-style-name chain of their own in practice.
 
@@ -221,11 +230,20 @@ export function readCellStyleDecoration(
   };
 }
 
+// The readParagraph callback readOdfListParagraphs (typed/shared/list.ts) needs: a text:list-item's own text:p/text:h child reads exactly as readTableCell's own direct walk reads one, so a heading inside a list item inside a cell gets the identical heading-identity step a heading directly in the cell gets.
+function readCellListParagraph(
+  element: XmlElement,
+  pkg: Package,
+): ContentParagraph {
+  return readParagraphOrHeading(element, readOdfParagraph(element, pkg));
+}
+
 function readTableCell(
   cellElement: XmlElement,
   pkg: Package,
+  listIdState: OdfListIdState,
 ): ContentTableCell {
-  // A cell's block content is its text:p AND text:h children (a heading paragraph set in a cell is a real text:h under the same convention office:text uses -- typed/shared/paragraph.ts's readParagraphOrHeading derives its identity), walked in document order rather than tag-filtered so a heading between two paragraphs stays between them. A nested text:list or table:table inside a cell remains outside this walk's scope, mirroring the block walks every other shared reader here makes.
+  // A cell's block content mirrors the general block-content reading every other shared/odt-specific walker here applies: text:p/text:h read as paragraphs/headings (a heading paragraph set in a cell is a real text:h under the same convention office:text uses -- typed/shared/paragraph.ts's readParagraphOrHeading derives its identity), text:list reads through the SAME shared list walker (typed/shared/list.ts's readOdfListParagraphs/mintOdfListNumId) office:text and a slide text-box both use, and table:table recurses back into readOdfTable -- a table nested inside a cell is still just a table:table element, read by the identical function that reads a top-level one. All four are walked in document order rather than tag-filtered, so a heading or a nested list/table between two paragraphs stays between them.
   const blocks: ContentBlock[] = [];
   for (const child of cellElement.children) {
     if (child.type !== "element") {
@@ -235,6 +253,15 @@ function readTableCell(
       blocks.push(readOdfParagraph(child, pkg));
     } else if (child.tag === "text:h") {
       blocks.push(readParagraphOrHeading(child, readOdfParagraph(child, pkg)));
+    } else if (child.tag === "text:list") {
+      const numId = mintOdfListNumId(pkg, child, listIdState);
+      blocks.push(
+        ...readOdfListParagraphs(child, { numId, level: 0 }, (element) =>
+          readCellListParagraph(element, pkg),
+        ),
+      );
+    } else if (child.tag === "table:table") {
+      blocks.push(readOdfTable(child, pkg, listIdState));
     }
   }
   const colSpanRaw = attrValue(cellElement, "table:number-columns-spanned");
@@ -258,7 +285,11 @@ function readTableCell(
   };
 }
 
-function readTableRow(rowElement: XmlElement, pkg: Package): ContentTableRow {
+function readTableRow(
+  rowElement: XmlElement,
+  pkg: Package,
+  listIdState: OdfListIdState,
+): ContentTableRow {
   const cells: ContentTableCell[] = [];
   for (const child of rowElement.children) {
     if (child.type !== "element") {
@@ -271,7 +302,7 @@ function readTableRow(rowElement: XmlElement, pkg: Package): ContentTableRow {
         cells.push({ blocks: [] });
       }
     } else if (child.tag === "table:table-cell") {
-      const cell = readTableCell(child, pkg);
+      const cell = readTableCell(child, pkg, listIdState);
       const repeat = readRepeatCount(child, "table:number-columns-repeated");
       for (let i = 0; i < repeat; i++) {
         cells.push(cell);
@@ -354,31 +385,91 @@ function tableCellStyle(
   });
 }
 
-// A cell's own block content. ODF's table:table-cell content model admits full block flow, but readOdfTable's cell walk reads only text:p/text:h (see readTableCell above), so writing anything else here would produce a document this package's own reader silently drops content from -- refused outright instead, naming the block kind, rather than written and lost.
+// What writeOdfTable needs beyond the registry, to write a cell's own nested content back exactly as readOdfTable's own recursive read reads it: a table nested inside a cell needs a document-unique table:name from the SAME counter a top-level table's name comes from (never a cell-local counter, which could mint a name a sibling top-level table already used), and consecutive list-membership paragraphs grouped into a text:list need the SAME named list-style a top-level list run would reuse or mint (never a second, cell-local style for the identical kind). Both callers -- typed/odt/write.ts's writeSectionBlocks and typed/draw/write-shapes.ts's writeDrawFrame -- already own exactly this state (OdtWriteState.nextTable/listStyleByKind, DrawShapeWriteState's own identically-shaped fields) for their own top-level tables and lists, so this context is built from that existing state rather than duplicating it.
+export interface OdfTableWriteContext {
+  readonly registry: StyleRegistry;
+  // Mints the next document-unique table:name -- called once per table:table element this function writes, including a nested table found inside a cell, off the caller's own document-wide counter.
+  mintTableName(): string;
+  // Mints (or reuses) the named text:list-style for one list kind, off the caller's own memoized cache -- one text:list-style per kind for the WHOLE document, not one per table.
+  mintListStyleName(kind: "ordered" | "bullet"): string;
+}
+
+// A cell's own block content, mirroring readTableCell's own recursive scope (typed/shared/table.ts's read side): a paragraph writes as itself; consecutive paragraphs sharing one list membership group into a single text:list, nested per level via typed/shared/list.ts's own writeOdfList -- the identical grouping typed/odt/write.ts's writeSectionBlocks and typed/draw/write-shapes.ts's writeShapeTextBox already apply at their own top level; and a nested table writes by recursing back into writeOdfTable itself, the identical function that writes a top-level one. Any other block kind is refused outright, naming it, rather than written and lost -- exactly what readTableCell's own scope stops it from reading back.
 function writeCellBlocks(
   cell: ContentTableCell,
-  registry: StyleRegistry,
-): XmlElement[] {
-  return cell.blocks.map((block) => {
+  context: OdfTableWriteContext,
+): XmlNode[] {
+  const out: XmlNode[] = [];
+  let openList:
+    | {
+        readonly numId: string;
+        readonly entries: OdfListEntry[];
+        readonly element: XmlElement;
+      }
+    | undefined;
+
+  const closeList = (): void => {
+    if (openList === undefined) {
+      return;
+    }
+    const kind = listKindOf(openList.numId);
+    const built = writeOdfList(
+      openList.entries,
+      kind === undefined ? undefined : context.mintListStyleName(kind),
+    );
+    openList.element.attributes = built.attributes;
+    openList.element.children = built.children;
+    openList = undefined;
+  };
+
+  for (const block of cell.blocks) {
+    if (block.kind === "table") {
+      closeList();
+      out.push(writeOdfTable(block, context));
+      continue;
+    }
     if (block.kind !== "paragraph") {
       throw new Error(
-        `writeOdfTable: a table cell carrying a "${block.kind}" block cannot be written -- odf.js's table reader reads only paragraphs and headings out of a cell, so writing one would lose it on the way back in`,
+        `writeOdfTable: a table cell carrying a "${block.kind}" block cannot be written -- odf.js's table reader reads only paragraphs, headings, lists, and nested tables out of a cell, so writing one would lose it on the way back in`,
       );
     }
-    return writeOdfParagraph(block, registry);
-  });
+    const element = writeOdfParagraph(block, context.registry);
+    const membership = block.list;
+    // context is never asked to canonicalise membership itself (unlike typed/draw/write-shapes.ts's own planShapeContent seam): a cell's own paragraphs pass through writeOdfTable's caller's normalisation exactly as a top-level table's do, so a membership here already carries a real numId whenever it carries one at all.
+    if (membership?.numId === undefined) {
+      closeList();
+      out.push(element);
+      continue;
+    }
+    if (openList !== undefined && openList.numId !== membership.numId) {
+      closeList();
+    }
+    if (openList === undefined) {
+      const listElement = el("text:list");
+      openList = {
+        numId: membership.numId,
+        entries: [],
+        element: listElement,
+      };
+      out.push(listElement);
+    }
+    openList.entries.push({ level: membership.level, element });
+  }
+  closeList();
+  return out;
 }
 
 function coverageKey(row: number, column: number): string {
   return `${row},${column}`;
 }
 
-// Writes one ContentTable as the table:table element readOdfTable reads back. `tableName` is the document-unique table:name every real ODF producer writes; the caller mints it, since uniqueness is a document-wide fact one table has no way to establish on its own.
+// Writes one ContentTable as the table:table element readOdfTable reads back. Its own table:name is minted by context.mintTableName() -- the caller's document-wide counter, shared with every nested table this call's own cells may recurse into (see writeCellBlocks), so uniqueness holds across the whole document regardless of nesting depth.
 export function writeOdfTable(
   table: ContentTable,
-  registry: StyleRegistry,
-  tableName: string,
+  context: OdfTableWriteContext,
 ): XmlElement {
+  const { registry } = context;
+  const tableName = context.mintTableName();
   const columns = table.columnWidthsPt.map((widthPt) => {
     const styleName = tableColumnStyle(widthPt, registry);
     return el(
@@ -416,11 +507,7 @@ export function writeOdfTable(
       if (cell.rowSpan !== undefined) {
         attributes["table:number-rows-spanned"] = String(cell.rowSpan);
       }
-      return el(
-        "table:table-cell",
-        attributes,
-        writeCellBlocks(cell, registry),
-      );
+      return el("table:table-cell", attributes, writeCellBlocks(cell, context));
     });
     const rowStyleName = tableRowStyle(row.heightPt, registry);
     return el(
@@ -457,9 +544,11 @@ export function writeOdfTable(
   );
 }
 
+// `listIdState` mints numId identity for a text:list found inside one of this table's own cells (readTableCell's own recursive walk), threaded through every nested table the same way -- so two lists in two different cells (or in a cell of a table nested inside another cell) get different identities exactly as two lists in different sections of an odt body do. Defaults to a fresh per-call counter, matching typed/draw/shapes.ts's own readDrawFrame convention, so every pre-existing call site that has no document-wide state to thread (a chart's own local data table, this module's own tests) keeps working unchanged; a caller walking a whole document threads its own state so identities stay unique across the whole read.
 export function readOdfTable(
   tableElement: XmlElement,
   pkg: Package,
+  listIdState: OdfListIdState = { next: 1 },
 ): ContentTable {
   const columnWidthsPt: number[] = [];
   for (const column of childrenWithTag(tableElement, "table:table-column")) {
@@ -472,7 +561,7 @@ export function readOdfTable(
 
   const rows: ContentTableRow[] = [];
   for (const rowElement of childrenWithTag(tableElement, "table:table-row")) {
-    const row = readTableRow(rowElement, pkg);
+    const row = readTableRow(rowElement, pkg, listIdState);
     const repeat = readRepeatCount(rowElement, "table:number-rows-repeated");
     for (let i = 0; i < repeat; i++) {
       rows.push(row);

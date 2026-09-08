@@ -14,7 +14,7 @@ import { type StyleRegistry } from "../../styles/registry";
 import { formatOdfLength, formatOdfNumber } from "../shared/units";
 import { imageExtension } from "../shared/image";
 import { writeOdfParagraph } from "../shared/paragraph";
-import { writeOdfTable } from "../shared/table";
+import { writeOdfTable, type OdfTableWriteContext } from "../shared/table";
 import {
   canonicalImage,
   canonicalParagraph,
@@ -154,6 +154,15 @@ function listStyleNameFor(
   state.listStyleByKind.set(kind, name);
   state.contentAutomaticStyles.children.push(buildOdfListStyle(name, kind));
   return name;
+}
+
+// The OdfTableWriteContext (typed/shared/table.ts) a table:table write threads through: table:name minting off this state's own nextTable counter -- the SAME counter for a shape's own top-level table and for any table nested inside one of its cells, so the two can never collide -- and list-style minting off this state's own listStyleByKind cache, matching listStyleNameFor above.
+function tableWriteContext(state: DrawShapeWriteState): OdfTableWriteContext {
+  return {
+    registry: state.registry,
+    mintTableName: () => `DrawTable${state.nextTable++}`,
+    mintListStyleName: (kind) => listStyleNameFor(kind, state),
+  };
 }
 
 // --- geometry: Box + rotationDeg -> either plain svg:x/y/width/height, or svg:width/height + draw:transform ----------
@@ -339,13 +348,7 @@ export function writeDrawFrame(
   const content = planShapeContent(shape.blocks, listState);
   const children: XmlNode[] =
     content.kind === "table"
-      ? [
-          writeOdfTable(
-            content.table,
-            state.registry,
-            `DrawTable${state.nextTable++}`,
-          ),
-        ]
+      ? [writeOdfTable(content.table, tableWriteContext(state))]
       : content.kind === "image"
         ? writeShapeImage(content.image, state)
         : [writeShapeTextBox(content.paragraphs, state)];
@@ -374,7 +377,7 @@ export function canonicalDrawShape(
   const content = planShapeContent(shape.blocks, listState);
   const blocks: ContentBlock[] =
     content.kind === "table"
-      ? [canonicalTable(content.table)]
+      ? [canonicalTable(content.table, listState)]
       : content.kind === "image"
         ? [
             {
