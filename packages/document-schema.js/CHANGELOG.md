@@ -1,3 +1,9 @@
+## [7.5.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.4.0...document-schema.js%407.5.0) (2026-09-08)
+
+### Features
+
+* **document-schema.js:** add a wpd residue format and a table cell formula field ([fb38b36](https://github.com/ExaDev/documents.js/commit/fb38b3629ceba300702cd40499e2426f7dbf6707))
+
 ## [7.4.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.3.1...document-schema.js%407.4.0) (2026-09-08)
 
 ### Features

@@ -1,3 +1,22 @@
+## [3.2.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.1.1...wpd-codec%403.2.0) (2026-09-08)
+
+### Features
+
+* **wpd-codec:** decode a table cell's New Cell Formula into its own text ([3f7f544](https://github.com/ExaDev/documents.js/commit/3f7f544c6f2d6064a064bb660ce737bc7f2cbfe0))
+* **wpd-codec:** fold style, merge field, formula, and box content into the read ([d1d347f](https://github.com/ExaDev/documents.js/commit/d1d347f0bb0026dc5c5116554a90686a06695593))
+* **wpd-codec:** resolve a box's own content type, prefix ID, and frame ([b623b2c](https://github.com/ExaDev/documents.js/commit/b623b2c59a25c4d12fd28d82493f0ec6333c6f93))
+* **wpd-codec:** resolve a style packet's own begin block ([721c162](https://github.com/ExaDev/documents.js/commit/721c1627d6b6fad3379eca59f9c130ce1614b531))
+
+### Documentation
+
+* **wpd-codec:** describe the lifted style, merge, formula, and box scope ([3e5d412](https://github.com/ExaDev/documents.js/commit/3e5d41251cd4cef6da2f784f6d8fcdc579abe9eb))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.5.0
+- Updated archive-codec to 1.9.2
+
 ## [3.1.1](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.1.0...wpd-codec%403.1.1) (2026-09-08)
 
 
