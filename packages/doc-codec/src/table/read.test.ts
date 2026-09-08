@@ -1,6 +1,6 @@
 import type { ContentBorder } from "document-schema.js";
 import { describe, expect, it } from "vitest";
-import { DocFormatError, DocUnsupportedError } from "../errors";
+import { DocFormatError } from "../errors";
 import { readDocContent } from "../read";
 import { buildDoc, type DocParagraphSpec } from "../test-support/doc";
 import { CELL_MARK } from "../text/special";
@@ -77,6 +77,11 @@ function sprmTMerge(itcFirst: number, itcLim: number): number[] {
 function sprmPItap(depth: number): number[] {
   return [0x49, 0x66, depth & 0xff, 0, 0, 0];
 }
+
+/** sprmPFInnerTableCell (0x244b), Bool8 true -- a nested table's own cell-ending paragraph mark. */
+const sprmPFInnerTableCell = [0x4b, 0x24, 0x01];
+/** sprmPFInnerTtp (0x244c), Bool8 true -- a nested table's own row-ending paragraph mark. */
+const sprmPFInnerTtp = [0x4c, 0x24, 0x01];
 
 // sprmTVertMerge, [MS-DOC] 2.6.3 (0xD62B): a VertMergeOperand naming one cell (itc) and its own VerticalMergeFlag -- the incremental per-cell mechanism for a vertical merge, the vertical analogue of sprmTMerge.
 function sprmTVertMerge(itc: number, vertMergeFlags: number): number[] {
@@ -351,20 +356,59 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
     expect(cellText(block.rows[1]?.cells[1])).toBe("right-2");
   });
 
-  it("refuses a table nested inside a table cell, detected from sprmPItap's own table depth", () => {
-    expect(() =>
-      readDocContent(
-        buildDoc({
-          paragraphs: [
-            {
-              runs: [{ text: "nested" }],
-              grpprl: [...SPRM_P_F_IN_TABLE, ...sprmPItap(2)],
-              mark: CELL_MARK,
-            },
-          ],
-        }),
-      ),
-    ).toThrow(DocUnsupportedError);
+  it("recurses into a table nested inside a table cell, at the depth sprmPItap and sprmPFInnerTableCell/sprmPFInnerTtp state", () => {
+    // [MS-DOC] 2.4.3: at depth 1, a cell mark is a real 0x0007 character; at depth 2, the identical role is played by an ordinary paragraph mark (0x000D) carrying sprmPFInnerTableCell (a cell boundary) or sprmPFInnerTtp (the row's own terminating mark) instead -- so every nested paragraph below defaults to the ordinary PARAGRAPH_MARK (buildDoc's own default) rather than setting `mark` at all.
+    const nestedBoundaries = [0, 1000, 2000];
+    const nestedUnmerged = { horzMerge: 0, vertMerge: 0 };
+    const nestedRowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...sprmPItap(2),
+      ...sprmPFInnerTtp,
+      ...sprmTDefTable(nestedBoundaries, [nestedUnmerged, nestedUnmerged]),
+    ];
+    const outerRowGrpprl = [
+      ...SPRM_P_F_IN_TABLE,
+      ...SPRM_P_F_TTP,
+      ...sprmTDefTable([0, 3000], [nestedUnmerged]),
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          {
+            runs: [{ text: "N1" }],
+            grpprl: [
+              ...SPRM_P_F_IN_TABLE,
+              ...sprmPItap(2),
+              ...sprmPFInnerTableCell,
+            ],
+          },
+          {
+            runs: [{ text: "N2" }],
+            grpprl: [
+              ...SPRM_P_F_IN_TABLE,
+              ...sprmPItap(2),
+              ...sprmPFInnerTableCell,
+            ],
+          },
+          { runs: [], grpprl: nestedRowGrpprl },
+          // The outer cell's own cell mark: a separate, empty depth-1 paragraph closing the outer cell after its nested table, exactly as an ordinary depth-1 cell's own trailing empty paragraph already does elsewhere in this file.
+          { runs: [{ text: "" }], grpprl: SPRM_P_F_IN_TABLE, mark: CELL_MARK },
+          { runs: [], grpprl: outerRowGrpprl, mark: CELL_MARK },
+        ],
+      }),
+    );
+    const outer = tableBlock(document);
+    expect(outer.rows).toHaveLength(1);
+    const outerCell = outer.rows[0]?.cells[0];
+    if (outerCell === undefined) throw new Error("expected the outer cell");
+    const nested = outerCell.blocks[0];
+    if (nested?.kind !== "table") {
+      throw new Error(`expected a nested table, got '${nested?.kind}'`);
+    }
+    expect(nested.columnWidthsPt).toEqual([50, 50]);
+    expect(nested.rows).toHaveLength(1);
+    expect(cellText(nested.rows[0]?.cells[0])).toBe("N1");
+    expect(cellText(nested.rows[0]?.cells[1])).toBe("N2");
   });
 
   // A row-ending mark with no direct sprmTDefTable is a real producer's own legal choice (sprmPTableProps' indirect TAP, per the README's own scope note) that this reader does not follow -- degrading the run back to flat paragraphs rather than refusing the whole document, exactly as an indirect Papx elsewhere in this package already degrades a paragraph's own properties rather than failing its read.
