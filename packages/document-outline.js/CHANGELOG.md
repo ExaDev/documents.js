@@ -1,3 +1,15 @@
+## [3.6.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.5.8...document-outline.js%403.6.0) (2026-09-08)
+
+### Features
+
+* **document-outline.js:** infer PDF page regions via recursive X-Y cut ([e0df599](https://github.com/ExaDev/documents.js/commit/e0df599a865b6eb0f79c1fadff319d54582b72de))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.4.0
+- Updated pdf-codec to 4.0.10
+
 ## [3.5.8](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.5.7...document-outline.js%403.5.8) (2026-09-08)
 
 ### Bug Fixes

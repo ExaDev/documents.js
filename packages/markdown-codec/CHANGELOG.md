@@ -1,3 +1,10 @@
+## [6.5.1](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.5.0...markdown-codec%406.5.1) (2026-09-08)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.4.0
+
 ## [6.5.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.4.3...markdown-codec%406.5.0) (2026-09-08)
 
 ### Features
