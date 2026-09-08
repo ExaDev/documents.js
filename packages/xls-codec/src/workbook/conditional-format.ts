@@ -6,7 +6,7 @@ import { BiffFormatError } from "../biff/records";
 import { recordByteLength, type RecordGroup } from "../biff/substreams";
 import { RECORD_CF } from "../biff/record-types";
 
-// CondFmt ([MS-XLS] 2.4.56) marks the start of 1-3 CF ([MS-XLS] 2.4.42) records sharing one cell-range list -- the binary equivalent of ODF's calcext:conditional-format wrapping several rule children, and xlsx's own conditionalFormatting wrapping several cfRule children (ExaDev/documents.js#758). Base BIFF8 (Excel 97) conditional formatting has exactly two rule shapes, both handled here: a comparison ("Cell Value Is") condition and a formula condition. Every richer rule type Excel 2007+ added -- top10, aboveAverage, colour scale, data bar, icon set, duplicate/unique values, text/date conditions -- has no representation in the base CF record at all; it rides a CF12 record instead, glued to its own CondFmt through a CFEx extension record (ExaDev/documents.js#1100, a separate cycle).
+// CondFmt ([MS-XLS] 2.4.56) marks the start of 1-3 CF ([MS-XLS] 2.4.42) records sharing one cell-range list -- the binary equivalent of ODF's calcext:conditional-format wrapping several rule children, and xlsx's own conditionalFormatting wrapping several cfRule children (ExaDev/documents.js#758). Base BIFF8 (Excel 97) conditional formatting has exactly two rule shapes, both handled here: a comparison ("Cell Value Is") condition and a formula condition. Every richer rule type Excel 2007+ added -- top10, aboveAverage, colour scale, data bar, icon set, duplicate/unique values, text/date conditions -- has no representation in the base CF record at all; it rides a CF12 record instead, or, for a rule Excel keeps expressible as a legacy formula condition for pre-2007 readers (the containsText family), a CFEx extension record glued to this CondFmt's own CF children by nID (conditional-format-ex.ts).
 //
 // A CF record's own layout is a real, precisely published Microsoft spec (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d6dcadf2-7e07-4f7d-a60a-0f643780225d), not a producer convention transcribed from source the way ODF's calcext:condition needed: ct (condition type: 0x01 comparison, 0x02 formula -- the latter has no closed-form structure to promote, the same 'expression' boundary xlsx's own cfRule reading and this package's data-validation.ts both already draw), cp (the comparison operator when ct is 0x01), cce1/cce2 (byte lengths of the two formula operands), a DXFN structure naming the rule's own resulting font-colour/fill-background override, then the two CFParsedFormulaNoCCE operands themselves -- the identical Ptg token grammar a cell's own Formula record carries, read with the same parseFormulaText this reader already uses there.
 
@@ -116,40 +116,72 @@ export function parseDxfStyle(
   }
 }
 
-function readCf(
-  record: RecordGroup,
-  ranges: ContentSheetRange[],
-  formulaSheets: FormulaSheetContext,
-): RawConditionalFormat | undefined {
+/** A CF record's own operand, in its rawest usable form -- the pieces conditional-format-ex.ts needs to resolve a CFEx that extends this specific CF (by icf, a positional index into a CondFmt's own CF children), independent of whether readCf below can promote this CF into a 'cellIs' rule at all. A ct 0x02 formula condition, exactly the kind readCf itself never promotes, is the one CFEx actually cares about (see conditional-format-ex.ts's own top comment for why). */
+export interface RawCfOperand {
+  readonly ct: number;
+  readonly cp: number;
+  readonly rgce1: Uint8Array<ArrayBuffer>;
+}
+
+/** The shared byte-layout parse both readCf and conditional-format.ts's own readCondFmtGroup need: ct/cp/cce1/cce2, the dxf trailer's own bytes (its length inferred from the record's total size the same way this file always has, since [MS-XLS] never states it directly), and the two formula operands. Returns undefined for a truncated/malformed record rather than throwing, so a caller can fold this into its own try/catch or call it standalone. */
+function parseCfBytes(record: RecordGroup):
+  | {
+      readonly ct: number;
+      readonly cp: number;
+      readonly dxfBytes: Uint8Array<ArrayBuffer>;
+      readonly rgce1: Uint8Array<ArrayBuffer>;
+      readonly rgce2: Uint8Array<ArrayBuffer>;
+    }
+  | undefined {
   try {
     const cursor = new BlockCursor(record.blocks);
     const ct = cursor.u8();
     const cp = cursor.u8();
     const cce1 = cursor.u16();
     const cce2 = cursor.u16();
-    if (ct === 0x02) {
-      // A formula condition has no closed-form structure to promote without a general formula engine -- the same 'expression' boundary drawn everywhere else this shared schema is populated.
-      return undefined;
-    }
-    const operator = CP_TO_OPERATOR.get(cp);
-    if (operator === undefined) {
-      return undefined;
-    }
     const dxfLength = recordByteLength(record) - 6 - cce1 - cce2;
     const dxfBytes = cursor.take(dxfLength);
     const rgce1 = cursor.take(cce1);
     const rgce2 = cursor.take(cce2);
-    if (cce1 === 0) {
-      // A comparison condition always compares against something -- a zero-length first operand is a malformed record, not a legitimate empty rule, so the whole rule degrades to absent rather than promoting a formula1 the schema requires but this record never actually carried.
-      return undefined;
+    return { ct, cp, dxfBytes, rgce1, rgce2 };
+  } catch (err) {
+    if (!(err instanceof BiffFormatError)) {
+      throw err;
     }
+    return undefined;
+  }
+}
+
+function readCf(
+  record: RecordGroup,
+  ranges: ContentSheetRange[],
+  formulaSheets: FormulaSheetContext,
+): RawConditionalFormat | undefined {
+  const parsed = parseCfBytes(record);
+  if (parsed === undefined) {
+    return undefined;
+  }
+  const { ct, cp, dxfBytes, rgce1, rgce2 } = parsed;
+  if (ct === 0x02) {
+    // A formula condition has no closed-form structure to promote without a general formula engine -- the same 'expression' boundary drawn everywhere else this shared schema is populated. (A containsText-family formula condition specifically is instead reached through conditional-format-ex.ts's own readCfEx, which knows the closed shape CFExTextTemplateParams.ctp tells it to expect.)
+    return undefined;
+  }
+  const operator = CP_TO_OPERATOR.get(cp);
+  if (operator === undefined) {
+    return undefined;
+  }
+  if (rgce1.length === 0) {
+    // A comparison condition always compares against something -- a zero-length first operand is a malformed record, not a legitimate empty rule, so the whole rule degrades to absent rather than promoting a formula1 the schema requires but this record never actually carried.
+    return undefined;
+  }
+  try {
     const formula1 = parseFormulaText(rgce1, formulaSheets);
     if (formula1 === undefined) {
       // ContentSheetConditionalFormatSchema's own 'cellIs' variant requires formula1 -- a Ptg stream this reader cannot render as text (an unsupported token) leaves nothing valid to promote, so the whole rule degrades to absent rather than a fabricated placeholder.
       return undefined;
     }
     const formula2 =
-      cce2 > 0 ? parseFormulaText(rgce2, formulaSheets) : undefined;
+      rgce2.length > 0 ? parseFormulaText(rgce2, formulaSheets) : undefined;
 
     return {
       operator,
@@ -170,9 +202,23 @@ export interface CondFmtGroupResult {
   readonly formats: RawConditionalFormat[];
   /** How many records (the CondFmt itself plus every CF it claimed) the caller should advance past, regardless of how many rules actually promoted. */
   readonly recordsConsumed: number;
+  /** CondFmt's own nID ([MS-XLS] 2.5.56's own CondFmtStructure) -- the identifier a later CFEx record's own nID field cross-references to extend one specific CF child of this group (conditional-format-ex.ts). 0 on a malformed group, alongside an empty rawCfs -- a real CFEx can legitimately name nID 0, but never resolves anything through an empty rawCfs, so the two degraded groups can never be confused for one another by a lookup. */
+  readonly nID: number;
+  /** This group's own shared ranges, exposed independently of `formats` since a CFEx-promoted rule needs them too and a CF this reader could not promote into `formats` still shares them. */
+  readonly ranges: ContentSheetRange[];
+  /** Every one of this group's CF children, in declared (icf) order, each parsed to its raw operand or undefined for one this reader could not even parse -- CFExNonCF12's own icf field indexes into exactly this collection, regardless of which entries readCf itself went on to promote into `formats`. */
+  readonly rawCfs: readonly (RawCfOperand | undefined)[];
 }
 
-// Reads one CondFmt and the ccf CF records immediately following it ([MS-XLS] 2.1.7.20.6's own worksheet-substream ABNF places them contiguously, the same "wrapper then its own children" shape MergeCells' own single-record simplicity doesn't need but DV's own sibling records never required either -- this is the one BIFF8 construct in this reader that spans more than one record). A CF this reader cannot promote (a formula condition, an unrecognised cp) is simply omitted rather than degrading the whole group -- the other rules in the same CondFmt, and every other CondFmt on the sheet, are unaffected. records[startIndex] MUST already be RECORD_CONDFMT; a malformed group (a declared ccf running past the end of the record array, or a non-CF record where a CF was expected) degrades the WHOLE group to no formats, consuming only the CondFmt record itself so the caller's own walk can still make sense of whatever follows.
+const DEGRADED_CONDFMT_GROUP: CondFmtGroupResult = {
+  formats: [],
+  recordsConsumed: 1,
+  nID: 0,
+  ranges: [],
+  rawCfs: [],
+};
+
+// Reads one CondFmt and the ccf CF records immediately following it ([MS-XLS] 2.1.7.20.6's own worksheet-substream ABNF places them contiguously, the same "wrapper then its own children" shape MergeCells' own single-record simplicity doesn't need but DV's own sibling records never required either -- this is the one BIFF8 construct in this reader that spans more than one record). A CF this reader cannot promote (a formula condition, an unrecognised cp) is simply omitted from `formats` rather than degrading the whole group -- the other rules in the same CondFmt, and every other CondFmt on the sheet, are unaffected. records[startIndex] MUST already be RECORD_CONDFMT; a malformed group (a declared ccf running past the end of the record array, or a non-CF record where a CF was expected) degrades the WHOLE group to no formats and no rawCfs, consuming only the CondFmt record itself so the caller's own walk can still make sense of whatever follows.
 export function readCondFmtGroup(
   records: readonly RecordGroup[],
   startIndex: number,
@@ -180,12 +226,13 @@ export function readCondFmtGroup(
 ): CondFmtGroupResult {
   const condFmt = records[startIndex];
   if (condFmt === undefined) {
-    return { formats: [], recordsConsumed: 1 };
+    return DEGRADED_CONDFMT_GROUP;
   }
   try {
     const cursor = new BlockCursor(condFmt.blocks);
     const ccf = cursor.u16();
-    cursor.skip(2); // fToughRecalc + nID -- CFEx's own linkage, not needed while CF12/CFEx stays out of scope (ExaDev/documents.js#1100)
+    const fToughRecalcAndNID = cursor.u16(); // A - fToughRecalc(1 bit, unused) + nID(15 bits), [MS-XLS] 2.5.56
+    const nID = (fToughRecalcAndNID >>> 1) & 0x7fff;
     cursor.skip(8); // refBound (Ref8U) -- a bounding superset of sqref, redundant for this reader's purposes
     const crefCount = cursor.u16();
     const ranges: ContentSheetRange[] = [];
@@ -198,21 +245,28 @@ export function readCondFmtGroup(
     }
 
     const formats: RawConditionalFormat[] = [];
+    const rawCfs: (RawCfOperand | undefined)[] = [];
     for (let offset = 1; offset <= ccf; offset += 1) {
       const cfRecord = records[startIndex + offset];
       if (cfRecord?.type !== RECORD_CF) {
-        return { formats: [], recordsConsumed: 1 };
+        return DEGRADED_CONDFMT_GROUP;
       }
       const format = readCf(cfRecord, ranges, formulaSheets);
       if (format !== undefined) {
         formats.push(format);
       }
+      const parsed = parseCfBytes(cfRecord);
+      rawCfs.push(
+        parsed === undefined
+          ? undefined
+          : { ct: parsed.ct, cp: parsed.cp, rgce1: parsed.rgce1 },
+      );
     }
-    return { formats, recordsConsumed: 1 + ccf };
+    return { formats, recordsConsumed: 1 + ccf, nID, ranges, rawCfs };
   } catch (err) {
     if (!(err instanceof BiffFormatError)) {
       throw err;
     }
-    return { formats: [], recordsConsumed: 1 };
+    return DEGRADED_CONDFMT_GROUP;
   }
 }
