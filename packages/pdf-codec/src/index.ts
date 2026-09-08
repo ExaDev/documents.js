@@ -5,6 +5,13 @@ export type { ReadPdfOptions } from "./read";
 export { readPdf } from "./read";
 export type { WritePdfOptions } from "./write";
 export { writePdf } from "./write";
+// Write-side standard security handler: encrypts a document written by writePdf under WritePdfOptions.encryption. See encrypt-write.ts's own module comment for the four schemes and their scope.
+export type {
+  PdfEncryptionOptions,
+  PdfEncryptionPermissions,
+  PdfEncryptionScheme,
+} from "./encrypt-write";
+export { PdfEncryptionError } from "./encrypt-write";
 export type {
   PdfDiagnostic,
   PdfDiagnosticSeverity,
