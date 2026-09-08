@@ -1,3 +1,20 @@
+## [7.8.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.7.1...odf.js%407.8.0) (2026-09-08)
+
+### Features
+
+* **odf.js:** build real geometry for six more draw:custom-shape presets ([41ec326](https://github.com/ExaDev/documents.js/commit/41ec3267ba3cef2aab97d3839606c2136cb85711)), references [ExaDev/documents.js#954](https://github.com/ExaDev/documents.js/issues/954)
+* **odf.js:** parse the ODF angle datatype and look up named draw resources ([4651826](https://github.com/ExaDev/documents.js/commit/465182641dad1d280a51fd227d72f123c2b6e767))
+* **odf.js:** resolve non-flat vector fills, opacity, and the real dash pattern ([bc4a53a](https://github.com/ExaDev/documents.js/commit/bc4a53a1e3ef67f3088039919063f1b6d84d68bb)), references [ExaDev/documents.js#954](https://github.com/ExaDev/documents.js/issues/954)
+
+### Documentation
+
+* **odf.js:** document the extended vector fill/stroke/custom-shape fidelity ([4063a87](https://github.com/ExaDev/documents.js/commit/4063a8725ebd303ed5782b8df7bfb3abec4661ee)), references [ExaDev/documents.js#954](https://github.com/ExaDev/documents.js/issues/954)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.4.0
+
 ## [7.7.1](https://github.com/ExaDev/documents.js/compare/odf.js%407.7.0...odf.js%407.7.1) (2026-09-08)
 
 ### Bug Fixes

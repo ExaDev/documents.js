@@ -1,3 +1,14 @@
+## [4.0.10](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.0.9...pdf-codec%404.0.10) (2026-09-08)
+
+### Documentation
+
+* **pdf-codec:** note document-outline.js as a LayoutPage consumer ([aa73489](https://github.com/ExaDev/documents.js/commit/aa73489c59ebb30114c3ffce2452953ac27f0382))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.4.0
+
 ## [4.0.9](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.0.8...pdf-codec%404.0.9) (2026-09-08)
 
 ### Bug Fixes

@@ -1,3 +1,9 @@
+## [7.4.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.3.1...document-schema.js%407.4.0) (2026-09-08)
+
+### Features
+
+* **document-schema.js:** model gradient/bitmap/hatch fills, opacity, dash patterns ([31b0d73](https://github.com/ExaDev/documents.js/commit/31b0d733329114c8524545051543db77e272f3ec))
+
 ## [7.3.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.3.0...document-schema.js%407.3.1) (2026-09-08)
 
 ### Bug Fixes
