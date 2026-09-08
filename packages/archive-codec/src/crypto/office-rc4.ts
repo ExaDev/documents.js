@@ -7,8 +7,10 @@ import { rc4 } from "./rc4";
 
 /** [MS-OFFCRYPTO] 2.3.6.1's own EncryptedVerifier/EncryptedVerifierHash length, and the salt length the same header carries. */
 export const OFFICE_RC4_VERIFIER_LENGTH = 16;
-/** The span of the underlying decrypted stream one derived RC4 key covers before the next block's key takes over -- confirmed against Apache POI's Biff8DecryptingStream.RC4_REKEYING_INTERVAL, since [MS-OFFCRYPTO] 2.3.6.2's own prose does not state it. */
+/** [MS-XLS]'s own FilePass-protected RC4 scheme's re-keying interval -- confirmed against Apache POI's Biff8DecryptingStream.RC4_REKEYING_INTERVAL, since [MS-OFFCRYPTO] 2.3.6.2's own prose does not state it. `decryptOfficeRc4`'s own default `blockSize`. */
 export const OFFICE_RC4_BLOCK_SIZE = 1024;
+/** [MS-DOC] 2.2.6.2's own re-keying interval for its identical RC4 encryption header scheme -- stated directly in the spec's own prose ("encrypted in 512-byte blocks"), confirmed independently against Apache POI's BinaryRC4Decryptor (`chunkSize = 512`). Genuinely different from OFFICE_RC4_BLOCK_SIZE, not a duplicate of it -- pass this as decryptOfficeRc4's own `blockSize` argument when decrypting a .doc stream. */
+export const OFFICE_RC4_DOC_BLOCK_SIZE = 512;
 /** The intermediate H0/H1 truncation [MS-OFFCRYPTO] 2.3.6.2 states explicitly ("H0's own first 5 bytes", "H1's own first 5 bytes") -- distinct from the FINAL per-block key length, which is Hfinal in full (see this file's own top comment) and is never truncated. */
 const INTERMEDIATE_HASH_LENGTH_BYTES = 5;
 
@@ -57,23 +59,24 @@ export function deriveOfficeRc4BlockKey(
 }
 
 /**
- * Decrypts `data` -- a byte range of the underlying OLE stream starting at `streamOffset` bytes from the very start of that stream -- against the RC4 encryption header scheme, re-deriving the block key at every 1024-byte boundary `data` crosses. RC4 is symmetric, so this same function also encrypts; nothing in this package uses it that way, since nothing in this family writes an encrypted legacy binary document.
+ * Decrypts `data` -- a byte range of the underlying OLE stream starting at `streamOffset` bytes from the very start of that stream -- against the RC4 encryption header scheme, re-deriving the block key at every `blockSize`-byte boundary `data` crosses (`OFFICE_RC4_BLOCK_SIZE`, 1024, when omitted -- the value every caller but [MS-DOC]'s own RC4 scheme uses; [MS-DOC] 2.2.6.2 re-keys every 512 bytes instead, a real difference from [MS-XLS]'s own FilePass scheme rather than a shared constant, confirmed against Apache POI's own `BinaryRC4Decryptor` (`chunkSize = 512`) directly contrasted with `Biff8DecryptingStream.RC4_REKEYING_INTERVAL` (1024) -- two genuinely separate implementations, not one shared class with a parameter). RC4 is symmetric, so this same function also encrypts; nothing in this package uses it that way, since nothing in this family writes an encrypted legacy binary document.
  *
- * `streamOffset` matters because the block number is the byte's own absolute position in the stream divided by 1024, not its position within whatever slice `data` happens to be -- decrypting a stream in arbitrary chunks (not just from offset 0) still lands on the correct per-block key this way.
+ * `streamOffset` matters because the block number is the byte's own absolute position in the stream divided by `blockSize`, not its position within whatever slice `data` happens to be -- decrypting a stream in arbitrary chunks (not just from offset 0) still lands on the correct per-block key this way.
  */
 export function decryptOfficeRc4(
   baseHash: Uint8Array<ArrayBuffer>,
   streamOffset: number,
   data: Uint8Array<ArrayBuffer>,
+  blockSize: number = OFFICE_RC4_BLOCK_SIZE,
 ): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(data.length);
   let position = 0;
   while (position < data.length) {
     const absolute = streamOffset + position;
-    const blockNumber = Math.floor(absolute / OFFICE_RC4_BLOCK_SIZE);
-    const blockStartAbsolute = blockNumber * OFFICE_RC4_BLOCK_SIZE;
+    const blockNumber = Math.floor(absolute / blockSize);
+    const blockStartAbsolute = blockNumber * blockSize;
     const offsetWithinBlock = absolute - blockStartAbsolute;
-    const bytesLeftInBlock = OFFICE_RC4_BLOCK_SIZE - offsetWithinBlock;
+    const bytesLeftInBlock = blockSize - offsetWithinBlock;
     const chunkLength = Math.min(bytesLeftInBlock, data.length - position);
     const key = deriveOfficeRc4BlockKey(baseHash, blockNumber);
     // RC4 is a keystream cipher: decrypting a chunk that starts partway through a block still needs the keystream from that block's own start, so the whole block-aligned prefix up to this chunk is generated and discarded -- there is no way to "seek" an RC4 keystream, only replay it from block start.
