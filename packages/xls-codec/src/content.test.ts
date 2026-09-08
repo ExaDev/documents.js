@@ -1,10 +1,16 @@
 import {
+  createXorObfuscationArray,
+  createXorObfuscationKey,
+  createXorObfuscationPasswordVerifier,
   decryptOfficeRc4,
+  decryptXorObfuscationMethod1,
   deriveOfficeRc4BaseHash,
   md5,
   readCompoundFile,
   writeCompoundFile,
   writeSummaryInformationStream,
+  XOR_OBFUSCATION_ARRAY_LENGTH,
+  XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD1,
 } from "archive-codec";
 import { ContentDocumentSchema, DocumentTreeSchema } from "document-schema.js";
 import { describe, expect, it } from "vitest";
@@ -931,6 +937,223 @@ describe("readXlsContent", () => {
       expect(content.sheets[0]?.cells[80]).toMatchObject({
         value: { kind: "number", value: 999 },
       });
+    });
+  });
+
+  describe("XOR-obfuscated workbooks", () => {
+    const PASSWORD = "123456789012345";
+    const FILEPASS_HEADER_LENGTH = 2 + 2 + 2;
+
+    // Re-derived independently of workbook/encryption.ts, same rationale as the RC4 suite above.
+    const NEVER_ENCRYPTED_TYPES = new Set([
+      RECORD_BOF,
+      RECORD_FILEPASS,
+      0x0194, // UsrExcl
+      0x0195, // FileLock
+      0x00e1, // InterfaceHdr
+      0x0196, // RRDInfo
+      0x0138, // RRDHead
+    ]);
+
+    /** Parses a stream's own records with their absolute offsets, independently of biff/records.ts -- shares the RC4 suite's own approach above, but duplicated locally since that one is scoped inside the sibling describe block. */
+    function parseForEncryption(stream: Uint8Array<ArrayBuffer>): {
+      type: number;
+      offset: number;
+      data: Uint8Array<ArrayBuffer>;
+    }[] {
+      const view = new DataView(
+        stream.buffer,
+        stream.byteOffset,
+        stream.byteLength,
+      );
+      const records = [];
+      let offset = 0;
+      while (offset < stream.length) {
+        const type = view.getUint16(offset, true);
+        const size = view.getUint16(offset + 2, true);
+        const dataStart = offset + 4;
+        records.push({
+          type,
+          offset,
+          data: stream.slice(dataStart, dataStart + size),
+        });
+        offset = dataStart + size;
+      }
+      return records;
+    }
+
+    /** [MS-XLS] 2.2.10's own XorArrayIndex rule, matching workbook/encryption.ts's own xorArrayIndexFor -- re-derived here rather than imported, same rationale as the RC4 suite's own encryptWorkbookStream. */
+    function xorArrayIndexFor(
+      spanOffset: number,
+      recordDataLength: number,
+    ): number {
+      return (spanOffset + recordDataLength) % XOR_OBFUSCATION_ARRAY_LENGTH;
+    }
+
+    /**
+     * Method 1's own encrypt direction: the inverse of decryptXorObfuscationMethod1's rotate-then-XOR (XOR first, then rotate right 3) -- independently derived and confirmed (in a scratch script, not against this package's own code) to reproduce a genuine Excel-generated XOR-obfuscated fixture's exact ciphertext byte for byte (nolze/msoffcrypto-tool's own tests/inputs/xor_password_123456789012345.xls; see archive-codec's own crypto/xor-obfuscation.test.ts, whose "decrypts a real Excel-generated BoundSheet8 span" vector is lifted from that same file). Method 1's transform is not self-inverse the way Method 2's is, so unlike the RC4 suite's own encryptWorkbookStream (which reuses the decrypt primitive directly), this needs its own, separate direction -- kept local to this test file rather than exported from archive-codec, which implements no encrypt direction at all (see xor-obfuscation.ts's own top comment).
+     */
+    function encryptXorObfuscationMethod1(
+      array: Uint8Array<ArrayBuffer>,
+      data: Uint8Array<ArrayBuffer>,
+      initialIndex: number,
+    ): Uint8Array<ArrayBuffer> {
+      const out = new Uint8Array(data.length);
+      const dataView = new DataView(
+        data.buffer,
+        data.byteOffset,
+        data.byteLength,
+      );
+      const arrayView = new DataView(
+        array.buffer,
+        array.byteOffset,
+        array.byteLength,
+      );
+      let index = initialIndex % XOR_OBFUSCATION_ARRAY_LENGTH;
+      for (let i = 0; i < data.length; i += 1) {
+        const withKey = dataView.getUint8(i) ^ arrayView.getUint8(index);
+        out[i] = ((withKey >>> 3) | (withKey << 5)) & 0xff;
+        index = (index + 1) % XOR_OBFUSCATION_ARRAY_LENGTH;
+      }
+      return out;
+    }
+
+    /** Takes a plaintext workbook stream already carrying a same-length FilePass placeholder record and turns it into a genuinely XOR-obfuscated one: real FilePass header fields (key/verificationBytes) in place of the placeholder, and every other record's data obfuscated per [MS-XLS] 2.2.10's own rules. */
+    function obfuscateWorkbookStream(
+      plainStreamWithPlaceholder: Uint8Array<ArrayBuffer>,
+      password: string,
+    ): Uint8Array<ArrayBuffer> {
+      const array = createXorObfuscationArray(
+        password,
+        XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD1,
+      );
+      const filePassData = new Uint8Array(FILEPASS_HEADER_LENGTH);
+      const filePassView = new DataView(filePassData.buffer);
+      filePassView.setUint16(0, 0x0000, true); // wEncryptionType: XOR obfuscation
+      filePassView.setUint16(2, createXorObfuscationKey(password), true);
+      filePassView.setUint16(
+        4,
+        createXorObfuscationPasswordVerifier(password),
+        true,
+      );
+
+      const parts: Uint8Array<ArrayBuffer>[] = [];
+      for (const rec of parseForEncryption(plainStreamWithPlaceholder)) {
+        let data: Uint8Array<ArrayBuffer>;
+        if (rec.type === RECORD_FILEPASS) {
+          data = filePassData;
+        } else if (NEVER_ENCRYPTED_TYPES.has(rec.type)) {
+          data = rec.data;
+        } else if (rec.type === RECORD_BOUNDSHEET8) {
+          const lbPlyPos = rec.data.subarray(0, 4);
+          const spanOffset = rec.offset + 4 + 4;
+          const rest = encryptXorObfuscationMethod1(
+            array,
+            rec.data.subarray(4),
+            xorArrayIndexFor(spanOffset, rec.data.length),
+          );
+          data = new Uint8Array(rec.data.length);
+          data.set(lbPlyPos, 0);
+          data.set(rest, 4);
+        } else {
+          const spanOffset = rec.offset + 4;
+          data = encryptXorObfuscationMethod1(
+            array,
+            rec.data,
+            xorArrayIndexFor(spanOffset, rec.data.length),
+          );
+        }
+        parts.push(record(rec.type, [...data]));
+      }
+      return concat(...parts);
+    }
+
+    function obfuscatedXlsFile(
+      globals: readonly Uint8Array<ArrayBuffer>[],
+      sheets: Parameters<typeof workbookStream>[0]["sheets"],
+      password = PASSWORD,
+    ): Uint8Array<ArrayBuffer> {
+      const placeholder = record(
+        RECORD_FILEPASS,
+        new Array<number>(FILEPASS_HEADER_LENGTH).fill(0),
+      );
+      const plain = workbookStream({
+        globals: [placeholder, ...globals],
+        sheets,
+      });
+      return xlsFile(obfuscateWorkbookStream(plain, password));
+    }
+
+    it("refuses an obfuscated workbook when no password is given", () => {
+      const bytes = obfuscatedXlsFile(xfTable(0), [
+        { name: "Sheet1", records: [] },
+      ]);
+
+      expect(() => readXlsContent(bytes)).toThrow(BiffFormatError);
+    });
+
+    it("refuses an obfuscated workbook given the wrong password", () => {
+      const bytes = obfuscatedXlsFile(xfTable(0), [
+        { name: "Sheet1", records: [] },
+      ]);
+
+      expect(() => readXlsContent(bytes, "the wrong password")).toThrow(
+        BiffFormatError,
+      );
+    });
+
+    it("decrypts an obfuscated workbook given the correct password", () => {
+      const bytes = obfuscatedXlsFile(xfTable(0), [
+        {
+          name: "Sheet1",
+          records: [record(RECORD_NUMBER, [...cell(0, 0), ...f64(42)])],
+        },
+      ]);
+
+      const content = readXlsContent(bytes, PASSWORD);
+
+      expect(content.sheets[0]?.name).toBe("Sheet1");
+      expect(content.sheets[0]?.cells[0]).toMatchObject({
+        row: 0,
+        column: 0,
+        value: { kind: "number", value: 42 },
+      });
+    });
+
+    it("decrypts correctly across the 16-byte XorArrayIndex period, across several records", () => {
+      // A run of NUMBER records long enough to cycle the 16-byte obfuscation array several times over, so a later cell only decrypts correctly if the per-record XorArrayIndex ((streamOffset + recordDataLength) % 16) is recomputed for every record rather than assumed constant.
+      const paddingCells = Array.from({ length: 40 }, (_, index) =>
+        record(RECORD_NUMBER, [...cell(index, 0), ...f64(index)]),
+      );
+      const bytes = obfuscatedXlsFile(xfTable(0), [
+        {
+          name: "Sheet1",
+          records: [
+            ...paddingCells,
+            record(RECORD_NUMBER, [...cell(40, 0), ...f64(999)]),
+          ],
+        },
+      ]);
+
+      const content = readXlsContent(bytes, PASSWORD);
+
+      expect(content.sheets[0]?.cells[0]).toMatchObject({
+        value: { kind: "number", value: 0 },
+      });
+      expect(content.sheets[0]?.cells[40]).toMatchObject({
+        value: { kind: "number", value: 999 },
+      });
+    });
+
+    it("decrypts a real Excel-generated XOR-obfuscated BoundSheet8 span using the shared archive-codec primitive directly", () => {
+      // The same real ciphertext vector archive-codec's own crypto/xor-obfuscation.test.ts verifies -- exercised again here to confirm xls-codec's own re-export/import wiring reaches the identical, real-file-validated result, not just archive-codec's own internal test.
+      const array = createXorObfuscationArray(
+        "123456789012345",
+        XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD1,
+      );
+      const ciphertext = Uint8Array.from(Buffer.from("5b28fc2ade6d5d", "hex"));
+      const plaintext = decryptXorObfuscationMethod1(array, ciphertext, 13);
+      expect(new TextDecoder().decode(plaintext.subarray(4))).toBe("420");
     });
   });
 
