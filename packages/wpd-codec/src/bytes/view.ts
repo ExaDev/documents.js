@@ -20,6 +20,12 @@ export function uint16At(bytes: Uint8Array, offset: number): number {
   return byteAt(bytes, offset) | (byteAt(bytes, offset + 1) << 8);
 }
 
+// A signed 16-bit read: uint16At's own bit pattern, reinterpreted as two's complement whenever the sign bit is set. WordPerfect states most shorts as WPUs or counts, always unsigned by the glossary's own default, but a handful of fields (a table formula's cell# row/column) are explicitly signed.
+export function int16At(bytes: Uint8Array, offset: number): number {
+  const value = uint16At(bytes, offset);
+  return value > 0x7fff ? value - 0x10000 : value;
+}
+
 export function uint32At(bytes: Uint8Array, offset: number): number {
   // Assembled through multiplication rather than `<< 24`, which would sign-extend a high bit set into a negative number. A WordPerfect long is unsigned unless its own field definition says otherwise.
   return (
