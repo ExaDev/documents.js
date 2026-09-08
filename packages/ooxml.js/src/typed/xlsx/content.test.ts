@@ -1041,7 +1041,6 @@ describe("readXlsxContent: chart graphic frames", () => {
     expect(chart?.source?.xml).toContain("c:barChart");
   });
 
-  it("does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the read row is one-way (the established cell-comment asymmetry)", () => {
   it("survives the write pair: buildXlsxPackageFromContent writes a real drawing/chart part pair, and reading it back recovers the same cached series/category model (ExaDev/documents.js#973)", () => {
     const rewritten = readXlsxContent(
       decodePackage(
