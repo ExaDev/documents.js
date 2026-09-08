@@ -29,6 +29,9 @@ export interface OdtBody {
   appendPageBreak(): void;
   appendFormula(formula: ContentFormula, frame: Box): OdtParagraph;
   appendVectors(vectors: readonly ContentVector[]): OdtParagraph;
+  // A bookmark's two halves as office:text-level siblings bracketing whatever is appended between the two calls -- the one construct shape expressible append-only, since ODF allows text:bookmark-start/text:bookmark-end directly in the body flow around whole blocks. The name travels on both halves, the shape every real producer writes and odf.js's own reader pairs back through.
+  appendBookmarkStart(name: string): void;
+  appendBookmarkEnd(name: string): void;
 }
 
 function findContentRoot(pkg: Package): XmlElement {
@@ -132,6 +135,24 @@ class OdtBodyImpl implements OdtBody {
       value: ensurePageBreakStyleName(this.pkg),
     });
     this.officeText.children.push(paragraphElement);
+  }
+
+  appendBookmarkStart(name: string): void {
+    this.officeText.children.push({
+      type: "element",
+      tag: "text:bookmark-start",
+      attributes: [{ name: "text:name", value: name }],
+      children: [],
+    });
+  }
+
+  appendBookmarkEnd(name: string): void {
+    this.officeText.children.push({
+      type: "element",
+      tag: "text:bookmark-end",
+      attributes: [{ name: "text:name", value: name }],
+      children: [],
+    });
   }
 }
 
