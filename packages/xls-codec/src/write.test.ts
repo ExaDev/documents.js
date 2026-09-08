@@ -1238,3 +1238,206 @@ describe("print settings", () => {
     expect(types).not.toContain(RECORD_EXTERNSHEET);
   });
 });
+
+describe("formula records", () => {
+  function roundTrippedFormula(
+    formula: string,
+    value: ContentCellValue,
+  ): string | undefined {
+    const content = document([
+      sheet("Sheet1", [cell(0, 0, value, { formula })]),
+    ]);
+    return findCell(readXlsContent(writeXlsContent(content)), 0, 0, 0)?.formula;
+  }
+
+  it("round-trips a plain arithmetic formula over integer literals", () => {
+    expect(roundTrippedFormula("A1+A2", { kind: "number", value: 3 })).toBe(
+      "A1+A2",
+    );
+  });
+
+  it("round-trips a formula referencing an absolute and a relative cell", () => {
+    expect(roundTrippedFormula("$A$1*B2", { kind: "number", value: 6 })).toBe(
+      "$A$1*B2",
+    );
+  });
+
+  it("round-trips a formula over a cell range passed to a variable-arity function", () => {
+    expect(
+      roundTrippedFormula("SUM(A1:A10)", { kind: "number", value: 55 }),
+    ).toBe("SUM(A1:A10)");
+  });
+
+  it("round-trips a fixed-arity function call", () => {
+    expect(
+      roundTrippedFormula("ROUND(A1,2)", { kind: "number", value: 1.23 }),
+    ).toBe("ROUND(A1,2)");
+  });
+
+  it("round-trips a nested function call with a comparison and a string literal", () => {
+    expect(
+      roundTrippedFormula('IF(A1>0,"positive","not positive")', {
+        kind: "string",
+        value: "positive",
+      }),
+    ).toBe('IF(A1>0,"positive","not positive")');
+  });
+
+  it("round-trips a formula whose cached result is a boolean", () => {
+    expect(roundTrippedFormula("A1>A2", { kind: "boolean", value: true })).toBe(
+      "A1>A2",
+    );
+  });
+
+  it("round-trips a formula whose cached result is an error", () => {
+    expect(
+      roundTrippedFormula("A1/A2", { kind: "error", value: "#DIV/0!" }),
+    ).toBe("A1/A2");
+  });
+
+  it("round-trips explicit parentheses exactly as written", () => {
+    expect(
+      roundTrippedFormula("(A1+A2)*A3", { kind: "number", value: 9 }),
+    ).toBe("(A1+A2)*A3");
+  });
+
+  it("round-trips unary minus binding tighter than exponentiation, matching Excel's own precedence", () => {
+    expect(roundTrippedFormula("-A1^2", { kind: "number", value: 4 })).toBe(
+      "-A1^2",
+    );
+  });
+
+  it("round-trips a formula's own cached numeric result alongside its expression", () => {
+    const content = document([
+      sheet("Sheet1", [
+        cell(0, 0, { kind: "number", value: 2 }),
+        cell(0, 1, { kind: "number", value: 3 }),
+        cell(0, 2, { kind: "number", value: 5 }, { formula: "A1+B1" }),
+      ]),
+    ]);
+    const read = readXlsContent(writeXlsContent(content));
+    const written = findCell(read, 0, 0, 2);
+    expect(written?.formula).toBe("A1+B1");
+    expect(written?.value).toEqual({ kind: "number", value: 5 });
+  });
+
+  it("refuses a formula this package's own reader could not read back, rather than writing unreadable bytes", () => {
+    const content = document([
+      sheet("Sheet1", [
+        cell(0, 0, { kind: "number", value: 1 }, { formula: "Sheet2!A1" }),
+      ]),
+    ]);
+    expect(() => writeXlsContent(content)).toThrow(BiffWriteError);
+  });
+
+  it("refuses a call to a function outside [MS-XLS]'s own Ftab vocabulary", () => {
+    const content = document([
+      sheet("Sheet1", [
+        cell(
+          0,
+          0,
+          { kind: "number", value: 1 },
+          { formula: "XLOOKUP(A1,A2,A3)" },
+        ),
+      ]),
+    ]);
+    expect(() => writeXlsContent(content)).toThrow(BiffWriteError);
+  });
+
+  it("refuses a fixed-arity function called with the wrong number of arguments", () => {
+    const content = document([
+      sheet("Sheet1", [
+        cell(0, 0, { kind: "number", value: 1 }, { formula: "SIN(A1,A2)" }),
+      ]),
+    ]);
+    expect(() => writeXlsContent(content)).toThrow(BiffWriteError);
+  });
+});
+
+describe("cell comments", () => {
+  it("round-trips a comment's text and author on an otherwise-populated cell", () => {
+    const content = document([
+      sheet("Sheet1", [
+        cell(
+          0,
+          0,
+          { kind: "number", value: 1 },
+          { comment: { text: "a note", author: "Reviewer" } },
+        ),
+      ]),
+    ]);
+    const read = readXlsContent(writeXlsContent(content));
+    expect(findCell(read, 0, 0, 0)?.comment).toEqual({
+      text: "a note",
+      author: "Reviewer",
+    });
+  });
+
+  it("round-trips a comment anchored to an otherwise-empty cell", () => {
+    const content = document([
+      sheet("Sheet1", [
+        {
+          row: 2,
+          column: 2,
+          value: { kind: "empty" },
+          displayText: "",
+          comment: { text: "pinned to nothing" },
+        },
+      ]),
+    ]);
+    const read = readXlsContent(writeXlsContent(content));
+    expect(findCell(read, 0, 2, 2)?.comment).toEqual({
+      text: "pinned to nothing",
+    });
+  });
+
+  it("round-trips a comment with no author, carrying no author back", () => {
+    const content = document([
+      sheet("Sheet1", [
+        cell(
+          0,
+          0,
+          { kind: "number", value: 1 },
+          { comment: { text: "anonymous" } },
+        ),
+      ]),
+    ]);
+    const read = readXlsContent(writeXlsContent(content));
+    expect(findCell(read, 0, 0, 0)?.comment).toEqual({ text: "anonymous" });
+  });
+
+  it("round-trips an empty comment with no text at all", () => {
+    const content = document([
+      sheet("Sheet1", [
+        cell(0, 0, { kind: "number", value: 1 }, { comment: { text: "" } }),
+      ]),
+    ]);
+    const read = readXlsContent(writeXlsContent(content));
+    expect(findCell(read, 0, 0, 0)?.comment).toEqual({ text: "" });
+  });
+
+  it("round-trips multiple comments on the same sheet, each keeping its own cell and text", () => {
+    const content = document([
+      sheet("Sheet1", [
+        cell(
+          0,
+          0,
+          { kind: "string", value: "first" },
+          { comment: { text: "note one" } },
+        ),
+        cell(
+          5,
+          1,
+          { kind: "string", value: "second" },
+          { comment: { text: "note two", author: "Someone" } },
+        ),
+      ]),
+    ]);
+    const read = readXlsContent(writeXlsContent(content));
+    expect(findCell(read, 0, 0, 0)?.comment).toEqual({ text: "note one" });
+    expect(findCell(read, 0, 5, 1)?.comment).toEqual({
+      text: "note two",
+      author: "Someone",
+    });
+  });
+});
