@@ -164,16 +164,22 @@ describe("reading footnote definitions", () => {
     ]);
   });
 
-  it("does not recognise a definition inside a block quote or a list item", () => {
-    // Both would put the construct pair's own extent inside a scope the enclosing container opened -- see src/block/block.ts's tryFootnoteDefinitionStart for why that is the one thing the marker contract forbids a producer from emitting. The text stays an ordinary paragraph there, exactly as it did before footnotes were recognised anywhere.
+  it("recognises a definition directly inside a block quote or a list item (ExaDev/markdown-codec#957)", () => {
+    // Both used to stay an ordinary paragraph -- see src/block/block.ts's footnoteDefinitionMayOpenIn for why the earlier restriction no longer holds: lowerBlockquote's own dual carry and lowerListItem's own placeholder paragraph (both pre-existing, built for a nested blockquote's division pair) generalise unchanged to a footnote definition's anchor construct pair sitting in the same position.
     expect(parseMarkdown("> [^1]: quoted note text").document.children).toEqual(
       [
         {
           type: "blockquote",
           children: [
             {
-              type: "paragraph",
-              children: [{ type: "text", value: "[^1]: quoted note text" }],
+              type: "footnoteDefinition",
+              label: "1",
+              children: [
+                {
+                  type: "paragraph",
+                  children: [{ type: "text", value: "quoted note text" }],
+                },
+              ],
             },
           ],
         },
@@ -191,8 +197,14 @@ describe("reading footnote definitions", () => {
               type: "listItem",
               children: [
                 {
-                  type: "paragraph",
-                  children: [{ type: "text", value: "[^1]: listed note text" }],
+                  type: "footnoteDefinition",
+                  label: "1",
+                  children: [
+                    {
+                      type: "paragraph",
+                      children: [{ type: "text", value: "listed note text" }],
+                    },
+                  ],
                 },
               ],
             },
@@ -245,19 +257,30 @@ describe("reading footnote definitions", () => {
     ]);
   });
 
-  it("still refuses a definition indented into a list item's own content, even though a bare definition after the same list is recognised", () => {
-    // "[^1]: note" here is indented enough to be the item's own second paragraph, so tryFootnoteDefinitionStart's guard correctly rejects it (matchedContainer is the listItem itself, not something that walks up to the document). What is left is an ordinary paragraph holding nothing but what extractDefinitions reads as a link reference definition, which leaves no block behind at all -- the item ends up with only its first paragraph.
+  it("recognises a definition indented into a list item's own content as that item's own second block (ExaDev/markdown-codec#957)", () => {
+    // "[^1]: note" here is indented to the item's own content column, so matchedContainer is the listItem itself -- footnoteDefinitionMayOpenIn now accepts that directly, and the definition becomes the item's own second block alongside its first paragraph.
     expect(parseMarkdown("- a\n\n  [^1]: note").document.children).toEqual([
       {
         type: "list",
         markerType: "bullet",
         bulletMarker: "-",
-        tight: true,
+        // Loose, not tight: the item now holds two blocks separated by a blank line, exactly the shape that makes a list loose under CommonMark's own tight/loose rule regardless of what the second block is.
+        tight: false,
         children: [
           {
             type: "listItem",
             children: [
               { type: "paragraph", children: [{ type: "text", value: "a" }] },
+              {
+                type: "footnoteDefinition",
+                label: "1",
+                children: [
+                  {
+                    type: "paragraph",
+                    children: [{ type: "text", value: "note" }],
+                  },
+                ],
+              },
             ],
           },
         ],
@@ -475,6 +498,52 @@ describe("lowering a footnote onto the schema", () => {
       (block) => block.kind === "constructEnd",
     ).length;
     expect(opens).toBe(closes);
+  });
+
+  it("nests a definition directly inside a block quote inside the quote's own division pair, dual-carried like any other quoted paragraph (ExaDev/markdown-codec#957)", () => {
+    expect(lowered("> [^1]: quoted note.")).toEqual([
+      { kind: "constructStart", descriptor: { kind: "division" } },
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+      },
+      {
+        kind: "paragraph",
+        runs: [{ text: "quoted note." }],
+        indentLeftPt: 36,
+        styleId: "Quote",
+      },
+      { kind: "constructEnd" },
+      { kind: "constructEnd" },
+    ]);
+  });
+
+  it("nests a definition directly inside a list item behind the SAME empty-paragraph placeholder a blockquote's own division pair already needed there (ExaDev/markdown-codec#957)", () => {
+    const blocks = lowered("- [^1]: listed note.");
+    const placeholder = blocks[0];
+    if (placeholder?.kind !== "paragraph") {
+      throw new Error(
+        `expected a placeholder paragraph, got '${placeholder?.kind}'`,
+      );
+    }
+    const itemId = placeholder.list?.itemId;
+    expect(typeof itemId).toBe("string");
+    expect(placeholder).toEqual({
+      kind: "paragraph",
+      runs: [],
+      list: { numId: "md1:bullet", level: 0, itemId },
+    });
+    expect(blocks[1]).toEqual({
+      kind: "constructStart",
+      descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
+    });
+    const body = blocks[2];
+    if (body?.kind !== "paragraph") {
+      throw new Error(`expected a paragraph body block, got '${body?.kind}'`);
+    }
+    // The item's own membership is carried straight through the footnote's own body paragraph -- the same dual carry lowerBlockquote already threads through a quote's own children -- so src/emit's constructCarriesListItemId recognises the anchor construct as belonging to this item rather than fracturing it out as separate top-level content.
+    expect(body.list?.itemId).toBe(placeholder.list?.itemId);
+    expect(blocks[3]).toEqual({ kind: "constructEnd" });
   });
 });
 
@@ -778,6 +847,12 @@ describe("round trip", () => {
     "Unmatched [^nope] stays literal text.",
     "Body[^1].\n\n- a\n- b\n\n[^1]: note",
     "| cell[^1] |\n| - |\n\n[^1]: a reference inside a table cell, whose extent rides the cell's own paragraph",
+    // A definition directly inside a block quote or a list item (ExaDev/markdown-codec#957).
+    "> Quoted[^1].\n>\n> [^1]: The note, quoted too.",
+    "- Item[^1].\n\n  [^1]: The note, indented into the item.",
+    "> Multi-paragraph[^1].\n>\n> [^1]: First.\n>\n>     Second.",
+    "- Nested item[^1].\n\n  [^1]: One.\n\n      Two.",
+    "> - Quoted list item[^1].\n>\n>   [^1]: A definition nested two containers deep.",
   ];
 
   it.each(sources)("reaches a fixed point for %j", (source) => {
