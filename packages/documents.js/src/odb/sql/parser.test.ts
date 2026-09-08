@@ -203,8 +203,11 @@ describe("parseSelect: GROUP BY and ORDER BY", () => {
 
   it("accepts one trailing semicolon", () => {
     expect(parseSelect("SELECT * FROM SALES;").from).toEqual({
-      table: { name: "SALES", quoted: false },
-      alias: undefined,
+      source: {
+        kind: "table",
+        table: { name: "SALES", quoted: false },
+        alias: undefined,
+      },
       joins: [],
     });
   });
@@ -214,8 +217,11 @@ describe("parseSelect: JOIN", () => {
   it("parses a bare JOIN as an inner join, requiring ON", () => {
     expect(parseSelect("SELECT A FROM T1 JOIN T2 ON T1.A = T2.A").from).toEqual(
       {
-        table: { name: "T1", quoted: false },
-        alias: undefined,
+        source: {
+          kind: "table",
+          table: { name: "T1", quoted: false },
+          alias: undefined,
+        },
         joins: [
           {
             joinKind: "inner",
@@ -377,18 +383,22 @@ describe("parseSelect: JOIN", () => {
   });
 
   it("parses a table alias with and without AS, on both the base FROM table and a JOIN's own table", () => {
-    expect(parseSelect("SELECT A FROM T1 AS t1").from.alias).toEqual({
+    const withAs = parseSelect("SELECT A FROM T1 AS t1").from.source;
+    expect(withAs.kind === "table" ? withAs.alias : undefined).toEqual({
       name: "T1",
       quoted: false,
     });
-    expect(parseSelect("SELECT A FROM T1 t1").from.alias).toEqual({
+    const withoutAs = parseSelect("SELECT A FROM T1 t1").from.source;
+    expect(withoutAs.kind === "table" ? withoutAs.alias : undefined).toEqual({
       name: "T1",
       quoted: false,
     });
     const from = parseSelect(
       "SELECT A FROM T1 AS one JOIN T2 two ON one.X = two.X",
     ).from;
-    expect(from.alias).toEqual({ name: "ONE", quoted: false });
+    expect(
+      from.source.kind === "table" ? from.source.alias : undefined,
+    ).toEqual({ name: "ONE", quoted: false });
     expect(from.joins[0]?.alias).toEqual({ name: "TWO", quoted: false });
   });
 
@@ -396,10 +406,155 @@ describe("parseSelect: JOIN", () => {
     const from = parseSelect(
       "SELECT t1.A FROM T t1 JOIN T t2 ON t1.A = t2.A",
     ).from;
-    expect(from.table.name).toBe("T");
-    expect(from.alias).toEqual({ name: "T1", quoted: false });
+    expect(
+      from.source.kind === "table" ? from.source.table.name : undefined,
+    ).toBe("T");
+    expect(
+      from.source.kind === "table" ? from.source.alias : undefined,
+    ).toEqual({ name: "T1", quoted: false });
     expect(from.joins[0]?.table.name).toBe("T");
     expect(from.joins[0]?.alias).toEqual({ name: "T2", quoted: false });
+  });
+});
+
+describe("parseSelect: a derived table in FROM", () => {
+  it("parses a derived table in FROM, requiring its own alias", () => {
+    const sql = "SELECT A FROM (SELECT A FROM T) inner1";
+    const from = parseSelect(sql).from;
+    expect(from.source).toMatchObject({
+      kind: "derived",
+      alias: { name: "INNER1", quoted: false },
+      query: { sql },
+    });
+    if (from.source.kind === "derived") {
+      expect(from.source.query.items).toEqual([
+        {
+          kind: "column",
+          column: {
+            qualifier: undefined,
+            column: { name: "A", quoted: false },
+            text: "A",
+          },
+        },
+      ]);
+    }
+  });
+
+  it("rejects a derived table with no alias", () => {
+    expect(() => parseSelect("SELECT A FROM (SELECT A FROM T)")).toThrow(
+      "a derived table alias",
+    );
+  });
+
+  it("lets a derived table itself JOIN, filter, group, and order, exactly as a top-level query can", () => {
+    const from = parseSelect(
+      "SELECT A FROM (SELECT T1.A FROM T1 JOIN T2 ON T1.A = T2.A WHERE T1.A > 1 GROUP BY T1.A ORDER BY T1.A) inner1",
+    ).from;
+    expect(from.source.kind).toBe("derived");
+    if (from.source.kind === "derived") {
+      expect(from.source.query.from.joins).toHaveLength(1);
+      expect(from.source.query.where).toBeDefined();
+      expect(from.source.query.groupBy).toHaveLength(1);
+      expect(from.source.query.orderBy).toHaveLength(1);
+    }
+  });
+
+  it("nests a derived table inside a derived table", () => {
+    const from = parseSelect(
+      "SELECT A FROM (SELECT A FROM (SELECT A FROM T) inner1) outer1",
+    ).from;
+    expect(from.source).toMatchObject({
+      kind: "derived",
+      alias: { name: "OUTER1" },
+    });
+    if (from.source.kind === "derived") {
+      expect(from.source.query.from.source).toMatchObject({
+        kind: "derived",
+        alias: { name: "INNER1" },
+      });
+    }
+  });
+});
+
+describe("parseSelect: IN (SELECT ...)", () => {
+  it("parses IN (SELECT ...) as its own predicate kind, distinct from a literal IN list", () => {
+    const where = parseSelect(
+      "SELECT A FROM T WHERE A IN (SELECT B FROM U)",
+    ).where;
+    expect(where).toMatchObject({
+      kind: "inSubquery",
+      negated: false,
+      query: {
+        from: {
+          source: { kind: "table", table: { name: "U" }, alias: undefined },
+        },
+      },
+    });
+  });
+
+  it("parses NOT IN (SELECT ...)", () => {
+    expect(
+      parseSelect("SELECT A FROM T WHERE A NOT IN (SELECT B FROM U)").where,
+    ).toMatchObject({ kind: "inSubquery", negated: true });
+  });
+
+  it("nests an IN (SELECT ...) inside another IN (SELECT ...), two levels deep", () => {
+    const where = parseSelect(
+      "SELECT A FROM T WHERE A IN (SELECT B FROM U WHERE B IN (SELECT C FROM V))",
+    ).where;
+    expect(where?.kind).toBe("inSubquery");
+    if (where?.kind === "inSubquery") {
+      expect(where.query.where).toMatchObject({ kind: "inSubquery" });
+    }
+  });
+
+  it("lets the subquery itself be a derived table, exactly as a top-level FROM can", () => {
+    expect(() =>
+      parseSelect(
+        "SELECT A FROM T WHERE A IN (SELECT B FROM (SELECT B FROM U) inner1)",
+      ),
+    ).not.toThrow();
+  });
+});
+
+describe("parseSelect: EXISTS (SELECT ...)", () => {
+  it("parses EXISTS (SELECT ...)", () => {
+    const where = parseSelect(
+      "SELECT A FROM T WHERE EXISTS (SELECT B FROM U)",
+    ).where;
+    expect(where).toMatchObject({
+      kind: "exists",
+      query: {
+        from: {
+          source: { kind: "table", table: { name: "U" }, alias: undefined },
+        },
+      },
+    });
+  });
+
+  it("parses NOT EXISTS (SELECT ...) as a plain NOT wrapping an exists predicate", () => {
+    const sql = "SELECT A FROM T WHERE NOT EXISTS (SELECT B FROM U)";
+    const where = parseSelect(sql).where;
+    expect(where?.kind).toBe("not");
+    if (where?.kind === "not") {
+      expect(where.predicate).toMatchObject({
+        kind: "exists",
+        query: { sql },
+      });
+    }
+  });
+
+  it("accepts an EXISTS subquery inside an IN subquery's own WHERE, and vice versa", () => {
+    expect(() =>
+      parseSelect(
+        "SELECT A FROM T WHERE A IN (SELECT B FROM U WHERE EXISTS (SELECT C FROM V))",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      parseSelect(
+        "SELECT A FROM T WHERE EXISTS (SELECT B FROM U WHERE B IN (SELECT C FROM V))",
+      ),
+    ).not.toThrow();
   });
 });
 
@@ -409,9 +564,6 @@ describe("parseSelect: deliberately unsupported constructs", () => {
       "SELECT A FROM T1, T2",
       "a comma-separated FROM list (write an explicit JOIN instead)",
     ],
-    ["SELECT A FROM T WHERE A IN (SELECT B FROM U)", "a subquery"],
-    ["SELECT A FROM (SELECT B FROM U)", "a subquery"],
-    ["SELECT A FROM T WHERE EXISTS (SELECT 1 FROM U)", "an EXISTS subquery"],
     ["SELECT DISTINCT A FROM T", "DISTINCT"],
     ["SELECT COUNT(DISTINCT A) FROM T", "DISTINCT"],
     ["SELECT A FROM T UNION SELECT A FROM U", "UNION"],
@@ -444,6 +596,14 @@ describe("parseSelect: deliberately unsupported constructs", () => {
     ["SELECT A FROM PUBLIC.T", "a schema-qualified table name"],
     ["SELECT A FROM T WHERE A IN (B)", "a column reference inside an IN list"],
     ["SELECT A FROM T WHERE A LIKE B", "a non-literal LIKE pattern"],
+    [
+      "SELECT A FROM T WHERE A = ANY (SELECT B FROM U)",
+      "a quantified subquery predicate (ANY)",
+    ],
+    [
+      "SELECT A FROM T WHERE A = SOME (SELECT B FROM U)",
+      "a quantified subquery predicate (SOME)",
+    ],
     ["INSERT INTO T VALUES (1)", "a non-SELECT statement (INSERT)"],
     ["UPDATE T SET A = 1", "a non-SELECT statement (UPDATE)"],
     ["DELETE FROM T", "a non-SELECT statement (DELETE)"],
@@ -493,7 +653,10 @@ describe("parseSelect: malformed input", () => {
     ],
     ["SELECT * FROM T ORDER", "expected keyword BY"],
     ["SELECT * FROM T WHERE A BETWEEN 1 2", "expected keyword AND"],
-    ["SELECT * FROM T; SELECT * FROM U", "a subquery"],
+    [
+      "SELECT * FROM T; SELECT * FROM U",
+      'expected end of statement, found keyword "SELECT"',
+    ],
   ])("throws for %s", (sql, message) => {
     expect(() => parseSelect(sql)).toThrow(message);
   });
