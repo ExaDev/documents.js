@@ -33,6 +33,8 @@ import {
   RECORD_LBL,
   RECORD_LEFTMARGIN,
   RECORD_MERGECELLS,
+  RECORD_MSODRAWING,
+  RECORD_MSODRAWINGGROUP,
   RECORD_NUMBER,
   RECORD_PALETTE,
   RECORD_PRINTGRID,
@@ -57,6 +59,7 @@ import {
   noteObjRecord,
   noteRecord,
   noteTxoRecords,
+  otherObjRecord,
   record,
   richExtendedString,
   shortXlUnicodeString,
@@ -66,6 +69,16 @@ import {
   type XfTestDecoration,
 } from "./test-support/biff";
 import { compoundFile } from "./test-support/cfb";
+import {
+  bseEntry,
+  clientAnchorSheet,
+  embeddedBlip,
+  escherAtom,
+  escherContainer,
+  foptEntry,
+  optAtom,
+  spAtom,
+} from "./test-support/escher";
 
 // End-to-end: a genuine [MS-CFB] compound file holding a hand-built BIFF8 record stream, read the whole way through to a ContentDocument. Every byte sequence is assembled from the field layouts [MS-XLS] specifies, so a failure here points at this package's reading of the specification rather than at a captured file's quirks.
 
@@ -1701,5 +1714,123 @@ describe("readXlsContent: cell comments (ExaDev/documents.js#949)", () => {
         comment: { text: "Floating note" },
       },
     ]);
+  });
+});
+
+describe("readXlsContent: charts, drawings and images (ExaDev/documents.js#924)", () => {
+  // A minimal but genuinely valid 1x1 PNG (a real signature, IHDR, IDAT, IEND chain), so this reads as a real end-to-end round trip rather than an opaque byte blob standing in for one.
+  const PNG_BYTES = [
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+    0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xde, 0x00, 0x00, 0x00,
+    0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb0, 0x00, 0x00, 0x00,
+    0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+  ];
+
+  const SHAPE_TYPE_RECTANGLE = 0x01;
+  const SHAPE_TYPE_PICTURE_FRAME = 0x4b;
+  const OBJECT_TYPE_PICTURE = 0x08;
+  const OBJECT_TYPE_OFFICE_ART = 0x1e;
+
+  /** The workbook-wide MsoDrawingGroup stream, carrying a Blip Store with a single PNG entry at index 1. */
+  function drawingGroupRecord(): Uint8Array<ArrayBuffer> {
+    const blip = embeddedBlip(0xf01e, 0x6e0, PNG_BYTES);
+    return record(
+      RECORD_MSODRAWINGGROUP,
+      escherContainer(0xf000, 0, [
+        escherContainer(0xf001, 0, [escherAtom(0xf007, 0, bseEntry(blip))]),
+      ]),
+    );
+  }
+
+  /** One sheet's own MsoDrawing stream: the patriarch group plus every real shape it carries. */
+  function msoDrawingRecord(
+    shapeContainers: readonly (readonly number[])[],
+  ): Uint8Array<ArrayBuffer> {
+    const patriarch = spAtom(SHAPE_TYPE_RECTANGLE, 1024, 0);
+    return record(
+      RECORD_MSODRAWING,
+      escherContainer(0xf002, 0, [
+        escherContainer(0xf003, 0, [
+          escherContainer(0xf004, 0, [patriarch]),
+          ...shapeContainers,
+        ]),
+      ]),
+    );
+  }
+
+  it("reads an embedded picture as a cell-anchored ContentSheetImage", () => {
+    const anchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const picture = escherContainer(0xf004, 0, [
+      spAtom(SHAPE_TYPE_PICTURE_FRAME, 10, 0),
+      optAtom([foptEntry(0x0104, 1)]),
+      anchor,
+    ]);
+    const bytes = xlsFile(
+      workbookStream({
+        globals: [...xfTable(0), drawingGroupRecord()],
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              msoDrawingRecord([picture]),
+              otherObjRecord(OBJECT_TYPE_PICTURE, 1),
+            ],
+          },
+        ],
+      }),
+    );
+
+    const images = readXlsContent(bytes).sheets[0]?.images;
+
+    expect(images).toHaveLength(1);
+    expect(images?.[0]?.format).toBe("png");
+    expect(images?.[0]?.anchorRow).toBe(0);
+    expect(images?.[0]?.anchorColumn).toBe(0);
+    expect(images?.[0]?.widthPt).toBeGreaterThan(0);
+    expect(images?.[0]?.heightPt).toBeGreaterThan(0);
+  });
+
+  it("reads a non-picture drawing shape as a 'drawing' embedded object", () => {
+    const anchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
+    const rectangle = escherContainer(0xf004, 0, [
+      spAtom(SHAPE_TYPE_RECTANGLE, 11, 0),
+      anchor,
+    ]);
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              msoDrawingRecord([rectangle]),
+              otherObjRecord(OBJECT_TYPE_OFFICE_ART, 1),
+            ],
+          },
+        ],
+      }),
+    );
+
+    const sheet = readXlsContent(bytes).sheets[0];
+
+    expect(sheet?.images).toEqual([]);
+    expect(sheet?.embeddedObjects).toHaveLength(1);
+    expect(sheet?.embeddedObjects?.[0]?.objectKind).toBe("drawing");
+  });
+
+  it("reports no images or embedded objects for a sheet with no drawing records", () => {
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [{ name: "Sheet1", records: [] }],
+      }),
+    );
+
+    const sheet = readXlsContent(bytes).sheets[0];
+
+    expect(sheet?.images).toEqual([]);
+    expect(sheet?.embeddedObjects).toBeUndefined();
   });
 });
