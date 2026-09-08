@@ -1,3 +1,24 @@
+## [4.9.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.8.0...xls-codec%404.9.0) (2026-09-08)
+
+### Features
+
+* **xls-codec:** extract a formula's first literal string operand without rendering it whole ([e2a212d](https://github.com/ExaDev/documents.js/commit/e2a212d2fdee79eb6d0600d42af8f594c21133b9))
+* **xls-codec:** map containsText-family CF12/CFEx rules onto the shared schema ([37c457c](https://github.com/ExaDev/documents.js/commit/37c457cd84e2f769b7603c1170257dfc10dc56b1))
+* **xls-codec:** parse CF12 containsText/notContainsText/beginsWith/endsWith rules ([6139b13](https://github.com/ExaDev/documents.js/commit/6139b138af28507a923420684ee9f91244032dd1))
+* **xls-codec:** read CFEx records extending a legacy CF with containsText metadata ([3447916](https://github.com/ExaDev/documents.js/commit/344791632950c72d9eba5f5688b90823dddde4c5))
+
+### Bug Fixes
+
+* **xls-codec:** bound BlockCursor.take() against remaining record bytes before allocating ([bdfbe85](https://github.com/ExaDev/documents.js/commit/bdfbe8521a96a6e299f208e69eacb137ca3bf384))
+
+### Code Refactoring
+
+* **xls-codec:** expose CondFmt's own nID and each CF's raw operand ([aa25fd2](https://github.com/ExaDev/documents.js/commit/aa25fd24b1dc2617caf93253801c9fb29fb4060c))
+
+### Documentation
+
+* **xls-codec:** document containsText and CFEx conditional-format coverage ([25dbbc7](https://github.com/ExaDev/documents.js/commit/25dbbc749c8a93e7402112d7019a1395e4cee933))
+
 ## [4.8.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.7.6...xls-codec%404.8.0) (2026-09-08)
 
 ### Features
