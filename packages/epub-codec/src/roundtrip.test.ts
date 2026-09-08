@@ -294,6 +294,88 @@ describe("writeEpubContent -> readEpubContent round trip", () => {
     ).toBe(remoteName);
   });
 
+  it("round-trips a cross-section footnote reference/body pair (ExaDev/documents.js#963)", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595.28, heightPt: 841.89 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [
+                { text: "A footnoted claim" },
+                { text: "1" },
+                { text: "." },
+              ],
+              constructs: [
+                {
+                  descriptor: {
+                    kind: "anchor",
+                    anchorType: "footnote",
+                    name: "fn1",
+                  },
+                  startRun: 1,
+                  endRun: 2,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          pageSize: { widthPt: 595.28, heightPt: 841.89 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "constructStart",
+              descriptor: {
+                kind: "anchor",
+                anchorType: "footnote",
+                name: "fn1",
+              },
+            },
+            {
+              kind: "paragraph",
+              runs: [
+                { text: "The footnote's own body, in a different section." },
+              ],
+            },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    };
+
+    const result = readEpubContent(writeEpubContent(document));
+    expect(result.kind).toBe("wordprocessing");
+    if (result.kind !== "wordprocessing") return;
+    expect(result.sections).toHaveLength(2);
+
+    const paragraph = result.sections[0]?.blocks[0];
+    const footnoteExtent =
+      paragraph?.kind === "paragraph" ? paragraph.constructs?.[0] : undefined;
+    expect(footnoteExtent?.descriptor.kind).toBe("anchor");
+    const footnoteName =
+      footnoteExtent?.descriptor.kind === "anchor"
+        ? footnoteExtent.descriptor.name
+        : undefined;
+    expect(footnoteName).toBeDefined();
+
+    const footnoteStart = result.sections[1]?.blocks.find(
+      (b) =>
+        b.kind === "constructStart" &&
+        b.descriptor.kind === "anchor" &&
+        b.descriptor.anchorType === "footnote",
+    );
+    expect(
+      footnoteStart?.kind === "constructStart" &&
+        footnoteStart.descriptor.kind === "anchor" &&
+        footnoteStart.descriptor.name,
+    ).toBe(footnoteName);
+  });
+
   it("writes the OCF-mandated mimetype-first/stored byte layout at the full pipeline level", () => {
     // Not a byte-for-byte determinism check across two writes: writeOpf mints a fresh dc:identifier per call (ExaDev/documents.js#801's own explicit "generated identifier" write scope), so the OPF entry's own compressed bytes genuinely differ between two writes of the identical document -- that is correct, not a gap in the fixed-mtime/ordered-entries discipline src/zip.ts's own unit tests already pin at the fflate-wrapper level. What IS a fixed, checkable invariant at this full-pipeline level is the physical layout OCF requires: "mimetype" first, stored uncompressed, and META-INF/container.xml immediately after it.
     const document: ContentDocument = {
