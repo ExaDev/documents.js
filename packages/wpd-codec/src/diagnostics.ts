@@ -36,6 +36,16 @@ export const WpdDiagnosticCodes = {
   CrossReferenceFlattened: "wpd/cross-reference-flattened",
   // The document contains merge codes -- a form-letter template's field placeholders. They contribute no text and are passed over.
   MergeCodeDropped: "wpd/merge-code-dropped",
+  // A table cell carries a New Cell Formula embedded subfunction whose tokenised formula this reader could not decode with confidence -- an undocumented "+" shortcut, a code the SDK itself only assumes the meaning of, or a temp-function reference this reader cannot confirm the shape of without a real file. The cell's displayed text is unaffected; only its formula is unavailable.
+  TableFormulaUnresolved: "wpd/table-formula-unresolved",
+  // A chain of styles resolving one another's own packets (type 0x30) ran deeper than this reader will follow -- a bound against a corrupt or adversarial file, since a well-formed document's own styles never reference themselves in a cycle.
+  StyleResolutionDepthExceeded: "wpd/style-resolution-depth-exceeded",
+  // A FIELD merge code's own On/Off pair straddled a paragraph boundary, which the run-scoped field construct (confined to one paragraph's own runs) cannot express. The field's own text still reads as ordinary paragraph text; only the field tag is unavailable.
+  MergeFieldSpansParagraphs: "wpd/merge-field-spans-paragraphs",
+  // A box's own function-level override names real content, but this reader could not read it -- the content prefix ID resolves to a packet type this reader does not decode (an image's Graphics Filename packet, an OLE object, a content type this reader has no text-block reader for), or resolves to no packet at all.
+  BoxContentUnresolved: "wpd/box-content-unresolved",
+  // A box's own content resolved to real, readable text, but its function-level override states no width and height this reader can trust -- a box relying on its template's own inherited geometry, which this reader does not resolve. The box's content is not lifted without a frame to place it in.
+  BoxFrameUnresolved: "wpd/box-frame-unresolved",
 } as const;
 
 export const NOOP_WPD_DIAGNOSTIC_SINK: WpdDiagnosticSink = () => {
