@@ -7,10 +7,13 @@ import type {
   ContentSheet,
   ContentSheetCell,
   ContentSheetPrintSettings,
+  DocumentTree,
+  SourceResidue,
 } from "document-schema.js";
-import { PAGE_SIZE_A4 } from "document-schema.js";
+import { PAGE_SIZE_A4, assembleTree } from "document-schema.js";
 import type { Package } from "../../model/package";
 import { decodePackage, encodePackage } from "../../codec";
+import { readManifest } from "../../manifest";
 import { parsePackage } from "../../package-io/read";
 import { readOds, readOdsContent } from "./read";
 import { normaliseOdsContent, writeOds, writeOdsContent } from "./write";
@@ -538,6 +541,37 @@ describe("writeOdsContent round trip", () => {
     const rewritten = decodePackage(encodePackage(writeOds(tree)));
     const reread = readOds(rewritten);
     expect(reread.kind).toBe("spreadsheet");
+  });
+
+  it("restores a quarantined non-content package part verbatim, through the tree form", () => {
+    // A settings.xml this writer never generates itself, exactly the shape readOdsContent quarantines wholesale on the way in (typed/shared/constructs.ts's collectOdfNonContentPartResidue).
+    const settingsXml =
+      '<office:document-settings office:version="1.3"><office:settings><config:config-item-set config:name="ooo:view-settings"><config:config-item config:name="ViewAreaTop" config:type="int">0</config:config-item></config:config-item-set></office:settings></office:document-settings>';
+    const source: Record<string, SourceResidue> = {
+      "settings.xml": { format: "ods", xml: settingsXml },
+    };
+    const tree: DocumentTree = {
+      ...assembleTree(documentOf([sheetOf("Sheet1", [])])),
+      source,
+    };
+
+    const written = writeOds(tree);
+    const settingsPart = written.parts["settings.xml"];
+    expect(settingsPart?.kind).toBe("xml");
+    expect(
+      settingsPart?.kind === "xml" &&
+        settingsPart.nodes.some(
+          (node) =>
+            node.type === "element" && node.tag === "office:document-settings",
+        ),
+    ).toBe(true);
+    const manifest = readManifest(written);
+    expect(
+      manifest.entries.some((entry) => entry.fullPath === "settings.xml"),
+    ).toBe(true);
+
+    const readBack = readOds(decodePackage(encodePackage(written)));
+    expect(readBack.source).toEqual(source);
   });
 
   describe("real producer fixtures", () => {

@@ -31,6 +31,7 @@ import {
   writeOdfParagraph,
 } from "../shared/paragraph";
 import { writeOdfTable } from "../shared/table";
+import { writeOdfPackageResidue } from "../shared/constructs";
 import {
   canonicalImage,
   canonicalMetadata,
@@ -54,7 +55,7 @@ import {
 // 2. NO STANDALONE PAGE BREAK, AND NO SECTION ELEMENT. A page break is fo:break-before on a paragraph style, and a change of page geometry is a paragraph style naming a different style:master-page. ContentSection's own boundary is therefore written as a master-page switch on the first paragraph of each section after the first, which is exactly the switch readOdtContent splits sections at.
 // 3. WHITESPACE IS STRUCTURE. A run of two or more spaces, a tab, and a line break are elements, not characters (see typed/shared/text.ts). A run whose text contains one is split at it, because ODF has no spelling that would keep it whole.
 //
-// WHAT THIS WRITER DOES NOT WRITE, and why it refuses rather than dropping: the fidelity constructs readOdtContent reads (fields, bookmarks, notes, annotations, tracked changes, divisions, index wrappers, forms) and embedded objects are semantic content, so writing a document that silently lost them would be worse than not writing it at all -- a block or paragraph carrying one is refused by name (see assertWritableBlock/assertWritableParagraph). The quarantined residue channel is the one deliberate exception to that stance: residue is opaque by construction and re-emitting a paragraph's own style-chain residue into the paragraph would be actively wrong, so it is dropped, stated in normaliseOdtContent, and tracked as the restorable-fidelity gap it is.
+// WHAT THIS WRITER DOES NOT WRITE, and why it refuses rather than dropping: the fidelity constructs readOdtContent reads (fields, bookmarks, notes, annotations, tracked changes, divisions, index wrappers, forms) and embedded objects are semantic content, so writing a document that silently lost them would be worse than not writing it at all -- a block or paragraph carrying one is refused by name (see assertWritableBlock/assertWritableParagraph). The quarantined residue channel is more nuanced: a whole non-content package part (settings.xml and the like) is restored verbatim by writeOdt itself, via the shared writeOdfPackageResidue helper, once writeOdtContent has built the rest of the package -- that part is never touched or interpreted by anything below, so re-emitting it is genuinely safe. A construct's own residue, and the body-walk quarantine buckets a paragraph or block can carry (dde-links, xforms, a vendor-extension tag), stay dropped: re-emitting one of those into a paragraph or block the writer is regenerating from a possibly-edited document would be actively wrong, since there is no structural position left to safely reinsert it at. That narrower drop is stated in normaliseOdtContent, and tracked as the restorable-fidelity gap it is.
 
 const CONTENT_PART = "content.xml";
 const STYLES_PART = "styles.xml";
@@ -244,7 +245,7 @@ function planDocument(sections: readonly ContentSection[]): PlannedSection[] {
 // - styleId is dropped except on a heading, whose identity is structural (text:h/@text:outline-level) rather than a style name; codeLanguage is dropped for the same reason (no ODF spelling).
 // - A CELL at a position covered by another cell's span becomes empty, which is all a table:covered-table-cell can say; an absent border style becomes the "solid" that ContentBorderSchema already documents absence to mean.
 // - breakType is 'nextPage' on every section after the first and absent on the first: an ODF page-style switch is defined to force a page break, so the three other members have no spelling here.
-// - The residue channel (`source`), `sourcePath`, and `frames` are dropped -- residue is not re-emitted (the restorable-fidelity gap this writer's own scope note names), and the other two are a reader's and a layout pass's own facts, not content.
+// - Per-node residue (`source`), `sourcePath`, and `frames` are dropped -- a construct's or block's own residue is not re-emitted (the restorable-fidelity gap this writer's own scope note names; the package-level residue table on the DocumentTree, by contrast, IS restored, by writeOdt rather than by this normaliser, since normaliseOdtContent works over the flat ContentDocument that table has no place on), and the other two are a reader's and a layout pass's own facts, not content.
 // - metadata's `producer` (a PDF-only concept) and `language` are dropped: nothing writes the first, and while dc:language IS written, readOdfMetadata does not read it back.
 // The return type is the wordprocessing arm specifically rather than the whole ContentDocument union: this function accepts any document so it can refuse a wrong-kind one by name, but it only ever RETURNS a wordprocessing one, and saying so spares every caller a re-narrowing step over a fact that is already settled.
 export function normaliseOdtContent(
@@ -543,5 +544,8 @@ export function writeOdt(
   document: DocumentTree,
   options: OdtWriteOptions = {},
 ): Package {
-  return writeOdtContent(flattenTree(document), options);
+  const pkg = writeOdtContent(flattenTree(document), options);
+  writeOdfPackageResidue(pkg, "odt", document.source);
+  syncManifest(pkg, { version: options.version ?? DEFAULT_ODF_VERSION });
+  return pkg;
 }

@@ -19,6 +19,7 @@ import { el } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { formatOdfLength } from "../shared/units";
 import { writeOdfMetadata } from "../shared/metadata";
+import { writeOdfPackageResidue } from "../shared/constructs";
 import { canonicalMetadata } from "../shared/canonicalise";
 import type { ListPlanState } from "../shared/list";
 import {
@@ -34,7 +35,7 @@ import { canonicalDrawVector, writeDrawVectors } from "../draw/write-vectors";
 //
 // WHAT IS GENUINELY NEW HERE, and the whole reason this module exists rather than a `kind` argument to writeOdpContent: a drawing page carries VECTOR PRIMITIVES -- ContentDrawPage's own `vectors` array, a second sibling array beside `shapes`, holding rect/ellipse/line/path values that a ContentShape has no vocabulary for at all. Writing them is typed/draw/write-vectors.ts's job (see that module for every attribute name and every refusal); placing them, ordering them, and stating what reading them back produces is this module's.
 //
-// WHAT THIS FORMAT DOES NOT HAVE, so this writer is smaller than odp's rather than larger: there is no notes concept (presentation:notes is a slide's, and ContentDrawPage carries no notes field), and no fidelity-construct vocabulary of its own -- readOdgContent reads neither. The shape-level refusals still apply verbatim, since they come from typed/draw/write-shapes.ts's planShapeContent rather than from anything odp-specific: a run-level construct extent, an embedded object, a construct boundary marker, a heading or a page break inside a shape's own text, and a table or image mixed with other shape content. A page's own `source` residue (the unmapped shape kinds and vendor-extension elements typed/odg/read.ts quarantines) is dropped, the same deliberate exception every other writer here makes -- residue is opaque by construction, so re-emitting it would be actively wrong rather than merely incomplete.
+// WHAT THIS FORMAT DOES NOT HAVE, so this writer is smaller than odp's rather than larger: there is no notes concept (presentation:notes is a slide's, and ContentDrawPage carries no notes field), and no fidelity-construct vocabulary of its own -- readOdgContent reads neither. The shape-level refusals still apply verbatim, since they come from typed/draw/write-shapes.ts's planShapeContent rather than from anything odp-specific: a run-level construct extent, an embedded object, a construct boundary marker, a heading or a page break inside a shape's own text, and a table or image mixed with other shape content. A page's own `source` residue (the unmapped shape kinds and vendor-extension elements typed/odg/read.ts quarantines) is dropped, the same deliberate exception every other writer here makes -- residue is opaque by construction, and re-emitting it into a page the writer is regenerating from a possibly-edited document would be actively wrong rather than merely incomplete, since there is no structural position left to safely restore it at. The package-level table (non-content parts, vendor-extension elements at document scope) is the one part of the same channel that IS restored -- writeOdg does that itself, via the shared writeOdfPackageResidue helper, once writeOdgContent has built the rest of the package, because a whole non-content part is never touched or interpreted by anything below either way.
 //
 // `.sxd` (the OpenOffice.org 1.x drawing format) is not written by this module, but is written FROM it: ooo1/write.ts's own writeSxd/writeSxdContent are this writer's output run through transformToOoo1Package, exactly what `.sxw`/`.sxc`/`.sxi` are of writeOdt/writeOds/writeOdp. Every construct written here therefore reaches `.sxd` too, and every refusal above holds there unchanged.
 
@@ -195,5 +196,8 @@ export function writeOdg(
   document: DocumentTree,
   options: OdgWriteOptions = {},
 ): Package {
-  return writeOdgContent(flattenTree(document), options);
+  const pkg = writeOdgContent(flattenTree(document), options);
+  writeOdfPackageResidue(pkg, "odg", document.source);
+  syncManifest(pkg, { version: options.version ?? DEFAULT_ODF_VERSION });
+  return pkg;
 }

@@ -3,12 +3,19 @@ import type {
   ContentDocument,
   ContentShape,
   ContentSlide,
+  DocumentTree,
+  SourceResidue,
 } from "document-schema.js";
-import { PAGE_SIZE_A4, SLIDE_SIZE_WIDESCREEN } from "document-schema.js";
+import {
+  PAGE_SIZE_A4,
+  SLIDE_SIZE_WIDESCREEN,
+  assembleTree,
+} from "document-schema.js";
 import type { Package } from "../../model/package";
 import { decodePackage, encodePackage } from "../../codec";
-import { readOdpContent } from "./read";
-import { normaliseOdpContent, writeOdpContent } from "./write";
+import { readManifest } from "../../manifest";
+import { readOdp, readOdpContent } from "./read";
+import { normaliseOdpContent, writeOdp, writeOdpContent } from "./write";
 
 // The write side's correctness suite: what writeOdpContent produces reads back as the document it was given. The sibling suite (write.test.ts) pins the XML shapes; this one states the law and every deviation from it by name -- the presentation mirror of typed/odt/write-round-trip.test.ts (that file's own top-of-file note states the law in full).
 //
@@ -296,6 +303,37 @@ describe("writeOdpContent: the round-trip law", () => {
     };
     expect(normaliseOdpContent(document).metadata).toEqual({ title: "T" });
     expectRoundTrip(document);
+  });
+
+  it("restores a quarantined non-content package part verbatim, through the tree form", () => {
+    // A settings.xml this writer never generates itself, exactly the shape readOdpContent quarantines wholesale on the way in (typed/shared/constructs.ts's collectOdfNonContentPartResidue).
+    const settingsXml =
+      '<office:document-settings office:version="1.3"><office:settings><config:config-item-set config:name="ooo:view-settings"><config:config-item config:name="ViewAreaTop" config:type="int">0</config:config-item></config:config-item-set></office:settings></office:document-settings>';
+    const source: Record<string, SourceResidue> = {
+      "settings.xml": { format: "odp", xml: settingsXml },
+    };
+    const tree: DocumentTree = {
+      ...assembleTree(documentOf([slide([shape()])])),
+      source,
+    };
+
+    const written = writeOdp(tree);
+    const settingsPart = written.parts["settings.xml"];
+    expect(settingsPart?.kind).toBe("xml");
+    expect(
+      settingsPart?.kind === "xml" &&
+        settingsPart.nodes.some(
+          (node) =>
+            node.type === "element" && node.tag === "office:document-settings",
+        ),
+    ).toBe(true);
+    const manifest = readManifest(written);
+    expect(
+      manifest.entries.some((entry) => entry.fullPath === "settings.xml"),
+    ).toBe(true);
+
+    const readBack = readOdp(decodePackage(encodePackage(written)));
+    expect(readBack.source).toEqual(source);
   });
 });
 

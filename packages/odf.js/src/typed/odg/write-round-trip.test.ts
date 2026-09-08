@@ -4,12 +4,15 @@ import type {
   ContentDrawPage,
   ContentShape,
   ContentVector,
+  DocumentTree,
+  SourceResidue,
 } from "document-schema.js";
-import { PAGE_SIZE_A4, rgbHexToColor } from "document-schema.js";
+import { PAGE_SIZE_A4, rgbHexToColor, assembleTree } from "document-schema.js";
 import type { Package } from "../../model/package";
 import { decodePackage, encodePackage } from "../../codec";
-import { readOdgContent } from "./read";
-import { normaliseOdgContent, writeOdgContent } from "./write";
+import { readManifest } from "../../manifest";
+import { readOdg, readOdgContent } from "./read";
+import { normaliseOdgContent, writeOdg, writeOdgContent } from "./write";
 
 // The write side's correctness suite: what writeOdgContent produces reads back as the document it was given. The sibling suite (write.test.ts) pins the XML shapes; this one states the law and every deviation from it by name -- the drawing mirror of typed/odp/write-round-trip.test.ts.
 //
@@ -329,6 +332,37 @@ describe("writeOdgContent: the round-trip law", () => {
       throw new Error("expected a line back");
     }
     expect(vector.stroke.style).toBe("solid");
+  });
+
+  it("restores a quarantined non-content package part verbatim, through the tree form", () => {
+    // A settings.xml this writer never generates itself, exactly the shape readOdgContent quarantines wholesale on the way in (typed/shared/constructs.ts's collectOdfNonContentPartResidue).
+    const settingsXml =
+      '<office:document-settings office:version="1.3"><office:settings><config:config-item-set config:name="ooo:view-settings"><config:config-item config:name="ViewAreaTop" config:type="int">0</config:config-item></config:config-item-set></office:settings></office:document-settings>';
+    const source: Record<string, SourceResidue> = {
+      "settings.xml": { format: "odg", xml: settingsXml },
+    };
+    const tree: DocumentTree = {
+      ...assembleTree(documentOf([page([], [shape()])])),
+      source,
+    };
+
+    const written = writeOdg(tree);
+    const settingsPart = written.parts["settings.xml"];
+    expect(settingsPart?.kind).toBe("xml");
+    expect(
+      settingsPart?.kind === "xml" &&
+        settingsPart.nodes.some(
+          (node) =>
+            node.type === "element" && node.tag === "office:document-settings",
+        ),
+    ).toBe(true);
+    const manifest = readManifest(written);
+    expect(
+      manifest.entries.some((entry) => entry.fullPath === "settings.xml"),
+    ).toBe(true);
+
+    const readBack = readOdg(decodePackage(encodePackage(written)));
+    expect(readBack.source).toEqual(source);
   });
 });
 

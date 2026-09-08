@@ -13,6 +13,7 @@ import type {
 import type { XmlElement, XmlNode } from "../../model/node";
 import type { Package } from "../../model/package";
 import { buildXml } from "../../xml/build";
+import { parseXml } from "../../xml/parse";
 import {
   attrValue,
   childrenWithTag,
@@ -170,6 +171,42 @@ export function collectOdfNonContentPartResidue(
     if (elements.length > 0) {
       out[path] = odfResidue(format, ...elements);
     }
+  }
+}
+
+// Write-side mirror of collectOdfNonContentPartResidue: restores each quarantined non-content package part verbatim, at the exact part path it was read from, into a package being written. This is the ONE quarantine bucket a writer can safely restore -- a whole non-content part is never touched or interpreted by the writer either way, so re-emitting it carries no risk of contradicting content the writer just wrote, unlike a construct's own residue or a body-walk quarantine bucket (dde-links, xforms, a vendor-extension tag), which have no structural position a writer could safely reinsert them at against a document that may have been edited since it was read; those stay dropped, exactly as each writer's own scope note still states. Eligible entries are recognised by collectOdfNonContentPartResidue's own key convention: a real package part path, always ending ".xml", that is neither one of ODF_CONSUMED_PART_PATHS (a part this writer already creates itself) nor an embedded sub-document's own part -- which is exactly how that collector tells a part-path key apart from a semantic-bucket key on the way in. Only entries whose own `format` matches this writer's format are restored, per the quarantine contract's "a same-format writer may re-emit its own residue verbatim" (document-schema.js's source.ts): a residue value another format's reader produced is never this writer's to touch. Callers must re-sync the package's manifest afterwards (buildManifest derives its entries from pkg.parts, so a part added here needs no manifest bookkeeping of its own beyond that resync).
+export function writeOdfPackageResidue(
+  pkg: Package,
+  format: OdfResidueFormat,
+  source: Record<string, SourceResidue> | undefined,
+): void {
+  if (source === undefined) {
+    return;
+  }
+  for (const [path, residue] of Object.entries(source)) {
+    if (
+      residue.format !== format ||
+      !path.endsWith(".xml") ||
+      ODF_CONSUMED_PART_PATHS.has(path) ||
+      isEmbeddedObjectPart(path)
+    ) {
+      continue;
+    }
+    pkg.parts[path] = {
+      kind: "xml",
+      nodes: [
+        {
+          type: "declaration",
+          attributes: [
+            { name: "version", value: "1.0" },
+            { name: "encoding", value: "UTF-8" },
+          ],
+        },
+        ...parseXml(residue.xml).filter(
+          (node): node is XmlElement => node.type === "element",
+        ),
+      ],
+    };
   }
 }
 

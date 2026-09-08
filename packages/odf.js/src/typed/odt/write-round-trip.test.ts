@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { ContentBlock, ContentDocument } from "document-schema.js";
+import type {
+  ContentBlock,
+  ContentDocument,
+  DocumentTree,
+  SourceResidue,
+} from "document-schema.js";
 import {
   PAGE_SIZE_A4,
   PAGE_SIZE_LETTER,
@@ -11,6 +16,7 @@ import {
 } from "document-schema.js";
 import type { Package } from "../../model/package";
 import { decodePackage, encodePackage } from "../../codec";
+import { readManifest } from "../../manifest";
 import { parsePackage } from "../../package-io/read";
 import { buildXml } from "../../xml/build";
 import { readOdt, readOdtContent } from "./read";
@@ -230,6 +236,40 @@ describe("the odt round-trip law", () => {
     expect(normaliseOdtContent(roundTrip(first))).toEqual(
       normaliseOdtContent(first),
     );
+  });
+
+  it("restores a quarantined non-content package part verbatim, through the tree form", () => {
+    // A settings.xml this writer never generates itself (package-io/scaffold.ts's own note: "settings.xml is not created at all") -- exactly the shape a reader quarantines wholesale on the way in (typed/shared/constructs.ts's collectOdfNonContentPartResidue), an unmapped element this writer could not have produced by writing the document, so its survival proves the residue channel restored it rather than the ordinary content writer coincidentally reproducing it.
+    const settingsXml =
+      '<office:document-settings office:version="1.3"><office:settings><config:config-item-set config:name="ooo:view-settings"><config:config-item config:name="ViewAreaTop" config:type="int">0</config:config-item></config:config-item-set></office:settings></office:document-settings>';
+    const source: Record<string, SourceResidue> = {
+      "settings.xml": { format: "odt", xml: settingsXml },
+    };
+    const tree: DocumentTree = {
+      ...assembleTree(
+        documentOf([{ kind: "paragraph", runs: [{ text: "hello" }] }]),
+      ),
+      source,
+    };
+
+    const written = writeOdt(tree);
+    const settingsPart = written.parts["settings.xml"];
+    expect(settingsPart?.kind).toBe("xml");
+    expect(
+      settingsPart?.kind === "xml" &&
+        settingsPart.nodes.some(
+          (node) =>
+            node.type === "element" && node.tag === "office:document-settings",
+        ),
+    ).toBe(true);
+    const manifest = readManifest(written);
+    expect(
+      manifest.entries.some((entry) => entry.fullPath === "settings.xml"),
+    ).toBe(true);
+
+    // The bytes leg is in the loop for the same reason roundTrip() puts it there: a writer that built a correct Package but an unserialisable one would pass a Package-only check.
+    const readBack = readOdt(decodePackage(encodePackage(written)));
+    expect(readBack.source).toEqual(source);
   });
 });
 

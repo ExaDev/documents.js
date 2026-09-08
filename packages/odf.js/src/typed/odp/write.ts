@@ -20,6 +20,7 @@ import { el } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { formatOdfLength } from "../shared/units";
 import { writeOdfMetadata } from "../shared/metadata";
+import { writeOdfPackageResidue } from "../shared/constructs";
 import { buildOdfInlineNodes, segmentOdfText } from "../shared/text";
 import type { ListPlanState } from "../shared/list";
 import { canonicalMetadata } from "../shared/canonicalise";
@@ -33,7 +34,7 @@ import {
 //
 // WHAT'S GENUINELY NEW HERE, beyond odt's own three forced facts (no direct formatting, no standalone page break, whitespace as structure -- all three still apply, inherited via typed/shared/canonicalise.ts and typed/draw/write-shapes.ts): a PRESENTATION has no office:text body flow at all -- its content is a sequence of draw:page elements, each carrying POSITIONED shapes (draw:frame, geometry-first) rather than flowed blocks, plus its own presentation:notes and its own page geometry (a presentation genuinely allows different slides to reference different master pages/page-layouts, unlike OOXML's single document-level p:sldSz -- see typed/odp/read.ts's own readSlideSize note). This module's own job is therefore: one style:master-page + style:page-layout pair per slide (mirroring odt's one per section, never deduplicated across slides for the same reason odt never deduplicates across sections), a draw:page wrapping that slide's own shapes (delegated entirely to typed/draw/write-shapes.ts's writeDrawShapes -- the shared shape writer this format's own write path exists to prove out for a later odg writer), and a presentation:notes built from ContentSlide.notes.
 //
-// WHAT THIS WRITER DOES NOT WRITE, and why it refuses rather than dropping: every shape/paragraph-level fidelity constraint typed/draw/write-shapes.ts's own planShapeContent already refuses by name (a run-level construct extent, an embedded object, a construct boundary marker, a heading inside a shape's own text, a page break inside a shape's own text, a table or image mixed with other shape content) applies here unchanged, since this module calls that shared validation rather than re-deriving it. Beyond that: a slide's own `source` residue (the transition/animation/sound facts typed/odp/read.ts quarantines) is dropped, the same deliberate exception odt's own residue channel makes -- residue is opaque by construction, so re-emitting it would be actively wrong rather than merely incomplete. `.odg` (drawings) and `.sxi` (the OpenOffice.org 1.x presentation format, which needs this writer to invert its own transform against) are NOT covered by this module -- both are separate, tracked follow-up work built on top of what this module and typed/draw/write-shapes.ts establish.
+// WHAT THIS WRITER DOES NOT WRITE, and why it refuses rather than dropping: every shape/paragraph-level fidelity constraint typed/draw/write-shapes.ts's own planShapeContent already refuses by name (a run-level construct extent, an embedded object, a construct boundary marker, a heading inside a shape's own text, a page break inside a shape's own text, a table or image mixed with other shape content) applies here unchanged, since this module calls that shared validation rather than re-deriving it. Beyond that: a slide's own `source` residue (the transition/animation/sound facts typed/odp/read.ts quarantines) is dropped, the same deliberate exception odt's own residue channel makes -- residue is opaque by construction, and re-emitting it into a slide the writer is regenerating from a possibly-edited document would be actively wrong rather than merely incomplete, since there is no structural position left to safely restore it at. The package-level table (non-content parts, vendor-extension elements at document scope) is the one part of the same channel that IS restored -- writeOdp does that itself, via the shared writeOdfPackageResidue helper, once writeOdpContent has built the rest of the package, because a whole non-content part is never touched or interpreted by anything below either way. `.odg` (drawings) and `.sxi` (the OpenOffice.org 1.x presentation format, which needs this writer to invert its own transform against) are NOT covered by this module -- both are separate, tracked follow-up work built on top of what this module and typed/draw/write-shapes.ts establish.
 
 const CONTENT_PART = "content.xml";
 const STYLES_PART = "styles.xml";
@@ -253,5 +254,8 @@ export function writeOdp(
   document: DocumentTree,
   options: OdpWriteOptions = {},
 ): Package {
-  return writeOdpContent(flattenTree(document), options);
+  const pkg = writeOdpContent(flattenTree(document), options);
+  writeOdfPackageResidue(pkg, "odp", document.source);
+  syncManifest(pkg, { version: options.version ?? DEFAULT_ODF_VERSION });
+  return pkg;
 }
