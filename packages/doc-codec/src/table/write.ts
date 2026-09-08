@@ -1,14 +1,17 @@
 import type {
   ContentBlock,
+  ContentImageBlock,
   ContentParagraph,
   ContentRun,
   ContentTable,
   ContentTableCell,
   ContentTableRow,
 } from "document-schema.js";
+import { type DataStreamBuilder } from "../data-stream";
 import { DocFormatError, DocUnsupportedError } from "../errors";
+import { buildInlinePicture } from "../pictures-write";
 import { fitsAloneOnPapxPage } from "../prop/fkp-write";
-import { CELL_MARK, PARAGRAPH_MARK } from "../text/special";
+import { INLINE_PICTURE, CELL_MARK, PARAGRAPH_MARK } from "../text/special";
 import {
   encodeTableRowGrpprl,
   MAX_TABLE_ROW_CELLS,
@@ -29,8 +32,18 @@ const SPRM_P_F_TTP = 0x2417;
 
 const TWIPS_PER_POINT = 20;
 
+/** One run to write, alongside grpprl bytes appended after encodeCharacterGrpprl's own output for it -- the run-level analogue of WriteParagraph.extraGrpprl below. Every ordinary run carries none (its whole grpprl comes from its own ContentRun fields); imageParagraph's own picture-anchor run is the one exception, since sprmCPicLocation is not a ContentRun field encodeCharacterGrpprl could ever derive on its own. */
+export interface WriteRun {
+  readonly run: ContentRun;
+  readonly extraGrpprl: readonly number[];
+}
+
+function plainRuns(runs: readonly ContentRun[]): WriteRun[] {
+  return runs.map((run) => ({ run, extraGrpprl: [] }));
+}
+
 export interface WriteParagraph {
-  readonly runs: readonly ContentRun[];
+  readonly runs: readonly WriteRun[];
   readonly properties: Pick<
     ContentParagraph,
     | "alignment"
@@ -96,7 +109,7 @@ function cellParagraphs(blocks: readonly ContentBlock[]): WriteParagraph[] {
       );
     }
     return {
-      runs: block.runs,
+      runs: plainRuns(block.runs),
       properties: block,
       extraGrpprl: inTableGrpprl(),
       terminator: index === blocks.length - 1 ? CELL_MARK : PARAGRAPH_MARK,
@@ -390,16 +403,37 @@ function flattenTable(
   return output;
 }
 
-// Flattens a section's whole block list into the paragraph sequence writeDocContent's own text-layout pass consumes: an ordinary paragraph passes through as one WriteParagraph, a table expands into its own real cell/row-mark stream. `onWarning`, when given, is reported a message for a non-fatal write-time degradation -- today, only flattenTable's own per-row lost-boundary-budget fallback (see its own note) -- naming the degraded table by its own position in `blocks` (`blockIndex`), since a document with more than one table would otherwise report every warning as an indistinguishable "table row N", with no way for a caller to tell which table it came from.
+// An inline picture is block-level in document-schema.js's own model but character-anchored in [MS-DOC] -- a single U+0001 character carrying sprmCPicLocation, per pictures.ts's own read-side resolveInlinePicture. flattenSectionBlocks therefore writes a ContentImageBlock as its own one-run, one-paragraph WriteParagraph: buildParagraphBlocks (text/paragraphs.ts) will split that run straight back out into an ContentImageBlock of its own on read, since a paragraph carrying no text before or after the anchor produces no synthetic empty paragraph either side of it (that function's own comment). dataStream accumulates the picture's own PICFAndOfficeArtData bytes (pictures-write.ts's buildInlinePicture) across the whole document -- shared across every section and image, not created per call, so offsets stay correct regardless of how many pictures came before this one.
+function imageParagraph(
+  image: ContentImageBlock,
+  dataStream: DataStreamBuilder,
+): WriteParagraph {
+  const { data, buildGrpprl } = buildInlinePicture(image);
+  const offset = dataStream.append(data);
+  return {
+    runs: [
+      {
+        run: { text: String.fromCharCode(INLINE_PICTURE) },
+        extraGrpprl: buildGrpprl(offset),
+      },
+    ],
+    properties: {},
+    extraGrpprl: [],
+    terminator: PARAGRAPH_MARK,
+  };
+}
+
+// Flattens a section's whole block list into the paragraph sequence writeDocContent's own text-layout pass consumes: an ordinary paragraph passes through as one WriteParagraph, a table expands into its own real cell/row-mark stream, and an inline picture becomes its own one-run paragraph carrying the picture anchor (see imageParagraph above). `onWarning`, when given, is reported a message for a non-fatal write-time degradation -- today, only flattenTable's own per-row lost-boundary-budget fallback (see its own note) -- naming the degraded table by its own position in `blocks` (`blockIndex`), since a document with more than one table would otherwise report every warning as an indistinguishable "table row N", with no way for a caller to tell which table it came from.
 export function flattenSectionBlocks(
   blocks: readonly ContentBlock[],
+  dataStream: DataStreamBuilder,
   onWarning?: WriteWarning,
 ): WriteParagraph[] {
   const output: WriteParagraph[] = [];
   blocks.forEach((block, blockIndex) => {
     if (block.kind === "paragraph") {
       output.push({
-        runs: block.runs,
+        runs: plainRuns(block.runs),
         properties: block,
         extraGrpprl: [],
         terminator: PARAGRAPH_MARK,
@@ -408,6 +442,10 @@ export function flattenSectionBlocks(
     }
     if (block.kind === "table") {
       output.push(...flattenTable(block, blockIndex, onWarning));
+      return;
+    }
+    if (block.kind === "image") {
+      output.push(imageParagraph(block, dataStream));
       return;
     }
     throw new DocUnsupportedError(

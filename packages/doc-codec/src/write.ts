@@ -4,7 +4,12 @@ import {
   writeSummaryInformationStream,
 } from "archive-codec";
 import type { ContentDocument } from "document-schema.js";
-import { SUMMARY_INFORMATION_STREAM, WORD_DOCUMENT_STREAM } from "./detect";
+import { DataStreamBuilder } from "./data-stream";
+import {
+  DATA_STREAM,
+  SUMMARY_INFORMATION_STREAM,
+  WORD_DOCUMENT_STREAM,
+} from "./detect";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { buildFib } from "./fib/write";
 import { buildNumberingTables, gatherListUsage } from "./list/numbering-write";
@@ -23,13 +28,17 @@ import { encodeParagraphGrpprl } from "./prop/pap-write";
 import { buildPlcfSed, buildSepx, encodeSectionGrpprl } from "./prop/sep-write";
 import { buildFontTable } from "./style/fonts";
 import { buildStshForStyles } from "./style/stsh";
-import { flattenSectionBlocks, type WriteWarning } from "./table/write";
+import {
+  flattenSectionBlocks,
+  type WriteParagraph,
+  type WriteWarning,
+} from "./table/write";
 import { buildTextClx } from "./text/piece-table-write";
-import { PARAGRAPH_MARK } from "./text/special";
+import { PARAGRAPH_MARK, SECTION_MARK } from "./text/special";
 
 // The top-level write: a wordprocessing ContentDocument to real [MS-DOC] bytes, wrapped in a real [MS-CFB] compound file. Every step below inverts one of read.ts's own -- the text stream is laid out and the paragraph/character formatting encoded into grpprls first (write.ts, prop/chp-write.ts, prop/pap-write.ts, table/write.ts), then packed into the piece table, the two property bin tables and their formatted disk pages, an empty-but-conformant style sheet, and (when a run names one) a font table (text/piece-table-write.ts, prop/fkp-write.ts, style/stsh.ts, style/fonts.ts) -- the identical structures readDocContent (read.ts) consumes, so a document this writer produces is verified by reading it back through this package's own reader rather than by inspecting its bytes in isolation. A ContentTable block is expanded by table/write.ts's flattenSectionBlocks into the same flat paragraph sequence every other block already is, each with its own terminator (a cell/row mark's own cell-mark character rather than the ordinary paragraph mark) and extra grpprl bytes (sprmPFInTable, and on a row's own mark, sprmPFTtp plus its whole TAP) -- so table paragraphs flow through the identical Chpx/Papx paging logic below as every other paragraph, not a separate table-only path.
 //
-// What this writer does NOT do is stated in full in the README's own scope section, not only here: no images, no footnotes/headers/endnotes, no section boundaries beyond refusing more than one section (the one section's own page size and margins are written for real -- see below), no numbering, and no hyperlinks or fields. Each is a genuine layer of the format this writer does not implement; none is silently approximated. Tables are written, but only at depth 1 (see table/write.ts) and without cell shading/borders or any other TAP layer document-schema.js's own ContentTable/ContentTableCell has no field for. Every paragraph's own styleId/headingLevel now mints a real STSH entry (ExaDev/documents.js#1059) -- but with no formatting of its own: every property this writer emits is already, unconditionally, a direct exception, so a style's own identity round-trips while its formatting stays entirely direct-exception-based, exactly as before.
+// What this writer does NOT do is stated in full in the README's own scope section, not only here: no footnotes/headers/endnotes, no page break or embedded-object blocks, no construct-boundary markers, and no hyperlinks or fields. Each is a genuine layer of the format this writer does not implement; none is silently approximated. Tables are written, but only at depth 1 (see table/write.ts) and without cell shading/borders or any other TAP layer document-schema.js's own ContentTable/ContentTableCell has no field for. Every paragraph's own styleId/headingLevel mints a real STSH entry (ExaDev/documents.js#1059) -- but with no formatting of its own: every property this writer emits is already, unconditionally, a direct exception, so a style's own identity round-trips while its formatting stays entirely direct-exception-based. Every section writes its own real page size and margins (multiple sections included, ExaDev/documents.js#971), and an inline picture writes its own real PNG/JPEG bytes into a genuine Data stream (ExaDev/documents.js#971) -- see [Writing](#writing) in the README for both.
 
 /** Where the text is written in the WordDocument stream: past the FIB (which needs under 900 bytes for the fields this writer populates), on a page boundary though not required to be. */
 const TEXT_FC = 0x400;
@@ -61,31 +70,35 @@ export function writeDocContent(
       `doc-codec writes wordprocessing documents only; got a '${document.kind}' document`,
     );
   }
-  if (document.sections.length !== 1) {
-    throw new DocUnsupportedError(
-      `doc-codec's reader never distinguishes more than one section within a document (see README's "Section properties" scope note): writeDocContent refuses ${document.sections.length} sections rather than silently merging their content into what would read back as one`,
+  if (document.sections.length === 0) {
+    throw new DocFormatError(
+      "a wordprocessing document must carry at least one section",
     );
   }
-  const [section] = document.sections;
-  if (section === undefined) {
-    throw new DocFormatError("a wordprocessing document must carry a section");
-  }
 
-  const writeParagraphs = flattenSectionBlocks(
-    section.blocks,
-    options.onWarning,
-  );
-  // The Main Document's own last character MUST be an ordinary paragraph mark ([MS-DOC]'s own "Main Document" glossary entry: "The last character in the main document MUST be a paragraph mark (Unicode 0x000D)") -- never a table's own cell/TTP mark (0x0007), even though a row-ending mark is itself a perfectly legal paragraph-boundary terminator everywhere else ([MS-DOC] 2.4.2's "Determining Paragraph Boundaries": "The character at the end character position of a paragraph MUST be a paragraph mark, an end-of-section character, a cell mark, or a TTP mark"). An otherwise-empty section and a section whose very last block is a table both leave the flattened sequence's own last terminator short of that stronger, main-document-wide requirement, so both need one trailing empty ordinary paragraph appended -- confirmed against a real producer (LibreOffice 26.2.5.2): a table it writes as a document's own last content is always followed by a genuine 0x000D, and a written .doc lacking one is not merely missing a property but is not recognised as carrying a table at all by LibreOffice's own .doc import filter (see the README's Tables section for the full finding, ExaDev/documents.js#892).
-  const lastTerminator =
-    writeParagraphs[writeParagraphs.length - 1]?.terminator;
-  if (lastTerminator !== PARAGRAPH_MARK) {
-    writeParagraphs.push({
-      runs: [],
-      properties: {},
-      extraGrpprl: [],
-      terminator: PARAGRAPH_MARK,
-    });
+  const dataStream = new DataStreamBuilder();
+  const sectionParagraphLists = document.sections.map((section, index) => {
+    const paragraphs = flattenSectionBlocks(
+      section.blocks,
+      dataStream,
+      options.onWarning,
+    );
+    // Every section but the last ends on the end-of-section character (0x000C, [MS-DOC] 2.4.4's own worked example); the Main Document's own final character, closing the last section, MUST instead be an ordinary paragraph mark ([MS-DOC]'s own "Main Document" glossary entry: "The last character in the main document MUST be a paragraph mark (Unicode 0x000D)"). Neither boundary may land on a table's own cell/TTP mark (0x0007), even though a row-ending mark is itself a perfectly legal paragraph-boundary terminator everywhere else ([MS-DOC] 2.4.2's "Determining Paragraph Boundaries": "The character at the end character position of a paragraph MUST be a paragraph mark, an end-of-section character, a cell mark, or a TTP mark"). An otherwise-empty section and a section whose very last block is a table both leave the flattened sequence's own last terminator short of that stronger requirement, so both get one trailing empty ordinary paragraph appended first -- confirmed against a real producer (LibreOffice 26.2.5.2) for the single-section, table-last case: a table it writes as a document's own last content is always followed by a genuine 0x000D, and a written .doc lacking one is not merely missing a property but is not recognised as carrying a table at all by LibreOffice's own .doc import filter (see the README's Tables section for the full finding, ExaDev/documents.js#892).
+    closeSection(
+      paragraphs,
+      index === document.sections.length - 1 ? PARAGRAPH_MARK : SECTION_MARK,
+    );
+    return paragraphs;
+  });
+  const sectionStartIndices: number[] = [];
+  {
+    let runningIndex = 0;
+    for (const paragraphs of sectionParagraphLists) {
+      sectionStartIndices.push(runningIndex);
+      runningIndex += paragraphs.length;
+    }
   }
+  const writeParagraphs: WriteParagraph[] = sectionParagraphLists.flat();
 
   // 1a. Mint a real istd for every distinct paragraph style: a headingLevel of 1-9 maps directly to that istd (headingLevelFromIstd's own read-side rule, so a re-read derives the identical headingLevel back regardless of what styleId names it), and every other named styleId gets its own istd starting at 10. This mints style IDENTITY only -- name, kind, istd -- with no formatting of its own: every property this writer emits is already, unconditionally, a direct exception (see buildStshForStyles's own comment and the README's scope note, ExaDev/documents.js#1059). A paragraph with neither styleId nor an in-range headingLevel gets istd 0, left an empty hole rather than a real "Normal" entry -- minting one there unconditionally would round-trip an absent styleId into a real "Normal" string on the next read, which is not what the source document stated. A paragraph whose own styleId literally IS "Normal" is treated like any other named style and mints its own real entry (not necessarily at istd 0), so that distinction survives. A headingLevel outside 1-9 (the schema's own field is unbounded, "ODF alone permits ten levels") has no istd slot to round-trip through at all -- a genuine format-boundary limit, so such a paragraph falls back to its styleId (or istd 0) exactly as if it carried no headingLevel.
   const FIRST_NON_HEADING_ISTD = 10;
@@ -146,11 +159,14 @@ export function writeDocContent(
   };
   const numberingTables = buildNumberingTables(listUsage.definitions);
 
-  // 2. Encode every run's and paragraph's own direct formatting up front: a run's byte-identical grpprl is what decides whether it merges with its neighbour into one Chpx exception below, so the encoding has to exist before the text stream is laid out. A table paragraph's own extraGrpprl (sprmPFInTable, and on a row's own mark, sprmPFTtp plus its TAP) is appended after its ordinary direct formatting -- table/write.ts already ordered the two so a later table sprm never has to fight an earlier paragraph one for the same property.
+  // 2. Encode every run's and paragraph's own direct formatting up front: a run's byte-identical grpprl is what decides whether it merges with its neighbour into one Chpx exception below, so the encoding has to exist before the text stream is laid out. A table paragraph's own extraGrpprl (sprmPFInTable, and on a row's own mark, sprmPFTtp plus its TAP) is appended after its ordinary direct formatting -- table/write.ts already ordered the two so a later table sprm never has to fight an earlier paragraph one for the same property. A run's own extraGrpprl (table/write.ts's WriteRun) is the run-level analogue: today only imageParagraph's own sprmCPicLocation, which encodeCharacterGrpprl could never derive from a bare ContentRun since it names no picture field of its own.
   const formatted: FormattedParagraph[] = writeParagraphs.map((entry) => ({
-    runs: entry.runs.map((run) => ({
-      text: run.text,
-      grpprl: encodeCharacterGrpprl(run, fontIndexOf),
+    runs: entry.runs.map((writeRun) => ({
+      text: writeRun.run.text,
+      grpprl: [
+        ...encodeCharacterGrpprl(writeRun.run, fontIndexOf),
+        ...writeRun.extraGrpprl,
+      ],
     })),
     grpprl: [
       ...encodeParagraphGrpprl(entry.properties, ilfoOf),
@@ -240,11 +256,27 @@ export function writeDocContent(
   );
   const papxPages = buildPapxPages(papxParagraphSpecs, textFcLim);
 
-  // The one section's own Sepx, [MS-DOC] 2.9.279 -- not an FKP-paged structure like the Chpx/Papx pages above, so it needs no page alignment and is simply appended after them.
-  const sepx = buildSepx(encodeSectionGrpprl(section));
-  const fcSepx = (papxPageStart + papxPages.length) * FKP_PAGE_SIZE;
-
-  const wordDocument = new Uint8Array(fcSepx + sepx.length);
+  // Every section's own Sepx, [MS-DOC] 2.9.279 -- not an FKP-paged structure like the Chpx/Papx pages above, so each needs no page alignment and is simply appended after the last, in section order.
+  const sepxPageStart = (papxPageStart + papxPages.length) * FKP_PAGE_SIZE;
+  const sepxList = document.sections.map((section) =>
+    buildSepx(encodeSectionGrpprl(section)),
+  );
+  const fcSepxList: number[] = [];
+  {
+    let sepxCursor = sepxPageStart;
+    for (const sepx of sepxList) {
+      fcSepxList.push(sepxCursor);
+      sepxCursor += sepx.length;
+    }
+  }
+  const lastFcSepx = fcSepxList[fcSepxList.length - 1];
+  const lastSepx = sepxList[sepxList.length - 1];
+  if (lastFcSepx === undefined || lastSepx === undefined) {
+    throw new DocFormatError(
+      "internal defect: writeDocContent built an empty section list despite the earlier at-least-one-section guard",
+    );
+  }
+  const wordDocument = new Uint8Array(lastFcSepx + lastSepx.length);
   const wordView = new DataView(wordDocument.buffer);
   for (let index = 0; index < text.length; index += 1) {
     wordView.setUint16(characterFc(index), text.charCodeAt(index), true);
@@ -255,7 +287,26 @@ export function writeDocContent(
   papxPages.forEach((page, index) => {
     wordDocument.set(page, (papxPageStart + index) * FKP_PAGE_SIZE);
   });
-  wordDocument.set(sepx, fcSepx);
+  sepxList.forEach((sepx, index) => {
+    const fcSepx = fcSepxList[index];
+    if (fcSepx === undefined) {
+      throw new DocFormatError(
+        `internal defect: writeDocContent lost section ${String(index)}'s own Sepx placement`,
+      );
+    }
+    wordDocument.set(sepx, fcSepx);
+  });
+
+  // Each section's own start CP -- PlcfSed.aCp[i] -- is exactly where its first paragraph's own text begins, which paragraphStarts already recorded for every paragraph in the flattened, whole-document sequence (step 3 above).
+  const sectionStartCps = sectionStartIndices.map((paragraphIndex, index) => {
+    const startCp = paragraphStarts[paragraphIndex];
+    if (startCp === undefined) {
+      throw new DocFormatError(
+        `internal defect: writeDocContent lost section ${String(index)}'s own start CP`,
+      );
+    }
+    return startCp;
+  });
 
   // 5. The Table stream: the Clx, the two bin tables (keyed on each page's own first fc, read back out of the page itself so the key and the page's content can never disagree), an empty-but-conformant style sheet, when at least one run names a font the font table, and, when the document uses at least one list, the numbering tables (PlfLst/PlfLfo).
   const clx = buildTextClx(text.length, TEXT_FC);
@@ -270,7 +321,7 @@ export function writeDocContent(
   const stsh = buildStshForStyles(styleNames);
   const fontTable =
     fontNames.length > 0 ? buildFontTable(fontNames) : undefined;
-  const plcfSed = buildPlcfSed(text.length, fcSepx);
+  const plcfSed = buildPlcfSed(sectionStartCps, text.length, fcSepxList);
 
   let cursor = 0;
   const place = (bytes: Uint8Array): number => {
@@ -335,6 +386,11 @@ export function writeDocContent(
       ),
     });
   }
+  // Only when the document actually carries at least one inline picture -- matching what pictures.ts's own reader treats as "a valid Word Binary File with no pictures need not have a Data stream at all", not malformed input.
+  const dataStreamBytes = dataStream.build();
+  if (dataStreamBytes.length > 0) {
+    streams.push({ path: DATA_STREAM, bytes: dataStreamBytes });
+  }
   return writeCompoundFile(streams);
 }
 
@@ -344,4 +400,26 @@ function sameGrpprl(
 ): boolean {
   if (a === undefined || b === undefined) return a === b;
   return a.length === b.length && a.every((byte, index) => byte === b[index]);
+}
+
+// Ensures `paragraphs` ends in a genuine ordinary-paragraph-mark-terminated entry -- appending an empty one when the last entry's own terminator is anything else (a table's own cell/row mark) -- then, when `terminator` differs from PARAGRAPH_MARK, replaces that entry's terminator with it. The one shared guarantee writeDocContent's own per-section loop and its final Main-Document-ending call both need: neither an end-of-section character nor the Main Document's own final character may land on a table's row-ending mark instead of a real paragraph mark (see this function's own call site for the [MS-DOC] citations).
+function closeSection(paragraphs: WriteParagraph[], terminator: number): void {
+  const last = paragraphs[paragraphs.length - 1];
+  if (last?.terminator !== PARAGRAPH_MARK) {
+    paragraphs.push({
+      runs: [],
+      properties: {},
+      extraGrpprl: [],
+      terminator: PARAGRAPH_MARK,
+    });
+  }
+  if (terminator === PARAGRAPH_MARK) return;
+  const index = paragraphs.length - 1;
+  const target = paragraphs[index];
+  if (target === undefined) {
+    throw new DocFormatError(
+      "internal defect: closeSection lost its own just-ensured trailing paragraph",
+    );
+  }
+  paragraphs[index] = { ...target, terminator };
 }
