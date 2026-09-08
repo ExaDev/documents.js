@@ -1,3 +1,18 @@
+## [4.7.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.6.0...xls-codec%404.7.0) (2026-09-08)
+
+### Features
+
+* **xls-codec:** decrypt RC4-encrypted workbooks given a password ([e655deb](https://github.com/ExaDev/documents.js/commit/e655deb89a13dc7fdb9921e4ee6b156223706a24))
+
+### Documentation
+
+* document RC4 decryption for encrypted xls workbooks ([268cbd3](https://github.com/ExaDev/documents.js/commit/268cbd342b080a0d23754d5b78e4fa87ebf17acf))
+
+
+### Dependencies
+
+- Updated archive-codec to ^1.7.0
+
 ## [4.6.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.5.0...xls-codec%404.6.0) (2026-09-08)
 
 ### Features

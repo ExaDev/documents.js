@@ -1,3 +1,10 @@
+## [2.3.5](https://github.com/ExaDev/documents.js/compare/doc-codec%402.3.4...doc-codec%402.3.5) (2026-09-08)
+
+
+### Dependencies
+
+- Updated archive-codec to ^1.7.0
+
 ## [2.3.4](https://github.com/ExaDev/documents.js/compare/doc-codec%402.3.3...doc-codec%402.3.4) (2026-09-07)
 
 
