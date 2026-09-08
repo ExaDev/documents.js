@@ -470,23 +470,24 @@ describe("lowering a footnote onto the schema", () => {
     ]);
   });
 
-  it("flattens a heading inside a definition body to literal ATX text, and says so", () => {
-    const collector = createDiagnosticCollector();
-    const document = readMarkdownContent("[^1]: intro\n\n    ## inner", {
-      sink: collector.sink,
-    }).document;
+  it("keeps a heading inside a definition body as a real heading (ExaDev/document-schema.js#1122)", () => {
+    const document = readMarkdownContent(
+      "[^1]: intro\n\n    ## inner",
+    ).document;
     expect(blocksOf(document)).toEqual([
       {
         kind: "constructStart",
         descriptor: { kind: "anchor", anchorType: "footnote", name: "1" },
       },
       { kind: "paragraph", runs: [{ text: "intro" }] },
-      { kind: "paragraph", runs: [{ text: "## " }, { text: "inner" }] },
+      {
+        kind: "paragraph",
+        runs: [{ text: "inner" }],
+        styleId: "Heading2",
+        headingLevel: 2,
+      },
       { kind: "constructEnd" },
     ]);
-    expect(
-      collector.has(MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED),
-    ).toBe(true);
   });
 
   it("leaves every construct marker pair balanced, which is what the schema requires of a producer", () => {

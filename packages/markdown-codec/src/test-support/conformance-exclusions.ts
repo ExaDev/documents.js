@@ -13,8 +13,6 @@ const NESTED_LIST_LOOSENESS_SHARED =
   "a nested list's own tight/loose spacing cannot diverge from its enclosing list's: src/shared/list-id.ts's own numId grammar mints exactly one loose flag per TOP-LEVEL list, and a nested list deliberately reuses that SAME numId rather than minting a second one (see that module's own top-of-file note on why nesting never mints again), so a genuinely tight nested list sitting under a genuinely loose outer item renders with the outer item's own loose spacing between its own siblings instead of its own real tight spacing";
 const MARKER_TYPE_CONFLICT =
   "a nested list disagreeing with its enclosing list's own minted marker type is resolved first-wins, not preserved (MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT) -- reusing the enclosing numId is itself the correct, tested design (src/shared/list-id.ts), just lossy for a genuinely mixed-type nesting";
-const BLOCKQUOTE_HEADING_CONTAINER_SKIPPED =
-  "a blockquote containing a heading anywhere in its subtree cannot carry its own division construct pair (a marker extent may not open a heading scope), so the whole quote degrades to indent-only structure while the heading itself keeps its own fidelity (MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED) -- and a plain paragraph rendered this way immediately after the heading, at the same indent depth with a blank line between them (src/emit/emit.ts's own comment directly above renderItems on why two same-depth quoted blocks always render as independent blockquotes), reparses as a SECOND, sibling blockquote rather than a continuation of the first";
 const IMAGE_SRC_UNPRESERVABLE =
   "an image with no data: URI destination has no bytes for this test harness to embed (no MarkdownImageResolver was supplied, matching how readMarkdown is actually called here), so it degrades to a hyperlinked text run (MarkdownDiagnosticCodes.IMAGE_UNRESOLVED) -- and even supplying one would not help this specific byte-for-byte comparison, since embedding real bytes re-renders as a data: URI, replacing rather than preserving the original external src the expected HTML still names";
 const EMPHASIS_TORTURE =
@@ -45,11 +43,6 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [146, INFO_STRING],
   // Link reference definitions
   [196, LINK_TITLE],
-  // Block quotes
-  [228, BLOCKQUOTE_HEADING_CONTAINER_SKIPPED],
-  [229, BLOCKQUOTE_HEADING_CONTAINER_SKIPPED],
-  [230, BLOCKQUOTE_HEADING_CONTAINER_SKIPPED],
-  [232, BLOCKQUOTE_HEADING_CONTAINER_SKIPPED],
   // List items
   [296, MARKER_TYPE_CONFLICT],
   [299, MARKER_TYPE_CONFLICT],

@@ -4,7 +4,7 @@
 //  - ATX/setext heading -> styleId "Heading1".."Heading6", mirroring odf.js's readOdt convention exactly (src/shared/style-constants.ts's headingStyleId), plus the canonical ContentParagraph.headingLevel document-schema.js defines -- the level number itself (always 1-6 here: ATX/setext cap at six), so a consumer that never learned this package's own styleId spelling still knows the heading's depth.
 //  - emphasis/strong/strikethrough -> italic/bold/strike ContentRun fields; links/autolinks -> ContentRun.hyperlink; code spans -> a Courier New run; a hard break -> a literal '\n'; a soft break -> a literal ' ' run carrying a 'markdown'-format residue (its own bare-newline spelling, restored verbatim by this package's own writer) -- all in src/lower/inline.ts, alongside MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED and LINK_TITLE_DROPPED.
 //  - fenced/indented code block -> one paragraph, styleId 'CodeBlock', '\n'-joined literal, monospace. A fence's info string splits at its first word (splitInfoString below): the language word rides ContentParagraph.codeLanguage semantically, and any pandoc-style attribute remainder quarantines as markdown residue on the same paragraph for this package's own writer to re-emit verbatim -- nothing is dropped, so the row carries no diagnostic code of its own any more.
-//  - blockquote -> a `division` construct's boundary-marker pair (one per nesting level, the container boundary and exact depth the indent alone never carried) wrapping blocks that keep styleId 'Quote' plus indentLeftPt per level as the materialised formatting; a heading inside a quote keeps its own Heading{N} styleId (decorateParagraph below only applies 'Quote' when nothing more specific already set a styleId) -- MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED for the one quote shape that cannot carry the pair (see lowerBlockquote).
+//  - blockquote -> a `division` construct's boundary-marker pair (one per nesting level, the container boundary and exact depth the indent alone never carried) wrapping blocks that keep styleId 'Quote' plus indentLeftPt per level as the materialised formatting; a heading inside a quote keeps its own Heading{N} styleId (decorateParagraph below only applies 'Quote' when nothing more specific already set a styleId) and groups inside the pair's own extent, exactly as document-schema.js's decompose does for any heading inside a construct (ExaDev/document-schema.js#1122) -- no quote shape degrades any more (see lowerBlockquote).
 //  - thematic break -> an empty paragraph, styleId 'HorizontalRule' -- deliberately NOT ContentPageBreak (would inject a spurious page break into every generated PDF/docx this ContentDocument later feeds). Whether a consumer that does not resolve styleId at all renders this invisibly is a property of THAT consumer, not something this package's own read pipeline can detect or diagnose, so it carries no code of its own.
 //  - lists (bullet/ordered/task) -> flat ContentListMembership numId/level, encoding ordered-vs-unordered/task/tight-loose into the numId string itself (src/shared/list-id.ts), plus a minted itemId (src/shared/list-id.ts's mintListItemId) shared by every block one item directly contains -- MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT (a nested list's own marker type disagrees with its numId's minted type), LIST_ITEM_BLOCK_UNLISTED (a table or a resolved image directly inside an item -- ContentListMembership lives only on ContentParagraph). itemId lets src/emit's own writer re-attach a multi-block item's later blocks to its own marker line rather than flattening them into separate items, including a construct (a blockquote's division pair) sitting directly inside the item -- lowerBlockquote below threads the enclosing item's own membership straight through the quote's wrapped paragraphs (the same context-carrying dual carry the quote indent itself uses), which is exactly what lets src/emit's own ListRegionItem recognise the construct as belonging to that item rather than fracturing it out as separate top-level content. When the quote's own content is itself a list, lowerList always mints that list a completely fresh, unrelated numId/itemId (ExaDev/documents.js#990) -- none of ITS paragraphs share the enclosing item's itemId either, so the paragraph-sharing carry above has nothing to find -- and the fresh list's own numId instead carries the enclosing item's itemId as its own `+owner=` suffix (src/shared/list-id.ts), which src/emit's own constructCarriesListItemId reads back the same way.
 //  - GFM tables -> ContentTable, src/lower/table.ts.
@@ -12,7 +12,7 @@
 //  - raw HTML -> preserved as literal text by default (styleId 'HTMLPreformatted' for block-level HTML), a rawHtml: 'drop' option available -- MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT / RAW_HTML_DROPPED. The one exception: a block-level HTML that is, in full, one well-formed <table> recognises straight to a real ContentTable instead (src/html/html-table.ts's own bounded recogniser, ExaDev/documents.js#1089) -- ahead of both the rawHtml option and RAW_HTML_PRESERVED_AS_TEXT/DROPPED, since a recognised table is genuine structure this package understands, not opaque markup to preserve or discard.
 //  - $$ display math (ExaDev/markdown-codec#53) -> one embedded FORMULA object whose presentation layer carries the LaTeX verbatim (lowerMathBlock below); \( \) inline math stays a Cambria-Math-marked run (src/lower/inline.ts, the run-level extent a formula is not) -- MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT for the inline half. Neither is parsed as LaTeX or converted to MathML here -- that is a documents.js question (ExaDev/documents.js#563).
 //  - front matter (src/lower/front-matter.ts) -> a flat-scalar-only LayoutMetadata subset -- MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED.
-//  - footnote definition (ExaDev/markdown-codec#66) -> an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing its own lowered body blocks; the reference site is a point run-level `anchor` extent on the paragraph it sits inside (src/lower/inline.ts) -- MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED. See lowerFootnoteDefinition below for why the body rides the construct's extent rather than AnchorDescriptor's own `definition` field.
+//  - footnote definition (ExaDev/markdown-codec#66) -> an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing its own lowered body blocks, headings included (ExaDev/document-schema.js#1122); the reference site is a point run-level `anchor` extent on the paragraph it sits inside (src/lower/inline.ts). See lowerFootnoteDefinition below for why the body rides the construct's extent rather than AnchorDescriptor's own `definition` field.
 
 import type {
   AnchorDescriptor,
@@ -354,26 +354,7 @@ function lowerMathBlock(
   ];
 }
 
-// Whether a blockquote's own subtree holds a heading anywhere (directly, or nested inside a further quote or a list item). A heading inside a construct extent ALWAYS leaves a heading scope standing at the extent's closing marker -- the last heading in the extent can never be closed by a shallower one also inside it -- and document-schema.js forbids a producer from emitting a pair whose extent opens or closes a heading scope (decompose is the enforcement point and rejects rather than repairs). A quote containing a heading therefore cannot carry the division pair at all; its structure stays approximated by the indent alone, exactly as every quote was before the division carry landed, and the heading itself keeps its heading fidelity.
-function blockquoteSubtreeContainsHeading(
-  node: Extract<MarkdownBlockNode, { type: "blockquote" }>,
-): boolean {
-  const walk = (block: MarkdownBlockNode): boolean => {
-    switch (block.type) {
-      case "heading":
-        return true;
-      case "blockquote":
-      case "list":
-      case "listItem":
-        return block.children.some(walk);
-      default:
-        return false;
-    }
-  };
-  return node.children.some(walk);
-}
-
-// A blockquote becomes a `division` construct pair (document-schema.js's arbitrarily nestable grouping of block flow -- tagged PDF /Sect is the cross-format analogue) bracketing the quote's lowered blocks, one pair per nesting level for a quoted quote: the pair is what carries the CONTAINER boundary and the exact depth, both of which indentLeftPt alone never held (same-depth adjacent quotes were indistinguishable from one multi-block quote; depth beyond level 1 was an approximation). The indent and 'Quote' styleId stay on the inner blocks as the materialised formatting, the same dual-carry a titled link's runs play -- a consumer that ignores constructs still sees an indented, Quote-styled paragraph, and this package's own writer recognises the pair-plus-indent pair as its own spelling rather than guessing at a foreign division.
+// A blockquote becomes a `division` construct pair (document-schema.js's arbitrarily nestable grouping of block flow -- tagged PDF /Sect is the cross-format analogue) bracketing the quote's lowered blocks, one pair per nesting level for a quoted quote: the pair is what carries the CONTAINER boundary and the exact depth, both of which indentLeftPt alone never held (same-depth adjacent quotes were indistinguishable from one multi-block quote; depth beyond level 1 was an approximation). The indent and 'Quote' styleId stay on the inner blocks as the materialised formatting, the same dual-carry a titled link's runs play -- a consumer that ignores constructs still sees an indented, Quote-styled paragraph, and this package's own writer recognises the pair-plus-indent pair as its own spelling rather than guessing at a foreign division. A heading anywhere in the quote's own subtree carries the pair too: document-schema.js's decompose groups a heading inside a construct's extent against nothing but that extent's own interior, regardless of what heading scope was open outside when the pair started (ExaDev/document-schema.js#1122), so there is no shape here decompose cannot build -- a quoted heading keeps both its own heading fidelity and the quote's own container fidelity.
 function lowerBlockquote(
   node: Extract<MarkdownBlockNode, { type: "blockquote" }>,
   context: BlockLowerContext,
@@ -391,15 +372,6 @@ function lowerBlockquote(
     blocks.length === 0
       ? [decorateParagraph({ kind: "paragraph", runs: [] }, nested)]
       : blocks;
-  if (blockquoteSubtreeContainsHeading(node)) {
-    context.sink({
-      code: MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED,
-      severity: "info",
-      message:
-        "a blockquote containing a heading cannot carry its division construct -- a marker extent may not open a heading scope, and the last heading inside an extent always leaves one standing -- so this quote degrades to indent-only structure while the heading keeps its heading fidelity",
-    });
-    return inner;
-  }
   return [
     { kind: "constructStart", descriptor: { kind: "division" } },
     ...inner,
@@ -482,63 +454,7 @@ function lowerList(
   );
 }
 
-// Rewrites every heading inside a footnote definition's own body into an ordinary paragraph carrying the heading's ATX spelling as leading literal text, recursively through the containers a body may hold.
-//
-// This is the one thing a footnote body cannot carry, and the reason is the construct boundary markers' own binding contract rather than anything about markdown: a marker pair's extent may not cross a heading-group scope boundary, and a heading INSIDE the extent both closes whatever heading scope was open outside it when the pair started (a `# H` in a footnote written under a `## Section`) and opens one that would still be standing at the closing marker. document-schema.js states that a producer must never emit such a pair, and that decompose rejects rather than repairs one -- so the choice here is between emitting a pair no consumer may accept and carrying the heading as text. The text form round-trips: `#` is escaped on the way out and unescaped identically on the way back in, so a second pass through this pipeline reproduces the same document.
-//
-// Deliberately unconditional rather than "only when a shallower heading is actually open outside": the level comparison would make one footnote's fidelity depend on which heading happens to precede it, so the same body would lower two different ways in two documents. A heading inside a footnote is a degenerate shape in the first place; a single, position-independent rule is the one a consumer can reason about.
-function flattenFootnoteBodyHeadings(
-  node: MarkdownBlockNode,
-  context: BlockLowerContext,
-): MarkdownBlockNode {
-  switch (node.type) {
-    case "heading":
-      context.sink({
-        code: MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED,
-        severity: "info",
-        message: `a level-${String(node.level)} heading inside a footnote definition's body is carried as literal ATX text: a construct boundary marker's extent may not contain a block that opens or closes a heading scope, so the heading cannot stay a heading inside the anchor construct the definition lowers to`,
-      });
-      return {
-        type: "paragraph",
-        children: [
-          { type: "text", value: `${"#".repeat(node.level)} ` },
-          ...node.children,
-        ],
-      };
-    case "blockquote":
-      return {
-        type: "blockquote",
-        children: node.children.map((child) =>
-          flattenFootnoteBodyHeadings(child, context),
-        ),
-      };
-    case "list":
-      return {
-        ...node,
-        children: node.children.map((item) =>
-          flattenFootnoteBodyHeadingsInItem(item, context),
-        ),
-      };
-    case "listItem":
-      return flattenFootnoteBodyHeadingsInItem(node, context);
-    default:
-      return node;
-  }
-}
-
-function flattenFootnoteBodyHeadingsInItem(
-  item: MarkdownListItemNode,
-  context: BlockLowerContext,
-): MarkdownListItemNode {
-  return {
-    ...item,
-    children: item.children.map((child) =>
-      flattenFootnoteBodyHeadings(child, context),
-    ),
-  };
-}
-
-// A footnote definition becomes an `anchor` construct: a constructStart carrying the descriptor, the definition's own lowered body blocks, and a constructEnd -- document-schema.js 4.2.0's flat-form encoding of the construct group its package tree already had.
+// A footnote definition becomes an `anchor` construct: a constructStart carrying the descriptor, the definition's own lowered body blocks, and a constructEnd -- document-schema.js 4.2.0's flat-form encoding of the construct group its package tree already had. A heading anywhere in the body lowers as an ordinary heading, keeping its own heading fidelity: document-schema.js's decompose groups a heading inside a construct's extent against nothing but that extent's own interior, regardless of what heading scope was open outside when the pair started (ExaDev/document-schema.js#1122), so there is no shape here decompose cannot build.
 //
 // Why the body rides the construct's EXTENT rather than AnchorDescriptor's own `definition` field: that field is documented as "the definitions-table key holding this marker's body", and a definitions table is a DocumentTree root field. A flat ContentDocument -- the only shape any codec in this family produces -- has no root to carry one, so there is no key to name and the field stays absent. The extent is not a workaround for that: a footnote body is genuinely block content (several paragraphs, a code block, a table), which a string field could not have held either way, and AnchorDescriptor's own note says outright that a ranged anchor "wraps the blocks it spans". A consumer that later factors these documents into a package is free to move the body into a definitions entry and populate `definition` then; nothing here has to be undone for it to.
 //
@@ -554,11 +470,7 @@ function lowerFootnoteDefinition(
     name: node.label,
   };
   const body = node.children.flatMap((child) =>
-    lowerBlock(
-      flattenFootnoteBodyHeadings(child, context),
-      context,
-      contentWidthPt,
-    ),
+    lowerBlock(child, context, contentWidthPt),
   );
   return [
     { kind: "constructStart", descriptor },

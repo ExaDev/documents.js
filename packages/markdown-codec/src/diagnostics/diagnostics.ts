@@ -36,14 +36,12 @@ export const MarkdownDiagnosticCodes = {
   INVENTED_PAGE_GEOMETRY: "md/invented-page-geometry",
   NESTED_EMPHASIS_FLATTENED: "md/nested-emphasis-flattened",
   LINK_TITLE_DROPPED: "md/link-title-dropped",
-  BLOCKQUOTE_CONTAINER_SKIPPED: "md/blockquote-container-skipped",
   LIST_ITEM_BLOCK_UNLISTED: "md/list-item-block-unlisted",
   IMAGE_UNRESOLVED: "md/image-unresolved",
   RAW_HTML_PRESERVED_AS_TEXT: "md/raw-html-preserved-as-text",
   RAW_HTML_DROPPED: "md/raw-html-dropped",
   MATH_INLINE_PRESERVED_AS_TEXT: "md/math-inline-preserved-as-text",
   FRONT_MATTER_KEY_UNMAPPED: "md/front-matter-key-unmapped",
-  FOOTNOTE_BODY_HEADING_FLATTENED: "md/footnote-body-heading-flattened",
   // src/emit (write side: ContentDocument -> markdown)
   CONSTRUCT_UNREPRESENTED: "md/construct-unrepresented",
   // src/write.ts (tree write side: DocumentTree -> markdown, ahead of flattening)

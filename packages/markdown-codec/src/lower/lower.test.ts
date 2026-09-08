@@ -243,27 +243,29 @@ describe("blockquotes", () => {
     ]);
   });
 
-  it("keeps a heading inside a quote styled as Heading{N}, not Quote, and skips the division pair for that quote -- a marker extent may not open a heading scope", () => {
-    const collector = createDiagnosticCollector();
-    const [block] = blocks("> # foo", { sink: collector.sink });
-    expect(block?.kind).toBe("paragraph");
-    expect(paragraph(block).styleId).toBe("Heading1");
-    expect(paragraph(block).headingLevel).toBe(1);
-    expect(paragraph(block).indentLeftPt).toBe(36);
-    expect(
-      collector.has(MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED),
-    ).toBe(true);
+  it("keeps a heading inside a quote styled as Heading{N}, not Quote, and still carries the division pair (ExaDev/document-schema.js#1122)", () => {
+    const result = blocks("> # foo");
+    expect(result.map((block) => block.kind)).toEqual([
+      "constructStart",
+      "paragraph",
+      "constructEnd",
+    ]);
+    const heading = result[1];
+    expect(paragraph(heading).styleId).toBe("Heading1");
+    expect(paragraph(heading).headingLevel).toBe(1);
+    expect(paragraph(heading).indentLeftPt).toBe(36);
   });
 
-  it("skips the pair for a quote containing a heading anywhere in its subtree, including inside a nested list", () => {
-    const collector = createDiagnosticCollector();
-    const kinds = blocks("> - item\n>\n>   # heading in item", {
-      sink: collector.sink,
-    }).map((block) => block.kind);
-    expect(kinds).not.toContain("constructStart");
-    expect(
-      collector.has(MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED),
-    ).toBe(true);
+  it("carries the pair for a quote containing a heading anywhere in its subtree, including inside a nested list", () => {
+    const kinds = blocks("> - item\n>\n>   # heading in item").map(
+      (block) => block.kind,
+    );
+    expect(kinds).toEqual([
+      "constructStart",
+      "paragraph",
+      "paragraph",
+      "constructEnd",
+    ]);
   });
 
   it("wraps a quote inside a list item, the pair sitting among the item's own membership-carrying blocks", () => {
