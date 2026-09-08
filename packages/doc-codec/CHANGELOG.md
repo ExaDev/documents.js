@@ -1,3 +1,14 @@
+## [2.6.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.5.0...doc-codec%402.6.0) (2026-09-08)
+
+### Features
+
+* **doc-codec:** decrypt XOR-obfuscated documents ([b93cbbc](https://github.com/ExaDev/documents.js/commit/b93cbbc8797703e752e61643bb118e28e244a037))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.10.0
+
 ## [2.5.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.4.3...doc-codec%402.5.0) (2026-09-08)
 
 ### Features

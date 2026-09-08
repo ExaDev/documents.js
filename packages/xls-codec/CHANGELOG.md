@@ -1,3 +1,14 @@
+## [4.10.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.9.0...xls-codec%404.10.0) (2026-09-08)
+
+### Features
+
+* **xls-codec:** decrypt XOR-obfuscated workbooks ([02e9ea7](https://github.com/ExaDev/documents.js/commit/02e9ea76fa106459e70f85a603262bf9f22ad455))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.10.0
+
 ## [4.9.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.8.0...xls-codec%404.9.0) (2026-09-08)
 
 ### Features

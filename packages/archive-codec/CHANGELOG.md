@@ -1,3 +1,9 @@
+## [1.10.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.9.2...archive-codec%401.10.0) (2026-09-08)
+
+### Features
+
+* **archive-codec:** add XOR obfuscation primitives for legacy Excel/Word encryption ([64cb442](https://github.com/ExaDev/documents.js/commit/64cb442029be7f5293b90c6fd07d0f637488e564))
+
 ## [1.9.2](https://github.com/ExaDev/documents.js/compare/archive-codec%401.9.1...archive-codec%401.9.2) (2026-09-08)
 
 
