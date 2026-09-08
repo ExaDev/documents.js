@@ -14,7 +14,10 @@ export const OFFICE_RC4_DOC_BLOCK_SIZE = 512;
 /** The intermediate H0/H1 truncation [MS-OFFCRYPTO] 2.3.6.2 states explicitly ("H0's own first 5 bytes", "H1's own first 5 bytes") -- distinct from the FINAL per-block key length, which is Hfinal in full (see this file's own top comment) and is never truncated. */
 const INTERMEDIATE_HASH_LENGTH_BYTES = 5;
 
-function passwordToUtf16LeBytes(password: string): Uint8Array<ArrayBuffer> {
+/** UTF-16LE password encoding, shared with office-rc4-cryptoapi.ts: both [MS-OFFCRYPTO] key-derivation schemes this package implements hash a password in this same encoding, per their own respective specs (2.3.6.2 and 2.3.5.2). */
+export function passwordToUtf16LeBytes(
+  password: string,
+): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(password.length * 2);
   for (let i = 0; i < password.length; i += 1) {
     const code = password.charCodeAt(i);
