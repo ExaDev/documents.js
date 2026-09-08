@@ -13,7 +13,8 @@ import {
   resolveCellFillColor,
   rgbHexToColor,
 } from "document-schema.js";
-import { segmentOdfParagraphRuns } from "./paragraph";
+import { segmentOdfParagraphRunsMapped } from "./paragraph";
+import { canonicalOdfConstructDescriptor } from "./constructs";
 import { closeListPlan, planListMembership, type ListPlanState } from "./list";
 
 // The write-side canonical form every ODF content writer in this package states its own round-trip law against: what reading a WRITTEN document back actually produces, for the pieces of the content model this package's writers already share verbatim (a paragraph's runs and formatting, a table's cells, an image block) -- factored out once typed/odt/write.ts's own normaliseOdtContent first stated it, now reused by typed/odp/write.ts (a shape's own text paragraphs, and a table nested inside a shape) rather than restated per format. See typed/odt/write.ts's own top-of-file note for the fuller philosophy this canonical-form discipline follows; this module owns only the pieces genuinely identical across every writer, not a format's own section/slide-level structure.
@@ -69,21 +70,51 @@ export function canonicalRun(run: ContentRun): ContentRun {
   return canonical;
 }
 
-// One paragraph in the exact shape reading the written document back produces: runs segmented into what ODF's inline content model can carry (see segmentOdfParagraphRuns's own note), list membership renumbered onto the given canonical numId (undefined strips membership entirely -- a table cell, which never carries list membership, always passes undefined here), and every field the format has no spelling for dropped. styleId is the interesting one -- a heading's identity is STRUCTURAL in ODF (a text:h carrying text:outline-level), so a reader always re-derives it as "Heading{level}" and it survives exactly; every other paragraph's styleId is a producer's own style name, and this package's writers mint their own automatic-style names, so an incoming one cannot survive and is dropped rather than pretended about. Refuses (rather than silently dropping) a run-level construct extent, the same fidelity-construct stance every writer in this package takes.
+// One paragraph in the exact shape reading the written document back produces: runs segmented into what ODF's inline content model can carry (see segmentOdfParagraphRuns's own note), list membership renumbered onto the given canonical numId (undefined strips membership entirely -- a table cell, which never carries list membership, always passes undefined here), and every field the format has no spelling for dropped. styleId is the interesting one -- a heading's identity is STRUCTURAL in ODF (a text:h carrying text:outline-level), so a reader always re-derives it as "Heading{level}" and it survives exactly; every other paragraph's styleId is a producer's own style name, and this package's writers mint their own automatic-style names, so an incoming one cannot survive and is dropped rather than pretended about. `allowConstructs` gates whether a run-level construct extent (a field, bookmark, note, annotation, or tracked change) is even considered here: false (the default, every caller except the odt writer's own top-level body) still refuses one outright, matching every writer's established fidelity-construct stance for content this package has no run-construct writer wired up for yet (a table cell, an odp/odg shape's own text -- ExaDev/documents.js#969); true (the odt writer's own body-paragraph path) lets typed/shared/paragraph.ts's writeOdfParagraphChildren decide construct-by-construct, mapping the surviving extents' startRun/endRun onto the canonical run list the SAME segmentation this function already applies produces, and still throwing (via odf.js's own assertWritableParagraph, called before this ever runs) for a construct kind no writer resolves yet.
 export function canonicalParagraph(
   paragraph: ContentParagraph,
   listNumId: string | undefined,
+  allowConstructs = false,
 ): ContentParagraph {
-  if (paragraph.constructs !== undefined && paragraph.constructs.length > 0) {
+  if (
+    !allowConstructs &&
+    paragraph.constructs !== undefined &&
+    paragraph.constructs.length > 0
+  ) {
     throw unsupportedContent(
       "run-level construct extents (a field, bookmark, note, annotation, or tracked change)",
       "a paragraph",
     );
   }
+  const { canonical: segmentedRuns, boundaryMap } =
+    segmentOdfParagraphRunsMapped(
+      paragraph.runs,
+      allowConstructs
+        ? new Set<number>([
+            0,
+            paragraph.runs.length,
+            ...(paragraph.constructs ?? []).flatMap((extent) => [
+              extent.startRun,
+              extent.endRun,
+            ]),
+          ])
+        : new Set<number>([0, paragraph.runs.length]),
+    );
   const canonical: ContentParagraph = {
     kind: "paragraph",
-    runs: segmentOdfParagraphRuns(paragraph.runs).map(canonicalRun),
+    runs: segmentedRuns.map(canonicalRun),
   };
+  if (
+    allowConstructs &&
+    paragraph.constructs !== undefined &&
+    paragraph.constructs.length > 0
+  ) {
+    canonical.constructs = paragraph.constructs.map((extent) => ({
+      descriptor: canonicalOdfConstructDescriptor(extent.descriptor),
+      startRun: boundaryMap.get(extent.startRun)!,
+      endRun: boundaryMap.get(extent.endRun)!,
+    }));
+  }
   if (paragraph.headingLevel !== undefined) {
     canonical.headingLevel = paragraph.headingLevel;
     canonical.styleId = `Heading${paragraph.headingLevel}`;
