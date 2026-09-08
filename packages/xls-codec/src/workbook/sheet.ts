@@ -15,6 +15,7 @@ import {
   RECORD_BLANK,
   RECORD_BOOLERR,
   RECORD_BOTTOMMARGIN,
+  RECORD_CFEX,
   RECORD_COLINFO,
   RECORD_CONDFMT,
   RECORD_CONDFMT12,
@@ -55,6 +56,7 @@ import {
   readCondFmt12Group,
   type RawConditionalFormat12,
 } from "./conditional-format-12";
+import { readCfEx, type CfExTarget } from "./conditional-format-ex";
 import { readDv, type RawDataValidation } from "./data-validation";
 
 // The worksheet substream ([MS-XLS] 2.1.7.20.5): the grid geometry and the cell table for one sheet. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/f41c06f2-9057-49a1-8c3f-a4a4d211fc56
@@ -295,6 +297,8 @@ export function readSheetRecords(
   const dataValidations: RawDataValidation[] = [];
   const conditionalFormats: RawConditionalFormat[] = [];
   const conditionalFormats12: RawConditionalFormat12[] = [];
+  // Keyed by CondFmt's own nID ([MS-XLS] 2.5.56), so a later CFEx record (always positioned after every CondFmt/CondFmt12 group on the sheet, per [MS-XLS] 2.1.7.20.6's own worksheet-substream ABNF) can resolve which group's ranges and raw CF operands it extends. See conditional-format-ex.ts's own top comment.
+  const legacyCondFmtsByNID = new Map<number, CfExTarget>();
   let usedRange: RawRange | undefined;
   const marginsPt: {
     left?: number;
@@ -337,6 +341,10 @@ export function readSheetRecords(
       case RECORD_CONDFMT: {
         const group = readCondFmtGroup(records, index, formulaSheets);
         conditionalFormats.push(...group.formats);
+        legacyCondFmtsByNID.set(group.nID, {
+          ranges: group.ranges,
+          cfs: group.rawCfs,
+        });
         // A CondFmt's own CF children are consumed here, not re-visited by this same loop -- they carry no case of their own (a stray CF this group's own bounds-checking rejected simply falls through to `default` next iteration).
         index += group.recordsConsumed - 1;
         break;
@@ -346,6 +354,13 @@ export function readSheetRecords(
         conditionalFormats12.push(...group.formats);
         // Mirrors RECORD_CONDFMT above: a CondFmt12's own CF12 children are consumed here, not re-visited by this same loop.
         index += group.recordsConsumed - 1;
+        break;
+      }
+      case RECORD_CFEX: {
+        const format = readCfEx(record, legacyCondFmtsByNID, formulaSheets);
+        if (format !== undefined) {
+          conditionalFormats12.push(format);
+        }
         break;
       }
       case RECORD_BLANK:
