@@ -98,6 +98,29 @@ describe("readPptStreams", () => {
     });
   });
 
+  it("resolves a title run's bold and colour from the master's own style cascade and colour scheme, when the run itself states neither", () => {
+    const { currentUserStream, powerPointDocumentStream } =
+      syntheticPresentation({ masterTitleBold: true });
+    const [slide] = readPptStreams(
+      currentUserStream,
+      powerPointDocumentStream,
+    ).slides;
+    // The title placeholder's own text carries no StyleTextPropAtom at all (see syntheticPresentation's own construction) -- every field below comes from the master's TITLE-type TextMasterStyleAtom level 0, not from the run itself.
+    expect(slide?.shapes[0]?.blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [
+          {
+            text: "Quarterly review",
+            bold: true,
+            // Accent 1 (colour-scheme slot 0x05) resolved against the master's own colour scheme -- see MASTER_COLOR_SCHEME's own comment in test-support/presentation.ts.
+            color: { r: 0x1a / 255, g: 0x4b / 255, b: 0x8c / 255 },
+          },
+        ],
+      },
+    ]);
+  });
+
   it("skips the patriarch group, leaving only the two content shapes", () => {
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation();

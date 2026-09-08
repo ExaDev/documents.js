@@ -14,9 +14,14 @@ import {
   assembleTree,
 } from "document-schema.js";
 import { buildParagraphs } from "./content";
+import { readSlideSchemeColorSchemeAtom } from "./document/color-scheme";
 import { readDocumentAtom } from "./document/document-atom";
-import { decryptPptDocumentStream } from "./encryption";
 import { readFontNames } from "./document/fonts";
+import {
+  type MasterInfo,
+  buildMasterStyleTable,
+  readSlideAtom,
+} from "./document/master";
 import { readNotesListWithText } from "./document/notes-list";
 import { readNotesContainerAtom, readNotesText } from "./document/notes";
 import {
@@ -24,24 +29,41 @@ import {
   readSlideListWithText,
 } from "./document/slide-list";
 import { readDrawingShapes } from "./drawing/shapes";
+import { decryptPptDocumentStream } from "./encryption";
 import { PptEncryptedError, PptFormatError } from "./errors";
 import { type PptRecord, childRecords, findChild } from "./record/tree";
 import {
+  RT_ColorSchemeAtom,
   RT_Document,
   RT_DocumentAtom,
   RT_Drawing,
   RT_Environment,
+  RT_MainMaster,
   RT_OutlineTextRefAtom,
   RT_Slide,
+  RT_SlideAtom,
   RT_SlideListWithText,
   RT_StyleTextPropAtom,
+  RT_TextHeaderAtom,
+  RT_TextMasterStyleAtom,
+  SLIDE_LIST_INSTANCE_MASTERS,
   SLIDE_LIST_INSTANCE_NOTES,
   SLIDE_LIST_INSTANCE_SLIDES,
 } from "./record/types";
 import { readCurrentUserAtom } from "./stream/current-user";
 import { buildPersistDirectory, resolvePersistObject } from "./stream/persist";
-import { characterCountOf, readTextBody } from "./text/atoms";
-import { type StyleTextProps, readStyleTextPropAtom } from "./text/style";
+import {
+  characterCountOf,
+  readTextBody,
+  readTextHeaderAtom,
+} from "./text/atoms";
+import {
+  type MasterTextStyleAtom,
+  type RgbColor,
+  type StyleTextProps,
+  readStyleTextPropAtom,
+  readTextMasterStyleAtom,
+} from "./text/style";
 import { POINTS_PER_INCH, masterUnitsToPoints } from "./units";
 
 // The read path, top to bottom: an [MS-CFB] compound file's two required streams, the persist directory that says which of the file's appended edits is live, the document container that edit names, and then each slide's drawing and text mapped onto document-schema.js's presentation content model -- the same ContentSlide/ContentShape/ContentParagraph/ContentRun vocabulary ooxml.js's pptx reader and odf.js's odp reader produce, so a .ppt reaches every consumer of that schema without a second representation of a slide existing anywhere. [MS-PPT] 2.1.1 Current User Stream: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/76cfa657-07a6-464b-81ab-4c017c611f64 [MS-PPT] 2.1.2 PowerPoint Document Stream: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/1fc22d56-28f9-4818-bd45-67c2bf721ccf
@@ -78,15 +100,26 @@ function requireStream(
   return stream.bytes;
 }
 
-// A shape's text, whether it is stored on the shape itself or -- for a placeholder -- in the document's slide list, which the shape points into with an OutlineTextRefAtom. The two spellings are not alternatives a producer picks freely: a title or body placeholder's text is genuinely absent from the slide's own drawing, so a reader that only looked at the client textbox would report those shapes as empty.
+interface ShapeText {
+  readonly textType: number;
+  readonly records: readonly PptRecord[];
+}
+
+// A shape's text, whether it is stored on the shape itself or -- for a placeholder -- in the document's slide list, which the shape points into with an OutlineTextRefAtom. The two spellings are not alternatives a producer picks freely: a title or body placeholder's text is genuinely absent from the slide's own drawing, so a reader that only looked at the client textbox would report those shapes as empty. They also disagree about where TextHeaderAtom itself ends up: a client textbox's own children include it as a raw record, but readSlideListWithText (document/slide-list.ts) already consumes it while building each OutlineText, capturing its textType separately rather than leaving it in `records` -- so the two branches below resolve textType in genuinely different ways rather than both searching `records` for one.
 function textRecordsFor(
   clientTextbox: PptRecord,
   persist: SlidePersist,
-): readonly PptRecord[] {
+): ShapeText {
   const children = childRecords(clientTextbox);
   const outlineRef = findChild(children, RT_OutlineTextRefAtom);
   if (outlineRef === undefined) {
-    return children;
+    const headerRecord = findChild(children, RT_TextHeaderAtom);
+    if (headerRecord === undefined) {
+      throw new PptFormatError(
+        "a client textbox's own text records carry no TextHeaderAtom, which [MS-PPT] 2.9.1 requires to precede its TextCharsAtom/TextBytesAtom",
+      );
+    }
+    return { textType: readTextHeaderAtom(headerRecord), records: children };
   }
   if (outlineRef.data.length < 4) {
     throw new PptFormatError(
@@ -105,18 +138,19 @@ function textRecordsFor(
       `OutlineTextRefAtom references text ${index} of slide ${persist.slideId}, which has only ${persist.texts.length} texts in the slide list`,
     );
   }
-  return outlineText.records;
+  return { textType: outlineText.textType, records: outlineText.records };
 }
 
 function blocksFor(
   clientTextbox: PptRecord | undefined,
   persist: SlidePersist,
   fontNames: readonly string[],
+  masterInfo: MasterInfo,
 ): ContentBlock[] {
   if (clientTextbox === undefined) {
     return [];
   }
-  const records = textRecordsFor(clientTextbox, persist);
+  const { textType, records } = textRecordsFor(clientTextbox, persist);
   const text = readTextBody(records);
   if (text === undefined) {
     return [];
@@ -126,7 +160,14 @@ function blocksFor(
     styleRecord === undefined
       ? NO_STYLE
       : readStyleTextPropAtom(styleRecord, characterCountOf(text));
-  return buildParagraphs(text, style, fontNames);
+  return buildParagraphs(
+    text,
+    style,
+    fontNames,
+    masterInfo.styles,
+    textType,
+    masterInfo.colorScheme,
+  );
 }
 
 // Every notes slide's text, keyed by the slideId of the presentation slide it belongs to. [MS-PPT] 3.5.3 makes this the association: "A notes slide is associated with its presentation slide by means of the slideIdRef field in the NotesContainer record", and it explicitly warns that the notes list's own order is not meaningful, so the mapping has to be built from each container's own atom rather than by pairing the two lists positionally. A NotesContainer naming the notes master states slideIdRef 0x00000000, which no presentation slide's own slideId can be, so such an entry simply matches nothing.
@@ -156,6 +197,59 @@ function readNotesBySlideId(
   return notes;
 }
 
+// A slide's own colour scheme, when it states one directly, else its master's. [MS-PPT] 2.5.1 mandates every SlideContainer carry its own SlideSchemeColorSchemeAtom, and a real producer that visually "follows the master's scheme" does so by duplicating the master's own RGB values into it rather than omitting the atom -- but this package's own writer (write.ts's writeSlideContainer) does not currently write one at all, so this reader tolerates its absence by falling back to the resolved master's colour scheme, which is also what an absent atom would mean in practice for a slide that genuinely follows its master.
+function colorSchemeFor(
+  slideChildren: readonly PptRecord[],
+  master: MasterInfo,
+): readonly RgbColor[] {
+  const ownScheme = findChild(slideChildren, RT_ColorSchemeAtom);
+  return ownScheme === undefined
+    ? master.colorScheme
+    : readSlideSchemeColorSchemeAtom(ownScheme);
+}
+
+// Every master persist object, keyed by its own identifier ([MS-PPT] 2.2.13 MasterId), resolved from the master list's own MasterPersistAtom entries -- the same RT_SlidePersistAtom shape the slide list itself uses ([MS-PPT] 2.4.14.1/2.4.14.2), read with the identical readSlideListWithText a slide's own list uses, its own `slideId` field simply naming a master rather than a slide here. A real .ppt genuinely carries more than one master when it mixes design templates within one deck, unlike this package's own writer, which only ever produces one -- SlideAtom.masterIdRef is a real per-slide choice, not a formality.
+function readMastersById(
+  streamBytes: Uint8Array<ArrayBuffer>,
+  directory: ReadonlyMap<number, number>,
+  masterList: PptRecord | undefined,
+  documentDefault: MasterTextStyleAtom | undefined,
+): Map<number, MasterInfo> {
+  const mastersById = new Map<number, MasterInfo>();
+  if (masterList === undefined) {
+    return mastersById;
+  }
+  for (const persist of readSlideListWithText(masterList)) {
+    const masterContainer = resolvePersistObject(
+      streamBytes,
+      directory,
+      persist.persistIdRef,
+      `MasterPersistAtom for master ${persist.slideId}`,
+    );
+    if (masterContainer.header.recType !== RT_MainMaster) {
+      throw new PptFormatError(
+        `persist object ${persist.persistIdRef} is record type 0x${masterContainer.header.recType.toString(16)}, not the RT_MainMaster (0x${RT_MainMaster.toString(16)}) its MasterPersistAtom promised`,
+      );
+    }
+    const masterChildren = childRecords(masterContainer);
+    const masterAtoms = masterChildren
+      .filter((record) => record.header.recType === RT_TextMasterStyleAtom)
+      .map(readTextMasterStyleAtom);
+    const styles = buildMasterStyleTable(masterAtoms, documentDefault);
+    const colorSchemeRecord = findChild(masterChildren, RT_ColorSchemeAtom);
+    if (colorSchemeRecord === undefined) {
+      throw new PptFormatError(
+        `MainMasterContainer for master ${persist.slideId} has no SlideSchemeColorSchemeAtom, which [MS-PPT] 2.5.3 requires`,
+      );
+    }
+    mastersById.set(persist.slideId, {
+      styles,
+      colorScheme: readSlideSchemeColorSchemeAtom(colorSchemeRecord),
+    });
+  }
+  return mastersById;
+}
+
 function readSlide(
   streamBytes: Uint8Array<ArrayBuffer>,
   directory: ReadonlyMap<number, number>,
@@ -163,6 +257,7 @@ function readSlide(
   size: PageSize,
   fontNames: readonly string[],
   notes: string,
+  mastersById: ReadonlyMap<number, MasterInfo>,
 ): ContentSlide {
   const slideContainer = resolvePersistObject(
     streamBytes,
@@ -175,7 +270,26 @@ function readSlide(
       `persist object ${persist.persistIdRef} is record type 0x${slideContainer.header.recType.toString(16)}, not the RT_Slide (0x${RT_Slide.toString(16)}) its SlidePersistAtom promised`,
     );
   }
-  const drawing = findChild(childRecords(slideContainer), RT_Drawing);
+  const slideChildren = childRecords(slideContainer);
+  const slideAtomRecord = findChild(slideChildren, RT_SlideAtom);
+  if (slideAtomRecord === undefined) {
+    throw new PptFormatError(
+      `SlideContainer for slide ${persist.slideId} has no SlideAtom, which [MS-PPT] 2.5.1 requires as its first child`,
+    );
+  }
+  const { masterIdRef } = readSlideAtom(slideAtomRecord);
+  const master = mastersById.get(masterIdRef);
+  if (master === undefined) {
+    throw new PptFormatError(
+      `slide ${persist.slideId}'s own SlideAtom names masterIdRef ${masterIdRef}, which the master list does not contain`,
+    );
+  }
+  const masterInfo: MasterInfo = {
+    styles: master.styles,
+    colorScheme: colorSchemeFor(slideChildren, master),
+  };
+
+  const drawing = findChild(slideChildren, RT_Drawing);
   const shapes: ContentShape[] = [];
   for (const shape of drawing === undefined ? [] : readDrawingShapes(drawing)) {
     // A shape with no anchor has no rectangle on the slide, and ContentShape has no way to say "positioned, but unknown where". Dropping it loses less than inventing a position for it would: the alternative is a shape rendered at a place the file never states.
@@ -195,7 +309,7 @@ function readSlide(
       insetTopPt: DEFAULT_INSET_TOP_BOTTOM_PT,
       insetRightPt: DEFAULT_INSET_LEFT_RIGHT_PT,
       insetBottomPt: DEFAULT_INSET_TOP_BOTTOM_PT,
-      blocks: blocksFor(shape.clientTextbox, persist, fontNames),
+      blocks: blocksFor(shape.clientTextbox, persist, fontNames, masterInfo),
     });
   }
   // Speaker notes live in their own NotesContainer persist objects, reached through the document's notes list rather than through the slide, and are resolved to this slide by readNotesBySlideId above. A slide with no notes slide of its own reads as "", which is what the schema requires of a slide with none.
@@ -262,6 +376,15 @@ export function readPptStreams(
 
   const environment = findChild(children, RT_Environment);
   const fontNames = environment === undefined ? [] : readFontNames(environment);
+  // [MS-PPT] 2.9.35: the DocumentTextInfoContainer's own TextMasterStyleAtom (a direct child of Environment, recInstance OTHER) is the fallback of last resort every TextTypeEnum member falls through to when its own master states nothing -- see document/master.ts's own top comment.
+  const documentDefaultRecord =
+    environment === undefined
+      ? undefined
+      : findChild(childRecords(environment), RT_TextMasterStyleAtom);
+  const documentDefault =
+    documentDefaultRecord === undefined
+      ? undefined
+      : readTextMasterStyleAtom(documentDefaultRecord);
 
   // The master, slide and notes lists all carry RT_SlideListWithText and differ only by recInstance, so matching on the record type alone would find whichever came first -- the master list.
   const listWithInstance = (instance: number): PptRecord | undefined =>
@@ -270,6 +393,12 @@ export function readPptStreams(
         record.header.recType === RT_SlideListWithText &&
         record.header.recInstance === instance,
     );
+  const mastersById = readMastersById(
+    streamBytes,
+    directory,
+    listWithInstance(SLIDE_LIST_INSTANCE_MASTERS),
+    documentDefault,
+  );
   const slideList = listWithInstance(SLIDE_LIST_INSTANCE_SLIDES);
   const persists =
     slideList === undefined ? [] : readSlideListWithText(slideList);
@@ -290,6 +419,7 @@ export function readPptStreams(
         size,
         fontNames,
         notesBySlideId.get(persist.slideId) ?? "",
+        mastersById,
       ),
     ),
   };

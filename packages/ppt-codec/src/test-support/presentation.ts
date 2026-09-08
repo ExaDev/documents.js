@@ -7,6 +7,7 @@ import {
   OfficeArtFSPGR,
   OfficeArtSpContainer,
   OfficeArtSpgrContainer,
+  RT_ColorSchemeAtom,
   RT_CryptSession10Container,
   RT_CurrentUserAtom,
   RT_Document,
@@ -15,16 +16,20 @@ import {
   RT_Environment,
   RT_FontCollection,
   RT_FontEntityAtom,
+  RT_MainMaster,
   RT_Notes,
   RT_NotesAtom,
   RT_OutlineTextRefAtom,
   RT_PersistDirectoryAtom,
   RT_Slide,
+  RT_SlideAtom,
   RT_SlideListWithText,
   RT_SlidePersistAtom,
   RT_TextBytesAtom,
   RT_TextHeaderAtom,
+  RT_TextMasterStyleAtom,
   RT_UserEditAtom,
+  SLIDE_LIST_INSTANCE_MASTERS,
   SLIDE_LIST_INSTANCE_NOTES,
   SLIDE_LIST_INSTANCE_SLIDES,
 } from "../record/types";
@@ -43,9 +48,11 @@ import {
 import { CURRENT_USER_HEADER_TOKEN_PLAIN } from "../stream/current-user";
 import {
   TEXT_TYPE_BODY,
+  TEXT_TYPE_NOTES,
   TEXT_TYPE_OTHER,
   TEXT_TYPE_TITLE,
 } from "../text/atoms";
+import { CF_BOLD, CF_COLOR, STYLE_BOLD } from "../text/style";
 
 // A whole synthetic presentation: the two [MS-PPT] streams of a one-slide document carrying a title placeholder (whose text lives in the document's slide list, reached by an OutlineTextRefAtom), a plain text box (whose text lives on the shape), and -- when asked for -- a notes slide of its own in a separate persist object reached through the document's notes list. Assembled from the same record builders the per-record suites use, so the end-to-end test exercises the real offset arithmetic -- the persist directory, the edit chain, and every cross-stream reference -- rather than a stubbed one.
 
@@ -106,6 +113,56 @@ function fsp(spid: number, flags: number): Uint8Array<ArrayBuffer> {
   });
 }
 
+// [MS-PPT] 2.5.2's 0x18-byte SlideAtom, recVer 0x2 -- geom and placeholderTypes are irrelevant to this reader (shapes come from the drawing tree, not this array) and are left zero; only masterIdRef/notesIdRef, the two fields readSlideAtom actually surfaces, carry real values.
+function slideAtom(
+  masterIdRef: number,
+  notesIdRef: number,
+): Uint8Array<ArrayBuffer> {
+  return atom(
+    RT_SlideAtom,
+    concatBytes(
+      i32le(0), // geom
+      new Uint8Array(8), // placeholderTypes
+      u32le(masterIdRef),
+      u32le(notesIdRef),
+      u16le(0), // slideFlags
+      u16le(0), // unused
+    ),
+    { recVer: 0x2 },
+  );
+}
+
+// [MS-PPT] 2.9.51 SlideSchemeColorSchemeAtom: 8 ColorStruct entries (red, green, blue, unused), independently fixed here rather than reused from color-scheme-write.ts's own DEFAULT_SCHEME_COLORS -- a read-path fixture should not depend on what the write path happens to choose.
+function slideSchemeColorSchemeAtom(
+  colors: readonly (readonly [number, number, number])[],
+): Uint8Array<ArrayBuffer> {
+  return atom(
+    RT_ColorSchemeAtom,
+    concatBytes(
+      ...colors.map(
+        ([red, green, blue]) => new Uint8Array([red, green, blue, 0]),
+      ),
+    ),
+    { recInstance: 0x001 },
+  );
+}
+
+// A TextMasterStyleAtom for TITLE stating one real level (level 0): bold, and a colour-scheme reference to Accent 1 (slot 0x05) rather than a literal RGB value -- built directly from the mask-bit layout text/style.ts's own readTextPFException/readTextCFException expect (the same low-level construction style.test.ts's own fixtures already use), independently of those readers, so this fixture proves the wiring rather than merely reflecting it. Used only when a test asks for it (masterTitleBold): every other master-related test keeps the empty-levels master every other test already relies on.
+function titleMasterStyleAtomWithBoldAccent1(): Uint8Array<ArrayBuffer> {
+  const pfLevel = u32le(0); // masks: no paragraph-level fields stated
+  const cfMasks = CF_BOLD | CF_COLOR;
+  const cfLevel = concatBytes(
+    u32le(cfMasks),
+    u16le(STYLE_BOLD), // fontStyle
+    new Uint8Array([0, 0, 0, 0x05]), // ColorIndexStruct: rgb bytes unused for a scheme reference, index 0x05 = Accent 1
+  );
+  return atom(
+    RT_TextMasterStyleAtom,
+    concatBytes(u16le(1), pfLevel, cfLevel), // cLevels = 1
+    { recInstance: TEXT_TYPE_TITLE },
+  );
+}
+
 function clientAnchor(
   top: number,
   left: number,
@@ -135,6 +192,8 @@ export interface SyntheticPresentationOptions {
   readonly password?: string;
   // Speaker notes for the one slide. Absent means the document carries no notes list and no NotesContainer at all, which is how a real presentation with no notes is stored.
   readonly notesText?: string;
+  // When set, the master's own TITLE TextMasterStyleAtom states one real level (bold, Accent 1 scheme colour) instead of the usual empty one -- an end-to-end proof that a title run stating neither directly resolves both through document/master.ts's own cascade and through the slide's colour scheme, rather than only through the pure-function unit tests document/master.test.ts/document/color-scheme.test.ts already cover in isolation.
+  readonly masterTitleBold?: boolean;
 }
 
 // [MS-OFFCRYPTO] 2.3.5.1's own RC4 CryptoAPI EncryptionInfo/EncryptionHeader/EncryptionVerifier layout, built independently of encryption.ts's own reader (readDocumentEncryptionAtom) rather than by calling it in reverse -- the two are cross-checked against each other only by the read.test.ts round trip that decrypts what this function encrypts, not by sharing this byte-layout logic. keySizeBits is fixed at 128 here: this package's own decryptor supports any RC4 key size the header states, so a fixture testing the 40-bit special case belongs in encryption.test.ts, which exercises deriveRc4CryptoApiBlockKey directly rather than through a whole synthetic presentation.
@@ -203,14 +262,18 @@ export function syntheticPresentation(
     encrypted = false,
     password,
     notesText,
+    masterTitleBold = false,
   } = options;
 
   const USER_NAME = "Ada";
 
   const DOCUMENT_PERSIST_ID = 1;
-  const SLIDE_PERSIST_ID = 2;
-  const NOTES_PERSIST_ID = 3;
-  const ENCRYPTION_PERSIST_ID = 4;
+  const MASTER_PERSIST_ID = 2;
+  const SLIDE_PERSIST_ID = 3;
+  const NOTES_PERSIST_ID = 4;
+  const ENCRYPTION_PERSIST_ID = 5;
+  // [MS-PPT] 2.2.13: a MasterId MUST be at or above 0x80000000, which is also what keeps it out of the SlideId range -- matching master-write.ts's own MASTER_SLIDE_ID.
+  const MASTER_ID = 0x80000000;
   const SLIDE_ID = 256;
   const NOTES_ID = 512;
   // Fixed rather than random: a reproducible fixture is easier to debug than one that only fails intermittently, and RC4 CryptoAPI's own security properties are not what this fixture is testing.
@@ -218,12 +281,29 @@ export function syntheticPresentation(
   for (let i = 0; i < 16; i += 1) {
     ENCRYPTION_SALT[i] = i * 11 + 5;
   }
+  // PowerPoint's own default light scheme -- an arbitrary but fixed and realistic 8-entry colour scheme, independently chosen from color-scheme-write.ts's own defaults (see slideSchemeColorSchemeAtom's own comment).
+  const MASTER_COLOR_SCHEME: readonly (readonly [number, number, number])[] = [
+    [0xff, 0xff, 0xff], // background
+    [0x00, 0x00, 0x00], // text
+    [0x80, 0x80, 0x80], // shadow
+    [0x00, 0x00, 0x00], // title text
+    [0xe6, 0xf2, 0xff], // fill
+    [0x1a, 0x4b, 0x8c], // Accent 1
+    [0x8c, 0x1a, 0x4b], // Accent 2
+    [0x4b, 0x8c, 0x1a], // Accent 3
+  ];
 
   const documentChildren = [
     documentAtom(slideWidth, slideHeight),
     container(RT_Environment, [
       container(RT_FontCollection, [fontEntityAtom(fontName)]),
     ]),
+    // [MS-PPT] 2.4.14.1 MasterListWithTextContainer: the same RT_SlidePersistAtom shape the slide list itself uses, its own identifier naming a master rather than a slide.
+    container(
+      RT_SlideListWithText,
+      [slidePersistAtom(MASTER_PERSIST_ID, 0, MASTER_ID)],
+      { recInstance: SLIDE_LIST_INSTANCE_MASTERS },
+    ),
     container(
       RT_SlideListWithText,
       [
@@ -258,6 +338,7 @@ export function syntheticPresentation(
   const documentContainer = container(RT_Document, documentChildren);
 
   const slideContainer = container(RT_Slide, [
+    slideAtom(MASTER_ID, notesText === undefined ? 0 : NOTES_ID),
     container(RT_Drawing, [
       container(OfficeArtDgContainer, [
         container(OfficeArtSpgrContainer, [
@@ -316,8 +397,22 @@ export function syntheticPresentation(
           ]),
         ]);
 
+  // [MS-PPT] 2.5.3 MainMasterContainer: this master's own SlideAtom (masterIdRef/notesIdRef both 0, since a master follows no master and has no notes of its own), one TextMasterStyleAtom per placeholder type it carries -- each stating no levels of its own (cLevels 0x0000), matching this package's own writer (master-write.ts) exactly, so a fixture whose runs never state formatting either resolves to the identical "everything absent" every existing test already asserts -- and this master's own colour scheme.
+  const masterContainer = container(RT_MainMaster, [
+    slideAtom(0, 0),
+    masterTitleBold
+      ? titleMasterStyleAtomWithBoldAccent1()
+      : atom(RT_TextMasterStyleAtom, u16le(0), {
+          recInstance: TEXT_TYPE_TITLE,
+        }),
+    atom(RT_TextMasterStyleAtom, u16le(0), { recInstance: TEXT_TYPE_BODY }),
+    atom(RT_TextMasterStyleAtom, u16le(0), { recInstance: TEXT_TYPE_NOTES }),
+    slideSchemeColorSchemeAtom(MASTER_COLOR_SCHEME),
+  ]);
+
   const persistObjects = [
     { persistId: DOCUMENT_PERSIST_ID, bytes: documentContainer },
+    { persistId: MASTER_PERSIST_ID, bytes: masterContainer },
     { persistId: SLIDE_PERSIST_ID, bytes: slideContainer },
   ];
   if (notesContainer !== undefined) {

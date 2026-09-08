@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PptFormatError } from "../errors";
 import { readRecordAt } from "../record/tree";
-import { RT_StyleTextPropAtom } from "../record/types";
+import { RT_StyleTextPropAtom, RT_TextMasterStyleAtom } from "../record/types";
 import {
   concatBytes,
   i16le,
@@ -10,7 +10,17 @@ import {
   u32le,
   writeAtom as atom,
 } from "../record/write";
-import { ALIGN_CENTER, ALIGN_RIGHT, readStyleTextPropAtom } from "./style";
+import {
+  TEXT_TYPE_BODY,
+  TEXT_TYPE_CENTER_BODY,
+  TEXT_TYPE_TITLE,
+} from "./atoms";
+import {
+  ALIGN_CENTER,
+  ALIGN_RIGHT,
+  readStyleTextPropAtom,
+  readTextMasterStyleAtom,
+} from "./style";
 
 // Mask bit positions written as raw shifts here, straight from the spec's own bit tables, rather than imported from the implementation: a test asserting against the constants the parser reads would pass even if both were wrong together. PFMasks ([MS-PPT] 2.9.x): https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/2a02831a-088b-44e7-84c9-c185ab314a71
 const PF_LEFT_MARGIN = 1 << 8;
@@ -199,18 +209,36 @@ describe("readStyleTextPropAtom character runs", () => {
       [cfRun(6, CF_COLOR, colorIndex(0xff, 0x80, 0x00, 0xfe))],
     );
     expect(read(bytes, 6).characterRuns[0]?.properties.color).toEqual({
-      red: 0xff,
-      green: 0x80,
-      blue: 0x00,
+      kind: "rgb",
+      rgb: { red: 0xff, green: 0x80, blue: 0x00 },
     });
   });
 
-  it("leaves the colour undefined for a scheme-colour index, whose value lives in the colour scheme", () => {
+  it("reads a ColorIndexStruct whose index is 0x00-0x07 as a colour-scheme slot reference, not yet resolved to RGB", () => {
     const bytes = styleTextPropAtom(
       [pfRun(6, 0, 0)],
       [cfRun(6, CF_COLOR, colorIndex(0x11, 0x22, 0x33, 0x01))],
     );
+    expect(read(bytes, 6).characterRuns[0]?.properties.color).toEqual({
+      kind: "scheme",
+      schemeIndex: 1,
+    });
+  });
+
+  it("leaves the colour undefined for the 0xFF undefined-colour sentinel", () => {
+    const bytes = styleTextPropAtom(
+      [pfRun(6, 0, 0)],
+      [cfRun(6, CF_COLOR, colorIndex(0x11, 0x22, 0x33, 0xff))],
+    );
     expect(read(bytes, 6).characterRuns[0]?.properties.color).toBeUndefined();
+  });
+
+  it("rejects a ColorIndexStruct index outside the scheme-slot/literal/undefined range", () => {
+    const bytes = styleTextPropAtom(
+      [pfRun(6, 0, 0)],
+      [cfRun(6, CF_COLOR, colorIndex(0x11, 0x22, 0x33, 0x2a))],
+    );
+    expect(() => read(bytes, 6)).toThrow(PptFormatError);
   });
 
   it("reads fontRef, and the later ansiFontRef, in the spec's field order", () => {
@@ -251,5 +279,97 @@ describe("readStyleTextPropAtom character runs", () => {
   it("rejects character runs whose counts overshoot the text's character count", () => {
     const bytes = styleTextPropAtom([pfRun(6, 0, 0)], [cfRun(99, 0)]);
     expect(() => read(bytes, 6)).toThrow(PptFormatError);
+  });
+});
+
+// A TextMasterStyleLevel's own pf/cf fields are the identical TextPFException/TextCFException byte layout a run's own PFRun/CFRun carry, minus the leading count field a run has and a level does not -- so these builders are pfRun/cfRun above with that one field dropped, not a second independently-derived layout.
+function pfLevel(
+  masks: number,
+  ...optionalFields: readonly Uint8Array<ArrayBuffer>[]
+): Uint8Array<ArrayBuffer> {
+  return concatBytes(u32le(masks), ...optionalFields);
+}
+
+function cfLevel(
+  masks: number,
+  ...optionalFields: readonly Uint8Array<ArrayBuffer>[]
+): Uint8Array<ArrayBuffer> {
+  return concatBytes(u32le(masks), ...optionalFields);
+}
+
+function masterStyleAtom(
+  textType: number,
+  levels: readonly Uint8Array<ArrayBuffer>[],
+  cLevels: number = levels.length,
+): Uint8Array<ArrayBuffer> {
+  return atom(RT_TextMasterStyleAtom, concatBytes(u16le(cLevels), ...levels), {
+    recInstance: textType,
+  });
+}
+
+describe("readTextMasterStyleAtom", () => {
+  it("reads the atom's own textType from its recInstance", () => {
+    const bytes = masterStyleAtom(TEXT_TYPE_TITLE, []);
+    expect(readTextMasterStyleAtom(readRecordAt(bytes, 0)).textType).toBe(
+      TEXT_TYPE_TITLE,
+    );
+  });
+
+  it("reads cLevels 0 as no levels at all", () => {
+    const bytes = masterStyleAtom(TEXT_TYPE_BODY, []);
+    expect(readTextMasterStyleAtom(readRecordAt(bytes, 0)).levels).toEqual([]);
+  });
+
+  it("reads each level's own pf/cf pair, in position order", () => {
+    const bytes = masterStyleAtom(TEXT_TYPE_BODY, [
+      concatBytes(
+        pfLevel(PF_ALIGN, u16le(ALIGN_CENTER)),
+        cfLevel(CF_BOLD, u16le(STYLE_BOLD)),
+      ),
+      concatBytes(pfLevel(0), cfLevel(CF_ITALIC, u16le(STYLE_ITALIC))),
+    ]);
+    const { levels } = readTextMasterStyleAtom(readRecordAt(bytes, 0));
+    expect(levels).toHaveLength(2);
+    expect(levels[0]?.paragraph.alignment).toBe(ALIGN_CENTER);
+    expect(levels[0]?.character.bold).toBe(true);
+    expect(levels[1]?.paragraph.alignment).toBeUndefined();
+    expect(levels[1]?.character.italic).toBe(true);
+  });
+
+  it("stamps each level's own paragraph.indentLevel from its position, for a type with no explicit level field", () => {
+    const bytes = masterStyleAtom(TEXT_TYPE_TITLE, [
+      concatBytes(pfLevel(0), cfLevel(0)),
+      concatBytes(pfLevel(0), cfLevel(0)),
+      concatBytes(pfLevel(0), cfLevel(0)),
+    ]);
+    const { levels } = readTextMasterStyleAtom(readRecordAt(bytes, 0));
+    expect(levels.map((l) => l.paragraph.indentLevel)).toEqual([0, 1, 2]);
+  });
+
+  it("consumes an explicit level field for a type at or above CENTER_BODY, without letting it affect the level's own position-derived indentLevel", () => {
+    // TEXT_TYPE_CENTER_BODY levels carry a real level field ([MS-PPT] 2.9.35's own explicit-level types) ahead of pf/cf; this fixture states a level field that disagrees with the level's own position (2 at position 0) specifically to prove the byte offset consumed is the explicit field, not that this reader trusts its value over the position.
+    const bytes = masterStyleAtom(TEXT_TYPE_CENTER_BODY, [
+      concatBytes(u16le(2), pfLevel(0), cfLevel(CF_BOLD, u16le(STYLE_BOLD))),
+    ]);
+    const { levels } = readTextMasterStyleAtom(readRecordAt(bytes, 0));
+    expect(levels).toHaveLength(1);
+    expect(levels[0]?.character.bold).toBe(true);
+    expect(levels[0]?.paragraph.indentLevel).toBe(0);
+  });
+
+  it("rejects cLevels greater than the mandated maximum of 5", () => {
+    const bytes = atom(RT_TextMasterStyleAtom, u16le(6), {
+      recInstance: TEXT_TYPE_BODY,
+    });
+    expect(() => readTextMasterStyleAtom(readRecordAt(bytes, 0))).toThrow(
+      PptFormatError,
+    );
+  });
+
+  it("rejects a record that is not RT_TextMasterStyleAtom", () => {
+    const bytes = styleTextPropAtom([], []);
+    expect(() => readTextMasterStyleAtom(readRecordAt(bytes, 0))).toThrow(
+      PptFormatError,
+    );
   });
 });
