@@ -753,6 +753,81 @@ describe("interpretContentStream: lines", () => {
     );
     expect(items[0]?.kind).toBe("path");
   });
+
+  // The read-side half of content-write.ts's writeStrokeStyleState: a dash array with a nonzero on-length reads back as 'dashed', a zero on-length reads back as 'dotted' (see strokeStyleFromDashArray's own comment for why), and the PDF default of no dash array at all leaves style absent rather than reporting 'solid' as a value.
+  it("recovers 'dashed' from a nonzero-on-length dash array", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("2 w [6 6] 0 d 0 0 m 10 10 l S"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toEqual([
+      {
+        kind: "line",
+        x1Pt: 0,
+        y1Pt: 0,
+        x2Pt: 10,
+        y2Pt: 10,
+        color: { r: 0, g: 0, b: 0 },
+        widthPt: 2,
+        style: "dashed",
+      },
+    ]);
+  });
+
+  it("recovers 'dotted' from a zero-on-length dash array", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("2 w [0 4] 0 d 1 J 0 0 m 10 10 l S"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toEqual([
+      {
+        kind: "line",
+        x1Pt: 0,
+        y1Pt: 0,
+        x2Pt: 10,
+        y2Pt: 10,
+        color: { r: 0, g: 0, b: 0 },
+        widthPt: 2,
+        style: "dotted",
+      },
+    ]);
+  });
+
+  it("leaves style absent once a dash array is reset back to empty", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("2 w [6 6] 0 d [] 0 d 0 0 m 10 10 l S"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toEqual([
+      {
+        kind: "line",
+        x1Pt: 0,
+        y1Pt: 0,
+        x2Pt: 10,
+        y2Pt: 10,
+        color: { r: 0, g: 0, b: 0 },
+        widthPt: 2,
+      },
+    ]);
+  });
 });
 
 describe("interpretContentStream: general paths", () => {
