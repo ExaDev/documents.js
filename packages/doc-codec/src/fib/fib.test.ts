@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DocFormatError, DocUnsupportedError } from "../errors";
+import { DocFormatError } from "../errors";
 import { buildFib } from "../test-support/fib";
-import { parseFib, tableStreamName } from "./fib";
+import { parseFib, peekFibBaseFlags, tableStreamName } from "./fib";
 import {
   FIB_FC_LCB_BLOB_OFFSET,
   FIB_RG_LW_OFFSET,
@@ -20,6 +20,27 @@ describe("Fib field offsets", () => {
 
   it("places FibRgFcLcbBlob after FibRgLw97's 88 bytes and cbRgFcLcb's 2", () => {
     expect(FIB_FC_LCB_BLOB_OFFSET).toBe(154);
+  });
+});
+
+describe("peekFibBaseFlags", () => {
+  it("reads fEncrypted, fObfuscated, and fWhichTblStm from the unencrypted prefix, without requiring a full valid Fib", () => {
+    expect(peekFibBaseFlags(buildFib({}))).toEqual({
+      fEncrypted: false,
+      fObfuscated: false,
+      fWhichTblStm: 1,
+    });
+    expect(peekFibBaseFlags(buildFib({ fEncrypted: true }))).toEqual({
+      fEncrypted: true,
+      fObfuscated: false,
+      fWhichTblStm: 1,
+    });
+    expect(
+      peekFibBaseFlags(buildFib({ fEncrypted: true, fObfuscated: true })),
+    ).toEqual({ fEncrypted: true, fObfuscated: true, fWhichTblStm: 1 });
+    expect(peekFibBaseFlags(buildFib({ fWhichTblStm: 0 }))).toMatchObject({
+      fWhichTblStm: 0,
+    });
   });
 });
 
@@ -70,10 +91,8 @@ describe("parseFib", () => {
     );
   });
 
-  it("refuses an encrypted document rather than reading its ciphertext as text", () => {
-    expect(() => parseFib(buildFib({ fEncrypted: true }))).toThrow(
-      DocUnsupportedError,
-    );
+  it("no longer refuses fEncrypted itself -- read.ts's own orchestration does, via peekFibBaseFlags, before parseFib ever runs on genuinely encrypted bytes", () => {
+    expect(parseFib(buildFib({ fEncrypted: true })).nFib).toBe(0x00c1);
   });
 
   it("reports fComplex, which marks a document last written by an incremental save", () => {

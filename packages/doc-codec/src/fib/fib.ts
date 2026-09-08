@@ -1,5 +1,5 @@
 import { readInt32LE, readUint16LE, readUint32LE } from "../bytes";
-import { DocFormatError, DocUnsupportedError } from "../errors";
+import { DocFormatError } from "../errors";
 import {
   FC_LCB_VALUE_INDEX,
   FIB_BASE_FLAG,
@@ -14,7 +14,7 @@ import {
   LW_OFFSET,
 } from "./offsets";
 
-// The File Information Block, [MS-DOC] 2.5.1 -- the structure at offset zero of the WordDocument stream that every other structure in a .doc is reached through. Only the fields this reader acts on are surfaced: the two stream-selection and refusal flags, the per-subdocument CP counts that carve the logical text stream into main document, footnotes, headers and the rest, and the four offset/length pairs locating the piece table, the character and paragraph formatting bin tables, and the style sheet. The remaining ~180 pairs are deliberately not modelled -- a field this package cannot yet act on is better absent than present and ignored, which would read as support it does not have.
+// The File Information Block, [MS-DOC] 2.5.1 -- the structure at offset zero of the WordDocument stream that every other structure in a .doc is reached through. Only the fields this reader acts on are surfaced: peekFibBaseFlags's own stream-selection and encryption-detection flags, the per-subdocument CP counts that carve the logical text stream into main document, footnotes, headers and the rest, and the four offset/length pairs locating the piece table, the character and paragraph formatting bin tables, and the style sheet. The remaining ~180 pairs are deliberately not modelled -- a field this package cannot yet act on is better absent than present and ignored, which would read as support it does not have.
 
 export interface Fib {
   readonly nFib: number;
@@ -53,6 +53,20 @@ export interface Fib {
   readonly lcbPlfLfo: number;
 }
 
+/** FibBase's own encryption-related flags and stream selector, [MS-DOC] 2.5.2 -- every one of them sits within the 68-byte prefix [MS-DOC] 2.2.6.2 leaves unencrypted, so this is always safely readable regardless of whether the document is actually encrypted, unlike parseFib's own later reads. read.ts calls this before choosing whether to decrypt and which Table stream to read, since both decisions have to be made before parseFib can run on a genuinely encrypted document -- parseFib itself no longer checks fEncrypted at all; a caller reading raw, still-encrypted bytes into it is a caller bug read.ts's own orchestration exists to prevent. */
+export function peekFibBaseFlags(wordDocument: Uint8Array): {
+  readonly fEncrypted: boolean;
+  readonly fObfuscated: boolean;
+  readonly fWhichTblStm: 0 | 1;
+} {
+  const flags = readUint16LE(wordDocument, 10);
+  return {
+    fEncrypted: (flags & FIB_BASE_FLAG.fEncrypted) !== 0,
+    fObfuscated: (flags & FIB_BASE_FLAG.fObfuscated) !== 0,
+    fWhichTblStm: (flags & FIB_BASE_FLAG.fWhichTblStm) !== 0 ? 1 : 0,
+  };
+}
+
 export function parseFib(wordDocument: Uint8Array): Fib {
   const wIdent = readUint16LE(wordDocument, 0);
   if (wIdent !== FIB_W_IDENT) {
@@ -63,15 +77,6 @@ export function parseFib(wordDocument: Uint8Array): Fib {
 
   const nFib = readUint16LE(wordDocument, 2);
   const flags = readUint16LE(wordDocument, 10);
-
-  // Refused rather than attempted: an encrypted or XOR-obfuscated document's WordDocument and Table streams hold ciphertext, so every offset below would address bytes that are not the structures they claim to be. Parsing on would not fail -- it would produce a piece table of arbitrary offsets and, from it, a document of arbitrary text. Loud refusal is the only honest outcome until decryption exists.
-  if ((flags & FIB_BASE_FLAG.fEncrypted) !== 0) {
-    throw new DocUnsupportedError(
-      (flags & FIB_BASE_FLAG.fObfuscated) !== 0
-        ? "this document is XOR-obfuscated ([MS-DOC] 2.2.6.1); doc-codec cannot decrypt it, and reading its streams as plaintext would produce arbitrary text rather than the document's own"
-        : "this document is encrypted ([MS-DOC] 2.2.6); doc-codec cannot decrypt it, and reading its streams as plaintext would produce arbitrary text rather than the document's own",
-    );
-  }
 
   // csw and cslw are fixed by the specification for every nFib, and the offsets of everything after them are computed from those fixed sizes. A file disagreeing is either corrupt or a format this reader does not know, and either way every subsequent read would land on neighbouring bytes.
   const csw = readUint16LE(wordDocument, FIB_BASE_SIZE);

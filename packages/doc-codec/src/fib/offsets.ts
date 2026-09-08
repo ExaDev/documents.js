@@ -5,6 +5,9 @@
 /** FibBase, [MS-DOC] 2.5.2 -- the fixed 32-byte head of every Fib. csw, the count of 16-bit values in FibRgW97, sits immediately after it, so this doubles as csw's own offset. */
 export const FIB_BASE_SIZE = 32;
 
+/** FibBase.lKey, [MS-DOC] 2.5.2 -- a 4-byte field at offset 14 (after wIdent, nFib, unused, lid, pnNext, and the flags word), meaningful only when fEncrypted is 1: the XOR obfuscation password verifier when fObfuscated is also 1, or the byte size of the EncryptionHeader stored at the start of the Table stream when fObfuscated is 0 ([MS-DOC] 2.2.6.2/encryption.ts). Otherwise MUST be 0. Sits within the 68-byte prefix [MS-DOC] 2.2.6.2 leaves unencrypted, so it is always safely readable regardless of the document's own encryption status. */
+export const FIB_LKEY_OFFSET = 14;
+
 /** csw MUST be 0x000E, fixing FibRgW97 at 28 bytes and every offset after it. */
 export const FIB_CSW_REQUIRED = 0x000e;
 

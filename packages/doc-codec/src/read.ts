@@ -12,8 +12,9 @@ import type {
 } from "document-schema.js";
 import { slice } from "./bytes";
 import { SUMMARY_INFORMATION_STREAM, WORD_DOCUMENT_STREAM } from "./detect";
-import { DocFormatError } from "./errors";
-import { parseFib, tableStreamName, type Fib } from "./fib/fib";
+import { decryptDocStreams } from "./encryption";
+import { DocFormatError, DocUnsupportedError } from "./errors";
+import { parseFib, peekFibBaseFlags, type Fib } from "./fib/fib";
 import {
   readNumberingDefinitions,
   type NumberingDefinitions,
@@ -49,7 +50,7 @@ import {
 
 // The top-level read: a .doc's bytes to a ContentDocument. Every step below is one of [MS-DOC]'s own algorithms, in the order the specification chains them -- the compound-file container gives the WordDocument and Table streams, the FIB gives the offsets, the piece table turns character positions into bytes, and the two bin tables turn byte offsets into formatting. readParagraphs itself only ever produces flat ParagraphEntry values (one per paragraph/cell/row mark, whatever its own table depth); table/read.ts's assembleBlocks is what folds a contiguous run of table-depth paragraphs into a real ContentTable, so this module carries no table-specific logic of its own.
 //
-// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images, no footnotes/headers/endnotes, no section boundaries beyond the whole document's own page size and margins, no table/numbering style formatting, and no decryption. Each of those is a genuine layer of the format, and each is absent rather than approximated. A paragraph or character style's own formatting IS resolved, up its full istdBase inheritance chain (style/stsh.ts's resolveStyleFormatting, ExaDev/documents.js#1005). Tables are read, but only at depth 1 -- a table nested inside a table cell is refused (table/read.ts) rather than mis-read. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like -- see DocContent's own comment below for why that rides outside ContentDocument's shared shape.
+// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images, no footnotes/headers/endnotes, no section boundaries beyond the whole document's own page size and margins, and no table/numbering style formatting -- RC4-encrypted documents are read given a password (encryption.ts), but XOR obfuscation and RC4 CryptoAPI stay refused. Each of those absences is a genuine layer of the format, and each is absent rather than approximated. A paragraph or character style's own formatting IS resolved, up its full istdBase inheritance chain (style/stsh.ts's resolveStyleFormatting, ExaDev/documents.js#1005). Tables are read, but only at depth 1 -- a table nested inside a table cell is refused (table/read.ts) rather than mis-read. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like -- see DocContent's own comment below for why that rides outside ContentDocument's shared shape.
 
 /** Word's own default for a new document (US Letter, one-inch margins) -- what a field this reader resolves from PlcfSed/Sepx (prop/sep.ts's readSectionProperties) falls back to when the file states nothing for it, exactly as it would fall back to Word's own implementation-dependent default for that one unstated sprm. */
 const DEFAULT_PAGE_SIZE: PageSize = { widthPt: 612, heightPt: 792 };
@@ -69,30 +70,50 @@ export interface DocStreams {
 }
 
 // Pulls the two streams every later step reads from, the FIB that says which of "1Table" and "0Table" is the one in play, and the optional metadata stream. Both WordDocument and Table names always exist as candidates in the container; only the one FibBase.fWhichTblStm selects holds the structures the FIB's offsets address, and reading the other yields offsets into unrelated bytes.
-export function readDocStreams(bytes: Uint8Array<ArrayBuffer>): DocStreams {
+//
+// fWhichTblStm (and, for an encrypted document, fEncrypted/fObfuscated) is read via fib/fib.ts's own peekFibBaseFlags rather than a full parseFib, since all three sit within the 68-byte prefix [MS-DOC] 2.2.6.2 leaves unencrypted regardless of the document's own encryption status -- parseFib's own later reads do not, so it cannot run at all until decryption (when needed) has already happened. `password` decrypts a document protected by [MS-DOC] 2.2.6.2's RC4 encryption header under the same [MS-OFFCRYPTO] 2.3.6.1 scheme xls-codec's own FilePass reading uses -- see encryption.ts. It is ignored for an unencrypted document, and a missing or incorrect password against an encrypted one throws rather than returning a partial or garbled document.
+export function readDocStreams(
+  bytes: Uint8Array<ArrayBuffer>,
+  password?: string,
+): DocStreams {
   const streams = readCompoundFile(bytes);
-  const wordDocument = streams.find(
+  const wordDocumentStream = streams.find(
     (stream) => stream.path === WORD_DOCUMENT_STREAM,
   );
-  if (wordDocument === undefined) {
+  if (wordDocumentStream === undefined) {
     throw new DocFormatError(
       `this compound file has no "${WORD_DOCUMENT_STREAM}" stream, so it is not a Word Binary File (it holds: ${streams.map((stream) => stream.path).join(", ")})`,
     );
   }
-  const fib = parseFib(wordDocument.bytes);
-  const wanted = tableStreamName(fib);
-  const table = streams.find((stream) => stream.path === wanted);
-  if (table === undefined) {
+  const flags = peekFibBaseFlags(wordDocumentStream.bytes);
+  const wanted = flags.fWhichTblStm === 1 ? "1Table" : "0Table";
+  const tableStream = streams.find((stream) => stream.path === wanted);
+  if (tableStream === undefined) {
     throw new DocFormatError(
       `FibBase.fWhichTblStm selects the "${wanted}" stream, which this compound file does not contain`,
     );
   }
+
+  let wordDocument = wordDocumentStream.bytes;
+  let table = tableStream.bytes;
+  if (flags.fEncrypted) {
+    if (flags.fObfuscated) {
+      throw new DocUnsupportedError(
+        "this document is XOR-obfuscated ([MS-DOC] 2.2.6.1); doc-codec cannot decrypt it, and reading its streams as plaintext would produce arbitrary text rather than the document's own",
+      );
+    }
+    const decrypted = decryptDocStreams(wordDocument, table, password);
+    wordDocument = decrypted.wordDocument;
+    table = decrypted.table;
+  }
+
+  const fib = parseFib(wordDocument);
   const metadata = streams.find(
     (stream) => stream.path === SUMMARY_INFORMATION_STREAM,
   );
   return {
-    wordDocument: wordDocument.bytes,
-    table: table.bytes,
+    wordDocument,
+    table,
     fib,
     metadata: metadata?.bytes,
   };
@@ -103,8 +124,14 @@ export type DocContent = ContentDocument & {
   readonly numbering: NumberingDefinitions;
 };
 
-export function readDocContent(bytes: Uint8Array<ArrayBuffer>): DocContent {
-  const { wordDocument, table, fib, metadata } = readDocStreams(bytes);
+export function readDocContent(
+  bytes: Uint8Array<ArrayBuffer>,
+  password?: string,
+): DocContent {
+  const { wordDocument, table, fib, metadata } = readDocStreams(
+    bytes,
+    password,
+  );
 
   const pieceTable = parseClx(
     slice(table, fib.fcClx, fib.lcbClx, "Clx in the Table stream"),

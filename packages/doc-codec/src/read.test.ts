@@ -1,4 +1,9 @@
 import {
+  decryptOfficeRc4,
+  deriveOfficeRc4BaseHash,
+  md5,
+  OFFICE_RC4_DOC_BLOCK_SIZE,
+  OFFICE_RC4_VERIFIER_LENGTH,
   readCompoundFile,
   writeCompoundFile,
   writeSummaryInformationStream,
@@ -8,6 +13,11 @@ import type { ContentBlock, ContentParagraph } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { isDocBytes } from "./detect";
 import { DocFormatError, DocUnsupportedError } from "./errors";
+import {
+  FC_LCB_VALUE_INDEX,
+  FIB_FC_LCB_BLOB_OFFSET,
+  FIB_LKEY_OFFSET,
+} from "./fib/offsets";
 import { readDocContent, readDocStreams } from "./read";
 import { compoundFile } from "./test-support/cfb";
 import { buildDoc } from "./test-support/doc";
@@ -636,5 +646,137 @@ describe("metadata", () => {
   it('reads {} when the container carries no "\\x05SummaryInformation" stream', () => {
     const doc = buildDoc({ paragraphs: [{ runs: [{ text: "Hello." }] }] });
     expect(readDocContent(doc).metadata).toEqual({});
+  });
+});
+
+describe("RC4-encrypted documents", () => {
+  const PASSWORD = "correct horse";
+  const SALT = new Uint8Array(16).map((_, index) => index * 7 + 1);
+  const WORD_DOCUMENT_PREFIX_LENGTH = 68;
+
+  /**
+   * Takes a plain (unencrypted) .doc's compound-file bytes and turns them into a genuinely RC4-encrypted one: sets FibBase.fEncrypted and lKey, writes a real EncryptionHeader at the start of the Table stream, and encrypts WordDocument from byte 68 and Table from lKey on -- each independently, its own block-number counter starting fresh at that stream's own byte 0, exactly as [MS-DOC] 2.2.6.2 requires and encryption.ts's own top comment documents.
+   *
+   * RC4's XOR symmetry makes "encrypt" and "decrypt" the identical operation, so this reuses decryptOfficeRc4 -- the same primitive readDocContent decrypts with -- rather than a separate encryption routine; the two directions cancelling out is exactly what makes RC4 what it is, not a shortcut that only looks like a round trip. What this test actually proves is read.ts's own orchestration: locating the right Table stream before a full Fib exists, decrypting at the right offsets, and handing the result to parseFib correctly -- the crypto itself is already independently verified (archive-codec's own office-rc4.test.ts, this package's own encryption.test.ts).
+   */
+  function encryptDoc(
+    plainDoc: Uint8Array<ArrayBuffer>,
+    password: string,
+    salt: Uint8Array<ArrayBuffer>,
+  ): Uint8Array<ArrayBuffer> {
+    const streams = readCompoundFile(plainDoc);
+    const wordDocumentStream = streams.find(
+      (stream) => stream.path === "WordDocument",
+    );
+    const tableStream = streams.find((stream) => stream.path === "1Table");
+    if (wordDocumentStream === undefined || tableStream === undefined) {
+      throw new Error("buildDoc always writes WordDocument and 1Table");
+    }
+
+    const baseHash = deriveOfficeRc4BaseHash(password, salt);
+    const verifier = new Uint8Array(16).map((_, index) => index * 3 + 11);
+    const verifierHash = md5(verifier);
+    const encryptedVerifier = decryptOfficeRc4(
+      baseHash,
+      0,
+      verifier,
+      OFFICE_RC4_DOC_BLOCK_SIZE,
+    );
+    const encryptedVerifierHash = decryptOfficeRc4(
+      baseHash,
+      OFFICE_RC4_VERIFIER_LENGTH,
+      verifierHash,
+      OFFICE_RC4_DOC_BLOCK_SIZE,
+    );
+    const headerSize = 4 + OFFICE_RC4_VERIFIER_LENGTH * 3;
+    const header = new Uint8Array(headerSize);
+    const headerView = new DataView(header.buffer);
+    headerView.setUint16(0, 1, true); // vMajor
+    headerView.setUint16(2, 1, true); // vMinor
+    header.set(salt, 4);
+    header.set(encryptedVerifier, 20);
+    header.set(encryptedVerifierHash, 36);
+
+    // A plaintext copy of WordDocument, patched before any encryption happens: fEncrypted/lKey (both in the always-unencrypted 68-byte prefix, so either order would do), and every fc offset FibRgFcLcb97 states relative to the Table stream's own byte 0 -- which, in a real encrypted file, the producer writes already accounting for the EncryptionHeader occupying the first lKey bytes there, exactly as it would for any other structure sharing the stream. buildDoc computed these assuming no header at all, so inserting one here means shifting every fc value (never the matching lcb, a length rather than a position) by the same headerSize this fixture is about to prepend -- the one piece of this fixture that is not simply "encrypt bytes 68 onward", and the reason this helper reads real field offsets from fib/offsets.ts rather than reimplementing them. This has to happen on the plaintext, not the ciphertext: the FibRgFcLcb97 blob itself sits well past byte 68 (FIB_FC_LCB_BLOB_OFFSET is 154), so it is encrypted content like any other -- patching it after encryption would be overwriting ciphertext bytes with a plaintext-shaped value instead of shifting the value the encryption itself protects.
+    const shiftedWordDocument = new Uint8Array(wordDocumentStream.bytes);
+    const shiftedView = new DataView(shiftedWordDocument.buffer);
+    const existingFlags = shiftedView.getUint16(10, true);
+    shiftedView.setUint16(10, existingFlags | 0x0100, true); // fEncrypted
+    shiftedView.setUint32(FIB_LKEY_OFFSET, headerSize, true); // lKey
+    // Shifted unconditionally, even where the existing value happens to be 0: 0 is a genuinely valid Table-stream offset (a real producer often places the Clx at the very start), not a sentinel for "field unused" -- every real reader (read.ts's own `fib.lcbStshf > 0 ? ... : undefined`, and the same pattern for every other fc/lcb pair) gates on the matching *lcb* being positive, never on the fc value itself, so shifting an unused field's fc (whose lcb is 0 regardless) changes nothing anything actually reads.
+    for (const [name, valueIndex] of Object.entries(FC_LCB_VALUE_INDEX)) {
+      if (!name.startsWith("fc")) continue;
+      const offset = FIB_FC_LCB_BLOB_OFFSET + valueIndex * 4;
+      const existing = shiftedView.getUint32(offset, true);
+      shiftedView.setUint32(offset, existing + headerSize, true);
+    }
+
+    const wordDocument = new Uint8Array(shiftedWordDocument.length);
+    wordDocument.set(
+      shiftedWordDocument.subarray(0, WORD_DOCUMENT_PREFIX_LENGTH),
+      0,
+    );
+    wordDocument.set(
+      decryptOfficeRc4(
+        baseHash,
+        WORD_DOCUMENT_PREFIX_LENGTH,
+        shiftedWordDocument.subarray(WORD_DOCUMENT_PREFIX_LENGTH),
+        OFFICE_RC4_DOC_BLOCK_SIZE,
+      ),
+      WORD_DOCUMENT_PREFIX_LENGTH,
+    );
+
+    const table = new Uint8Array(headerSize + tableStream.bytes.length);
+    table.set(header, 0);
+    table.set(
+      decryptOfficeRc4(
+        baseHash,
+        headerSize,
+        tableStream.bytes,
+        OFFICE_RC4_DOC_BLOCK_SIZE,
+      ),
+      headerSize,
+    );
+
+    return writeCompoundFile(
+      streams.map((stream) => {
+        if (stream.path === "WordDocument")
+          return { ...stream, bytes: wordDocument };
+        if (stream.path === "1Table") return { ...stream, bytes: table };
+        return stream;
+      }),
+    );
+  }
+
+  it("refuses an encrypted document when no password is given", () => {
+    const doc = encryptDoc(
+      buildDoc({ paragraphs: [{ runs: [{ text: "Secret." }] }] }),
+      PASSWORD,
+      SALT,
+    );
+    expect(() => readDocContent(doc)).toThrow(DocUnsupportedError);
+  });
+
+  it("refuses an encrypted document given the wrong password", () => {
+    const doc = encryptDoc(
+      buildDoc({ paragraphs: [{ runs: [{ text: "Secret." }] }] }),
+      PASSWORD,
+      SALT,
+    );
+    expect(() => readDocContent(doc, "the wrong password")).toThrow(
+      DocUnsupportedError,
+    );
+  });
+
+  it("decrypts an encrypted document given the correct password", () => {
+    const plainDoc = buildDoc({
+      paragraphs: [{ runs: [{ text: "Secret meeting notes." }] }],
+    });
+    const encrypted = encryptDoc(plainDoc, PASSWORD, SALT);
+
+    const plainResult = readDocContent(plainDoc);
+    const decryptedResult = readDocContent(encrypted, PASSWORD);
+
+    expect(decryptedResult).toEqual(plainResult);
   });
 });
