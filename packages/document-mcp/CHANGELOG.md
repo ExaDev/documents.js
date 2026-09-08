@@ -1,3 +1,12 @@
+## [4.8.13](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.12...document-mcp%404.8.13) (2026-09-08)
+
+
+### Dependencies
+
+- Updated wpd-codec to 3.0.9
+- Updated documents.js to 7.8.10
+- Updated document-compute.js to 1.3.42
+
 ## [4.8.12](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.11...document-mcp%404.8.12) (2026-09-08)
 
 
