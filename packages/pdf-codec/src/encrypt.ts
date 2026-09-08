@@ -32,31 +32,32 @@ export interface PdfDecryptor {
   ): Uint8Array<ArrayBuffer>;
 }
 
-// ISO 32000-1 7.6.3.3, Algorithm 2, step (a): the 32-byte padding string every password (including the empty one) is padded to or truncated at.
-const PASSWORD_PADDING = new Uint8Array([
+// ISO 32000-1 7.6.3.3, Algorithm 2, step (a): the 32-byte padding string every password (including the empty one) is padded to or truncated at. Exported: encrypt-write.ts's Algorithm 3/8/9 need the same constant to pad a real owner/user password the same way.
+export const PASSWORD_PADDING = new Uint8Array([
   0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff,
   0xfa, 0x01, 0x08, 0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80, 0x2f, 0x0c,
   0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a,
 ]);
 
-// Algorithm 1's own trailing salt, appended to the per-object key input for an AES (but not an RC4) crypt filter -- the four bytes of the ASCII string "sAlT".
-const AES_OBJECT_KEY_SALT = new Uint8Array([0x73, 0x41, 0x6c, 0x54]);
+// Algorithm 1's own trailing salt, appended to the per-object key input for an AES (but not an RC4) crypt filter -- the four bytes of the ASCII string "sAlT". Exported: the same per-object key derivation (objectKey below) is symmetric between read and write, so encrypt-write.ts reuses this rather than re-deriving it.
+export const AES_OBJECT_KEY_SALT = new Uint8Array([0x73, 0x41, 0x6c, 0x54]);
 
-const MD5_DIGEST_BYTES = 16;
+export const MD5_DIGEST_BYTES = 16;
 const OBJECT_KEY_EXTRA_BYTES = 5; // Algorithm 1: three object-number bytes plus two generation bytes
-const LEGACY_KEY_ITERATIONS = 50; // Algorithm 2 step (h), revision 3 and later
-const ALGORITHM_5_ITERATIONS = 19; // Algorithm 5 step (d): 19 further RC4 passes after the first
+export const LEGACY_KEY_ITERATIONS = 50; // Algorithm 2 step (h) and Algorithm 3 step (c), revision 3 and later
+// Algorithm 3 step (g) and Algorithm 5 step (e): 19 further RC4 passes after the first, each keyed by the base key XORed with the round number. Shared by both algorithms (owner-value computation and user-value computation/verification), not just Algorithm 5, hence the name.
+export const RC4_OBFUSCATION_ROUNDS = 19;
 const R6_MINIMUM_ROUNDS = 64; // Algorithm 2.B: at least 64 rounds before the last-byte termination test applies
 const R6_ROUND_REPEATS = 64; // Algorithm 2.B step (a): K1 is 64 repetitions of the round input
 const R6_TERMINATION_MARGIN = 32; // Algorithm 2.B: stop once the last byte of E is at most (round - 32)
-const AESV3_KEY_BYTES = 32;
-const AESV3_SALT_BYTES = 8;
-const RC4_40_KEY_BYTES = 5;
-const AESV2_KEY_BYTES = 16;
+export const AESV3_KEY_BYTES = 32;
+export const AESV3_SALT_BYTES = 8;
+export const RC4_40_KEY_BYTES = 5;
+export const AESV2_KEY_BYTES = 16;
 const DEFAULT_KEY_BITS = 40;
 const BITS_PER_BYTE = 8;
 const MAX_RC4_KEY_BYTES = 16;
-const ZERO_IV = new Uint8Array(AES_BLOCK_BYTES);
+export const ZERO_IV = new Uint8Array(AES_BLOCK_BYTES);
 
 interface HandlerSetup {
   readonly fileKey: Uint8Array<ArrayBuffer>;
@@ -96,8 +97,8 @@ function bytesEqual(
   return true;
 }
 
-// /P is a signed 32-bit integer whose *unsigned* four bytes go into the key derivation low-order byte first (Algorithm 2 step (d)).
-function permissionsBytes(p: number): Uint8Array<ArrayBuffer> {
+// /P is a signed 32-bit integer whose *unsigned* four bytes go into the key derivation low-order byte first (Algorithm 2 step (d)). Exported: encrypt-write.ts's own Algorithm 2 (file-key computation for a real password) needs the identical encoding.
+export function permissionsBytes(p: number): Uint8Array<ArrayBuffer> {
   const unsigned = Math.trunc(p) >>> 0;
   return new Uint8Array([
     unsigned & 0xff,
@@ -107,18 +108,34 @@ function permissionsBytes(p: number): Uint8Array<ArrayBuffer> {
   ]);
 }
 
-// ISO 32000-1 7.6.3.3, Algorithm 2, for the empty user password: the padded password is the padding string itself, so there is no password argument here at all.
-function computeLegacyFileKey(
-  encryptDict: PdfDict,
+// ISO 32000-1 7.6.3.3, Algorithm 2 step (a) / Algorithm 3 step (a): pad or truncate a password's raw bytes to exactly 32 bytes. Exported so encrypt-write.ts can apply the identical rule to a real, caller-supplied password; the read side never calls this directly because the only password it ever tries is empty, i.e. PASSWORD_PADDING itself unpadded.
+export function padOrTruncatePassword(
+  password: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
+  if (password.length >= PASSWORD_PADDING.length) {
+    return password.subarray(0, PASSWORD_PADDING.length);
+  }
+  const padded = new Uint8Array(PASSWORD_PADDING.length);
+  padded.set(password);
+  padded.set(
+    PASSWORD_PADDING.subarray(0, PASSWORD_PADDING.length - password.length),
+    password.length,
+  );
+  return padded;
+}
+
+// ISO 32000-1 7.6.3.3, Algorithm 2, generalised over an already-padded password (step (a) run once by the caller): both the read path (always the padded empty password -- see computeLegacyFileKey below) and encrypt-write.ts's write path (a real, possibly non-empty, padded password) share every remaining step. Exported for that reuse.
+export function computeLegacyFileKeyFromPaddedPassword(
+  paddedPassword: Uint8Array<ArrayBuffer>,
+  owner: Uint8Array<ArrayBuffer>,
+  permissions: number,
   fileId: Uint8Array<ArrayBuffer>,
   revision: number,
   keyBytes: number,
   encryptMetadata: boolean,
 ): Uint8Array<ArrayBuffer> {
-  const owner = requireStringBytes(encryptDict, "O");
-  const permissions = asNumber(dictGet(encryptDict, "P")) ?? 0;
   const parts: Uint8Array<ArrayBuffer>[] = [
-    PASSWORD_PADDING,
+    paddedPassword,
     owner.subarray(0, PASSWORD_PADDING.length),
     permissionsBytes(permissions),
     fileId,
@@ -136,7 +153,45 @@ function computeLegacyFileKey(
   return digest.subarray(0, keyBytes);
 }
 
-// ISO 32000-1 7.6.3.4, Algorithm 4 (revision 2) and Algorithm 5 (revision 3+), run forwards and compared against the stored /U -- which is exactly Algorithm 6's "does the empty user password open this file" test.
+// ISO 32000-1 7.6.3.3, Algorithm 2, for the empty user password: the padded password is the padding string itself, so there is no password argument here at all.
+function computeLegacyFileKey(
+  encryptDict: PdfDict,
+  fileId: Uint8Array<ArrayBuffer>,
+  revision: number,
+  keyBytes: number,
+  encryptMetadata: boolean,
+): Uint8Array<ArrayBuffer> {
+  const owner = requireStringBytes(encryptDict, "O");
+  const permissions = asNumber(dictGet(encryptDict, "P")) ?? 0;
+  return computeLegacyFileKeyFromPaddedPassword(
+    PASSWORD_PADDING,
+    owner,
+    permissions,
+    fileId,
+    revision,
+    keyBytes,
+    encryptMetadata,
+  );
+}
+
+// ISO 32000-1 7.6.3.4, Algorithm 4 (revision 2) steps (a)-(c) and Algorithm 5 (revision 3+) steps (a)-(e): computing /U in the first place IS this forward computation (a writer stores its result directly), and Algorithm 6 (authenticating a supplied password) is just this same computation compared against whatever a writer already stored. Returns the full 32 bytes for revision 2 (already meaningful throughout) or the 16 meaningful bytes for revision 3+ (the caller decides what -- if anything -- to compare or to append the 16 bytes of arbitrary padding Algorithm 5 step (f) requires after). Exported so both this module's read-side Algorithm 6 and encrypt-write.ts's write-side Algorithm 4/5 share one implementation.
+export function legacyUserValueCore(
+  fileKey: Uint8Array<ArrayBuffer>,
+  fileId: Uint8Array<ArrayBuffer>,
+  revision: number,
+): Uint8Array<ArrayBuffer> {
+  if (revision === 2) {
+    return rc4(fileKey, PASSWORD_PADDING);
+  }
+  let value = rc4(fileKey, md5(concatBytes([PASSWORD_PADDING, fileId])));
+  for (let i = 1; i <= RC4_OBFUSCATION_ROUNDS; i++) {
+    const roundKey = Uint8Array.from(fileKey, (byte) => byte ^ i);
+    value = rc4(roundKey, value);
+  }
+  return value;
+}
+
+// ISO 32000-1 7.6.3.4, Algorithm 6: run Algorithm 4/5 forwards and compare against the stored /U -- "does the supplied password open this file" (this codec only ever supplies the empty password; see this module's own header).
 function legacyUserPasswordVerifies(
   encryptDict: PdfDict,
   fileId: Uint8Array<ArrayBuffer>,
@@ -144,24 +199,17 @@ function legacyUserPasswordVerifies(
   fileKey: Uint8Array<ArrayBuffer>,
 ): boolean {
   const storedUser = requireStringBytes(encryptDict, "U");
-  if (revision === 2) {
-    return bytesEqual(
-      rc4(fileKey, PASSWORD_PADDING),
-      storedUser,
-      PASSWORD_PADDING.length,
-    );
-  }
-  let value = rc4(fileKey, md5(concatBytes([PASSWORD_PADDING, fileId])));
-  for (let i = 1; i <= ALGORITHM_5_ITERATIONS; i++) {
-    const roundKey = Uint8Array.from(fileKey, (byte) => byte ^ i);
-    value = rc4(roundKey, value);
-  }
-  // Only the first 16 bytes are meaningful: Algorithm 5 pads its 16-byte result out to 32 with arbitrary bytes, so a full-length comparison would reject valid files.
-  return bytesEqual(value, storedUser, MD5_DIGEST_BYTES);
+  const value = legacyUserValueCore(fileKey, fileId, revision);
+  // Only the first 16 bytes are meaningful for revision 3+: Algorithm 5 pads its 16-byte result out to 32 with arbitrary bytes, so a full-length comparison would reject valid files. Revision 2's own 32-byte result is meaningful throughout.
+  return bytesEqual(
+    value,
+    storedUser,
+    revision === 2 ? PASSWORD_PADDING.length : MD5_DIGEST_BYTES,
+  );
 }
 
-// ISO 32000-2 7.6.4.3.4, Algorithm 2.B: the revision-6 hardened password hash. Revision 5 (a deprecated Adobe extension that shipped before revision 6 was standardised) stops at the plain SHA-256 of the same input.
-function hardenedHash(
+// ISO 32000-2 7.6.4.3.4, Algorithm 2.B: the revision-6 hardened password hash. Revision 5 (a deprecated Adobe extension that shipped before revision 6 was standardised) stops at the plain SHA-256 of the same input. Exported: encrypt-write.ts's own Algorithm 8/9 (computing /U, /UE, /O, /OE) call the identical hash the read side uses to verify them.
+export function hardenedHash(
   password: Uint8Array<ArrayBuffer>,
   salt: Uint8Array<ArrayBuffer>,
   userData: Uint8Array<ArrayBuffer>,
@@ -376,8 +424,8 @@ function setUpHandler(
   };
 }
 
-// ISO 32000-1 7.6.2, Algorithm 1: mix the object and generation numbers into the file key so no two objects share a keystream.
-function objectKey(
+// ISO 32000-1 7.6.2, Algorithm 1: mix the object and generation numbers into the file key so no two objects share a keystream. Symmetric between read and write (RC4 is its own inverse, and this derives the key an AES-CBC block cipher is keyed with either direction), so encrypt-write.ts reuses this directly rather than re-deriving it.
+export function objectKey(
   fileKey: Uint8Array<ArrayBuffer>,
   num: number,
   gen: number,
