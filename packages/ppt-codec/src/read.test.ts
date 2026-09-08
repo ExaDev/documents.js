@@ -115,6 +115,48 @@ describe("readPptStreams", () => {
       readPptStreams(currentUserStream, powerPointDocumentStream),
     ).toThrow(PptEncryptedError);
   });
+
+  describe("RC4 CryptoAPI-encrypted presentations", () => {
+    const PASSWORD = "Correct Horse Battery Staple";
+
+    it("refuses a genuinely encrypted document given no password", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ password: PASSWORD });
+      expect(() =>
+        readPptStreams(currentUserStream, powerPointDocumentStream),
+      ).toThrow(PptEncryptedError);
+    });
+
+    it("refuses a genuinely encrypted document given the wrong password", () => {
+      const { currentUserStream, powerPointDocumentStream } =
+        syntheticPresentation({ password: PASSWORD });
+      expect(() =>
+        readPptStreams(
+          currentUserStream,
+          powerPointDocumentStream,
+          "wrong password",
+        ),
+      ).toThrow(PptEncryptedError);
+    });
+
+    it("decrypts a presentation given the correct password, matching an unencrypted read of the same content", () => {
+      const plain = syntheticPresentation({ notesText: "Speaker notes" });
+      const encrypted = syntheticPresentation({
+        password: PASSWORD,
+        notesText: "Speaker notes",
+      });
+      const decrypted = readPptStreams(
+        encrypted.currentUserStream,
+        encrypted.powerPointDocumentStream,
+        PASSWORD,
+      );
+      const expected = readPptStreams(
+        plain.currentUserStream,
+        plain.powerPointDocumentStream,
+      );
+      expect(decrypted).toEqual(expected);
+    });
+  });
 });
 
 describe("readPptContent", () => {
