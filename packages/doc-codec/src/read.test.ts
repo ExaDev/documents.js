@@ -374,6 +374,164 @@ describe("readDocContent", () => {
     ).toEqual(["second section"]);
   });
 
+  it("reads footnotes, endnotes, and comments as plain text, one story per subdocument", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [{ runs: [{ text: "main text" }] }],
+        footnotes: [
+          [{ runs: [{ text: "first footnote" }] }],
+          [{ runs: [{ text: "second footnote" }] }],
+        ],
+        endnotes: [[{ runs: [{ text: "an endnote" }] }]],
+        comments: [[{ runs: [{ text: "a reviewer comment" }] }]],
+      }),
+    );
+    expect(document.footnotes).toEqual([
+      { id: "1", text: "first footnote" },
+      { id: "2", text: "second footnote" },
+    ]);
+    expect(document.endnotes).toEqual([{ id: "1", text: "an endnote" }]);
+    expect(document.comments).toEqual([
+      { id: "1", text: "a reviewer comment" },
+    ]);
+  });
+
+  it("reads a footnote/endnote/comment story spanning more than one paragraph as newline-joined text", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [{ runs: [{ text: "main" }] }],
+        footnotes: [
+          [
+            { runs: [{ text: "first line" }] },
+            { runs: [{ text: "second line" }] },
+          ],
+        ],
+      }),
+    );
+    expect(document.footnotes).toEqual([
+      { id: "1", text: "first line\nsecond line" },
+    ]);
+  });
+
+  it("reads an empty footnote story as empty text without absorbing the next story's content", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [{ runs: [{ text: "main" }] }],
+        footnotes: [[], [{ runs: [{ text: "real footnote" }] }]],
+      }),
+    );
+    expect(document.footnotes).toEqual([
+      { id: "1", text: "" },
+      { id: "2", text: "real footnote" },
+    ]);
+  });
+
+  it("reads header/footer stories as real block flow, positioned by section and slot, with an empty story omitted entirely", () => {
+    // Plcfhdd's own fixed layout: six separator stories (all empty here, since nothing under test needs them), then one section's own six -- evenHeader, oddHeader, evenFooter, oddFooter, firstHeader, firstFooter -- only the odd header and odd footer given real content, the rest left empty.
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [{ runs: [{ text: "main text" }] }],
+        headerFooterStories: [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          [{ runs: [{ text: "the odd header" }] }],
+          [],
+          [{ runs: [{ text: "the odd footer" }] }],
+          [],
+          [],
+        ],
+      }),
+    );
+    expect(document.headerFooterStories).toHaveLength(2);
+    const header = document.headerFooterStories.find(
+      (story) => story.slot === "oddHeader",
+    );
+    const footer = document.headerFooterStories.find(
+      (story) => story.slot === "oddFooter",
+    );
+    if (header === undefined || footer === undefined) {
+      throw new Error("both the odd header and odd footer must be present");
+    }
+    expect(header.section).toBe(0);
+    expect(footer.section).toBe(0);
+    expect(
+      header.blocks.map((block) =>
+        block.kind === "paragraph"
+          ? block.runs.map((run) => run.text).join("")
+          : "",
+      ),
+    ).toEqual(["the odd header"]);
+    expect(
+      footer.blocks.map((block) =>
+        block.kind === "paragraph"
+          ? block.runs.map((run) => run.text).join("")
+          : "",
+      ),
+    ).toEqual(["the odd footer"]);
+  });
+
+  it("positions header/footer stories against the right section in a multi-section document", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          { runs: [{ text: "first section" }] },
+          { runs: [{ text: "end of first" }], mark: SECTION_MARK },
+          { runs: [{ text: "second section" }] },
+        ],
+        sections: [SECTION_GEOMETRY, SECTION_GEOMETRY],
+        headerFooterStories: [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          // Section 0's own six slots.
+          [],
+          [{ runs: [{ text: "section one header" }] }],
+          [],
+          [],
+          [],
+          [],
+          // Section 1's own six slots.
+          [],
+          [{ runs: [{ text: "section two header" }] }],
+          [],
+          [],
+          [],
+          [],
+        ],
+      }),
+    );
+    expect(document.headerFooterStories).toHaveLength(2);
+    const first = document.headerFooterStories.find(
+      (story) => story.section === 0,
+    );
+    const second = document.headerFooterStories.find(
+      (story) => story.section === 1,
+    );
+    if (first === undefined || second === undefined) {
+      throw new Error("both sections' own headers must be present");
+    }
+    expect(first.slot).toBe("oddHeader");
+    expect(second.slot).toBe("oddHeader");
+    const textOfStory = (
+      story: (typeof document.headerFooterStories)[number],
+    ) =>
+      story.blocks.map((block) =>
+        block.kind === "paragraph"
+          ? block.runs.map((run) => run.text).join("")
+          : "",
+      );
+    expect(textOfStory(first)).toEqual(["section one header"]);
+    expect(textOfStory(second)).toEqual(["section two header"]);
+  });
+
   it("derives a heading level from the paragraph style index, as sprmPIstd's own rule states", () => {
     const document = readDocContent(
       buildDoc({

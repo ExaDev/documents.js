@@ -14,7 +14,7 @@ import {
   LW_OFFSET,
 } from "./offsets";
 
-// The File Information Block, [MS-DOC] 2.5.1 -- the structure at offset zero of the WordDocument stream that every other structure in a .doc is reached through. Only the fields this reader acts on are surfaced: peekFibBaseFlags's own stream-selection and encryption-detection flags, the per-subdocument CP counts that carve the logical text stream into main document, footnotes, headers and the rest, and the four offset/length pairs locating the piece table, the character and paragraph formatting bin tables, and the style sheet. The remaining ~180 pairs are deliberately not modelled -- a field this package cannot yet act on is better absent than present and ignored, which would read as support it does not have.
+// The File Information Block, [MS-DOC] 2.5.1 -- the structure at offset zero of the WordDocument stream that every other structure in a .doc is reached through. Only the fields this reader acts on are surfaced: peekFibBaseFlags's own stream-selection and encryption-detection flags, the per-subdocument CP counts that carve the logical text stream into main document, footnotes, headers and the rest, the offset/length pairs locating the piece table, the character and paragraph formatting bin tables, the style sheet, PlcfSed, and the footnote/endnote/comment reference and text plexes and Plcfhdd that notes.ts and headers-footers.ts resolve. The remaining ~170 pairs are deliberately not modelled -- a field this package cannot yet act on is better absent than present and ignored, which would read as support it does not have.
 
 export interface Fib {
   readonly nFib: number;
@@ -43,6 +43,21 @@ export interface Fib {
 
   readonly fcPlcfSed: number;
   readonly lcbPlcfSed: number;
+
+  readonly fcPlcffndRef: number;
+  readonly lcbPlcffndRef: number;
+  readonly fcPlcffndTxt: number;
+  readonly lcbPlcffndTxt: number;
+  readonly fcPlcfandRef: number;
+  readonly lcbPlcfandRef: number;
+  readonly fcPlcfandTxt: number;
+  readonly lcbPlcfandTxt: number;
+  readonly fcPlcfendRef: number;
+  readonly lcbPlcfendRef: number;
+  readonly fcPlcfendTxt: number;
+  readonly lcbPlcfendTxt: number;
+  readonly fcPlcfHdd: number;
+  readonly lcbPlcfHdd: number;
 
   readonly fcSttbfFfn: number;
   readonly lcbSttbfFfn: number;
@@ -129,6 +144,20 @@ export function parseFib(wordDocument: Uint8Array): Fib {
     lcbClx: fcLcb(FC_LCB_VALUE_INDEX.lcbClx),
     fcPlcfSed: fcLcb(FC_LCB_VALUE_INDEX.fcPlcfSed),
     lcbPlcfSed: fcLcb(FC_LCB_VALUE_INDEX.lcbPlcfSed),
+    fcPlcffndRef: fcLcb(FC_LCB_VALUE_INDEX.fcPlcffndRef),
+    lcbPlcffndRef: fcLcb(FC_LCB_VALUE_INDEX.lcbPlcffndRef),
+    fcPlcffndTxt: fcLcb(FC_LCB_VALUE_INDEX.fcPlcffndTxt),
+    lcbPlcffndTxt: fcLcb(FC_LCB_VALUE_INDEX.lcbPlcffndTxt),
+    fcPlcfandRef: fcLcb(FC_LCB_VALUE_INDEX.fcPlcfandRef),
+    lcbPlcfandRef: fcLcb(FC_LCB_VALUE_INDEX.lcbPlcfandRef),
+    fcPlcfandTxt: fcLcb(FC_LCB_VALUE_INDEX.fcPlcfandTxt),
+    lcbPlcfandTxt: fcLcb(FC_LCB_VALUE_INDEX.lcbPlcfandTxt),
+    fcPlcfendRef: fcLcb(FC_LCB_VALUE_INDEX.fcPlcfendRef),
+    lcbPlcfendRef: fcLcb(FC_LCB_VALUE_INDEX.lcbPlcfendRef),
+    fcPlcfendTxt: fcLcb(FC_LCB_VALUE_INDEX.fcPlcfendTxt),
+    lcbPlcfendTxt: fcLcb(FC_LCB_VALUE_INDEX.lcbPlcfendTxt),
+    fcPlcfHdd: fcLcb(FC_LCB_VALUE_INDEX.fcPlcfHdd),
+    lcbPlcfHdd: fcLcb(FC_LCB_VALUE_INDEX.lcbPlcfHdd),
     fcSttbfFfn: fcLcb(FC_LCB_VALUE_INDEX.fcSttbfFfn),
     lcbSttbfFfn: fcLcb(FC_LCB_VALUE_INDEX.lcbSttbfFfn),
     fcPlfLst: fcLcb(FC_LCB_VALUE_INDEX.fcPlfLst),
