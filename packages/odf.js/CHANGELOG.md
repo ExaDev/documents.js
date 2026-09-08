@@ -1,3 +1,20 @@
+## [7.10.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.9.2...odf.js%407.10.0) (2026-09-08)
+
+### Features
+
+* **odf.js:** add write-side helpers for ODF divisions and index wrappers ([e921f75](https://github.com/ExaDev/documents.js/commit/e921f75540d4d17a79bf31bb662116c4ff676e0b))
+* **odf.js:** let canonicalParagraph state run-level constructs when allowed ([00d9da2](https://github.com/ExaDev/documents.js/commit/00d9da28f0a3a93b99cdc7966a90f97e014683aa))
+* **odf.js:** splice run-level field and bookmark constructs into paragraph writing ([309f0d3](https://github.com/ExaDev/documents.js/commit/309f0d38011a7dd35ff218d2a4199bdc57f1d04f))
+* **odf.js:** write divisions and index wrappers from block-scope constructs ([bed1946](https://github.com/ExaDev/documents.js/commit/bed19461ff9162ce2d8a8450597e29ad11a979c3))
+
+### Documentation
+
+* **odf.js:** describe which odt fidelity constructs writeOdt now closes ([f85a611](https://github.com/ExaDev/documents.js/commit/f85a611c7360d4c0eec0883731b6000b59132d4e))
+
+### Tests
+
+* **odf.js:** cover the newly-written odt fields, bookmarks, and constructs ([dfbead7](https://github.com/ExaDev/documents.js/commit/dfbead7f523d806ff3764b47ee23017750fc845c))
+
 ## [7.9.2](https://github.com/ExaDev/documents.js/compare/odf.js%407.9.1...odf.js%407.9.2) (2026-09-08)
 
 
