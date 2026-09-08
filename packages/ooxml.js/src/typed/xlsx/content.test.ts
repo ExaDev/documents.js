@@ -1030,6 +1030,17 @@ describe("readXlsxContent: chart graphic frames", () => {
     ).toBe(true);
   });
 
+  it("quarantines the whole chart part -- type, axes, colours, everything the cached-model read does not carry -- as xlsx residue on the embedded object", () => {
+    const document = readXlsxContent(chartDrawingPackage());
+    if (document.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const chart = document.sheets[0]?.embeddedObjects?.[0];
+    expect(chart?.source?.format).toBe("xlsx");
+    expect(chart?.source?.xml).toContain("c:chartSpace");
+    expect(chart?.source?.xml).toContain("c:barChart");
+  });
+
   it("does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the read row is one-way (the established cell-comment asymmetry)", () => {
     const rewritten = readXlsxContent(
       decodePackage(

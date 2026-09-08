@@ -6,7 +6,7 @@ import type {
 } from "document-schema.js";
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
-import { readChartTable } from "../pptx/chart";
+import { readChartResidue, readChartTable } from "../pptx/chart";
 import { readCoreProperties } from "../shared/metadata";
 import { emuToPt } from "../shared/units";
 import {
@@ -382,6 +382,7 @@ export function readSheetDrawing(
         anchorColumn: placement.anchorColumn,
         offsetXPt: placement.offsetXPt,
         offsetYPt: placement.offsetYPt,
+        source: readChartResidue(chart.root, "xlsx"),
       });
     }
     for (const pic of elementsWithTag([node], "xdr:pic")) {
