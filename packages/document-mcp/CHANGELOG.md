@@ -1,3 +1,15 @@
+## [4.8.27](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.26...document-mcp%404.8.27) (2026-09-08)
+
+### Documentation
+
+* **documents.js:** describe odb SQL derived tables and IN/EXISTS subqueries ([79e5249](https://github.com/ExaDev/documents.js/commit/79e524905e6cdc91c4872c6f1ab7196ef46286e4))
+
+
+### Dependencies
+
+- Updated documents.js to 7.10.0
+- Updated document-compute.js to 1.3.56
+
 ## [4.8.26](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.25...document-mcp%404.8.26) (2026-09-08)
 
 

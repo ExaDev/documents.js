@@ -1,3 +1,15 @@
+## [7.10.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.9.1...documents.js%407.10.0) (2026-09-08)
+
+### Features
+
+* **documents.js:** support a derived table in the odb SQL FROM clause ([3449d1b](https://github.com/ExaDev/documents.js/commit/3449d1b761310be06f8560afebddb12a1fc74c63))
+* **documents.js:** support EXISTS (SELECT ...) subqueries in odb SQL ([406119c](https://github.com/ExaDev/documents.js/commit/406119c9b016cba689b147bf681e7ce68ed753dc))
+* **documents.js:** support IN (SELECT ...) subqueries in odb SQL ([ec239a2](https://github.com/ExaDev/documents.js/commit/ec239a298129e99f920c462fc8745a8c5af7d03d))
+
+### Documentation
+
+* **documents.js:** describe odb SQL derived tables and IN/EXISTS subqueries ([79e5249](https://github.com/ExaDev/documents.js/commit/79e524905e6cdc91c4872c6f1ab7196ef46286e4))
+
 ## [7.9.1](https://github.com/ExaDev/documents.js/compare/documents.js%407.9.0...documents.js%407.9.1) (2026-09-08)
 
 ### Tests
