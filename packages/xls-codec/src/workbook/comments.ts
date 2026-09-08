@@ -40,8 +40,8 @@ function readNoteAnchor(group: RecordGroup): NoteAnchor {
     : { row, column, idObj };
 }
 
-/** [MS-XLS] 2.5.92 FtCmo, read only far enough to answer "is this a Note object, and if so, what id does its own TxO get associated through": ft/cb are fixed reserved values this reader does not validate, ot is the object type, id is what a Note record's idObj cross-references. */
-function readObjTypeAndId(group: RecordGroup): {
+/** [MS-XLS] 2.5.92 FtCmo, read only far enough to answer "what kind of drawing object is this, and what id does a following TxO/other per-object record cross-reference": ft/cb are fixed reserved values this reader does not validate, ot is the object type, id is what a Note record's idObj (here) and workbook/drawing.ts's own shape pairing (there) both key on. Exported for workbook/drawing.ts, which pairs each MsoDrawing shape with the Obj record immediately naming it -- the identical FtCmo structure every Obj record carries, comment-anchored or not. */
+export function readObjTypeAndId(group: RecordGroup): {
   readonly ot: number;
   readonly id: number;
 } {

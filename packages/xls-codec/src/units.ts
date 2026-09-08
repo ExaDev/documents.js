@@ -17,6 +17,12 @@ const MILLIMETRES_PER_INCH = 25.4;
  */
 const MAX_DIGIT_WIDTH_PX = 7;
 
+/**
+ * Excel's own "Normal" style column width (8.43 characters) and default row height (15pt), for a worksheet grid cell a drawing shape's own anchor names but that carries no explicit ColInfo/Row record of its own to size it -- the identical fallback constants ooxml.js's own xlsx drawing reader uses for the same reason (no font-metrics engine to derive a workbook's real default from), so a shape anchored to an undeclared cell places identically whether it arrived as .xls or .xlsx.
+ */
+export const DEFAULT_COLUMN_WIDTH_CHARS = 8.43;
+export const DEFAULT_ROW_HEIGHT_PT = 15;
+
 /** A Row record's height, in twips, as points. */
 export function twipsToPoints(twips: number): number {
   return twips / TWIPS_PER_POINT;
