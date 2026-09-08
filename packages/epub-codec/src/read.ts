@@ -31,7 +31,8 @@ import {
 } from "./xhtml/read";
 import { resolveHrefTarget } from "./xhtml/link-target";
 import { dirname, resolvePackagePath } from "./path";
-import { unzipPackage } from "./zip";
+import { parsePackage } from "./package-io/read";
+import { packageToEntries } from "./package-io/write";
 
 // The public read entry points: readEpubContent (the flat ContentDocument every codec's read side ultimately produces) and readEpub (the tree-form DocumentTree, assembleTree composed on top -- matching markdown-codec's own dual-level API exactly, at the "unsuffixed name is the tree, Content-suffixed is the flat pair one level down" convention). The tree is where a nav/NCX-vs-spine mismatch's raw XML lands as package-level residue (DocumentTreeSchema's own root `source` table) -- the flat ContentDocument has no root field to carry it, mirroring markdown-codec's identical "the flat pair never carries the tree-only residue table" precedent.
 
@@ -139,7 +140,8 @@ function readEpubInternal(
   bytes: Uint8Array<ArrayBuffer>,
   sink: EpubDiagnosticSink,
 ): ParsedEpub {
-  const entries = unzipPackage(bytes);
+  // The lossless byte-level Package model (ExaDev/documents.js#963) is this function's own first step, not a separate entry point a caller must reach for themselves: readEpubContent/readEpub stay this package's one-shot bytes-in convenience, but internally they now cross the identical decodePackage boundary a caller reaching for decodePackage/encodePackage directly would. packageToEntries reconstitutes the same Record<string, Uint8Array> shape unzipPackage used to hand this function, so every entries[path] read below is unchanged.
+  const entries = packageToEntries(parsePackage(bytes));
   const mimetypeBytes = entries.mimetype;
   if (
     mimetypeBytes === undefined ||
