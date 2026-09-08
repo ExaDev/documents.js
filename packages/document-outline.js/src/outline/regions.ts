@@ -8,9 +8,16 @@ import {
 //
 // The input is deliberately just the sparse cell array, not a whole ContentSheet/SheetDescriptor/SheetGroupNode: a consumer holding any one of those three (the flat codec-exchange sheet, its tree-form descriptor, or the tree group wrapper) reaches its own `cells` field and passes that straight through, and this module never needs column widths, print settings, or the sheet's images/embedded objects to do its job.
 //
-// RegionClassification is deliberately NOT spreadsheet-scoped in its name (unlike SheetRegion, whose `range`/`cells` genuinely are sheet-shaped): the issue is explicit that "regions with confidence" is a document-model concept, not a spreadsheet one -- a PDF's columns/tables/figures/captions have the identical shape (a spatial region, a kind, a confidence), and this is the vocabulary a future PDF region pass would reuse rather than re-mint under its own name. Only the spreadsheet case is implemented here; the shared vocabulary costs nothing extra to keep generic.
+// RegionClassification is deliberately NOT spreadsheet-scoped in its name (unlike SheetRegion, whose `range`/`cells` genuinely are sheet-shaped): the issue is explicit that "regions with confidence" is a document-model concept, not a spreadsheet one -- a PDF's columns/tables/figures/captions have the identical shape (a spatial region, a kind, a confidence), and this is the vocabulary a future PDF region pass would reuse rather than re-mint under its own name. `table`, `mixed`, and `unknown` are shared verbatim across both consumers (a PDF page can carry a ruled/gridded table exactly as a sheet can); `prose`/`model` stay spreadsheet-specific signals (narrative text vs. formula-driven calculation, neither of which a PDF page's positioned items can distinguish); `column`/`figure`/`caption` are PDF-specific (see outline/pdf-regions.ts) with no spreadsheet analogue -- a sheet's cells are never grouped into a caption. One union serves both because a consumer of either only ever sees the subset its own segmentation function actually produces.
 export type RegionClassification =
-  "table" | "prose" | "model" | "mixed" | "unknown";
+  | "table"
+  | "prose"
+  | "model"
+  | "mixed"
+  | "unknown"
+  | "column"
+  | "figure"
+  | "caption";
 
 // One connected component of populated cells, its bounding box, and a best-effort classification. `range` is the bounding box of `cells` (min/max row and column actually populated) -- it may itself include blank gap rows/columns the tolerance rule bridged over, so a consumer wanting only the genuinely populated positions should read `cells`, not iterate `range`. `confidence` is this module's own new 0 (no signal either way) to 1 (unambiguous) scale -- there is no prior numeric confidence convention elsewhere in this workspace to match (documents.js's own PDF-reconstruction cell-typing reports a boolean accept/decline per cell, never a score), so 0..1 is introduced here and reused verbatim by deriveNeighbourLabels' own distance-based confidence in labels.ts, for consistency between the two advisory outputs this issue asks for.
 export interface SheetRegion {
