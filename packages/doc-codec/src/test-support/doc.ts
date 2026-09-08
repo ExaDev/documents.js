@@ -57,6 +57,8 @@ export interface DocSpec {
   readonly comments?: readonly (readonly DocParagraphSpec[])[];
   /** The header document's own stories, FLAT and in Plcfhdd's own fixed order: six footnote/endnote-separator stories first (ordinarily `[]`, since no test here needs to assert on separator content), then six per section -- evenHeader, oddHeader, evenFooter, oddFooter, firstHeader, firstFooter -- repeated once per entry in `sections`/`sectionGrpprl`. Absent produces no header document at all (ccpHdd 0, no Plcfhdd). */
   readonly headerFooterStories?: readonly (readonly DocParagraphSpec[])[];
+  /** The container's own "Data" stream bytes, verbatim -- absent produces no "Data" stream at all, exercising the reader's own fallback for a document with no pictures. buildInlinePictureBytes builds this stream's own content for an inline-picture test. */
+  readonly data?: Uint8Array<ArrayBuffer>;
 }
 
 // Two grpprls are the same exception when both are absent or their bytes match, which is what decides whether adjacent stretches merge into one ChpxFkp run.
@@ -355,6 +357,7 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   return compoundFile([
     { path: "WordDocument", bytes: wordDocument },
     { path: "1Table", bytes: table },
+    ...(spec.data === undefined ? [] : [{ path: "Data", bytes: spec.data }]),
   ]);
 }
 
@@ -392,6 +395,80 @@ function buildPlcfSedBytes(
     view.setUint16(base + 6, 0, true); // sed.fnMpr -- ignored.
     view.setUint32(base + 8, 0xffffffff, true); // sed.fcMpr -- ignored.
   });
+  return bytes;
+}
+
+/** One inline picture's own PICFAndOfficeArtData bytes, [MS-DOC]'s "Pictures" and [MS-ODRAW] 2.2.15/2.2.28 -- a 68-byte PICF (mm=MM_SHAPE, so no cchPicName/stPicName pair; dxaGoal/dyaGoal the picture's own initial size in twips, mx/my 1000 for "no scaling"), an empty OfficeArtSpContainer (an 8-byte record header alone, recLen 0 -- this reader never looks inside it), then a single-UID OfficeArtBlipPNG record wrapping `pngBytes` verbatim. Returns the whole byte sequence to place at some offset in a "Data" stream, and the sprmCPicLocation operand bytes (a 4-byte little-endian signed offset) a run's own grpprl states to point at it. */
+export function buildInlinePictureBytes(
+  picLocation: number,
+  pngBytes: Uint8Array,
+  dxaGoalTwips: number,
+  dyaGoalTwips: number,
+): {
+  readonly dataStreamBytes: Uint8Array<ArrayBuffer>;
+  readonly picLocationGrpprl: number[];
+} {
+  const picf = new Uint8Array(68);
+  const picfView = new DataView(picf.buffer);
+  picfView.setUint16(6, 0x0064, true); // mfpf.mm: MM_SHAPE.
+  picfView.setInt16(28, dxaGoalTwips, true); // picmid.dxaGoal.
+  picfView.setInt16(30, dyaGoalTwips, true); // picmid.dyaGoal.
+  picfView.setUint16(32, 1000, true); // picmid.mx: no scaling.
+  picfView.setUint16(34, 1000, true); // picmid.my: no scaling.
+
+  const shapeHeader = recordHeaderBytes(0xf004, 0);
+  const uid = new Uint8Array(16);
+  const blipHeader = recordHeaderBytes(
+    0xf01e,
+    0x06e0,
+    uid.length + 1 + pngBytes.length,
+  );
+
+  const dataStreamBytes = new Uint8Array(picLocation);
+  const out = new Uint8Array(
+    dataStreamBytes.length +
+      picf.length +
+      shapeHeader.length +
+      blipHeader.length +
+      uid.length +
+      1 +
+      pngBytes.length,
+  );
+  let cursor = 0;
+  out.set(dataStreamBytes, cursor);
+  cursor += dataStreamBytes.length;
+  out.set(picf, cursor);
+  cursor += picf.length;
+  out.set(shapeHeader, cursor);
+  cursor += shapeHeader.length;
+  out.set(blipHeader, cursor);
+  cursor += blipHeader.length;
+  out.set(uid, cursor);
+  cursor += uid.length;
+  out[cursor] = 0xff; // tag.
+  cursor += 1;
+  out.set(pngBytes, cursor);
+
+  const picLocationGrpprl: number[] = [0x03, 0x6a]; // sprmCPicLocation, little-endian.
+  const operand = new Int32Array([picLocation]);
+  const operandBytes = new Uint8Array(operand.buffer);
+  picLocationGrpprl.push(...operandBytes);
+
+  return { dataStreamBytes: out, picLocationGrpprl };
+}
+
+// [MS-ODRAW] 2.2.1's OfficeArtRecordHeader -- the 8-byte version/instance/type/length header shared by every OfficeArt record, including the ones this fixture doesn't otherwise model (recVer is fixed at 0xF for a container, arbitrary/ignored for an atom, since this package's own reader never checks it).
+function recordHeaderBytes(
+  recType: number,
+  recInstance: number,
+  recLen = 0,
+): Uint8Array {
+  const bytes = new Uint8Array(8);
+  const view = new DataView(bytes.buffer);
+  const recVer = 0x0;
+  view.setUint16(0, recVer | (recInstance << 4), true);
+  view.setUint16(2, recType, true);
+  view.setUint32(4, recLen, true);
   return bytes;
 }
 
