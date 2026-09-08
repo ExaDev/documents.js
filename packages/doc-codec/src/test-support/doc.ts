@@ -49,6 +49,14 @@ export interface DocSpec {
   readonly sectionGrpprl?: readonly number[];
   /** Multiple sections' own Sepx grpprls, one per section in document order -- overrides `sectionGrpprl`. Section boundaries are derived from where `paragraphs` themselves place a SECTION_MARK terminator (`mark: SECTION_MARK`): this array must carry exactly one more entry than the number of SECTION_MARK-terminated paragraphs, matching [MS-DOC] 2.8.26's own "an end-of-section character MUST be the final character in the text range of all but the last section". */
   readonly sections?: readonly (readonly number[])[];
+  /** The footnote document's own stories, one per footnote reference in document order -- an empty story (`[]`) is a genuinely empty one, per [MS-DOC]'s own "the beginning CP has the same value as the next CP"; a non-empty one gets its own trailing guard paragraph mark appended automatically ("not considered part of the story contents", the Headers page's own words, restated for PlcffndTxt by that structure's own page). Absent produces no footnote document at all (ccpFtn 0, no PlcffndTxt). */
+  readonly footnotes?: readonly (readonly DocParagraphSpec[])[];
+  /** The endnote document's own stories -- the identical shape and guard-mark handling as `footnotes`, for PlcfendTxt. */
+  readonly endnotes?: readonly (readonly DocParagraphSpec[])[];
+  /** The comment (annotation) document's own stories -- the identical shape and guard-mark handling as `footnotes`, for PlcfandTxt. */
+  readonly comments?: readonly (readonly DocParagraphSpec[])[];
+  /** The header document's own stories, FLAT and in Plcfhdd's own fixed order: six footnote/endnote-separator stories first (ordinarily `[]`, since no test here needs to assert on separator content), then six per section -- evenHeader, oddHeader, evenFooter, oddFooter, firstHeader, firstFooter -- repeated once per entry in `sections`/`sectionGrpprl`. Absent produces no header document at all (ccpHdd 0, no Plcfhdd). */
+  readonly headerFooterStories?: readonly (readonly DocParagraphSpec[])[];
 }
 
 // Two grpprls are the same exception when both are absent or their bytes match, which is what decides whether adjacent stretches merge into one ChpxFkp run.
@@ -63,41 +71,103 @@ function sameGrpprl(
 /** Where the text is written in the WordDocument stream: past the FIB, on a page boundary, and even, which the 16-bit spelling requires. */
 const TEXT_FC = 0x400;
 
-export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
-  const compressed = spec.compressed === true;
-  const bytesPerCharacter = compressed ? 1 : 2;
-
-  // 1. The logical text: every run's characters in order, each paragraph closed by its own mark.
-  let text = "";
-  const paragraphRanges: { start: number; end: number }[] = [];
-  const runRanges: {
+interface ParagraphAccumulator {
+  text: string;
+  readonly paragraphs: { spec: DocParagraphSpec; start: number; end: number }[];
+  readonly runRanges: {
     start: number;
     end: number;
     grpprl?: readonly number[];
-  }[] = [];
-  for (const paragraph of spec.paragraphs) {
-    const paragraphStart = text.length;
+  }[];
+}
+
+// Appends `paragraphs`' own text/marks onto a shared accumulator -- the logical-text-building step every document-stream range this builder writes shares (the main document, and each footnote/endnote/comment/header-footer story appendSubdocument below writes in turn), so a subdocument's own paragraphs flow into the identical ChpxFkp/PapxFkp/Clx-building machinery the main document already uses rather than a second, parallel implementation.
+function appendParagraphs(
+  acc: ParagraphAccumulator,
+  paragraphs: readonly DocParagraphSpec[],
+): void {
+  for (const paragraph of paragraphs) {
+    const paragraphStart = acc.text.length;
     for (const run of paragraph.runs) {
-      const runStart = text.length;
-      text += run.text;
-      if (text.length > runStart) {
-        runRanges.push({
+      const runStart = acc.text.length;
+      acc.text += run.text;
+      if (acc.text.length > runStart) {
+        acc.runRanges.push({
           start: runStart,
-          end: text.length,
+          end: acc.text.length,
           ...(run.grpprl === undefined ? {} : { grpprl: run.grpprl }),
         });
       }
     }
-    text += String.fromCharCode(paragraph.mark ?? PARAGRAPH_MARK);
+    acc.text += String.fromCharCode(paragraph.mark ?? PARAGRAPH_MARK);
     // The mark shares the last run's formatting, which is what a producer writes: extending that run rather than adding an unformatted one keeps the ChpxFkp's ranges contiguous.
-    const lastRun = runRanges[runRanges.length - 1];
-    if (lastRun?.end === text.length - 1) {
-      lastRun.end = text.length;
+    const lastRun = acc.runRanges[acc.runRanges.length - 1];
+    if (lastRun?.end === acc.text.length - 1) {
+      lastRun.end = acc.text.length;
     } else {
-      runRanges.push({ start: text.length - 1, end: text.length });
+      acc.runRanges.push({ start: acc.text.length - 1, end: acc.text.length });
     }
-    paragraphRanges.push({ start: paragraphStart, end: text.length });
+    acc.paragraphs.push({
+      spec: paragraph,
+      start: paragraphStart,
+      end: acc.text.length,
+    });
   }
+}
+
+// Appends one document-stream range's own stories onto the accumulator -- shared by footnotes/endnotes/comments (each story a plain paragraph list) and headerFooterStories (already flat, one entry per fixed Plcfhdd slot) -- and returns that range's own boundary plex keys (PlcffndTxt/PlcfandTxt/PlcfendTxt/Plcfhdd's own aCP), local to the range's own start rather than the whole document, matching what each of those structures states as its own CPs. A non-empty story gets its own trailing guard paragraph mark, [MS-DOC]'s own "not considered part of the story contents" -- an empty one (`[]`) gets neither content nor a guard, matching "the beginning CP has the same value as the next CP".
+function appendSubdocument(
+  acc: ParagraphAccumulator,
+  stories: readonly (readonly DocParagraphSpec[])[],
+): number[] {
+  const subdocStart = acc.text.length;
+  const keys: number[] = [0];
+  for (const story of stories) {
+    if (story.length > 0) {
+      appendParagraphs(acc, story);
+      appendParagraphs(acc, [{ runs: [] }]);
+    }
+    keys.push(acc.text.length - subdocStart);
+  }
+  // The trailing "ignored" sentinel every one of these boundary plexes carries -- any value works, since this package's own reader (text/paragraphs.ts's splitEntriesByBoundaries via subdocument.ts's readSubdocumentStories) never consults the group it would define.
+  keys.push(acc.text.length - subdocStart);
+  return keys;
+}
+
+export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
+  const compressed = spec.compressed === true;
+  const bytesPerCharacter = compressed ? 1 : 2;
+
+  // 1. The logical text: the main document's own paragraphs, then -- in [MS-DOC] 2.4.1's own subdocument order -- the footnote, header, comment, and endnote documents, each only when the spec actually wants one.
+  const acc: ParagraphAccumulator = { text: "", paragraphs: [], runRanges: [] };
+  appendParagraphs(acc, spec.paragraphs);
+  const ccpText = acc.text.length;
+
+  const footnoteKeys =
+    spec.footnotes === undefined
+      ? undefined
+      : appendSubdocument(acc, spec.footnotes);
+  const ccpFtn = acc.text.length - ccpText;
+
+  const headerFooterKeys =
+    spec.headerFooterStories === undefined
+      ? undefined
+      : appendSubdocument(acc, spec.headerFooterStories);
+  const ccpHdd = acc.text.length - ccpText - ccpFtn;
+
+  const commentKeys =
+    spec.comments === undefined
+      ? undefined
+      : appendSubdocument(acc, spec.comments);
+  const ccpAtn = acc.text.length - ccpText - ccpFtn - ccpHdd;
+
+  const endnoteKeys =
+    spec.endnotes === undefined
+      ? undefined
+      : appendSubdocument(acc, spec.endnotes);
+  const ccpEdn = acc.text.length - ccpText - ccpFtn - ccpHdd - ccpAtn;
+
+  const { text, paragraphs, runRanges } = acc;
 
   // Adjacent stretches with identical formatting become ONE ChpxFkp run, which is what a real producer writes: the format stores formatting as exceptions over runs of unchanging properties, not one entry per authored span. It matters for what the reader is exercised against, because the resulting run routinely spans paragraph boundaries -- two consecutive bold paragraphs are one Chpx covering both, including the paragraph mark between them -- so the reader has to split runs by paragraph itself rather than inheriting the split from the formatting table.
   const mergedRuns: typeof runRanges = [];
@@ -157,17 +227,11 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   );
   wordDocument.set(
     buildPapxFkp(
-      spec.paragraphs.map((paragraph, index) => {
-        const range = paragraphRanges[index];
-        if (range === undefined) throw new Error("paragraph range missing");
-        return {
-          fc: characterFc(range.start),
-          istd: paragraph.istd ?? 0,
-          ...(paragraph.grpprl === undefined
-            ? {}
-            : { grpprl: paragraph.grpprl }),
-        };
-      }),
+      paragraphs.map(({ spec: paragraph, start }) => ({
+        fc: characterFc(start),
+        istd: paragraph.istd ?? 0,
+        ...(paragraph.grpprl === undefined ? {} : { grpprl: paragraph.grpprl }),
+      })),
       characterFc(text.length),
     ),
     papxPage * FKP_PAGE_SIZE,
@@ -191,9 +255,9 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
     [papxPage],
   );
   const stsh = buildStsh(spec.styles ?? []);
-  // A section's own start CP is derived from the paragraph stream itself, not stated separately: every SECTION_MARK-terminated paragraph the spec places closes one section and opens the next, mirroring how a real .doc's own end-of-section character marks the boundary PlcfSed.aCp then restates as a CP.
+  // A section's own start CP is derived from the paragraph stream itself, not stated separately: every SECTION_MARK-terminated paragraph the spec places closes one section and opens the next, mirroring how a real .doc's own end-of-section character marks the boundary PlcfSed.aCp then restates as a CP. Scanned only over the main document's own range: SECTION_MARK is a main-document-only construct, and a subdocument's own text could otherwise coincidentally contain the identical byte value with no section meaning at all.
   const sectionStartCps = [0];
-  for (let index = 0; index < text.length; index += 1) {
+  for (let index = 0; index < ccpText; index += 1) {
     if (text.charCodeAt(index) === SECTION_MARK) {
       sectionStartCps.push(index + 1);
     }
@@ -201,48 +265,90 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   const plcfSed =
     sepxList === undefined
       ? undefined
-      : buildPlcfSedBytes(sectionStartCps, text.length, sepxOffsets);
+      : buildPlcfSedBytes(sectionStartCps, ccpText, sepxOffsets);
+  const plcffndTxt =
+    footnoteKeys === undefined ? undefined : buildPlcBytes(footnoteKeys);
+  const plcfHdd =
+    headerFooterKeys === undefined
+      ? undefined
+      : buildPlcBytes(headerFooterKeys);
+  const plcfandTxt =
+    commentKeys === undefined ? undefined : buildPlcBytes(commentKeys);
+  const plcfendTxt =
+    endnoteKeys === undefined ? undefined : buildPlcBytes(endnoteKeys);
 
-  const tableParts = [
+  // Named rather than positional: several parts are conditionally present (plcfSed/plcffndTxt/plcfHdd/plcfandTxt/plcfendTxt), so a fixed numeric index would silently point at the wrong part the moment one spec includes some of these and not others.
+  const namedParts: Record<string, Uint8Array> = {
     clx,
     plcBteChpx,
     plcBtePapx,
     stsh,
-    ...(plcfSed === undefined ? [] : [plcfSed]),
-  ];
-  const tableOffsets: number[] = [];
+    ...(plcfSed === undefined ? {} : { plcfSed }),
+    ...(plcffndTxt === undefined ? {} : { plcffndTxt }),
+    ...(plcfHdd === undefined ? {} : { plcfHdd }),
+    ...(plcfandTxt === undefined ? {} : { plcfandTxt }),
+    ...(plcfendTxt === undefined ? {} : { plcfendTxt }),
+  };
+  const tableOffsets = new Map<string, number>();
   let tableLength = 0;
-  for (const part of tableParts) {
-    tableOffsets.push(tableLength);
-    tableLength += part.length;
+  for (const [name, bytes] of Object.entries(namedParts)) {
+    tableOffsets.set(name, tableLength);
+    tableLength += bytes.length;
   }
   const table = new Uint8Array(tableLength);
-  tableParts.forEach((part, index) => {
-    const offset = tableOffsets[index];
-    if (offset === undefined) throw new Error("table part offset missing");
-    table.set(part, offset);
-  });
-  const offsetOf = (index: number): number => {
-    const offset = tableOffsets[index];
-    if (offset === undefined) throw new Error("table part offset missing");
+  for (const [name, bytes] of Object.entries(namedParts)) {
+    const offset = tableOffsets.get(name);
+    if (offset === undefined)
+      throw new Error(`table part offset missing for ${name}`);
+    table.set(bytes, offset);
+  }
+  const offsetOf = (name: string): number => {
+    const offset = tableOffsets.get(name);
+    if (offset === undefined)
+      throw new Error(`table part offset missing for ${name}`);
     return offset;
   };
 
   const fib = buildFib({
-    ccpText: text.length,
+    ccpText,
+    ccpFtn,
+    ccpHdd,
+    ccpAtn,
+    ccpEdn,
     cbMac: wordDocument.length,
     fWhichTblStm: 1,
-    fcClx: offsetOf(0),
+    fcClx: offsetOf("clx"),
     lcbClx: clx.length,
-    fcPlcfBteChpx: offsetOf(1),
+    fcPlcfBteChpx: offsetOf("plcBteChpx"),
     lcbPlcfBteChpx: plcBteChpx.length,
-    fcPlcfBtePapx: offsetOf(2),
+    fcPlcfBtePapx: offsetOf("plcBtePapx"),
     lcbPlcfBtePapx: plcBtePapx.length,
-    fcStshf: offsetOf(3),
+    fcStshf: offsetOf("stsh"),
     lcbStshf: stsh.length,
     ...(plcfSed === undefined
       ? {}
-      : { fcPlcfSed: offsetOf(4), lcbPlcfSed: plcfSed.length }),
+      : { fcPlcfSed: offsetOf("plcfSed"), lcbPlcfSed: plcfSed.length }),
+    ...(plcffndTxt === undefined
+      ? {}
+      : {
+          fcPlcffndTxt: offsetOf("plcffndTxt"),
+          lcbPlcffndTxt: plcffndTxt.length,
+        }),
+    ...(plcfHdd === undefined
+      ? {}
+      : { fcPlcfHdd: offsetOf("plcfHdd"), lcbPlcfHdd: plcfHdd.length }),
+    ...(plcfandTxt === undefined
+      ? {}
+      : {
+          fcPlcfandTxt: offsetOf("plcfandTxt"),
+          lcbPlcfandTxt: plcfandTxt.length,
+        }),
+    ...(plcfendTxt === undefined
+      ? {}
+      : {
+          fcPlcfendTxt: offsetOf("plcfendTxt"),
+          lcbPlcfendTxt: plcfendTxt.length,
+        }),
   });
   wordDocument.set(fib, 0);
 
@@ -285,6 +391,16 @@ function buildPlcfSedBytes(
     view.setUint32(base + 2, fcSepx, true); // sed.fcSepx.
     view.setUint16(base + 6, 0, true); // sed.fnMpr -- ignored.
     view.setUint32(base + 8, 0xffffffff, true); // sed.fcMpr -- ignored.
+  });
+  return bytes;
+}
+
+// A CP-only PLC -- PlcffndTxt/PlcfandTxt/PlcfendTxt/Plcfhdd's own shape, [MS-DOC]'s own "a PLC that contains only CPs and no additional data": just the aCP array itself, one 4-byte little-endian value per key, no data section at all (element size 0, so parsePlc's own count = keys.length - 1 falls straight out of the byte length alone).
+function buildPlcBytes(keys: readonly number[]): Uint8Array {
+  const bytes = new Uint8Array(keys.length * 4);
+  const view = new DataView(bytes.buffer);
+  keys.forEach((key, index) => {
+    view.setUint32(index * 4, key, true);
   });
   return bytes;
 }
