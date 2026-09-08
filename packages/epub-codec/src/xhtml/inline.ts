@@ -5,7 +5,7 @@ import { attrValue } from "../xml/query";
 import { decodeEntities, decodeTextLikeNode } from "../xml/entities";
 import type { InlineStyle, XhtmlReadContext } from "./context";
 import { isInertElement, reportInertElementSkip } from "./context";
-import { isFootnoteReferenceAnchor, sameDocumentFragment } from "./footnote";
+import { sameDocumentFragment } from "./footnote";
 import { MONOSPACE_FONT_FAMILY } from "./style-constants";
 
 export interface InlineResult {
@@ -214,44 +214,31 @@ function appendAnchor(
   runs: ContentRun[],
   constructs: RunConstructExtent[],
 ): void {
-  const footnoteName = isFootnoteReferenceAnchor(element, context.idElements);
-  if (footnoteName !== undefined) {
+  const href = attrValue(element, "href");
+  // A same-/cross-document href resolving to a real, block-level element anywhere in the spine (ExaDev/documents.js#963): a footnote/endnote reference, or an ordinary internal link target (document-schema.js's own `link` construct, README Architecture) otherwise -- rather than the plain ContentRun.hyperlink degrade below. context.resolveAnchorHref (src/xhtml/read.ts's own whole-document, and src/read.ts's own whole-spine, prescan) is the single place same-document vs. cross-document resolution, footnote-vs-bookmark classification, and eligibility (BLOCK_LEVEL_TAGS membership) are all decided; this call site only builds the run-level construct extent once it already has a target to build one with.
+  const target =
+    href === undefined ? undefined : context.resolveAnchorHref(href);
+  if (target !== undefined) {
     const startRun = runs.length;
     const nested = buildInlineRuns(element.children, style, context);
     runs.push(...nested.runs);
     constructs.push(...rebaseConstructs(nested.constructs, startRun));
     constructs.push({
-      descriptor: {
-        kind: "anchor",
-        anchorType: "footnote",
-        name: footnoteName,
-      },
+      descriptor:
+        target.anchorType === "footnote"
+          ? { kind: "anchor", anchorType: "footnote", name: target.name }
+          : {
+              kind: "link",
+              target: { kind: "internal", anchor: target.name },
+            },
       startRun,
       endRun: runs.length,
     });
     return;
   }
 
-  const href = attrValue(element, "href");
   if (href === undefined || href.length === 0) {
     appendNested(element, style, context, runs, constructs);
-    return;
-  }
-  // A same-/cross-document href resolving to a real, block-level element that no footnote reference already claims: document-schema.js's own internal `link` target (README Architecture), rather than the plain ContentRun.hyperlink degrade below. context.resolveBookmarkHref (src/xhtml/read.ts's own whole-document, and src/read.ts's own whole-spine, prescan) is the single place same-document vs. cross-document resolution and eligibility (BLOCK_LEVEL_TAGS membership) are decided; this call site only builds the run-level construct extent once it already has a name to build one with.
-  const bookmarkName = context.resolveBookmarkHref(href);
-  if (bookmarkName !== undefined) {
-    const startRun = runs.length;
-    const nested = buildInlineRuns(element.children, style, context);
-    runs.push(...nested.runs);
-    constructs.push(...rebaseConstructs(nested.constructs, startRun));
-    constructs.push({
-      descriptor: {
-        kind: "link",
-        target: { kind: "internal", anchor: bookmarkName },
-      },
-      startRun,
-      endRun: runs.length,
-    });
     return;
   }
   // Every href this package cannot resolve to a real, addressable in-package element -- an external URI, or an internal-looking href naming no element this package's own read pass ever wraps in an anchor marker -- rides ContentRun.hyperlink verbatim; every href still restores byte-for-byte either way. A same-/cross-document fragment already recognised as a footnote reference or an ordinary internal link target above never reaches this branch.

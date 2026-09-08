@@ -1,5 +1,12 @@
+import type { AnchorType } from "document-schema.js";
 import { EpubDiagnosticCodes, type EpubDiagnosticSink } from "../diagnostics";
 import type { XmlElement } from "../xml/node";
+
+// One resolved anchor target: which construct kind it is (only "footnote" or "bookmark" -- this package's own reader never produces an "endnote" or "comment" anchor from real EPUB content) and the canonical name both its own constructStart marker and every reference to it must carry. The name is the bare fragment for a target with no cross-document referrer, or "targetHref#fragment" (src/read.ts's own whole-spine registry, ExaDev/documents.js#963) once at least one cross-document href references it, so a bare id colliding between two different target documents can never be confused for one shared target.
+export interface ResolvedAnchorTarget {
+  readonly anchorType: AnchorType;
+  readonly name: string;
+}
 
 // Shared read-side context threaded through src/xhtml/read.ts and src/xhtml/inline.ts.
 export interface XhtmlReadContext {
@@ -8,14 +15,14 @@ export interface XhtmlReadContext {
   readonly sink: EpubDiagnosticSink;
   // The manifest href of the XHTML document being read, carried on every diagnostic this stage reports so a caller can tell which spine item a gap came from.
   readonly sourceHref: string;
-  // Every element in this document carrying an `id` attribute, keyed by that id -- built once per document (src/xhtml/read.ts's own whole-body pre-pass) so footnote-target and same-document link resolution never re-walks the tree per reference.
+  // Every element in this document carrying an `id` attribute, keyed by that id -- built once per document (src/xhtml/read.ts's own whole-body pre-pass) so anchor-target and same-document link resolution never re-walks the tree per reference.
   readonly idElements: ReadonlyMap<string, XmlElement>;
-  // Every id recognised as a footnote/endnote BODY target -- built once per document by walking every <a> and asking isFootnoteReferenceAnchor which id (if any) it names, so src/xhtml/read.ts's own block-level walk can tell "this <p id=...> is a footnote body to bracket" from "this is an ordinary paragraph that merely happens to carry an id" without re-deriving the same anchor-recognition logic from the other direction.
-  readonly footnoteTargetIds: ReadonlySet<string>;
-  // Every id in THIS document recognised as an ordinary internal-link target (document-schema.js's `link` construct, target.kind: 'internal') rather than a footnote body, mapped to the canonical name its own constructStart marker (and every reference to it) must carry -- a same-document href, or another document's href, whose fragment names a real block-level element here that no footnote reference already claims. The name is the bare fragment for a target with no cross-document referrer, or "targetHref#fragment" (src/read.ts's own whole-spine registry) once at least one cross-document href references it, so a bare id colliding between two different target documents can never be confused for one shared target. Checked second, after footnoteTargetIds: a footnote-shaped reference always wins the same id.
-  readonly bookmarkTargets: ReadonlyMap<string, string>;
-  // Resolves an <a href> (same-document or cross-document) this document's own footnote recognition did not already claim to the canonical name a `link` construct's internal target should carry, or undefined when the href does not resolve to a real, addressable in-package element. Threaded as a closure rather than a plain map because a cross-document resolution needs the whole spine's own id tables, which this document's own context has no reason to hold directly -- src/read.ts's own whole-spine pass builds the real one; a standalone readXhtmlBody call (every unit test in this package) falls back to a same-document-only resolver.
-  readonly resolveBookmarkHref: (href: string) => string | undefined;
+  // Every id in THIS document recognised as an anchor target (a footnote/endnote BODY, or an ordinary internal-link target) that some href -- same-document, or another spine document's own -- resolves to, and how src/xhtml/read.ts's own block-level walk should wrap it: a footnote-shaped reference (EPUB 3 epub:type="noteref"/"footnote", or the EPUB 2 class convention -- src/xhtml/footnote.ts's isFootnoteReference) always wins the same id over an ordinary bookmark reading of it.
+  readonly anchorTargets: ReadonlyMap<string, ResolvedAnchorTarget>;
+  // Resolves an <a href> (same-document or cross-document) to the ResolvedAnchorTarget a run-level construct extent should carry, or undefined when the href does not resolve to a real, addressable in-package element -- the single place src/xhtml/inline.ts's appendAnchor (and src/xhtml/read.ts's own <pre> footnote-reference walk) decides between a footnote/link construct and the plain ContentRun.hyperlink degrade. Threaded as a closure rather than a plain map because a cross-document resolution needs the whole spine's own id tables, which this document's own context has no reason to hold directly -- src/read.ts's own whole-spine pass builds the real one; a standalone readXhtmlBody call (every unit test in this package) falls back to a same-document-only resolver.
+  readonly resolveAnchorHref: (
+    href: string,
+  ) => ResolvedAnchorTarget | undefined;
   // The current blockquote nesting depth (0 outside any blockquote), threaded so a nested quote's indent and division-construct pairing both scale with real depth.
   readonly quoteDepth: number;
 }

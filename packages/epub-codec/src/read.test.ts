@@ -4,6 +4,7 @@ import { readEpub, readEpubContent } from "./read";
 import { fixtureEpub2Bytes } from "./test-support/epub2-fixture";
 import { fixtureEpub3Bytes } from "./test-support/epub3-fixture";
 import { fixtureEpubMultichapterBytes } from "./test-support/epub-multichapter-fixture";
+import { fixtureEpub2MultichapterBytes } from "./test-support/epub2-multichapter-fixture";
 
 function assertWordprocessing(
   document: ContentDocument,
@@ -246,6 +247,74 @@ describe("readEpubContent: internal-link semantics (ExaDev/documents.js#963)", (
       kind: "anchor",
       anchorType: "bookmark",
       name: "OEBPS/chapter2.xhtml#sec2",
+    });
+  });
+});
+
+describe("readEpubContent: cross-document footnotes (ExaDev/documents.js#963)", () => {
+  it("recognises an EPUB 3 structured (epub:type=noteref/footnote) reference whose own body lives in a different spine document", () => {
+    const document = readEpubContent(fixtureEpubMultichapterBytes());
+    assertWordprocessing(document);
+    const chapter1Blocks = document.sections[0]?.blocks ?? [];
+    const mainParagraph = chapter1Blocks.find(
+      (b): b is Extract<ContentBlock, { kind: "paragraph" }> =>
+        b.kind === "paragraph" && b.runs.some((r) => r.text === "1"),
+    );
+    const footnoteExtent = mainParagraph?.constructs?.find(
+      (c) =>
+        c.descriptor.kind === "anchor" &&
+        c.descriptor.anchorType === "footnote",
+    );
+    expect(footnoteExtent?.descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "footnote",
+      name: "OEBPS/chapter2.xhtml#note1",
+    });
+
+    const chapter2Blocks = document.sections[1]?.blocks ?? [];
+    const footnoteStart = chapter2Blocks.find(
+      (b): b is Extract<ContentBlock, { kind: "constructStart" }> =>
+        b.kind === "constructStart" &&
+        b.descriptor.kind === "anchor" &&
+        b.descriptor.anchorType === "footnote",
+    );
+    expect(footnoteStart?.descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "footnote",
+      name: "OEBPS/chapter2.xhtml#note1",
+    });
+  });
+
+  it("recognises the EPUB 2 linked-anchor idiom (class=footnote, no epub:type at all) across a spine document boundary", () => {
+    const document = readEpubContent(fixtureEpub2MultichapterBytes());
+    assertWordprocessing(document);
+    const chapter1Blocks = document.sections[0]?.blocks ?? [];
+    const mainParagraph = chapter1Blocks.find(
+      (b): b is Extract<ContentBlock, { kind: "paragraph" }> =>
+        b.kind === "paragraph" && b.runs.some((r) => r.text === "1"),
+    );
+    const footnoteExtent = mainParagraph?.constructs?.find(
+      (c) =>
+        c.descriptor.kind === "anchor" &&
+        c.descriptor.anchorType === "footnote",
+    );
+    expect(footnoteExtent?.descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "footnote",
+      name: "OEBPS/chapter2.xhtml#note1",
+    });
+
+    const chapter2Blocks = document.sections[1]?.blocks ?? [];
+    const footnoteStart = chapter2Blocks.find(
+      (b): b is Extract<ContentBlock, { kind: "constructStart" }> =>
+        b.kind === "constructStart" &&
+        b.descriptor.kind === "anchor" &&
+        b.descriptor.anchorType === "footnote",
+    );
+    expect(footnoteStart?.descriptor).toEqual({
+      kind: "anchor",
+      anchorType: "footnote",
+      name: "OEBPS/chapter2.xhtml#note1",
     });
   });
 });
