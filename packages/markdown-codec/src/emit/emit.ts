@@ -100,6 +100,8 @@ interface EmitContext extends TableEmitContext {
   readonly thematicBreakChar: string;
   readonly headingStyle: MarkdownHeadingStyle;
   readonly orderedCounters: Map<string, number>;
+  // The bullet character (for a numId minted type 'bullet') or ordered delimiter (type 'ordered') CHOSEN for this numId, memoised the first time renderListRegion reaches it -- see resolveListGlyph below for why this can diverge from bulletMarker/orderedDelimiter.
+  readonly resolvedListGlyphs: Map<string, string>;
   readonly reportedFallbackNumIds: Set<string>;
   // One-shot latch for the no-numId-at-all fallback diagnostic -- reportedFallbackNumIds cannot key an absent numId without inventing a sentinel string, so this is a mutable flag where its sibling is a mutable-by-reference collection.
   reportedAbsentNumIdFallback: boolean;
@@ -644,6 +646,7 @@ interface RenderedListMarker {
 function renderListItemMarker(
   numId: string | undefined,
   info: ListNumIdInfo | undefined,
+  glyph: string,
   checkboxText: string,
   context: EmitContext,
 ): RenderedListMarker {
@@ -651,11 +654,46 @@ function renderListItemMarker(
   if (info?.type === "ordered" && numId !== undefined) {
     const next = context.orderedCounters.get(numId) ?? info.start ?? 1;
     context.orderedCounters.set(numId, next + 1);
-    const bare = `${String(next)}${context.orderedDelimiter} `;
+    const bare = `${String(next)}${glyph} `;
     return { full: `${bare}${checkboxText}`, bareLength: bare.length };
   }
-  const bare = `${context.bulletMarker} `;
+  const bare = `${glyph} `;
   return { full: `${bare}${checkboxText}`, bareLength: bare.length };
+}
+
+// The two glyphs CommonMark's own list-item grammar recognises for each marker type (spec 0.31.2, "List items"): a bullet list marker is '-', '+', or '*'; an ordered list delimiter is '.' or ')'. Only two candidates for ORDERED because that is every legal delimiter the grammar defines; BULLET keeps all three so a collision has a glyph left even after one alternation.
+const BULLET_GLYPH_CANDIDATES = ["-", "+", "*"] as const;
+const ORDERED_GLYPH_CANDIDATES = [".", ")"] as const;
+
+interface ListSiblingSignature {
+  readonly numId: string;
+  readonly type: "bullet" | "ordered";
+  readonly glyph: string;
+}
+
+// The bullet character or ordered delimiter a numId renders with, memoised in context.resolvedListGlyphs the first time renderListRegion reaches it so every item of the SAME numId agrees on one glyph. Defaults to the configured bulletMarker/orderedDelimiter, EXCEPT when `numId` immediately follows a DIFFERENT numId of the SAME type in the CURRENT list region (renderListRegion's own numId-boundary loop passes the immediately preceding numId's own resolved signature as `previousSibling`) and that sibling already resolved to the identical default glyph: two adjacent lists rendered with the SAME bullet character or ordered delimiter are indistinguishable, on reparse, from one continuous list (CommonMark spec 0.31.2 examples 301/302 -- `- foo\n- bar\n+ baz` and `1. foo\n2. bar\n3) baz`, each a source that used two DIFFERENT marker glyphs specifically so the second list would not continue the first) -- a blank line between the numId-boundary's own two parts (renderListRegion's own `out += sameList && !loose ? "\n" : "\n\n"`) does not by itself force a fresh list the way a genuine glyph change does. Alternating to the next candidate glyph is what actually reproduces that boundary; picking the first candidate that ISN'T the colliding default keeps the choice deterministic and, for a run of three or more adjacent same-type lists, alternates back and forth rather than drifting through every candidate in turn.
+function resolveListGlyph(
+  numId: string,
+  type: "bullet" | "ordered",
+  previousSibling: ListSiblingSignature | undefined,
+  context: EmitContext,
+): string {
+  const cached = context.resolvedListGlyphs.get(numId);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const defaultGlyph =
+    type === "ordered" ? context.orderedDelimiter : context.bulletMarker;
+  const collides =
+    previousSibling?.type === type && previousSibling.glyph === defaultGlyph;
+  const candidates =
+    type === "ordered" ? ORDERED_GLYPH_CANDIDATES : BULLET_GLYPH_CANDIDATES;
+  const glyph = collides
+    ? (candidates.find((candidate) => candidate !== defaultGlyph) ??
+      defaultGlyph)
+    : defaultGlyph;
+  context.resolvedListGlyphs.set(numId, glyph);
+  return glyph;
 }
 
 interface ListItemPart {
@@ -814,6 +852,8 @@ function renderListRegion(
 ): string {
   const parts: ListItemPart[] = [];
   let index = 0;
+  // The immediately preceding numId's own resolved type/glyph, local to this call (never read across a recursive call into a nested sub-list, or across a separate top-level renderListRegion call) -- exactly the scope resolveListGlyph's own collision check needs: two lists are only a genuine ADJACENCY risk when nothing else renders between them, which is precisely what "both sit in the SAME renderListRegion call's own items array" already guarantees. Left unset (and never consulted) for a depth-only membership (numId undefined, the cross-format shape LIST_NUMID_FALLBACK already documents) -- a rare cross-format edge case this glyph-alternation scheme does not extend to.
+  let previousSibling: ListSiblingSignature | undefined;
   while (index < items.length) {
     const item = items[index];
     if (item === undefined) {
@@ -822,6 +862,16 @@ function renderListRegion(
     const { numId, level, itemId } = item.list;
     const info = listInfoFor(numId, context);
     const loose = info?.loose === true;
+    const type = info?.type ?? "bullet";
+    const glyph =
+      numId === undefined
+        ? type === "ordered"
+          ? context.orderedDelimiter
+          : context.bulletMarker
+        : resolveListGlyph(numId, type, previousSibling, context);
+    if (numId !== undefined) {
+      previousSibling = { numId, type, glyph };
+    }
 
     const { segments, next } = collectListItem(items, index, level, itemId);
     const first = segments[0]?.blocks[0];
@@ -832,7 +882,13 @@ function renderListRegion(
       first,
       info?.task === true,
     );
-    const marker = renderListItemMarker(numId, info, checkboxText, context);
+    const marker = renderListItemMarker(
+      numId,
+      info,
+      glyph,
+      checkboxText,
+      context,
+    );
     const indent = " ".repeat(marker.bareLength);
 
     let text = "";
@@ -1217,6 +1273,7 @@ export function emitMarkdown(
     headingStyle: options.headingStyle ?? DEFAULT_HEADING_STYLE,
     embedImages: options.images ?? true,
     orderedCounters: new Map(),
+    resolvedListGlyphs: new Map(),
     reportedFallbackNumIds: new Set(),
     reportedAbsentNumIdFallback: false,
     divisionDepth: 0,
