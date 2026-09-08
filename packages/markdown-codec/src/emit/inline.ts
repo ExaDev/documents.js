@@ -202,7 +202,7 @@ function hasMarkerConflict(
   return precedingText.endsWith(candidate);
 }
 
-// Tries the configured marker first, falls back to the other one when the configured choice would collide (either hazard above), and -- when NEITHER of the only two delimiter characters CommonMark offers is collision-free (a rare, adversarial-looking construct: several directly-touching nested/sibling emphasis spans with no separating text anywhere) -- falls back to the configured marker regardless, a genuine, bounded gap rather than a silent wrong answer; see src/test-support/conformance-exclusions.ts for the specific corpus examples this still cannot round-trip.
+// Tries the configured marker first, falls back to the other one when the configured choice would collide (either hazard above), and -- when NEITHER of the only two delimiter characters CommonMark offers is collision-free -- falls back to the configured marker regardless. Reaching that last fallback is now rare rather than routine: pickSplitKey below already resolves the common multi-way clash (several styles/hyperlinks touching at one boundary) by choosing a NESTING ORDER that keeps each style's own delimiter run away from the others' boundaries in the first place, so this function's own two-character choice only has to arbitrate what is left once that ordering has already done its job -- see that function's own comment for what remains genuinely unrepresentable (same-kind nesting, e.g. emphasis-in-emphasis, which document-schema.js's own flat ContentRun.italic/bold booleans cannot hold a depth for at all) and src/test-support/conformance-exclusions.ts for the specific corpus examples that residual gap still cannot round-trip.
 function pickEmphasisMarker(
   body: string,
   configured: string,
@@ -235,20 +235,53 @@ function wrapForStyle(
   return `${delimiter}${body}${delimiter}`;
 }
 
-// Groups `runs` hierarchically -- first by bold, then (within each bold/non-bold group) by italic, then by strike -- rendering each group's own inner content recursively before wrapping it, so a bold span containing an italic sub-span comes out as a single, properly nested `**bold *nested***`-shaped wrap rather than two independently-wrapped, directly-concatenated spans. `out`, threaded into wrapForStyle as `precedingText`, is what lets pickEmphasisMarker see the immediately preceding sibling's own trailing character. `base` is the index `runs[0]` occupies in the PARAGRAPH's own run array (a slice may start anywhere), threaded so a leaf's renderLeaf can look its run up in the paragraph's run-level construct extents; each recursive slice adjusts it by its own local offset.
+// How many contiguous same-value groups splitting `runs` by `key` would produce -- 1 when the key's value never changes across the whole window (constant true, or constant false), up to `runs.length` when it toggles on every run. pickSplitKey below uses this to find whichever remaining key is LEAST fragmented across the current window, which is exactly the key that should be resolved OUTERMOST at this recursion level: a key that stays constant while some other key changes underneath it (a whole quoted aside kept italic throughout, with only its middle word also bold) needs exactly one wrap around the whole window, and deciding that BEFORE the key that does vary is what keeps it as one continuous span instead of one fragment per sub-run.
+function groupCount(runs: readonly ContentRun[], key: StyleKey): number {
+  let count = 0;
+  let index = 0;
+  while (index < runs.length) {
+    const active = styleActive(runs[index]!, key);
+    count += 1;
+    index += 1;
+    while (index < runs.length && styleActive(runs[index]!, key) === active) {
+      index += 1;
+    }
+  }
+  return count;
+}
+
+// Picks which of the still-unresolved style keys to split `runs` on next: whichever has the fewest contiguous groups across the CURRENT window (see groupCount above), ties broken by STYLE_KEYS' own fixed order (bold, then italic, then strike) so the common single-style case renders identically to before. This replaces a FIXED bold-then-italic-then-strike priority, which fractures a style that spans a boundary another style happens to change at -- CommonMark spec 0.31.2 example 393, `*(**foo**)*` (italic wrapping the whole "(foo)", bold wrapping only "foo" in the middle): a fixed bold-first split produces three independent depth-0 groups ("(", "foo", ")"), each wrapped in ITS OWN separate italic markers, which then collide into an invalid delimiter run on the way out. Picking the LEAST-fragmented key first instead recognises italic as constant across the whole window (one group) and resolves it outermost, wrapping the bold-only recursion's own output once -- reproducing the source's own `*(**foo**)*` exactly.
+function pickSplitKey(
+  runs: readonly ContentRun[],
+  remaining: readonly StyleKey[],
+): StyleKey {
+  let best = remaining[0]!;
+  let bestCount = groupCount(runs, best);
+  for (const key of remaining.slice(1)) {
+    const count = groupCount(runs, key);
+    if (count < bestCount) {
+      best = key;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+// Groups `runs` hierarchically by whichever remaining style key (see pickSplitKey) is least fragmented across the current window, rendering each group's own inner content recursively -- against the still-narrower remaining key set -- before wrapping it, so a style spanning a boundary another style changes at comes out as a single, properly nested wrap (`*(**foo**)*`-shaped) rather than several independently-wrapped, directly-concatenated fragments whose delimiters collide once written out. `out`, threaded into wrapForStyle as `precedingText`, is what lets pickEmphasisMarker see the immediately preceding sibling's own trailing character. `base` is the index `runs[0]` occupies in the PARAGRAPH's own run array (a slice may start anywhere), threaded so a leaf's renderLeaf can look its run up in the paragraph's run-level construct extents; each recursive slice adjusts it by its own local offset.
 function renderNestedStyles(
   runs: readonly ContentRun[],
-  depth: number,
+  remainingKeys: readonly StyleKey[],
   context: InlineEmitContext,
   base: number,
   constructs: readonly RunConstructExtent[] | undefined,
 ): string {
-  if (depth >= STYLE_KEYS.length) {
+  if (remainingKeys.length === 0) {
     return runs
       .map((run, local) => renderLeaf(run, context, base + local, constructs))
       .join("");
   }
-  const key = STYLE_KEYS[depth]!;
+  const key = pickSplitKey(runs, remainingKeys);
+  const rest = remainingKeys.filter((candidate) => candidate !== key);
   let out = "";
   let index = 0;
   while (index < runs.length) {
@@ -263,7 +296,7 @@ function renderNestedStyles(
     }
     const inner = renderNestedStyles(
       runs.slice(index, end),
-      depth + 1,
+      rest,
       context,
       base + index,
       constructs,
@@ -360,7 +393,7 @@ export function emitRuns(
       }
       out += renderNestedStyles(
         runs.slice(index, end),
-        0,
+        STYLE_KEYS,
         context,
         index,
         constructs,
@@ -389,7 +422,13 @@ export function emitRuns(
     ) {
       out += `<${group[0]!.text}>`;
     } else {
-      const linkText = renderNestedStyles(group, 0, context, index, constructs);
+      const linkText = renderNestedStyles(
+        group,
+        STYLE_KEYS,
+        context,
+        index,
+        constructs,
+      );
       out += `[${linkText}](${escapeLinkDestination(hyperlink)}${title === undefined ? "" : ` "${renderLinkTitle(title)}"`})`;
     }
     index = groupEnd;

@@ -2881,6 +2881,79 @@ describe("link and image titles (the `link` construct annotation)", () => {
   });
 });
 
+describe("nested style ordering (ExaDev/markdown-codec#957)", () => {
+  it("wraps an italic span outermost when it stays constant across a bold sub-span (CommonMark spec 0.31.2 example 393)", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "(", italic: true },
+            { text: "foo", italic: true, bold: true },
+            { text: ")", italic: true },
+          ],
+        },
+      ]),
+      { emphasisMarker: "*" },
+    );
+    expect(markdown).toBe("*(**foo**)*");
+  });
+
+  it("wraps a bold span outermost when it stays constant across an italic sub-span", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "(", bold: true },
+            { text: "foo", italic: true, bold: true },
+            { text: ")", bold: true },
+          ],
+        },
+      ]),
+      { emphasisMarker: "*" },
+    );
+    expect(markdown).toBe("**(*foo*)**");
+  });
+
+  it("still renders an ordinary single-style span unwrapped by any other key, keeping the common case unchanged", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "foo " }, { text: "bar", bold: true }],
+        },
+      ]),
+      { emphasisMarker: "*" },
+    );
+    expect(markdown).toBe("foo **bar**");
+  });
+
+  it("round-trips a whole hyperlink group's own inner emphasis/strong/code-span nesting (CommonMark spec 0.31.2 example 516)", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "link ", hyperlink: "/uri" },
+            { text: "foo ", italic: true, hyperlink: "/uri" },
+            { text: "bar", italic: true, bold: true, hyperlink: "/uri" },
+            { text: " ", italic: true, hyperlink: "/uri" },
+            {
+              text: "#",
+              italic: true,
+              hyperlink: "/uri",
+              fontFamily: "Courier New",
+            },
+          ],
+        },
+      ]),
+      { emphasisMarker: "*" },
+    );
+    expect(markdown).toBe("[link *foo **bar** `#`*](/uri)");
+  });
+});
+
 describe("gaps (MarkdownDiagnosticCodes)", () => {
   it("HEADING_LEVEL_CLAMPED fires when a styleId exceeds Heading6", () => {
     const collector = createDiagnosticCollector();

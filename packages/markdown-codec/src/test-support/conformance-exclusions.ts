@@ -20,7 +20,7 @@ const ADJACENT_SAME_DEPTH =
 const IMAGE_SRC_UNPRESERVABLE =
   "an image with no data: URI destination has no bytes for this test harness to embed (no MarkdownImageResolver was supplied, matching how readMarkdown is actually called here), so it degrades to a hyperlinked text run (MarkdownDiagnosticCodes.IMAGE_UNRESOLVED) -- and even supplying one would not help this specific byte-for-byte comparison, since embedding real bytes re-renders as a data: URI, replacing rather than preserving the original external src the expected HTML still names";
 const EMPHASIS_TORTURE =
-  "several directly-touching nested or sibling emphasis/strong spans (occasionally one crossing a hyperlink's own text boundary) leave only CommonMark's two delimiter characters to resolve every adjacent boundary at once -- src/emit/inline.ts's pickEmphasisMarker resolves the common single-boundary case (intraword adjacency, one sibling touching one wrap) but a genuine three-or-more-way clash has no second fallback character left; a same-kind nesting (emphasis-in-emphasis, strong-in-strong) is additionally flattened outright before this is ever reached (MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED)";
+  "a SAME-KIND nesting -- emphasis directly inside emphasis, strong directly inside strong -- is flattened outright on the way in (MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED): document-schema.js's own ContentRun carries flat italic/bold booleans with no depth of their own, so two nested spans of the identical kind collapse into one before src/emit/inline.ts ever sees them to render. This is the residual left once src/emit/inline.ts's own renderNestedStyles started choosing which style to nest OUTERMOST per run window (fewest contiguous groups first, ExaDev/markdown-codec#957) rather than a fixed bold-then-italic-then-strike order -- that change resolved every DIFFERENT-kind multi-way clash this list used to carry (an emphasis span crossing a strong or link boundary, e.g. spec examples 393 and 516), leaving only the kind no re-ordering of DIFFERENT styles can fix, because there is only one ContentRun.italic (or .bold) flag for a run to carry regardless of how many nested spans of that same kind the source had";
 const MATH_DELIMITER_DIVERGENCE =
   'a source-level \\( directly followed (eventually) by a literal \\) is now read as inline math (ExaDev/markdown-codec#53), a deliberate divergence from cmark\'s own reading of two independently backslash-escaped parentheses -- src/inline/inline.ts\'s own new \\( recognition in parseBackslash cannot distinguish "the author escaped two literal parens" from "the author wrote inline math", because CommonMark\'s grammar gives \\( no third reading to disambiguate against; real Pandoc/GFM math-extension implementations accept the identical trade-off';
 
@@ -63,18 +63,10 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [369, EMPHASIS_TORTURE],
   [373, EMPHASIS_TORTURE],
   [389, EMPHASIS_TORTURE],
-  [393, EMPHASIS_TORTURE],
-  [399, EMPHASIS_TORTURE],
   [404, EMPHASIS_TORTURE],
-  [406, EMPHASIS_TORTURE],
   [407, EMPHASIS_TORTURE],
   [408, EMPHASIS_TORTURE],
   [409, EMPHASIS_TORTURE],
-  [410, EMPHASIS_TORTURE],
-  [411, EMPHASIS_TORTURE],
-  [413, EMPHASIS_TORTURE],
-  [414, EMPHASIS_TORTURE],
-  [415, EMPHASIS_TORTURE],
   [416, EMPHASIS_TORTURE],
   [417, EMPHASIS_TORTURE],
   [418, EMPHASIS_TORTURE],
@@ -92,9 +84,7 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [466, EMPHASIS_TORTURE],
   [467, EMPHASIS_TORTURE],
   [468, EMPHASIS_TORTURE],
-  [470, EMPHASIS_TORTURE],
   // Links
-  [516, EMPHASIS_TORTURE],
   [
     517,
     "a nested, unresolved image inside a link overwrites the OUTER link's own hyperlink with the inner image's own destination -- ContentRun.hyperlink is a single flat field with no way to represent two nested hyperlinks at once",
@@ -107,7 +97,6 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
     520,
     "an image whose alt text contains bracket-nested link-like text is flattened to plain alt text (image alt text is always plain per CommonMark's own rule), losing the specific nested-bracket text cmark's own alt-text-flattening happens to preserve literally",
   ],
-  [530, EMPHASIS_TORTURE],
   [
     531,
     "a nested, unresolved image inside a link overwrites the OUTER link's own hyperlink with the inner image's own destination -- ContentRun.hyperlink is a single flat field with no way to represent two nested hyperlinks at once",
