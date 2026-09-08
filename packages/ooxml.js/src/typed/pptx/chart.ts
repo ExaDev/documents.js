@@ -1,5 +1,11 @@
-import type { Box, ContentTable, ContentTableCell } from "document-schema.js";
+import type {
+  Box,
+  ContentTable,
+  ContentTableCell,
+  SourceResidue,
+} from "document-schema.js";
 import type { XmlElement } from "../../model/node";
+import { buildXml } from "../../xml/build";
 import { attr, childrenWithTag, elementsWithTag, textContent } from "../util";
 
 // Reads a chart part (a c:chartSpace root) into the same ContentTable shape an a:tbl graphic frame produces, so a chart reaches consumers as the series/category data it carries rather than geometry with empty content. Only the chart part's own cached model is read (c:strCache/c:numCache, or the c:numLit/c:strLit literal forms) -- the linked workbook behind c:externalData is a separate embedded package and is not opened.
@@ -130,4 +136,12 @@ export function readChartTable(
       () => columnWidthPt,
     ),
   };
+}
+
+// Quarantines a chart part's own presentation specifics -- chart type, axes, legend, colours, and every other c:chartSpace facet readChartTable itself does not read -- as opaque residue on whichever node the caller anchors it to (a pptx graphic frame's own ContentTable, an xlsx chart's ContentEmbeddedObject), per document-schema.js's stated ExaDev/documents.js#719 contract ("the chart's own serialised specifics riding the object's residue channel") and mirroring odf.js's readOdfChartContent, which already quarantines its own chart:chart element whole for the ODF side of the identical decision. The WHOLE chart root is kept, not just its c:chart child: unlike ODF's chart:chart (one element inside a shared content.xml), chartRoot is an entire standalone part existing for nothing but this one chart, so a same-format restorer re-emitting this residue verbatim reconstructs the whole part.
+export function readChartResidue(
+  chartRoot: XmlElement,
+  format: "pptx" | "xlsx",
+): SourceResidue {
+  return { format, xml: buildXml([chartRoot]) };
 }
