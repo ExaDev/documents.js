@@ -236,7 +236,14 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
       ],
     };
     const rebuiltBytes = codec.write!(content);
-    expect(codec.read(rebuiltBytes)).toEqual({ ...content, numbering: {} });
+    expect(codec.read(rebuiltBytes)).toEqual({
+      ...content,
+      numbering: {},
+      footnotes: [],
+      endnotes: [],
+      comments: [],
+      headerFooterStories: [],
+    });
   });
 
   // Mirrors xls-codec's own write.test.ts fixture shape (its `sheet`/`cell` helpers, restated inline here rather than imported -- that test-support is not part of xls-codec's published surface). writeXlsContent's own scope covers cell values, merges, row/column sizing, and number formats (no formulas/decoration -- see that package's README scope note), so this fixture sticks to plain cell values. A cell written with no explicit number format gains 'General' on the way back (XF 15's own ifmt resolving through the built-in table) -- the same pre-existing, documented stamping xls-codec's own write.test.ts pins, not something this registry wiring introduces -- so the expected content states it explicitly rather than asserting exact equality against the unformatted input.
