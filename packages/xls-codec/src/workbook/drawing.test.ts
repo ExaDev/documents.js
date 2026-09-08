@@ -19,7 +19,11 @@ import {
   spAtom,
 } from "../test-support/escher";
 import type { BlipImage } from "../drawing/blips";
-import { readSheetDrawing, type SheetDrawingContext } from "./drawing";
+import {
+  chartTableCells,
+  readSheetDrawing,
+  type SheetDrawingContext,
+} from "./drawing";
 
 const SHAPE_TYPE_RECTANGLE = 0x01;
 const SHAPE_TYPE_PICTURE_FRAME = 0x4b;
@@ -214,5 +218,70 @@ describe("readSheetDrawing", () => {
     expect(drawing.images).toEqual([]);
     expect(drawing.embeddedObjects).toHaveLength(1);
     expect(drawing.embeddedObjects[0]?.objectKind).toBe("chart");
+  });
+});
+
+describe("chartTableCells", () => {
+  it("writes each series' own name and values under its own column", () => {
+    const cells = chartTableCells([
+      { name: "Revenue", categories: ["Jan", "Feb"], values: ["10", "20"] },
+      { name: "Cost", categories: ["Jan", "Feb"], values: ["5", "8"] },
+    ]);
+
+    expect(cells).toContainEqual({
+      row: 0,
+      column: 1,
+      value: { kind: "string", value: "Revenue" },
+      displayText: "Revenue",
+    });
+    expect(cells).toContainEqual({
+      row: 0,
+      column: 2,
+      value: { kind: "string", value: "Cost" },
+      displayText: "Cost",
+    });
+    expect(cells).toContainEqual({
+      row: 1,
+      column: 1,
+      value: { kind: "string", value: "10" },
+      displayText: "10",
+    });
+    expect(cells).toContainEqual({
+      row: 2,
+      column: 2,
+      value: { kind: "string", value: "8" },
+      displayText: "8",
+    });
+  });
+
+  it("writes the shared category column once, not once per series, even when series disagree", () => {
+    // Two series whose own category arrays genuinely disagree at index 1 -- the first series to label a given point wins, and the category cell at (row 2, column 0) appears exactly once, never one entry per series.
+    const cells = chartTableCells([
+      { name: "A", categories: ["Jan", "Feb"], values: ["1", "2"] },
+      { name: "B", categories: ["Jan", "Mar"], values: ["3", "4"] },
+    ]);
+
+    const categoryCells = cells.filter((cell) => cell.column === 0);
+    expect(categoryCells).toHaveLength(2);
+    expect(categoryCells).toContainEqual({
+      row: 1,
+      column: 0,
+      value: { kind: "string", value: "Jan" },
+      displayText: "Jan",
+    });
+    expect(categoryCells).toContainEqual({
+      row: 2,
+      column: 0,
+      value: { kind: "string", value: "Feb" },
+      displayText: "Feb",
+    });
+  });
+
+  it("omits an empty-string name, category, or value rather than materialising an empty cell", () => {
+    const cells = chartTableCells([
+      { name: undefined, categories: [""], values: [""] },
+    ]);
+
+    expect(cells).toEqual([]);
   });
 });

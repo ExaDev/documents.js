@@ -316,7 +316,7 @@ function chartFromShape(
 }
 
 /** Lays a chart's own series out as ooxml.js's readChartTable does for the identical xlsx/pptx case: a header row of series names over the category column, then one row per category with each series' own value -- see workbook/chart.ts's own top comment for why this flattened shape, not a typed chart object, is what document-schema.js's 'chart' objectKind actually carries. */
-function chartTableCells(
+export function chartTableCells(
   series: readonly {
     readonly name: string | undefined;
     readonly categories: readonly string[];
@@ -334,17 +334,6 @@ function chartTableCells(
         displayText: name,
       });
     }
-    entry.categories.forEach((category, pointIndex) => {
-      if (category === "") {
-        return;
-      }
-      cells.push({
-        row: pointIndex + 1,
-        column: 0,
-        value: { kind: "string", value: category },
-        displayText: category,
-      });
-    });
     entry.values.forEach((value, pointIndex) => {
       if (value === "") {
         return;
@@ -357,6 +346,23 @@ function chartTableCells(
       });
     });
   });
+  // A chart's series share one category axis: the union across every series, in series order (the first series to label a given point wins), matching readChartTable's own identical convention for the xlsx/pptx case -- written once here rather than once per series, which would otherwise push one cell per series at the SAME (row, 0) position whenever two series' own category arrays disagree.
+  const categories = new Map<number, string>();
+  for (const entry of series) {
+    entry.categories.forEach((category, pointIndex) => {
+      if (category !== "" && !categories.has(pointIndex)) {
+        categories.set(pointIndex, category);
+      }
+    });
+  }
+  for (const [pointIndex, category] of categories) {
+    cells.push({
+      row: pointIndex + 1,
+      column: 0,
+      value: { kind: "string", value: category },
+      displayText: category,
+    });
+  }
   return cells;
 }
 
