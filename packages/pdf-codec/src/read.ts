@@ -719,6 +719,7 @@ function convertLine(item: ExtractedLine, pageMatrix: Matrix): LayoutLine {
     y2Pt: p2.y,
     color: item.color,
     widthPt: item.widthPt,
+    ...(item.style !== undefined ? { style: item.style } : {}),
     ...(item.layerName !== undefined ? { layer: item.layerName } : {}),
   };
 }
@@ -770,6 +771,7 @@ function convertPath(item: ExtractedPath, pageMatrix: Matrix): LayoutPath {
       ? { fillRule: "evenodd" as const }
       : {}),
     ...(item.stroke !== undefined ? { stroke: item.stroke } : {}),
+    ...(item.style !== undefined ? { style: item.style } : {}),
     ...(item.layerName !== undefined ? { layer: item.layerName } : {}),
   };
 }
