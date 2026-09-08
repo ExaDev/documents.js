@@ -394,3 +394,8 @@ export const FTAB_FIXED_ARITY: ReadonlyMap<number, number> = new Map(
     (entry): entry is [number, [string, number]] => entry[1][1] !== undefined,
   ).map(([iftab, [, arity]]) => [iftab, arity]),
 );
+
+/** The write direction's own lookup: a function's Ftab index by its displayed name, consulted by biff/ptg-writer.ts when compiling a formula's own function calls back into PtgFunc/PtgFuncVar tokens. Built from FTAB_NAMES rather than as a second hand-maintained table, so the two directions cannot drift apart; every name in this table is unique, so the inversion loses nothing. */
+export const FTAB_IFTAB_BY_NAME: ReadonlyMap<string, number> = new Map(
+  FTAB_ENTRIES.map(([iftab, [name]]) => [name, iftab]),
+);
