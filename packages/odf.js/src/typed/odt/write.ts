@@ -1,5 +1,8 @@
 import type {
+  ConstructDescriptor,
   ContentBlock,
+  ContentConstructEnd,
+  ContentConstructStart,
   ContentDocument,
   ContentImageBlock,
   ContentPageBreak,
@@ -31,7 +34,14 @@ import {
   writeOdfParagraph,
 } from "../shared/paragraph";
 import { writeOdfTable, type OdfTableWriteContext } from "../shared/table";
-import { writeOdfPackageResidue } from "../shared/constructs";
+import {
+  canonicalOdfConstructDescriptor,
+  odfRunConstructWriteKind,
+  writeOdfDivision,
+  writeOdfIndexWrapper,
+  writeOdfPackageResidue,
+  type OdfDivisionWriteContext,
+} from "../shared/constructs";
 import {
   canonicalImage,
   canonicalMetadata,
@@ -55,7 +65,7 @@ import {
 // 2. NO STANDALONE PAGE BREAK, AND NO SECTION ELEMENT. A page break is fo:break-before on a paragraph style, and a change of page geometry is a paragraph style naming a different style:master-page. ContentSection's own boundary is therefore written as a master-page switch on the first paragraph of each section after the first, which is exactly the switch readOdtContent splits sections at.
 // 3. WHITESPACE IS STRUCTURE. A run of two or more spaces, a tab, and a line break are elements, not characters (see typed/shared/text.ts). A run whose text contains one is split at it, because ODF has no spelling that would keep it whole.
 //
-// WHAT THIS WRITER DOES NOT WRITE, and why it refuses rather than dropping: the fidelity constructs readOdtContent reads (fields, bookmarks, notes, annotations, tracked changes, divisions, index wrappers, forms) and embedded objects are semantic content, so writing a document that silently lost them would be worse than not writing it at all -- a block or paragraph carrying one is refused by name (see assertWritableBlock/assertWritableParagraph). The quarantined residue channel is more nuanced: a whole non-content package part (settings.xml and the like) is restored verbatim by writeOdt itself, via the shared writeOdfPackageResidue helper, once writeOdtContent has built the rest of the package -- that part is never touched or interpreted by anything below, so re-emitting it is genuinely safe. A construct's own residue, and the body-walk quarantine buckets a paragraph or block can carry (dde-links, xforms, a vendor-extension tag), stay dropped: re-emitting one of those into a paragraph or block the writer is regenerating from a possibly-edited document would be actively wrong, since there is no structural position left to safely reinsert it at. That narrower drop is stated in normaliseOdtContent, and tracked as the restorable-fidelity gap it is.
+// WHAT THIS WRITER WRITES AND WHAT IT STILL REFUSES, and why it refuses rather than dropping: the fidelity constructs readOdtContent reads are semantic content, so writing a document that silently lost one would be worse than not writing it at all -- a block or paragraph carrying a construct this writer does not yet resolve is refused BY NAME (see assertWritableBlock/assertWritableParagraph), never silently dropped. As of ExaDev/documents.js#969, that is no longer every construct: a FIELD and a BOOKMARK anchor (point or ranged, entirely within one paragraph) are written from ContentParagraph.constructs, via typed/shared/paragraph.ts's writeOdfParagraphChildren; a DIVISION (text:section) and an INDEX WRAPPER (text:table-of-content and its six siblings) are written from a block-scope constructStart/constructEnd pair, via typed/shared/constructs.ts's writeOdfDivision/writeOdfIndexWrapper (see assertWritableBlock/isWritableOdfDivisionOrIndexDescriptor and writeSectionBlocks' own construct stack). Still refused: a NOTE or ANNOTATION anchor and a TRACKED-CHANGE provenance wrapper (both need the definitions-table body a bare ContentDocument write has no access to -- see writeOdt's own DocumentTree entry point, which does have it, for the natural place to wire this up next); a bookmark/tracked-change/comment range that SPANS SEVERAL BLOCKS rather than sitting inside one paragraph (that needs a marker spliced onto the first/last paragraph inside the extent, not a wrapping element, a materially different write path from the division/index case); office:forms controls (the reader's own point-pair encoding, readOdfFormControlConstructs in typed/shared/forms.ts, flattens a form's real parent/child nesting into a flat pre-order sequence of point constructs with no extent of its own, so there is no reliable way back to the original form:form/form:<kind> tree from what gets read); and embedded objects (ExaDev/documents.js#972's own write-side sub-document infrastructure, tracked separately). Every one of those is still refused by name, not dropped. The quarantined residue channel is separate again: a whole non-content package part (settings.xml and the like) is restored verbatim by writeOdt itself, via the shared writeOdfPackageResidue helper, once writeOdtContent has built the rest of the package -- that part is never touched or interpreted by anything below, so re-emitting it is genuinely safe. A construct's own residue, and the body-walk quarantine buckets a paragraph or block can carry (dde-links, xforms, a vendor-extension tag), stay dropped: re-emitting one of those into a paragraph or block the writer is regenerating from a possibly-edited document would be actively wrong, since there is no structural position left to safely reinsert it at (the one narrow, deliberate exception is an index wrapper's own *-source residue, read back purely to recover WHICH of the seven wrapper elements to write -- structural identity, never re-emitted content -- see odfIndexWrapperTag's own note). That narrower drop is stated in normaliseOdtContent, and tracked as the restorable-fidelity gap it is.
 
 const CONTENT_PART = "content.xml";
 const STYLES_PART = "styles.xml";
@@ -87,7 +97,21 @@ interface PlannedImage {
   readonly image: ContentImageBlock;
 }
 
-type PlannedBlock = PlannedParagraph | PlannedTable | PlannedImage;
+// The block-scope construct markers pass through planning as-is: a marker carries no formatting or list membership of its own to restate, so there is nothing for the plan to do beyond deciding WHERE in the flow it lands (see planSection below, which treats a marker as a flow boundary the same way a table already is: it flushes a pending page break and closes any open list run before it, rather than trying to nest inside one).
+interface PlannedConstructStart {
+  readonly kind: "constructStart";
+  readonly descriptor: ContentConstructStart["descriptor"];
+}
+interface PlannedConstructEnd {
+  readonly kind: "constructEnd";
+}
+
+type PlannedBlock =
+  | PlannedParagraph
+  | PlannedTable
+  | PlannedImage
+  | PlannedConstructStart
+  | PlannedConstructEnd;
 
 interface PlannedSection {
   readonly pageSize: PageSize;
@@ -103,22 +127,53 @@ function unsupported(what: string, where: string): Error {
   );
 }
 
+// A run-level construct extent this paragraph carries is writable when odfRunConstructWriteKind (typed/shared/constructs.ts) resolves it: a field (always, from its own cached instruction) or a bookmark anchor (point or range, both spelled as text:bookmark/-start/-end). Every other run-level construct -- a footnote/endnote/comment anchor, a tracked-change provenance wrapper -- has no writer yet and is refused by name, matching every writer's established fidelity-construct stance.
 function assertWritableParagraph(paragraph: ContentParagraph): void {
-  if (paragraph.constructs !== undefined && paragraph.constructs.length > 0) {
-    throw unsupported(
-      "run-level construct extents (a field, bookmark, note, annotation, or tracked change)",
-      "a paragraph",
-    );
+  for (const extent of paragraph.constructs ?? []) {
+    if (odfRunConstructWriteKind(extent) === undefined) {
+      const anchorType =
+        extent.descriptor.kind === "anchor"
+          ? ` of anchor type "${extent.descriptor.anchorType}"`
+          : "";
+      throw unsupported(
+        `a run-level construct extent this writer does not spell back yet (a "${extent.descriptor.kind}" construct${anchorType})`,
+        "a paragraph",
+      );
+    }
   }
 }
 
-// An assertion signature rather than a plain check, so the walk below narrows to exactly the four block kinds this writer knows how to place without a second, redundant test for the kinds this one already refused.
+// Whether a block-scope construct marker's own descriptor is one writeSectionBlocks knows how to wrap: a division (text:section) and an index wrapper (contentControl "index", text:table-of-content and its six siblings) are real WRAPPING elements, so their inverse is exactly "write the wrapper around the blocks between the matching constructStart/constructEnd" (see writeConstructWrapper below). Every other block-scope construct -- a bookmark/tracked-change/comment range spanning several whole PARAGRAPHS, or an office:forms control -- has no writer yet: those need a marker element spliced onto the first/last paragraph INSIDE the extent rather than a wrapping element around it, a materially different write path this pass does not build. The run-scoped case of the identical anchor/field kinds -- entirely within one paragraph -- IS written (assertWritableParagraph above), so only the block-scoped, multi-paragraph-spanning case remains refused here.
+function isWritableOdfDivisionOrIndexDescriptor(
+  descriptor: ConstructDescriptor,
+): boolean {
+  return (
+    descriptor.kind === "division" ||
+    (descriptor.kind === "contentControl" && descriptor.controlType === "index")
+  );
+}
+
+// An assertion signature rather than a plain check, so the walk below narrows to exactly the block kinds this writer knows how to place without a second, redundant test for the kinds this one already refused.
 function assertWritableBlock(
   block: ContentBlock,
 ): asserts block is
-  ContentParagraph | ContentTable | ContentImageBlock | ContentPageBreak {
-  if (block.kind === "constructStart" || block.kind === "constructEnd") {
-    throw unsupported("a construct boundary marker", "a section's block flow");
+  | ContentParagraph
+  | ContentTable
+  | ContentImageBlock
+  | ContentPageBreak
+  | ContentConstructStart
+  | ContentConstructEnd {
+  if (block.kind === "constructStart") {
+    if (!isWritableOdfDivisionOrIndexDescriptor(block.descriptor)) {
+      throw unsupported(
+        `a block-scope construct boundary marker for a "${block.descriptor.kind}" construct this writer does not yet wrap`,
+        "a section's block flow",
+      );
+    }
+    return;
+  }
+  if (block.kind === "constructEnd") {
+    return;
   }
   if (block.kind === "embeddedObject") {
     throw unsupported("an embedded object", "a section's block flow");
@@ -193,7 +248,7 @@ function planSection(
     if (block.kind === "paragraph") {
       // A membership with no numId at all (ContentListMembershipSchema makes it optional, for a source format carrying only a depth) still names a real list here -- it just names one whose identity the source never stated, so it gets its own run key and its own minted numId on the way back in, exactly as any other list does. planListMembership (typed/shared/list.ts) owns this canonicalisation.
       const canonicalId = planListMembership(block.list, listState);
-      const paragraph = canonicalParagraph(block, canonicalId);
+      const paragraph = canonicalParagraph(block, canonicalId, true);
       pushParagraph(
         pendingPageBreak ? { ...paragraph, pageBreakBefore: true } : paragraph,
       );
@@ -205,6 +260,17 @@ function planSection(
       closeListRun();
       // canonicalTable renumbers any list membership a cell's own paragraphs carry onto this SAME listState, in document order, exactly as the paragraph branch above does for body-level membership -- a list minted inside a cell needs an identity as unique as one minted anywhere else in the document, and readOdtContent's own listIdState mints in this identical interleaved order on the way back in.
       blocks.push({ kind: "table", table: canonicalTable(block, listState) });
+      continue;
+    }
+    if (block.kind === "constructStart" || block.kind === "constructEnd") {
+      // A construct boundary is a flow boundary exactly the way a table already is: it never continues an open list run into or out of its own extent, matching the identical treatment the table branch above already gives non-paragraph, non-image content. writeSectionBlocks (below) is what actually re-wraps the blocks between a matching pair; this plan just states where in the flow they land.
+      flushPendingPageBreak();
+      closeListRun();
+      blocks.push(
+        block.kind === "constructStart"
+          ? { kind: "constructStart", descriptor: block.descriptor }
+          : { kind: "constructEnd" },
+      );
       continue;
     }
     // An image: ODF anchors a draw:frame inside a paragraph, never beside one, so an image with no paragraph before it in this section opens an empty one to hang off. The anchor paragraph doubles as the page break's own host when one is pending.
@@ -239,7 +305,7 @@ function planDocument(sections: readonly ContentSection[]): PlannedSection[] {
 // The one canonical ContentDocument a written-and-reread document equals, and therefore the exact statement of what this writer preserves and what ODF (or this package's own reader) cannot carry back. Idempotent by construction -- every step below is already a fixed point of itself -- so it is a genuine equivalence, applied to both sides of the round-trip law rather than to the reader's output alone.
 //
 // What it restates, each forced by the format rather than chosen here:
-// - RUNS are segmented into what ODF's inline content model can express (typed/shared/paragraph.ts's segmentOdfParagraphRuns): empty runs vanish, adjacent identically-formatted runs merge, and a run containing a tab, a line break, or a collapsing space run splits at it.
+// - RUNS are segmented into what ODF's inline content model can express (typed/shared/paragraph.ts's segmentOdfParagraphRuns): empty runs vanish, adjacent identically-formatted runs merge, and a run containing a tab, a line break, or a collapsing space run splits at it. A paragraph carrying run-level CONSTRUCTS (a field, a bookmark) segments the identical way except that merging never crosses a construct's own startRun/endRun boundary (segmentOdfParagraphRunsMapped), and its constructs field survives with each extent's bounds remapped onto the resulting canonical run indices -- the descriptor itself is untouched, since neither construct this writer resolves loses any of its own state on the way through.
 // - A PAGE BREAK block becomes pageBreakBefore on the paragraph that follows it, or on an empty paragraph of its own when nothing follows it that could carry one -- ODF has no standalone page-break element.
 // - An IMAGE with no paragraph before it in its section gains an empty anchor paragraph, since a draw:frame is anchored inside a paragraph, never beside one.
 // - LIST identities are renumbered onto the reader's own per-encounter minting, keeping the incoming ordered:/bullet: kind. ContentListMembership's `checked` and `itemId` are dropped: ODF list items carry neither a checkbox nor an item identity.
@@ -265,12 +331,21 @@ export function normaliseOdtContent(
       const blocks: ContentBlock[] = section.blocks.map((block) => {
         switch (block.kind) {
           case "paragraph":
+            // Already canonical: planSection ran canonicalParagraph(..., true) when it planned this block, mapping any run-level construct extents onto the SAME segmented run list this block's own runs already state.
             return block.paragraph;
           case "table":
             // Already canonical: planSection ran canonicalTable when it planned this block, threading the SAME listState its own paragraph branch renumbers body-level list membership through.
             return block.table;
           case "image":
             return canonicalImage(block.image);
+          case "constructStart":
+            // canonicalOdfConstructDescriptor (typed/shared/constructs.ts) restates the one fact a block-scope marker CAN carry that a round trip reshapes: an index wrapper's own bare *-source residue, re-serialised through the identical parse/build pass writeOdfIndexWrapper's own read-back takes. Everything else about the marker -- its extent's blocks -- is restated individually, in the same map, exactly as it would be at the document's top level.
+            return {
+              kind: "constructStart",
+              descriptor: canonicalOdfConstructDescriptor(block.descriptor),
+            };
+          case "constructEnd":
+            return { kind: "constructEnd" };
         }
       });
       return index === 0
@@ -298,6 +373,7 @@ interface OdtWriteState {
   nextTable: number;
   nextImage: number;
   nextListStyle: number;
+  nextSectionStyle: number;
   // One text:list-style per kind, minted on first use: a document with fifty bullet lists needs one bullet list-style, not fifty identical ones.
   readonly listStyleByKind: Map<"ordered" | "bullet", string>;
 }
@@ -396,7 +472,13 @@ function writeImageFrame(
   );
 }
 
-// Writes one planned section's blocks into office:text's own child list. The paragraph elements are built first and the list grouping is layered over them, because a paragraph does not know it is in a list -- ODF membership is the containers around it (see typed/shared/list.ts), so grouping is this walk's job rather than the paragraph writer's.
+// One division/index-wrapper construct still being written: the extent's own children accumulate here, separately from whatever array surrounds the construct, until the matching constructEnd closes it and the wrapper element (division or index) is built around them and pushed into ITS OWN surrounding array in turn -- a plain stack, so constructs nest correctly to arbitrary depth with no special-casing.
+interface OpenOdtConstruct {
+  readonly descriptor: ContentConstructStart["descriptor"];
+  readonly children: XmlNode[];
+}
+
+// Writes one planned section's blocks into office:text's own child list (or, once a division/index wrapper is open, into that wrapper's own accumulating children instead -- see the construct stack below). The paragraph elements are built first and the list grouping is layered over them, because a paragraph does not know it is in a list -- ODF membership is the containers around it (see typed/shared/list.ts), so grouping is this walk's job rather than the paragraph writer's.
 function writeSectionBlocks(
   section: PlannedSection,
   parentStyleName: string | undefined,
@@ -405,7 +487,7 @@ function writeSectionBlocks(
 ): void {
   // The paragraph the next image anchors into: an image is a draw:frame inside a paragraph, and planSection has already guaranteed one exists before any image.
   let anchorParagraph: XmlElement | undefined;
-  // The list run currently open. Its text:list element is pushed into `out` as soon as the run starts, so document order is settled immediately, and its contents are filled in when the run closes -- the nesting structure of a list is a fact about the whole run (a level-2 item lives inside the item before it), which no per-paragraph append could decide on its own.
+  // The list run currently open. Its text:list element is pushed into the current output array as soon as the run starts, so document order is settled immediately, and its contents are filled in when the run closes -- the nesting structure of a list is a fact about the whole run (a level-2 item lives inside the item before it), which no per-paragraph append could decide on its own. A construct boundary always closes it first (see the constructStart/constructEnd branches below), matching how a table already does.
   let openList:
     | {
         readonly numId: string;
@@ -428,7 +510,59 @@ function writeSectionBlocks(
     openList = undefined;
   };
 
+  const constructStack: OpenOdtConstruct[] = [];
+  const currentOut = (): XmlNode[] =>
+    constructStack.length === 0
+      ? out
+      : constructStack[constructStack.length - 1]!.children;
+  const divisionContext: OdfDivisionWriteContext = {
+    mintSectionStyleName: (columnCount) => {
+      const name = `Sect${state.nextSectionStyle}`;
+      state.nextSectionStyle += 1;
+      state.stylesAutomaticStyles.children.push(
+        el("style:style", { "style:name": name, "style:family": "section" }, [
+          el("style:section-properties", {}, [
+            el("style:columns", { "fo:column-count": String(columnCount) }),
+          ]),
+        ]),
+      );
+      return name;
+    },
+  };
+
   for (const [index, block] of section.blocks.entries()) {
+    if (block.kind === "constructStart") {
+      closeList();
+      anchorParagraph = undefined;
+      constructStack.push({ descriptor: block.descriptor, children: [] });
+      continue;
+    }
+    if (block.kind === "constructEnd") {
+      closeList();
+      anchorParagraph = undefined;
+      const open = constructStack.pop();
+      if (open === undefined) {
+        throw new Error(
+          "writeOdt: internal error -- a constructEnd block reached the writer with no matching constructStart open, which document-schema.js's own marker-balance contract is supposed to guarantee",
+        );
+      }
+      if (open.descriptor.kind === "division") {
+        currentOut().push(
+          writeOdfDivision(open.descriptor, open.children, divisionContext),
+        );
+      } else if (
+        open.descriptor.kind === "contentControl" &&
+        open.descriptor.controlType === "index"
+      ) {
+        currentOut().push(writeOdfIndexWrapper(open.descriptor, open.children));
+      } else {
+        // isWritableOdfDivisionOrIndexDescriptor already refused any other descriptor kind at plan time (assertWritableBlock), so this branch is unreachable in practice -- kept only so the exhaustiveness above stays a real check rather than an assumption.
+        throw new Error(
+          `writeOdt: internal error -- an open construct with an unwritable descriptor kind "${open.descriptor.kind}" reached writeSectionBlocks, which assertWritableBlock is supposed to have refused before planning`,
+        );
+      }
+      continue;
+    }
     if (block.kind === "paragraph") {
       const paragraph = block.paragraph;
       const element = writeOdfParagraph(paragraph, state.registry, {
@@ -440,7 +574,7 @@ function writeSectionBlocks(
       const membership = paragraph.list;
       if (membership?.numId === undefined) {
         closeList();
-        out.push(element);
+        currentOut().push(element);
         continue;
       }
       if (openList !== undefined && openList.numId !== membership.numId) {
@@ -453,7 +587,7 @@ function writeSectionBlocks(
           entries: [],
           element: listElement,
         };
-        out.push(listElement);
+        currentOut().push(listElement);
       }
       openList.entries.push({ level: membership.level, element });
       continue;
@@ -461,7 +595,7 @@ function writeSectionBlocks(
     if (block.kind === "table") {
       closeList();
       anchorParagraph = undefined;
-      out.push(writeOdfTable(block.table, tableWriteContext(state)));
+      currentOut().push(writeOdfTable(block.table, tableWriteContext(state)));
       continue;
     }
     if (anchorParagraph === undefined) {
@@ -512,6 +646,7 @@ export function writeOdtContent(
     nextTable: 1,
     nextImage: 1,
     nextListStyle: 1,
+    nextSectionStyle: 1,
     listStyleByKind: new Map(),
   };
   // Minted unconditionally, once per document, rather than only when a preformatted paragraph is actually found: a document-wide pre-scan just to decide whether to skip one small, otherwise-inert element is more machinery than the element itself costs. writeOdfParagraph references this style's own name for ANY paragraph.preformatted paragraph it writes -- body text here, and (via typed/shared/table.ts's own writeOdfParagraph calls, sharing this exact registry/part) a document table cell's paragraphs too -- so it must already exist by the time the first such paragraph is written.
