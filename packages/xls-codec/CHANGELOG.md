@@ -1,3 +1,14 @@
+## [4.5.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.4.0...xls-codec%404.5.0) (2026-09-08)
+
+### Features
+
+* **xls-codec:** add Excel's TintAndShade colour model to xf-colors ([47738ba](https://github.com/ExaDev/documents.js/commit/47738ba352644cfcdf57c8c8644341cda5ff25a4)), references [getTint/#setTint](https://github.com/ExaDev/documents.js/issues/setTint)
+* **xls-codec:** read BIFF8 CF12 colour scale, data bar, and icon set rules ([da8be8e](https://github.com/ExaDev/documents.js/commit/da8be8eb8b09f4aa9137e75a75fe1ad2d3080005))
+
+### Bug Fixes
+
+* **xls-codec:** correct CF12 icon-set byte order and join ContinueFrt12 continuations ([5e7bc7d](https://github.com/ExaDev/documents.js/commit/5e7bc7d64d1b184330b10859156891c869953047))
+
 ## [4.4.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.3.0...xls-codec%404.4.0) (2026-09-07)
 
 ### Features
