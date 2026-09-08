@@ -95,3 +95,28 @@ export function formatOdfNumber(value: number): string {
 export function formatOdfLength(pt: number, unit: LengthUnit = "pt"): string {
   return `${formatOdfNumber(pt / unitToPtFactor(unit))}${unit}`;
 }
+
+// ODF's `angle` datatype (OASIS ODF 1.3 section 18.3.1): a double, optionally followed immediately by one of "deg"/"grad"/"rad", defaulting to degrees when no unit is given. The spec itself notes ODF 1.1 never supported a unit suffix at all and recommends producers omit one for that compatibility -- real LibreOffice output (draw:angle on <draw:gradient>, draw:rotation on <draw:hatch>) follows that recommendation and writes a bare degree number, but a unit suffix is still valid ODF a conforming reader must accept. Grad-to-degree (400 grad = 360deg = a full turn) and rad-to-degree are exact, universal angle-unit conversions, not ODF-specific constants.
+const ANGLE_PATTERN = /^(-?(?:\d+(?:\.\d+)?|\.\d+))(deg|grad|rad)?$/;
+const DEGREES_PER_GRAD = 360 / 400;
+const DEGREES_PER_RADIAN = 180 / Math.PI;
+
+export function parseOdfAngleDeg(value: string): number | undefined {
+  const match = ANGLE_PATTERN.exec(value);
+  if (match === null) {
+    return undefined;
+  }
+  const numeric = match[1];
+  if (numeric === undefined) {
+    return undefined;
+  }
+  const raw = Number(numeric);
+  switch (match[2]) {
+    case "grad":
+      return raw * DEGREES_PER_GRAD;
+    case "rad":
+      return raw * DEGREES_PER_RADIAN;
+    default:
+      return raw;
+  }
+}
