@@ -237,7 +237,24 @@ function appendAnchor(
     appendNested(element, style, context, runs, constructs);
     return;
   }
-  // Every href round-trips through ContentRun.hyperlink regardless of whether it names an external URI or a same-/cross-document fragment -- a deliberate simplification over document-schema.js's own internal/external `link` construct split (see README Architecture): building the full same-document anchor-target bookkeeping a genuine internal `link` construct needs is a real feature this package does not attempt, and every href still restores byte-for-byte either way. A same-document fragment already recognised as a footnote reference above never reaches this branch.
+  // A same-/cross-document href resolving to a real, block-level element that no footnote reference already claims: document-schema.js's own internal `link` target (README Architecture), rather than the plain ContentRun.hyperlink degrade below. context.resolveBookmarkHref (src/xhtml/read.ts's own whole-document, and src/read.ts's own whole-spine, prescan) is the single place same-document vs. cross-document resolution and eligibility (BLOCK_LEVEL_TAGS membership) are decided; this call site only builds the run-level construct extent once it already has a name to build one with.
+  const bookmarkName = context.resolveBookmarkHref(href);
+  if (bookmarkName !== undefined) {
+    const startRun = runs.length;
+    const nested = buildInlineRuns(element.children, style, context);
+    runs.push(...nested.runs);
+    constructs.push(...rebaseConstructs(nested.constructs, startRun));
+    constructs.push({
+      descriptor: {
+        kind: "link",
+        target: { kind: "internal", anchor: bookmarkName },
+      },
+      startRun,
+      endRun: runs.length,
+    });
+    return;
+  }
+  // Every href this package cannot resolve to a real, addressable in-package element -- an external URI, or an internal-looking href naming no element this package's own read pass ever wraps in an anchor marker -- rides ContentRun.hyperlink verbatim; every href still restores byte-for-byte either way. A same-/cross-document fragment already recognised as a footnote reference or an ordinary internal link target above never reaches this branch.
   const offset = runs.length;
   const nested = buildInlineRuns(element.children, style, context);
   for (const run of nested.runs) {

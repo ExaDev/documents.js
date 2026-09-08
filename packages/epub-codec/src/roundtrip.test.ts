@@ -188,6 +188,112 @@ describe("writeEpubContent -> readEpubContent round trip", () => {
     expect(result.sections[0]?.source).toEqual(document.sections[0]?.source);
   });
 
+  it("round-trips a same-section and a cross-section internal link construct (ExaDev/documents.js#963)", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595.28, heightPt: 841.89 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [
+                { text: "See " },
+                { text: "here" },
+                { text: " and " },
+                { text: "there" },
+                { text: "." },
+              ],
+              constructs: [
+                {
+                  descriptor: {
+                    kind: "link",
+                    target: { kind: "internal", anchor: "local-target" },
+                  },
+                  startRun: 1,
+                  endRun: 2,
+                },
+                {
+                  descriptor: {
+                    kind: "link",
+                    target: { kind: "internal", anchor: "remote-target" },
+                  },
+                  startRun: 3,
+                  endRun: 4,
+                },
+              ],
+            },
+            {
+              kind: "constructStart",
+              descriptor: {
+                kind: "anchor",
+                anchorType: "bookmark",
+                name: "local-target",
+              },
+            },
+            { kind: "paragraph", runs: [{ text: "Local target." }] },
+            { kind: "constructEnd" },
+          ],
+        },
+        {
+          pageSize: { widthPt: 595.28, heightPt: 841.89 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "constructStart",
+              descriptor: {
+                kind: "anchor",
+                anchorType: "bookmark",
+                name: "remote-target",
+              },
+            },
+            { kind: "paragraph", runs: [{ text: "Remote target." }] },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    };
+
+    const result = readEpubContent(writeEpubContent(document));
+    expect(result.kind).toBe("wordprocessing");
+    if (result.kind !== "wordprocessing") return;
+    expect(result.sections).toHaveLength(2);
+
+    // The same-section link/bookmark pair is a purely intra-document fact with no cross-document href to rediscover, so its bare name survives unchanged.
+    const paragraph = result.sections[0]?.blocks[0];
+    expect(paragraph?.kind).toBe("paragraph");
+    const localExtent =
+      paragraph?.kind === "paragraph" ? paragraph.constructs?.[0] : undefined;
+    expect(localExtent?.descriptor).toEqual({
+      kind: "link",
+      target: { kind: "internal", anchor: "local-target" },
+    });
+
+    // The cross-section link/bookmark pair is re-read from the written EPUB (a genuine "section2.xhtml#remote-target" href, discovered fresh by the whole-spine pass): its own name is re-qualified with the target document's own path, exactly the way any other cross-document reference is (this package's own "restorable, not byte-identical" tier for constructs, matching every sibling codec's own documented degrade for markup order and similar round-trip-neutral reshaping) -- what matters is that it is still internally consistent, i.e. the reference's own target names the SAME construct the second section's constructStart actually carries.
+    const remoteExtent =
+      paragraph?.kind === "paragraph" ? paragraph.constructs?.[1] : undefined;
+    expect(remoteExtent?.descriptor.kind).toBe("link");
+    const remoteName =
+      remoteExtent?.descriptor.kind === "link" &&
+      remoteExtent.descriptor.target.kind === "internal"
+        ? remoteExtent.descriptor.target.anchor
+        : undefined;
+    const remoteBookmarkStart = result.sections[1]?.blocks.find(
+      (b) =>
+        b.kind === "constructStart" &&
+        b.descriptor.kind === "anchor" &&
+        b.descriptor.anchorType === "bookmark",
+    );
+    expect(remoteBookmarkStart?.kind).toBe("constructStart");
+    expect(
+      remoteBookmarkStart?.kind === "constructStart" &&
+        remoteBookmarkStart.descriptor.kind === "anchor" &&
+        remoteBookmarkStart.descriptor.name,
+    ).toBe(remoteName);
+  });
+
   it("writes the OCF-mandated mimetype-first/stored byte layout at the full pipeline level", () => {
     // Not a byte-for-byte determinism check across two writes: writeOpf mints a fresh dc:identifier per call (ExaDev/documents.js#801's own explicit "generated identifier" write scope), so the OPF entry's own compressed bytes genuinely differ between two writes of the identical document -- that is correct, not a gap in the fixed-mtime/ordered-entries discipline src/zip.ts's own unit tests already pin at the fflate-wrapper level. What IS a fixed, checkable invariant at this full-pipeline level is the physical layout OCF requires: "mimetype" first, stored uncompressed, and META-INF/container.xml immediately after it.
     const document: ContentDocument = {
