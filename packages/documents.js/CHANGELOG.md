@@ -1,3 +1,10 @@
+## [7.8.13](https://github.com/ExaDev/documents.js/compare/documents.js%407.8.12...documents.js%407.8.13) (2026-09-08)
+
+
+### Dependencies
+
+- Updated ppt-codec to 1.4.0
+
 ## [7.8.12](https://github.com/ExaDev/documents.js/compare/documents.js%407.8.11...documents.js%407.8.12) (2026-09-08)
 
 
