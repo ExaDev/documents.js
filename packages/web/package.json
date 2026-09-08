@@ -75,7 +75,7 @@
     "@types/wicg-file-system-access": "2023.10.7",
     "@vanilla-extract/vite-plugin": "5.2.6",
     "@vitejs/plugin-react": "6.0.5",
-    "@vitest/coverage-v8": "4.1.10",
+    "@vitest/coverage-v8": "4.1.11",
     "eslint": "10.8.1",
     "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-react-hooks": "7.1.1",

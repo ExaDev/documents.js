@@ -6,9 +6,16 @@ import type { RcFile } from "syncpack";
 //
 // minimumReleaseAge is deliberately left unset: syncpack falls back to pnpm-workspace.yaml's own value (60 minutes, tuned there for the --frozen-lockfile gotcha its own comment documents) when the rcfile doesn't set one, so there stays exactly one place that number is chosen.
 //
-// Not wired into CI yet: the drift already present (both real third-party drift and every existing caret-ranged specifier that this exact-pin policy now treats as needing correction) needs fixing first (`pnpm run deps:fix`, then a full workspace verify) before `syncpack lint` can be a required check without failing on day one -- a separate change, since fixing it touches every package's manifest.
+// A CI job (`Dependency versions` in .github/workflows/ci.yml) and a pre-commit hook (lint-staged.config.ts) both run `deps:lint`/`deps:fix`, so drift is caught before it merges, not just documented as a manual check.
 
 const config: RcFile = {
+  dependencyGroups: [
+    {
+      // @vitest/coverage-v8 is Vitest's own coverage provider, which the exact-fixed-version policy would otherwise leave free to disagree with the vitest version it instruments -- the two aren't textually related, so syncpack's own per-name matching can't see they need to move together, and Vitest itself does not support a coverage provider whose version differs from the runner's.
+      aliasName: "vitest-and-coverage-provider",
+      dependencies: ["vitest", "@vitest/coverage-v8"],
+    },
+  ],
   versionGroups: [
     {
       label:
