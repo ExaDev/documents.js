@@ -1,3 +1,14 @@
+## [8.8.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.7.0...ooxml.js%408.8.0) (2026-09-08)
+
+### Features
+
+* **ooxml.js:** write real word/numbering.xml abstractNum/num definitions ([e6ea610](https://github.com/ExaDev/documents.js/commit/e6ea610dcc960e91e2f7d27446d4331213c14856))
+* **ooxml.js:** write styles, comments, footnotes, endnotes, and headers/footers in docx ([f9014a2](https://github.com/ExaDev/documents.js/commit/f9014a2004ed781f95508787c5f7b97066605b8d))
+
+### Bug Fixes
+
+* **ooxml.js:** share one docx media file per payload across all parts ([28e61e5](https://github.com/ExaDev/documents.js/commit/28e61e58e59a800c6c3ca0a3fcdaa6c88af4d2ae))
+
 ## [8.7.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.6.10...ooxml.js%408.7.0) (2026-09-08)
 
 ### Features
