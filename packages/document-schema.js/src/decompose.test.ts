@@ -681,6 +681,56 @@ describe("construct-boundary promotion", () => {
     expect(rebuiltStart.descriptor).toBe(descriptor);
     expect(rebuiltStart).not.toBe(start);
   });
+
+  it("groups a heading shallower than the outer scope, opened inside the extent and never closed inside it, against nothing but the extent's own interior (ExaDev/documents.js#1122)", () => {
+    // The crossing case content.ts's own BALANCE comment names directly: an H2 is open outside when the pair starts, an H1 -- shallower than the H2 -- opens inside the extent and is still the innermost open heading when constructEnd is reached. Under a hoisting reading, that H1 would pop the H2 scope and "content after" would nest under the H1 instead; decompose's actual, deliberate resolution leaves the outer H2 stack undisturbed by anything inside the extent, in both directions, so "content after" lands back under H2 exactly where a plain paragraph following the construct would.
+    const h2 = paragraph("Section A", { headingLevel: 2 });
+    const h1 = paragraph("New top", { headingLevel: 1 });
+    const source: ContentSection = {
+      ...SECTION_GEOMETRY,
+      blocks: [
+        h2,
+        paragraph("content A"),
+        constructStart({ kind: "division" }),
+        h1,
+        paragraph("content in H1"),
+        CONSTRUCT_END,
+        paragraph("content after"),
+      ],
+    };
+    const group = decomposeSection(source);
+    expect(group).toEqual({
+      node: {
+        kind: "section",
+        pageSize: SECTION_GEOMETRY.pageSize,
+        margins: SECTION_GEOMETRY.margins,
+      },
+      children: [
+        {
+          node: h2,
+          children: [
+            paragraph("content A"),
+            {
+              node: { kind: "division" },
+              children: [{ node: h1, children: [paragraph("content in H1")] }],
+            },
+            paragraph("content after"),
+          ],
+        },
+      ],
+    });
+    // The tree shape above is only half the claim -- flatten's own reconstruction is the other half, since headingLevel rides each anchor paragraph directly rather than being inferred from tree depth, so this crossing shape round-trips exactly like every other.
+    const flat = flattenTree({
+      kind: "wordprocessing",
+      metadata: {},
+      children: [group],
+    });
+    expect(flat).toEqual({
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [source],
+    });
+  });
 });
 
 // Promotion is defined only over a balanced marker stream, so an unbalanced one is refused outright rather than repaired into a plausible tree -- the same "fail loudly, never silently skip" rule the sheet-group style-ref guard above follows. The thrown error carries document-schema.js's own ConstructMarkerImbalance payload, so a caller gets the offending block index without parsing a message.
