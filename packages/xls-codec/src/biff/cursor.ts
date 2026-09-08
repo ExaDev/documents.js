@@ -97,8 +97,26 @@ export class BlockCursor {
     );
   }
 
-  /** The next `count` bytes, copied out. Spans block boundaries. */
+  /** Total unread bytes across the current block and every block after it -- what a length-prefixed field's own prefix must be checked against before that many bytes are allocated, so a record cannot claim a length far larger than the data actually behind it. */
+  private remainingTotal(): number {
+    this.settle();
+    let total = 0;
+    for (let index = this.blockIndex; index < this.blocks.length; index += 1) {
+      const block = this.blocks[index];
+      total +=
+        (index === this.blockIndex ? this.remainingInBlock() : block?.length) ??
+        0;
+    }
+    return total;
+  }
+
+  /** The next `count` bytes, copied out. Spans block boundaries. Rejects a `count` larger than the data actually remaining before allocating, so a length-prefixed field taken from untrusted input (e.g. CFEx's own `cbDxf`) cannot force a multi-gigabyte allocation from a tiny record. */
   take(count: number): Uint8Array<ArrayBuffer> {
+    if (count > this.remainingTotal()) {
+      throw new BiffFormatError(
+        `${count}-byte run requests more data than remains in the record`,
+      );
+    }
     const out = new Uint8Array(count);
     for (let index = 0; index < count; index += 1) {
       out[index] = this.nextByte(`${count}-byte run`);
