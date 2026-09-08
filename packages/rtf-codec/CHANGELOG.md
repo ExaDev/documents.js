@@ -1,3 +1,14 @@
+## [4.1.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.0.9...rtf-codec%404.1.0) (2026-09-08)
+
+### Features
+
+* **rtf-codec:** decode East Asian DBCS code pages via a lead-byte state machine ([e0fbe75](https://github.com/ExaDev/documents.js/commit/e0fbe7550dcff586816a9e159d56192d36f955e7))
+* **rtf-codec:** generate DBCS byte-to-character tables for code pages 932/936/949/950/1361 ([254f1a6](https://github.com/ExaDev/documents.js/commit/254f1a6279372d93504a5dc3d6aab8c306e24331))
+
+### Documentation
+
+* **rtf-codec:** document East Asian DBCS code page support ([9d1a53b](https://github.com/ExaDev/documents.js/commit/9d1a53bb8c72084e225173541fbe0a9d576bb9ef))
+
 ## [4.0.9](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.0.8...rtf-codec%404.0.9) (2026-09-08)
 
 
