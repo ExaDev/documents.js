@@ -2,6 +2,7 @@ import { colorToRgbHex } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 
 import {
+  applyTint,
   BORDER_STYLE_DASHED,
   BORDER_STYLE_DOTTED,
   BORDER_STYLE_DOUBLE,
@@ -271,5 +272,36 @@ describe("packXfDecorationWords / unpackXfDecoration", () => {
       fillBackgroundIcv: 31,
     });
     expect((word4 >>> 7) & 0x7f).toBe(0x41);
+  });
+});
+
+// Reference values below are the well-known "tint pure red" and "shade pure red" results Excel's own colour picker shows for tint 50%/-50% on the standard red swatch, cross-checked against the Lum'=Lum*(1+tint) (negative) / Lum*(1-tint)+tint (positive) formula Apache POI's XSSFColor#getTint/#setTint documents.
+describe("applyTint", () => {
+  const red = { r: 1, g: 0, b: 0 };
+
+  it("returns the colour unchanged for a zero tint", () => {
+    expect(applyTint(red, 0)).toEqual(red);
+  });
+
+  it("tints a colour toward white for a positive value", () => {
+    const tinted = applyTint(red, 0.5);
+    expect(tinted.r).toBeCloseTo(1);
+    expect(tinted.g).toBeCloseTo(0.5);
+    expect(tinted.b).toBeCloseTo(0.5);
+  });
+
+  it("shades a colour toward black for a negative value", () => {
+    const shaded = applyTint(red, -0.5);
+    expect(shaded.r).toBeCloseTo(0.5);
+    expect(shaded.g).toBeCloseTo(0);
+    expect(shaded.b).toBeCloseTo(0);
+  });
+
+  it("tints an achromatic colour (grey) without introducing hue", () => {
+    const grey = { r: 0.5, g: 0.5, b: 0.5 };
+    const tinted = applyTint(grey, 0.5);
+    expect(tinted.r).toBeCloseTo(tinted.g);
+    expect(tinted.g).toBeCloseTo(tinted.b);
+    expect(tinted.r).toBeGreaterThan(grey.r);
   });
 });
