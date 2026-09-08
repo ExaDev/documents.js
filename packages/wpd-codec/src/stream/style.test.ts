@@ -5,9 +5,46 @@ import {
   isStyleScopeCloser,
   isStyleScopeOpener,
   readDisplayNumberLevel,
+  readStyleBeginBlock,
   readSystemStyleNumber,
   styleSemanticsFor,
 } from "./style";
+
+function putUint32(bytes: number[], offset: number, value: number): void {
+  bytes[offset] = value & 0xff;
+  bytes[offset + 1] = (value >>> 8) & 0xff;
+  bytes[offset + 2] = (value >>> 16) & 0xff;
+  bytes[offset + 3] = (value >>> 24) & 0xff;
+}
+
+// A Normal Style packet (type 0x30) carrying no link PID and a non-empty "beginning style text" block, laid out exactly as WPFF Prefix Packet Type 48 states: [pid count=0] [numTextBlocks=4] {relOffset} {paragraphSize} {beginSize} {endSize} {extraSize}, then whatever bytes the text-block region holds starting at relOffset.
+function stylePacket(options: {
+  readonly relOffset: number;
+  readonly paragraphSize: number;
+  readonly beginSize: number;
+  readonly endSize?: number;
+  readonly extraSize?: number;
+  readonly totalLength: number;
+  readonly beginBytes?: readonly number[];
+}): Uint8Array {
+  const bytes = new Array<number>(options.totalLength).fill(0);
+  bytes[0] = 0; // pid count low byte
+  bytes[1] = 0; // pid count high byte
+  bytes[2] = 4; // number of text blocks
+  bytes[3] = 0;
+  putUint32(bytes, 4, options.relOffset);
+  putUint32(bytes, 8, options.paragraphSize);
+  putUint32(bytes, 12, options.beginSize);
+  putUint32(bytes, 16, options.endSize ?? 0);
+  putUint32(bytes, 20, options.extraSize ?? 0);
+  if (options.beginBytes !== undefined) {
+    const start = options.relOffset + options.paragraphSize;
+    options.beginBytes.forEach((byte, index) => {
+      bytes[start + index] = byte;
+    });
+  }
+  return new Uint8Array(bytes);
+}
 
 function opener(systemStyleNumber: number): Uint8Array {
   // "[size of non-deletable information = 3]": "[hash of this Begin On]" then "<system style number>".
@@ -120,5 +157,55 @@ describe("paragraph number display", () => {
   // "[size of non-deletable information = 1] <level number to display (0 - n)>".
   it("reads the level number to display", () => {
     expect(readDisplayNumberLevel(new Uint8Array([2]))).toBe(2);
+  });
+});
+
+describe("readStyleBeginBlock", () => {
+  it("reads the beginning style text block at its stated offset", () => {
+    const beginBytes = [0xf2, 12, 0xf2]; // Attribute On (bold)
+    const packet = stylePacket({
+      relOffset: 24,
+      paragraphSize: 0,
+      beginSize: beginBytes.length,
+      totalLength: 24 + beginBytes.length,
+      beginBytes,
+    });
+    expect(readStyleBeginBlock(packet)).toEqual(new Uint8Array(beginBytes));
+  });
+
+  it("skips past a non-empty paragraph text block to reach the begin block", () => {
+    const beginBytes = [0xf2, 12, 0xf2];
+    const packet = stylePacket({
+      relOffset: 24,
+      paragraphSize: 5,
+      beginSize: beginBytes.length,
+      totalLength: 24 + 5 + beginBytes.length,
+      beginBytes,
+    });
+    expect(readStyleBeginBlock(packet)).toEqual(new Uint8Array(beginBytes));
+  });
+
+  it("returns undefined for a style with no begin codes", () => {
+    const packet = stylePacket({
+      relOffset: 24,
+      paragraphSize: 0,
+      beginSize: 0,
+      totalLength: 24,
+    });
+    expect(readStyleBeginBlock(packet)).toBeUndefined();
+  });
+
+  it("returns undefined rather than reading past the packet's own bytes", () => {
+    const packet = stylePacket({
+      relOffset: 24,
+      paragraphSize: 0,
+      beginSize: 100,
+      totalLength: 24,
+    });
+    expect(readStyleBeginBlock(packet)).toBeUndefined();
+  });
+
+  it("returns undefined for a packet too short to carry the text-block header", () => {
+    expect(readStyleBeginBlock(new Uint8Array([0, 0]))).toBeUndefined();
   });
 });
