@@ -335,11 +335,336 @@ describe("readWpdContent", () => {
       readWpdContent(compoundFileWithStream(PERFECT_OFFICE_MAIN_STREAM, bare)),
     ).toEqual(readWpdContent(bare));
   });
+
+  describe("style packet resolution", () => {
+    const GLOBAL_ON = 0x0a;
+    const GLOBAL_OFF = 0x0b;
+    const STYLE_GROUP = 0xdd;
+    const NORMAL_STYLE_PACKET_TYPE = 0x30;
+    // No system style number, so styleSemanticsFor contributes nothing -- isolating the packet's own direct-formatting effect from the heading/list mapping a system style number would otherwise add.
+    const NO_SYSTEM_STYLE = 0xff;
+
+    // A Normal Style packet (type 0x30) carrying no link PID and a "beginning style text" block of the given raw document-area bytes, laid out exactly as WPFF Prefix Packet Type 48 states.
+    function normalStylePacket(beginBytes: readonly number[]) {
+      const headerSize = 2 + 2 + 16; // [pid count=0] [numTextBlocks=4] then four 32-bit sizes/offsets
+      const bytes = new Uint8Array(headerSize + beginBytes.length);
+      // pid count = 0, number of text blocks = 4
+      bytes[2] = 4;
+      const putUint32 = (offset: number, value: number) => {
+        bytes[offset] = value & 0xff;
+        bytes[offset + 1] = (value >>> 8) & 0xff;
+        bytes[offset + 2] = (value >>> 16) & 0xff;
+        bytes[offset + 3] = (value >>> 24) & 0xff;
+      };
+      putUint32(4, headerSize); // relative offset of 1st text block
+      putUint32(8, 0); // paragraph text size
+      putUint32(12, beginBytes.length); // beginning style text size
+      bytes.set(beginBytes, headerSize);
+      return { packetType: NORMAL_STYLE_PACKET_TYPE, bytes };
+    }
+
+    it("applies a style packet's own begin block as direct formatting", () => {
+      const document = readDocumentArea(
+        [
+          ...variableFunction({
+            group: STYLE_GROUP,
+            subgroup: GLOBAL_ON,
+            prefixIds: [1],
+            nonDeletable: [0, 0, NO_SYSTEM_STYLE],
+          }),
+          ...text("styled"),
+          ...variableFunction({ group: STYLE_GROUP, subgroup: GLOBAL_OFF }),
+          ...text("plain"),
+        ],
+        [normalStylePacket([ATTRIBUTE_ON, BOLD, ATTRIBUTE_ON])],
+      );
+      const runs = paragraphsOf(document)[0]?.runs;
+      expect(runs?.[0]).toEqual({ text: "styled", bold: true });
+      expect(runs?.[1]).toEqual({ text: "plain" });
+    });
+
+    it("restores font family and colour the style's own begin block changed", () => {
+      const document = readDocumentArea(
+        [
+          ...variableFunction({
+            group: 0xd4,
+            subgroup: 0x1a, // Font Face Change, naming the descriptor packet at prefix ID 2
+            prefixIds: [2],
+            nonDeletable: [0, 0, 0, 0, 0, 0, 0, 0],
+          }),
+          ...text("before"),
+          ...variableFunction({
+            group: STYLE_GROUP,
+            subgroup: GLOBAL_ON,
+            prefixIds: [1],
+            nonDeletable: [0, 0, NO_SYSTEM_STYLE],
+          }),
+          ...text("styled"),
+          ...variableFunction({ group: STYLE_GROUP, subgroup: GLOBAL_OFF }),
+          ...text("after"),
+        ],
+        [
+          normalStylePacket([ATTRIBUTE_ON, BOLD, ATTRIBUTE_ON]),
+          fontDescriptorPacket("Courier New"),
+        ],
+      );
+      const runs = paragraphsOf(document)[0]?.runs;
+      expect(runs?.[0]).toEqual({ text: "before", fontFamily: "Courier New" });
+      expect(runs?.[1]).toEqual({
+        text: "styled",
+        bold: true,
+        fontFamily: "Courier New",
+      });
+      expect(runs?.[2]).toEqual({ text: "after", fontFamily: "Courier New" });
+    });
+  });
+
+  describe("merge fields", () => {
+    const MERGE_GROUP = 0xde;
+    const FIELD_ON = 0x4c;
+    const FIELD_OFF = 0x4d;
+
+    it("tags a FIELD On/Off pair as a field construct, keeping its own displayed text", () => {
+      const document = readDocumentArea([
+        ...text("Dear "),
+        ...variableFunction({ group: MERGE_GROUP, subgroup: FIELD_ON }),
+        ...text("CompanyName"),
+        ...variableFunction({ group: MERGE_GROUP, subgroup: FIELD_OFF }),
+        ...text(","),
+      ]);
+      const paragraph = paragraphsOf(document)[0];
+      expect(paragraph?.runs.map((run) => run.text)).toEqual([
+        "Dear ",
+        "CompanyName",
+        ",",
+      ]);
+      expect(paragraph?.constructs).toEqual([
+        {
+          descriptor: { kind: "field", instruction: "CompanyName" },
+          startRun: 1,
+          endRun: 2,
+        },
+      ]);
+    });
+
+    it("reports every other merge subfunction through the diagnostic sink, unchanged", () => {
+      const diagnostics: WpdDiagnostic[] = [];
+      const bytes = buildWpdFile([
+        ...variableFunction({ group: MERGE_GROUP, subgroup: 0x08 }), // ELSE
+        ...text("plain"),
+      ]);
+      readWpdContent(bytes, { sink: (d) => diagnostics.push(d) });
+      expect(
+        diagnostics.filter(
+          (diagnostic) =>
+            diagnostic.code === WpdDiagnosticCodes.MergeCodeDropped,
+        ),
+      ).toHaveLength(1);
+    });
+
+    it("abandons a FIELD left open across a paragraph boundary and reports it", () => {
+      const diagnostics: WpdDiagnostic[] = [];
+      const bytes = buildWpdFile([
+        ...variableFunction({ group: MERGE_GROUP, subgroup: FIELD_ON }),
+        ...text("Name"),
+        HARD_EOL,
+        ...text("next"),
+        ...variableFunction({ group: MERGE_GROUP, subgroup: FIELD_OFF }),
+      ]);
+      const document = readWpdContent(bytes, {
+        sink: (d) => diagnostics.push(d),
+      });
+      const paragraphs = paragraphsOf(document);
+      expect(
+        paragraphs.every((paragraph) => paragraph.constructs === undefined),
+      ).toBe(true);
+      expect(
+        diagnostics.filter(
+          (diagnostic) =>
+            diagnostic.code === WpdDiagnosticCodes.MergeFieldSpansParagraphs,
+        ),
+      ).toHaveLength(1);
+    });
+  });
 });
 
 describe("readWpd", () => {
   it("assembles the tree form of the same document", () => {
     const tree = readWpd(buildWpdFile(text("Hello")));
     expect(tree.kind).toBe("wordprocessing");
+  });
+});
+
+describe("boxes", () => {
+  const BOX_GROUP = 0xdf;
+  const PAGE_ANCHORED_BOX = 0x02;
+  const BOX_CONTENT_TYPE_TEXT = 1;
+  const BOX_CONTENT_TYPE_EQUATION = 4;
+  const BOX_CONTENT_TYPE_IMAGE = 3;
+
+  function putUint16(bytes: number[], offset: number, value: number): void {
+    bytes[offset] = value & 0xff;
+    bytes[offset + 1] = (value >>> 8) & 0xff;
+  }
+
+  function contentBlock(contentType: number): number[] {
+    const flags: number[] = [0, 0];
+    putUint16(flags, 0, 0x4000); // bit 14: content type override
+    return [...flags, contentType];
+  }
+
+  function positionBlock(widthWpu: number, heightWpu: number): number[] {
+    const flags: number[] = [0, 0];
+    putUint16(flags, 0, 0x0c00); // bits 11 (width) and 10 (height)
+    const width = [0, 0, 0];
+    putUint16(width, 1, widthWpu);
+    const height = [0, 0, 0];
+    putUint16(height, 1, heightWpu);
+    return [...flags, ...width, ...height];
+  }
+
+  // A box function's own nonDeletable bytes: 14 reserved, two unused "total size" words, the override flags word, then each set bit's own size-prefixed block in descending order.
+  function boxNonDeletable(
+    overrideFlags: number,
+    blocks: ReadonlyMap<number, readonly number[]>,
+  ): number[] {
+    const bytes = new Array<number>(18).fill(0);
+    putUint16(bytes, 18, overrideFlags);
+    for (let bit = 15; bit >= 5; bit -= 1) {
+      const data = blocks.get(bit);
+      if (data === undefined) {
+        continue;
+      }
+      putUint16(bytes, bytes.length, data.length);
+      bytes.push(...data);
+    }
+    return bytes;
+  }
+
+  function generalWpTextPacket(documentArea: readonly number[]) {
+    const header = [
+      1,
+      0,
+      6,
+      0,
+      documentArea.length & 0xff,
+      (documentArea.length >>> 8) & 0xff,
+    ];
+    return {
+      packetType: 0x08,
+      bytes: new Uint8Array([...header, ...documentArea]),
+    };
+  }
+
+  function boxFunction(
+    contentType: number,
+    prefixIds: readonly number[],
+  ): number[] {
+    return variableFunction({
+      group: BOX_GROUP,
+      subgroup: PAGE_ANCHORED_BOX,
+      prefixIds,
+      nonDeletable: boxNonDeletable(
+        0x6000, // bit 14 (position) and bit 13 (content)
+        new Map([
+          [14, positionBlock(1440, 720)], // 1440 WPU = 86.4pt, 720 WPU = 43.2pt
+          [13, contentBlock(contentType)],
+        ]),
+      ),
+    });
+  }
+
+  it("lifts a text box's own content into an embedded wordprocessing document", () => {
+    const document = readDocumentArea(
+      [...boxFunction(BOX_CONTENT_TYPE_TEXT, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) }, // box template, not read
+        generalWpTextPacket(text("boxed text")),
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    expect(block?.kind).toBe("embeddedObject");
+    if (block?.kind !== "embeddedObject")
+      throw new Error("expected embeddedObject");
+    expect(block.objectKind).toBe("wordprocessing");
+    expect(block.frame).toEqual({
+      xPt: 0,
+      yPt: 0,
+      widthPt: 86.4,
+      heightPt: 43.2,
+    });
+    if (block.document.kind !== "wordprocessing") {
+      throw new Error("expected nested wordprocessing document");
+    }
+    expect(block.document.sections[0]?.blocks[0]).toMatchObject({
+      kind: "paragraph",
+      runs: [{ text: "boxed text" }],
+    });
+  });
+
+  it("lifts an equation box's own content as unparsed residue, not fabricated MathML", () => {
+    const document = readDocumentArea(
+      [...boxFunction(BOX_CONTENT_TYPE_EQUATION, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        generalWpTextPacket(text("a+b")),
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const block = document.sections[0]?.blocks.find(
+      (b) => b.kind === "embeddedObject",
+    );
+    if (block?.kind !== "embeddedObject")
+      throw new Error("expected embeddedObject");
+    expect(block.objectKind).toBe("formula");
+    if (block.document.kind !== "formula") {
+      throw new Error("expected a formula document");
+    }
+    expect(block.document.formula.mathml).toEqual([]);
+    expect(block.document.formula.source).toEqual({
+      format: "wpd",
+      xml: "a+b",
+    });
+  });
+
+  it("reports an image box through the diagnostic sink rather than guessing at its content", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const bytes = buildWpdFile(
+      [...boxFunction(BOX_CONTENT_TYPE_IMAGE, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        { packetType: 0x40, bytes: new Uint8Array([0]) }, // Graphics Filename, not decoded
+      ],
+    );
+    readWpdContent(bytes, { sink: (d) => diagnostics.push(d) });
+    expect(
+      diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.code === WpdDiagnosticCodes.BoxContentUnresolved,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("reports a box with no content override through the diagnostic sink", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const bytes = buildWpdFile([
+      ...variableFunction({
+        group: BOX_GROUP,
+        subgroup: PAGE_ANCHORED_BOX,
+        prefixIds: [1],
+        nonDeletable: boxNonDeletable(0, new Map()),
+      }),
+    ]);
+    readWpdContent(bytes, { sink: (d) => diagnostics.push(d) });
+    expect(
+      diagnostics.filter(
+        (diagnostic) => diagnostic.code === WpdDiagnosticCodes.BoxDropped,
+      ),
+    ).toHaveLength(1);
   });
 });

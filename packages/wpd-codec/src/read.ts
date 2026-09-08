@@ -4,12 +4,14 @@ import type {
   ContentBlock,
   ContentCellFill,
   ContentDocument,
+  ContentEmbeddedObjectBlock,
   ContentParagraph,
   ContentRun,
   ContentTableCell,
   ContentTableRow,
   DocumentTree,
   LayoutMetadata,
+  RunConstructExtent,
 } from "document-schema.js";
 import { assembleTree } from "document-schema.js";
 import { uint16At } from "./bytes/view";
@@ -19,7 +21,9 @@ import {
 } from "./container/container";
 import {
   PACKET_TYPE_DESIRED_FONT_DESCRIPTOR,
+  PACKET_TYPE_GENERAL_WP_TEXT,
   packetByPrefixId,
+  readGeneralWpTextBlocks,
   readTypefaceName,
 } from "./container/prefix";
 import {
@@ -70,7 +74,9 @@ import {
   isParagraphNumberDisplayOn,
   isStyleScopeCloser,
   isStyleScopeOpener,
+  PACKET_TYPE_NORMAL_STYLE,
   readDisplayNumberLevel,
+  readStyleBeginBlock,
   readSystemStyleNumber,
   STYLE_GROUP,
   styleSemanticsFor,
@@ -78,6 +84,7 @@ import {
 } from "./stream/style";
 import {
   CELL_FILL_COLORS_SUBFUNCTION,
+  CELL_FORMULA_SUBFUNCTION,
   CELL_INFORMATION_SUBFUNCTION,
   CELL_SPANNING_SUBFUNCTION,
   CHARACTER_DEFINE_TABLE_END,
@@ -92,6 +99,13 @@ import {
   readTableColumnWidthPt,
   ROW_INFORMATION_SUBFUNCTION,
 } from "./stream/table";
+import {
+  BOX_CONTENT_TYPE_EQUATION,
+  BOX_CONTENT_TYPE_LINKED_TEXT,
+  BOX_CONTENT_TYPE_TEXT,
+  readBoxContent,
+} from "./stream/box";
+import { readTableFormula } from "./stream/formula";
 import { tabEffectFor, TAB_GROUP } from "./stream/tab";
 import { tokeniseDocumentArea, type WpdToken } from "./stream/tokenise";
 
@@ -122,6 +136,9 @@ const CROSS_REFERENCE_GROUP = 0xd5;
 const HEADER_FOOTER_GROUP = 0xd6;
 const FOOTNOTE_ENDNOTE_GROUP = 0xd7;
 const MERGE_GROUP = 0xde;
+// "FIELD On (field)" / "FIELD Off", the one paired merge subfunction this reader lifts: a mail-merge field reference is always a short inline placeholder, never a wrapper around multi-paragraph content the way a control-flow code (IF, FOR, CALL) can be, so its own On/Off pair fits the run-scoped construct mechanism cleanly. "Each instance of a subfunction will consist of the On subfunction, a string of information, and the Off subfunction" -- and per the SDK's own byte layout for every paired merge subfunction, that string sits in the document stream itself, AFTER the On function's own gates, as ordinary characters this reader already decodes -- not inside the function's non-deletable data. Every other paired and non-paired merge subfunction (ASSIGN, CALL, IF, FOR, CASE, and the rest of WordPerfect's own merge scripting language) stays reported through the diagnostic sink: modelling a scripting language's control flow has no construct in the shared schema, and unlike FIELD it can legitimately wrap whole paragraphs of body text, which the run-scoped mechanism cannot express at all.
+const MERGE_FIELD_ON = 0x4c;
+const MERGE_FIELD_OFF = 0x4d;
 const BOX_GROUP = 0xdf;
 const PARAGRAPH_GROUP = 0xd3;
 const PARAGRAPH_SET_JUSTIFICATION = 0x05;
@@ -174,6 +191,7 @@ interface CellAttributes {
   readonly columnSpan: number;
   readonly rowSpan: number;
   readonly covered: boolean;
+  readonly formula: string | undefined;
 }
 
 // A table under construction. `definingColumns` is true between Table Definition and Define Table End, the window in which Table Column functions state the grid's widths and no content can appear.
@@ -199,7 +217,9 @@ interface ReaderState {
   // "The surrounded text is passed over by the formatter and is not displayed", per the Start/End of Text to Skip pair. Nested pairs are possible, so this is a depth rather than a flag.
   skipDepth: number;
   // The style scopes currently open, innermost last. A scope with no structural meaning is still pushed, so its own closing code pops it rather than the one enclosing it.
-  readonly styleScopes: (WpdStyleSemantics | undefined)[];
+  readonly styleScopes: StyleScopeEntry[];
+  // Depth of style-packet resolution currently in progress, guarding against a corrupt or adversarial file whose style packets reference one another in a cycle -- resolving one style's own begin block can itself open a style scope, so without a bound a cyclic reference would recurse without limit over untrusted document bytes.
+  styleResolutionDepth: number;
   // The structural facts of the paragraph currently accumulating, captured when its first character arrives rather than when it closes: a heading's style region ends at the style's own End Off code, which in a real document sits BEFORE the hard return that ends the paragraph, so reading the scope stack at flush time would find it already popped.
   pendingHeadingLevel: number | undefined;
   pendingListLevel: number | undefined;
@@ -210,7 +230,28 @@ interface ReaderState {
   page: PageState;
   table: TableState | undefined;
   readonly reported: Set<string>;
+  // The run-scoped constructs (document-schema.js's RunConstructExtent) opened within the paragraph currently accumulating -- currently just a merge FIELD's own field-code text, tagged so a consumer can tell "this run's text is a mail-merge placeholder, not typed prose" without losing the placeholder's own displayed spelling. Attached to the paragraph when it flushes and cleared afterwards; a paragraph with none carries no `constructs` field at all, the overwhelmingly common case.
+  pendingConstructs: RunConstructExtent[];
+  // The run index (into `runs`) a FIELD On merge code opened, or undefined when no FIELD scope is currently open. Reset to undefined -- abandoning the in-progress field, rather than reused across paragraphs -- whenever a paragraph flushes with one still open: `runs` is spliced empty by flushParagraph, so an index into the paragraph that just closed means nothing in the one that follows.
+  openMergeFieldStartRun: number | undefined;
 }
+
+// The direct-formatting state a style packet's own "beginning style text" block can change, snapshotted before applying that block so the style's own scope closer can restore exactly what it overrode -- the same fields a Font Face Change, Font Size Change, character-colour function, or Attribute On/Off can change directly in the main stream, because a style's begin block is folded through the identical applyToken dispatch those use.
+interface FormattingSnapshot {
+  readonly activeAttributes: ReadonlySet<number>;
+  readonly fontFamily: string | undefined;
+  readonly sizePt: number | undefined;
+  readonly color: Color | undefined;
+}
+
+// One entry per currently-open style scope. `snapshot` is present only when this scope resolved its own packet (type 0x30) and applied a non-empty begin block -- a scope with no resolvable packet, or an empty one, changes nothing to restore.
+interface StyleScopeEntry {
+  readonly semantics: WpdStyleSemantics | undefined;
+  readonly snapshot: FormattingSnapshot | undefined;
+}
+
+// A style-packet-resolution cycle -- corrupt or adversarial input, since a well-formed document's own styles never reference themselves -- is bounded rather than left to recurse without limit over untrusted bytes.
+const MAX_STYLE_RESOLUTION_DEPTH = 16;
 
 function sameAttributes(a: WpdRunAttributes, b: WpdRunAttributes): boolean {
   return (
@@ -264,10 +305,24 @@ function targetBlocks(state: ReaderState): ContentBlock[] {
 }
 
 // Closes the current paragraph. Called for every hard return, so a document with two consecutive hard returns genuinely produces an empty paragraph between them -- that blank line is content the author typed, not an artefact.
-function flushParagraph(state: ReaderState): void {
+function flushParagraph(state: ReaderState, sink: WpdDiagnosticSink): void {
   flushRun(state);
+  if (state.openMergeFieldStartRun !== undefined) {
+    // A FIELD On with no matching FIELD Off before this paragraph closed: `runs` is about to be spliced empty, so the run index this field opened at means nothing in the paragraph that follows. Abandoned rather than carried forward -- the run-level extent mechanism cannot express a construct spanning two paragraphs, so no construct is emitted for this occurrence, and the diagnostic says so rather than the field silently vanishing with no trace.
+    state.openMergeFieldStartRun = undefined;
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.MergeFieldSpansParagraphs,
+      "A merge field's own On/Off pair straddled a paragraph boundary, which the run-scoped field construct cannot express; its text became ordinary paragraph text with no field tag.",
+    );
+  }
   // A line-scoped centring or flush-right code outranks the document-level justification: the Tab group code that begins one applies to the line it sits in, where Set Justification Mode applies from where it sits onwards.
   const alignment = state.pendingAlignment ?? state.alignment;
+  const constructs = state.pendingConstructs.splice(
+    0,
+    state.pendingConstructs.length,
+  );
   const paragraph: ContentParagraph = {
     kind: "paragraph",
     runs: state.runs.splice(0, state.runs.length),
@@ -278,6 +333,7 @@ function flushParagraph(state: ReaderState): void {
     ...(state.pendingListLevel === undefined
       ? {}
       : { list: { level: state.pendingListLevel } }),
+    ...(constructs.length === 0 ? {} : { constructs }),
   };
   state.pendingHeadingLevel = undefined;
   state.pendingListLevel = undefined;
@@ -286,19 +342,22 @@ function flushParagraph(state: ReaderState): void {
 }
 
 // Closes the current paragraph only when it holds something. Used at every boundary that is a container edge rather than a line break -- a cell end, a row end, the end of the stream -- where an unconditional flush would fabricate a blank paragraph the author never typed.
-function flushParagraphIfContent(state: ReaderState): void {
+function flushParagraphIfContent(
+  state: ReaderState,
+  sink: WpdDiagnosticSink,
+): void {
   if (state.text.length === 0 && state.runs.length === 0) {
     return;
   }
-  flushParagraph(state);
+  flushParagraph(state, sink);
 }
 
 // The innermost open style scope that says something structural. An enclosing Global On naming the document's Normal style does not override a heading style opened inside it, and a scope with no meaning at all is transparent.
 function effectiveStyle(state: ReaderState): WpdStyleSemantics | undefined {
   for (let index = state.styleScopes.length - 1; index >= 0; index -= 1) {
-    const scope = state.styleScopes[index];
-    if (scope !== undefined) {
-      return scope;
+    const semantics = state.styleScopes[index]?.semantics;
+    if (semantics !== undefined) {
+      return semantics;
     }
   }
   return undefined;
@@ -356,6 +415,20 @@ function readCellAttributes(
     subfunctions,
     ROW_INFORMATION_SUBFUNCTION,
   );
+  const formulaData = findEmbeddedSubfunction(
+    subfunctions,
+    CELL_FORMULA_SUBFUNCTION,
+  );
+  const formula =
+    formulaData === undefined ? undefined : readTableFormula(formulaData);
+  if (formulaData !== undefined && formula === undefined) {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.TableFormulaUnresolved,
+      "A table cell carries a formula this reader could not decode with confidence, so the cell keeps its displayed text but not the formula that produced it.",
+    );
+  }
 
   const cellSpanning =
     spanning === undefined ? undefined : readCellSpanning(spanning);
@@ -381,6 +454,7 @@ function readCellAttributes(
       covered:
         cellSpanning?.coveredFromLeft === true ||
         cellSpanning?.coveredFromAbove === true,
+      formula,
     },
     rowHeightPt:
       row === undefined ? undefined : readRowInformation(row)?.heightPt,
@@ -392,8 +466,9 @@ function closeCell(
   state: ReaderState,
   table: TableState,
   attributes: CellAttributes,
+  sink: WpdDiagnosticSink,
 ): void {
-  flushParagraphIfContent(state);
+  flushParagraphIfContent(state, sink);
   const blocks = table.cellBlocks;
   table.cellBlocks = [];
   if (attributes.covered) {
@@ -417,6 +492,9 @@ function closeCell(
     ...(attributes.background === undefined
       ? {}
       : { background: attributes.background }),
+    ...(attributes.formula === undefined
+      ? {}
+      : { formula: attributes.formula }),
   };
   table.cells.push(cell);
 }
@@ -465,7 +543,7 @@ function applyEolMapping(
       appendText(state, " ");
       return;
     case "hardReturn":
-      flushParagraph(state);
+      flushParagraph(state, sink);
       return;
     case "hardEndOfColumn":
       // The shared content schema has no column-break block: ContentSection.breakType describes how a section begins, not a break inside one. Ending the paragraph keeps the text on either side apart, which is the part that matters for content, and the diagnostic records what was lost.
@@ -475,10 +553,10 @@ function applyEolMapping(
         WpdDiagnosticCodes.ColumnBreakFlattened,
         "A column break became a paragraph break.",
       );
-      flushParagraph(state);
+      flushParagraph(state, sink);
       return;
     case "hardEndOfPage":
-      flushParagraph(state);
+      flushParagraph(state, sink);
       targetBlocks(state).push({ kind: "pageBreak" });
       return;
     case "tableCell":
@@ -494,7 +572,7 @@ function applyEolMapping(
           WpdDiagnosticCodes.TableFlattened,
           "A table cell or row boundary appeared with no table definition open; its text became a paragraph.",
         );
-        flushParagraph(state);
+        flushParagraph(state, sink);
         return;
       }
       const { attributes, rowHeightPt } = readCellAttributes(
@@ -511,7 +589,7 @@ function applyEolMapping(
         state.runs.length > 0 ||
         table.cellBlocks.length > 0;
       if (mapping !== "tableOff" || cellIsOpen) {
-        closeCell(state, table, attributes);
+        closeCell(state, table, attributes, sink);
       }
       if (mapping === "tableCell") {
         return;
@@ -556,7 +634,7 @@ function applySingleByteFunction(
       return;
     case DORMANT_HARD_RETURN:
       // "Whenever a [HRt] code appears alone at the top of a page that starts with a soft page break, the formatter changes the Hard Return code into a Dormant Hard Return code." It is a hard return whose blank line the formatter suppresses at a page top; the paragraph boundary the author typed is still there, so it is kept.
-      flushParagraph(state);
+      flushParagraph(state, sink);
       return;
     case SOFT_END_OF_CENTER_ALIGN:
       // "The formatter inserts a soft End of Line, which causes centering to end, but not the paragraph" -- a wrap, so the same space every other soft end of line converts to.
@@ -564,7 +642,7 @@ function applySingleByteFunction(
       return;
     case HARD_END_OF_CENTER_ALIGN:
       // "The Enter key is pressed, ending the line, the centering, and the paragraph."
-      flushParagraph(state);
+      flushParagraph(state, sink);
       return;
     case START_OF_TEXT_TO_SKIP:
       state.skipDepth += 1;
@@ -678,22 +756,91 @@ function applyColumnGroup(
   }
 }
 
+// Captures the direct-formatting fields a style's own begin block can change, so its scope closer can restore exactly what it overrode.
+function snapshotFormatting(state: ReaderState): FormattingSnapshot {
+  return {
+    activeAttributes: new Set(state.activeAttributes),
+    fontFamily: state.fontFamily,
+    sizePt: state.sizePt,
+    color: state.color,
+  };
+}
+
+function restoreFormattingSnapshot(
+  state: ReaderState,
+  snapshot: FormattingSnapshot,
+): void {
+  flushRun(state);
+  state.activeAttributes.clear();
+  for (const attribute of snapshot.activeAttributes) {
+    state.activeAttributes.add(attribute);
+  }
+  state.attributes = runAttributesFrom(state.activeAttributes);
+  state.fontFamily = snapshot.fontFamily;
+  state.sizePt = snapshot.sizePt;
+  state.color = snapshot.color;
+}
+
+// Resolves a style scope's own packet (type 0x30, named by the opening function's own prefix ID) and applies its "beginning style text" block's own function codes -- font face/size/colour changes, attribute on/off -- exactly as if the author had typed them at the point the scope opened. Returns the pre-application snapshot when it changed anything, so the scope's closer can restore it; returns undefined for a scope with no resolvable packet, an empty begin block, or a resolution depth this reader will not recurse past.
+function applyStylePacketBegin(
+  state: ReaderState,
+  token: Extract<WpdToken, { kind: "variableFunction" }>,
+  container: WpdDocumentContainer,
+  sink: WpdDiagnosticSink,
+): FormattingSnapshot | undefined {
+  const prefixId = token.prefixIds[0];
+  if (prefixId === undefined) {
+    return undefined;
+  }
+  const packet = packetByPrefixId(container.packets, prefixId);
+  if (packet?.packetType !== PACKET_TYPE_NORMAL_STYLE) {
+    return undefined;
+  }
+  const beginBlock = readStyleBeginBlock(packet.bytes);
+  if (beginBlock === undefined) {
+    return undefined;
+  }
+  if (state.styleResolutionDepth >= MAX_STYLE_RESOLUTION_DEPTH) {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.StyleResolutionDepthExceeded,
+      "A chain of styles resolving one another's own packets ran deeper than this reader will follow, so the deepest style's own direct formatting was not applied.",
+    );
+    return undefined;
+  }
+  const snapshot = snapshotFormatting(state);
+  const tokens = tokeniseDocumentArea(beginBlock, 0, beginBlock.length);
+  state.styleResolutionDepth += 1;
+  for (const beginToken of tokens) {
+    applyToken(state, beginToken, container, sink);
+  }
+  state.styleResolutionDepth -= 1;
+  return snapshot;
+}
+
 function applyStyleGroup(
   state: ReaderState,
   token: Extract<WpdToken, { kind: "variableFunction" }>,
+  container: WpdDocumentContainer,
+  sink: WpdDiagnosticSink,
 ): void {
   if (isStyleScopeOpener(token.subgroup)) {
     const systemStyleNumber = readSystemStyleNumber(token.nonDeletable);
-    state.styleScopes.push(
+    const semantics =
       systemStyleNumber === undefined
         ? undefined
-        : styleSemanticsFor(systemStyleNumber),
-    );
+        : styleSemanticsFor(systemStyleNumber);
+    const snapshot = applyStylePacketBegin(state, token, container, sink);
+    state.styleScopes.push({ semantics, snapshot });
     return;
   }
   if (isStyleScopeCloser(token.subgroup)) {
     // A closer with nothing open is a stream whose style codes do not pair -- possible in a document edited by a third-party writer. Popping nothing is the harmless reading; the alternative, treating it as an error, would refuse a document whose text is entirely readable.
-    state.styleScopes.pop();
+    const entry = state.styleScopes.pop();
+    if (entry?.snapshot !== undefined) {
+      restoreFormattingSnapshot(state, entry.snapshot);
+    }
   }
 }
 
@@ -731,7 +878,7 @@ function applyCharacterGroup(
     case CHARACTER_TABLE_DEFINITION:
       // A table inside a table has no spelling in this format -- the definition function is not recursive -- so an open table is closed before a new one opens rather than nesting one grid inside another cell.
       closeTable(state);
-      flushParagraphIfContent(state);
+      flushParagraphIfContent(state, sink);
       state.table = {
         columnWidthsPt: [],
         rows: [],
@@ -793,6 +940,157 @@ function applyCharacterGroup(
   }
 }
 
+// FIELD On opens a run-scoped extent at the run boundary it sits at; FIELD Off closes it and tags the runs in between as a FieldDescriptor construct, `instruction` being exactly the field-code text that flowed through as ordinary characters between the two -- so a merge field's own displayed spelling is both kept as real run content (a template genuinely shows its own field codes, not a merged result) and tagged as a placeholder rather than typed prose. Every other merge subfunction still reports through the diagnostic sink, unchanged.
+function applyMergeGroup(
+  state: ReaderState,
+  token: Extract<WpdToken, { kind: "variableFunction" }>,
+  sink: WpdDiagnosticSink,
+): void {
+  if (token.subgroup === MERGE_FIELD_ON) {
+    flushRun(state);
+    state.openMergeFieldStartRun = state.runs.length;
+    return;
+  }
+  if (token.subgroup === MERGE_FIELD_OFF) {
+    const startRun = state.openMergeFieldStartRun;
+    state.openMergeFieldStartRun = undefined;
+    if (startRun === undefined) {
+      // An Off with no matching On -- a stream whose merge codes do not pair, or an On this reader already abandoned at a paragraph boundary (flushParagraph). Nothing to tag.
+      return;
+    }
+    flushRun(state);
+    const endRun = state.runs.length;
+    const instruction = state.runs
+      .slice(startRun, endRun)
+      .map((run) => run.text)
+      .join("");
+    state.pendingConstructs.push({
+      descriptor: { kind: "field", instruction },
+      startRun,
+      endRun,
+    });
+    return;
+  }
+  reportOnce(
+    state,
+    sink,
+    WpdDiagnosticCodes.MergeCodeDropped,
+    "This document contains merge codes, which are a form-letter template's placeholders rather than text.",
+  );
+}
+
+// The plain text a box's own equation content contributes to its residue: every paragraph's runs, joined, with paragraphs themselves joined by a newline. Deliberately not real MathML -- WordPerfect's own equation notation is neither MathML nor LaTeX, and this reader has no grammar for it, so the raw notation is carried verbatim through ContentFormula's own residue channel (source.ts) rather than mislabelled as either.
+function plainTextOf(blocks: readonly ContentBlock[]): string {
+  return blocks
+    .filter((block): block is ContentParagraph => block.kind === "paragraph")
+    .map((paragraph) => paragraph.runs.map((run) => run.text).join(""))
+    .join("\n");
+}
+
+// Lifts a box's own text, linked-text, or equation content, per stream/box.ts's own function-level override walk: a box's real content is ALWAYS named there (never its template), as the prefix ID of a General WP Text packet (type 0x08) whose own text blocks are this format's ordinary function-code stream -- readable through the identical tokeniser and fold the main document area uses. A box the override walk cannot resolve real content or a trustworthy frame for, or whose content type is image/OLE/presentation/other (this reader has no decoder for any of those payload shapes), stays reported through the diagnostic sink rather than guessed at.
+function applyBoxGroup(
+  state: ReaderState,
+  token: Extract<WpdToken, { kind: "variableFunction" }>,
+  container: WpdDocumentContainer,
+  sink: WpdDiagnosticSink,
+): void {
+  const boxContent = readBoxContent(token.nonDeletable, token.prefixIds);
+  if (boxContent === undefined) {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.BoxDropped,
+      "This document contains a box -- a figure, text box, equation, or graphic -- whose function-level override names no content this reader can resolve.",
+    );
+    return;
+  }
+
+  const isTextLike =
+    boxContent.contentType === BOX_CONTENT_TYPE_TEXT ||
+    boxContent.contentType === BOX_CONTENT_TYPE_LINKED_TEXT ||
+    boxContent.contentType === BOX_CONTENT_TYPE_EQUATION;
+  const packet = isTextLike
+    ? packetByPrefixId(container.packets, boxContent.contentPrefixId)
+    : undefined;
+  const textBlocks =
+    packet?.packetType !== PACKET_TYPE_GENERAL_WP_TEXT
+      ? undefined
+      : readGeneralWpTextBlocks(packet.bytes);
+  if (textBlocks === undefined) {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.BoxContentUnresolved,
+      "This document contains a box whose content this reader could not read -- an image, OLE object, or other content type this reader does not yet decode into the shared schema.",
+    );
+    return;
+  }
+  if (boxContent.frame === undefined) {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.BoxFrameUnresolved,
+      "This document contains a box whose content this reader could read, but whose function-level override states no width and height this reader can trust, so its content was not lifted.",
+    );
+    return;
+  }
+
+  flushParagraphIfContent(state, sink);
+  const nestedTokens = tokeniseDocumentArea(textBlocks, 0, textBlocks.length);
+  const frame = {
+    xPt: boxContent.frame.xPt,
+    yPt: boxContent.frame.yPt,
+    widthPt: boxContent.frame.widthPt,
+    heightPt: boxContent.frame.heightPt,
+  };
+
+  if (boxContent.contentType === BOX_CONTENT_TYPE_EQUATION) {
+    const { blocks } = foldTokens(nestedTokens, container, sink);
+    const embed: ContentEmbeddedObjectBlock = {
+      kind: "embeddedObject",
+      objectKind: "formula",
+      frame,
+      document: {
+        kind: "formula",
+        metadata: {},
+        formula: {
+          mathml: [],
+          source: { format: "wpd", xml: plainTextOf(blocks) },
+        },
+      },
+    };
+    targetBlocks(state).push(embed);
+    return;
+  }
+
+  const { blocks, page } = foldTokens(nestedTokens, container, sink);
+  const embed: ContentEmbeddedObjectBlock = {
+    kind: "embeddedObject",
+    objectKind: "wordprocessing",
+    frame,
+    document: {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: {
+            widthPt: page.widthPt ?? DEFAULT_PAGE_WIDTH_PT,
+            heightPt: page.heightPt ?? DEFAULT_PAGE_HEIGHT_PT,
+          },
+          margins: {
+            topPt: page.topPt ?? DEFAULT_MARGIN_PT,
+            rightPt: page.rightPt ?? DEFAULT_MARGIN_PT,
+            bottomPt: page.bottomPt ?? DEFAULT_MARGIN_PT,
+            leftPt: page.leftPt ?? DEFAULT_MARGIN_PT,
+          },
+          blocks,
+        },
+      ],
+    },
+  };
+  targetBlocks(state).push(embed);
+}
+
 function applyVariableFunction(
   state: ReaderState,
   token: Extract<WpdToken, { kind: "variableFunction" }>,
@@ -841,7 +1139,7 @@ function applyVariableFunction(
       return;
     }
     case STYLE_GROUP:
-      applyStyleGroup(state, token);
+      applyStyleGroup(state, token, container, sink);
       return;
     case DISPLAY_NUMBER_GROUP:
       applyDisplayNumberGroup(state, token, sink);
@@ -871,20 +1169,10 @@ function applyVariableFunction(
       );
       return;
     case MERGE_GROUP:
-      reportOnce(
-        state,
-        sink,
-        WpdDiagnosticCodes.MergeCodeDropped,
-        "This document contains merge codes, which are a form-letter template's placeholders rather than text.",
-      );
+      applyMergeGroup(state, token, sink);
       return;
     case BOX_GROUP:
-      reportOnce(
-        state,
-        sink,
-        WpdDiagnosticCodes.BoxDropped,
-        "This document contains a box -- a figure, text box, equation, or graphic -- whose contents were not read.",
-      );
+      applyBoxGroup(state, token, container, sink);
       return;
     default:
       return;
@@ -945,6 +1233,39 @@ interface FoldResult {
   readonly page: PageState;
 }
 
+// One token's own effect on the reader state, shared by the main document-area walk and any sub-stream folded through the identical function-code vocabulary -- currently a style packet's own "beginning style text" block (applyStylePacketBegin above), which carries the same font/attribute/colour-change functions the main stream does and means them identically.
+function applyToken(
+  state: ReaderState,
+  token: WpdToken,
+  container: WpdDocumentContainer,
+  sink: WpdDiagnosticSink,
+): void {
+  switch (token.kind) {
+    case "character": {
+      const character = decodeSingleByteCharacter(token.byte);
+      if (character === undefined) {
+        sink({
+          code: WpdDiagnosticCodes.UnmappedCharacter,
+          message: `Byte ${token.byte} in the document area has no character mapping and was rendered as U+FFFD.`,
+        });
+        appendText(state, UNMAPPED_CHARACTER);
+        return;
+      }
+      appendText(state, character);
+      return;
+    }
+    case "singleByteFunction":
+      applySingleByteFunction(state, token.code, sink);
+      return;
+    case "variableFunction":
+      applyVariableFunction(state, token, container, sink);
+      return;
+    case "fixedFunction":
+      applyFixedFunction(state, token, sink);
+      return;
+  }
+}
+
 function foldTokens(
   tokens: readonly WpdToken[],
   container: WpdDocumentContainer,
@@ -962,6 +1283,7 @@ function foldTokens(
     alignment: undefined,
     skipDepth: 0,
     styleScopes: [],
+    styleResolutionDepth: 0,
     pendingHeadingLevel: undefined,
     pendingListLevel: undefined,
     pendingAlignment: undefined,
@@ -977,39 +1299,18 @@ function foldTokens(
     },
     table: undefined,
     reported: new Set<string>(),
+    pendingConstructs: [],
+    openMergeFieldStartRun: undefined,
   };
 
   for (const token of tokens) {
-    switch (token.kind) {
-      case "character": {
-        const character = decodeSingleByteCharacter(token.byte);
-        if (character === undefined) {
-          sink({
-            code: WpdDiagnosticCodes.UnmappedCharacter,
-            message: `Byte ${token.byte} in the document area has no character mapping and was rendered as U+FFFD.`,
-          });
-          appendText(state, UNMAPPED_CHARACTER);
-          break;
-        }
-        appendText(state, character);
-        break;
-      }
-      case "singleByteFunction":
-        applySingleByteFunction(state, token.code, sink);
-        break;
-      case "variableFunction":
-        applyVariableFunction(state, token, container, sink);
-        break;
-      case "fixedFunction":
-        applyFixedFunction(state, token, sink);
-        break;
-    }
+    applyToken(state, token, container, sink);
   }
 
   // Whatever is still accumulating when the stream ends is a final paragraph only if it actually holds text. A document ending in a hard return has already had its last paragraph closed, and fabricating an empty one after it would invent a blank line the author never typed.
   flushRun(state);
   if (state.runs.length > 0) {
-    flushParagraph(state);
+    flushParagraph(state, sink);
   }
   // A table the stream ends inside was never closed by a Table Off code. Its rows are real content, so it is closed here rather than discarded.
   if (state.table !== undefined) {
