@@ -1,8 +1,13 @@
-import type { ContentParagraph, ContentRun } from "document-schema.js";
+import type {
+  ContentParagraph,
+  ContentRun,
+  SourceResidue,
+} from "document-schema.js";
 import type { XmlElement } from "../../model/node";
+import { buildXml } from "../../xml/build";
 import { attr, childrenWithTag, textContent } from "../util";
 
-// Reads a SmartArt diagram's data model part (a dgm:dataModel root) into paragraphs of node text in diagram order. The data model is the semantic half of a SmartArt graphic (the dgm:relIds' r:dm target): a graph of points whose text lives in dgm:t text bodies, plus the parOf connections that make it a tree rooted at the type="doc" point. The layout/quickStyle/colour parts (r:lo/r:qs/r:cs) decide only how that graph is drawn and are not read.
+// Reads a SmartArt diagram's data model part (a dgm:dataModel root) into paragraphs of node text in diagram order. The data model is the semantic half of a SmartArt graphic (the dgm:relIds' r:dm target): a graph of points whose text lives in dgm:t text bodies, plus the parOf connections that make it a tree rooted at the type="doc" point. The layout/quickStyle/colour parts (r:lo/r:qs/r:cs) decide only how that graph is drawn -- readDiagramText does not read them, but readDiagramResidue below quarantines them whole as the graphic frame's own residue rather than discarding them.
 
 // A node's a:p paragraphs become ContentParagraphs with one plain-text run per a:r/a:fld (an a:br becomes a literal-newline run) -- the same structure readParagraph produces for slide text, minus the placeholder inheritance cascade a diagram's private text body never participates in.
 function diagramTextParagraphs(
@@ -115,4 +120,48 @@ export function readDiagramText(dataModelRoot: XmlElement): ContentParagraph[] {
   };
   visit(docModelId);
   return blocks;
+}
+
+// Quarantines the three parts readDiagramText itself does not read -- layout (r:lo), quickStyle (r:qs), colours (r:cs) -- as opaque residue on the diagram's own graphic-frame shape, mirroring readChartResidue's identical "whole part, own reader's contract" treatment for a chart (ExaDev/documents.js#719's residue-channel convention). Only the parts that actually resolved are concatenated, in relIds' own r:lo/r:qs/r:cs order; a diagram missing one or more (a producer that emitted only a data model) quarantines whatever it does have rather than fabricating an element for what's absent. Undefined when none resolved at all, so a diagram with no drawing-specific parts leaves the shape's own source field absent rather than an empty residue value.
+//
+// Cached by the exact (layoutRoot, quickStyleRoot, colorsRoot) triple's own object identity, nested through three WeakMaps (a shared sentinel stands in for "absent" at each level, since WeakMap keys must be objects) -- mirroring readChartResidue's cache for the identical reason: multiple graphic frames can share one diagram's layout/quickStyle/colour relationship targets, and re-serialising the same parts once per frame is an O(N*M) cost a hostile document can exploit.
+const ABSENT_ROOT: XmlElement = {
+  type: "element",
+  tag: "",
+  attributes: [],
+  children: [],
+};
+const diagramResidueCache = new WeakMap<
+  XmlElement,
+  WeakMap<XmlElement, WeakMap<XmlElement, SourceResidue | undefined>>
+>();
+
+export function readDiagramResidue(
+  layoutRoot: XmlElement | undefined,
+  quickStyleRoot: XmlElement | undefined,
+  colorsRoot: XmlElement | undefined,
+): SourceResidue | undefined {
+  const key1 = layoutRoot ?? ABSENT_ROOT;
+  const key2 = quickStyleRoot ?? ABSENT_ROOT;
+  const key3 = colorsRoot ?? ABSENT_ROOT;
+  let level2 = diagramResidueCache.get(key1);
+  if (level2 === undefined) {
+    level2 = new WeakMap();
+    diagramResidueCache.set(key1, level2);
+  }
+  let level3 = level2.get(key2);
+  if (level3 === undefined) {
+    level3 = new WeakMap();
+    level2.set(key2, level3);
+  }
+  if (level3.has(key3)) {
+    return level3.get(key3);
+  }
+  const parts = [layoutRoot, quickStyleRoot, colorsRoot].filter(
+    (root): root is XmlElement => root !== undefined,
+  );
+  const residue: SourceResidue | undefined =
+    parts.length === 0 ? undefined : { format: "pptx", xml: buildXml(parts) };
+  level3.set(key3, residue);
+  return residue;
 }

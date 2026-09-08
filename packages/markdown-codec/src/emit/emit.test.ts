@@ -961,8 +961,14 @@ describe("headings", () => {
           throw new Error("expected a wordprocessing ContentDocument");
         }
         const blocks = reparsed.sections[0]?.blocks ?? [];
-        expect(blocks).toHaveLength(1);
-        const [headingBlock] = blocks;
+        // The reparse now carries a real division pair around the quoted heading (ExaDev/document-schema.js#1122) rather than degrading to indent-only structure -- a heading inside a construct's extent groups fine, so the quote's own container fidelity survives alongside the heading's.
+        expect(blocks).toHaveLength(3);
+        const [open, headingBlock, close] = blocks;
+        expect(open).toEqual({
+          kind: "constructStart",
+          descriptor: { kind: "division" },
+        });
+        expect(close).toEqual({ kind: "constructEnd" });
         if (headingBlock?.kind !== "paragraph") {
           throw new Error("expected a paragraph block");
         }

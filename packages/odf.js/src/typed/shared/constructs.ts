@@ -14,6 +14,8 @@ import type { XmlElement, XmlNode } from "../../model/node";
 import type { Package } from "../../model/package";
 import { buildXml } from "../../xml/build";
 import { parseXml } from "../../xml/parse";
+import { el } from "../../xml/fragment";
+import { encodeXmlText } from "../../xml/entities";
 import {
   attrValue,
   childrenWithTag,
@@ -904,4 +906,166 @@ export function collectOdfNamedExpressions(
       }
     }
   }
+}
+
+// --- the write direction: constructs a writer actually spells back ---------------------------------------------
+//
+// Not every construct this module's read side recovers has a writer yet (ExaDev/documents.js#969): a division and an index wrapper are real WRAPPING elements, so their inverse is exactly "write the wrapping element around the extent's own blocks", stated here beside their own readers; a field and a bookmark are RUN-scoped (RunConstructExtent, document-schema.js's own src/content.ts), so their inverse lives in typed/shared/paragraph.ts instead, which owns the run-writing pipeline these need to splice into -- but the field/bookmark element builders below are shared by both scopes' writers (a run-scoped bookmark within one paragraph and a block-scoped one spanning several use the identical text:bookmark-start/-end spelling), so they live here with the rest of this module's element vocabulary rather than being duplicated. Every writer in this package deliberately never re-emits a construct's own quarantined residue (typed/odt/write.ts's own top-of-file note on why) -- the one narrow exception is odfIndexWrapperTag below, which reads a residue element's own TAG NAME as a structural discriminator (which of the seven index wrappers this control came from), never its content.
+
+// Reconstructs the field element FieldDescriptor.instruction serialised (odfFieldDescriptor above): the producer's own element and its attributes, with no children -- parsing it back recovers the field's full identity losslessly, leaving only its cached-text children (the paragraph's own runs covering the field's extent) to be reattached by the caller.
+export function parseOdfFieldInstruction(instruction: string): XmlElement {
+  const [element] = parseXml(instruction).filter(
+    (node): node is XmlElement => node.type === "element",
+  );
+  if (element === undefined) {
+    throw new Error(
+      `parseOdfFieldInstruction: "${instruction}" did not parse back to a single element`,
+    );
+  }
+  return element;
+}
+
+// The exact string writing a field and reading it straight back produces -- buildXml's own serialisation is not always byte-identical to whatever a caller originally spelled (a self-closing "<tag/>" and an empty "<tag></tag>" carry the identical fact but are different strings), so a FieldDescriptor.instruction that did not already come from buildXml needs this same normalisation applied before it is compared against a round-tripped one.
+export function canonicalOdfFieldInstruction(instruction: string): string {
+  return buildXml([{ ...parseOdfFieldInstruction(instruction), children: [] }]);
+}
+
+// The one canonical ConstructDescriptor a written-and-reread construct equals -- the construct-vocabulary sibling of typed/shared/canonicalise.ts's own canonicalParagraph/canonicalTable/canonicalImage, kept here instead because it is stated over document-schema.js's ConstructDescriptor union rather than this package's own content shapes, and both this module's read side (odfIndexControlDescriptor) and write side (writeOdfIndexWrapper, writeOdfDivision) already own the ODF-specific facts it restates. Only a 'field' or an index-typed 'contentControl' carry a serialised-XML string this writer's own round trip can reshape (canonicalOdfFieldInstruction above; an index wrapper's own bare *-source residue, written back by writeOdfIndexWrapper below); every other descriptor kind passes through unchanged.
+export function canonicalOdfConstructDescriptor(
+  descriptor: ConstructDescriptor,
+): ConstructDescriptor {
+  if (descriptor.kind === "field") {
+    return {
+      ...descriptor,
+      instruction: canonicalOdfFieldInstruction(descriptor.instruction),
+    };
+  }
+  if (
+    descriptor.kind === "contentControl" &&
+    descriptor.controlType === "index" &&
+    descriptor.source !== undefined
+  ) {
+    return {
+      ...descriptor,
+      source: odfResidue(
+        "odt",
+        parseOdfFieldInstruction(descriptor.source.xml),
+      ),
+    };
+  }
+  return descriptor;
+}
+
+export function writeOdfBookmarkPoint(name: string): XmlElement {
+  return el("text:bookmark", { "text:name": encodeXmlText(name) });
+}
+
+export function writeOdfBookmarkStart(name: string): XmlElement {
+  return el("text:bookmark-start", { "text:name": encodeXmlText(name) });
+}
+
+export function writeOdfBookmarkEnd(name: string): XmlElement {
+  return el("text:bookmark-end", { "text:name": encodeXmlText(name) });
+}
+
+// Which run-level construct kind (if any) this package's odt writer knows how to spell back, and how: a field always writes from its own instruction; a bookmark anchor writes as a POINT (text:bookmark) when its extent covers no runs at all and a RANGE (text:bookmark-start/-end pair) otherwise -- the same point-vs-range split odfBookmarkAnchorDescriptor's own two call sites (a point mark, a paired range half) collapse into one indistinguishable descriptor shape for, disambiguated here the only way it still can be: by whether the extent itself is empty. Every other run-level construct (a footnote/endnote/comment anchor, a tracked-change provenance wrapper) has no writer yet -- see ExaDev/documents.js#969 -- and this returns undefined for those so a caller can refuse them by name rather than guess at a spelling.
+export type OdfRunConstructWriteKind =
+  "field" | "bookmarkPoint" | "bookmarkRange";
+
+export function odfRunConstructWriteKind(
+  extent: RunConstructExtent,
+): OdfRunConstructWriteKind | undefined {
+  const { descriptor } = extent;
+  if (descriptor.kind === "field") {
+    return "field";
+  }
+  if (descriptor.kind === "anchor" && descriptor.anchorType === "bookmark") {
+    return extent.startRun === extent.endRun
+      ? "bookmarkPoint"
+      : "bookmarkRange";
+  }
+  return undefined;
+}
+
+// --- divisions (text:section), write direction ---------------------------------------------------------------------
+
+// A division's own column-count style: the caller mints the style:style[family="section"] element and its own document-unique name (typed/odt/write.ts's own nextSectionStyle counter, mirroring nextTable/nextImage/nextListStyle), and this module only ever asks for the name back -- keeping the actual element construction and registration in the format writer that owns the document's own automatic-styles container, exactly as listStyleNameFor does for a list style.
+export interface OdfDivisionWriteContext {
+  readonly mintSectionStyleName: (columnCount: number) => string;
+}
+
+// The inverse of odfDivisionDescriptor: wraps `children` (the construct's own extent, already written) in the text:section element the descriptor's structural fields state -- name, protected, the column-count style, and the external-chapter link. Per this writer's own residue policy, the descriptor's own quarantined residue (text:section-source's text:filter-name) is never re-emitted; only the structural facts document-schema.js's DivisionDescriptor actually names are written.
+export function writeOdfDivision(
+  descriptor: DivisionDescriptor,
+  children: XmlNode[],
+  context: OdfDivisionWriteContext,
+): XmlElement {
+  const attributes: Record<string, string> = {};
+  if (descriptor.name !== undefined) {
+    attributes["text:name"] = encodeXmlText(descriptor.name);
+  }
+  if (descriptor.protected === true) {
+    attributes["text:protected"] = "true";
+  }
+  if (descriptor.columnCount !== undefined) {
+    attributes["text:style-name"] = context.mintSectionStyleName(
+      descriptor.columnCount,
+    );
+  }
+  const sectionChildren: XmlNode[] = [...children];
+  if (descriptor.linked !== undefined) {
+    const sourceAttributes: Record<string, string> = {
+      "xlink:type": "simple",
+      "xlink:href": encodeXmlText(descriptor.linked.href),
+    };
+    if (descriptor.linked.sectionName !== undefined) {
+      sourceAttributes["text:section-name"] = encodeXmlText(
+        descriptor.linked.sectionName,
+      );
+    }
+    sectionChildren.push(el("text:section-source", sourceAttributes));
+  }
+  return el("text:section", attributes, sectionChildren);
+}
+
+// --- index/TOC wrappers, write direction ----------------------------------------------------------------------------
+
+// Which of the seven ODF_INDEX_WRAPPER_TAGS this control came from -- the one fact ContentControlDescriptor has nowhere else to state (controlType is the single, shared "index" member for all seven), recovered from the descriptor's own quarantined residue: odfIndexControlDescriptor above always sets it to the wrapper's own *-source child (mandatory in the ODF schema for every real index wrapper), so this reads that element's own TAG NAME back -- "text:table-of-content-source" strips to "text:table-of-content" -- as a structural discriminator, the one narrow exception to this package's "a construct's own residue is never re-emitted" policy (typed/odt/write.ts's own top-of-file note): the tag decides WHICH ELEMENT to write at all, which is identity, not content a possibly-edited document could have invalidated. Throws when no residue survives to name it (a hand-built descriptor with no source, or one from a different format's residue), since there is then no tag this function could pick without inventing a fact the caller never stated.
+export function odfIndexWrapperTag(
+  descriptor: ContentControlDescriptor,
+): string {
+  const residue = descriptor.source;
+  if (residue !== undefined) {
+    const [sourceElement] = parseXml(residue.xml).filter(
+      (node): node is XmlElement => node.type === "element",
+    );
+    if (sourceElement?.tag.endsWith("-source") === true) {
+      const wrapperTag = sourceElement.tag.slice(
+        0,
+        sourceElement.tag.length - "-source".length,
+      );
+      if (ODF_INDEX_WRAPPER_TAGS.has(wrapperTag)) {
+        return wrapperTag;
+      }
+    }
+  }
+  throw new Error(
+    "odfIndexWrapperTag: an index contentControl descriptor with no recognisable *-source residue carries no fact naming which of the seven ODF index wrappers to write",
+  );
+}
+
+// The inverse of odfIndexControlDescriptor: the wrapper element (odfIndexWrapperTag above) carrying text:name, a BARE *-source child, and wrapping `children` (the control's own cached extent) in a text:index-body -- exactly the shape isOdfIndexWrapper/odfIndexControlDescriptor read back. The *-source child is written empty rather than omitted: the ODF schema requires every real index wrapper to carry one (it states the index's own build rules -- outline levels, sort keys, entry formatting), so an instance with no *-source child at all would not merely be missing decoration, it would be incomplete ODF a real consumer may refuse to open. Its own CONTENT (the build rules themselves) is still never re-emitted, per this writer's residue policy -- only a bare, attribute-less instance of the required element, which is what keeps this wrapper valid AND keeps a second write of the same document able to recover the identical tag again (odfIndexWrapperTag reads the bare child back exactly as it would a fuller one).
+export function writeOdfIndexWrapper(
+  descriptor: ContentControlDescriptor,
+  children: XmlNode[],
+): XmlElement {
+  const tag = odfIndexWrapperTag(descriptor);
+  const attributes: Record<string, string> = {};
+  if (descriptor.tag !== undefined) {
+    attributes["text:name"] = encodeXmlText(descriptor.tag);
+  }
+  return el(tag, attributes, [
+    el(`${tag}-source`),
+    el("text:index-body", {}, children),
+  ]);
 }
