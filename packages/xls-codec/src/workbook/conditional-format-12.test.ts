@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { FormulaSheetContext } from "../biff/ptg";
 import { groupRecords, type RecordGroup } from "../biff/substreams";
 import { readRecords } from "../biff/records";
-import { concat, f64, record, u16, u32 } from "../test-support/biff";
+import {
+  concat,
+  f64,
+  record,
+  shortXlUnicodeString,
+  u16,
+  u32,
+} from "../test-support/biff";
 import {
   RECORD_CF12,
   RECORD_CONDFMT12,
@@ -150,6 +157,8 @@ function cf12Bytes(
     icfTemplate?: number;
     templateParams?: readonly number[];
     dxf?: readonly number[];
+    /** rgce1's own bytes ([MS-XLS] 2.4.43's own CFParsedFormulaNoCCE) -- meaningful only for ct 0x01/0x02, empty (cce1 0) for every other ct this file already exercises. */
+    formula1?: readonly number[];
   } = {},
 ): number[] {
   const templateParams =
@@ -158,14 +167,16 @@ function cf12Bytes(
     throw new Error("templateParams must be exactly 16 bytes");
   }
   const dxf = options.dxf ?? [];
+  const formula1 = options.formula1 ?? [];
   return [
     ...new Array<number>(12).fill(0), // frtRefHeader
     ct,
     0x00, // cp
-    ...u16(0), // cce1
+    ...u16(formula1.length), // cce1
     ...u16(0), // cce2
     ...u32(dxf.length), // cbDxf
     ...dxf,
+    ...formula1, // rgce1
     ...u16(0), // fmlaActive cce
     options.stopIfTrue === true ? 0x02 : 0x00, // flags: B - fStopIfTrue
     ...u16(options.priority ?? 0), // ipriority
@@ -207,9 +218,25 @@ function cf12Record(
     icfTemplate?: number;
     templateParams?: readonly number[];
     dxf?: readonly number[];
+    formula1?: readonly number[];
   } = {},
 ): Uint8Array<ArrayBuffer> {
   return record(RECORD_CF12, cf12Bytes(ct, rgbCT, options));
+}
+
+/** PtgStr ([MS-XLS] 2.5.198.something, opcode 0x17): a ShortXLUnicodeString operand -- the literal search text a containsText-family formula always carries somewhere in its own token stream, wrapped in whatever function shape the sub-type needs (see readCfTextFilterRule's own comment in conditional-format-12.ts). */
+function ptgStr(text: string): number[] {
+  return [0x17, ...shortXlUnicodeString(text)];
+}
+
+/** A fully-relative PtgRef (value class, [MS-XLS] 2.5.198.61): opcode 0x44, then row and a relative ColRelU column field -- what a bare `A1` reference compiles to. */
+function ptgRef(row: number, column: number): number[] {
+  return [0x44, ...u16(row), ...u16(0xc000 | column)];
+}
+
+/** CFExTextTemplateParams ([MS-XLS] 2.4): ctp(2) then 14 reserved bytes -- the containsText family's own rgbTemplateParms shape, naming which of the four text sub-types a rule is. */
+function cfExTextTemplateParams(ctp: number): number[] {
+  return [...u16(ctp), ...new Array<number>(14).fill(0)];
 }
 
 const DXFFNTD_LENGTH = 122;
@@ -729,7 +756,7 @@ describe("readCondFmt12Group", () => {
     }
   });
 
-  it("does not promote a containsText rule (icfTemplate 0x0008) -- the search string's own location is unresolved", () => {
+  it("does not promote a containsText rule (icfTemplate 0x0008) carried as a ct 0x05 filter -- containsText is never expressed this way in a genuine file, since neither CFExTextTemplateParams nor CFFilter has anywhere to carry the search text; see readCf12Group's own ct 0x02 handling below for the real containsText path", () => {
     const groups = groupsFrom(
       condFmt12Record(1, ONE_RANGE),
       cf12Record(0x05, cfFilterBytes(), { icfTemplate: 0x0008 }),
@@ -795,5 +822,127 @@ describe("readCondFmt12Group", () => {
       "uniqueValues",
       "duplicateValues",
     ]);
+  });
+
+  describe("containsText/notContainsText/beginsWith/endsWith (ct 0x02, icfTemplate 0x0008)", () => {
+    it("reads all four ctp sub-types, each from a bare PtgStr formula", () => {
+      const cases: [number, string][] = [
+        [0x0000, "containsText"],
+        [0x0001, "notContainsText"],
+        [0x0002, "beginsWith"],
+        [0x0003, "endsWith"],
+      ];
+      for (const [ctp, kind] of cases) {
+        const groups = groupsFrom(
+          condFmt12Record(1, ONE_RANGE),
+          cf12Record(0x02, [], {
+            icfTemplate: 0x0008,
+            templateParams: cfExTextTemplateParams(ctp),
+            formula1: ptgStr("needle"),
+          }),
+        );
+        const result = readCondFmt12Group(groups, 0, NO_SHEETS);
+        expect(result.formats).toEqual([
+          {
+            kind,
+            text: "needle",
+            priority: 0,
+            stopIfTrue: false,
+            ranges: ONE_RANGE,
+            style: undefined,
+          },
+        ]);
+      }
+    });
+
+    it('extracts the literal text from inside a realistic ISNUMBER(SEARCH("text",A1)) formula, not just a bare PtgStr', () => {
+      const groups = groupsFrom(
+        condFmt12Record(1, ONE_RANGE),
+        cf12Record(0x02, [], {
+          icfTemplate: 0x0008,
+          templateParams: cfExTextTemplateParams(0x0000), // containsText
+          formula1: [
+            ...ptgStr("needle"),
+            ...ptgRef(0, 0),
+            0x42,
+            0x02,
+            ...u16(0x0052), // PtgFuncVar, SEARCH, cparams=2
+            0x41,
+            ...u16(0x0080), // PtgFunc, ISNUMBER
+          ],
+        }),
+      );
+
+      const result = readCondFmt12Group(groups, 0, NO_SHEETS);
+
+      expect(result.formats).toEqual([
+        {
+          kind: "containsText",
+          text: "needle",
+          priority: 0,
+          stopIfTrue: false,
+          ranges: ONE_RANGE,
+          style: undefined,
+        },
+      ]);
+    });
+
+    it("reads a containsText rule's own resulting style", () => {
+      const groups = groupsFrom(
+        condFmt12Record(1, ONE_RANGE),
+        cf12Record(0x02, [], {
+          icfTemplate: 0x0008,
+          templateParams: cfExTextTemplateParams(0x0000),
+          formula1: ptgStr("needle"),
+          dxf: dxfFontColor(2), // icv 2, Red
+        }),
+      );
+
+      const format = readCondFmt12Group(groups, 0, NO_SHEETS).formats[0];
+
+      expect(format).toMatchObject({
+        kind: "containsText",
+        text: "needle",
+        style: { fontColorIcv: 2, fill: undefined },
+      });
+    });
+
+    it("does not promote a ctp value outside the four documented sub-types", () => {
+      const groups = groupsFrom(
+        condFmt12Record(1, ONE_RANGE),
+        cf12Record(0x02, [], {
+          icfTemplate: 0x0008,
+          templateParams: cfExTextTemplateParams(0x00ff),
+          formula1: ptgStr("needle"),
+        }),
+      );
+
+      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+    });
+
+    it("does not promote a containsText-templated rule whose formula carries no string literal at all", () => {
+      const groups = groupsFrom(
+        condFmt12Record(1, ONE_RANGE),
+        cf12Record(0x02, [], {
+          icfTemplate: 0x0008,
+          templateParams: cfExTextTemplateParams(0x0000),
+          formula1: ptgRef(0, 0), // =A1, no PtgStr anywhere
+        }),
+      );
+
+      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+    });
+
+    it("does not promote a ct 0x02 rule whose icfTemplate is not the containsText family -- the same 'expression' boundary base CF's own formula-condition reading draws", () => {
+      const groups = groupsFrom(
+        condFmt12Record(1, ONE_RANGE),
+        cf12Record(0x02, [], {
+          icfTemplate: 0x0001, // "Formula" -- a plain formula condition, not a text template
+          formula1: ptgInt(1),
+        }),
+      );
+
+      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+    });
   });
 });
