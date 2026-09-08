@@ -4,6 +4,8 @@ import { el, txt } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 
 // The write-side inverse of typed/xlsx/definitions.ts: a workbook's own DefinitionsTable (the tree reader's namedRange/table entries, ExaDev/documents.js#973) back into xl/workbook.xml's general <definedNames> and xl/tables/tableN.xml parts. definitions.ts's own header states the shape decisions this mirrors; this module owns only the entry validation and element construction, never part/relationship wiring, which stays in build.ts alongside every other part this writer assembles.
+//
+// SECURITY BOUNDARY: a namedRange's refersTo is only ever written when it matches INTERNAL_RANGE_PATTERN below -- a sheet-qualified internal A1 reference and nothing else. A defined name is live formula context in every real spreadsheet application, so writing an attacker-shaped refersTo verbatim (a WEBSERVICE call, an external-workbook reference, a formula) would restore executable content the moment a recipient opens or recalculates the output, the exfiltration shape SECURITY.md's formula paragraph names. Refused values throw by name rather than degrading.
 
 const SML_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
@@ -50,6 +52,29 @@ export interface NamedRangeEntry {
   readonly localSheetId: number | undefined;
 }
 
+// The one shape of refersTo this writer will place into an ACTIVE workbook defined-name context: a sheet-qualified internal A1 reference (a cell, a cell range, a column range, or a row range), optionally a comma-separated union of them, every area carrying its own sheet qualifier. Everything else is refused -- and "everything else" is exactly the executable-formula surface: parentheses carry function calls (a preserved WEBSERVICE(...&A1) name restores network exfiltration the moment a recipient recalculates), square brackets carry external-workbook references, and a bare unqualified range depends on whatever sheet context the opening application happens to resolve it in. XML escaping protects markup, not formula semantics; this boundary protects formula semantics.
+const SHEET_QUALIFIER_SOURCE = "(?:'[^']*'|[A-Za-z0-9_.]+)!";
+const AREA_SOURCE =
+  "(?:\\$?[A-Za-z]{1,3}\\$?[0-9]+(?::\\$?[A-Za-z]{1,3}\\$?[0-9]+)?|\\$?[A-Za-z]{1,3}:\\$?[A-Za-z]{1,3}|\\$?[0-9]+:\\$?[0-9]+)";
+const INTERNAL_RANGE_PATTERN = new RegExp(
+  `^${SHEET_QUALIFIER_SOURCE}${AREA_SOURCE}(?:,${SHEET_QUALIFIER_SOURCE}${AREA_SOURCE})*$`,
+);
+
+function asInternalRangeRefersTo(
+  value: unknown,
+  field: string,
+  kind: string,
+  name: string,
+): string {
+  const refersTo = asString(value, field, kind);
+  if (!INTERNAL_RANGE_PATTERN.test(refersTo)) {
+    throw new Error(
+      `buildXlsxPackageFromContent: the named range "${name}"'s refersTo must be a sheet-qualified internal A1 reference (a cell, cell range, column range, or row range, optionally a comma-separated union) -- '${refersTo}' carries formula or external-reference content this writer refuses to place into an active defined-name context`,
+    );
+  }
+  return refersTo;
+}
+
 export interface TableEntry {
   readonly name: string;
   readonly ref: string;
@@ -74,7 +99,12 @@ export function collectNamedRangeEntries(
     }
     entries.push({
       name: asString(entry.name, "name", "namedRange"),
-      refersTo: asString(entry.refersTo, "refersTo", "namedRange"),
+      refersTo: asInternalRangeRefersTo(
+        entry.refersTo,
+        "refersTo",
+        "namedRange",
+        typeof entry.name === "string" ? entry.name : String(entry.name),
+      ),
       localSheetId: asOptionalNumber(
         entry.localSheetId,
         "localSheetId",
