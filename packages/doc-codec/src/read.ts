@@ -5,7 +5,11 @@ import {
 } from "archive-codec";
 import type { ContentDocument, Margins, PageSize } from "document-schema.js";
 import { slice } from "./bytes";
-import { SUMMARY_INFORMATION_STREAM, WORD_DOCUMENT_STREAM } from "./detect";
+import {
+  DATA_STREAM,
+  SUMMARY_INFORMATION_STREAM,
+  WORD_DOCUMENT_STREAM,
+} from "./detect";
 import { decryptDocStreams } from "./encryption";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { parseFib, peekFibBaseFlags, type Fib } from "./fib/fib";
@@ -32,7 +36,7 @@ import { parseClx } from "./text/piece-table";
 
 // The top-level read: a .doc's bytes to a ContentDocument. Every step below is one of [MS-DOC]'s own algorithms, in the order the specification chains them -- the compound-file container gives the WordDocument and Table streams, the FIB gives the offsets, the piece table turns character positions into bytes, and the two bin tables turn byte offsets into formatting. text/paragraphs.ts's readParagraphs itself only ever produces flat ParagraphEntry values (one per paragraph/cell/row mark, whatever its own table depth) for whichever document-stream range it is handed; table/read.ts's assembleBlocks is what folds a contiguous run of table-depth paragraphs into a real ContentTable, so this module carries no table-specific logic of its own.
 //
-// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images or drawn objects, no text boxes, and no table/numbering style formatting -- RC4-encrypted documents are read given a password (encryption.ts), but XOR obfuscation and RC4 CryptoAPI stay refused. Each of those absences is a genuine layer of the format, and each is absent rather than approximated. A paragraph or character style's own formatting IS resolved, up its full istdBase inheritance chain (style/stsh.ts's resolveStyleFormatting, ExaDev/documents.js#1005). Tables are read at every depth a document states, a table nested inside a table cell included (table/read.ts). Every section PlcfSed states resolves to its own real ContentSection, each with its own page size and margins. Footnotes, endnotes, and comments are read as plain text (notes.ts); headers and footers are read as real block flow, per section and per even/odd/first slot (headers-footers.ts) -- see DocContent's own comment below for how all four ride outside ContentDocument's shared shape, the same way numbering definitions already do. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like.
+// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: an inline picture (U+0001, sprmCPicLocation) resolves to a real ContentImageBlock when its own OfficeArtBlip is JPEG or PNG (pictures.ts) -- a floating/anchored drawn object (U+0008, PlcfSpa) and every other blip format (WMF/EMF/PICT metafiles, a raw DIB, TIFF) are genuinely different, unimplemented structures, and text boxes are absent for the identical reason (they ride the same OfficeArt drawing layer a floating object does). No table/numbering style formatting either. RC4-encrypted documents are read given a password (encryption.ts), but XOR obfuscation and RC4 CryptoAPI stay refused. Each of those absences is a genuine layer of the format, and each is absent rather than approximated. A paragraph or character style's own formatting IS resolved, up its full istdBase inheritance chain (style/stsh.ts's resolveStyleFormatting, ExaDev/documents.js#1005). Tables are read at every depth a document states, a table nested inside a table cell included (table/read.ts). Every section PlcfSed states resolves to its own real ContentSection, each with its own page size and margins. Footnotes, endnotes, and comments are read as plain text (notes.ts); headers and footers are read as real block flow, per section and per even/odd/first slot (headers-footers.ts) -- see DocContent's own comment below for how all four ride outside ContentDocument's shared shape, the same way numbering definitions already do. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like.
 
 /** Word's own default for a new document (US Letter, one-inch margins) -- what a field this reader resolves from PlcfSed/Sepx (prop/sep.ts's readSectionProperties) falls back to when the file states nothing for it, exactly as it would fall back to Word's own implementation-dependent default for that one unstated sprm. */
 const DEFAULT_PAGE_SIZE: PageSize = { widthPt: 612, heightPt: 792 };
@@ -49,6 +53,8 @@ export interface DocStreams {
   readonly fib: Fib;
   /** The raw "\x05SummaryInformation" stream bytes, or undefined when the container carries none -- a valid, spec-conformant Word Binary File need not carry document properties at all. */
   readonly metadata: Uint8Array<ArrayBuffer> | undefined;
+  /** The raw "Data" stream bytes, or undefined when the container carries none -- a valid Word Binary File with no pictures need not have one. sprmCPicLocation's operand addresses this stream (pictures.ts). */
+  readonly data: Uint8Array<ArrayBuffer> | undefined;
 }
 
 // Pulls the two streams every later step reads from, the FIB that says which of "1Table" and "0Table" is the one in play, and the optional metadata stream. Both WordDocument and Table names always exist as candidates in the container; only the one FibBase.fWhichTblStm selects holds the structures the FIB's offsets address, and reading the other yields offsets into unrelated bytes.
@@ -93,11 +99,13 @@ export function readDocStreams(
   const metadata = streams.find(
     (stream) => stream.path === SUMMARY_INFORMATION_STREAM,
   );
+  const data = streams.find((stream) => stream.path === DATA_STREAM);
   return {
     wordDocument,
     table,
     fib,
     metadata: metadata?.bytes,
+    data: data?.bytes,
   };
 }
 
@@ -114,7 +122,7 @@ export function readDocContent(
   bytes: Uint8Array<ArrayBuffer>,
   password?: string,
 ): DocContent {
-  const { wordDocument, table, fib, metadata } = readDocStreams(
+  const { wordDocument, table, fib, metadata, data } = readDocStreams(
     bytes,
     password,
   );
@@ -164,6 +172,7 @@ export function readDocContent(
     chpxTable,
     papxTable,
     styles,
+    dataStream: data,
     fonts,
     // Shared across every document-stream range read below -- see ReadContext's own comment on why this is safe: a Chpx's identity is its byte position in the WordDocument stream, which means the same thing regardless of which subdocument's CP space led to it.
     characterProperties: new Map(),

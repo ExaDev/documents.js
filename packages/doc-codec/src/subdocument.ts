@@ -42,9 +42,14 @@ export function readSubdocumentStories(
   return stories.map((story) => story.slice(0, -1));
 }
 
-/** Joins a story's own paragraphs into plain text -- one line per paragraph, matching how ooxml.js's own Footnote/Comment reading concatenates a footnote or comment body's `w:t` runs rather than preserving paragraph/run structure. A footnote, endnote, or comment in this family is carried as text alone; only a header or footer keeps real block flow (headers-footers.ts). */
+/** Joins a story's own paragraphs into plain text -- one line per paragraph, matching how ooxml.js's own Footnote/Comment reading concatenates a footnote or comment body's `w:t` runs rather than preserving paragraph/run structure. A footnote, endnote, or comment in this family is carried as text alone; only a header or footer keeps real block flow (headers-footers.ts). Non-paragraph blocks a story's own entries produced (an inline picture split out of one of its paragraphs) contribute no text of their own here, the same way an image has no plain-text spelling in ooxml.js's own footnote/comment reading either. */
 export function storyText(entries: readonly ParagraphEntry[]): string {
   return entries
-    .map((entry) => entry.paragraph.runs.map((run) => run.text).join(""))
+    .map((entry) =>
+      entry.blocks
+        .flatMap((block) => (block.kind === "paragraph" ? block.runs : []))
+        .map((run) => run.text)
+        .join(""),
+    )
     .join("\n");
 }
