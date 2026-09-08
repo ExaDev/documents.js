@@ -28,6 +28,7 @@ import {
   FIELD_END,
   FIELD_SEPARATOR,
   LINE_BREAK,
+  SECTION_MARK,
 } from "./text/special";
 
 // Sprm byte sequences, each written little-endian from its own opcode: the two-byte sprm then its operand.
@@ -292,6 +293,85 @@ describe("readDocContent", () => {
       topPt: 72,
       bottomPt: 72,
     });
+  });
+
+  it("reads a genuine multi-section document, each section's own PlcfSed/Sepx giving its own page size and margins", () => {
+    // A second section's own geometry, deliberately different from SECTION_GEOMETRY above in every field, so a test reading either back proves it resolved the right Sed rather than reusing the first's.
+    const SECTION_GEOMETRY_TWO = [
+      0x1f,
+      0xb0,
+      0x40,
+      0x1f, // sprmSXaPage, 8000 twips (400pt).
+      0x20,
+      0xb0,
+      0xa0,
+      0x27, // sprmSYaPage, 10144 twips (~507.2pt, an arbitrary non-round value).
+      0x21,
+      0xb0,
+      0xb4,
+      0x00, // sprmSDxaLeft, 180 twips (9pt).
+      0x22,
+      0xb0,
+      0xb4,
+      0x00, // sprmSDxaRight, 180 twips (9pt).
+      0x23,
+      0x90,
+      0xb4,
+      0x00, // sprmSDyaTop, 180 twips (9pt).
+      0x24,
+      0x90,
+      0xb4,
+      0x00, // sprmSDyaBottom, 180 twips (9pt).
+    ];
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [
+          { runs: [{ text: "first section" }] },
+          { runs: [{ text: "still first section" }] },
+          // The section boundary: this paragraph's own mark is the end-of-section character (0x000C), [MS-DOC] 2.8.26's "an end-of-section character MUST be the final character in the text range of all but the last section".
+          { runs: [{ text: "end of first" }], mark: SECTION_MARK },
+          { runs: [{ text: "second section" }] },
+        ],
+        sections: [SECTION_GEOMETRY, SECTION_GEOMETRY_TWO],
+      }),
+    );
+    if (document.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads as a wordprocessing document");
+    }
+    expect(document.sections).toHaveLength(2);
+    const [first, second] = document.sections;
+    if (first === undefined || second === undefined) {
+      throw new Error("both sections must be present");
+    }
+    expect(first.pageSize).toEqual({ widthPt: 600, heightPt: 800 });
+    expect(first.margins).toEqual({
+      leftPt: 90,
+      rightPt: 54,
+      topPt: 45,
+      bottomPt: 36,
+    });
+    expect(
+      first.blocks.map((block) =>
+        block.kind === "paragraph"
+          ? block.runs.map((run) => run.text).join("")
+          : "",
+      ),
+    ).toEqual(["first section", "still first section", "end of first"]);
+
+    expect(second.pageSize).toEqual({ widthPt: 400, heightPt: 507.2 });
+    expect(second.margins).toEqual({
+      leftPt: 9,
+      rightPt: 9,
+      topPt: 9,
+      bottomPt: 9,
+    });
+    expect(
+      second.blocks.map((block) =>
+        block.kind === "paragraph"
+          ? block.runs.map((run) => run.text).join("")
+          : "",
+      ),
+    ).toEqual(["second section"]);
   });
 
   it("derives a heading level from the paragraph style index, as sprmPIstd's own rule states", () => {

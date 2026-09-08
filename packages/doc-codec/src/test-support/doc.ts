@@ -5,7 +5,7 @@
 // Test-support only: excluded from the published dist (tsdown.config.ts drops src/test-support/**), never imported by src/index.ts.
 
 import { FKP_PAGE_SIZE } from "../prop/fkp";
-import { PARAGRAPH_MARK } from "../text/special";
+import { PARAGRAPH_MARK, SECTION_MARK } from "../text/special";
 import { compoundFile } from "./cfb";
 import { buildFib } from "./fib";
 import { buildBinTable, buildChpxFkp, buildPapxFkp } from "./fkp";
@@ -45,8 +45,10 @@ export interface DocSpec {
   /** Splits the text across this many pieces rather than one, exercising a logical stream assembled from discontiguous byte ranges. */
   readonly pieces?: number;
   readonly styles?: readonly DocStyleSpec[];
-  /** The one section's own Sepx grpprl -- absent produces no PlcfSed at all, exercising the reader's own fallback to its page-geometry defaults exactly as a real file with no section properties would. */
+  /** The one section's own Sepx grpprl -- absent produces no PlcfSed at all, exercising the reader's own fallback to its page-geometry defaults exactly as a real file with no section properties would. Ignored when `sections` is given. */
   readonly sectionGrpprl?: readonly number[];
+  /** Multiple sections' own Sepx grpprls, one per section in document order -- overrides `sectionGrpprl`. Section boundaries are derived from where `paragraphs` themselves place a SECTION_MARK terminator (`mark: SECTION_MARK`): this array must carry exactly one more entry than the number of SECTION_MARK-terminated paragraphs, matching [MS-DOC] 2.8.26's own "an end-of-section character MUST be the final character in the text range of all but the last section". */
+  readonly sections?: readonly (readonly number[])[];
 }
 
 // Two grpprls are the same exception when both are absent or their bytes match, which is what decides whether adjacent stretches merge into one ChpxFkp run.
@@ -118,13 +120,21 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
   const firstFreePage = Math.ceil((TEXT_FC + textByteLength) / FKP_PAGE_SIZE);
 
   const papxPage = firstFreePage + 1;
-  // The Sepx, when the spec wants one, sits right after the Papx page -- not itself an FKP-paged structure, so it needs no page alignment of its own.
-  const sepx =
-    spec.sectionGrpprl === undefined
-      ? undefined
-      : buildSepxBytes(spec.sectionGrpprl);
-  const fcSepx = (papxPage + 1) * FKP_PAGE_SIZE;
-  const wordDocument = new Uint8Array(fcSepx + (sepx?.length ?? 0));
+  // The Sepx array, when the spec wants one, sits right after the Papx page -- not itself an FKP-paged structure, so it needs no page alignment of its own; each section's own Sepx follows the previous one directly.
+  const sectionGrpprls: readonly (readonly number[])[] | undefined =
+    spec.sections ??
+    (spec.sectionGrpprl === undefined ? undefined : [spec.sectionGrpprl]);
+  const sepxList = sectionGrpprls?.map(buildSepxBytes);
+  const fcSepxStart = (papxPage + 1) * FKP_PAGE_SIZE;
+  const sepxOffsets: number[] = [];
+  let sepxCursor = fcSepxStart;
+  if (sepxList !== undefined) {
+    for (const bytes of sepxList) {
+      sepxOffsets.push(sepxCursor);
+      sepxCursor += bytes.length;
+    }
+  }
+  const wordDocument = new Uint8Array(sepxCursor);
   const wordView = new DataView(wordDocument.buffer);
   for (let index = 0; index < text.length; index += 1) {
     const code = text.charCodeAt(index);
@@ -162,11 +172,15 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
     ),
     papxPage * FKP_PAGE_SIZE,
   );
-  if (sepx !== undefined) {
-    wordDocument.set(sepx, fcSepx);
+  if (sepxList !== undefined) {
+    sepxList.forEach((bytes, index) => {
+      const offset = sepxOffsets[index];
+      if (offset === undefined) throw new Error("Sepx offset missing");
+      wordDocument.set(bytes, offset);
+    });
   }
 
-  // 3. The Table stream: the Clx, the two bin tables, the style sheet, and (when the spec wants a section) the PlcfSed, each at an offset the FIB then names.
+  // 3. The Table stream: the Clx, the two bin tables, the style sheet, and (when the spec wants sections) the PlcfSed, each at an offset the FIB then names.
   const clx = buildClx(text.length, spec.pieces ?? 1, compressed, characterFc);
   const plcBteChpx = buildBinTable(
     [TEXT_FC, characterFc(text.length)],
@@ -177,8 +191,17 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
     [papxPage],
   );
   const stsh = buildStsh(spec.styles ?? []);
+  // A section's own start CP is derived from the paragraph stream itself, not stated separately: every SECTION_MARK-terminated paragraph the spec places closes one section and opens the next, mirroring how a real .doc's own end-of-section character marks the boundary PlcfSed.aCp then restates as a CP.
+  const sectionStartCps = [0];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text.charCodeAt(index) === SECTION_MARK) {
+      sectionStartCps.push(index + 1);
+    }
+  }
   const plcfSed =
-    sepx === undefined ? undefined : buildPlcfSedBytes(text.length, fcSepx);
+    sepxList === undefined
+      ? undefined
+      : buildPlcfSedBytes(sectionStartCps, text.length, sepxOffsets);
 
   const tableParts = [
     clx,
@@ -238,16 +261,31 @@ function buildSepxBytes(grpprl: readonly number[]): Uint8Array {
   ]);
 }
 
-// A one-section PlcfSed: two CPs (0 and ccpText) bracketing a single 12-byte Sed ([MS-DOC] 2.9.269) whose fcSepx names where buildSepxBytes' own bytes were placed in the WordDocument stream.
-function buildPlcfSedBytes(ccpText: number, fcSepx: number): Uint8Array {
-  const bytes = new Uint8Array(4 + 4 + 12);
+// A PlcfSed for `startCps.length` sections: startCps (each section's own PlcfSed.aCp[i], per [MS-DOC] 2.8.26 "the beginning of a range of text ... that constitutes a section") plus a trailing ccpText -- the "last CP does not begin a new section" terminator -- bracketing one 12-byte Sed ([MS-DOC] 2.9.269) per section, each naming where buildSepxBytes' own bytes for that section were placed in the WordDocument stream.
+function buildPlcfSedBytes(
+  startCps: readonly number[],
+  ccpText: number,
+  fcSepxList: readonly number[],
+): Uint8Array {
+  if (startCps.length !== fcSepxList.length) {
+    throw new Error(
+      `buildPlcfSedBytes was given ${startCps.length} section start CPs but ${fcSepxList.length} Sepx offsets -- these must be the same length`,
+    );
+  }
+  const keys = [...startCps, ccpText];
+  const keyBytes = keys.length * 4;
+  const bytes = new Uint8Array(keyBytes + fcSepxList.length * 12);
   const view = new DataView(bytes.buffer);
-  view.setUint32(0, 0, true); // cp[0]
-  view.setUint32(4, ccpText, true); // cp[1]
-  view.setUint16(8, 0, true); // sed.fn -- ignored.
-  view.setUint32(10, fcSepx, true); // sed.fcSepx.
-  view.setUint16(14, 0, true); // sed.fnMpr -- ignored.
-  view.setUint32(16, 0xffffffff, true); // sed.fcMpr -- ignored.
+  keys.forEach((cp, index) => {
+    view.setUint32(index * 4, cp, true);
+  });
+  fcSepxList.forEach((fcSepx, index) => {
+    const base = keyBytes + index * 12;
+    view.setUint16(base, 0, true); // sed.fn -- ignored.
+    view.setUint32(base + 2, fcSepx, true); // sed.fcSepx.
+    view.setUint16(base + 6, 0, true); // sed.fnMpr -- ignored.
+    view.setUint32(base + 8, 0xffffffff, true); // sed.fcMpr -- ignored.
+  });
   return bytes;
 }
 

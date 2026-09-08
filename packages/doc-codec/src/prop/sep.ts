@@ -1,4 +1,5 @@
 import { readInt16LE, readUint16LE, readUint32LE, slice } from "../bytes";
+import { DocFormatError } from "../errors";
 import type { Fib } from "../fib/fib";
 import { parsePlc } from "../plc";
 import { SGC, readGrpprl, type Prl } from "./sprm";
@@ -74,14 +75,19 @@ export function applySectionSprms(
   return into;
 }
 
-/** Resolves the document's first section's own page size and margins from PlcfSed/Sepx -- absent entirely when the file carries no PlcfSed at all (lcbPlcfSed 0), which read.ts's own DEFAULT_PAGE_SIZE/DEFAULT_MARGINS then stand in for field by field, exactly as an individual unstated sprm already does. This reader only ever resolves the section covering the whole main document (see read.ts's own DocContent comment on why more than one section is out of scope), so it reads PlcfSed's first Sed regardless of how many the file actually carries. */
-export function readSectionProperties(
+/** One section's own resolved properties (page size, margins) alongside `startCp`, the character position PlcfSed.aCp[i] names as where its text begins in the main document -- [MS-DOC] 2.8.26: "Each CP specifies the beginning of a range of text in the main document that constitutes a section." read.ts's own splitIntoSections groups the main document's paragraph entries by these boundaries. */
+export interface DocSectionProperties extends SectionProperties {
+  readonly startCp: number;
+}
+
+/** Resolves every section PlcfSed/Sepx states, in document order -- a single zero-start entry with no properties when the file carries no PlcfSed at all (lcbPlcfSed 0) or an empty one, which read.ts's own DEFAULT_PAGE_SIZE/DEFAULT_MARGINS then stand in for field by field, exactly as an individual unstated sprm already does, matching what a single-section document with no PlcfSed at all would resolve to anyway. */
+export function readAllSectionProperties(
   wordDocument: Uint8Array,
   table: Uint8Array,
   fib: Pick<Fib, "fcPlcfSed" | "lcbPlcfSed">,
-): SectionProperties {
+): readonly DocSectionProperties[] {
   if (fib.lcbPlcfSed === 0) {
-    return {};
+    return [{ startCp: 0 }];
   }
   const plc = parsePlc(
     slice(table, fib.fcPlcfSed, fib.lcbPlcfSed, "PlcfSed in the Table stream"),
@@ -89,16 +95,26 @@ export function readSectionProperties(
     "PlcfSed",
   );
   if (plc.count === 0) {
-    return {};
+    return [{ startCp: 0 }];
   }
-  const sed = plc.element(0);
-  const fcSepx = readUint32LE(sed, SED_FC_SEPX_OFFSET);
-  const cb = readUint16LE(wordDocument, fcSepx);
-  const grpprl = slice(
-    wordDocument,
-    fcSepx + 2,
-    cb,
-    "Sepx grpprl in the WordDocument stream",
-  );
-  return applySectionSprms(readGrpprl(grpprl), {});
+  const sections: DocSectionProperties[] = [];
+  for (let index = 0; index < plc.count; index += 1) {
+    const startCp = plc.keys[index];
+    if (startCp === undefined) {
+      throw new DocFormatError(
+        `internal defect: PlcfSed key ${index} is absent from a PLC of ${plc.count} elements`,
+      );
+    }
+    const sed = plc.element(index);
+    const fcSepx = readUint32LE(sed, SED_FC_SEPX_OFFSET);
+    const cb = readUint16LE(wordDocument, fcSepx);
+    const grpprl = slice(
+      wordDocument,
+      fcSepx + 2,
+      cb,
+      "Sepx grpprl in the WordDocument stream",
+    );
+    sections.push({ startCp, ...applySectionSprms(readGrpprl(grpprl), {}) });
+  }
+  return sections;
 }
