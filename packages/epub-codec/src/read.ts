@@ -22,6 +22,8 @@ import { readNcxHrefs } from "./nav/ncx";
 import { navMatchesSpine } from "./nav/reconcile";
 import { parseOpf } from "./opf/parse";
 import { attrValue } from "./xml/query";
+import type { ResolvedAnchorTarget } from "./xhtml/context";
+import { isFootnoteReference } from "./xhtml/footnote";
 import {
   BLOCK_LEVEL_TAGS,
   readXhtmlBody,
@@ -56,16 +58,19 @@ interface ResolvedSpineItem {
 }
 
 interface CrossDocumentAnchorRegistry {
-  // This document's own ids that some OTHER document's href targets, mapped to the canonical (always cross-document-qualified) name the constructStart marker src/xhtml/read.ts's own readBlockElement wraps that id in must carry -- fed straight in as ReadXhtmlBodyOptions.extraBookmarkTargetIds.
-  readonly targetsByHref: ReadonlyMap<string, ReadonlyMap<string, string>>;
-  // The reference-side counterpart: resolves an href a document's own local (same-document) prescan could not, to the same canonical name targetsByHref would hand the target document -- fed in as ReadXhtmlBodyOptions.resolveCrossDocumentBookmarkHref.
+  // This document's own ids that some OTHER document's href targets, mapped to the ResolvedAnchorTarget (always cross-document-qualified) the constructStart marker src/xhtml/read.ts's own readBlockElement/readAside wraps that id in must carry -- fed straight in as ReadXhtmlBodyOptions.extraAnchorTargets.
+  readonly targetsByHref: ReadonlyMap<
+    string,
+    ReadonlyMap<string, ResolvedAnchorTarget>
+  >;
+  // The reference-side counterpart: resolves an href a document's own local (same-document) prescan could not, to the same ResolvedAnchorTarget targetsByHref would hand the target document -- fed in as ReadXhtmlBodyOptions.resolveCrossDocumentAnchorHref.
   readonly resolveHref: (
     sourceHref: string,
     href: string,
-  ) => string | undefined;
+  ) => ResolvedAnchorTarget | undefined;
 }
 
-// Every href in the whole spine is walked exactly once here, resolved against its own source document's directory (src/xhtml/link-target.ts's resolveHrefTarget), and kept only when it names a real, block-level element (BLOCK_LEVEL_TAGS) in a DIFFERENT spine document -- a same-document href is entirely readXhtmlBody's own local prescan's job (it has this document's own idElements already, with no cross-document lookup needed), so this registry only ever holds cross-document entries. Every entry that does land here therefore has at least one genuine cross-document referrer by construction, which is exactly the condition src/xhtml/context.ts's own bookmarkTargets comment states for when a name must be qualified -- so every name this function mints is qualified, unconditionally, with no separate "does this collide" check required.
+// Every href in the whole spine is walked exactly once here, resolved against its own source document's directory (src/xhtml/link-target.ts's resolveHrefTarget), and kept only when it names a real, block-level element (BLOCK_LEVEL_TAGS) in a DIFFERENT spine document -- a same-document href is entirely readXhtmlBody's own local prescan's job (it has this document's own idElements already, with no cross-document lookup needed), so this registry only ever holds cross-document entries. Every entry that does land here therefore has at least one genuine cross-document referrer by construction, which is exactly the condition src/xhtml/context.ts's own ResolvedAnchorTarget comment states for when a name must be qualified -- so every name this function mints is qualified, unconditionally, with no separate "does this collide" check required. footnote-vs-bookmark classification reuses src/xhtml/footnote.ts's own isFootnoteReference, the identical same-document logic readXhtmlBody's own local prescan already applies -- a cross-document footnote reference (ExaDev/documents.js#963's own "notes.xhtml" shape) is recognised exactly the same way, just resolved against a different document's own idElements.
 function buildCrossDocumentAnchorRegistry(
   items: readonly ResolvedSpineItem[],
 ): CrossDocumentAnchorRegistry {
@@ -73,7 +78,7 @@ function buildCrossDocumentAnchorRegistry(
     items.map((item) => [item.fullPath, scanXhtmlAnchors(item.xml)]),
   );
   const spineHrefs = new Set(items.map((item) => item.fullPath));
-  const targetsByHref = new Map<string, Map<string, string>>();
+  const targetsByHref = new Map<string, Map<string, ResolvedAnchorTarget>>();
 
   for (const item of items) {
     const scan = scans.get(item.fullPath);
@@ -103,8 +108,17 @@ function buildCrossDocumentAnchorRegistry(
         continue;
       }
       const perDoc =
-        targetsByHref.get(target.targetHref) ?? new Map<string, string>();
-      perDoc.set(target.fragment, `${target.targetHref}#${target.fragment}`);
+        targetsByHref.get(target.targetHref) ??
+        new Map<string, ResolvedAnchorTarget>();
+      // A footnote-shaped referrer always wins the same id (matching readXhtmlBody's own local prescan and appendAnchor's reference-side priority) -- two different referrers reading the identical target two different ways must not let iteration order decide which classification survives.
+      if (perDoc.get(target.fragment)?.anchorType !== "footnote") {
+        perDoc.set(target.fragment, {
+          anchorType: isFootnoteReference(anchor, targetElement)
+            ? "footnote"
+            : "bookmark",
+          name: `${target.targetHref}#${target.fragment}`,
+        });
+      }
       targetsByHref.set(target.targetHref, perDoc);
     }
   }
@@ -179,7 +193,7 @@ function readEpubInternal(
     resolvedItems.push({ fullPath, xml: decodeText(xhtmlBytes) });
   }
 
-  // The whole-spine cross-document internal-link registry (ExaDev/documents.js#963): which id in which document is targeted by a href living in a DIFFERENT document, and under what canonical name -- see buildCrossDocumentAnchorRegistry below and src/xhtml/context.ts's own bookmarkTargets comment for the naming rule. A same-document href is entirely readXhtmlBody's own local prescan's job and never reaches this registry at all.
+  // The whole-spine cross-document anchor registry (ExaDev/documents.js#963): which id in which document is targeted by a href living in a DIFFERENT document, whether that target is a footnote body or an ordinary internal link target, and under what canonical name -- see buildCrossDocumentAnchorRegistry below and src/xhtml/context.ts's own ResolvedAnchorTarget comment for the naming rule. A same-document href is entirely readXhtmlBody's own local prescan's job and never reaches this registry at all.
   const anchorRegistry = buildCrossDocumentAnchorRegistry(resolvedItems);
 
   const sections: ContentSection[] = [];
@@ -190,8 +204,8 @@ function readEpubInternal(
       sink,
       sourceHref: fullPath,
       contentWidthPt: CONTENT_WIDTH_PT,
-      extraBookmarkTargetIds: anchorRegistry.targetsByHref.get(fullPath),
-      resolveCrossDocumentBookmarkHref: (href) =>
+      extraAnchorTargets: anchorRegistry.targetsByHref.get(fullPath),
+      resolveCrossDocumentAnchorHref: (href) =>
         anchorRegistry.resolveHref(fullPath, href),
     });
     sections.push({

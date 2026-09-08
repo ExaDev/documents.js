@@ -21,11 +21,15 @@ import { isTextLikeNode, type XmlElement, type XmlNode } from "../xml/node";
 import { attrValue, findChildElement, rootElement } from "../xml/query";
 import { decodeEntities, decodeTextLikeNode } from "../xml/entities";
 import { parseXml } from "../xml/parse";
-import type { InlineStyle, XhtmlReadContext } from "./context";
+import type {
+  InlineStyle,
+  ResolvedAnchorTarget,
+  XhtmlReadContext,
+} from "./context";
 import { isInertElement, reportInertElementSkip } from "./context";
 import {
   isFootnoteAside,
-  isFootnoteReferenceAnchor,
+  isFootnoteReference,
   sameDocumentFragment,
 } from "./footnote";
 import { buildInlineRuns, rebaseConstructs } from "./inline";
@@ -155,7 +159,7 @@ function buildIdElementMap(nodes: readonly XmlNode[]): Map<string, XmlElement> {
   return map;
 }
 
-// A depth-first descendant search for every element with the given tag, mirroring src/xml/query.ts's own generic elementsWithTag -- but scoped to this module's own inert-content policy above, since elementsWithTag is shared by callers elsewhere in this package (src/nav) with no reason to assume the same policy. Used only by readXhtmlBody's own footnote-anchor prescan: an <a> nested inside an inert element (<template>, <noscript>, ...) is never real, readable document content (it is skipped entirely wherever buildInlineRuns would otherwise reach it), so it must not be allowed to seed footnoteTargetIds and cause some unrelated, genuinely live body element sharing its target id to be wrapped as a footnote body it was never really referenced by.
+// A depth-first descendant search for every element with the given tag, mirroring src/xml/query.ts's own generic elementsWithTag -- but scoped to this module's own inert-content policy above, since elementsWithTag is shared by callers elsewhere in this package (src/nav) with no reason to assume the same policy. Used only by readXhtmlBody's own anchor-target prescan: an <a> nested inside an inert element (<template>, <noscript>, ...) is never real, readable document content (it is skipped entirely wherever buildInlineRuns would otherwise reach it), so it must not be allowed to seed anchorTargets and cause some unrelated, genuinely live body element sharing its target id to be wrapped as a footnote/bookmark target it was never really referenced by.
 function elementsWithTagSkippingInert(
   nodes: readonly XmlNode[],
   tag: string,
@@ -185,12 +189,12 @@ export interface ReadXhtmlBodyOptions {
   }) => void;
   readonly sourceHref: string;
   readonly contentWidthPt: number;
-  // Ids in THIS document a caller reading the whole spine already discovered are targeted by ANOTHER document's own href, mapped to the qualified name (src/xhtml/context.ts's own bookmarkTargets comment) that reference already committed to -- merged with this function's own local (same-document) prescan of this document's own <a> elements, which defers to an entry already present here rather than minting its own bare-fragment name for the same id. Absent when a caller reads exactly one document in isolation (every direct call site in this package's own test suite), in which case only same-document bookmark targets are ever recognised.
-  readonly extraBookmarkTargetIds?: ReadonlyMap<string, string>;
+  // Ids in THIS document a caller reading the whole spine already discovered are targeted by ANOTHER document's own href (a footnote reference or an ordinary internal link, src/xhtml/context.ts's own ResolvedAnchorTarget), keyed by fragment -- merged with this function's own local (same-document) prescan of this document's own <a> elements, which defers to an entry already present here rather than minting its own bare-fragment reading of the same id. Absent when a caller reads exactly one document in isolation (every direct call site in this package's own test suite), in which case only same-document anchor targets are ever recognised.
+  readonly extraAnchorTargets?: ReadonlyMap<string, ResolvedAnchorTarget>;
   // Resolves a REFERENCE-side href this document's own local (same-document) resolution could not -- because the href's own path portion names a different document -- against the caller's whole-spine registry. Absent when a caller reads exactly one document in isolation, in which case a cross-document href is left unresolved: the existing degrade this package already had before it recognised any internal link target at all, a plain ContentRun.hyperlink carrying the href verbatim.
-  readonly resolveCrossDocumentBookmarkHref?: (
+  readonly resolveCrossDocumentAnchorHref?: (
     href: string,
-  ) => string | undefined;
+  ) => ResolvedAnchorTarget | undefined;
 }
 
 // A whole-spine pre-pass helper: parses one XHTML content document's <body> just far enough to expose its own id-bearing elements and its own <a href> elements, without walking the rest of the body into ContentBlock[] the way readXhtmlBody itself does. src/read.ts's own cross-document anchor registry (ExaDev/documents.js#963) calls this once per spine document before any document's own full body read, since a target's own eligibility (BLOCK_LEVEL_TAGS membership) has to be known before the referencing document's own read can decide whether to build an internal-link construct or degrade to a plain hyperlink.
@@ -262,42 +266,39 @@ export function readXhtmlBody(
     return { blocks: [], source: undefined };
   }
   const idElements = buildIdElementMap(body.children);
-  const footnoteTargetIds = new Set<string>();
-  const bookmarkTargets = new Map<string, string>(
-    options.extraBookmarkTargetIds,
+  const anchorTargets = new Map<string, ResolvedAnchorTarget>(
+    options.extraAnchorTargets,
   );
   for (const anchor of elementsWithTagSkippingInert(body.children, "a")) {
-    const footnoteName = isFootnoteReferenceAnchor(anchor, idElements);
-    if (footnoteName !== undefined) {
-      footnoteTargetIds.add(footnoteName);
-      continue;
-    }
-    // A same-document href that resolves to a real, block-level element and that no footnote reference already claims: document-schema.js's own internal `link` target (see src/xhtml/inline.ts's appendAnchor). Only a BLOCK_LEVEL_TAGS member is eligible -- an id living on an inline element (a <span id> mid-sentence) never reaches src/xhtml/read.ts's own readBlockElement, which is the one place a target actually gets wrapped in its own bookmark anchor marker, so recognising it here would mint a reference to a name nothing ever anchors. A fragment already present in bookmarkTargets (seeded from options.extraBookmarkTargetIds) keeps its own cross-document-qualified name rather than being overwritten with the bare fragment here.
+    // A same-document href that resolves to a real, block-level element: either a footnote/endnote reference (src/xhtml/footnote.ts's isFootnoteReference) or an ordinary internal link target (document-schema.js's own `link` construct -- see src/xhtml/inline.ts's appendAnchor). Only a BLOCK_LEVEL_TAGS member is eligible -- an id living on an inline element (a <span id> mid-sentence) never reaches src/xhtml/read.ts's own readBlockElement, which is the one place a target actually gets wrapped in its own anchor marker, so recognising it here would mint a reference to a name nothing ever anchors. A fragment already present in anchorTargets (seeded from options.extraAnchorTargets) keeps whatever the whole-spine pass already decided rather than being overwritten with a bare-fragment reading here.
     const fragment = sameDocumentFragment(attrValue(anchor, "href"));
     const target =
       fragment === undefined ? undefined : idElements.get(fragment);
     if (
-      fragment !== undefined &&
-      target !== undefined &&
-      BLOCK_LEVEL_TAGS.has(target.tag) &&
-      !bookmarkTargets.has(fragment)
+      fragment === undefined ||
+      target === undefined ||
+      !BLOCK_LEVEL_TAGS.has(target.tag) ||
+      anchorTargets.has(fragment)
     ) {
-      bookmarkTargets.set(fragment, fragment);
+      continue;
     }
+    anchorTargets.set(fragment, {
+      anchorType: isFootnoteReference(anchor, target) ? "footnote" : "bookmark",
+      name: fragment,
+    });
   }
   const context: XhtmlReadContext = {
     resolveImage: options.resolveImage,
     sink: options.sink,
     sourceHref: options.sourceHref,
     idElements,
-    footnoteTargetIds,
-    bookmarkTargets,
-    resolveBookmarkHref: (href) => {
+    anchorTargets,
+    resolveAnchorHref: (href) => {
       const fragment = sameDocumentFragment(href);
       if (fragment !== undefined) {
-        return bookmarkTargets.get(fragment);
+        return anchorTargets.get(fragment);
       }
-      return options.resolveCrossDocumentBookmarkHref?.(href);
+      return options.resolveCrossDocumentAnchorHref?.(href);
     },
     quoteDepth: 0,
   };
@@ -390,7 +391,7 @@ function headingLevelOf(tag: string): number | undefined {
     : clampHeadingLevel(Number(match[1]));
 }
 
-// Wraps readBlockElementInner's own result in a footnote anchor construct pair when this element's own id is a recognised EPUB 2 linked-anchor footnote/endnote body target (src/xhtml/footnote.ts's isFootnoteReferenceAnchor, run over every <a> once per document by readXhtmlBody) -- the target-side half of that idiom, symmetric with an EPUB 3 <aside epub:type="footnote"> (readAside below), which instead recognises itself directly rather than needing this reverse lookup. An element already handled as such an aside is excluded here to avoid double-wrapping.
+// Wraps readBlockElementInner's own result in an anchor construct pair (footnote or bookmark) when this element's own id is a recognised anchor target -- src/xhtml/read.ts's own whole-document (and, via ReadXhtmlBodyOptions.extraAnchorTargets, whole-spine, ExaDev/documents.js#963) anchor-target registry, run over every <a> once by readXhtmlBody -- the target-side half of the EPUB 2 linked-anchor idiom and of an ordinary internal link, symmetric with an EPUB 3 <aside epub:type="footnote"> (readAside below), which instead recognises itself directly rather than needing this reverse lookup. An element already handled as such an aside is excluded here to avoid double-wrapping.
 function readBlockElement(
   element: XmlElement,
   state: BuildState,
@@ -400,33 +401,22 @@ function readBlockElement(
   if (id === undefined) {
     return blocks;
   }
-  // A footnote-shaped target always wins the same id (matching appendAnchor's own reference-side priority in src/xhtml/inline.ts) -- an id recognised as both is one <a> reading it as a footnote reference and a different one reading it as an ordinary internal link, and the footnote reading is the more specific one.
-  if (state.context.footnoteTargetIds.has(id) && !isFootnoteAside(element)) {
-    return [
-      {
-        kind: "constructStart",
-        descriptor: { kind: "anchor", anchorType: "footnote", name: id },
-      },
-      ...blocks,
-      { kind: "constructEnd" },
-    ];
+  const target = state.context.anchorTargets.get(id);
+  if (target === undefined || isFootnoteAside(element)) {
+    return blocks;
   }
-  const bookmarkName = state.context.bookmarkTargets.get(id);
-  if (bookmarkName !== undefined) {
-    return [
-      {
-        kind: "constructStart",
-        descriptor: {
-          kind: "anchor",
-          anchorType: "bookmark",
-          name: bookmarkName,
-        },
+  return [
+    {
+      kind: "constructStart",
+      descriptor: {
+        kind: "anchor",
+        anchorType: target.anchorType,
+        name: target.name,
       },
-      ...blocks,
-      { kind: "constructEnd" },
-    ];
-  }
-  return blocks;
+    },
+    ...blocks,
+    { kind: "constructEnd" },
+  ];
 }
 
 function readBlockElementInner(
@@ -517,6 +507,19 @@ function readPreFlatRuns(
   return text.length > 0 ? [{ text, fontFamily: MONOSPACE_FONT_FAMILY }] : [];
 }
 
+// The <pre> twin of appendAnchor's own footnote branch (src/xhtml/inline.ts): resolves an <a> (same-document or cross-document, via context.resolveAnchorHref -- ExaDev/documents.js#963) to its footnote-reference name, or undefined for anything else (an unresolved href, or one that resolves to an ordinary bookmark target). Used by both containsFootnoteReference's own prescan and readPreRuns' own per-node dispatch below, so the two never drift on what counts as a footnote reference inside a <pre>.
+function preFootnoteReferenceName(
+  anchor: XmlElement,
+  context: XhtmlReadContext,
+): string | undefined {
+  const href = attrValue(anchor, "href");
+  if (href === undefined) {
+    return undefined;
+  }
+  const target = context.resolveAnchorHref(href);
+  return target?.anchorType === "footnote" ? target.name : undefined;
+}
+
 // Whether a <pre>'s own subtree carries a recognised footnote-reference anchor anywhere, at any depth -- mirrors containsHeading's own inert-skipping descendant walk above. This is the cheap pre-check readPre uses to decide whether it can take readPreText's own flat-string shortcut (nothing structural to lose) or must pay for readPreRuns' own run-splitting recursion (needed only to bracket a footnote reference's own text as a distinct run range a RunConstructExtent can point at).
 function containsFootnoteReference(
   nodes: readonly XmlNode[],
@@ -528,7 +531,7 @@ function containsFootnoteReference(
     }
     if (
       node.tag === "a" &&
-      isFootnoteReferenceAnchor(node, context.idElements) !== undefined
+      preFootnoteReferenceName(node, context) !== undefined
     ) {
       return true;
     }
@@ -575,9 +578,7 @@ function readPreRuns(
       continue;
     }
     const footnoteName =
-      node.tag === "a"
-        ? isFootnoteReferenceAnchor(node, context.idElements)
-        : undefined;
+      node.tag === "a" ? preFootnoteReferenceName(node, context) : undefined;
     if (
       footnoteName === undefined &&
       !containsFootnoteReference([node], context)
@@ -1096,8 +1097,8 @@ function readAside(element: XmlElement, state: BuildState): ContentBlock[] {
   if (!isFootnoteAside(element)) {
     return readContainerChildren(element.children, state);
   }
-  const name = attrValue(element, "id");
-  if (name === undefined) {
+  const id = attrValue(element, "id");
+  if (id === undefined) {
     state.context.sink({
       code: EpubDiagnosticCodes.FOOTNOTE_TARGET_UNRESOLVED,
       severity: "warning",
@@ -1107,6 +1108,8 @@ function readAside(element: XmlElement, state: BuildState): ContentBlock[] {
     });
     return readContainerChildren(element.children, state);
   }
+  // This <aside> recognises itself as a footnote body directly, via its own epub:type, regardless of whether anything actually references it -- but the NAME it carries still has to agree with whatever the reference side committed to (state.context.anchorTargets, ExaDev/documents.js#963's cross-document-qualified name when a referrer lives in a different spine document), or a cross-document reference and this body would carry two different names for the same construct. An unreferenced footnote <aside> (anchorTargets carries no entry for its own id) falls back to the bare id, exactly as before this package recognised cross-document references at all.
+  const name = state.context.anchorTargets.get(id)?.name ?? id;
   return [
     {
       kind: "constructStart",
