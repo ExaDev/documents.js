@@ -1,3 +1,13 @@
+## [3.1.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.0.9...wpd-codec%403.1.0) (2026-09-08)
+
+### Features
+
+* **wpd-codec:** map WordPerfect character sets 1-14 to Unicode ([8d79f00](https://github.com/ExaDev/documents.js/commit/8d79f00a95f761d058c847f133547077da186d80))
+
+### Documentation
+
+* **wpd-codec:** document the closed character-set fidelity gap ([549c567](https://github.com/ExaDev/documents.js/commit/549c567781db0efa3023d7b41ee43a93f4759525))
+
 ## [3.0.9](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.0.8...wpd-codec%403.0.9) (2026-09-08)
 
 
