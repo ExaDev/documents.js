@@ -1,4 +1,4 @@
-// LayoutMetadata -> a leading YAML front matter block, the structural inverse of src/lower/front-matter.ts. Emits exactly the same five keys that side reads (title/author/subject/keywords/date<-createdIso/creator) and nothing else -- `producer` and `modifiedIso` have no front matter key of their own in this package's own mapping and are never emitted, matching the read side's own scope exactly.
+// LayoutMetadata -> a leading YAML front matter block, the structural inverse of src/lower/front-matter.ts. Emits every key that side reads (STRING_FIELD_SETTERS, plus `keywords` and `direction`) and nothing else -- `producer` has no front matter key of its own in this package's own mapping and is never emitted, matching the read side's own scope exactly.
 
 import type { LayoutMetadata } from "document-schema.js";
 
@@ -16,22 +16,38 @@ function emitScalar(value: string): string {
   return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
+// Every string-valued LayoutMetadata field this module emits, paired with the front-matter key src/lower/front-matter.ts's own STRING_FIELD_SETTERS reads it back under -- kept as an explicit list (not derived from that module's own table) so each entry can name its own LayoutMetadata accessor with a real type instead of a string-keyed lookup.
+const STRING_FIELD_ENTRIES: readonly [
+  string,
+  (metadata: LayoutMetadata) => string | undefined,
+][] = [
+  ["title", (metadata) => metadata.title],
+  ["author", (metadata) => metadata.author],
+  ["subject", (metadata) => metadata.subject],
+  ["creator", (metadata) => metadata.creator],
+  ["date", (metadata) => metadata.createdIso],
+  ["modified", (metadata) => metadata.modifiedIso],
+  ["lastPrinted", (metadata) => metadata.lastPrintedIso],
+  ["language", (metadata) => metadata.language],
+  ["publisher", (metadata) => metadata.publisher],
+  ["contributor", (metadata) => metadata.contributor],
+  ["rights", (metadata) => metadata.rights],
+  ["identifier", (metadata) => metadata.identifier],
+  ["comments", (metadata) => metadata.comments],
+  ["company", (metadata) => metadata.company],
+  ["manager", (metadata) => metadata.manager],
+];
+
 export function emitFrontMatter(metadata: LayoutMetadata): string | undefined {
   const lines: string[] = [];
-  if (metadata.title !== undefined) {
-    lines.push(`title: ${emitScalar(metadata.title)}`);
+  for (const [key, accessor] of STRING_FIELD_ENTRIES) {
+    const value = accessor(metadata);
+    if (value !== undefined) {
+      lines.push(`${key}: ${emitScalar(value)}`);
+    }
   }
-  if (metadata.author !== undefined) {
-    lines.push(`author: ${emitScalar(metadata.author)}`);
-  }
-  if (metadata.subject !== undefined) {
-    lines.push(`subject: ${emitScalar(metadata.subject)}`);
-  }
-  if (metadata.creator !== undefined) {
-    lines.push(`creator: ${emitScalar(metadata.creator)}`);
-  }
-  if (metadata.createdIso !== undefined) {
-    lines.push(`date: ${emitScalar(metadata.createdIso)}`);
+  if (metadata.direction !== undefined) {
+    lines.push(`direction: ${metadata.direction}`);
   }
   if (metadata.keywords !== undefined && metadata.keywords.length > 0) {
     lines.push(
