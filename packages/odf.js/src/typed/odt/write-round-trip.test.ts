@@ -689,6 +689,370 @@ describe("preformatted (#1020)", () => {
   });
 });
 
+// ExaDev/documents.js#969: the writer's own construct-writing scope, closed for the odt writer -- a field and a bookmark anchor entirely within one paragraph (run-scoped, ContentParagraph.constructs), and a division/index wrapper bracketing whole blocks (block-scoped, a constructStart/constructEnd pair). Every case here round-trips through the identical law the rest of this suite states: normaliseOdtContent(read(write(document))) equals normaliseOdtContent(document).
+describe("fidelity constructs written (#969)", () => {
+  it("round-trips a field from its own cached instruction and result", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Author: " }, { text: "Joe" }, { text: "." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "field",
+                instruction: '<text:author-name text:fixed="false"/>',
+                cachedResult: "Joe",
+              },
+              startRun: 1,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+  });
+
+  it("round-trips a field carrying no cached text as a point extent", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "paragraph",
+          runs: [{ text: "Page " }, { text: " of many" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "field",
+                instruction: "<text:page-number/>",
+              },
+              startRun: 1,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+  });
+
+  it("round-trips a field whose own cached text mixes formatting", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "before " },
+            { text: "bold", bold: true },
+            { text: "plain" },
+            { text: " after" },
+          ],
+          constructs: [
+            {
+              descriptor: {
+                kind: "field",
+                instruction: "<text:expression/>",
+                cachedResult: "boldplain",
+              },
+              startRun: 1,
+              endRun: 3,
+            },
+          ],
+        },
+      ]),
+    );
+  });
+
+  it("round-trips a point bookmark", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "paragraph",
+          runs: [{ text: "before" }, { text: "after" }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "anchor",
+                anchorType: "bookmark",
+                name: "b1",
+              },
+              startRun: 1,
+              endRun: 1,
+            },
+          ],
+        },
+      ]),
+    );
+  });
+
+  it("round-trips a ranged bookmark spanning part of one paragraph", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "see " },
+            { text: "target", bold: true },
+            { text: " here" },
+          ],
+          constructs: [
+            {
+              descriptor: {
+                kind: "anchor",
+                anchorType: "bookmark",
+                name: "target1",
+              },
+              startRun: 1,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+  });
+
+  it("round-trips two overlapping ranged bookmarks in one paragraph", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "paragraph",
+          runs: [{ text: "one" }, { text: "two" }, { text: "three" }],
+          constructs: [
+            {
+              descriptor: { kind: "anchor", anchorType: "bookmark", name: "a" },
+              startRun: 0,
+              endRun: 2,
+            },
+            {
+              descriptor: { kind: "anchor", anchorType: "bookmark", name: "b" },
+              startRun: 1,
+              endRun: 3,
+            },
+          ],
+        },
+      ]),
+    );
+  });
+
+  it("round-trips a field and a ranged bookmark together, keeping a bookmark boundary that falls inside the field's own range clamped just after it", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "paragraph",
+          runs: [{ text: "value: " }, { text: "42" }, { text: "." }],
+          constructs: [
+            {
+              descriptor: {
+                kind: "field",
+                instruction: "<text:expression/>",
+                cachedResult: "42",
+              },
+              startRun: 1,
+              endRun: 2,
+            },
+            {
+              descriptor: {
+                kind: "anchor",
+                anchorType: "bookmark",
+                name: "value",
+              },
+              startRun: 0,
+              endRun: 2,
+            },
+          ],
+        },
+      ]),
+    );
+  });
+
+  it("round-trips a division wrapping a single paragraph", () => {
+    expectRoundTrip(
+      documentOf([
+        { kind: "constructStart", descriptor: { kind: "division" } },
+        { kind: "paragraph", runs: [{ text: "inside the division" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("round-trips a division's own name, protected flag, and column count", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "division",
+            name: "Sidebar",
+            protected: true,
+            columnCount: 3,
+          },
+        },
+        { kind: "paragraph", runs: [{ text: "column text" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("round-trips a division's external-chapter link", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "division",
+            linked: { href: "chapters/one.odt", sectionName: "Chapter1" },
+          },
+        },
+        { kind: "paragraph", runs: [{ text: "linked content" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("round-trips a division wrapping a table and multiple paragraphs", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "Body" },
+        },
+        { kind: "paragraph", runs: [{ text: "first" }] },
+        {
+          kind: "table",
+          columnWidthsPt: [100],
+          rows: [
+            {
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "cell" }] }] },
+              ],
+            },
+          ],
+        },
+        { kind: "paragraph", runs: [{ text: "last" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("round-trips two sibling divisions in the same section", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "First" },
+        },
+        { kind: "paragraph", runs: [{ text: "one" }] },
+        { kind: "constructEnd" },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "Second" },
+        },
+        { kind: "paragraph", runs: [{ text: "two" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("round-trips a division nested inside another division", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "Outer" },
+        },
+        { kind: "paragraph", runs: [{ text: "outer text" }] },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "Inner" },
+        },
+        { kind: "paragraph", runs: [{ text: "inner text" }] },
+        { kind: "constructEnd" },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("round-trips an index wrapper recovering its own element identity from residue", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "contentControl",
+            controlType: "index",
+            tag: "Table of Contents1",
+            source: {
+              format: "odt",
+              xml: "<text:table-of-content-source/>",
+            },
+          },
+        },
+        { kind: "paragraph", runs: [{ text: "Chapter One .......... 1" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("round-trips a bibliography index wrapper, a different one of the seven wrapper tags", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "contentControl",
+            controlType: "index",
+            source: {
+              format: "odt",
+              xml: "<text:bibliography-source/>",
+            },
+          },
+        },
+        { kind: "paragraph", runs: [{ text: "Author, Title, Year" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("round-trips a division nested inside an index wrapper's own cached body", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "constructStart",
+          descriptor: {
+            kind: "contentControl",
+            controlType: "index",
+            source: {
+              format: "odt",
+              xml: "<text:table-of-content-source/>",
+            },
+          },
+        },
+        { kind: "paragraph", runs: [{ text: "heading" }] },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "division", name: "Nested" },
+        },
+        { kind: "paragraph", runs: [{ text: "nested entry" }] },
+        { kind: "constructEnd" },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("refuses an index wrapper descriptor with no recoverable *-source residue", () => {
+    expect(() =>
+      writeOdtContent(
+        documentOf([
+          {
+            kind: "constructStart",
+            descriptor: { kind: "contentControl", controlType: "index" },
+          },
+          { kind: "paragraph", runs: [{ text: "x" }] },
+          { kind: "constructEnd" },
+        ]),
+      ),
+    ).toThrow(/no fact naming which of the seven ODF index wrappers/);
+  });
+});
+
 function roundTrippedBlocks(document: WordprocessingDocument): ContentBlock[] {
   return document.sections.flatMap((section) => section.blocks);
 }
