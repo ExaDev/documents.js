@@ -15,6 +15,7 @@ import {
 } from "../../xml/query";
 import { readManifest } from "../../manifest";
 import { readMimetype } from "../../mimetype";
+import { decodeXmlText } from "../../xml/entities";
 import { writeOdsContent } from "./write";
 
 // The write side's XML-shape suite: what writeOdsContent actually emits, construct by construct -- the sibling suite (write-round-trip.test.ts) proves the output reads back as the document it came from; this one proves the output is the ODF a real consumer expects, which a round trip through this package's own reader cannot (a writer and reader that agreed on the same wrong spelling would round-trip perfectly and open nowhere). This mirrors typed/odt/write.test.ts's own stated split of responsibility.
@@ -506,5 +507,159 @@ describe("writeOdsContent: cell comments (ExaDev/documents.js#949)", () => {
     expect(paragraphs[1]).toMatchObject({
       children: [{ type: "text", value: "Second line" }],
     });
+  });
+});
+
+describe("writeOdsContent: data validation and conditional formatting", () => {
+  it("declares the calcext namespace the conditional-format elements need, on the part root", () => {
+    const pkg = writeOdsContent(documentOf([sheetOf([])]));
+    const root = partRoot(pkg, "content.xml");
+    expect(attrValue(root, "xmlns:calcext")).toBe(
+      "urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0",
+    );
+  });
+
+  it("writes one document-wide table:content-validation before the tables, with a LibreOffice-shaped table:condition", () => {
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf([], {
+          dataValidations: [
+            {
+              ranges: [
+                { startRow: 0, startColumn: 0, endRow: 0, endColumn: 1 },
+              ],
+              type: "whole",
+              operator: "greaterThanOrEqual",
+              formula1: "1",
+              allowBlank: false,
+              showErrorMessage: true,
+              errorStyle: "warning",
+              error: "Not whole",
+            },
+          ],
+        }),
+      ]),
+    );
+    const spreadsheet = findChildElement(
+      findChildElement(partRoot(pkg, "content.xml").children, "office:body")!
+        .children,
+      "office:spreadsheet",
+    )!;
+    const definitions = childrenWithTag(
+      spreadsheet,
+      "table:content-validations",
+    )[0]!;
+    expect(definitions.children[0]!.type).toBe("element");
+    const validation = definitions.children[0] as XmlElement;
+    expect(attrValue(validation, "table:name")).toBe("val1");
+    // Decoded the way the read side decodes it: the in-memory attribute stores the escaped form, the serialiser writes it verbatim, decodeXmlText reverses it.
+    expect(decodeXmlText(attrValue(validation, "table:condition")!)).toBe(
+      "of:cell-content-is-whole-number() and cell-content()>=1",
+    );
+    expect(attrValue(validation, "table:allow-empty-cell")).toBe("false");
+    const errorMessage = childrenWithTag(validation, "table:error-message")[0]!;
+    expect(attrValue(errorMessage, "table:display")).toBe("true");
+    expect(attrValue(errorMessage, "table:message-type")).toBe("warning");
+    // The definitions container precedes the tables, matching where every real producer puts it.
+    expect(
+      spreadsheet.children.findIndex(
+        (child) => child.type === "element" && child.tag === "table:table",
+      ),
+    ).toBeGreaterThan(
+      spreadsheet.children.findIndex(
+        (child) =>
+          child.type === "element" && child.tag === "table:content-validations",
+      ),
+    );
+  });
+
+  it("stamps every in-range cell with table:content-validation-name, including content-less ones", () => {
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf(
+          [
+            {
+              row: 0,
+              column: 0,
+              value: { kind: "number", value: 5 },
+              displayText: "5",
+            },
+          ],
+          {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, startColumn: 0, endRow: 0, endColumn: 1 },
+                ],
+                type: "list",
+                formula1: '"a";"b"',
+              },
+            ],
+          },
+        ),
+      ]),
+    );
+    const row = childrenWithTag(firstTable(pkg), "table:table-row")[0]!;
+    const cells = childrenWithTag(row, "table:table-cell");
+    expect(cells).toHaveLength(2);
+    expect(attrValue(cells[0]!, "table:content-validation-name")).toBe("val1");
+    expect(attrValue(cells[1]!, "table:content-validation-name")).toBe("val1");
+    expect(attrValue(cells[1]!, "office:value-type")).toBeUndefined();
+  });
+
+  it("writes one calcext:conditional-format wrapper per distinct range list with calcext:condition, colour-scale, data-bar, icon-set, and date-is children", () => {
+    const ranges = [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }];
+    const pkg = writeOdsContent(
+      documentOf([
+        sheetOf([], {
+          conditionalFormats: [
+            {
+              type: "cellIs",
+              ranges,
+              operator: "between",
+              formula1: "1",
+              formula2: "10",
+            },
+            {
+              type: "timePeriod",
+              ranges,
+              timePeriod: "last7Days",
+            },
+            {
+              type: "dataBar",
+              ranges,
+              min: { type: "min" },
+              max: { type: "max" },
+              color: { r: 99 / 255, g: 190 / 255, b: 123 / 255 },
+              showValue: false,
+            },
+          ],
+        }),
+      ]),
+    );
+    const table = firstTable(pkg);
+    const wrapper = childrenWithTag(table, "calcext:conditional-formats")[0]!;
+    const formats = childrenWithTag(wrapper, "calcext:conditional-format");
+    expect(formats).toHaveLength(1);
+    expect(attrValue(formats[0]!, "calcext:target-range-address")).toBe(
+      "Sheet1.A1:Sheet1.A1",
+    );
+    const ruleChildren = formats[0]!.children.filter(
+      (child): child is XmlElement => child.type === "element",
+    );
+    const [condition, dateIs, dataBar] = ruleChildren;
+    expect(condition!.tag).toBe("calcext:condition");
+    expect(attrValue(condition!, "calcext:value")).toBe("between(1,10)");
+    expect(attrValue(condition!, "calcext:base-cell-address")).toBe(
+      "Sheet1.A1",
+    );
+    expect(dateIs!.tag).toBe("calcext:date-is");
+    expect(attrValue(dateIs!, "calcext:date")).toBe("last-7-days");
+    expect(dataBar!.tag).toBe("calcext:data-bar");
+    expect(attrValue(dataBar!, "calcext:positive-color")).toBe("#63be7b");
+    expect(attrValue(dataBar!, "calcext:show-value")).toBe("false");
+    expect(childrenWithTag(dataBar!, "calcext:formatting-entry")).toHaveLength(
+      2,
+    );
   });
 });

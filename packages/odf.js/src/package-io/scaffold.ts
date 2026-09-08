@@ -24,6 +24,8 @@ const ODF_DOCUMENT_PREFIXES: readonly OdfNamespacePrefix[] = [
   "meta",
   "number",
   "svg",
+  // calcext: an ods document's own conditional formatting (typed/ods/write.ts's calcext:conditional-formats) -- a vendor-extension prefix a real producer declares on every part, and this writer's output would be not-well-formed XML without it.
+  "calcext",
   // presentation: a slide's own presentation:notes element and its notes frame's presentation:class attribute (typed/odp/write.ts's writeSlideNotes).
   "presentation",
 ];

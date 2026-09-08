@@ -9,8 +9,13 @@ import type {
   ContentSheetCell,
   ContentSheetCellComment,
   ContentSheetColumn,
+  ContentSheetConditionalFormat,
+  ContentSheetConditionalFormatStyle,
+  ContentSheetConditionalFormatValue,
+  ContentSheetDataValidation,
   ContentSheetImage,
   ContentSheetPrintSettings,
+  ContentSheetRange,
   ContentSheetRow,
   DocumentTree,
 } from "document-schema.js";
@@ -49,10 +54,17 @@ import {
   formatBorderEdge,
 } from "../shared/border";
 import { DEFAULT_COLUMN_WIDTH_PT, DEFAULT_ROW_HEIGHT_PT } from "./read";
+import { synthesiseContentValidationCondition } from "./data-validation";
+import {
+  calextDateForTimePeriod,
+  calextTypeForCfvoType,
+  formatTargetRangeList,
+  synthesiseConditionValue,
+} from "./conditional-format";
 
 // ContentDocument (the 'spreadsheet' arm) -> a real .ods Package: the inverse of typed/ods/read.ts, and the second content WRITER in this package's typed layer (the first, typed/odt/write.ts, states the philosophy this module follows in full and is worth reading first). Every mapping below is stated as the exact inverse of the corresponding read in that module rather than as an independent idea of what an .ods should look like -- the correctness property this writer is held to is that its own package reads back as the document it was given (see normaliseOdsContent below for the one canonical form that equality is stated against, and write.test.ts / write-round-trip.test.ts for both halves).
 //
-// WHAT THIS WRITER DOES NOT WRITE, and why: dataValidations and conditionalFormats are refused BY NAME when present. readOdsContent reads a sheet's table:content-validation-name references against the document-wide table:content-validations definitions (ExaDev/documents.js#925) -- see readContentValidationDefinitions/resolveSheetDataValidations in ./data-validation.ts and readCellComment's own sibling readCellText/readCellComment reads above for the equivalent cell-level pattern -- and each calcext:conditional-format's own condition/colour-scale/data-bar/icon-set/date-is children (ExaDev/documents.js#1075) -- see readConditionalFormats in ./conditional-format.ts -- but this writer has no inverse for either field yet, so a document carrying dataValidations or conditionalFormats is semantic content this writer would otherwise have to drop silently or misrepresent. Refusing both by name rather than writing one direction of a half-built round trip matches the odt writer's own stated stance ("writing a document that silently lost semantic content is worse than not writing it at all"). embeddedObjects (including the 'chart' kind) are refused BY NAME for every sheet, matching the odt writer's own blanket refusal of every embedded-object kind -- odf.js's typed layer has no write-side embedded-sub-document machinery at all yet (no writer builds an "Object N/" package, wires its manifest entries, or emits a draw:object reference), and building that from scratch is a substantial undertaking of its own, out of scope for landing the first genuine .ods writer at the same scope the odt writer itself first landed at. The quarantined residue channel splits the same way it does for the odt writer: the package-level table readOdsContent collects (calculation-settings, vendor-extension elements, and every non-content package part such as settings.xml) IS restored, verbatim, by writeOds itself once writeOdsContent has built the rest of the package, since none of it is ever touched or interpreted by anything this writer does either way. A per-sheet `sheet.source` -- which readOdsContent does not populate today, so this is stated for whichever future reader change adds it, not a live gap -- would stay dropped on write, the same known, tracked, restorable-fidelity gap a paragraph's own residue is for the odt writer. A cell's own `numberFormatCode` is likewise not written as a `number:*` data-style/`style:data-style-name` reference: readOdsContent does not populate that field for any cell today (it has no data-style reading wired into its own walk at all, unlike readOdtContent's field-master reading), so there is no genuine inverse to write against or verify -- every cell value kind still writes back with the correct `office:value-type` regardless, which is the fact that actually round-trips. A cell's `comment` DOES now round-trip (ExaDev/documents.js#949) -- see writeCellAnnotation below and readCellComment in ./read.ts.
+// WHAT THIS WRITER DOES NOT WRITE, and why: embeddedObjects (including the 'chart' kind) are refused BY NAME for every sheet, matching the odt writer's own blanket refusal of every embedded-object kind -- odf.js's typed layer has no write-side embedded-sub-document machinery at all yet (no writer builds an "Object N/" package, wires its manifest entries, or emits a draw:object reference), and building that from scratch is a substantial undertaking of its own, out of scope for landing the first genuine .ods writer at the same scope the odt writer itself first landed at. dataValidations and conditionalFormats ARE now written (the exact inverses of readOdsContent's own data-validation.ts/conditional-format.ts readings, co-located with the parsers they invert), with two narrower refusals inside the conditional-format side: the schema's containsBlanks/notContainsBlanks members have no spelling in calcext:condition's own mini-language at all, and a rule carrying priority, stopIfTrue, stdDev, or reverse carries a precedence/standard-deviation/reversal fact ODF's vendor extension simply has no attribute for -- each is refused by name rather than written as a rule that would read back as something else. The quarantined residue channel splits the same way it does for the odt writer: the package-level table readOdsContent collects (calculation-settings, vendor-extension elements, and every non-content package part such as settings.xml) IS restored, verbatim, by writeOds itself once writeOdsContent has built the rest of the package, since none of it is ever touched or interpreted by anything this writer does either way. A per-sheet `sheet.source` -- which readOdsContent does not populate today, so this is stated for whichever future reader change adds it, not a live gap -- would stay dropped on write, the same known, tracked, restorable-fidelity gap a paragraph's own residue is for the odt writer. A per-rule `source` residue on a data-validation or conditional-format rule stays dropped the same way: the promoted fields write, the raw element they were quarantined from does not. A cell's own `numberFormatCode` is likewise not written as a `number:*` data-style/`style:data-style-name` reference: readOdsContent does not populate that field for any cell today (it has no data-style reading wired into its own walk at all, unlike readOdtContent's field-master reading), so there is no genuine inverse to write against or verify -- every cell value kind still writes back with the correct `office:value-type` regardless, which is the fact that actually round-trips. A cell's `comment` DOES now round-trip (ExaDev/documents.js#949) -- see writeCellAnnotation below and readCellComment in ./read.ts.
 //
 // THE ONE FORCED ASYMMETRY THIS WRITER CANNOT PAPER OVER: a 'time' cell's ISO 8601 HH:MM:SS wall-clock value (document-schema.js's own documented wire contract for ContentCellValueSchema's 'time' kind) has no direct ODF spelling -- office:time-value is an xsd:duration ("PT13H30M00S"), and a conformant producer must convert between the two. This writer performs that conversion on write (see formatOdfDuration), because writing the ISO clock string directly into office:time-value would be invalid ODF that no real spreadsheet application could open correctly. readOdsContent, however, does not perform the inverse conversion today (see that module's own readCellValue: `attrValue(cellElement, "office:time-value") ?? displayText`, carried through unconverted) -- a narrow, pre-existing, unrelated reader gap this writer's own correctness cannot depend on being fixed. normaliseOdsContent states the resulting canonical form precisely (the raw xsd:duration string, not the ISO clock string) rather than hand-waving it, and the gap is tracked as a follow-up rather than silently worked around by emitting non-conformant XML to make today's reader happy.
 
@@ -69,7 +81,7 @@ export interface OdsWriteOptions {
 
 function unsupported(what: string, where: string): Error {
   return new Error(
-    `writeOds: ${where} carries ${what}, which this writer does not write yet -- refusing rather than producing an .ods that silently lost it. See ExaDev/documents.js for the tracked follow-up covering embedded objects, data validation, and conditional formatting.`,
+    `writeOds: ${where} carries ${what}, which this writer does not write yet -- refusing rather than producing an .ods that silently lost it.`,
   );
 }
 
@@ -318,6 +330,330 @@ function sheetRowStyle(
   });
 }
 
+// --- data validation and conditional formatting: the write-side inverses of data-validation.ts/conditional-format.ts ----
+
+// The merge key for canonicalisation is the rule's WRITTEN content -- the emitted condition string plus everything else that reaches the definition element -- rather than its raw fields: two rules that write identical definitions (a list rule with operator "notEqual" and one with no operator at all both emit the same condition, the operator being unstated for a list) are one definition in the file and must canonicalise as one rule, exactly as a second normalise pass over the read-back would merge them. The same key interns definitions on the write side, so the two agree by construction.
+function canonicalValidationKey(rule: ContentSheetDataValidation): string {
+  return JSON.stringify([
+    synthesiseContentValidationCondition(rule) ?? null,
+    rule.allowBlank ?? true,
+    rule.showInputMessage === true,
+    rule.promptTitle,
+    rule.prompt,
+    rule.showErrorMessage === true,
+    rule.errorStyle,
+    rule.errorTitle,
+    rule.error,
+  ]);
+}
+
+// One table:content-validation definition per distinct written rule content in the whole document, interned by that key and named deterministically ("val1", "val2", ... in first-encounter order). The name is this writer's own mint -- ODF ties no meaning to it beyond the references cells carry, and readOdsContent joins purely through it.
+function internContentValidation(
+  rule: ContentSheetDataValidation,
+  state: OdsWriteState,
+): string {
+  const fingerprint = canonicalValidationKey(rule);
+  const existing = state.validationNames.get(fingerprint);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const name = `val${state.nextValidationName}`;
+  state.nextValidationName += 1;
+  state.validationNames.set(fingerprint, name);
+
+  const attributes: Record<string, string> = {
+    "table:name": name,
+  };
+  const condition = synthesiseContentValidationCondition(rule);
+  if (condition !== undefined) {
+    attributes["table:condition"] = encodeXmlText(condition);
+  }
+  // allowBlank's absent form already reads back as true (readContentValidation's own default), so only the explicit "false" needs stating.
+  if (rule.allowBlank === false) {
+    attributes["table:allow-empty-cell"] = "false";
+  }
+  const children: XmlElement[] = [];
+  const helpMessage = writeValidationMessage("table:help-message", rule);
+  if (helpMessage !== undefined) {
+    children.push(helpMessage);
+  }
+  const errorMessage = writeValidationMessage("table:error-message", rule);
+  if (errorMessage !== undefined) {
+    children.push(errorMessage);
+  }
+  state.contentValidations.children.push(
+    el("table:content-validation", attributes, children),
+  );
+  return name;
+}
+
+// table:help-message/table:error-message, the inverse of readContentValidation's own message reading: a title attribute, a display flag stated only when true (an absent table:display reads back as absent, never as false), and a text:p per '\n'-separated body line.
+function writeValidationMessage(
+  tag: "table:help-message" | "table:error-message",
+  rule: ContentSheetDataValidation,
+): XmlElement | undefined {
+  const isHelp = tag === "table:help-message";
+  const display = isHelp ? rule.showInputMessage : rule.showErrorMessage;
+  const title = isHelp ? rule.promptTitle : rule.errorTitle;
+  const body = isHelp ? rule.prompt : rule.error;
+  if (display === undefined && title === undefined && body === undefined) {
+    return undefined;
+  }
+  const attributes: Record<string, string> = {};
+  if (display === true) {
+    attributes["table:display"] = "true";
+  }
+  if (title !== undefined) {
+    attributes["table:title"] = encodeXmlText(title);
+  }
+  if (!isHelp && rule.errorStyle !== undefined) {
+    attributes["table:message-type"] = rule.errorStyle;
+  }
+  const children: XmlNode[] = [];
+  if (body !== undefined) {
+    for (const line of body.split("\n")) {
+      children.push(el("text:p", {}, [txt(line)]));
+    }
+  }
+  return el(tag, attributes, children);
+}
+
+// Every grid position a sheet's rules stamp, as coverageKey -> minted definition name. Positions covered by another cell's vertical span are excluded: ODF carries a validation reference only on a real table:table-cell, and a table:covered-table-cell (the only element a span-covered position can be) is invisible to readOdsContent's own reference walk -- a position a span hides is a position no producer can reference, not a gap this writer chose.
+function validationNameByPosition(
+  sheet: ContentSheet,
+  covered: ReadonlySet<string>,
+  state: OdsWriteState,
+): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const rule of sheet.dataValidations ?? []) {
+    const name = internContentValidation(rule, state);
+    for (const range of rule.ranges) {
+      for (let row = range.startRow; row <= range.endRow; row += 1) {
+        for (
+          let column = range.startColumn;
+          column <= range.endColumn;
+          column += 1
+        ) {
+          const key = coverageKey(row, column);
+          if (!covered.has(key)) {
+            names.set(key, name);
+          }
+        }
+      }
+    }
+  }
+  return names;
+}
+
+// A conditional-format rule's resulting style as one interned table-cell-family named style -- the same channel a regular cell's own decoration takes (sheetCellStyle above), so readConditionalFormatStyle's resolveStyleElementChain finds it through the identical path. Only the two properties the schema itself carries are stated; a style carrying nothing but quarantined source mints nothing at all and reads back as no style.
+function conditionalFormatStyleName(
+  style: ContentSheetConditionalFormatStyle | undefined,
+  registry: StyleRegistry,
+): string | undefined {
+  if (style === undefined) {
+    return undefined;
+  }
+  const propertyElements: XmlElement[] = [];
+  if (style.background !== undefined) {
+    propertyElements.push(
+      el("style:table-cell-properties", {
+        "fo:background-color": formatOdfColor(style.background),
+      }),
+    );
+  }
+  if (style.textColor !== undefined) {
+    propertyElements.push(
+      el("style:text-properties", {
+        "fo:color": formatOdfColor(style.textColor),
+      }),
+    );
+  }
+  if (propertyElements.length === 0) {
+    return undefined;
+  }
+  return registry.intern({
+    properties: {},
+    family: "table-cell",
+    propertyElements,
+  });
+}
+
+// calcext:color is stated only where the format itself carries one: a colour-scale entry's own colour. Data-bar and icon-set entries carry none (the data bar's colour lives on its parent's calcext:positive-color, and an icon-set entry has no colour concept at all), so `color` is optional and the attribute is simply absent without it.
+function writeCfvoEntry(
+  tag: string,
+  value: ContentSheetConditionalFormatValue,
+  color?: Color,
+): XmlElement {
+  const type = calextTypeForCfvoType(value.type);
+  if (type === undefined) {
+    // Guarded by unsupportedConditionalFormatReason before any entry is built; an unreachable fallback here would silently write a stand-in type the read side maps differently.
+    throw new Error(
+      `writeCfvoEntry: cfvo type '${value.type}' has no calcext spelling`,
+    );
+  }
+  const attributes: Record<string, string> = { "calcext:type": type };
+  if (color !== undefined) {
+    attributes["calcext:color"] = formatOdfColor(color);
+  }
+  if (value.value !== undefined) {
+    attributes["calcext:value"] = encodeXmlText(value.value);
+  }
+  return el(tag, attributes);
+}
+
+// Why a conditional-format rule cannot be written, for every schema member or field ODF's calcext extension has no spelling for. Everything else has a genuine inverse; writeSheet throws this reason by name rather than emitting a rule that would read back as something else.
+function unsupportedConditionalFormatReason(
+  format: ContentSheetConditionalFormat,
+): string | undefined {
+  if (format.type === "containsBlanks" || format.type === "notContainsBlanks") {
+    return `a '${format.type}' rule, which calcext:condition's own vocabulary has no spelling for`;
+  }
+  if (format.priority !== undefined) {
+    return "a conditional-format priority, which ODF's calcext extension carries no attribute for";
+  }
+  if (format.stopIfTrue !== undefined) {
+    return "a stopIfTrue flag, which ODF's calcext extension carries no attribute for";
+  }
+  if (format.type === "aboveAverage" && format.stdDev !== undefined) {
+    return "an aboveAverage standard-deviation count, which calcext:condition's own vocabulary has no spelling for";
+  }
+  if (format.type === "iconSet" && format.reverse === true) {
+    return "a reversed icon set, which calcext:icon-set carries no attribute for";
+  }
+  const thresholds: ContentSheetConditionalFormatValue[] =
+    format.type === "colorScale"
+      ? format.stops.map((stop) => stop.value)
+      : format.type === "dataBar"
+        ? [format.min, format.max]
+        : format.type === "iconSet"
+          ? format.thresholds
+          : [];
+  if (
+    thresholds.some(
+      (threshold) => calextTypeForCfvoType(threshold.type) === undefined,
+    )
+  ) {
+    return `a 'num' threshold value, which the calcext entry vocabulary has no spelling for (only min/max/percent/percentile/formula exist on this side of the round trip)`;
+  }
+  return undefined;
+}
+
+// One rule child of a calcext:conditional-format wrapper. Every rule reaching here already passed unsupportedConditionalFormatReason, so each branch states a genuine inverse rather than a degradation.
+function writeConditionalFormatChild(
+  format: ContentSheetConditionalFormat,
+  sheetName: string,
+  registry: StyleRegistry,
+): XmlElement {
+  const baseCellAddress = `${sheetName}.${cellReference(format.ranges[0]!.startColumn, format.ranges[0]!.startRow)}`;
+  switch (format.type) {
+    case "colorScale": {
+      const children: XmlElement[] = [];
+      for (const stop of format.stops) {
+        children.push(
+          writeCfvoEntry("calcext:color-scale-entry", stop.value, stop.color),
+        );
+      }
+      return el("calcext:color-scale", {}, children);
+    }
+    case "dataBar": {
+      const attributes: Record<string, string> = {
+        "calcext:positive-color": formatOdfColor(format.color),
+      };
+      if (format.showValue !== undefined) {
+        attributes["calcext:show-value"] = format.showValue ? "true" : "false";
+      }
+      return el("calcext:data-bar", attributes, [
+        writeCfvoEntry("calcext:formatting-entry", format.min),
+        writeCfvoEntry("calcext:formatting-entry", format.max),
+      ]);
+    }
+    case "iconSet": {
+      const children: XmlElement[] = [];
+      for (const threshold of format.thresholds) {
+        children.push(writeCfvoEntry("calcext:formatting-entry", threshold));
+      }
+      const attributes: Record<string, string> = {
+        "calcext:icon-set-type": encodeXmlText(format.iconSetType),
+      };
+      if (format.showValue !== undefined) {
+        attributes["calcext:show-value"] = format.showValue ? "true" : "false";
+      }
+      return el("calcext:icon-set", attributes, children);
+    }
+    case "timePeriod": {
+      const attributes: Record<string, string> = {
+        "calcext:date": calextDateForTimePeriod(format.timePeriod),
+      };
+      const styleName = conditionalFormatStyleName(format.style, registry);
+      if (styleName !== undefined) {
+        attributes["calcext:style"] = encodeXmlText(styleName);
+      }
+      return el("calcext:date-is", attributes);
+    }
+    default: {
+      // Every remaining type is a calcext:condition rule; its value is guaranteed synthesizable by the same refusal pass.
+      const value = synthesiseConditionValue(format);
+      if (value === undefined) {
+        throw new Error(
+          `writeConditionalFormatChild: a '${format.type}' rule reached the condition builder unsynthesizable`,
+        );
+      }
+      const attributes: Record<string, string> = {
+        "calcext:value": encodeXmlText(value),
+        "calcext:base-cell-address": encodeXmlText(baseCellAddress),
+      };
+      const styleName = conditionalFormatStyleName(format.style, registry);
+      if (styleName !== undefined) {
+        attributes["calcext:apply-style-name"] = encodeXmlText(styleName);
+      }
+      return el("calcext:condition", attributes);
+    }
+  }
+}
+
+// The sheet's whole calcext:conditional-formats block: one calcext:conditional-format wrapper per distinct range list (the read side promotes each rule of a shared wrapper with that wrapper's own ranges, so rules sharing ranges re-share a wrapper and rules with distinct ranges each get their own), emitted after the rows exactly where the read side's childrenWithTag finds it and every real producer puts it.
+function writeConditionalFormats(
+  sheet: ContentSheet,
+  state: OdsWriteState,
+): XmlElement | undefined {
+  if (
+    sheet.conditionalFormats === undefined ||
+    sheet.conditionalFormats.length === 0
+  ) {
+    return undefined;
+  }
+  const wrappers = new Map<
+    string,
+    { ranges: ContentSheetRange[]; rules: ContentSheetConditionalFormat[] }
+  >();
+  for (const format of sheet.conditionalFormats) {
+    const key = JSON.stringify(format.ranges);
+    const wrapper = wrappers.get(key);
+    if (wrapper === undefined) {
+      wrappers.set(key, { ranges: format.ranges, rules: [format] });
+    } else {
+      wrapper.rules.push(format);
+    }
+  }
+  const children: XmlElement[] = [];
+  for (const { ranges, rules } of wrappers.values()) {
+    children.push(
+      el(
+        "calcext:conditional-format",
+        {
+          "calcext:target-range-address": encodeXmlText(
+            formatTargetRangeList(ranges, sheet.name),
+          ),
+        },
+        rules.map((rule) =>
+          writeConditionalFormatChild(rule, sheet.name, state.registry),
+        ),
+      ),
+    );
+  }
+  return el("calcext:conditional-formats", {}, children);
+}
+
 // --- the used range: every position this writer must materialise a table:table-column/-row element for ---------------
 //
 // ODF's own table:table-column/table:table-row model is purely positional -- there is no "skip to column N" spelling -- so a sparse `columns`/`rows`/`cells` input has to be densified into one element per position from 0 up to the highest position anything in the sheet actually references, INDEPENDENTLY per axis (a column-only declaration must never force a row to exist, and vice versa).
@@ -353,6 +689,19 @@ function computeUsedRange(sheet: ContentSheet): UsedRange {
   for (const image of sheet.images) {
     bumpRow(image.anchorRow);
     bumpColumn(image.anchorColumn);
+  }
+  // A validation or conditional-format rule's ranges extend the grid the writer must materialise: every referencing cell within them carries table:content-validation-name (the only carrier ODF offers -- there is no range-level spelling), so a rule reaching past the last content-bearing cell has to stamp cells that would otherwise never exist.
+  for (const validation of sheet.dataValidations ?? []) {
+    for (const range of validation.ranges) {
+      bumpRow(range.endRow);
+      bumpColumn(range.endColumn);
+    }
+  }
+  for (const format of sheet.conditionalFormats ?? []) {
+    for (const range of format.ranges) {
+      bumpRow(range.endRow);
+      bumpColumn(range.endColumn);
+    }
   }
   const printSettings = sheet.printSettings;
   if (printSettings.repeatColumns !== undefined) {
@@ -527,6 +876,10 @@ interface OdsWriteState {
   readonly contentAutomaticStyles: XmlElement;
   readonly stylesAutomaticStyles: XmlElement;
   readonly masterStyles: XmlElement;
+  // The document-wide table:content-validations container (a direct child of office:spreadsheet, before every table:table) plus the fingerprint interner backing it: rules with identical promoted content across the whole document share one definition and one minted name, exactly the structure readContentValidationDefinitions/resolveSheetDataValidations join back together per sheet.
+  readonly contentValidations: XmlElement;
+  readonly validationNames: Map<string, string>;
+  nextValidationName: number;
   nextImage: number;
   nextZIndex: number;
   nextSheetStyle: number;
@@ -574,6 +927,7 @@ function writeRowCells(
   cellByPosition: ReadonlyMap<string, ContentSheetCell>,
   imagesByPosition: ReadonlyMap<string, ContentSheetImage[]>,
   covered: ReadonlySet<string>,
+  validationByPosition: ReadonlyMap<string, string>,
   state: OdsWriteState,
 ): XmlElement[] {
   if (maxColumn === undefined) {
@@ -605,6 +959,7 @@ function writeRowCells(
 
     const cell = cellByPosition.get(key);
     const images = imagesByPosition.get(key);
+    const validationName = validationByPosition.get(key);
     if (cell !== undefined || (images !== undefined && images.length > 0)) {
       const attributes: Record<string, string> = {};
       if (cell !== undefined) {
@@ -623,6 +978,10 @@ function writeRowCells(
           attributes["table:style-name"] = encodeXmlText(styleName);
         }
       }
+      if (validationName !== undefined) {
+        attributes["table:content-validation-name"] =
+          encodeXmlText(validationName);
+      }
       const children: XmlNode[] = [];
       if (cell?.comment !== undefined) {
         // Precedes the cell's own text:p content, matching ODF's general metadata-before-content convention (the same order office:change-info's own dc:creator/dc:date precede a tracked change's content) -- none of this package's own real fixtures happens to carry a cell comment to confirm the exact order against, and readCellComment's own findChildElement-based lookup is order-independent regardless, so this ordering affects compatibility with other ODF consumers, not round-trip correctness through this pair.
@@ -639,11 +998,23 @@ function writeRowCells(
       continue;
     }
 
+    if (validationName !== undefined) {
+      // A referenced but content-less position still has to carry its table:content-validation-name on a real table:table-cell -- the one carrier ODF offers -- so it gets its own element rather than dissolving into the repeated empty run below.
+      nodes.push(
+        el("table:table-cell", {
+          "table:content-validation-name": encodeXmlText(validationName),
+        }),
+      );
+      column += 1;
+      continue;
+    }
+
     let end = column;
     while (
       end + 1 <= maxColumn &&
       !covered.has(coverageKey(row, end + 1)) &&
       !cellByPosition.has(coverageKey(row, end + 1)) &&
+      !validationByPosition.has(coverageKey(row, end + 1)) &&
       (imagesByPosition.get(coverageKey(row, end + 1))?.length ?? 0) === 0
     ) {
       end += 1;
@@ -666,6 +1037,7 @@ function writeRows(
   manualBreakRows: ReadonlySet<number>,
   maxRow: number | undefined,
   maxColumn: number | undefined,
+  validationByPosition: ReadonlyMap<string, string>,
 ): XmlNode[] {
   if (maxRow === undefined) {
     return [];
@@ -698,6 +1070,7 @@ function writeRows(
       cellByPosition,
       imagesByPosition,
       covered,
+      validationByPosition,
       state,
     );
     elements.push(el("table:table-row", attributes, cells));
@@ -716,20 +1089,22 @@ function writeSheet(sheet: ContentSheet, state: OdsWriteState): XmlElement {
       `sheet "${sheet.name}"`,
     );
   }
-  if (sheet.dataValidations !== undefined && sheet.dataValidations.length > 0) {
-    throw unsupported("a data-validation rule", `sheet "${sheet.name}"`);
-  }
-  if (
-    sheet.conditionalFormats !== undefined &&
-    sheet.conditionalFormats.length > 0
-  ) {
-    throw unsupported("a conditional-formatting rule", `sheet "${sheet.name}"`);
+  for (const format of sheet.conditionalFormats ?? []) {
+    const reason = unsupportedConditionalFormatReason(format);
+    if (reason !== undefined) {
+      throw unsupported(reason, `sheet "${sheet.name}"`);
+    }
   }
 
   const { maxRow, maxColumn } = computeUsedRange(sheet);
   const manualBreakRows = new Set(sheet.printSettings.manualBreaks?.rows ?? []);
   const manualBreakColumns = new Set(
     sheet.printSettings.manualBreaks?.columns ?? [],
+  );
+  const validationByPosition = validationNameByPosition(
+    sheet,
+    computeCoveredPositions(sheet.cells),
+    state,
   );
 
   const ordinal = state.nextSheetStyle;
@@ -761,7 +1136,15 @@ function writeSheet(sheet: ContentSheet, state: OdsWriteState): XmlElement {
   );
 
   const columns = writeColumns(sheet, state, manualBreakColumns, maxColumn);
-  const rows = writeRows(sheet, state, manualBreakRows, maxRow, maxColumn);
+  const rows = writeRows(
+    sheet,
+    state,
+    manualBreakRows,
+    maxRow,
+    maxColumn,
+    validationByPosition,
+  );
+  const conditionalFormats = writeConditionalFormats(sheet, state);
 
   const tableAttributes: Record<string, string> = {
     "table:name": encodeXmlText(sheet.name),
@@ -773,7 +1156,11 @@ function writeSheet(sheet: ContentSheet, state: OdsWriteState): XmlElement {
     );
   }
 
-  return el("table:table", tableAttributes, [...columns, ...rows]);
+  return el("table:table", tableAttributes, [
+    ...columns,
+    ...rows,
+    ...(conditionalFormats === undefined ? [] : [conditionalFormats]),
+  ]);
 }
 
 // --- the canonical form: what reading this writer's own output back produces ----------------------------------------
@@ -1052,6 +1439,206 @@ function canonicalPrintSettings(
   return canonical;
 }
 
+// What a sheet's dataValidations read back as, per the read side's own established behaviour rather than chosen here: rules sharing one interned definition merge into one rule carrying the union of their ranges; every range expands to one 1x1 range per stamped cell (readOdsContent's own collect step, one entry per referencing cell, never merged); a position covered by another cell's span carries no reference and so drops out; rules order and range order follow the row-major walk order of first reference; allowBlank is always explicit (the reader's own default); the display flags appear only when true (the reader sets them only on table:display="true"); a list rule always reads an operator of "equal" and a custom rule never reads one (data-validation.ts's own CONDITION_INFOS fixed mappings); a list or custom rule with no formula1 has no condition to write and reads back as a bare custom rule; and a rule whose every position sat under a span is referenced by nothing and vanishes.
+// The merge key for canonicalisation is the rule's WRITTEN content -- see canonicalValidationKey's own note above.
+function canonicalDataValidations(
+  sheet: ContentSheet,
+): ContentSheetDataValidation[] | undefined {
+  if (sheet.dataValidations === undefined) {
+    return undefined;
+  }
+  const covered = computeCoveredPositions(sheet.cells);
+  const byKey = new Map<
+    string,
+    { rule: ContentSheetDataValidation; ranges: ContentSheetRange[] }
+  >();
+  for (const rule of sheet.dataValidations) {
+    const key = canonicalValidationKey(rule);
+    let merged = byKey.get(key);
+    if (merged === undefined) {
+      merged = { rule, ranges: [] };
+      byKey.set(key, merged);
+    }
+    for (const range of rule.ranges) {
+      for (let row = range.startRow; row <= range.endRow; row += 1) {
+        for (
+          let column = range.startColumn;
+          column <= range.endColumn;
+          column += 1
+        ) {
+          if (!covered.has(coverageKey(row, column))) {
+            merged.ranges.push({
+              startRow: row,
+              startColumn: column,
+              endRow: row,
+              endColumn: column,
+            });
+          }
+        }
+      }
+    }
+  }
+  const canonical: ContentSheetDataValidation[] = [];
+  for (const { rule, ranges } of byKey.values()) {
+    if (ranges.length === 0) {
+      continue;
+    }
+    ranges.sort(
+      (a, b) => a.startRow - b.startRow || a.startColumn - b.startColumn,
+    );
+    if (
+      (rule.type === "list" || rule.type === "custom") &&
+      rule.formula1 === undefined
+    ) {
+      // No condition to write at all: the definition carries no table:condition, which readContentValidation itself degrades to a bare custom rule.
+      canonical.push({ type: "custom", ranges, allowBlank: true });
+      continue;
+    }
+    const base: ContentSheetDataValidation = {
+      ...rule,
+      ranges,
+      allowBlank: rule.allowBlank ?? true,
+    };
+    if (base.type === "list") {
+      base.operator = "equal";
+    } else if (base.type === "custom") {
+      delete base.operator;
+    }
+    canonical.push(base);
+  }
+  canonical.sort(
+    (a, b) =>
+      (a.ranges[0]?.startRow ?? 0) - (b.ranges[0]?.startRow ?? 0) ||
+      (a.ranges[0]?.startColumn ?? 0) - (b.ranges[0]?.startColumn ?? 0),
+  );
+  return canonical;
+}
+
+// What one conditional-format style reads back as: the two colour properties that actually round-trip through a minted named style, or no style field at all when neither is present (the read side resolves no style from a style element carrying no colour properties -- a source-only style is indistinguishable from none).
+function canonicalConditionalFormatStyle(
+  style: ContentSheetConditionalFormatStyle | undefined,
+):
+  | { textColor: Color; background?: never }
+  | { background: Color; textColor?: never }
+  | undefined {
+  if (style?.textColor !== undefined) {
+    return { textColor: style.textColor };
+  }
+  if (style?.background !== undefined) {
+    return { background: style.background };
+  }
+  return undefined;
+}
+
+// What a sheet's conditionalFormats read back as: the writer's own emission order preserved (the read side promotes each wrapper's children in document order), each rule's quarantined source dropped, and each style narrowed per canonicalConditionalFormatStyle. The precedence fields never appear here because the writer refuses a rule carrying them before any of this runs.
+function canonicalConditionalFormats(
+  sheet: ContentSheet,
+): ContentSheetConditionalFormat[] | undefined {
+  if (sheet.conditionalFormats === undefined) {
+    return undefined;
+  }
+  return sheet.conditionalFormats.map((format) => {
+    const ranges = format.ranges;
+    switch (format.type) {
+      case "cellIs":
+        return {
+          type: "cellIs" as const,
+          ranges,
+          operator: format.operator,
+          formula1: format.formula1,
+          ...(format.formula2 !== undefined
+            ? { formula2: format.formula2 }
+            : {}),
+          ...(canonicalConditionalFormatStyle(format.style) !== undefined
+            ? { style: canonicalConditionalFormatStyle(format.style) }
+            : {}),
+        };
+      case "containsText":
+      case "notContainsText":
+      case "beginsWith":
+      case "endsWith":
+        return {
+          type: format.type,
+          ranges,
+          text: format.text,
+          ...(canonicalConditionalFormatStyle(format.style) !== undefined
+            ? { style: canonicalConditionalFormatStyle(format.style) }
+            : {}),
+        };
+      case "containsBlanks":
+      case "notContainsBlanks":
+      case "containsErrors":
+      case "notContainsErrors":
+      case "uniqueValues":
+      case "duplicateValues":
+        return {
+          type: format.type,
+          ranges,
+          ...(canonicalConditionalFormatStyle(format.style) !== undefined
+            ? { style: canonicalConditionalFormatStyle(format.style) }
+            : {}),
+        };
+      case "top10":
+        return {
+          type: "top10" as const,
+          ranges,
+          rank: format.rank,
+          ...(format.percent !== undefined ? { percent: format.percent } : {}),
+          ...(format.bottom !== undefined ? { bottom: format.bottom } : {}),
+          ...(canonicalConditionalFormatStyle(format.style) !== undefined
+            ? { style: canonicalConditionalFormatStyle(format.style) }
+            : {}),
+        };
+      case "aboveAverage":
+        return {
+          type: "aboveAverage" as const,
+          ranges,
+          ...(format.aboveAverage !== undefined
+            ? { aboveAverage: format.aboveAverage }
+            : {}),
+          ...(format.equalAverage !== undefined
+            ? { equalAverage: format.equalAverage }
+            : {}),
+          ...(canonicalConditionalFormatStyle(format.style) !== undefined
+            ? { style: canonicalConditionalFormatStyle(format.style) }
+            : {}),
+        };
+      case "timePeriod":
+        return {
+          type: "timePeriod" as const,
+          ranges,
+          timePeriod: format.timePeriod,
+          ...(canonicalConditionalFormatStyle(format.style) !== undefined
+            ? { style: canonicalConditionalFormatStyle(format.style) }
+            : {}),
+        };
+      case "colorScale":
+        return { type: "colorScale" as const, ranges, stops: format.stops };
+      case "dataBar":
+        return {
+          type: "dataBar" as const,
+          ranges,
+          min: format.min,
+          max: format.max,
+          color: format.color,
+          ...(format.showValue !== undefined
+            ? { showValue: format.showValue }
+            : {}),
+        };
+      case "iconSet":
+        return {
+          type: "iconSet" as const,
+          ranges,
+          iconSetType: format.iconSetType,
+          thresholds: format.thresholds,
+          ...(format.showValue !== undefined
+            ? { showValue: format.showValue }
+            : {}),
+        };
+    }
+  });
+}
+
 function canonicalSheet(sheet: ContentSheet): ContentSheet {
   const { maxRow, maxColumn } = computeUsedRange(sheet);
   const canonical: ContentSheet = {
@@ -1062,6 +1649,14 @@ function canonicalSheet(sheet: ContentSheet): ContentSheet {
     images: canonicalImages(sheet),
     printSettings: canonicalPrintSettings(sheet.printSettings),
   };
+  const dataValidations = canonicalDataValidations(sheet);
+  if (dataValidations !== undefined && dataValidations.length > 0) {
+    canonical.dataValidations = dataValidations;
+  }
+  const conditionalFormats = canonicalConditionalFormats(sheet);
+  if (conditionalFormats !== undefined && conditionalFormats.length > 0) {
+    canonical.conditionalFormats = conditionalFormats;
+  }
   return canonical;
 }
 
@@ -1070,7 +1665,7 @@ function canonicalSheet(sheet: ContentSheet): ContentSheet {
 // - COLUMNS/ROWS densify to one entry per position across the sheet's used range, an undeclared width/height stamped with readOdsContent's own DEFAULT_COLUMN_WIDTH_PT/DEFAULT_ROW_HEIGHT_PT default rather than staying absent (canonicalColumns/canonicalRows' own note).
 // - IMAGES reorder into row-major anchor-position document order (canonicalImages' own note).
 // - A cell's numeric exactValue, comment, sourcePath, and source never survive -- readOdsContent has no field for the first three on write-back and residue is a deliberate, documented drop (this module's own top-of-file note); a 'time' cell's ISO clock value becomes the raw xsd:duration string readOdsContent carries through unconverted (this module's own top-of-file note on that one forced, pre-existing asymmetry).
-// - The sheet-level `source` residue and any `embeddedObjects`/`dataValidations`/`conditionalFormats` are refused outright by the writer itself (writeSheet throws before producing a Package for one), so a document reaching this canonicaliser never carries them in the first place.
+// - The sheet-level `source` residue and any `embeddedObjects` are refused outright by the writer itself (writeSheet throws before producing a Package for one), so a document reaching this canonicaliser never carries them in the first place; `dataValidations` and `conditionalFormats` canonicalise per their own functions above (definition-merged, span-narrowed, row-major re-ordered; source residue dropped).
 export function normaliseOdsContent(
   document: ContentDocument,
 ): Extract<ContentDocument, { kind: "spreadsheet" }> {
@@ -1121,13 +1716,22 @@ export function writeOdsContent(
       "office:automatic-styles",
     ),
     masterStyles: odfPartContainer(pkg, STYLES_PART, "office:master-styles"),
+    contentValidations: el("table:content-validations"),
+    validationNames: new Map(),
+    nextValidationName: 1,
     nextImage: 1,
     nextZIndex: 0,
     nextSheetStyle: 1,
   };
 
+  // The document-wide validation definitions container precedes every table:table -- the position LibreOffice itself writes it and readContentValidationDefinitions's own findChildElement finds it, order-independently of the sheets that reference into it.
+  spreadsheetElement.children.push(state.contentValidations);
   for (const sheet of document.sheets) {
     spreadsheetElement.children.push(writeSheet(sheet, state));
+  }
+  // A document whose every rule happened to be referenced from no cell at all (possible only if every range sat under a span) still carries the definitions it interned; an empty container with no definitions is never written.
+  if (state.contentValidations.children.length === 0) {
+    spreadsheetElement.children.shift();
   }
 
   writeOdfMetadata(pkg, document.metadata, version);
