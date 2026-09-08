@@ -1,3 +1,5 @@
+import { uint16At, uint32At } from "../bytes/view";
+
 // -- Styles and outline numbering, per WPFF "DD Style Functions" and "DA Display Number Functions" --
 //
 // WordPerfect states a style's IDENTITY twice: as a prefix ID naming a style packet whose contents are that style's own codes, and -- for a style the product itself defines rather than the user -- as a "system style number" in the function's own non-deletable data. The second is the one that carries meaning across formats: the SDK enumerates it, and its entries include "68 = heading level 1 style" through "75 = heading level 8 style", "52 = level 1 style (indented)" through "67 = level 8 style (not indented)", "48 = bullets" and "31 = list". That enumeration is the whole basis for this package's heading and list recovery -- a heading is a heading because the file says which system style it is, never because its text is short or its font is large.
@@ -126,4 +128,39 @@ export function readDisplayNumberLevel(
   nonDeletable: Uint8Array,
 ): number | undefined {
   return nonDeletable[0];
+}
+
+// -- Resolving a style packet's own definitions, per WPFF Prefix Packet Type 48 (0x30), "Normal Style" --
+//
+// A style's identity is stated twice: as a system style number in the opening function's own non-deletable data (readSystemStyleNumber above), and as a prefix ID naming this packet -- "the prefix ID referred to ... is the standard WP Text packet"-shaped record whose own text blocks carry the style's before- and after-codes. Bit 7 of the opening function's own flags names the PID (WpdVariableFunctionToken.prefixIds, from the tokeniser), so a style scope this package cannot classify by system style number may still resolve real direct formatting through its own packet.
+//
+// "[number of text blocks = 4] {relative offset of 1st text block} {paragraph text size} {beginning style text size} {end style text size} {extra style text size}" -- four LONG-sized regions laid out consecutively starting at the stated relative offset, exactly the "General WP Text" packet's own block layout (container/prefix.ts's neighbouring packet types), except every size here is a 32-bit long rather than a 16-bit short. Only the "beginning style text size" block is read: it is the region WordPerfect inserts at the START of the styled text, the paired-style analogue of a Font Face Change or Attribute On function typed directly into the document, and applying it the same way those apply is what resolves the style's own direct formatting onto the runs the scope encloses.
+export const PACKET_TYPE_NORMAL_STYLE = 0x30;
+
+const PID_COUNT_OFFSET = 0;
+const TEXT_BLOCK_HEADER_SIZE = 2 + 4 * 4; // [number of text blocks] then four LONG sizes/offsets
+
+export function readStyleBeginBlock(
+  packet: Uint8Array,
+): Uint8Array | undefined {
+  if (packet.length < 2) {
+    return undefined;
+  }
+  const pidCount = uint16At(packet, PID_COUNT_OFFSET);
+  const afterPids = 2 + pidCount * 2;
+  if (afterPids + TEXT_BLOCK_HEADER_SIZE > packet.length) {
+    return undefined;
+  }
+  const relativeOffset = uint32At(packet, afterPids + 2);
+  const paragraphTextSize = uint32At(packet, afterPids + 6);
+  const beginningStyleTextSize = uint32At(packet, afterPids + 10);
+  if (beginningStyleTextSize === 0) {
+    return undefined;
+  }
+  const start = relativeOffset + paragraphTextSize;
+  const end = start + beginningStyleTextSize;
+  if (start < 0 || end > packet.length) {
+    return undefined;
+  }
+  return packet.subarray(start, end);
 }
