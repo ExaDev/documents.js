@@ -181,9 +181,7 @@ interface ParsedCondition {
   readonly operator?: SheetRuleOperator;
   readonly formula1?: string;
   readonly formula2?: string;
-}
-
-// table:condition's own outer namespace prefix (e.g. "of:" for OpenFormula) precedes the whole condition string, not any one operand within it -- stripped once, generically, rather than enumerating every namespace a producer might use, since nothing here needs to know WHICH formula grammar the operands are written in (they stay raw text either way, matching ContentSheetDataValidationSchema's own "no formula engine" contract).
+} // table:condition's own outer namespace prefix (e.g. "of:" for OpenFormula) precedes the whole condition string, not any one operand within it -- stripped once, generically, rather than enumerating every namespace a producer might use, since nothing here needs to know WHICH formula grammar the operands are written in (they stay raw text either way, matching ContentSheetDataValidationSchema's own "no formula engine" contract).
 const NAMESPACE_PREFIX_PATTERN = /^[a-zA-Z]+:/;
 
 export function parseContentValidationCondition(
@@ -357,4 +355,109 @@ export function resolveSheetDataValidations(
     result.push({ ...rule, ranges });
   }
   return result;
+}
+
+// --- the write side: synthesising table:condition back from a rule --------------------------------------------------
+//
+// The exact inverse of parseContentValidationCondition above, over the identical LibreOffice-transcribed grammar: every string this synthesiser emits for a rule that itself came from that parser round-trips back to the same rule. Operands stay raw text in both directions (ContentSheetDataValidationSchema's own "no formula engine" contract), so no operand is ever re-encoded, quoted, or normalised here.
+
+const VALIDATION_TYPE_IDENTIFIER: ReadonlyMap<
+  ContentSheetDataValidationType,
+  string
+> = new Map([
+  ["whole", "cell-content-is-whole-number"],
+  ["decimal", "cell-content-is-decimal-number"],
+  ["date", "cell-content-is-date"],
+  ["time", "cell-content-is-time"],
+]);
+
+const OPERATOR_TEXT: ReadonlyMap<SheetRuleOperator, string> = new Map([
+  ["equal", "="],
+  ["notEqual", "!="],
+  ["lessThan", "<"],
+  ["lessThanOrEqual", "<="],
+  ["greaterThan", ">"],
+  ["greaterThanOrEqual", ">="],
+]);
+
+function comparisonClause(
+  operator: SheetRuleOperator,
+  formula1: string,
+): string | undefined {
+  const operatorText = OPERATOR_TEXT.get(operator);
+  return operatorText === undefined
+    ? undefined
+    : `cell-content()${operatorText}${formula1}`;
+}
+
+function betweenClause(
+  operator: SheetRuleOperator,
+  stem: string,
+  formula1: string,
+  formula2: string,
+): string | undefined {
+  const suffix =
+    operator === "between"
+      ? "is-between"
+      : operator === "notBetween"
+        ? "is-not-between"
+        : undefined;
+  return suffix === undefined
+    ? undefined
+    : `${stem}-${suffix}(${formula1},${formula2})`;
+}
+
+/** The table:condition attribute value for one rule, "of:"-prefixed the way every real producer spells the OpenFormula namespace. Returns undefined when the rule carries no condition this grammar can state at all -- a custom rule with no formula, a list with no list body, or a textLength rule with no comparison -- in which case the writer emits no table:condition attribute, exactly the shape whose absence the read side itself degrades to a bare custom rule. An operator whose operand is missing degrades the same way rather than emitting a clause the read side would reject: the same partial-parse tolerance readContentValidation already shows in the other direction. */
+export function synthesiseContentValidationCondition(rule: {
+  type: ContentSheetDataValidationType;
+  operator?: SheetRuleOperator;
+  formula1?: string;
+  formula2?: string;
+}): string | undefined {
+  switch (rule.type) {
+    case "list":
+      return rule.formula1 === undefined
+        ? undefined
+        : `of:cell-content-is-in-list(${rule.formula1})`;
+    case "custom":
+      return rule.formula1 === undefined
+        ? undefined
+        : `of:is-true-formula(${rule.formula1})`;
+    case "textLength": {
+      if (rule.operator === undefined || rule.formula1 === undefined) {
+        return undefined;
+      }
+      if (
+        (rule.operator === "between" || rule.operator === "notBetween") &&
+        rule.formula2 !== undefined
+      ) {
+        return `of:${betweenClause(rule.operator, "cell-content-text-length", rule.formula1, rule.formula2)}`;
+      }
+      const clause = comparisonClause(rule.operator, rule.formula1);
+      return clause === undefined
+        ? undefined
+        : `of:cell-content-text-length()${OPERATOR_TEXT.get(rule.operator)}${rule.formula1}`;
+    }
+    default: {
+      const identifier = VALIDATION_TYPE_IDENTIFIER.get(rule.type);
+      if (identifier === undefined) {
+        return undefined;
+      }
+      const primary = `of:${identifier}()`;
+      if (rule.operator === undefined || rule.formula1 === undefined) {
+        return primary;
+      }
+      const secondary =
+        (rule.operator === "between" || rule.operator === "notBetween") &&
+        rule.formula2 !== undefined
+          ? betweenClause(
+              rule.operator,
+              "cell-content",
+              rule.formula1,
+              rule.formula2,
+            )
+          : comparisonClause(rule.operator, rule.formula1);
+      return secondary === undefined ? primary : `${primary} and ${secondary}`;
+    }
+  }
 }
