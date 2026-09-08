@@ -1,3 +1,11 @@
+## [1.3.0](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.12...epub-codec%401.3.0) (2026-09-08)
+
+### Features
+
+* **epub-codec:** add a lossless byte-level Package model ([5c28859](https://github.com/ExaDev/documents.js/commit/5c28859e5d8603a3abc44b6680122bc851b0df49))
+* **epub-codec:** build the internal-target link construct for same- and cross-document hrefs ([934baec](https://github.com/ExaDev/documents.js/commit/934baec99f22b2ac4dbeeb65d8d2f56597113753))
+* **epub-codec:** recognise a footnote whose body lives in a different spine document ([7fd6907](https://github.com/ExaDev/documents.js/commit/7fd6907d5242c50f3e1c1ac129f0aa3d18030afe))
+
 ## [1.2.12](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.11...epub-codec%401.2.12) (2026-09-08)
 
 ### Bug Fixes

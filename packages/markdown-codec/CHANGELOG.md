@@ -1,3 +1,21 @@
+## [6.5.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.4.3...markdown-codec%406.5.0) (2026-09-08)
+
+### Features
+
+* **markdown-codec:** add a bounded HTML table read/write pair ([02c8f38](https://github.com/ExaDev/documents.js/commit/02c8f38f5ebd311ee6e4d52c1365bf3dda3757f4))
+* **markdown-codec:** fall back to a raw HTML table for colSpan/rowSpan/background/a nested block ([7e0dd11](https://github.com/ExaDev/documents.js/commit/7e0dd1189a4df058a61a357ffeab09d61dcccc88)), closes [#1089](https://github.com/ExaDev/documents.js/issues/1089)
+* **markdown-codec:** recognise a footnote definition inside a quote or list item ([3803957](https://github.com/ExaDev/documents.js/commit/38039572f5af4176b85002010ed82fd5f314d5e4))
+* **markdown-codec:** recognise every LayoutMetadata field in front matter ([b014d91](https://github.com/ExaDev/documents.js/commit/b014d91ad38d29794e5ecd3f9a6522a9c4d7fbfc))
+
+### Bug Fixes
+
+* **markdown-codec:** alternate marker glyph between adjacent same-type lists ([a11a7c5](https://github.com/ExaDev/documents.js/commit/a11a7c5cb809f4d91282cedf6399f99853c37954))
+* **markdown-codec:** pick a per-window nesting order for bold/italic/strike ([53d4cf2](https://github.com/ExaDev/documents.js/commit/53d4cf2b7951e9168444120306dea56c4395f851))
+
+### Documentation
+
+* **markdown-codec:** document the HTML-table fallback ([2f64b60](https://github.com/ExaDev/documents.js/commit/2f64b60ad891a55119cb9e764b1c52d04078f375))
+
 ## [6.4.3](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.4.2...markdown-codec%406.4.3) (2026-09-08)
 
 ### Bug Fixes
