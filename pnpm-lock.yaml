@@ -503,6 +503,9 @@ importers:
       document-schema.js:
         specifier: 7.3.1
         version: link:../document-schema.js
+      pdf-codec:
+        specifier: 4.0.9
+        version: link:../pdf-codec
       zod:
         specifier: 4.4.3
         version: 4.4.3
