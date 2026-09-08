@@ -64,7 +64,7 @@ const EMBEDDED_SUBFUNCTION_SIZES: ReadonlyMap<number, number> = new Map([
 ]);
 
 // "New Cell Formula Embedded Subfunction ... <129 (0x81)> [size = variable] [length of formula] <tokenized formula> x length of formula [length] <129 (0x81)>" -- the code, the length word, the formula, the length word again, the code: six bytes of framing around the formula itself.
-const CELL_FORMULA_SUBFUNCTION = 0x81;
+export const CELL_FORMULA_SUBFUNCTION = 0x81;
 const CELL_FORMULA_FRAMING_SIZE = 6;
 
 // "Don't End a Paragraph Style for this Hard Return ... <141 (0x8D)> (size = 1)" -- the whole subfunction is its own code, with no payload and no closing gate. The only member of the list shaped that way.
