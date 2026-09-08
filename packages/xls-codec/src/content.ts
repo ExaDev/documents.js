@@ -19,11 +19,16 @@ import type {
   ContentSheetPrintSettings,
   ContentSheetRow,
   DocumentTree,
+  LayoutMetadata,
 } from "document-schema.js";
 import { assembleTree, PAGE_SIZE_LETTER } from "document-schema.js";
 
 import { pageSizeFromSetup } from "./biff/print-setup";
-import { BOF_TYPE_WORKSHEET, RECORD_FILEPASS } from "./biff/record-types";
+import {
+  BOF_TYPE_WORKSHEET,
+  RECORD_FILEPASS,
+  RECORD_MSODRAWINGGROUP,
+} from "./biff/record-types";
 import { BiffFormatError, readRecords } from "./biff/records";
 import {
   groupRecords,
@@ -37,7 +42,10 @@ import {
   resolveIcvColor,
 } from "./biff/xf-colors";
 import { readWorkbookStreams } from "./container";
+import { readBlipStore, type BlipImage } from "./drawing/blips";
+import { concatBytes } from "./drawing/bytes";
 import { readSheetComments, type SheetCellComment } from "./workbook/comments";
+import { readSheetDrawing } from "./workbook/drawing";
 import { classifyNumberFormat } from "excel-number-format";
 import {
   serialToIsoDate,
@@ -205,22 +213,45 @@ export function readXlsContent(
     );
   }
   const globals = readWorkbookGlobals(globalsSubstream.records);
+  // The Blip Store ([MS-ODRAW]'s own BstoreContainer) is workbook-wide, carried in the globals substream's own MsoDrawingGroup stream -- every worksheet's picture shapes reference it by index rather than each carrying its own copy. See drawing/blips.ts's own top comment.
+  const blipStore = readBlipStore(
+    concatDrawingGroupBytes(globalsSubstream.records),
+  );
+  // Absent when the container carries no "\x05SummaryInformation" stream at all -- a valid BIFF8 workbook need not have one -- and mapped from it through summaryInformationToLayoutMetadata (see src/metadata.ts) otherwise. Computed before the sheets, not after: a chart embedded in any sheet carries its own cached data as a small spreadsheet ContentDocument (see workbook/drawing.ts's own chartFromShape) that reuses this SAME document-level metadata, mirroring ooxml.js's own chart reading, which reuses the whole package's core properties for the identical synthetic sheet.
+  const documentMetadata: LayoutMetadata =
+    metadata === undefined
+      ? {}
+      : summaryInformationToLayoutMetadata(readSummaryInformation(metadata));
   // Indexed before filtering, not after: a print name's own itab is a position in the FULL BoundSheet8 collection, so a workbook whose first sheet is a chart would mis-key every print name if the index came from the filtered list.
   const sheets = globals.sheets
     .map((entry, sheetIndex) => ({ entry, sheetIndex }))
     .filter(({ entry }) => entry.sheetType === SHEET_TYPE_WORKSHEET)
     .map(({ entry, sheetIndex }) =>
-      readSheet(entry, sheetIndex, substreams, globals),
+      readSheet(
+        entry,
+        sheetIndex,
+        substreams,
+        globals,
+        blipStore,
+        documentMetadata,
+      ),
     );
-  // Absent when the container carries no "\x05SummaryInformation" stream at all -- a valid BIFF8 workbook need not have one -- and mapped from it through summaryInformationToLayoutMetadata (see src/metadata.ts) otherwise.
   return {
     kind: "spreadsheet",
-    metadata:
-      metadata === undefined
-        ? {}
-        : summaryInformationToLayoutMetadata(readSummaryInformation(metadata)),
+    metadata: documentMetadata,
     sheets,
   };
+}
+
+/** Every MsoDrawingGroup record's own data, in stream order, concatenated into one Escher byte stream -- the workbook-wide counterpart of a worksheet's own MsoDrawing concatenation (drawing/shapes.ts's own readSheetShapes), carrying the Blip Store rather than any one sheet's shape tree. */
+function concatDrawingGroupBytes(
+  records: Substream["records"],
+): Uint8Array<ArrayBuffer> {
+  const chunks = records
+    .filter((record) => record.type === RECORD_MSODRAWINGGROUP)
+    .map((record) => record.blocks[0])
+    .filter((block): block is Uint8Array<ArrayBuffer> => block !== undefined);
+  return concatBytes(chunks);
 }
 
 /** The tree-form read: readXlsContent composed with the schema's own structural transform, exactly as ooxml.js's readXlsx wraps readXlsxContent. */
@@ -241,6 +272,8 @@ function readSheet(
   sheetIndex: number,
   substreams: readonly Substream[],
   globals: WorkbookGlobals,
+  blipStore: ReadonlyMap<number, BlipImage>,
+  documentMetadata: LayoutMetadata,
 ): ContentSheet {
   const substream = substreams.find(
     (candidate) =>
@@ -251,6 +284,10 @@ function readSheet(
     marginsPt: {},
     rowBreaks: [],
     columnBreaks: [],
+  };
+  const formulaSheets = {
+    sheets: globals.sheets,
+    sheetRanges: globals.sheetRanges,
   };
   const raw: RawSheet =
     substream === undefined
@@ -264,10 +301,11 @@ function readSheet(
           conditionalFormats12: [],
           print: emptyPrint,
         }
-      : readSheetRecords(substream.records, globals.sharedStrings, {
-          sheets: globals.sheets,
-          sheetRanges: globals.sheetRanges,
-        });
+      : readSheetRecords(
+          substream.records,
+          globals.sharedStrings,
+          formulaSheets,
+        );
   const comments =
     substream === undefined
       ? new Map<string, SheetCellComment>()
@@ -279,12 +317,23 @@ function readSheet(
     ...mapConditionalFormats(raw.conditionalFormats, globals.palette),
     ...mapConditionalFormats12(raw.conditionalFormats12, globals.palette),
   ];
+  // Charts/drawings/images (ExaDev/documents.js#924): a sheet with no substream at all (its BOF's own lbPlyPos matched nothing) has no MsoDrawing bytes to read either, and drawing.ts's own contract already covers that -- an empty worksheetRecords list simply carries no MSODRAWING/Obj records, producing no images and no embeddedObjects.
+  const drawing = readSheetDrawing(substream?.records ?? [], {
+    blipStore,
+    columns: raw.columns,
+    rows: raw.rows,
+    ownSheetIndex: sheetIndex,
+    formulaSheets,
+    ownSheetCells: cells,
+    metadata: documentMetadata,
+    allSubstreams: substreams,
+  });
   return {
     name: entry.name,
     cells,
     columns: mapColumns(raw),
     rows: mapRows(raw),
-    images: [],
+    images: [...drawing.images],
     // The sheet index a print name is scoped to is its BoundSheet8 position -- the index into globals.sheets, before the worksheet-only filter readXlsContent applies -- not its position among the sheets that survive that filter.
     printSettings: mapPrintSettings(
       raw.print,
@@ -292,6 +341,9 @@ function readSheet(
     ),
     ...(dataValidations.length > 0 ? { dataValidations } : {}),
     ...(conditionalFormats.length > 0 ? { conditionalFormats } : {}),
+    ...(drawing.embeddedObjects.length > 0
+      ? { embeddedObjects: [...drawing.embeddedObjects] }
+      : {}),
   };
 }
 
