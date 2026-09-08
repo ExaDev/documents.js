@@ -173,6 +173,9 @@ interface WriteCounters {
   // Media/embedding FILE names (word/media/imageN.ext, word/embeddings/oleObjectN.ext) are minted from a counter shared across every part for the same reason the ids above are: each header/footer part below gets its own, part-local mediaParts/embeddingParts registry (so a header's own relationship ids never collide with the body's), and those per-part registries are merged into one flat word/media/ and word/embeddings/ folder when the package is assembled -- a per-part `size + 1` naming scheme would mint colliding file names (two different parts each writing their own "image1.png") the instant more than one part carries media.
   nextMediaFileId: number;
   nextEmbeddingFileId: number;
+  // Content-addressed file minting, shared across every part: one word/media (or word/embeddings) FILE per distinct payload in the whole document, however many parts reference it. Without this, N header/footer parts each carrying the same S-byte payload mint N files totalling N x S -- and a hostile input of many near-empty header parts all referencing one large image amplifies a 1 MiB PNG into gigabytes of decoded entries on round trip, exactly the resource-exhaustion shape SECURITY.md's media paragraph names. A part's RELATIONSHIP to the file stays part-local (only that is scoped to the part's own _rels); the bytes are not.
+  readonly mediaFiles: Map<string, string>;
+  readonly embeddingFiles: Map<string, string>;
 }
 
 interface WriteState {
@@ -190,7 +193,7 @@ interface WriteState {
   readonly counters: WriteCounters;
 }
 
-// One WriteState per emitted part (the document body, and each header/footer part below): relationships, hyperlink/media/embedding dedup, and the media/embedding FILES themselves are all deliberately part-local rather than shared -- a relationship id (rId1, rId2, ...) is only meaningful within the one part whose own _rels file declares it, so a header reusing an image the body already embedded gets its own relationship (and, here, its own word/media copy: a second copy is a correct, honest trade-off for never risking a body-scoped id read back through a header's own relationships). `counters` is the one piece of state genuinely shared across every part, for the reason WriteCounters' own comment states.
+// One WriteState per emitted part (the document body, and each header/footer part below): relationships and hyperlink/media/embedding RELATIONSHIP dedup are deliberately part-local rather than shared -- a relationship id (rId1, rId2, ...) is only meaningful within the one part whose own _rels file declares it, so a header reusing an image the body already embedded gets its own relationship, never risking a body-scoped id read back through a header's own relationships. The media/embedding FILES those relationships point at are content-addressed through the shared counters instead (one file per distinct payload document-wide, see WriteCounters' own note), so the per-part mediaParts/embeddingParts registries below are bookkeeping for the assembly merge and content-types build, not copies: two parts referencing one image both record the same file name. `counters` is the one piece of state genuinely shared across every part, for the reason WriteCounters' own comment states.
 function newWriteState(
   options: BuildDocxContentOptions | undefined,
   counters?: WriteCounters,
@@ -208,6 +211,8 @@ function newWriteState(
       nextMarkerId: 1,
       nextMediaFileId: 1,
       nextEmbeddingFileId: 1,
+      mediaFiles: new Map(),
+      embeddingFiles: new Map(),
     },
   };
 }
@@ -260,7 +265,11 @@ function imageRelationshipId(
   if (existing !== undefined) {
     return existing;
   }
-  const name = `image${String(state.counters.nextMediaFileId++)}.${mediaExtension(image.format)}`;
+  let name = state.counters.mediaFiles.get(key);
+  if (name === undefined) {
+    name = `image${String(state.counters.nextMediaFileId++)}.${mediaExtension(image.format)}`;
+    state.counters.mediaFiles.set(key, name);
+  }
   state.mediaParts.set(name, { format: image.format, base64: image.base64 });
   const id = addRelationship(state, REL_IMAGE, `media/${name}`, false);
   state.mediaIds.set(key, id);
@@ -999,7 +1008,11 @@ function embeddedObjectRelationshipId(
   if (existing !== undefined) {
     return existing;
   }
-  const name = `oleObject${String(state.counters.nextEmbeddingFileId++)}.${payload.extension}`;
+  let name = state.counters.embeddingFiles.get(payload.base64);
+  if (name === undefined) {
+    name = `oleObject${String(state.counters.nextEmbeddingFileId++)}.${payload.extension}`;
+    state.counters.embeddingFiles.set(payload.base64, name);
+  }
   state.embeddingParts.set(name, payload);
   const id = addRelationship(
     state,
