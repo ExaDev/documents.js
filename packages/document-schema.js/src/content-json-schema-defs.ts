@@ -99,7 +99,7 @@ function mathBinderDef(kind: "sum" | "prod"): JsonSchema {
 
 // -- Hand-authored $defs, spliced into content-document.schema.json only (via scripts/generate-json-schemas.mjs's own ContentDocumentSchema override branch) --
 //
-// The fragments below are transcribed by hand, field-for-field, from src/content.ts's real Zod object definitions (ContentParagraphSchema, ContentTableSchema/ContentTableRowSchema/ContentTableCellSchema, ContentImageBlockSchema, ContentPageBreakSchema, ContentRunSchema, ContentListMembershipSchema, ColorSchema, BoxSchema, LayoutFrameSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, ContentParagraphBordersSchema, ContentCellPatternTypeSchema, ContentCellFillSchema -- each cross-checked directly against a real z.toJSONSchema() call over that exact exported schema, and the ones with a real, non-recursive, non-custom counterpart are held to that comparison as a running test by content-json-schema-defs.test.ts) plus the ContentEmbeddedObject/ContentEmbeddedObjectBlock TS interfaces, which have no exported z.object() counterpart at all (both are validated only via the isContentEmbeddedObject*() z.custom() guards), plus the math value schemas of src/math.ts (the semantic half of the two-layer formula model -- see that file's own top comment for how the layers divide). Re-verify this block against src/content.ts/src/math.ts whenever those files' field shapes change -- nothing here is generated or checked against the real schemas at build time, other than the leaf/near-leaf fragments the regression test below does cover.
+// The fragments below are transcribed by hand, field-for-field, from src/content.ts's real Zod object definitions (ContentParagraphSchema, ContentTableSchema/ContentTableRowSchema/ContentTableCellSchema, ContentImageBlockSchema, ContentPageBreakSchema, ContentRunSchema, ContentListMembershipSchema, ColorSchema, BoxSchema, LayoutFrameSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, ContentParagraphBordersSchema, ContentCellPatternTypeSchema, ContentCellFillSchema, ContentStrokeDashSchema, ContentGradientStyleSchema, ContentGradientFillSchema, ContentHatchStyleSchema, ContentHatchFillSchema, ContentBitmapFillSchema, ContentFillPatternSchema -- each cross-checked directly against a real z.toJSONSchema() call over that exact exported schema, and the ones with a real, non-recursive, non-custom counterpart are held to that comparison as a running test by content-json-schema-defs.test.ts) plus the ContentEmbeddedObject/ContentEmbeddedObjectBlock TS interfaces, which have no exported z.object() counterpart at all (both are validated only via the isContentEmbeddedObject*() z.custom() guards), plus the math value schemas of src/math.ts (the semantic half of the two-layer formula model -- see that file's own top comment for how the layers divide). Re-verify this block against src/content.ts/src/math.ts whenever those files' field shapes change -- nothing here is generated or checked against the real schemas at build time, other than the leaf/near-leaf fragments the regression test below does cover.
 export const CONTENT_DEFS: Record<string, JsonSchema> = {
   Color: {
     type: "object",
@@ -1356,15 +1356,86 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     ],
     additionalProperties: false,
   },
+  ContentStrokeDash: {
+    type: "object",
+    properties: {
+      dots1: {
+        type: "integer",
+        exclusiveMinimum: 0,
+        maximum: MAX_SAFE_INTEGER,
+      },
+      dots1LengthPt: { type: "number", exclusiveMinimum: 0 },
+      dots2: {
+        type: "integer",
+        exclusiveMinimum: 0,
+        maximum: MAX_SAFE_INTEGER,
+      },
+      dots2LengthPt: { type: "number", exclusiveMinimum: 0 },
+      distancePt: { type: "number", minimum: 0 },
+    },
+    required: ["dots1", "dots1LengthPt", "distancePt"],
+    additionalProperties: false,
+  },
   ContentStroke: {
     type: "object",
     properties: {
       color: { $ref: "#/$defs/Color" },
       widthPt: { type: "number", exclusiveMinimum: 0 },
       style: { $ref: "#/$defs/ContentStrokeStyle" },
+      opacity: { type: "number", minimum: 0, maximum: 1 },
+      dashPattern: { $ref: "#/$defs/ContentStrokeDash" },
     },
     required: ["color", "widthPt"],
     additionalProperties: false,
+  },
+  ContentGradientStyle: {
+    type: "string",
+    enum: ["linear", "axial", "radial", "ellipsoid", "square", "rectangular"],
+  },
+  ContentGradientFill: {
+    type: "object",
+    properties: {
+      kind: { type: "string", const: "gradient" },
+      style: { $ref: "#/$defs/ContentGradientStyle" },
+      startColor: { $ref: "#/$defs/Color" },
+      endColor: { $ref: "#/$defs/Color" },
+      angleDeg: { type: "number" },
+    },
+    required: ["kind", "style", "startColor", "endColor"],
+    additionalProperties: false,
+  },
+  ContentHatchStyle: {
+    type: "string",
+    enum: ["single", "double", "triple"],
+  },
+  ContentHatchFill: {
+    type: "object",
+    properties: {
+      kind: { type: "string", const: "hatch" },
+      style: { $ref: "#/$defs/ContentHatchStyle" },
+      color: { $ref: "#/$defs/Color" },
+      distancePt: { type: "number", minimum: 0 },
+      rotationDeg: { type: "number" },
+    },
+    required: ["kind", "style", "color", "distancePt"],
+    additionalProperties: false,
+  },
+  ContentBitmapFill: {
+    type: "object",
+    properties: {
+      kind: { type: "string", const: "bitmap" },
+      format: { type: "string", enum: ["png", "jpeg", "svg", "gif"] },
+      base64: { type: "string" },
+    },
+    required: ["kind", "format", "base64"],
+    additionalProperties: false,
+  },
+  ContentFillPattern: {
+    oneOf: [
+      { $ref: "#/$defs/ContentGradientFill" },
+      { $ref: "#/$defs/ContentHatchFill" },
+      { $ref: "#/$defs/ContentBitmapFill" },
+    ],
   },
   ContentPathPoint: {
     type: "object",
@@ -1422,6 +1493,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
           frame: { $ref: "#/$defs/Box" },
           rotationDeg: { type: "number" },
           fill: { $ref: "#/$defs/Color" },
+          fillPattern: { $ref: "#/$defs/ContentFillPattern" },
+          fillOpacity: { type: "number", minimum: 0, maximum: 1 },
           stroke: { $ref: "#/$defs/ContentStroke" },
           paintOrder: { type: "number" },
           sourcePath: { type: "string" },
@@ -1438,6 +1511,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
           frame: { $ref: "#/$defs/Box" },
           rotationDeg: { type: "number" },
           fill: { $ref: "#/$defs/Color" },
+          fillPattern: { $ref: "#/$defs/ContentFillPattern" },
+          fillOpacity: { type: "number", minimum: 0, maximum: 1 },
           stroke: { $ref: "#/$defs/ContentStroke" },
           paintOrder: { type: "number" },
           sourcePath: { type: "string" },
@@ -1473,6 +1548,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
             items: { $ref: "#/$defs/ContentSubpath" },
           },
           fill: { $ref: "#/$defs/Color" },
+          fillPattern: { $ref: "#/$defs/ContentFillPattern" },
+          fillOpacity: { type: "number", minimum: 0, maximum: 1 },
           fillRule: { type: "string", enum: ["nonzero", "evenodd"] },
           stroke: { $ref: "#/$defs/ContentStroke" },
           paintOrder: { type: "number" },
