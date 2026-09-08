@@ -1,6 +1,6 @@
 import { PptFormatError } from "../errors";
 import { type PptRecord } from "../record/tree";
-import { RT_StyleTextPropAtom } from "../record/types";
+import { RT_StyleTextPropAtom, RT_TextMasterStyleAtom } from "../record/types";
 
 // StyleTextPropAtom: the paragraph-level and character-level formatting for one text body, expressed as two run arrays measured in characters rather than as properties attached to the text. A run's own length is what says where it ends, so the whole atom is only parseable against the character count of the text body it accompanies -- which is why every function here takes that count rather than deriving it. [MS-PPT] 2.9.x StyleTextPropAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/a9a5fa71-238d-491e-acc7-fa1fffd5f100 [MS-PPT] TextPFRun: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/4e95a4f9-a9af-42b5-b81a-f8f991cb1418 [MS-PPT] TextCFRun: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/426f313a-a4f3-4ffb-a041-9a74ccf23f17 [MS-PPT] TextPFException: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c15a13b3-db2c-4b50-a7e6-08045581a663 [MS-PPT] TextCFException: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c75024a2-14cb-4d7d-9964-bdab2fcd9d93
 
@@ -60,14 +60,21 @@ export const STYLE_UNDERLINE = 1 << 2;
 export const STYLE_SHADOW = 1 << 4;
 export const STYLE_EMBOSS = 1 << 9;
 
-// ColorIndexStruct.index: the one value meaning the struct's red/green/blue bytes are a literal colour rather than a slot in the slide's colour scheme. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/5d6b0509-f3c7-435f-9bf4-6f1fc5f8293c Exported so style-write.ts's writeColorIndexStruct writes the identical sentinel readColorIndexStruct below checks for.
+// ColorIndexStruct.index ([MS-PPT] 2.12.2): 0x00-0x07 name one of the slide's own colour scheme slots (background, text, shadow, title text, fill, then Accent 1/2/3 -- see document/color-scheme.ts), 0xFE means the struct's own red/green/blue bytes are a literal colour, and 0xFF means the colour is genuinely unstated. Exported so style-write.ts's writeColorIndexStruct writes the identical sentinel readColorIndexStruct below checks for.
 export const COLOR_INDEX_SRGB = 0xfe;
+export const COLOR_INDEX_UNDEFINED = 0xff;
+export const COLOR_SCHEME_SLOT_COUNT = 8;
 
 export interface RgbColor {
   readonly red: number;
   readonly green: number;
   readonly blue: number;
 }
+
+// A run's own colour reference, before any colour-scheme lookup: either a literal RGB triple, or an index into whichever colour scheme (the slide's own, or its master's, when the slide states none) ends up applying to that run. Modelling this as a union rather than collapsing a scheme reference straight to `undefined` is what makes scheme-colour resolution possible at all -- discarding the index at parse time, the way this module used to, would make the two cases ("no colour stated" and "a scheme colour that hasn't been resolved yet") indistinguishable.
+export type RunColor =
+  | { readonly kind: "rgb"; readonly rgb: RgbColor }
+  | { readonly kind: "scheme"; readonly schemeIndex: number };
 
 export interface ParagraphProperties {
   readonly indentLevel: number;
@@ -90,8 +97,7 @@ export interface CharacterProperties {
   // A zero-based index into the document's FontCollectionContainer, not a typeface name: resolving it needs the Environment record, which this structure has no access to.
   readonly fontRef: number | undefined;
   readonly sizePt: number | undefined;
-  // Present only when the colour is a literal sRGB value; a scheme-colour index resolves against the slide's own colour scheme, which this structure cannot see.
-  readonly color: RgbColor | undefined;
+  readonly color: RunColor | undefined;
 }
 
 export interface StyleRun<T> {
@@ -155,7 +161,7 @@ class FieldCursor {
   }
 }
 
-function readColorIndexStruct(cursor: FieldCursor): RgbColor | undefined {
+function readColorIndexStruct(cursor: FieldCursor): RunColor | undefined {
   const bytes = cursor.bytes(4);
   const [red, green, blue, index] = bytes;
   if (
@@ -168,7 +174,18 @@ function readColorIndexStruct(cursor: FieldCursor): RgbColor | undefined {
       "ColorIndexStruct read returned fewer than its four bytes",
     );
   }
-  return index === COLOR_INDEX_SRGB ? { red, green, blue } : undefined;
+  if (index === COLOR_INDEX_SRGB) {
+    return { kind: "rgb", rgb: { red, green, blue } };
+  }
+  if (index === COLOR_INDEX_UNDEFINED) {
+    return undefined;
+  }
+  if (index < COLOR_SCHEME_SLOT_COUNT) {
+    return { kind: "scheme", schemeIndex: index };
+  }
+  throw new PptFormatError(
+    `ColorIndexStruct index 0x${index.toString(16)} is none of a colour-scheme slot (0x00-0x07), the literal-colour sentinel (0x${COLOR_INDEX_SRGB.toString(16)}), or the undefined-colour sentinel (0x${COLOR_INDEX_UNDEFINED.toString(16)})`,
+  );
 }
 
 // A TextPFException's optional fields, read strictly in the spec's declared field order. That order is not the mask-bit order -- bulletChar (bit 7) is emitted before bulletFontRef (bit 4), and textAlignment (bit 11) before leftMargin (bit 8) -- so iterating the mask bits in numeric order would misalign every field after the first divergence.
@@ -339,4 +356,52 @@ export function readStyleTextPropAtom(
     readTextCFException,
   );
   return { paragraphRuns, characterRuns };
+}
+
+// [MS-PPT] 2.9.35's own cap: "cLevels ... MUST be less than or equal to 0x0005."
+const MASTER_STYLE_MAX_LEVELS = 5;
+// [MS-PPT] 2.9.35: TextMasterStyleLevel's own optional `level` field is present "if the value of the TextMasterStyleAtom record that contains this TextMasterStyleLevel is 0x005, 0x006, 0x007, or 0x008" -- i.e. the containing atom's own recInstance (its TextTypeEnum) is at least CENTER_BODY. For TITLE/BODY/NOTES/OTHER, a level's own index within lstLvl1..lstLvl5 already states which outline level it is.
+const MASTER_STYLE_TYPES_WITH_EXPLICIT_LEVEL = 0x005;
+
+export interface MasterStyleLevel {
+  readonly paragraph: ParagraphProperties;
+  readonly character: CharacterProperties;
+}
+
+export interface MasterTextStyleAtom {
+  // The TextTypeEnum member this atom's own formatting applies to -- the atom's own rh.recInstance, per [MS-PPT] 2.9.35.
+  readonly textType: number;
+  // Index 0 is the outermost outline level, matching lstLvl1; a shorter array than 5 means the remaining levels are not stated by this atom at all (see document/master.ts's own cascade, which walks this array from `min(indentLevel, levels.length - 1)` down to 0).
+  readonly levels: readonly MasterStyleLevel[];
+}
+
+// TextMasterStyleAtom ([MS-PPT] 2.9.35): cLevels, then that many TextMasterStyleLevel entries -- each just a TextPFException/TextCFException pair (an optional `level` field first, for the four types that carry one), so this reuses readTextPFException/readTextCFException directly rather than re-deriving their byte layout. Read from either a MainMasterContainer (one recInstance-tagged atom per placeholder type the master carries) or the DocumentTextInfoContainer inside Environment (the single OTHER-typed document-wide default every type falls back to when its own master says nothing) -- both are the identical record shape, told apart only by where the caller found them.
+export function readTextMasterStyleAtom(
+  record: PptRecord,
+): MasterTextStyleAtom {
+  if (record.header.recType !== RT_TextMasterStyleAtom) {
+    throw new PptFormatError(
+      `expected RT_TextMasterStyleAtom (0x${RT_TextMasterStyleAtom.toString(16)}) at offset ${record.offset}, found record type 0x${record.header.recType.toString(16)}`,
+    );
+  }
+  const textType = record.header.recInstance;
+  const cursor = new FieldCursor(record.data, 0, "TextMasterStyleAtom");
+  const cLevels = cursor.u16();
+  if (cLevels > MASTER_STYLE_MAX_LEVELS) {
+    throw new PptFormatError(
+      `TextMasterStyleAtom at offset ${record.offset} declares cLevels ${cLevels}, more than the mandated maximum of ${MASTER_STYLE_MAX_LEVELS}`,
+    );
+  }
+  const hasExplicitLevel = textType >= MASTER_STYLE_TYPES_WITH_EXPLICIT_LEVEL;
+  const levels: MasterStyleLevel[] = [];
+  for (let i = 0; i < cLevels; i += 1) {
+    if (hasExplicitLevel) {
+      // The level field's own value is redundant with this loop's own index for a well-formed file (both name the same outline level); it is consumed here purely to keep the cursor aligned for the pf/cf fields that follow, not read back out.
+      cursor.u16();
+    }
+    const paragraph = readTextPFException(cursor, i);
+    const character = readTextCFException(cursor);
+    levels.push({ paragraph, character });
+  }
+  return { textType, levels };
 }

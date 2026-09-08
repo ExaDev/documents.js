@@ -114,9 +114,8 @@ describe("buildTextBody", () => {
     ];
     const { style } = buildTextBody(blocks, noFonts);
     expect(style.characterRuns[0]?.properties.color).toEqual({
-      red: 0x33,
-      green: 0x66,
-      blue: 0x99,
+      kind: "rgb",
+      rgb: { red: 0x33, green: 0x66, blue: 0x99 },
     });
   });
 

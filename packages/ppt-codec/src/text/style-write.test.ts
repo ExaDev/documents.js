@@ -129,7 +129,7 @@ describe("writeStyleTextPropAtom", () => {
             emboss: undefined,
             fontRef: 2,
             sizePt: 18,
-            color: { red: 0x11, green: 0x22, blue: 0x33 },
+            color: { kind: "rgb", rgb: { red: 0x11, green: 0x22, blue: 0x33 } },
           },
         },
       ],

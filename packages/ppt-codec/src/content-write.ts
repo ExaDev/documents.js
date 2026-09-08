@@ -12,7 +12,7 @@ import {
   ALIGN_RIGHT,
   type CharacterProperties,
   type ParagraphProperties,
-  type RgbColor,
+  type RunColor,
   type StyleRun,
   type StyleTextProps,
 } from "./text/style";
@@ -52,14 +52,18 @@ function pointsToParaSpacing(pt: number | undefined): number | undefined {
   return pt === undefined ? undefined : -pointsToMasterUnits(pt);
 }
 
-function mapColorToPpt(color: Color | undefined): RgbColor | undefined {
+// The writer only ever states a literal colour, never a scheme reference: document-schema.js's own Color is always concrete RGB, with no representation for "whichever colour the deck's own scheme slot N currently holds."
+function mapColorToPpt(color: Color | undefined): RunColor | undefined {
   if (color === undefined) {
     return undefined;
   }
   return {
-    red: Math.round(color.r * BYTE_MAX),
-    green: Math.round(color.g * BYTE_MAX),
-    blue: Math.round(color.b * BYTE_MAX),
+    kind: "rgb",
+    rgb: {
+      red: Math.round(color.r * BYTE_MAX),
+      green: Math.round(color.g * BYTE_MAX),
+      blue: Math.round(color.b * BYTE_MAX),
+    },
   };
 }
 

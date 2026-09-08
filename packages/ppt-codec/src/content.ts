@@ -4,6 +4,12 @@ import type {
   ContentParagraph,
   ContentRun,
 } from "document-schema.js";
+import { resolveSchemeColor } from "./document/color-scheme";
+import {
+  type MasterStyleTable,
+  resolveCharacterProperties,
+  resolveParagraphProperties,
+} from "./document/master";
 import { splitParagraphs } from "./text/atoms";
 import {
   ALIGN_CENTER,
@@ -13,6 +19,7 @@ import {
   type CharacterProperties,
   type ParagraphProperties,
   type RgbColor,
+  type RunColor,
   type StyleRun,
   type StyleTextProps,
 } from "./text/style";
@@ -70,6 +77,19 @@ function mapColor(color: RgbColor | undefined): Color | undefined {
   };
 }
 
+// The scheme-colour resolution [MS-PPT] describes as a wholly separate step from master text-formatting inheritance (see document/master.ts's own top comment): a run's own colour reference, once the cascade has picked one, is either already a literal RGB triple or a scheme-slot index that still needs looking up against colorScheme -- the slide's own SlideSchemeColorSchemeAtom, or its master's when the slide states none (see read.ts's own colour-scheme resolution).
+function resolveRunColor(
+  color: RunColor | undefined,
+  colorScheme: readonly RgbColor[],
+): RgbColor | undefined {
+  if (color === undefined) {
+    return undefined;
+  }
+  return color.kind === "rgb"
+    ? color.rgb
+    : resolveSchemeColor(color.schemeIndex, colorScheme);
+}
+
 // One character-counted run's extent within the text body, paired with its properties. A run array states only lengths, so the absolute range each run covers has to be accumulated before any of them can be intersected with a paragraph.
 interface RunExtent<T> {
   readonly start: number;
@@ -95,6 +115,7 @@ function runFrom(
   text: string,
   properties: CharacterProperties,
   fontNames: readonly string[],
+  colorScheme: readonly RgbColor[],
 ): ContentRun {
   return {
     text,
@@ -107,25 +128,36 @@ function runFrom(
         ? undefined
         : fontNames[properties.fontRef],
     sizePt: properties.sizePt,
-    color: mapColor(properties.color),
+    color: mapColor(resolveRunColor(properties.color, colorScheme)),
   };
 }
 
-// A shape's whole text body plus its formatting, as the schema's paragraphs. `fontNames` is the document's font collection, which is what a run's FontIndexRef indexes.
+// A shape's whole text body plus its formatting, as the schema's paragraphs. `fontNames` is the document's font collection, which is what a run's FontIndexRef indexes. `masterStyles`/`textType` resolve a run's own unstated formatting against [MS-PPT] 2.9.35's master-style cascade (document/master.ts), and `colorScheme` resolves a scheme-slot colour reference to an actual RGB value (document/color-scheme.ts) -- both genuinely per-shape, since a placeholder's own TextHeaderAtom states which TextTypeEnum member it is and a slide's own colour scheme can differ from its master's.
 export function buildParagraphs(
   text: string,
   style: StyleTextProps,
   fontNames: readonly string[],
+  masterStyles: MasterStyleTable,
+  textType: number,
+  colorScheme: readonly RgbColor[],
 ): ContentParagraph[] {
   const paragraphExtents = toExtents<ParagraphProperties>(style.paragraphRuns);
   const characterExtents = toExtents<CharacterProperties>(style.characterRuns);
 
   return splitParagraphs(text).map((paragraph) => {
     const end = paragraph.start + paragraph.text.length;
-    const paragraphProperties = paragraphExtents.find(
+    const rawParagraphProperties = paragraphExtents.find(
       (extent) =>
         paragraph.start >= extent.start && paragraph.start < extent.end,
     )?.properties;
+    // The run's own stated (or, absent one, default-zero) outline depth -- never itself resolved from the master, since it is what selects which of the master's own levels apply in the first place.
+    const indentLevel = rawParagraphProperties?.indentLevel ?? 0;
+    const paragraphProperties = resolveParagraphProperties(
+      rawParagraphProperties,
+      masterStyles,
+      textType,
+      indentLevel,
+    );
 
     const runs: ContentRun[] = [];
     for (const extent of characterExtents) {
@@ -134,32 +166,51 @@ export function buildParagraphs(
       if (from >= to) {
         continue;
       }
+      const resolvedCharacterProperties = resolveCharacterProperties(
+        extent.properties,
+        masterStyles,
+        textType,
+        indentLevel,
+      );
       runs.push(
         runFrom(
           paragraph.text.slice(from - paragraph.start, to - paragraph.start),
-          extent.properties,
+          resolvedCharacterProperties,
           fontNames,
+          colorScheme,
         ),
       );
     }
-    // A text body whose style atom is absent, shorter than the text, or missing entirely still has to yield its text: the formatting is what is missing, not the characters. An empty paragraph yields no run at all, since a run carrying no text is not a thing the schema needs to represent.
+    // A text body whose style atom is absent, shorter than the text, or missing entirely still has to yield its text: the formatting is what is missing, not the characters -- and even then, the master cascade can still supply it. An empty paragraph yields no run at all, since a run carrying no text is not a thing the schema needs to represent.
     if (runs.length === 0 && paragraph.text.length > 0) {
-      runs.push({ text: paragraph.text });
+      const resolvedCharacterProperties = resolveCharacterProperties(
+        undefined,
+        masterStyles,
+        textType,
+        indentLevel,
+      );
+      runs.push(
+        runFrom(
+          paragraph.text,
+          resolvedCharacterProperties,
+          fontNames,
+          colorScheme,
+        ),
+      );
     }
 
-    const alignment = mapAlignment(paragraphProperties?.alignment);
-    const indentLevel = paragraphProperties?.indentLevel ?? 0;
+    const alignment = mapAlignment(paragraphProperties.alignment);
     return {
       kind: "paragraph" as const,
       runs,
       alignment,
       // [MS-PPT] states an indent level on every paragraph run, including level 0, which is the ordinary un-indented body text rather than a list. Only a level above zero is reported as list membership, matching how ooxml.js reads a drawing paragraph's a:pPr/@lvl.
       list: indentLevel > 0 ? { level: indentLevel } : undefined,
-      spacingBeforePt: paraSpacingToPoints(paragraphProperties?.spaceBefore),
-      spacingAfterPt: paraSpacingToPoints(paragraphProperties?.spaceAfter),
-      lineSpacing: paraSpacingToLineSpacing(paragraphProperties?.lineSpacing),
-      indentLeftPt: marginOrIndentToPoints(paragraphProperties?.leftMargin),
-      indentFirstLinePt: marginOrIndentToPoints(paragraphProperties?.indent),
+      spacingBeforePt: paraSpacingToPoints(paragraphProperties.spaceBefore),
+      spacingAfterPt: paraSpacingToPoints(paragraphProperties.spaceAfter),
+      lineSpacing: paraSpacingToLineSpacing(paragraphProperties.lineSpacing),
+      indentLeftPt: marginOrIndentToPoints(paragraphProperties.leftMargin),
+      indentFirstLinePt: marginOrIndentToPoints(paragraphProperties.indent),
     };
   });
 }
