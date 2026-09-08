@@ -8,6 +8,7 @@ export * from "./crypto/sha1";
 export * from "./crypto/rc4";
 export * from "./crypto/office-rc4";
 export * from "./crypto/office-rc4-cryptoapi";
+export * from "./crypto/xor-obfuscation";
 export * from "./oleps/layout-metadata";
 export * from "./oleps/read";
 export * from "./oleps/summary-information";
