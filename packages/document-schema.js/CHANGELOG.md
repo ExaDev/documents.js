@@ -1,3 +1,9 @@
+## [7.5.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.5.0...document-schema.js%407.5.1) (2026-09-08)
+
+### Documentation
+
+* **document-schema.js:** state that a construct's extent is its own heading and list scope ([beeda39](https://github.com/ExaDev/documents.js/commit/beeda397ea8e7fdd101673d53e0ba3c183c340ae))
+
 ## [7.5.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.4.0...document-schema.js%407.5.0) (2026-09-08)
 
 ### Features

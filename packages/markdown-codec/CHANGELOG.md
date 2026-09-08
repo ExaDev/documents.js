@@ -1,3 +1,14 @@
+## [6.6.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.5.2...markdown-codec%406.6.0) (2026-09-08)
+
+### Features
+
+* **markdown-codec:** stop degrading a heading inside a quote or footnote body ([9dd9504](https://github.com/ExaDev/documents.js/commit/9dd9504555dcf03654f827f96156dcd7967b4629))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.5.1
+
 ## [6.5.2](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.5.1...markdown-codec%406.5.2) (2026-09-08)
 
 
