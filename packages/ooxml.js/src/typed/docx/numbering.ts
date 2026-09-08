@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
+import { el } from "../../xml/fragment";
+import { encodeXmlText } from "../../xml/entities";
 import { attr, childrenWithTag, rootElement } from "../util";
 
 // Resolves word/numbering.xml's real w:abstractNum/w:num definitions -- the glyph/format, start-at value, and restart rule a consumer needs to actually render a list's own markers -- as a companion to (not a replacement for) ContentListMembership (document-schema.js), which read.ts's readListMembership already tracks unchanged: a paragraph's own numId/level membership. NumberingDefinitions is deliberately a separate, top-level structure exported alongside DocxDocument rather than folded into ContentListMembership itself, for two reasons: (1) ContentListMembership is document-schema.js's own schema, shared verbatim across ooxml.js/odf.js/documents.js -- widening it with an ooxml-specific numbering-definition payload would leak this package's own model into a schema the sibling packages also depend on; (2) a definition is a genuinely document-level resource referenced by numId, not a per-paragraph one -- every paragraph sharing a numId would otherwise carry an identical copy of that numId's full level table repeated on every paragraph, rather than the keyed-map-once, referenced-by-id-many-times shape this file provides.
@@ -28,7 +30,10 @@ export type NumberingDefinitions = Readonly<
   Record<string, NumberingDefinition>
 >;
 
-const NUMBERING_PART_PATH = "word/numbering.xml";
+export const NUMBERING_PART_PATH = "word/numbering.xml";
+
+// word/numbering.xml is its own standalone part, so its root element carries the wordprocessingml namespace declaration itself rather than inheriting one from an enclosing word/document.xml the way a fragment nested in the body would -- the same reason typed/docx/write.ts's own WML_NS is duplicated here rather than imported (importing it would pull that module's own writer surface into this read-and-write-shared one, the dependency direction the write side already takes in the other direction).
+const WML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
 function readLevel(lvl: XmlElement): NumberingLevel | undefined {
   const numFmtEl = childrenWithTag(lvl, "w:numFmt")[0];
@@ -137,4 +142,53 @@ export function readNumberingDefinitions(pkg: Package): NumberingDefinitions {
     definitions[numId] = { levels: applyLevelOverrides(baseLevels, num) };
   }
   return definitions;
+}
+
+// readNumberingDefinitions's inverse: one w:abstractNum per numId (rather than reconstructing whichever original numId->abstractNumId sharing a producer may have written, which NumberingDefinitions does not retain) with a w:num pointing straight at it, so every numId a paragraph's own ContentListMembership references resolves to exactly the level table it read from. CT_Lvl's own child sequence puts w:start before w:numFmt before w:lvlRestart before w:lvlText; w:start is always written explicitly (even at the default of 1), since NumberingLevel carries no flag for "was this the default" and the reader treats an explicit '1' identically to an absent element either way.
+function buildNumberingLevel(ilvl: string, level: NumberingLevel): XmlElement {
+  const children: XmlElement[] = [
+    el("w:start", { "w:val": String(level.startAt) }),
+    el("w:numFmt", { "w:val": encodeXmlText(level.format) }),
+  ];
+  if (level.restart !== undefined) {
+    children.push(el("w:lvlRestart", { "w:val": String(level.restart) }));
+  }
+  children.push(el("w:lvlText", { "w:val": encodeXmlText(level.text) }));
+  return el("w:lvl", { "w:ilvl": ilvl }, children);
+}
+
+// NumberingDefinitions -> word/numbering.xml's root element, returned unwrapped (an XmlElement, not an XmlPart) so the caller -- typed/docx/write.ts's buildDocxPackageFromContent, the only writer that emits genuinely new parts in this package -- supplies its own xml declaration exactly as it already does for every other part it builds, the same division of responsibility shading.ts's buildCellShading already follows for a smaller fragment. Returns undefined for an empty definitions record (a document with no lists at all), so the caller can skip emitting the part entirely rather than shipping a numbering.xml with no content -- the read side of that same absence (readNumberingDefinitions returns {} when the part itself is missing).
+export function buildNumberingElement(
+  definitions: NumberingDefinitions,
+): XmlElement | undefined {
+  const numIds = Object.keys(definitions).sort();
+  if (numIds.length === 0) {
+    return undefined;
+  }
+  const abstractNums: XmlElement[] = [];
+  const nums: XmlElement[] = [];
+  for (const numId of numIds) {
+    const definition = definitions[numId];
+    if (definition === undefined) {
+      continue;
+    }
+    const levels = Object.keys(definition.levels)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((ilvl) => {
+        const level = definition.levels[ilvl];
+        return level === undefined
+          ? undefined
+          : buildNumberingLevel(ilvl, level);
+      })
+      .filter((lvl): lvl is XmlElement => lvl !== undefined);
+    abstractNums.push(
+      el("w:abstractNum", { "w:abstractNumId": numId }, levels),
+    );
+    nums.push(
+      el("w:num", { "w:numId": numId }, [
+        el("w:abstractNumId", { "w:val": numId }),
+      ]),
+    );
+  }
+  return el("w:numbering", { "xmlns:w": WML_NS }, [...abstractNums, ...nums]);
 }
