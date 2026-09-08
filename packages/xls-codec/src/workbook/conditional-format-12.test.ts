@@ -149,6 +149,7 @@ function cf12Bytes(
     priority?: number;
     icfTemplate?: number;
     templateParams?: readonly number[];
+    dxf?: readonly number[];
   } = {},
 ): number[] {
   const templateParams =
@@ -156,13 +157,15 @@ function cf12Bytes(
   if (templateParams.length !== 16) {
     throw new Error("templateParams must be exactly 16 bytes");
   }
+  const dxf = options.dxf ?? [];
   return [
     ...new Array<number>(12).fill(0), // frtRefHeader
     ct,
     0x00, // cp
     ...u16(0), // cce1
     ...u16(0), // cce2
-    ...u32(0), // cbDxf
+    ...u32(dxf.length), // cbDxf
+    ...dxf,
     ...u16(0), // fmlaActive cce
     options.stopIfTrue === true ? 0x02 : 0x00, // flags: B - fStopIfTrue
     ...u16(options.priority ?? 0), // ipriority
@@ -203,9 +206,22 @@ function cf12Record(
     priority?: number;
     icfTemplate?: number;
     templateParams?: readonly number[];
+    dxf?: readonly number[];
   } = {},
 ): Uint8Array<ArrayBuffer> {
   return record(RECORD_CF12, cf12Bytes(ct, rgbCT, options));
+}
+
+const DXFFNTD_LENGTH = 122;
+const DXFFNTD_ICV_FORE_OFFSET = 80;
+
+/** A minimal DXFN ([MS-XLS] 2.4.97) naming only a font colour: the 6-byte flags header (ibitAtrFnt only) then a 122-byte DXFFntD with icvFore set at its own documented offset -- everything conditional-format.test.ts's own sibling dxf() helper already builds for base CF's identical DXFN, written independently here since DXFN12 wraps this exact same payload behind its own cbDxf prefix rather than sharing test fixture code across files. */
+function dxfFontColor(icvFore: number): number[] {
+  const block = new Array<number>(DXFFNTD_LENGTH).fill(0);
+  const buffer = new ArrayBuffer(4);
+  new DataView(buffer).setInt32(0, icvFore, true);
+  block.splice(DXFFNTD_ICV_FORE_OFFSET, 4, ...new Uint8Array(buffer));
+  return [...u32(1 << 26), ...u16(0), ...block];
 }
 
 function groupsFrom(
@@ -729,6 +745,35 @@ describe("readCondFmt12Group", () => {
     const groups = groupsFrom(
       condFmt12Record(1, ONE_RANGE),
       cf12Record(0x05, cfFilterBytes(), { icfTemplate: 0x00ff }),
+    );
+
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+  });
+
+  it("reads a filter rule's own DXFN12 style -- unlike colour scale/data bar/icon set, [MS-XLS] does not force ct 0x05's own cbDxf to zero", () => {
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x05, cfFilterBytes(), {
+        icfTemplate: 0x001b, // duplicateValues -- needs no CFExTemplateParams data of its own, isolating the style extraction under test
+        dxf: dxfFontColor(2), // icv 2, Red
+      }),
+    );
+
+    const format = readCondFmt12Group(groups, 0, NO_SHEETS).formats[0];
+
+    expect(format).toMatchObject({
+      kind: "duplicateValues",
+      style: { fontColorIcv: 2, fill: undefined },
+    });
+  });
+
+  it("rejects a top10 rule with a zero rank rather than promoting a value the schema itself forbids", () => {
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x05, cfFilterBytes(), {
+        icfTemplate: 0x0005,
+        templateParams: cfExFilterParams({ top: true, iParam: 0 }),
+      }),
     );
 
     expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
