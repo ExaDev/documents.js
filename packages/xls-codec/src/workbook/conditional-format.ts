@@ -47,7 +47,8 @@ const DXFFNTD_LENGTH = 122; // cchFont(1) + [stFontName+unused1, always 63 bytes
 const DXFFNTD_ICV_FORE_OFFSET = 64 + 16; // past the 64-byte font-name block and the 16-byte Stxp
 const DXF_DEFAULT_FOREGROUND_TEXT_COLOR = 32767; // DXFFntD.icvFore's own documented "use the default foreground text colour" sentinel -- not a real override
 
-function parseDxfStyle(
+// Exported for reuse by conditional-format-12.ts: DXFN12 ([MS-XLS] 2.4) is a cbDxf-prefixed wrapper around this exact same DXFN payload, so a CF12 ct 0x05 filter rule's style (the one CF12 rule shape [MS-XLS] does not force cbDxf to zero for) resolves through the identical font/fill extraction a base CF record's style already does.
+export function parseDxfStyle(
   dxfBytes: Uint8Array<ArrayBuffer>,
 ): RawConditionalFormatStyle | undefined {
   if (dxfBytes.length === 0) {

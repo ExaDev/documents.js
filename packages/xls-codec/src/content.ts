@@ -352,34 +352,45 @@ function mapConditionalFormats12(
       continue;
     }
     if (format.kind === "top10") {
+      const style = mapConditionalFormatStyle(format.style, palette);
       results.push({
         type: "top10",
         rank: format.rank,
         ...(format.percent ? { percent: true } : {}),
         ...(format.bottom ? { bottom: true } : {}),
+        ...(style !== undefined ? { style } : {}),
         ...common,
       });
       continue;
     }
     if (format.kind === "aboveAverage") {
+      const style = mapConditionalFormatStyle(format.style, palette);
       results.push({
         type: "aboveAverage",
         ...(format.aboveAverage ? {} : { aboveAverage: false }),
         ...(format.equalAverage ? { equalAverage: true } : {}),
         ...(format.stdDev !== undefined ? { stdDev: format.stdDev } : {}),
+        ...(style !== undefined ? { style } : {}),
         ...common,
       });
       continue;
     }
     if (format.kind === "timePeriod") {
+      const style = mapConditionalFormatStyle(format.style, palette);
       results.push({
         type: "timePeriod",
         timePeriod: format.timePeriod,
+        ...(style !== undefined ? { style } : {}),
         ...common,
       });
       continue;
     }
-    results.push({ type: format.kind, ...common });
+    const style = mapConditionalFormatStyle(format.style, palette);
+    results.push({
+      type: format.kind,
+      ...(style !== undefined ? { style } : {}),
+      ...common,
+    });
   }
   return results;
 }
