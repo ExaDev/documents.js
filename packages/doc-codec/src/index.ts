@@ -4,6 +4,7 @@ export * from "./bytes";
 export * from "./base64";
 export * from "./plc";
 export * from "./detect";
+export * from "./data-stream";
 export * from "./fib/offsets";
 export * from "./fib/fib";
 export * from "./fib/write";

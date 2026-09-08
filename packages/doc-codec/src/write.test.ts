@@ -371,7 +371,123 @@ describe("writeDocContent", () => {
     expect(() => writeDocContent(spreadsheet)).toThrow(DocUnsupportedError);
   });
 
-  it("refuses a document with more than one section, rather than silently merging their content into what would read back as one", () => {
+  it("refuses a block kind it does not yet write, such as a page break", () => {
+    const input = document([{ kind: "pageBreak" }]);
+    expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
+  });
+
+  it("refuses an embedded-object block, a genuinely separate undertaking this reader does not implement either (ExaDev/documents.js#971)", () => {
+    const input = document([
+      {
+        kind: "embeddedObject",
+        objectKind: "chart",
+        document: { kind: "spreadsheet", metadata: {}, sheets: [] },
+        frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      },
+    ]);
+    expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
+  });
+
+  it("refuses a construct-boundary marker block, tracked separately on ExaDev/documents.js#1122", () => {
+    const input = document([
+      { kind: "constructStart", descriptor: { kind: "division" } },
+    ]);
+    expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
+  });
+});
+
+// ExaDev/documents.js#971: writeDocContent used to refuse a document with more than one section outright. Now every section writes its own real PlcfSed/Sepx entry with its own page size and margins, and the boundary between two sections is a genuine end-of-section character (0x000C, [MS-DOC] 2.4.4), never merged into one.
+describe("writeDocContent multiple sections", () => {
+  function twoSectionDocument(): ContentDocument {
+    return {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [paragraph([{ text: "section one" }])],
+        },
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 },
+          blocks: [paragraph([{ text: "section two" }])],
+        },
+      ],
+    };
+  }
+
+  it("round-trips each section's own page size, margins and blocks independently", () => {
+    const result = roundTrip(twoSectionDocument());
+    if (result.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    expect(result.sections).toHaveLength(2);
+    const [first, second] = result.sections;
+    if (first === undefined || second === undefined) {
+      throw new Error("expected two sections");
+    }
+    expect(first.pageSize).toEqual({ widthPt: 612, heightPt: 792 });
+    expect(first.margins).toEqual({
+      topPt: 72,
+      rightPt: 72,
+      bottomPt: 72,
+      leftPt: 72,
+    });
+    expect(second.pageSize).toEqual({ widthPt: 595, heightPt: 842 });
+    expect(second.margins).toEqual({
+      topPt: 36,
+      rightPt: 36,
+      bottomPt: 36,
+      leftPt: 36,
+    });
+    if (
+      first.blocks[0]?.kind !== "paragraph" ||
+      second.blocks[0]?.kind !== "paragraph"
+    ) {
+      throw new Error("expected a paragraph block in each section");
+    }
+    expect(first.blocks[0].runs.map((run) => run.text)).toEqual([
+      "section one",
+    ]);
+    expect(second.blocks[0].runs.map((run) => run.text)).toEqual([
+      "section two",
+    ]);
+  });
+
+  it("round-trips three sections, keeping every boundary distinct", () => {
+    const input: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [0, 1, 2].map((index) => ({
+        pageSize: { widthPt: 500 + index, heightPt: 700 },
+        margins: { topPt: 40, rightPt: 40, bottomPt: 40, leftPt: 40 },
+        blocks: [paragraph([{ text: `section ${String(index)}` }])],
+      })),
+    };
+    const result = roundTrip(input);
+    if (result.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    expect(result.sections).toHaveLength(3);
+    result.sections.forEach((section, index) => {
+      expect(section.pageSize.widthPt).toBe(500 + index);
+      const block = section.blocks[0];
+      if (block?.kind !== "paragraph") {
+        throw new Error(`expected a paragraph in section ${String(index)}`);
+      }
+      expect(block.runs.map((run) => run.text)).toEqual([
+        `section ${String(index)}`,
+      ]);
+    });
+  });
+
+  it("ends a non-final section on an ordinary paragraph mark even when its own last block is a table", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [{ cells: [{ blocks: [paragraph([{ text: "cell" }])] }] }],
+    };
     const input: ContentDocument = {
       kind: "wordprocessing",
       metadata: {},
@@ -379,29 +495,154 @@ describe("writeDocContent", () => {
         {
           pageSize: { widthPt: 612, heightPt: 792 },
           margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
-          blocks: [paragraph([{ text: "one" }])],
+          blocks: [table],
         },
         {
           pageSize: { widthPt: 612, heightPt: 792 },
           margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
-          blocks: [paragraph([{ text: "two" }])],
+          blocks: [paragraph([{ text: "after" }])],
         },
       ],
     };
-    expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
+    const result = roundTrip(input);
+    if (result.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    expect(result.sections).toHaveLength(2);
+    // The section's own end-of-section character may not land on the table's own row-ending mark (closeSection's own guarantee -- see writeDocContent's own comment), so a trailing empty paragraph closes it first, exactly as [MS-DOC] 2.4.4's worked example requires.
+    expect(result.sections[0]?.blocks.map((block) => block.kind)).toEqual([
+      "table",
+      "paragraph",
+    ]);
+    const second = result.sections[1]?.blocks[0];
+    if (second?.kind !== "paragraph") {
+      throw new Error("expected a paragraph in the second section");
+    }
+    expect(second.runs.map((run) => run.text)).toEqual(["after"]);
   });
+});
 
-  it("refuses a block kind it does not yet write, such as an image", () => {
+// ExaDev/documents.js#971: writeDocContent used to throw DocUnsupportedError for every image block. Now a 'png'/'jpeg' inline picture writes a genuine PICFAndOfficeArtData blob into a real Data stream, matching pictures.ts's own read-side byte layout exactly in reverse.
+describe("writeDocContent inline pictures", () => {
+  function base64Of(bytes: readonly number[]): string {
+    return btoa(String.fromCharCode(...bytes));
+  }
+
+  it("round-trips a PNG image's own bytes, format and size", () => {
+    const pngBytes = [137, 80, 78, 71, 1, 2, 3, 4, 5, 6, 7, 8];
     const input = document([
       {
         kind: "image",
         format: "png",
+        base64: base64Of(pngBytes),
+        widthPt: 72,
+        heightPt: 36,
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "image") {
+      throw new Error(`expected an image block, got '${block?.kind}'`);
+    }
+    expect(block.format).toBe("png");
+    expect(block.widthPt).toBe(72);
+    expect(block.heightPt).toBe(36);
+    expect(
+      Array.from(atob(block.base64), (char) => char.charCodeAt(0)),
+    ).toEqual(pngBytes);
+  });
+
+  it("round-trips a JPEG image", () => {
+    const jpegBytes = [0xff, 0xd8, 0xff, 0xd9];
+    const input = document([
+      {
+        kind: "image",
+        format: "jpeg",
+        base64: base64Of(jpegBytes),
+        widthPt: 10,
+        heightPt: 20,
+      },
+    ]);
+    const result = roundTrip(input);
+    const block = blocksOf(result)[0];
+    if (block?.kind !== "image") {
+      throw new Error(`expected an image block, got '${block?.kind}'`);
+    }
+    expect(block.format).toBe("jpeg");
+    expect(
+      Array.from(atob(block.base64), (char) => char.charCodeAt(0)),
+    ).toEqual(jpegBytes);
+  });
+
+  it("splits a paragraph carrying real text around an inline picture into separate blocks", () => {
+    const input = document([
+      paragraph([{ text: "before " }]),
+      {
+        kind: "image",
+        format: "png",
+        base64: base64Of([1, 2, 3]),
+        widthPt: 10,
+        heightPt: 10,
+      },
+      paragraph([{ text: "after" }]),
+    ]);
+    const result = roundTrip(input);
+    const blocks = blocksOf(result);
+    expect(blocks.map((block) => block.kind)).toEqual([
+      "paragraph",
+      "image",
+      "paragraph",
+    ]);
+  });
+
+  it("writes more than one picture into the same Data stream at distinct offsets", () => {
+    const input = document([
+      {
+        kind: "image",
+        format: "png",
+        base64: base64Of([1, 1, 1]),
+        widthPt: 10,
+        heightPt: 10,
+      },
+      {
+        kind: "image",
+        format: "png",
+        base64: base64Of([2, 2, 2, 2]),
+        widthPt: 20,
+        heightPt: 20,
+      },
+    ]);
+    const result = roundTrip(input);
+    const blocks = blocksOf(result);
+    expect(blocks.map((block) => block.kind)).toEqual(["image", "image"]);
+    const [first, second] = blocks;
+    if (first?.kind !== "image" || second?.kind !== "image") {
+      throw new Error("expected two image blocks");
+    }
+    expect(
+      Array.from(atob(first.base64), (char) => char.charCodeAt(0)),
+    ).toEqual([1, 1, 1]);
+    expect(
+      Array.from(atob(second.base64), (char) => char.charCodeAt(0)),
+    ).toEqual([2, 2, 2, 2]);
+  });
+
+  it("refuses an image format it cannot write, such as svg", () => {
+    const input = document([
+      {
+        kind: "image",
+        format: "svg",
         base64: "",
         widthPt: 10,
         heightPt: 10,
       },
     ]);
     expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
+  });
+
+  it('writes no "Data" stream at all when the document carries no pictures', () => {
+    const bytes = writeDocContent(document([paragraph([{ text: "plain" }])]));
+    expect(readDocStreams(bytes).data).toBeUndefined();
   });
 });
 

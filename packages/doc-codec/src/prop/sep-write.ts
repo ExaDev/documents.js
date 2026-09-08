@@ -124,18 +124,30 @@ export function buildSepx(grpprl: readonly number[]): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-/** PlcfSed for exactly one section: two CPs (0 and ccpText) bracketing the single Sed ([MS-DOC] 2.9.269) this writer ever emits, whose fcSepx names where buildSepx's own bytes were placed in the WordDocument stream and whose fn/fnMpr/fcMpr fields carry the values [MS-DOC] states are ignored. */
+/** PlcfSed for `startCps.length` sections, [MS-DOC] 2.9.269/2.8.26: `startCps` (each section's own PlcfSed.aCp[i], "the beginning of a range of text ... that constitutes a section") plus a trailing `ccpText` -- the "last CP does not begin a new section" terminator -- bracketing one 12-byte Sed per section, each naming where that section's own buildSepx bytes were placed in the WordDocument stream (`fcSepxList`, the same order as `startCps`) and whose fn/fnMpr/fcMpr fields carry the values [MS-DOC] states are ignored. A single-section document is simply the `startCps.length === 1` case. */
 export function buildPlcfSed(
+  startCps: readonly number[],
   ccpText: number,
-  fcSepx: number,
+  fcSepxList: readonly number[],
 ): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(4 + 4 + 12);
+  if (startCps.length !== fcSepxList.length) {
+    throw new DocFormatError(
+      `internal defect: buildPlcfSed was given ${String(startCps.length)} section start CPs but ${String(fcSepxList.length)} Sepx offsets -- these must be the same length`,
+    );
+  }
+  const keys = [...startCps, ccpText];
+  const keyBytes = keys.length * 4;
+  const bytes = new Uint8Array(keyBytes + fcSepxList.length * 12);
   const view = new DataView(bytes.buffer);
-  view.setUint32(0, 0, true); // cp[0]: the section starts at the beginning of the main document.
-  view.setUint32(4, ccpText, true); // cp[1]: the terminating CP, at or beyond the end of the main document.
-  view.setUint16(8, 0, true); // sed.fn -- ignored.
-  view.setUint32(10, fcSepx, true); // sed.fcSepx.
-  view.setUint16(14, 0, true); // sed.fnMpr -- ignored.
-  view.setUint32(16, 0xffffffff, true); // sed.fcMpr -- ignored.
+  keys.forEach((cp, index) => {
+    view.setUint32(index * 4, cp, true);
+  });
+  fcSepxList.forEach((fcSepx, index) => {
+    const base = keyBytes + index * 12;
+    view.setUint16(base, 0, true); // sed.fn -- ignored.
+    view.setUint32(base + 2, fcSepx, true); // sed.fcSepx.
+    view.setUint16(base + 6, 0, true); // sed.fnMpr -- ignored.
+    view.setUint32(base + 8, 0xffffffff, true); // sed.fcMpr -- ignored.
+  });
   return bytes;
 }
