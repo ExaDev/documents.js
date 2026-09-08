@@ -4,6 +4,7 @@ import { genericHeaderBytes } from "../test-support/generic-header";
 import { readFileHeader } from "./header";
 import {
   PACKET_TYPE_DESIRED_FONT_DESCRIPTOR,
+  readGeneralWpTextBlocks,
   readPrefixPackets,
   readTypefaceName,
 } from "./prefix";
@@ -108,5 +109,28 @@ describe("readTypefaceName", () => {
 
   it("returns undefined for a packet too short to hold a descriptor's fixed fields", () => {
     expect(readTypefaceName(new Uint8Array(10))).toBeUndefined();
+  });
+});
+
+describe("readGeneralWpTextBlocks", () => {
+  it("concatenates two text blocks into one contiguous span", () => {
+    const blockA = [0x48, 0x69]; // "Hi"
+    const blockB = [0x21]; // "!"
+    const header = [2, 0, 8, 0, blockA.length, 0, blockB.length, 0]; // [count=2] [offset=8] [size1] [size2]
+    const bytes = new Uint8Array([...header, ...blockA, ...blockB]);
+    expect(readGeneralWpTextBlocks(bytes)).toEqual(
+      new Uint8Array([...blockA, ...blockB]),
+    );
+  });
+
+  it("returns undefined for a zero block count", () => {
+    expect(
+      readGeneralWpTextBlocks(new Uint8Array([0, 0, 4, 0])),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined rather than reading past the packet's own bytes", () => {
+    const header = [1, 0, 4, 0, 100, 0]; // claims a 100-byte block with no data present
+    expect(readGeneralWpTextBlocks(new Uint8Array(header))).toBeUndefined();
   });
 });

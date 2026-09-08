@@ -108,6 +108,39 @@ export function packetByPrefixId(
 const TYPEFACE_NAME_LENGTH_OFFSET = 22;
 const TYPEFACE_NAME_OFFSET = 24;
 
+// -- General WP Text (Packet Type 8 / 0x08), per WPFF_PrefixPkt0-32.htm --
+//
+// "[number of text blocks] {relative offset of first text block within packet} {size of 1st text block} ... {size of last text block} <text data for 1st block> x 1st block size ... <text data for last block> x last block size" -- one or more anonymous text-block regions, each a document-area function-code stream this package's own tokeniser and fold can read exactly as they read the main document area. The blocks are laid out consecutively starting at the stated offset with no gap between them (the layout's own field order states data immediately following data, with no per-block offset of its own beyond the first), so their concatenation is simply the one contiguous span from the first block's offset to the sum of every block's stated size past it -- returned as a single view rather than split back into blocks, since nothing here needs the boundary between them.
+//
+// This is the packet a header, footer, footnote, endnote, or box caption's own text lives in -- and, per WPFF_DF-BOX.htm's own PID list, the packet a box's TEXT or EQUATION content resolves to as well, once the box function's own override names which prefix ID holds it (stream/box.ts).
+export const PACKET_TYPE_GENERAL_WP_TEXT = 0x08;
+
+export function readGeneralWpTextBlocks(
+  bytes: Uint8Array,
+): Uint8Array | undefined {
+  if (bytes.length < 4) {
+    return undefined;
+  }
+  const blockCount = uint16At(bytes, 0);
+  const firstBlockOffset = uint16At(bytes, 2);
+  if (blockCount === 0) {
+    return undefined;
+  }
+  const sizesEnd = 4 + blockCount * 2;
+  if (sizesEnd > bytes.length) {
+    return undefined;
+  }
+  let totalSize = 0;
+  for (let index = 0; index < blockCount; index += 1) {
+    totalSize += uint16At(bytes, 4 + index * 2);
+  }
+  const end = firstBlockOffset + totalSize;
+  if (firstBlockOffset < 0 || end > bytes.length) {
+    return undefined;
+  }
+  return bytes.subarray(firstBlockOffset, end);
+}
+
 // "The typeface name is made up for four separate null word-terminated strings: 1st string = typeface family (such as Times or Swiss), 2nd string = attributes (such as Bold, Italic, or Bold Italic), 3rd string = name prefix ... 4th string = name extension." Only the first is returned: it is the one a ContentRun's fontFamily wants, and the attributes string duplicates information the document's own Attribute On/Off functions already carry.
 export function readTypefaceName(packet: Uint8Array): string | undefined {
   if (packet.length < TYPEFACE_NAME_OFFSET) {
