@@ -1,3 +1,4 @@
+import { md5 } from "./md5";
 import { describe, expect, it } from "vitest";
 import {
   decryptOfficeRc4,
@@ -20,29 +21,54 @@ function fromHex(hex: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-// A password/salt pair and its expected derived hashes, independently computed via a from-scratch Python port of [MS-OFFCRYPTO] 2.3.6.2 (H0 = MD5(UTF-16LE password), H1 = MD5(16x-repeated (H0[0:5] + salt)), block key = MD5(H1[0:5] + LE32 block number)[0:5]), not against this module's own code.
-const PASSWORD = "Test1234";
-const SALT = fromHex("000102030405060708090a0b0c0d0e0f");
-const BASE_HASH_HEX = "d51ea02125";
-const BLOCK_0_KEY_HEX = "542a0783ac";
-const BLOCK_1_KEY_HEX = "286de68a00";
-
-describe("deriveOfficeRc4BaseHash", () => {
-  it("matches an independent MS-OFFCRYPTO 2.3.6.2 implementation", () => {
-    expect(toHex(deriveOfficeRc4BaseHash(PASSWORD, SALT))).toBe(BASE_HASH_HEX);
+describe("deriveOfficeRc4BlockKey", () => {
+  // A real vector from nolze/msoffcrypto-tool's own `_makekey` doctest (msoffcrypto/method/rc4.py), a third-party, real-world, actively-maintained library -- not authored for this test suite, and not something a bug in this module's own algorithm could pass by construction. This exact vector is what caught this module's own first implementation truncating Hfinal to 5 bytes (matching [MS-OFFCRYPTO] 2.3.6.1's own "encrypted using a 40-bit RC4 cipher" prose, which is wrong): the correct key is Hfinal in full, all 16 bytes, confirmed against this vector byte for byte, and independently against Apache POI's own BinaryRC4Decryptor/CryptoFunctions.generateKey.
+  it("matches nolze/msoffcrypto-tool's own doctested block-0 key", () => {
+    const salt = fromHex("e8772c1d91c56a37964761b280183217");
+    const baseHash = deriveOfficeRc4BaseHash("password1", salt);
+    expect(toHex(baseHash)).toBe("775fae570e");
+    expect(toHex(deriveOfficeRc4BlockKey(baseHash, 0))).toBe(
+      "20bf32ddf540858c513744af0f24e03c",
+    );
   });
 });
 
-describe("deriveOfficeRc4BlockKey", () => {
-  it("derives the block 0 and block 1 keys the reference implementation derives", () => {
-    const baseHash = fromHex(BASE_HASH_HEX);
-    expect(toHex(deriveOfficeRc4BlockKey(baseHash, 0))).toBe(BLOCK_0_KEY_HEX);
-    expect(toHex(deriveOfficeRc4BlockKey(baseHash, 1))).toBe(BLOCK_1_KEY_HEX);
+describe("decryptOfficeRc4 password verification", () => {
+  // The same reference implementation's own `verifypw` doctest: decrypting a real EncryptedVerifier/EncryptedVerifierHash pair with the block-0 key and confirming MD5(decrypted verifier) equals the decrypted hash -- the exact check xls-codec's own workbook/encryption.ts performs before trusting a password.
+  it("recovers a verifier whose MD5 matches its own decrypted hash", () => {
+    const salt = fromHex("e8772c1d91c56a37964761b280183217");
+    const baseHash = deriveOfficeRc4BaseHash("password1", salt);
+    const encryptedVerifier = fromHex("c9e997d454973d310bb1ba701426837e");
+    const encryptedVerifierHash = fromHex("b1de178f07e989c44dae5e4cf96ac407");
+    const decryptedVerifier = decryptOfficeRc4(baseHash, 0, encryptedVerifier);
+    const decryptedVerifierHash = decryptOfficeRc4(
+      baseHash,
+      16,
+      encryptedVerifierHash,
+    );
+    expect(toHex(decryptedVerifier)).toBe("325385a8caec0e205285c8ec1e315375");
+    expect(toHex(decryptedVerifierHash)).toBe(
+      "38f471967a53bff56029063c21121b5c",
+    );
+    expect(md5(decryptedVerifier)).toEqual(decryptedVerifierHash);
   });
 });
 
 describe("decryptOfficeRc4", () => {
-  const baseHash = fromHex(BASE_HASH_HEX);
+  // A second password/salt pair, independently recomputed via a from-scratch Python port of the (now-corrected) algorithm, exercising the 1024-byte block-crossing logic the msoffcrypto-tool vector above (single block only) does not reach.
+  const PASSWORD = "Test1234";
+  const SALT = fromHex("000102030405060708090a0b0c0d0e0f");
+  const baseHash = deriveOfficeRc4BaseHash(PASSWORD, SALT);
+
+  it("derives the base hash and block keys the reference implementation derives", () => {
+    expect(toHex(baseHash)).toBe("d51ea02125");
+    expect(toHex(deriveOfficeRc4BlockKey(baseHash, 0))).toBe(
+      "542a0783acefd5a74688516d8a34869e",
+    );
+    expect(toHex(deriveOfficeRc4BlockKey(baseHash, 1))).toBe(
+      "286de68a004bb014917b4f2d801b5a2d",
+    );
+  });
 
   it("decrypts a chunk that starts before and ends after a 1024-byte block boundary", () => {
     // streamOffset 1000 + 48 bytes crosses the block-0/block-1 boundary at absolute offset 1024, 24 bytes into this chunk.
@@ -50,7 +76,7 @@ describe("decryptOfficeRc4", () => {
     expect(streamOffset + 48).toBeGreaterThan(OFFICE_RC4_BLOCK_SIZE);
     const plaintext = Uint8Array.from({ length: 48 }, (_, i) => i % 256);
     const ciphertext = fromHex(
-      "510ae92f50a6b568f545da7c7aafe2e0e91eaf63e6646ff676c5ff6153f1db9e0489e94f49556c055a46119050823dae",
+      "610bf0648703379561cb42ad1119fa471764eb883d3eab5b215829a5a6f8fdc3df5b2327fbb2b6630cb524c5bac2695f",
     );
     expect(decryptOfficeRc4(baseHash, streamOffset, plaintext)).toEqual(
       ciphertext,
