@@ -2,15 +2,19 @@
 //
 // A character in a WordPerfect document is a (character set, character number) pair. The document area encodes that pair three ways, and this module owns all three:
 //
-//   1. A byte in 33 (0x21) through 127 (0x7F) is that ASCII character directly -- character set 0.
+//   1. A byte in 33 (0x21) through 127 (0x7F) is that ASCII character directly — character set 0.
 //   2. A byte in 1 (0x01) through 32 (0x20) is one of thirty-two "Default Extended International Characters", a shorthand for a set-1 (Multinational) character that would otherwise cost the four-byte extended-character function. The SDK's own table gives both the glyph and the (set, number) pair each shorthand stands for, and DEFAULT_EXTENDED_INTERNATIONAL below transcribes it verbatim.
 //   3. Any other character is the fixed-length Extended Character function 0xF0, whose two payload bytes are the character number and the character set number.
 //
-// THE ONE COUNTER-INTUITIVE CONSEQUENCE, stated here because it looks like a bug on first reading: byte 0x20 is NOT a space in this stream -- it is ß, the last of the thirty-two shorthands. A space is the single-byte Soft Space function 0x80, which the SDK describes as "Equivalent of an ASCII 0x20", or the Hard Space function 0x81. That is why the shorthand range runs to 32 rather than stopping at 31, and why the ASCII range is documented as starting at 33 rather than 32. Both statements appear twice in the SDK -- once in the glossary's "Text Characters" and once at the head of the single-byte page -- and the design reason is plain from the function list: WordPerfect has to distinguish a justifiable soft space from a hard one, so neither can be a plain text byte.
+// THE ONE COUNTER-INTUITIVE CONSEQUENCE, stated here because it looks like a bug on first reading: byte 0x20 is NOT a space in this stream — it is ß, the last of the thirty-two shorthands. A space is the single-byte Soft Space function 0x80, which the SDK describes as "Equivalent of an ASCII 0x20", or the Hard Space function 0x81. That is why the shorthand range runs to 32 rather than stopping at 31, and why the ASCII range is documented as starting at 33 rather than 32. Both statements appear twice in the SDK — once in the glossary's "Text Characters" and once at the head of the single-byte page — and the design reason is plain from the function list: WordPerfect has to distinguish a justifiable soft space from a hard one, so neither can be a plain text byte.
 //
 // https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_SingleByte.htm
+//
+// Character sets 1 through 14 (Multinational, Phonetic Symbols, Box Drawing, Typographic Symbols, Iconic Symbols, Math/Scientific, Math/Scientific Extended, Greek, Hebrew, Cyrillic, Japanese, Tibetan, Arabic, and Arabic Script) decode through WP6_CHARACTER_SETS in ./character-sets, transcribed from libwpd's own WP6-to-Unicode tables since the mirrored SDK pages state the (set, number) mechanism but tabulate no character-set table of their own beyond the thirty-two shorthands above. See that module's own top-of-file comment for the source and how it was cross-checked.
 
-// The SDK's "Default Extended International Characters" table, byte value 1..32 in order, each with the (character set, character number) pair the table states in parentheses beside the glyph. Both halves matter: the glyph decodes the single-byte shorthand, and the pair seeds character set 1 for the extended-character function, so one transcription serves both paths and they can never disagree.
+import { WP6_CHARACTER_SETS } from "./character-sets";
+
+// The SDK's "Default Extended International Characters" table, byte value 1..32 in order, each with the (character set, character number) pair the table states in parentheses beside the glyph. Both halves matter: the glyph decodes the single-byte shorthand, and the pair is one of the two independent sources WP6_CHARACTER_SETS' own set-1 table is cross-checked against (see ./character-sets) — every one of these thirty-two entries, transcribed here directly from the SDK rather than from libwpd, resolves to the identical glyph at the identical character number in that table.
 const DEFAULT_EXTENDED_INTERNATIONAL: readonly (readonly [
   byteValue: number,
   characterNumber: number,
@@ -57,14 +61,6 @@ const SINGLE_BYTE_SHORTHAND: ReadonlyMap<number, string> = new Map(
   ]),
 );
 
-// Character set 1 (Multinational 1), seeded from the shorthand table above. Deliberately partial: the SDK help pages mirrored for this format document the shorthand mapping but not the full character-set tables, so these thirty-two are the entries this package can state from a primary source. Every other set-1 character, and every character of sets 2 and above (box drawing, typographic symbols, mathematical, Greek, Hebrew, Cyrillic, Japanese, user-defined), decodes through the unmapped path below rather than through a table guessed at from memory.
-const CHARACTER_SET_MULTINATIONAL_1: ReadonlyMap<number, string> = new Map(
-  DEFAULT_EXTENDED_INTERNATIONAL.map(([, characterNumber, glyph]) => [
-    characterNumber,
-    glyph,
-  ]),
-);
-
 // The lowest byte value that is a literal ASCII character rather than one of the thirty-two international shorthands.
 export const FIRST_ASCII_CHARACTER = 0x21;
 
@@ -82,7 +78,7 @@ function decodeAsciiSet(characterNumber: number): string | undefined {
   return String.fromCharCode(characterNumber);
 }
 
-// Decodes one (character set, character number) pair, as carried by the Extended Character function 0xF0 and by every WP word string. Returns undefined -- never a substitute glyph -- when this package holds no entry for the pair, leaving the caller to decide between reporting it and rendering UNMAPPED_CHARACTER.
+// Decodes one (character set, character number) pair, as carried by the Extended Character function 0xF0 and by every WP word string. Returns undefined — never a substitute glyph — when this package holds no entry for the pair, leaving the caller to decide between reporting it and rendering UNMAPPED_CHARACTER.
 export function decodeWpCharacter(
   characterSet: number,
   characterNumber: number,
@@ -90,10 +86,7 @@ export function decodeWpCharacter(
   if (characterSet === 0) {
     return decodeAsciiSet(characterNumber);
   }
-  if (characterSet === 1) {
-    return CHARACTER_SET_MULTINATIONAL_1.get(characterNumber);
-  }
-  return undefined;
+  return WP6_CHARACTER_SETS.get(characterSet)?.get(characterNumber);
 }
 
 // Decodes one byte of the document area's literal-character range, 1 (0x01) through 127 (0x7F). Byte 0 is excluded by the caller, not here: "The character 0 (0x00) has special meaning as the null character and is always deleted by WordPerfect", which is a stream-level rule about skipping a byte rather than a character that decodes to nothing.
