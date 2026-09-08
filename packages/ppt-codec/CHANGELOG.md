@@ -1,3 +1,9 @@
+## [1.4.0](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.3.0...ppt-codec%401.4.0) (2026-09-08)
+
+### Features
+
+* **ppt-codec:** resolve text formatting through the master style cascade ([71fe59d](https://github.com/ExaDev/documents.js/commit/71fe59d41d9ad5b4f6a635b9e2b65d2d6a53e6e4))
+
 ## [1.3.0](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.2.13...ppt-codec%401.3.0) (2026-09-08)
 
 ### Features
