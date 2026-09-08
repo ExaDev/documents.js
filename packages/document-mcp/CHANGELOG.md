@@ -1,3 +1,15 @@
+## [4.8.25](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.24...document-mcp%404.8.25) (2026-09-08)
+
+### Documentation
+
+* describe odb SQL join kinds and table aliases in place of the old scope note ([cc5e4c7](https://github.com/ExaDev/documents.js/commit/cc5e4c75e6ec3d287e4569e21b72d4271bd1766d))
+
+
+### Dependencies
+
+- Updated documents.js to 7.9.0
+- Updated document-compute.js to 1.3.54
+
 ## [4.8.24](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.23...document-mcp%404.8.24) (2026-09-08)
 
 

@@ -1,3 +1,22 @@
+## [7.9.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.8.21...documents.js%407.9.0) (2026-09-08)
+
+### Features
+
+* **documents.js:** support outer/cross/natural joins, USING, and table aliases in odb SQL ([a287540](https://github.com/ExaDev/documents.js/commit/a2875402108e03e29746a66f7d1f3b0fb4d440f6))
+
+### Documentation
+
+* describe odb SQL join kinds and table aliases in place of the old scope note ([cc5e4c7](https://github.com/ExaDev/documents.js/commit/cc5e4c75e6ec3d287e4569e21b72d4271bd1766d))
+
+### Tests
+
+* **documents.js:** cover odb SQL join kinds, USING/NATURAL merging, and aliases ([30452d4](https://github.com/ExaDev/documents.js/commit/30452d49e3f665f79199017dbc091d617a722777))
+
+
+### Dependencies
+
+- Updated xls-codec to 4.11.0
+
 ## [7.8.21](https://github.com/ExaDev/documents.js/compare/documents.js%407.8.20...documents.js%407.8.21) (2026-09-08)
 
 
