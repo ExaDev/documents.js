@@ -189,7 +189,7 @@ function mapPrintSettings(
 /**
  * Reads a .xls file's bytes into a ContentDocument.
  *
- * The counterpart of ooxml.js's readXlsxContent, producing the same shape from the older format. `password` decrypts a workbook protected by [MS-XLS] 2.4.117's FilePass record under the [MS-OFFCRYPTO] 2.3.6.1 RC4 encryption header scheme -- see workbook/encryption.ts. It is ignored for an unencrypted workbook, and a missing or incorrect password against an encrypted one throws rather than returning a partial or garbled document.
+ * The counterpart of ooxml.js's readXlsxContent, producing the same shape from the older format. `password` decrypts a workbook protected by [MS-XLS] 2.4.117's FilePass record, under either the [MS-OFFCRYPTO] 2.3.6.1 RC4 encryption header scheme or 2.3.7's XOR obfuscation -- see workbook/encryption.ts. It is ignored for an unencrypted workbook, and a missing or incorrect password against an encrypted one throws rather than returning a partial or garbled document.
  */
 export function readXlsContent(
   bytes: Uint8Array<ArrayBuffer>,
