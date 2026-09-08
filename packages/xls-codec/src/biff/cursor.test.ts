@@ -73,6 +73,19 @@ describe("BlockCursor", () => {
     expect(cursor.take(3)).toEqual(bytes(0x01, 0x02, 0x03));
   });
 
+  it("reads a run of raw bytes spanning a block boundary", () => {
+    const cursor = new BlockCursor([bytes(0x01, 0x02), bytes(0x03, 0x04)]);
+
+    expect(cursor.take(3)).toEqual(bytes(0x01, 0x02, 0x03));
+  });
+
+  it("rejects a length-prefixed take() before allocating, rather than after reading runs out", () => {
+    // A length field taken straight from untrusted BIFF8 input (e.g. CFEx's own cbDxf, [MS-XLS] 2.4.64) can name up to 4 GiB from a record only a few real bytes long. take() must reject a count larger than the data actually remaining before it allocates, not merely fail partway through copying bytes -- an allocate-then-fail sequence still pays the allocation cost the check exists to avoid.
+    const cursor = new BlockCursor([bytes(0x01, 0x02, 0x03)]);
+
+    expect(() => cursor.take(0xffffffff)).toThrow(BiffFormatError);
+  });
+
   it("skips forward without returning the bytes", () => {
     const cursor = new BlockCursor([bytes(0x01, 0x02, 0x03)]);
 
