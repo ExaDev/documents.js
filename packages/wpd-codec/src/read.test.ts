@@ -131,8 +131,8 @@ describe("readWpdContent", () => {
 
   it("renders an unmapped character visibly and reports it", () => {
     const diagnostics: WpdDiagnostic[] = [];
-    // Character set 8 is one of the sets whose table this package cannot state from a primary source.
-    readWpdContent(buildWpdFile([...text("x"), 0xf0, 5, 8, 0xf0]), {
+    // Character 0 of set 12 (Tibetan): libwpd's own tibetanMap1 table has no entry below character number 33, so this position genuinely has no mapping in the cited source rather than being a gap this package introduced.
+    readWpdContent(buildWpdFile([...text("x"), 0xf0, 0, 12, 0xf0]), {
       sink: (diagnostic) => diagnostics.push(diagnostic),
     });
     expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
