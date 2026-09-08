@@ -1,3 +1,4 @@
+import { deriveRc4CryptoApiBlockKey, rc4, sha1 } from "archive-codec";
 import {
   OfficeArtClientAnchor,
   OfficeArtClientTextbox,
@@ -6,6 +7,7 @@ import {
   OfficeArtFSPGR,
   OfficeArtSpContainer,
   OfficeArtSpgrContainer,
+  RT_CryptSession10Container,
   RT_CurrentUserAtom,
   RT_Document,
   RT_DocumentAtom,
@@ -127,9 +129,66 @@ export interface SyntheticPresentationOptions {
   readonly titleText?: string;
   readonly bodyText?: string;
   readonly fontName?: string;
+  // Flips the CurrentUserAtom's own headerToken to the encrypted marker. With `password` unset this produces a file that LOOKS encrypted but carries no real DocumentEncryptionAtom or ciphertext, which is all readPptStreams's own missing-password check needs to see before it throws; it never reaches for the atom this stub never wrote. Set `password` (below) for a genuinely encrypted fixture.
   readonly encrypted?: boolean;
+  // When set, builds a genuinely RC4 CryptoAPI-encrypted ([MS-OFFCRYPTO] 2.3.5) presentation under this password: every persist object except the DocumentEncryptionAtom itself is really RC4-encrypted, keyed by its own persist ID, with a real EncryptionHeader/EncryptionVerifier a caller's own password must actually match. Implies `encrypted: true`.
+  readonly password?: string;
   // Speaker notes for the one slide. Absent means the document carries no notes list and no NotesContainer at all, which is how a real presentation with no notes is stored.
   readonly notesText?: string;
+}
+
+// [MS-OFFCRYPTO] 2.3.5.1's own RC4 CryptoAPI EncryptionInfo/EncryptionHeader/EncryptionVerifier layout, built independently of encryption.ts's own reader (readDocumentEncryptionAtom) rather than by calling it in reverse -- the two are cross-checked against each other only by the read.test.ts round trip that decrypts what this function encrypts, not by sharing this byte-layout logic. keySizeBits is fixed at 128 here: this package's own decryptor supports any RC4 key size the header states, so a fixture testing the 40-bit special case belongs in encryption.test.ts, which exercises deriveRc4CryptoApiBlockKey directly rather than through a whole synthetic presentation.
+const CRYPTOAPI_KEY_SIZE_BITS = 128;
+
+function encryptionAtomBytes(
+  password: string,
+  salt: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
+  const blockZeroKey = deriveRc4CryptoApiBlockKey(
+    password,
+    salt,
+    0,
+    CRYPTOAPI_KEY_SIZE_BITS,
+  );
+  // An arbitrary 16-byte "random" verifier -- [MS-OFFCRYPTO] 2.3.4.9 never constrains its value, only that SHA-1 of it must match what decrypting encryptedVerifierHash recovers.
+  const verifier = new Uint8Array(16);
+  for (let i = 0; i < 16; i += 1) {
+    verifier[i] = i * 7 + 3;
+  }
+  const verifierHash = sha1(verifier);
+  const encryptedCombined = rc4(
+    blockZeroKey,
+    concatBytes(verifier, verifierHash),
+  );
+  const encryptedVerifier = encryptedCombined.subarray(0, 16);
+  const encryptedVerifierHash = encryptedCombined.subarray(16, 36);
+
+  const header = concatBytes(
+    u32le(0x04), // flags: fCryptoAPI
+    u32le(0), // sizeExtra
+    u32le(0x6801), // algId: RC4
+    u32le(0x8004), // algIdHash: SHA-1
+    u32le(CRYPTOAPI_KEY_SIZE_BITS),
+    u32le(0x01), // providerType: PROV_RSA_FULL, unread by this package's own reader
+    u32le(0), // reserved1
+    u32le(0), // reserved2 -- no CSPName follows, so the header ends here
+  );
+  const verifierFields = concatBytes(
+    u32le(16), // saltSize
+    salt,
+    encryptedVerifier,
+    u32le(20), // verifierHashSize
+    encryptedVerifierHash,
+  );
+
+  return concatBytes(
+    u16le(2), // versionMajor
+    u16le(2), // versionMinor
+    u32le(0x04), // encryptionFlags: fCryptoAPI
+    u32le(header.length),
+    header,
+    verifierFields,
+  );
 }
 
 export function syntheticPresentation(
@@ -142,6 +201,7 @@ export function syntheticPresentation(
     bodyText = "First point\rSecond point",
     fontName = "Arial",
     encrypted = false,
+    password,
     notesText,
   } = options;
 
@@ -150,8 +210,14 @@ export function syntheticPresentation(
   const DOCUMENT_PERSIST_ID = 1;
   const SLIDE_PERSIST_ID = 2;
   const NOTES_PERSIST_ID = 3;
+  const ENCRYPTION_PERSIST_ID = 4;
   const SLIDE_ID = 256;
   const NOTES_ID = 512;
+  // Fixed rather than random: a reproducible fixture is easier to debug than one that only fails intermittently, and RC4 CryptoAPI's own security properties are not what this fixture is testing.
+  const ENCRYPTION_SALT = new Uint8Array(16);
+  for (let i = 0; i < 16; i += 1) {
+    ENCRYPTION_SALT[i] = i * 11 + 5;
+  }
 
   const documentChildren = [
     documentAtom(slideWidth, slideHeight),
@@ -260,6 +326,27 @@ export function syntheticPresentation(
       bytes: notesContainer,
     });
   }
+  if (password !== undefined) {
+    // Every existing persist object gets RC4-encrypted in place, keyed by its own persist ID -- the DocumentEncryptionAtom itself never does, since a decryptor has to read it before it knows any key at all.
+    for (const object of persistObjects) {
+      const key = deriveRc4CryptoApiBlockKey(
+        password,
+        ENCRYPTION_SALT,
+        object.persistId,
+        CRYPTOAPI_KEY_SIZE_BITS,
+      );
+      object.bytes = rc4(key, object.bytes);
+    }
+    persistObjects.push({
+      persistId: ENCRYPTION_PERSIST_ID,
+      bytes: atom(
+        RT_CryptSession10Container,
+        encryptionAtomBytes(password, ENCRYPTION_SALT),
+        // [MS-PPT] real producers (confirmed against Apache POI's own DocumentEncryptionAtom.writeOut) stamp recVer 0xF on this atom despite its data being fields, not child records -- harmless to this package's own reader, which never calls childRecords on it.
+        { recVer: 0xf },
+      ),
+    });
+  }
   const persistEntries: Uint8Array<ArrayBuffer>[] = [];
   let persistOffset = 0;
   for (const object of persistObjects) {
@@ -289,6 +376,8 @@ export function syntheticPresentation(
       u32le(persistObjects.length + 1),
       u16le(0),
       u16le(0),
+      // [MS-PPT] 2.3.3: this trailing field only exists at all when the record's own recLen says so (0x20 bytes rather than 0x1c) -- there is no separate flag bit, so its presence here is exactly what marks the document as carrying a real encryption session for buildPersistDirectory's own reader to find.
+      ...(password === undefined ? [] : [u32le(ENCRYPTION_PERSIST_ID)]),
     ),
   );
 
@@ -297,7 +386,11 @@ export function syntheticPresentation(
     RT_CurrentUserAtom,
     concatBytes(
       u32le(0x00000014),
-      u32le(encrypted ? 0xf3d1c4df : CURRENT_USER_HEADER_TOKEN_PLAIN),
+      u32le(
+        encrypted || password !== undefined
+          ? 0xf3d1c4df
+          : CURRENT_USER_HEADER_TOKEN_PLAIN,
+      ),
       u32le(userEditOffset),
       u16le(ansiUserName.length),
       u16le(0x03f4),
