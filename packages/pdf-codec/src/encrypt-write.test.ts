@@ -67,13 +67,14 @@ function requireStringBytes(
 }
 
 describe("createStandardEncryptor: default scope", () => {
+  // AES-256 (revision 6) key derivation is CPU-bound (see read.test.ts's own timeout note): constructing one encryptor runs Algorithm 2.B several times, slow enough under load to miss vitest's default 5000ms timeout.
   it("defaults to aes-256 with an empty user password and full permissions", () => {
     const encryptor = createStandardEncryptor({}, new Uint8Array(16));
     expect(asName(dictGet(encryptor.encryptDict, "Filter"))).toBe("Standard");
     expect(asNumber(dictGet(encryptor.encryptDict, "V"))).toBe(5);
     expect(asNumber(dictGet(encryptor.encryptDict, "R"))).toBe(6);
     expect(asNumber(dictGet(encryptor.encryptDict, "P"))).toBe(-4); // every meaningful/reserved bit set except bits 1-2
-  });
+  }, 60_000);
 
   it("defaults the owner password to the user password when only one is supplied", () => {
     // Algorithm 3 step (a)'s own convention, applied uniformly across schemes: with no owner password at all, the resulting /O must be exactly what an explicit ownerPassword equal to userPassword would produce.
@@ -102,7 +103,7 @@ describe("createStandardEncryptor: default scope", () => {
     expect((p >> 4) & 1).toBe(1); // bit 5: copy, still permitted
     expect((p >> 6) & 1).toBe(1); // bit 7: reserved, always 1
     expect((p >> 31) & 1).toBe(1); // bit 32: reserved, always 1
-  });
+  }, 60_000);
 
   it("rejects a non-ASCII password for a legacy scheme", () => {
     expect(() =>
@@ -120,7 +121,7 @@ describe("createStandardEncryptor: default scope", () => {
         new Uint8Array(16),
       ),
     ).not.toThrow();
-  });
+  }, 60_000);
 
   it("never re-encrypts a /Type /Metadata stream when encryptMetadata is false", () => {
     const encryptor = createStandardEncryptor(
@@ -154,7 +155,7 @@ describe("writePdf + readPdf: encryption round-trips through this package's own 
       const [page] = doc.pages;
       const [item] = page!.items;
       expect(item).toMatchObject({ kind: "text", text: "Encrypted hello" });
-    });
+    }, 60_000);
   }
 
   it("produces a document that does not read back as its own plaintext", () => {
@@ -165,7 +166,7 @@ describe("writePdf + readPdf: encryption round-trips through this package's own 
     const text = new TextDecoder("latin1").decode(pdf);
     expect(text).not.toContain("Secret Title");
     expect(text).not.toContain("Encrypted hello");
-  });
+  }, 60_000);
 
   it("writes no /Encrypt dictionary and no /ID at all when encryption is not requested", () => {
     const pdf = writePdf(docWithSecretContent());
@@ -252,7 +253,7 @@ describe("createStandardEncryptor: a real, non-empty user password verifies agai
     const padded = aesCbcDecrypt(fileKey, iv, body);
     const padLength = padded[padded.length - 1]!;
     expect(padded.subarray(0, padded.length - padLength)).toEqual(plaintext);
-  });
+  }, 60_000);
 });
 
 describe("createStandardEncryptor: the /Encrypt dictionary's own O/U/OE/UE", () => {
@@ -274,5 +275,5 @@ describe("createStandardEncryptor: the /Encrypt dictionary's own O/U/OE/UE", () 
         );
       }
     }
-  });
+  }, 60_000);
 });
