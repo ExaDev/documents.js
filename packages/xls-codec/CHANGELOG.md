@@ -1,3 +1,15 @@
+## [4.11.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.10.0...xls-codec%404.11.0) (2026-09-08)
+
+### Features
+
+* **xls-codec:** compile same-sheet formula text into Formula records ([80f5d2b](https://github.com/ExaDev/documents.js/commit/80f5d2b2cb08740230d15da32b5893ecc5f62629))
+* **xls-codec:** wire formula and comment records into the worksheet writer ([818b910](https://github.com/ExaDev/documents.js/commit/818b910c82cfc059fc2c71423477c309edc296f2))
+* **xls-codec:** write a cell comment back to its Note/Obj/Txo triple ([6576360](https://github.com/ExaDev/documents.js/commit/65763606c1b895595128f240e8f8bb3f0289fb04))
+
+### Documentation
+
+* **xls-codec:** document formula writing and cell comment writing ([08fa385](https://github.com/ExaDev/documents.js/commit/08fa385769b5026b2a6c719fe269d3eff494c399))
+
 ## [4.10.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.9.0...xls-codec%404.10.0) (2026-09-08)
 
 ### Features
