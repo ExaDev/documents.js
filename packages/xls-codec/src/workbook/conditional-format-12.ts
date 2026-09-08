@@ -6,7 +6,7 @@ import type {
 } from "document-schema.js";
 import { BlockCursor } from "../biff/cursor";
 import type { FormulaSheetContext } from "../biff/ptg";
-import { parseFormulaText } from "../biff/ptg";
+import { extractFirstStringLiteral, parseFormulaText } from "../biff/ptg";
 import { BiffFormatError } from "../biff/records";
 import type { RecordGroup } from "../biff/substreams";
 import { RECORD_CF12 } from "../biff/record-types";
@@ -17,7 +17,9 @@ import {
 
 // CondFmt12 ([MS-XLS] 2.4.57, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/b891e737-12f6-41dd-b8a8-7360a4826d4a) is CondFmt's own "future record" (FRT) counterpart: it wraps a CondFmtStructure ([MS-XLS] 2.4's own CondFmtStructure, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1f4b7576-b5e0-40f0-b2c6-b447d0954b17 -- the identical ccf/flags/refBound/sqref shape CondFmt's own body already carries), prefixed by a 12-byte FrtRefHeaderU this reader never needs, and marks the start of the CF12 ([MS-XLS] 2.4.43, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3b6a364e-8c34-4830-a8b1-5a51476a9934) records it names via mainCF.ccf. A CF12's own ct field picks one of six rule shapes: colour scale (ct 0x03), data bar (ct 0x04), and icon set (ct 0x06) are read via their own array-of-thresholds building block (ExaDev/documents.js#1104); comparison/formula rules re-expressed in this newer record shape (ct 0x01/0x02) stay unread here, since base CF already covers them.
 //
-// ct 0x05 ("filter") is a further dispatch: icfTemplate (an unsigned integer alongside a 16-byte CFExTemplateParams block, both always present regardless of ct) names one of roughly fifteen templates -- top10, aboveAverage (and its below/or-equal siblings), duplicateValues, uniqueValues, four blank/error conditions, ten date/time periods, and four containsText sub-types. Every one of those except containsText is read here (ExaDev/documents.js#1106): CFExTemplateParams turns out to need real parsing for only two of its five variants (CFExFilterParams for top10; CFExAveragesTemplateParams for the aboveAverage family) -- CFExDefaultTemplateParams (duplicateValues/uniqueValues/blank/error conditions) is 16 reserved bytes, and CFExDateTemplateParams's own dateOp field is a fixed 1:1 restatement of icfTemplate itself, so both dispatch directly off icfTemplate with no further byte reading at all. containsText stays unread: CFExTextTemplateParams only carries which of the four text sub-types a rule is, not the actual search string, and CF12's own cce1/cce2 fields are spec'd to be zero for every ct 0x05 rule -- so where the literal text operand lives is a genuine open question, tracked on ExaDev/documents.js#1100 alongside CFEx's own extension of a legacy (non-CF12) CF record.
+// ct 0x05 ("filter") is a further dispatch: icfTemplate (an unsigned integer alongside a 16-byte CFExTemplateParams block, both always present regardless of ct) names one of roughly fifteen templates -- top10, aboveAverage (and its below/or-equal siblings), duplicateValues, uniqueValues, four blank/error conditions, ten date/time periods, and four containsText sub-types. Every one of those except containsText is read here via this ct 0x05 dispatch (ExaDev/documents.js#1106): CFExTemplateParams turns out to need real parsing for only two of its five variants (CFExFilterParams for top10; CFExAveragesTemplateParams for the aboveAverage family) -- CFExDefaultTemplateParams (duplicateValues/uniqueValues/blank/error conditions) is 16 reserved bytes, and CFExDateTemplateParams's own dateOp field is a fixed 1:1 restatement of icfTemplate itself, so both dispatch directly off icfTemplate with no further byte reading at all.
+//
+// containsText/notContainsText/beginsWith/endsWith (icfTemplate 0x0008, "Contains text") is NOT a ct 0x05 rule at all, despite sharing the same icfTemplate/CFExTemplateParams dispatch mechanism -- CFExTextTemplateParams carries only ctp, which of the four text sub-types the rule is, never the literal search text itself, and ct 0x05's own rgbCT (a CFFilter) has nowhere for one either: [MS-XLS]'s own CFFilter page (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1fbbdfb0-5320-43bc-a8a5-c81dbeba9b7b) documents exactly fTop/fPercent/iParam and nothing else, confirmed against a second, independent transcription of the same structure (kinkou/unxls's own cffilter reader, https://github.com/kinkou/unxls/blob/master/lib/unxls/biff8/structure.rb, which reads it as an unconditional fixed 6 bytes -- no variable trailer). A text rule instead rides ct 0x02 (a formula condition) with a genuine, non-zero rgce1: read below in readCf12's own final branch, and by conditional-format-ex.ts's readCfEx for the equivalent case where Excel keeps the rule expressible as a legacy (pre-2007) CF's own formula rather than promoting it into a CF12 record. Both paths share readCfTextFilterRule, extracting the search text via ptg.ts's extractFirstStringLiteral -- see that function's own comment, and conditional-format-ex.ts's, for why the text is safe to pull out of the formula's first PtgStr operand without interpreting the formula as a whole.
 //
 // [MS-XLS] 2.4.43's own ct table constrains DXFN12's own cbDxf to zero ONLY for ct 0x03/0x04/0x06 ("If ct is equal to 0x03, 0x04 or 0x06, then dxf.cbDxf MUST be equal to 0x00000000") -- colour scale/data bar/icon set formatting carries its own colour fields directly, so no style extraction applies to those three. ct 0x05 is NOT covered by that constraint: a filter rule's own DXFN12 can carry a genuine font/fill override, resolved through the identical parseDxfStyle base CF's own DXFN already uses (see readCf12's own ct 0x05 branch).
 //
@@ -93,7 +95,7 @@ function readCfColor(cursor: BlockCursor): RawCfColor | undefined {
   return undefined;
 }
 
-interface RawConditionalFormat12Common {
+export interface RawConditionalFormat12Common {
   /** CF12's own ipriority field, always genuinely present and meaningful (MUST be unique across every CF12 record in the worksheet substream) -- unlike base CF, which has no priority concept at all, this is never an "absent" or omittable-default value. */
   readonly priority: number;
   readonly stopIfTrue: boolean;
@@ -165,6 +167,11 @@ export interface RawSimpleFilterFormat extends RawFilterFormatCommon {
     | "duplicateValues";
 }
 
+export interface RawTextFilterFormat extends RawFilterFormatCommon {
+  readonly kind: "containsText" | "notContainsText" | "beginsWith" | "endsWith";
+  readonly text: string;
+}
+
 export type RawConditionalFormat12 =
   | RawColorScaleFormat
   | RawDataBarFormat
@@ -172,7 +179,8 @@ export type RawConditionalFormat12 =
   | RawTop10Format
   | RawAboveAverageFormat
   | RawTimePeriodFormat
-  | RawSimpleFilterFormat;
+  | RawSimpleFilterFormat
+  | RawTextFilterFormat;
 
 // CFGradient ([MS-XLS] 2.4's own colour-scale rgbCT shape, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/dd6c7ea2-f6a9-45e0-9253-0989a7aa8421): two fixed-size counts (cInterpCurve/cGradientCurve, MUST be equal, 2 or 3) followed by rgInterp (that many CFGradientInterpItem, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/166c53dc-edc9-40a7-bd1e-128b7268e344 -- a CFVO then an 8-byte numDomain fraction, discarded) and then rgCurve (that many CFGradientItem, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/84cb4bf3-33d1-4fa3-9346-e0c2c8cbb768 -- an 8-byte numGrange fraction, discarded, then a CFColor). The two arrays are positional, not interleaved -- rgInterp[i] pairs with rgCurve[i] as one stop, the same pairing ooxml.js's own colorScale/cfvo+color reading already assumes.
 function readCfGradient(
@@ -297,6 +305,38 @@ function readCfMultistate(
     thresholds.push(value);
   }
   return { iconSetType, thresholds, reverse, showValue };
+}
+
+const ICF_TEMPLATE_CONTAINS_TEXT = 0x0008;
+
+const CTP_TO_TEXT_KIND: ReadonlyMap<number, RawTextFilterFormat["kind"]> =
+  new Map([
+    [0x0000, "containsText"],
+    [0x0001, "notContainsText"],
+    [0x0002, "beginsWith"],
+    [0x0003, "endsWith"],
+  ]);
+
+export function readCfTextFilterRule(
+  icfTemplate: number,
+  templateParams: Uint8Array<ArrayBuffer>,
+  rgce1: Uint8Array<ArrayBuffer>,
+  formulaSheets: FormulaSheetContext,
+): Omit<RawTextFilterFormat, keyof RawFilterFormatCommon> | undefined {
+  if (icfTemplate !== ICF_TEMPLATE_CONTAINS_TEXT) {
+    return undefined;
+  }
+  const cursor = new BlockCursor([templateParams]);
+  const ctp = cursor.u16();
+  const kind = CTP_TO_TEXT_KIND.get(ctp);
+  if (kind === undefined) {
+    return undefined;
+  }
+  const text = extractFirstStringLiteral(rgce1, formulaSheets);
+  if (text === undefined) {
+    return undefined;
+  }
+  return { kind, text };
 }
 
 // icfTemplate ([MS-XLS] 2.4.43's own field table) names the ct-0x05 rule's real type. Only the values below reach readCfFilterRule at all -- 0x00-0x04 belong to ct 0x01/0x02/0x03/0x04/0x06 instead and are never seen here.
@@ -427,7 +467,7 @@ function readCf12(
     const cce2 = cursor.u16();
     const cbDxf = cursor.u32(); // DXFN12's own length prefix -- MUST be zero for ct 0x03/0x04/0x06, but NOT for ct 0x05 (a filter rule's own resulting font/fill override), so its bytes are captured, not blindly skipped
     const dxfBytes = cursor.take(cbDxf);
-    cursor.skip(cce1); // rgce1 -- meaningful only for ct 0x01/0x02
+    const rgce1 = cursor.take(cce1); // meaningful only for ct 0x01/0x02
     cursor.skip(cce2); // rgce2 -- meaningful only for ct 0x01 with cp 0x01/0x02
     const cceActive = cursor.u16(); // fmlaActive's own cce
     cursor.skip(cceActive); // fmlaActive's rgce -- the colour scale/data bar/icon set "activity condition" formula; no schema field for a rule's own separate activation expression
@@ -472,7 +512,19 @@ function readCf12(
       const style = parseDxfStyle(dxfBytes);
       return { ...rule, ...common, style };
     }
-    return undefined; // ct 0x01/0x02 -- out of scope for this reader, base CF already covers them
+    if (ct === 0x02) {
+      const textRule = readCfTextFilterRule(
+        icfTemplate,
+        templateParams,
+        rgce1,
+        formulaSheets,
+      );
+      if (textRule !== undefined) {
+        const style = parseDxfStyle(dxfBytes);
+        return { ...textRule, ...common, style };
+      }
+    }
+    return undefined; // ct 0x01, or a ct 0x02 rule with no closed-form structure to promote
   } catch (err) {
     if (!(err instanceof BiffFormatError)) {
       throw err;
