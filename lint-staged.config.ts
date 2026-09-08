@@ -44,14 +44,9 @@ const config: Configuration = {
       );
       return `pnpm --dir ${directory} exec eslint --fix ${pathsRelativeToDirectory.join(" ")}`;
     }),
-  // syncpack operates over every package.json in the workspace at once, never a single file in isolation, so unlike the ESLint task above this runs once regardless of which manifest triggered it, correcting any dependency this commit left at a non-fixed version or out of step with the rest of the workspace (syncpack.config.ts). A genuinely unfixable disagreement (see `syncpack lint`) exits non-zero and blocks the commit rather than committing a manifest syncpack cannot reconcile.
-  //
-  // `deps:fix` rewrites package.json files only -- it has no knowledge of pnpm-lock.yaml at all -- so a fix that actually changes a specifier would otherwise commit a manifest the lockfile no longer agrees with, and every CI job installs with `--frozen-lockfile`, which rejects exactly that disagreement. `pnpm install` regenerates the lockfile to match, and since lint-staged only re-stages the files it explicitly passed to a task (not a side effect an arbitrary shell command happens to touch), the lockfile needs its own explicit `git add`.
-  "{package.json,packages/*/package.json,pnpm-workspace.yaml}": () => [
-    "pnpm run deps:fix",
-    "pnpm install",
-    "git add pnpm-lock.yaml",
-  ],
+  // syncpack operates over every package.json in the workspace at once, never a single file in isolation -- deliberately non-mutating here rather than running `deps:fix`, for two reasons a mutating version of this task cannot escape. First, `package.json` also matches the ESLint glob above, and lint-staged runs different glob entries concurrently by default, so a mutating fixer here could race ESLint's own `--fix` on the identical file. Second, and more fundamentally, syncpack reads every package.json from disk, not from the git index -- lint-staged's own stash-and-restore only isolates unstaged hunks of a file that is ITSELF partially staged, not a wholly different, wholly unstaged manifest sitting untouched elsewhere in the tree (someone else's in-progress edit), so a mutating fixer could pull that unstaged content into a lockfile this commit stages, silently making the committed manifest and the committed lockfile disagree. `deps:lint` has neither problem: it only ever reads, so serialization against ESLint and isolation from unstaged files are both moot. It blocks the commit exactly when something needs fixing, naming the drift; run `pnpm run deps:fix && pnpm install` yourself, review the result, then commit.
+  "{package.json,packages/*/package.json,pnpm-workspace.yaml}": () =>
+    "pnpm run deps:lint",
 };
 
 export default config;
