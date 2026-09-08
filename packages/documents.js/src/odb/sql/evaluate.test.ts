@@ -848,9 +848,18 @@ describe("evaluateSelect: a derived table in FROM", () => {
       ).rows,
     ).toEqual([[text("Carol")], [text("Dave")]]);
   });
+
+  it("never correlates with an enclosing query, even a correlated one -- a plain derived table always evaluates standalone, regardless of what it is nested inside", () => {
+    // The EXISTS wrapping this derived table is itself perfectly capable of correlation (see the "evaluateSelect: EXISTS" tests below) -- but the derived table nested inside it does not inherit that: its own inner SELECT references EMPLOYEES.DEPT, and EMPLOYEES is not a table this derived table's own FROM ever named, so it must fail exactly as it would with no enclosing EXISTS at all.
+    expect(() =>
+      runJoin(
+        "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT NAME FROM (SELECT NAME FROM DEPARTMENTS WHERE DEPARTMENTS.NAME = EMPLOYEES.DEPT) inner1)",
+      ),
+    ).toThrow('table qualifier "EMPLOYEES" not found');
+  });
 });
 
-// A dedicated table for the IN (SELECT ...) tests below -- several rows per DEPT, and target values chosen to overlap only some employees' own SALARY, so a correlated subquery's per-row re-evaluation and an uncorrelated one's single shared result set are both genuinely exercised rather than trivially matching everything or nothing.
+// A dedicated table for the IN (SELECT ...)/EXISTS (SELECT ...) tests below -- several rows per DEPT, and target values chosen to overlap only some employees' own SALARY, so a correlated subquery's per-row re-evaluation and an uncorrelated one's single shared result set are both genuinely exercised rather than trivially matching everything or nothing.
 const REGIONAL_TARGETS: HsqldbTable = {
   tableName: "REGIONAL_TARGETS",
   columns: [
@@ -909,6 +918,57 @@ describe("evaluateSelect: IN (SELECT ...)", () => {
     ).toThrow(
       "IN (SELECT ...) requires the subquery to produce exactly one column, but it produced 2",
     );
+  });
+});
+
+describe("evaluateSelect: EXISTS (SELECT ...)", () => {
+  it("is true precisely when a correlated subquery produces at least one row", () => {
+    // The identical row set runJoin's own INNER JOIN test already proves matches -- EXISTS over a correlated subquery is the row-existence half of exactly the same join condition.
+    expect(
+      runSub(
+        "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT NAME FROM DEPARTMENTS WHERE DEPARTMENTS.NAME = EMPLOYEES.DEPT) ORDER BY NAME",
+      ).rows,
+    ).toEqual([
+      [text("Alice")],
+      [text("Bob")],
+      [text("Carol")],
+      [text("Dave")],
+    ]);
+  });
+
+  it("negates with NOT EXISTS, parsed as an ordinary NOT wrapping the exists predicate -- never UNKNOWN even for a NULL-correlated row", () => {
+    expect(
+      runSub(
+        "SELECT NAME FROM EMPLOYEES WHERE NOT EXISTS (SELECT NAME FROM DEPARTMENTS WHERE DEPARTMENTS.NAME = EMPLOYEES.DEPT) ORDER BY NAME",
+      ).rows,
+    ).toEqual([[text("Erin")], [text("Frank")]]);
+  });
+
+  it("ignores the subquery's own select list entirely -- only row existence matters", () => {
+    expect(
+      runSub(
+        "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT BUDGET FROM DEPARTMENTS WHERE DEPARTMENTS.NAME = EMPLOYEES.DEPT) ORDER BY NAME",
+      ).rows,
+    ).toEqual([
+      [text("Alice")],
+      [text("Bob")],
+      [text("Carol")],
+      [text("Dave")],
+    ]);
+  });
+
+  it("resolves a correlated reference through two nested subquery scopes, skipping an intermediate scope that does not itself declare the referenced table", () => {
+    // The middle EXISTS (over DEPARTMENTS) has nothing to do with DEPARTMENTS at all -- its own inner EXISTS references EMPLOYEES.DEPT, two scopes up, which the middle scope must pass through rather than resolve itself (DEPARTMENTS declares no DEPT column).
+    expect(
+      runSub(
+        "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT NAME FROM DEPARTMENTS WHERE EXISTS (SELECT DEPT FROM REGIONAL_TARGETS WHERE REGIONAL_TARGETS.DEPT = EMPLOYEES.DEPT)) ORDER BY NAME",
+      ).rows,
+    ).toEqual([
+      [text("Alice")],
+      [text("Bob")],
+      [text("Carol")],
+      [text("Dave")],
+    ]);
   });
 });
 
