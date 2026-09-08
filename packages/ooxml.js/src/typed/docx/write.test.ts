@@ -9,7 +9,8 @@ import type { Package } from "../../model/package";
 import type { XmlNode } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
 import { decodePackage, encodePackage } from "../../codec";
-import { elementsWithTag, rootElement } from "../util";
+import { attr, elementsWithTag, rootElement } from "../util";
+import type { DocxDocument } from "./read";
 import { readDocxContent } from "./read";
 import { buildDocxPackageFromContent } from "./write";
 
@@ -74,6 +75,17 @@ function expectStableRoundTrip(source: Package): ContentSection[] {
   const { before, after } = roundTrip(source);
   expect(after).toEqual(before);
   return after;
+}
+
+// The extras round trip: unlike `roundTrip` above, this carries the WHOLE DocxDocument -- comments, footnotes, endnotes, header/footer parts, and numbering, not only sections -- through buildDocxPackageFromContent, since DocxContent's own optional fields are a superset of what `roundTrip` exercises.
+function fullRoundTrip(source: Package): {
+  before: DocxDocument;
+  after: DocxDocument;
+  written: Package;
+} {
+  const before = readDocxContent(source);
+  const written = buildDocxPackageFromContent(before);
+  return { before, after: readDocxContent(written), written };
 }
 
 // The written order of a paragraph's run-and-bookmark children, described by bookmark NAME rather than the id the writer mints: an order assertion over the writer's own XML, which the round-trip assertions cannot express (readDocxContent pairs halves by id at run positions, so it reads an inverted pair back as the same extent it wrote from).
@@ -387,10 +399,13 @@ describe("buildDocxPackageFromContent: content round trip", () => {
         ? paragraph.runs[0]?.hyperlink
         : undefined,
     ).toBe("https://example.com/a?x=1&y=2");
+    // Filtered to the hyperlink relationship specifically -- document.xml.rels also always carries a styles.xml relationship now (buildStylesPart is unconditional), which this test's own "one relationship per target" claim was never about.
     const rels = rootElement(written.parts["word/_rels/document.xml.rels"]);
-    expect(
-      elementsWithTag(rels === undefined ? [] : [rels], "Relationship"),
-    ).toHaveLength(1);
+    const hyperlinkRels = elementsWithTag(
+      rels === undefined ? [] : [rels],
+      "Relationship",
+    ).filter((rel) => attr(rel, "Type") === HYPERLINK_REL);
+    expect(hyperlinkRels).toHaveLength(1);
   });
 
   it("round-trips a table's grid, spans, shading, borders, and row heights", () => {
@@ -1416,5 +1431,286 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
     for (const section of sections) {
       expect(findConstructMarkerImbalance(section.blocks)).toBeUndefined();
     }
+  });
+});
+
+describe("buildDocxPackageFromContent: styles, numbering, comments, footnotes, endnotes, headers/footers (#968)", () => {
+  const HEADER_REL =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
+
+  it("writes a real word/styles.xml entry for every referenced styleId, so a w:pStyle reference resolves instead of dangling", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, [el("w:pStyle", { "w:val": "IntenseQuote" })]),
+      el("w:r", {}, [el("w:t", {}, [txt("quoted")])]),
+    ]);
+    // No word/styles.xml at all in the source -- the exact defect the issue reports.
+    const { after, written } = fullRoundTrip(docxPackage([paragraph]));
+    const stylesRoot = rootElement(written.parts["word/styles.xml"]);
+    expect(stylesRoot).toBeDefined();
+    const styleIds =
+      stylesRoot === undefined
+        ? []
+        : elementsWithTag([stylesRoot], "w:style").map((style) =>
+            attr(style, "w:styleId"),
+          );
+    expect(styleIds).toEqual(
+      expect.arrayContaining([
+        "Normal",
+        "DefaultParagraphFont",
+        "IntenseQuote",
+      ]),
+    );
+    const relTypes = elementsWithTag(
+      [rootElement(written.parts["word/_rels/document.xml.rels"])!],
+      "Relationship",
+    ).map((rel) => attr(rel, "Type"));
+    expect(relTypes).toEqual(
+      expect.arrayContaining([
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
+      ]),
+    );
+    const firstBlock = after.sections[0]?.blocks[0];
+    expect(
+      firstBlock?.kind === "paragraph" ? firstBlock.styleId : undefined,
+    ).toBe("IntenseQuote");
+  });
+
+  it("round-trips word/numbering.xml's own abstractNum/num level definitions", () => {
+    const abstractNum = el("w:abstractNum", { "w:abstractNumId": "0" }, [
+      el("w:lvl", { "w:ilvl": "0" }, [
+        el("w:start", { "w:val": "1" }),
+        el("w:numFmt", { "w:val": "bullet" }),
+        el("w:lvlText", { "w:val": "•" }),
+      ]),
+    ]);
+    const num = el("w:num", { "w:numId": "1" }, [
+      el("w:abstractNumId", { "w:val": "0" }),
+    ]);
+    const paragraph = el("w:p", {}, [
+      el("w:pPr", {}, [
+        el("w:numPr", {}, [
+          el("w:ilvl", { "w:val": "0" }),
+          el("w:numId", { "w:val": "1" }),
+        ]),
+      ]),
+      el("w:r", {}, [el("w:t", {}, [txt("bulleted")])]),
+    ]);
+    const source = docxPackage([paragraph], {
+      "word/numbering.xml": {
+        kind: "xml",
+        nodes: [el("w:numbering", {}, [abstractNum, num])],
+      },
+    });
+    const { before, after, written } = fullRoundTrip(source);
+    expect(written.parts["word/numbering.xml"]).toBeDefined();
+    expect(after.numbering).toEqual(before.numbering);
+    expect(after.numbering["1"]?.levels["0"]).toEqual({
+      format: "bullet",
+      text: "•",
+      startAt: 1,
+    });
+  });
+
+  it("omits word/numbering.xml entirely for a document with no lists", () => {
+    const { written } = fullRoundTrip(docxPackage([para("plain")]));
+    expect(written.parts["word/numbering.xml"]).toBeUndefined();
+  });
+
+  it("round-trips a comment's extent, reference mark, author, and text through word/comments.xml", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:commentRangeStart", { "w:id": "7" }),
+      el("w:r", {}, [el("w:t", {}, [txt("commented text")])]),
+      el("w:commentRangeEnd", { "w:id": "7" }),
+      el("w:r", {}, [el("w:commentReference", { "w:id": "7" })]),
+    ]);
+    const source = docxPackage([paragraph], {
+      "word/comments.xml": {
+        kind: "xml",
+        nodes: [
+          el("w:comments", {}, [
+            el("w:comment", { "w:id": "7", "w:author": "A Reviewer" }, [
+              el("w:p", {}, [el("w:r", {}, [el("w:t", {}, [txt("a note")])])]),
+            ]),
+          ]),
+        ],
+      },
+    });
+    const { before, after, written } = fullRoundTrip(source);
+    expect(written.parts["word/comments.xml"]).toBeDefined();
+    expect(after.comments).toEqual(before.comments);
+    expect(after.comments).toEqual([
+      { id: "7", author: "A Reviewer", text: "a note" },
+    ]);
+    expect(after.sections).toEqual(before.sections);
+  });
+
+  it("round-trips a footnote and an endnote reference mark and body through their own parts", () => {
+    const paragraph = el("w:p", {}, [
+      el("w:r", {}, [el("w:t", {}, [txt("see")])]),
+      el("w:r", {}, [el("w:footnoteReference", { "w:id": "1" })]),
+      el("w:r", {}, [el("w:endnoteReference", { "w:id": "1" })]),
+    ]);
+    const source = docxPackage([paragraph], {
+      "word/footnotes.xml": {
+        kind: "xml",
+        nodes: [
+          el("w:footnotes", {}, [
+            el("w:footnote", { "w:id": "1" }, [
+              el("w:p", {}, [
+                el("w:r", {}, [el("w:t", {}, [txt("footnote body")])]),
+              ]),
+            ]),
+          ]),
+        ],
+      },
+      "word/endnotes.xml": {
+        kind: "xml",
+        nodes: [
+          el("w:endnotes", {}, [
+            el("w:endnote", { "w:id": "1" }, [
+              el("w:p", {}, [
+                el("w:r", {}, [el("w:t", {}, [txt("endnote body")])]),
+              ]),
+            ]),
+          ]),
+        ],
+      },
+    });
+    const { before, after, written } = fullRoundTrip(source);
+    expect(written.parts["word/footnotes.xml"]).toBeDefined();
+    expect(written.parts["word/endnotes.xml"]).toBeDefined();
+    expect(after.footnotes).toEqual(before.footnotes);
+    expect(after.endnotes).toEqual(before.endnotes);
+    expect(after.footnotes).toEqual([{ id: "1", text: "footnote body" }]);
+    expect(after.endnotes).toEqual([{ id: "1", text: "endnote body" }]);
+    expect(after.sections).toEqual(before.sections);
+  });
+
+  it("round-trips a header part and its section-level default reference", () => {
+    const finalSectPr = el("w:sectPr", {}, [
+      el("w:headerReference", { "w:type": "default", "r:id": "rIdHeader1" }),
+      el("w:pgSz", { "w:w": "12240", "w:h": "15840" }),
+      el("w:pgMar", {
+        "w:top": "1440",
+        "w:right": "1440",
+        "w:bottom": "1440",
+        "w:left": "1440",
+      }),
+    ]);
+    const body = el("w:body", {}, [para("body text"), finalSectPr]);
+    const source: Package = {
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [el("w:document", {}, [body])],
+        },
+        "word/_rels/document.xml.rels": {
+          kind: "xml",
+          nodes: [
+            el("Relationships", {}, [
+              el("Relationship", {
+                Id: "rIdHeader1",
+                Type: HEADER_REL,
+                Target: "header1.xml",
+              }),
+            ]),
+          ],
+        },
+        "word/header1.xml": {
+          kind: "xml",
+          nodes: [
+            el("w:hdr", {}, [
+              el("w:p", {}, [
+                el("w:r", {}, [el("w:t", {}, [txt("Running header")])]),
+              ]),
+            ]),
+          ],
+        },
+      },
+    };
+    const { before, after, written } = fullRoundTrip(source);
+    expect(written.parts["word/header1.xml"]).toBeDefined();
+    expect(written.parts["word/_rels/header1.xml.rels"]).toBeUndefined();
+    expect(after.headerFooterParts).toEqual(before.headerFooterParts);
+    expect(after.sectionHeaderFooters).toEqual(before.sectionHeaderFooters);
+    expect(after.headerFooterParts).toEqual([
+      {
+        path: "word/header1.xml",
+        kind: "header",
+        blocks: [{ kind: "paragraph", runs: [{ text: "Running header" }] }],
+      },
+    ]);
+    expect(after.sectionHeaderFooters).toEqual([
+      { header: { default: "word/header1.xml" } },
+    ]);
+  });
+
+  it("writes an image inside a header through that header's own relationships, not the document's", () => {
+    const drawing = el("w:drawing", {}, [
+      el("wp:inline", {}, [
+        el("wp:extent", { cx: "914400", cy: "914400" }),
+        el("a:graphic", {}, [
+          el("a:graphicData", { uri: PICTURE_GRAPHIC_URI }, [
+            el("pic:pic", {}, [
+              el("pic:blipFill", {}, [el("a:blip", { "r:embed": "rIdImg" })]),
+            ]),
+          ]),
+        ]),
+      ]),
+    ]);
+    const finalSectPr = el("w:sectPr", {}, [
+      el("w:headerReference", { "w:type": "default", "r:id": "rIdHeader1" }),
+      el("w:pgSz", { "w:w": "12240", "w:h": "15840" }),
+      el("w:pgMar", {
+        "w:top": "1440",
+        "w:right": "1440",
+        "w:bottom": "1440",
+        "w:left": "1440",
+      }),
+    ]);
+    const body = el("w:body", {}, [para("body text"), finalSectPr]);
+    const source: Package = {
+      parts: {
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [el("w:document", {}, [body])],
+        },
+        "word/_rels/document.xml.rels": {
+          kind: "xml",
+          nodes: [
+            el("Relationships", {}, [
+              el("Relationship", {
+                Id: "rIdHeader1",
+                Type: HEADER_REL,
+                Target: "header1.xml",
+              }),
+            ]),
+          ],
+        },
+        "word/header1.xml": {
+          kind: "xml",
+          nodes: [el("w:hdr", {}, [el("w:p", {}, [el("w:r", {}, [drawing])])])],
+        },
+        "word/_rels/header1.xml.rels": {
+          kind: "xml",
+          nodes: [
+            el("Relationships", {}, [
+              el("Relationship", {
+                Id: "rIdImg",
+                Type: IMAGE_REL,
+                Target: "media/image1.png",
+              }),
+            ]),
+          ],
+        },
+        "word/media/image1.png": { kind: "binary", base64: TINY_PNG_BASE64 },
+      },
+    };
+    const { before, after, written } = fullRoundTrip(source);
+    expect(written.parts["word/_rels/header1.xml.rels"]).toBeDefined();
+    expect(after.headerFooterParts).toEqual(before.headerFooterParts);
+    const headerPart = after.headerFooterParts[0];
+    const image = headerPart?.blocks.find((block) => block.kind === "image");
+    expect(image?.kind).toBe("image");
   });
 });
