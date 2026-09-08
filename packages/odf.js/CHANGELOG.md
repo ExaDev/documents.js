@@ -1,3 +1,18 @@
+## [7.11.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.10.0...odf.js%407.11.0) (2026-09-08)
+
+### Features
+
+* **odf.js:** synthesise validation conditions and calcext values on the write side ([e9d3139](https://github.com/ExaDev/documents.js/commit/e9d3139dbca6fd9eb873d0a92d845106d5ae6d8b))
+* **odf.js:** write ods data-validation and conditional-formatting rules ([a8205f6](https://github.com/ExaDev/documents.js/commit/a8205f653b297cdb409b45e0c88f544002e22d92)), references [#925](https://github.com/ExaDev/documents.js/issues/925) [#1075](https://github.com/ExaDev/documents.js/issues/1075)
+
+### Bug Fixes
+
+* **odf.js:** keep conditional-format ranges out of the materialised grid ([db4c961](https://github.com/ExaDev/documents.js/commit/db4c96103c828c0eb5464daebad35d711054d25e))
+
+### Documentation
+
+* **odf.js:** document the ods writer's validation and conditional formats ([4d89c21](https://github.com/ExaDev/documents.js/commit/4d89c2127d78e112664dc879bb2744c98a4c0058))
+
 ## [7.10.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.9.2...odf.js%407.10.0) (2026-09-08)
 
 ### Features
