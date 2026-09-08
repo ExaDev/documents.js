@@ -407,7 +407,120 @@ describe("writePdf -> readPdf: structural round trip", () => {
 
     expect(result.pages[0]!.items).toEqual(items);
   });
+});
 
+// content-write.ts's writeStrokeStyleState emits a real dash-array operator for 'dashed'/'dotted' (see that module's own top-of-block comment for the exact arrays); until interpret.ts's own `d`-operator handling and strokeStyleFromDashArray landed, nothing on the read side recovered it, so a dashed or dotted line/path this package wrote itself came back with no `style` field at all -- ContentStrokeStyleSchema's own 'solid' default, i.e. silently flattened to a plain line. These tests are the self-inflicted-asymmetry check the README's Gotchas section used to warn about.
+describe("writePdf -> readPdf: stroke style round trip", () => {
+  it("recovers a dashed LayoutLine's style, not just its geometry and colour", () => {
+    const line: LayoutLine = {
+      kind: "line",
+      x1Pt: 10,
+      y1Pt: 10,
+      x2Pt: 150,
+      y2Pt: 10,
+      color: BLACK,
+      widthPt: 2,
+      style: "dashed",
+    };
+    const doc = docWithItems([line]);
+
+    const result = readPdf(writePdf(doc, { compress: false }));
+
+    expect(result.pages[0]!.items).toEqual([line]);
+  });
+
+  it("recovers a dotted LayoutLine's style, distinguishing it from dashed", () => {
+    const line: LayoutLine = {
+      kind: "line",
+      x1Pt: 10,
+      y1Pt: 40,
+      x2Pt: 150,
+      y2Pt: 40,
+      color: BLACK,
+      widthPt: 2,
+      style: "dotted",
+    };
+    const doc = docWithItems([line]);
+
+    const result = readPdf(writePdf(doc, { compress: false }));
+
+    expect(result.pages[0]!.items).toEqual([line]);
+  });
+
+  it("recovers a dashed LayoutPath's style on a stroked open curve", () => {
+    const path: LayoutPath = {
+      kind: "path",
+      stroke: { color: BLUE, widthPt: 3 },
+      style: "dashed",
+      subpaths: [
+        {
+          startXPt: 0,
+          startYPt: 0,
+          closed: false,
+          segments: [
+            {
+              kind: "cubic",
+              c1xPt: 0,
+              c1yPt: 40,
+              c2xPt: 40,
+              c2yPt: 40,
+              xPt: 40,
+              yPt: 0,
+            },
+          ],
+        },
+      ],
+    };
+    const doc = docWithItems([path]);
+
+    const result = readPdf(writePdf(doc, { compress: false }));
+
+    expect(result.pages[0]!.items).toEqual([path]);
+  });
+
+  it("recovers a dotted LayoutPath's style on a stroked closed polygon", () => {
+    const path: LayoutPath = {
+      kind: "path",
+      stroke: { color: RED, widthPt: 2 },
+      style: "dotted",
+      subpaths: [
+        {
+          startXPt: 20,
+          startYPt: 20,
+          closed: true,
+          segments: [
+            { kind: "line", xPt: 80, yPt: 20 },
+            { kind: "line", xPt: 50, yPt: 60 },
+          ],
+        },
+      ],
+    };
+    const doc = docWithItems([path]);
+
+    const result = readPdf(writePdf(doc, { compress: false }));
+
+    expect(result.pages[0]!.items).toEqual([path]);
+  });
+
+  it("leaves style absent for a plain solid line, matching the pre-existing default", () => {
+    const line: LayoutLine = {
+      kind: "line",
+      x1Pt: 10,
+      y1Pt: 70,
+      x2Pt: 150,
+      y2Pt: 70,
+      color: BLACK,
+      widthPt: 2,
+    };
+    const doc = docWithItems([line]);
+
+    const result = readPdf(writePdf(doc, { compress: false }));
+
+    expect(result.pages[0]!.items).toEqual([line]);
+  });
+});
+
+describe("writePdf -> readPdf: structural round trip", () => {
   // page.notes carries pptx speaker notes through the PDF round trip (see layout/slides.ts and layout/reconstruct.ts) as a hidden /Subtype /Text annotation (write.ts's buildNotesAnnotDict) -- PDF has no native concept of presenter notes, so this is this package's own round-trip mechanism, confirmed here at the LayoutDocument level and separately confirmed against real Keynote (see editor.test.ts and this project's own manual verification).
   it("recovers page.notes from the hidden notes annotation, and omits it entirely when absent", () => {
     const withNotes = docWithPages([
