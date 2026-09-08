@@ -1,6 +1,7 @@
 import {
   COLOR_BLACK,
   type Color as LayoutColor,
+  type ContentStrokeStyle,
   type Point,
 } from "document-schema.js";
 import { decodeStream } from "./filters";
@@ -71,6 +72,7 @@ export interface ExtractedLine {
   readonly y2Pt: number;
   readonly color: LayoutColor;
   readonly widthPt: number;
+  readonly style?: ContentStrokeStyle; // recovered from the dash array in effect when this line was stroked -- see strokeStyleFromDashArray
   readonly layerName?: string; // the optional-content group in scope -- membership is a fact of every painted item, not only text
   readonly mcid?: number; // the /MCID in scope -- ownership is as much a fact of a painted item as layer membership
 }
@@ -100,6 +102,7 @@ export interface ExtractedPath extends ExtractedPaint {
   readonly kind: "path";
   readonly subpaths: readonly ExtractedSubpath[];
   readonly fillRule: "nonzero" | "evenodd";
+  readonly style?: ContentStrokeStyle; // recovered from the dash array in effect when this path was stroked -- see strokeStyleFromDashArray
 }
 
 export interface ExtractedImage {
@@ -171,6 +174,7 @@ interface GraphicsState {
   readonly fillColor: LayoutColor;
   readonly strokeColor: LayoutColor;
   readonly lineWidth: number;
+  readonly dashArray: readonly number[]; // the `d` operator's own dash array (ISO 32000-1 8.4.3.6), empty for the PDF default (a solid line) -- the dash phase is write-only state this package never reads back, since content-write.ts always emits phase 0 and no recoverable ContentStrokeStyle distinguishes phases
   readonly fontResourceName: string | undefined;
   readonly fontSizePt: number;
   readonly charSpace: number;
@@ -188,7 +192,7 @@ interface TextObjectState {
 
 function initialTextParameters(): Omit<
   GraphicsState,
-  "ctm" | "fillColor" | "strokeColor" | "lineWidth"
+  "ctm" | "fillColor" | "strokeColor" | "lineWidth" | "dashArray"
 > {
   return {
     fontResourceName: undefined,
@@ -591,9 +595,20 @@ function detectEllipse(
 }
 
 // An open subpath of exactly one straight segment, stroked and not filled, is a line -- the only shape a `m ... l S` sequence can be. A fill disqualifies it because a two-point path encloses no area, so a producer that filled one meant something this detector should not guess at.
+// The inverse of content-write.ts's writeStrokeStyleState: that module emits a two-element dash array for both styles it writes -- a nonzero on-length ('dashed', `[3w 3w] 0 d`) or a zero on-length under a round cap ('dotted', `[0 2w] 0 d`) -- so the on-length alone (present or zero) is what distinguishes them on the way back in, and any other non-empty dash array a third-party producer wrote collapses to 'dashed', the closer of the two words this package's ContentStrokeStyleSchema models. An empty array (the PDF default, and what resetStrokeStyleState restores after a styled stroke) reads back as 'solid', i.e. the field left absent -- matching ContentStrokeStyleSchema's own documented default.
+function strokeStyleFromDashArray(
+  dashArray: readonly number[],
+): ContentStrokeStyle | undefined {
+  if (dashArray.length === 0) {
+    return undefined;
+  }
+  return dashArray.length === 2 && dashArray[0] === 0 ? "dotted" : "dashed";
+}
+
 function detectLine(
   subpath: ExtractedSubpath,
   paint: ExtractedPaint,
+  style: ContentStrokeStyle | undefined,
 ): ExtractedLine | undefined {
   const segment = subpath.segments[0];
   if (
@@ -614,6 +629,7 @@ function detectLine(
     y2Pt: segment.yPt,
     color: paint.stroke.color,
     widthPt: paint.stroke.widthPt,
+    ...(style !== undefined ? { style } : {}),
   };
 }
 
@@ -621,6 +637,7 @@ function detectLine(
 function classifyShape(
   subpaths: readonly ExtractedSubpath[],
   paint: ExtractedPaint,
+  style: ContentStrokeStyle | undefined,
 ): ExtractedRect | ExtractedEllipse | ExtractedLine | undefined {
   const subpath = subpaths[0];
   if (subpaths.length !== 1 || subpath === undefined) {
@@ -629,7 +646,7 @@ function classifyShape(
   return (
     detectRect(subpath, paint) ??
     detectEllipse(subpath, paint) ??
-    detectLine(subpath, paint)
+    detectLine(subpath, paint, style)
   );
 }
 
@@ -644,6 +661,7 @@ export function interpretContentStream(
     fillColor: COLOR_BLACK,
     strokeColor: COLOR_BLACK,
     lineWidth: DEFAULT_LINE_WIDTH_PT,
+    dashArray: [],
     ...initialTextParameters(),
   };
   runContentStream(bytes, resources, initialState, context, items, 0, []);
@@ -805,12 +823,16 @@ function runContentStream(
           ? { color: gs.strokeColor, widthPt: gs.lineWidth }
           : undefined,
       };
+      const strokeStyle = isStrokeOp
+        ? strokeStyleFromDashArray(gs.dashArray)
+        : undefined;
       pushItem(
-        classifyShape(pathSubpaths, paint) ?? {
+        classifyShape(pathSubpaths, paint, strokeStyle) ?? {
           kind: "path",
           subpaths: pathSubpaths,
           fillRule: paintFillRuleFor(operator),
           ...paint,
+          ...(strokeStyle !== undefined ? { style: strokeStyle } : {}),
         },
       );
     }
@@ -1138,6 +1160,14 @@ function runContentStream(
         break;
       case "w":
         gs = { ...gs, lineWidth: numAt(operands, 0) };
+        break;
+      case "d":
+        gs = {
+          ...gs,
+          dashArray: (asArray(operands[0]) ?? []).map(
+            (entry) => asNumber(entry) ?? 0,
+          ),
+        };
         break;
       case "f":
       case "F":
