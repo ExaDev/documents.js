@@ -451,6 +451,36 @@ describe("tree-only carries: reference definitions and front-matter residue", ()
     ).toBe("---\ntitle: Generated\n---\n\nbody");
   });
 
+  it("round-trips every string/array/enum LayoutMetadata field through generated front matter, not just the original five keys", () => {
+    const metadata = {
+      title: "Hello",
+      author: "Jo",
+      subject: "A subject",
+      creator: "Producer Co",
+      createdIso: "2024-01-01",
+      modifiedIso: "2024-02-02",
+      lastPrintedIso: "2024-03-03",
+      language: "en-GB",
+      direction: "rtl" as const,
+      publisher: "A Publisher",
+      contributor: "A Contributor",
+      rights: "All rights reserved",
+      identifier: "urn:isbn:0-000-00000-0",
+      comments: "A comment",
+      company: "A Company",
+      manager: "A Manager",
+      keywords: ["a", "b"],
+    };
+    const base = readMarkdown("body").documentPackage;
+    const written = writeMarkdown(
+      { ...base, metadata: { ...base.metadata, ...metadata } },
+      { frontMatter: true },
+    );
+    expect(
+      readMarkdown(written, { frontMatter: true }).documentPackage.metadata,
+    ).toEqual(metadata);
+  });
+
   it("emits no front matter at all without the option, residue or not", () => {
     const { documentPackage } = readMarkdown("---\ntitle: x\n---\n\nbody", {
       frontMatter: true,

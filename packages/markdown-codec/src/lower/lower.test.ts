@@ -591,6 +591,61 @@ describe("front matter", () => {
     });
     expect(doc.metadata.producer).toBeUndefined();
   });
+
+  it("maps every other LayoutMetadata string/enum field a front matter line can carry", () => {
+    const doc = lowerMarkdown(
+      [
+        "---",
+        "title: Hello",
+        "author: Jo",
+        "subject: A subject",
+        "creator: Producer Co",
+        "date: 2024-01-01",
+        "modified: 2024-02-02",
+        "lastPrinted: 2024-03-03",
+        "language: en-GB",
+        "direction: rtl",
+        "publisher: A Publisher",
+        "contributor: A Contributor",
+        "rights: All rights reserved",
+        "identifier: urn:isbn:0-000-00000-0",
+        "comments: A comment",
+        "company: A Company",
+        "manager: A Manager",
+        "keywords: [a, b]",
+        "---",
+        "",
+        "body",
+      ].join("\n"),
+      { frontMatter: true },
+    );
+    expect(doc.metadata).toEqual({
+      title: "Hello",
+      author: "Jo",
+      subject: "A subject",
+      creator: "Producer Co",
+      createdIso: "2024-01-01",
+      modifiedIso: "2024-02-02",
+      lastPrintedIso: "2024-03-03",
+      language: "en-GB",
+      direction: "rtl",
+      publisher: "A Publisher",
+      contributor: "A Contributor",
+      rights: "All rights reserved",
+      identifier: "urn:isbn:0-000-00000-0",
+      comments: "A comment",
+      company: "A Company",
+      manager: "A Manager",
+      keywords: ["a", "b"],
+    });
+  });
+
+  it("silently skips a direction value outside TextDirectionSchema's own ltr/rtl enum", () => {
+    const doc = lowerMarkdown("---\ndirection: sideways\n---\n\nbody", {
+      frontMatter: true,
+    });
+    expect(doc.metadata.direction).toBeUndefined();
+  });
 });
 
 describe("gaps (MarkdownDiagnosticCodes)", () => {
