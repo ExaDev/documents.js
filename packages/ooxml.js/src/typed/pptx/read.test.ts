@@ -1458,6 +1458,15 @@ describe("readPptxContent: chart graphic frames", () => {
       "slides[0].shapes[0].blocks[0].rows[1].cells[1].blocks[0]",
     );
   });
+
+  it("quarantines the whole chart part -- type, axes, colours, everything readChartTable itself does not read -- as pptx residue on the table", () => {
+    const doc = readPptxContent(chartFixturePackage());
+    const chartShape = doc.slides[0]?.shapes.find((s) => s.name === "Chart 1");
+    const table = asTable(chartShape?.blocks[0]);
+    expect(table.source?.format).toBe("pptx");
+    expect(table.source?.xml).toContain("c:chartSpace");
+    expect(table.source?.xml).toContain("c:barChart");
+  });
 });
 
 // A SmartArt graphic frame's dgm:relIds carries four relationship ids; only r:dm (the data model -- the semantic graph of nodes and text) is read. The tree below: doc -> [Strategy (node 1, srcOrd 0), Cost (node 2, srcOrd 1), textless (node 4, srcOrd 2), Assistant (asst 5, srcOrd 3)], with Strategy -> [Quality/Details (node 3), a parTrans point whose text must not surface]. cxnLst order is deliberately scrambled against srcOrd to prove the sort, and a presOf edge to node 2 must not duplicate its text (readDiagramText in src/typed/pptx/diagram.ts).
@@ -1608,6 +1617,58 @@ describe("readPptxContent: SmartArt graphic frames", () => {
     );
     expect(asParagraph(diagramShape?.blocks[4]).sourcePath).toBe(
       "slides[0].shapes[0].blocks[4]",
+    );
+  });
+
+  it("leaves the shape's own source undefined when relIds names no layout/quickStyle/colour relationship the slide actually carries", () => {
+    const doc = readPptxContent(smartArtFixturePackage());
+    const diagramShape = doc.slides[0]?.shapes.find(
+      (s) => s.name === "Diagram 1",
+    );
+    expect(diagramShape?.source).toBeUndefined();
+  });
+
+  it("quarantines whichever of the layout/quickStyle/colour parts resolve as pptx residue on the diagram's own shape, in r:lo/r:qs/r:cs order", () => {
+    const pkg = smartArtFixturePackage();
+    const layout = el("dgm:layoutDef", { uniqueId: "layout1" });
+    const quickStyle = el("dgm:styleDef", { uniqueId: "style1" });
+    pkg.parts["ppt/diagrams/layout1.xml"] = { kind: "xml", nodes: [layout] };
+    pkg.parts["ppt/diagrams/quickStyle1.xml"] = {
+      kind: "xml",
+      nodes: [quickStyle],
+    };
+    // Replaces the fixture's own dm-only relationships with dm+lo+qs -- rIdCs is deliberately left unresolved (no relationship, no part) to prove residue quarantines whichever parts actually resolve rather than requiring all three.
+    pkg.parts["ppt/slides/_rels/slide1.xml.rels"] = {
+      kind: "xml",
+      nodes: [
+        rels([
+          {
+            id: "rIdDm",
+            type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData",
+            target: "../diagrams/data1.xml",
+          },
+          {
+            id: "rIdLo",
+            type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramLayout",
+            target: "../diagrams/layout1.xml",
+          },
+          {
+            id: "rIdQs",
+            type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramQuickStyle",
+            target: "../diagrams/quickStyle1.xml",
+          },
+        ]),
+      ],
+    };
+    const doc = readPptxContent(pkg);
+    const diagramShape = doc.slides[0]?.shapes.find(
+      (s) => s.name === "Diagram 1",
+    );
+    expect(diagramShape?.source?.format).toBe("pptx");
+    const xml = diagramShape?.source?.xml ?? "";
+    expect(xml.indexOf("dgm:layoutDef")).toBeGreaterThanOrEqual(0);
+    expect(xml.indexOf("dgm:styleDef")).toBeGreaterThan(
+      xml.indexOf("dgm:layoutDef"),
     );
   });
 });
