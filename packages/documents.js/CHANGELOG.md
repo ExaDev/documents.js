@@ -1,3 +1,11 @@
+## [7.8.14](https://github.com/ExaDev/documents.js/compare/documents.js%407.8.13...documents.js%407.8.14) (2026-09-08)
+
+
+### Dependencies
+
+- Updated epub-codec to 1.3.0
+- Updated markdown-codec to 6.5.0
+
 ## [7.8.13](https://github.com/ExaDev/documents.js/compare/documents.js%407.8.12...documents.js%407.8.13) (2026-09-08)
 
 
