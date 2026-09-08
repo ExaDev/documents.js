@@ -271,6 +271,68 @@ describe("the odt round-trip law", () => {
     const readBack = readOdt(decodePackage(encodePackage(written)));
     expect(readBack.source).toEqual(source);
   });
+
+  it("holds for a table cell containing a nested list and a nested table", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "table",
+          columnWidthsPt: [200],
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [
+                    { kind: "paragraph", runs: [{ text: "Before the list" }] },
+                    {
+                      kind: "paragraph",
+                      runs: [{ text: "Item one" }],
+                      list: { numId: "bullet:list1", level: 0 },
+                    },
+                    {
+                      kind: "paragraph",
+                      runs: [{ text: "Item two" }],
+                      list: { numId: "bullet:list1", level: 0 },
+                    },
+                    {
+                      kind: "table",
+                      columnWidthsPt: [80, 80],
+                      rows: [
+                        {
+                          cells: [
+                            {
+                              blocks: [
+                                {
+                                  kind: "paragraph",
+                                  runs: [{ text: "Nested A" }],
+                                },
+                              ],
+                            },
+                            {
+                              blocks: [
+                                {
+                                  kind: "paragraph",
+                                  runs: [{ text: "Nested B" }],
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      kind: "paragraph",
+                      runs: [{ text: "After the nested table" }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+  });
 });
 
 // Every restatement below is a fact about ODF, not about this writer's convenience: each is something the format's own content model cannot carry, and each is asserted here on its own so that a future change which quietly widens the normalisation fails a test rather than passing one.

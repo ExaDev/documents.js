@@ -201,7 +201,7 @@ function readDrawFrameContent(
 ): ContentBlock[] {
   const table = childrenWithTag(frame, "table:table")[0];
   if (table !== undefined) {
-    return [readOdfTable(table, pkg)];
+    return [readOdfTable(table, pkg, listIdState)];
   }
   const textBox = childrenWithTag(frame, "draw:text-box")[0];
   if (textBox !== undefined) {
