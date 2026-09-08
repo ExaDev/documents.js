@@ -45,8 +45,44 @@ const NAV_PATH = `${OPF_DIR}/nav.xhtml`;
 const XHTML_DOCTYPE =
   '<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">';
 
+function sectionFileName(index: number): string {
+  return `section${String(index + 1)}.xhtml`;
+}
+
 function sectionXhtmlPath(index: number): string {
-  return `${OPF_DIR}/section${String(index + 1)}.xhtml`;
+  return `${OPF_DIR}/${sectionFileName(index)}`;
+}
+
+// The whole-document footnote/bookmark name -> owning section index, built once before any section is written: writeXhtmlBody itself only ever sees ONE section's own flat blocks, so it has no way to tell a same-section footnote/link reference from a cross-document one (ExaDev/documents.js#963) without this. A flat ContentDocument's sections carry their own constructStart/constructEnd markers as literal, unnested entries of section.blocks (never inside a further block list), so one flat scan per section is enough -- no recursion.
+function buildAnchorSectionIndex(
+  sections: readonly ContentSection[],
+): Map<string, number> {
+  const index = new Map<string, number>();
+  sections.forEach((section, sectionIndex) => {
+    for (const block of section.blocks) {
+      if (
+        block.kind === "constructStart" &&
+        block.descriptor.kind === "anchor"
+      ) {
+        index.set(block.descriptor.name, sectionIndex);
+      }
+    }
+  });
+  return index;
+}
+
+// The XhtmlWriteContext.resolveAnchorHref this section (ownIndex) should use: a same-section href when the name's own constructStart lives in this section (or, matching this package's original pre-#963 behaviour, when no section carries a matching constructStart at all -- a hand-built ContentDocument whose footnote/link extent names nothing), a cross-section href pointing at the OTHER section's own written file otherwise.
+function resolveAnchorHrefFor(
+  ownIndex: number,
+  anchorSectionIndex: ReadonlyMap<string, number>,
+): (name: string) => string {
+  return (name) => {
+    const targetIndex = anchorSectionIndex.get(name);
+    if (targetIndex === undefined || targetIndex === ownIndex) {
+      return `#${name}`;
+    }
+    return `${sectionFileName(targetIndex)}#${name}`;
+  };
 }
 
 // Builds one section's own <head>: a required <title> (EPUB 3.3's own XHTML content document conformance, matching every real producer's output even though this package's own reader never checks for one) plus, when this section carries its own quarantined CSS residue (src/xhtml/read.ts's STYLE_RESIDUE), that residue's raw <link>/<style> elements re-parsed and spliced back in verbatim.
@@ -117,6 +153,8 @@ export function writeEpubContent(
     return href;
   };
 
+  const anchorSectionIndex = buildAnchorSectionIndex(document.sections);
+
   const sectionXhtml: { body: XmlElement; residueXml: string | undefined }[] =
     [];
   document.sections.forEach((section: ContentSection, index) => {
@@ -126,6 +164,7 @@ export function writeEpubContent(
         registerImage,
         sink,
         sourceHref,
+        resolveAnchorHref: resolveAnchorHrefFor(index, anchorSectionIndex),
       });
       // A same-format (EPUB-to-EPUB) restorable-fidelity re-emission of this package's own CSS residue (src/xhtml/read.ts's own STYLE_RESIDUE quarantine): the raw <link rel="stylesheet">/<style> elements this section's own source XHTML carried, re-parsed and spliced back into the written <head> verbatim, never interpreted -- matching this whole family's residue-channel contract (document-schema.js's own "a same-format writer may re-emit its own residue verbatim").
       const residueXml =

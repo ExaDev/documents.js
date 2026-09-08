@@ -21,7 +21,13 @@ import { readNav3TocHrefs } from "./nav/nav3";
 import { readNcxHrefs } from "./nav/ncx";
 import { navMatchesSpine } from "./nav/reconcile";
 import { parseOpf } from "./opf/parse";
-import { readXhtmlBody } from "./xhtml/read";
+import { attrValue } from "./xml/query";
+import {
+  BLOCK_LEVEL_TAGS,
+  readXhtmlBody,
+  scanXhtmlAnchors,
+} from "./xhtml/read";
+import { resolveHrefTarget } from "./xhtml/link-target";
 import { dirname, resolvePackagePath } from "./path";
 import { unzipPackage } from "./zip";
 
@@ -42,6 +48,77 @@ interface ParsedEpub {
 
 function decodeText(bytes: Uint8Array): string {
   return new TextDecoder("utf-8").decode(bytes);
+}
+
+interface ResolvedSpineItem {
+  readonly fullPath: string;
+  readonly xml: string;
+}
+
+interface CrossDocumentAnchorRegistry {
+  // This document's own ids that some OTHER document's href targets, mapped to the canonical (always cross-document-qualified) name the constructStart marker src/xhtml/read.ts's own readBlockElement wraps that id in must carry -- fed straight in as ReadXhtmlBodyOptions.extraBookmarkTargetIds.
+  readonly targetsByHref: ReadonlyMap<string, ReadonlyMap<string, string>>;
+  // The reference-side counterpart: resolves an href a document's own local (same-document) prescan could not, to the same canonical name targetsByHref would hand the target document -- fed in as ReadXhtmlBodyOptions.resolveCrossDocumentBookmarkHref.
+  readonly resolveHref: (
+    sourceHref: string,
+    href: string,
+  ) => string | undefined;
+}
+
+// Every href in the whole spine is walked exactly once here, resolved against its own source document's directory (src/xhtml/link-target.ts's resolveHrefTarget), and kept only when it names a real, block-level element (BLOCK_LEVEL_TAGS) in a DIFFERENT spine document -- a same-document href is entirely readXhtmlBody's own local prescan's job (it has this document's own idElements already, with no cross-document lookup needed), so this registry only ever holds cross-document entries. Every entry that does land here therefore has at least one genuine cross-document referrer by construction, which is exactly the condition src/xhtml/context.ts's own bookmarkTargets comment states for when a name must be qualified -- so every name this function mints is qualified, unconditionally, with no separate "does this collide" check required.
+function buildCrossDocumentAnchorRegistry(
+  items: readonly ResolvedSpineItem[],
+): CrossDocumentAnchorRegistry {
+  const scans = new Map(
+    items.map((item) => [item.fullPath, scanXhtmlAnchors(item.xml)]),
+  );
+  const spineHrefs = new Set(items.map((item) => item.fullPath));
+  const targetsByHref = new Map<string, Map<string, string>>();
+
+  for (const item of items) {
+    const scan = scans.get(item.fullPath);
+    if (scan === undefined) {
+      continue;
+    }
+    for (const anchor of scan.anchors) {
+      const href = attrValue(anchor, "href");
+      if (href === undefined) {
+        continue;
+      }
+      const target = resolveHrefTarget(item.fullPath, href);
+      if (
+        target === undefined ||
+        target.targetHref === item.fullPath ||
+        !spineHrefs.has(target.targetHref)
+      ) {
+        continue;
+      }
+      const targetElement = scans
+        .get(target.targetHref)
+        ?.idElements.get(target.fragment);
+      if (
+        targetElement === undefined ||
+        !BLOCK_LEVEL_TAGS.has(targetElement.tag)
+      ) {
+        continue;
+      }
+      const perDoc =
+        targetsByHref.get(target.targetHref) ?? new Map<string, string>();
+      perDoc.set(target.fragment, `${target.targetHref}#${target.fragment}`);
+      targetsByHref.set(target.targetHref, perDoc);
+    }
+  }
+
+  return {
+    targetsByHref,
+    resolveHref: (sourceHref, href) => {
+      const target = resolveHrefTarget(sourceHref, href);
+      if (target === undefined || target.targetHref === sourceHref) {
+        return undefined;
+      }
+      return targetsByHref.get(target.targetHref)?.get(target.fragment);
+    },
+  };
 }
 
 function readEpubInternal(
@@ -75,8 +152,8 @@ function readEpubInternal(
 
   const manifestById = new Map(opf.manifest.map((item) => [item.id, item]));
 
-  const sections: ContentSection[] = [];
   const spineFullPaths: string[] = [];
+  const resolvedItems: ResolvedSpineItem[] = [];
   for (const itemref of opf.spine) {
     const manifestItem = manifestById.get(itemref.idref);
     if (manifestItem === undefined) {
@@ -99,12 +176,23 @@ function readEpubInternal(
       });
       continue;
     }
+    resolvedItems.push({ fullPath, xml: decodeText(xhtmlBytes) });
+  }
+
+  // The whole-spine cross-document internal-link registry (ExaDev/documents.js#963): which id in which document is targeted by a href living in a DIFFERENT document, and under what canonical name -- see buildCrossDocumentAnchorRegistry below and src/xhtml/context.ts's own bookmarkTargets comment for the naming rule. A same-document href is entirely readXhtmlBody's own local prescan's job and never reaches this registry at all.
+  const anchorRegistry = buildCrossDocumentAnchorRegistry(resolvedItems);
+
+  const sections: ContentSection[] = [];
+  for (const { fullPath, xml } of resolvedItems) {
     const sectionDir = dirname(fullPath);
-    const { blocks, source } = readXhtmlBody(decodeText(xhtmlBytes), {
+    const { blocks, source } = readXhtmlBody(xml, {
       resolveImage: (src) => entries[resolvePackagePath(sectionDir, src)],
       sink,
       sourceHref: fullPath,
       contentWidthPt: CONTENT_WIDTH_PT,
+      extraBookmarkTargetIds: anchorRegistry.targetsByHref.get(fullPath),
+      resolveCrossDocumentBookmarkHref: (href) =>
+        anchorRegistry.resolveHref(fullPath, href),
     });
     sections.push({
       pageSize: PAGE_SIZE_A4,

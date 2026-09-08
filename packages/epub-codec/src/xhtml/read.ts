@@ -23,7 +23,11 @@ import { decodeEntities, decodeTextLikeNode } from "../xml/entities";
 import { parseXml } from "../xml/parse";
 import type { InlineStyle, XhtmlReadContext } from "./context";
 import { isInertElement, reportInertElementSkip } from "./context";
-import { isFootnoteAside, isFootnoteReferenceAnchor } from "./footnote";
+import {
+  isFootnoteAside,
+  isFootnoteReferenceAnchor,
+  sameDocumentFragment,
+} from "./footnote";
 import { buildInlineRuns, rebaseConstructs } from "./inline";
 import type { InlineResult } from "./inline";
 import type { MintListNumIdOptions } from "./list-id";
@@ -181,6 +185,34 @@ export interface ReadXhtmlBodyOptions {
   }) => void;
   readonly sourceHref: string;
   readonly contentWidthPt: number;
+  // Ids in THIS document a caller reading the whole spine already discovered are targeted by ANOTHER document's own href, mapped to the qualified name (src/xhtml/context.ts's own bookmarkTargets comment) that reference already committed to -- merged with this function's own local (same-document) prescan of this document's own <a> elements, which defers to an entry already present here rather than minting its own bare-fragment name for the same id. Absent when a caller reads exactly one document in isolation (every direct call site in this package's own test suite), in which case only same-document bookmark targets are ever recognised.
+  readonly extraBookmarkTargetIds?: ReadonlyMap<string, string>;
+  // Resolves a REFERENCE-side href this document's own local (same-document) resolution could not -- because the href's own path portion names a different document -- against the caller's whole-spine registry. Absent when a caller reads exactly one document in isolation, in which case a cross-document href is left unresolved: the existing degrade this package already had before it recognised any internal link target at all, a plain ContentRun.hyperlink carrying the href verbatim.
+  readonly resolveCrossDocumentBookmarkHref?: (
+    href: string,
+  ) => string | undefined;
+}
+
+// A whole-spine pre-pass helper: parses one XHTML content document's <body> just far enough to expose its own id-bearing elements and its own <a href> elements, without walking the rest of the body into ContentBlock[] the way readXhtmlBody itself does. src/read.ts's own cross-document anchor registry (ExaDev/documents.js#963) calls this once per spine document before any document's own full body read, since a target's own eligibility (BLOCK_LEVEL_TAGS membership) has to be known before the referencing document's own read can decide whether to build an internal-link construct or degrade to a plain hyperlink.
+export interface XhtmlAnchorScan {
+  readonly idElements: ReadonlyMap<string, XmlElement>;
+  readonly anchors: readonly XmlElement[];
+}
+
+export function scanXhtmlAnchors(xml: string): XhtmlAnchorScan {
+  const nodes = parseXml(xml);
+  const html = rootElement(nodes);
+  const body =
+    html === undefined ? undefined : findChildElement(html.children, "body");
+  if (body === undefined) {
+    return { idElements: new Map(), anchors: [] };
+  }
+  return {
+    idElements: buildIdElementMap(body.children),
+    anchors: elementsWithTagSkippingInert(body.children, "a").filter(
+      (anchor) => attrValue(anchor, "href") !== undefined,
+    ),
+  };
 }
 
 export interface ReadXhtmlBodyResult {
@@ -231,10 +263,26 @@ export function readXhtmlBody(
   }
   const idElements = buildIdElementMap(body.children);
   const footnoteTargetIds = new Set<string>();
+  const bookmarkTargets = new Map<string, string>(
+    options.extraBookmarkTargetIds,
+  );
   for (const anchor of elementsWithTagSkippingInert(body.children, "a")) {
-    const name = isFootnoteReferenceAnchor(anchor, idElements);
-    if (name !== undefined) {
-      footnoteTargetIds.add(name);
+    const footnoteName = isFootnoteReferenceAnchor(anchor, idElements);
+    if (footnoteName !== undefined) {
+      footnoteTargetIds.add(footnoteName);
+      continue;
+    }
+    // A same-document href that resolves to a real, block-level element and that no footnote reference already claims: document-schema.js's own internal `link` target (see src/xhtml/inline.ts's appendAnchor). Only a BLOCK_LEVEL_TAGS member is eligible -- an id living on an inline element (a <span id> mid-sentence) never reaches src/xhtml/read.ts's own readBlockElement, which is the one place a target actually gets wrapped in its own bookmark anchor marker, so recognising it here would mint a reference to a name nothing ever anchors. A fragment already present in bookmarkTargets (seeded from options.extraBookmarkTargetIds) keeps its own cross-document-qualified name rather than being overwritten with the bare fragment here.
+    const fragment = sameDocumentFragment(attrValue(anchor, "href"));
+    const target =
+      fragment === undefined ? undefined : idElements.get(fragment);
+    if (
+      fragment !== undefined &&
+      target !== undefined &&
+      BLOCK_LEVEL_TAGS.has(target.tag) &&
+      !bookmarkTargets.has(fragment)
+    ) {
+      bookmarkTargets.set(fragment, fragment);
     }
   }
   const context: XhtmlReadContext = {
@@ -243,6 +291,14 @@ export function readXhtmlBody(
     sourceHref: options.sourceHref,
     idElements,
     footnoteTargetIds,
+    bookmarkTargets,
+    resolveBookmarkHref: (href) => {
+      const fragment = sameDocumentFragment(href);
+      if (fragment !== undefined) {
+        return bookmarkTargets.get(fragment);
+      }
+      return options.resolveCrossDocumentBookmarkHref?.(href);
+    },
     quoteDepth: 0,
   };
   const state: BuildState = {
@@ -260,7 +316,7 @@ export function readXhtmlBody(
 }
 
 // Every container this package maps transparently (li, blockquote, aside, div/section/..., and the top-level body itself) is, per the XHTML content model, legally allowed to mix real block-level children with bare phrasing content (text and inline markup with no block wrapper) as siblings -- <li>text<ul>...</ul></li> is exactly as real as <li><p>text</p><ul>...</ul></li>, and both idioms appear in real EPUBs. A dispatcher that only recurses into element children whose own tag it recognises as a block would silently drop the phrasing case outright: any stray text node sitting among block siblings is skipped, wherever it falls. This walks the children in source order instead, accumulating a run of phrasing content into its own implicit paragraph (dropped if it produces no runs) and flushing it the moment a real block-level element is reached -- the same "anonymous block box" rule every browser's own HTML block-formatting context applies to inline content sitting beside block siblings. Every block-level dispatch point in this module (a <p>'s own children, a <li>'s, a <blockquote>'s, an <aside>'s, and every other container's default passthrough) reaches content exclusively through this one function; nothing else in the module walks a raw children array directly.
-const BLOCK_LEVEL_TAGS = new Set([
+export const BLOCK_LEVEL_TAGS = new Set([
   "p",
   "h1",
   "h2",
@@ -340,22 +396,37 @@ function readBlockElement(
   state: BuildState,
 ): ContentBlock[] {
   const id = attrValue(element, "id");
-  const isFootnoteTarget =
-    id !== undefined &&
-    state.context.footnoteTargetIds.has(id) &&
-    !isFootnoteAside(element);
   const blocks = readBlockElementInner(element, state);
-  if (!isFootnoteTarget) {
+  if (id === undefined) {
     return blocks;
   }
-  return [
-    {
-      kind: "constructStart",
-      descriptor: { kind: "anchor", anchorType: "footnote", name: id },
-    },
-    ...blocks,
-    { kind: "constructEnd" },
-  ];
+  // A footnote-shaped target always wins the same id (matching appendAnchor's own reference-side priority in src/xhtml/inline.ts) -- an id recognised as both is one <a> reading it as a footnote reference and a different one reading it as an ordinary internal link, and the footnote reading is the more specific one.
+  if (state.context.footnoteTargetIds.has(id) && !isFootnoteAside(element)) {
+    return [
+      {
+        kind: "constructStart",
+        descriptor: { kind: "anchor", anchorType: "footnote", name: id },
+      },
+      ...blocks,
+      { kind: "constructEnd" },
+    ];
+  }
+  const bookmarkName = state.context.bookmarkTargets.get(id);
+  if (bookmarkName !== undefined) {
+    return [
+      {
+        kind: "constructStart",
+        descriptor: {
+          kind: "anchor",
+          anchorType: "bookmark",
+          name: bookmarkName,
+        },
+      },
+      ...blocks,
+      { kind: "constructEnd" },
+    ];
+  }
+  return blocks;
 }
 
 function readBlockElementInner(
