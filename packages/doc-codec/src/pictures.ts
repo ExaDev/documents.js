@@ -1,4 +1,5 @@
 import type { ContentImageBlock } from "document-schema.js";
+import { bytesToBase64 } from "./base64";
 import {
   readInt16LE,
   readUint16LE,
@@ -115,26 +116,4 @@ function blipFormat(recType: number): "jpeg" | "png" | undefined {
     default:
       return undefined;
   }
-}
-
-// Isomorphic (no Node Buffer), matching ooxml.js's own util/base64.ts bytesToBase64 exactly -- this package cannot import that one directly (doc-codec depends on archive-codec and document-schema.js only, never a sibling codec), so the identical, proven table-based technique is inlined here rather than reached for via Buffer or btoa, keeping this reader's own Worker-isomorphism the same as every other codec in the family.
-const BASE64_TABLE =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let out = "";
-  const len = bytes.length;
-  for (let index = 0; index < len; index += 3) {
-    const b0 = bytes[index] ?? 0;
-    const b1 = index + 1 < len ? (bytes[index + 1] ?? 0) : 0;
-    const b2 = index + 2 < len ? (bytes[index + 2] ?? 0) : 0;
-    out += BASE64_TABLE.charAt(b0 >> 2);
-    out += BASE64_TABLE.charAt(((b0 & 0x03) << 4) | (b1 >> 4));
-    out +=
-      index + 1 < len
-        ? BASE64_TABLE.charAt(((b1 & 0x0f) << 2) | (b2 >> 6))
-        : "=";
-    out += index + 2 < len ? BASE64_TABLE.charAt(b2 & 0x3f) : "=";
-  }
-  return out;
 }
