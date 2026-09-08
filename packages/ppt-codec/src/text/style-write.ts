@@ -16,7 +16,7 @@ import {
   PF_SPACE_AFTER,
   PF_SPACE_BEFORE,
   type ParagraphProperties,
-  type RgbColor,
+  type RunColor,
   STYLE_BOLD,
   STYLE_ITALIC,
   STYLE_UNDERLINE,
@@ -26,8 +26,17 @@ import {
 
 // The write-side mirror of text/style.ts's readStyleTextPropAtom: given the same StyleRun<ParagraphProperties>/StyleRun<CharacterProperties> arrays the reader produces, emits a real StyleTextPropAtom whose bytes that reader parses back to an equal value. Every field is written in the identical declared order style.ts's own comment states the reader uses (masks, then each optional field in spec order) -- the two functions are inverses of literally the same byte layout, not independently derived from the spec a second time.
 
-function writeColorIndexStruct(color: RgbColor): Uint8Array<ArrayBuffer> {
-  return new Uint8Array([color.red, color.green, color.blue, COLOR_INDEX_SRGB]);
+// The write-side mirror of readColorIndexStruct: a literal colour writes its own RGB bytes with the sentinel index, a scheme colour writes the scheme slot's index with no meaningful RGB bytes of its own (0 in each, since nothing reads them back for that index).
+function writeColorIndexStruct(color: RunColor): Uint8Array<ArrayBuffer> {
+  if (color.kind === "rgb") {
+    return new Uint8Array([
+      color.rgb.red,
+      color.rgb.green,
+      color.rgb.blue,
+      COLOR_INDEX_SRGB,
+    ]);
+  }
+  return new Uint8Array([0, 0, 0, color.schemeIndex]);
 }
 
 // A TextPFException carrying textAlignment, lineSpacing/spaceBefore/spaceAfter, and leftMargin/indent -- every field this writer states, in the spec's own declared order (masks, then textAlignment, lineSpacing, spaceBefore, spaceAfter, leftMargin, indent). Every other PFMasks field (bullets, tab stops, wrapping, direction) is left unset, which round-trips as "the format did not say" through the reader's own undefined-on-unset-mask behaviour -- exactly the same absence a run whose writer never set the bit already produces for those fields today.
