@@ -1,3 +1,19 @@
+## [8.7.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.6.10...ooxml.js%408.7.0) (2026-09-08)
+
+### Features
+
+* **ooxml.js:** add readDiagramResidue for SmartArt drawing parts ([efa5b2b](https://github.com/ExaDev/documents.js/commit/efa5b2b07cb72ceb40933028eef083eb52a75997))
+* **ooxml.js:** quarantine pptx chart and SmartArt parts as residue ([4be3cd8](https://github.com/ExaDev/documents.js/commit/4be3cd8e2826e3ce75aa596b3b1a07eb48116b6c))
+* **ooxml.js:** quarantine xlsx chart parts as residue on read ([ee4786a](https://github.com/ExaDev/documents.js/commit/ee4786a9ebbd1d3cd2faef9a049f74f5d6f2b563))
+
+### Bug Fixes
+
+* **ooxml.js:** cache chart and diagram residue serialisation by root identity ([a4d2fba](https://github.com/ExaDev/documents.js/commit/a4d2fba97689c895f5df8c19fc4f407c2a6a021e))
+
+### Documentation
+
+* **ooxml.js:** document chart and SmartArt residue quarantining ([1c83bd8](https://github.com/ExaDev/documents.js/commit/1c83bd8f138988ddb086758357af4b3eb1daa479))
+
 ## [8.6.10](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.6.9...ooxml.js%408.6.10) (2026-09-08)
 
 
