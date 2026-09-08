@@ -1,3 +1,19 @@
+## [2.3.6](https://github.com/ExaDev/documents.js/compare/doc-codec%402.3.5...doc-codec%402.3.6) (2026-09-08)
+
+### Bug Fixes
+
+* **hooks:** remove stale per-package lint-staged fields ([1b85b5a](https://github.com/ExaDev/documents.js/commit/1b85b5a545fb9762879310ed4ea73b68fa73d00d))
+
+### Miscellaneous Chores
+
+* **deps:** pin every workspace dependency to an exact fixed version ([6a38142](https://github.com/ExaDev/documents.js/commit/6a38142facc043dfa499573f37431d3b32ff602e))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.3.1
+- Updated archive-codec to 1.7.1
+
 ## [2.3.5](https://github.com/ExaDev/documents.js/compare/doc-codec%402.3.4...doc-codec%402.3.5) (2026-09-08)
 
 

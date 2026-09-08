@@ -1,3 +1,20 @@
+## [1.3.39](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.3.38...document-compute.js%401.3.39) (2026-09-08)
+
+### Bug Fixes
+
+* **hooks:** remove stale per-package lint-staged fields ([1b85b5a](https://github.com/ExaDev/documents.js/commit/1b85b5a545fb9762879310ed4ea73b68fa73d00d))
+
+### Miscellaneous Chores
+
+* **deps:** pin every workspace dependency to an exact fixed version ([6a38142](https://github.com/ExaDev/documents.js/commit/6a38142facc043dfa499573f37431d3b32ff602e))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.3.1
+- Updated markdown-codec to 6.4.3
+- Updated documents.js to 7.8.7
+
 ## [1.3.38](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.3.37...document-compute.js%401.3.38) (2026-09-08)
 
 

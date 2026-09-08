@@ -1,3 +1,19 @@
+## [4.0.9](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.0.8...pdf-codec%404.0.9) (2026-09-08)
+
+### Bug Fixes
+
+* **deps:** pin @vitest/coverage-v8 to match its vitest runner ([6912e0e](https://github.com/ExaDev/documents.js/commit/6912e0e5c602f0c21d9df12d2dc9899422bf5bd2))
+
+### Miscellaneous Chores
+
+* **deps:** pin every workspace dependency to an exact fixed version ([6a38142](https://github.com/ExaDev/documents.js/commit/6a38142facc043dfa499573f37431d3b32ff602e))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.4.1
+- Updated document-schema.js to 7.3.1
+
 ## [4.0.8](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.0.7...pdf-codec%404.0.8) (2026-09-07)
 
 

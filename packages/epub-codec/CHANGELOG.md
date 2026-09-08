@@ -1,3 +1,18 @@
+## [1.2.12](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.11...epub-codec%401.2.12) (2026-09-08)
+
+### Bug Fixes
+
+* **hooks:** remove stale per-package lint-staged fields ([1b85b5a](https://github.com/ExaDev/documents.js/commit/1b85b5a545fb9762879310ed4ea73b68fa73d00d))
+
+### Miscellaneous Chores
+
+* **deps:** pin every workspace dependency to an exact fixed version ([6a38142](https://github.com/ExaDev/documents.js/commit/6a38142facc043dfa499573f37431d3b32ff602e))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.3.1
+
 ## [1.2.11](https://github.com/ExaDev/documents.js/compare/epub-codec%401.2.10...epub-codec%401.2.11) (2026-09-07)
 
 

@@ -1,3 +1,13 @@
+## [7.3.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.3.0...document-schema.js%407.3.1) (2026-09-08)
+
+### Bug Fixes
+
+* **deps:** pin @vitest/coverage-v8 to match its vitest runner ([6912e0e](https://github.com/ExaDev/documents.js/commit/6912e0e5c602f0c21d9df12d2dc9899422bf5bd2))
+
+### Miscellaneous Chores
+
+* **deps:** pin every workspace dependency to an exact fixed version ([6a38142](https://github.com/ExaDev/documents.js/commit/6a38142facc043dfa499573f37431d3b32ff602e))
+
 ## [7.3.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.2.0...document-schema.js%407.3.0) (2026-09-07)
 
 ### Features
