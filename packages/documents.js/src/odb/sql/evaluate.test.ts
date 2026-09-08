@@ -559,6 +559,255 @@ describe("evaluateSelect: JOIN", () => {
       ),
     ).toThrow(/is ambiguous/);
   });
+
+  it("keeps every LEFT row under LEFT JOIN, padding an unmatched one with NULL for the right side's own columns", () => {
+    const result = runJoin(
+      "SELECT EMPLOYEES.NAME, DEPARTMENTS.NAME FROM EMPLOYEES LEFT JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME ORDER BY EMPLOYEES.NAME",
+    );
+    // Erin and Frank (DEPT NULL) now survive, padded with NULL rather than dropped -- and Marketing still never appears, since a LEFT JOIN never keeps an unmatched row from the RIGHT side.
+    expect(result.rows).toEqual([
+      [text("Alice"), text("Sales")],
+      [text("Bob"), text("Sales")],
+      [text("Carol"), text("Eng")],
+      [text("Dave"), text("Eng")],
+      [text("Erin"), NULL_VALUE],
+      [text("Frank"), NULL_VALUE],
+    ]);
+  });
+
+  it("mirrors LEFT JOIN for RIGHT JOIN, keeping an unmatched right row padded with NULL for the left side", () => {
+    const result = runJoin(
+      "SELECT EMPLOYEES.NAME, DEPARTMENTS.NAME FROM EMPLOYEES RIGHT JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME ORDER BY DEPARTMENTS.NAME",
+    );
+    // Marketing (no employee) now survives, padded with NULL -- and Erin/Frank never appear, since a RIGHT JOIN never keeps an unmatched row from the LEFT side.
+    expect(result.rows).toEqual([
+      [text("Carol"), text("Eng")],
+      [text("Dave"), text("Eng")],
+      [NULL_VALUE, text("Marketing")],
+      [text("Alice"), text("Sales")],
+      [text("Bob"), text("Sales")],
+    ]);
+  });
+
+  it("keeps every unmatched row from both sides under FULL JOIN", () => {
+    const result = runJoin(
+      "SELECT EMPLOYEES.NAME, DEPARTMENTS.NAME FROM EMPLOYEES FULL JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME ORDER BY EMPLOYEES.NAME, DEPARTMENTS.NAME",
+    );
+    // ORDER BY sorts NULLs last, so Marketing (EMPLOYEES.NAME is NULL) sorts after every named employee.
+    expect(result.rows).toEqual([
+      [text("Alice"), text("Sales")],
+      [text("Bob"), text("Sales")],
+      [text("Carol"), text("Eng")],
+      [text("Dave"), text("Eng")],
+      [text("Erin"), NULL_VALUE],
+      [text("Frank"), NULL_VALUE],
+      [NULL_VALUE, text("Marketing")],
+    ]);
+  });
+
+  it("accepts OUTER as a no-op after LEFT/RIGHT/FULL, identically to omitting it", () => {
+    expect(
+      runJoin(
+        "SELECT EMPLOYEES.NAME FROM EMPLOYEES LEFT OUTER JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME ORDER BY EMPLOYEES.NAME",
+      ),
+    ).toEqual(
+      runJoin(
+        "SELECT EMPLOYEES.NAME FROM EMPLOYEES LEFT JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME ORDER BY EMPLOYEES.NAME",
+      ),
+    );
+  });
+});
+
+describe("evaluateSelect: table aliases", () => {
+  it("resolves a column by its alias instead of the table's own name", () => {
+    const result = run(
+      "SELECT e.NAME, d.NAME FROM EMPLOYEES e JOIN DEPARTMENTS d ON e.DEPT = d.NAME ORDER BY e.NAME",
+      JOIN_TABLES,
+    );
+    expect(result.rows).toEqual([
+      [text("Alice"), text("Sales")],
+      [text("Bob"), text("Sales")],
+      [text("Carol"), text("Eng")],
+      [text("Dave"), text("Eng")],
+    ]);
+  });
+
+  it("makes the alias the ONLY name that resolves a table, not an addition to its real name", () => {
+    expect(() =>
+      run(
+        "SELECT EMPLOYEES.NAME FROM EMPLOYEES e JOIN DEPARTMENTS d ON e.DEPT = d.NAME",
+        JOIN_TABLES,
+      ),
+    ).toThrow('table qualifier "EMPLOYEES" not found');
+  });
+
+  it("resolves a genuine self-join once aliases tell the two occurrences of the same table apart", () => {
+    const result = run(
+      "SELECT e1.NAME, e2.NAME FROM EMPLOYEES e1 JOIN EMPLOYEES e2 ON e1.DEPT = e2.DEPT AND e1.NAME <> e2.NAME ORDER BY e1.NAME, e2.NAME",
+      [EMPLOYEES],
+    );
+    // Erin and Frank never appear on either side: DEPT is NULL for both, and NULL = NULL is UNKNOWN under three-valued logic, never TRUE.
+    expect(result.rows).toEqual([
+      [text("Alice"), text("Bob")],
+      [text("Bob"), text("Alice")],
+      [text("Carol"), text("Dave")],
+      [text("Dave"), text("Carol")],
+    ]);
+  });
+});
+
+// A pair of tables purpose-built for NATURAL/USING: CUSTOMERS and ORDERS share exactly one column, CUSTOMER_ID, which is what both join forms match on. Initech has no order at all (an unmatched LEFT row); order 102's own CUSTOMER_ID is NULL (an orphan that never matches anything, on the identical three-valued-logic rule an ON clause already follows) -- between them these give every outer-join padding case something real to prove.
+const CUSTOMERS: HsqldbTable = {
+  tableName: "CUSTOMERS",
+  columns: [
+    { name: "CUSTOMER_ID", type: "INTEGER" },
+    { name: "CUSTOMER_NAME", type: "VARCHAR(20)" },
+  ],
+  rows: [
+    [num(1), text("Acme")],
+    [num(2), text("Globex")],
+    [num(3), text("Initech")],
+  ],
+};
+
+const ORDERS: HsqldbTable = {
+  tableName: "ORDERS",
+  columns: [
+    { name: "ORDER_ID", type: "INTEGER" },
+    { name: "CUSTOMER_ID", type: "INTEGER" },
+  ],
+  rows: [
+    [num(100), num(1)],
+    [num(101), num(2)],
+    [num(102), NULL_VALUE],
+  ],
+};
+
+const NATURAL_TABLES: readonly HsqldbTable[] = [CUSTOMERS, ORDERS];
+
+describe("evaluateSelect: NATURAL JOIN and JOIN ... USING", () => {
+  it("merges the shared column into one, laid out before each side's own remaining columns", () => {
+    const result = run(
+      "SELECT * FROM CUSTOMERS NATURAL JOIN ORDERS ORDER BY ORDER_ID",
+      NATURAL_TABLES,
+    );
+    expect(result.columns).toEqual([
+      "CUSTOMER_ID",
+      "CUSTOMER_NAME",
+      "ORDER_ID",
+    ]);
+    expect(result.rows).toEqual([
+      [num(1), text("Acme"), num(100)],
+      [num(2), text("Globex"), num(101)],
+    ]);
+  });
+
+  it("parses JOIN ... USING identically to NATURAL JOIN when the two sides share exactly one column", () => {
+    expect(
+      run(
+        "SELECT * FROM CUSTOMERS JOIN ORDERS USING (CUSTOMER_ID) ORDER BY ORDER_ID",
+        NATURAL_TABLES,
+      ),
+    ).toEqual(
+      run(
+        "SELECT * FROM CUSTOMERS NATURAL JOIN ORDERS ORDER BY ORDER_ID",
+        NATURAL_TABLES,
+      ),
+    );
+  });
+
+  it("keeps a merged column's own value from whichever side is not NULL under LEFT JOIN", () => {
+    const result = run(
+      "SELECT * FROM CUSTOMERS LEFT JOIN ORDERS USING (CUSTOMER_ID) ORDER BY CUSTOMER_ID",
+      NATURAL_TABLES,
+    );
+    expect(result.rows).toEqual([
+      [num(1), text("Acme"), num(100)],
+      [num(2), text("Globex"), num(101)],
+      // Initech has no order: ORDER_ID is padded NULL, and the merged CUSTOMER_ID keeps the LEFT side's own real value (3) rather than the padded-NULL right side.
+      [num(3), text("Initech"), NULL_VALUE],
+    ]);
+  });
+
+  it("pads the LEFT side with NULL under RIGHT JOIN, leaving a merged column NULL when both sides are", () => {
+    const result = run(
+      "SELECT * FROM CUSTOMERS RIGHT JOIN ORDERS USING (CUSTOMER_ID) ORDER BY ORDER_ID",
+      NATURAL_TABLES,
+    );
+    expect(result.rows).toEqual([
+      [num(1), text("Acme"), num(100)],
+      [num(2), text("Globex"), num(101)],
+      // Order 102's own CUSTOMER_ID is NULL, and CUSTOMERS never matches it (an orphan order): both sides are NULL, so the merged column stays NULL rather than picking either.
+      [NULL_VALUE, NULL_VALUE, num(102)],
+    ]);
+  });
+
+  it("keeps every unmatched row from both sides under FULL JOIN", () => {
+    const result = run(
+      "SELECT * FROM CUSTOMERS FULL JOIN ORDERS USING (CUSTOMER_ID) ORDER BY CUSTOMER_ID, ORDER_ID",
+      NATURAL_TABLES,
+    );
+    // ORDER BY sorts NULLs last, so order 102 (a merged CUSTOMER_ID of NULL) sorts after every real customer ID.
+    expect(result.rows).toEqual([
+      [num(1), text("Acme"), num(100)],
+      [num(2), text("Globex"), num(101)],
+      [num(3), text("Initech"), NULL_VALUE],
+      [NULL_VALUE, NULL_VALUE, num(102)],
+    ]);
+  });
+
+  it("still lets a merged column be qualified by either side's own name", () => {
+    const result = run(
+      "SELECT CUSTOMERS.CUSTOMER_ID, ORDERS.CUSTOMER_ID FROM CUSTOMERS NATURAL JOIN ORDERS WHERE ORDER_ID = 100",
+      NATURAL_TABLES,
+    );
+    expect(result.rows).toEqual([[num(1), num(1)]]);
+  });
+
+  it("produces the unrestricted cartesian product for CROSS JOIN, with no condition and no merging", () => {
+    const result = run(
+      "SELECT * FROM CUSTOMERS CROSS JOIN ORDERS",
+      NATURAL_TABLES,
+    );
+    expect(result.columns).toEqual([
+      "CUSTOMER_ID",
+      "CUSTOMER_NAME",
+      "ORDER_ID",
+      "CUSTOMER_ID",
+    ]);
+    expect(result.rows).toHaveLength(9);
+  });
+
+  it("refuses to guess which of two identically-named already-joined columns NATURAL JOIN should match", () => {
+    const regions: HsqldbTable = {
+      tableName: "REGIONS",
+      columns: [
+        { name: "NAME", type: "VARCHAR(20)" },
+        { name: "CODE", type: "VARCHAR(5)" },
+      ],
+      rows: [[text("Sales"), text("S1")]],
+    };
+    expect(() =>
+      run(
+        "SELECT * FROM EMPLOYEES JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME NATURAL JOIN REGIONS",
+        [EMPLOYEES, DEPARTMENTS, regions],
+      ),
+    ).toThrow(/NATURAL JOIN cannot determine a unique match/);
+  });
+
+  it("refuses a NATURAL JOIN between tables that share no column at all", () => {
+    const highBudget: HsqldbTable = {
+      tableName: "HIGH_BUDGET",
+      columns: [{ name: "DEPT_NAME", type: "VARCHAR(20)" }],
+      rows: [[text("Eng")]],
+    };
+    expect(() =>
+      run("SELECT * FROM EMPLOYEES NATURAL JOIN HIGH_BUDGET", [
+        EMPLOYEES,
+        highBudget,
+      ]),
+    ).toThrow("NATURAL JOIN found no columns shared between the joined tables");
+  });
 });
 
 describe("evaluateSelect: failures that must never become a wrong answer", () => {
