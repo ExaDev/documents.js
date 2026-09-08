@@ -12,7 +12,7 @@ import { createOdt, openOdt } from "../edit/odt/editor";
 import { openPptx } from "../edit/pptx/editor";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
 import { rtfBytesFromLatin1 } from "rtf-codec";
-import { DocUnsupportedError, writeDocContent } from "doc-codec";
+import { writeDocContent } from "doc-codec";
 import { writeEpubContent } from "epub-codec";
 import { writeXlsContent } from "xls-codec";
 import { writePptContent } from "../ppt/write";
@@ -590,7 +590,7 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
     case "odf":
       return odfFormulaBytes(FRACTION_FORMULA);
     case "doc":
-      // Built through doc-codec's own writeDocContent directly (not through this package's FORMAT_NODES.doc.build, the very wiring several sweep pairs exercise) -- a bold heading paragraph and a plain paragraph, matching this switch's own rtf case in spirit: minimal but real enough that every doc-sourced sweep pair carries recognisable text through. doc-codec's writer covers a single wordprocessing section only (see that package's README scope note), which this fixture already satisfies.
+      // Built through doc-codec's own writeDocContent directly (not through this package's FORMAT_NODES.doc.build, the very wiring several sweep pairs exercise) -- a bold heading paragraph and a plain paragraph, matching this switch's own rtf case in spirit: minimal but real enough that every doc-sourced sweep pair carries recognisable text through.
       return writeDocContent({
         kind: "wordprocessing",
         metadata: {},
@@ -748,9 +748,6 @@ const ALL_SUPPORTED_PAIRS = createLocalDocumentConverter().conversions;
 // svg -> csv and svg -> markdown are the one pair family whose honest output is EMPTY: svg's read scope is vector graphics only (text is out of scope by design, reported as svg/text-unsupported), and neither csv nor markdown has any vector vocabulary, so there is literally nothing these two targets can carry. The conversion still runs and still produces a valid zero-record csv / zero-block markdown -- pinned here as the pair's own expected result, with every text-carrying source keeping the non-empty requirement unchanged.
 const EMPTY_OUTPUT_PAIRS = new Set(["svg->csv", "svg->markdown"]);
 
-// doc's own writer covers a single section of plain paragraphs and tables (see doc-codec's README scope note): no images, numbering, or embedded objects. odp recovers an image/embeddedObject block by the time presentationToWordprocessing (its own cross-variant transform) lands on the wordprocessing variant -- content doc's writer genuinely cannot express, so writeDocContent correctly throws DocUnsupportedError rather than silently dropping the block, exactly the same "refuse, never approximate" contract doc-codec's write path documents throughout. ods used to carry the identical gap through its own PDF-composed route, but ExaDev/documents.js#1043 rewired ods -> doc onto spreadsheetToWordprocessing instead, which drops anchored images/embedded objects entirely rather than recovering them as a block doc's writer would then refuse -- so ods -> doc now succeeds like any other doc-target pair whose content stays within a table/paragraph's own vocabulary. docx/odt's own sweep fixtures (minimalDocxBytes/minimalOdtBytes, shared with every other sweep pair too) carry a table, which doc's writer now expresses natively, so those two pairs reach doc successfully the same way (markdown, rtf, svg's own near-empty drawing-to-text transform, ...). This is a genuine, pre-existing content-scope boundary of doc-codec's own writer, not a wiring gap.
-const DOC_UNSUPPORTED_CONTENT_PAIRS = new Set(["odp->doc"]);
-
 describe.each(
   ALL_SUPPORTED_PAIRS.map(
     (pair) => [`${pair.source}->${pair.target}`, pair] as const,
@@ -768,11 +765,6 @@ describe.each(
         },
         { signal: new AbortController().signal, ...options },
       );
-    // DOC_UNSUPPORTED_CONTENT_PAIRS is a genuine, pinned refusal, not a "must not throw" violation -- see that set's own comment. Asserted directly rather than folded into the catch chain below, since there is no option that could make writeDocContent accept a table/image/embeddedObject block the way { sheet }/{ page } make a csv/svg build succeed.
-    if (DOC_UNSUPPORTED_CONTENT_PAIRS.has(edgeKey(pair))) {
-      await expect(run()).rejects.toThrow(DocUnsupportedError);
-      return;
-    }
     const result = await run()
       .catch((error: unknown) => {
         if (!(error instanceof CsvSheetNotSpecifiedError)) {
