@@ -20,8 +20,8 @@ export class BiffFormatError extends Error {
   }
 }
 
-/** The four-byte record header: a two-byte type followed by a two-byte size. */
-const HEADER_SIZE = 4;
+/** The four-byte record header: a two-byte type followed by a two-byte size. Exported for workbook/encryption.ts, which needs a record's own data start offset (the byte position right after this header) to derive the correct RC4 keystream position -- [MS-XLS] 2.2.10 counts a record's own header bytes toward the encryption stream's position even though the header itself is never encrypted. */
+export const HEADER_SIZE = 4;
 
 /**
  * Splits a BIFF record stream into its records, in stream order.

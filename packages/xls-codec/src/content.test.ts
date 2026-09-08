@@ -1,4 +1,7 @@
 import {
+  decryptOfficeRc4,
+  deriveOfficeRc4BaseHash,
+  md5,
   readCompoundFile,
   writeCompoundFile,
   writeSummaryInformationStream,
@@ -745,16 +748,177 @@ describe("readXlsContent", () => {
     expect(settings?.margins.topPt).toBeCloseTo(54);
   });
 
-  it("refuses an encrypted workbook rather than reading ciphertext", () => {
-    // [MS-XLS] 2.4.117: every record after a FilePass is encrypted, so reading on would produce confident nonsense.
-    const bytes = xlsFile(
-      workbookStream({
-        globals: [record(RECORD_FILEPASS, u16(1)), ...xfTable(0)],
-        sheets: [{ name: "Sheet1", records: [] }],
-      }),
-    );
+  describe("RC4-encrypted workbooks", () => {
+    const PASSWORD = "correct horse";
+    const SALT = new Uint8Array(16).map((_, index) => index * 7 + 1);
+    const FILEPASS_HEADER_LENGTH = 2 + 2 + 2 + 16 + 16 + 16;
 
-    expect(() => readXlsContent(bytes)).toThrow(BiffFormatError);
+    // [MS-XLS] 2.2.10's own excluded-record set and the BoundSheet8 lbPlyPos exception, re-derived here independently of workbook/encryption.ts rather than imported from it -- so a round trip through readXlsContent actually exercises that module's own understanding of the spec, rather than a test built from its own exclusion list vacuously agreeing with itself.
+    const NEVER_ENCRYPTED_TYPES = new Set([
+      RECORD_BOF,
+      RECORD_FILEPASS,
+      0x0194, // UsrExcl
+      0x0195, // FileLock
+      0x00e1, // InterfaceHdr
+      0x0196, // RRDInfo
+      0x0138, // RRDHead
+    ]);
+
+    /** Parses a stream's own records with their absolute offsets, independently of biff/records.ts, for the same reason above. */
+    function parseForEncryption(stream: Uint8Array<ArrayBuffer>): {
+      type: number;
+      offset: number;
+      data: Uint8Array<ArrayBuffer>;
+    }[] {
+      const view = new DataView(
+        stream.buffer,
+        stream.byteOffset,
+        stream.byteLength,
+      );
+      const records = [];
+      let offset = 0;
+      while (offset < stream.length) {
+        const type = view.getUint16(offset, true);
+        const size = view.getUint16(offset + 2, true);
+        const dataStart = offset + 4;
+        records.push({
+          type,
+          offset,
+          data: stream.slice(dataStart, dataStart + size),
+        });
+        offset = dataStart + size;
+      }
+      return records;
+    }
+
+    /**
+     * Takes a plaintext workbook stream already carrying a same-length FilePass placeholder record (so every BoundSheet8 lbPlyPos workbookStream computed already accounts for its real size) and turns it into a genuinely RC4-encrypted one: real FilePass header fields in place of the placeholder, and every other record's data encrypted per [MS-XLS] 2.2.10's own rules. RC4's XOR symmetry makes "encrypt" and "decrypt" literally the same operation, so this reuses decryptOfficeRc4 -- the same primitive readXlsContent decrypts with -- rather than a separate encryption routine; the two directions cancelling out is exactly what makes RC4 what it is, not a shortcut that only looks like a round trip.
+     */
+    function encryptWorkbookStream(
+      plainStreamWithPlaceholder: Uint8Array<ArrayBuffer>,
+      password: string,
+      salt: Uint8Array<ArrayBuffer>,
+    ): Uint8Array<ArrayBuffer> {
+      const baseHash = deriveOfficeRc4BaseHash(password, salt);
+      const verifier = new Uint8Array(16).map((_, index) => index * 3 + 11);
+      const verifierHash = md5(verifier);
+      const encryptedVerifier = decryptOfficeRc4(baseHash, 0, verifier);
+      const encryptedVerifierHash = decryptOfficeRc4(
+        baseHash,
+        16,
+        verifierHash,
+      );
+      const filePassData = new Uint8Array(FILEPASS_HEADER_LENGTH);
+      const filePassView = new DataView(filePassData.buffer);
+      filePassView.setUint16(0, 0x0001, true); // wEncryptionType: RC4
+      filePassView.setUint16(2, 1, true); // vMajor
+      filePassView.setUint16(4, 1, true); // vMinor
+      filePassData.set(salt, 6);
+      filePassData.set(encryptedVerifier, 22);
+      filePassData.set(encryptedVerifierHash, 38);
+
+      const parts: Uint8Array<ArrayBuffer>[] = [];
+      for (const rec of parseForEncryption(plainStreamWithPlaceholder)) {
+        let data: Uint8Array<ArrayBuffer>;
+        if (rec.type === RECORD_FILEPASS) {
+          data = filePassData;
+        } else if (NEVER_ENCRYPTED_TYPES.has(rec.type)) {
+          data = rec.data;
+        } else if (rec.type === RECORD_BOUNDSHEET8) {
+          const lbPlyPos = rec.data.subarray(0, 4);
+          const rest = decryptOfficeRc4(
+            baseHash,
+            rec.offset + 4 + 4,
+            rec.data.subarray(4),
+          );
+          data = new Uint8Array(rec.data.length);
+          data.set(lbPlyPos, 0);
+          data.set(rest, 4);
+        } else {
+          data = decryptOfficeRc4(baseHash, rec.offset + 4, rec.data);
+        }
+        parts.push(record(rec.type, [...data]));
+      }
+      return concat(...parts);
+    }
+
+    function encryptedXlsFile(
+      globals: readonly Uint8Array<ArrayBuffer>[],
+      sheets: Parameters<typeof workbookStream>[0]["sheets"],
+      password = PASSWORD,
+      salt = SALT,
+    ): Uint8Array<ArrayBuffer> {
+      const placeholder = record(
+        RECORD_FILEPASS,
+        new Array<number>(FILEPASS_HEADER_LENGTH).fill(0),
+      );
+      const plain = workbookStream({
+        globals: [placeholder, ...globals],
+        sheets,
+      });
+      return xlsFile(encryptWorkbookStream(plain, password, salt));
+    }
+
+    it("refuses an encrypted workbook when no password is given", () => {
+      const bytes = encryptedXlsFile(xfTable(0), [
+        { name: "Sheet1", records: [] },
+      ]);
+
+      expect(() => readXlsContent(bytes)).toThrow(BiffFormatError);
+    });
+
+    it("refuses an encrypted workbook given the wrong password", () => {
+      const bytes = encryptedXlsFile(xfTable(0), [
+        { name: "Sheet1", records: [] },
+      ]);
+
+      expect(() => readXlsContent(bytes, "the wrong password")).toThrow(
+        BiffFormatError,
+      );
+    });
+
+    it("decrypts an encrypted workbook given the correct password", () => {
+      const bytes = encryptedXlsFile(xfTable(0), [
+        {
+          name: "Sheet1",
+          records: [record(RECORD_NUMBER, [...cell(0, 0), ...f64(42)])],
+        },
+      ]);
+
+      const content = readXlsContent(bytes, PASSWORD);
+
+      expect(content.sheets[0]?.name).toBe("Sheet1");
+      expect(content.sheets[0]?.cells[0]).toMatchObject({
+        row: 0,
+        column: 0,
+        value: { kind: "number", value: 42 },
+      });
+    });
+
+    it("decrypts correctly across a 1024-byte RC4 block boundary", () => {
+      // A run of NUMBER records padding the sheet substream well past the first 1024-byte block, so the sheet's later cells only decrypt correctly if decryptOfficeRc4's per-block re-keying is wired up right, not just its first block.
+      const paddingCells = Array.from({ length: 80 }, (_, index) =>
+        record(RECORD_NUMBER, [...cell(index, 0), ...f64(index)]),
+      );
+      const bytes = encryptedXlsFile(xfTable(0), [
+        {
+          name: "Sheet1",
+          records: [
+            ...paddingCells,
+            record(RECORD_NUMBER, [...cell(80, 0), ...f64(999)]),
+          ],
+        },
+      ]);
+
+      const content = readXlsContent(bytes, PASSWORD);
+
+      expect(content.sheets[0]?.cells[0]).toMatchObject({
+        value: { kind: "number", value: 0 },
+      });
+      expect(content.sheets[0]?.cells[80]).toMatchObject({
+        value: { kind: "number", value: 999 },
+      });
+    });
   });
 
   it("refuses a compound file holding no Workbook stream", () => {

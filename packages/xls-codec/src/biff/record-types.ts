@@ -29,6 +29,19 @@ export const RECORD_DATE1904 = 0x0022;
 export const RECORD_STYLE = 0x0293;
 /** Present only in an encrypted workbook, where every record after it is ciphertext ([MS-XLS] 2.4.117). */
 export const RECORD_FILEPASS = 0x002f;
+
+// --- Records [MS-XLS] 2.2.10 (Encryption (Password to Open)) names as MUST NOT be obfuscated or encrypted, even though every one of them can occur after FilePass -- see workbook/encryption.ts, the only reader of these four. None of the four is otherwise read: they belong to the shared-workbook revision-tracking feature this package has no other reason to model. RECORD_INTERFACEHDR's own 0x00e1 is confirmed directly against Apache POI's InterfaceHdrRecord.sid; the other three are corroborated by the (pre-MS-XLS) "Microsoft Office Excel 97-2007 Binary File Format Specification" and independent secondary citations of the current [MS-XLS] page for each record, since neither the current [MS-XLS] per-record page nor Apache POI's Biff8DecryptingStream states them directly (POI does not implement these four at all).
+
+/** Specifies whether a user holds an exclusive lock on a shared workbook ([MS-XLS] 2.4.339). */
+export const RECORD_USREXCL = 0x0194;
+/** Specifies that a shared workbook was locked by a particular user ([MS-XLS] 2.4.116). */
+export const RECORD_FILELOCK = 0x0195;
+/** Specifies the user-interface code page and opens the globals substream's own record collection ([MS-XLS] 2.4.146). */
+export const RECORD_INTERFACEHDR = 0x00e1;
+/** Information about a shared workbook's revision tracking ([MS-XLS] 2.4.227). */
+export const RECORD_RRDINFO = 0x0196;
+/** Metadata about one user's set of revisions in a shared workbook ([MS-XLS] 2.4.226). */
+export const RECORD_RRDHEAD = 0x0138;
 /** A collection of XTI structures resolving a formula's ixti to a sheet range, for a 3D reference ([MS-XLS] 2.4.106). */
 export const RECORD_EXTERNSHEET = 0x0017;
 /** The beginning of a supporting-link's own record collection: another workbook, a DDE/OLE data source, an add-in, or -- the one case this reader resolves -- this same workbook, self-referencing ([MS-XLS] 2.4.271). */
