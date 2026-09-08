@@ -77,6 +77,17 @@ export function writeShortXLUnicodeString(
     .build();
 }
 
+/** An XLUnicodeStringNoCch ([MS-XLS] 2.5.296): a flags byte then the characters, with no character-count field of its own -- the containing structure states the count separately (a TxO record's own cchText, for the comment/text-box text a Continue record following it carries). */
+export function writeXLUnicodeStringNoCch(
+  text: string,
+): Uint8Array<ArrayBuffer> {
+  const { highByte, units } = encodeCharacters(text);
+  return new RecordBuilder()
+    .u8(highByte ? FLAG_HIGH_BYTE : 0x00)
+    .bytes(units)
+    .build();
+}
+
 /**
  * An XLUnicodeRichExtendedString ([MS-XLS] 2.5.293): the SST's own element shape.
  *
