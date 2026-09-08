@@ -439,6 +439,8 @@ export interface ParseFormulaOptions {
   readonly relativeTo?: FormulaOrigin;
   /** The RgbExtra trailer following `rgce` in the same CellParsedFormula/ArrayParsedFormula ([MS-XLS] 7dd67f0a/242bcf20) -- consulted only when `rgce` contains a PtgArray, one PtgExtraArray pulled off the front for each in the order both arrays share ([MS-XLS] 70f743b2: "The order of the structures MUST be the same as the order of the Ptgs"). Absent (or exhausted before a PtgArray needs it) aborts the parse rather than guessing at the array's values. */
   readonly rgcb?: Uint8Array<ArrayBuffer>;
+  /** Invoked with the raw, unquoted text of every PtgStr operand this formula contains, in encounter order -- a side channel for a caller that needs a literal string operand out of a formula whose overall shape it isn't otherwise trying to interpret (conditional-format-12.ts's own readCfTextFilterRule, extracting the search text CFExTextTemplateParams itself has no field for). Does not affect the returned formula text, which still renders the same operand quoted via quoteStringLiteral as it always has. */
+  readonly onStringLiteral?: (value: string) => void;
 }
 
 export function parseFormulaText(
@@ -507,9 +509,12 @@ export function parseFormulaText(
         // An omitted optional argument (e.g. the third argument of IF(A1>0,1)) -- present in the token stream as a real, empty operand so the enclosing PtgFuncVar's own cparams still counts it.
         pushAtomic(stack, "");
         break;
-      case PTG_STR:
-        pushAtomic(stack, quoteStringLiteral(readShortXLUnicodeString(cursor)));
+      case PTG_STR: {
+        const value = readShortXLUnicodeString(cursor);
+        options.onStringLiteral?.(value);
+        pushAtomic(stack, quoteStringLiteral(value));
         break;
+      }
       case PTG_ERR: {
         const text = errorTextOf(cursor.u8());
         if (text === undefined) return undefined;
@@ -641,6 +646,22 @@ export function parseFormulaText(
   }
 
   return stack.length === 1 ? stack[0]?.text : undefined;
+}
+
+/**
+ * Returns the raw text of the first PtgStr operand `rgce` contains, or undefined if it contains none -- a narrower question than parseFormulaText's own "render the whole formula", answerable even when the formula wraps that operand in functions this reader has no other reason to understand. Exists for conditional-format-12.ts's own readCfTextFilterRule: a CF12/CFExNonCF12 containsText-family rule states which of the four text-comparison sub-types it is via CFExTextTemplateParams.ctp, but carries the literal search text nowhere else but as this operand in its own formula (Excel's real generated shape being e.g. NOT(ISERROR(SEARCH("text",A1))) for containsText -- see conditional-format-ex.ts's own top comment for the full citation). Walks the whole token stream via parseFormulaText's own onStringLiteral hook rather than scanning for the PtgStr opcode directly, since a raw byte scan cannot tell an opcode byte from a length or count belonging to some other token's own payload.
+ */
+export function extractFirstStringLiteral(
+  rgce: Uint8Array<ArrayBuffer>,
+  context: FormulaSheetContext,
+): string | undefined {
+  let literal: string | undefined;
+  parseFormulaText(rgce, context, {
+    onStringLiteral: (value) => {
+      literal ??= value;
+    },
+  });
+  return literal;
 }
 
 /** PtgExp's own opcode ([MS-XLS] f9aa266f): 0x01, a reserved bit, then the row/col of the Formula record that carries the shared or array formula's real expression -- see readPtgExpBase. */
