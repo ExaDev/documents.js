@@ -45,9 +45,21 @@ export const LW_OFFSET = {
 export const FC_LCB_VALUE_INDEX = {
   fcStshf: 2,
   lcbStshf: 3,
+  // Pairs 2-5, counted forward from fcStshfOrig(0)/lcbStshfOrig(1)/fcStshf(2)/lcbStshf(3): fcPlcffndRef(4)/lcbPlcffndRef(5), fcPlcffndTxt(6)/lcbPlcffndTxt(7), fcPlcfandRef(8)/lcbPlcfandRef(9), fcPlcfandTxt(10)/lcbPlcfandTxt(11) -- confirmed by recounting [MS-DOC] 2.5.5's own field-by-field FibRgFcLcb97 table in full, not derived by arithmetic from a nearby pair.
+  fcPlcffndRef: 4,
+  lcbPlcffndRef: 5,
+  fcPlcffndTxt: 6,
+  lcbPlcffndTxt: 7,
+  fcPlcfandRef: 8,
+  lcbPlcfandRef: 9,
+  fcPlcfandTxt: 10,
+  lcbPlcfandTxt: 11,
   // Pair 6, counted the same way as the fcSttbfFfn comment below counts pair 15: fcStshfOrig(0), fcStshf(1), fcPlcffndRef(2), fcPlcffndTxt(3), fcPlcfandRef(4), fcPlcfandTxt(5), fcPlcfSed(6).
   fcPlcfSed: 12,
   lcbPlcfSed: 13,
+  // Pair 11, counted forward from fcStshfOrig(0): fcPlcffndRef(1), fcPlcffndTxt(2), fcPlcfandRef(3), fcPlcfandTxt(4), fcPlcfSed(5), fcPlcPad(6), fcPlcfPhe(7), fcSttbfGlsy(8), fcPlcfGlsy(9), fcPlcfHdd(10) -- pair 11, value index 22.
+  fcPlcfHdd: 22,
+  lcbPlcfHdd: 23,
   fcPlcfBteChpx: 24,
   lcbPlcfBteChpx: 25,
   fcPlcfBtePapx: 26,
@@ -57,6 +69,11 @@ export const FC_LCB_VALUE_INDEX = {
   lcbSttbfFfn: 31,
   fcClx: 66,
   lcbClx: 67,
+  // Pairs 46-47, counted forward the same way from fcStshfOrig -- confirmed by recounting [MS-DOC] 2.5.5's own field table from fcClx(66) onward: fcPlcfPgdFtn(68)/lcbPlcfPgdFtn(69), fcAutosaveSource(70)/lcbAutosaveSource(71), fcGrpXstAtnOwners(72)/lcbGrpXstAtnOwners(73), fcSttbfAtnBkmk(74)/lcbSttbfAtnBkmk(75), fcUnused2(76)/lcbUnused2(77), fcUnused3(78)/lcbUnused3(79), fcPlcSpaMom(80)/lcbPlcSpaMom(81), fcPlcSpaHdr(82)/lcbPlcSpaHdr(83), fcPlcfAtnBkf(84)/lcbPlcfAtnBkf(85), fcPlcfAtnBkl(86)/lcbPlcfAtnBkl(87), fcPms(88)/lcbPms(89), fcFormFldSttbs(90)/lcbFormFldSttbs(91), fcPlcfendRef(92)/lcbPlcfendRef(93), fcPlcfendTxt(94)/lcbPlcfendTxt(95).
+  fcPlcfendRef: 92,
+  lcbPlcfendRef: 93,
+  fcPlcfendTxt: 94,
+  lcbPlcfendTxt: 95,
   // Counted forward the same way from fcStshfOrig at value index 0 -- confirmed against every value index above by recounting the spec's own field-by-field FibRgFcLcb97 page in full, not derived by arithmetic from a nearby pair. fcPlfLst is the 74th fc/lcb pair (value index 146), fcPlfLfo the 75th (value index 148).
   fcPlfLst: 146,
   lcbPlfLst: 147,

@@ -8,7 +8,7 @@ import type {
   ContentTableRow,
 } from "document-schema.js";
 import { DocFormatError } from "../errors";
-import type { ParagraphEntry } from "../read";
+import type { ParagraphEntry } from "../text/paragraphs";
 import {
   HORZ_MERGE_CONTINUATION,
   VERT_MERGE_CONTINUATION,

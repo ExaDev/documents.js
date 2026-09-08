@@ -28,6 +28,20 @@ export interface FibSpec {
   readonly lcbClx?: number;
   readonly fcPlcfSed?: number;
   readonly lcbPlcfSed?: number;
+  readonly fcPlcffndRef?: number;
+  readonly lcbPlcffndRef?: number;
+  readonly fcPlcffndTxt?: number;
+  readonly lcbPlcffndTxt?: number;
+  readonly fcPlcfandRef?: number;
+  readonly lcbPlcfandRef?: number;
+  readonly fcPlcfandTxt?: number;
+  readonly lcbPlcfandTxt?: number;
+  readonly fcPlcfendRef?: number;
+  readonly lcbPlcfendRef?: number;
+  readonly fcPlcfendTxt?: number;
+  readonly lcbPlcfendTxt?: number;
+  readonly fcPlcfHdd?: number;
+  readonly lcbPlcfHdd?: number;
   readonly fcPlfLst?: number;
   readonly lcbPlfLst?: number;
   readonly fcPlfLfo?: number;
@@ -57,6 +71,13 @@ const FC_LCB_INDEX = {
   fcPlcfBtePapx: 26,
   fcClx: 66,
   fcPlcfSed: 12,
+  fcPlcffndRef: 4,
+  fcPlcffndTxt: 6,
+  fcPlcfandRef: 8,
+  fcPlcfandTxt: 10,
+  fcPlcfHdd: 22,
+  fcPlcfendRef: 92,
+  fcPlcfendTxt: 94,
   fcPlfLst: 146,
   fcPlfLfo: 148,
 } as const;
@@ -115,6 +136,37 @@ export function buildFib(spec: FibSpec = {}): Uint8Array<ArrayBuffer> {
   );
   pair(FC_LCB_INDEX.fcClx, spec.fcClx ?? 0, spec.lcbClx ?? 0);
   pair(FC_LCB_INDEX.fcPlcfSed, spec.fcPlcfSed ?? 0, spec.lcbPlcfSed ?? 0);
+  pair(
+    FC_LCB_INDEX.fcPlcffndRef,
+    spec.fcPlcffndRef ?? 0,
+    spec.lcbPlcffndRef ?? 0,
+  );
+  pair(
+    FC_LCB_INDEX.fcPlcffndTxt,
+    spec.fcPlcffndTxt ?? 0,
+    spec.lcbPlcffndTxt ?? 0,
+  );
+  pair(
+    FC_LCB_INDEX.fcPlcfandRef,
+    spec.fcPlcfandRef ?? 0,
+    spec.lcbPlcfandRef ?? 0,
+  );
+  pair(
+    FC_LCB_INDEX.fcPlcfandTxt,
+    spec.fcPlcfandTxt ?? 0,
+    spec.lcbPlcfandTxt ?? 0,
+  );
+  pair(FC_LCB_INDEX.fcPlcfHdd, spec.fcPlcfHdd ?? 0, spec.lcbPlcfHdd ?? 0);
+  pair(
+    FC_LCB_INDEX.fcPlcfendRef,
+    spec.fcPlcfendRef ?? 0,
+    spec.lcbPlcfendRef ?? 0,
+  );
+  pair(
+    FC_LCB_INDEX.fcPlcfendTxt,
+    spec.fcPlcfendTxt ?? 0,
+    spec.lcbPlcfendTxt ?? 0,
+  );
   pair(FC_LCB_INDEX.fcPlfLst, spec.fcPlfLst ?? 0, spec.lcbPlfLst ?? 0);
   pair(FC_LCB_INDEX.fcPlfLfo, spec.fcPlfLfo ?? 0, spec.lcbPlfLfo ?? 0);
 

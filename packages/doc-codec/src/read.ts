@@ -3,54 +3,36 @@ import {
   readSummaryInformation,
   summaryInformationToLayoutMetadata,
 } from "archive-codec";
-import type {
-  ContentDocument,
-  ContentParagraph,
-  ContentRun,
-  Margins,
-  PageSize,
-} from "document-schema.js";
+import type { ContentDocument, Margins, PageSize } from "document-schema.js";
 import { slice } from "./bytes";
 import { SUMMARY_INFORMATION_STREAM, WORD_DOCUMENT_STREAM } from "./detect";
 import { decryptDocStreams } from "./encryption";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { parseFib, peekFibBaseFlags, type Fib } from "./fib/fib";
+import type { HeaderFooterStories } from "./headers-footers";
+import { readHeaderFooterStories } from "./headers-footers";
 import {
   readNumberingDefinitions,
   type NumberingDefinitions,
 } from "./list/numbering";
-import {
-  applyCharacterSprms,
-  characterIstdFromGrpprl,
-  type CharacterProperties,
-} from "./prop/chp";
+import type { NoteBodies } from "./notes";
+import { readNoteBodies } from "./notes";
 import { PropertyBinTable } from "./prop/fkp";
-import { applyParagraphSprms, type ParagraphProperties } from "./prop/pap";
 import { readAllSectionProperties } from "./prop/sep";
-import { readGrpprl, type Prl } from "./prop/sprm";
 import { parseFontTable } from "./style/fonts";
-import {
-  headingLevelFromIstd,
-  parseStsh,
-  resolveStyleFormatting,
-  type StyleSheet,
-} from "./style/stsh";
+import { parseStsh } from "./style/stsh";
 import { assembleBlocks } from "./table/read";
+import {
+  readParagraphs,
+  type ParagraphEntry,
+  type ReadContext,
+} from "./text/paragraphs";
 import { readTextRange } from "./text/characters";
 import { parseClx } from "./text/piece-table";
-import {
-  FIELD_BEGIN,
-  FIELD_END,
-  FIELD_SEPARATOR,
-  LINE_BREAK,
-  PARAGRAPH_MARK,
-  endsParagraph,
-  isAnchorOnly,
-} from "./text/special";
 
-// The top-level read: a .doc's bytes to a ContentDocument. Every step below is one of [MS-DOC]'s own algorithms, in the order the specification chains them -- the compound-file container gives the WordDocument and Table streams, the FIB gives the offsets, the piece table turns character positions into bytes, and the two bin tables turn byte offsets into formatting. readParagraphs itself only ever produces flat ParagraphEntry values (one per paragraph/cell/row mark, whatever its own table depth); table/read.ts's assembleBlocks is what folds a contiguous run of table-depth paragraphs into a real ContentTable, so this module carries no table-specific logic of its own.
+// The top-level read: a .doc's bytes to a ContentDocument. Every step below is one of [MS-DOC]'s own algorithms, in the order the specification chains them -- the compound-file container gives the WordDocument and Table streams, the FIB gives the offsets, the piece table turns character positions into bytes, and the two bin tables turn byte offsets into formatting. text/paragraphs.ts's readParagraphs itself only ever produces flat ParagraphEntry values (one per paragraph/cell/row mark, whatever its own table depth) for whichever document-stream range it is handed; table/read.ts's assembleBlocks is what folds a contiguous run of table-depth paragraphs into a real ContentTable, so this module carries no table-specific logic of its own.
 //
-// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images, no footnotes/headers/endnotes, no section boundaries beyond the whole document's own page size and margins, and no table/numbering style formatting -- RC4-encrypted documents are read given a password (encryption.ts), but XOR obfuscation and RC4 CryptoAPI stay refused. Each of those absences is a genuine layer of the format, and each is absent rather than approximated. A paragraph or character style's own formatting IS resolved, up its full istdBase inheritance chain (style/stsh.ts's resolveStyleFormatting, ExaDev/documents.js#1005). Tables are read, but only at depth 1 -- a table nested inside a table cell is refused (table/read.ts) rather than mis-read. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like -- see DocContent's own comment below for why that rides outside ContentDocument's shared shape.
+// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: no images or drawn objects, no text boxes, and no table/numbering style formatting -- RC4-encrypted documents are read given a password (encryption.ts), but XOR obfuscation and RC4 CryptoAPI stay refused. Each of those absences is a genuine layer of the format, and each is absent rather than approximated. A paragraph or character style's own formatting IS resolved, up its full istdBase inheritance chain (style/stsh.ts's resolveStyleFormatting, ExaDev/documents.js#1005). Tables are read at every depth a document states, a table nested inside a table cell included (table/read.ts). Every section PlcfSed states resolves to its own real ContentSection, each with its own page size and margins. Footnotes, endnotes, and comments are read as plain text (notes.ts); headers and footers are read as real block flow, per section and per even/odd/first slot (headers-footers.ts) -- see DocContent's own comment below for how all four ride outside ContentDocument's shared shape, the same way numbering definitions already do. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like.
 
 /** Word's own default for a new document (US Letter, one-inch margins) -- what a field this reader resolves from PlcfSed/Sepx (prop/sep.ts's readSectionProperties) falls back to when the file states nothing for it, exactly as it would fall back to Word's own implementation-dependent default for that one unstated sprm. */
 const DEFAULT_PAGE_SIZE: PageSize = { widthPt: 612, heightPt: 792 };
@@ -119,9 +101,13 @@ export function readDocStreams(
   };
 }
 
-/** readDocContent's own return type: a ContentDocument (kind 'wordprocessing') plus numbering -- the list-level formatting (glyph/format, level-text template, start-at value) PlfLst/PlfLfo carry, which ContentListMembership has nowhere to hold. Mirrors ooxml.js's own DocxDocument.numbering exactly in field name and NumberingDefinitions' own shape (see list/numbering.ts's top comment for why it sits outside the shared schema rather than inside ContentListMembership); unlike DocxDocument, DocContent stays a genuine ContentDocument subtype (an intersection, not a fresh shape) since readDocContent already had one return type to widen rather than two to reconcile. */
+/** readDocContent's own return type: a ContentDocument (kind 'wordprocessing') plus numbering, footnotes, endnotes, comments, and headerFooterStories -- constructs [MS-DOC] carries outside the main document's own text and document-schema.js's ContentDocument has nowhere to hold. Mirrors ooxml.js's own DocxDocument in field name and shape wherever the two formats' own constructs genuinely agree (numbering/NumberingDefinitions, footnotes/endnotes/comments as plain-text `Footnote`/`Comment`); headerFooterStories is doc-codec's own shape rather than DocxDocument's path-addressed HeaderFooterPart, since [MS-DOC] has no named parts of its own for a header or footer to be identified by, only a (section, slot) position (see headers-footers.ts's own top comment). Unlike DocxDocument, DocContent stays a genuine ContentDocument subtype (an intersection, not a fresh shape) since readDocContent already had one return type to widen rather than several to reconcile. */
 export type DocContent = ContentDocument & {
   readonly numbering: NumberingDefinitions;
+  readonly footnotes: NoteBodies["footnotes"];
+  readonly endnotes: NoteBodies["endnotes"];
+  readonly comments: NoteBodies["comments"];
+  readonly headerFooterStories: HeaderFooterStories;
 };
 
 export function readDocContent(
@@ -174,19 +160,36 @@ export function readDocContent(
         )
       : undefined;
 
-  // The main document is the first subdocument: it starts at character position 0 and runs for ccpText characters, with the footnote, header, comment, endnote and textbox subdocuments following it in the order FibRgLw97 declares them. Only the main document is converted here; the rest are left for the subdocument support the README's scope section describes as absent.
-  const range = readTextRange(wordDocument, pieceTable, 0, fib.ccpText);
-
-  const entries = readParagraphs(range.text, range.fcs, {
+  const context: ReadContext = {
     chpxTable,
     papxTable,
     styles,
     fonts,
+    // Shared across every document-stream range read below -- see ReadContext's own comment on why this is safe: a Chpx's identity is its byte position in the WordDocument stream, which means the same thing regardless of which subdocument's CP space led to it.
     characterProperties: new Map(),
-  });
+  };
+
+  // The main document is the first subdocument: it starts at character position 0 and runs for ccpText characters.
+  const range = readTextRange(wordDocument, pieceTable, 0, fib.ccpText);
+  const entries = readParagraphs(range.text, range.fcs, context);
   const numbering = readNumberingDefinitions(table, fib);
   const sectionProperties = readAllSectionProperties(wordDocument, table, fib);
   const entriesBySection = splitIntoSections(entries, sectionProperties);
+  const { footnotes, endnotes, comments } = readNoteBodies(
+    wordDocument,
+    table,
+    pieceTable,
+    context,
+    fib,
+  );
+  const headerFooterStories = readHeaderFooterStories(
+    wordDocument,
+    table,
+    pieceTable,
+    context,
+    fib,
+    sectionProperties.length,
+  );
 
   return {
     kind: "wordprocessing",
@@ -209,6 +212,10 @@ export function readDocContent(
       blocks: assembleBlocks(entriesBySection[index] ?? []),
     })),
     numbering,
+    footnotes,
+    endnotes,
+    comments,
+    headerFooterStories,
   };
 }
 
@@ -232,261 +239,4 @@ function splitIntoSections(
     }
   }
   return groups;
-}
-
-interface ReadContext {
-  readonly chpxTable: PropertyBinTable;
-  readonly papxTable: PropertyBinTable;
-  readonly styles: StyleSheet | undefined;
-  /** The font names sprmCRgFtc0's operand indexes into, or undefined when the document carries no SttbfFfn at all. */
-  readonly fonts: readonly string[] | undefined;
-  // Character properties already folded out of one Chpx, keyed by that Chpx's own position and length in the WordDocument stream. It belongs to the whole read rather than to one paragraph because a Chpx routinely spans many paragraphs -- a document in one font is one exception covering all of it -- so a per-paragraph cache would re-parse the same grpprl once per paragraph and never hit.
-  readonly characterProperties: Map<string, CharacterProperties>;
-}
-
-/** One paragraph/cell/row-ending mark, still flat -- table/read.ts's assembleBlocks is what folds a run of these into a real ContentTable. `properties` and `grpprl` are carried alongside the already-built `paragraph` because table grouping needs sprmPFInTable/sprmPFTtp/sprmPItap (properties) and, on a row's own mark, its table-defining sgc-5 sprms (grpprl) -- neither of which survives onto a plain ContentParagraph. */
-export interface ParagraphEntry {
-  readonly paragraph: ContentParagraph;
-  readonly properties: ParagraphProperties;
-  readonly grpprl: readonly Prl[];
-  /** The character that terminated this paragraph in the text stream: PARAGRAPH_MARK, CELL_MARK, or SECTION_MARK. */
-  readonly terminator: number;
-  /** The character position immediately after this paragraph's own terminator (or, for the trailing no-mark case, the text's own length) -- comparable directly to PlcfSed.aCp, since the main document is read from character position 0. splitIntoSections below is what actually uses it. */
-  readonly endCp: number;
-}
-
-// Splits the logical text stream into paragraphs at the marks [MS-DOC] 2.4.2 names as paragraph ends, and each paragraph into runs at the boundaries of the character-formatting exceptions covering it.
-function readParagraphs(
-  text: string,
-  fcs: readonly number[],
-  context: ReadContext,
-): ParagraphEntry[] {
-  const entries: ParagraphEntry[] = [];
-  let start = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index);
-    if (!endsParagraph(code)) continue;
-    // The mark's own byte offset is what the paragraph's PAPX is keyed on, and the mark itself is structure rather than text, so it ends the range without joining it.
-    const markFc = fcs[index];
-    if (markFc === undefined) {
-      throw new DocFormatError(
-        `character ${index} has no byte offset, so its paragraph's properties cannot be located`,
-      );
-    }
-    entries.push(
-      buildParagraph(
-        text.slice(start, index),
-        fcs.slice(start, index),
-        markFc,
-        code,
-        index + 1,
-        context,
-      ),
-    );
-    start = index + 1;
-  }
-  // A document whose last character is not a paragraph mark is malformed by [MS-DOC]'s own account, but its trailing text is real and the honest thing is to keep it rather than drop content on a technicality. Its properties are located from its first character instead of a mark it does not have; PARAGRAPH_MARK stands in for the terminator this trailing text does not have.
-  if (start < text.length) {
-    const firstFc = fcs[start];
-    if (firstFc === undefined) {
-      throw new DocFormatError(
-        `character ${start} has no byte offset, so the trailing paragraph's properties cannot be located`,
-      );
-    }
-    entries.push(
-      buildParagraph(
-        text.slice(start),
-        fcs.slice(start),
-        firstFc,
-        PARAGRAPH_MARK,
-        text.length,
-        context,
-      ),
-    );
-  }
-  return entries;
-}
-
-function buildParagraph(
-  text: string,
-  fcs: readonly number[],
-  propertyFc: number,
-  terminator: number,
-  endCp: number,
-  context: ReadContext,
-): ParagraphEntry {
-  const papx = context.papxTable.papx(propertyFc);
-  const properties: ParagraphProperties = {};
-  const grpprl = papx !== undefined ? readGrpprl(papx.grpprl) : [];
-  if (papx !== undefined) {
-    // The istd comes from the GrpPrlAndIstd's own field, and a sprmPIstd inside the grpprl can then replace it -- so it is seeded first and the fold is allowed to overwrite it.
-    properties.istd = papx.istd;
-    // The paragraph style's own formatting is resolved and folded in BEFORE the direct PAPX exception, [MS-DOC] 2.4.6.6 Part 2's own order -- style first, then the paragraph's own grpprl on top, so the direct exception can override whatever the style (and its own base-style chain) supplied. Resolved from papx.istd specifically, not properties.istd, since a rare embedded sprmPIstd inside grpprl replaces what gets reported going forward without retroactively changing which style's formatting was already applied beneath it (see #1005's own README scope note).
-    if (context.styles !== undefined) {
-      applyParagraphSprms(
-        resolveStyleFormatting(context.styles, papx.istd).paragraphPrls,
-        properties,
-      );
-    }
-    applyParagraphSprms(grpprl, properties);
-  }
-
-  const paragraph: ContentParagraph = {
-    kind: "paragraph",
-    runs: buildRuns(text, fcs, context, papx?.istd),
-  };
-  return {
-    paragraph: { ...paragraph, ...paragraphAttributes(properties, context) },
-    properties,
-    grpprl,
-    terminator,
-    endCp,
-  };
-}
-
-function paragraphAttributes(
-  properties: ParagraphProperties,
-  context: ReadContext,
-): Partial<ContentParagraph> {
-  const attributes: Partial<ContentParagraph> = {};
-  const istd = properties.istd;
-  if (istd !== undefined) {
-    const style = context.styles?.styles[istd];
-    if (style !== undefined && style.name !== "") {
-      attributes.styleId = style.name;
-    }
-    const headingLevel = headingLevelFromIstd(istd);
-    if (headingLevel !== undefined) attributes.headingLevel = headingLevel;
-  }
-  // sprmPOutLvl states an outline level directly and is the more specific statement where both are present, so it wins over the istd-derived one. [MS-DOC] makes the reverse precedence explicit -- sprmPOutLvl "MUST be ignored if the paragraph has an istd that is greater than or equal to 0x1 and less than or equal to 0x9" -- so it only applies where the istd did not already supply a level.
-  if (
-    attributes.headingLevel === undefined &&
-    properties.outlineLevel !== undefined
-  ) {
-    attributes.headingLevel = properties.outlineLevel + 1;
-  }
-  if (properties.alignment !== undefined)
-    attributes.alignment = properties.alignment;
-  if (properties.spacingBeforePt !== undefined) {
-    attributes.spacingBeforePt = properties.spacingBeforePt;
-  }
-  if (properties.spacingAfterPt !== undefined) {
-    attributes.spacingAfterPt = properties.spacingAfterPt;
-  }
-  if (properties.lineSpacing !== undefined) {
-    attributes.lineSpacing = properties.lineSpacing;
-  }
-  if (properties.indentLeftPt !== undefined) {
-    attributes.indentLeftPt = properties.indentLeftPt;
-  }
-  if (properties.indentRightPt !== undefined) {
-    attributes.indentRightPt = properties.indentRightPt;
-  }
-  if (properties.indentFirstLinePt !== undefined) {
-    attributes.indentFirstLinePt = properties.indentFirstLinePt;
-  }
-  if (properties.pageBreakBefore === true) attributes.pageBreakBefore = true;
-  if (properties.listId !== undefined) {
-    attributes.list = {
-      numId: String(properties.listId),
-      level: properties.listLevel ?? 0,
-    };
-  }
-  return attributes;
-}
-
-// Groups the paragraph's characters into runs of identical direct character formatting. The grouping key is the identity of the Chpx covering each character -- its position and length within the WordDocument stream -- rather than the resolved properties, so two runs that happen to resolve to the same values but come from different exceptions stay distinct, exactly as the file states them. The paragraph's own istd joins the key too: the SAME raw Chpx bytes routinely cover runs in different paragraphs (a Chpx exception spans until the next one, paragraph boundaries notwithstanding), and since a paragraph's style now contributes character defaults, two paragraphs in different styles sharing one Chpx no longer resolve to the same properties.
-function buildRuns(
-  text: string,
-  fcs: readonly number[],
-  context: ReadContext,
-  paragraphIstd: number | undefined,
-): ContentRun[] {
-  const runs: ContentRun[] = [];
-  let currentKey: string | undefined;
-  let currentText = "";
-  let currentProperties: CharacterProperties = {};
-  // The paragraph style's own character defaults (StkParaGRLPUPX.lpUpxChpx), resolved once per paragraph rather than per run -- every run in this paragraph starts from the identical base, [MS-DOC] 2.4.6.6 Part 2 step 4's own "obtain any character property modifications specified by GrpprlAndIstd.istd... apply [them] to the character properties" applied before step 5's direct formatting.
-  const paragraphStyleCharacterPrls: readonly Prl[] =
-    context.styles !== undefined && paragraphIstd !== undefined
-      ? resolveStyleFormatting(context.styles, paragraphIstd).characterPrls
-      : [];
-  // Field state, per [MS-DOC] 2.8.25's field characters: everything between a begin (0x13) and a separator (0x14) is the field's instruction rather than its displayed result, and a field with no separator displays nothing at all.
-  //
-  // A stack rather than a depth counter, because fields nest and the enclosing field's own state has to survive the inner one. A nested field appears inside the OUTER field's instruction as often as inside its result, so on reaching the inner field's end, whether text resumes depends on which side of its own separator the outer field had reached -- a counter cannot express that, and would resume in instruction mode (dropping real text) whenever an inner field closed inside an outer field's result.
-  const enclosingInstruction: boolean[] = [];
-  let inInstruction = false;
-
-  const flush = (): void => {
-    if (currentText !== "") {
-      runs.push({ text: currentText, ...currentProperties });
-    }
-    currentText = "";
-  };
-
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index);
-    if (code === FIELD_BEGIN) {
-      flush();
-      enclosingInstruction.push(inInstruction);
-      inInstruction = true;
-      continue;
-    }
-    if (code === FIELD_SEPARATOR) {
-      inInstruction = false;
-      continue;
-    }
-    if (code === FIELD_END) {
-      // An unmatched end -- one the text carries with no begin before it -- pops nothing and leaves the state alone rather than flipping it, so malformed field nesting cannot swallow the rest of the paragraph.
-      inInstruction = enclosingInstruction.pop() ?? inInstruction;
-      continue;
-    }
-    if (inInstruction || isAnchorOnly(code)) continue;
-
-    const fc = fcs[index];
-    if (fc === undefined) {
-      throw new DocFormatError(
-        `character ${index} of a paragraph has no byte offset, so its formatting cannot be located`,
-      );
-    }
-    const grpprl = context.chpxTable.chpxGrpprl(fc);
-    const chpxKey =
-      grpprl === undefined
-        ? "none"
-        : `${grpprl.byteOffset}:${grpprl.byteLength}`;
-    const key = `${paragraphIstd ?? "none"}:${chpxKey}`;
-    if (key !== currentKey) {
-      flush();
-      currentKey = key;
-      let properties = context.characterProperties.get(key);
-      if (properties === undefined) {
-        properties = {};
-        applyCharacterSprms(
-          paragraphStyleCharacterPrls,
-          properties,
-          context.fonts,
-        );
-        if (grpprl !== undefined) {
-          const runPrls = readGrpprl(grpprl);
-          // A run's own sprmCIstd names a character style, which is resolved and folded in AFTER the paragraph style's own defaults but BEFORE the run's direct exceptions -- the same "more specific wins" precedence the paragraph/direct-exception layering above already follows, applied one level deeper.
-          const characterIstd = characterIstdFromGrpprl(runPrls);
-          if (characterIstd !== undefined && context.styles !== undefined) {
-            applyCharacterSprms(
-              resolveStyleFormatting(context.styles, characterIstd)
-                .characterPrls,
-              properties,
-              context.fonts,
-            );
-          }
-          applyCharacterSprms(runPrls, properties, context.fonts);
-        }
-        context.characterProperties.set(key, properties);
-      }
-      currentProperties = properties;
-    }
-    // A line break inside a paragraph is a real break in the text rather than a paragraph boundary, so it survives as a newline instead of being dropped as a control character. Rebuilt from the code unit already in hand rather than indexed back out of the string, which the loop bound has established is present but the type of an indexed read cannot.
-    currentText += String.fromCharCode(code === LINE_BREAK ? 0x0a : code);
-  }
-  flush();
-  return runs;
 }
