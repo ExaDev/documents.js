@@ -9,10 +9,12 @@ import type {
   ContentGradientFill,
   ContentHatchFill,
   ContentImageBlock,
+  ContentPathPoint,
   ContentShape,
   ContentStroke,
   ContentStrokeDash,
   ContentStrokeStyle,
+  ContentSubpath,
   ContentVector,
 } from "document-schema.js";
 import type { XmlElement, XmlNode } from "../../model/node";
@@ -43,6 +45,7 @@ import {
   parseOdfPointsList,
   parseOdfViewBox,
   rawSubpathFromPoints,
+  type OdfViewBox,
 } from "../shared/path";
 import type {
   OdfShapeGeometry,
@@ -807,12 +810,199 @@ function readDrawPathVector(
   };
 }
 
-// A small, deliberately narrow subset of draw:custom-shape presets, identified by draw:enhanced-geometry's own draw:type attribute -- verified against real LibreOffice 26.2 output (the same macro-built fixtures as typed/shared/path.ts's own top-of-file note; LibreOffice's "Basic Shapes" gallery rectangle/rounded rectangle/ellipse each round-trip with draw:type="rectangle"/"round-rectangle"/"ellipse" respectively). Their OWN draw:enhanced-path (a "M ?f7 0 X 0 ?f8 L ..." formula-driven mini-language with ?fN/$N expression references and ODF-specific commands like X/Y/U that are NOT part of plain SVG at all) is deliberately never parsed -- evaluating draw:enhanced-geometry's formula language is explicitly out of scope for this reader (a v1.5+ gap, tracked, not attempted here) -- instead, each recognised preset maps to the CLOSEST ContentVector approximation built from the shape's own frame alone: 'ellipse' maps to the ellipse variant; 'rectangle' AND 'round-rectangle' both map to the plain rect variant (ContentVectorSchema has no rounded-corner concept at all, so a rounded rectangle reads with sharp corners -- a documented, bounded approximation, not a silent one).
+// A small, deliberately narrow subset of draw:custom-shape presets, identified by draw:enhanced-geometry's own draw:type attribute -- verified against real LibreOffice 26.2 output for 'rectangle'/'round-rectangle'/'ellipse' (the same macro-built fixtures as typed/shared/path.ts's own top-of-file note; LibreOffice's "Basic Shapes" gallery rectangle/rounded rectangle/ellipse each round-trip with exactly these draw:type values) and against LibreOffice's own EnhancedCustomShapeTypeNames.cxx preset-name table (github.com/LibreOffice/core/blob/master/svx/source/customshapes/EnhancedCustomShapeTypeNames.cxx) for the remaining six, since the OASIS schema itself says draw:type is "rendering-engine dependent" and "shall not influence the geometry of the shape" (OASIS ODF 1.3 section 19.229.3/18.2 -- draw:type's own defined values are exactly "non-primitive" or "a value of type string" with no fixed geometry-name enumeration at all); real geometry always lives in the shape's own draw:enhanced-path, which this reader still does not evaluate (see below).
+//
+// Their OWN draw:enhanced-path (a "M ?f7 0 X 0 ?f8 L ..." formula-driven mini-language with ?fN/$N expression references and ODF-specific commands like X/Y/U that are NOT part of plain SVG at all) is deliberately never parsed -- evaluating draw:enhanced-geometry's formula language in full generality stays out of scope for this reader (a v1.5+ gap, tracked, not attempted here). Instead, each recognised preset maps to the CLOSEST ContentVector approximation this reader can build without that evaluator:
+// - 'rectangle' -> the plain rect variant; 'ellipse' -> the plain ellipse variant.
+// - 'round-rectangle' (ExaDev/documents.js#954's own named example) -> a REAL rounded-corner path when a corner radius can be derived from the shape's own draw:handle/draw:modifiers (readRoundRectangleRadiusPt below -- the one genuinely resolvable number this reader reads out of enhanced-geometry without a general formula evaluator, since a handle's position/range is a small, fixed micro-grammar, not the open-ended path formula language); when no handle/modifier is present to derive one from, this still falls back to the plain rect variant exactly as before -- there is no ODF-declared default radius to fabricate one from (see readRoundRectangleRadiusPt's own note).
+// - 'diamond'/'isosceles-triangle'/'right-triangle'/'pentagon'/'hexagon'/'octagon' -> a fixed polygon inscribed in the shape's own frame (fixedPresetSubpath below) -- these six have no adjustment handle in LibreOffice's own unadjusted gallery defaults, so a frame-derived idealised polygon is a stable, well-defined approximation of "a diamond"/"a hexagon"/etc, not a guess at any one producer's own stored coordinates. 'parallelogram' and 'trapezoid' are NOT included here: LibreOffice's own defaults for both DO carry an adjustable slant via exactly the same kind of handle round-rectangle uses, and approximating them without reading that handle would produce a wrong shape (a fixed default slant this reader invented) rather than a documented bound on a right one -- left unresolved, deliberately, alongside the general enhanced-path formula language, rather than guessed.
+const REGULAR_POLYGON_SIDES: ReadonlyMap<string, number> = new Map([
+  ["pentagon", 5],
+  ["hexagon", 6],
+  ["octagon", 8],
+]);
+const FIXED_POLYGON_PRESETS: ReadonlySet<string> = new Set([
+  "diamond",
+  "isosceles-triangle",
+  "right-triangle",
+  ...REGULAR_POLYGON_SIDES.keys(),
+]);
 const RECOGNIZED_CUSTOM_SHAPE_PRESETS: ReadonlySet<string> = new Set([
   "rectangle",
   "round-rectangle",
   "ellipse",
+  ...FIXED_POLYGON_PRESETS,
 ]);
+
+function polygonSubpath(
+  points: readonly ContentPathPoint[],
+): ContentSubpath | undefined {
+  const [start, ...rest] = points;
+  if (start === undefined) {
+    return undefined;
+  }
+  return {
+    start,
+    closed: true,
+    segments: rest.map((to) => ({ kind: "line" as const, to })),
+  };
+}
+
+// A regular N-gon inscribed in the shape's own frame, point-up, independently stretched on each axis to fill a non-square frame -- the same box-fit convention every other approximated preset in this file already uses (round-rectangle, the fixed triangle/diamond presets alongside this one). A closest reasonable approximation for an unadjusted preset of this name, not a literal read of the file's own stored draw:enhanced-path geometry (see this section's own top-of-file note).
+function regularPolygonSubpath(
+  sides: number,
+  frame: Box,
+): ContentSubpath | undefined {
+  const cx = frame.widthPt / 2;
+  const cy = frame.heightPt / 2;
+  const points: ContentPathPoint[] = [];
+  for (let i = 0; i < sides; i++) {
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / sides;
+    points.push({
+      xPt: cx + cx * Math.cos(angle),
+      yPt: cy + cy * Math.sin(angle),
+    });
+  }
+  return polygonSubpath(points);
+}
+
+// The fixed-geometry preset subpaths -- see this section's own top-of-file note for why these six specifically, and why 'parallelogram'/'trapezoid' are deliberately excluded from this table.
+function fixedPresetSubpath(
+  type: string,
+  frame: Box,
+): ContentSubpath | undefined {
+  const w = frame.widthPt;
+  const h = frame.heightPt;
+  switch (type) {
+    case "diamond":
+      return polygonSubpath([
+        { xPt: w / 2, yPt: 0 },
+        { xPt: w, yPt: h / 2 },
+        { xPt: w / 2, yPt: h },
+        { xPt: 0, yPt: h / 2 },
+      ]);
+    case "isosceles-triangle":
+      return polygonSubpath([
+        { xPt: w / 2, yPt: 0 },
+        { xPt: w, yPt: h },
+        { xPt: 0, yPt: h },
+      ]);
+    case "right-triangle":
+      return polygonSubpath([
+        { xPt: 0, yPt: 0 },
+        { xPt: 0, yPt: h },
+        { xPt: w, yPt: h },
+      ]);
+    default: {
+      const sides = REGULAR_POLYGON_SIDES.get(type);
+      return sides === undefined
+        ? undefined
+        : regularPolygonSubpath(sides, frame);
+    }
+  }
+}
+
+// The standard cubic-Bezier approximation constant for a quarter circle (4/3 * (sqrt(2) - 1) = 0.55228474983...) -- a universal mathematical constant independent of ODF, used below to build a rounded rectangle's four corner arcs.
+const BEZIER_QUARTER_CIRCLE_KAPPA = 0.5522847498307936;
+
+function roundedRectSubpath(frame: Box, radiusPt: number): ContentSubpath {
+  const w = frame.widthPt;
+  const h = frame.heightPt;
+
+  const k = radiusPt * BEZIER_QUARTER_CIRCLE_KAPPA;
+  return {
+    start: { xPt: radiusPt, yPt: 0 },
+    closed: true,
+    segments: [
+      { kind: "line", to: { xPt: w - radiusPt, yPt: 0 } },
+      {
+        kind: "cubic",
+        control1: { xPt: w - radiusPt + k, yPt: 0 },
+        control2: { xPt: w, yPt: radiusPt - k },
+        to: { xPt: w, yPt: radiusPt },
+      },
+      { kind: "line", to: { xPt: w, yPt: h - radiusPt } },
+      {
+        kind: "cubic",
+        control1: { xPt: w, yPt: h - radiusPt + k },
+        control2: { xPt: w - radiusPt + k, yPt: h },
+        to: { xPt: w - radiusPt, yPt: h },
+      },
+      { kind: "line", to: { xPt: radiusPt, yPt: h } },
+      {
+        kind: "cubic",
+        control1: { xPt: radiusPt - k, yPt: h },
+        control2: { xPt: 0, yPt: h - radiusPt + k },
+        to: { xPt: 0, yPt: h - radiusPt },
+      },
+      { kind: "line", to: { xPt: 0, yPt: radiusPt } },
+      {
+        kind: "cubic",
+        control1: { xPt: 0, yPt: radiusPt - k },
+        control2: { xPt: radiusPt - k, yPt: 0 },
+        to: { xPt: radiusPt, yPt: 0 },
+      },
+    ],
+  };
+}
+
+// draw:handle-position/-range-x-minimum/-range-x-maximum's own shared micro-grammar (OASIS ODF 1.3 section 19.179/19.183): each value is a bare number OR "$N" indexing the shape's own draw:modifiers list (section 19.196) at position N. A THIRD form, "?formula-name" (referencing a <draw:equation>), is exactly the open-ended draw:enhanced-path formula language this file's own top-of-file note already puts out of scope -- a handle whose position/range uses one resolves to undefined here rather than evaluating an arbitrary named formula.
+function readOdfHandleValue(
+  raw: string | undefined,
+  modifiers: readonly number[],
+): number | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (raw.startsWith("$")) {
+    const index = Number.parseInt(raw.slice(1), 10);
+    const value = Number.isInteger(index) ? modifiers[index] : undefined;
+    return value === undefined || !Number.isFinite(value) ? undefined : value;
+  }
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+// The real corner radius behind a "round-rectangle" preset (ExaDev/documents.js#954's own named example), read from the shape's own draw:enhanced-geometry: its first <draw:handle>'s draw:handle-position (indexing draw:modifiers via readOdfHandleValue above), clamped to that handle's own draw:handle-range-x-minimum/-maximum when present, then scaled from the shape's raw enhanced-geometry coordinate space into real points using the SAME svg:viewBox-derived horizontal scale factor typed/shared/path.ts's own scaleOdfRawPoint applies to path/polygon geometry (a handle's own position/range values live in the identical raw coordinate space draw:enhanced-path's own numbers do). Returns undefined when any of this is unresolvable -- there is no ODF-declared "default" radius for an unadjusted round-rectangle to fall back to (an application's own gallery preset defaults are a producer convenience, not something the OASIS schema mandates a value for), so a round-rectangle with no resolvable handle degrades to the caller's own plain-rect fallback rather than a fabricated radius. The result is additionally clamped to half the shape's shorter side -- not a guessed threshold, but the mathematical maximum a rectangle's own corner radius can be before adjacent corners overlap.
+function readRoundRectangleRadiusPt(
+  geometryElement: XmlElement,
+  viewBox: OdfViewBox,
+  frame: Box,
+): number | undefined {
+  if (viewBox.width <= 0) {
+    return undefined;
+  }
+  const modifiersValue = attrValue(geometryElement, "draw:modifiers");
+  const modifiers = (modifiersValue ?? "")
+    .split(/\s+/)
+    .filter((token) => token.length > 0)
+    .map(Number);
+  const handle = childrenWithTag(geometryElement, "draw:handle")[0];
+  if (handle === undefined) {
+    return undefined;
+  }
+  const positionValue = attrValue(handle, "draw:handle-position");
+  const rawX = positionValue?.split(/\s+/)[0];
+  const raw = readOdfHandleValue(rawX, modifiers);
+  if (raw === undefined) {
+    return undefined;
+  }
+  const min = readOdfHandleValue(
+    attrValue(handle, "draw:handle-range-x-minimum"),
+    modifiers,
+  );
+  const max = readOdfHandleValue(
+    attrValue(handle, "draw:handle-range-x-maximum"),
+    modifiers,
+  );
+  const clamped = Math.min(max ?? raw, Math.max(min ?? raw, raw));
+  const radiusPt = clamped * (frame.widthPt / viewBox.width);
+  if (radiusPt <= 0) {
+    return undefined;
+  }
+  const maxRadiusPt = Math.min(frame.widthPt, frame.heightPt) / 2;
+  return Math.min(radiusPt, maxRadiusPt);
+}
 
 function readCustomShapeVector(
   element: XmlElement,
@@ -831,12 +1021,68 @@ function readCustomShapeVector(
   if (geometry === undefined) {
     return undefined;
   }
-  const { fill, stroke } = readOdfFillAndStroke(element, pkg);
+  const { fill, fillPattern, fillOpacity, stroke } = readOdfFillAndStroke(
+    element,
+    pkg,
+  );
+  const fillFields = {
+    fill,
+    ...(fillPattern === undefined ? {} : { fillPattern }),
+    ...(fillOpacity === undefined ? {} : { fillOpacity }),
+  };
+
+  if (type === "ellipse") {
+    return {
+      kind: "ellipse",
+      frame: geometry.frame,
+      rotationDeg: geometry.rotationDeg,
+      ...fillFields,
+      stroke,
+    };
+  }
+
+  if (type === "round-rectangle" && geometryElement !== undefined) {
+    // svg:viewBox and draw:modifiers both live on <draw:enhanced-geometry> itself (OASIS ODF 1.3 section 10.6.2), NOT on the enclosing draw:custom-shape -- unlike draw:path/draw:polygon/draw:polyline, where svg:viewBox sits on the geometry element itself directly.
+    const viewBoxValue = attrValue(geometryElement, "svg:viewBox");
+    const viewBox =
+      viewBoxValue === undefined ? undefined : parseOdfViewBox(viewBoxValue);
+    const radiusPt =
+      viewBox === undefined
+        ? undefined
+        : readRoundRectangleRadiusPt(geometryElement, viewBox, geometry.frame);
+    if (radiusPt !== undefined) {
+      return {
+        kind: "path",
+        frame: geometry.frame,
+        rotationDeg: geometry.rotationDeg,
+        subpaths: [roundedRectSubpath(geometry.frame, radiusPt)],
+        ...fillFields,
+        stroke,
+      };
+    }
+    // No resolvable handle/modifier -- fall through to the plain-rect approximation below, exactly as before this preset's corner radius could be resolved.
+  }
+
+  if (FIXED_POLYGON_PRESETS.has(type)) {
+    const subpath = fixedPresetSubpath(type, geometry.frame);
+    if (subpath === undefined) {
+      return undefined;
+    }
+    return {
+      kind: "path",
+      frame: geometry.frame,
+      rotationDeg: geometry.rotationDeg,
+      subpaths: [subpath],
+      ...fillFields,
+      stroke,
+    };
+  }
+
   return {
-    kind: type === "ellipse" ? "ellipse" : "rect",
+    kind: "rect",
     frame: geometry.frame,
     rotationDeg: geometry.rotationDeg,
-    fill,
+    ...fillFields,
     stroke,
   };
 }
