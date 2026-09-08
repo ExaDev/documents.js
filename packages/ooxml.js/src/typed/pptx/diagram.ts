@@ -123,16 +123,45 @@ export function readDiagramText(dataModelRoot: XmlElement): ContentParagraph[] {
 }
 
 // Quarantines the three parts readDiagramText itself does not read -- layout (r:lo), quickStyle (r:qs), colours (r:cs) -- as opaque residue on the diagram's own graphic-frame shape, mirroring readChartResidue's identical "whole part, own reader's contract" treatment for a chart (ExaDev/documents.js#719's residue-channel convention). Only the parts that actually resolved are concatenated, in relIds' own r:lo/r:qs/r:cs order; a diagram missing one or more (a producer that emitted only a data model) quarantines whatever it does have rather than fabricating an element for what's absent. Undefined when none resolved at all, so a diagram with no drawing-specific parts leaves the shape's own source field absent rather than an empty residue value.
+//
+// Cached by the exact (layoutRoot, quickStyleRoot, colorsRoot) triple's own object identity, nested through three WeakMaps (a shared sentinel stands in for "absent" at each level, since WeakMap keys must be objects) -- mirroring readChartResidue's cache for the identical reason: multiple graphic frames can share one diagram's layout/quickStyle/colour relationship targets, and re-serialising the same parts once per frame is an O(N*M) cost a hostile document can exploit.
+const ABSENT_ROOT: XmlElement = {
+  type: "element",
+  tag: "",
+  attributes: [],
+  children: [],
+};
+const diagramResidueCache = new WeakMap<
+  XmlElement,
+  WeakMap<XmlElement, WeakMap<XmlElement, SourceResidue | undefined>>
+>();
+
 export function readDiagramResidue(
   layoutRoot: XmlElement | undefined,
   quickStyleRoot: XmlElement | undefined,
   colorsRoot: XmlElement | undefined,
 ): SourceResidue | undefined {
+  const key1 = layoutRoot ?? ABSENT_ROOT;
+  const key2 = quickStyleRoot ?? ABSENT_ROOT;
+  const key3 = colorsRoot ?? ABSENT_ROOT;
+  let level2 = diagramResidueCache.get(key1);
+  if (level2 === undefined) {
+    level2 = new WeakMap();
+    diagramResidueCache.set(key1, level2);
+  }
+  let level3 = level2.get(key2);
+  if (level3 === undefined) {
+    level3 = new WeakMap();
+    level2.set(key2, level3);
+  }
+  if (level3.has(key3)) {
+    return level3.get(key3);
+  }
   const parts = [layoutRoot, quickStyleRoot, colorsRoot].filter(
     (root): root is XmlElement => root !== undefined,
   );
-  if (parts.length === 0) {
-    return undefined;
-  }
-  return { format: "pptx", xml: buildXml(parts) };
+  const residue: SourceResidue | undefined =
+    parts.length === 0 ? undefined : { format: "pptx", xml: buildXml(parts) };
+  level3.set(key3, residue);
+  return residue;
 }
