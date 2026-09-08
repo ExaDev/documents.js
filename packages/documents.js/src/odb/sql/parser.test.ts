@@ -204,6 +204,7 @@ describe("parseSelect: GROUP BY and ORDER BY", () => {
   it("accepts one trailing semicolon", () => {
     expect(parseSelect("SELECT * FROM SALES;").from).toEqual({
       table: { name: "SALES", quoted: false },
+      alias: undefined,
       joins: [],
     });
   });
@@ -214,26 +215,32 @@ describe("parseSelect: JOIN", () => {
     expect(parseSelect("SELECT A FROM T1 JOIN T2 ON T1.A = T2.A").from).toEqual(
       {
         table: { name: "T1", quoted: false },
+        alias: undefined,
         joins: [
           {
+            joinKind: "inner",
             table: { name: "T2", quoted: false },
-            on: {
-              kind: "comparison",
-              operator: "=",
-              left: {
-                kind: "column",
-                column: {
-                  qualifier: { name: "T1", quoted: false },
-                  column: { name: "A", quoted: false },
-                  text: "T1.A",
+            alias: undefined,
+            condition: {
+              kind: "on",
+              predicate: {
+                kind: "comparison",
+                operator: "=",
+                left: {
+                  kind: "column",
+                  column: {
+                    qualifier: { name: "T1", quoted: false },
+                    column: { name: "A", quoted: false },
+                    text: "T1.A",
+                  },
                 },
-              },
-              right: {
-                kind: "column",
-                column: {
-                  qualifier: { name: "T2", quoted: false },
-                  column: { name: "A", quoted: false },
-                  text: "T2.A",
+                right: {
+                  kind: "column",
+                  column: {
+                    qualifier: { name: "T2", quoted: false },
+                    column: { name: "A", quoted: false },
+                    text: "T2.A",
+                  },
                 },
               },
             },
@@ -260,13 +267,11 @@ describe("parseSelect: JOIN", () => {
     const from = parseSelect(
       "SELECT A FROM T1 JOIN T2 ON T1.A = T2.A AND T2.B IS NOT NULL",
     ).from;
-    expect(from.joins[0]?.on.kind).toBe("and");
-  });
-
-  it("rejects a table alias on a JOIN clause's own table, exactly as it does on the base FROM table", () => {
-    expect(() =>
-      parseSelect("SELECT A FROM T1 JOIN T2 t ON T1.A = t.A"),
-    ).toThrow(HsqldbSqlUnsupportedError);
+    const condition = from.joins[0]?.condition;
+    expect(condition?.kind).toBe("on");
+    expect(
+      condition?.kind === "on" ? condition.predicate.kind : undefined,
+    ).toBe("and");
   });
 
   it("rejects a schema-qualified table name on a JOIN clause's own table", () => {
@@ -275,22 +280,131 @@ describe("parseSelect: JOIN", () => {
     ).toThrow("a schema-qualified table name");
   });
 
-  it("requires ON after a JOIN's own table", () => {
+  it("requires ON or USING after a plain/INNER/LEFT/RIGHT/FULL JOIN's own table", () => {
     expect(() =>
       parseSelect("SELECT A FROM T1 JOIN T2 WHERE T1.A = 1"),
     ).toThrow(HsqldbSqlParseError);
+  });
+
+  it.each([
+    ["SELECT A FROM T1 LEFT JOIN T2 ON T1.A = T2.A", "left"],
+    ["SELECT A FROM T1 LEFT OUTER JOIN T2 ON T1.A = T2.A", "left"],
+    ["SELECT A FROM T1 RIGHT JOIN T2 ON T1.A = T2.A", "right"],
+    ["SELECT A FROM T1 RIGHT OUTER JOIN T2 ON T1.A = T2.A", "right"],
+    ["SELECT A FROM T1 FULL JOIN T2 ON T1.A = T2.A", "full"],
+    ["SELECT A FROM T1 FULL OUTER JOIN T2 ON T1.A = T2.A", "full"],
+  ])("parses %s as joinKind %s, still requiring ON", (sql, joinKind) => {
+    const from = parseSelect(sql).from;
+    expect(from.joins[0]?.joinKind).toBe(joinKind);
+    expect(from.joins[0]?.condition.kind).toBe("on");
+  });
+
+  it("parses CROSS JOIN with no condition at all -- no ON, no USING, no NATURAL", () => {
+    const from = parseSelect("SELECT A FROM T1 CROSS JOIN T2").from;
+    expect(from.joins[0]).toEqual({
+      joinKind: "cross",
+      table: { name: "T2", quoted: false },
+      alias: undefined,
+      condition: { kind: "none" },
+    });
+  });
+
+  it("rejects ON or USING after a CROSS JOIN's own table", () => {
+    expect(() =>
+      parseSelect("SELECT A FROM T1 CROSS JOIN T2 ON T1.A = T2.A"),
+    ).toThrow(HsqldbSqlParseError);
+    expect(() =>
+      parseSelect("SELECT A FROM T1 CROSS JOIN T2 USING (A)"),
+    ).toThrow(HsqldbSqlParseError);
+  });
+
+  it("parses NATURAL JOIN with an implicit condition, defaulting its own join kind to inner", () => {
+    const from = parseSelect("SELECT A FROM T1 NATURAL JOIN T2").from;
+    expect(from.joins[0]).toEqual({
+      joinKind: "inner",
+      table: { name: "T2", quoted: false },
+      alias: undefined,
+      condition: { kind: "natural" },
+    });
+  });
+
+  it("parses NATURAL LEFT/RIGHT/FULL JOIN, combining NATURAL with a join kind", () => {
+    expect(
+      parseSelect("SELECT A FROM T1 NATURAL LEFT JOIN T2").from.joins[0]
+        ?.joinKind,
+    ).toBe("left");
+    expect(
+      parseSelect("SELECT A FROM T1 NATURAL RIGHT OUTER JOIN T2").from.joins[0]
+        ?.joinKind,
+    ).toBe("right");
+  });
+
+  it("rejects NATURAL CROSS JOIN, which is not valid SQL", () => {
+    expect(() => parseSelect("SELECT A FROM T1 NATURAL CROSS JOIN T2")).toThrow(
+      HsqldbSqlParseError,
+    );
+  });
+
+  it("parses JOIN ... USING with one or more columns", () => {
+    expect(
+      parseSelect("SELECT A FROM T1 JOIN T2 USING (A)").from.joins[0]
+        ?.condition,
+    ).toEqual({
+      kind: "using",
+      columns: [{ name: "A", quoted: false }],
+    });
+    expect(
+      parseSelect('SELECT A FROM T1 JOIN T2 USING (A, "B")').from.joins[0]
+        ?.condition,
+    ).toEqual({
+      kind: "using",
+      columns: [
+        { name: "A", quoted: false },
+        { name: "B", quoted: true },
+      ],
+    });
+  });
+
+  it("parses LEFT/RIGHT/FULL JOIN ... USING, combining an outer join kind with USING", () => {
+    expect(
+      parseSelect("SELECT A FROM T1 LEFT JOIN T2 USING (A)").from.joins[0],
+    ).toEqual({
+      joinKind: "left",
+      table: { name: "T2", quoted: false },
+      alias: undefined,
+      condition: { kind: "using", columns: [{ name: "A", quoted: false }] },
+    });
+  });
+
+  it("parses a table alias with and without AS, on both the base FROM table and a JOIN's own table", () => {
+    expect(parseSelect("SELECT A FROM T1 AS t1").from.alias).toEqual({
+      name: "T1",
+      quoted: false,
+    });
+    expect(parseSelect("SELECT A FROM T1 t1").from.alias).toEqual({
+      name: "T1",
+      quoted: false,
+    });
+    const from = parseSelect(
+      "SELECT A FROM T1 AS one JOIN T2 two ON one.X = two.X",
+    ).from;
+    expect(from.alias).toEqual({ name: "ONE", quoted: false });
+    expect(from.joins[0]?.alias).toEqual({ name: "TWO", quoted: false });
+  });
+
+  it("parses a genuine self-join, distinguishing the two occurrences of the same table by alias alone", () => {
+    const from = parseSelect(
+      "SELECT t1.A FROM T t1 JOIN T t2 ON t1.A = t2.A",
+    ).from;
+    expect(from.table.name).toBe("T");
+    expect(from.alias).toEqual({ name: "T1", quoted: false });
+    expect(from.joins[0]?.table.name).toBe("T");
+    expect(from.joins[0]?.alias).toEqual({ name: "T2", quoted: false });
   });
 });
 
 describe("parseSelect: deliberately unsupported constructs", () => {
   it.each([
-    ["SELECT A FROM T1 LEFT JOIN T2 ON T1.A = T2.A", "a JOIN"],
-    ["SELECT A FROM T1 LEFT OUTER JOIN T2 ON T1.A = T2.A", "a JOIN"],
-    ["SELECT A FROM T1 RIGHT JOIN T2 ON T1.A = T2.A", "a JOIN"],
-    ["SELECT A FROM T1 FULL JOIN T2 ON T1.A = T2.A", "a JOIN"],
-    ["SELECT A FROM T1 CROSS JOIN T2", "a JOIN"],
-    ["SELECT A FROM T1 NATURAL JOIN T2", "a JOIN"],
-    ["SELECT A FROM T1 JOIN T2 USING (A)", "a JOIN"],
     [
       "SELECT A FROM T1, T2",
       "a comma-separated FROM list (write an explicit JOIN instead)",
@@ -306,8 +420,8 @@ describe("parseSelect: deliberately unsupported constructs", () => {
     ["SELECT A, COUNT(*) FROM T GROUP BY A HAVING COUNT(*) > 1", "HAVING"],
     ["SELECT A FROM T LIMIT 10", "a row-limit clause (LIMIT)"],
     ["SELECT A FROM T ORDER BY A OFFSET 5", "a row-limit clause (OFFSET)"],
-    ["SELECT A AS ALIAS FROM T", "a column or table alias (AS)"],
-    ["SELECT A FROM T ALIAS", "a table alias"],
+    ["SELECT A AS ALIAS FROM T", "a column alias (AS)"],
+    ["SELECT COUNT(*) AS TOTAL FROM T", "a column alias (AS)"],
     ["SELECT UPPER(A) FROM T", "a scalar function (UPPER)"],
     ["SELECT COALESCE(A, 0) FROM T", "a scalar function (COALESCE)"],
     ["SELECT CASE WHEN A = 1 THEN 2 ELSE 3 END FROM T", "a CASE expression"],
@@ -378,7 +492,6 @@ describe("parseSelect: malformed input", () => {
       "an aggregate function is not valid in GROUP BY",
     ],
     ["SELECT * FROM T ORDER", "expected keyword BY"],
-    ["SELECT * FROM T T2", "a table alias"],
     ["SELECT * FROM T WHERE A BETWEEN 1 2", "expected keyword AND"],
     ["SELECT * FROM T; SELECT * FROM U", "a subquery"],
   ])("throws for %s", (sql, message) => {
