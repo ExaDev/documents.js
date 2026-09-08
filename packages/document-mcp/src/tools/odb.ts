@@ -145,7 +145,7 @@ export function registerOdbTools(server: McpServer): void {
     {
       title: "Query an .odb database",
       description:
-        "Runs a bounded SELECT (with optional JOINs and table aliases) over an embedded .odb database's own extracted tables, given directly as SQL or by naming one of the database's saved queries. No database engine is involved -- the query runs in memory over the same tables odb_tables would return, against a closed grammar (SELECT/FROM/JOIN [INNER|LEFT [OUTER]|RIGHT [OUTER]|FULL [OUTER]|CROSS|NATURAL] ... [ON|USING]/WHERE/GROUP BY/ORDER BY, with an optional [AS] alias on any table -- no subqueries or column aliases); an unsupported construct is reported as a tool error naming it, never silently ignored.",
+        "Runs a bounded SELECT (with optional JOINs of any kind, table aliases, a derived table in FROM, and IN/EXISTS subqueries) over an embedded .odb database's own extracted tables, given directly as SQL or by naming one of the database's saved queries. No database engine is involved -- the query runs in memory over the same tables odb_tables would return, against a closed grammar (SELECT/FROM/JOIN [INNER|LEFT [OUTER]|RIGHT [OUTER]|FULL [OUTER]|CROSS|NATURAL] ... [ON|USING]/WHERE/GROUP BY/ORDER BY, with an optional [AS] alias on any table, WHERE and ON also accepting [NOT] IN (SELECT ...) and [NOT] EXISTS (SELECT ...) -- no column aliases); an unsupported construct is reported as a tool error naming it, never silently ignored.",
       inputSchema: z.object({
         source: DocumentInputSchema.describe(ODB_SOURCE_DESCRIPTION),
         sql: z

@@ -794,7 +794,7 @@ export {
 } from "odf.js";
 export { readOdbForms, readOdbReports } from "./odb/components";
 export { OdbTableNotFoundError, OdbTableNotSpecifiedError } from "./odb/csv";
-// A bounded SQL SELECT engine (src/odb/sql/) over the HsqldbTable[] readOdbTables produces, so a .odb's own saved query (OdbQueryInfo.command, above) can actually be RUN against the data this package extracts -- the one thing an inventory of query text alone cannot do. Exported as the same independently-usable pipeline stages the rest of the .odb surface follows: parseSelect (SQL text -> a validated AST) and evaluateSelect (AST + tables -> a result set). Its grammar is a closed allowlist -- SELECT column-list-or-star FROM one table plus zero or more `[INNER] JOIN table ON predicate` clauses, optional WHERE (comparisons, AND/OR/NOT with parentheses, IS [NOT] NULL, [NOT] LIKE, [NOT] IN, [NOT] BETWEEN -- the identical grammar ON itself uses), GROUP BY with COUNT/SUM/AVG/MIN/MAX, and ORDER BY -- and everything outside it (OUTER/LEFT/RIGHT/FULL/CROSS/NATURAL joins, subqueries, UNION, DISTINCT, HAVING, row limits, aliases, scalar functions, arithmetic) throws HsqldbSqlUnsupportedError naming the construct rather than being silently ignored, the same policy src/hsqldb/script.ts's own statement parser follows. There is no reverse direction: this engine reads SQL, it never writes it.
+// A bounded SQL SELECT engine (src/odb/sql/) over the HsqldbTable[] readOdbTables produces, so a .odb's own saved query (OdbQueryInfo.command, above) can actually be RUN against the data this package extracts -- the one thing an inventory of query text alone cannot do. Exported as the same independently-usable pipeline stages the rest of the .odb surface follows: parseSelect (SQL text -> a validated AST) and evaluateSelect (AST + tables -> a result set). Its grammar is a closed allowlist -- SELECT column-list-or-star FROM one table (or one derived table -- a subquery standing in for one, requiring its own alias) plus zero or more joins of any kind ([INNER]/LEFT [OUTER]/RIGHT [OUTER]/FULL [OUTER]/CROSS/NATURAL, each with ON, USING, or NATURAL's own implicit equi-join over shared columns), each table (or the base FROM table) optionally aliased, optional WHERE (comparisons, AND/OR/NOT with parentheses, IS [NOT] NULL, [NOT] LIKE, [NOT] IN (a literal list or a subquery), [NOT] BETWEEN, [NOT] EXISTS (a subquery) -- the identical grammar ON itself uses), GROUP BY with COUNT/SUM/AVG/MIN/MAX, and ORDER BY, with a derived table's or IN/EXISTS's own subquery recursing through the identical grammar to whatever nesting depth it naturally reaches -- and everything outside it (UNION, DISTINCT, HAVING, row limits, column aliases, scalar functions, arithmetic, quantified subquery predicates) throws HsqldbSqlUnsupportedError naming the construct rather than being silently ignored, the same policy src/hsqldb/script.ts's own statement parser follows. There is no reverse direction: this engine reads SQL, it never writes it.
 export type { SqlResultSet } from "./odb/sql/evaluate";
 export { evaluateSelect } from "./odb/sql/evaluate";
 export type {
@@ -802,6 +802,7 @@ export type {
   SqlAggregateFunction,
   SqlColumnRef,
   SqlFromClause,
+  SqlFromSource,
   SqlJoinClause,
   SqlLiteral,
   SqlNameRef,
