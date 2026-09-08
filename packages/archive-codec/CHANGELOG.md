@@ -1,3 +1,9 @@
+## [1.8.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.7.2...archive-codec%401.8.0) (2026-09-08)
+
+### Features
+
+* **archive-codec:** make decryptOfficeRc4's re-keying interval configurable ([21acaa2](https://github.com/ExaDev/documents.js/commit/21acaa2cda103cb6630d27d527dd36191f86b96b))
+
 ## [1.7.2](https://github.com/ExaDev/documents.js/compare/archive-codec%401.7.1...archive-codec%401.7.2) (2026-09-08)
 
 ### Bug Fixes

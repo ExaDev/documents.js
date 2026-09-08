@@ -1,3 +1,14 @@
+## [2.4.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.3.7...doc-codec%402.4.0) (2026-09-08)
+
+### Features
+
+* **doc-codec:** decrypt RC4-encrypted documents given a password ([7ca8998](https://github.com/ExaDev/documents.js/commit/7ca899874900d53daa151c3c4bdb43b0bd728afa))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.8.0
+
 ## [2.3.7](https://github.com/ExaDev/documents.js/compare/doc-codec%402.3.6...doc-codec%402.3.7) (2026-09-08)
 
 
