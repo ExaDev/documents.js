@@ -776,11 +776,24 @@ describe("readXlsx / buildXlsxPackage: the xlsx DocumentTree boundary", () => {
     ).toBeUndefined();
   });
 
-  it("keeps the tree path and the flat path the same WRITE even with definitions attached: flatten drops them, so both build the identical package", () => {
+  it("writes the tree's own definitions table back out (ExaDev/documents.js#973): buildXlsxPackage closes the row flattenTree itself cannot carry, while the flat write pair still emits neither a general defined name nor an xl/tables part", () => {
     const pkg = workbookWithTablesAndNames();
-    expect(buildXlsxPackage(readXlsx(pkg))).toEqual(
-      buildXlsxPackageFromContent(readXlsxContent(pkg)),
+    const treePackage = buildXlsxPackage(readXlsx(pkg));
+    const flatPackage = buildXlsxPackageFromContent(readXlsxContent(pkg));
+    expect(treePackage).not.toEqual(flatPackage);
+    expect(Object.keys(flatPackage.parts)).not.toContain(
+      "xl/tables/table1.xml",
     );
+    expect(Object.keys(treePackage.parts)).toContain("xl/tables/table1.xml");
+    // flattenTree itself still drops the table on the way to a flat ContentDocument -- unaffected by buildXlsxPackage now threading the tree's own definitions table through as buildXlsxPackageFromContent's own separate options argument.
     expect(flattenTree(readXlsx(pkg))).toEqual(readXlsxContent(pkg));
+  });
+
+  it("round-trips the tree's own definitions table through a real byte encode/decode: reading the freshly-built package back recovers the same general defined names and table object", () => {
+    const pkg = workbookWithTablesAndNames();
+    const rebuilt = decodePackage(
+      encodePackage(buildXlsxPackage(readXlsx(pkg))),
+    );
+    expect(readXlsx(rebuilt).definitions).toEqual(readXlsx(pkg).definitions);
   });
 });

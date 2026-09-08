@@ -3,6 +3,7 @@ import type {
   ContentDocument,
   ContentEmbeddedObject,
   ContentSheet,
+  DefinitionsTable,
 } from "document-schema.js";
 import { PAGE_SIZE_A4, PAGE_SIZE_LETTER } from "document-schema.js";
 import type { XmlElement } from "../../model/node";
@@ -12,6 +13,7 @@ import { parsePackage } from "../../package-io/read";
 import { attr, childrenWithTag, decodeEntities, rootElement } from "../util";
 import { buildXlsxPackageFromContent } from "./build";
 import { readXlsxContent } from "./content";
+import { readWorkbookDefinitions } from "./definitions";
 import { columnWidthCharsToPt } from "./units";
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
@@ -1410,7 +1412,7 @@ describe("buildXlsxPackageFromContent: cell comments (ExaDev/documents.js#949)",
   });
 });
 
-// ExaDev/documents.js#973's own drawing-layer one-way row, closed: a worksheet's own charts and pictures now survive buildXlsxPackageFromContent -- typed/xlsx/content.test.ts carries the byte-level decodePackage/encodePackage round trips (one per anchor spelling); this suite checks the XML shape directly, the same way the comment tests above do.
+// ExaDev/documents.js#973's own two one-way rows, closed: a worksheet's own drawing layer (charts and pictures) and the workbook's own definitions table (general defined names and Table/List objects) now both survive buildXlsxPackageFromContent -- typed/xlsx/content.test.ts carries the byte-level decodePackage/encodePackage round trips for the drawing layer (one per anchor spelling); this suite checks the XML shape directly, the same way the comment tests above do, plus one round trip per row through readXlsxContent/readWorkbookDefinitions.
 
 function chartEmbeddedObject(): ContentEmbeddedObject {
   return {
@@ -1565,5 +1567,77 @@ describe("buildXlsxPackageFromContent: drawing layer (charts and pictures)", () 
     expect(Object.keys(pkg.parts)).not.toContain(
       "xl/worksheets/_rels/sheet1.xml.rels",
     );
+  });
+});
+
+function tableDefinitions(): DefinitionsTable {
+  return {
+    "table:SalesTable": {
+      kind: "table",
+      name: "SalesTable",
+      ref: "A1:B3",
+      sheet: "Sheet1",
+      columns: ["Item", "Amount"],
+    },
+  };
+}
+
+function namedRangeDefinitions(): DefinitionsTable {
+  return {
+    "namedRange:TaxRate": {
+      kind: "namedRange",
+      name: "TaxRate",
+      refersTo: "Sheet1!$B$1",
+    },
+  };
+}
+
+describe("buildXlsxPackageFromContent: definitions table (general defined names and Table objects)", () => {
+  it("writes a real xl/tables/tableN.xml plus a worksheet tableParts entry for a table definitions entry, and reading it back through readWorkbookDefinitions recovers the same entry", () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]), {
+      definitions: tableDefinitions(),
+    });
+    expect(Object.keys(pkg.parts)).toContain("xl/tables/table1.xml");
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected the worksheet part to have a root element");
+    }
+    const tableParts = childrenWithTag(worksheet, "tableParts")[0];
+    if (tableParts === undefined) {
+      throw new Error("expected the worksheet to carry a tableParts element");
+    }
+    expect(childrenWithTag(tableParts, "tablePart")).toHaveLength(1);
+
+    expect(readWorkbookDefinitions(pkg)).toEqual(tableDefinitions());
+  });
+
+  it("writes a real general <definedName> for a namedRange definitions entry, and reading it back through readWorkbookDefinitions recovers the same entry", () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]), {
+      definitions: namedRangeDefinitions(),
+    });
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    const definedNames = childrenWithTag(workbook, "definedNames")[0];
+    if (definedNames === undefined) {
+      throw new Error("expected a <definedNames> container");
+    }
+    const definedName = childrenWithTag(definedNames, "definedName").find(
+      (element) => attr(element, "name") === "TaxRate",
+    );
+    expect(definedName).toBeDefined();
+
+    expect(readWorkbookDefinitions(pkg)).toEqual(namedRangeDefinitions());
+  });
+
+  it("writes no <definedNames> container and no xl/tables part at all when no definitions are supplied", () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
+    const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
+    if (workbook === undefined) {
+      throw new Error("expected xl/workbook.xml to have a root element");
+    }
+    expect(childrenWithTag(workbook, "definedNames")).toHaveLength(0);
+    expect(Object.keys(pkg.parts)).not.toContain("xl/tables/table1.xml");
   });
 });
