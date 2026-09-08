@@ -1,3 +1,11 @@
+## [1.4.4](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.4.3...ppt-codec%401.4.4) (2026-09-08)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.5.1
+- Updated archive-codec to 1.10.1
+
 ## [1.4.3](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.4.2...ppt-codec%401.4.3) (2026-09-08)
 
 
