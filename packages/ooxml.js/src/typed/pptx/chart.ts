@@ -1,5 +1,11 @@
-import type { Box, ContentTable, ContentTableCell } from "document-schema.js";
+import type {
+  Box,
+  ContentTable,
+  ContentTableCell,
+  SourceResidue,
+} from "document-schema.js";
 import type { XmlElement } from "../../model/node";
+import { buildXml } from "../../xml/build";
 import { attr, childrenWithTag, elementsWithTag, textContent } from "../util";
 
 // Reads a chart part (a c:chartSpace root) into the same ContentTable shape an a:tbl graphic frame produces, so a chart reaches consumers as the series/category data it carries rather than geometry with empty content. Only the chart part's own cached model is read (c:strCache/c:numCache, or the c:numLit/c:strLit literal forms) -- the linked workbook behind c:externalData is a separate embedded package and is not opened.
@@ -130,4 +136,22 @@ export function readChartTable(
       () => columnWidthPt,
     ),
   };
+}
+
+// Quarantines a chart part's own presentation specifics -- chart type, axes, legend, colours, and every other c:chartSpace facet readChartTable itself does not read -- as opaque residue on whichever node the caller anchors it to (a pptx graphic frame's own ContentTable, an xlsx chart's ContentEmbeddedObject), per document-schema.js's stated ExaDev/documents.js#719 contract ("the chart's own serialised specifics riding the object's residue channel") and mirroring odf.js's readOdfChartContent, which already quarantines its own chart:chart element whole for the ODF side of the identical decision. The WHOLE chart root is kept, not just its c:chart child: unlike ODF's chart:chart (one element inside a shared content.xml), chartRoot is an entire standalone part existing for nothing but this one chart, so a same-format restorer re-emitting this residue verbatim reconstructs the whole part.
+//
+// Cached by chartRoot's own object identity: a package's relationship resolution parses each part once, so every graphic frame referencing the same chart relationship target hands this function the identical XmlElement instance. Without the cache, N frames sharing one M-byte chart part would re-serialise it N times (O(N*M) CPU and retained strings from a single hostile part), rather than once (O(N+M)).
+const chartResidueCache = new WeakMap<XmlElement, SourceResidue>();
+
+export function readChartResidue(
+  chartRoot: XmlElement,
+  format: "pptx" | "xlsx",
+): SourceResidue {
+  const cached = chartResidueCache.get(chartRoot);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const residue: SourceResidue = { format, xml: buildXml([chartRoot]) };
+  chartResidueCache.set(chartRoot, residue);
+  return residue;
 }
