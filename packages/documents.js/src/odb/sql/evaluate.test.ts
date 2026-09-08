@@ -850,6 +850,68 @@ describe("evaluateSelect: a derived table in FROM", () => {
   });
 });
 
+// A dedicated table for the IN (SELECT ...) tests below -- several rows per DEPT, and target values chosen to overlap only some employees' own SALARY, so a correlated subquery's per-row re-evaluation and an uncorrelated one's single shared result set are both genuinely exercised rather than trivially matching everything or nothing.
+const REGIONAL_TARGETS: HsqldbTable = {
+  tableName: "REGIONAL_TARGETS",
+  columns: [
+    { name: "DEPT", type: "VARCHAR(20)" },
+    { name: "TARGET_SALARY", type: "DECIMAL(10,2)" },
+  ],
+  rows: [
+    [text("Sales"), num(1000)],
+    [text("Sales"), num(1500)],
+    [text("Eng"), num(2000)],
+  ],
+};
+
+const SUBQUERY_TABLES: readonly HsqldbTable[] = [
+  EMPLOYEES,
+  DEPARTMENTS,
+  REGIONAL_TARGETS,
+];
+
+function runSub(sql: string) {
+  return run(sql, SUBQUERY_TABLES);
+}
+
+describe("evaluateSelect: IN (SELECT ...)", () => {
+  it("matches against every value the uncorrelated subquery produces, re-evaluated identically for every outer row", () => {
+    expect(
+      runSub(
+        "SELECT NAME FROM EMPLOYEES WHERE SALARY IN (SELECT TARGET_SALARY FROM REGIONAL_TARGETS) ORDER BY NAME",
+      ).rows,
+    ).toEqual([[text("Alice")], [text("Carol")], [text("Dave")]]);
+  });
+
+  it("negates with NOT IN, still leaving a NULL left operand UNKNOWN rather than TRUE", () => {
+    // Bob's own SALARY is NULL: SALARY IN (...) is UNKNOWN for him under both IN and NOT IN, so he is excluded from BOTH this and the test above, not included in exactly one of them.
+    expect(
+      runSub(
+        "SELECT NAME FROM EMPLOYEES WHERE SALARY NOT IN (SELECT TARGET_SALARY FROM REGIONAL_TARGETS) ORDER BY NAME",
+      ).rows,
+    ).toEqual([[text("Erin")], [text("Frank")]]);
+  });
+
+  it("re-evaluates a correlated subquery per outer row, using that row's own values", () => {
+    // Erin and Frank have DEPT = NULL: REGIONAL_TARGETS.DEPT = NULL is UNKNOWN for every REGIONAL_TARGETS row, so their own correlated subquery produces zero rows and IN is FALSE (not UNKNOWN -- there is no NULL in an empty result set to make it UNKNOWN instead).
+    expect(
+      runSub(
+        "SELECT NAME FROM EMPLOYEES WHERE SALARY IN (SELECT TARGET_SALARY FROM REGIONAL_TARGETS WHERE REGIONAL_TARGETS.DEPT = EMPLOYEES.DEPT) ORDER BY NAME",
+      ).rows,
+    ).toEqual([[text("Alice")], [text("Carol")]]);
+  });
+
+  it("throws when the subquery produces more than one column", () => {
+    expect(() =>
+      runSub(
+        "SELECT NAME FROM EMPLOYEES WHERE SALARY IN (SELECT DEPT, TARGET_SALARY FROM REGIONAL_TARGETS)",
+      ),
+    ).toThrow(
+      "IN (SELECT ...) requires the subquery to produce exactly one column, but it produced 2",
+    );
+  });
+});
+
 describe("evaluateSelect: failures that must never become a wrong answer", () => {
   it.each([
     ["SELECT * FROM NOPE", 'table "NOPE" not found'],
