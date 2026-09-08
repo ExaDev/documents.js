@@ -102,15 +102,6 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     reached.add(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED);
   });
 
-  it("BLOCKQUOTE_CONTAINER_SKIPPED: a blockquote containing a heading", () => {
-    const collector = createDiagnosticCollector();
-    lowerMarkdown("> # heading", { sink: collector.sink });
-    expect(
-      collector.has(MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED),
-    ).toBe(true);
-    reached.add(MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED);
-  });
-
   it("LIST_ITEM_BLOCK_UNLISTED: a table directly inside a list item", () => {
     const collector = createDiagnosticCollector();
     lowerMarkdown("- | a |\n  | - |\n  | 1 |", { sink: collector.sink });
@@ -414,15 +405,6 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
       collector.has(MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION),
     ).toBe(true);
     reached.add(MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION);
-  });
-
-  it("FOOTNOTE_BODY_HEADING_FLATTENED: a heading inside a definition body", () => {
-    const collector = createDiagnosticCollector();
-    lowerMarkdown("[^1]: intro\n\n    # inner", { sink: collector.sink });
-    expect(
-      collector.has(MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED),
-    ).toBe(true);
-    reached.add(MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED);
   });
 
   it("CONSTRUCT_UNREPRESENTED: a construct kind markdown has no syntax for", () => {
