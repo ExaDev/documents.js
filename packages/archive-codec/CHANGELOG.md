@@ -1,3 +1,9 @@
+## [1.7.2](https://github.com/ExaDev/documents.js/compare/archive-codec%401.7.1...archive-codec%401.7.2) (2026-09-08)
+
+### Bug Fixes
+
+* **archive-codec:** use the full 128-bit RC4 key, not a 40-bit truncation ([b26a737](https://github.com/ExaDev/documents.js/commit/b26a737313369123481f87ae5fb8cd0a6df383d8))
+
 ## [1.7.1](https://github.com/ExaDev/documents.js/compare/archive-codec%401.7.0...archive-codec%401.7.1) (2026-09-08)
 
 ### Bug Fixes
