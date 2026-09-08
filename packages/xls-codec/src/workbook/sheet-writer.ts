@@ -16,6 +16,7 @@ import {
   WSBOOL_FLAG_FIT_TO_PAGE,
   type SetupFields,
 } from "../biff/print-setup";
+import { compileFormulaText } from "../biff/ptg-writer";
 import {
   BOF_TYPE_WORKSHEET,
   RECORD_BLANK,
@@ -30,6 +31,7 @@ import {
   RECORD_COLINFO,
   RECORD_DIMENSIONS,
   RECORD_EOF,
+  RECORD_FORMULA,
   RECORD_HORIZONTALPAGEBREAKS,
   RECORD_LABELSST,
   RECORD_LEFTMARGIN,
@@ -40,11 +42,13 @@ import {
   RECORD_RIGHTMARGIN,
   RECORD_ROW,
   RECORD_SETUP,
+  RECORD_STRING,
   RECORD_TOPMARGIN,
   RECORD_VERTICALPAGEBREAKS,
   RECORD_WSBOOL,
 } from "../biff/record-types";
 import { concatRecords, writeRecord } from "../biff/record-writer";
+import { writeXLUnicodeString } from "../biff/string-writer";
 import { BiffWriteError } from "../biff/write-errors";
 import {
   isoDateTimeToSerial,
@@ -53,6 +57,7 @@ import {
 } from "../serial";
 import { pointsToColumnWidth, pointsToInches, pointsToTwips } from "../units";
 import { cellCarriesFormatting, writesCellRecord } from "../written-cells";
+import { writeSheetComments } from "./comment-writer";
 import { GENERAL_CELL_XF_INDEX } from "./globals-writer";
 
 // The worksheet substream ([MS-XLS] 2.1.7.20.5), write side: the page setup, grid geometry, and cell table for one sheet, the counterpart of workbook/sheet.ts's own readSheetRecords. See xls-codec's README for exactly which worksheet-substream records this writer emits (the print-settings group, Dimensions, ColInfo, Row, the value-cell family, MergeCells) and which it deliberately omits (Window2, the calc-state family, Index/DBCell) -- real content, not per-window UI state or a lookup optimisation this reader (or any reader) does not require to find a cell.
@@ -526,7 +531,110 @@ function writeCellValueRecord(
   }
 }
 
-/** Builds one worksheet's own substream: BOF, the print-settings records, Dimensions, ColInfo per column, Row + value-cell records per populated or declared row (in ascending row then column order), MergeCells if the sheet declares any, EOF. */
+// --- Formula records ([MS-XLS] 2.4.127) ---
+
+/** [MS-XLS] 2.4.127's own FormulaValue tag vocabulary, restated here from workbook/sheet.ts's own read-side constants (not shared across the read/write boundary, matching this package's existing per-direction module convention): a cached result that is not a plain number tags byte 6-7 as 0xFFFF and names its own kind in byte 0. */
+const FORMULA_VALUE_TAGGED = 0xffff;
+const FORMULA_VALUE_STRING = 0x00;
+const FORMULA_VALUE_BOOLEAN = 0x01;
+const FORMULA_VALUE_ERROR = 0x02;
+
+/** The 8-byte FormulaValue field for a cached result that is not a plain number: byte 0 names which of string/boolean/error it is, byte 2 carries a boolean's own 0/1 or an error's own BIFF8 code, and the trailing u16 is the FORMULA_VALUE_TAGGED marker every reader checks for before trusting the field as a literal IEEE 754 double. */
+function taggedFormulaValueBytes(
+  tag: number,
+  valueByte: number,
+): Uint8Array<ArrayBuffer> {
+  return new RecordBuilder()
+    .u8(tag)
+    .u8(0)
+    .u8(valueByte)
+    .u8(0)
+    .u16(0)
+    .u16(FORMULA_VALUE_TAGGED)
+    .build();
+}
+
+/** The Formula record's own 8-byte FormulaValue field for `cell.value` -- a plain little-endian f64 of the cell's own numeric/temporal serial for every numeric-shaped kind, or one of the tagged shapes above for a string, boolean, or error result. `empty` has no BIFF8 encoding that this package's own reader reads back as `empty` (a tagged-blank result reads back as an empty STRING, not an empty cell -- see workbook/sheet.ts's own taggedFormulaValue), so a formula whose value resolves to `empty` is refused outright rather than written as something the round trip would silently change the kind of. */
+function formulaValueBytes(cell: ContentSheetCell): Uint8Array<ArrayBuffer> {
+  const value = cell.value;
+  switch (value.kind) {
+    case "number":
+    case "percentage":
+    case "currency":
+      return new RecordBuilder().f64(value.value).build();
+    case "date":
+      return new RecordBuilder()
+        .f64(isoDateToSerial(value.value, false))
+        .build();
+    case "time":
+      return new RecordBuilder().f64(isoTimeToSerial(value.value)).build();
+    case "dateTime":
+      return new RecordBuilder()
+        .f64(isoDateTimeToSerial(value.value, false))
+        .build();
+    case "boolean":
+      return taggedFormulaValueBytes(
+        FORMULA_VALUE_BOOLEAN,
+        value.value ? 1 : 0,
+      );
+    case "error": {
+      const code = errorCodeOf(value.value);
+      if (code === undefined) {
+        throw new BiffWriteError(
+          `cell at row ${cell.row}, column ${cell.column} carries a formula whose cached result is error text ${JSON.stringify(value.value)}, which is not one of the eight error values [MS-XLS] 2.5.10 defines`,
+        );
+      }
+      return taggedFormulaValueBytes(FORMULA_VALUE_ERROR, code);
+    }
+    case "string":
+      return taggedFormulaValueBytes(FORMULA_VALUE_STRING, 0);
+    case "empty":
+      throw new BiffWriteError(
+        `cell at row ${cell.row}, column ${cell.column} carries a formula whose value resolves to an empty cell, which this writer cannot express as a Formula record's cached result`,
+      );
+  }
+}
+
+/** Formula ([MS-XLS] 2.4.127): a Cell, the 8-byte FormulaValue above, a flags word and a 4-byte calculation cache this writer has no data for (both written zero -- see the module comment on RECORD_CALCCOUNT and friends for the same "nothing this schema models" reasoning), then a CellParsedFormula -- a two-byte cce and that many bytes of compiled Ptg tokens from biff/ptg-writer.ts's own compileFormulaText. Never carries an RgbExtra trailer: this writer's formula compiler refuses any construct (an array-constant literal, a shared/array formula) that would need one, so cce always accounts for the whole of rgce. A string-kind result is followed by a String record ([MS-XLS] 2.4.268) carrying the cached text, exactly as workbook/sheet.ts's own reader expects to find it. */
+function writeFormulaRecords(
+  cell: ContentSheetCell,
+  xfIndex: number,
+): Uint8Array<ArrayBuffer>[] {
+  const formula = cell.formula;
+  if (formula === undefined) {
+    throw new BiffWriteError(
+      `internal error: writeFormulaRecords was called for the cell at row ${cell.row}, column ${cell.column}, which carries no formula`,
+    );
+  }
+  const rgce = compileFormulaText(formula);
+  const data = cellHeader(cell, xfIndex)
+    .bytes(formulaValueBytes(cell))
+    .u16(0) // flags: fAlwaysCalc and friends, none of which this writer states
+    .u32(0) // calculation cache: this writer maintains no calc chain
+    .u16(rgce.length)
+    .bytes(rgce)
+    .build();
+  const records = [writeRecord(RECORD_FORMULA, data)];
+  if (cell.value.kind === "string") {
+    records.push(
+      writeRecord(RECORD_STRING, writeXLUnicodeString(cell.value.value)),
+    );
+  }
+  return records;
+}
+
+/** The one or two records one cell contributes to the worksheet substream's cell table -- a Formula record (plus its String result, for a string-kind cell) when the cell carries a formula, the plain value record from writeCellValueRecord otherwise. */
+function writeCellRecords(
+  cell: ContentSheetCell,
+  xfIndex: number,
+  ctx: SheetWriteContext,
+): Uint8Array<ArrayBuffer>[] {
+  return cell.formula !== undefined
+    ? writeFormulaRecords(cell, xfIndex)
+    : [writeCellValueRecord(cell, xfIndex, ctx)];
+}
+
+/** Builds one worksheet's own substream: BOF, the print-settings records, Dimensions, ColInfo per column, Row + value-cell records per populated or declared row (in ascending row then column order), MergeCells if the sheet declares any, comment records for cells carrying one, EOF. */
 export function buildWorksheetSubstream(
   sheet: ContentSheet,
   ctx: SheetWriteContext,
@@ -574,13 +682,20 @@ export function buildWorksheetSubstream(
     );
     for (const cell of cellsInRow) {
       const xfIndex = ctx.xfIndexForCell(cell);
-      pieces.push(writeCellValueRecord(cell, xfIndex, ctx));
+      pieces.push(...writeCellRecords(cell, xfIndex, ctx));
     }
   }
 
   const merges = mergedRangesOf(sheet.cells);
   if (merges.length > 0) {
     pieces.push(writeMergeCellsRecord(merges));
+  }
+
+  const commentedCells = sheet.cells.filter(
+    (cell) => cell.comment !== undefined,
+  );
+  if (commentedCells.length > 0) {
+    pieces.push(...writeSheetComments(commentedCells));
   }
 
   pieces.push(writeRecord(RECORD_EOF, new Uint8Array(0)));
