@@ -39,17 +39,25 @@ import {
 } from "../shared/units";
 import { buildXlsxPackageFromContent } from "../xlsx/build";
 import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from "./constructs";
+import type {
+  Comment,
+  Footnote,
+  HeaderFooterPart,
+  SectionHeaderFooterReferences,
+} from "./read";
+import type { NumberingDefinitions } from "./numbering";
+import { NUMBERING_PART_PATH, buildNumberingElement } from "./numbering";
 import { buildCellShading } from "./shading";
 
 // ContentSection[] -> Package: the write side of readDocxContent, and this package's second writer of genuinely new content after typed/xlsx/build.ts's buildXlsxPackageFromContent (whose part-scaffolding conventions this follows). It builds a complete, fresh docx package -- content types, package and document relationships, media parts, core/extended properties, and word/document.xml -- rather than editing a decoded one, so a ContentDocument that never came from a docx writes out just as well as one that did.
 //
 // This is the flat, content-level half of the docx write pair: buildDocxPackage (typed/document-tree.ts) is the primary name, flattening a tree-form DocumentTree (styles-table refs materialised away) and handing the result straight to this function.
 //
-// It is readDocxContent's honest inverse over ContentSection: page geometry, paragraphs with their fully-resolved direct formatting, runs (including external hyperlinks), lists, headings, tables (grids, spans, shading, borders, row heights), page breaks, images, embedded objects, and the block-scoped construct markers all survive a round trip through the pair -- a degraded gallery's w:docPartObj included, restored from the descriptor's residue (restoreGalleryElement below). What does NOT survive, stated rather than implied:
-// - No styles.xml, numbering.xml, comments, footnotes, or header/footer parts are written. readDocxContent reads all of those into DocxDocument fields outside `sections`, and each needs machinery of its own; a paragraph's styleId is still written as a w:pStyle reference, resolving to nothing without the style part, since every property that style would have contributed is already spelled as direct formatting by then.
+// It is readDocxContent's honest inverse over ContentSection: page geometry, paragraphs with their fully-resolved direct formatting, runs (including external hyperlinks), lists (against real word/numbering.xml abstractNum/num definitions, when DocxContent.numbering carries any), headings, tables (grids, spans, shading, borders, row heights), page breaks, images, embedded objects, comments, footnotes, endnotes, header/footer parts, and the block-scoped construct markers all survive a round trip through the pair -- a degraded gallery's w:docPartObj included, restored from the descriptor's residue (restoreGalleryElement below). What does NOT survive, stated rather than implied:
+// - A paragraph's own styleId now always resolves to a real word/styles.xml entry (buildStylesPart below) rather than a dangling w:pStyle reference, but that entry carries no formatting of its own: ContentParagraph.styleId is documented as "round-trip-only... meaningful only to a consumer that already knows that producer's naming convention" (document-schema.js), because resolveParagraphProperties/resolveRunProperties (styles.ts) fully materialise the read-time style cascade into direct formatting and nothing keeps the original cascade, basedOn chain, or display name around to write back. Visual fidelity is unaffected -- every property a real style would have contributed is already spelled as direct formatting on the paragraphs/runs that used it -- but a consumer expecting styles.xml to carry a style's actual properties (as opposed to merely a name every reference now safely resolves to) will not find them there.
 // - An embedded object's VML preview picture is not regenerated: the reader never read one into the model (no VML reader exists, and real producers ship WMF/EMF previews this ecosystem has no writer for), so the written w:object carries only its o:OLEObject payload reference and Word shows a blank until activated. An embedded presentation serialises through the injected port (options.serialiseEmbeddedPresentation -- EmbeddedPresentationSerialiser's own comment states why it is a port); without one injected, and for a nested document of any other kind this package cannot serialise (drawing/formula -- ODF/MathML spellings), the block is refused with a thrown error rather than silently dropped, inverting the reader's degrade-tier rule at the write boundary where the caller has explicitly asked for a document.
-// - Four construct shapes are written as their content with no wrapper, because WordprocessingML has no block-level element for them: a `link` (its own hyperlink is run-level, so a block-scoped link has no element to be), a `division` (no block container answers to one), a `provenance` whose change is `formatChange` (w:pPrChange is a child of w:pPr describing one paragraph's old properties, not a wrapper over a block flow), and an `anchor` whose type is a footnote, endnote, or comment (each of those is a run-level reference or range into parts this writer does not emit -- a comment extent or note reference written without its word/comments.xml, word/footnotes.xml, or word/endnotes.xml body would point at nothing). readDocxContent produces the last of those, so this bounds what its own output carries through here.
-// - Of a paragraph's run-level construct extents (ContentParagraph.constructs), bookmark anchors write back as their w:bookmarkStart/End halves between the runs the range names, fields as their w:fldChar begin/instruction/separate/end characters between the same runs, and internal links as one w:hyperlink/@w:anchor wrapping exactly the runs they cover (interleaveRunConstructExtents below). A run extent of any other kind -- a contentControl from a legacy w:ffData form field, a comment extent, a note reference -- writes its paragraph's content untouched and loses only the descriptor (rebuilding the ffData control payload, or emitting a reference into a part this writer never writes, is out of scope), and an extent whose range does not name real runs is refused with a thrown error rather than written at a made-up position.
+// - Three construct shapes are written as their content with no wrapper, because WordprocessingML has no block-level element for them: a `link` (its own hyperlink is run-level, so a block-scoped link has no element to be), a `division` (no block container answers to one), and a `provenance` whose change is `formatChange` (w:pPrChange is a child of w:pPr describing one paragraph's old properties, not a wrapper over a block flow). A block-scoped `anchor` whose type is `comment` DOES get a wrapper now (a w:commentRangeStart/End pair, mirroring the bookmark case immediately above it in buildConstructNodes); `footnote`/`endnote` anchors have no block-scoped spelling to begin with, since a note reference is inherently a single point, never a multi-paragraph range.
+// - Of a paragraph's run-level construct extents (ContentParagraph.constructs), bookmark anchors write back as their w:bookmarkStart/End halves, a comment extent as its w:commentRangeStart/End halves (using the SAME w:id as its word/comments.xml entry, the join key a reader pairs them back through -- see interleaveRunConstructExtents below), a comment/footnote/endnote reference mark by injecting its own w:commentReference/footnoteReference/endnoteReference into the run element already sitting at its own recorded index, and fields as their w:fldChar begin/instruction/separate/end characters -- all between the runs their ranges name, the exact inverse of the reader's run-position walk. Internal links write back as one w:hyperlink/@w:anchor wrapping exactly the runs they cover. A run extent of any other kind -- a contentControl from a legacy w:ffData form field -- writes its paragraph's content untouched and loses only the descriptor (rebuilding the ffData control payload is out of scope), and an extent whose range does not name real runs is refused with a thrown error rather than written at a made-up position.
 // - A field construct whose extent contains no paragraph at all, and a section whose last block is not a paragraph, each gain one empty paragraph on the way out (the field characters and the section break both need a paragraph to live in). Everything readDocxContent itself produces already has one.
 // - A page break immediately before a table or an image -- w:pageBreakBefore is a paragraph property, so neither can carry it directly -- becomes its own empty paragraph carrying the break, immediately before that content rather than displaced to the end of the flow.
 
@@ -90,6 +98,20 @@ const CT_EMBEDDED_XLSX =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const CT_EMBEDDED_PPTX =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+const CT_STYLES =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
+const CT_NUMBERING =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
+const CT_COMMENTS =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml";
+const CT_FOOTNOTES =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml";
+const CT_ENDNOTES =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml";
+const CT_HEADER =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
+const CT_FOOTER =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
 
 // The content type an embeddings part is declared with, by the extension the payload serialised into -- each names the format of the nested document the part holds, so an Override can declare exactly that part without claiming anything about other files sharing the extension elsewhere.
 const EMBEDDED_PART_CONTENT_TYPES: Readonly<
@@ -102,13 +124,30 @@ const REL_EXTENDED_PROPS = `${REL_NS}/extended-properties`;
 const REL_HYPERLINK = `${REL_NS}/hyperlink`;
 const REL_IMAGE = `${REL_NS}/image`;
 const REL_OLE_OBJECT = `${REL_NS}/oleObject`;
+const REL_STYLES = `${REL_NS}/styles`;
+const REL_NUMBERING = `${REL_NS}/numbering`;
+const REL_COMMENTS = `${REL_NS}/comments`;
+const REL_FOOTNOTES = `${REL_NS}/footnotes`;
+const REL_ENDNOTES = `${REL_NS}/endnotes`;
+const REL_HEADER = `${REL_NS}/header`;
+const REL_FOOTER = `${REL_NS}/footer`;
 
 const DOCUMENT_PART_PATH = "word/document.xml";
+const STYLES_PART_PATH = "word/styles.xml";
+const COMMENTS_PART_PATH = "word/comments.xml";
+const FOOTNOTES_PART_PATH = "word/footnotes.xml";
+const ENDNOTES_PART_PATH = "word/endnotes.xml";
 
-// The input readDocxContent's own output satisfies directly (a DocxDocument is assignable to it), narrowed to the two fields this writer can express: everything else DocxDocument carries -- comments, footnotes, header/footer parts, numbering definitions -- lives in parts this writer does not emit.
+// The input readDocxContent's own output satisfies directly (a DocxDocument is assignable to it): every field beyond metadata/sections is optional here so a caller building a DocxContent by hand -- most of this package's own tests, some of documents.js's -- need not populate parts it does not care about, while a genuine DocxDocument (every field always present, several as empty arrays/records rather than absent) still assigns straight across.
 export interface DocxContent {
   readonly metadata?: DocumentMetadata;
   readonly sections: readonly ContentSection[];
+  readonly comments?: readonly Comment[];
+  readonly footnotes?: readonly Footnote[];
+  readonly endnotes?: readonly Footnote[];
+  readonly headerFooterParts?: readonly HeaderFooterPart[];
+  readonly sectionHeaderFooters?: readonly SectionHeaderFooterReferences[];
+  readonly numbering?: NumberingDefinitions;
 }
 
 // The port that lets a docx carrying an embedded presentation round-trip (#742): presentation ContentDocument -> whole pptx file bytes. This package has no PresentationML writer of its own (pptx is read-only here), and the one pptx writer in the ecosystem -- documents.js's editor scaffold -- lives one layer up, where this package cannot reach it without inverting the family's dependency direction. The port resolves that without the inversion: a caller holding a pptx serialiser injects it, and the writer serialises the embedded presentation into a genuine word/embeddings/oleObjectN.pptx payload exactly as an embedded workbook serialises through buildXlsxPackageFromContent. The returned bytes are the OLE payload verbatim -- the reader detects the payload by ZIP magic and decodes its flavour from the nested package's own entry part, never by extension or content type, so any conforming pptx byte stream round-trips. An embedded presentation with no serialiser injected is still refused with a thrown error: a silent drop would re-create exactly the read-once-never-written loss the embedded emitter exists to close.
@@ -127,6 +166,15 @@ interface WriteRelationship {
   readonly external: boolean;
 }
 
+// The two id-minting counters, pulled out of WriteState proper and shared by reference across every part's own state (buildPartState below): a wp:docPr id only has to be unique within its own containing part per ECMA-376, and a bookmark/tracked-change w:id is conventionally minted document-wide by real producers, so sharing one pair of counters across the document body and every header/footer part it carries costs nothing and avoids the alternative of two different sharing rules for two different id kinds.
+interface WriteCounters {
+  nextDrawingId: number;
+  nextMarkerId: number;
+  // Media/embedding FILE names (word/media/imageN.ext, word/embeddings/oleObjectN.ext) are minted from a counter shared across every part for the same reason the ids above are: each header/footer part below gets its own, part-local mediaParts/embeddingParts registry (so a header's own relationship ids never collide with the body's), and those per-part registries are merged into one flat word/media/ and word/embeddings/ folder when the package is assembled -- a per-part `size + 1` naming scheme would mint colliding file names (two different parts each writing their own "image1.png") the instant more than one part carries media.
+  nextMediaFileId: number;
+  nextEmbeddingFileId: number;
+}
+
 interface WriteState {
   readonly relationships: WriteRelationship[];
   readonly hyperlinkIds: Map<string, string>;
@@ -139,12 +187,13 @@ interface WriteState {
   readonly embeddingParts: Map<string, EmbeddedPayload>;
   readonly serialiseEmbeddedPresentation:
     EmbeddedPresentationSerialiser | undefined;
-  nextDrawingId: number;
-  nextMarkerId: number;
+  readonly counters: WriteCounters;
 }
 
+// One WriteState per emitted part (the document body, and each header/footer part below): relationships, hyperlink/media/embedding dedup, and the media/embedding FILES themselves are all deliberately part-local rather than shared -- a relationship id (rId1, rId2, ...) is only meaningful within the one part whose own _rels file declares it, so a header reusing an image the body already embedded gets its own relationship (and, here, its own word/media copy: a second copy is a correct, honest trade-off for never risking a body-scoped id read back through a header's own relationships). `counters` is the one piece of state genuinely shared across every part, for the reason WriteCounters' own comment states.
 function newWriteState(
   options: BuildDocxContentOptions | undefined,
+  counters?: WriteCounters,
 ): WriteState {
   return {
     relationships: [],
@@ -154,8 +203,12 @@ function newWriteState(
     embeddingIds: new Map(),
     embeddingParts: new Map(),
     serialiseEmbeddedPresentation: options?.serialiseEmbeddedPresentation,
-    nextDrawingId: 1,
-    nextMarkerId: 1,
+    counters: counters ?? {
+      nextDrawingId: 1,
+      nextMarkerId: 1,
+      nextMediaFileId: 1,
+      nextEmbeddingFileId: 1,
+    },
   };
 }
 
@@ -207,7 +260,7 @@ function imageRelationshipId(
   if (existing !== undefined) {
     return existing;
   }
-  const name = `image${state.mediaParts.size + 1}.${mediaExtension(image.format)}`;
+  const name = `image${String(state.counters.nextMediaFileId++)}.${mediaExtension(image.format)}`;
   state.mediaParts.set(name, { format: image.format, base64: image.base64 });
   const id = addRelationship(state, REL_IMAGE, `media/${name}`, false);
   state.mediaIds.set(key, id);
@@ -422,7 +475,16 @@ function buildParagraph(
   return el("w:p", {}, [...(pPr === undefined ? [] : [pPr]), ...content]);
 }
 
-// The write side of a run-level construct extent (document-schema.js's ContentParagraph.constructs): a bookmark's two halves and a field's fldChar characters go back between the runs their ranges name -- the exact inverse of the reader's run-position walk, so each reads back at the positions it was written from. Of the vocabulary's kinds, bookmark anchors and fields are the two with a run-level spelling here (WordprocessingML's w:bookmarkStart/End pair, and the w:fldChar begin/separate/end characters whose between-runs placement is what the reader's own block-scope test looks for); an internal link wraps its runs in one w:hyperlink/@w:anchor element (wrapInternalLinks below); everything else -- a run-scoped content control, a comment extent, a note reference -- writes its paragraph's content untouched and loses only the descriptor, the same content-preserving policy the block-level foreign constructs follow. At a shared boundary the halves go out in three groups -- closes of extents that opened earlier, then opens, then point extents (startRun === endRun) as one adjacent group each -- a convention the reader is indifferent to (both halves land on the same run position either way) but one the written XML needs: WordprocessingML pairs the halves by w:id with start-before-end ordering, so a point's end emitted among the boundary's closes would precede its own start, and pairing point halves keeps two points at one position from interleaving by id, which is the shape Word itself writes for adjacent point bookmarks.
+// docx `w:id` values a reference-mark run's own child element carries, one per AnchorType this writer gives a run-level spelling to beyond bookmarks and comment ranges.
+const NOTE_REFERENCE_TAG: Readonly<
+  Record<"comment" | "footnote" | "endnote", string>
+> = {
+  comment: "w:commentReference",
+  footnote: "w:footnoteReference",
+  endnote: "w:endnoteReference",
+};
+
+// The write side of a run-level construct extent (document-schema.js's ContentParagraph.constructs): a bookmark's two halves, a comment extent's commentRangeStart/End pair, and a field's fldChar characters go back between the runs their ranges name -- the exact inverse of the reader's run-position walk, so each reads back at the positions it was written from. A comment/footnote/endnote reference mark is not a boundary marker at all: it mutates the run element already sitting at its own recorded index (handled above this function's own boundary-map loop, before the early-return guard, since a paragraph carrying only a reference mark and no bookmark/field/comment-extent must still get it). An internal link wraps its runs in one w:hyperlink/@w:anchor element (wrapInternalLinks below); everything else -- a run-scoped content control -- writes its paragraph's content untouched and loses only the descriptor, the same content-preserving policy the block-level foreign constructs follow. At a shared boundary the halves go out in three groups -- closes of extents that opened earlier, then opens, then point extents (startRun === endRun) as one adjacent group each -- a convention the reader is indifferent to (both halves land on the same run position either way) but one the written XML needs: WordprocessingML pairs the halves by w:id with start-before-end ordering, so a point's end emitted among the boundary's closes would precede its own start, and pairing point halves keeps two points at one position from interleaving by id, which is the shape Word itself writes for adjacent point bookmarks.
 function interleaveRunConstructExtents(
   runElements: readonly XmlElement[],
   paragraph: ContentParagraph,
@@ -471,7 +533,54 @@ function interleaveRunConstructExtents(
       });
     }
   }
-  if (bookmarks.length === 0 && fields.length === 0) {
+  // A comment's extent (startRun !== endRun) and its reference mark (always startRun === endRun, whether it names a comment, footnote, or endnote) are two independently-recorded RunConstructExtent entries the reader can never tell apart from a genuinely zero-width comment extent once both have flattened onto the same anchorType -- a real producer never writes one of those, so width is the honest discriminator here, the same "no clean encoding, so no attempt to guess" policy this file already applies to a crossing extent.
+  const commentRanges = paragraph.constructs.filter(
+    (
+      extent,
+    ): extent is {
+      descriptor: AnchorDescriptor;
+      startRun: number;
+      endRun: number;
+    } =>
+      extent.descriptor.kind === "anchor" &&
+      extent.descriptor.anchorType === "comment" &&
+      extent.startRun !== extent.endRun,
+  );
+  const noteReferences = paragraph.constructs.filter(
+    (
+      extent,
+    ): extent is {
+      descriptor: AnchorDescriptor & {
+        anchorType: "comment" | "footnote" | "endnote";
+      };
+      startRun: number;
+      endRun: number;
+    } =>
+      extent.descriptor.kind === "anchor" &&
+      (extent.descriptor.anchorType === "comment" ||
+        extent.descriptor.anchorType === "footnote" ||
+        extent.descriptor.anchorType === "endnote") &&
+      extent.startRun === extent.endRun,
+  );
+  // A reference mark renders as a child of the run it sits at, never as its own inserted run (readDocxContent's recordReferenceAnchor records the point at the reference-carrying run's own index, not a boundary before or after it -- see typed/docx/read.ts's own comment on that function), so this mutates the already-built run element in place rather than going through the position-indexed opening/closing/point maps every other construct kind below uses.
+  for (const reference of noteReferences) {
+    const target = runElements[reference.startRun];
+    if (target === undefined) {
+      throw new Error(
+        `buildDocxPackageFromContent: a ${reference.descriptor.anchorType} reference at run index ${String(reference.startRun)} of a paragraph does not name a real run`,
+      );
+    }
+    target.children.push(
+      el(NOTE_REFERENCE_TAG[reference.descriptor.anchorType], {
+        "w:id": encodeXmlText(reference.descriptor.name),
+      }),
+    );
+  }
+  if (
+    bookmarks.length === 0 &&
+    fields.length === 0 &&
+    commentRanges.length === 0
+  ) {
     return wrapInternalLinks(
       [...runElements],
       new RunPositions(runElements),
@@ -494,7 +603,7 @@ function interleaveRunConstructExtents(
     }
   };
   for (const bookmark of bookmarks) {
-    const id = String(state.nextMarkerId++);
+    const id = String(state.counters.nextMarkerId++);
     const open = el("w:bookmarkStart", {
       "w:id": id,
       "w:name": encodeXmlText(bookmark.descriptor.name),
@@ -531,6 +640,12 @@ function interleaveRunConstructExtents(
       }
       push(closingAt, field.endRun, fieldCharRun("end"));
     }
+  }
+  // Unlike a bookmark's own w:id (an internal marker id this writer mints fresh, since nothing outside the pair reads it), a comment extent's w:id must be the SAME value word/comments.xml's own w:comment carries for this comment -- the join key the reader pairs them back through -- so descriptor.name is written verbatim rather than through state.counters.
+  for (const range of commentRanges) {
+    const id = encodeXmlText(range.descriptor.name);
+    push(openingAt, range.startRun, el("w:commentRangeStart", { "w:id": id }));
+    push(closingAt, range.endRun, el("w:commentRangeEnd", { "w:id": id }));
   }
   const out: XmlElement[] = [];
   const positions = new RunPositions(runElements);
@@ -781,7 +896,7 @@ function buildTable(
 
 function buildDrawing(image: ContentImageBlock, state: WriteState): XmlElement {
   const relId = imageRelationshipId(state, image);
-  const drawingId = state.nextDrawingId++;
+  const drawingId = state.counters.nextDrawingId++;
   const cx = String(ptToEmu(image.widthPt));
   const cy = String(ptToEmu(image.heightPt));
   const docPrAttrs: Record<string, string> = {
@@ -884,7 +999,7 @@ function embeddedObjectRelationshipId(
   if (existing !== undefined) {
     return existing;
   }
-  const name = `oleObject${state.embeddingParts.size + 1}.${payload.extension}`;
+  const name = `oleObject${String(state.counters.nextEmbeddingFileId++)}.${payload.extension}`;
   state.embeddingParts.set(name, payload);
   const id = addRelationship(
     state,
@@ -941,7 +1056,7 @@ function trackChangeAttrs(
   descriptor: ProvenanceDescriptor,
 ): Record<string, string> {
   const attrs: Record<string, string> = {
-    "w:id": String(state.nextMarkerId++),
+    "w:id": String(state.counters.nextMarkerId++),
     "w:author": encodeXmlText(descriptor.author ?? UNKNOWN_PROVENANCE_AUTHOR),
   };
   if (descriptor.dateIso !== undefined) {
@@ -1213,7 +1328,7 @@ function buildConstructNodes(
     }
   }
   if (descriptor.kind === "anchor" && descriptor.anchorType === "bookmark") {
-    const id = String(state.nextMarkerId++);
+    const id = String(state.counters.nextMarkerId++);
     return [
       el("w:bookmarkStart", {
         "w:id": id,
@@ -1221,6 +1336,15 @@ function buildConstructNodes(
       }),
       ...buildFlowItems(children, state, deleted, provenance),
       el("w:bookmarkEnd", { "w:id": id }),
+    ];
+  }
+  // A comment extent spanning more than one paragraph reads back as a block-scoped construct (constructs.ts's own block/run split, mirroring the identical bookmark case immediately above) rather than a run-level one -- its own w:id is descriptor.name verbatim, the SAME join key the run-level comment-range branch in interleaveRunConstructExtents writes, since both are the identical comments.xml entry's own id. The comment's own reference mark (w:commentReference) is never block-scoped -- it is always a single run inside whichever one paragraph carries it -- so it is handled entirely by the run-level noteReferences branch regardless of whether the range wrapping it here is block- or run-scoped.
+  if (descriptor.kind === "anchor" && descriptor.anchorType === "comment") {
+    const id = encodeXmlText(descriptor.name);
+    return [
+      el("w:commentRangeStart", { "w:id": id }),
+      ...buildFlowItems(children, state, deleted, provenance),
+      el("w:commentRangeEnd", { "w:id": id }),
     ];
   }
   if (descriptor.kind === "field") {
@@ -1359,15 +1483,251 @@ function buildBlockFlow(
   return buildFlowItems(parseFlow(blocks), state, deleted, undefined);
 }
 
+// --- styles.xml -------------------------------------------------------------------------------------------------------
+
+const NORMAL_STYLE_ID = "Normal";
+
+// Every distinct ContentParagraph.styleId a document's own blocks reference, recursed into table cells (the only place a block flow nests inside this schema -- a construct's own children stay in the same flat array, per parseFlow's own doc comment above). Collected across every section AND every header/footer part, since a w:pStyle inside a header is exactly as dangling as one in the body if styles.xml never defines it.
+function collectParagraphStyleIds(
+  blocks: readonly ContentBlock[],
+  styleIds: Set<string>,
+): void {
+  for (const block of blocks) {
+    if (block.kind === "paragraph") {
+      if (block.styleId !== undefined) {
+        styleIds.add(block.styleId);
+      }
+    } else if (block.kind === "table") {
+      for (const row of block.rows) {
+        for (const cell of row.cells) {
+          collectParagraphStyleIds(cell.blocks, styleIds);
+        }
+      }
+    }
+  }
+}
+
+// document-schema.js's own styleId field comment states the constraint this writer works under: "round-trip-only: a producer's own style name, meaningful only to a consumer that already knows that producer's naming convention" -- ContentParagraph carries no basedOn chain, no resolved paragraph/run properties, not even a human-readable display name for a styleId, because resolveParagraphProperties/resolveRunProperties (styles.ts) fully materialise the style cascade into direct formatting at read time and nothing keeps the original cascade around. So this is not a lossy shortcut around a richer model this package chooses not to use -- there is no richer model to write from. What this DOES fix is the defect the issue names: previously a paragraph's own w:pStyle referenced a styleId that resolved to nothing at all, because styles.xml was never written; every styleId this writer has ever seen referenced now resolves to a real, valid w:style entry (empty of properties, since the properties it would have carried are already spelled as direct formatting on every paragraph/run that used it -- Word renders identically whether or not this stub carries them). w:docDefaults and a w:default="1" Normal/DefaultParagraphFont pair are always written, even for a document that references no styleId at all, matching what a real Word-produced styles.xml always carries and keeping every producer's file shape uniform rather than making the part's very presence a signal about paragraph content.
+function buildStylesPart(styleIds: ReadonlySet<string>): XmlPart {
+  const styles: XmlElement[] = [
+    el("w:docDefaults", {}, [el("w:rPrDefault"), el("w:pPrDefault")]),
+    el(
+      "w:style",
+      { "w:type": "paragraph", "w:default": "1", "w:styleId": NORMAL_STYLE_ID },
+      [el("w:name", { "w:val": NORMAL_STYLE_ID })],
+    ),
+    el(
+      "w:style",
+      {
+        "w:type": "character",
+        "w:default": "1",
+        "w:styleId": "DefaultParagraphFont",
+      },
+      [el("w:name", { "w:val": "Default Paragraph Font" })],
+    ),
+  ];
+  const orderedIds = [...styleIds]
+    .filter((id) => id !== NORMAL_STYLE_ID)
+    .sort();
+  for (const id of orderedIds) {
+    const encoded = encodeXmlText(id);
+    styles.push(
+      el("w:style", { "w:type": "paragraph", "w:styleId": encoded }, [
+        el("w:name", { "w:val": encoded }),
+        el("w:basedOn", { "w:val": NORMAL_STYLE_ID }),
+      ]),
+    );
+  }
+  return xmlPart(el("w:styles", { "xmlns:w": WML_NS }, styles));
+}
+
+// --- comments, footnotes, and endnotes ---------------------------------------------------------------------------------
+
+// readComment's inverse: one w:comment per Comment, its text as a single paragraph. A comment with no id (Comment.id is optional -- see read.ts's own field comment) gets one minted here starting past every explicitly-carried numeric id, so every comment this writer emits has a real w:id even though nothing in `content` can then reference it by name; every comment produced by readDocxContent itself always carries the id its own w:comment/@w:id supplied, so this path is only ever exercised by a hand-built DocxContent.
+function buildCommentsPart(comments: readonly Comment[]): XmlPart {
+  const explicitIds = comments
+    .map((comment) => Number(comment.id))
+    .filter((id) => Number.isInteger(id));
+  let nextMintedId =
+    explicitIds.length === 0 ? 1 : Math.max(...explicitIds) + 1;
+  const children = comments.map((comment) => {
+    const id = comment.id ?? String(nextMintedId++);
+    const attrs: Record<string, string> = { "w:id": encodeXmlText(id) };
+    if (comment.author !== undefined) {
+      attrs["w:author"] = encodeXmlText(comment.author);
+    }
+    return el("w:comment", attrs, [
+      el("w:p", {}, [el("w:r", {}, buildRunContent(comment.text, false))]),
+    ]);
+  });
+  return xmlPart(el("w:comments", { "xmlns:w": WML_NS }, children));
+}
+
+// The two boilerplate notes every real footnotes.xml/endnotes.xml carries -- ids -1 (separator, the short horizontal rule Word draws above the first note) and 0 (continuationSeparator, the longer rule drawn when a note continues onto another page) -- which readNotesPart (read.ts) deliberately filters out of DocxDocument.footnotes/endnotes, so a genuine reader of this writer's own output round-trips cleanly even though the source w:footnotes/w:endnotes element these two live in does not.
+function noteBoilerplate(tag: "w:footnote" | "w:endnote"): XmlElement[] {
+  return [
+    el(tag, { "w:type": "separator", "w:id": "-1" }, [
+      el("w:p", {}, [el("w:r", {}, [el("w:separator")])]),
+    ]),
+    el(tag, { "w:type": "continuationSeparator", "w:id": "0" }, [
+      el("w:p", {}, [el("w:r", {}, [el("w:continuationSeparator")])]),
+    ]),
+  ];
+}
+
+// readFootnote's inverse, shared between word/footnotes.xml and word/endnotes.xml exactly as readNotesPart shares the read side. A note's own w:id is written back verbatim when Footnote.id is present -- load-bearing, since a paragraph's own footnote/endnote reference-mark construct (interleaveRunConstructExtents above) carries that SAME id as its descriptor.name, the join key WordprocessingML pairs a w:footnoteReference/w:endnoteReference to its body through; minting a fresh id here instead would silently break every reference mark this writer also emits. A note with no id (the same optional-field, hand-built-content case buildCommentsPart's own comment explains) gets one minted past every explicitly-carried numeric id, on the same reasoning: nothing in a hand-built `content` could have referenced it by name anyway. w:type is written only when the source recorded one other than the ordinary "normal" implied by its absence.
+function buildNotesPart(
+  tag: "w:footnote" | "w:endnote",
+  notes: readonly Footnote[],
+): XmlElement {
+  const explicitIds = notes
+    .map((note) => Number(note.id))
+    .filter((id) => Number.isInteger(id));
+  let nextMintedId =
+    explicitIds.length === 0 ? 1 : Math.max(...explicitIds) + 1;
+  const noteElements = notes.map((note) => {
+    const id = note.id ?? String(nextMintedId++);
+    const attrs: Record<string, string> = { "w:id": encodeXmlText(id) };
+    if (note.type !== undefined && note.type !== "normal") {
+      attrs["w:type"] = encodeXmlText(note.type);
+    }
+    return el(tag, attrs, [
+      el("w:p", {}, [el("w:r", {}, buildRunContent(note.text, false))]),
+    ]);
+  });
+  return el(
+    tag === "w:footnote" ? "w:footnotes" : "w:endnotes",
+    {
+      "xmlns:w": WML_NS,
+    },
+    [...noteBoilerplate(tag), ...noteElements],
+  );
+}
+
+// --- headers and footers ------------------------------------------------------------------------------------------
+
+// One header/footer part's own body -- the same block-flow machinery the document body itself is built through, so an image or hyperlink inside a header resolves through THIS part's own relationships (registered on the fresh WriteState passed in), never the document's -- readHeaderFooterParts' own doc comment states this is exactly how it is read back.
+function buildHeaderFooterPart(
+  part: HeaderFooterPart,
+  partState: WriteState,
+): XmlPart {
+  const nodes = buildBlockFlow(part.blocks, partState, false);
+  const root = el(
+    part.kind === "header" ? "w:hdr" : "w:ftr",
+    {
+      "xmlns:w": WML_NS,
+      "xmlns:r": REL_NS,
+      "xmlns:a": DRAWINGML_NS,
+      "xmlns:wp": DRAWING_WP_NS,
+      "xmlns:pic": DRAWING_PIC_NS,
+      "xmlns:mc": MARKUP_COMPAT_NS,
+      "xmlns:o": VML_OFFICE_NS,
+      "xmlns:w14": W14_NS,
+      "xmlns:w15": W15_NS,
+      "mc:Ignorable": "w14 w15",
+    },
+    nodes,
+  );
+  return xmlPart(root);
+}
+
+interface BuiltHeaderFooterParts {
+  // Every emitted part keyed by its OWN package path (word/header1.xml, word/_rels/header1.xml.rels, and any word/media|embeddings file its own WriteState minted) -- merged straight into the package's own `parts` record by buildDocxPackageFromContent.
+  readonly parts: Package["parts"];
+  // The document-level relationship id (registered on the BODY's own WriteState/document.xml.rels, since that is what a w:headerReference/w:footerReference's own r:id resolves against) for each header/footer part, keyed by that part's ORIGINAL path -- the exact string DocxContent.sectionHeaderFooters names a slot's target with, so resolving a section's own reference is a straight map lookup.
+  readonly relIdByPath: ReadonlyMap<string, string>;
+  // Every header/footer part's own media/embeddings registry, merged: buildContentTypesPart needs the format/extension metadata behind these files (a word/media/*.png's own Default entry, an embeddings part's own Override) that the flat binary `parts` record above does not carry back out on its own.
+  readonly mediaParts: ReadonlyMap<
+    string,
+    { format: "png" | "jpeg" | "gif"; base64: string }
+  >;
+  readonly embeddingParts: ReadonlyMap<string, EmbeddedPayload>;
+}
+
+// Builds every header/footer part DocxContent carries, registering one document-level relationship per part (shared by every section that references it, exactly as Word itself shares one relationship across several w:headerReference/w:footerReference elements) on `documentState` -- the same WriteState buildDocumentPart's own sections will be built against, so its word/_rels/document.xml.rels ends up carrying these relationships too.
+function buildHeaderFooterParts(
+  headerFooterParts: readonly HeaderFooterPart[],
+  documentState: WriteState,
+  options: BuildDocxContentOptions | undefined,
+): BuiltHeaderFooterParts {
+  const parts: Package["parts"] = {};
+  const relIdByPath = new Map<string, string>();
+  const mediaParts = new Map<
+    string,
+    { format: "png" | "jpeg" | "gif"; base64: string }
+  >();
+  const embeddingParts = new Map<string, EmbeddedPayload>();
+  headerFooterParts.forEach((part, index) => {
+    const partState = newWriteState(options, documentState.counters);
+    const partName = `word/${part.kind}${String(index + 1)}.xml`;
+    parts[partName] = buildHeaderFooterPart(part, partState);
+    if (partState.relationships.length > 0) {
+      parts[`word/_rels/${part.kind}${String(index + 1)}.xml.rels`] =
+        buildDocumentRelsPart(partState);
+    }
+    for (const [name, media] of partState.mediaParts) {
+      parts[`word/media/${name}`] = { kind: "binary", base64: media.base64 };
+      mediaParts.set(name, media);
+    }
+    for (const [name, payload] of partState.embeddingParts) {
+      parts[`word/embeddings/${name}`] = {
+        kind: "binary",
+        base64: payload.base64,
+      };
+      embeddingParts.set(name, payload);
+    }
+    const relType = part.kind === "header" ? REL_HEADER : REL_FOOTER;
+    const rId = addRelationship(
+      documentState,
+      relType,
+      `${part.kind}${String(index + 1)}.xml`,
+      false,
+    );
+    relIdByPath.set(part.path, rId);
+  });
+  return { parts, relIdByPath, mediaParts, embeddingParts };
+}
+
+// One section's own w:headerReference/w:footerReference elements, resolved from DocxDocument.sectionHeaderFooters' own path-keyed slots through the relationship ids buildHeaderFooterParts registered -- a slot naming a path that was not itself in DocxContent.headerFooterParts (a caller error; never true of readDocxContent's own output, which always emits the referenced part alongside the reference) resolves to no element rather than a reference with no relationship behind it.
+function buildSectionHeaderFooterReferences(
+  references: SectionHeaderFooterReferences | undefined,
+  relIdByPath: ReadonlyMap<string, string>,
+): XmlElement[] {
+  if (references === undefined) {
+    return [];
+  }
+  const elements: XmlElement[] = [];
+  const slots = ["default", "first", "even"] as const;
+  for (const tag of ["w:headerReference", "w:footerReference"] as const) {
+    const slotRefs =
+      tag === "w:headerReference" ? references.header : references.footer;
+    if (slotRefs === undefined) {
+      continue;
+    }
+    for (const slot of slots) {
+      const path = slotRefs[slot];
+      const rId = path === undefined ? undefined : relIdByPath.get(path);
+      if (rId !== undefined) {
+        elements.push(el(tag, { "w:type": slot, "r:id": rId }));
+      }
+    }
+  }
+  return elements;
+}
+
 // --- sections and the document part ---------------------------------------------------------------------------------
 
-function buildSectionProperties(section: ContentSection): XmlElement {
-  // CT_SectPr's own child sequence puts w:type before w:pgSz, so an emitted break kind lands ahead of the geometry it qualifies. An absent breakType writes no w:type at all: that absence IS WordprocessingML's own nextPage default, and spelling it would turn "no break kind declared" into "break kind declared as the default" on the way back in.
+function buildSectionProperties(
+  section: ContentSection,
+  headerFooterReferences: readonly XmlElement[] = [],
+): XmlElement {
+  // CT_SectPr's own child sequence puts EG_HdrFtrReferences (headerReference*/footerReference*) before w:type before w:pgSz, so the reference elements lead, then an emitted break kind lands ahead of the geometry it qualifies. An absent breakType writes no w:type at all: that absence IS WordprocessingML's own nextPage default, and spelling it would turn "no break kind declared" into "break kind declared as the default" on the way back in.
   const type =
     section.breakType === undefined
       ? []
       : [el("w:type", { "w:val": section.breakType })];
   return el("w:sectPr", {}, [
+    ...headerFooterReferences,
     ...type,
     el("w:pgSz", {
       "w:w": String(ptToTwips(section.pageSize.widthPt)),
@@ -1383,34 +1743,43 @@ function buildSectionProperties(section: ContentSection): XmlElement {
 }
 
 // A mid-document section break rides on the last paragraph of the section it closes -- the shape readSections reads it back from, which keeps that paragraph as content rather than adding one. That paragraph is not necessarily nodes' own last element: a bookmark closing the section trails a childless w:bookmarkEnd marker, and a content control closing it wraps its content in w:sdt, so findParagraph (searching from the end, the same way buildFieldNodes locates a field's own paragraphs) descends through whatever construct wrapper sits last to find the real one. Only the final section's w:sectPr is a direct child of w:body; a section with no paragraph anywhere in its flow gets an empty one to carry the break.
-function attachSectionBreak(nodes: XmlNode[], section: ContentSection): void {
+function attachSectionBreak(
+  nodes: XmlNode[],
+  section: ContentSection,
+  headerFooterReferences: readonly XmlElement[],
+): void {
+  const properties = buildSectionProperties(section, headerFooterReferences);
   const target = findParagraph(nodes, true);
   if (target === undefined) {
-    nodes.push(
-      el("w:p", {}, [el("w:pPr", {}, [buildSectionProperties(section)])]),
-    );
+    nodes.push(el("w:p", {}, [el("w:pPr", {}, [properties])]));
     return;
   }
   const first = target.children[0];
   if (first?.type === "element" && first.tag === "w:pPr") {
-    first.children.push(buildSectionProperties(section));
+    first.children.push(properties);
     return;
   }
-  target.children.unshift(el("w:pPr", {}, [buildSectionProperties(section)]));
+  target.children.unshift(el("w:pPr", {}, [properties]));
 }
 
 function buildDocumentPart(
   sections: readonly ContentSection[],
   state: WriteState,
+  sectionHeaderFooters: readonly (SectionHeaderFooterReferences | undefined)[],
+  headerFooterRelIdByPath: ReadonlyMap<string, string>,
 ): XmlPart {
   const bodyChildren: XmlNode[] = [];
   sections.forEach((section, index) => {
     const nodes = buildBlockFlow(section.blocks, state, false);
+    const references = buildSectionHeaderFooterReferences(
+      sectionHeaderFooters[index],
+      headerFooterRelIdByPath,
+    );
     if (index === sections.length - 1) {
-      bodyChildren.push(...nodes, buildSectionProperties(section));
+      bodyChildren.push(...nodes, buildSectionProperties(section, references));
       return;
     }
-    attachSectionBreak(nodes, section);
+    attachSectionBreak(nodes, section, references);
     bodyChildren.push(...nodes);
   });
   const root = el(
@@ -1434,10 +1803,14 @@ function buildDocumentPart(
 
 // --- package scaffolding ----------------------------------------------------------------------------------------------
 
-// The embeddings parts are declared per part (Override) rather than per extension (Default): each carries the content type of the format the nested document serialised into, and an Override names exactly the part written without making any claim about other files sharing its extension elsewhere in someone else's package.
-function buildContentTypesPart(state: WriteState): XmlPart {
+// The embeddings parts are declared per part (Override) rather than per extension (Default): each carries the content type of the format the nested document serialised into, and an Override names exactly the part written without making any claim about other files sharing its extension elsewhere in someone else's package. `mediaParts`/`embeddingParts` are the MERGED registries across every part this package writes (the document body and every header/footer, each with its own WriteState -- see WriteCounters' own comment), not any one part's own local map, so a media format or embedded payload that only ever appears inside a header still gets declared here. `extraOverrides` carries every other part's own Override -- styles.xml, numbering.xml, comments.xml, footnotes.xml, endnotes.xml, and each header/footer part -- built by the caller, which is the only place that already knows exactly which of those parts exist.
+function buildContentTypesPart(
+  mediaParts: ReadonlyMap<string, { format: "png" | "jpeg" | "gif" }>,
+  embeddingParts: ReadonlyMap<string, EmbeddedPayload>,
+  extraOverrides: readonly XmlElement[],
+): XmlPart {
   const mediaFormats = new Set(
-    [...state.mediaParts.values()].map((media) => media.format),
+    [...mediaParts.values()].map((media) => media.format),
   );
   const defaults: XmlElement[] = [
     el("Default", {
@@ -1461,7 +1834,7 @@ function buildContentTypesPart(state: WriteState): XmlPart {
       el("Default", { Extension: "gif", ContentType: "image/gif" }),
     );
   }
-  const embeddingOverrides = [...state.embeddingParts].map(([name, payload]) =>
+  const embeddingOverrides = [...embeddingParts].map(([name, payload]) =>
     el("Override", {
       PartName: `/word/embeddings/${name}`,
       ContentType: EMBEDDED_PART_CONTENT_TYPES[payload.extension],
@@ -1482,6 +1855,7 @@ function buildContentTypesPart(state: WriteState): XmlPart {
       ContentType: CT_EXTENDED_PROPS,
     }),
     ...embeddingOverrides,
+    ...extraOverrides,
   ]);
   return xmlPart(root);
 }
@@ -1594,17 +1968,110 @@ export function buildDocxPackageFromContent(
           },
         ]
       : content.sections;
-  // The document part is built first so every hyperlink and image relationship it needs already exists by the time the relationship and content-type parts are written.
-  const documentPart = buildDocumentPart(sections, state);
+
+  // Headers/footers are built before the document part: each section's own w:sectPr needs the header/footer parts' relationship ids already registered on `state` (headerFooterRelIdByPath) by the time buildDocumentPart resolves its own w:headerReference/w:footerReference elements.
+  const headerFooterParts = content.headerFooterParts ?? [];
+  const {
+    parts: headerFooterPartFiles,
+    relIdByPath: headerFooterRelIdByPath,
+    mediaParts: headerFooterMediaParts,
+    embeddingParts: headerFooterEmbeddingParts,
+  } = buildHeaderFooterParts(headerFooterParts, state, options);
+
+  // The document part is built next so every hyperlink, image, and header/footer relationship it needs already exists by the time the relationship and content-type parts are written.
+  const documentPart = buildDocumentPart(
+    sections,
+    state,
+    content.sectionHeaderFooters ?? [],
+    headerFooterRelIdByPath,
+  );
+
+  const styleIds = new Set<string>();
+  for (const section of sections) {
+    collectParagraphStyleIds(section.blocks, styleIds);
+  }
+  for (const part of headerFooterParts) {
+    collectParagraphStyleIds(part.blocks, styleIds);
+  }
+  const stylesPart = buildStylesPart(styleIds);
+  addRelationship(state, REL_STYLES, "styles.xml", false);
+
+  const numberingElement = buildNumberingElement(content.numbering ?? {});
+  const comments = content.comments ?? [];
+  const footnotes = content.footnotes ?? [];
+  const endnotes = content.endnotes ?? [];
+
+  const extraOverrides: XmlElement[] = [
+    el("Override", {
+      PartName: `/${STYLES_PART_PATH}`,
+      ContentType: CT_STYLES,
+    }),
+  ];
   const metadata = content.metadata ?? {};
   const parts: Package["parts"] = {
-    "[Content_Types].xml": buildContentTypesPart(state),
     "_rels/.rels": buildPackageRelsPart(),
     [DOCUMENT_PART_PATH]: documentPart,
-    "word/_rels/document.xml.rels": buildDocumentRelsPart(state),
+    [STYLES_PART_PATH]: stylesPart,
     "docProps/core.xml": buildCorePropertiesPart(metadata),
     "docProps/app.xml": buildExtendedPropertiesPart(metadata),
+    ...headerFooterPartFiles,
   };
+
+  if (numberingElement !== undefined) {
+    addRelationship(state, REL_NUMBERING, "numbering.xml", false);
+    parts[NUMBERING_PART_PATH] = xmlPart(numberingElement);
+    extraOverrides.push(
+      el("Override", {
+        PartName: `/${NUMBERING_PART_PATH}`,
+        ContentType: CT_NUMBERING,
+      }),
+    );
+  }
+  if (comments.length > 0) {
+    addRelationship(state, REL_COMMENTS, "comments.xml", false);
+    parts[COMMENTS_PART_PATH] = buildCommentsPart(comments);
+    extraOverrides.push(
+      el("Override", {
+        PartName: `/${COMMENTS_PART_PATH}`,
+        ContentType: CT_COMMENTS,
+      }),
+    );
+  }
+  if (footnotes.length > 0) {
+    addRelationship(state, REL_FOOTNOTES, "footnotes.xml", false);
+    parts[FOOTNOTES_PART_PATH] = xmlPart(
+      buildNotesPart("w:footnote", footnotes),
+    );
+    extraOverrides.push(
+      el("Override", {
+        PartName: `/${FOOTNOTES_PART_PATH}`,
+        ContentType: CT_FOOTNOTES,
+      }),
+    );
+  }
+  if (endnotes.length > 0) {
+    addRelationship(state, REL_ENDNOTES, "endnotes.xml", false);
+    parts[ENDNOTES_PART_PATH] = xmlPart(buildNotesPart("w:endnote", endnotes));
+    extraOverrides.push(
+      el("Override", {
+        PartName: `/${ENDNOTES_PART_PATH}`,
+        ContentType: CT_ENDNOTES,
+      }),
+    );
+  }
+  headerFooterParts.forEach((part, index) => {
+    const partName = `word/${part.kind}${String(index + 1)}.xml`;
+    extraOverrides.push(
+      el("Override", {
+        PartName: `/${partName}`,
+        ContentType: part.kind === "header" ? CT_HEADER : CT_FOOTER,
+      }),
+    );
+  });
+
+  // `state.relationships` is complete only now -- addRelationship above (numbering/comments/footnotes/endnotes) and buildHeaderFooterParts/buildDocumentPart earlier (headers/footers/hyperlinks/images/embeddings) have all had their chance to register a relationship -- so document.xml.rels and [Content_Types].xml are built last, exactly as they were before this writer emitted more than two parts.
+  parts["word/_rels/document.xml.rels"] = buildDocumentRelsPart(state);
+
   for (const [name, media] of state.mediaParts) {
     parts[`word/media/${name}`] = { kind: "binary", base64: media.base64 };
   }
@@ -1614,5 +2081,20 @@ export function buildDocxPackageFromContent(
       base64: payload.base64,
     };
   }
+
+  const mergedMediaParts = new Map([
+    ...state.mediaParts,
+    ...headerFooterMediaParts,
+  ]);
+  const mergedEmbeddingParts = new Map([
+    ...state.embeddingParts,
+    ...headerFooterEmbeddingParts,
+  ]);
+  parts["[Content_Types].xml"] = buildContentTypesPart(
+    mergedMediaParts,
+    mergedEmbeddingParts,
+    extraOverrides,
+  );
+
   return { parts };
 }
