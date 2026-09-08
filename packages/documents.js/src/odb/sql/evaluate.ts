@@ -12,6 +12,7 @@ import type {
   SqlAggregateFunction,
   SqlColumnRef,
   SqlFromClause,
+  SqlJoinClause,
   SqlLiteral,
   SqlNameRef,
   SqlOperand,
@@ -30,7 +31,7 @@ import type {
 // 2. Value comparison and the five aggregates' own NULL handling are src/odb/values.ts's, shared verbatim with src/odb/formula/'s Report Builder engine rather than restated here: values compare within three classes and never across them, and SUM/AVG/MIN/MAX skip NULLs and return NULL for a group with no non-NULL value at all. See that module's own top-of-file comment for the full statement of both rules.
 // 3. GROUP BY partitions by the grouped columns' own values, with all NULLs forming one group (SQL's own rule), and groups come back in first-appearance order -- SQL does not define an order without ORDER BY, and first-appearance is the one deterministic choice available. COUNT(*) counts rows; COUNT(column) counts non-NULL values; SUM/AVG/MIN/MAX ignore NULLs and return NULL for a group with no non-NULL value at all. An aggregate with no GROUP BY treats the whole (post-WHERE) row set as one group, and still returns exactly one row when that set is empty.
 // 4. ORDER BY sorts NULLs last under ASC (and therefore first under DESC, since a descending term is the ascending comparison negated). The sort is stable, so rows tied on every ORDER BY term keep their original relative order, and a multi-column ORDER BY resolves ties left to right.
-// 5. Each JOIN clause is a plain nested-loop INNER JOIN, folded into the row set left to right in the order written (joinTables below): the first JOIN's own ON tests every (base row, joined row) pair, the second JOIN's own ON then tests every (surviving pair, its joined row) triple, and so on. A row that matches nothing on the OTHER side of a join is simply absent from the result -- there is no NULL-padded outer-join row, since OUTER/LEFT/RIGHT/FULL joins are deliberately unsupported (src/odb/sql/parser.ts's own OUT_OF_SCOPE_KEYWORDS).
+// 5. Each JOIN clause is a plain nested-loop join, folded into the row set left to right in the order written (joinTables/applyJoinClause below): the first JOIN's own condition tests every (base row, joined row) pair, the second JOIN's own condition then tests every (surviving pair, its joined row) triple, and so on. For INNER and CROSS, a row with no match on the other side is simply absent from the result; for LEFT/RIGHT/FULL, an unmatched row on the side that join kind preserves is kept, padded with NULL for every column the other side would have contributed. A USING or NATURAL join's shared columns are merged into one output column each, COALESCE(left, right) -- see applyJoinClause and mergeSharedColumns' own comments for the full column-ordering and qualifier rules, and src/odb/sql/parser.ts's own top-of-file comment for the PostgreSQL semantics this follows.
 
 export interface SqlResultSet {
   // The result-set column labels, in order: a real table column's own name for a plain column item, or the aggregate's own rendering (COUNT(*), SUM(AMOUNT)) for an aggregate item.
@@ -177,9 +178,47 @@ function resolveTable(
   return table;
 }
 
+// A joined-row column: the name(s) it may legally be qualified by (normally the one table or alias that declared it, but two for a column USING/NATURAL merged from both sides of a join -- see mergeSharedColumns), and its own real column name.
 interface ResolvedColumn {
-  readonly tableName: string;
+  readonly qualifiers: readonly string[];
   readonly columnName: string;
+}
+
+// A shared column pairing a USING or NATURAL join matched on: `leftIndex` is an index into the LEFT side's own column list (which, after prior joins, may itself already hold merged columns), `rightIndex` is an index into the newly-joined table's own column list alone (0-based, never merged), and `columnName` is the real name the merged output column keeps -- see mergeSharedColumns' own comment for why it is always the left side's name.
+interface SharedColumnPair {
+  readonly leftIndex: number;
+  readonly rightIndex: number;
+  readonly columnName: string;
+}
+
+function columnAt(
+  columns: readonly ResolvedColumn[],
+  index: number,
+  sql: string,
+): ResolvedColumn {
+  const column = columns[index];
+  if (column === undefined) {
+    throw new HsqldbSqlEvaluationError(
+      `column index ${String(index)} is outside the joined column list`,
+      sql,
+    );
+  }
+  return column;
+}
+
+function valueAtIndex(
+  row: readonly ContentCellValue[],
+  index: number,
+  sql: string,
+): ContentCellValue {
+  const value = row[index];
+  if (value === undefined) {
+    throw new HsqldbSqlEvaluationError(
+      `malformed joined row: it carries ${String(row.length)} values but index ${String(index)} was expected`,
+      sql,
+    );
+  }
+  return value;
 }
 
 // Resolves a column name against a narrowed set of candidate indices into `columns`, the same identifier rule resolveName applies (exact, case-sensitive match first; an unquoted reference also matching case-insensitively as a fallback) but keyed by INDEX rather than by name, and checking ambiguity by count of matching indices rather than distinct names. resolveName's own return-a-name contract is safe only when candidates cannot repeat (a single table's own column list, or the table-name list) -- a joined column list can legitimately hold the identical name at more than one index (two different tables both declaring an ID column, or a self-join naming the same table twice), so two tables sharing a column name must still be flagged ambiguous even though "the name" itself resolves to only one string.
@@ -235,24 +274,22 @@ function resolveColumnIndex(
 
 // Every column reference in a statement resolves to the same index on every row, so resolution happens once per reference and is memoised by the AST node's own identity -- a large table would otherwise re-scan the joined column list once per row per reference.
 //
-// A resolver is built over every table in FROM plus its JOINs at once, never one table alone: a joined row is the plain concatenation of its source rows in that same table order (see joinTables below), so the flat index space this class resolves into is exactly the position space a joined row's own values live in, whether the statement joins zero tables or several.
+// A resolver is built over the fully-joined column list at once, never one table alone: joinTables/applyJoinClause below produce that list (and its matching row shape) by folding every JOIN left to right, so the flat index space this class resolves into is exactly the position space a joined row's own values live in, whether the statement joins zero tables or several, and regardless of whether any join along the way merged a USING/NATURAL column pair into one.
 class ColumnResolver {
   private readonly cache = new Map<SqlColumnRef, number>();
-  // One entry per column across every table, in table-then-column order -- also the exact order joinTables lays a joined row's own concatenated values out in.
+  // The joined column list this resolver was built over, in exactly the order joinTables/applyJoinClause laid the corresponding row values out in.
   private readonly columns: readonly ResolvedColumn[];
-  private readonly tableNames: readonly string[];
+  // Every qualifying name any column in this list may be referenced by, deduplicated -- a plain table's own name, an alias, or (for a USING/NATURAL merged column) both sides' names at once.
+  private readonly qualifierNames: readonly string[];
 
   constructor(
-    tables: readonly HsqldbTable[],
+    columns: readonly ResolvedColumn[],
     private readonly sql: string,
   ) {
-    this.tableNames = tables.map((table) => table.tableName);
-    this.columns = tables.flatMap((table) =>
-      table.columns.map((column) => ({
-        tableName: table.tableName,
-        columnName: column.name,
-      })),
-    );
+    this.columns = columns;
+    this.qualifierNames = [
+      ...new Set(columns.flatMap((column) => column.qualifiers)),
+    ];
   }
 
   get columnCount(): number {
@@ -260,17 +297,10 @@ class ColumnResolver {
   }
 
   nameAt(index: number): string {
-    const column = this.columns[index];
-    if (column === undefined) {
-      throw new HsqldbSqlEvaluationError(
-        `column index ${String(index)} is outside the joined column list`,
-        this.sql,
-      );
-    }
-    return column.columnName;
+    return columnAt(this.columns, index, this.sql).columnName;
   }
 
-  // Resolves a column reference to its index in the joined column list, checking any table qualifier against every table in FROM/JOIN (a qualifier naming anything else can only be a reference to a table this statement never selected from) and, when unqualified, searching across every table at once.
+  // Resolves a column reference to its index in the joined column list, checking any table qualifier against every qualifying name in scope (a qualifier naming anything else can only be a reference to a table this statement never selected from) and, when unqualified, searching across every column at once.
   indexOf(ref: SqlColumnRef): number {
     const cached = this.cache.get(ref);
     if (cached !== undefined) {
@@ -279,14 +309,14 @@ class ColumnResolver {
     let candidateIndices: readonly number[];
     if (ref.qualifier !== undefined) {
       const qualifierName = resolveName(
-        this.tableNames,
+        this.qualifierNames,
         ref.qualifier,
         "table qualifier",
         this.sql,
       );
       candidateIndices = this.columns
         .map((column, index) =>
-          column.tableName === qualifierName ? index : -1,
+          column.qualifiers.includes(qualifierName) ? index : -1,
         )
         .filter((index) => index >= 0);
     } else {
@@ -303,14 +333,7 @@ class ColumnResolver {
   }
 
   valueAt(index: number, row: readonly ContentCellValue[]): ContentCellValue {
-    const value = row[index];
-    if (value === undefined) {
-      throw new HsqldbSqlEvaluationError(
-        `malformed joined row: it carries ${String(row.length)} values but the joined column list declares ${String(this.columns.length)}`,
-        this.sql,
-      );
-    }
-    return value;
+    return valueAtIndex(row, index, this.sql);
   }
 
   valueOf(
@@ -716,48 +739,274 @@ function evaluateGrouped(
   };
 }
 
-// Nested-loop INNER JOIN, folding each JOIN clause into the row set left to right in the order written: a joined row is the plain concatenation of its source rows (base table first, then each join in turn), tested against that clause's own ON predicate with the identical three-valued-logic truth evaluation WHERE already uses -- a row pair survives only when the predicate is genuinely TRUE, so an UNKNOWN comparison (either side NULL) excludes the pair exactly as it excludes a row from WHERE. `resolvedTables` grows alongside the row set (base table, then each joined table in order) so an ON clause can reference any table already joined by the time it runs, not only the two tables its own JOIN clause names -- src/odb/sql/parser.ts's own grammar note on self-joins is exactly this mechanism working as intended when a table repeats.
+interface JoinResult {
+  readonly columns: readonly ResolvedColumn[];
+  readonly rows: readonly (readonly ContentCellValue[])[];
+}
+
+function tableColumns(
+  qualifier: string,
+  table: HsqldbTable,
+): readonly ResolvedColumn[] {
+  return table.columns.map((column) => ({
+    qualifiers: [qualifier],
+    columnName: column.name,
+  }));
+}
+
+// A row of NULLs the width of one side of a join, used to pad the side an unmatched LEFT/RIGHT/FULL row has no partner on. Every entry is the identical CELL_NULL constant -- safe to share by reference, since a ContentCellValue is never mutated in place anywhere in this module.
+function nullRow(count: number): readonly ContentCellValue[] {
+  return new Array<ContentCellValue>(count).fill(CELL_NULL);
+}
+
+// Every column NATURAL JOIN's left and right sides share, matched by real column name alone (never case-folded or quoted, unlike a user-typed identifier -- these are structural properties of the tables themselves, not something the query spelled out). Iterates the left side in column order, which is what fixes the shared columns' own left-to-right order in the merged result (see mergeSharedColumns). A name appearing more than once on either side -- two already-joined tables both declaring it, or (defensively) a table declaring it twice -- cannot be matched to a single unambiguous partner, so it is refused rather than guessed at, the same "never guess" policy this module's own top-of-file comment states for every other ambiguous reference.
+function computeNaturalSharedPairs(
+  leftColumns: readonly ResolvedColumn[],
+  rightColumns: readonly ResolvedColumn[],
+  sql: string,
+): readonly SharedColumnPair[] {
+  const rightIndexByName = new Map<string, number>();
+  const ambiguousRightNames = new Set<string>();
+  rightColumns.forEach((column, index) => {
+    if (rightIndexByName.has(column.columnName)) {
+      ambiguousRightNames.add(column.columnName);
+    } else {
+      rightIndexByName.set(column.columnName, index);
+    }
+  });
+
+  const pairs: SharedColumnPair[] = [];
+  const seenNames = new Set<string>();
+  leftColumns.forEach((leftColumn, leftIndex) => {
+    const rightIndex = rightIndexByName.get(leftColumn.columnName);
+    if (rightIndex === undefined) {
+      return;
+    }
+    if (
+      ambiguousRightNames.has(leftColumn.columnName) ||
+      seenNames.has(leftColumn.columnName)
+    ) {
+      throw new HsqldbSqlEvaluationError(
+        `NATURAL JOIN cannot determine a unique match for column "${leftColumn.columnName}" -- more than one column shares that name on one side of the join`,
+        sql,
+      );
+    }
+    seenNames.add(leftColumn.columnName);
+    pairs.push({ leftIndex, rightIndex, columnName: leftColumn.columnName });
+  });
+  return pairs;
+}
+
+// Whether a row pair matches a USING/NATURAL join's implicit condition: every shared column pair equal, under the identical three-valued NULL logic WHERE and ON already use (a NULL on either side makes that pair's comparison UNKNOWN, which -- like an ON clause -- excludes the row pair rather than matching it).
+function evaluateSharedColumnMatch(
+  combined: readonly ContentCellValue[],
+  pairs: readonly SharedColumnPair[],
+  leftColumnCount: number,
+  sql: string,
+): boolean {
+  return pairs.every((pair) => {
+    const left = valueAtIndex(combined, pair.leftIndex, sql);
+    const right = valueAtIndex(
+      combined,
+      leftColumnCount + pair.rightIndex,
+      sql,
+    );
+    return (
+      left.kind !== "empty" &&
+      right.kind !== "empty" &&
+      compareValues(left, right, sql) === 0
+    );
+  });
+}
+
+// Collapses a USING/NATURAL join's shared column pairs into one output column each, exactly as PostgreSQL documents JOIN USING doing (see src/odb/sql/parser.ts's own top-of-file comment for the citation): the merged columns come first, in the order `sharedPairs` gives them, followed by the left side's own remaining columns, then the right side's remaining columns. Each merged column's value is COALESCE(left, right) -- the left side's value when it is not NULL, otherwise the right's, which only differs from either side alone when an outer join has padded one side with NULL -- and it may be qualified by either side's own qualifying name, since the merge is exactly what makes the two references the same column. The merged column keeps the LEFT side's own real column name; the two sides are only reachable this way because USING/NATURAL requires them to share a name in the first place, so this is a naming choice, not a semantic one.
+function mergeSharedColumns(
+  rawColumns: readonly ResolvedColumn[],
+  rows: readonly (readonly ContentCellValue[])[],
+  sharedPairs: readonly SharedColumnPair[],
+  leftColumnCount: number,
+  sql: string,
+): JoinResult {
+  const sharedLeftIndices = new Set(sharedPairs.map((pair) => pair.leftIndex));
+  const sharedRightIndices = new Set(
+    sharedPairs.map((pair) => leftColumnCount + pair.rightIndex),
+  );
+  const remainingIndices = rawColumns
+    .map((_column, index) => index)
+    .filter(
+      (index) =>
+        !sharedLeftIndices.has(index) && !sharedRightIndices.has(index),
+    );
+
+  const mergedColumns: ResolvedColumn[] = sharedPairs.map((pair) => {
+    const leftColumn = columnAt(rawColumns, pair.leftIndex, sql);
+    const rightColumn = columnAt(
+      rawColumns,
+      leftColumnCount + pair.rightIndex,
+      sql,
+    );
+    return {
+      qualifiers: [
+        ...new Set([...leftColumn.qualifiers, ...rightColumn.qualifiers]),
+      ],
+      columnName: leftColumn.columnName,
+    };
+  });
+  const columns = [
+    ...mergedColumns,
+    ...remainingIndices.map((index) => columnAt(rawColumns, index, sql)),
+  ];
+
+  const mergedRows = rows.map((row) => {
+    const mergedValues = sharedPairs.map((pair) => {
+      const leftValue = valueAtIndex(row, pair.leftIndex, sql);
+      const rightValue = valueAtIndex(
+        row,
+        leftColumnCount + pair.rightIndex,
+        sql,
+      );
+      return leftValue.kind !== "empty" ? leftValue : rightValue;
+    });
+    const remainingValues = remainingIndices.map((index) =>
+      valueAtIndex(row, index, sql),
+    );
+    return [...mergedValues, ...remainingValues];
+  });
+
+  return { columns, rows: mergedRows };
+}
+
+// Folds one JOIN clause into the running joined row set, left to right (joinTables calls this once per clause): a plain nested loop over (left row, right row) pairs, tested against the clause's own condition -- an ON predicate (reusing evaluatePredicate's own three-valued logic directly), a USING/NATURAL equi-join over shared columns (evaluateSharedColumnMatch), or, for CROSS, no condition at all. LEFT/FULL then re-adds every left row that matched nothing, padded with NULL for the right side's columns; RIGHT/FULL mirrors that for unmatched right rows. A USING/NATURAL join's raw (unmerged) result is finally collapsed by mergeSharedColumns; an ON or CROSS join's is not, since only USING/NATURAL ever declare two columns "the same".
+function applyJoinClause(
+  left: JoinResult,
+  join: SqlJoinClause,
+  tables: readonly HsqldbTable[],
+  sql: string,
+): JoinResult {
+  const rightTable = resolveTable(tables, join.table, sql);
+  const rightQualifier =
+    join.alias !== undefined ? join.alias.name : rightTable.tableName;
+  const rightColumns = tableColumns(rightQualifier, rightTable);
+  const leftColumnCount = left.columns.length;
+  const rawColumns = [...left.columns, ...rightColumns];
+
+  let onPredicate: SqlPredicate | undefined;
+  let sharedPairs: readonly SharedColumnPair[] = [];
+  if (join.condition.kind === "on") {
+    onPredicate = join.condition.predicate;
+  } else if (join.condition.kind === "using") {
+    const allLeftIndices = left.columns.map((_column, index) => index);
+    const allRightIndices = rightColumns.map((_column, index) => index);
+    sharedPairs = join.condition.columns.map((ref) => {
+      const leftIndex = resolveColumnIndex(
+        left.columns,
+        allLeftIndices,
+        ref,
+        sql,
+      );
+      const rightIndex = resolveColumnIndex(
+        rightColumns,
+        allRightIndices,
+        ref,
+        sql,
+      );
+      return {
+        leftIndex,
+        rightIndex,
+        columnName: columnAt(left.columns, leftIndex, sql).columnName,
+      };
+    });
+  } else if (join.condition.kind === "natural") {
+    sharedPairs = computeNaturalSharedPairs(left.columns, rightColumns, sql);
+    if (sharedPairs.length === 0) {
+      throw new HsqldbSqlEvaluationError(
+        "NATURAL JOIN found no columns shared between the joined tables",
+        sql,
+      );
+    }
+  }
+  // join.condition.kind === "none" (CROSS): onPredicate stays undefined and sharedPairs stays empty, so isMatch below is unconditionally true for every pair.
+
+  const rawResolver = new ColumnResolver(rawColumns, sql);
+  const matchedLeft = new Set<number>();
+  const matchedRight = new Set<number>();
+  const paired: (readonly ContentCellValue[])[] = [];
+
+  left.rows.forEach((leftRow, leftIndex) => {
+    rightTable.rows.forEach((rightRow, rightIndex) => {
+      const combined = [...leftRow, ...rightRow];
+      const isMatch =
+        onPredicate !== undefined
+          ? evaluatePredicate(onPredicate, combined, rawResolver, sql) ===
+            "true"
+          : sharedPairs.length > 0
+            ? evaluateSharedColumnMatch(
+                combined,
+                sharedPairs,
+                leftColumnCount,
+                sql,
+              )
+            : true;
+      if (isMatch) {
+        paired.push(combined);
+        matchedLeft.add(leftIndex);
+        matchedRight.add(rightIndex);
+      }
+    });
+  });
+
+  if (join.joinKind === "left" || join.joinKind === "full") {
+    left.rows.forEach((leftRow, leftIndex) => {
+      if (!matchedLeft.has(leftIndex)) {
+        paired.push([...leftRow, ...nullRow(rightColumns.length)]);
+      }
+    });
+  }
+  if (join.joinKind === "right" || join.joinKind === "full") {
+    rightTable.rows.forEach((rightRow, rightIndex) => {
+      if (!matchedRight.has(rightIndex)) {
+        paired.push([...nullRow(leftColumnCount), ...rightRow]);
+      }
+    });
+  }
+
+  if (join.condition.kind === "using" || join.condition.kind === "natural") {
+    return mergeSharedColumns(
+      rawColumns,
+      paired,
+      sharedPairs,
+      leftColumnCount,
+      sql,
+    );
+  }
+  return { columns: rawColumns, rows: paired };
+}
+
+// Folds every JOIN clause into the base table's own row set, left to right in the order written, via applyJoinClause -- each clause sees every table joined so far, not only the two tables its own clause names, which is exactly what src/odb/sql/parser.ts's own grammar note on self-joins relies on when a table repeats under two different aliases.
 function joinTables(
   from: SqlFromClause,
   tables: readonly HsqldbTable[],
   sql: string,
-): {
-  readonly resolvedTables: readonly HsqldbTable[];
-  readonly rows: readonly (readonly ContentCellValue[])[];
-} {
+): JoinResult {
   const baseTable = resolveTable(tables, from.table, sql);
-  const resolvedTables: HsqldbTable[] = [baseTable];
-  let rows: readonly (readonly ContentCellValue[])[] = baseTable.rows;
-
+  const baseQualifier =
+    from.alias !== undefined ? from.alias.name : baseTable.tableName;
+  let result: JoinResult = {
+    columns: tableColumns(baseQualifier, baseTable),
+    rows: baseTable.rows,
+  };
   for (const join of from.joins) {
-    const joinTable = resolveTable(tables, join.table, sql);
-    const resolver = new ColumnResolver([...resolvedTables, joinTable], sql);
-    const nextRows: (readonly ContentCellValue[])[] = [];
-    for (const leftRow of rows) {
-      for (const rightRow of joinTable.rows) {
-        const combined = [...leftRow, ...rightRow];
-        if (evaluatePredicate(join.on, combined, resolver, sql) === "true") {
-          nextRows.push(combined);
-        }
-      }
-    }
-    rows = nextRows;
-    resolvedTables.push(joinTable);
+    result = applyJoinClause(result, join, tables, sql);
   }
-
-  return { resolvedTables, rows };
+  return result;
 }
 
 export function evaluateSelect(
   statement: SqlSelectStatement,
   tables: readonly HsqldbTable[],
 ): SqlResultSet {
-  const { resolvedTables, rows } = joinTables(
-    statement.from,
-    tables,
-    statement.sql,
-  );
-  const resolver = new ColumnResolver(resolvedTables, statement.sql);
+  const { columns, rows } = joinTables(statement.from, tables, statement.sql);
+  const resolver = new ColumnResolver(columns, statement.sql);
   const plan = planSelectList(statement, resolver);
 
   const where = statement.where;
