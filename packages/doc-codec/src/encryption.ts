@@ -1,15 +1,23 @@
 import {
+  createXorObfuscationArray,
+  createXorObfuscationKey,
+  createXorObfuscationPasswordVerifier,
   decryptOfficeRc4,
+  decryptXorObfuscationMethod2,
   deriveOfficeRc4BaseHash,
   md5,
   OFFICE_RC4_DOC_BLOCK_SIZE,
   OFFICE_RC4_VERIFIER_LENGTH,
+  XOR_OBFUSCATION_ARRAY_LENGTH,
+  XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD2,
 } from "archive-codec";
 import { readUint16LE, readUint32LE } from "./bytes";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { FIB_LKEY_OFFSET } from "./fib/offsets";
 
-// [MS-DOC] 2.2.6 "Encryption and Obfuscation (Password to Open)" (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/37639397-6451-427b-9cf2-01d56e927f25) names three schemes, selected by FibBase's own fEncrypted/fObfuscated flags (fib/fib.ts's peekFibBaseFlags): fObfuscated=1 is XOR obfuscation (2.2.6.1, out of scope, matching ExaDev/documents.js#1108's own scoping for xls-codec's identical XOR case), fObfuscated=0 is RC4 encryption (2.2.6.2, this module) or RC4 CryptoAPI (2.2.6.3, a different EncryptionHeader shape this module does not implement, rejected below by its own EncryptionVersionInfo).
+// [MS-DOC] 2.2.6 "Encryption and Obfuscation (Password to Open)" (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/37639397-6451-427b-9cf2-01d56e927f25) names three schemes, selected by FibBase's own fEncrypted/fObfuscated flags (fib/fib.ts's peekFibBaseFlags): fObfuscated=1 is XOR obfuscation Method 2 (2.2.6.1, this module -- see archive-codec's own crypto/xor-obfuscation.ts for the real, cross-validated Method 1/Method 2 algorithm and why it diverges from the published spec text for array construction), fObfuscated=0 is RC4 encryption (2.2.6.2, this module) or RC4 CryptoAPI (2.2.6.3, a different EncryptionHeader shape this module does not implement, rejected below by its own EncryptionVersionInfo).
+//
+// XOR obfuscation needs no EncryptionHeader in the Table stream the way RC4 does: [MS-DOC]'s own XOR Obfuscation section states the password verifier "MUST be stored in FibBase.lKey" directly -- the same 32-bit field RC4 instead uses as the Table stream's own unencrypted-prefix byte length -- so FIB_LKEY_OFFSET is read here under two entirely different interpretations depending on fObfuscated, not one shared meaning. lKey's own high 16 bits are createXorObfuscationKey's output ([MS-OFFCRYPTO] 2.3.7.4's own CreatePasswordVerifier_Method2, which packs CreateXorKey_Method1 as the high word and CreatePasswordVerifier_Method1 as the low word), and its low 16 bits are createXorObfuscationPasswordVerifier's output -- confirmed against LibreOffice's own WW8 import (`ww8par.cxx`'s `eAlgo = XOR` branch checks `aCtx.VerifyKey(m_xWwFib->m_nKey, m_xWwFib->m_nHash)`, where `m_nKey`/`m_nHash` are that same FIB field's own high/low halves). Unlike RC4's Table stream (whose own EncryptionHeader occupies an unencrypted FibBase.lKey-byte prefix), XOR obfuscation's Table stream carries no unencrypted prefix at all and is obfuscated in full from its own byte 0 -- confirmed against the same LibreOffice source, whose `DecryptXOR` call for the Table stream passes no prior seek/skip the way the WordDocument stream's own 68-byte copy-then-decrypt does.
 //
 // [MS-DOC] 2.2.6.2's own EncryptionHeader *is* [MS-OFFCRYPTO] 2.3.6.1's RC4 encryption header, byte-identical to what xls-codec's own workbook/encryption.ts already reads for FilePass -- EncryptionVersionInfo(4) + Salt(16) + EncryptedVerifier(16) + EncryptedVerifierHash(16), confirmed via Apache POI's own EncryptionMode.binaryRC4 (versionMajor=1/versionMinor=1) resolving both FilePassRecord's and doc-codec's own EncryptionHeader reads through the identical path -- so this module needs no new crypto, only the doc-specific container layout, which differs from BIFF8's in three real ways:
 //
@@ -118,7 +126,7 @@ function verifyPassword(
 }
 
 /** Decrypts everything after `prefixLength` bytes of `stream`, leaving the prefix itself untouched -- WORD_DOCUMENT_UNENCRYPTED_PREFIX for WordDocument, FibBase.lKey for Table, each stream's own block-number counter starting fresh at its own byte 0 (this file's own top comment, point 3). */
-function decryptStream(
+function decryptStreamRc4(
   baseHash: Uint8Array<ArrayBuffer>,
   stream: Uint8Array<ArrayBuffer>,
   prefixLength: number,
@@ -142,8 +150,94 @@ export interface DecryptedDocStreams {
   readonly table: Uint8Array<ArrayBuffer>;
 }
 
+/** Decrypts an RC4-encrypted (fEncrypted=1, fObfuscated=0) document's WordDocument and Table streams given the password, verifying it first against the Table stream's own EncryptionHeader. */
+function decryptDocStreamsRc4(
+  wordDocument: Uint8Array<ArrayBuffer>,
+  table: Uint8Array<ArrayBuffer>,
+  password: string,
+): DecryptedDocStreams {
+  const header = readRc4Header(table);
+  const baseHash = deriveOfficeRc4BaseHash(password, header.salt);
+  verifyPassword(baseHash, header);
+
+  const lKey = readUint32LE(wordDocument, FIB_LKEY_OFFSET);
+  return {
+    wordDocument: decryptStreamRc4(
+      baseHash,
+      wordDocument,
+      WORD_DOCUMENT_UNENCRYPTED_PREFIX,
+    ),
+    table: decryptStreamRc4(baseHash, table, lKey),
+  };
+}
+
+/** Decrypts everything after `prefixLength` bytes of `stream` against Method 2's own transform, leaving the prefix itself untouched -- `initialIndex` is `prefixLength % 16`, the XorArrayIndex the decrypted span's own first byte starts at (confirmed against LibreOffice's own `ww8par.cxx` `DecryptXOR`, whose `InitCipher(); Skip(nSt)` is exactly this: reset to 0, then advance by the skipped prefix's own length mod 16). */
+function decryptStreamXor(
+  array: Uint8Array<ArrayBuffer>,
+  stream: Uint8Array<ArrayBuffer>,
+  prefixLength: number,
+): Uint8Array<ArrayBuffer> {
+  const decrypted = new Uint8Array(stream.length);
+  decrypted.set(stream.subarray(0, prefixLength), 0);
+  decrypted.set(
+    decryptXorObfuscationMethod2(
+      array,
+      stream.subarray(prefixLength),
+      prefixLength % XOR_OBFUSCATION_ARRAY_LENGTH,
+    ),
+    prefixLength,
+  );
+  return decrypted;
+}
+
 /**
- * Decrypts an RC4-encrypted (fEncrypted=1, fObfuscated=0) document's WordDocument and Table streams given the password, verifying it first against the Table stream's own EncryptionHeader.
+ * Decrypts an XOR-obfuscated (fEncrypted=1, fObfuscated=1) document's WordDocument and Table streams given the password, verifying it first against FibBase's own lKey field -- not a Table-stream EncryptionHeader the way RC4 needs, see this file's own top comment for why. The Table stream carries no unencrypted prefix under this scheme, unlike RC4's own FibBase.lKey-byte EncryptionHeader; Data (also obfuscated per [MS-DOC], from its own byte 0) is out of scope, matching decryptDocStreamsRc4 and this package's own read.ts, which does not read the Data stream at all.
+ */
+function decryptDocStreamsXor(
+  wordDocument: Uint8Array<ArrayBuffer>,
+  table: Uint8Array<ArrayBuffer>,
+  password: string,
+): DecryptedDocStreams {
+  const lKey = readUint32LE(wordDocument, FIB_LKEY_OFFSET);
+  const headerKey = (lKey >>> 16) & 0xffff;
+  const headerVerifier = lKey & 0xffff;
+
+  // A password too long or carrying a character outside single-byte ASCII/Latin-1 cannot be the real one -- see xls-codec's own workbook/encryption.ts for the identical reasoning.
+  let computedKey: number;
+  let computedVerifier: number;
+  try {
+    computedKey = createXorObfuscationKey(password);
+    computedVerifier = createXorObfuscationPasswordVerifier(password);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      throw new DocUnsupportedError(
+        "incorrect password for XOR-obfuscated document",
+      );
+    }
+    throw error;
+  }
+  if (computedKey !== headerKey || computedVerifier !== headerVerifier) {
+    throw new DocUnsupportedError(
+      "incorrect password for XOR-obfuscated document",
+    );
+  }
+
+  const array = createXorObfuscationArray(
+    password,
+    XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD2,
+  );
+  return {
+    wordDocument: decryptStreamXor(
+      array,
+      wordDocument,
+      WORD_DOCUMENT_UNENCRYPTED_PREFIX,
+    ),
+    table: decryptStreamXor(array, table, 0),
+  };
+}
+
+/**
+ * Decrypts an encrypted document's WordDocument and Table streams given the password, dispatching on `fObfuscated` between [MS-DOC] 2.2.6.2's RC4 encryption header and 2.2.6.1's XOR obfuscation (Method 2).
  *
  * Throws `DocUnsupportedError` for a missing password, an incorrect one, or an encryption scheme this module does not implement (RC4 CryptoAPI) -- there is no partial or best-effort result to return in any of those cases.
  */
@@ -151,23 +245,14 @@ export function decryptDocStreams(
   wordDocument: Uint8Array<ArrayBuffer>,
   table: Uint8Array<ArrayBuffer>,
   password: string | undefined,
+  fObfuscated: boolean,
 ): DecryptedDocStreams {
   if (password === undefined) {
     throw new DocUnsupportedError(
-      "this document is RC4-encrypted ([MS-DOC] 2.2.6.2); call readDocContent with a password to decrypt it",
+      `this document is ${fObfuscated ? "XOR-obfuscated ([MS-DOC] 2.2.6.1)" : "RC4-encrypted ([MS-DOC] 2.2.6.2)"}; call readDocContent with a password to decrypt it`,
     );
   }
-  const header = readRc4Header(table);
-  const baseHash = deriveOfficeRc4BaseHash(password, header.salt);
-  verifyPassword(baseHash, header);
-
-  const lKey = readUint32LE(wordDocument, FIB_LKEY_OFFSET);
-  return {
-    wordDocument: decryptStream(
-      baseHash,
-      wordDocument,
-      WORD_DOCUMENT_UNENCRYPTED_PREFIX,
-    ),
-    table: decryptStream(baseHash, table, lKey),
-  };
+  return fObfuscated
+    ? decryptDocStreamsXor(wordDocument, table, password)
+    : decryptDocStreamsRc4(wordDocument, table, password);
 }
