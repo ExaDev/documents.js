@@ -690,15 +690,9 @@ function computeUsedRange(sheet: ContentSheet): UsedRange {
     bumpRow(image.anchorRow);
     bumpColumn(image.anchorColumn);
   }
-  // A validation or conditional-format rule's ranges extend the grid the writer must materialise: every referencing cell within them carries table:content-validation-name (the only carrier ODF offers -- there is no range-level spelling), so a rule reaching past the last content-bearing cell has to stamp cells that would otherwise never exist.
+  // A data-validation rule's ranges extend the grid the writer must materialise: every referencing cell within them carries table:content-validation-name (the only carrier ODF offers -- there is no range-level spelling), so a rule reaching past the last content-bearing cell has to stamp cells that would otherwise never exist. This is bounded under the untrusted-round-trip threat model by the source itself: readOdsContent collects a rule's ranges only from cells that physically exist in the source XML, so an attacker pays for the cells up front rather than amplifying a compact attribute into them. A conditional-format rule's ranges deliberately do NOT extend the grid: calcext:conditional-format is emitted range-level through its own calcext:target-range-address attribute, no cell needs to exist, and letting a hostile compact range (A1:XFD1048576) drive the materialised grid would amplify 22 bytes of attribute into a million row nodes and billions of position checks.
   for (const validation of sheet.dataValidations ?? []) {
     for (const range of validation.ranges) {
-      bumpRow(range.endRow);
-      bumpColumn(range.endColumn);
-    }
-  }
-  for (const format of sheet.conditionalFormats ?? []) {
-    for (const range of format.ranges) {
       bumpRow(range.endRow);
       bumpColumn(range.endColumn);
     }

@@ -13,6 +13,11 @@ import type {
 import { PAGE_SIZE_A4, assembleTree } from "document-schema.js";
 import type { Package } from "../../model/package";
 import { decodePackage, encodePackage } from "../../codec";
+import {
+  childrenWithTag,
+  findChildElement,
+  rootElement,
+} from "../../xml/query";
 import { readManifest } from "../../manifest";
 import { parsePackage } from "../../package-io/read";
 import { readOds, readOdsContent } from "./read";
@@ -688,6 +693,46 @@ describe("writeOdsContent round trip", () => {
     });
     expect(() => writeOdsContent(documentOf([sheet]))).toThrow(
       /containsBlanks.*no spelling/,
+    );
+  });
+
+  it("round-trips a conditional-format rule whose range reaches far past the content grid without materialising it", () => {
+    // The hostile shape the security review of this PR named: a compact calcext:target-range-address controls nothing but its own attribute, so a rule spanning a huge rectangle must not drive one row element per covered row. This rule's range reaches ~100k rows x 256 columns on a sheet whose content grid is empty; if the writer ever lets a conditional-format range extend the materialised grid, this test takes seconds and allocates millions of nodes before it fails.
+    const sheet = sheetOf("Sheet1", [], {
+      conditionalFormats: [
+        {
+          type: "uniqueValues",
+          ranges: [
+            { startRow: 0, startColumn: 0, endRow: 99_999, endColumn: 255 },
+          ],
+        },
+      ],
+    });
+    expectRoundTrip(documentOf([sheet]));
+    const pkg = writeOdsContent(documentOf([sheet]));
+    const part = pkg.parts["content.xml"];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml content.xml part");
+    }
+    const root = rootElement(part.nodes);
+    if (root === undefined) {
+      throw new Error("expected a content.xml root element");
+    }
+    const body = findChildElement(root.children, "office:body");
+    const spreadsheet = findChildElement(
+      body?.children ?? [],
+      "office:spreadsheet",
+    );
+    if (spreadsheet === undefined) {
+      throw new Error("expected an office:spreadsheet element");
+    }
+    const table = childrenWithTag(spreadsheet, "table:table")[0];
+    if (table === undefined) {
+      throw new Error("expected a table:table element");
+    }
+    expect(childrenWithTag(table, "table:table-row")).toHaveLength(0);
+    expect(childrenWithTag(table, "calcext:conditional-formats")).toHaveLength(
+      1,
     );
   });
 
