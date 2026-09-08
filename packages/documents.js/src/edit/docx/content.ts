@@ -46,6 +46,35 @@ export interface BuildDocxPackageOptions {
 }
 
 // ContentDocument -> a fresh docx Package, built entirely through the same edit/docx/* live-view primitives a caller would use by hand -- the write-side counterpart to src/ooxml/docx/read.ts's readDocxContent. Used by the PDF->docx conversion path (src/layout/reconstruct.ts's output never contains a ContentTable, since PDF table reconstruction degrades to tab-separated text), but written to handle the full ContentBlock union for any other caller that wants a ContentDocument turned into real docx bytes. Constructs its own package directly (createEmptyDocxPackage + DocxEditor) rather than calling createDocx(), since createDocx() always starts metadata from {} -- this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps, not an empty object.
+// The block-level construct marker state one build carries: bookmark anchors mint a fresh, document-unique w:id on their start half and hold it open until the matching end, and every opened construct (bookmark or not) is stacked so a dropped construct's own end marker pops the right entry rather than a bookmark's.
+class ConstructMarkerState {
+  private nextBookmarkId = 1;
+  private readonly open: { isBookmark: boolean; id: number }[] = [];
+
+  openConstruct(
+    body: DocxBody,
+    marker: Extract<ContentBlock, { kind: "constructStart" }>,
+  ): void {
+    const detail = marker.descriptor;
+    if (detail.kind === "anchor" && detail.anchorType === "bookmark") {
+      const id = this.nextBookmarkId;
+      this.nextBookmarkId += 1;
+      this.open.push({ isBookmark: true, id });
+      body.appendBookmarkStart(id, detail.name);
+      return;
+    }
+    // Every other construct kind is wrapper-shaped (an SDT, a tracked-change w:ins, a division) or needs machinery this builder has no editor surface for, and is dropped as the README's construct-marker note states -- stacked here so its own end marker still balances.
+    this.open.push({ isBookmark: false, id: -1 });
+  }
+
+  closeConstruct(body: DocxBody): void {
+    const entry = this.open.pop();
+    if (entry?.isBookmark) {
+      body.appendBookmarkEnd(entry.id);
+    }
+  }
+}
+
 export function buildDocxPackage(
   content: ContentDocument,
   options?: BuildDocxPackageOptions,
@@ -92,6 +121,7 @@ export function buildDocxPackage(
     });
   }
   const editor = new DocxEditor(pkg);
+  const markers = new ConstructMarkerState();
   const sections =
     numIdLevels.size > 0
       ? content.sections.map((section) => ({
@@ -104,7 +134,7 @@ export function buildDocxPackage(
       // A section boundary becomes a page break -- distinct per-section page size/margins (w:sectPr per section) isn't modelled by this bridge yet, since createDocx()'s single scaffolded section covers every caller this function currently has.
       editor.body.appendPageBreak();
     }
-    appendBlocks(editor.body, section.blocks, options);
+    appendBlocks(editor.body, section.blocks, options, markers);
   });
   return editor.toPackage();
 }
@@ -177,6 +207,7 @@ function appendBlocks(
   body: DocxBody,
   blocks: readonly ContentBlock[],
   options: BuildDocxPackageOptions | undefined,
+  markers: ConstructMarkerState,
 ): void {
   let index = 0;
   while (index < blocks.length) {
@@ -204,7 +235,7 @@ function appendBlocks(
       continue;
     }
     if (block !== undefined) {
-      appendBlock(body, block, options);
+      appendBlock(body, block, options, markers);
     }
     index += 1;
   }
@@ -359,6 +390,7 @@ function appendBlock(
   body: DocxBody,
   block: ContentBlock,
   options: BuildDocxPackageOptions | undefined,
+  markers: ConstructMarkerState,
 ): void {
   if (block.kind === "paragraph") {
     populateParagraph(body.appendParagraph(), block);
@@ -378,6 +410,10 @@ function appendBlock(
     appendTable(body, block);
   } else if (block.kind === "embeddedObject") {
     appendEmbeddedObject(body, block, options);
+  } else if (block.kind === "constructStart") {
+    markers.openConstruct(body, block);
+  } else {
+    markers.closeConstruct(body);
   }
 }
 
