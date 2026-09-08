@@ -19,6 +19,22 @@ function contentPackage(
   };
 }
 
+// Like contentPackage above, but ALSO populates content.xml's own office:styles container -- the real placement of a named draw resource (<draw:gradient>/<draw:hatch>/<draw:fill-image>/<draw:stroke-dash>, OASIS ODF 1.3 section 16.42: "usable within the following element: <office:styles>"), a genuinely separate ODF vocabulary from style:style that a shape's own draw:fill-gradient-name/draw:fill-hatch-name/draw:fill-image-name/draw:stroke-dash attribute references by name rather than nests inside.
+function contentPackageWithResources(
+  automaticStyleChildren: XmlElement[],
+  namedResourceChildren: XmlElement[],
+): Package["parts"][string] {
+  return {
+    kind: "xml",
+    nodes: [
+      el("office:document-content", {}, [
+        el("office:styles", {}, namedResourceChildren),
+        el("office:automatic-styles", {}, automaticStyleChildren),
+      ]),
+    ],
+  };
+}
+
 function graphicStyle(
   name: string,
   attrs: Record<string, string>,
@@ -547,6 +563,356 @@ describe("readDrawPageContent: draw:rect / draw:ellipse / draw:circle", () => {
     expect(
       readDrawPageContent([el("draw:ellipse")], { parts: {} }).vectors,
     ).toEqual([]);
+  });
+});
+
+describe("readDrawPageContent: non-flat fills (gradient/bitmap/hatch) and fill opacity (ExaDev/documents.js#954)", () => {
+  it('resolves a "gradient" fill from its named <draw:gradient> definition, and uses its start colour as the flat fill swatch when the style carries no direct draw:fill-color of its own', () => {
+    const gradient = el("draw:gradient", {
+      "draw:name": "grad1",
+      "draw:style": "linear",
+      "draw:start-color": "#ff0000",
+      "draw:end-color": "#0000ff",
+      "draw:angle": "45",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill": "gradient",
+      "draw:fill-gradient-name": "grad1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [gradient]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.fill).toEqual({ r: 1, g: 0, b: 0 });
+    expect(vector.fillPattern).toEqual({
+      kind: "gradient",
+      style: "linear",
+      startColor: { r: 1, g: 0, b: 0 },
+      endColor: { r: 0, g: 0, b: 1 },
+      angleDeg: 45,
+    });
+  });
+
+  it("a direct draw:fill-color alongside a \"gradient\" fill mode wins as the flat swatch over the gradient's own start colour -- real LibreOffice output sometimes writes both, per this file's own top-of-file note", () => {
+    const gradient = el("draw:gradient", {
+      "draw:name": "grad1",
+      "draw:style": "linear",
+      "draw:start-color": "#ff0000",
+      "draw:end-color": "#0000ff",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill": "gradient",
+      "draw:fill-color": "#00ff00",
+      "draw:fill-gradient-name": "grad1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [gradient]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.fill).toEqual({ r: 0, g: 1, b: 0 });
+    expect(vector.fillPattern?.kind).toBe("gradient");
+  });
+
+  it('resolves a "hatch" fill from its named <draw:hatch> definition, using its own colour as the flat fill swatch', () => {
+    const hatch = el("draw:hatch", {
+      "draw:name": "hatch1",
+      "draw:style": "triple",
+      "draw:color": "#123456",
+      "draw:distance": "0.1cm",
+      "draw:rotation": "90",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill": "hatch",
+      "draw:fill-hatch-name": "hatch1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [hatch]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.fillPattern).toEqual({
+      kind: "hatch",
+      style: "triple",
+      color: { r: 0x12 / 255, g: 0x34 / 255, b: 0x56 / 255 },
+      distancePt: 0.1 * (72 / 2.54),
+      rotationDeg: 90,
+    });
+  });
+
+  it('resolves a "bitmap" fill from its named <draw:fill-image> definition, referencing the package part by xlink:href exactly like draw:image', () => {
+    const fillImage = el("draw:fill-image", {
+      "draw:name": "img1",
+      "xlink:href": "Pictures/fill.png",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill": "bitmap",
+      "draw:fill-image-name": "img1",
+    });
+    const pkg: Package = {
+      parts: {
+        "content.xml": contentPackageWithResources([gr1], [fillImage]),
+        "Pictures/fill.png": { kind: "binary", base64: tinyPngBase64() },
+      },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.fill).toBeUndefined(); // no single representative colour for a bitmap
+    expect(vector.fillPattern).toEqual({
+      kind: "bitmap",
+      format: "png",
+      base64: tinyPngBase64(),
+    });
+  });
+
+  it("a gradient/hatch/bitmap fill whose named resource cannot be resolved (missing definition) leaves fillPattern undefined, matching this reader's existing degrade-gracefully convention", () => {
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill": "gradient",
+      "draw:fill-gradient-name": "does-not-exist",
+    });
+    const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.fillPattern).toBeUndefined();
+    expect(vector.fill).toBeUndefined();
+  });
+
+  it("reads draw:opacity into fillOpacity as a 0..1 fraction", () => {
+    const gr1 = graphicStyle("gr1", {
+      "draw:fill-color": "#ff0000",
+      "draw:opacity": "37%",
+    });
+    const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.fillOpacity).toBeCloseTo(0.37, 6);
+  });
+
+  it("leaves fillOpacity undefined (fully opaque) when draw:opacity is absent", () => {
+    const gr1 = graphicStyle("gr1", { "draw:fill-color": "#ff0000" });
+    const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.fillOpacity).toBeUndefined();
+  });
+});
+
+describe("readDrawPageContent: stroke opacity and the real dash run-length pattern (ExaDev/documents.js#954)", () => {
+  it("reads svg:stroke-opacity (a bare [0,1] double) into the stroke's own opacity field", () => {
+    const gr1 = graphicStyle("gr1", {
+      "svg:stroke-color": "#000000",
+      "svg:stroke-width": "1pt",
+      "svg:stroke-opacity": "0.25",
+    });
+    const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.stroke?.opacity).toBeCloseTo(0.25, 6);
+  });
+
+  it("also accepts svg:stroke-opacity as a percentage", () => {
+    const gr1 = graphicStyle("gr1", {
+      "svg:stroke-color": "#000000",
+      "svg:stroke-width": "1pt",
+      "svg:stroke-opacity": "80%",
+    });
+    const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.stroke?.opacity).toBeCloseTo(0.8, 6);
+  });
+
+  it("resolves a \"dash\"-mode stroke's own named <draw:stroke-dash> definition into a real dashPattern, alongside the existing style: 'dashed'", () => {
+    const dash = el("draw:stroke-dash", {
+      "draw:name": "dash1",
+      "draw:style": "rect",
+      "draw:dots1": "1",
+      "draw:dots1-length": "3pt",
+      "draw:dots2": "2",
+      "draw:dots2-length": "1pt",
+      "draw:distance": "2pt",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "svg:stroke-color": "#000000",
+      "svg:stroke-width": "1pt",
+      "draw:stroke": "dash",
+      "draw:stroke-dash": "dash1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [dash]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.stroke?.style).toBe("dashed");
+    expect(vector.stroke?.dashPattern).toEqual({
+      dots1: 1,
+      dots1LengthPt: 3,
+      dots2: 2,
+      dots2LengthPt: 1,
+      distancePt: 2,
+    });
+  });
+
+  it("resolves a single-length dash pattern (no draw:dots2) with dots2/dots2LengthPt genuinely absent, not zero", () => {
+    const dash = el("draw:stroke-dash", {
+      "draw:name": "dash1",
+      "draw:style": "rect",
+      "draw:dots1": "4",
+      "draw:dots1-length": "150%", // percentage of svg:stroke-width
+      "draw:distance": "1pt",
+    });
+    const gr1 = graphicStyle("gr1", {
+      "svg:stroke-color": "#000000",
+      "svg:stroke-width": "2pt",
+      "draw:stroke": "dash",
+      "draw:stroke-dash": "dash1",
+    });
+    const pkg: Package = {
+      parts: { "content.xml": contentPackageWithResources([gr1], [dash]) },
+    };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.stroke?.dashPattern).toEqual({
+      dots1: 4,
+      dots1LengthPt: 3, // 150% of the 2pt stroke width
+      distancePt: 1,
+    });
+    expect(vector.stroke?.dashPattern?.dots2).toBeUndefined();
+  });
+
+  it("a dashed stroke whose named dash definition cannot be resolved keeps style: 'dashed' alone, with no fabricated dashPattern", () => {
+    const gr1 = graphicStyle("gr1", {
+      "svg:stroke-color": "#000000",
+      "svg:stroke-width": "1pt",
+      "draw:stroke": "dash",
+      "draw:stroke-dash": "does-not-exist",
+    });
+    const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
+    const rect = el("draw:rect", {
+      "draw:style-name": "gr1",
+      "svg:x": "0pt",
+      "svg:y": "0pt",
+      "svg:width": "10pt",
+      "svg:height": "10pt",
+    });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== "rect") {
+      throw new Error("expected a rect vector");
+    }
+    expect(vector.stroke?.style).toBe("dashed");
+    expect(vector.stroke?.dashPattern).toBeUndefined();
   });
 });
 
