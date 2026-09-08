@@ -3,12 +3,11 @@ import type {
   ContentBorder,
   ContentCellBorders,
   ContentCellFill,
-  ContentParagraph,
   ContentTable,
   ContentTableCell,
   ContentTableRow,
 } from "document-schema.js";
-import { DocFormatError, DocUnsupportedError } from "../errors";
+import { DocFormatError } from "../errors";
 import type { ParagraphEntry } from "../read";
 import {
   HORZ_MERGE_CONTINUATION,
@@ -21,9 +20,9 @@ import {
   type CellBorderSide,
   type TableBordersSet,
 } from "./decoration";
-import { CELL_MARK } from "../text/special";
+import { CELL_MARK, PARAGRAPH_MARK } from "../text/special";
 
-// Groups the flat paragraph-entry sequence read.ts produces into the final ContentBlock list, folding every contiguous run of table-depth-1 paragraphs into a real ContentTable with row/cell/merge structure -- [MS-DOC] 2.4.3's own Overview of Tables model: a table is a run of paragraphs each marked sprmPFInTable, cells delimited by cell-mark (0x07) characters (a cell holding more than one paragraph ends every paragraph but its last with an ordinary 0x0D mark), and each row closed by a row-ending mark of its own (sprmPFTtp, itself a 0x07 mark) that carries the row's TAP -- its column layout and every physical cell's own horizontal/vertical merge state, resolved by tap.ts. A non-table entry passes through untouched. A run whose TAP this reader cannot resolve degrades to its own paragraphs rather than failing the whole document -- see tryAssembleTable's own note.
+// Groups the flat paragraph-entry sequence read.ts produces into the final ContentBlock list, folding every contiguous run of table-depth paragraphs into a real ContentTable with row/cell/merge structure -- [MS-DOC] 2.4.3's own Overview of Tables model: a table is a run of paragraphs each marked sprmPFInTable (or, one level deeper, sprmPItap), cells delimited by cell-mark (0x07) characters at depth 1 or paragraph marks (0x000D) carrying sprmPFInnerTableCell deeper, and each row closed by a row-ending mark of its own (sprmPFTtp at depth 1, sprmPFInnerTtp deeper) that carries the row's TAP -- its column layout and every physical cell's own horizontal/vertical merge state, resolved by tap.ts. A non-table entry passes through untouched. walkBlocksAtDepth/tryAssembleTable are mutually recursive, so a table cell's own content is walked at one depth deeper than its containing table -- a table nested inside a table cell (table depth greater than 1, [MS-DOC] 2.4.3's own "a table cell consists of one or more paragraphs ... and, optionally, one or more tables whose table depth is one greater than that of the containing cell") resolves to a real nested ContentTable rather than being refused, to whatever depth the file actually states. A run whose TAP this reader cannot resolve degrades to its own paragraphs rather than failing the whole document -- see tryAssembleTable's own note.
 //
 // Column layout is derived per row, never assumed shared: [MS-DOC] 2.6.3 permits each row of a table to declare its own independent rgdxaCenter, and a real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed to rely on exactly this for a horizontal merge -- a merged row's own TDefTableOperand simply has fewer, wider physical cells, with no TCGRF.horzMerge or sprmTMerge signal at all (ExaDev/documents.js#895; see table/write.ts's own top-of-file note for the full ground-truth finding). buildRows below reconstructs the table's shared grid as the union of every row's own column boundaries -- taken within one point rather than by exact integer equality, since rows stating the identical grid independently may legally disagree by a twip or two (see isSameColumnBoundary's own note) -- then expresses each physical cell's own colSpan as however many of that shared grid's segments its own boundaries cover -- folding in this writer's own legacy TCGRF.horzMerge-flagged continuation cells (a spec-conformant encoding this reader still honours, in case a genuine third-party producer uses it) exactly as before. A column boundary that no row in the table ever states on its own -- every row happens to merge across it identically -- cannot be recovered from the physical bytes at all; this is a real limitation of [MS-DOC]'s own physical model, not an approximation this reader is choosing to make. table/write.ts's own writer no longer produces this gap for an ordinary merge (ExaDev/documents.js#992: it falls back to a horizontal-merge continuation cell precisely when every row would otherwise merge across a boundary identically) -- but its own lost-boundary fallback now genuinely reopens it: when a row's assigned split would overflow either the row-ending mark's own byte budget or the format's 63-cell ceiling, flattenTable (table/write.ts) trims the excess boundaries rather than throwing (ExaDev/documents.js#1013), and a boundary it trims away is exactly as unrecoverable on the next read as one no row ever stated at all. That trim is now the most likely source of this shape; a table hand-built for a test, or produced by a genuine third-party [MS-DOC] implementation that happens to encode a merge the identical way on every row, are the two remaining, rarer sources (see the README's own note on this).
 //
@@ -80,18 +79,57 @@ interface RawCell {
 export function assembleBlocks(
   entries: readonly ParagraphEntry[],
 ): ContentBlock[] {
+  return walkBlocksAtDepth(entries, 0);
+}
+
+// A paragraph's own table depth: sprmPItap's explicit value when the paragraph's own grpprl carries it (a real producer states it for a nested table, and may state it even at depth 1), falling back to "1 when sprmPFInTable is set, else 0" for a paragraph that carries no sprmPItap of its own -- [MS-DOC] 2.4.3's own compatibility relationship between the two sprms at depth 1, where sprmPItap is not required.
+function effectiveTableDepth(properties: ParagraphEntry["properties"]): number {
+  if (properties.tableDepth !== undefined) return properties.tableDepth;
+  return properties.inTable === true ? 1 : 0;
+}
+
+// Whether `entry` is an ordinary cell-ending mark AT `tableDepth` -- the boundary that closes one physical cell's own accumulated content, per [MS-DOC] 2.4.3's own Overview of Tables: at depth 1, any cell-mark (0x0007) terminator with sprmPFInTable applied; deeper, a paragraph mark (0x000D) with sprmPFInnerTableCell applied instead, since "If the table depth is greater than 1, the cell mark MUST be a paragraph mark ... with sprmPFInnerTableCell applied". The row's own terminating mark (isRowBoundary below) is deliberately excluded here even though it is also, technically, one more mark in the stream: [MS-DOC]'s own ABNF (RowN = 1*63 CellN TTPN) states the TTP mark as a SEPARATE element following the row's cells, not one of the cells itself, so its own (ordinarily empty) content is discarded rather than becoming a phantom extra cell -- exactly what the pre-existing depth-1 code already did by checking tableRowEnd first and `continue`-ing before this check could fire.
+function isCellBoundary(entry: ParagraphEntry, tableDepth: number): boolean {
+  if (tableDepth === 1) {
+    return (
+      entry.terminator === CELL_MARK && entry.properties.tableRowEnd !== true
+    );
+  }
+  return (
+    entry.terminator === PARAGRAPH_MARK &&
+    entry.properties.innerTableCellMark === true
+  );
+}
+
+// Whether `entry` is the row-terminating (TTP) mark at `tableDepth` -- sprmPFTtp's own cell-mark at depth 1, sprmPFInnerTtp's own paragraph-mark deeper, per this module's own top-of-file note.
+function isRowBoundary(entry: ParagraphEntry, tableDepth: number): boolean {
+  return tableDepth === 1
+    ? entry.properties.tableRowEnd === true
+    : entry.properties.innerTtpMark === true;
+}
+
+// Walks a flat span of paragraph entries at nesting `depth` (0 for the section's or a non-table cell's own top-level content) into a real ContentBlock[]: an ordinary paragraph passes straight through, and a contiguous run of entries at depth+1 folds into a nested ContentTable via tryAssembleTable -- recursively, since that table's own cells are themselves walked at depth+1, letting a table nest to whatever depth the file actually states rather than only one level. This one function is what both read.ts's top-level call (depth 0, the whole entries array) and every table cell's own content (depth tableDepth, the slice of entries between that cell's boundaries) share, so a table nested inside a table cell inside a table cell needs no separate code path from an ordinary top-level table.
+function walkBlocksAtDepth(
+  entries: readonly ParagraphEntry[],
+  depth: number,
+): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   let index = 0;
   while (index < entries.length) {
     const entry = entries[index];
     if (entry === undefined) break;
-    if (entry.properties.inTable !== true) {
+    if (effectiveTableDepth(entry.properties) <= depth) {
       blocks.push(entry.paragraph);
       index += 1;
       continue;
     }
-    const { runEntries, nextIndex } = collectTableRun(entries, index);
-    const table = tryAssembleTable(runEntries);
+    const tableDepth = depth + 1;
+    const { runEntries, nextIndex } = collectTableRun(
+      entries,
+      index,
+      tableDepth,
+    );
+    const table = tryAssembleTable(runEntries, tableDepth);
     blocks.push(
       ...(table !== undefined
         ? [table]
@@ -102,24 +140,21 @@ export function assembleBlocks(
   return blocks;
 }
 
-// Collects one contiguous run of table-depth-1 paragraphs -- up to but not including the first entry that has left the table -- refusing a nested table (table depth greater than 1) immediately, since that is a genuinely unimplemented feature this reader cannot represent at all, unlike the TAP-resolution gaps tryAssembleTable degrades around below. Boundary detection lives here, once, so a row this reader ends up unable to resolve still degrades to flat paragraphs across the SAME span a successfully parsed table would have occupied, rather than needing its own separate boundary logic.
+// Collects one contiguous run of paragraphs at table depth `tableDepth` or deeper -- up to but not including the first entry that has returned to a shallower depth (left this table entirely). Boundary detection lives here, once, so a row this reader ends up unable to resolve still degrades to flat paragraphs across the SAME span a successfully parsed table would have occupied, rather than needing its own separate boundary logic.
 function collectTableRun(
   entries: readonly ParagraphEntry[],
   start: number,
+  tableDepth: number,
 ): { runEntries: ParagraphEntry[]; nextIndex: number } {
   const runEntries: ParagraphEntry[] = [];
   let index = start;
   while (index < entries.length) {
     const entry = entries[index];
-    if (entry?.properties.inTable !== true) break;
     if (
-      (entry.properties.tableDepth !== undefined &&
-        entry.properties.tableDepth > 1) ||
-      entry.properties.nestedTableMark === true
+      entry === undefined ||
+      effectiveTableDepth(entry.properties) < tableDepth
     ) {
-      throw new DocUnsupportedError(
-        "doc-codec does not support a table nested inside a table cell (table depth greater than 1)",
-      );
+      break;
     }
     runEntries.push(entry);
     index += 1;
@@ -127,21 +162,22 @@ function collectTableRun(
   return { runEntries, nextIndex: index };
 }
 
-// Attempts to fold one contiguous run of table-depth paragraphs into a real ContentTable, per [MS-DOC] 2.4.3's own Overview of Tables: cell boundaries at each cell mark, a row closed by its own row-ending mark whose TAP (tap.ts's applyTableSprms) supplies the row's column layout and every physical cell's merge state. Returns undefined -- never throws -- when a row's own TAP cannot be resolved this way, rather than refusing the whole document: a real producer's own row mark can state its TAP indirectly (sprmPTableProps pointing at a PrcData of incremental sprmT* operations, [MS-DOC] 2.4.3's own worked example) rather than through the direct sprmTDefTable this reader follows, or a row's cell marks can simply not agree with what its TAP declares -- both genuinely legal constructs this reader does not implement, exactly the "reads with fewer properties than it states" degrade the README's scope table already documents for an indirect Papx elsewhere in this package, not corruption. The run's own paragraphs read as paragraphs instead, the same as any other property this reader does not convert. A row ending mid-cell with no terminating mark at all, by contrast, is genuine corruption (the stream itself is truncated, not merely using an unsupported mechanism) and still throws.
+// Attempts to fold one contiguous run of paragraphs at `tableDepth` into a real ContentTable, per [MS-DOC] 2.4.3's own Overview of Tables: cell boundaries at each cell mark (isCellBoundary), a row closed by its own row-ending mark (isRowBoundary) whose TAP (tap.ts's applyTableSprms) supplies the row's column layout and every physical cell's merge state. A cell's own raw entries are walked recursively at depth tableDepth (walkBlocksAtDepth), which is what lets a cell hold either ordinary paragraphs or a table nested one level deeper -- exactly [MS-DOC]'s own "table cell consists of one or more paragraphs at the same nonzero table depth and, optionally, one or more tables whose table depth is one greater than that of the containing cell". Returns undefined -- never throws -- when a row's own TAP cannot be resolved this way, rather than refusing the whole document: a real producer's own row mark can state its TAP indirectly (sprmPTableProps pointing at a PrcData of incremental sprmT* operations, [MS-DOC] 2.4.3's own worked example) rather than through the direct sprmTDefTable this reader follows, or a row's cell marks can simply not agree with what its TAP declares -- both genuinely legal constructs this reader does not implement, exactly the "reads with fewer properties than it states" degrade the README's scope table already documents for an indirect Papx elsewhere in this package, not corruption. The run's own paragraphs read as paragraphs instead, the same as any other property this reader does not convert. A row ending mid-cell with no terminating mark at all, by contrast, is genuine corruption (the stream itself is truncated, not merely using an unsupported mechanism) and still throws.
 function tryAssembleTable(
   runEntries: readonly ParagraphEntry[],
+  tableDepth: number,
 ): ContentTable | undefined {
   const rawRows: RawCell[][] = [];
   const rowDefinitions: TableRowDefinition[] = [];
   const rowHeights: (number | undefined)[] = [];
 
-  let cellParagraphs: ContentParagraph[] = [];
+  let cellEntries: ParagraphEntry[] = [];
   let rowCells: { blocks: ContentBlock[] }[] = [];
 
   for (const entry of runEntries) {
-    cellParagraphs.push(entry.paragraph);
+    cellEntries.push(entry);
 
-    if (entry.properties.tableRowEnd === true) {
+    if (isRowBoundary(entry, tableDepth)) {
       const rowProperties = applyTableSprms(entry.grpprl, {});
       const definition = rowProperties.definition;
       if (definition === undefined) return undefined;
@@ -167,18 +203,18 @@ function tryAssembleTable(
       rowDefinitions.push(definition);
       rowHeights.push(rowProperties.heightPt);
       rowCells = [];
-      cellParagraphs = [];
+      cellEntries = [];
       continue;
     }
 
-    if (entry.terminator === CELL_MARK) {
-      // An ordinary cell mark -- not the row's own -- closes the cell that was accumulating: everything from the last cell (or row) boundary up to and including this paragraph.
-      rowCells.push({ blocks: cellParagraphs });
-      cellParagraphs = [];
+    if (isCellBoundary(entry, tableDepth)) {
+      // An ordinary cell mark -- not the row's own -- closes the cell that was accumulating: everything from the last cell (or row) boundary up to and including this paragraph, walked recursively so a nested table inside this very cell resolves rather than flattening to paragraphs.
+      rowCells.push({ blocks: walkBlocksAtDepth(cellEntries, tableDepth) });
+      cellEntries = [];
     }
   }
 
-  if (cellParagraphs.length > 0 || rowCells.length > 0) {
+  if (cellEntries.length > 0 || rowCells.length > 0) {
     throw new DocFormatError(
       "a table's paragraphs end without a row-ending mark to close the row's last cell",
     );

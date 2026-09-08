@@ -40,7 +40,7 @@ const SPRM_P_ILVL = 0x260a;
 const SPRM_P_ILFO = 0x460b;
 /** sprmPItap: the paragraph's own table depth -- read only far enough to detect a depth greater than 1 (a table nested inside a table cell), which this package refuses rather than mis-reads. */
 const SPRM_P_ITAP = 0x6649;
-/** sprmPFInnerTableCell / sprmPFInnerTtp: a nested table's own cell-ending or row-ending mark. Neither is acted on beyond refusing the nested table it signals. */
+/** sprmPFInnerTableCell / sprmPFInnerTtp: a nested table's (table depth greater than 1) own cell-ending or row-ending mark, [MS-DOC] 2.4.3's Overview of Tables -- the paragraph-mark (0x000D) analogues of sprmPFInTable's cell-mark (0x0007) boundary and sprmPFTtp's row-mark at depth 1. */
 const SPRM_P_F_INNER_TABLE_CELL = 0x244b;
 const SPRM_P_F_INNER_TTP = 0x244c;
 
@@ -75,10 +75,12 @@ export interface ParagraphProperties {
   listLevel?: number;
   /** The list identifier (sprmPIlfo), present only when the paragraph is in a list at all. */
   listId?: number;
-  /** sprmPItap's own table depth, present only when the sprm is; a value greater than 1 marks a table nested inside a table cell. */
+  /** sprmPItap's own table depth, present only when the sprm is; a value greater than 1 marks a paragraph belonging to a table nested inside a table cell. */
   tableDepth?: number;
-  /** True when sprmPFInnerTableCell or sprmPFInnerTtp is set -- a nested table's own cell/row-ending mark, carried purely as a refusal signal since this package's table support does not descend into a nested table. */
-  nestedTableMark?: boolean;
+  /** True on a nested table's (depth greater than 1) own cell-ending paragraph mark -- the sprmPFInnerTableCell analogue of sprmPFInTable's own cell-mark boundary at depth 1. */
+  innerTableCellMark?: boolean;
+  /** True on a nested table's (depth greater than 1) own row-ending paragraph mark -- the sprmPFInnerTtp analogue of sprmPFTtp's own row-mark boundary at depth 1. */
+  innerTtpMark?: boolean;
 }
 
 function twipsToPoints(twips: number): number {
@@ -184,8 +186,10 @@ export function applyParagraphSprms(
         into.tableDepth = readUint32LE(prl.operand, 0);
         break;
       case SPRM_P_F_INNER_TABLE_CELL:
+        into.innerTableCellMark = readUint8(prl.operand, 0) !== 0;
+        break;
       case SPRM_P_F_INNER_TTP:
-        if (readUint8(prl.operand, 0) !== 0) into.nestedTableMark = true;
+        into.innerTtpMark = readUint8(prl.operand, 0) !== 0;
         break;
       default:
         // Every other paragraph sprm is a property this reader does not convert; see the README's scope note.
