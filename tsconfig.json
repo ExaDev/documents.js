@@ -26,6 +26,7 @@
     "release-workspace.config.test.ts",
     ".github/scripts",
     "commitlint.config.ts",
-    "lint-staged.config.ts"
+    "lint-staged.config.ts",
+    "syncpack.config.ts"
   ]
 }
