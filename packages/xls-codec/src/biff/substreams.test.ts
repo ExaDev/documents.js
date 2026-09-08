@@ -263,4 +263,79 @@ describe("splitSubstreams", () => {
       ),
     ).toThrow(BiffFormatError);
   });
+
+  it("nests a chart substream inside the worksheet substream that anchors it, resuming the worksheet's own records once the chart's EOF closes it", () => {
+    // An embedded chart's own BOF...EOF sits INSIDE the worksheet substream that anchors it ([MS-XLS] "Chart Area": "the chart is treated as a drawing ... contained within a worksheet") -- unlike splitSubstreams' pre-nesting behaviour, which would have treated the chart's BOF as ending the worksheet substream outright and silently dropped every worksheet record written after the chart's own EOF.
+    const substreams = splitSubstreams(
+      groupRecords(
+        records(
+          { type: RECORD_BOF, data: bofData(BOF_TYPE_WORKSHEET) },
+          { type: RECORD_SST, data: bytes(1) }, // a worksheet record before the embedded chart
+          { type: RECORD_BOF, data: bofData(BOF_TYPE_CHART) },
+          { type: RECORD_SST, data: bytes(2) }, // a chart-substream record
+          { type: RECORD_EOF, data: bytes() }, // closes the chart
+          { type: RECORD_SST, data: bytes(3) }, // a worksheet record after the embedded chart
+          { type: RECORD_EOF, data: bytes() }, // closes the worksheet
+        ),
+      ),
+    );
+
+    expect(substreams.map((sub) => sub.documentType)).toEqual([
+      BOF_TYPE_CHART,
+      BOF_TYPE_WORKSHEET,
+    ]);
+    expect(substreams[0]?.records.map((entry) => entry.blocks[0])).toEqual([
+      bytes(2),
+    ]);
+    expect(substreams[1]?.records.map((entry) => entry.blocks[0])).toEqual([
+      bytes(1),
+      bytes(3),
+    ]);
+  });
+
+  it("nests multiple embedded charts, one per BOF...EOF pair, in the same worksheet substream", () => {
+    const substreams = splitSubstreams(
+      groupRecords(
+        records(
+          { type: RECORD_BOF, data: bofData(BOF_TYPE_WORKSHEET) },
+          { type: RECORD_BOF, data: bofData(BOF_TYPE_CHART) },
+          { type: RECORD_SST, data: bytes(1) },
+          { type: RECORD_EOF, data: bytes() },
+          { type: RECORD_BOF, data: bofData(BOF_TYPE_CHART) },
+          { type: RECORD_SST, data: bytes(2) },
+          { type: RECORD_EOF, data: bytes() },
+          { type: RECORD_EOF, data: bytes() },
+        ),
+      ),
+    );
+
+    expect(substreams.map((sub) => sub.documentType)).toEqual([
+      BOF_TYPE_CHART,
+      BOF_TYPE_CHART,
+      BOF_TYPE_WORKSHEET,
+    ]);
+    expect(substreams[0]?.records[0]?.blocks[0]).toEqual(bytes(1));
+    expect(substreams[1]?.records[0]?.blocks[0]).toEqual(bytes(2));
+    expect(substreams[2]?.records).toHaveLength(0);
+  });
+
+  it("reports a substream still open when the stream truncates, innermost first", () => {
+    const substreams = splitSubstreams(
+      groupRecords(
+        records(
+          { type: RECORD_BOF, data: bofData(BOF_TYPE_WORKSHEET) },
+          { type: RECORD_BOF, data: bofData(BOF_TYPE_CHART) },
+          { type: RECORD_SST, data: bytes(1) },
+          // Neither the chart's own EOF nor the worksheet's ever arrives.
+        ),
+      ),
+    );
+
+    expect(substreams.map((sub) => sub.documentType)).toEqual([
+      BOF_TYPE_CHART,
+      BOF_TYPE_WORKSHEET,
+    ]);
+    expect(substreams[0]?.records).toHaveLength(1);
+    expect(substreams[1]?.records).toHaveLength(0);
+  });
 });
