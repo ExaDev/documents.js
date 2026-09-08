@@ -1,8 +1,10 @@
 import type {
+  AnchorDescriptor,
   ContentBlock,
   ContentParagraph,
   ContentRun,
   DefinitionEntry,
+  FieldDescriptor,
   ProvenanceDescriptor,
   RunConstructExtent,
 } from "document-schema.js";
@@ -34,7 +36,12 @@ import {
   odfBookmarkAnchorDescriptor,
   odfFieldDescriptor,
   odfResidue,
+  odfRunConstructWriteKind,
   pairOdfMarkerHalves,
+  parseOdfFieldInstruction,
+  writeOdfBookmarkEnd,
+  writeOdfBookmarkPoint,
+  writeOdfBookmarkStart,
   type OdfDefinitionsSink,
   type OdfMarkerHalf,
   type OdfResidueFormat,
@@ -641,37 +648,47 @@ function runFormattingKey(run: ContentRun): string {
   return `${canonicalPropertiesString(odfRunProperties(run))}${KEY_SEPARATOR}${hyperlink}`;
 }
 
-// The canonical run list an ODF paragraph can actually carry, and therefore exactly what reading a written paragraph back produces. Three normalisations, each forced by ODF's own inline content model rather than chosen here:
-// 1. A zero-length run has no spelling at all -- there is no empty text node in a serialized document -- so it is dropped.
-// 2. Adjacent runs whose formatting is identical are one text node or one text:span; two of them would serialize as one and read back as one, so they are merged here rather than left to be silently merged later.
-// 3. A tab, a hard line break, and a collapsing space run are ELEMENTS (text:tab, text:line-break, text:s), so a run whose text contains one is split at it -- the reader emits one run per node it meets, and no ODF spelling exists that would keep "a\tb" a single run.
-// Exported because the write path's own round-trip law is stated against it: reading back what writeOdt produced yields this list, not the caller's original one, whenever the original was not already canonical.
-export function segmentOdfParagraphRuns(
+// The construct-aware generalisation of paragraph run canonicalisation: identical to the degenerate no-constructs case below in every respect, but additionally refuses to let two adjacent ORIGINAL runs merge, or a single run's own text-segmentation swallow one, across any boundary the caller has protected -- which a run-level construct's own startRun/endRun always is (see writeOdfParagraphChildren below). This is sound because RunConstructExtent's bounds are themselves defined as gaps BETWEEN whole original runs, never a position inside one (document-schema.js's own RunConstructExtentSchema doc comment): a protected boundary therefore always coincides with the start of a genuinely new merge-group once merging across it is disabled, so `boundaryMap` can report, for every protected boundary, exactly which canonical run index that gap maps to once segmentation has run, with no approximation. A protected boundary that happened to sit on a dropped (zero-length) run resolves to wherever the next surviving group begins (or to the canonical run count, if none survives after it) -- the same "nothing there to split" fact a zero-width construct at that position would want anyway.
+export interface OdfSegmentedParagraphRuns {
+  readonly canonical: ContentRun[];
+  readonly boundaryMap: ReadonlyMap<number, number>;
+}
+
+export function segmentOdfParagraphRunsMapped(
   runs: readonly ContentRun[],
-): ContentRun[] {
-  const merged: ContentRun[] = [];
-  for (const run of runs) {
+  protectedBoundaries: ReadonlySet<number>,
+): OdfSegmentedParagraphRuns {
+  // Pass 1: merge adjacent original runs sharing identical formatting into groups, never crossing a protected boundary. Zero-length runs are dropped outright -- there is no empty text node in a serialized document -- so they contribute no group of their own.
+  const groups: ContentRun[] = [];
+  const groupStartBoundary: number[] = [];
+  for (let index = 0; index < runs.length; index += 1) {
+    const run = runs[index]!;
     if (run.text.length === 0) {
       continue;
     }
-    const previous = merged[merged.length - 1];
-    if (
+    const previous = groups[groups.length - 1];
+    const canMerge =
       previous !== undefined &&
-      runFormattingKey(previous) === runFormattingKey(run)
-    ) {
-      merged[merged.length - 1] = {
+      !protectedBoundaries.has(index) &&
+      runFormattingKey(previous) === runFormattingKey(run);
+    if (canMerge) {
+      groups[groups.length - 1] = {
         ...previous,
         text: previous.text + run.text,
       };
-      continue;
+    } else {
+      groups.push(run);
+      groupStartBoundary.push(index);
     }
-    merged.push(run);
   }
 
+  // Pass 2: segment each group's own text into the pieces ODF's inline content model can carry (a tab, a hard line break, and a collapsing space run are ELEMENTS, so a run whose text contains one splits at it) -- identical to the original segmentOdfParagraphRuns algorithm, just walking groups instead of the flat merged list it used to build inline.
   const canonical: ContentRun[] = [];
-  for (const [index, run] of merged.entries()) {
-    const previousText = merged[index - 1]?.text;
-    const nextText = merged[index + 1]?.text;
+  const groupCanonicalStart: number[] = [];
+  for (const [index, run] of groups.entries()) {
+    groupCanonicalStart.push(canonical.length);
+    const previousText = groups[index - 1]?.text;
+    const nextText = groups[index + 1]?.text;
     const protectLeading =
       previousText === undefined || previousText.endsWith(" ");
     const protectTrailing = nextText === undefined || nextText.startsWith(" ");
@@ -683,42 +700,253 @@ export function segmentOdfParagraphRuns(
       canonical.push({ ...run, text: segment.text });
     }
   }
-  return canonical;
+
+  // Pass 3: resolve every requested boundary against the groups just built.
+  const boundaryMap = new Map<number, number>();
+  for (const boundary of protectedBoundaries) {
+    if (boundary <= 0) {
+      boundaryMap.set(boundary, 0);
+      continue;
+    }
+    if (boundary >= runs.length) {
+      boundaryMap.set(boundary, canonical.length);
+      continue;
+    }
+    const groupIndex = groupStartBoundary.indexOf(boundary);
+    if (groupIndex !== -1) {
+      boundaryMap.set(boundary, groupCanonicalStart[groupIndex]!);
+      continue;
+    }
+    let resolved = canonical.length;
+    for (const [group, start] of groupStartBoundary.entries()) {
+      if (start >= boundary) {
+        resolved = groupCanonicalStart[group]!;
+        break;
+      }
+    }
+    boundaryMap.set(boundary, resolved);
+  }
+
+  return { canonical, boundaryMap };
 }
 
-// The inline nodes for canonical runs [from, to), grouped so each maximal stretch of consecutive runs sharing one resolved formatting is ONE text:span rather than one per run: a span is the formatting unit, and two adjacent spans referencing the same style say exactly what one does while saying it twice. Runs with no formatting at all contribute bare nodes -- ODF producers never wrap unformatted text in an empty span, and doing so would make every plain paragraph mint a style that states nothing. Whitespace protection is computed against each run's true neighbours in the whole paragraph, never against the group's own edges, since a space at a group boundary is still interior to the paragraph.
-function writeOdfFormattedRunNodes(
+// The canonical run list an ODF paragraph can actually carry, and therefore exactly what reading a written paragraph back produces -- the no-constructs degenerate case of segmentOdfParagraphRunsMapped above (protecting only the paragraph's own two outer edges, which never changes the merge/segment result since every interior boundary stays free to merge exactly as it always did). Exported because the write path's own round-trip law is stated against it: reading back what writeOdt produced yields this list, not the caller's original one, whenever the original was not already canonical.
+export function segmentOdfParagraphRuns(
+  runs: readonly ContentRun[],
+): ContentRun[] {
+  return segmentOdfParagraphRunsMapped(runs, new Set([0, runs.length]))
+    .canonical;
+}
+
+// --- run-level constructs: splicing fields and bookmarks into the run-writing pipeline --------------------------
+//
+// A field CONSUMES a contiguous run of canonical runs as one opaque element (the reconstructed field itself, wrapping the runs its own extent covers); a bookmark is a zero-width marker that has to land as a genuine sibling at an exact position among the paragraph's own children, splitting whatever formatting/hyperlink group would otherwise have run straight through it. Both need the run-grouping walk below to never merge or wrap across the boundary they sit at, which is why every function from here down threads a `protected boundary` set the way segmentOdfParagraphRunsMapped already does at the run level -- this is that same discipline one level up, over ITEMS (a run, or one already-built field element standing in for the runs it consumed) rather than over runs directly.
+
+interface OdfParagraphRunItem {
+  readonly kind: "run";
+  readonly run: ContentRun;
+}
+interface OdfParagraphFieldItem {
+  readonly kind: "field";
+  readonly node: XmlElement;
+}
+type OdfParagraphItem = OdfParagraphRunItem | OdfParagraphFieldItem;
+
+interface OdfBookmarkMarker {
+  readonly side: "start" | "end" | "point";
+  readonly name: string;
+}
+
+interface OdfParagraphConstructPlan {
+  readonly fieldRanges: readonly {
+    readonly start: number;
+    readonly end: number;
+    readonly descriptor: FieldDescriptor;
+  }[];
+  // Canonical run boundary -> the markers whose event happens there, already ordered end-before-start the way insertOdfConstructMarkers orders block-scope markers at a shared position.
+  readonly markersAt: ReadonlyMap<number, readonly OdfBookmarkMarker[]>;
+}
+
+// Resolves a paragraph's own constructs field against the canonical run list segmentOdfParagraphRunsMapped's boundaryMap already mapped every extent's startRun/endRun onto, splitting the field extents (which consume their own run range) from the bookmark point/range markers (which are zero-width events at a boundary). Every entry here has already passed odfRunConstructWriteKind -- the caller (writeOdfParagraphChildren) is responsible for refusing a paragraph carrying anything this function does not resolve, exactly as assertWritableParagraph does before this ever runs.
+function planOdfParagraphConstructs(
+  extents: readonly RunConstructExtent[],
+  boundaryMap: ReadonlyMap<number, number>,
+): OdfParagraphConstructPlan {
+  const fieldRanges: {
+    start: number;
+    end: number;
+    descriptor: FieldDescriptor;
+  }[] = [];
+  const startsAt = new Map<number, OdfBookmarkMarker[]>();
+  const endsAt = new Map<number, OdfBookmarkMarker[]>();
+  for (const extent of extents) {
+    const kind = odfRunConstructWriteKind(extent);
+    const start = boundaryMap.get(extent.startRun)!;
+    const end = boundaryMap.get(extent.endRun)!;
+    if (kind === "field") {
+      fieldRanges.push({
+        start,
+        end,
+        descriptor: extent.descriptor as FieldDescriptor,
+      });
+    } else if (kind === "bookmarkPoint") {
+      const name = (extent.descriptor as AnchorDescriptor).name;
+      const list = startsAt.get(start) ?? [];
+      list.push({ side: "point", name });
+      startsAt.set(start, list);
+    } else if (kind === "bookmarkRange") {
+      const name = (extent.descriptor as AnchorDescriptor).name;
+      const startList = startsAt.get(start) ?? [];
+      startList.push({ side: "start", name });
+      startsAt.set(start, startList);
+      const endList = endsAt.get(end) ?? [];
+      endList.push({ side: "end", name });
+      endsAt.set(end, endList);
+    }
+  }
+  fieldRanges.sort((a, b) => a.start - b.start);
+  const markersAt = new Map<number, OdfBookmarkMarker[]>();
+  for (const boundary of new Set([...startsAt.keys(), ...endsAt.keys()])) {
+    markersAt.set(boundary, [
+      ...(endsAt.get(boundary) ?? []),
+      ...(startsAt.get(boundary) ?? []),
+    ]);
+  }
+  return { fieldRanges, markersAt };
+}
+
+// Field runs, formatted with the same span-grouping the top-level paragraph uses (never hyperlink-wrapped: a hyperlink carried by a run strictly inside a field's own cached text has no ODF spelling this writer produces, a narrow and documented gap rather than a silent drop -- ContentRun.hyperlink on such a run is simply not honoured).
+function writeOdfFieldElement(
+  descriptor: FieldDescriptor,
+  runs: readonly ContentRun[],
+  registry: StyleRegistry,
+): XmlElement {
+  const element = parseOdfFieldInstruction(descriptor.instruction);
+  const items: OdfParagraphItem[] = runs.map((run) => ({ kind: "run", run }));
+  const children = writeOdfItemFormattedNodes(
+    items,
+    0,
+    items.length,
+    registry,
+    new Set([0, items.length]),
+  );
+  return { ...element, children };
+}
+
+// Builds the item sequence writeOdfParagraphChildren emits from: a run item per surviving canonical run, except where a field's own range consumes a contiguous stretch of them into one field element.
+function buildOdfParagraphItems(
   canonical: readonly ContentRun[],
+  fieldRanges: OdfParagraphConstructPlan["fieldRanges"],
+  registry: StyleRegistry,
+): OdfParagraphItem[] {
+  const items: OdfParagraphItem[] = [];
+  let cursor = 0;
+  for (const range of fieldRanges) {
+    while (cursor < range.start) {
+      items.push({ kind: "run", run: canonical[cursor]! });
+      cursor += 1;
+    }
+    const fieldRuns = canonical.slice(
+      range.start,
+      Math.max(range.end, range.start),
+    );
+    items.push({
+      kind: "field",
+      node: writeOdfFieldElement(range.descriptor, fieldRuns, registry),
+    });
+    cursor = Math.max(cursor, range.end);
+  }
+  while (cursor < canonical.length) {
+    items.push({ kind: "run", run: canonical[cursor]! });
+    cursor += 1;
+  }
+  return items;
+}
+
+// Maps a canonical RUN boundary onto the corresponding ITEM boundary in the sequence buildOdfParagraphItems produced: a boundary strictly inside a field's own consumed range has no item position of its own to land on (the field is one opaque unit by the time a bookmark marker would need to split it), so it clamps to the item boundary immediately after that field -- a narrow, documented simplification for the rare case of a bookmark nested inside a field's own cached text, rather than an attempt to split the reconstructed field element apart.
+function odfParagraphItemBoundary(
+  canonicalBoundary: number,
+  fieldRanges: OdfParagraphConstructPlan["fieldRanges"],
+): number {
+  let items = 0;
+  let position = 0;
+  for (const range of fieldRanges) {
+    if (position >= canonicalBoundary) {
+      break;
+    }
+    if (range.start >= canonicalBoundary) {
+      items += canonicalBoundary - position;
+      position = canonicalBoundary;
+      break;
+    }
+    items += range.start - position;
+    items += 1; // the field item itself
+    position = range.end;
+  }
+  if (position < canonicalBoundary) {
+    items += canonicalBoundary - position;
+  }
+  return items;
+}
+
+function odfItemFormattingKey(item: OdfParagraphItem): string | undefined {
+  return item.kind === "run"
+    ? canonicalPropertiesString(odfRunProperties(item.run))
+    : undefined;
+}
+
+function odfItemHyperlink(item: OdfParagraphItem): string | undefined {
+  return item.kind === "run" ? item.run.hyperlink : undefined;
+}
+
+// The inline nodes for items [from, to), grouped so each maximal stretch of consecutive RUN items sharing one resolved formatting is ONE text:span rather than one per run -- a field item is never merged into a surrounding span (it is already its own element) and never lets a group straddle a protected boundary (where a bookmark marker needs to land). Whitespace protection is computed against each run's true neighbours in the WHOLE item sequence (a neighbouring field, or the paragraph's own edge, both count as "no neighbouring text" and are protected accordingly), never against the group's own edges, mirroring the original algorithm this generalises.
+function writeOdfItemFormattedNodes(
+  items: readonly OdfParagraphItem[],
   from: number,
   to: number,
   registry: StyleRegistry,
+  protectedBoundaries: ReadonlySet<number>,
 ): XmlNode[] {
   const nodes: XmlNode[] = [];
   let index = from;
   while (index < to) {
-    const properties = odfRunProperties(canonical[index]!);
-    const key = canonicalPropertiesString(properties);
+    const item = items[index]!;
+    if (item.kind === "field") {
+      nodes.push(item.node);
+      index += 1;
+      continue;
+    }
+    const key = odfItemFormattingKey(item);
     let end = index + 1;
     while (
       end < to &&
-      canonicalPropertiesString(odfRunProperties(canonical[end]!)) === key
+      !protectedBoundaries.has(end) &&
+      items[end]!.kind === "run" &&
+      odfItemFormattingKey(items[end]!) === key
     ) {
       end += 1;
     }
     const inner: XmlNode[] = [];
     for (let position = index; position < end; position += 1) {
-      const previousText = canonical[position - 1]?.text;
-      const nextText = canonical[position + 1]?.text;
+      const run = (items[position] as OdfParagraphRunItem).run;
+      const previous = items[position - 1];
+      const next = items[position + 1];
+      const previousText =
+        previous?.kind === "run" ? previous.run.text : undefined;
+      const nextText = next?.kind === "run" ? next.run.text : undefined;
       inner.push(
         ...buildOdfInlineNodes(
           segmentOdfText(
-            canonical[position]!.text,
+            run.text,
             previousText === undefined || previousText.endsWith(" "),
             nextText === undefined || nextText.startsWith(" "),
           ),
         ),
       );
     }
+    const properties = odfRunProperties(
+      (items[index] as OdfParagraphRunItem).run,
+    );
     if (Object.keys(properties).length === 0) {
       nodes.push(...inner);
     } else {
@@ -739,21 +967,73 @@ function writeOdfFormattedRunNodes(
   return nodes;
 }
 
-// A paragraph's own inline children: each maximal stretch of consecutive runs sharing one hyperlink target wrapped in a single text:a, with the formatting grouping above running inside it. Grouping rather than one text:a per run matches how the reader threads a link's target down through whatever spans sit inside it, so a link whose text changes formatting part-way is one anchor, not several.
-function writeOdfParagraphChildren(
-  runs: readonly ContentRun[],
+function writeOdfBookmarkMarker(marker: OdfBookmarkMarker): XmlElement {
+  switch (marker.side) {
+    case "point":
+      return writeOdfBookmarkPoint(marker.name);
+    case "start":
+      return writeOdfBookmarkStart(marker.name);
+    case "end":
+      return writeOdfBookmarkEnd(marker.name);
+  }
+}
+
+// A paragraph's own inline children: each maximal stretch of consecutive items sharing one hyperlink target wrapped in a single text:a (a field item never carries a hyperlink of its own, so it always breaks a hyperlink group open around it), with the formatting grouping above running inside it, and every run-level construct the paragraph carries spliced in at its own exact boundary -- a field consuming its own run range as one element (buildOdfParagraphItems), a bookmark point/start/end sitting as a bare sibling exactly where its extent's boundary maps to. Refusing a construct this function does not resolve is assertWritableParagraph's job (typed/odt/write.ts), called before this ever runs; every extent reaching here has already passed odfRunConstructWriteKind.
+export function writeOdfParagraphChildren(
+  paragraph: ContentParagraph,
   registry: StyleRegistry,
 ): XmlNode[] {
-  const canonical = segmentOdfParagraphRuns(runs);
+  const runs = paragraph.runs;
+  const extents = paragraph.constructs ?? [];
+  const protectedRunBoundaries = new Set<number>([0, runs.length]);
+  for (const extent of extents) {
+    protectedRunBoundaries.add(extent.startRun);
+    protectedRunBoundaries.add(extent.endRun);
+  }
+  const { canonical, boundaryMap } = segmentOdfParagraphRunsMapped(
+    runs,
+    protectedRunBoundaries,
+  );
+  const plan = planOdfParagraphConstructs(extents, boundaryMap);
+  const items = buildOdfParagraphItems(canonical, plan.fieldRanges, registry);
+
+  const protectedItemBoundaries = new Set<number>([0, items.length]);
+  const markersAtItemBoundary = new Map<number, OdfBookmarkMarker[]>();
+  for (const [canonicalBoundary, markers] of plan.markersAt) {
+    const itemBoundary = odfParagraphItemBoundary(
+      canonicalBoundary,
+      plan.fieldRanges,
+    );
+    protectedItemBoundaries.add(itemBoundary);
+    const existing = markersAtItemBoundary.get(itemBoundary) ?? [];
+    markersAtItemBoundary.set(itemBoundary, [...existing, ...markers]);
+  }
+  const emitMarkers = (children: XmlNode[], boundary: number): void => {
+    for (const marker of markersAtItemBoundary.get(boundary) ?? []) {
+      children.push(writeOdfBookmarkMarker(marker));
+    }
+  };
+
   const children: XmlNode[] = [];
+  emitMarkers(children, 0);
   let index = 0;
-  while (index < canonical.length) {
-    const target = canonical[index]!.hyperlink;
+  while (index < items.length) {
+    const target = odfItemHyperlink(items[index]!);
     let end = index + 1;
-    while (end < canonical.length && canonical[end]!.hyperlink === target) {
+    while (
+      end < items.length &&
+      !protectedItemBoundaries.has(end) &&
+      odfItemHyperlink(items[end]!) === target
+    ) {
       end += 1;
     }
-    const nodes = writeOdfFormattedRunNodes(canonical, index, end, registry);
+    const nodes = writeOdfItemFormattedNodes(
+      items,
+      index,
+      end,
+      registry,
+      protectedItemBoundaries,
+    );
     if (target === undefined) {
       children.push(...nodes);
     } else {
@@ -766,6 +1046,7 @@ function writeOdfParagraphChildren(
       );
     }
     index = end;
+    emitMarkers(children, index);
   }
   return children;
 }
@@ -807,7 +1088,7 @@ export function writeOdfParagraph(
     paragraph.headingLevel === undefined ? "text:p" : "text:h",
     attributes,
     [
-      ...writeOdfParagraphChildren(paragraph.runs, registry),
+      ...writeOdfParagraphChildren(paragraph, registry),
       ...(options.trailingNodes ?? []),
     ],
   );
