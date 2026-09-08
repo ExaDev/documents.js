@@ -87,6 +87,17 @@ const bytes2 = z.encode(epubCodec, tree);
 
 This is the no-extra-options form only — `readEpub(Content)`/`writeEpub(Content)` remain the entry points for a diagnostic sink.
 
+The lossless byte-level `Package` (ExaDev/documents.js#963), for a caller that wants a genuine EPUB-to-EPUB round trip with no `ContentDocument`/`DocumentTree` projection in between — `readEpub(Content)`/`writeEpubContent` already cross this exact boundary internally, so reaching for it directly is for a caller inspecting or editing raw parts, not a prerequisite for ordinary reading/writing:
+
+```ts
+import { decodePackage, encodePackage } from "epub-codec";
+
+const pkg = decodePackage(epubBytes); // -> { parts: Record<string, Part> }, every zip entry as XML nodes or base64 bytes
+const bytes2 = encodePackage(pkg); // decode -> encode is a fixed point: bytes2 carries the identical part content
+```
+
+Unlike `ooxml.js`/`odf.js`, neither of which offers a one-shot bytes-in convenience at all (their own typed readers take an already-decoded `Package`, e.g. `readDocx(decodePackage(bytes))`), `readEpub(Content)`/`writeEpub(Content)` above stay this package's own established bytes-in/bytes-out API — `decodePackage`/`encodePackage` are additive, not a replacement for it.
+
 One spine itemref becomes one `ContentSection`, in spine order — **every** itemref, including one marked `linear="no"` (an EPUB 2 idiom for supplementary content, most often a footnote/endnote page): this package reads it as an ordinary section rather than silently skipping real content a reading system happens to route around. EPUB has no page concept of its own, so every section is given the same invented A4 + 1in default geometry (`ReadEpubOptions`/`WriteEpubOptions` carry no override for this, unlike `markdown-codec`'s `pageSize`/`margins` options — nothing in this package's own scope needs one yet).
 
 ## Architecture
@@ -94,7 +105,8 @@ One spine itemref becomes one `ContentSection`, in spine order — **every** ite
 Layered from the lossless OCF/XML primitives outward to the XHTML-to-`ContentDocument` mapping itself:
 
 - **`src/zip.ts`** — the OCF ZIP container: fixed-mtime, ordered-entries `zipPackage`/`unzipPackage` over `fflate`, hand-duplicated from `ooxml.js`'s and `odf.js`'s own identical wrappers rather than depending on `archive-codec` — see [Dependency choices](#dependency-choices).
-- **`src/xml/`** — the lossless XML layer every other module in this package builds on: `parse.ts`/`build.ts` wrap `fast-xml-parser` with the identical `preserveOrder` configuration `ooxml.js`'s and `odf.js`'s own XML modules use (order and mixed content survive; entity encoding stays raw until `entities.ts` decodes it in the one place text actually becomes content), `query.ts` the same handful of tree-walking helpers (`rootElement`, `findChildElement`, `childrenWithTag`, `elementsWithTag`, `attrValue`, plus `findElement` and `textContent`, needed here for footnote-target and nav-toc resolution respectively).
+- **`src/xml/`** — the lossless XML layer every other module in this package builds on: `parse.ts`/`build.ts` wrap `fast-xml-parser` with the identical `preserveOrder` configuration `ooxml.js`'s and `odf.js`'s own XML modules use (order and mixed content survive; entity encoding stays raw until `entities.ts` decodes it in the one place text actually becomes content), `query.ts` the same handful of tree-walking helpers (`rootElement`, `findChildElement`, `childrenWithTag`, `elementsWithTag`, `attrValue`, plus `findElement` and `textContent`, needed here for footnote-target and nav-toc resolution respectively), `node.ts` the ordered `XmlNode` forest itself — also the shape `src/model/package.ts`'s own `XmlPart` carries.
+- **`src/model/package.ts`/`src/package-io/`** — the lossless byte-level `Package` model (ExaDev/documents.js#963), mirroring `ooxml.js`'s and `odf.js`'s own `model/package.ts`/`package-io/` exactly: every zip entry as a `Part` (an `XmlNode[]` forest, or raw base64 bytes), `read.ts`'s `parsePackage`/`packageFromEntries` classifying entries into parts, `write.ts`'s `serializePackage`/`packageToEntries` the structural inverse (including the OCF mimetype-first-stored hoist). `src/codec.ts` wraps the pair as `decodePackage`/`encodePackage`; `src/read.ts`/`src/write.ts` cross this same boundary internally rather than talking to `src/zip.ts` directly.
 - **`src/ocf/`** — `container.ts` resolves the OPF rootfile from `META-INF/container.xml` (EPUB 3.3 §6.7.2); `write.ts` is its structural inverse.
 - **`src/opf/`** — `parse.ts`/`write.ts` read and write the OPF package document (§5.4): Dublin Core metadata (`metadata.ts`), the manifest, and the spine.
 - **`src/nav/`** — `nav3.ts`/`ncx.ts` reduce the EPUB 3 `<nav epub:type="toc">` document and the EPUB 2 NCX to a flat, fragment-stripped href sequence each; `reconcile.ts` compares that sequence against the spine's own reading order (the issue's own explicit "the spine wins" decision); `write.ts` builds a minimal EPUB 3 nav document, one entry per section, titled from each section's own first heading.
@@ -103,8 +115,8 @@ Layered from the lossless OCF/XML primitives outward to the XHTML-to-`ContentDoc
 - **`src/util/base64.ts`** — isomorphic base64 codec, a third hand-written copy of the identical helper `odf.js`'s and `pdf-codec`'s own `src/util/base64.ts` already carry.
 - **`src/path.ts`** — package-relative path resolution (manifest hrefs against the OPF's own directory, `<img src>` against its own XHTML document's directory), honouring `../` segments.
 - **`src/diagnostics.ts`** — the three-tier read/write failure policy; see [Conventions](#conventions).
-- **`src/read.ts`/`src/write.ts`** — the public entry points, composing every layer above into `readEpub(Content)`/`writeEpub(Content)`.
-- **`src/codec.ts`** — `epubCodec`/`epubContentCodec`, the `z.codec()` pair.
+- **`src/read.ts`/`src/write.ts`** — the public entry points, composing every layer above into `readEpub(Content)`/`writeEpub(Content)`, `decodePackage`/`encodePackage` first/last.
+- **`src/codec.ts`** — `epubCodec`/`epubContentCodec` (the `ContentDocument`/`DocumentTree` round trip) and `packageCodec`/`decodePackage`/`encodePackage` (the lossless `Package` round trip), each a `z.codec()` pair.
 
 ## Dependency choices
 
@@ -149,7 +161,9 @@ Every construct this package's XHTML mapping cannot represent losslessly is a do
 
 **Restorable fidelity** — a same-format (EPUB-to-EPUB) round trip re-emits quarantined CSS residue verbatim, and re-resolves an internal link/bookmark or footnote reference/body pair to a working same-file or cross-file href on every write (ExaDev/documents.js#963); the one remaining documented gap above (sub/sup styling) is a permanent, structural limit rather than a restorable one, since the source construct itself has nowhere in the schema to ride.
 
-**Not byte fidelity.** This package has no lossless byte-level `Package` model the way `ooxml.js`/`odf.js` do — there is no `decodePackage`/`encodePackage` pair, and a read-then-write round trip never reproduces the original bytes (a fresh `dc:identifier` is minted on every write, per this package's own explicit write scope). What _is_ deterministic: two writes of the _same_ `ContentDocument` produce byte-identical zip _layout_ (mimetype-first, stored, ordered entries, fixed mtimes) even though the OPF entry's own compressed bytes differ (the fresh identifier). `src/roundtrip.test.ts` pins the layout invariant directly rather than claiming full byte determinism.
+**Byte fidelity, at the Package level** (ExaDev/documents.js#963). This package now has the same lossless byte-level `Package` model `ooxml.js`/`odf.js` do — a `decodePackage`/`encodePackage` pair, mirroring theirs exactly, that reads every OCF zip entry into a generic `Part` (an XML entry as an ordered `XmlNode[]` forest, anything else as raw base64 bytes) and writes it straight back, with no EPUB-specific interpretation in between. `decodePackage(bytes) |> encodePackage` is a genuine fixed point: `src/package-round-trip.test.ts` pins `decode -> encode -> decode` idempotence, per-part content preservation (an XML part's own entities/structure, a binary part's own bytes verbatim), and the one deliberate departure from a generic zip-of-XML writer this format shares with ODF's identical requirement — the `mimetype` part hoisted first and stored uncompressed (EPUB 3.3 §6.3), regardless of the input zip's own entry order, and never fabricated if the input never carried one. `readEpub(Content)`/`writeEpubContent` cross this identical boundary internally (`decodePackage` first, `encodePackage` last) rather than talking to the zip layer directly, so the two are the same lossless core, not two independent implementations that happen to agree.
+
+**Not byte fidelity at the ContentDocument level.** The `ContentDocument`/`DocumentTree` mapping stays a lossy projection on top of that lossless core — the same "lossless core vs. lossy views" boundary `ooxml.js`'s own README states for its identical `decodePackage`/`readDocx` split: `writeEpubContent` always builds a _fresh_ `EpubPackage` from the content it's given rather than touching one `readEpubContent` might have decoded, so a read-then-write round trip through the content level never reproduces the original bytes (a fresh `dc:identifier` is minted on every write, per this package's own explicit write scope, among other differences a lossy projection can't avoid). What _is_ deterministic at this level: two writes of the _same_ `ContentDocument` produce byte-identical zip _layout_ (mimetype-first, stored, ordered entries, fixed mtimes) even though the OPF entry's own compressed bytes differ (the fresh identifier). `src/roundtrip.test.ts` pins the layout invariant directly rather than claiming full byte determinism at this level.
 
 ## Build, test, and lint
 
@@ -177,7 +191,7 @@ Conventional Commits, enforced workspace-wide by commitlint through a root `comm
 
 - [document-schema.js](../document-schema.js/README.md) — the canonical `ContentDocument`/`DocumentTree` schema and the `decompose`/`flattenTree`/`assembleTree` transform this package's writer is built on.
 - [markdown-codec](../markdown-codec/README.md) — the closest architectural relative: hand-written, AST-to-`ContentDocument` lowering, the identical dual-level (`DocumentTree`/`ContentDocument`) API, the identical three-tier diagnostic policy, and the identical list-`numId`-packing mechanism for the identical schema gap.
-- [ooxml.js](../ooxml.js/README.md) / [odf.js](../odf.js/README.md) — the OCF/ZIP and lossless-XML-layer conventions this package's own `src/zip.ts`/`src/xml/` mirror.
+- [ooxml.js](../ooxml.js/README.md) / [odf.js](../odf.js/README.md) — the OCF/ZIP, lossless-XML-layer, and byte-level `Package` model (`decodePackage`/`encodePackage`, ExaDev/documents.js#963) conventions this package's own `src/zip.ts`/`src/xml/`/`src/model/package.ts`/`src/package-io/` mirror; `odf.js`'s in particular, since ODF shares EPUB's identical OCF mimetype-first-stored requirement.
 - [archive-codec](../archive-codec/README.md) — the ZIP-in-ZIP/CFB utility package this package deliberately does not depend on; see [Dependency choices](#dependency-choices).
 - [byte-codec](../byte-codec/README.md) — the byte/image utility package this package deliberately does not depend on for image dimensions; see [Dependency choices](#dependency-choices).
 - [EPUB 3.3](https://www.w3.org/TR/epub-33/) — the current W3C Recommendation this package's own EPUB 3 reading and writing targets.

@@ -31,7 +31,9 @@ import { buildXml } from "./xml/build";
 import { encodeEntities } from "./xml/entities";
 import type { XmlElement, XmlNode } from "./xml/node";
 import { parseXml } from "./xml/parse";
-import { zipPackage, type ZipEntry } from "./zip";
+import { packageFromEntries } from "./package-io/read";
+import { serializePackage } from "./package-io/write";
+import type { ZipEntry } from "./zip";
 
 // The public write entry points: writeEpubContent (the primary API -- a flat ContentDocument in, a minimal valid EPUB 3 out) and writeEpub (flattenTree composed on top, for a caller holding a DocumentTree instead -- matching markdown-codec's own dual-level API and readEpub's own tree/flat pairing in src/read.ts). Only EPUB 3 is ever written (ExaDev/documents.js#801's own explicit scope: EPUB 2 is read-only), and only a 'wordprocessing' document -- EPUB has no presentation/spreadsheet/drawing/formula analogue.
 
@@ -258,7 +260,12 @@ export function writeEpubContent(
     entries.push([`${OPF_DIR}/${image.href}`, { bytes: image.bytes }]);
   }
 
-  return zipPackage(entries);
+  // The lossless byte-level Package model (ExaDev/documents.js#963) is this function's own last step, not a separate entry point a caller must reach for themselves: writeEpubContent stays this package's one-shot ContentDocument-in/bytes-out convenience, but internally it now crosses the identical encodePackage boundary a caller reaching for decodePackage/encodePackage directly would. packageFromEntries classifies each entry exactly as parsePackage's own read-side classification would (an XML entry parsed into nodes, a binary entry kept as base64), which serializePackage then re-derives back to these same bytes -- a real round trip through the Package model, not a bypass of it, even though this writer (matching ooxml.js's own buildDocxPackageFromContent precedent: "each writer builds a fresh package rather than touching the decoded one") always builds a brand-new package rather than reusing one read.ts might have decoded.
+  const entryBytes: Record<string, Uint8Array<ArrayBuffer>> = {};
+  for (const [path, entry] of entries) {
+    entryBytes[path] = entry.bytes;
+  }
+  return serializePackage(packageFromEntries(entryBytes));
 }
 
 export function writeEpub(

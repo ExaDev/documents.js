@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// The lossless XML node model this package's OCF/OPF/nav/XHTML parsing all share, mirroring ooxml.js's and odf.js's own model/node.ts exactly (an ordered forest matching XML mixed content -- text/cdata/comment/declaration/pi/element). Unlike those two siblings, this package has no separate byte-fidelity "Package" layer sitting above it: an EPUB's XML parts are read straight into ContentDocument, so this model exists purely as the shared parse/build/query intermediate for src/opf, src/nav, and src/xhtml, not as a published lossless round-trip artefact in its own right.
+// The lossless XML node model this package's OCF/OPF/nav/XHTML parsing all share, mirroring ooxml.js's and odf.js's own model/node.ts exactly (an ordered forest matching XML mixed content -- text/cdata/comment/declaration/pi/element). It is also the shape src/model/package.ts's own XmlPart carries (ExaDev/documents.js#963), so a Package's own parts are exactly as lossless as this forest is -- this module is the one shared parse/build/query intermediate for src/opf, src/nav, src/xhtml, and the Package model alike.
 
 export const AttributeSchema = z.object({
   name: z.string(),
