@@ -1,6 +1,12 @@
 import { base64ToBytes } from "./util/base64";
 import { deflate } from "./bytes/flate";
 import { ByteWriter, concatBytes } from "./bytes/writer";
+import { randomBytes } from "./crypto/random";
+import type { PdfEncryptionOptions } from "./encrypt-write";
+import {
+  createStandardEncryptor,
+  encryptIndirectObject,
+} from "./encrypt-write";
 import { readJpegInfo } from "./image/jpeg-info";
 import { decodePng } from "./image/png-decode";
 import type { LayoutFont, PositionedFormula } from "document-schema.js";
@@ -84,7 +90,12 @@ export interface WritePdfOptions {
   readonly fonts?: FontRegistry;
   // Every embedded formula to draw (src/mathml's own MathBox, already positioned per page) -- see this module's own top-of-file comment for why a formula can't travel through doc.pages[].items itself. The embedded STIX Two Math composite font (one Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode object group) is allocated once for the whole document, only when this array is non-empty, and shared across every page that references it -- the same "allocate once, reuse via /Resources" pattern this writer already uses for every standard-14 font and image asset.
   readonly formulas?: readonly PositionedFormula[];
+  // Encrypts the written PDF with the standard security handler under one of encrypt-write.ts's four schemes (default: aes-256). Omitted -- the default -- no /Encrypt dictionary is written at all and output is byte-identical to a build with no encryption support; see encrypt-write.ts's own module comment for the write-side algorithms and README.md's Gotchas section for this feature's scope.
+  readonly encryption?: PdfEncryptionOptions;
 }
+
+// A PDF file identifier (trailer /ID) is only ever written when encryption is requested -- an unencrypted document has never needed one from this writer, and adding it unconditionally would change every existing golden-byte test's output. 16 bytes matches the ID this writer's own qpdf-produced test fixtures carry (src/test-support/encrypted-pdfs.ts).
+const FILE_ID_BYTES = 16;
 
 // PDF's UTF-16BE-with-BOM convention for text strings outside PDFDocEncoding's range (ISO 32000-1 7.9.2.2) -- JS strings are already UTF-16 internally, so this is a direct byte-pair re-encoding of each existing code unit (surrogate pairs included), not a decode/re-encode round trip.
 function textToPdfString(text: string): PdfObject {
@@ -567,6 +578,9 @@ export function writePdf(
     contentsNum: nextObjNum++,
   }));
 
+  const encryptDictNum =
+    options.encryption === undefined ? undefined : nextObjNum++;
+
   const objects: AllocatedObject[] = [];
   objects.push({
     num: catalogNum,
@@ -821,10 +835,26 @@ export function writePdf(
     objects.push({ num: pageNum, value: pdfDict(pageEntries) });
   });
 
+  // Encryption runs as a final pass over the fully-assembled object graph, rather than being threaded through every object-construction call above: every string and stream this writer produces needs the identical treatment (Algorithm 1/1.A, keyed by that object's own number), so one recursive walk here is the same DRY move document.ts's own decryptDict/decryptObject already makes on the read side. The /Encrypt dictionary object itself is allocated and appended only afterwards, so this walk never touches it -- ISO 32000-2 7.6.1 requires its own O/U/OE/UE/Perms strings to stay in the clear.
+  let fileId: Uint8Array<ArrayBuffer> | undefined;
+  let encryptedObjects = objects;
+  if (options.encryption !== undefined && encryptDictNum !== undefined) {
+    fileId = randomBytes(FILE_ID_BYTES);
+    const encryptor = createStandardEncryptor(options.encryption, fileId);
+    encryptedObjects = objects.map(({ num, value }) => ({
+      num,
+      value: encryptIndirectObject(value, num, 0, encryptor),
+    }));
+    encryptedObjects.push({
+      num: encryptDictNum,
+      value: encryptor.encryptDict,
+    });
+  }
+
   const writer = new ByteWriter();
   writer.writeAscii("%PDF-1.7\n");
   const offsets = new Map<number, number>();
-  for (const { num, value } of objects) {
+  for (const { num, value } of encryptedObjects) {
     offsets.set(num, writer.length);
     writer.writeAscii(`${num} 0 obj\n`);
     writeObject(writer, value);
@@ -846,15 +876,20 @@ export function writePdf(
     writer.writeAscii(xrefEntry(offset, 0, true));
   }
 
+  const trailerEntries = new Map<string, PdfObject>([
+    ["Size", pdfNum(maxObjNum + 1)],
+    ["Root", pdfRef(catalogNum, 0)],
+    ["Info", pdfRef(infoNum, 0)],
+  ]);
+  if (fileId !== undefined && encryptDictNum !== undefined) {
+    trailerEntries.set(
+      "ID",
+      pdfArray([pdfHexString(fileId), pdfHexString(fileId)]),
+    );
+    trailerEntries.set("Encrypt", pdfRef(encryptDictNum, 0));
+  }
   writer.writeAscii("trailer\n");
-  writeObject(
-    writer,
-    pdfDict({
-      Size: pdfNum(maxObjNum + 1),
-      Root: pdfRef(catalogNum, 0),
-      Info: pdfRef(infoNum, 0),
-    }),
-  );
+  writeObject(writer, pdfDict(trailerEntries));
   writer.writeAscii("\nstartxref\n");
   writer.writeAscii(`${xrefOffset}\n`);
   writer.writeAscii("%%EOF");
