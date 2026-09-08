@@ -365,7 +365,7 @@ function mapConditionalFormats(
   });
 }
 
-// CF12's colour scale/data bar/icon set rules (ExaDev/documents.js#1104's own scope -- the ct 0x05 filter-dispatched template family, top10/aboveAverage/containsText/etc., stays unread, ExaDev/documents.js#1100). A rule whose own colour cannot be resolved (an automatic or theme colour reference, this package has no BIFF8 Theme reader) is dropped whole rather than promoted with a missing or wrong colour, mirroring the same "narrow rather than guess" boundary the base CF/DXFN reading above already draws.
+// CF12's colour scale/data bar/icon set/filter-template rules. A rule whose own colour cannot be resolved (an automatic or theme colour reference, this package has no BIFF8 Theme reader) is dropped whole rather than promoted with a missing or wrong colour, mirroring the same "narrow rather than guess" boundary the base CF/DXFN reading above already draws.
 function mapConditionalFormats12(
   raw: readonly RawConditionalFormat12[],
   palette: readonly Color[] | undefined,
@@ -440,6 +440,21 @@ function mapConditionalFormats12(
       results.push({
         type: "timePeriod",
         timePeriod: format.timePeriod,
+        ...(style !== undefined ? { style } : {}),
+        ...common,
+      });
+      continue;
+    }
+    if (
+      format.kind === "containsText" ||
+      format.kind === "notContainsText" ||
+      format.kind === "beginsWith" ||
+      format.kind === "endsWith"
+    ) {
+      const style = mapConditionalFormatStyle(format.style, palette);
+      results.push({
+        type: format.kind,
+        text: format.text,
         ...(style !== undefined ? { style } : {}),
         ...common,
       });
