@@ -20,6 +20,7 @@ import type {
   ContentTableCell,
   PageSize,
   RunConstructExtent,
+  SourceResidue,
 } from "document-schema.js";
 import { ContentSlideSchema, SLIDE_SIZE_WIDESCREEN } from "document-schema.js";
 import { drawingMlFontSizeToPt, emuToPt } from "../shared/units";
@@ -55,8 +56,8 @@ import {
   resolvePlaceholderXfrm,
   resolveSlideInheritance,
 } from "./inherit";
-import { readChartTable } from "./chart";
-import { readDiagramText } from "./diagram";
+import { readChartResidue, readChartTable } from "./chart";
+import { readDiagramResidue, readDiagramText } from "./diagram";
 
 // Package -> PptxDocument. Walks PresentationML directly: document order, placeholder inheritance, and theme resolution all matter for conversion fidelity in a way a flat text/shape-list projection doesn't preserve. Ported from documents.js's src/ooxml/pptx/read.ts.
 //
@@ -833,6 +834,7 @@ function readGraphicFrameShape(
       ? childrenWithTag(graphicData, "a:tbl")[0]
       : undefined;
   let blocks: ContentBlock[];
+  let shapeSource: SourceResidue | undefined;
   if (tbl !== undefined) {
     blocks = [readTable(tbl, context, slideRels)];
   } else if (uri === CHART_GRAPHIC_URI && graphicData !== undefined) {
@@ -844,16 +846,26 @@ function readGraphicFrameShape(
     );
     const chartTable =
       chartRoot === undefined ? undefined : readChartTable(chartRoot, frame);
+    if (chartTable !== undefined && chartRoot !== undefined) {
+      chartTable.source = readChartResidue(chartRoot, "pptx");
+    }
     blocks = chartTable === undefined ? [] : [chartTable];
   } else if (uri === DIAGRAM_GRAPHIC_URI && graphicData !== undefined) {
-    // dgm:relIds' r:dm names the data model part -- the semantic graph of nodes and text (r:lo/r:qs/r:cs only decide how that graph is drawn).
+    // dgm:relIds' r:dm names the data model part -- the semantic graph of nodes and text. r:lo/r:qs/r:cs (layout, quick-style, colours) only decide how that graph is DRAWN, so they carry no text of their own to read into blocks; they quarantine whole as the shape's own residue instead (readDiagramResidue), rather than being silently dropped.
     const relIds = childrenWithTag(graphicData, "dgm:relIds")[0];
-    const dataModelRoot = relatedPartRoot(
-      relIds === undefined ? undefined : attr(relIds, "r:dm"),
-      slideRels,
-      pkg,
-    );
+    const relPartRoot = (attrName: string): XmlElement | undefined =>
+      relatedPartRoot(
+        relIds === undefined ? undefined : attr(relIds, attrName),
+        slideRels,
+        pkg,
+      );
+    const dataModelRoot = relPartRoot("r:dm");
     blocks = dataModelRoot === undefined ? [] : readDiagramText(dataModelRoot);
+    shapeSource = readDiagramResidue(
+      relPartRoot("r:lo"),
+      relPartRoot("r:qs"),
+      relPartRoot("r:cs"),
+    );
   } else if (uri === OLE_GRAPHIC_URI && graphicData !== undefined) {
     // What the slide actually displays is the OLE object's fallback picture (mc:Fallback > p:oleObj > p:pic under the mc:AlternateContent wrapper, or a p:pic directly under p:oleObj where a producer skipped the wrapper), so that picture is read like any other blip image. With no reachable picture, the p:oleObj's progId at least records what kind of object the frame holds. The object's own payload (p:oleObj/@r:id's embedded part) is additionally decoded when it is a ZIP archive -- a modern producer's embedded xlsx/docx/pptx -- and its recovered sub-document appended as an embeddedObject block beside whatever the display path produced (readOleEmbeddedObject below); the classic non-ZIP OLE compound-file payload stays opaque external-application data, and a ZIP that does not decode as one of the three OOXML flavours degrades to no embedded block, so an undecodable payload never fails the slide read.
     const image = readBlipImage(graphicData, slideRels, pkg, frame);
@@ -880,6 +892,7 @@ function readGraphicFrameShape(
     frame,
     rotationDeg,
     ...NO_TEXT_BODY_EXTRAS,
+    source: shapeSource,
     blocks,
   };
 }
