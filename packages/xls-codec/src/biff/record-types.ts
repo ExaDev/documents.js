@@ -8,6 +8,8 @@ export const RECORD_BOF = 0x0809;
 export const RECORD_EOF = 0x000a;
 /** Carries the overflow of a preceding record whose data exceeds what one record can hold ([MS-XLS] 2.4.58). */
 export const RECORD_CONTINUE = 0x003c;
+/** Carries the overflow of a preceding "future record type" (FRT) record -- CondFmt12/CF12 among them -- whose data exceeds what one record can hold, restating a 12-byte FrtRefHeader of its own before the actual continuation bytes ([MS-XLS] 2.4.62). Plain Continue never follows an FRT record; this is its own record type precisely so a reader can tell the two apart. */
+export const RECORD_CONTINUEFRT12 = 0x087f;
 
 // --- Workbook globals substream ---
 
