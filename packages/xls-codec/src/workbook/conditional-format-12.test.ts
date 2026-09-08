@@ -3,7 +3,11 @@ import type { FormulaSheetContext } from "../biff/ptg";
 import { groupRecords, type RecordGroup } from "../biff/substreams";
 import { readRecords } from "../biff/records";
 import { concat, f64, record, u16, u32 } from "../test-support/biff";
-import { RECORD_CF12, RECORD_CONDFMT12 } from "../biff/record-types";
+import {
+  RECORD_CF12,
+  RECORD_CONDFMT12,
+  RECORD_CONTINUEFRT12,
+} from "../biff/record-types";
 import { readCondFmt12Group } from "./conditional-format-12";
 
 // CondFmt12/CF12 ([MS-XLS] 2.4.57/2.4.43): https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3b6a364e-8c34-4830-a8b1-5a51476a9934. Every byte layout exercised here is built directly to that published field table, the same "state the real grammar, not a producer convention" approach conditional-format.test.ts already takes for base CondFmt/CF.
@@ -137,12 +141,12 @@ function condFmt12Record(
   ]);
 }
 
-function cf12Record(
+function cf12Bytes(
   ct: number,
   rgbCT: readonly number[],
   options: { stopIfTrue?: boolean; priority?: number } = {},
-): Uint8Array<ArrayBuffer> {
-  return record(RECORD_CF12, [
+): number[] {
+  return [
     ...new Array<number>(12).fill(0), // frtRefHeader
     ct,
     0x00, // cp
@@ -156,7 +160,15 @@ function cf12Record(
     16, // cbTemplateParm
     ...new Array<number>(16).fill(0), // rgbTemplateParms
     ...rgbCT,
-  ]);
+  ];
+}
+
+function cf12Record(
+  ct: number,
+  rgbCT: readonly number[],
+  options: { stopIfTrue?: boolean; priority?: number } = {},
+): Uint8Array<ArrayBuffer> {
+  return record(RECORD_CF12, cf12Bytes(ct, rgbCT, options));
 }
 
 function groupsFrom(
@@ -185,8 +197,8 @@ describe("readCondFmt12Group", () => {
       {
         kind: "colorScale",
         stops: [
-          { value: { type: "min" }, color: { kind: "icv", icv: 2 } },
-          { value: { type: "max" }, color: { kind: "icv", icv: 3 } },
+          { value: { type: "min" }, color: { kind: "icv", icv: 2, tint: 0 } },
+          { value: { type: "max" }, color: { kind: "icv", icv: 3, tint: 0 } },
         ],
         priority: 0,
         stopIfTrue: false,
@@ -217,7 +229,7 @@ describe("readCondFmt12Group", () => {
     expect(format.stops).toHaveLength(3);
     expect(format.stops[1]).toEqual({
       value: { type: "num", value: "50" },
-      color: { kind: "rgb", color: { r: 1, g: 1, b: 0 } },
+      color: { kind: "rgb", color: { r: 1, g: 1, b: 0 }, tint: 0 },
     });
   });
 
@@ -279,6 +291,7 @@ describe("readCondFmt12Group", () => {
         color: {
           kind: "rgb",
           color: { r: 99 / 255, g: 190 / 255, b: 123 / 255 },
+          tint: 0,
         },
         showValue: true,
         priority: 0,
@@ -347,6 +360,10 @@ describe("readCondFmt12Group", () => {
   it("reads every documented icon-set byte against its own ECMA-376 name", () => {
     const cases: [number, string][] = [
       [0x00, "3Arrows"],
+      [0x03, "3TrafficLights1"],
+      // 0x04/0x05 deliberately diverge from the raw spec page's own prose ordering -- see this table's own top comment in conditional-format-12.ts. Cross-checked against Apache POI's IconSet enum and LibreOffice's ScIconSetType enum, which independently agree with each other on this exact pairing.
+      [0x04, "3TrafficLights2"],
+      [0x05, "3Signs"],
       [0x07, "3Symbols2"],
       [0x08, "4Arrows"],
       [0x0c, "4TrafficLights"],
@@ -490,5 +507,43 @@ describe("readCondFmt12Group", () => {
 
     expect(result.formats).toEqual([]);
     expect(result.recordsConsumed).toBe(1);
+  });
+
+  it("reads a CF12 record correctly when its own data is split across a ContinueFrt12", () => {
+    const fullBytes = cf12Bytes(
+      0x03,
+      cfGradient([
+        { cfvo: cfvo(0x02), color: cfColorIcv(2) },
+        { cfvo: cfvo(0x03), color: cfColorIcv(3) },
+      ]),
+    );
+    const splitPoint = 20; // somewhere inside the fixed frtRefHeader/ct/cp/cce prefix
+    const first = fullBytes.slice(0, splitPoint);
+    const rest = fullBytes.slice(splitPoint);
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      record(RECORD_CF12, first),
+      record(RECORD_CONTINUEFRT12, [
+        ...new Array<number>(12).fill(0), // frtRefHeader, stripped by groupRecords
+        ...rest,
+      ]),
+    );
+
+    const result = readCondFmt12Group(groups, 0, NO_SHEETS);
+
+    // groupRecords has already joined the CF12 base record and its ContinueFrt12 into one logical record by this point, so recordsConsumed still counts 2 -- the CondFmt12 plus that one (now complete) CF12, the same as an unsplit CF12 would.
+    expect(result.recordsConsumed).toBe(2);
+    expect(result.formats).toEqual([
+      {
+        kind: "colorScale",
+        stops: [
+          { value: { type: "min" }, color: { kind: "icv", icv: 2, tint: 0 } },
+          { value: { type: "max" }, color: { kind: "icv", icv: 3, tint: 0 } },
+        ],
+        priority: 0,
+        stopIfTrue: false,
+        ranges: ONE_RANGE,
+      },
+    ]);
   });
 });

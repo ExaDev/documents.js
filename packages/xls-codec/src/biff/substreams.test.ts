@@ -5,7 +5,9 @@ import {
   BOF_TYPE_WORKBOOK,
   BOF_TYPE_WORKSHEET,
   RECORD_BOF,
+  RECORD_CF12,
   RECORD_CONTINUE,
+  RECORD_CONTINUEFRT12,
   RECORD_EOF,
   RECORD_SST,
 } from "./record-types";
@@ -104,6 +106,48 @@ describe("groupRecords", () => {
   it("rejects a Continue with no preceding record to continue", () => {
     expect(() =>
       groupRecords(records({ type: RECORD_CONTINUE, data: bytes(1) })),
+    ).toThrow(BiffFormatError);
+  });
+
+  it("attaches a ContinueFrt12 record to the FRT record it continues, stripping its own 12-byte FrtRefHeader first", () => {
+    const groups = groupRecords(
+      records(
+        { type: RECORD_CF12, data: bytes(1) },
+        {
+          type: RECORD_CONTINUEFRT12,
+          data: bytes(
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0, // frtRefHeader, stripped
+            2,
+            3, // genuine continuation bytes
+          ),
+        },
+      ),
+    );
+
+    expect(groups).toEqual([
+      { type: RECORD_CF12, blocks: [bytes(1), bytes(2, 3)], offset: 0 },
+    ]);
+  });
+
+  it("rejects a ContinueFrt12 with no preceding record to continue", () => {
+    expect(() =>
+      groupRecords(
+        records({
+          type: RECORD_CONTINUEFRT12,
+          data: bytes(...new Array<number>(12).fill(0)),
+        }),
+      ),
     ).toThrow(BiffFormatError);
   });
 });

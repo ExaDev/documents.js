@@ -31,6 +31,7 @@ import {
   type Substream,
 } from "./biff/substreams";
 import {
+  applyTint,
   resolveFillBackground,
   resolveBorderEdge,
   resolveIcvColor,
@@ -351,11 +352,14 @@ function mapConditionalFormats12(
   return results;
 }
 
+// CFColor's own tint applies to whichever base colour xclrType named, indexed or RGB alike, so it is applied here, once, after resolving that base colour -- not inside conditional-format-12.ts's own readCfColor, which has no palette to resolve an indexed colour against in the first place.
 function mapCfColor(
   raw: RawCfColor,
   palette: readonly Color[] | undefined,
 ): Color | undefined {
-  return raw.kind === "rgb" ? raw.color : resolveIcvColor(raw.icv, palette);
+  const base =
+    raw.kind === "rgb" ? raw.color : resolveIcvColor(raw.icv, palette);
+  return base === undefined ? undefined : applyTint(base, raw.tint);
 }
 
 function mapColorScaleStops(

@@ -1153,8 +1153,8 @@ describe("readSheetRecords grid geometry", () => {
       {
         kind: "colorScale",
         stops: [
-          { value: { type: "min" }, color: { kind: "icv", icv: 2 } },
-          { value: { type: "max" }, color: { kind: "icv", icv: 3 } },
+          { value: { type: "min" }, color: { kind: "icv", icv: 2, tint: 0 } },
+          { value: { type: "max" }, color: { kind: "icv", icv: 3, tint: 0 } },
         ],
         priority: 0,
         stopIfTrue: false,

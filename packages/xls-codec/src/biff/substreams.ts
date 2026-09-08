@@ -2,13 +2,17 @@ import {
   BIFF8_VERSION,
   RECORD_BOF,
   RECORD_CONTINUE,
+  RECORD_CONTINUEFRT12,
   RECORD_EOF,
 } from "./record-types";
 import { BiffFormatError, type BiffRecord } from "./records";
 
 // The two structural passes between the flat record list and the substream readers.
 //
-// groupRecords joins each record to the Continue records ([MS-XLS] 2.4.58) that follow it, producing one entry per LOGICAL record with its blocks kept separate -- separate because the boundary between them is meaningful to a string reader (see biff/strings.ts), so this is a grouping rather than a concatenation.
+// groupRecords joins each record to the Continue records ([MS-XLS] 2.4.58) that follow it, producing one entry per LOGICAL record with its blocks kept separate -- separate because the boundary between them is meaningful to a string reader (see biff/strings.ts), so this is a grouping rather than a concatenation. A "future record type" (FRT) record -- CondFmt12/CF12 among them -- uses its own ContinueFrt12 ([MS-XLS] 2.4.62) instead of plain Continue when its data exceeds one record, and that record restates a 12-byte FrtRefHeader of its own before the genuine continuation bytes begin; this function strips that restated header so a ContinueFrt12's own block, like a plain Continue's, is exactly the bytes it is extending the base record with.
+
+/** FrtRefHeader/FrtRefHeaderU's own fixed size ([MS-XLS] 2.4), restated at the front of every ContinueFrt12 record and stripped before its remaining bytes join the record it continues. */
+const FRT_REF_HEADER_SIZE = 12;
 //
 // splitSubstreams then cuts the grouped sequence at its BOF/EOF delimiters. [MS-XLS] 2.1.3 defines a substream as exactly that: "The beginning of each substream is marked by a BOF record that has a dt field that specifies the type of the substream. The end of each substream is marked by an EOF record." (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/5e380e95-a9f5-4dfd-b6d9-c6998a9772f8) A workbook stream is one globals substream followed by one substream per sheet, in the order the sheets were written -- which is NOT necessarily the order they appear in the workbook, so the sheet order comes from the globals substream's BoundSheet8 records rather than from this sequence.
 
@@ -50,6 +54,16 @@ export function groupRecords(
         );
       }
       current.blocks.push(record.data);
+      continue;
+    }
+    if (record.type === RECORD_CONTINUEFRT12) {
+      const current = groups[groups.length - 1];
+      if (current === undefined) {
+        throw new BiffFormatError(
+          "ContinueFrt12 record with no preceding record to continue",
+        );
+      }
+      current.blocks.push(record.data.subarray(FRT_REF_HEADER_SIZE));
       continue;
     }
     groups.push({

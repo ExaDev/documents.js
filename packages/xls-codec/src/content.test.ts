@@ -594,11 +594,11 @@ describe("readXlsContent", () => {
                 ...f64(0),
                 ...u32(0x00000001),
                 ...u32(2),
-                ...f64(0), // numGrange + CFColor(icv 2, Red)
+                ...f64(0.5), // numGrange + CFColor(icv 2, Red, tint 0.5)
                 ...f64(0),
                 ...u32(0x00000001),
                 ...u32(3),
-                ...f64(0), // numGrange + CFColor(icv 3, Green)
+                ...f64(0), // numGrange + CFColor(icv 3, Green, no tint)
               ]),
             ],
           },
@@ -611,7 +611,8 @@ describe("readXlsContent", () => {
         type: "colorScale",
         ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
         stops: [
-          { value: { type: "min" }, color: { r: 1, g: 0, b: 0 } },
+          // A tint of 0.5 on the base Red lightens it toward white: Lum' = Lum*(1-tint)+tint.
+          { value: { type: "min" }, color: { r: 1, g: 0.5, b: 0.5 } },
           { value: { type: "max" }, color: { r: 0, g: 1, b: 0 } },
         ],
         priority: 0,
