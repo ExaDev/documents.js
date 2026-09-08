@@ -681,4 +681,72 @@ describe("buildOdtPackage", () => {
       expect(attr(properties, "style:wrap")).toBe("run-through");
     }
   });
+  it("writes a bookmark construct marker pair as office:text-level text:bookmark-start/-end around the blocks it spans", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "anchor",
+              anchorType: "bookmark",
+              name: "Ziel",
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "inside the bookmark" }] },
+          { kind: "constructEnd" },
+          { kind: "paragraph", runs: [{ text: "outside" }] },
+        ],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    const text = officeText(pkg);
+    const starts = childrenWithTag(text, "text:bookmark-start");
+    const ends = childrenWithTag(text, "text:bookmark-end");
+    expect(starts).toHaveLength(1);
+    expect(ends).toHaveLength(1);
+    expect(attr(starts[0]!, "text:name")).toBe("Ziel");
+    expect(attr(ends[0]!, "text:name")).toBe("Ziel");
+    const tags = text.children
+      .filter((child): child is XmlElement => child.type === "element")
+      .map((child) => child.tag);
+    expect(tags.indexOf("text:bookmark-start")).toBeLessThan(
+      tags.indexOf("text:p"),
+    );
+    expect(tags.indexOf("text:bookmark-end")).toBeGreaterThan(
+      tags.indexOf("text:p"),
+    );
+  });
+
+  it("drops a non-bookmark construct marker without disturbing an enclosing bookmark's pairing", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "anchor",
+              anchorType: "bookmark",
+              name: "Aussen",
+            },
+          },
+          {
+            kind: "constructStart",
+            descriptor: { kind: "division", name: "dropped" },
+          },
+          { kind: "paragraph", runs: [{ text: "inner" }] },
+          { kind: "constructEnd" },
+          { kind: "constructEnd" },
+        ],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    const text = officeText(pkg);
+    expect(childrenWithTag(text, "text:bookmark-start")).toHaveLength(1);
+    expect(childrenWithTag(text, "text:bookmark-end")).toHaveLength(1);
+  });
 });

@@ -46,12 +46,13 @@ export function buildOdtPackage(
   const clock = options?.clock ?? systemClock;
   const metadata = resolveMetadataTimestamps(content.metadata, clock);
   const editor = new OdtEditor(createEmptyOdtPackage({ metadata }));
+  const markers = new ConstructMarkerState();
   content.sections.forEach((section, sectionIndex) => {
     if (sectionIndex > 0) {
       // A section boundary becomes a page break -- distinct per-section page size/margins isn't modelled by this bridge yet, mirroring buildDocxPackage's own identical single-page-layout scope (createOdt()'s single scaffolded page-layout covers every caller this function currently has).
       editor.body.appendPageBreak();
     }
-    appendBlocks(editor.body, section.blocks);
+    appendBlocks(editor.body, section.blocks, markers);
   });
   return editor.toPackage();
 }
@@ -94,7 +95,11 @@ function appendMergedImageParagraph(
 }
 
 // Walks a flat block list, routing maximal consecutive runs of list-member paragraphs (block.list !== undefined, docx's own flat numId/level model -- see paragraph.ts's own DocxParagraph.list) through appendListRun instead of appendBlock, since ODF has no flat paragraph-level list property to set the way buildDocxPackage's own populateParagraph does (see that file's own paragraph.list assignment); a list only exists in ODF as a real text:list/text:list-item tree, so it has to be built as one. A paragraph immediately followed by an image block (the shape readOdtContent now produces for a real inline image -- see isMergeableImageParagraph above) is merged into one physical paragraph+image instead, checked ahead of the list-run branch since it never applies to a list-member paragraph anyway. Every other block kind is unaffected and still goes through appendBlock one at a time.
-function appendBlocks(body: OdtBody, blocks: readonly ContentBlock[]): void {
+function appendBlocks(
+  body: OdtBody,
+  blocks: readonly ContentBlock[],
+  markers: ConstructMarkerState,
+): void {
   let i = 0;
   while (i < blocks.length) {
     const block = blocks[i];
@@ -121,7 +126,7 @@ function appendBlocks(body: OdtBody, blocks: readonly ContentBlock[]): void {
       appendListRun(body, run);
       continue;
     }
-    appendBlock(body, block);
+    appendBlock(body, block, markers);
     i++;
   }
 }
@@ -345,7 +350,36 @@ function appendCellBlock(cell: OdtTableCell, block: ContentBlock): void {
 }
 
 // A bare image block reaching here (i.e. not already consumed by appendBlocks' own merge-back check above) gets a fresh paragraph of its own -- mirrors buildDocxPackage's own appendBlock 'image' case exactly.
-function appendBlock(body: OdtBody, block: ContentBlock): void {
+// The block-level construct marker state one odt build carries: a bookmark anchor opens a text:bookmark-start half under its own name and closes it at the matching end marker, and every opened construct (bookmark or not) is stacked so a dropped construct's own end marker pops the right entry. Every other construct kind is dropped as the README's construct-marker note states -- odf.js's own writeOdtContent writes divisions and index wrappers, but this editor-model builder has no surface for them.
+class ConstructMarkerState {
+  private readonly open: { isBookmark: boolean; name: string }[] = [];
+
+  openConstruct(
+    body: OdtBody,
+    marker: Extract<ContentBlock, { kind: "constructStart" }>,
+  ): void {
+    const detail = marker.descriptor;
+    if (detail.kind === "anchor" && detail.anchorType === "bookmark") {
+      this.open.push({ isBookmark: true, name: detail.name });
+      body.appendBookmarkStart(detail.name);
+      return;
+    }
+    this.open.push({ isBookmark: false, name: "" });
+  }
+
+  closeConstruct(body: OdtBody): void {
+    const entry = this.open.pop();
+    if (entry?.isBookmark) {
+      body.appendBookmarkEnd(entry.name);
+    }
+  }
+}
+
+function appendBlock(
+  body: OdtBody,
+  block: ContentBlock,
+  markers: ConstructMarkerState,
+): void {
   if (block.kind === "paragraph") {
     populateParagraph(body.appendParagraph(), block, { headings: "element" });
   } else if (block.kind === "image") {
@@ -363,6 +397,10 @@ function appendBlock(body: OdtBody, block: ContentBlock): void {
     appendTable(body, block);
   } else if (block.kind === "embeddedObject") {
     appendEmbeddedObject(body, block);
+  } else if (block.kind === "constructStart") {
+    markers.openConstruct(body, block);
+  } else {
+    markers.closeConstruct(body);
   }
 }
 
