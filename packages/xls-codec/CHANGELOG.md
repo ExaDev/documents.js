@@ -1,3 +1,17 @@
+## [4.6.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.5.0...xls-codec%404.6.0) (2026-09-08)
+
+### Features
+
+* **xls-codec:** read BIFF8 CF12 top10, aboveAverage, and other filter-dispatched rules ([ed1056c](https://github.com/ExaDev/documents.js/commit/ed1056cfecb7675a101a168448fefaeeb5c69189))
+
+### Bug Fixes
+
+* **xls-codec:** preserve DXFN12 styles and reject a zero top10 rank ([40713fa](https://github.com/ExaDev/documents.js/commit/40713fa9fb9586c67c53321ba14abdc06ef046b6))
+
+### Documentation
+
+* **xls-codec:** correct a stale claim about ct 0x05's own DXFN12 scope ([1241bc6](https://github.com/ExaDev/documents.js/commit/1241bc6573efad4b705d00a83460cf0b68e733c1))
+
 ## [4.5.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.4.0...xls-codec%404.5.0) (2026-09-08)
 
 ### Features
