@@ -1,3 +1,17 @@
+## [4.0.12](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.0.11...pdf-codec%404.0.12) (2026-09-08)
+
+### Bug Fixes
+
+* **pdf-codec:** recover dashed and dotted stroke styles from the d operator ([735063f](https://github.com/ExaDev/documents.js/commit/735063fb59de402842c9ec21d435d5179512d74f))
+
+### Documentation
+
+* **pdf-codec:** correct the Gotchas claim that stroke style never reads back ([39498e0](https://github.com/ExaDev/documents.js/commit/39498e0d59f0593b3bf864179de81b1955402b56))
+
+### Tests
+
+* **pdf-codec:** cover dash-array stroke-style recovery ([e861b88](https://github.com/ExaDev/documents.js/commit/e861b88bf4dc29ee935aacfacd82e6d30e19ee95))
+
 ## [4.0.11](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.0.10...pdf-codec%404.0.11) (2026-09-08)
 
 

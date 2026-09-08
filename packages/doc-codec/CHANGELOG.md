@@ -1,3 +1,17 @@
+## [2.7.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.6.0...doc-codec%402.7.0) (2026-09-08)
+
+### Features
+
+* **doc-codec:** write inline PNG/JPEG pictures and every section's own page geometry ([c29fd04](https://github.com/ExaDev/documents.js/commit/c29fd040037fd3a8e428a552cb4636f2758ed1ed))
+
+### Code Refactoring
+
+* **doc-codec:** extract a shared isomorphic base64 codec ([5d8424d](https://github.com/ExaDev/documents.js/commit/5d8424dcf2a929820ae0063213c87be7947e78dc))
+
+### Documentation
+
+* **doc-codec:** document multi-section and inline-picture writing ([a92df55](https://github.com/ExaDev/documents.js/commit/a92df55c0c5a0291e8ed9f8fa7a4bf8231b4892a))
+
 ## [2.6.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.5.0...doc-codec%402.6.0) (2026-09-08)
 
 ### Features

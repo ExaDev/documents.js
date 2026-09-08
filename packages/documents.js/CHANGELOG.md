@@ -1,3 +1,15 @@
+## [7.9.1](https://github.com/ExaDev/documents.js/compare/documents.js%407.9.0...documents.js%407.9.1) (2026-09-08)
+
+### Tests
+
+* **documents.js:** stop expecting odp->doc to refuse image content ([18b1264](https://github.com/ExaDev/documents.js/commit/18b1264c0ed8b6d8cadd922e6e6f792a1f085abd))
+
+
+### Dependencies
+
+- Updated pdf-codec to 4.0.12
+- Updated doc-codec to 2.7.0
+
 ## [7.9.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.8.21...documents.js%407.9.0) (2026-09-08)
 
 ### Features
