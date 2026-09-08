@@ -1,3 +1,21 @@
+## [4.8.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.7.6...xls-codec%404.8.0) (2026-09-08)
+
+### Features
+
+* **xls-codec:** add record type constants for drawings and charts ([af20572](https://github.com/ExaDev/documents.js/commit/af205724bf8d2a3e0492d0c314d46f1f41efe765))
+* **xls-codec:** read charts, drawings, and images into ContentSheet ([8ae17b3](https://github.com/ExaDev/documents.js/commit/8ae17b3cd353cd2cb481303fab82bcef7c078d0f))
+* **xls-codec:** read embedded chart series data from its own substream ([716498d](https://github.com/ExaDev/documents.js/commit/716498dea93fcab56706f6b5ac0ff0c7312b3902))
+* **xls-codec:** read MS-ODRAW Escher shapes and the workbook Blip Store ([85dedf5](https://github.com/ExaDev/documents.js/commit/85dedf5c509c0e56ef5dcd11010ebc95cb6e676e))
+
+### Bug Fixes
+
+* **xls-codec:** nest a chart substream inside the worksheet substream that anchors it ([652e410](https://github.com/ExaDev/documents.js/commit/652e4102c9aa3d540b9e9fb4789f0091b1257193))
+* **xls-codec:** write a chart's shared category column once, not once per series ([4aec960](https://github.com/ExaDev/documents.js/commit/4aec960aaf484234e64c16acf77889f878b31c6c))
+
+### Documentation
+
+* **xls-codec:** document charts, drawings, and images support ([06e69d9](https://github.com/ExaDev/documents.js/commit/06e69d913f22e41726b22f88716ced0e45fe870c))
+
 ## [4.7.6](https://github.com/ExaDev/documents.js/compare/xls-codec%404.7.5...xls-codec%404.7.6) (2026-09-08)
 
 
