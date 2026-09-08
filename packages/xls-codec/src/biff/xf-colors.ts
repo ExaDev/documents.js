@@ -278,6 +278,71 @@ export function resolveIcvColor(
   return undefined;
 }
 
+interface Hsl {
+  readonly h: number;
+  readonly s: number;
+  readonly l: number;
+}
+
+// Standard sRGB <-> HSL conversion (CSS Color Module Level 3 / W3C), operating on the gamma-encoded 0-1 components ColorSchema itself carries -- the same convention ooxml.js's own DrawingML shade/tint reading (typed/shared/color.ts) documents and cross-validates against Apache POI's RGB2HSL/HSL2RGB, reused here rather than re-derived since it's plain, format-agnostic colour maths.
+function rgbToHsl(color: Color): Hsl {
+  const { r, g, b } = color;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) {
+    return { h: 0, s: 0, l };
+  }
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  if (max === r) {
+    h = (g - b) / d + (g < b ? 6 : 0);
+  } else if (max === g) {
+    h = (b - r) / d + 2;
+  } else {
+    h = (r - g) / d + 4;
+  }
+  return { h: h / 6, s, l };
+}
+
+function hslToRgb(hsl: Hsl): Color {
+  const { h, s, l } = hsl;
+  if (s === 0) {
+    return { r: l, g: l, b: l };
+  }
+  const hueToRgb = (p: number, q: number, t: number): number => {
+    let tt = t;
+    if (tt < 0) tt += 1;
+    if (tt > 1) tt -= 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return {
+    r: hueToRgb(p, q, h + 1 / 3),
+    g: hueToRgb(p, q, h),
+    b: hueToRgb(p, q, h - 1 / 3),
+  };
+}
+
+/**
+ * Applies Excel's own "TintAndShade" colour model to an already-resolved colour: a single -1.0..1.0 value shading a colour toward black (negative) or tinting it toward white (positive), the model CFColor's own numTint field ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fd8e679d-069f-486b-ab48-2382cc167305) carries -- distinct from DrawingML's own separate shade/tint elements (ooxml.js's typed/shared/color.ts), which apply in linear light rather than adjusting HSL lightness directly.
+ *
+ * The formula itself -- Lum' = Lum*(1+tint) for a negative tint, Lum' = Lum*(1-tint) + tint for a positive one -- is Microsoft's own documented Color.TintAndShade algorithm, cross-checked against Apache POI's XSSFColor#getTint/#setTint javadoc (a completely independent implementation carrying the identical formula) rather than trusted from memory alone.
+ */
+export function applyTint(color: Color, tint: number): Color {
+  if (tint === 0) {
+    return color;
+  }
+  const hsl = rgbToHsl(color);
+  const l = tint < 0 ? hsl.l * (1 + tint) : hsl.l * (1 - tint) + tint;
+  return hslToRgb({ ...hsl, l });
+}
+
 // --- Border style <-> ContentBorder mapping, one table shared by both directions ---
 
 // BIFF8's BorderStyle tokens name the same four weights xlsx's own CT_BorderStyle tokens do, at the same point widths, bucketed back from a widthPt the same way. That vocabulary is not this package's to own: it lives once in document-schema.js (BORDER_WIDTH_PT, borderWeightForWidthPt, dashedBorderWeightForWidthPt, imported above) and is imported by both this package and ooxml.js's typed/xlsx/styles.ts, so neither can drift from the other. What is BIFF8-specific -- which numeric token names a medium dashed stroke -- stays here, in BIFF_BORDER_STYLE and borderStyleTokenFor below.
