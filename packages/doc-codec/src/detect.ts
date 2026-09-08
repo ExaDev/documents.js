@@ -8,6 +8,9 @@ export const WORD_DOCUMENT_STREAM = "WordDocument";
 /** The [MS-OLEPS] Property Set Stream a .doc's title/author/dates live in when present -- a genuinely optional stream, unlike WordDocument, since a valid Word Binary File need not carry document properties at all. */
 export const SUMMARY_INFORMATION_STREAM = "\x05SummaryInformation";
 
+/** The stream sprmCPicLocation's operand addresses, [MS-DOC] "Data Stream": "has no predefined structure. It contains data that is referenced from the FIB or from other parts of the file. This stream need not be present if there are no references to it." -- genuinely optional, like SUMMARY_INFORMATION_STREAM, since a document with no pictures need not carry one. */
+export const DATA_STREAM = "Data";
+
 // Whether these bytes are a Word Binary File. The compound-file signature alone is not enough to answer that: .xls and .ppt of the same era are compound files too, and so is any OLE embedding, so a detector that stopped at the magic bytes would claim every one of them. The distinguishing facts are the presence of a stream named "WordDocument" and the 0xA5EC signature at its own offset zero -- the two things [MS-DOC] requires of every conforming file and no sibling format has.
 //
 // This reads the whole container to answer, which is the honest cost of a correct answer: a compound file's directory is not at a fixed offset, so there is no cheaper place to look for a named stream. A caller with a path or a MIME type already in hand should use that instead of paying for this.

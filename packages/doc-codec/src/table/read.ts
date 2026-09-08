@@ -119,7 +119,7 @@ function walkBlocksAtDepth(
     const entry = entries[index];
     if (entry === undefined) break;
     if (effectiveTableDepth(entry.properties) <= depth) {
-      blocks.push(entry.paragraph);
+      blocks.push(...entry.blocks);
       index += 1;
       continue;
     }
@@ -133,7 +133,7 @@ function walkBlocksAtDepth(
     blocks.push(
       ...(table !== undefined
         ? [table]
-        : runEntries.map((run) => run.paragraph)),
+        : runEntries.flatMap((run) => run.blocks)),
     );
     index = nextIndex;
   }

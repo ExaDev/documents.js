@@ -1,4 +1,9 @@
-import type { ContentParagraph, ContentRun } from "document-schema.js";
+import type {
+  ContentBlock,
+  ContentParagraph,
+  ContentRun,
+} from "document-schema.js";
+import { readInt32LE } from "../bytes";
 import { DocFormatError } from "../errors";
 import { type PropertyBinTable } from "../prop/fkp";
 import {
@@ -8,6 +13,7 @@ import {
 } from "../prop/chp";
 import { applyParagraphSprms, type ParagraphProperties } from "../prop/pap";
 import { readGrpprl, type Prl } from "../prop/sprm";
+import { readInlinePicture } from "../pictures";
 import {
   headingLevelFromIstd,
   resolveStyleFormatting,
@@ -17,6 +23,7 @@ import {
   FIELD_BEGIN,
   FIELD_END,
   FIELD_SEPARATOR,
+  INLINE_PICTURE,
   LINE_BREAK,
   PARAGRAPH_MARK,
   endsParagraph,
@@ -33,11 +40,13 @@ export interface ReadContext {
   readonly fonts: readonly string[] | undefined;
   // Character properties already folded out of one Chpx, keyed by that Chpx's own position and length in the WordDocument stream. It belongs to the whole read rather than to one paragraph because a Chpx routinely spans many paragraphs -- a document in one font is one exception covering all of it -- so a per-paragraph cache would re-parse the same grpprl once per paragraph and never hit. Shared across every document-stream range a caller reads through this context, since the same byte offset in the WordDocument stream means the same Chpx regardless of which subdocument's own CP space is being walked.
   readonly characterProperties: Map<string, CharacterProperties>;
+  /** The "Data" stream's own bytes, or undefined when the container carries none -- a valid Word Binary File with no pictures need not have one at all. sprmCPicLocation's operand is an offset into this stream (pictures.ts's readInlinePicture). */
+  readonly dataStream: Uint8Array | undefined;
 }
 
-/** One paragraph/cell/row-ending mark, still flat -- table/read.ts's assembleBlocks is what folds a run of these into a real ContentTable. `properties` and `grpprl` are carried alongside the already-built `paragraph` because table grouping needs sprmPFInTable/sprmPFTtp/sprmPItap (properties) and, on a row's own mark, its table-defining sgc-5 sprms (grpprl) -- neither of which survives onto a plain ContentParagraph. */
+/** One paragraph/cell/row-ending mark, still flat -- table/read.ts's assembleBlocks is what folds a run of these into a real ContentTable. `properties` and `grpprl` are carried alongside the already-built `blocks` because table grouping needs sprmPFInTable/sprmPFTtp/sprmPItap (properties) and, on a row's own mark, its table-defining sgc-5 sprms (grpprl) -- neither of which survives onto a plain ContentParagraph. `blocks` is more than one paragraph exactly when an inline picture anchor split this paragraph's own text around it (buildParagraphBlocks) -- ordinarily a single-element array holding the one ContentParagraph this mark closes. */
 export interface ParagraphEntry {
-  readonly paragraph: ContentParagraph;
+  readonly blocks: readonly ContentBlock[];
   readonly properties: ParagraphProperties;
   readonly grpprl: readonly Prl[];
   /** The character that terminated this paragraph in the text stream: PARAGRAPH_MARK, CELL_MARK, or SECTION_MARK. */
@@ -122,17 +131,77 @@ function buildParagraph(
     applyParagraphSprms(grpprl, properties);
   }
 
-  const paragraph: ContentParagraph = {
-    kind: "paragraph",
-    runs: buildRuns(text, fcs, context, papx?.istd),
-  };
+  const blocks = buildParagraphBlocks(
+    text,
+    fcs,
+    context,
+    papx?.istd,
+    paragraphAttributes(properties, context),
+  );
   return {
-    paragraph: { ...paragraph, ...paragraphAttributes(properties, context) },
+    blocks,
     properties,
     grpprl,
     terminator,
     endCp,
   };
+}
+
+// Splits a paragraph's own text into ContentBlock[] around every inline picture anchor (U+0001) it carries, resolving each one through its own Chpx's sprmCPicLocation (resolveInlinePicture) into a real ContentImageBlock -- an inline image is block-level in document-schema.js's own model, not a run property, so a paragraph containing one genuinely becomes more than one block, mirroring how ooxml.js's own docx reader splits a paragraph around a mid-run page break (readParagraphBlocks's own top comment: "Both halves inherit the original paragraph's own paragraph-level formatting... unchanged"). The ordinary case -- no picture anchor at all -- still produces exactly one ContentParagraph, identical to what this function replaced.
+function buildParagraphBlocks(
+  text: string,
+  fcs: readonly number[],
+  context: ReadContext,
+  paragraphIstd: number | undefined,
+  attributes: Partial<ContentParagraph>,
+): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  let segmentStart = 0;
+  const flushSegment = (end: number): void => {
+    if (end <= segmentStart) return;
+    const runs = buildRuns(
+      text.slice(segmentStart, end),
+      fcs.slice(segmentStart, end),
+      context,
+      paragraphIstd,
+    );
+    blocks.push({ kind: "paragraph", runs, ...attributes });
+  };
+
+  for (let index = 0; index < text.length; index += 1) {
+    if (text.charCodeAt(index) !== INLINE_PICTURE) continue;
+    flushSegment(index);
+    const fc = fcs[index];
+    const image =
+      fc === undefined ? undefined : resolveInlinePicture(context, fc);
+    if (image !== undefined) blocks.push(image);
+    segmentStart = index + 1;
+  }
+  flushSegment(text.length);
+
+  // A paragraph that ends up with no real block at all -- an ordinary blank paragraph, or one whose only picture anchor pointed at a format this reader does not decode (pictures.ts's own scope note) -- still needs its own genuine, empty ContentParagraph: every existing caller of this pipeline already expects one for a blank line or an empty table cell. A paragraph that DID produce at least one real block (non-empty text, a resolved image) never reaches this: the whole point of splitting around an image is that the image itself carries the paragraph's real content, and a synthetic empty wrapper alongside it would be a block this paragraph never actually had.
+  if (blocks.length === 0) {
+    blocks.push({ kind: "paragraph", runs: [], ...attributes });
+  }
+  return blocks;
+}
+
+// Resolves one inline picture anchor's own Chpx for its sprmCPicLocation operand -- the Data-stream offset pictures.ts's readInlinePicture needs -- returning undefined when the character carries no such sprm at all (malformed input) or when context.dataStream is absent (a container with no "Data" stream can carry no pictures).
+const SPRM_C_PIC_LOCATION = 0x6a03;
+
+function resolveInlinePicture(
+  context: ReadContext,
+  fc: number,
+): ContentBlock | undefined {
+  if (context.dataStream === undefined) return undefined;
+  const grpprl = context.chpxTable.chpxGrpprl(fc);
+  if (grpprl === undefined) return undefined;
+  for (const prl of readGrpprl(grpprl)) {
+    if (prl.sprm.value !== SPRM_C_PIC_LOCATION) continue;
+    const picLocation = readInt32LE(prl.operand, 0);
+    return readInlinePicture(context.dataStream, picLocation);
+  }
+  return undefined;
 }
 
 function paragraphAttributes(
