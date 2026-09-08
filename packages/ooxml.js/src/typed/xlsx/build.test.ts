@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ContentDocument, ContentSheet } from "document-schema.js";
+import type {
+  ContentDocument,
+  ContentEmbeddedObject,
+  ContentSheet,
+} from "document-schema.js";
 import { PAGE_SIZE_A4, PAGE_SIZE_LETTER } from "document-schema.js";
 import type { XmlElement } from "../../model/node";
 import type { Package } from "../../model/package";
@@ -1403,5 +1407,163 @@ describe("buildXlsxPackageFromContent: cell comments (ExaDev/documents.js#949)",
       text: "Second cell",
       replies: [{ text: "Reply to second" }],
     });
+  });
+});
+
+// ExaDev/documents.js#973's own drawing-layer one-way row, closed: a worksheet's own charts and pictures now survive buildXlsxPackageFromContent -- typed/xlsx/content.test.ts carries the byte-level decodePackage/encodePackage round trips (one per anchor spelling); this suite checks the XML shape directly, the same way the comment tests above do.
+
+function chartEmbeddedObject(): ContentEmbeddedObject {
+  return {
+    objectKind: "chart",
+    frame: { xPt: 10, yPt: 15, widthPt: 200, heightPt: 120 },
+    anchorRow: 1,
+    anchorColumn: 0,
+    offsetXPt: 0,
+    offsetYPt: 0,
+    document: {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Chart 1",
+          cells: [
+            {
+              row: 0,
+              column: 1,
+              value: { kind: "string", value: "Revenue" },
+              displayText: "Revenue",
+            },
+            {
+              row: 1,
+              column: 0,
+              value: { kind: "string", value: "Q1" },
+              displayText: "Q1",
+            },
+            {
+              row: 1,
+              column: 1,
+              value: { kind: "string", value: "8.5" },
+              displayText: "8.5",
+            },
+            {
+              row: 2,
+              column: 0,
+              value: { kind: "string", value: "Q2" },
+              displayText: "Q2",
+            },
+            {
+              row: 2,
+              column: 1,
+              value: { kind: "string", value: "12" },
+              displayText: "12",
+            },
+          ],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    },
+  };
+}
+
+const TINY_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+describe("buildXlsxPackageFromContent: drawing layer (charts and pictures)", () => {
+  it("writes a real xl/drawings/drawingN.xml plus xl/charts/chartN.xml for a chart embedded object, and reading it back recovers the same series/category cache", () => {
+    const sourceChart = chartEmbeddedObject();
+    const sourceChartSheet =
+      sourceChart.document.kind === "spreadsheet"
+        ? sourceChart.document.sheets[0]
+        : undefined;
+    const document: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          embeddedObjects: [sourceChart],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    };
+    const pkg = buildXlsxPackageFromContent(document);
+    expect(Object.keys(pkg.parts)).toContain("xl/drawings/drawing1.xml");
+    expect(Object.keys(pkg.parts)).toContain("xl/charts/chart1.xml");
+    const contentTypes = rootElement(pkg.parts["[Content_Types].xml"]);
+    if (contentTypes === undefined) {
+      throw new Error("expected [Content_Types].xml to have a root element");
+    }
+    const overrides = childrenWithTag(contentTypes, "Override").map((el) =>
+      attr(el, "PartName"),
+    );
+    expect(overrides).toContain("/xl/drawings/drawing1.xml");
+    expect(overrides).toContain("/xl/charts/chart1.xml");
+
+    const roundTripped = readXlsxContent(pkg);
+    if (roundTripped.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const chart = roundTripped.sheets[0]?.embeddedObjects?.[0];
+    expect(chart?.objectKind).toBe("chart");
+    const chartSheet =
+      chart?.document.kind === "spreadsheet"
+        ? chart.document.sheets[0]
+        : undefined;
+    expect(chartSheet?.cells).toEqual(sourceChartSheet?.cells);
+  });
+
+  it("writes a real xl/drawings/drawingN.xml plus xl/media/imageN.png for a sheet image, and reading it back recovers the same bytes", () => {
+    const document: ContentDocument = {
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [
+            {
+              kind: "image",
+              format: "png",
+              base64: TINY_PNG_BASE64,
+              widthPt: 100,
+              heightPt: 50,
+              anchorRow: 0,
+              anchorColumn: 0,
+              offsetXPt: 0,
+              offsetYPt: 0,
+            },
+          ],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    };
+    const pkg = buildXlsxPackageFromContent(document);
+    expect(Object.keys(pkg.parts)).toContain("xl/media/image1.png");
+    const roundTripped = readXlsxContent(pkg);
+    if (roundTripped.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const image = roundTripped.sheets[0]?.images[0];
+    expect(image?.format).toBe("png");
+    expect(image?.base64).toBe(TINY_PNG_BASE64);
+    expect(image?.widthPt).toBeCloseTo(100, 5);
+    expect(image?.heightPt).toBeCloseTo(50, 5);
+  });
+
+  it("writes no drawing part, no worksheet rels, and no Content_Types override at all for a sheet carrying neither an image nor a chart", () => {
+    const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
+    expect(Object.keys(pkg.parts)).not.toContain("xl/drawings/drawing1.xml");
+    expect(Object.keys(pkg.parts)).not.toContain(
+      "xl/worksheets/_rels/sheet1.xml.rels",
+    );
   });
 });
