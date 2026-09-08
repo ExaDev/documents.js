@@ -20,6 +20,7 @@ describe("SourceFormatSchema", () => {
       "pdf",
       "epub",
       "rtf",
+      "wpd",
     ]) {
       expect(SourceFormatSchema.safeParse(format).success).toBe(true);
     }

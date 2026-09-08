@@ -159,6 +159,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
           "pdf",
           "epub",
           "rtf",
+          "wpd",
         ],
       },
       xml: { type: "string" }, // opaque text -- validation stops at "is a string"; everything about the content is the producer's to know
@@ -474,6 +475,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       background: { $ref: "#/$defs/ContentCellFill" },
       borders: { $ref: "#/$defs/ContentCellBorders" },
       verticalAlign: { type: "string", enum: ["top", "center", "bottom"] },
+      formula: { type: "string" },
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },

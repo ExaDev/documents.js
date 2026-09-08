@@ -242,6 +242,7 @@ export interface ContentTableCell {
   background?: ContentCellFill;
   borders?: ContentCellBorders;
   verticalAlign?: "top" | "center" | "bottom"; // RTF's \clvertalt/\clvertalc/\clvertalb; absent means the format's own default (top)
+  formula?: string; // a wordprocessing table cell's own computed-value formula (WordPerfect's table math feature), carried verbatim in whatever syntax the source format used -- the identical "structure yes, formula content no" boundary ContentSheetCell.formula already draws, since neither this format nor a spreadsheet's own formula language has a closed grammar this package could parse without a general formula engine
   sourcePath?: string;
   source?: SourceResidue; // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames?: LayoutFrame[]; // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
@@ -624,6 +625,7 @@ export const ContentTableCellSchema = z.object({
   background: ContentCellFillSchema.optional(),
   borders: ContentCellBordersSchema.optional(),
   verticalAlign: z.enum(["top", "center", "bottom"]).optional(), // RTF's \clvertalt/\clvertalc/\clvertalb; absent means the format's own default (top)
+  formula: z.string().optional(), // a wordprocessing table cell's own computed-value formula, carried verbatim -- see the ContentTableCell interface's own field comment
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
