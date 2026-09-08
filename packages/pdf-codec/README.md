@@ -8,7 +8,7 @@
 
 This is a genuinely large undertaking with an honest trade-off spelled out in [Fidelity](#fidelity): this is not, and does not attempt to be, as robust against adversarial or badly malformed real-world PDFs as a library with 15+ years of hardening. What it buys instead is a dependency-free, fully auditable PDF implementation with no supply-chain surface beyond `document-schema.js`, `fflate`, and `zod`.
 
-`documents.js` uses this package to convert docx/pptx/odt/odp/ods/odg to and from PDF, and to render MathML formulas (typeset by its own `src/mathml/` engine) through the embedded math font this package parses and writes. That MathML _layout_ engine deliberately stays in `documents.js` — see [Architecture](#architecture) for exactly where the boundary sits and why a real `MathBox` value crosses it with zero cast or wrapper.
+`documents.js` uses this package to convert docx/pptx/odt/odp/ods/odg to and from PDF, and to render MathML formulas (typeset by its own `src/mathml/` engine) through the embedded math font this package parses and writes. That MathML _layout_ engine deliberately stays in `documents.js` — see [Architecture](#architecture) for exactly where the boundary sits and why a real `MathBox` value crosses it with zero cast or wrapper. [`document-outline.js`](https://github.com/ExaDev/documents.js/tree/main/packages/document-outline.js)'s `segmentPdfRegions` ([ExaDev/documents.js#931](https://github.com/ExaDev/documents.js/issues/931)) is a second, independent consumer of this package's `LayoutPage`/`LayoutItem` types alone — a recursive X-Y cut page-segmentation pass classifying a page's own positioned items into columns, tables, figures, and captions, entirely without the semantic reconstruction this package deliberately keeps out of itself.
 
 ```mermaid
 graph TD
@@ -21,23 +21,28 @@ graph TD
     documents("documents.js")
     mcp("document-mcp")
     cli("document-cli")
+    outline("document-outline.js")
 
     schema --> ooxml
     schema --> odf
     schema --> pdfcodec
     schema --> mdcodec
     schema --> documents
+    schema --> outline
     ooxml --> documents
     odf --> documents
     pdfcodec --> documents
     mdcodec --> documents
     bytecodec --> pdfcodec
     bytecodec --> documents
+    pdfcodec --> outline
     documents --> mcp
     pdfcodec --> mcp
     documents --> cli
     odf --> cli
     pdfcodec --> cli
+    outline --> mcp
+    outline --> cli
 
     click schema "https://github.com/ExaDev/documents.js/tree/main/packages/document-schema.js" "document-schema.js"
     click ooxml "https://github.com/ExaDev/documents.js/tree/main/packages/ooxml.js" "ooxml.js"
@@ -48,6 +53,7 @@ graph TD
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
     click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
     click cli "https://github.com/ExaDev/documents.js/tree/main/packages/document-cli" "document-cli"
+    click outline "https://github.com/ExaDev/documents.js/tree/main/packages/document-outline.js" "document-outline.js"
 
     style pdfcodec fill:#f9a825,stroke:#333,stroke-width:3px
 ```
