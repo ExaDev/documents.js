@@ -15,8 +15,6 @@ const MARKER_TYPE_CONFLICT =
   "a nested list disagreeing with its enclosing list's own minted marker type is resolved first-wins, not preserved (MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT) -- reusing the enclosing numId is itself the correct, tested design (src/shared/list-id.ts), just lossy for a genuinely mixed-type nesting";
 const BLOCKQUOTE_HEADING_CONTAINER_SKIPPED =
   "a blockquote containing a heading anywhere in its subtree cannot carry its own division construct pair (a marker extent may not open a heading scope), so the whole quote degrades to indent-only structure while the heading itself keeps its own fidelity (MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED) -- and a plain paragraph rendered this way immediately after the heading, at the same indent depth with a blank line between them (src/emit/emit.ts's own comment directly above renderItems on why two same-depth quoted blocks always render as independent blockquotes), reparses as a SECOND, sibling blockquote rather than a continuation of the first";
-const ADJACENT_SAME_DEPTH =
-  "two independent containers back to back at the same depth (two blockquotes with nothing between them, or two lists using different bullet/ordered marker glyphes) are indistinguishable, once lowered, from one container spanning both -- ContentParagraph.indentLeftPt and the numId minted for each list carry no shared-boundary field of their own; merging them (tried and reverted for blockquotes, see src/emit/emit.ts's own comment directly above renderItems) fixes no example this list's own entries were not already going to fail on regardless, while genuinely breaking the common case";
 const IMAGE_SRC_UNPRESERVABLE =
   "an image with no data: URI destination has no bytes for this test harness to embed (no MarkdownImageResolver was supplied, matching how readMarkdown is actually called here), so it degrades to a hyperlinked text run (MarkdownDiagnosticCodes.IMAGE_UNRESOLVED) -- and even supplying one would not help this specific byte-for-byte comparison, since embedding real bytes re-renders as a data: URI, replacing rather than preserving the original external src the expected HTML still names";
 const EMPHASIS_TORTURE =
@@ -56,8 +54,6 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [296, MARKER_TYPE_CONFLICT],
   [299, MARKER_TYPE_CONFLICT],
   // Lists
-  [301, ADJACENT_SAME_DEPTH],
-  [302, ADJACENT_SAME_DEPTH],
   [326, NESTED_LIST_LOOSENESS_SHARED],
   // Emphasis and strong emphasis
   [369, EMPHASIS_TORTURE],
