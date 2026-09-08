@@ -1054,12 +1054,71 @@ export type ContentSheet = z.infer<typeof ContentSheetSchema>;
 
 // Drawing content model: pure vector primitives with no docx/pptx analogue, for a standalone drawing document (odf.js's .odg target). ContentShapeSchema (text-in-a-frame, already shared with presentations) covers text content; ContentVectorSchema below covers everything ContentShape can't -- raw rectangles, ellipses, lines, and free-form paths.
 
+// The real run-length pattern behind a 'dashed' ContentStroke (ExaDev/documents.js#954) -- ODF's own <draw:stroke-dash> element (OASIS ODF 1.3 section 16.42.9), a repeating dot/dash sequence: dots1 copies of a dots1LengthPt-long dash, then (optionally) dots2 copies of a dots2LengthPt-long dash, each pair separated by distancePt of gap, the whole sequence repeating along the stroke. dots2/dots2LengthPt are absent for a single-length dash pattern (ODF's own draw:dots2 is optional -- a plain "dash-dash-dash" pattern with no alternating second length at all, not a zero-count second sequence). A consumer with no interest in the exact pattern can keep treating ContentStrokeStyleSchema's own 'dashed' as the whole story; this is the closer look for one that wants it.
+export const ContentStrokeDashSchema = z.object({
+  dots1: z.number().int().positive(),
+  dots1LengthPt: z.number().positive(),
+  dots2: z.number().int().positive().optional(),
+  dots2LengthPt: z.number().positive().optional(),
+  distancePt: z.number().nonnegative(),
+});
+export type ContentStrokeDash = z.infer<typeof ContentStrokeDashSchema>;
+
 export const ContentStrokeSchema = z.object({
   color: ColorSchema,
   widthPt: z.number().positive(),
   style: ContentStrokeStyleSchema.optional(), // absent means 'solid'
+  opacity: z.number().min(0).max(1).optional(), // svg:stroke-opacity (OASIS ODF 1.3 section 20.410-ish -- style:graphic-properties) -- absent means fully opaque, matching Color's own plain-RGB shape (no alpha channel) rather than a stored, always-present 1
+  dashPattern: ContentStrokeDashSchema.optional(), // present only when style is 'dashed' AND the source resolved a real <draw:stroke-dash> definition for it (ExaDev/documents.js#954) -- a 'dashed' stroke whose dash definition could not be resolved keeps style alone, exactly as before this field existed
 });
 export type ContentStroke = z.infer<typeof ContentStrokeSchema>;
+
+// The real definition behind a non-flat vector fill (ExaDev/documents.js#954) -- gradient/bitmap/hatch, the three fill kinds a bare Color cannot express at all. Additive alongside ContentVectorSchema's existing `fill: ColorSchema.optional()` field on every fillable variant below, not a replacement for it: `fill` stays the flat, single-colour approximation (a representative swatch, exactly as it already behaved before this field existed -- see readOdfFillAndStroke's own top-of-file note in odf.js for which swatch a gradient/hatch/bitmap fill resolves to), while `fillPattern` carries the real, lossless definition for a consumer that wants to render it properly. Kept as a genuinely separate field rather than widening `fill` itself into this union so every existing consumer of ContentVector's flat Color fill (documents.js's SVG writer, its layout/drawing.ts and edit/odg editor, document-cli's TUI) keeps typechecking unchanged.
+export const ContentGradientStyleSchema = z.enum([
+  "linear",
+  "axial",
+  "radial",
+  "ellipsoid",
+  "square",
+  "rectangular",
+]); // OASIS ODF 1.3 section 19.218.2 (draw:style on <draw:gradient>) -- the complete, exhaustive enumeration.
+export type ContentGradientStyle = z.infer<typeof ContentGradientStyleSchema>;
+
+export const ContentGradientFillSchema = z.object({
+  kind: z.literal("gradient"),
+  style: ContentGradientStyleSchema,
+  startColor: ColorSchema,
+  endColor: ColorSchema,
+  angleDeg: z.number().optional(), // <draw:gradient>'s own draw:angle (OASIS ODF 1.3 section 19.112), stored in the source's own angle convention as-is -- ignored by the source itself for a 'radial' style, so absent there. There is no second format's gradient angle in this codebase yet to normalise against.
+});
+export type ContentGradientFill = z.infer<typeof ContentGradientFillSchema>;
+
+export const ContentHatchStyleSchema = z.enum(["single", "double", "triple"]); // OASIS ODF 1.3 section 19.218.3 (draw:style on <draw:hatch>) -- the complete, exhaustive enumeration.
+export type ContentHatchStyle = z.infer<typeof ContentHatchStyleSchema>;
+
+export const ContentHatchFillSchema = z.object({
+  kind: z.literal("hatch"),
+  style: ContentHatchStyleSchema,
+  color: ColorSchema,
+  distancePt: z.number().nonnegative(),
+  rotationDeg: z.number().optional(),
+});
+export type ContentHatchFill = z.infer<typeof ContentHatchFillSchema>;
+
+// A bitmap fill's own raster image, resolved from the <draw:fill-image> definition its owning style references -- the same format/base64 pairing ContentImageBlockSchema already carries for an embedded picture, without that schema's own sizing/positioning fields (a fill image tiles/stretches across whatever shape references it, it has no size or position of its own the way a placed picture does).
+export const ContentBitmapFillSchema = z.object({
+  kind: z.literal("bitmap"),
+  format: z.enum(["png", "jpeg", "svg", "gif"]),
+  base64: z.string(),
+});
+export type ContentBitmapFill = z.infer<typeof ContentBitmapFillSchema>;
+
+export const ContentFillPatternSchema = z.discriminatedUnion("kind", [
+  ContentGradientFillSchema,
+  ContentHatchFillSchema,
+  ContentBitmapFillSchema,
+]);
+export type ContentFillPattern = z.infer<typeof ContentFillPatternSchema>;
 
 export const ContentPathPointSchema = z.object({
   xPt: z.number(),
@@ -1093,6 +1152,8 @@ export const ContentVectorSchema = z.discriminatedUnion("kind", [
     frame: BoxSchema,
     rotationDeg: z.number().optional(),
     fill: ColorSchema.optional(),
+    fillPattern: ContentFillPatternSchema.optional(), // present only when the source fill is genuinely non-flat (gradient/bitmap/hatch) and its real definition resolved -- see ContentFillPatternSchema's own comment
+    fillOpacity: z.number().min(0).max(1).optional(), // absent means fully opaque, matching Color's own plain-RGB shape
     stroke: ContentStrokeSchema.optional(),
     paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
@@ -1104,6 +1165,8 @@ export const ContentVectorSchema = z.discriminatedUnion("kind", [
     frame: BoxSchema,
     rotationDeg: z.number().optional(),
     fill: ColorSchema.optional(),
+    fillPattern: ContentFillPatternSchema.optional(),
+    fillOpacity: z.number().min(0).max(1).optional(),
     stroke: ContentStrokeSchema.optional(),
     paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
@@ -1126,6 +1189,8 @@ export const ContentVectorSchema = z.discriminatedUnion("kind", [
     rotationDeg: z.number().optional(),
     subpaths: z.array(ContentSubpathSchema),
     fill: ColorSchema.optional(),
+    fillPattern: ContentFillPatternSchema.optional(),
+    fillOpacity: z.number().min(0).max(1).optional(),
     fillRule: z.enum(["nonzero", "evenodd"]).optional(),
     stroke: ContentStrokeSchema.optional(),
     paintOrder: z.number().optional(),
