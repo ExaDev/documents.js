@@ -57,7 +57,30 @@ for (const slide of slides) {
 }
 ```
 
-`readPptStreams(currentUserStream, powerPointDocumentStream)` is the same read one level down, for a caller that already holds the two streams — the compound file beneath them is `archive-codec`'s business, and separating the two is what lets every record-level behaviour be tested without a container around it.
+`readPptStreams(currentUserStream, powerPointDocumentStream, password)` is the same read one level down, for a caller that already holds the two streams — the compound file beneath them is `archive-codec`'s business, and separating the two is what lets every record-level behaviour be tested without a container around it.
+
+## Encryption
+
+A `.ppt` protected with a password to open uses [MS-OFFCRYPTO] 2.3.5 "RC4 CryptoAPI Encryption" — genuinely different from the MD5-based scheme `xls-codec` and `doc-codec` share (ExaDev/documents.js#1108/#1113): SHA-1-based key derivation with no intermediate-hash iteration, and re-keying per persist object rather than at a fixed byte interval. `readPpt`/`readPptContent`/`readPptStreams` take an optional `password`, ignored for an unencrypted presentation; a missing or incorrect password against an encrypted one throws `PptEncryptedError` rather than returning a partial or garbled document, and so does an encryption shape this package does not implement (anything other than RC4 CryptoAPI — [MS-PPT] itself never specifies any other scheme for the binary format).
+
+```ts
+import { readPptContent } from "ppt-codec";
+
+const { metadata, slides } = readPptContent(
+  pptBytes,
+  "correct horse battery staple",
+);
+```
+
+`archive-codec`'s `crypto/office-rc4-cryptoapi` module (ExaDev/documents.js#1116) carries the key derivation and password verification; this package's own `src/encryption.ts` carries the container-specific pieces, which differ from both xls-codec's and doc-codec's shared scheme in three real ways:
+
+- **Location.** There is no fixed-offset header at all. The `DocumentEncryptionAtom` (`RT_CryptSession10Container`, [MS-PPT]'s own name for record type 0x2F14) is just another persist object, reached only by walking the current `UserEditAtom.encryptSessionPersistIdRef` through the same persist directory every other record uses.
+- **Re-keying granularity.** Each top-level persist object gets its own RC4 key, derived from its own persist ID as the "block number" — not a running byte offset within one continuous stream, the way both `xls-codec`'s FilePass scheme and `doc-codec`'s own EncryptionHeader scheme re-key.
+- **Encrypted headers.** A persist object's own 8-byte record header is encrypted along with its data, unlike the never-encrypted headers the shared xls/doc scheme leaves alone — `decryptPptDocumentStream` decrypts a peek of those 8 bytes first, under the object's own key, to learn its real length before decrypting the object in full.
+
+Pictures in a separate `Pictures` stream are also RC4 CryptoAPI-encrypted per [MS-PPT], but this package does not read the `Pictures` stream at all today (see [Images, tables, and OLE embeddings](#what-it-does-not-read-yet)), so decrypting it is out of scope until something needs to.
+
+`writePptContent` never encrypts.
 
 ## Writing a document
 
@@ -84,6 +107,7 @@ The whole path from a file's first byte to a slide's text, record by record:
 | Container       | The `Current User` and `PowerPoint Document` streams, read through `archive-codec`'s bounded [MS-CFB] reader.                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Record framing  | The generic 8-byte `RecordHeader`, the container/atom distinction, sibling sequences, child walks, and typed-descendant search — shared with [MS-ODRAW]'s records, which carry the identical header.                                                                                                                                                                                                                                                                                                                           |
 | Edit resolution | `CurrentUserAtom` (including its encrypted/plaintext `headerToken`), the `UserEditAtom` chain, `PersistDirectoryAtom`/`PersistDirectoryEntry`'s packed 20-bit/12-bit run form, and the oldest-first directory construction whose later entries supersede earlier ones — [MS-PPT] 2.1.2's own "live record" process, Part 1.                                                                                                                                                                                                    |
+| Encryption      | `DocumentEncryptionAtom` (`UserEditAtom.encryptSessionPersistIdRef` → the persist directory), [MS-OFFCRYPTO] 2.3.5's RC4 CryptoAPI scheme — see [Encryption](#encryption).                                                                                                                                                                                                                                                                                                                                                     |
 | Document        | `DocumentContainer` → `DocumentAtom` (slide size, in master units), `DocumentTextInfoContainer`'s `FontCollectionContainer`/`FontEntityAtom` typeface names, and `SlideListWithTextContainer` (distinguished from the master and notes lists by `recInstance`, which does not run in the order the names suggest).                                                                                                                                                                                                             |
 | Slides          | `SlidePersistAtom` → the persist directory → each `SlideContainer`, and the placeholder texts the slide list carries for it.                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Speaker notes   | `NotesListWithTextContainer` (the third of the three containers sharing `RT_SlideListWithText`) → `NotesPersistAtom` → the persist directory → each `NotesContainer`, and the `NotesAtom.slideIdRef` naming the presentation slide those notes belong to. The text comes from the notes slide's own drawing, since the notes list — unlike the slide list — carries no texts for an `OutlineTextRefAtom` to reach into.                                                                                                        |
@@ -97,7 +121,6 @@ Geometry is converted from master units (1/576 inch) to points on the way out, s
 
 Each of these is a real construct of the format that this package currently ignores or cannot represent — not a claim that it does not exist:
 
-- **Encrypted documents.** Recognised and refused by name (`PptEncryptedError`) rather than misparsed, but not decrypted.
 - **`DocumentSummaryInformation`'s extended and user-defined properties** (company, manager, custom properties) — a genuinely different stream from the one [Metadata](#metadata) covers, not attempted at all.
 - **Master and layout inheritance.** A run that states no size, typeface, or weight inherits it from the master's `TextMasterStyleAtom`; this reader reports such a property as absent rather than resolving the cascade, so a run's formatting is what the slide itself states and no more.
 - **Scheme colours.** A `ColorIndexStruct` naming a colour-scheme slot (rather than a literal sRGB value) yields no colour, because resolving it needs the slide's `SlideSchemeColorSchemeAtom`.
@@ -198,6 +221,7 @@ import { readStyleTextPropAtom } from "ppt-codec/text/style";
 | `stream/current-user-write`    | Writes a real `CurrentUserAtom` pointing at the single edit this writer always produces.                                                                                                                                                                                                                                 |
 | `stream/persist`               | `UserEditAtom`, `PersistDirectoryAtom`, and the persist directory the edit chain builds.                                                                                                                                                                                                                                 |
 | `stream/persist-write`         | Writes a single-edit `UserEditAtom`/`PersistDirectoryAtom` pair covering the document container and every slide container.                                                                                                                                                                                               |
+| `encryption`                   | `readDocumentEncryptionAtom`, `decryptPptDocumentStream` — [MS-OFFCRYPTO] 2.3.5 RC4 CryptoAPI decryption, wired against `archive-codec`'s own key derivation (see [Encryption](#encryption)).                                                                                                                            |
 | `document/document-atom`       | `DocumentAtom`: slide and notes sizes, master persist references.                                                                                                                                                                                                                                                        |
 | `document/document-atom-write` | Writes a `DocumentAtom` for the one slide size every slide must share.                                                                                                                                                                                                                                                   |
 | `document/fonts`               | The font collection, resolved to typeface names a `FontIndexRef` indexes.                                                                                                                                                                                                                                                |
@@ -221,7 +245,7 @@ import { readStyleTextPropAtom } from "ppt-codec/text/style";
 | `read`                         | The whole read pipeline, and the `readPpt`/`readPptContent`/`readPptStreams` surface.                                                                                                                                                                                                                                    |
 | `write`                        | The whole write pipeline, and the `writePpt`/`writePptContent`/`writePptStreams` surface.                                                                                                                                                                                                                                |
 | `units`                        | Master units to points, and points to master units.                                                                                                                                                                                                                                                                      |
-| `errors`                       | `PptFormatError` for malformed input, `PptEncryptedError` for well-formed input this package cannot decrypt, `PptUnsupportedContentError` for well-formed content this package's writer cannot express.                                                                                                                  |
+| `errors`                       | `PptFormatError` for malformed input, `PptEncryptedError` for encrypted input given no password, an incorrect one, or an encryption scheme this package does not implement (anything other than RC4 CryptoAPI), `PptUnsupportedContentError` for well-formed content this package's writer cannot express.               |
 
 ### Every fixture is built from the specification, not captured
 

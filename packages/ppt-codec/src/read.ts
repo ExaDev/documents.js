@@ -15,6 +15,7 @@ import {
 } from "document-schema.js";
 import { buildParagraphs } from "./content";
 import { readDocumentAtom } from "./document/document-atom";
+import { decryptPptDocumentStream } from "./encryption";
 import { readFontNames } from "./document/fonts";
 import { readNotesListWithText } from "./document/notes-list";
 import { readNotesContainerAtom, readNotesText } from "./document/notes";
@@ -205,19 +206,37 @@ function readSlide(
 export function readPptStreams(
   currentUserStream: Uint8Array<ArrayBuffer>,
   powerPointDocumentStream: Uint8Array<ArrayBuffer>,
+  password?: string,
 ): PptDocument {
   const currentUser = readCurrentUserAtom(currentUserStream);
-  if (currentUser.encrypted) {
-    throw new PptEncryptedError(
-      "the CurrentUserAtom's headerToken marks this document as encrypted, and this package does not implement [MS-PPT]'s encryption",
-    );
-  }
+  // The persist directory itself is always readable: UserEditAtom and PersistDirectoryAtom are never encrypted (see encryption.ts's own top comment), so building it does not need to wait on a password.
   const { directory, currentEdit } = buildPersistDirectory(
     powerPointDocumentStream,
     currentUser.offsetToCurrentEdit,
   );
+
+  let streamBytes = powerPointDocumentStream;
+  if (currentUser.encrypted) {
+    if (password === undefined) {
+      throw new PptEncryptedError(
+        "the CurrentUserAtom's headerToken marks this document as RC4 CryptoAPI-encrypted ([MS-OFFCRYPTO] 2.3.5); call readPptStreams with a password to decrypt it",
+      );
+    }
+    if (currentEdit.encryptSessionPersistIdRef === undefined) {
+      throw new PptFormatError(
+        "the CurrentUserAtom marks this document as encrypted, but its current UserEditAtom carries no encryptSessionPersistIdRef",
+      );
+    }
+    streamBytes = decryptPptDocumentStream(
+      powerPointDocumentStream,
+      directory,
+      currentEdit.encryptSessionPersistIdRef,
+      password,
+    );
+  }
+
   const documentContainer = resolvePersistObject(
-    powerPointDocumentStream,
+    streamBytes,
     directory,
     currentEdit.docPersistIdRef,
     "UserEditAtom.docPersistIdRef",
@@ -255,7 +274,7 @@ export function readPptStreams(
   const persists =
     slideList === undefined ? [] : readSlideListWithText(slideList);
   const notesBySlideId = readNotesBySlideId(
-    powerPointDocumentStream,
+    streamBytes,
     directory,
     listWithInstance(SLIDE_LIST_INSTANCE_NOTES),
   );
@@ -265,7 +284,7 @@ export function readPptStreams(
     metadata: {},
     slides: persists.map((persist) =>
       readSlide(
-        powerPointDocumentStream,
+        streamBytes,
         directory,
         persist,
         size,
@@ -276,12 +295,16 @@ export function readPptStreams(
   };
 }
 
-// Reads a .ppt file's bytes into the flat metadata + slides form. readPptStreams below is the pure record-level read (metadata always {}, since it has no container to look a SummaryInformation stream up in); this wraps it with the one container-level fact readPptStreams cannot know -- whether the compound file also carries a "\x05SummaryInformation" stream -- mapped onto LayoutMetadata through summaryInformationToLayoutMetadata (see src/metadata.ts) when present.
-export function readPptContent(bytes: Uint8Array<ArrayBuffer>): PptDocument {
+// Reads a .ppt file's bytes into the flat metadata + slides form. readPptStreams below is the pure record-level read (metadata always {}, since it has no container to look a SummaryInformation stream up in); this wraps it with the one container-level fact readPptStreams cannot know -- whether the compound file also carries a "\x05SummaryInformation" stream -- mapped onto LayoutMetadata through summaryInformationToLayoutMetadata (see src/metadata.ts) when present. `password` decrypts a presentation protected by [MS-OFFCRYPTO] 2.3.5 RC4 CryptoAPI -- see encryption.ts. It is ignored for an unencrypted presentation, and a missing or incorrect password against an encrypted one throws rather than returning a partial or garbled document.
+export function readPptContent(
+  bytes: Uint8Array<ArrayBuffer>,
+  password?: string,
+): PptDocument {
   const streams = readCompoundFile(bytes);
   const document = readPptStreams(
     requireStream(streams, CURRENT_USER_STREAM),
     requireStream(streams, POWERPOINT_DOCUMENT_STREAM),
+    password,
   );
   const metadataStream = streams.find(
     (stream) => stream.path === SUMMARY_INFORMATION_STREAM,
@@ -298,8 +321,11 @@ export function readPptContent(bytes: Uint8Array<ArrayBuffer>): PptDocument {
 }
 
 // Reads a .ppt file's bytes into the shared tree form, the same DocumentTree ooxml.js's readPptx and odf.js's readOdp produce for their own presentation formats.
-export function readPpt(bytes: Uint8Array<ArrayBuffer>): DocumentTree {
-  const { metadata, slides } = readPptContent(bytes);
+export function readPpt(
+  bytes: Uint8Array<ArrayBuffer>,
+  password?: string,
+): DocumentTree {
+  const { metadata, slides } = readPptContent(bytes, password);
   const document: ContentDocument = {
     kind: "presentation",
     metadata,
