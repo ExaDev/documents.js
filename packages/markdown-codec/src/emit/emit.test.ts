@@ -2418,6 +2418,95 @@ describe("lists", () => {
   });
 });
 
+describe("adjacent same-type lists get different marker glyphs (ExaDev/markdown-codec#957)", () => {
+  it("alternates the bullet character when two adjacent bullet lists share the configured default", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "foo" }],
+          list: { numId: "md1:bullet", level: 0 },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "bar" }],
+          list: { numId: "md1:bullet", level: 0 },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "baz" }],
+          list: { numId: "md2:bullet", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- foo\n- bar\n\n+ baz");
+  });
+
+  it("alternates the ordered delimiter when two adjacent ordered lists share the configured default, keeping each its own start", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "foo" }],
+          list: { numId: "md1:ordered", level: 0 },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "bar" }],
+          list: { numId: "md1:ordered", level: 0 },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "baz" }],
+          list: { numId: "md2:ordered@3", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("1. foo\n2. bar\n\n3) baz");
+  });
+
+  it("alternates back for a third adjacent same-type list rather than drifting through every candidate", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0 },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "b" }],
+          list: { numId: "md2:bullet", level: 0 },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "c" }],
+          list: { numId: "md3:bullet", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- a\n\n+ b\n\n- c");
+  });
+
+  it("does not alternate when the two adjacent lists are of different types (bullet then ordered)", () => {
+    const markdown = emitMarkdown(
+      doc([
+        {
+          kind: "paragraph",
+          runs: [{ text: "a" }],
+          list: { numId: "md1:bullet", level: 0 },
+        },
+        {
+          kind: "paragraph",
+          runs: [{ text: "b" }],
+          list: { numId: "md2:ordered", level: 0 },
+        },
+      ]),
+    );
+    expect(markdown).toBe("- a\n\n1. b");
+  });
+});
+
 describe("tables", () => {
   it("emits alignment markers read from the header row's own cell alignment", () => {
     const table: ContentTable = {
