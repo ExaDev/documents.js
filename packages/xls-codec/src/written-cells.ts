@@ -32,10 +32,14 @@ export function cellCarriesFormatting(cell: ContentSheetCell): boolean {
 }
 
 /**
- * Whether the writer emits a cell record for this cell: a value record for anything carrying a value, or a Blank record for an `empty`-kind cell whose formatting is the only thing it has to say.
+ * Whether the writer emits a cell record for this cell: a value record for anything carrying a value, a Formula record for anything carrying a formula, or a Blank record for an `empty`-kind cell whose formatting is the only thing it has to say.
  *
- * An unformatted empty cell is written as nothing at all, which is what round-trips: content.ts's reader drops an unformatted blank cell, and a merged range's empty anchor is reconstructed from the MergeCells record alone. A formatted one is not that case -- its fill, borders, and alignment live only in the XF a cell record points at, so writing nothing for it discards them.
+ * An unformatted empty cell with no formula is written as nothing at all, which is what round-trips: content.ts's reader drops an unformatted blank cell, and a merged range's empty anchor is reconstructed from the MergeCells record alone. A formatted one is not that case -- its fill, borders, and alignment live only in the XF a cell record points at, so writing nothing for it discards them. A formula is the identical case one level up: it lives only in a Formula record, so a cell carrying one is never dropped regardless of what its own cached `value` resolves to, even where that value alone would otherwise not have earned a record.
  */
 export function writesCellRecord(cell: ContentSheetCell): boolean {
-  return cell.value.kind !== "empty" || cellCarriesFormatting(cell);
+  return (
+    cell.value.kind !== "empty" ||
+    cellCarriesFormatting(cell) ||
+    cell.formula !== undefined
+  );
 }
