@@ -1,3 +1,14 @@
+## [7.8.20](https://github.com/ExaDev/documents.js/compare/documents.js%407.8.19...documents.js%407.8.20) (2026-09-08)
+
+### Tests
+
+* **documents.js:** expect doc-codec's new note/header-footer fields in round trip ([6d308cf](https://github.com/ExaDev/documents.js/commit/6d308cff36a55c5c78e7bcb7769f9c31dbc95537))
+
+
+### Dependencies
+
+- Updated doc-codec to 2.5.0
+
 ## [7.8.19](https://github.com/ExaDev/documents.js/compare/documents.js%407.8.18...documents.js%407.8.19) (2026-09-08)
 
 
