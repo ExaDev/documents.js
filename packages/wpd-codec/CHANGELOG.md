@@ -1,3 +1,19 @@
+## [3.0.6](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.0.5...wpd-codec%403.0.6) (2026-09-08)
+
+### Bug Fixes
+
+* **deps:** pin @vitest/coverage-v8 to match its vitest runner ([6912e0e](https://github.com/ExaDev/documents.js/commit/6912e0e5c602f0c21d9df12d2dc9899422bf5bd2))
+
+### Miscellaneous Chores
+
+* **deps:** pin every workspace dependency to an exact fixed version ([6a38142](https://github.com/ExaDev/documents.js/commit/6a38142facc043dfa499573f37431d3b32ff602e))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.3.1
+- Updated archive-codec to 1.7.1
+
 ## [3.0.5](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.0.4...wpd-codec%403.0.5) (2026-09-08)
 
 
