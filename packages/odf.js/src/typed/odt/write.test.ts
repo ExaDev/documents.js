@@ -1024,7 +1024,7 @@ describe("writeOdtContent: what it refuses rather than dropping", () => {
     ).toThrow(/embedded object/);
   });
 
-  it("refuses a table cell carrying anything but paragraphs, which the table reader could not read back", () => {
+  it("refuses a table cell carrying a block kind the table reader could not read back", () => {
     expect(() =>
       writeOdtContent(
         documentOf([
@@ -1037,9 +1037,12 @@ describe("writeOdtContent: what it refuses rather than dropping", () => {
                   {
                     blocks: [
                       {
-                        kind: "table",
-                        columnWidthsPt: [10],
-                        rows: [{ cells: [{ blocks: [] }] }],
+                        kind: "image",
+                        format: "png",
+                        base64:
+                          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+                        widthPt: 10,
+                        heightPt: 10,
                       },
                     ],
                   },

@@ -14,6 +14,7 @@ import {
   rgbHexToColor,
 } from "document-schema.js";
 import { segmentOdfParagraphRuns } from "./paragraph";
+import { closeListPlan, planListMembership, type ListPlanState } from "./list";
 
 // The write-side canonical form every ODF content writer in this package states its own round-trip law against: what reading a WRITTEN document back actually produces, for the pieces of the content model this package's writers already share verbatim (a paragraph's runs and formatting, a table's cells, an image block) -- factored out once typed/odt/write.ts's own normaliseOdtContent first stated it, now reused by typed/odp/write.ts (a shape's own text paragraphs, and a table nested inside a shape) rather than restated per format. See typed/odt/write.ts's own top-of-file note for the fuller philosophy this canonical-form discipline follows; this module owns only the pieces genuinely identical across every writer, not a format's own section/slide-level structure.
 
@@ -120,20 +121,25 @@ export function canonicalParagraph(
   return canonical;
 }
 
-// A covered grid position is a table:covered-table-cell in ODF, which carries no content, no span and no style of its own -- so whatever an incoming placeholder happened to hold, reading one back yields exactly an empty cell. A non-paragraph block (a table cell can hold only text:p/text:h, per typed/shared/table.ts's own readTableCell) is refused by name, matching every writer's own fidelity-construct stance.
+// A covered grid position is a table:covered-table-cell in ODF, which carries no content, no span and no style of its own -- so whatever an incoming placeholder happened to hold, reading one back yields exactly an empty cell. A cell's own blocks mirror readTableCell's own recursive scope (typed/shared/table.ts): a paragraph's list membership is renumbered onto `listState` exactly as a body-level paragraph's is (planListMembership, threaded by the caller across the whole document so a list minted inside a cell gets as unique an identity as one minted anywhere else), and a nested table recurses back into canonicalTable itself. Any other block kind is refused by name, matching every writer's own fidelity-construct stance.
 function canonicalCell(
   cell: ContentTableCell,
   covered: boolean,
+  listState: ListPlanState,
 ): ContentTableCell {
   if (covered) {
     return { blocks: [] };
   }
   const canonical: ContentTableCell = {
     blocks: cell.blocks.map((block) => {
+      if (block.kind === "table") {
+        return canonicalTable(block, listState);
+      }
       if (block.kind !== "paragraph") {
         throw unsupportedContent(`a "${block.kind}" block`, "a table cell");
       }
-      return canonicalParagraph(block, undefined);
+      const canonicalId = planListMembership(block.list, listState);
+      return canonicalParagraph(block, canonicalId);
     }),
   };
   if (cell.colSpan !== undefined) {
@@ -164,9 +170,14 @@ function canonicalCell(
 }
 
 // The one canonical ContentTable a written-and-reread table equals, wherever writeOdfTable places it (odt's own top-level tables, or one nested inside an odp/odg shape's draw:frame) -- every mapping forced by ODF's own table:table content model rather than chosen here, matching typed/shared/table.ts's own writeOdfTable/readOdfTable as the single writer/reader pair every caller shares.
-export function canonicalTable(table: ContentTable): ContentTable {
+// `listState` is the caller's own document-wide ListPlanState (typed/odt/write.ts's planDocument, typed/odp/write.ts's own presentation-wide state -- see each caller's own top-of-file note), threaded through every cell so a list minted inside this table -- including one nested inside a cell of a table nested inside one of THIS table's own cells -- is numbered in the identical document-encounter order readOdfTable's own listIdState mints it in on the way back in. Closed on entry and after every cell (never merely between rows): each cell is its own list-run scope, exactly as writeCellBlocks' own openList/closeList never persists across a writeCellBlocks call, so two adjacent cells can never canonicalise to the same numId even when both carry an identical incoming one.
+export function canonicalTable(
+  table: ContentTable,
+  listState: ListPlanState,
+): ContentTable {
+  closeListPlan(listState);
   const covered = new Set<string>();
-  return {
+  const canonical: ContentTable = {
     kind: "table",
     columnWidthsPt: [...table.columnWidthsPt],
     rows: table.rows.map((row, rowIndex) => {
@@ -184,13 +195,18 @@ export function canonicalTable(table: ContentTable): ContentTable {
             }
           }
         }
-        return canonicalCell(cell, isCovered);
+        closeListPlan(listState);
+        const canonicalCellValue = canonicalCell(cell, isCovered, listState);
+        closeListPlan(listState);
+        return canonicalCellValue;
       });
       return row.heightPt === undefined
         ? { cells }
         : { cells, heightPt: row.heightPt };
     }),
   };
+  closeListPlan(listState);
+  return canonical;
 }
 
 // The one canonical LayoutMetadata a written-and-reread document's own metadata equals: exactly the seven fields typed/shared/metadata.ts's writeOdfMetadata puts into meta.xml and readOdfMetadata reads back, each passed through when stated and dropped when absent (an empty keywords array writes no meta:keyword elements at all, so it reads back absent rather than empty). Every other LayoutMetadata field -- `producer`, `language`, and the rest -- is dropped: none has a meta.xml spelling this package writes or reads, so carrying it would be claiming a fidelity meta.xml does not have. Shared by every content writer here rather than restated per format: what meta.xml can carry is a property of the part, not of which body element sits beside it.
