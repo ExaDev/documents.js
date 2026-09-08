@@ -1250,6 +1250,172 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     });
     expect(readDrawPageContent([shape], { parts: {} }).vectors).toEqual([]);
   });
+
+  // ExaDev/documents.js#954: 'round-rectangle' now builds a REAL rounded-corner path when the shape's own draw:handle/draw:modifiers resolve a corner radius, rather than always approximating to the plain rect variant.
+  it('"round-rectangle" with a resolvable draw:handle/draw:modifiers corner radius builds a real rounded-corner path, not the plain rect approximation', () => {
+    const shape = el(
+      "draw:custom-shape",
+      {
+        "draw:name": "CustomRoundRect1",
+        "svg:x": "0pt",
+        "svg:y": "0pt",
+        "svg:width": "50pt",
+        "svg:height": "30pt",
+      },
+      [
+        el(
+          "draw:enhanced-geometry",
+          {
+            "svg:viewBox": "0 0 21600 21600",
+            "draw:type": "round-rectangle",
+            "draw:modifiers": "3600",
+          },
+          [
+            el("draw:handle", {
+              "draw:handle-position": "$0 0",
+              "draw:handle-range-x-minimum": "0",
+              "draw:handle-range-x-maximum": "10800",
+            }),
+          ],
+        ),
+      ],
+    );
+    const { vectors } = readDrawPageContent([shape], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== "path") {
+      throw new Error("expected a path vector");
+    }
+    // 3600/21600 * 50pt width = ~8.33pt radius.
+    const expectedRadius = (3600 / 21600) * 50;
+    expect(vector.subpaths).toHaveLength(1);
+    const subpath = vector.subpaths[0];
+    expect(subpath?.closed).toBe(true);
+    expect(subpath?.start.xPt).toBeCloseTo(expectedRadius, 6);
+    expect(subpath?.start.yPt).toBeCloseTo(0, 6);
+    // 4 straight edges + 4 corner arcs = 8 segments.
+    expect(subpath?.segments).toHaveLength(8);
+    expect(subpath?.segments.map((s) => s.kind)).toEqual([
+      "line",
+      "cubic",
+      "line",
+      "cubic",
+      "line",
+      "cubic",
+      "line",
+      "cubic",
+    ]);
+  });
+
+  it('"round-rectangle" clamps a modifier value beyond half the shape\'s shorter side to the mathematical maximum a corner radius can be', () => {
+    const shape = el(
+      "draw:custom-shape",
+      {
+        "svg:x": "0pt",
+        "svg:y": "0pt",
+        "svg:width": "50pt",
+        "svg:height": "30pt",
+      },
+      [
+        el(
+          "draw:enhanced-geometry",
+          {
+            "svg:viewBox": "0 0 21600 21600",
+            "draw:type": "round-rectangle",
+            "draw:modifiers": "21600", // the whole viewBox width -- wildly beyond any sane radius
+          },
+          [el("draw:handle", { "draw:handle-position": "$0 0" })],
+        ),
+      ],
+    );
+    const { vectors } = readDrawPageContent([shape], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== "path") {
+      throw new Error("expected a path vector");
+    }
+    const subpath = vector.subpaths[0];
+    // Clamped to half the shorter side (30pt height / 2 = 15pt).
+    expect(subpath?.start.xPt).toBeCloseTo(15, 6);
+  });
+
+  it.each([
+    ["diamond", 4],
+    ["isosceles-triangle", 3],
+    ["right-triangle", 3],
+    ["pentagon", 5],
+    ["hexagon", 6],
+    ["octagon", 8],
+  ])(
+    'recognises the "%s" preset -- builds a closed, straight-line-only path with %i vertices inscribed in the shape\'s own frame',
+    (type, vertexCount) => {
+      const { vectors } = readDrawPageContent(
+        [customShape(`Custom${type}`, type)],
+        { parts: {} },
+      );
+      const vector = vectors[0];
+      if (vector?.kind !== "path") {
+        throw new Error(`expected a path vector for preset "${type}"`);
+      }
+      expect(vector.subpaths).toHaveLength(1);
+      const subpath = vector.subpaths[0];
+      expect(subpath?.closed).toBe(true);
+      // One vertex is `start`, the rest are line segments -- together they total the vertex count.
+      expect((subpath?.segments.length ?? 0) + 1).toBe(vertexCount);
+      expect(subpath?.segments.every((s) => s.kind === "line")).toBe(true);
+    },
+  );
+
+  it("diamond's own four vertices sit at the midpoints of each frame edge", () => {
+    const { vectors } = readDrawPageContent(
+      [customShape("CustomDiamond1", "diamond")],
+      { parts: {} },
+    );
+    const vector = vectors[0];
+    if (vector?.kind !== "path") {
+      throw new Error("expected a path vector");
+    }
+    const points = [
+      vector.subpaths[0]?.start,
+      ...(vector.subpaths[0]?.segments.map((s) =>
+        s.kind === "line" ? s.to : undefined,
+      ) ?? []),
+    ];
+    expect(points).toEqual([
+      { xPt: 25, yPt: 0 },
+      { xPt: 50, yPt: 15 },
+      { xPt: 25, yPt: 30 },
+      { xPt: 0, yPt: 15 },
+    ]);
+  });
+
+  it("a fixed-polygon preset's vector carries no residue, same as rectangle/round-rectangle/ellipse -- the approximation replaces the enhanced-geometry wholesale", () => {
+    const { vectors } = readDrawPageContent(
+      [customShape("CustomDiamond1", "diamond")],
+      { parts: {} },
+    );
+    expect(vectors[0]?.source).toBeUndefined();
+  });
+
+  it("'parallelogram'/'trapezoid' stay unrecognised -- deliberately excluded pending real slant-handle evaluation, per this file's own top-of-file note", () => {
+    const shape = el(
+      "draw:custom-shape",
+      {
+        "svg:x": "0pt",
+        "svg:y": "0pt",
+        "svg:width": "50pt",
+        "svg:height": "30pt",
+      },
+      [
+        el("text:p", {}, [txt("Hello")]),
+        el("draw:enhanced-geometry", {
+          "svg:viewBox": "0 0 21600 21600",
+          "draw:type": "parallelogram",
+        }),
+      ],
+    );
+    const { shapes, vectors } = readDrawPageContent([shape], { parts: {} });
+    expect(vectors).toEqual([]);
+    expect(shapes).toHaveLength(1); // salvaged as a text shape, the same as any other unrecognised preset
+  });
 });
 
 describe("readDrawPageContent: draw:z-index paint order", () => {
