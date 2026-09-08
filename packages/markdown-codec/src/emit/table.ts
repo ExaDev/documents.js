@@ -1,6 +1,8 @@
 // ContentTable -> a GFM table: rows[0] is always treated as the header row (GFM requires exactly one), each column's own alignment read from that header row's own cell.blocks[0].alignment (a ContentTable carries no column-level alignment field of its own -- src/lower/table.ts's own mapping choice was to carry it per-cell instead, so the write side reads it back from the same place). Absolute column widths (ContentTable.columnWidthsPt) have no GFM equivalent at all and are dropped without comment -- a GFM table was never able to carry them to begin with, so this is not a fidelity loss introduced by this package.
 //
-// A markdown table cell holds inline content only. Two degradations are real improvements over dropping, not the ceiling of what this package attempts: MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED fires when a cell carries more than one block, joined with a literal `<br>` -- raw inline HTML, universally rendered as a real line break by every GFM table renderer (GitHub/GitLab included), and already round-trips safely as quarantined residue on its own run (src/lower/inline.ts's rawHtml case) rather than corrupting anything on read-back. An `image`-kind block emits inline via emitImage, the identical degradation src/lower/inline.ts's own "nested image" case already gives an image inside emphasis/a link elsewhere in this package: it reads back as a run carrying the alt text as its own visible text with the image's data: URI riding as that run's hyperlink, not as a lost block -- MarkdownDiagnosticCodes.TABLE_CELL_IMAGE_DEGRADED reports this explicitly, distinct from FORMATTING_DROPPED's true silent loss. FORMATTING_DROPPED itself still fires for what pure GFM syntax genuinely cannot express at all -- a nested table or any other non-paragraph, non-image block, and colSpan/rowSpan/background on the cell itself (the cell still renders, just as an ordinary unmerged, unstyled one) -- a real ceiling of the GFM table grammar, not a narrowing this module chose.
+// A markdown table cell holds inline content only. Two degradations are real improvements over dropping, not the ceiling of what this package attempts: MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED fires when a cell carries more than one block, joined with a literal `<br>` -- raw inline HTML, universally rendered as a real line break by every GFM table renderer (GitHub/GitLab included), and already round-trips safely as quarantined residue on its own run (src/lower/inline.ts's rawHtml case) rather than corrupting anything on read-back. An `image`-kind block emits inline via emitImage, the identical degradation src/lower/inline.ts's own "nested image" case already gives an image inside emphasis/a link elsewhere in this package: it reads back as a run carrying the alt text as its own visible text with the image's data: URI riding as that run's hyperlink, not as a lost block -- MarkdownDiagnosticCodes.TABLE_CELL_IMAGE_DEGRADED reports this explicitly, distinct from FORMATTING_DROPPED's true silent loss.
+//
+// A cell's own colSpan/rowSpan/background, or a non-paragraph/non-image block inside it (a nested table, say), have no representation in THIS plain pipe-syntax writer at all -- but tableNeedsHtmlFallback (src/emit/html-table.ts) is checked before any of this module's own rendering runs, so a table containing any such cell never reaches this file's own renderCellText in the first place; it renders through that module's HTML-table fallback instead (MarkdownDiagnosticCodes.TABLE_HTML_FALLBACK), which DOES represent all three losslessly. By the time renderCellText below runs, tableNeedsHtmlFallback has already established that every cell in the whole table holds only paragraph/image blocks and no colSpan/rowSpan/background -- ExaDev/documents.js#1089.
 
 import type {
   Alignment,
@@ -10,6 +12,7 @@ import type {
 import type { MarkdownTableAlignment } from "../ast/ast";
 import type { MarkdownDiagnosticSink } from "../diagnostics/diagnostics";
 import { MarkdownDiagnosticCodes } from "../diagnostics/diagnostics";
+import { emitHtmlTable, tableNeedsHtmlFallback } from "./html-table";
 import { emitImage } from "./image";
 import type { InlineEmitContext } from "./inline";
 import { emitRunsSingleLine } from "./inline";
@@ -66,18 +69,6 @@ function renderCellText(
   cell: ContentTableCell,
   context: TableEmitContext,
 ): string {
-  if (
-    cell.colSpan !== undefined ||
-    cell.rowSpan !== undefined ||
-    cell.background !== undefined
-  ) {
-    context.sink({
-      code: MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED,
-      severity: "info",
-      message:
-        "a table cell's own colSpan/rowSpan/background has no GFM table equivalent; the cell renders as an ordinary unmerged, unstyled cell",
-    });
-  }
   if (cell.blocks.length > 1) {
     context.sink({
       code: MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED,
@@ -98,11 +89,7 @@ function renderCellText(
       continue;
     }
     if (block.kind !== "paragraph") {
-      context.sink({
-        code: MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED,
-        severity: "info",
-        message: `a table cell containing a "${block.kind}" block has no GFM table equivalent; it is dropped entirely`,
-      });
+      // Unreachable for real input: emitTable only reaches this plain pipe-syntax renderer when tableNeedsHtmlFallback(table) is false, which requires every cell's own blocks, across the WHOLE table, to be "paragraph" or "image" only (see that function, src/emit/html-table.ts). Kept as a real narrowing rather than an assertion so this loop still type-checks against ContentBlock's full union.
       continue;
     }
     const text = emitRunsSingleLine(block.runs, context, block.constructs);
@@ -117,6 +104,15 @@ export function emitTable(
   table: ContentTable,
   context: TableEmitContext,
 ): string {
+  if (tableNeedsHtmlFallback(table)) {
+    context.sink({
+      code: MarkdownDiagnosticCodes.TABLE_HTML_FALLBACK,
+      severity: "info",
+      message:
+        "a cell in this table needs colSpan/rowSpan/background, or holds a block a GFM table cell cannot represent at all (most commonly a nested table); GFM's own table extension holds inline content only (github.github.com/gfm, \"Tables (extension)\"), so no single cell can carry an HTML sub-block inside an otherwise pipe-syntax table -- the whole table is rendered as a raw HTML <table> block instead (CommonMark spec 0.31.2, HTML blocks condition 6, https://spec.commonmark.org/0.31.2/#html-blocks), which src/html/html-table.ts's own reader recognises back into an equal ContentTable",
+    });
+    return emitHtmlTable(table, context);
+  }
   const [header, ...body] = table.rows;
   if (header === undefined) {
     return "";

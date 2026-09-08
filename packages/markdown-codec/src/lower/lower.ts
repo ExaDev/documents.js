@@ -9,7 +9,7 @@
 //  - lists (bullet/ordered/task) -> flat ContentListMembership numId/level, encoding ordered-vs-unordered/task/tight-loose into the numId string itself (src/shared/list-id.ts), plus a minted itemId (src/shared/list-id.ts's mintListItemId) shared by every block one item directly contains -- MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT (a nested list's own marker type disagrees with its numId's minted type), LIST_ITEM_BLOCK_UNLISTED (a table or a resolved image directly inside an item -- ContentListMembership lives only on ContentParagraph). itemId lets src/emit's own writer re-attach a multi-block item's later blocks to its own marker line rather than flattening them into separate items, including a construct (a blockquote's division pair) sitting directly inside the item -- lowerBlockquote below threads the enclosing item's own membership straight through the quote's wrapped paragraphs (the same context-carrying dual carry the quote indent itself uses), which is exactly what lets src/emit's own ListRegionItem recognise the construct as belonging to that item rather than fracturing it out as separate top-level content. When the quote's own content is itself a list, lowerList always mints that list a completely fresh, unrelated numId/itemId (ExaDev/documents.js#990) -- none of ITS paragraphs share the enclosing item's itemId either, so the paragraph-sharing carry above has nothing to find -- and the fresh list's own numId instead carries the enclosing item's itemId as its own `+owner=` suffix (src/shared/list-id.ts), which src/emit's own constructCarriesListItemId reads back the same way.
 //  - GFM tables -> ContentTable, src/lower/table.ts.
 //  - images -> ContentImageBlock via a synchronous MarkdownImageResolver port (src/lower/image.ts) -- MarkdownDiagnosticCodes.IMAGE_UNRESOLVED when the resolver (or native data: URI decoding) cannot produce a real PNG/JPEG; the image degrades to a text run of alt text + hyperlink, NEVER an invalid ContentImageBlock. A top-level image (a direct child of a paragraph) splits that paragraph precisely at the point it occurs; a nested one (inside emphasis/a link) never resolves at all -- see src/lower/inline.ts's own top-of-file note.
-//  - raw HTML -> preserved as literal text by default (styleId 'HTMLPreformatted' for block-level HTML), a rawHtml: 'drop' option available -- MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT / RAW_HTML_DROPPED.
+//  - raw HTML -> preserved as literal text by default (styleId 'HTMLPreformatted' for block-level HTML), a rawHtml: 'drop' option available -- MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT / RAW_HTML_DROPPED. The one exception: a block-level HTML that is, in full, one well-formed <table> recognises straight to a real ContentTable instead (src/html/html-table.ts's own bounded recogniser, ExaDev/documents.js#1089) -- ahead of both the rawHtml option and RAW_HTML_PRESERVED_AS_TEXT/DROPPED, since a recognised table is genuine structure this package understands, not opaque markup to preserve or discard.
 //  - $$ display math (ExaDev/markdown-codec#53) -> one embedded FORMULA object whose presentation layer carries the LaTeX verbatim (lowerMathBlock below); \( \) inline math stays a Cambria-Math-marked run (src/lower/inline.ts, the run-level extent a formula is not) -- MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT for the inline half. Neither is parsed as LaTeX or converted to MathML here -- that is a documents.js question (ExaDev/documents.js#563).
 //  - front matter (src/lower/front-matter.ts) -> a flat-scalar-only LayoutMetadata subset -- MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED.
 //  - footnote definition (ExaDev/markdown-codec#66) -> an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing its own lowered body blocks; the reference site is a point run-level `anchor` extent on the paragraph it sits inside (src/lower/inline.ts) -- MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED. See lowerFootnoteDefinition below for why the body rides the construct's extent rather than AnchorDescriptor's own `definition` field.
@@ -46,6 +46,7 @@ import {
   MarkdownInputTooLargeError,
   NOOP_MARKDOWN_DIAGNOSTIC_SINK,
 } from "../diagnostics/diagnostics";
+import { parseHtmlTable } from "../html/html-table";
 import type { ReadMarkdownOptions } from "../options/options";
 import type { NumIdMintState } from "../shared/list-id";
 import {
@@ -86,6 +87,8 @@ interface BlockLowerContext {
   readonly numIdState: NumIdMintState;
   readonly quoteDepth: number;
   readonly list: ListMembership | undefined;
+  // Whether GFM's table extension is enabled for this read (ReadMarkdownOptions.gfmTables, default true) -- gates lowerHtmlBlock's own HTML-table recognition (src/html/html-table.ts) the same way it already gates src/block/block.ts's own pipe-table promotion, since a ContentTable is a GFM-table-extension construct either way it is spelled in the source; with the extension off, a <table> HTML block stays exactly the opaque raw HTML it always was (src/conformance.test.ts's own CommonMark-only corpus run depends on this: a bare `| a |` line is ordinary paragraph text under pure CommonMark, and re-emitting a recognised table as GFM pipe syntax with the extension off would produce markdown the very same options can no longer parse back correctly).
+  readonly gfmTables: boolean;
 }
 
 function inlineContext(context: BlockLowerContext): InlineLowerContext {
@@ -278,7 +281,22 @@ function lowerThematicBreak(context: BlockLowerContext): ContentBlock[] {
 function lowerHtmlBlock(
   node: Extract<MarkdownBlockNode, { type: "htmlBlock" }>,
   context: BlockLowerContext,
+  contentWidthPt: number,
 ): ContentBlock[] {
+  const table = context.gfmTables
+    ? parseHtmlTable(node.literal, contentWidthPt)
+    : undefined;
+  if (table !== undefined) {
+    if (context.list !== undefined) {
+      context.sink({
+        code: MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
+        severity: "info",
+        message:
+          "an HTML-table block directly inside a list item has no ContentListMembership field of its own -- only ContentParagraph carries .list -- so its association with the enclosing list item is lost",
+      });
+    }
+    return [table];
+  }
   if (context.rawHtmlMode === "drop") {
     context.sink({
       code: MarkdownDiagnosticCodes.RAW_HTML_DROPPED,
@@ -568,7 +586,7 @@ function lowerBlock(
     case "thematicBreak":
       return lowerThematicBreak(context);
     case "htmlBlock":
-      return lowerHtmlBlock(node, context);
+      return lowerHtmlBlock(node, context, contentWidthPt);
     case "mathBlock":
       return lowerMathBlock(node, context);
     case "footnoteDefinition":
@@ -617,6 +635,7 @@ export function lowerParsedMarkdown(
     numIdState: createNumIdMintState(),
     quoteDepth: 0,
     list: undefined,
+    gfmTables: options.gfmTables ?? true,
   };
 
   const blocks = parsed.document.children.flatMap((child) =>

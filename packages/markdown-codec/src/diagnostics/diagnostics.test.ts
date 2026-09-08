@@ -304,7 +304,31 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
     reached.add(MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK);
   });
 
-  it("TABLE_CELL_FORMATTING_DROPPED: a cell with colSpan set", () => {
+  it("TABLE_CELL_FORMATTING_DROPPED: a cell with a pattern background, which has no CSS equivalent even in the HTML-table fallback", () => {
+    const collector = createDiagnosticCollector();
+    const table: ContentTable = {
+      kind: "table",
+      columnWidthsPt: [100],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }],
+              colSpan: 2,
+              background: { kind: "pattern", patternType: "percent50" },
+            },
+          ],
+        },
+      ],
+    };
+    emitMarkdown(minimalDocument([table]), { sink: collector.sink });
+    expect(
+      collector.has(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED),
+    ).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED);
+  });
+
+  it("TABLE_HTML_FALLBACK: a cell needing colSpan/rowSpan/background/a nested block falls back to a raw HTML table", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
@@ -321,10 +345,10 @@ describe("every MarkdownDiagnosticCodes entry is reachable from real input", () 
       ],
     };
     emitMarkdown(minimalDocument([table]), { sink: collector.sink });
-    expect(
-      collector.has(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED),
-    ).toBe(true);
-    reached.add(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED);
+    expect(collector.has(MarkdownDiagnosticCodes.TABLE_HTML_FALLBACK)).toBe(
+      true,
+    );
+    reached.add(MarkdownDiagnosticCodes.TABLE_HTML_FALLBACK);
   });
 
   it("TABLE_CELL_MULTI_PARAGRAPH_JOINED: a cell with two blocks", () => {

@@ -2976,7 +2976,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     ).toHaveLength(1);
   });
 
-  it("TABLE_CELL_FORMATTING_DROPPED fires for colSpan/rowSpan/background and for a non-paragraph cell block", () => {
+  it("TABLE_CELL_FORMATTING_DROPPED fires for a non-paragraph/non-image/non-lone-nested-table cell block even inside the HTML-table fallback, once colSpan already triggers it", () => {
     const collector = createDiagnosticCollector();
     const table: ContentTable = {
       kind: "table",
@@ -2996,15 +2996,14 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
         },
       ],
     };
-    emitMarkdown(doc([table]), { sink: collector.sink });
+    const markdown = emitMarkdown(doc([table]), { sink: collector.sink });
+    expect(markdown).toContain('colspan="2"');
+    expect(collector.has(MarkdownDiagnosticCodes.TABLE_HTML_FALLBACK)).toBe(
+      true,
+    );
     expect(
-      collector
-        .codes()
-        .filter(
-          (code) =>
-            code === MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED,
-        ).length,
-    ).toBeGreaterThanOrEqual(2);
+      collector.has(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED),
+    ).toBe(true);
   });
 
   it("TABLE_CELL_MULTI_PARAGRAPH_JOINED fires for a cell with more than one paragraph, and the text joins with a literal <br>", () => {

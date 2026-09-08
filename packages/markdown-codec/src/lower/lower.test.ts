@@ -536,6 +536,39 @@ describe("raw HTML", () => {
     );
     expect(block.source).toBeUndefined();
   });
+
+  it("recognises a raw HTML <table> block as a real ContentTable (ExaDev/documents.js#1089), ahead of both rawHtml options and opaque preservation", () => {
+    const source =
+      '<table>\n<tr><th>a</th><th>b</th></tr>\n<tr><td colspan="2">merged</td></tr>\n</table>';
+    const block = blocks(source, { rawHtml: "drop" })[0];
+    if (block?.kind !== "table") {
+      throw new Error(`expected a table block, got '${block?.kind}'`);
+    }
+    expect(block.rows[1]?.cells[0]?.colSpan).toBe(2);
+  });
+
+  it("does not recognise an HTML table when gfmTables is disabled, matching plain GFM pipe-table promotion's own gate -- it stays opaque preserved text instead", () => {
+    const source = "<table>\n<tr><td>x</td></tr>\n</table>";
+    const collector = createDiagnosticCollector();
+    const result = blocks(source, {
+      gfmTables: false,
+      sink: collector.sink,
+    });
+    expect(result.every((block) => block.kind !== "table")).toBe(true);
+    expect(
+      collector.has(MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT),
+    ).toBe(true);
+  });
+
+  it("falls through to opaque preservation for an HTML block that merely starts with <table> but is not, in full, one well-formed table", () => {
+    const source = "<table>\nnot really a table\n</table>";
+    const collector = createDiagnosticCollector();
+    const result = blocks(source, { sink: collector.sink });
+    expect(result.every((block) => block.kind !== "table")).toBe(true);
+    expect(
+      collector.has(MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT),
+    ).toBe(true);
+  });
 });
 
 describe("front matter", () => {
