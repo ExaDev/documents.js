@@ -620,6 +620,67 @@ describe("readXlsContent", () => {
     ]);
   });
 
+  it("reads a CondFmt12/CF12 top10 rule into ContentSheet.conditionalFormats (ExaDev/documents.js#1106) -- workbook/conditional-format-12.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
+    const bytes = xlsFile(
+      workbookStream({
+        globals: xfTable(0),
+        sheets: [
+          {
+            name: "Sheet1",
+            records: [
+              record(RECORD_CONDFMT12, [
+                ...new Array<number>(12).fill(0), // frtRefHeaderU
+                ...u16(1), // ccf -- one CF12 record follows
+                ...u16(0), // fToughRecalc + nID, unused
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0), // refBound (Ref8U), unused
+                ...u16(1), // one range
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+                ...u16(0),
+              ]),
+              record(RECORD_CF12, [
+                ...new Array<number>(12).fill(0), // frtRefHeader
+                0x05, // ct: filter
+                0x00, // cp
+                ...u16(0), // cce1
+                ...u16(0), // cce2
+                ...u32(0), // cbDxf -- MUST be zero for a filter rule
+                ...u16(0), // fmlaActive cce
+                0x00, // flags
+                ...u16(0), // ipriority
+                ...u16(0x0005), // icfTemplate: Filter (top10)
+                16, // cbTemplateParm
+                // CFExFilterParams: fTop=1, fPercent=0, iParam=5
+                0x01,
+                ...u16(5),
+                ...new Array<number>(13).fill(0),
+                // CFFilter (unread beyond its own declared length)
+                ...u16(4),
+                0,
+                0,
+                0,
+                0,
+              ]),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(readXlsContent(bytes).sheets[0]?.conditionalFormats).toEqual([
+      {
+        type: "top10",
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+        rank: 5,
+        priority: 0,
+      },
+    ]);
+  });
+
   it("materialises an empty anchor for a merged range whose top-left cell has no value", () => {
     // Merging in Excel keeps only the top-left value, so a range merged over empty cells has no value anywhere; dropping the anchor would lose the merge entirely.
     const bytes = xlsFile(

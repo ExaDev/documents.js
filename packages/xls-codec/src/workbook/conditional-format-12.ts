@@ -1,5 +1,6 @@
 import type {
   Color,
+  ContentSheetConditionalFormat,
   ContentSheetConditionalFormatValue,
   ContentSheetRange,
 } from "document-schema.js";
@@ -10,9 +11,11 @@ import { BiffFormatError } from "../biff/records";
 import type { RecordGroup } from "../biff/substreams";
 import { RECORD_CF12 } from "../biff/record-types";
 
-// CondFmt12 ([MS-XLS] 2.4.57, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/b891e737-12f6-41dd-b8a8-7360a4826d4a) is CondFmt's own "future record" (FRT) counterpart: it wraps a CondFmtStructure ([MS-XLS] 2.4's own CondFmtStructure, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1f4b7576-b5e0-40f0-b2c6-b447d0954b17 -- the identical ccf/flags/refBound/sqref shape CondFmt's own body already carries), prefixed by a 12-byte FrtRefHeaderU this reader never needs, and marks the start of the CF12 ([MS-XLS] 2.4.43, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3b6a364e-8c34-4830-a8b1-5a51476a9934) records it names via mainCF.ccf. A CF12's own ct field picks one of six rule shapes; this reader promotes only the three that share a genuine array-of-thresholds building block already modelled in document-schema.js -- colour scale (ct 0x03), data bar (ct 0x04), and icon set (ct 0x06) -- since ooxml.js's xlsx cfRule reading and odf.js's ods reading already populate the identical ContentSheetConditionalFormatValueSchema/colorScale/dataBar/iconSet shapes (ExaDev/documents.js#1104). Comparison (ct 0x01) and formula (ct 0x02) rules re-expressed in this newer record shape, and the filter-dispatched template family (ct 0x05: top10, aboveAverage, duplicateValues, containsText, date/time periods, …), stay unread here -- tracked separately on ExaDev/documents.js#1100.
+// CondFmt12 ([MS-XLS] 2.4.57, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/b891e737-12f6-41dd-b8a8-7360a4826d4a) is CondFmt's own "future record" (FRT) counterpart: it wraps a CondFmtStructure ([MS-XLS] 2.4's own CondFmtStructure, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1f4b7576-b5e0-40f0-b2c6-b447d0954b17 -- the identical ccf/flags/refBound/sqref shape CondFmt's own body already carries), prefixed by a 12-byte FrtRefHeaderU this reader never needs, and marks the start of the CF12 ([MS-XLS] 2.4.43, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3b6a364e-8c34-4830-a8b1-5a51476a9934) records it names via mainCF.ccf. A CF12's own ct field picks one of six rule shapes: colour scale (ct 0x03), data bar (ct 0x04), and icon set (ct 0x06) are read via their own array-of-thresholds building block (ExaDev/documents.js#1104); comparison/formula rules re-expressed in this newer record shape (ct 0x01/0x02) stay unread here, since base CF already covers them.
 //
-// Every rule type this reader promotes carries a DXFN12 whose own cbDxf MUST be zero ([MS-XLS] 2.4.43's own ct table: "If ct is equal to 0x03, 0x04 or 0x06, then dxf.cbDxf MUST be equal to 0x00000000"), since colour scale/data bar/icon set formatting carries its own colour fields directly rather than through a differential-format override -- so, unlike base CF's own DXFN reading, no style extraction is needed here at all.
+// ct 0x05 ("filter") is a further dispatch: icfTemplate (an unsigned integer alongside a 16-byte CFExTemplateParams block, both always present regardless of ct) names one of roughly fifteen templates -- top10, aboveAverage (and its below/or-equal siblings), duplicateValues, uniqueValues, four blank/error conditions, ten date/time periods, and four containsText sub-types. Every one of those except containsText is read here (ExaDev/documents.js#1106): CFExTemplateParams turns out to need real parsing for only two of its five variants (CFExFilterParams for top10; CFExAveragesTemplateParams for the aboveAverage family) -- CFExDefaultTemplateParams (duplicateValues/uniqueValues/blank/error conditions) is 16 reserved bytes, and CFExDateTemplateParams's own dateOp field is a fixed 1:1 restatement of icfTemplate itself, so both dispatch directly off icfTemplate with no further byte reading at all. containsText stays unread: CFExTextTemplateParams only carries which of the four text sub-types a rule is, not the actual search string, and CF12's own cce1/cce2 fields are spec'd to be zero for every ct 0x05 rule -- so where the literal text operand lives is a genuine open question, tracked on ExaDev/documents.js#1100 alongside CFEx's own extension of a legacy (non-CF12) CF record.
+//
+// Every rule type this reader promotes carries a DXFN12 whose own cbDxf MUST be zero ([MS-XLS] 2.4.43's own ct table: "If ct is equal to 0x03, 0x04 or 0x06, then dxf.cbDxf MUST be equal to 0x00000000" -- true for ct 0x05 too, since a filter rule's own formatting rides the same CFExTemplateParams/CFFilter path, never a differential-format override), so, unlike base CF's own DXFN reading, no style extraction is needed here at all.
 //
 // A CondFmt12/CF12 record longer than the 8224-byte single-record ceiling continues onto one or more ContinueFrt12 records rather than the plain Continue every other reader in this package joins against -- handled once, generically, in biff/substreams.ts's own groupRecords (not here), so record.blocks already spans any such continuation by the time this file ever sees a RecordGroup.
 
@@ -117,8 +120,50 @@ export interface RawIconSetFormat extends RawConditionalFormat12Common {
   readonly showValue: boolean;
 }
 
+// The exact literal union ContentSheetConditionalFormatSchema's own 'timePeriod' variant carries -- derived from the shared schema type rather than duplicated as a free-standing string union, so a schema change that renames or extends the enum is a compile error here, not a silent mismatch.
+export type RawTimePeriod = Extract<
+  ContentSheetConditionalFormat,
+  { readonly type: "timePeriod" }
+>["timePeriod"];
+
+export interface RawTop10Format extends RawConditionalFormat12Common {
+  readonly kind: "top10";
+  readonly rank: number;
+  readonly percent: boolean;
+  readonly bottom: boolean;
+}
+
+export interface RawAboveAverageFormat extends RawConditionalFormat12Common {
+  readonly kind: "aboveAverage";
+  readonly aboveAverage: boolean;
+  readonly equalAverage: boolean;
+  readonly stdDev: number | undefined;
+}
+
+export interface RawTimePeriodFormat extends RawConditionalFormat12Common {
+  readonly kind: "timePeriod";
+  readonly timePeriod: RawTimePeriod;
+}
+
+/** duplicateValues/uniqueValues and the four blank/error conditions carry no data beyond which one a rule is -- CFExDefaultTemplateParams is 16 reserved bytes ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/c8f156b6-10ec-4594-adb1-c734fbb1fc11). */
+export interface RawSimpleFilterFormat extends RawConditionalFormat12Common {
+  readonly kind:
+    | "containsBlanks"
+    | "notContainsBlanks"
+    | "containsErrors"
+    | "notContainsErrors"
+    | "uniqueValues"
+    | "duplicateValues";
+}
+
 export type RawConditionalFormat12 =
-  RawColorScaleFormat | RawDataBarFormat | RawIconSetFormat;
+  | RawColorScaleFormat
+  | RawDataBarFormat
+  | RawIconSetFormat
+  | RawTop10Format
+  | RawAboveAverageFormat
+  | RawTimePeriodFormat
+  | RawSimpleFilterFormat;
 
 // CFGradient ([MS-XLS] 2.4's own colour-scale rgbCT shape, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/dd6c7ea2-f6a9-45e0-9253-0989a7aa8421): two fixed-size counts (cInterpCurve/cGradientCurve, MUST be equal, 2 or 3) followed by rgInterp (that many CFGradientInterpItem, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/166c53dc-edc9-40a7-bd1e-128b7268e344 -- a CFVO then an 8-byte numDomain fraction, discarded) and then rgCurve (that many CFGradientItem, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/84cb4bf3-33d1-4fa3-9346-e0c2c8cbb768 -- an 8-byte numGrange fraction, discarded, then a CFColor). The two arrays are positional, not interleaved -- rgInterp[i] pairs with rgCurve[i] as one stop, the same pairing ooxml.js's own colorScale/cfvo+color reading already assumes.
 function readCfGradient(
@@ -245,6 +290,118 @@ function readCfMultistate(
   return { iconSetType, thresholds, reverse, showValue };
 }
 
+// icfTemplate ([MS-XLS] 2.4.43's own field table) names the ct-0x05 rule's real type. Only the values below reach readCfFilterRule at all -- 0x00-0x04 belong to ct 0x01/0x02/0x03/0x04/0x06 instead and are never seen here.
+const ICF_TEMPLATE_TOP10 = 0x0005;
+const ICF_TEMPLATE_UNIQUE_VALUES = 0x0007;
+const ICF_TEMPLATE_CONTAINS_BLANKS = 0x0009;
+const ICF_TEMPLATE_CONTAINS_NO_BLANKS = 0x000a;
+const ICF_TEMPLATE_CONTAINS_ERRORS = 0x000b;
+const ICF_TEMPLATE_CONTAINS_NO_ERRORS = 0x000c;
+const ICF_TEMPLATE_ABOVE_AVERAGE = 0x0019;
+const ICF_TEMPLATE_BELOW_AVERAGE = 0x001a;
+const ICF_TEMPLATE_DUPLICATE_VALUES = 0x001b;
+const ICF_TEMPLATE_ABOVE_OR_EQUAL_AVERAGE = 0x001d;
+const ICF_TEMPLATE_BELOW_OR_EQUAL_AVERAGE = 0x001e;
+
+// The ten date/time-period icfTemplate values, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3b6a364e-8c34-4830-a8b1-5a51476a9934's own icfTemplate table (0x0F-0x18). CFExDateTemplateParams's own dateOp field ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a079f971-f12f-438f-a127-3dee84e94034) is a fixed 1:1 restatement of icfTemplate for every one of these -- confirmed from that structure's own value table -- so it carries no information this reader needs beyond what icfTemplate already states, and this map dispatches on icfTemplate directly rather than reading dateOp at all.
+const ICF_TEMPLATE_TO_TIME_PERIOD: ReadonlyMap<number, RawTimePeriod> = new Map(
+  [
+    [0x000f, "today"],
+    [0x0010, "tomorrow"],
+    [0x0011, "yesterday"],
+    [0x0012, "last7Days"],
+    [0x0013, "lastMonth"],
+    [0x0014, "nextMonth"],
+    [0x0015, "thisWeek"],
+    [0x0016, "nextWeek"],
+    [0x0017, "lastWeek"],
+    [0x0018, "thisMonth"],
+  ],
+);
+
+const SIMPLE_ICF_TEMPLATE_KIND: ReadonlyMap<
+  number,
+  RawSimpleFilterFormat["kind"]
+> = new Map([
+  [ICF_TEMPLATE_UNIQUE_VALUES, "uniqueValues"],
+  [ICF_TEMPLATE_CONTAINS_BLANKS, "containsBlanks"],
+  [ICF_TEMPLATE_CONTAINS_NO_BLANKS, "notContainsBlanks"],
+  [ICF_TEMPLATE_CONTAINS_ERRORS, "containsErrors"],
+  [ICF_TEMPLATE_CONTAINS_NO_ERRORS, "notContainsErrors"],
+  [ICF_TEMPLATE_DUPLICATE_VALUES, "duplicateValues"],
+]);
+
+type RawFilterRule =
+  | Omit<RawTop10Format, keyof RawConditionalFormat12Common>
+  | Omit<RawAboveAverageFormat, keyof RawConditionalFormat12Common>
+  | Omit<RawTimePeriodFormat, keyof RawConditionalFormat12Common>
+  | Omit<RawSimpleFilterFormat, keyof RawConditionalFormat12Common>;
+
+// Dispatches ct 0x05's icfTemplate against the 16-byte CFExTemplateParams block CF12 always carries just before its own rgbCT (a CFFilter this function otherwise ignores entirely -- see the two comments below). Every branch reads from a cursor over exactly those 16 bytes, never the record's own trailing CFFilter, since CFExFilterParams/CFExAveragesTemplateParams already duplicate everything a top10/aboveAverage rule needs without it.
+//
+// Each branch's return value is built as its own explicitly-typed local first, then returned -- an object literal checked directly against the RawFilterRule union return type does not reliably pick the matching member for its own excess-property check, so this sidesteps that rather than fighting it with a broader type.
+function readCfFilterRule(
+  icfTemplate: number,
+  templateParams: Uint8Array<ArrayBuffer>,
+): RawFilterRule | undefined {
+  if (icfTemplate === ICF_TEMPLATE_TOP10) {
+    // CFExFilterParams ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/796db4e4-43e0-43a5-a4f3-67a43b3bd38d): a flags byte (fTop/fPercent/reserved), then iParam(2), then 13 reserved bytes -- duplicates the sibling CFFilter structure's own fTop/fPercent/iParam fields exactly, so that trailing CFFilter is never read at all.
+    const cursor = new BlockCursor([templateParams]);
+    const flags = cursor.u8();
+    const top = (flags & 0x1) !== 0;
+    const percent = ((flags >>> 1) & 0x1) !== 0;
+    const rank = cursor.u16();
+    const top10: Omit<RawTop10Format, keyof RawConditionalFormat12Common> = {
+      kind: "top10",
+      rank,
+      percent,
+      bottom: !top,
+    };
+    return top10;
+  }
+  if (
+    icfTemplate === ICF_TEMPLATE_ABOVE_AVERAGE ||
+    icfTemplate === ICF_TEMPLATE_BELOW_AVERAGE ||
+    icfTemplate === ICF_TEMPLATE_ABOVE_OR_EQUAL_AVERAGE ||
+    icfTemplate === ICF_TEMPLATE_BELOW_OR_EQUAL_AVERAGE
+  ) {
+    // CFExAveragesTemplateParams ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/6b440d01-2af7-4e72-ac36-b6ac189edb80): iParam(2, a standard-deviation count: 0/1/2) then 14 reserved bytes.
+    const cursor = new BlockCursor([templateParams]);
+    const iParam = cursor.u16();
+    const aboveAverage =
+      icfTemplate === ICF_TEMPLATE_ABOVE_AVERAGE ||
+      icfTemplate === ICF_TEMPLATE_ABOVE_OR_EQUAL_AVERAGE;
+    const equalAverage =
+      icfTemplate === ICF_TEMPLATE_ABOVE_OR_EQUAL_AVERAGE ||
+      icfTemplate === ICF_TEMPLATE_BELOW_OR_EQUAL_AVERAGE;
+    const rule: Omit<
+      RawAboveAverageFormat,
+      keyof RawConditionalFormat12Common
+    > = {
+      kind: "aboveAverage",
+      aboveAverage,
+      equalAverage,
+      stdDev: iParam > 0 ? iParam : undefined,
+    };
+    return rule;
+  }
+  const timePeriod = ICF_TEMPLATE_TO_TIME_PERIOD.get(icfTemplate);
+  if (timePeriod !== undefined) {
+    const rule: Omit<RawTimePeriodFormat, keyof RawConditionalFormat12Common> =
+      { kind: "timePeriod", timePeriod };
+    return rule;
+  }
+  const simpleKind = SIMPLE_ICF_TEMPLATE_KIND.get(icfTemplate);
+  if (simpleKind !== undefined) {
+    const rule: Omit<
+      RawSimpleFilterFormat,
+      keyof RawConditionalFormat12Common
+    > = { kind: simpleKind };
+    return rule;
+  }
+  return undefined; // containsText (icfTemplate 0x0008) and anything undocumented -- see this file's own top comment
+}
+
 function readCf12(
   record: RecordGroup,
   ranges: ContentSheetRange[],
@@ -266,9 +423,9 @@ function readCf12(
     const flags = cursor.u8();
     const stopIfTrue = (flags & 0x2) !== 0; // B - fStopIfTrue (A - unused1 is bit 0)
     const priority = cursor.u16(); // ipriority
-    cursor.skip(2); // icfTemplate -- meaningful only for the ct 0x05 filter family (ExaDev/documents.js#1100)
+    const icfTemplate = cursor.u16(); // meaningful only for the ct 0x05 filter family
     cursor.skip(1); // cbTemplateParm -- MUST be 16, not validated
-    cursor.skip(16); // rgbTemplateParms (CFExTemplateParams) -- meaningful only for the ct 0x05 filter family
+    const templateParams = cursor.take(16); // rgbTemplateParms (CFExTemplateParams) -- meaningful only for the ct 0x05 filter family
     const common: RawConditionalFormat12Common = {
       priority,
       stopIfTrue,
@@ -293,7 +450,14 @@ function readCf12(
         ? undefined
         : { kind: "iconSet", ...iconSet, ...common };
     }
-    return undefined; // ct 0x01/0x02/0x05 -- out of scope for this reader, see this file's own top comment
+    if (ct === 0x05) {
+      const rule = readCfFilterRule(icfTemplate, templateParams);
+      // The trailing CFFilter ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1fbbdfb0-5320-43bc-a8a5-c81dbeba9b7b) is still consumed here regardless of whether templateParams resolved a rule -- cbFilter states its own total length, so skipping by that count (rather than a fixed size) stays correct even for an icfTemplate this reader cannot promote.
+      const cbFilter = cursor.u16();
+      cursor.skip(cbFilter);
+      return rule === undefined ? undefined : { ...rule, ...common };
+    }
+    return undefined; // ct 0x01/0x02 -- out of scope for this reader, base CF already covers them
   } catch (err) {
     if (!(err instanceof BiffFormatError)) {
       throw err;
