@@ -45,8 +45,13 @@ const config: Configuration = {
       return `pnpm --dir ${directory} exec eslint --fix ${pathsRelativeToDirectory.join(" ")}`;
     }),
   // syncpack operates over every package.json in the workspace at once, never a single file in isolation, so unlike the ESLint task above this runs once regardless of which manifest triggered it, correcting any dependency this commit left at a non-fixed version or out of step with the rest of the workspace (syncpack.config.ts). A genuinely unfixable disagreement (see `syncpack lint`) exits non-zero and blocks the commit rather than committing a manifest syncpack cannot reconcile.
-  "{package.json,packages/*/package.json,pnpm-workspace.yaml}": () =>
+  //
+  // `deps:fix` rewrites package.json files only -- it has no knowledge of pnpm-lock.yaml at all -- so a fix that actually changes a specifier would otherwise commit a manifest the lockfile no longer agrees with, and every CI job installs with `--frozen-lockfile`, which rejects exactly that disagreement. `pnpm install` regenerates the lockfile to match, and since lint-staged only re-stages the files it explicitly passed to a task (not a side effect an arbitrary shell command happens to touch), the lockfile needs its own explicit `git add`.
+  "{package.json,packages/*/package.json,pnpm-workspace.yaml}": () => [
     "pnpm run deps:fix",
+    "pnpm install",
+    "git add pnpm-lock.yaml",
+  ],
 };
 
 export default config;
