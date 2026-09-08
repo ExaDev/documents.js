@@ -1,3 +1,14 @@
+## [7.9.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.8.0...odf.js%407.9.0) (2026-09-08)
+
+### Features
+
+* **odf.js:** read and write nested lists and tables inside a table cell ([7975e6a](https://github.com/ExaDev/documents.js/commit/7975e6ad5fe20a654b9ba1e83834e91a85c3a455))
+* **odf.js:** restore quarantined non-content package parts on write ([84b0772](https://github.com/ExaDev/documents.js/commit/84b07724015e10923087b7bc86024db5b47af7c9))
+
+### Documentation
+
+* **odf.js:** document package residue restoration and nested table-cell content ([ca0fec2](https://github.com/ExaDev/documents.js/commit/ca0fec2e1ce08db09876aa8272bf5fecc1925cd9))
+
 ## [7.8.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.7.1...odf.js%407.8.0) (2026-09-08)
 
 ### Features
