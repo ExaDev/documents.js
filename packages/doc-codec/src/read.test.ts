@@ -1,5 +1,9 @@
 import {
+  createXorObfuscationArray,
+  createXorObfuscationKey,
+  createXorObfuscationPasswordVerifier,
   decryptOfficeRc4,
+  decryptXorObfuscationMethod2,
   deriveOfficeRc4BaseHash,
   md5,
   OFFICE_RC4_DOC_BLOCK_SIZE,
@@ -7,6 +11,7 @@ import {
   readCompoundFile,
   writeCompoundFile,
   writeSummaryInformationStream,
+  XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD2,
 } from "archive-codec";
 import { ContentDocumentSchema } from "document-schema.js";
 import type { ContentBlock, ContentParagraph } from "document-schema.js";
@@ -1014,6 +1019,99 @@ describe("RC4-encrypted documents", () => {
 
     const plainResult = readDocContent(plainDoc);
     const decryptedResult = readDocContent(encrypted, PASSWORD);
+
+    expect(decryptedResult).toEqual(plainResult);
+  });
+});
+
+describe("XOR-obfuscated documents", () => {
+  const PASSWORD = "correct horse";
+  const WORD_DOCUMENT_PREFIX_LENGTH = 68;
+
+  /**
+   * Takes a plain (unencrypted) .doc's compound-file bytes and turns them into a genuinely XOR-obfuscated one: sets FibBase.fEncrypted/fObfuscated and lKey (the 32-bit password verifier itself here, not a header byte length -- see encryption.ts's own top comment), and obfuscates WordDocument from byte 68 and Table from byte 0 -- each independently, exactly as [MS-DOC]'s own XOR Obfuscation section requires.
+   *
+   * Unlike RC4, XOR obfuscation needs no EncryptionHeader occupying space at the start of the Table stream, so FibRgFcLcb97's own fc offsets (computed by buildDoc assuming no header) need no shifting here -- the one genuine simplification over the sibling RC4 fixture above. Method 2's data transform (plain XOR with a zero-byte exception) is its own inverse, so this reuses decryptXorObfuscationMethod2 -- the same primitive readDocContent decrypts with -- rather than a separate encryption routine, mirroring RC4's own XOR-symmetry reuse above.
+   */
+  function obfuscateDoc(
+    plainDoc: Uint8Array<ArrayBuffer>,
+    password: string,
+  ): Uint8Array<ArrayBuffer> {
+    const streams = readCompoundFile(plainDoc);
+    const wordDocumentStream = streams.find(
+      (stream) => stream.path === "WordDocument",
+    );
+    const tableStream = streams.find((stream) => stream.path === "1Table");
+    if (wordDocumentStream === undefined || tableStream === undefined) {
+      throw new Error("buildDoc always writes WordDocument and 1Table");
+    }
+
+    const array = createXorObfuscationArray(
+      password,
+      XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD2,
+    );
+    const lKey =
+      (createXorObfuscationKey(password) << 16) |
+      createXorObfuscationPasswordVerifier(password);
+
+    const shiftedWordDocument = new Uint8Array(wordDocumentStream.bytes);
+    const shiftedView = new DataView(shiftedWordDocument.buffer);
+    const existingFlags = shiftedView.getUint16(10, true);
+    shiftedView.setUint16(10, existingFlags | 0x8100, true); // fEncrypted (0x0100) | fObfuscated (0x8000)
+    shiftedView.setUint32(FIB_LKEY_OFFSET, lKey, true);
+
+    const wordDocument = new Uint8Array(shiftedWordDocument.length);
+    wordDocument.set(
+      shiftedWordDocument.subarray(0, WORD_DOCUMENT_PREFIX_LENGTH),
+      0,
+    );
+    wordDocument.set(
+      decryptXorObfuscationMethod2(
+        array,
+        shiftedWordDocument.subarray(WORD_DOCUMENT_PREFIX_LENGTH),
+        WORD_DOCUMENT_PREFIX_LENGTH % 16,
+      ),
+      WORD_DOCUMENT_PREFIX_LENGTH,
+    );
+
+    const table = decryptXorObfuscationMethod2(array, tableStream.bytes, 0);
+
+    return writeCompoundFile(
+      streams.map((stream) => {
+        if (stream.path === "WordDocument")
+          return { ...stream, bytes: wordDocument };
+        if (stream.path === "1Table") return { ...stream, bytes: table };
+        return stream;
+      }),
+    );
+  }
+
+  it("refuses an obfuscated document when no password is given", () => {
+    const doc = obfuscateDoc(
+      buildDoc({ paragraphs: [{ runs: [{ text: "Secret." }] }] }),
+      PASSWORD,
+    );
+    expect(() => readDocContent(doc)).toThrow(DocUnsupportedError);
+  });
+
+  it("refuses an obfuscated document given the wrong password", () => {
+    const doc = obfuscateDoc(
+      buildDoc({ paragraphs: [{ runs: [{ text: "Secret." }] }] }),
+      PASSWORD,
+    );
+    expect(() => readDocContent(doc, "the wrong password")).toThrow(
+      DocUnsupportedError,
+    );
+  });
+
+  it("decrypts an obfuscated document given the correct password", () => {
+    const plainDoc = buildDoc({
+      paragraphs: [{ runs: [{ text: "Secret meeting notes." }] }],
+    });
+    const obfuscated = obfuscateDoc(plainDoc, PASSWORD);
+
+    const plainResult = readDocContent(plainDoc);
+    const decryptedResult = readDocContent(obfuscated, PASSWORD);
 
     expect(decryptedResult).toEqual(plainResult);
   });

@@ -11,7 +11,7 @@ import {
   WORD_DOCUMENT_STREAM,
 } from "./detect";
 import { decryptDocStreams } from "./encryption";
-import { DocFormatError, DocUnsupportedError } from "./errors";
+import { DocFormatError } from "./errors";
 import { parseFib, peekFibBaseFlags, type Fib } from "./fib/fib";
 import type { HeaderFooterStories } from "./headers-footers";
 import { readHeaderFooterStories } from "./headers-footers";
@@ -59,7 +59,7 @@ export interface DocStreams {
 
 // Pulls the two streams every later step reads from, the FIB that says which of "1Table" and "0Table" is the one in play, and the optional metadata stream. Both WordDocument and Table names always exist as candidates in the container; only the one FibBase.fWhichTblStm selects holds the structures the FIB's offsets address, and reading the other yields offsets into unrelated bytes.
 //
-// fWhichTblStm (and, for an encrypted document, fEncrypted/fObfuscated) is read via fib/fib.ts's own peekFibBaseFlags rather than a full parseFib, since all three sit within the 68-byte prefix [MS-DOC] 2.2.6.2 leaves unencrypted regardless of the document's own encryption status -- parseFib's own later reads do not, so it cannot run at all until decryption (when needed) has already happened. `password` decrypts a document protected by [MS-DOC] 2.2.6.2's RC4 encryption header under the same [MS-OFFCRYPTO] 2.3.6.1 scheme xls-codec's own FilePass reading uses -- see encryption.ts. It is ignored for an unencrypted document, and a missing or incorrect password against an encrypted one throws rather than returning a partial or garbled document.
+// fWhichTblStm (and, for an encrypted document, fEncrypted/fObfuscated) is read via fib/fib.ts's own peekFibBaseFlags rather than a full parseFib, since all three sit within the 68-byte prefix [MS-DOC] 2.2.6.2 leaves unencrypted regardless of the document's own encryption status -- parseFib's own later reads do not, so it cannot run at all until decryption (when needed) has already happened. `password` decrypts a document protected by either [MS-DOC] 2.2.6.2's RC4 encryption header (the same [MS-OFFCRYPTO] 2.3.6.1 scheme xls-codec's own FilePass reading uses) or 2.2.6.1's XOR obfuscation (Method 2, xls-codec's own Method 1 counterpart) -- see encryption.ts. It is ignored for an unencrypted document, and a missing or incorrect password against an encrypted one throws rather than returning a partial or garbled document.
 export function readDocStreams(
   bytes: Uint8Array<ArrayBuffer>,
   password?: string,
@@ -85,12 +85,12 @@ export function readDocStreams(
   let wordDocument = wordDocumentStream.bytes;
   let table = tableStream.bytes;
   if (flags.fEncrypted) {
-    if (flags.fObfuscated) {
-      throw new DocUnsupportedError(
-        "this document is XOR-obfuscated ([MS-DOC] 2.2.6.1); doc-codec cannot decrypt it, and reading its streams as plaintext would produce arbitrary text rather than the document's own",
-      );
-    }
-    const decrypted = decryptDocStreams(wordDocument, table, password);
+    const decrypted = decryptDocStreams(
+      wordDocument,
+      table,
+      password,
+      flags.fObfuscated,
+    );
     wordDocument = decrypted.wordDocument;
     table = decrypted.table;
   }
