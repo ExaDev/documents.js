@@ -1,3 +1,20 @@
+## [2.5.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.4.3...doc-codec%402.5.0) (2026-09-08)
+
+### Features
+
+* **doc-codec:** read every section's own page size and margins ([cf6d5fd](https://github.com/ExaDev/documents.js/commit/cf6d5fdf72611c41b7fa2db866f2458a939ed542))
+* **doc-codec:** read footnotes, endnotes, comments, headers, and footers ([5747a21](https://github.com/ExaDev/documents.js/commit/5747a219fac8611a48f02aa50ee318cf6ede2c06))
+* **doc-codec:** read inline picture bytes from the Data stream ([7bf75bd](https://github.com/ExaDev/documents.js/commit/7bf75bd5ffcaa0a8f6c75c87170dfae8abda3a0e))
+* **doc-codec:** recurse into tables nested inside a table cell ([154241a](https://github.com/ExaDev/documents.js/commit/154241a11e8b4f99b73e65690ddc9858d73c9f27))
+
+### Bug Fixes
+
+* **doc-codec:** update smoke test's export manifest for readAllSectionProperties ([c8843ef](https://github.com/ExaDev/documents.js/commit/c8843ef3582ec810a4d79c8d2f6a65229545eee0))
+
+### Documentation
+
+* **doc-codec:** document nested table, section, note, and image reading ([cfcaa66](https://github.com/ExaDev/documents.js/commit/cfcaa66f0b4e90ab974eb73594281b48b35fa623))
+
 ## [2.4.3](https://github.com/ExaDev/documents.js/compare/doc-codec%402.4.2...doc-codec%402.4.3) (2026-09-08)
 
 
