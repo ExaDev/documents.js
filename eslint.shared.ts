@@ -90,6 +90,11 @@ export const dataFileLintConfig: ReturnType<typeof tseslint.config> =
       files: ["**/*.md"],
       rules: { "markdown/no-missing-label-refs": "off" },
     },
+    {
+      // Off: `no-reversed-media-syntax` hangs indefinitely (a ReDoS, not merely a slow pass) against real prose in this workspace's own READMEs -- reproduced directly against @eslint/markdown 8.0.3, the latest published version at the time of writing, with no fixed release available to upgrade to. Isolating every markdown/* rule to run alone against the same file narrowed the hang to this one rule specifically; every other rule in the recommended set completes instantly against identical content. This workspace's own prose convention (one continuous line per paragraph or table cell, however long, rather than hard-wrapped -- see the repo's "never hard wrap" convention) is exactly the shape of input that triggers it, so the rule is a live landmine for any README here, not merely the one that first surfaced it. Re-enable once a released fix exists upstream.
+      files: ["**/*.md"],
+      rules: { "markdown/no-reversed-media-syntax": "off" },
+    },
 
     // YAML. Each entry gets an explicit `files`: two of the three the plugin ships set none, which would make every path in the repository a YAML lint target.
     ...yml.configs["flat/recommended"].map((config) => ({
