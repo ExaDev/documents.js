@@ -26,7 +26,7 @@ import {
 } from "./prop/chp";
 import { PropertyBinTable } from "./prop/fkp";
 import { applyParagraphSprms, type ParagraphProperties } from "./prop/pap";
-import { readSectionProperties } from "./prop/sep";
+import { readAllSectionProperties } from "./prop/sep";
 import { readGrpprl, type Prl } from "./prop/sprm";
 import { parseFontTable } from "./style/fonts";
 import {
@@ -184,9 +184,9 @@ export function readDocContent(
     fonts,
     characterProperties: new Map(),
   });
-  const blocks = assembleBlocks(entries);
   const numbering = readNumberingDefinitions(table, fib);
-  const sectionProperties = readSectionProperties(wordDocument, table, fib);
+  const sectionProperties = readAllSectionProperties(wordDocument, table, fib);
+  const entriesBySection = splitIntoSections(entries, sectionProperties);
 
   return {
     kind: "wordprocessing",
@@ -195,25 +195,43 @@ export function readDocContent(
       metadata === undefined
         ? {}
         : summaryInformationToLayoutMetadata(readSummaryInformation(metadata)),
-    sections: [
-      {
-        pageSize: {
-          widthPt: sectionProperties.pageWidthPt ?? DEFAULT_PAGE_SIZE.widthPt,
-          heightPt:
-            sectionProperties.pageHeightPt ?? DEFAULT_PAGE_SIZE.heightPt,
-        },
-        margins: {
-          leftPt: sectionProperties.marginLeftPt ?? DEFAULT_MARGINS.leftPt,
-          rightPt: sectionProperties.marginRightPt ?? DEFAULT_MARGINS.rightPt,
-          topPt: sectionProperties.marginTopPt ?? DEFAULT_MARGINS.topPt,
-          bottomPt:
-            sectionProperties.marginBottomPt ?? DEFAULT_MARGINS.bottomPt,
-        },
-        blocks,
+    sections: sectionProperties.map((properties, index) => ({
+      pageSize: {
+        widthPt: properties.pageWidthPt ?? DEFAULT_PAGE_SIZE.widthPt,
+        heightPt: properties.pageHeightPt ?? DEFAULT_PAGE_SIZE.heightPt,
       },
-    ],
+      margins: {
+        leftPt: properties.marginLeftPt ?? DEFAULT_MARGINS.leftPt,
+        rightPt: properties.marginRightPt ?? DEFAULT_MARGINS.rightPt,
+        topPt: properties.marginTopPt ?? DEFAULT_MARGINS.topPt,
+        bottomPt: properties.marginBottomPt ?? DEFAULT_MARGINS.bottomPt,
+      },
+      blocks: assembleBlocks(entriesBySection[index] ?? []),
+    })),
     numbering,
   };
+}
+
+// Groups the main document's flat paragraph entries by which section (PlcfSed.aCp boundary) they fall in, per [MS-DOC] 2.8.26: section i covers entries up to and including the one whose own terminator sits at (or crosses) the next section's startCp -- exactly the entry carrying the end-of-section character (0x000C) itself, since that character IS the boundary [MS-DOC] states. `sections` always has at least one entry (readAllSectionProperties' own fallback for a file with no PlcfSed at all), so every entry lands somewhere; entries past the last real boundary all join the final section, matching "the last CP does not begin a new section."
+function splitIntoSections(
+  entries: readonly ParagraphEntry[],
+  sections: readonly { readonly startCp: number }[],
+): ParagraphEntry[][] {
+  const groups: ParagraphEntry[][] = sections.map(() => []);
+  let sectionIndex = 0;
+  for (const entry of entries) {
+    const group = groups[sectionIndex];
+    if (group === undefined) {
+      throw new DocFormatError(
+        `internal defect: section index ${sectionIndex} has no group despite ${sections.length} sections`,
+      );
+    }
+    group.push(entry);
+    if (entry.endCp === sections[sectionIndex + 1]?.startCp) {
+      sectionIndex += 1;
+    }
+  }
+  return groups;
 }
 
 interface ReadContext {
@@ -233,6 +251,8 @@ export interface ParagraphEntry {
   readonly grpprl: readonly Prl[];
   /** The character that terminated this paragraph in the text stream: PARAGRAPH_MARK, CELL_MARK, or SECTION_MARK. */
   readonly terminator: number;
+  /** The character position immediately after this paragraph's own terminator (or, for the trailing no-mark case, the text's own length) -- comparable directly to PlcfSed.aCp, since the main document is read from character position 0. splitIntoSections below is what actually uses it. */
+  readonly endCp: number;
 }
 
 // Splits the logical text stream into paragraphs at the marks [MS-DOC] 2.4.2 names as paragraph ends, and each paragraph into runs at the boundaries of the character-formatting exceptions covering it.
@@ -259,6 +279,7 @@ function readParagraphs(
         fcs.slice(start, index),
         markFc,
         code,
+        index + 1,
         context,
       ),
     );
@@ -278,6 +299,7 @@ function readParagraphs(
         fcs.slice(start),
         firstFc,
         PARAGRAPH_MARK,
+        text.length,
         context,
       ),
     );
@@ -290,6 +312,7 @@ function buildParagraph(
   fcs: readonly number[],
   propertyFc: number,
   terminator: number,
+  endCp: number,
   context: ReadContext,
 ): ParagraphEntry {
   const papx = context.papxTable.papx(propertyFc);
@@ -317,6 +340,7 @@ function buildParagraph(
     properties,
     grpprl,
     terminator,
+    endCp,
   };
 }
 
