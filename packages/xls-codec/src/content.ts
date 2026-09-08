@@ -340,14 +340,46 @@ function mapConditionalFormats12(
       });
       continue;
     }
-    results.push({
-      type: "iconSet",
-      iconSetType: format.iconSetType,
-      thresholds: [...format.thresholds],
-      ...(format.reverse ? { reverse: true } : {}),
-      ...(format.showValue ? {} : { showValue: false }),
-      ...common,
-    });
+    if (format.kind === "iconSet") {
+      results.push({
+        type: "iconSet",
+        iconSetType: format.iconSetType,
+        thresholds: [...format.thresholds],
+        ...(format.reverse ? { reverse: true } : {}),
+        ...(format.showValue ? {} : { showValue: false }),
+        ...common,
+      });
+      continue;
+    }
+    if (format.kind === "top10") {
+      results.push({
+        type: "top10",
+        rank: format.rank,
+        ...(format.percent ? { percent: true } : {}),
+        ...(format.bottom ? { bottom: true } : {}),
+        ...common,
+      });
+      continue;
+    }
+    if (format.kind === "aboveAverage") {
+      results.push({
+        type: "aboveAverage",
+        ...(format.aboveAverage ? {} : { aboveAverage: false }),
+        ...(format.equalAverage ? { equalAverage: true } : {}),
+        ...(format.stdDev !== undefined ? { stdDev: format.stdDev } : {}),
+        ...common,
+      });
+      continue;
+    }
+    if (format.kind === "timePeriod") {
+      results.push({
+        type: "timePeriod",
+        timePeriod: format.timePeriod,
+        ...common,
+      });
+      continue;
+    }
+    results.push({ type: format.kind, ...common });
   }
   return results;
 }

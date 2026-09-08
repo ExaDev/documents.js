@@ -144,8 +144,18 @@ function condFmt12Record(
 function cf12Bytes(
   ct: number,
   rgbCT: readonly number[],
-  options: { stopIfTrue?: boolean; priority?: number } = {},
+  options: {
+    stopIfTrue?: boolean;
+    priority?: number;
+    icfTemplate?: number;
+    templateParams?: readonly number[];
+  } = {},
 ): number[] {
+  const templateParams =
+    options.templateParams ?? new Array<number>(16).fill(0);
+  if (templateParams.length !== 16) {
+    throw new Error("templateParams must be exactly 16 bytes");
+  }
   return [
     ...new Array<number>(12).fill(0), // frtRefHeader
     ct,
@@ -156,17 +166,44 @@ function cf12Bytes(
     ...u16(0), // fmlaActive cce
     options.stopIfTrue === true ? 0x02 : 0x00, // flags: B - fStopIfTrue
     ...u16(options.priority ?? 0), // ipriority
-    ...u16(0), // icfTemplate
+    ...u16(options.icfTemplate ?? 0), // icfTemplate
     16, // cbTemplateParm
-    ...new Array<number>(16).fill(0), // rgbTemplateParms
+    ...templateParams, // rgbTemplateParms (CFExTemplateParams)
     ...rgbCT,
   ];
+}
+
+/** A minimal CFFilter ([MS-XLS] 2.4): cbFilter(2) then that many bytes -- content is irrelevant for every ct 0x05 rule this reader promotes, since CFExFilterParams/CFExAveragesTemplateParams already duplicate whatever it would carry; only its own declared length matters, to prove the reader skips exactly that far. */
+function cfFilterBytes(body: readonly number[] = [0, 0, 0, 0]): number[] {
+  return [...u16(body.length), ...body];
+}
+
+/** CFExFilterParams ([MS-XLS] 2.4): a flags byte (fTop/fPercent/reserved) then iParam(2) then 13 reserved bytes -- top10's own rgbTemplateParms shape. */
+function cfExFilterParams(options: {
+  top?: boolean;
+  percent?: boolean;
+  iParam: number;
+}): number[] {
+  const flags =
+    (options.top === true ? 0x01 : 0x00) |
+    (options.percent === true ? 0x02 : 0x00);
+  return [flags, ...u16(options.iParam), ...new Array<number>(13).fill(0)];
+}
+
+/** CFExAveragesTemplateParams ([MS-XLS] 2.4): iParam(2, a standard-deviation count) then 14 reserved bytes -- the aboveAverage family's own rgbTemplateParms shape. */
+function cfExAveragesTemplateParams(stdDev: number): number[] {
+  return [...u16(stdDev), ...new Array<number>(14).fill(0)];
 }
 
 function cf12Record(
   ct: number,
   rgbCT: readonly number[],
-  options: { stopIfTrue?: boolean; priority?: number } = {},
+  options: {
+    stopIfTrue?: boolean;
+    priority?: number;
+    icfTemplate?: number;
+    templateParams?: readonly number[];
+  } = {},
 ): Uint8Array<ArrayBuffer> {
   return record(RECORD_CF12, cf12Bytes(ct, rgbCT, options));
 }
@@ -544,6 +581,174 @@ describe("readCondFmt12Group", () => {
         stopIfTrue: false,
         ranges: ONE_RANGE,
       },
+    ]);
+  });
+
+  it("reads a top10 rule from CFExFilterParams", () => {
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x05, cfFilterBytes(), {
+        icfTemplate: 0x0005,
+        templateParams: cfExFilterParams({
+          top: true,
+          percent: false,
+          iParam: 10,
+        }),
+      }),
+    );
+
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([
+      {
+        kind: "top10",
+        rank: 10,
+        percent: false,
+        bottom: false,
+        priority: 0,
+        stopIfTrue: false,
+        ranges: ONE_RANGE,
+      },
+    ]);
+  });
+
+  it("reads a bottom-percent top10 rule", () => {
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x05, cfFilterBytes(), {
+        icfTemplate: 0x0005,
+        templateParams: cfExFilterParams({
+          top: false,
+          percent: true,
+          iParam: 25,
+        }),
+      }),
+    );
+
+    const format = readCondFmt12Group(groups, 0, NO_SHEETS).formats[0];
+    expect(format).toMatchObject({
+      kind: "top10",
+      rank: 25,
+      percent: true,
+      bottom: true,
+    });
+  });
+
+  it("reads every above/below-average icfTemplate against its own aboveAverage/equalAverage pairing, with a standard-deviation count", () => {
+    const cases: [number, boolean, boolean][] = [
+      [0x0019, true, false], // Above average
+      [0x001a, false, false], // Below average
+      [0x001d, true, true], // Above or equal to average
+      [0x001e, false, true], // Below or equal to average
+    ];
+    for (const [icfTemplate, aboveAverage, equalAverage] of cases) {
+      const groups = groupsFrom(
+        condFmt12Record(1, ONE_RANGE),
+        cf12Record(0x05, cfFilterBytes(), {
+          icfTemplate,
+          templateParams: cfExAveragesTemplateParams(1),
+        }),
+      );
+      const format = readCondFmt12Group(groups, 0, NO_SHEETS).formats[0];
+      expect(format).toMatchObject({
+        kind: "aboveAverage",
+        aboveAverage,
+        equalAverage,
+        stdDev: 1,
+      });
+    }
+  });
+
+  it("omits stdDev for an aboveAverage rule with no standard-deviation offset", () => {
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x05, cfFilterBytes(), {
+        icfTemplate: 0x0019,
+        templateParams: cfExAveragesTemplateParams(0),
+      }),
+    );
+
+    const format = readCondFmt12Group(groups, 0, NO_SHEETS).formats[0];
+    expect(format).toMatchObject({ kind: "aboveAverage", stdDev: undefined });
+  });
+
+  it("reads every documented date/time-period icfTemplate", () => {
+    const cases: [number, string][] = [
+      [0x000f, "today"],
+      [0x0010, "tomorrow"],
+      [0x0011, "yesterday"],
+      [0x0012, "last7Days"],
+      [0x0013, "lastMonth"],
+      [0x0014, "nextMonth"],
+      [0x0015, "thisWeek"],
+      [0x0016, "nextWeek"],
+      [0x0017, "lastWeek"],
+      [0x0018, "thisMonth"],
+    ];
+    for (const [icfTemplate, timePeriod] of cases) {
+      const groups = groupsFrom(
+        condFmt12Record(1, ONE_RANGE),
+        cf12Record(0x05, cfFilterBytes(), { icfTemplate }),
+      );
+      const format = readCondFmt12Group(groups, 0, NO_SHEETS).formats[0];
+      expect(format).toMatchObject({ kind: "timePeriod", timePeriod });
+    }
+  });
+
+  it("reads every icfTemplate needing no extra data beyond its own tag", () => {
+    const cases: [number, string][] = [
+      [0x0007, "uniqueValues"],
+      [0x0009, "containsBlanks"],
+      [0x000a, "notContainsBlanks"],
+      [0x000b, "containsErrors"],
+      [0x000c, "notContainsErrors"],
+      [0x001b, "duplicateValues"],
+    ];
+    for (const [icfTemplate, kind] of cases) {
+      const groups = groupsFrom(
+        condFmt12Record(1, ONE_RANGE),
+        cf12Record(0x05, cfFilterBytes(), { icfTemplate }),
+      );
+      expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([
+        { kind, priority: 0, stopIfTrue: false, ranges: ONE_RANGE },
+      ]);
+    }
+  });
+
+  it("does not promote a containsText rule (icfTemplate 0x0008) -- the search string's own location is unresolved", () => {
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x05, cfFilterBytes(), { icfTemplate: 0x0008 }),
+    );
+
+    const result = readCondFmt12Group(groups, 0, NO_SHEETS);
+
+    expect(result.formats).toEqual([]);
+    expect(result.recordsConsumed).toBe(2);
+  });
+
+  it("does not promote an undocumented icfTemplate", () => {
+    const groups = groupsFrom(
+      condFmt12Record(1, ONE_RANGE),
+      cf12Record(0x05, cfFilterBytes(), { icfTemplate: 0x00ff }),
+    );
+
+    expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toEqual([]);
+  });
+
+  it("still finds the record after a ct 0x05 rule's own CFFilter, proving cbFilter-driven skip advances correctly", () => {
+    const groups = groupsFrom(
+      condFmt12Record(2, ONE_RANGE),
+      cf12Record(0x05, cfFilterBytes([1, 2, 3, 4, 5, 6, 7, 8]), {
+        icfTemplate: 0x0007,
+      }),
+      cf12Record(0x05, cfFilterBytes(), { icfTemplate: 0x001b }),
+    );
+
+    const result = readCondFmt12Group(groups, 0, NO_SHEETS);
+
+    expect(result.recordsConsumed).toBe(3);
+    expect(result.formats.map((f) => f.kind)).toEqual([
+      "uniqueValues",
+      "duplicateValues",
     ]);
   });
 });
