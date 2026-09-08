@@ -10,15 +10,18 @@
 //
 // The tables in SINGLE_BYTE_PAGES were GENERATED, not typed: each is `bytes([b]).decode(codec)` over 0x80..0xFF from Python's own codec library, because a hand-transcribed 128-entry table is exactly where one transposed character hides until a real document decodes wrong. Bytes 0x00..0x7F are US-ASCII in every page here and are mapped directly rather than stored. A byte a page genuinely leaves undefined decodes as U+FFFD, which is what its own table says, rather than an invented mapping.
 //
-// Two deliberate gaps, both reported rather than silently papered over:
+// The five East Asian DBCS pages (932 Shift-JIS, 936 GBK/GB2312, 949 UHC/Hangul, 950 Big5, 1361 Johab) are supported too, through DBCS_LEAD_BYTE_TABLES and DBCS_SINGLE_BYTE_EXTRAS in ./codepage-dbcs.ts -- generated the same way and by the same script's own header comment (scripts/generate-dbcs-tables.py) for the full citation and cross-validation notes.
 //
-//  - The East Asian DBCS pages (932 Shift-JIS, 936 GB2312, 949 Hangul, 950 Big5, 1361 Johab) are not supported. Each needs a ~20k-entry table and its own lead-byte state machine, which is its own piece of work; a document declaring one decodes through cp1252 and the reader reports rtf/unsupported-codepage, so a caller sees the gap instead of receiving plausible-looking mojibake.
-//  - Code page 42 (SYMBOL_CHARSET, what \fcharset2 names) is not a character encoding at all: its bytes are glyph indices into whichever symbol font the run names, and the spec's own advice is to "find the last SYMBOL_CHARSET font control word \fN used, look up font N in the font table and find the face name" to know which. Without the font's own cmap there is no correct Unicode for those bytes, so they decode through cp1252 and report the same diagnostic.
+// One deliberate gap remains, reported rather than silently papered over: code page 42 (SYMBOL_CHARSET, what \fcharset2 names) is not a character encoding at all -- its bytes are glyph indices into whichever symbol font the run names, and the spec's own advice is to "find the last SYMBOL_CHARSET font control word \fN used, look up font N in the font table and find the face name" to know which. Without the font's own cmap there is no correct Unicode for those bytes, so they decode through cp1252 and report rtf/unsupported-codepage, so a caller sees the gap instead of receiving plausible-looking mojibake.
 //
-// UTF-8 (\ansicpg65001, which RichEdit and some non-Word producers emit) IS supported, through the platform's own TextDecoder. That is why this module decodes a byte RUN rather than one byte at a time: a stateful multi-byte encoding cannot be decoded byte-by-byte, and the reader accordingly buffers consecutive ANSI bytes and flushes them here at the first event that is not another byte.
+// UTF-8 (\ansicpg65001, which RichEdit and some non-Word producers emit) IS supported, through the platform's own TextDecoder. That is why this module decodes a byte RUN rather than one byte at a time: a stateful multi-byte encoding cannot be decoded byte-by-byte, and the reader accordingly buffers consecutive ANSI bytes and flushes them here at the first event that is not another byte. The DBCS pages share that same run-buffered entry point rather than adding one of their own -- a DBCS lead byte and its trail byte can arrive in the same run as ordinary single-byte characters either side of it, so the run itself, not the byte, is still the unit a codepage decodes.
 
 import { RtfDiagnosticCodes } from "./diagnostics";
 import type { RtfDiagnosticSink } from "./diagnostics";
+import {
+  DBCS_LEAD_BYTE_TABLES,
+  DBCS_SINGLE_BYTE_EXTRAS,
+} from "./codepage-dbcs";
 
 export const DEFAULT_CODEPAGE = 1252;
 export const UTF8_CODEPAGE = 65001;
@@ -169,7 +172,11 @@ export function codepageForFontCharset(charset: number): number | undefined {
 }
 
 export function isSupportedCodepage(codepage: number): boolean {
-  return codepage === UTF8_CODEPAGE || SINGLE_BYTE_PAGES.has(codepage);
+  return (
+    codepage === UTF8_CODEPAGE ||
+    SINGLE_BYTE_PAGES.has(codepage) ||
+    DBCS_LEAD_BYTE_TABLES.has(codepage)
+  );
 }
 
 // Decodes one run of ANSI bytes through `codepage`. A run, not a byte, because \ansicpg65001 is UTF-8 and a stateful multi-byte encoding cannot be decoded a byte at a time -- see this module's own header.
@@ -186,6 +193,10 @@ export function decodeCodepageBytes(
   if (codepage === UTF8_CODEPAGE) {
     return new TextDecoder("utf-8").decode(input);
   }
+  const leadTable = DBCS_LEAD_BYTE_TABLES.get(codepage);
+  if (leadTable !== undefined) {
+    return decodeDbcsBytes(input, codepage, leadTable);
+  }
   const table = SINGLE_BYTE_PAGES.get(codepage);
   if (table === undefined) {
     sink({
@@ -199,6 +210,38 @@ export function decodeCodepageBytes(
   for (const byte of input) {
     out +=
       byte < 0x80 ? String.fromCharCode(byte) : (table[byte - 0x80] ?? "�");
+  }
+  return out;
+}
+
+// The lead-byte state machine a DBCS page needs (see this module's own header): a byte under 0x80 is always ASCII, a byte the page uses as a lead byte consumes the byte after it too (or, at the end of a run with no byte left to consume, decodes alone as U+FFFD -- a genuine RTF document never actually splits a DBCS character's two bytes across separate runs, since \'hh escapes and raw bytes both feed the same buffered run this function receives whole), and every other byte is either one of the page's own single-byte extensions (932's halfwidth katakana and a handful of others -- see DBCS_SINGLE_BYTE_EXTRAS's own comment in ./codepage-dbcs.ts) or genuinely undefined and decodes as U+FFFD, the same fallback SINGLE_BYTE_PAGES uses above.
+function decodeDbcsBytes(
+  input: Uint8Array,
+  codepage: number,
+  leadTable: ReadonlyMap<number, string>,
+): string {
+  const singleByteExtras = DBCS_SINGLE_BYTE_EXTRAS.get(codepage);
+  let out = "";
+  let i = 0;
+  while (i < input.length) {
+    const byte = input[i];
+    if (byte === undefined) {
+      break;
+    }
+    if (byte < 0x80) {
+      out += String.fromCharCode(byte);
+      i += 1;
+      continue;
+    }
+    const trailTable = leadTable.get(byte);
+    if (trailTable !== undefined) {
+      const trail = input[i + 1];
+      out += trail === undefined ? "�" : (trailTable[trail] ?? "�");
+      i += trail === undefined ? 1 : 2;
+      continue;
+    }
+    out += singleByteExtras?.[byte - 0x80] ?? "�";
+    i += 1;
   }
   return out;
 }

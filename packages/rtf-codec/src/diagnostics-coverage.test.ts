@@ -67,9 +67,9 @@ describe("every read-side diagnostic code is reachable", () => {
   });
 
   it("rtf/unsupported-codepage", () => {
-    // 932 is Shift-JIS, one of the DBCS pages this package deliberately does not carry a table for.
+    // 42 is SYMBOL_CHARSET, which this package deliberately does not carry a table for -- its bytes are glyph indices into a font, not a character encoding at all. See codepage.ts's own header comment.
     expect(
-      readCodes("{\\rtf1\\ansi\\ansicpg932\\pard \\'82\\'a0\\par}"),
+      readCodes("{\\rtf1\\ansi\\ansicpg42\\pard \\'82\\'a0\\par}"),
     ).toContain(RtfDiagnosticCodes.UNSUPPORTED_CODEPAGE);
   });
 
