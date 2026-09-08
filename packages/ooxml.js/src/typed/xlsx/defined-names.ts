@@ -114,8 +114,8 @@ export function parsePrintTitlesValue(value: string): PrintTitles {
   return result;
 }
 
-// Excel quotes a sheet name in a formula/defined-name reference whenever it contains anything other than letters, digits, or underscores (spaces, punctuation, a leading digit, ...) -- a conservative superset of the real ECMA-376 grammar's own reserved-character rule, safe to over-quote but never safe to under-quote. An embedded single quote is escaped by doubling it, Excel's own convention for a quoted sheet name.
-function quoteSheetNameIfNeeded(sheetName: string): string {
+// Excel quotes a sheet name in a formula/defined-name reference whenever it contains anything other than letters, digits, or underscores (spaces, punctuation, a leading digit, ...) -- a conservative superset of the real ECMA-376 grammar's own reserved-character rule, safe to over-quote but never safe to under-quote. An embedded single quote is escaped by doubling it, Excel's own convention for a quoted sheet name. Exported for typed/xlsx/drawings-write.ts, which quotes a chart series' own sheet-qualified range formula the identical way.
+export function quoteSheetNameIfNeeded(sheetName: string): string {
   if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(sheetName)) {
     return sheetName;
   }

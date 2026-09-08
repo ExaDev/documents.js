@@ -1042,6 +1042,7 @@ describe("readXlsxContent: chart graphic frames", () => {
   });
 
   it("does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the read row is one-way (the established cell-comment asymmetry)", () => {
+  it("survives the write pair: buildXlsxPackageFromContent writes a real drawing/chart part pair, and reading it back recovers the same cached series/category model (ExaDev/documents.js#973)", () => {
     const rewritten = readXlsxContent(
       decodePackage(
         encodePackage(
@@ -1052,7 +1053,45 @@ describe("readXlsxContent: chart graphic frames", () => {
     if (rewritten.kind !== "spreadsheet") {
       throw new Error("expected a spreadsheet ContentDocument");
     }
-    expect(rewritten.sheets[0]?.embeddedObjects).toBeUndefined();
+    expect(rewritten.sheets[0]?.embeddedObjects).toHaveLength(1);
+    const chart = rewritten.sheets[0]?.embeddedObjects?.[0];
+    expect(chart?.objectKind).toBe("chart");
+    const sheet =
+      chart?.document.kind === "spreadsheet"
+        ? chart.document.sheets[0]
+        : undefined;
+    expect(sheet?.cells).toEqual([
+      {
+        row: 0,
+        column: 1,
+        value: { kind: "string", value: "Revenue" },
+        displayText: "Revenue",
+      },
+      {
+        row: 1,
+        column: 0,
+        value: { kind: "string", value: "Q1" },
+        displayText: "Q1",
+      },
+      {
+        row: 1,
+        column: 1,
+        value: { kind: "string", value: "8.5" },
+        displayText: "8.5",
+      },
+      {
+        row: 2,
+        column: 0,
+        value: { kind: "string", value: "Q2" },
+        displayText: "Q2",
+      },
+      {
+        row: 2,
+        column: 1,
+        value: { kind: "string", value: "12" },
+        displayText: "12",
+      },
+    ]);
   });
 });
 
@@ -1390,7 +1429,7 @@ describe("readXlsxContent: drawing pictures", () => {
     ).toBe(true);
   });
 
-  it("does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the read row is one-way (the established cell-comment asymmetry)", () => {
+  it("survives the write pair: buildXlsxPackageFromContent writes a real drawing/media part pair, and reading it back recovers the same image (ExaDev/documents.js#973)", () => {
     const rewritten = readXlsxContent(
       decodePackage(
         encodePackage(
@@ -1401,7 +1440,10 @@ describe("readXlsxContent: drawing pictures", () => {
     if (rewritten.kind !== "spreadsheet") {
       throw new Error("expected a spreadsheet ContentDocument");
     }
-    expect(rewritten.sheets[0]?.images).toEqual([]);
+    expect(rewritten.sheets[0]?.images).toHaveLength(1);
+    const image = rewritten.sheets[0]?.images[0];
+    expect(image?.format).toBe("png");
+    expect(image?.base64).toBe(TINY_PNG_BASE64);
   });
 });
 
@@ -1535,7 +1577,7 @@ describe("readXlsxContent: drawing pictures (oneCellAnchor)", () => {
     ).toBe(true);
   });
 
-  it("does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the read row is one-way (the established cell-comment asymmetry)", () => {
+  it("survives the write pair: buildXlsxPackageFromContent writes a real drawing/media part pair, and reading it back recovers the same image (ExaDev/documents.js#973)", () => {
     const rewritten = readXlsxContent(
       decodePackage(
         encodePackage(
@@ -1546,7 +1588,10 @@ describe("readXlsxContent: drawing pictures (oneCellAnchor)", () => {
     if (rewritten.kind !== "spreadsheet") {
       throw new Error("expected a spreadsheet ContentDocument");
     }
-    expect(rewritten.sheets[0]?.images).toEqual([]);
+    expect(rewritten.sheets[0]?.images).toHaveLength(1);
+    const image = rewritten.sheets[0]?.images[0];
+    expect(image?.format).toBe("png");
+    expect(image?.base64).toBe(TINY_PNG_BASE64);
   });
 });
 
@@ -1673,7 +1718,7 @@ describe("readXlsxContent: drawing pictures (absoluteAnchor)", () => {
     ).toBe(true);
   });
 
-  it("does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the read row is one-way (the established cell-comment asymmetry)", () => {
+  it("survives the write pair: buildXlsxPackageFromContent writes a real drawing/media part pair, and reading it back recovers the same image (ExaDev/documents.js#973)", () => {
     const rewritten = readXlsxContent(
       decodePackage(
         encodePackage(
@@ -1686,7 +1731,10 @@ describe("readXlsxContent: drawing pictures (absoluteAnchor)", () => {
     if (rewritten.kind !== "spreadsheet") {
       throw new Error("expected a spreadsheet ContentDocument");
     }
-    expect(rewritten.sheets[0]?.images).toEqual([]);
+    expect(rewritten.sheets[0]?.images).toHaveLength(1);
+    const image = rewritten.sheets[0]?.images[0];
+    expect(image?.format).toBe("png");
+    expect(image?.base64).toBe(TINY_PNG_BASE64);
   });
 });
 

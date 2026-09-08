@@ -58,8 +58,14 @@ import {
 } from "./conditional-format";
 import { buildDataValidationsElement } from "./data-validation";
 import { buildThreadedCommentsRoot, sheetHasComments } from "./comments-write";
+import {
+  buildSheetDrawing,
+  CT_CHART,
+  CT_DRAWING,
+  newDrawingCounters,
+} from "./drawings-write";
 
-// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, through the same number-format vocabulary that reader classifies (see renderCellValue and typed/xlsx/number-format.ts's own write-side section), and honestly re-approximating the one lossy conversion left on the way in (column-width characters). ContentSheetCell.comment now survives a round trip too, via the threaded-comments part comments-write.ts builds (see buildWorksheetPart's own note below). The one remaining read-side exception is the drawing layer: the reader's drawing rows -- chart graphic frames (embeddedObjects) and pictures (images), typed/xlsx/drawings.ts -- have no write side, this writer emitting no drawing part. See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
+// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, through the same number-format vocabulary that reader classifies (see renderCellValue and typed/xlsx/number-format.ts's own write-side section), and honestly re-approximating the one lossy conversion left on the way in (column-width characters). ContentSheetCell.comment now survives a round trip too, via the threaded-comments part comments-write.ts builds (see buildWorksheetPart's own note below). The reader's own drawing rows -- chart graphic frames (embeddedObjects) and pictures (images), typed/xlsx/drawings.ts -- now have a real write side too (ExaDev/documents.js#973, typed/xlsx/drawings-write.ts): every image and chart embedded object a sheet carries writes back out as a real xdr:oneCellAnchor in a genuine xl/drawings/drawingN.xml, plus xl/media/imageN.<ext> or xl/charts/chartN.xml as appropriate. See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
 //
 // This is the flat, content-level half of the xlsx write pair: buildXlsxPackage (typed/document-tree.ts) is the primary name, flattening a tree-form DocumentTree (styles-table refs materialised away) and handing the result straight to this function.
 
@@ -101,6 +107,8 @@ const REL_SHARED_STRINGS = `${REL_NS}/sharedStrings`;
 // Matches typed/xlsx/comments.ts's own REL_THREADED_COMMENTS exactly -- the read side already reads whatever this writer emits under this relationship type, so the two must stay identical.
 const REL_THREADED_COMMENTS =
   "http://schemas.microsoft.com/office/2017/10/relationships/threadedComment";
+// Matches typed/xlsx/drawings.ts's own DRAWING_REL_SUFFIX -- the read side resolves a worksheet's drawing part by relationship TYPE alone, never by r:id, so this must stay identical to what that reader matches against.
+const REL_DRAWING = `${REL_NS}/drawing`;
 
 // 0-based indices of the last column (XFD, the 16384th) and the last row (the 1,048,576th) -- the current OOXML worksheet size limits, used as rowBreaks/colBreaks' own <brk max="..."> extent (the full width/height of the sheet the break spans), per ECMA-376 Part 1 SS18.3.1.2's own min/max attribute semantics documented in print-settings.ts's readManualBreaks.
 const MAX_COLUMN_INDEX = 16383;
@@ -123,9 +131,18 @@ function xmlPart(root: XmlElement): XmlPart {
 
 // --- [Content_Types].xml -----------------------------------------------------------------------------------------
 
+const IMAGE_CONTENT_TYPES: Readonly<Record<"png" | "jpeg" | "gif", string>> = {
+  png: "image/png",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+};
+
 function buildContentTypesPart(
   sheetCount: number,
   commentedSheetIndices: readonly number[],
+  drawingSheetIndices: readonly number[],
+  chartPartNames: readonly string[],
+  usedImageFormats: ReadonlySet<"png" | "jpeg" | "gif">,
 ): XmlPart {
   const overrides: XmlElement[] = [
     el("Override", { PartName: "/xl/workbook.xml", ContentType: CT_WORKBOOK }),
@@ -151,6 +168,19 @@ function buildContentTypesPart(
       }),
     );
   }
+  for (const index of drawingSheetIndices) {
+    overrides.push(
+      el("Override", {
+        PartName: `/xl/drawings/drawing${index + 1}.xml`,
+        ContentType: CT_DRAWING,
+      }),
+    );
+  }
+  for (const partName of chartPartNames) {
+    overrides.push(
+      el("Override", { PartName: `/${partName}`, ContentType: CT_CHART }),
+    );
+  }
   overrides.push(
     el("Override", {
       PartName: "/docProps/core.xml",
@@ -163,12 +193,19 @@ function buildContentTypesPart(
       ContentType: CT_EXTENDED_PROPS,
     }),
   );
+  const mediaDefaults = [...usedImageFormats].map((format) =>
+    el("Default", {
+      Extension: format,
+      ContentType: IMAGE_CONTENT_TYPES[format],
+    }),
+  );
   const root = el("Types", { xmlns: CONTENT_TYPES_NS }, [
     el("Default", {
       Extension: "rels",
       ContentType: "application/vnd.openxmlformats-package.relationships+xml",
     }),
     el("Default", { Extension: "xml", ContentType: "application/xml" }),
+    ...mediaDefaults,
     ...overrides,
   ]);
   return xmlPart(root);
@@ -878,24 +915,33 @@ function buildBreaksElements(settings: ContentSheetPrintSettings): {
   return result;
 }
 
-// A worksheet part only ever needs its own .rels when something on the sheet relates to a sibling part outside xl/worksheets/ -- today, that is exactly a sheet carrying at least one commented cell (sheetHasComments, comments-write.ts), addressed by the SAME relative-target convention typed/xlsx/util.ts's own resolveRelTarget already resolves back through: "../threadedComments/threadedComment{N}.xml" from xl/worksheets/_rels/sheet{N}.xml.rels resolves to xl/threadedComments/threadedComment{N}.xml.
-function buildWorksheetRelsPart(sheetIndex: number): XmlPart {
-  const root = el("Relationships", { xmlns: PKG_RELS_NS }, [
-    el("Relationship", {
-      Id: "rId1",
-      Type: REL_THREADED_COMMENTS,
-      Target: `../threadedComments/threadedComment${sheetIndex + 1}.xml`,
-    }),
-  ]);
+interface WorksheetRelationship {
+  readonly id: string;
+  readonly type: string;
+  readonly target: string;
+}
+
+// A worksheet part only ever needs its own .rels when something on the sheet relates to a sibling part outside xl/worksheets/ -- a commented cell (sheetHasComments, comments-write.ts) or a drawing layer carrying at least one image or chart (typed/xlsx/drawings-write.ts) -- addressed by the SAME relative-target convention typed/xlsx/util.ts's own resolveRelTarget already resolves back through.
+function buildWorksheetRelsPart(
+  relationships: readonly WorksheetRelationship[],
+): XmlPart {
+  const root = el(
+    "Relationships",
+    { xmlns: PKG_RELS_NS },
+    relationships.map((rel) =>
+      el("Relationship", { Id: rel.id, Type: rel.type, Target: rel.target }),
+    ),
+  );
   return xmlPart(root);
 }
 
-// CT_Worksheet's own required child element ORDER (ECMA-376 Part 1 SS18.3.1.99): sheetPr?, dimension?, sheetViews?, sheetFormatPr?, cols*, sheetData, ..., mergeCells?, conditionalFormatting*, dataValidations?, ..., printOptions?, pageMargins?, pageSetup?, headerFooter?, rowBreaks?, colBreaks?, ... -- every element this writer emits follows that relative order (sheetViews and headerFooter are both skipped entirely: pure UI/print-preview state this package's own content model carries no data for), confirmed against real-producer-validation-and-cellis.xlsx's own emitted order: mergeCells (this fixture has none), conditionalFormatting, dataValidations, printOptions/pageMargins/pageSetup.
+// CT_Worksheet's own required child element ORDER (ECMA-376 Part 1 SS18.3.1.99): sheetPr?, dimension?, sheetViews?, sheetFormatPr?, cols*, sheetData, ..., mergeCells?, conditionalFormatting*, dataValidations?, ..., printOptions?, pageMargins?, pageSetup?, headerFooter?, rowBreaks?, colBreaks?, ..., drawing?, ... -- every element this writer emits follows that relative order (sheetViews and headerFooter are both skipped entirely: pure UI/print-preview state this package's own content model carries no data for), confirmed against real-producer-validation-and-cellis.xlsx's own emitted order: mergeCells (this fixture has none), conditionalFormatting, dataValidations, printOptions/pageMargins/pageSetup. drawing (typed/xlsx/drawings-write.ts) sits past colBreaks, matching CT_Worksheet's own sequence.
 function buildWorksheetPart(
   sheet: ContentSheet,
   sharedStrings: SharedStringTable,
   cellFormats: CellFormatTable,
   dxfTable: DxfTable,
+  drawingRelId: string | undefined,
 ): XmlPart {
   const children: XmlElement[] = [
     buildSheetPrElement(sheet.printSettings),
@@ -942,11 +988,21 @@ function buildWorksheetPart(
     children.push(colBreaks);
   }
 
+  if (drawingRelId !== undefined) {
+    children.push(el("drawing", { "r:id": drawingRelId }));
+  }
+
   const root = el("worksheet", { xmlns: SML_NS, "xmlns:r": REL_NS }, children);
   return xmlPart(root);
 }
 
 // --- entry point -----------------------------------------------------------------------------------------------
+
+// One sheet's own worksheet-level extras: which relationships it needs (comments/drawing), and the r:id the drawing one lands on for the <drawing> element buildWorksheetPart writes inline.
+interface SheetExtras {
+  readonly relationships: WorksheetRelationship[];
+  readonly drawingRelId: string | undefined;
+}
 
 export function buildXlsxPackageFromContent(
   document: ContentDocument,
@@ -961,18 +1017,74 @@ export function buildXlsxPackageFromContent(
   const sharedStrings = new SharedStringTable();
   const cellFormats = new CellFormatTable();
   const dxfTable = new DxfTable();
+  const drawingCounters = newDrawingCounters();
+
+  const commentedSheetIndices: number[] = [];
+  const drawingSheetIndices: number[] = [];
+  const chartPartNames: string[] = [];
+  const usedImageFormats = new Set<"png" | "jpeg" | "gif">();
+  const extraParts: Package["parts"] = {};
+  const sheetExtras: SheetExtras[] = sheets.map((sheet, index) => {
+    const relationships: WorksheetRelationship[] = [];
+    let relCounter = 0;
+    const nextRelId = (): string => {
+      relCounter += 1;
+      return `rId${relCounter}`;
+    };
+
+    if (sheetHasComments(sheet)) {
+      commentedSheetIndices.push(index);
+      relationships.push({
+        id: nextRelId(),
+        type: REL_THREADED_COMMENTS,
+        target: `../threadedComments/threadedComment${index + 1}.xml`,
+      });
+    }
+
+    let drawingRelId: string | undefined;
+    const drawing = buildSheetDrawing(sheet, drawingCounters);
+    if (drawing !== undefined) {
+      drawingSheetIndices.push(index);
+      chartPartNames.push(...drawing.chartPartNames);
+      for (const format of drawing.usedImageFormats) {
+        usedImageFormats.add(format);
+      }
+      Object.assign(extraParts, drawing.extraParts);
+      extraParts[`xl/drawings/drawing${index + 1}.xml`] = xmlPart(
+        drawing.drawingRoot,
+      );
+      extraParts[`xl/drawings/_rels/drawing${index + 1}.xml.rels`] = xmlPart(
+        drawing.drawingRelsRoot,
+      );
+      drawingRelId = nextRelId();
+      relationships.push({
+        id: drawingRelId,
+        type: REL_DRAWING,
+        target: `../drawings/drawing${index + 1}.xml`,
+      });
+    }
+
+    return { relationships, drawingRelId };
+  });
+
   // Building every worksheet part first, before touching xl/sharedStrings.xml or xl/styles.xml, is load-bearing: buildCellElement interns every literal string value into `sharedStrings` and every non-General number format into `cellFormats` as a side effect while it walks each sheet's cells, buildConditionalFormattingElements interns every styled conditional-format rule into `dxfTable` the same way, and buildSharedStringsPart/buildStylesPart below must all see the FULLY populated tables.
-  const worksheetParts = sheets.map((sheet) =>
-    buildWorksheetPart(sheet, sharedStrings, cellFormats, dxfTable),
+  const worksheetParts = sheets.map((sheet, index) =>
+    buildWorksheetPart(
+      sheet,
+      sharedStrings,
+      cellFormats,
+      dxfTable,
+      sheetExtras[index]?.drawingRelId,
+    ),
   );
-  const commentedSheetIndices = sheets
-    .map((sheet, index) => (sheetHasComments(sheet) ? index : undefined))
-    .filter((index): index is number => index !== undefined);
 
   const parts: Package["parts"] = {
     "[Content_Types].xml": buildContentTypesPart(
       sheets.length,
       commentedSheetIndices,
+      drawingSheetIndices,
+      chartPartNames,
+      usedImageFormats,
     ),
     "_rels/.rels": buildPackageRelsPart(),
     "xl/workbook.xml": buildWorkbookPart(sheets),
@@ -981,6 +1093,7 @@ export function buildXlsxPackageFromContent(
     "xl/sharedStrings.xml": buildSharedStringsPart(sharedStrings),
     "docProps/core.xml": buildCorePropertiesPart(document.metadata),
     "docProps/app.xml": buildAppPropertiesPart(document.metadata),
+    ...extraParts,
   };
   worksheetParts.forEach((part, index) => {
     parts[`xl/worksheets/sheet${index + 1}.xml`] = part;
@@ -990,12 +1103,17 @@ export function buildXlsxPackageFromContent(
     if (sheet === undefined) {
       continue;
     }
-    parts[`xl/worksheets/_rels/sheet${index + 1}.xml.rels`] =
-      buildWorksheetRelsPart(index);
     parts[`xl/threadedComments/threadedComment${index + 1}.xml`] = xmlPart(
       buildThreadedCommentsRoot(sheet),
     );
   }
+  sheets.forEach((_sheet, index) => {
+    const relationships = sheetExtras[index]?.relationships ?? [];
+    if (relationships.length > 0) {
+      parts[`xl/worksheets/_rels/sheet${index + 1}.xml.rels`] =
+        buildWorksheetRelsPart(relationships);
+    }
+  });
 
   return { parts };
 }
