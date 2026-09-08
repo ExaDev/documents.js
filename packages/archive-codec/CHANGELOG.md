@@ -1,3 +1,9 @@
+## [1.9.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.8.0...archive-codec%401.9.0) (2026-09-08)
+
+### Features
+
+* **archive-codec:** add SHA-1 and RC4 CryptoAPI key derivation ([f6e48a0](https://github.com/ExaDev/documents.js/commit/f6e48a0a7795e618907ccd14f0da20d0e0e8b7a8))
+
 ## [1.8.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.7.2...archive-codec%401.8.0) (2026-09-08)
 
 ### Features

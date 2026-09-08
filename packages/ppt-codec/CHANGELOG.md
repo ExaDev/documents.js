@@ -1,3 +1,14 @@
+## [1.3.0](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.2.13...ppt-codec%401.3.0) (2026-09-08)
+
+### Features
+
+* **ppt-codec:** decrypt RC4 CryptoAPI-encrypted presentations ([3d7a8df](https://github.com/ExaDev/documents.js/commit/3d7a8dfe3fad55f0caa0e2439e1f61e5a8a75e0f))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.9.0
+
 ## [1.2.13](https://github.com/ExaDev/documents.js/compare/ppt-codec%401.2.12...ppt-codec%401.2.13) (2026-09-08)
 
 
