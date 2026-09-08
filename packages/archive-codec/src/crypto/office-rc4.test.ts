@@ -5,6 +5,7 @@ import {
   deriveOfficeRc4BaseHash,
   deriveOfficeRc4BlockKey,
   OFFICE_RC4_BLOCK_SIZE,
+  OFFICE_RC4_DOC_BLOCK_SIZE,
 } from "./office-rc4";
 
 function toHex(bytes: Uint8Array<ArrayBuffer>): string {
@@ -101,5 +102,36 @@ describe("decryptOfficeRc4", () => {
       plaintext.subarray(15),
     );
     expect(new Uint8Array([...first, ...second])).toEqual(whole);
+  });
+
+  it("decrypts across a 512-byte block boundary when passed the [MS-DOC] block size", () => {
+    // The same "password1"/salt pair as the msoffcrypto-tool vector above (block 0's key is therefore already independently verified against that doctest), decrypting across a 512-byte boundary at a stream offset a 1024-byte scheme would not have crossed at all.
+    const docBaseHash = deriveOfficeRc4BaseHash(
+      "password1",
+      fromHex("e8772c1d91c56a37964761b280183217"),
+    );
+    const streamOffset = 500;
+    expect(streamOffset + 40).toBeGreaterThan(OFFICE_RC4_DOC_BLOCK_SIZE);
+    expect(streamOffset + 40).toBeLessThan(OFFICE_RC4_BLOCK_SIZE);
+    const plaintext = Uint8Array.from({ length: 40 }, (_, i) => i % 256);
+    const ciphertext = fromHex(
+      "85df351d8b44f2caa119ca8f9943cbd2619389354f115027870e6827ee6b2875cefd995357852dbe",
+    );
+    expect(
+      decryptOfficeRc4(
+        docBaseHash,
+        streamOffset,
+        plaintext,
+        OFFICE_RC4_DOC_BLOCK_SIZE,
+      ),
+    ).toEqual(ciphertext);
+    expect(
+      decryptOfficeRc4(
+        docBaseHash,
+        streamOffset,
+        ciphertext,
+        OFFICE_RC4_DOC_BLOCK_SIZE,
+      ),
+    ).toEqual(plaintext);
   });
 });
