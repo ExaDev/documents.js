@@ -58,6 +58,7 @@ import {
   type RawSheet,
 } from "./workbook/sheet";
 import type { RawDataValidation } from "./workbook/data-validation";
+import { decryptWorkbookRecords } from "./workbook/encryption";
 import type {
   RawConditionalFormat,
   RawConditionalFormatStyle,
@@ -180,23 +181,27 @@ function mapPrintSettings(
 /**
  * Reads a .xls file's bytes into a ContentDocument.
  *
- * The counterpart of ooxml.js's readXlsxContent, producing the same shape from the older format.
+ * The counterpart of ooxml.js's readXlsxContent, producing the same shape from the older format. `password` decrypts a workbook protected by [MS-XLS] 2.4.117's FilePass record under the [MS-OFFCRYPTO] 2.3.6.1 RC4 encryption header scheme -- see workbook/encryption.ts. It is ignored for an unencrypted workbook, and a missing or incorrect password against an encrypted one throws rather than returning a partial or garbled document.
  */
 export function readXlsContent(
   bytes: Uint8Array<ArrayBuffer>,
+  password?: string,
 ): XlsContentDocument {
   const { workbook, metadata } = readWorkbookStreams(bytes);
-  const substreams = splitSubstreams(groupRecords(readRecords(workbook)));
+  // FilePass ([MS-XLS] 2.4.117) is looked for in the raw record list, before grouping or substream-splitting, because its own record type and size are never encrypted ([MS-XLS] 2.2.10) -- readRecords already parses correctly over the still-encrypted stream, so there is no need for a separate raw byte scan.
+  const rawRecords = readRecords(workbook);
+  const filePassRecord = rawRecords.find(
+    (record) => record.type === RECORD_FILEPASS,
+  );
+  const records =
+    filePassRecord === undefined
+      ? rawRecords
+      : decryptWorkbookRecords(rawRecords, filePassRecord, password);
+  const substreams = splitSubstreams(groupRecords(records));
   const globalsSubstream = substreams[0];
   if (globalsSubstream === undefined) {
     throw new BiffFormatError(
       "workbook stream holds no substreams, so it carries no globals substream",
-    );
-  }
-  // [MS-XLS] 2.4.117: a FilePass record means the workbook's contents are encrypted, and every record after it is ciphertext. Reading on would produce confident nonsense, so this fails loudly instead.
-  if (globalsSubstream.records.some((rec) => rec.type === RECORD_FILEPASS)) {
-    throw new BiffFormatError(
-      "workbook is encrypted (its globals substream carries a FilePass record); this reader does not decrypt",
     );
   }
   const globals = readWorkbookGlobals(globalsSubstream.records);
@@ -219,8 +224,11 @@ export function readXlsContent(
 }
 
 /** The tree-form read: readXlsContent composed with the schema's own structural transform, exactly as ooxml.js's readXlsx wraps readXlsxContent. */
-export function readXls(bytes: Uint8Array<ArrayBuffer>): DocumentTree {
-  return assembleTree(readXlsContent(bytes));
+export function readXls(
+  bytes: Uint8Array<ArrayBuffer>,
+  password?: string,
+): DocumentTree {
+  return assembleTree(readXlsContent(bytes, password));
 }
 
 /**
