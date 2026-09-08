@@ -44,6 +44,9 @@ const config: Configuration = {
       );
       return `pnpm --dir ${directory} exec eslint --fix ${pathsRelativeToDirectory.join(" ")}`;
     }),
+  // syncpack operates over every package.json in the workspace at once, never a single file in isolation, so unlike the ESLint task above this runs once regardless of which manifest triggered it, correcting any dependency this commit left at a non-fixed version or out of step with the rest of the workspace (syncpack.config.ts). A genuinely unfixable disagreement (see `syncpack lint`) exits non-zero and blocks the commit rather than committing a manifest syncpack cannot reconcile.
+  "{package.json,packages/*/package.json,pnpm-workspace.yaml}": () =>
+    "pnpm run deps:fix",
 };
 
 export default config;
