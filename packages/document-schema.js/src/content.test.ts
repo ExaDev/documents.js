@@ -1576,6 +1576,21 @@ describe("ContentTableCell background", () => {
   });
 });
 
+describe("ContentTableCell formula", () => {
+  it("accepts a wordprocessing table cell's own formula, carried verbatim", () => {
+    const parsed = ContentTableCellSchema.parse({
+      blocks: [],
+      formula: "(A1+B1)",
+    });
+    expect(parsed.formula).toBe("(A1+B1)");
+  });
+
+  it("omits formula for a cell with none, the overwhelming common case", () => {
+    const parsed = ContentTableCellSchema.parse({ blocks: [] });
+    expect(parsed.formula).toBeUndefined();
+  });
+});
+
 describe("ContentSheetCell background", () => {
   const base = {
     row: 0,
