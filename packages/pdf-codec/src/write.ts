@@ -786,13 +786,12 @@ export function writePdf(
   if (residueXmpNum !== undefined) {
     catalogEntries.push(["Metadata", pdfRef(residueXmpNum, 0)]);
   }
-  // The restorable residue rows: each is re-parsed from its own serialised text back into a PdfObject and emitted inline under its original Catalog key (the trailer /ID is held for the trailer block below). A row whose parse names an indirect object of the SOURCE file cannot be restorable -- its "N 0 R" targets an object number that need not exist in this file -- so it is skipped rather than emitted as a dangling reference. The XMP packet (a standalone XML stream, never a reference-carrier) is restored as a /Metadata stream object; the page-boxes row is deliberately not restored at all -- it records the SOURCE file's page geometry, which this writer states itself from each page's own dimensions.
+  // The restorable residue rows: each is re-parsed from its own serialised text back into a PdfObject and emitted inline under its original Catalog key (the trailer /ID is held for the trailer block below). A row whose parse names an indirect object of the SOURCE file cannot be restorable -- its "N 0 R" targets an object number that need not exist in this file -- so it is skipped rather than emitted as a dangling reference. The XMP packet (a standalone XML stream, never a reference-carrier) is restored as a /Metadata stream object; the page-boxes row is deliberately not restored at all -- it records the SOURCE file's page geometry, which this writer states itself from each page's own dimensions. The open-action row is deliberately not restored either: /OpenAction is ACTIVE content (an inline JavaScript, Launch, or URI action a viewer executes on open), and restoring it verbatim from an attacker-supplied source would re-arm that behaviour in the rewritten file -- an inert-destination allowlist is not worth the risk surface when the writer's own destinations and outline already carry navigation.
   const trailerIdRestore = restoreResidueRow(doc.source, "trailer-id");
   for (const [rowKey, catalogKey] of [
     ["viewer-preferences", "ViewerPreferences"],
     ["page-mode", "PageMode"],
     ["page-layout", "PageLayout"],
-    ["open-action", "OpenAction"],
     ["output-intents", "OutputIntents"],
     ["piece-info", "PieceInfo"],
     ["legal", "Legal"],

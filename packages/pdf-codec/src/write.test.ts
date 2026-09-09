@@ -946,12 +946,33 @@ describe("writePdf: package-level residue (#967)", () => {
       pages: [],
       images: {},
       source: {
-        "open-action": { format: "pdf", xml: "[ 12 0 R /Fit]" },
+        "output-intents": { format: "pdf", xml: "[ 12 0 R /Fit]" },
       },
     };
     const { readPdf } = await import("./read");
     const reread = readPdf(writePdf(doc));
     // A dangling "12 0 R" has no target in the new file; the row restores as nothing rather than corrupting the Catalog.
-    expect(reread.source?.["open-action"]).toBeUndefined();
+    expect(reread.source?.["output-intents"]).toBeUndefined();
+  });
+
+  it("never restores the open-action row, including an inline action", async () => {
+    // /OpenAction is active content: a viewer executes an inline JavaScript/Launch/URI action on open, so restoring it verbatim from a source file would re-arm attacker-supplied behaviour in the rewritten output. The row restores as nothing whether its serialisation is reference-free or not.
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+      source: {
+        "open-action": {
+          format: "pdf",
+          xml: "<< /S /JavaScript /JS (app.alert(1)) >>",
+        },
+      },
+    };
+    const { readPdf } = await import("./read");
+    const bytes = writePdf(doc);
+    const text = new TextDecoder("latin1").decode(bytes);
+    expect(text).not.toContain("/OpenAction");
+    expect(readPdf(bytes).source?.["open-action"]).toBeUndefined();
   });
 });
