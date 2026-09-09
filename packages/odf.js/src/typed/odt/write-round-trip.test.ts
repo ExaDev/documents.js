@@ -1209,6 +1209,54 @@ describe("fidelity constructs written (#969)", () => {
       ),
     ).toThrow(/does not spell back yet/);
   });
+
+  it("refuses a cyclic note definition by name rather than recursing to stack exhaustion", () => {
+    // The hostile shape the security review of this PR named: a note body whose own anchor resolves back to the entry still being written (the reader assigns the outer entry after parsing the nested body, so a reused text:id lands here).
+    const document = documentOf([
+      {
+        kind: "paragraph",
+        runs: [{ text: "1" }],
+        constructs: [
+          {
+            descriptor: {
+              kind: "anchor",
+              anchorType: "footnote",
+              name: "note1",
+              definition: "note:note1",
+            },
+            startRun: 0,
+            endRun: 1,
+          },
+        ],
+      },
+    ]);
+    const tree = assembleTree(document);
+    tree.definitions = {
+      "note:note1": {
+        kind: "footnote",
+        citation: "1",
+        body: [
+          {
+            kind: "paragraph",
+            runs: [{ text: "nested" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "anchor",
+                  anchorType: "footnote",
+                  name: "note1",
+                  definition: "note:note1",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    expect(() => writeOdt(tree)).toThrow(/cyclic note definition/);
+  });
 });
 
 function roundTrippedBlocks(document: WordprocessingDocument): ContentBlock[] {
