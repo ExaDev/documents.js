@@ -398,6 +398,82 @@ describe("writeOdpContent: the round-trip law", () => {
   });
 });
 
+// ExaDev/documents.js#969 closing the shape-text arm: a run-level construct extent inside a shape's own text writes through the identical construct machinery a body paragraph uses (the definitions/changeIds context writeOdp threads), and reads back through the same shared paragraph reader -- so the round-trip law holds for shape text exactly as it already did for odt body text.
+describe("writeOdp: fidelity constructs in shape text (#969)", () => {
+  it("round-trips a field extent inside a shape's own text", () => {
+    const document = documentOf([
+      slide([
+        shape({}, [
+          {
+            kind: "paragraph",
+            runs: [{ text: "Author: " }, { text: "Joe" }, { text: "." }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "field",
+                  instruction: '<text:author-name text:fixed="false"/>',
+                  cachedResult: "Joe",
+                },
+                startRun: 1,
+                endRun: 2,
+              },
+            ],
+          },
+        ]),
+      ]),
+    ]);
+    expectRoundTrip(document);
+  });
+
+  it("round-trips a footnote anchor in shape text with its definitions-table body through writeOdp", () => {
+    // The tree-level law for a note in a shape: writeOdp (the entry point that sees the definitions table) writes the inline text:note inside the shape's own text-box paragraph, and reading the package back recovers the same citation run, anchor extent, and definitions entry.
+    const document = documentOf([
+      slide([
+        shape({}, [
+          {
+            kind: "paragraph",
+            runs: [{ text: "1" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "anchor",
+                  anchorType: "footnote",
+                  name: "note1",
+                  definition: "note:note1",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+      ]),
+    ]);
+    const tree = assembleTree(document);
+    tree.definitions = {
+      "note:note1": {
+        kind: "footnote",
+        citation: "1",
+        body: [{ kind: "paragraph", runs: [{ text: "the note body" }] }],
+      },
+    };
+    const rewritten = readOdpContent(writeOdp(tree));
+    const shapeText = rewritten.slides[0]!.shapes[0]!.blocks[0]!;
+    expect(shapeText).toMatchObject({
+      kind: "paragraph",
+      constructs: [
+        {
+          descriptor: {
+            kind: "anchor",
+            anchorType: "footnote",
+            name: "note1",
+          },
+        },
+      ],
+    });
+  });
+});
+
 describe("writeOdpContent: refusals", () => {
   it("refuses a page break inside a shape's own text", () => {
     expect(() =>

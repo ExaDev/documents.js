@@ -517,9 +517,16 @@ function listStyleNameFor(
 }
 
 // The OdfTableWriteContext (typed/shared/table.ts) a table:table write threads through: table:name minting off this document's own nextTable counter -- the SAME counter for a top-level table and for any table nested inside one of its own cells, so the two can never collide -- and list-style minting off this document's own listStyleByKind cache, so a list run inside a cell reuses the identical style a body-level list of the same kind would.
-function tableWriteContext(state: OdtWriteState): OdfTableWriteContext {
+// The definitions/changeIds parameters thread the tree's construct context into cell paragraphs -- the same context the body-paragraph path threads (writeOdtContent's own options), so a run-level construct extent inside a table cell writes exactly as one in the body does.
+function tableWriteContext(
+  state: OdtWriteState,
+  definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
+  changeIds: ReadonlyMap<ProvenanceDescriptor, string> | undefined,
+): OdfTableWriteContext {
   return {
     registry: state.registry,
+    definitions,
+    changeIds,
     mintTableName: () => {
       const name = `Table${state.nextTable}`;
       state.nextTable += 1;
@@ -782,7 +789,12 @@ function writeSectionBlocks(
     if (block.kind === "table") {
       closeList();
       anchorParagraph = undefined;
-      currentOut().push(writeOdfTable(block.table, tableWriteContext(state)));
+      currentOut().push(
+        writeOdfTable(
+          block.table,
+          tableWriteContext(state, definitions, changeIds),
+        ),
+      );
       continue;
     }
     if (block.kind === "embeddedObject") {
