@@ -15,6 +15,7 @@ import type {
 } from "document-schema.js";
 import { flattenTree } from "document-schema.js";
 import type { Package } from "../../model/package";
+import type { DefinitionEntry } from "document-schema.js";
 import type { XmlElement, XmlNode } from "../../model/node";
 import { ODF_MEDIA_TYPES } from "../../media-type";
 import { syncManifest } from "../../manifest";
@@ -67,7 +68,7 @@ import {
 // 2. NO STANDALONE PAGE BREAK, AND NO SECTION ELEMENT. A page break is fo:break-before on a paragraph style, and a change of page geometry is a paragraph style naming a different style:master-page. ContentSection's own boundary is therefore written as a master-page switch on the first paragraph of each section after the first, which is exactly the switch readOdtContent splits sections at.
 // 3. WHITESPACE IS STRUCTURE. A run of two or more spaces, a tab, and a line break are elements, not characters (see typed/shared/text.ts). A run whose text contains one is split at it, because ODF has no spelling that would keep it whole.
 //
-// WHAT THIS WRITER WRITES AND WHAT IT STILL REFUSES, and why it refuses rather than dropping: the fidelity constructs readOdtContent reads are semantic content, so writing a document that silently lost one would be worse than not writing it at all -- a block or paragraph carrying a construct this writer does not yet resolve is refused BY NAME (see assertWritableBlock/assertWritableParagraph), never silently dropped. As of ExaDev/documents.js#969, that is no longer every construct: a FIELD and a BOOKMARK anchor (point or ranged, entirely within one paragraph) are written from ContentParagraph.constructs, via typed/shared/paragraph.ts's writeOdfParagraphChildren; a DIVISION (text:section) and an INDEX WRAPPER (text:table-of-content and its six siblings) are written from a block-scope constructStart/constructEnd pair, via typed/shared/constructs.ts's writeOdfDivision/writeOdfIndexWrapper (see assertWritableBlock/isWritableOdfDivisionOrIndexDescriptor and writeSectionBlocks' own construct stack). A BLOCK-SCOPE bookmark range is written too: its two halves (text:bookmark-start/-end) splice onto the extent's own first and last paragraph elements at the leading/trailing edge positions isOdfBlockScopedHalf reads back. Still refused: a NOTE or ANNOTATION anchor and a TRACKED-CHANGE provenance wrapper (both need the definitions-table body a bare ContentDocument write has no access to -- see writeOdt's own DocumentTree entry point, which does have it, for the natural place to wire this up next); a tracked-change/comment range that SPANS SEVERAL BLOCKS (the identical splice machinery the bookmark case now has, but against marker halves whose definitions-table body still needs wiring); a block-scope bookmark range whose extent contains no paragraph at all (nothing to carry the halves); office:forms controls (the reader's own point-pair encoding, readOdfFormControlConstructs in typed/shared/forms.ts, flattens a form's real parent/child nesting into a flat pre-order sequence of point constructs with no extent of its own, so there is no reliable way back to the original form:form/form:<kind> tree from what gets read); and embedded objects (ExaDev/documents.js#972's own write-side sub-document infrastructure, tracked separately). Every one of those is still refused by name, not dropped. The quarantined residue channel is separate again: a whole non-content package part (settings.xml and the like) is restored verbatim by writeOdt itself, via the shared writeOdfPackageResidue helper, once writeOdtContent has built the rest of the package -- that part is never touched or interpreted by anything below, so re-emitting it is genuinely safe. A construct's own residue, and the body-walk quarantine buckets a paragraph or block can carry (dde-links, xforms, a vendor-extension tag), stay dropped: re-emitting one of those into a paragraph or block the writer is regenerating from a possibly-edited document would be actively wrong, since there is no structural position left to safely reinsert it at (the one narrow, deliberate exception is an index wrapper's own *-source residue, read back purely to recover WHICH of the seven wrapper elements to write -- structural identity, never re-emitted content -- see odfIndexWrapperTag's own note). That narrower drop is stated in normaliseOdtContent, and tracked as the restorable-fidelity gap it is.
+// WHAT THIS WRITER WRITES AND WHAT IT STILL REFUSES, and why it refuses rather than dropping: the fidelity constructs readOdtContent reads are semantic content, so writing a document that silently lost one would be worse than not writing it at all -- a block or paragraph carrying a construct this writer does not yet resolve is refused BY NAME (see assertWritableBlock/assertWritableParagraph), never silently dropped. As of ExaDev/documents.js#969, that is no longer every construct: a FIELD and a BOOKMARK anchor (point or ranged, entirely within one paragraph) are written from ContentParagraph.constructs, via typed/shared/paragraph.ts's writeOdfParagraphChildren; a DIVISION (text:section) and an INDEX WRAPPER (text:table-of-content and its six siblings) are written from a block-scope constructStart/constructEnd pair, via typed/shared/constructs.ts's writeOdfDivision/writeOdfIndexWrapper (see assertWritableBlock/isWritableOdfDivisionOrIndexDescriptor and writeSectionBlocks' own construct stack). A BLOCK-SCOPE bookmark range is written too: its two halves (text:bookmark-start/-end) splice onto the extent's own first and last paragraph elements at the leading/trailing edge positions isOdfBlockScopedHalf reads back. A NOTE anchor (footnote or endnote) writes when the definitions table holds its body: writeOdt passes the tree's own table, the anchor becomes an inline text:note carrying its citation and a body written from the entry's blocks. Still refused: a note anchor with no definitions table in reach (writeOdtContent called bare), an ANNOTATION anchor and a TRACKED-CHANGE provenance wrapper (both need the identical wiring against their own definition kinds); a tracked-change/comment range that SPANS SEVERAL BLOCKS (the identical splice machinery the bookmark case now has, but against marker halves whose definitions-table body still needs wiring); a block-scope bookmark range whose extent contains no paragraph at all (nothing to carry the halves); office:forms controls (the reader's own point-pair encoding, readOdfFormControlConstructs in typed/shared/forms.ts, flattens a form's real parent/child nesting into a flat pre-order sequence of point constructs with no extent of its own, so there is no reliable way back to the original form:form/form:<kind> tree from what gets read); and embedded objects (ExaDev/documents.js#972's own write-side sub-document infrastructure, tracked separately). Every one of those is still refused by name, not dropped. The quarantined residue channel is separate again: a whole non-content package part (settings.xml and the like) is restored verbatim by writeOdt itself, via the shared writeOdfPackageResidue helper, once writeOdtContent has built the rest of the package -- that part is never touched or interpreted by anything below, so re-emitting it is genuinely safe. A construct's own residue, and the body-walk quarantine buckets a paragraph or block can carry (dde-links, xforms, a vendor-extension tag), stay dropped: re-emitting one of those into a paragraph or block the writer is regenerating from a possibly-edited document would be actively wrong, since there is no structural position left to safely reinsert it at (the one narrow, deliberate exception is an index wrapper's own *-source residue, read back purely to recover WHICH of the seven wrapper elements to write -- structural identity, never re-emitted content -- see odfIndexWrapperTag's own note). That narrower drop is stated in normaliseOdtContent, and tracked as the restorable-fidelity gap it is.
 
 const CONTENT_PART = "content.xml";
 const STYLES_PART = "styles.xml";
@@ -76,6 +77,8 @@ const PICTURES_DIRECTORY = "Pictures";
 export interface OdtWriteOptions {
   // The ODF version stamped on each part's office:version and on the manifest. Defaults to the current standard.
   readonly version?: string;
+  // The definitions table note anchors resolve against. writeOdt (the DocumentTree entry point) passes the tree's own definitions table here automatically; a caller of writeOdtContent with note-bearing paragraphs must supply the table itself or the write refuses those anchors by name.
+  readonly definitions?: Readonly<Record<string, DefinitionEntry>>;
   // Stamps the package as a document template (ODF_MEDIA_TYPES.ott) rather than a regular document (ODF_MEDIA_TYPES.odt) -- the "mimetype" part and the manifest root entry syncManifest derives from it, both of which createOdfPackage/syncManifest already key off whatever media type is passed in. Nothing else about the writer's own output changes: ODF makes no other structural distinction between a document and its template. Defaults to false.
   readonly template?: boolean;
 }
@@ -130,9 +133,12 @@ function unsupported(what: string, where: string): Error {
 }
 
 // A run-level construct extent this paragraph carries is writable when odfRunConstructWriteKind (typed/shared/constructs.ts) resolves it: a field (always, from its own cached instruction) or a bookmark anchor (point or range, both spelled as text:bookmark/-start/-end). Every other run-level construct -- a footnote/endnote/comment anchor, a tracked-change provenance wrapper -- has no writer yet and is refused by name, matching every writer's established fidelity-construct stance.
-function assertWritableParagraph(paragraph: ContentParagraph): void {
+function assertWritableParagraph(
+  paragraph: ContentParagraph,
+  definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
+): void {
   for (const extent of paragraph.constructs ?? []) {
-    if (odfRunConstructWriteKind(extent) === undefined) {
+    if (odfRunConstructWriteKind(extent, definitions) === undefined) {
       const anchorType =
         extent.descriptor.kind === "anchor"
           ? ` of anchor type "${extent.descriptor.anchorType}"`
@@ -160,6 +166,7 @@ function isWritableOdfDivisionOrIndexDescriptor(
 // An assertion signature rather than a plain check, so the walk below narrows to exactly the block kinds this writer knows how to place without a second, redundant test for the kinds this one already refused.
 function assertWritableBlock(
   block: ContentBlock,
+  blockDefinitions: Readonly<Record<string, DefinitionEntry>> | undefined,
 ): asserts block is
   | ContentParagraph
   | ContentTable
@@ -183,7 +190,7 @@ function assertWritableBlock(
     throw unsupported("an embedded object", "a section's block flow");
   }
   if (block.kind === "paragraph") {
-    assertWritableParagraph(block);
+    assertWritableParagraph(block, blockDefinitions);
   }
 }
 
@@ -200,6 +207,7 @@ function planSection(
   section: ContentSection,
   needsLeadingParagraph: boolean,
   listState: ListPlanState,
+  definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
 ): PlannedSection {
   const blocks: PlannedBlock[] = [];
   let pendingPageBreak = false;
@@ -242,7 +250,7 @@ function planSection(
   }
 
   for (const block of section.blocks) {
-    assertWritableBlock(block);
+    assertWritableBlock(block, definitions);
     if (block.kind === "pageBreak") {
       // Two page breaks in a row need two paragraphs to carry them: fo:break-before states a break BEFORE something, so the first one is flushed onto an empty paragraph of its own rather than collapsing into the second.
       flushPendingPageBreak();
@@ -289,7 +297,10 @@ function planSection(
   return { pageSize: section.pageSize, margins: section.margins, blocks };
 }
 
-function planDocument(sections: readonly ContentSection[]): PlannedSection[] {
+function planDocument(
+  sections: readonly ContentSection[],
+  definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
+): PlannedSection[] {
   // A wordprocessing document with no sections has no page geometry at all, and an .odt always has at least one page style -- writing one would mean inventing a page size and margins the caller never stated, and reading the result back would report a section the input never had. Refused, rather than fabricated.
   if (sections.length === 0) {
     throw new Error(
@@ -298,7 +309,7 @@ function planDocument(sections: readonly ContentSection[]): PlannedSection[] {
   }
   const listState: ListPlanState = { next: 1 };
   return sections.map((section, index) =>
-    planSection(section, index > 0, listState),
+    planSection(section, index > 0, listState, definitions),
   );
 }
 
@@ -327,7 +338,8 @@ export function normaliseOdtContent(
       `normaliseOdtContent: expected a 'wordprocessing' document, got '${document.kind}'`,
     );
   }
-  const planned = planDocument(document.sections);
+  // No definitions table here: the canonical form works over the flat ContentDocument, which has no root to hold one -- note anchors pass through untouched (their bodies are the tree-level write's concern, via writeOdt).
+  const planned = planDocument(document.sections, undefined);
   return {
     kind: "wordprocessing",
     metadata: canonicalMetadata(document.metadata),
@@ -492,6 +504,7 @@ function writeSectionBlocks(
   parentStyleName: string | undefined,
   state: OdtWriteState,
   out: XmlNode[],
+  definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
 ): void {
   // The paragraph the next image anchors into: an image is a draw:frame inside a paragraph, and planSection has already guaranteed one exists before any image.
   let anchorParagraph: XmlElement | undefined;
@@ -598,6 +611,7 @@ function writeSectionBlocks(
         ...(index === 0 && parentStyleName !== undefined
           ? { parentStyleName }
           : {}),
+        definitions,
       });
       anchorParagraph = element;
       for (const open of constructStack) {
@@ -665,6 +679,7 @@ export function writeOdtContent(
     version,
   );
 
+  const definitions = options.definitions;
   const state: OdtWriteState = {
     pkg,
     registry: StyleRegistry.forPart(pkg, CONTENT_PART, {
@@ -691,7 +706,7 @@ export function writeOdtContent(
   // Minted unconditionally, once per document, rather than only when a preformatted paragraph is actually found: a document-wide pre-scan just to decide whether to skip one small, otherwise-inert element is more machinery than the element itself costs. writeOdfParagraph references this style's own name for ANY paragraph.preformatted paragraph it writes -- body text here, and (via typed/shared/table.ts's own writeOdfParagraph calls, sharing this exact registry/part) a document table cell's paragraphs too -- so it must already exist by the time the first such paragraph is written.
   state.stylesNamedStyles.children.push(preformattedStyleElement());
 
-  const planned = planDocument(document.sections);
+  const planned = planDocument(document.sections, definitions);
   for (const [index, section] of planned.entries()) {
     const masterPageName = `MP${index + 1}`;
     const pageLayoutName = `PM${index + 1}`;
@@ -717,6 +732,7 @@ export function writeOdtContent(
       index === 0 ? undefined : `MP${index + 1}Start`,
       state,
       textElement.children,
+      definitions,
     );
   }
 
@@ -730,7 +746,11 @@ export function writeOdt(
   document: DocumentTree,
   options: OdtWriteOptions = {},
 ): Package {
-  const pkg = writeOdtContent(flattenTree(document), options);
+  // The tree's own definitions table is the bodies note and comment anchors name -- the flat ContentDocument flattenTree produces has no root to hold one, so this is the one place the table crosses into the write.
+  const pkg = writeOdtContent(flattenTree(document), {
+    ...options,
+    definitions: document.definitions ?? options.definitions,
+  });
   writeOdfPackageResidue(pkg, "odt", document.source);
   syncManifest(pkg, { version: options.version ?? DEFAULT_ODF_VERSION });
   return pkg;
