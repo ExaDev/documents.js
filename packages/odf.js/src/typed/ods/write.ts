@@ -13,6 +13,7 @@ import type {
   ContentSheetConditionalFormatStyle,
   ContentSheetConditionalFormatValue,
   ContentSheetDataValidation,
+  ContentEmbeddedObject,
   ContentSheetImage,
   ContentSheetPrintSettings,
   ContentSheetRange,
@@ -55,6 +56,7 @@ import {
 } from "../shared/border";
 import { DEFAULT_COLUMN_WIDTH_PT, DEFAULT_ROW_HEIGHT_PT } from "./read";
 import { synthesiseContentValidationCondition } from "./data-validation";
+import { writeEmbeddedObject } from "../draw/embedded-write";
 import {
   calextDateForTimePeriod,
   calextTypeForCfvoType,
@@ -64,7 +66,7 @@ import {
 
 // ContentDocument (the 'spreadsheet' arm) -> a real .ods Package: the inverse of typed/ods/read.ts, and the second content WRITER in this package's typed layer (the first, typed/odt/write.ts, states the philosophy this module follows in full and is worth reading first). Every mapping below is stated as the exact inverse of the corresponding read in that module rather than as an independent idea of what an .ods should look like -- the correctness property this writer is held to is that its own package reads back as the document it was given (see normaliseOdsContent below for the one canonical form that equality is stated against, and write.test.ts / write-round-trip.test.ts for both halves).
 //
-// WHAT THIS WRITER DOES NOT WRITE, and why: embeddedObjects (including the 'chart' kind) are refused BY NAME for every sheet, matching the odt writer's own blanket refusal of every embedded-object kind -- odf.js's typed layer has no write-side embedded-sub-document machinery at all yet (no writer builds an "Object N/" package, wires its manifest entries, or emits a draw:object reference), and building that from scratch is a substantial undertaking of its own, out of scope for landing the first genuine .ods writer at the same scope the odt writer itself first landed at. dataValidations and conditionalFormats ARE now written (the exact inverses of readOdsContent's own data-validation.ts/conditional-format.ts readings, co-located with the parsers they invert), with two narrower refusals inside the conditional-format side: the schema's containsBlanks/notContainsBlanks members have no spelling in calcext:condition's own mini-language at all, and a rule carrying priority, stopIfTrue, stdDev, or reverse carries a precedence/standard-deviation/reversal fact ODF's vendor extension simply has no attribute for -- each is refused by name rather than written as a rule that would read back as something else. The quarantined residue channel splits the same way it does for the odt writer: the package-level table readOdsContent collects (calculation-settings, vendor-extension elements, and every non-content package part such as settings.xml) IS restored, verbatim, by writeOds itself once writeOdsContent has built the rest of the package, since none of it is ever touched or interpreted by anything this writer does either way. A per-sheet `sheet.source` -- which readOdsContent does not populate today, so this is stated for whichever future reader change adds it, not a live gap -- would stay dropped on write, the same known, tracked, restorable-fidelity gap a paragraph's own residue is for the odt writer. A per-rule `source` residue on a data-validation or conditional-format rule stays dropped the same way: the promoted fields write, the raw element they were quarantined from does not. A cell's own `numberFormatCode` is likewise not written as a `number:*` data-style/`style:data-style-name` reference: readOdsContent does not populate that field for any cell today (it has no data-style reading wired into its own walk at all, unlike readOdtContent's field-master reading), so there is no genuine inverse to write against or verify -- every cell value kind still writes back with the correct `office:value-type` regardless, which is the fact that actually round-trips. A cell's `comment` DOES now round-trip (ExaDev/documents.js#949) -- see writeCellAnnotation below and readCellComment in ./read.ts.
+// WHAT THIS WRITER DOES NOT WRITE, and why: an embedded OBJECT of the 'chart' kind is refused BY NAME for every sheet (a chart sub-document is quarantined residue by the family's own ExaDev/documents.js#719 decision, and fabricating a serialiser for it would invent a writer the family deliberately decided not to have). Every other embedded kind IS now written: the shared writeEmbeddedObject machinery (typed/draw/embedded-write.ts, ExaDev/documents.js#972) serialises the sub-package under its own "Object N/" directory, and writeSheetEmbeddedObjectFrame anchors the referencing draw:frame inside the object's own anchor cell exactly as writeSheetImageFrame anchors an image. dataValidations and conditionalFormats ARE now written (the exact inverses of readOdsContent's own data-validation.ts/conditional-format.ts readings, co-located with the parsers they invert), with two narrower refusals inside the conditional-format side: the schema's containsBlanks/notContainsBlanks members have no spelling in calcext:condition's own mini-language at all, and a rule carrying priority, stopIfTrue, stdDev, or reverse carries a precedence/standard-deviation/reversal fact ODF's vendor extension simply has no attribute for -- each is refused by name rather than written as a rule that would read back as something else. The quarantined residue channel splits the same way it does for the odt writer: the package-level table readOdsContent collects (calculation-settings, vendor-extension elements, and every non-content package part such as settings.xml) IS restored, verbatim, by writeOds itself once writeOdsContent has built the rest of the package, since none of it is ever touched or interpreted by anything this writer does either way. A per-sheet `sheet.source` -- which readOdsContent does not populate today, so this is stated for whichever future reader change adds it, not a live gap -- would stay dropped on write, the same known, tracked, restorable-fidelity gap a paragraph's own residue is for the odt writer. A per-rule `source` residue on a data-validation or conditional-format rule stays dropped the same way: the promoted fields write, the raw element they were quarantined from does not. A cell's own `numberFormatCode` is likewise not written as a `number:*` data-style/`style:data-style-name` reference: readOdsContent does not populate that field for any cell today (it has no data-style reading wired into its own walk at all, unlike readOdtContent's field-master reading), so there is no genuine inverse to write against or verify -- every cell value kind still writes back with the correct `office:value-type` regardless, which is the fact that actually round-trips. A cell's `comment` DOES now round-trip (ExaDev/documents.js#949) -- see writeCellAnnotation below and readCellComment in ./read.ts.
 //
 // THE ONE FORCED ASYMMETRY THIS WRITER CANNOT PAPER OVER: a 'time' cell's ISO 8601 HH:MM:SS wall-clock value (document-schema.js's own documented wire contract for ContentCellValueSchema's 'time' kind) has no direct ODF spelling -- office:time-value is an xsd:duration ("PT13H30M00S"), and a conformant producer must convert between the two. This writer performs that conversion on write (see formatOdfDuration), because writing the ISO clock string directly into office:time-value would be invalid ODF that no real spreadsheet application could open correctly. readOdsContent, however, does not perform the inverse conversion today (see that module's own readCellValue: `attrValue(cellElement, "office:time-value") ?? displayText`, carried through unconverted) -- a narrow, pre-existing, unrelated reader gap this writer's own correctness cannot depend on being fixed. normaliseOdsContent states the resulting canonical form precisely (the raw xsd:duration string, not the ISO clock string) rather than hand-waving it, and the gap is tracked as a follow-up rather than silently worked around by emitting non-conformant XML to make today's reader happy.
 
@@ -690,6 +692,11 @@ function computeUsedRange(sheet: ContentSheet): UsedRange {
     bumpRow(image.anchorRow);
     bumpColumn(image.anchorColumn);
   }
+  for (const object of sheet.embeddedObjects ?? []) {
+    // An embedded object rides inside its anchor cell's own element, so an anchor past the content grid has to materialise that cell exactly as an image anchor does.
+    bumpRow(object.anchorRow ?? 0);
+    bumpColumn(object.anchorColumn ?? 0);
+  }
   // A data-validation rule's ranges extend the grid the writer must materialise: every referencing cell within them carries table:content-validation-name (the only carrier ODF offers -- there is no range-level spelling), so a rule reaching past the last content-bearing cell has to stamp cells that would otherwise never exist. This is bounded under the untrusted-round-trip threat model by the source itself: readOdsContent collects a rule's ranges only from cells that physically exist in the source XML, so an attacker pays for the cells up front rather than amplifying a compact attribute into them. A conditional-format rule's ranges deliberately do NOT extend the grid: calcext:conditional-format is emitted range-level through its own calcext:target-range-address attribute, no cell needs to exist, and letting a hostile compact range (A1:XFD1048576) drive the materialised grid would amplify 22 bytes of attribute into a million row nodes and billions of position checks.
   for (const validation of sheet.dataValidations ?? []) {
     for (const range of validation.ranges) {
@@ -797,7 +804,45 @@ function writeSheetImageFrame(
   );
 }
 
-// --- print settings: ContentSheetPrintSettings -> a master page + page layout the sheet's own table style names ------
+// The identical position grouping images use, for the sheet's own embedded objects: one list per anchor cell, in document order.
+function groupEmbeddedObjectsByPosition(
+  objects: readonly ContentEmbeddedObject[],
+): ReadonlyMap<string, ContentEmbeddedObject[]> {
+  const byPosition = new Map<string, ContentEmbeddedObject[]>();
+  for (const object of objects) {
+    const key = coverageKey(object.anchorRow ?? 0, object.anchorColumn ?? 0);
+    const existing = byPosition.get(key);
+    if (existing === undefined) {
+      byPosition.set(key, [object]);
+    } else {
+      existing.push(object);
+    }
+  }
+  return byPosition;
+}
+
+// An embedded object's own sub-package plus the page-anchored draw:frame that references it: the frame mirrors writeSheetImageFrame's own z-indexed/svg:x/y/width/height shape (the cell-anchored spelling -- anchorRow/anchorColumn with cell-relative offsets, which is what the reader's cell-anchored walk resolves back), and the draw:object child replaces the draw:image. The sub-package serialises through the shared writeEmbeddedObject (#972's machinery, typed/draw/embedded-write.ts) under its own "Object N/" directory.
+function writeSheetEmbeddedObjectFrame(
+  object: ContentEmbeddedObject,
+  state: OdsWriteState,
+): XmlElement {
+  const directory = `Object ${state.nextObject}`;
+  state.nextObject += 1;
+  const drawObject = writeEmbeddedObject(object, directory, state.pkg);
+  return el(
+    "draw:frame",
+    {
+      "draw:z-index": String(state.nextZIndex++),
+      "svg:x": formatOdfLength(object.offsetXPt ?? object.frame.xPt),
+      "svg:y": formatOdfLength(object.offsetYPt ?? object.frame.yPt),
+      "svg:width": formatOdfLength(object.frame.widthPt),
+      "svg:height": formatOdfLength(object.frame.heightPt),
+    },
+    [drawObject],
+  );
+}
+
+// --- print settings: ContentSheetPrintSettings -> a master page + page style names ------
 
 function sheetPageLayoutElement(
   name: string,
@@ -874,6 +919,7 @@ interface OdsWriteState {
   readonly contentValidations: XmlElement;
   readonly validationNames: Map<string, string>;
   nextValidationName: number;
+  nextObject: number;
   nextImage: number;
   nextZIndex: number;
   nextSheetStyle: number;
@@ -920,6 +966,7 @@ function writeRowCells(
   maxColumn: number | undefined,
   cellByPosition: ReadonlyMap<string, ContentSheetCell>,
   imagesByPosition: ReadonlyMap<string, ContentSheetImage[]>,
+  objectsByPosition: ReadonlyMap<string, ContentEmbeddedObject[]>,
   covered: ReadonlySet<string>,
   validationByPosition: ReadonlyMap<string, string>,
   state: OdsWriteState,
@@ -987,6 +1034,9 @@ function writeRowCells(
       for (const image of images ?? []) {
         children.push(writeSheetImageFrame(image, state));
       }
+      for (const object of objectsByPosition.get(key) ?? []) {
+        children.push(writeSheetEmbeddedObjectFrame(object, state));
+      }
       nodes.push(el("table:table-cell", attributes, children));
       column += 1;
       continue;
@@ -1009,7 +1059,8 @@ function writeRowCells(
       !covered.has(coverageKey(row, end + 1)) &&
       !cellByPosition.has(coverageKey(row, end + 1)) &&
       !validationByPosition.has(coverageKey(row, end + 1)) &&
-      (imagesByPosition.get(coverageKey(row, end + 1))?.length ?? 0) === 0
+      (imagesByPosition.get(coverageKey(row, end + 1))?.length ?? 0) === 0 &&
+      (objectsByPosition.get(coverageKey(row, end + 1))?.length ?? 0) === 0
     ) {
       end += 1;
     }
@@ -1041,6 +1092,9 @@ function writeRows(
     sheet.cells.map((cell) => [coverageKey(cell.row, cell.column), cell]),
   );
   const imagesByPosition = groupImagesByPosition(sheet.images);
+  const objectsByPosition = groupEmbeddedObjectsByPosition(
+    sheet.embeddedObjects ?? [],
+  );
   const covered = computeCoveredPositions(sheet.cells);
 
   const elements: XmlElement[] = [];
@@ -1063,6 +1117,7 @@ function writeRows(
       maxColumn,
       cellByPosition,
       imagesByPosition,
+      objectsByPosition,
       covered,
       validationByPosition,
       state,
@@ -1077,12 +1132,6 @@ function writeRows(
 }
 
 function writeSheet(sheet: ContentSheet, state: OdsWriteState): XmlElement {
-  if (sheet.embeddedObjects !== undefined && sheet.embeddedObjects.length > 0) {
-    throw unsupported(
-      `an embedded object ("${sheet.embeddedObjects[0]!.objectKind}")`,
-      `sheet "${sheet.name}"`,
-    );
-  }
   for (const format of sheet.conditionalFormats ?? []) {
     const reason = unsupportedConditionalFormatReason(format);
     if (reason !== undefined) {
@@ -1659,7 +1708,7 @@ function canonicalSheet(sheet: ContentSheet): ContentSheet {
 // - COLUMNS/ROWS densify to one entry per position across the sheet's used range, an undeclared width/height stamped with readOdsContent's own DEFAULT_COLUMN_WIDTH_PT/DEFAULT_ROW_HEIGHT_PT default rather than staying absent (canonicalColumns/canonicalRows' own note).
 // - IMAGES reorder into row-major anchor-position document order (canonicalImages' own note).
 // - A cell's numeric exactValue, comment, sourcePath, and source never survive -- readOdsContent has no field for the first three on write-back and residue is a deliberate, documented drop (this module's own top-of-file note); a 'time' cell's ISO clock value becomes the raw xsd:duration string readOdsContent carries through unconverted (this module's own top-of-file note on that one forced, pre-existing asymmetry).
-// - The sheet-level `source` residue and any `embeddedObjects` are refused outright by the writer itself (writeSheet throws before producing a Package for one), so a document reaching this canonicaliser never carries them in the first place; `dataValidations` and `conditionalFormats` canonicalise per their own functions above (definition-merged, span-narrowed, row-major re-ordered; source residue dropped).
+// - The sheet-level `source` residue is refused outright by the writer itself (writeSheet throws before producing a Package for one), so a document reaching this canonicaliser never carries it in the first place; embeddedObjects pass through with the reader-droppable `source` field stripped; `dataValidations` and `conditionalFormats` canonicalise per their own functions above (definition-merged, span-narrowed, row-major re-ordered; source residue dropped).
 export function normaliseOdsContent(
   document: ContentDocument,
 ): Extract<ContentDocument, { kind: "spreadsheet" }> {
@@ -1713,6 +1762,7 @@ export function writeOdsContent(
     contentValidations: el("table:content-validations"),
     validationNames: new Map(),
     nextValidationName: 1,
+    nextObject: 1,
     nextImage: 1,
     nextZIndex: 0,
     nextSheetStyle: 1,
