@@ -347,6 +347,11 @@ export { displayTextOfValue as xlsDisplayTextOfValue } from "./edit/xls/cell";
 export { XlsCell } from "./edit/xls/cell";
 export { XlsSheet } from "./edit/xls/sheet";
 
+// The ppt sibling of the editors above: a live-view editor over a mutable presentation ContentDocument, read and written through this package's own src/ppt envelope adapters over ppt-codec's flat { metadata, slides } shape. PptShape's paragraph surface reuses DocParagraph (the identical ContentParagraph node under a shape as under a doc section), and PptShape.rotationDeg is getter-only because [MS-PPT]'s writer cannot state a rotation.
+export type { CreatePptOptions } from "./edit/ppt/editor";
+export { createPpt, openPpt, PptEditor } from "./edit/ppt/editor";
+export { PptShape, PptSlide } from "./edit/ppt/slide";
+
 // A live-view editor over pdf-codec's own positioned-item model (LayoutDocument) -- NOT a content-stream/byte-level editor, see src/edit/pdf/editor.ts's own module doc comment for the rationale. PageInit is defined in page.ts (mirroring ParagraphInit living in paragraph.ts rather than editor.ts) since it's PdfPage's own initial shape, even though appendPage/insertPageAt (which consume it) live on PdfEditor.
 export type { PageInit } from "./edit/pdf/page";
 export { PdfPage } from "./edit/pdf/page";
