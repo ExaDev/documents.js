@@ -1,3 +1,9 @@
+## [3.3.0](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.2.2...wpd-codec%403.3.0) (2026-09-09)
+
+### Features
+
+* **wpd-codec:** decrypt standard-mode encrypted documents with a password ([44a7d2e](https://github.com/ExaDev/documents.js/commit/44a7d2edda47c7248b84fe045c45660135e21f53))
+
 ## [3.2.2](https://github.com/ExaDev/documents.js/compare/wpd-codec%403.2.1...wpd-codec%403.2.2) (2026-09-08)
 
 
