@@ -1,3 +1,13 @@
+## [7.18.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.17.0...odf.js%407.18.0) (2026-09-09)
+
+### Features
+
+* **odf.js:** write block-scope tracked-change ranges ([d939751](https://github.com/ExaDev/documents.js/commit/d93975174bc735f48d20c941e9b57818ce6bb88d))
+
+### Bug Fixes
+
+* **odf.js:** encode the tracked-change author and date on write ([f26f98e](https://github.com/ExaDev/documents.js/commit/f26f98e7fb6333b1f62b8cedf6d7f96e7faf8e26))
+
 ## [7.17.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.16.0...odf.js%407.17.0) (2026-09-09)
 
 ### Features
