@@ -33,6 +33,7 @@ import {
   readXlsxContent,
   setDocumentMetadata,
 } from "documents.js";
+import { buildDocumentBytes } from "documents.js";
 import type {
   ContentBlock,
   ContentDocument,
@@ -419,6 +420,22 @@ export const router = {
           package: documentTreeWithSchema(assembleTree(content)),
         };
       }),
+
+    // The restore half of the Package / JSON tool: a tree-form dump back into real bytes for its own format. The input is the raw edited JSON (z.unknown -- the tree schema lives this side of the worker boundary, where UI code may not import it), parsed and schema-validated here; an absent or edited-away $schema stamp is re-stamped after validation, so the dump's own artefact contract holds regardless of what the editor did to the text. buildDocumentBytes then takes the tree directly.
+    restore: os
+      .input(
+        z.object({
+          format: DocumentFormatSchema,
+          package: z.unknown(),
+        }),
+      )
+      .output(z.object({ bytes: BytesSchema }))
+      .handler(({ input }) => ({
+        bytes: buildDocumentBytes(
+          documentTreeWithSchema(DocumentTreeSchema.parse(input.package)),
+          input.format,
+        ),
+      })),
   },
 
   metadata: {
