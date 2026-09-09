@@ -1,3 +1,10 @@
+## [7.12.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.11.0...odf.js%407.12.0) (2026-09-09)
+
+### Features
+
+* **odf.js:** write .odf formula documents ([2162a05](https://github.com/ExaDev/documents.js/commit/2162a054962c960d2be7b309a9f4d1e2b6ac9846))
+* **odf.js:** write .odm master documents ([73b5853](https://github.com/ExaDev/documents.js/commit/73b58530917e0b8eac86fe4be58bc08c28e531d5))
+
 ## [7.11.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.10.0...odf.js%407.11.0) (2026-09-08)
 
 ### Features
