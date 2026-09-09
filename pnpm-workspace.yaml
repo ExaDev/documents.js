@@ -40,8 +40,12 @@ minimumReleaseAgeExclude:
 
 # fast-uri < 3.1.5 is vulnerable to host confusion via a backslash authority introducer (GHSA-hht2-r2mx-9j9m). It is a transitive devDependency (ajv -> @commitlint/config-validator -> commitlint), several layers below anything declared directly, so there is no direct dependency to bump -- only this override forces every resolution of it onto a patched version regardless of what commitlint's own dependency tree asks for. js-yaml carried the same treatment in documents.js's own file.
 overrides:
-  fast-uri: 3.1.5
-  js-yaml: 4.3.1
+  # fast-uri 3.1.6 patches the host-confusion/SSRF advisory batch (Dependabot alerts on the default branch); reached only transitively (ajv under workbox-build/vite-plugin-pwa and commitlint).
+  fast-uri: 3.1.6
+  # js-yaml 4.3.2 patches maxTotalMergeKeys not limiting CPU use for empty merge sources; reached only transitively (eslint's eslintrc and commitlint's cosmiconfig).
+  js-yaml: 4.3.2
+  # sharp 0.35.4 patches the libheif vulnerabilities (GHSA-g89c-p67h-r497, GHSA-2jg2-4ch7-h545); reached only transitively (miniflare under @cloudflare/vitest-pool-workers).
+  sharp: 0.35.4
   # qs 6.11.1-6.15.1 crashes with a TypeError on null/undefined array entries when qs.stringify is called with encodeValuesOnly set (GHSA-q8mj-m7cp-5q26). Another transitive devDependency several layers below anything declared directly (typed-rest-client -> @stryker-mutator/core, which every package's own devDependencies pull in for mutation testing), so there is no direct dependency to bump either.
   qs: 6.15.2
   # release-workspace.config.json's generateNotes step uses the conventionalcommits preset, whose templates call a helper that only conventional-changelog-writer@9 or newer provides. @semantic-release/release-notes-generator depends on conventional-changelog-writer@^8, so without this the preset loads and then throws from inside handlebars at render time -- the preset itself detects the too-old writer and registers a helper whose only job is to raise "requires conventional-changelog-writer@9 or newer". Scoped to release-notes-generator rather than global because it is the only consumer that renders with the writer at all: @semantic-release/commit-analyzer declares the same dependency but never imports it, using only the preset's whatBump.
