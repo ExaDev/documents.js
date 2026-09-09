@@ -330,6 +330,10 @@ export {
 export type { OdfFormulaWriteOptions } from "./typed/formula/write";
 
 export { readOdm } from "./typed/odm/read";
+
+// The master-document WRITER, the inverse of readOdm: one top-level text:section per chapter, each carrying its external-file reference exactly as the reader's own real-LibreOffice verification transcribed it.
+export { writeOdm } from "./typed/odm/write";
+export type { OdmWriteOptions } from "./typed/odm/write";
 export type { OdmDocument, OdmSection } from "./typed/odm/read";
 
 export { readOdbInventory, resolveOdbComponent } from "./typed/odb/read";
