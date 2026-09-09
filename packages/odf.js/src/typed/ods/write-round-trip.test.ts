@@ -491,19 +491,60 @@ describe("writeOdsContent round trip", () => {
     expectRoundTrip(document);
   });
 
-  it("refuses a sheet carrying an embedded object by name", () => {
-    const sheet = sheetOf("Sheet1", [], {
-      embeddedObjects: [
+  it("round-trips a spreadsheet embedded in a sheet through its anchor cell", () => {
+    const sheet = sheetOf(
+      "Sheet1",
+      [
         {
-          objectKind: "chart",
-          document: { kind: "spreadsheet", metadata: {}, sheets: [] },
-          frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "host" },
+          displayText: "host",
         },
       ],
-    });
-    expect(() => writeOdsContent(documentOf([sheet]))).toThrow(
-      /embedded object/,
+      {
+        embeddedObjects: [
+          {
+            objectKind: "wordprocessing",
+            frame: { xPt: 4.5, yPt: 13.2, widthPt: 180, heightPt: 90 },
+            anchorRow: 0,
+            anchorColumn: 0,
+            offsetXPt: 4.5,
+            offsetYPt: 13.2,
+            document: {
+              kind: "wordprocessing",
+              metadata: {},
+              sections: [
+                {
+                  pageSize: { widthPt: 612, heightPt: 792 },
+                  margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+                  blocks: [
+                    { kind: "paragraph", runs: [{ text: "inner text" }] },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      },
     );
+    const document = documentOf([sheet]);
+    const round = roundTrip(document);
+    const objects = round.sheets[0]!.embeddedObjects ?? [];
+    expect(objects).toHaveLength(1);
+    expect(objects[0]).toMatchObject({
+      objectKind: "wordprocessing",
+      anchorRow: 0,
+      anchorColumn: 0,
+      document: {
+        kind: "wordprocessing",
+        sections: [
+          {
+            blocks: [{ kind: "paragraph", runs: [{ text: "inner text" }] }],
+          },
+        ],
+      },
+    });
   });
 
   it("round-trips a whole-number data-validation rule with a comparison, messages, and a no-blank restriction", () => {
