@@ -1014,10 +1014,14 @@ export function writeOdfTrackedChanges(
       }
       const changeInfoChildren: XmlNode[] = [];
       if (descriptor.author !== undefined) {
-        changeInfoChildren.push(el("dc:creator", {}, [txt(descriptor.author)]));
+        changeInfoChildren.push(
+          el("dc:creator", {}, [txt(encodeXmlText(descriptor.author))]),
+        );
       }
       if (descriptor.dateIso !== undefined) {
-        changeInfoChildren.push(el("dc:date", {}, [txt(descriptor.dateIso)]));
+        changeInfoChildren.push(
+          el("dc:date", {}, [txt(encodeXmlText(descriptor.dateIso))]),
+        );
       }
       return el("text:changed-region", { "xml:id": encodeXmlText(id) }, [
         el(
