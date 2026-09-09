@@ -327,6 +327,13 @@ export {
 export type { MarkdownListInit } from "./edit/markdown/list";
 export { MarkdownList } from "./edit/markdown/list";
 
+// The xls sibling of the editors above: a live-view editor over a mutable spreadsheet ContentDocument (xls-codec reads and writes the plain ContentDocument directly), with XlsSheet/XlsCell holding references into document.sheets and each sheet's own sparse cells array. XlsCell's value setter derives the schema-required displayText mechanically; a caller needing a locale-rendered display overrides displayText afterwards.
+export type { CreateXlsOptions } from "./edit/xls/editor";
+export { createXls, openXls, XlsEditor } from "./edit/xls/editor";
+export { displayTextOfValue as xlsDisplayTextOfValue } from "./edit/xls/cell";
+export { XlsCell } from "./edit/xls/cell";
+export { XlsSheet } from "./edit/xls/sheet";
+
 // A live-view editor over pdf-codec's own positioned-item model (LayoutDocument) -- NOT a content-stream/byte-level editor, see src/edit/pdf/editor.ts's own module doc comment for the rationale. PageInit is defined in page.ts (mirroring ParagraphInit living in paragraph.ts rather than editor.ts) since it's PdfPage's own initial shape, even though appendPage/insertPageAt (which consume it) live on PdfEditor.
 export type { PageInit } from "./edit/pdf/page";
 export { PdfPage } from "./edit/pdf/page";
