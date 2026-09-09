@@ -1,3 +1,11 @@
+## [7.12.3](https://github.com/ExaDev/documents.js/compare/documents.js%407.12.2...documents.js%407.12.3) (2026-09-09)
+
+
+### Dependencies
+
+- Updated odf.js to 7.22.0
+- Updated pdf-codec to 4.2.0
+
 ## [7.12.2](https://github.com/ExaDev/documents.js/compare/documents.js%407.12.1...documents.js%407.12.2) (2026-09-09)
 
 
