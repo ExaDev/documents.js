@@ -26,6 +26,10 @@ const DOCUMENT_FILE_TYPES: readonly number[] = [0x0a, 0x24];
 // "The major version number is the same for 6.x through X6 documents. For WP X6 documents the major version byte is 2." That one byte is the whole of this reader's version gate: it separates the single lineage Corel documents as "structured the same" from the earlier formats (WP 5.x and before) that share the file ID but not the structure. Source: WPFF Document Structure, "Major Version and Minor Version Fields".
 const MAJOR_VERSION_WP6_THROUGH_X6 = 2;
 
+export interface ReadWpdHeaderOptions {
+  readonly password?: string;
+}
+
 export interface WpdFileHeader {
   // "Long pointer to document area (the absolute offset from the beginning of the file)."
   readonly documentAreaOffset: number;
@@ -38,6 +42,8 @@ export interface WpdFileHeader {
   readonly indexAreaOffset: number;
   // "This 32-bit integer field contains the total length of the WordPerfect file." Not the buffer's length: a file inside an OLE compound wrapper, or one padded at EOF, legitimately differs, and the SDK warns that a third-party writer forgetting to update this field is a common real-world defect. This reader therefore records it and bounds nothing on it.
   readonly fileSize: number;
+  // The header's encryption word verbatim: 0 for an unencrypted document, and for an encrypted one the 16-bit checksum of the standard mode's password (see src/container/encryption.ts for the cipher and the word's two readings -- standard password checksum, or a value an enhanced-mode file carries instead).
+  readonly encryption: number;
 }
 
 // True when the bytes open with the -1,"WPC" file ID. Cheap enough to run before any other work, and the discriminator the container layer uses to decide whether a buffer is a bare WordPerfect file or something (an OLE compound file) that may contain one.
@@ -48,7 +54,10 @@ export function hasWordPerfectFileId(bytes: Uint8Array): boolean {
   return WPD_FILE_ID.every((expected, index) => bytes[index] === expected);
 }
 
-export function readFileHeader(bytes: Uint8Array): WpdFileHeader {
+export function readFileHeader(
+  bytes: Uint8Array,
+  options: ReadWpdHeaderOptions = {},
+): WpdFileHeader {
   if (!hasWordPerfectFileId(bytes)) {
     const actual = Array.from(sliceAt(bytes, 0, Math.min(4, bytes.length)))
       .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -66,10 +75,12 @@ export function readFileHeader(bytes: Uint8Array): WpdFileHeader {
   const encryption = uint16At(bytes, 12);
   const indexAreaOffset = uint16At(bytes, 14);
 
-  // Checked before the version gate: an encrypted file's version bytes are inside the header and therefore still readable, but reporting "unsupported version" for a file that is merely encrypted would name the wrong problem.
-  if (encryption !== 0) {
+  // Checked before the version gate: an encrypted file's version bytes are inside the header and therefore still readable, but reporting "unsupported version" for a file that is merely encrypted would name the wrong problem. With a password supplied, the encrypted file stays readable -- the password's verification and the decryption itself happen in the container layer (openWpdDocument), which owns the byte buffer -- so this throws only when there is no password to try. An empty-string password is no password, exactly as every other codec here treats one.
+  const suppliedPassword =
+    options.password === "" ? undefined : options.password;
+  if (encryption !== 0 && suppliedPassword === undefined) {
     throw new WpdEncryptedDocumentError(
-      `This document is encrypted (encryption word ${encryption}); nothing beyond the file header is intelligible without the password, which this reader does not support.`,
+      `This document is encrypted (encryption word ${encryption}); nothing beyond the file header is intelligible without the password. Pass { password } to read it -- the standard ("original") encryption mode is supported, and a non-matching password throws WpdWrongPasswordError.`,
     );
   }
 
@@ -102,5 +113,6 @@ export function readFileHeader(bytes: Uint8Array): WpdFileHeader {
     minorVersion,
     indexAreaOffset,
     fileSize,
+    encryption,
   };
 }

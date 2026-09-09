@@ -1,8 +1,10 @@
 import { isCompoundFile, readCompoundFile } from "archive-codec";
 import { WpdNotAWordPerfectFileError } from "../errors";
+import { decryptWpdDocument } from "./encryption";
 import {
   hasWordPerfectFileId,
   readFileHeader,
+  type ReadWpdHeaderOptions,
   type WpdFileHeader,
 } from "./header";
 import { readPrefixPackets, type WpdPrefixPacket } from "./prefix";
@@ -85,9 +87,22 @@ function documentAreaEnd(
   return bytes.length;
 }
 
-export function openWpdDocument(input: Uint8Array): WpdDocumentContainer {
-  const { bytes, compound } = unwrapContainer(toArrayBufferBacked(input));
-  const header = readFileHeader(bytes);
+export function openWpdDocument(
+  input: Uint8Array,
+  options: ReadWpdHeaderOptions = {},
+): WpdDocumentContainer {
+  const { bytes: wrapped, compound } = unwrapContainer(
+    toArrayBufferBacked(input),
+  );
+  const header = readFileHeader(wrapped, options);
+  // An empty-string password means no password (the identical normalisation readFileHeader applies), so both gates below see one consistent value.
+  const suppliedPassword =
+    options.password === "" ? undefined : options.password;
+  // An encrypted document's index area, packet data, and document area are all beyond the fixed header and therefore all ciphertext; decrypting the whole buffer in one pass here means every downstream reader (the prefix walker, the tokeniser) parses plaintext with no encryption awareness of its own. A password supplied for an unencrypted document never reaches this branch -- the header word gates it -- and is harmlessly ignored, mirroring every other codec here.
+  const bytes =
+    header.encryption !== 0 && suppliedPassword !== undefined
+      ? decryptWpdDocument(wrapped, header, suppliedPassword)
+      : wrapped;
   const packets = readPrefixPackets(bytes, header);
   return {
     header,

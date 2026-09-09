@@ -57,6 +57,7 @@ describe("readFileHeader", () => {
       minorVersion: 1,
       indexAreaOffset: GENERIC_HEADER_INDEX_AREA_OFFSET,
       fileSize: GENERIC_HEADER_SIZE,
+      encryption: 0,
     });
   });
 
