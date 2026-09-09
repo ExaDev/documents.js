@@ -15,7 +15,7 @@ import type { StyleRegistry } from "../../styles/registry";
 import { canonicalPropertiesString } from "../../styles/serialize";
 import { attrValue, childrenWithTag, findChildElement } from "../../xml/query";
 import { decodeXmlText, encodeXmlText } from "../../xml/entities";
-import { el } from "../../xml/fragment";
+import { el, txt } from "../../xml/fragment";
 import {
   getOdfSpaceCount,
   decodeOdfText,
@@ -763,6 +763,12 @@ interface OdfParagraphConstructPlan {
     readonly end: number;
     readonly descriptor: FieldDescriptor;
   }[];
+  readonly noteRanges: readonly {
+    readonly start: number;
+    readonly end: number;
+    readonly descriptor: AnchorDescriptor;
+    readonly entry: DefinitionEntry;
+  }[];
   // Canonical run boundary -> the markers whose event happens there, already ordered end-before-start the way insertOdfConstructMarkers orders block-scope markers at a shared position.
   readonly markersAt: ReadonlyMap<number, readonly OdfBookmarkMarker[]>;
 }
@@ -771,16 +777,23 @@ interface OdfParagraphConstructPlan {
 function planOdfParagraphConstructs(
   extents: readonly RunConstructExtent[],
   boundaryMap: ReadonlyMap<number, number>,
+  definitions?: Readonly<Record<string, DefinitionEntry>>,
 ): OdfParagraphConstructPlan {
   const fieldRanges: {
     start: number;
     end: number;
     descriptor: FieldDescriptor;
   }[] = [];
+  const noteRanges: {
+    start: number;
+    end: number;
+    descriptor: AnchorDescriptor;
+    entry: DefinitionEntry;
+  }[] = [];
   const startsAt = new Map<number, OdfBookmarkMarker[]>();
   const endsAt = new Map<number, OdfBookmarkMarker[]>();
   for (const extent of extents) {
-    const kind = odfRunConstructWriteKind(extent);
+    const kind = odfRunConstructWriteKind(extent, definitions);
     const start = boundaryMap.get(extent.startRun)!;
     const end = boundaryMap.get(extent.endRun)!;
     if (kind === "field") {
@@ -802,8 +815,15 @@ function planOdfParagraphConstructs(
       const endList = endsAt.get(end) ?? [];
       endList.push({ side: "end", name });
       endsAt.set(end, endList);
+    } else if (kind === "note") {
+      const descriptor = extent.descriptor as AnchorDescriptor;
+      const entry = definitions?.[descriptor.definition!];
+      if (entry !== undefined) {
+        noteRanges.push({ start, end, descriptor, entry });
+      }
     }
   }
+  noteRanges.sort((a, b) => a.start - b.start);
   fieldRanges.sort((a, b) => a.start - b.start);
   const markersAt = new Map<number, OdfBookmarkMarker[]>();
   for (const boundary of new Set([...startsAt.keys(), ...endsAt.keys()])) {
@@ -812,7 +832,7 @@ function planOdfParagraphConstructs(
       ...(startsAt.get(boundary) ?? []),
     ]);
   }
-  return { fieldRanges, markersAt };
+  return { fieldRanges, noteRanges, markersAt };
 }
 
 // Field runs, formatted with the same span-grouping the top-level paragraph uses (never hyperlink-wrapped: a hyperlink carried by a run strictly inside a field's own cached text has no ODF spelling this writer produces, a narrow and documented gap rather than a silent drop -- ContentRun.hyperlink on such a run is simply not honoured).
@@ -837,30 +857,119 @@ function writeOdfFieldElement(
 function buildOdfParagraphItems(
   canonical: readonly ContentRun[],
   fieldRanges: OdfParagraphConstructPlan["fieldRanges"],
+  noteRanges: OdfParagraphConstructPlan["noteRanges"],
   registry: StyleRegistry,
+  definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
 ): OdfParagraphItem[] {
+  // Fields and notes are both range-CONSUMING constructs -- each swallows the canonical runs its extent covers and emits one opaque element in their place -- so they walk one merged, start-sorted stream: two ranges can never overlap (a protected boundary always coincides with the start of a genuinely non-overlapping extent), and interleaving them in one cursor loop keeps the consumption arithmetic single-sourced.
+  const consumed: (
+    | {
+        kind: "field";
+        start: number;
+        end: number;
+        range: OdfParagraphConstructPlan["fieldRanges"][number];
+      }
+    | {
+        kind: "note";
+        start: number;
+        end: number;
+        range: OdfParagraphConstructPlan["noteRanges"][number];
+      }
+  )[] = [
+    ...fieldRanges.map((range) => ({
+      kind: "field" as const,
+      start: range.start,
+      end: range.end,
+      range,
+    })),
+    ...noteRanges.map((range) => ({
+      kind: "note" as const,
+      start: range.start,
+      end: range.end,
+      range,
+    })),
+  ].sort((a, b) => a.start - b.start);
   const items: OdfParagraphItem[] = [];
   let cursor = 0;
-  for (const range of fieldRanges) {
-    while (cursor < range.start) {
+  for (const slot of consumed) {
+    while (cursor < slot.start) {
       items.push({ kind: "run", run: canonical[cursor]! });
       cursor += 1;
     }
-    const fieldRuns = canonical.slice(
-      range.start,
-      Math.max(range.end, range.start),
-    );
-    items.push({
-      kind: "field",
-      node: writeOdfFieldElement(range.descriptor, fieldRuns, registry),
-    });
-    cursor = Math.max(cursor, range.end);
+    const covered = canonical.slice(slot.start, Math.max(slot.end, slot.start));
+    if (slot.kind === "field") {
+      items.push({
+        kind: "field",
+        node: writeOdfFieldElement(slot.range.descriptor, covered, registry),
+      });
+    } else {
+      items.push({
+        kind: "field",
+        node: writeOdfNoteElement(
+          slot.range.descriptor,
+          slot.range.entry,
+          covered,
+          registry,
+          definitions,
+        ),
+      });
+    }
+    cursor = Math.max(cursor, slot.end);
   }
   while (cursor < canonical.length) {
     items.push({ kind: "run", run: canonical[cursor]! });
     cursor += 1;
   }
   return items;
+}
+
+// DefinitionEntry's body is deliberately loose (document-schema.js's own tenant-generic shape -- this package does not enumerate another tenant's fields), so a type guard narrows it rather than a cast: an entry the reader minted always carries ContentBlock[] here, and anything else is not a paragraph this writer can place.
+function isNoteBodyParagraph(value: unknown): value is ContentParagraph {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  if (!("kind" in value) || value.kind !== "paragraph") {
+    return false;
+  }
+  return Array.isArray((value as ContentParagraph).runs);
+}
+
+// The write-side inverse of the text:note reading in this module's own run walk: the note element carries its class and id, a citation rebuilt from the definitions entry (falling back to the covered runs' own text -- the reader pushed the citation text as the extent's run, so the two agree on everything this reader produces), and a body written from the entry's own blocks. Body blocks are written with the same paragraph writer that builds the containing paragraph -- a note body is ordinary block flow, not a special container.
+function writeOdfNoteElement(
+  descriptor: AnchorDescriptor,
+  entry: DefinitionEntry,
+  citationRuns: readonly ContentRun[],
+  registry: StyleRegistry,
+  definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
+): XmlElement {
+  const citation =
+    typeof entry.citation === "string"
+      ? entry.citation
+      : citationRuns.map((run) => run.text).join("");
+  const body: unknown = entry.body;
+  const bodyChildren: XmlNode[] = [];
+  if (Array.isArray(body)) {
+    for (const candidate of body) {
+      if (isNoteBodyParagraph(candidate)) {
+        bodyChildren.push(
+          writeOdfParagraph(candidate, registry, {
+            definitions,
+          }),
+        );
+      }
+    }
+  }
+  return el(
+    "text:note",
+    {
+      "text:note-class": descriptor.anchorType,
+      "text:id": encodeXmlText(descriptor.name),
+    },
+    [
+      el("text:note-citation", {}, [txt(citation)]),
+      el("text:note-body", {}, bodyChildren),
+    ],
+  );
 }
 
 // Maps a canonical RUN boundary onto the corresponding ITEM boundary in the sequence buildOdfParagraphItems produced: a boundary strictly inside a field's own consumed range has no item position of its own to land on (the field is one opaque unit by the time a bookmark marker would need to split it), so it clamps to the item boundary immediately after that field -- a narrow, documented simplification for the rare case of a bookmark nested inside a field's own cached text, rather than an attempt to split the reconstructed field element apart.
@@ -982,6 +1091,7 @@ function writeOdfBookmarkMarker(marker: OdfBookmarkMarker): XmlElement {
 export function writeOdfParagraphChildren(
   paragraph: ContentParagraph,
   registry: StyleRegistry,
+  definitions?: Readonly<Record<string, DefinitionEntry>>,
 ): XmlNode[] {
   const runs = paragraph.runs;
   const extents = paragraph.constructs ?? [];
@@ -994,8 +1104,14 @@ export function writeOdfParagraphChildren(
     runs,
     protectedRunBoundaries,
   );
-  const plan = planOdfParagraphConstructs(extents, boundaryMap);
-  const items = buildOdfParagraphItems(canonical, plan.fieldRanges, registry);
+  const plan = planOdfParagraphConstructs(extents, boundaryMap, definitions);
+  const items = buildOdfParagraphItems(
+    canonical,
+    plan.fieldRanges,
+    plan.noteRanges,
+    registry,
+    definitions,
+  );
 
   const protectedItemBoundaries = new Set<number>([0, items.length]);
   const markersAtItemBoundary = new Map<number, OdfBookmarkMarker[]>();
@@ -1056,6 +1172,8 @@ export interface OdfParagraphWriteOptions {
   readonly parentStyleName?: string;
   // Nodes appended after the paragraph's own inline content -- the anchored draw:frame elements an image block contributes, which ODF anchors inside a paragraph rather than beside one.
   readonly trailingNodes?: readonly XmlNode[];
+  // The definitions table note anchors resolve against: a footnote/endnote anchor writes its inline text:note (citation plus body) only when the entry its descriptor names is present here. Absent means the caller has no bodies to write (the flat writeOdtContent path) and note anchors were already refused upstream.
+  readonly definitions?: Readonly<Record<string, DefinitionEntry>>;
 }
 
 // Writes one ContentParagraph as the text:p (or, for a paragraph carrying a headingLevel, text:h) element readOdfParagraph reads back. Every formatting difference becomes an interned automatic style, since ODF has no other way to state one.
@@ -1088,7 +1206,7 @@ export function writeOdfParagraph(
     paragraph.headingLevel === undefined ? "text:p" : "text:h",
     attributes,
     [
-      ...writeOdfParagraphChildren(paragraph, registry),
+      ...writeOdfParagraphChildren(paragraph, registry, options.definitions),
       ...(options.trailingNodes ?? []),
     ],
   );
