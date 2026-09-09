@@ -321,6 +321,14 @@ export {
 } from "./typed/formula/read";
 export type { OdfFormulaDocument } from "./typed/formula/read";
 
+// The formula WRITER, the inverse of the reader ladder above: writeOdfFormula takes the DocumentTree readOdfFormula returns, writeOdfFormulaContent the flat ContentDocument readOdfFormulaContent returns, writeOdfFormulaMathMl the raw MathML document readOdfFormulaMathMl returns -- the identical three-level ladder every other format's writer in this package mirrors.
+export {
+  writeOdfFormula,
+  writeOdfFormulaContent,
+  writeOdfFormulaMathMl,
+} from "./typed/formula/write";
+export type { OdfFormulaWriteOptions } from "./typed/formula/write";
+
 export { readOdm } from "./typed/odm/read";
 export type { OdmDocument, OdmSection } from "./typed/odm/read";
 
