@@ -981,6 +981,29 @@ export function writeOdfChangeEnd(id: string): XmlElement {
   return el("text:change-end", { "text:change-id": encodeXmlText(id) });
 }
 
+// The block-scope comment halves: office:annotation (the full comment element, body inline, keyed by office:name) splices onto the extent's first paragraph, office:annotation-end onto its last -- the pair the reader's annotation-half walk keys back through by the same name.
+export function writeOdfAnnotationHalf(
+  descriptor: { readonly name: string },
+  entry: DefinitionEntry,
+): XmlElement {
+  const children: XmlNode[] = [];
+  if (typeof entry.author === "string") {
+    children.push(el("dc:creator", {}, [txt(entry.author)]));
+  }
+  if (typeof entry.dateIso === "string") {
+    children.push(el("dc:date", {}, [txt(entry.dateIso)]));
+  }
+  return el(
+    "office:annotation",
+    { "office:name": encodeXmlText(descriptor.name) },
+    children,
+  );
+}
+
+export function writeOdfAnnotationEndHalf(name: string): XmlElement {
+  return el("office:annotation-end", { "office:name": encodeXmlText(name) });
+}
+
 // The inverse of collectOdfProvenanceRegions: one text:tracked-changes container holding every region, each with its minted id (xml:id, the ODF 1.2 spelling), its change child (the tag the collector's own table maps back), and an office:change-info when the descriptor names an author or date. The descriptor's quarantined residue (the move-relation pairing) is never re-emitted, per every writer's own residue policy.
 const ODF_CHANGE_TAG_BY_PROVENANCE_CHANGE: ReadonlyMap<
   "insertion" | "deletion" | "formatChange",
