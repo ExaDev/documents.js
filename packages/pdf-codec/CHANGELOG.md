@@ -1,3 +1,13 @@
+## [4.4.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.3.0...pdf-codec%404.4.0) (2026-09-09)
+
+### Features
+
+* **pdf-codec:** write the document-level surfaces the reader extracts ([2a2ac6b](https://github.com/ExaDev/documents.js/commit/2a2ac6b91036bb1508bbc28ae995eb352c6e7fe2))
+
+### Bug Fixes
+
+* **pdf-codec:** never restore the source /OpenAction row on rewrite ([d2c4de4](https://github.com/ExaDev/documents.js/commit/d2c4de4e4213e909c0117a50ed5ae6df42869281))
+
 ## [4.3.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.2.0...pdf-codec%404.3.0) (2026-09-09)
 
 ### Features
