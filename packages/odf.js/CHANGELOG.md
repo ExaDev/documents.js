@@ -1,3 +1,18 @@
+## [7.19.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.18.0...odf.js%407.19.0) (2026-09-09)
+
+### Features
+
+* **documents.js:** write non-formula embedded objects in the editors ([644d5eb](https://github.com/ExaDev/documents.js/commit/644d5ebdc6c33d0172dadb11e5d137ce03ecd7a3))
+* **odf.js:** write embedded sub-documents in the odt writer ([1f72005](https://github.com/ExaDev/documents.js/commit/1f72005c6a31742c8ef5a1f25f2c3fbdece00389)), references [#972](https://github.com/ExaDev/documents.js/issues/972) [#719](https://github.com/ExaDev/documents.js/issues/719)
+
+### Bug Fixes
+
+* **odf.js:** drop the per-object manifest sync from the embedded writer ([5a20968](https://github.com/ExaDev/documents.js/commit/5a209685a50f160cf0b14d4140fc7fef695f225e))
+
+### Tests
+
+* **odf.js:** keep the embedded round-trip test beside the block-range suite after the rebase ([9571d36](https://github.com/ExaDev/documents.js/commit/9571d362f65470d9000f1af2d7c6603d987795da))
+
 ## [7.18.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.17.0...odf.js%407.18.0) (2026-09-09)
 
 ### Features

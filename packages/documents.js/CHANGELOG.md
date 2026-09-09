@@ -1,3 +1,14 @@
+## [7.12.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.11.8...documents.js%407.12.0) (2026-09-09)
+
+### Features
+
+* **documents.js:** write non-formula embedded objects in the editors ([644d5eb](https://github.com/ExaDev/documents.js/commit/644d5ebdc6c33d0172dadb11e5d137ce03ecd7a3))
+
+
+### Dependencies
+
+- Updated odf.js to 7.19.0
+
 ## [7.11.8](https://github.com/ExaDev/documents.js/compare/documents.js%407.11.7...documents.js%407.11.8) (2026-09-09)
 
 
