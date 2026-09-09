@@ -1501,6 +1501,42 @@ describe("fidelity constructs written (#969)", () => {
       author: "Kay McNulty",
     });
   });
+
+  it("round-trips a block-scope comment range spanning two paragraphs through writeOdt", () => {
+    const document = documentOf([
+      {
+        kind: "constructStart",
+        descriptor: {
+          kind: "anchor",
+          anchorType: "comment",
+          name: "annotation3",
+          definition: "comment:annotation3",
+        },
+      },
+      { kind: "paragraph", runs: [{ text: "first remarked" }] },
+      { kind: "paragraph", runs: [{ text: "second remarked" }] },
+      { kind: "constructEnd" },
+    ]);
+    const tree = assembleTree(document);
+    tree.definitions = {
+      "comment:annotation3": {
+        kind: "comment",
+        author: "Kay McNulty",
+        body: [{ kind: "paragraph", runs: [{ text: "a ranged remark" }] }],
+      },
+    };
+    const rewritten = readOdtContent(writeOdt(tree));
+    const blocks = rewritten.sections[0]!.blocks;
+    expect(blocks[0]).toMatchObject({ kind: "constructStart" });
+    expect(blocks[1]).toMatchObject({
+      kind: "paragraph",
+      runs: [{ text: "first remarked" }],
+    });
+    expect(rewritten.definitions?.["comment:annotation3"]).toMatchObject({
+      kind: "comment",
+      author: "Kay McNulty",
+    });
+  });
 });
 
 function roundTrippedBlocks(document: WordprocessingDocument): ContentBlock[] {
