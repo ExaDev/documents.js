@@ -1,3 +1,14 @@
+## [5.7.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.6.46...document-cli%405.7.0) (2026-09-09)
+
+### Features
+
+* **document-cli:** open doc, xls, and ppt through live-view editors ([8816dc4](https://github.com/ExaDev/documents.js/commit/8816dc4b2173b10081a299bf3f6522a2a340077f))
+
+
+### Dependencies
+
+- Updated documents.js to 7.15.0
+
 ## [5.6.46](https://github.com/ExaDev/documents.js/compare/document-cli%405.6.45...document-cli%405.6.46) (2026-09-09)
 
 
