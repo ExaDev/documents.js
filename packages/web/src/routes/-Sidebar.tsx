@@ -25,12 +25,12 @@ const NAV_ITEMS = [
   { to: "/fonts", label: "Fonts", icon: IconTypography },
   { to: "/recent", label: "Recent", icon: IconHistory },
   { to: "/package", label: "Package / JSON", icon: IconJson },
+  { to: "/odb", label: ".odb", icon: IconDatabase },
 ] as const;
 
 // Tools already tracked as follow-up work -- headroom in the nav without inventing empty route files ahead of time.
 const PLANNED_ITEMS = [
   { label: "Editors", icon: IconEdit },
-  { label: ".odb", icon: IconDatabase },
   { label: ".odm", icon: IconBooks },
 ] as const;
 
