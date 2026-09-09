@@ -1,3 +1,13 @@
+## [7.11.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.10.4...documents.js%407.11.0) (2026-09-09)
+
+### Features
+
+* **documents.js:** write bookmark construct markers in the docx and odt builders ([0bfe2e8](https://github.com/ExaDev/documents.js/commit/0bfe2e8bfb9dbb2807341710b8ff6169690e624e))
+
+### Bug Fixes
+
+* **documents.js:** escape bookmark names written into both builders ([31cc593](https://github.com/ExaDev/documents.js/commit/31cc5937aaecf6542b187013a96ca5a4e6a4feae))
+
 ## [7.10.4](https://github.com/ExaDev/documents.js/compare/documents.js%407.10.3...documents.js%407.10.4) (2026-09-08)
 
 
