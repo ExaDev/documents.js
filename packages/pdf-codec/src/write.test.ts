@@ -586,3 +586,86 @@ describe("writePdf: embedded-file attachments (#967)", () => {
     expect(text).not.to.contain("/EmbeddedFiles");
   });
 });
+
+describe("writePdf: the outline (#967)", () => {
+  it("round-trips a nested bookmark tree through /Outlines and this package's own reader", async () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [
+        {
+          widthPt: 200,
+          heightPt: 100,
+          items: [
+            {
+              kind: "text",
+              text: "one",
+              xPt: 10,
+              yPt: 80,
+              font: HELVETICA,
+              sizePt: 12,
+              color: BLACK,
+            },
+            {
+              kind: "text",
+              text: "two",
+              xPt: 10,
+              yPt: 40,
+              font: HELVETICA,
+              sizePt: 12,
+              color: BLACK,
+            },
+          ],
+        },
+      ],
+      images: {},
+      destinations: [
+        {
+          name: "chapter-1",
+          pageIndex: 0,
+          target: { kind: "xyz", topPt: 80 },
+        },
+        {
+          name: "section-1-1",
+          pageIndex: 0,
+          target: { kind: "xyz", topPt: 40 },
+        },
+      ],
+      outline: [
+        {
+          title: "Chapter 1",
+          destination: "chapter-1",
+          children: [
+            { title: "Section 1.1", destination: "section-1-1", children: [] },
+            { title: "Section 1.2 (no target)", children: [] },
+          ],
+        },
+      ],
+    };
+    const bytes = writePdf(doc);
+    const { readPdf } = await import("./read");
+    const reread = readPdf(bytes);
+    // Destinations are spelled as direct arrays (the identical convention the internal-link writer established: no /Dests tree is emitted), so the reader re-mints table names in read order -- "dest1", "dest2" -- while titles, nesting, and the TARGETS themselves round-trip exactly.
+    expect(reread.outline).toEqual([
+      {
+        title: "Chapter 1",
+        destination: "dest2",
+        children: [
+          { title: "Section 1.1", destination: "dest1", children: [] },
+          { title: "Section 1.2 (no target)", children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("writes no /Outlines at all for a document with no outline", () => {
+    const bytes = writePdf({
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+    });
+    const text = new TextDecoder("latin1").decode(bytes);
+    expect(text).not.toContain("/Outlines");
+  });
+});
