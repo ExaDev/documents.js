@@ -4,6 +4,9 @@ import type {
   ContentSlide,
   DocumentTree,
   PageSize,
+  DefinitionEntry,
+  ProvenanceDescriptor,
+  RunConstructExtent,
 } from "document-schema.js";
 import { flattenTree, PAGE_SIZE_A4 } from "document-schema.js";
 import type { Package } from "../../model/package";
@@ -20,7 +23,10 @@ import { el } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { formatOdfLength } from "../shared/units";
 import { writeOdfMetadata } from "../shared/metadata";
-import { writeOdfPackageResidue } from "../shared/constructs";
+import {
+  writeOdfPackageResidue,
+  writeOdfTrackedChanges,
+} from "../shared/constructs";
 import { buildOdfInlineNodes, segmentOdfText } from "../shared/text";
 import type { ListPlanState } from "../shared/list";
 import { canonicalMetadata } from "../shared/canonicalise";
@@ -42,6 +48,8 @@ const STYLES_PART = "styles.xml";
 export interface OdpWriteOptions {
   // The ODF version stamped on each part's office:version and on the manifest. Defaults to the current standard.
   readonly version?: string;
+  // The definitions table shape-text construct anchors resolve against; writeOdp passes the tree's own table automatically. A bare writeOdpContent caller with construct-bearing shape text still refuses those anchors by name.
+  readonly definitions?: Readonly<Record<string, DefinitionEntry>>;
   // Stamps the package as a document template (ODF_MEDIA_TYPES.otp) rather than a regular document (ODF_MEDIA_TYPES.odp) -- the "mimetype" part and the manifest root entry syncManifest derives from it, both of which createOdfPackage/syncManifest already key off whatever media type is passed in. Nothing else about the writer's own output changes: ODF makes no other structural distinction between a document and its template. Defaults to false.
   readonly template?: boolean;
 }
@@ -55,11 +63,13 @@ export interface OdpWriteOptions {
 function canonicalSlide(
   slide: ContentSlide,
   listState: ListPlanState,
+  definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
+  changeIds: ReadonlyMap<ProvenanceDescriptor, string> | undefined,
 ): ContentSlide {
   return {
     size: slide.size,
     shapes: slide.shapes.map((shape, index) =>
-      canonicalDrawShape(shape, index, listState),
+      canonicalDrawShape(shape, index, listState, definitions, changeIds),
     ),
     notes: slide.notes,
   };
@@ -78,7 +88,9 @@ export function normaliseOdpContent(
   return {
     kind: "presentation",
     metadata: canonicalMetadata(document.metadata),
-    slides: document.slides.map((slide) => canonicalSlide(slide, listState)),
+    slides: document.slides.map((slide) =>
+      canonicalSlide(slide, listState, undefined, undefined),
+    ),
   };
 }
 
@@ -171,6 +183,8 @@ export function writeOdpContent(
   document: ContentDocument,
   options: OdpWriteOptions = {},
 ): Package {
+  // Tracked-change descriptors in shape text mint here, the same document-wide chg1/chg2 collection and one text:presentation-level text:tracked-changes container the odt writer performs for office:text -- the odp reader's own collector scans presentation.xml the identical way.
+
   if (document.kind !== "presentation") {
     throw new Error(
       `writeOdpContent: expected a 'presentation' document, got '${document.kind}' -- odf.js writes .odp from the presentation arm only`,
@@ -203,10 +217,57 @@ export function writeOdpContent(
     "office:master-styles",
   );
 
+  const changeIds = new Map<ProvenanceDescriptor, string>();
+  const changeRegions: {
+    id: string;
+    descriptor: ProvenanceDescriptor & {
+      change: "insertion" | "deletion" | "formatChange";
+    };
+  }[] = [];
+  let nextChangeId = 1;
+  const mintChangeRegion = (
+    descriptor: RunConstructExtent["descriptor"],
+  ): void => {
+    if (
+      descriptor.kind !== "provenance" ||
+      (descriptor.change !== "insertion" &&
+        descriptor.change !== "deletion" &&
+        descriptor.change !== "formatChange")
+    ) {
+      return;
+    }
+    if (!changeIds.has(descriptor)) {
+      const id = `chg${nextChangeId}`;
+      nextChangeId += 1;
+      changeIds.set(descriptor, id);
+      changeRegions.push({
+        id,
+        descriptor: descriptor as ProvenanceDescriptor & {
+          change: "insertion" | "deletion" | "formatChange";
+        },
+      });
+    }
+  };
+  if (changeRegions.length > 0) {
+    presentationElement.children.push(writeOdfTrackedChanges(changeRegions));
+  }
+
+  for (const slide of document.slides) {
+    for (const shape of slide.shapes) {
+      for (const block of shape.blocks) {
+        if (block.kind === "paragraph") {
+          for (const extent of block.constructs ?? []) {
+            mintChangeRegion(extent.descriptor);
+          }
+        }
+      }
+    }
+  }
   const shapeState = createDrawShapeWriteState(
     pkg,
     registry,
     contentAutomaticStyles,
+    { definitions: options.definitions, changeIds },
   );
   // One counter across the WHOLE presentation, matching readOdpContent's own listIdState threading (typed/odp/read.ts) -- two lists on different slides must mint different identities exactly as two lists in different sections of one odt body do.
   const listState: ListPlanState = { next: 1 };
@@ -254,7 +315,10 @@ export function writeOdp(
   document: DocumentTree,
   options: OdpWriteOptions = {},
 ): Package {
-  const pkg = writeOdpContent(flattenTree(document), options);
+  const pkg = writeOdpContent(flattenTree(document), {
+    ...options,
+    definitions: document.definitions ?? options.definitions,
+  });
   writeOdfPackageResidue(pkg, "odp", document.source);
   syncManifest(pkg, { version: options.version ?? DEFAULT_ODF_VERSION });
   return pkg;
