@@ -1,3 +1,11 @@
+## [7.21.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.20.0...odf.js%407.21.0) (2026-09-09)
+
+### Features
+
+* **odf.js:** write block-scope comment ranges ([bb65c7c](https://github.com/ExaDev/documents.js/commit/bb65c7c89ab7d0705a1a9406fe25bb53d303297c)), references [#969](https://github.com/ExaDev/documents.js/issues/969) [#972](https://github.com/ExaDev/documents.js/issues/972)
+* **odf.js:** write embedded sub-documents in the odt writer ([fe399eb](https://github.com/ExaDev/documents.js/commit/fe399eb15a86c599a9f1e9a5a927ed5060652f71)), references [#972](https://github.com/ExaDev/documents.js/issues/972) [#719](https://github.com/ExaDev/documents.js/issues/719)
+* **odf.js:** write run-level construct extents in odp and odg shape text ([708f5f4](https://github.com/ExaDev/documents.js/commit/708f5f4657075940bddbd107ac9e5f3db69f645f))
+
 ## [7.20.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.19.0...odf.js%407.20.0) (2026-09-09)
 
 ### Features
