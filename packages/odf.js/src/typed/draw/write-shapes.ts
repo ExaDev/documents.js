@@ -54,7 +54,7 @@ export type ShapeContentPlan =
 // Refusals, each by name rather than a silent drop:
 // - a table or an image found ALONGSIDE any other block (only a shape whose blocks are ALL paragraphs, or whose blocks are EXACTLY one table, or EXACTLY one image, has a real draw:frame spelling);
 // - a page break (no ODF spelling inside a shape's own text -- draw:text-box has no page concept at all);
-// - an embedded object or a construct boundary marker (the same fidelity constructs odt's own writer refuses, not yet handled here);
+// - an embedded object (the odp/odg readers have no draw:object frame recovery path -- readDrawFrameContent reads table:table/draw:text-box/draw:image only -- so writing one would be silent loss, and the shape-side gap is reader-side before it is writer-side) or a construct boundary marker (the text-box walk reads (text:p | text:list)* only, so block-scope markers inside a shape have no read path either);
 // - a heading (a shape's own draw:text-box content model is (text:p | text:list)* with no text:h at all -- readDrawFrameContent's own text-box walk only ever looks for those two tags, so a text:h written here would be silently invisible on the way back in, not merely unusual).
 export function planShapeContent(
   blocks: readonly ContentBlock[],
@@ -180,6 +180,8 @@ function listStyleNameFor(
 function tableWriteContext(state: DrawShapeWriteState): OdfTableWriteContext {
   return {
     registry: state.registry,
+    definitions: state.definitions,
+    changeIds: state.changeIds,
     mintTableName: () => `DrawTable${state.nextTable++}`,
     mintListStyleName: (kind) => listStyleNameFor(kind, state),
   };
@@ -422,7 +424,7 @@ export function canonicalDrawShape(
             },
           ]
         : content.paragraphs.map((paragraph) =>
-            canonicalParagraph(paragraph, paragraph.list?.numId),
+            canonicalParagraph(paragraph, paragraph.list?.numId, true),
           );
   const canonical: ContentShape & { paintOrder: number } = {
     frame: shape.frame,

@@ -11,6 +11,7 @@ import type {
   ContentTableRow,
 } from "document-schema.js";
 import { resolveCellFillColor } from "document-schema.js";
+import type { DefinitionEntry, ProvenanceDescriptor } from "document-schema.js";
 import type { XmlElement, XmlNode } from "../../model/node";
 import type { Package } from "../../model/package";
 import type { StyleRegistry } from "../../styles/registry";
@@ -392,6 +393,9 @@ export interface OdfTableWriteContext {
   mintTableName(): string;
   // Mints (or reuses) the named text:list-style for one list kind, off the caller's own memoized cache -- one text:list-style per kind for the WHOLE document, not one per table.
   mintListStyleName(kind: "ordered" | "bullet"): string;
+  // The construct-writing context a cell's own paragraphs resolve their run-level construct extents against, identical to the body-paragraph and shape-text threading: the definitions table note/comment anchors resolve against and the tracked-change id map (ExaDev/documents.js#969 closed the last allowConstructs=false gap these close). Absent means the caller has no tree context and the paragraph writer itself refuses the construct kinds that need one.
+  readonly definitions?: Readonly<Record<string, DefinitionEntry>>;
+  readonly changeIds?: ReadonlyMap<ProvenanceDescriptor, string>;
 }
 
 // A cell's own block content, mirroring readTableCell's own recursive scope (typed/shared/table.ts's read side): a paragraph writes as itself; consecutive paragraphs sharing one list membership group into a single text:list, nested per level via typed/shared/list.ts's own writeOdfList -- the identical grouping typed/odt/write.ts's writeSectionBlocks and typed/draw/write-shapes.ts's writeShapeTextBox already apply at their own top level; and a nested table writes by recursing back into writeOdfTable itself, the identical function that writes a top-level one. Any other block kind is refused outright, naming it, rather than written and lost -- exactly what readTableCell's own scope stops it from reading back.
@@ -433,7 +437,10 @@ function writeCellBlocks(
         `writeOdfTable: a table cell carrying a "${block.kind}" block cannot be written -- odf.js's table reader reads only paragraphs, headings, lists, and nested tables out of a cell, so writing one would lose it on the way back in`,
       );
     }
-    const element = writeOdfParagraph(block, context.registry);
+    const element = writeOdfParagraph(block, context.registry, {
+      definitions: context.definitions,
+      changeIds: context.changeIds,
+    });
     const membership = block.list;
     // context is never asked to canonicalise membership itself (unlike typed/draw/write-shapes.ts's own planShapeContent seam): a cell's own paragraphs pass through writeOdfTable's caller's normalisation exactly as a top-level table's do, so a membership here already carries a real numId whenever it carries one at all.
     if (membership?.numId === undefined) {

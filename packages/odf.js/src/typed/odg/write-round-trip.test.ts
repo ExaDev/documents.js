@@ -537,6 +537,37 @@ describe("writeOdgContent: paint order across both arrays", () => {
 });
 
 // A rotated vector's own frame/rotationDeg is an exact algebraic inverse, verified with a numeric tolerance rather than the blanket expectRoundTrip helper -- see this file's own top-of-file note.
+// ExaDev/documents.js#969 closing the shape-text arm: a run-level construct extent inside a drawing shape's own text writes through the identical construct machinery, and the round-trip law holds exactly as it already did for odp shape text.
+describe("writeOdg: fidelity constructs in shape text (#969)", () => {
+  it("round-trips a field extent inside a shape's own text", () => {
+    const document = documentOf([
+      page(
+        [],
+        [
+          shape({}, [
+            {
+              kind: "paragraph",
+              runs: [{ text: "Author: " }, { text: "Joe" }, { text: "." }],
+              constructs: [
+                {
+                  descriptor: {
+                    kind: "field",
+                    instruction: '<text:author-name text:fixed="false"/>',
+                    cachedResult: "Joe",
+                  },
+                  startRun: 1,
+                  endRun: 2,
+                },
+              ],
+            },
+          ]),
+        ],
+      ),
+    ]);
+    expectRoundTrip(document);
+  });
+});
+
 describe("writeOdgContent: rotated vector geometry, within floating-point tolerance", () => {
   it.each([30, 90, 180, -45, 12.5])(
     "round-trips a %i-degree rotation on a rect",
