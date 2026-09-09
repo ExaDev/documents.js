@@ -1,3 +1,10 @@
+## [7.14.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.13.0...documents.js%407.14.0) (2026-09-09)
+
+### Features
+
+* **documents.js:** add a live-view editor for doc documents ([6b871e9](https://github.com/ExaDev/documents.js/commit/6b871e974c07485d14ba9b3d2e15dbe1a3f62718))
+* **documents.js:** add a live-view editor for ppt presentations ([7c3b021](https://github.com/ExaDev/documents.js/commit/7c3b0212a5e7c106465b3d3fe6a10eaf21d143f6))
+
 ## [7.13.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.12.3...documents.js%407.13.0) (2026-09-09)
 
 ### Features
