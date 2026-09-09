@@ -171,6 +171,8 @@ const NO_SPAN = 1;
 
 export interface ReadWpdOptions {
   readonly sink?: WpdDiagnosticSink;
+  // The password for a document whose header's encryption word is non-zero. The standard ("original") WordPerfect encryption mode is decrypted with it (src/container/encryption.ts); a wrong password throws WpdWrongPasswordError, an encrypted document read without one still throws WpdEncryptedDocumentError, and a password supplied for an unencrypted document is ignored -- the identical contract doc-codec's and xls-codec's own password options hold.
+  readonly password?: string;
 }
 
 // The page geometry the document states, one field per function that states it. Each stays undefined until its own function appears, so a document overriding only its top margin keeps the WordPerfect default for the other four rather than for none of them.
@@ -1335,7 +1337,7 @@ export function readWpdContent(
   options: ReadWpdOptions = {},
 ): ContentDocument {
   const sink = options.sink ?? NOOP_WPD_DIAGNOSTIC_SINK;
-  const container = openWpdDocument(bytes);
+  const container = openWpdDocument(bytes, { password: options.password });
   const tokens = tokeniseDocumentArea(
     container.bytes,
     container.documentAreaOffset,
