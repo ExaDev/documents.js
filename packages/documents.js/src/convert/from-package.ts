@@ -1,5 +1,6 @@
 import type {
   ContentBlock,
+  ContentEmbeddedObjectBlock,
   ContentImageBlock,
   ContentParagraph,
   ContentRun,
@@ -10,6 +11,8 @@ import type {
   ContentVector,
   DocumentTree,
   LayoutFrame,
+  PositionedFormula,
+  TextMeasurer,
 } from "document-schema.js";
 import {
   COLOR_BLACK,
@@ -17,28 +20,37 @@ import {
   flattenTree,
   resolveCellFillColor,
 } from "document-schema.js";
-import { LAYOUT_FORMAT_VERSION, writePdf } from "pdf-codec";
+import {
+  createFontMeasurer,
+  createFontRegistry,
+  LAYOUT_FORMAT_VERSION,
+  loadMathFont,
+  writePdf,
+} from "pdf-codec";
 import { flipY } from "../model/geometry";
 import { convertVector } from "../layout/drawing";
 import { NOMINAL_CELL_TEXT_SIZE_PT } from "../layout/sheets";
 import {
+  formulaSizePtForFrame,
   NOMINAL_TEXT_SIZE_PT,
   pushCellBorderLines,
   registerImage,
   runFont,
 } from "../layout/shared";
+import { wrapRunsToWidth } from "../layout/text-layout";
+import { layoutFormula } from "../mathml/layout";
+import { formulaOfBlock } from "../model/formula";
 import { DOCUMENT_FORMAT_CODECS } from "../codecs/registry";
 import { requireArrayBufferBytes } from "../model/bytes";
 import { READ_ONLY_FORMATS } from "./capability";
 import type { DocumentFormat } from "./port";
 import type {
+  FontRegistry,
   LayoutDocument,
   LayoutImage,
   LayoutImageAsset,
   LayoutItem,
-  LayoutLink,
   LayoutPage,
-  LayoutText,
 } from "pdf-codec";
 
 // Builds any DocumentFormat's own bytes from an already-assembled tree-form DocumentTree -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back. The tree is flattened once at this boundary (flattenTree, which also materialises any styles-table refs away): the builders' public signatures already take the flat ContentDocument, so nothing downstream of this point knows the tree exists -- the boundary design in one sentence. Every target except 'pdf' dispatches through DOCUMENT_FORMAT_CODECS (src/codecs/registry.ts), building a fresh package through the identical buildXPackage function the matching pdf-to-X/bridge conversion already uses, then encoding it with that format's own codec -- xlsx goes through this exact same dispatch (DOCUMENT_FORMAT_CODECS.xlsx.content.write wraps ooxml.js's buildXlsxPackageFromContent), no longer a named exception. 'odf' still has no builder at all -- a standalone formula document has no write path from ContentDocument to begin with -- so it alone is rejected outright ahead of the registry lookup.
@@ -52,7 +64,12 @@ export function buildDocumentBytes(
         "this DocumentTree has no pages -- only a package dumped from a <format>-to-pdf or pdf-to-<format> conversion carries them; a bridge conversion's own dump (e.g. odt-to-docx) never does, so 'pdf' is not a reachable target from it",
       );
     }
-    return writePdf(layoutDocumentFromPackage(pkg));
+    const { document: layout, formulas, fonts } = packageToLayout(pkg);
+    // The fonts registry is the same one the walk measured through, so the re-render draws at the advances its re-derived wrap was measured against. writePdf treats an empty formulas array and an omitted option identically (its embedded math font group is allocated only when the array is non-empty), and a registry with no resolved faces is the no-op it always was, so a package with no formulas still builds byte-identical to before.
+    return writePdf(
+      layout,
+      formulas.length > 0 ? { formulas, fonts } : { fonts },
+    );
   }
   // A read-only format (capability.ts's READ_ONLY_FORMATS) has no writer at all, so naming one as a target is a caller error with a real answer rather than a registry gap: 'odf' (a standalone formula document) has no ContentDocument-to-formula path anywhere in the family, and 'wpd' has none because wpd-codec deliberately ships no writer. One check covers both, and covers whichever read-only format joins them next.
   if (READ_ONLY_FORMATS.has(target)) {
@@ -73,14 +90,22 @@ export function buildDocumentBytes(
 //
 // Rebuilds the pdf-codec LayoutDocument a package's own frames + pages describe: a mechanical inverse that walks the content tree and emits LayoutItems from each node's own recorded placements. This is the fusion-faithful direction -- the package now CARRIES the positions (a layout pass stamped them onto content's own nodes), so from-package reconstructs the pdf-codec view from them rather than needing a parallel layout side-channel, which is exactly the second-tree coupling the fused DocumentTree design removed.
 //
-// Two honest limits, both structural properties of what a package records, not gaps in this walk:
+// One honest limit, a structural property of what a package records rather than a gap in this walk: a bare DocumentTree carries no source-EMBEDDED font bytes, so text re-renders through pdf-codec's vendored substitutes and the standard 14 rather than the source document's own embedded faces.
 //
-// 1. A run's frames record POSITIONS, not the wrap decisions that distributed its text across them. Re-splitting the text would need the font metrics the original layout pass had; guessing a split would garble words. So a run's full text renders once, at its first recorded placement, and its further frames carry no additional text -- a single-frame run (the common case: an unwrapped line, a spreadsheet cell) round-trips exactly; a wrapped run re-renders as one long overflowing line. A spreadsheet cell is exempt by construction: sheets.ts lays cell text out as a single line, so a cell's own displayText at its own frame is an exact re-render.
-// 2. No font registry and no positioned formulas survive a bare DocumentTree, exactly as before the fusion: a formula block's frame records where it sat while its glyphs render as nothing, and text draws through the standard 14 or a caller-configured default face.
+// The two limits this walk used to carry are closed:
+//
+// 1. Wrap distribution is RE-DERIVED, not guessed: a run's frames each record the tight width of the fragment the original wrap placed there (shared.ts's textBoxForFragment stamps the same measurement the wrapping pass made), and re-wrapping the run's remaining text against each frame's own recorded width through the same registry-backed metrics the re-render draws with (wrapRunsToWidth, the identical line-breaker the layout engines run) reproduces the original split wherever the original also resolved through the vendored/standard layers -- and where it did not (an embedded face the rebuild no longer has), the re-derived wrap and the re-render at least stay consistent with each other, wrapping and drawing through the same substitute metrics, where the old behaviour drew one long overflowing line.
+// 2. An embedded formula is RE-TYPESET from its own recorded MathML: the formula block carries the full ContentFormula (mathml tree and all) in the content, so its frame is enough to re-run the identical layoutFormula + loadMathFont pipeline the original pass ran, at the size the recorded frame's own two-pass fit recovers. Only a formula whose source carried no MathML at all (mathml: []) still renders as nothing -- there is genuinely nothing to typeset.
 
 interface FrameWalkState {
   readonly pages: LayoutPage[];
   readonly images: Record<string, LayoutImageAsset>;
+  // The measurer the wrap re-derivation below measures through, built over the same registry the re-render draws through (state.fonts) so a re-derived split and its re-render agree with each other by construction -- measuring one face's advances while drawing another's is exactly the drift measure.ts's own module comment forbids.
+  readonly measurer: TextMeasurer;
+  // The registry both halves of the rebuild share: pdf-codec's vendored substitutes ahead of the standard 14, with no source-embedded faces (the one layer a bare DocumentTree does not carry). Measuring through it is what makes the re-derived wrap reproduce the original split wherever the original also resolved through the vendored/standard layers, and drawing through it is what makes the re-render match that measurement.
+  readonly fonts: FontRegistry;
+  // Every embedded formula re-typeset during the walk, for buildDocumentBytes to hand to writePdf's own formulas side channel -- the same hand-off convertWordprocessingToLayout's own result makes.
+  readonly formulas: PositionedFormula[];
 }
 
 // The page a frame's own pageIndex names, or undefined when it points outside the package's own pages array -- an internally inconsistent or hand-edited package. There is nothing to render such a frame onto, so each emitter skips it; every other frame in the same tree still renders.
@@ -91,40 +116,101 @@ function pageOfFrame(
   return state.pages[frame.pageIndex];
 }
 
-// One run's emission: the run's full text at its FIRST frame (the wrap-decision limit above), plus a LayoutLink alongside when the run is hyperlinked. Font resolution mirrors the layout engines' own defaults (shared.ts's runFont and NOMINAL_TEXT_SIZE_PT), so a run that carried no explicit formatting renders as it would have laid out.
+// One run's emission. A single-frame run (the common case: an unwrapped line, a spreadsheet cell) renders its whole text at that frame exactly as before. A multi-frame run is a wrapped line set: each frame's own width is the tight measured width of the fragment the original wrap placed there, so re-wrapping the remaining text against each frame's width through wrapRunsToWidth -- the identical line-breaker the layout engines themselves run -- reproduces the fragment boundaries wherever the original drew through the same standard-14 metrics, and a hyperlink covers every fragment it spans (one link per frame, the same way the engines stamp a link over each wrapped fragment). Font resolution mirrors the layout engines' own defaults (shared.ts's runFont and NOMINAL_TEXT_SIZE_PT), so a run that carried no explicit formatting renders as it would have laid out.
 function emitRun(state: FrameWalkState, run: ContentRun): void {
-  const frame = run.frames?.[0];
-  if (frame === undefined) {
-    return;
-  }
-  const page = pageOfFrame(state, frame);
-  if (page === undefined) {
-    return;
-  }
+  const frames = run.frames ?? [];
   const font = runFont(run);
   const sizePt = run.sizePt ?? NOMINAL_TEXT_SIZE_PT;
-  const textItem: LayoutText = {
-    kind: "text",
-    text: run.text,
-    xPt: frame.xPt,
-    yPt: frame.yPt,
-    font,
-    sizePt,
-    color: run.color ?? COLOR_BLACK,
-    underline: run.underline,
-  };
-  page.items.push(textItem);
-  if (run.hyperlink !== undefined) {
-    const link: LayoutLink = {
-      kind: "link",
-      uri: run.hyperlink,
-      xPt: frame.xPt,
-      yPt: frame.yPt,
-      widthPt: frame.widthPt,
-      heightPt: frame.heightPt,
-    };
-    page.items.push(link);
+  const color = run.color ?? COLOR_BLACK;
+
+  // The frames a page actually exists for -- an out-of-range pageIndex drops that placement, exactly as every other emitter here drops one.
+  const placements = frames.filter(
+    (frame) => pageOfFrame(state, frame) !== undefined,
+  );
+  if (placements.length === 0) {
+    return;
   }
+
+  const fragments =
+    placements.length === 1
+      ? [run.text]
+      : rederiveWrapFragments(
+          run.text,
+          font,
+          sizePt,
+          placements,
+          state.measurer,
+        );
+
+  // Text that no frame's budget could hold (more fragments than frames) joins the last fragment rather than being dropped -- the same overflow failure mode a single-frame run has always had, confined to the tail.
+  for (const [index, frame] of placements.entries()) {
+    const page = pageOfFrame(state, frame);
+    if (page === undefined) {
+      continue;
+    }
+    const text =
+      index === placements.length - 1
+        ? fragments.slice(index).join(" ")
+        : fragments[index];
+    if (text !== undefined && text !== "") {
+      page.items.push({
+        kind: "text",
+        text,
+        xPt: frame.xPt,
+        yPt: frame.yPt,
+        font,
+        sizePt,
+        color,
+        underline: run.underline,
+      });
+    }
+    if (run.hyperlink !== undefined) {
+      page.items.push({
+        kind: "link",
+        uri: run.hyperlink,
+        xPt: frame.xPt,
+        yPt: frame.yPt,
+        widthPt: frame.widthPt,
+        heightPt: frame.heightPt,
+      });
+    }
+  }
+}
+
+// Re-derives a wrapped run's per-frame fragments: wrap the remaining text against each frame's own recorded width, take the first line as that frame's fragment, and carry the rest to the next frame. wrapRunsToWidth consumed exactly a prefix of the remaining text (its fragments come from tokenising that text), so the remainder is recovered by slicing; if that prefix property ever fails to hold for some wrap edge case, the whole run falls back to the single-frame rendering rather than emitting text that does not match its frames.
+function rederiveWrapFragments(
+  text: string,
+  font: ReturnType<typeof runFont>,
+  sizePt: number,
+  frames: readonly LayoutFrame[],
+  measurer: TextMeasurer,
+): string[] {
+  let remaining = text;
+  const fragments: string[] = [];
+  for (const frame of frames) {
+    if (remaining === "") {
+      break;
+    }
+    const lines = wrapRunsToWidth(
+      [{ text: remaining, font, sizePt, color: COLOR_BLACK }],
+      measurer,
+      frame.widthPt,
+    );
+    const first = lines[0];
+    if (first === undefined) {
+      // A zero-width frame admits no text at all -- nothing is consumed here, and the next frame gets the chance the layout pass gave it.
+      fragments.push("");
+      continue;
+    }
+    const consumed = first.fragments.map((f) => f.text).join("");
+    if (!remaining.startsWith(consumed)) {
+      return [text];
+    }
+    remaining = remaining.slice(consumed.length);
+    fragments.push(consumed.trimEnd());
+    remaining = remaining.trimStart();
+  }
+  return fragments;
 }
 
 // A paragraph's own frames record its list-marker placements (engine.ts stamps the paragraph node, not any run, for the marker it derives from list membership). The marker text itself came from the engine's own per-numId counters, which a package does not carry, so there is nothing honest to re-render at those positions -- the frames stay recorded on the node (traceability) and emit nothing here.
@@ -336,19 +422,66 @@ function emitBlocks(
       emitImageBlock(state, block, block.frames);
     } else if (block.kind === "table") {
       emitTable(state, block);
+    } else if (block.kind === "embeddedObject") {
+      emitEmbeddedObjectBlock(state, block);
     }
-    // 'embeddedObject' and 'pageBreak' emit nothing: an embedded formula's glyphs rendered through writePdf's positioned-formulas channel (CID-font glyph runs with no LayoutItem kind, which never travelled in a DocumentTree even before the fusion -- its frame is honoured as a position record on the node, and nothing renders from it), and a page break is structural, with no placement of its own.
+    // 'pageBreak' emits nothing: it is structural, with no placement of its own.
+  }
+}
+
+// One embedded object block. A formula is re-typeset at its own recorded frames through the identical layoutFormula + loadMathFont pipeline the original layout pass ran (formulaSizePtForFrame's two-pass fit against the recorded frame recovers the size the original chose), landing in writePdf's own formulas side channel -- the same channel the original pass used, which is why nothing of this renders as a page item. A non-formula embedded object (a chart, a sub-document) still emits nothing: the original pass did not render its glyphs either, so the frame stays a position record. A formula whose source carried no MathML (mathml: []) has nothing to typeset and renders as nothing -- the honest floor, not a guess.
+function emitEmbeddedObjectBlock(
+  state: FrameWalkState,
+  block: ContentEmbeddedObjectBlock,
+): void {
+  const formula = formulaOfBlock(block);
+  if (formula === undefined || formula.mathml.length === 0) {
+    return;
+  }
+  const { metricsAt } = loadMathFont();
+  for (const frame of block.frames ?? []) {
+    if (pageOfFrame(state, frame) === undefined) {
+      continue;
+    }
+    const sizePt = formulaSizePtForFrame(formula.mathml, frame, metricsAt);
+    const { box } = layoutFormula(formula.mathml, {
+      metrics: metricsAt(sizePt),
+      sizePt,
+      color: COLOR_BLACK,
+    });
+    state.formulas.push({
+      pageIndex: frame.pageIndex,
+      xPt: frame.xPt,
+      yPt: frame.yPt,
+      box,
+    });
   }
 }
 
 // The public inverse. Flattens the tree once (materialising any styles refs away) and walks the flat content's own structure in document order, so the items land on each page in the same order the original layout pass emitted them (paint order is array order); a package whose content carries no frames at all (a bridge dump, or fresh reader output) still rebuilds the pages themselves, empty. Walking the flattened form rather than the tree directly is a deliberate one-implementation choice: flatten is the single tree-to-flat authority (bijection-tested), the walk below stays the flat document walk it always was, and every other consumer (buildDocumentBytes, lintMathCoherence) shares the same flattened view.
 export function layoutDocumentFromPackage(pkg: DocumentTree): LayoutDocument {
+  return packageToLayout(pkg).document;
+}
+
+// The full walk both consumers share: the LayoutDocument a package's frames describe, plus the re-typeset positioned formulas that travel beside it. layoutDocumentFromPackage is the LayoutDocument-only public view; buildDocumentBytes needs the formulas half too, and both must run the identical walk so the public view and the built bytes never disagree.
+function packageToLayout(pkg: DocumentTree): {
+  document: LayoutDocument;
+  formulas: PositionedFormula[];
+  fonts: FontRegistry;
+} {
   const pages: LayoutPage[] = (pkg.pages ?? []).map((page) => ({
     widthPt: page.widthPt,
     heightPt: page.heightPt,
     items: [],
   }));
-  const state: FrameWalkState = { pages, images: {} };
+  const fonts = createFontRegistry({});
+  const state: FrameWalkState = {
+    pages,
+    images: {},
+    measurer: createFontMeasurer(fonts),
+    fonts,
+    formulas: [],
+  };
   const content = flattenTree(pkg);
   if (content.kind === "wordprocessing") {
     for (const section of content.sections) {
@@ -377,9 +510,13 @@ export function layoutDocumentFromPackage(pkg: DocumentTree): LayoutDocument {
   }
   // 'formula' content has no frames to walk at all: a standalone formula document renders through writePdf's own formula positioning (see convert.ts's odfToPdf), of which a package carries no record beyond the page sizes themselves.
   return {
-    formatVersion: LAYOUT_FORMAT_VERSION,
-    metadata: content.metadata,
-    pages,
-    images: state.images,
+    document: {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: content.metadata,
+      pages,
+      images: state.images,
+    },
+    formulas: state.formulas,
+    fonts: state.fonts,
   };
 }

@@ -27,9 +27,9 @@ import { minimalOdgBytes } from "../test-support/odg";
 import { minimalOdpBytes } from "../test-support/odp";
 import { minimalOdsBytes } from "../test-support/ods";
 import { minimalOdtBytes } from "../test-support/odt";
-import { docxToPdf, odtToDocx } from "./convert";
+import { docxToPdf, markdownToPdf, odtToDocx } from "./convert";
 import { buildDocumentBytes, layoutDocumentFromPackage } from "./from-package";
-import type { LayoutItem, LayoutRect } from "pdf-codec";
+import type { LayoutItem, LayoutRect, LayoutText } from "pdf-codec";
 
 function wordprocessingPackage(): DocumentTree {
   return assembleTree(readOdtContent(decodeOdfPackage(minimalOdtBytes())));
@@ -117,7 +117,7 @@ describe("buildDocumentBytes", () => {
     const bytes = buildDocumentBytes(captured, "pdf");
     const layout = readPdf(bytes);
     expect(layout.pages.length).toBe(captured.pages?.length);
-    // The rebuilt page carries the stamped text back as real positioned text: each run renders once, whole, at its first recorded frame, so every run's own text survives the package -> pdf round trip verbatim.
+    // The rebuilt page carries the stamped text back as real positioned text: a multi-frame run re-renders as one text item per recorded frame (the wrap re-derivation), so a run's own words all survive the package -> pdf round trip -- verbatim for a single-frame run, and fragment-by-fragment along the recorded placements for a wrapped one.
     const capturedContent = flattenTree(captured);
     if (capturedContent.kind !== "wordprocessing") {
       throw new Error("expected a wordprocessing ContentDocument");
@@ -136,8 +136,9 @@ describe("buildDocumentBytes", () => {
         block.kind === "paragraph" ? block.runs.map((run) => run.text) : [],
       )
       .filter((text) => text.length > 0);
+    const joined = texts.join(" ").replace(/\s+/g, " ").trim();
     for (const runText of runTexts) {
-      expect(texts).toContain(runText);
+      expect(joined).toContain(runText.replace(/\s+/g, " ").trim());
     }
   });
 
@@ -253,5 +254,141 @@ describe("layoutDocumentFromPackage: cell background rects", () => {
     ]);
     const layout = layoutDocumentFromPackage(pkg);
     expect(rectItems(layout.pages[0]!.items)).toHaveLength(0);
+  });
+});
+
+describe("layoutDocumentFromPackage: wrap re-derivation (#964)", () => {
+  it("re-renders a multi-frame run as one item per frame, each at that frame's recorded position", () => {
+    let captured: DocumentTree | undefined;
+    docxToPdf(minimalDocxBytes(), {
+      onDocument: (pkg) => {
+        captured = pkg;
+      },
+    });
+    if (captured === undefined) {
+      throw new Error("expected docxToPdf to report a package via onDocument");
+    }
+    const content = flattenTree(captured);
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const layout = layoutDocumentFromPackage(captured);
+    const multiFrameRun = content.sections
+      .flatMap((section) => section.blocks)
+      .flatMap((block) => (block.kind === "paragraph" ? block.runs : []))
+      .find((run) => (run.frames?.length ?? 0) > 1);
+    if (multiFrameRun === undefined) {
+      throw new Error("expected the fixture to carry a multi-frame run");
+    }
+    const frames = multiFrameRun.frames!;
+    const items = layout.pages
+      .flatMap((page) => page.items)
+      .filter(
+        (item): item is LayoutText =>
+          item.kind === "text" &&
+          frames.some(
+            (frame) => item.xPt === frame.xPt && item.yPt === frame.yPt,
+          ),
+      );
+    // One item per recorded frame, at the frame's own position, and the fragments join back to the run's whole text (whitespace-normalised -- the wrap points themselves are not data).
+    expect(items).toHaveLength(frames.length);
+    const joined = items
+      .map((item) => item.text)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    expect(joined).toBe(multiFrameRun.text.replace(/\s+/g, " ").trim());
+  });
+});
+
+describe("buildDocumentBytes: embedded formulas re-typeset (#964)", () => {
+  it("re-typesets a formula block's recorded MathML so the rebuilt PDF reads back the same math as the original render", () => {
+    const source = new TextEncoder().encode("Before\n\n$$\nx^2\n$$\n\nAfter");
+    const original = readPdf(markdownToPdf(source));
+    let captured: DocumentTree | undefined;
+    markdownToPdf(source, {
+      onDocument: (pkg) => {
+        captured = pkg;
+      },
+    });
+    if (captured === undefined) {
+      throw new Error("expected markdownToPdf to report a package");
+    }
+    const rebuilt = readPdf(buildDocumentBytes(captured, "pdf"));
+    const textItems = (layout: typeof original): string[] =>
+      layout.pages.flatMap((page) =>
+        page.items
+          .filter(
+            (item): item is Extract<LayoutItem, { kind: "text" }> =>
+              item.kind === "text",
+          )
+          .map((item) => item.text),
+      );
+    // The original render's formula glyphs read back through the math font's ToUnicode as "x2"; the rebuild's re-typeset formula must read back the same, which it can only do if the recorded MathML was genuinely re-laid-out into writePdf's formulas channel (a dropped formula leaves nothing on the page at all).
+    expect(textItems(rebuilt)).toEqual(textItems(original));
+  });
+
+  it("still renders no math channel for a formula with no MathML of its own", () => {
+    // Hand-built tree: a formula block whose source carried no MathML (mathml: []) has nothing to re-typeset, so the rebuilt PDF carries no math font group.
+    const pkg = assembleTree({
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [
+                {
+                  text: "Before",
+                  frames: [
+                    {
+                      pageIndex: 0,
+                      xPt: 72,
+                      yPt: 700,
+                      widthPt: 40,
+                      heightPt: 12,
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              kind: "embeddedObject",
+              objectKind: "formula",
+              frame: { xPt: 100, yPt: 600, widthPt: 50, heightPt: 20 },
+              document: {
+                kind: "formula",
+                metadata: {},
+                formula: { mathml: [] },
+              },
+              frames: [
+                {
+                  pageIndex: 0,
+                  xPt: 100,
+                  yPt: 600,
+                  widthPt: 50,
+                  heightPt: 20,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    pkg.pages = [{ widthPt: 612, heightPt: 792 }];
+    const layout = readPdf(buildDocumentBytes(pkg, "pdf"));
+    // Nothing of the formula renders: the page's only text is the paragraph around it, exactly as the original pass would have left a MathML-less formula.
+    const texts = layout.pages.flatMap((page) =>
+      page.items
+        .filter(
+          (item): item is Extract<LayoutItem, { kind: "text" }> =>
+            item.kind === "text",
+        )
+        .map((item) => item.text),
+    );
+    expect(texts).toEqual(["Before"]);
   });
 });
