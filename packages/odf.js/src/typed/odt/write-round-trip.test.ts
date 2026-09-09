@@ -1537,6 +1537,68 @@ describe("fidelity constructs written (#969)", () => {
       author: "Kay McNulty",
     });
   });
+
+  it("round-trips an embedded spreadsheet sub-document through writeOdt", () => {
+    const document = documentOf([
+      { kind: "paragraph", runs: [{ text: "before the object" }] },
+      {
+        kind: "embeddedObject",
+        objectKind: "spreadsheet",
+        frame: { xPt: 0, yPt: 0, widthPt: 200, heightPt: 100 },
+        document: {
+          kind: "spreadsheet",
+          metadata: {},
+          sheets: [
+            {
+              name: "Data",
+              cells: [
+                {
+                  row: 0,
+                  column: 0,
+                  value: { kind: "string", value: "cell" },
+                  displayText: "cell",
+                },
+              ],
+              columns: [],
+              rows: [],
+              images: [],
+              printSettings: {
+                pageSize: PAGE_SIZE_A4,
+                margins: { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 },
+                gridlines: false,
+                headers: false,
+                pageOrder: "downThenOver",
+              },
+            },
+          ],
+        },
+      },
+      { kind: "paragraph", runs: [{ text: "after the object" }] },
+    ]);
+    const tree = assembleTree(document);
+    const rewritten = readOdtContent(writeOdt(tree));
+    const blocks = rewritten.sections[0]!.blocks;
+    const embedded = blocks.find((block) => block.kind === "embeddedObject");
+    expect(embedded).toMatchObject({
+      kind: "embeddedObject",
+      objectKind: "spreadsheet",
+      document: {
+        kind: "spreadsheet",
+        sheets: [
+          {
+            name: "Data",
+            cells: [
+              {
+                row: 0,
+                column: 0,
+                value: { kind: "string", value: "cell" },
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
 });
 
 function roundTrippedBlocks(document: WordprocessingDocument): ContentBlock[] {

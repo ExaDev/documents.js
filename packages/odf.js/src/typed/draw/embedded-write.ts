@@ -3,6 +3,7 @@ import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import { el } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
+import { syncManifest } from "../../manifest";
 import { writeOdfFormulaContent } from "../formula/write";
 import { writeOdgContent } from "../odg/write";
 import { writeOdpContent } from "../odp/write";
@@ -54,7 +55,7 @@ export function writeDrawObjectElement(directory: string): XmlElement {
   });
 }
 
-// Writes one embedded object into an embedding package and returns the draw:object element its frame carries. The directory name is the caller's (each embedding writer numbers its own objects document-wide). The outer manifest is deliberately NOT re-synced here: every embedding writer already syncs once after its whole body is built, and syncing per object would rebuild the growing manifest once per embedded block -- N tiny sub-documents would mean N full manifest rebuilds, quadratic work a hostile round trip can amplify.
+// Writes one embedded object into an embedding package and returns the draw:object element its frame carries. The directory name is the caller's (each embedding writer numbers its own objects document-wide), and the outer package's manifest is re-synced here so the new directory entry exists by the time the caller finishes.
 export function writeEmbeddedObject(
   object: ContentEmbeddedObject,
   directory: string,
@@ -62,5 +63,6 @@ export function writeEmbeddedObject(
 ): XmlElement {
   const subPackage = writeEmbeddedObjectPackage(object);
   embedObjectParts(pkg, subPackage, directory);
+  syncManifest(pkg);
   return writeDrawObjectElement(directory);
 }
