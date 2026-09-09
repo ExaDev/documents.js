@@ -1,3 +1,10 @@
+## [2.10.5](https://github.com/ExaDev/documents.js/compare/web%402.10.4...web%402.10.5) (2026-09-09)
+
+
+### Dependencies
+
+- Updated documents.js to 7.11.8
+
 ## [2.10.4](https://github.com/ExaDev/documents.js/compare/web%402.10.3...web%402.10.4) (2026-09-09)
 
 
