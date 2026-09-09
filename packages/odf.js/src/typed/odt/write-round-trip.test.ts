@@ -690,6 +690,44 @@ describe("preformatted (#1020)", () => {
 });
 
 // ExaDev/documents.js#969: the writer's own construct-writing scope, closed for the odt writer -- a field and a bookmark anchor entirely within one paragraph (run-scoped, ContentParagraph.constructs), and a division/index wrapper bracketing whole blocks (block-scoped, a constructStart/constructEnd pair). Every case here round-trips through the identical law the rest of this suite states: normaliseOdtContent(read(write(document))) equals normaliseOdtContent(document).
+describe("fidelity constructs inside a table cell (#969)", () => {
+  it("round-trips a field extent inside a table cell's own paragraph", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "table",
+          columnWidthsPt: [240],
+          rows: [
+            {
+              cells: [
+                {
+                  blocks: [
+                    {
+                      kind: "paragraph",
+                      runs: [{ text: "Value " }, { text: "42", bold: true }],
+                      constructs: [
+                        {
+                          descriptor: {
+                            kind: "field",
+                            instruction: "<text:expression/>",
+                            cachedResult: "42",
+                          },
+                          startRun: 1,
+                          endRun: 2,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+  });
+});
+
 describe("fidelity constructs written (#969)", () => {
   it("round-trips a field from its own cached instruction and result", () => {
     expectRoundTrip(
