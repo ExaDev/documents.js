@@ -1,6 +1,7 @@
 import { base64ToBytes } from "./util/base64";
 import { deflate } from "./bytes/flate";
 import { ByteWriter, concatBytes } from "./bytes/writer";
+import { ByteReader } from "./bytes/reader";
 import { randomBytes } from "./crypto/random";
 import type { PdfEncryptionOptions } from "./encrypt-write";
 import {
@@ -13,15 +14,19 @@ import type { LayoutFont, PositionedFormula } from "document-schema.js";
 import type {
   LayoutDestinationTarget,
   LayoutDocument,
+  LayoutFormField,
   LayoutImageAsset,
   LayoutInternalLink,
   LayoutLink,
   LayoutOutlineItem,
+  LayoutStructureElement,
 } from "./layout";
+import type { SourceResidue } from "document-schema.js";
 import type { FontMetrics, StandardFontName } from "./afm-widths";
 import { STANDARD_METRICS, widthOfCode } from "./afm-widths";
 import type { ContentWriteContext } from "./content-write";
 import { writeContentStream } from "./content-write";
+import { parseValue } from "./parse";
 import type { EmbeddedFace, EmbeddedFaceSubstitution } from "./embedded-font";
 import { collectEmbeddedGlyphs } from "./embedded-font";
 import { NOTES_ANNOTATION_AUTHOR } from "./notes-annotation-author";
@@ -455,6 +460,49 @@ function xrefEntry(offset: number, generation: number, inUse: boolean): string {
   return `${offset.toString().padStart(10, "0")} ${generation.toString().padStart(5, "0")} ${inUse ? "n" : "f"} \n`;
 }
 
+// #967 residue parse-back: the inverse of serializeObjectToText the read side's readDocumentResidue used to quarantine each row. One object from the row's text through the ordinary lexer/parser; a row that does not parse at all restores as nothing (skip, never throw -- residue is opacity, not data this writer depends on).
+function parseResidueRow(residue: SourceResidue): PdfObject | undefined {
+  const reader = new ByteReader(new TextEncoder().encode(residue.xml));
+  const ignored: unknown[] = [];
+  return parseValue(reader, () => {
+    // Parse diagnostics here describe the SOURCE producer's serialisation, not this writer's output -- nothing downstream can act on them, so they are collected and dropped rather than surfaced.
+    void ignored;
+  });
+}
+
+// True when the parsed object names an indirect object anywhere inside -- the marker that the row is tied to the source file's own object graph and cannot be restorable in this one.
+function objectContainsReference(obj: PdfObject): boolean {
+  if (obj.kind === "ref") {
+    return true;
+  }
+  if (obj.kind === "array") {
+    return obj.items.some(objectContainsReference);
+  }
+  if (obj.kind === "dict") {
+    return [...obj.entries.values()].some(objectContainsReference);
+  }
+  if (obj.kind === "stream") {
+    return [...obj.dict.entries.values()].some(objectContainsReference);
+  }
+  return false;
+}
+
+// One residue row restored, or undefined when absent, unparseable, or reference-carrying.
+function restoreResidueRow(
+  source: Record<string, SourceResidue> | undefined,
+  key: string,
+): PdfObject | undefined {
+  const row = source?.[key];
+  if (row === undefined) {
+    return undefined;
+  }
+  const parsed = parseResidueRow(row);
+  if (parsed === undefined || objectContainsReference(parsed)) {
+    return undefined;
+  }
+  return parsed;
+}
+
 // Assembles a LayoutDocument into a complete PDF file: the object graph (Catalog, Pages, Info, one Font+FontDescriptor pair per standard-14 face actually used, one Image XObject (+SMask) per image asset actually referenced, one embedded math composite font group when options.formulas is non-empty (Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode -- see math-font-write.ts), one embedded text font group per subsetted face when options.fonts resolved any (Type0/CIDFontType2/FontDescriptor/FontFile2/ToUnicode -- see embedded-font-write.ts), then each page's own Page dict, Contents stream (ordinary LayoutItem bytes followed by that page's own formula bytes, if any -- see math-content-write.ts), and optional Annots), a classic cross-reference table, and a trailer. Objects are allocated in this fixed order -- never derived from Map/object iteration order -- so identical input always produces byte-identical output (see the determinism tests).
 //
 // Without options.fonts, no embedded text face can exist, so that group consumes no object numbers and every other object is numbered exactly as it was before embedded-font support: output is byte-identical to a build with none of it (proved by the golden digests in write-embedded-font.test.ts).
@@ -623,6 +671,75 @@ export function writePdf(
     }
   }
 
+  // #967: optional-content layers. One OCG object per layer, in doc.layers order, so the /OCProperties lists stay stable under the fixed-order determinism rule.
+  const layerNumByName = new Map<string, number>();
+  for (const layer of doc.layers ?? []) {
+    layerNumByName.set(layer.name, nextObjNum++);
+  }
+
+  // #967: the AcroForm field tree. One object per field (terminal or group); a terminal field with more than one widget spends one further object per widget beyond the first (widgets after the first are separate /Subtype /Widget kids, while a single widget merges into the field dict itself -- the merged-field/widget spelling the reader's own comment names).
+  const formObjectNums: number[] = [];
+  const countFieldObjects = (fields: readonly LayoutFormField[]): number => {
+    let n = 0;
+    for (const field of fields) {
+      n +=
+        1 +
+        (field.fieldType !== "group" && field.widgets.length > 1
+          ? field.widgets.length - 1
+          : 0) +
+        countFieldObjects(field.children);
+    }
+    return n;
+  };
+  for (let i = 0; i < countFieldObjects(doc.form ?? []); i += 1) {
+    formObjectNums.push(nextObjNum++);
+  }
+  const formNumByField = new Map<LayoutFormField, number>();
+  const formExtraWidgetNums = new Map<LayoutFormField, number[]>();
+  let formNumCursor = 0;
+  const claimFormNums = (fields: readonly LayoutFormField[]): void => {
+    for (const field of fields) {
+      formNumByField.set(field, formObjectNums[formNumCursor++]!);
+      if (field.fieldType !== "group" && field.widgets.length > 1) {
+        formExtraWidgetNums.set(
+          field,
+          field.widgets.slice(1).map(() => formObjectNums[formNumCursor++]!),
+        );
+      }
+      claimFormNums(field.children);
+    }
+  };
+  claimFormNums(doc.form ?? []);
+  const formNumOf = (field: LayoutFormField): number => {
+    const num = formNumByField.get(field);
+    if (num === undefined) {
+      throw new Error(
+        "AcroForm field object number was not claimed -- this is a writePdf internal invariant violation",
+      );
+    }
+    return num;
+  };
+
+  // #967: the tagged structure tree. One object per element plus one for the /ParentTree number tree; element ids map to their object numbers in the same document-order walk that emits them.
+  const structElementNumById = new Map<string, number>();
+  const countElements = (
+    elements: readonly LayoutStructureElement[],
+  ): number => {
+    let n = 0;
+    for (const element of elements) {
+      structElementNumById.set(element.id, nextObjNum++);
+      n += 1 + countElements(element.children);
+    }
+    return n;
+  };
+  const structElementCount = countElements(doc.structure ?? []);
+  const structRootNum = structElementCount > 0 ? nextObjNum++ : undefined;
+  const structParentTreeNum = structElementCount > 0 ? nextObjNum++ : undefined;
+
+  // #967: package-level residue. The XMP packet is the one row needing an object of its own (a /Metadata stream); every other restored row lands inline on the Catalog or the trailer, so no allocation.
+  const residueXmpNum =
+    doc.source?.xmp !== undefined ? nextObjNum++ : undefined;
+
   const objects: AllocatedObject[] = [];
   const catalogEntries: [string, PdfObject][] = [
     ["Type", pdfName("Catalog")],
@@ -633,6 +750,58 @@ export function writePdf(
   }
   if (outlineRootNum !== undefined) {
     catalogEntries.push(["Outlines", pdfRef(outlineRootNum, 0)]);
+  }
+  if (layerNumByName.size > 0) {
+    const ocgRefs = [...layerNumByName.values()].map((num) => pdfRef(num, 0));
+    const visible: PdfObject[] = [];
+    const hidden: PdfObject[] = [];
+    for (const layer of doc.layers ?? []) {
+      const num = layerNumByName.get(layer.name)!;
+      (layer.visible ? visible : hidden).push(pdfRef(num, 0));
+    }
+    // No /BaseState: the default is ON (the reader's own default), with each layer spelled explicitly into /ON or /OFF so its recovered state is exactly the model's, never an implicit default.
+    const defaultConfigEntries: [string, PdfObject][] = [];
+    if (visible.length > 0)
+      defaultConfigEntries.push(["ON", pdfArray(visible)]);
+    if (hidden.length > 0) defaultConfigEntries.push(["OFF", pdfArray(hidden)]);
+    catalogEntries.push([
+      "OCProperties",
+      pdfDict({
+        OCGs: pdfArray(ocgRefs),
+        D: pdfDict(Object.fromEntries(defaultConfigEntries)),
+      }),
+    ]);
+  }
+  if (doc.form !== undefined && doc.form.length > 0) {
+    catalogEntries.push([
+      "AcroForm",
+      pdfDict({
+        Fields: pdfArray(doc.form.map((field) => pdfRef(formNumOf(field), 0))),
+      }),
+    ]);
+  }
+  if (structRootNum !== undefined) {
+    catalogEntries.push(["StructTreeRoot", pdfRef(structRootNum, 0)]);
+  }
+  if (residueXmpNum !== undefined) {
+    catalogEntries.push(["Metadata", pdfRef(residueXmpNum, 0)]);
+  }
+  // The restorable residue rows: each is re-parsed from its own serialised text back into a PdfObject and emitted inline under its original Catalog key (the trailer /ID is held for the trailer block below). A row whose parse names an indirect object of the SOURCE file cannot be restorable -- its "N 0 R" targets an object number that need not exist in this file -- so it is skipped rather than emitted as a dangling reference. The XMP packet (a standalone XML stream, never a reference-carrier) is restored as a /Metadata stream object; the page-boxes row is deliberately not restored at all -- it records the SOURCE file's page geometry, which this writer states itself from each page's own dimensions.
+  const trailerIdRestore = restoreResidueRow(doc.source, "trailer-id");
+  for (const [rowKey, catalogKey] of [
+    ["viewer-preferences", "ViewerPreferences"],
+    ["page-mode", "PageMode"],
+    ["page-layout", "PageLayout"],
+    ["open-action", "OpenAction"],
+    ["output-intents", "OutputIntents"],
+    ["piece-info", "PieceInfo"],
+    ["legal", "Legal"],
+    ["collection", "Collection"],
+  ] as const) {
+    const restored = restoreResidueRow(doc.source, rowKey);
+    if (restored !== undefined) {
+      catalogEntries.push([catalogKey, restored]);
+    }
   }
   objects.push({
     num: catalogNum,
@@ -760,6 +929,239 @@ export function writePdf(
     });
   }
 
+  // #967: optional-content groups. /Name as a text string exactly as the reader's own decodePdfString expects; visibility is stated only through the /OCProperties /D /ON and /OFF lists (no /BaseState), so a reader recovers each layer's state from the list it names, never from an implicit default.
+  for (const layer of doc.layers ?? []) {
+    const num = layerNumByName.get(layer.name)!;
+    objects.push({
+      num,
+      value: pdfDict({
+        Type: pdfName("OCG"),
+        Name: pdfLiteralString(new TextEncoder().encode(layer.name)),
+      }),
+    });
+  }
+
+  // #967: the AcroForm field tree. A terminal field's FIRST widget merges into the field dict itself (/Subtype /Widget /Rect /P alongside /FT and friends); further widgets are separate widget-kid objects under /Kids, and a group is a bare /T + /Kids node. Fully-qualified names decompose back into the /T chain: a root field carries its whole name, a nested field carries the segment beyond its parent's, exactly the join the reader re-applies (ISO 32000-1 12.7.3.2).
+  const widgetRectArray = (
+    widget: LayoutFormField["widgets"][number],
+  ): PdfObject =>
+    pdfArray(
+      [
+        widget.xPt,
+        widget.yPt,
+        widget.xPt + widget.widthPt,
+        widget.yPt + widget.heightPt,
+      ].map((n) => pdfNum(n)),
+    );
+  const widgetDict = (widget: LayoutFormField["widgets"][number]): PdfDict =>
+    pdfDict({
+      Subtype: pdfName("Widget"),
+      Rect: widgetRectArray(widget),
+      P: pdfRef(pageAllocs[widget.pageIndex]!.pageNum, 0),
+    });
+  const FIELD_TYPE_PDF_NAME: Record<
+    Exclude<LayoutFormField["fieldType"], "group">,
+    string
+  > = {
+    text: "Tx",
+    checkbox: "Btn",
+    radio: "Btn",
+    button: "Btn",
+    listbox: "Ch",
+    combobox: "Ch",
+    signature: "Sig",
+  };
+  const emitFormFieldObjects = (
+    fields: readonly LayoutFormField[],
+    parentName: string,
+  ): void => {
+    for (const field of fields) {
+      const ownName =
+        parentName.length > 0 && field.name.startsWith(`${parentName}.`)
+          ? field.name.slice(parentName.length + 1)
+          : field.name;
+      const entries: [string, PdfObject][] = [];
+      if (ownName.length > 0) {
+        entries.push([
+          "T",
+          pdfLiteralString(new TextEncoder().encode(ownName)),
+        ]);
+      }
+      if (field.alias !== undefined) {
+        entries.push([
+          "TU",
+          pdfLiteralString(new TextEncoder().encode(field.alias)),
+        ]);
+      }
+      if (field.fieldType === "group") {
+        entries.push([
+          "Kids",
+          pdfArray(field.children.map((child) => pdfRef(formNumOf(child), 0))),
+        ]);
+      } else {
+        entries.push(["FT", pdfName(FIELD_TYPE_PDF_NAME[field.fieldType])]);
+        const FLAG_READ_ONLY = 1;
+        const FLAG_PUSHBUTTON = 4;
+        const FLAG_RADIO = 32768;
+        const FLAG_COMBO = 131072;
+        let flags = 0;
+        if (field.readOnly === true) flags |= FLAG_READ_ONLY;
+        if (field.fieldType === "button") flags |= FLAG_PUSHBUTTON;
+        if (field.fieldType === "radio") flags |= FLAG_RADIO;
+        if (field.fieldType === "combobox") flags |= FLAG_COMBO;
+        if (flags !== 0) {
+          entries.push(["Ff", pdfNum(flags)]);
+        }
+        if (
+          field.fieldType === "text" ||
+          field.fieldType === "listbox" ||
+          field.fieldType === "combobox"
+        ) {
+          if (field.value !== undefined) {
+            entries.push([
+              "V",
+              pdfLiteralString(new TextEncoder().encode(field.value)),
+            ]);
+          }
+        } else if (
+          field.fieldType === "checkbox" ||
+          field.fieldType === "radio"
+        ) {
+          // The button family's checked state is a NAME export value: any name other than Off reads back as checked, so /Yes is the canonical spelling for a checked field the model left value-less and /Off the unchecked one.
+          entries.push([
+            "V",
+            pdfName(
+              field.checked === false || field.value === undefined
+                ? (field.value ?? (field.checked === true ? "Yes" : "Off"))
+                : field.value,
+            ),
+          ]);
+        }
+        if (field.options !== undefined) {
+          entries.push([
+            "Opt",
+            pdfArray(
+              field.options.map((option) =>
+                pdfLiteralString(new TextEncoder().encode(option)),
+              ),
+            ),
+          ]);
+        }
+        const firstWidget = field.widgets[0];
+        if (field.widgets.length === 1 && firstWidget !== undefined) {
+          entries.push(["Subtype", pdfName("Widget")]);
+          entries.push(["Rect", widgetRectArray(firstWidget)]);
+          entries.push([
+            "P",
+            pdfRef(pageAllocs[firstWidget.pageIndex]!.pageNum, 0),
+          ]);
+        } else if (field.widgets.length > 1 && firstWidget !== undefined) {
+          // The first widget is inline inside /Kids (no object of its own); each further widget is one of the extra objects the allocation walk reserved.
+          const extraNums = formExtraWidgetNums.get(field) ?? [];
+          entries.push([
+            "Kids",
+            pdfArray([
+              widgetDict(firstWidget),
+              ...extraNums.map((num) => pdfRef(num, 0)),
+            ]),
+          ]);
+        }
+      }
+      objects.push({
+        num: formNumOf(field),
+        value: pdfDict(Object.fromEntries(entries)),
+      });
+      const extraNums = formExtraWidgetNums.get(field) ?? [];
+      for (const [index, num] of extraNums.entries()) {
+        const widget = field.widgets[index + 1]!;
+        objects.push({ num, value: widgetDict(widget) });
+      }
+      emitFormFieldObjects(field.children, field.name);
+    }
+  };
+  emitFormFieldObjects(doc.form ?? [], "");
+
+  // #967: the tagged structure tree. One /StructElem per model element (/S the type, /P the parent -- the root for top-level elements, /K the child refs), and the /StructTreeRoot pointing at both the element roots and the /ParentTree number tree built after the page walk below (it depends on the per-page MCID assignments).
+  if (structRootNum !== undefined && structParentTreeNum !== undefined) {
+    const emitStructureElement = (
+      element: LayoutStructureElement,
+      parentNum: number,
+    ): void => {
+      const entries: [string, PdfObject][] = [
+        ["Type", pdfName("StructElem")],
+        ["S", pdfName(element.type)],
+        ["P", pdfRef(parentNum, 0)],
+      ];
+      if (element.title !== undefined) {
+        entries.push([
+          "T",
+          pdfLiteralString(new TextEncoder().encode(element.title)),
+        ]);
+      }
+      if (element.language !== undefined) {
+        entries.push([
+          "Lang",
+          pdfLiteralString(new TextEncoder().encode(element.language)),
+        ]);
+      }
+      if (element.alt !== undefined) {
+        entries.push([
+          "Alt",
+          pdfLiteralString(new TextEncoder().encode(element.alt)),
+        ]);
+      }
+      if (element.actualText !== undefined) {
+        entries.push([
+          "ActualText",
+          pdfLiteralString(new TextEncoder().encode(element.actualText)),
+        ]);
+      }
+      if (element.children.length > 0) {
+        entries.push([
+          "K",
+          pdfArray(
+            element.children.map((child) => {
+              const num = structElementNumById.get(child.id);
+              if (num === undefined) {
+                throw new Error(
+                  `structure element "${child.id}" was not allocated -- this is a writePdf internal invariant violation`,
+                );
+              }
+              return pdfRef(num, 0);
+            }),
+          ),
+        ]);
+      }
+      const ownNum = structElementNumById.get(element.id);
+      if (ownNum === undefined) {
+        throw new Error(
+          `structure element "${element.id}" was not allocated -- this is a writePdf internal invariant violation`,
+        );
+      }
+      objects.push({
+        num: ownNum,
+        value: pdfDict(Object.fromEntries(entries)),
+      });
+      for (const child of element.children) {
+        emitStructureElement(child, ownNum);
+      }
+    };
+    for (const element of doc.structure ?? []) {
+      emitStructureElement(element, structRootNum);
+    }
+  }
+
+  // #967: the XMP packet restored as an uncompressed /Metadata stream -- the read side decodes it back verbatim.
+  if (residueXmpNum !== undefined && doc.source?.xmp !== undefined) {
+    objects.push({
+      num: residueXmpNum,
+      value: pdfStream(
+        pdfDict({ Type: pdfName("Metadata"), Subtype: pdfName("XML") }),
+        new TextEncoder().encode(doc.source.xmp.xml),
+      ),
+    });
+  }
+
   for (const [standardName, alloc] of fontAllocs) {
     const { font, descriptor } = buildFontObjects(
       standardName,
@@ -884,6 +1286,12 @@ export function writePdf(
   }
   const resourcesDict = pdfDict(resourceEntries);
 
+  // #967: each page's (MCID -> owning element id) marks, filled by the content writer as it assigns MCIDs, consumed by the /ParentTree assembly after the walk.
+  const markedStructureByPage = new Map<
+    number,
+    { mcid: number; structureId: string }[]
+  >();
+
   const formulasByPage = new Map<number, PositionedFormula[]>();
   for (const formula of formulas) {
     const forPage = formulasByPage.get(formula.pageIndex);
@@ -938,11 +1346,22 @@ export function writePdf(
     throwIfAborted(options.signal);
     const { pageNum, contentsNum } = pageAllocs[pageIndex]!;
 
+    // #967: the per-page marked-content state. MCIDs are page-scoped and sequential in emission order; the layer object numbers were allocated up front, so the content writer can spell an item's /OC reference inline.
+    let pageMcid = 0;
+    const pageContext: ContentWriteContext = {
+      ...context,
+      nextMcid: () => pageMcid++,
+      layerObjectNumberOf: (name: string) => layerNumByName.get(name),
+    };
     const {
       bytes: contentBytes,
       substitutions,
       missingGlyphs,
-    } = writeContentStream(page.items, context);
+      markedStructure,
+    } = writeContentStream(page.items, pageContext);
+    if (markedStructure.length > 0) {
+      markedStructureByPage.set(pageIndex, [...markedStructure]);
+    }
     for (const substitution of substitutions) {
       options.onSubstitution?.(substitution, { pageIndex });
     }
@@ -999,8 +1418,56 @@ export function writePdf(
     if (annots.length > 0) {
       pageEntries.set("Annots", pdfArray(annots));
     }
+    if ((markedStructureByPage.get(pageIndex) ?? []).length > 0) {
+      // The producer-chosen key this page's parent-tree entry is filed under (14.7.4.4); the page's own position is the natural deterministic choice for a writer minting the tree itself.
+      pageEntries.set("StructParents", pdfNum(pageIndex));
+    }
     objects.push({ num: pageNum, value: pdfDict(pageEntries) });
   });
+
+  // #967: the /ParentTree number tree. One entry per marked page, keyed by that page's /StructParents value, holding the array of owning element references indexed by MCID -- exactly the association structure.ts's own reader walks back. An MCID with no owning element (an item marked for a layer only, or naming an element id this document's tree does not carry) files a null, the spelling a producer writes for an unused slot.
+  if (structRootNum !== undefined && structParentTreeNum !== undefined) {
+    const nums: PdfObject[] = [];
+    for (const [pageIndex, marks] of markedStructureByPage) {
+      const maxMcid = Math.max(...marks.map((mark) => mark.mcid));
+      const byMcid: PdfObject[] = Array.from({ length: maxMcid + 1 }, () =>
+        pdfNull(),
+      );
+      for (const mark of marks) {
+        const elementNum = structElementNumById.get(mark.structureId);
+        if (elementNum !== undefined) {
+          byMcid[mark.mcid] = pdfRef(elementNum, 0);
+        }
+      }
+      nums.push(pdfNum(pageIndex), pdfArray(byMcid));
+    }
+    objects.push({
+      num: structParentTreeNum,
+      value: pdfDict({ Nums: pdfArray(nums) }),
+    });
+    const rootEntries: [string, PdfObject][] = [
+      ["Type", pdfName("StructTreeRoot")],
+      [
+        "K",
+        pdfArray(
+          (doc.structure ?? []).map((element) => {
+            const num = structElementNumById.get(element.id);
+            if (num === undefined) {
+              throw new Error(
+                `structure element "${element.id}" was not allocated -- this is a writePdf internal invariant violation`,
+              );
+            }
+            return pdfRef(num, 0);
+          }),
+        ),
+      ],
+      ["ParentTree", pdfRef(structParentTreeNum, 0)],
+    ];
+    objects.push({
+      num: structRootNum,
+      value: pdfDict(Object.fromEntries(rootEntries)),
+    });
+  }
 
   // Encryption runs as a final pass over the fully-assembled object graph, rather than being threaded through every object-construction call above: every string and stream this writer produces needs the identical treatment (Algorithm 1/1.A, keyed by that object's own number), so one recursive walk here is the same DRY move document.ts's own decryptDict/decryptObject already makes on the read side. The /Encrypt dictionary object itself is allocated and appended only afterwards, so this walk never touches it -- ISO 32000-2 7.6.1 requires its own O/U/OE/UE/Perms strings to stay in the clear.
   let fileId: Uint8Array<ArrayBuffer> | undefined;
@@ -1054,6 +1521,9 @@ export function writePdf(
       pdfArray([pdfHexString(fileId), pdfHexString(fileId)]),
     );
     trailerEntries.set("Encrypt", pdfRef(encryptDictNum, 0));
+  } else if (trailerIdRestore !== undefined) {
+    // #967: the quarantined trailer /ID restored verbatim (the one residue row that belongs to the trailer, not the Catalog). An encrypted document keeps its own freshly minted ID -- the encryption keys are derived from it.
+    trailerEntries.set("ID", trailerIdRestore);
   }
   writer.writeAscii("trailer\n");
   writeObject(writer, pdfDict(trailerEntries));
