@@ -1,4 +1,10 @@
 import type { ContentDocument, ContentParagraph } from "documents.js";
+import {
+  DocumentTreeSchema,
+  documentTreeWithSchema,
+  readMarkdownContent,
+} from "documents.js";
+import { assembleTree } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 
 import { normalizeContentForSource } from "./router";
@@ -127,5 +133,20 @@ describe("normalizeContentForSource", () => {
     });
     const result = normalizeContentForSource(content, "odt");
     expect(firstStyleId(result)).toBe("horizontal-rule");
+  });
+});
+
+describe("the Package / JSON tool's dump-to-restore pipeline", () => {
+  it("round-trips a markdown document's tree through the stamped JSON dump and back as a schema-valid, identically-stamped artefact", () => {
+    // The exact shape the Package / JSON route exchanges: the dump is documentTreeWithSchema(tree) as JSON, the restore parses and schema-validates it before rebuilding bytes. The byte-building half (buildDocumentBytes) is documents.js's own from-package suite's coverage -- asserted here at the tree boundary this package owns.
+    const markdown = "# Title\n\nBody text.\n";
+    const stamped = documentTreeWithSchema(
+      assembleTree(readMarkdownContent(markdown)),
+    );
+    const dumped = JSON.stringify(stamped, null, 2);
+    const restored = documentTreeWithSchema(
+      DocumentTreeSchema.parse(JSON.parse(dumped)),
+    );
+    expect(restored).toEqual(stamped);
   });
 });
