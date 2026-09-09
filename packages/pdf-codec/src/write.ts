@@ -16,6 +16,7 @@ import type {
   LayoutImageAsset,
   LayoutInternalLink,
   LayoutLink,
+  LayoutOutlineItem,
 } from "./layout";
 import type { FontMetrics, StandardFontName } from "./afm-widths";
 import { STANDARD_METRICS, widthOfCode } from "./afm-widths";
@@ -367,25 +368,36 @@ function destinationViewArray(target: LayoutDestinationTarget): PdfObject[] {
   return [pdfName(target.kind === "fitB" ? "FitB" : "Fit")];
 }
 
-function buildInternalLinkAnnotDict(
-  link: LayoutInternalLink,
+// The direct destination array a destinations-table NAME resolves to -- [pageRef, view] -- shared by internal links and outline items so the two can never spell the same target differently. The error message names the referer (what) so a caller violating the destinations-table invariant knows which construct tripped it.
+function resolveDestinationArray(
   doc: LayoutDocument,
   pageAllocs: readonly { pageNum: number }[],
-): PdfObject {
-  const destination = doc.destinations?.find(
-    (d) => d.name === link.destination,
-  );
+  name: string,
+  what: string,
+): PdfObject[] {
+  const destination = doc.destinations?.find((d) => d.name === name);
   if (destination === undefined) {
     throw new Error(
-      `internal link names destination "${link.destination}", which the document's destinations table does not carry -- this is a caller-invariant violation`,
+      `${what} names destination "${name}", which the document's destinations table does not carry -- this is a caller-invariant violation`,
     );
   }
   const targetPage = pageAllocs[destination.pageIndex];
   if (targetPage === undefined) {
     throw new Error(
-      `destination "${link.destination}" names page index ${destination.pageIndex}, which is beyond the document's own pages -- this is a caller-invariant violation`,
+      `destination "${destination.name}" names page index ${destination.pageIndex}, which is beyond the document's own pages -- this is a caller-invariant violation`,
     );
   }
+  return [
+    pdfRef(targetPage.pageNum, 0),
+    ...destinationViewArray(destination.target),
+  ];
+}
+
+function buildInternalLinkAnnotDict(
+  link: LayoutInternalLink,
+  doc: LayoutDocument,
+  pageAllocs: readonly { pageNum: number }[],
+): PdfObject {
   return pdfDict({
     Type: pdfName("Annot"),
     Subtype: pdfName("Link"),
@@ -398,10 +410,14 @@ function buildInternalLinkAnnotDict(
       ].map((v) => pdfNum(v)),
     ),
     Border: pdfArray([0, 0, 0].map((v) => pdfNum(v))),
-    Dest: pdfArray([
-      pdfRef(targetPage.pageNum, 0),
-      ...destinationViewArray(destination.target),
-    ]),
+    Dest: pdfArray(
+      resolveDestinationArray(
+        doc,
+        pageAllocs,
+        link.destination,
+        "internal link",
+      ),
+    ),
   });
 }
 
@@ -590,6 +606,23 @@ export function writePdf(
   const attachmentsNamesNum =
     attachmentAllocs.length > 0 ? nextObjNum++ : undefined;
 
+  // #967: the outline. One /Outlines root plus one item dict per bookmark node, allocated in the same pre-order walk that emits them, so sibling order and /Next chains are stable.
+  const outlineRootNum =
+    (doc.outline ?? []).length > 0 ? nextObjNum++ : undefined;
+  const outlineItemNums: number[] = [];
+  if (outlineRootNum !== undefined) {
+    const countItems = (items: readonly LayoutOutlineItem[]): number => {
+      let n = 0;
+      for (const item of items) {
+        n += 1 + countItems(item.children);
+      }
+      return n;
+    };
+    for (let i = 0; i < countItems(doc.outline ?? []); i += 1) {
+      outlineItemNums.push(nextObjNum++);
+    }
+  }
+
   const objects: AllocatedObject[] = [];
   const catalogEntries: [string, PdfObject][] = [
     ["Type", pdfName("Catalog")],
@@ -597,6 +630,9 @@ export function writePdf(
   ];
   if (attachmentsNamesNum !== undefined) {
     catalogEntries.push(["Names", pdfRef(attachmentsNamesNum, 0)]);
+  }
+  if (outlineRootNum !== undefined) {
+    catalogEntries.push(["Outlines", pdfRef(outlineRootNum, 0)]);
   }
   objects.push({
     num: catalogNum,
@@ -657,6 +693,69 @@ export function writePdf(
       value: pdfDict({
         // The /Names dict the Catalog references holds ONE child, /EmbeddedFiles, whose own /Names array is the flat name tree -- the identical shape readAttachments walks (resolve catalog /Names, take its /EmbeddedFiles, walk that node's /Names) and the shape every real producer writes.
         EmbeddedFiles: pdfDict({ Names: pdfArray(names) }),
+      }),
+    });
+  }
+
+  if (outlineRootNum !== undefined && (doc.outline ?? []).length > 0) {
+    // One shared pre-order cursor across the whole walk: allocation reserved every item's number by pre-order count, so emission must consume them in exactly that order -- a per-level cursor would hand children numbers already used by earlier siblings.
+    let itemCursor = 0;
+    const emitItems = (
+      items: readonly LayoutOutlineItem[],
+      parentNum: number,
+    ): number[] => {
+      const siblingNums: number[] = [];
+      let prevNum: number | undefined;
+      for (const item of items) {
+        const ownNum = outlineItemNums[itemCursor]!;
+        itemCursor += 1;
+        siblingNums.push(ownNum);
+        // Children are allocated contiguously AFTER this whole sibling run was pre-counted, so the recursive call consumes the remaining tail of the same pre-allocated run -- the counts were reserved by the identical pre-order walk at allocation time, keeping object numbering deterministic.
+        const childNums = emitItems(item.children, ownNum);
+        const entries: [string, PdfObject][] = [
+          ["Title", pdfLiteralString(new TextEncoder().encode(item.title))],
+          ["Parent", pdfRef(parentNum, 0)],
+        ];
+        if (item.destination !== undefined) {
+          entries.push([
+            "Dest",
+            pdfArray(
+              resolveDestinationArray(
+                doc,
+                pageAllocs,
+                item.destination,
+                `outline item "${item.title}"`,
+              ),
+            ),
+          ]);
+        }
+        if (prevNum !== undefined) {
+          entries.push(["Prev", pdfRef(prevNum, 0)]);
+        }
+        if (siblingNums.length < items.length) {
+          entries.push(["Next", pdfRef(outlineItemNums[itemCursor]!, 0)]);
+        }
+        if (childNums.length > 0) {
+          entries.push(["First", pdfRef(childNums[0]!, 0)]);
+          entries.push(["Last", pdfRef(childNums[childNums.length - 1]!, 0)]);
+          // Every child is an open descendant: /Count states them all positively, the Acrobat-default outline state, so a reader re-presenting this document shows the tree expanded exactly as the LayoutDocument modelled it (the flat model has no "collapsed" fact to preserve).
+          entries.push(["Count", pdfNum(childNums.length)]);
+        }
+        objects.push({
+          num: ownNum,
+          value: pdfDict(Object.fromEntries(entries)),
+        });
+        prevNum = ownNum;
+      }
+      return siblingNums;
+    };
+    const topLevelNums = emitItems(doc.outline ?? [], outlineRootNum);
+    objects.push({
+      num: outlineRootNum,
+      value: pdfDict({
+        Type: pdfName("Outlines"),
+        First: pdfRef(topLevelNums[0]!, 0),
+        Last: pdfRef(topLevelNums[topLevelNums.length - 1]!, 0),
       }),
     });
   }
