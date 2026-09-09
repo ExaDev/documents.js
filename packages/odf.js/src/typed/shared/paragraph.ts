@@ -1,11 +1,11 @@
 import type {
   AnchorDescriptor,
   ContentBlock,
+  ProvenanceDescriptor,
   ContentParagraph,
   ContentRun,
   DefinitionEntry,
   FieldDescriptor,
-  ProvenanceDescriptor,
   RunConstructExtent,
 } from "document-schema.js";
 import type { XmlElement, XmlNode } from "../../model/node";
@@ -39,6 +39,9 @@ import {
   odfRunConstructWriteKind,
   pairOdfMarkerHalves,
   parseOdfFieldInstruction,
+  writeOdfChangeEnd,
+  writeOdfChangePoint,
+  writeOdfChangeStart,
   writeOdfBookmarkEnd,
   writeOdfBookmarkPoint,
   writeOdfBookmarkStart,
@@ -757,6 +760,11 @@ interface OdfBookmarkMarker {
   readonly name: string;
 }
 
+interface OdfChangeMarker {
+  readonly side: "start" | "end" | "point";
+  readonly id: string;
+}
+
 interface OdfParagraphConstructPlan {
   readonly fieldRanges: readonly {
     readonly start: number;
@@ -771,6 +779,8 @@ interface OdfParagraphConstructPlan {
   }[];
   // Canonical run boundary -> the markers whose event happens there, already ordered end-before-start the way insertOdfConstructMarkers orders block-scope markers at a shared position.
   readonly markersAt: ReadonlyMap<number, readonly OdfBookmarkMarker[]>;
+  // The identical map for tracked-change markers, keyed apart from bookmarks because the two families pair within themselves and never share a key vocabulary.
+  readonly changeMarkersAt: ReadonlyMap<number, readonly OdfChangeMarker[]>;
 }
 
 // Resolves a paragraph's own constructs field against the canonical run list segmentOdfParagraphRunsMapped's boundaryMap already mapped every extent's startRun/endRun onto, splitting the field extents (which consume their own run range) from the bookmark point/range markers (which are zero-width events at a boundary). Every entry here has already passed odfRunConstructWriteKind -- the caller (writeOdfParagraphChildren) is responsible for refusing a paragraph carrying anything this function does not resolve, exactly as assertWritableParagraph does before this ever runs.
@@ -778,6 +788,7 @@ function planOdfParagraphConstructs(
   extents: readonly RunConstructExtent[],
   boundaryMap: ReadonlyMap<number, number>,
   definitions?: Readonly<Record<string, DefinitionEntry>>,
+  changeIds?: ReadonlyMap<ProvenanceDescriptor, string>,
 ): OdfParagraphConstructPlan {
   const fieldRanges: {
     start: number;
@@ -792,8 +803,10 @@ function planOdfParagraphConstructs(
   }[] = [];
   const startsAt = new Map<number, OdfBookmarkMarker[]>();
   const endsAt = new Map<number, OdfBookmarkMarker[]>();
+  const changeStartsAt = new Map<number, OdfChangeMarker[]>();
+  const changeEndsAt = new Map<number, OdfChangeMarker[]>();
   for (const extent of extents) {
-    const kind = odfRunConstructWriteKind(extent, definitions);
+    const kind = odfRunConstructWriteKind(extent, definitions, changeIds);
     const start = boundaryMap.get(extent.startRun)!;
     const end = boundaryMap.get(extent.endRun)!;
     if (kind === "field") {
@@ -815,6 +828,20 @@ function planOdfParagraphConstructs(
       const endList = endsAt.get(end) ?? [];
       endList.push({ side: "end", name });
       endsAt.set(end, endList);
+    } else if (kind === "changePoint" || kind === "changeRange") {
+      const id = changeIds!.get(extent.descriptor as ProvenanceDescriptor)!;
+      if (kind === "changePoint") {
+        const list = changeStartsAt.get(start) ?? [];
+        list.push({ side: "point", id });
+        changeStartsAt.set(start, list);
+      } else {
+        const startList = changeStartsAt.get(start) ?? [];
+        startList.push({ side: "start", id });
+        changeStartsAt.set(start, startList);
+        const endList = changeEndsAt.get(end) ?? [];
+        endList.push({ side: "end", id });
+        changeEndsAt.set(end, endList);
+      }
     } else if (kind === "note" || kind === "comment") {
       const descriptor = extent.descriptor as AnchorDescriptor;
       const entry = definitions?.[descriptor.definition!];
@@ -832,7 +859,17 @@ function planOdfParagraphConstructs(
       ...(startsAt.get(boundary) ?? []),
     ]);
   }
-  return { fieldRanges, noteRanges, markersAt };
+  const changeMarkersAt = new Map<number, OdfChangeMarker[]>();
+  for (const boundary of new Set([
+    ...changeStartsAt.keys(),
+    ...changeEndsAt.keys(),
+  ])) {
+    changeMarkersAt.set(boundary, [
+      ...(changeEndsAt.get(boundary) ?? []),
+      ...(changeStartsAt.get(boundary) ?? []),
+    ]);
+  }
+  return { fieldRanges, noteRanges, markersAt, changeMarkersAt };
 }
 
 // Field runs, formatted with the same span-grouping the top-level paragraph uses (never hyperlink-wrapped: a hyperlink carried by a run strictly inside a field's own cached text has no ODF spelling this writer produces, a narrow and documented gap rather than a silent drop -- ContentRun.hyperlink on such a run is simply not honoured).
@@ -1120,11 +1157,21 @@ function writeOdfBookmarkMarker(marker: OdfBookmarkMarker): XmlElement {
 }
 
 // A paragraph's own inline children: each maximal stretch of consecutive items sharing one hyperlink target wrapped in a single text:a (a field item never carries a hyperlink of its own, so it always breaks a hyperlink group open around it), with the formatting grouping above running inside it, and every run-level construct the paragraph carries spliced in at its own exact boundary -- a field consuming its own run range as one element (buildOdfParagraphItems), a bookmark point/start/end sitting as a bare sibling exactly where its extent's boundary maps to. Refusing a construct this function does not resolve is assertWritableParagraph's job (typed/odt/write.ts), called before this ever runs; every extent reaching here has already passed odfRunConstructWriteKind.
-export function writeOdfParagraphChildren(
+export function writeOdfChangeMarker(marker: OdfChangeMarker): XmlElement {
+  if (marker.side === "point") {
+    return writeOdfChangePoint(marker.id);
+  }
+  return marker.side === "start"
+    ? writeOdfChangeStart(marker.id)
+    : writeOdfChangeEnd(marker.id);
+}
+
+function writeOdfParagraphChildren(
   paragraph: ContentParagraph,
   registry: StyleRegistry,
   definitions?: Readonly<Record<string, DefinitionEntry>>,
   openNoteKeys?: Set<string>,
+  changeIds?: ReadonlyMap<ProvenanceDescriptor, string>,
 ): XmlNode[] {
   const runs = paragraph.runs;
   const extents = paragraph.constructs ?? [];
@@ -1137,7 +1184,12 @@ export function writeOdfParagraphChildren(
     runs,
     protectedRunBoundaries,
   );
-  const plan = planOdfParagraphConstructs(extents, boundaryMap, definitions);
+  const plan = planOdfParagraphConstructs(
+    extents,
+    boundaryMap,
+    definitions,
+    changeIds,
+  );
   const items = buildOdfParagraphItems(
     canonical,
     plan.fieldRanges,
@@ -1158,9 +1210,22 @@ export function writeOdfParagraphChildren(
     const existing = markersAtItemBoundary.get(itemBoundary) ?? [];
     markersAtItemBoundary.set(itemBoundary, [...existing, ...markers]);
   }
+  const changeMarkersAtItemBoundary = new Map<number, OdfChangeMarker[]>();
+  for (const [canonicalBoundary, markers] of plan.changeMarkersAt) {
+    const itemBoundary = odfParagraphItemBoundary(
+      canonicalBoundary,
+      plan.fieldRanges,
+    );
+    protectedItemBoundaries.add(itemBoundary);
+    const existing = changeMarkersAtItemBoundary.get(itemBoundary) ?? [];
+    changeMarkersAtItemBoundary.set(itemBoundary, [...existing, ...markers]);
+  }
   const emitMarkers = (children: XmlNode[], boundary: number): void => {
     for (const marker of markersAtItemBoundary.get(boundary) ?? []) {
       children.push(writeOdfBookmarkMarker(marker));
+    }
+    for (const marker of changeMarkersAtItemBoundary.get(boundary) ?? []) {
+      children.push(writeOdfChangeMarker(marker));
     }
   };
 
@@ -1210,6 +1275,8 @@ export interface OdfParagraphWriteOptions {
   readonly definitions?: Readonly<Record<string, DefinitionEntry>>;
   // The note-definition keys on the write stack RIGHT NOW: a cyclic definition (a note body whose own anchor resolves back to an entry still being written) would recurse until the stack is exhausted, so the writer refuses one by name instead. Internal to the note write path -- never set by a caller.
   readonly openNoteKeys?: Set<string>;
+  // The tracked-change descriptor -> minted text:changed-region id map: a provenance extent writes its inline markers only when its descriptor has a region id here. The odt writer mints the ids document-wide and emits the matching text:tracked-changes container.
+  readonly changeIds?: ReadonlyMap<ProvenanceDescriptor, string>;
 }
 
 // Writes one ContentParagraph as the text:p (or, for a paragraph carrying a headingLevel, text:h) element readOdfParagraph reads back. Every formatting difference becomes an interned automatic style, since ODF has no other way to state one.
@@ -1247,6 +1314,7 @@ export function writeOdfParagraph(
         registry,
         options.definitions,
         options.openNoteKeys,
+        options.changeIds,
       ),
       ...(options.trailingNodes ?? []),
     ],
