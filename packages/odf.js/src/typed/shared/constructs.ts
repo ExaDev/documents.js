@@ -970,7 +970,7 @@ export function writeOdfBookmarkEnd(name: string): XmlElement {
 
 // Which run-level construct kind (if any) this package's odt writer knows how to spell back, and how: a field always writes from its own instruction; a bookmark anchor writes as a POINT (text:bookmark) when its extent covers no runs at all and a RANGE (text:bookmark-start/-end pair) otherwise -- the same point-vs-range split odfBookmarkAnchorDescriptor's own two call sites (a point mark, a paired range half) collapse into one indistinguishable descriptor shape for, disambiguated here the only way it still can be: by whether the extent itself is empty. Every other run-level construct (a footnote/endnote/comment anchor, a tracked-change provenance wrapper) has no writer yet -- see ExaDev/documents.js#969 -- and this returns undefined for those so a caller can refuse them by name rather than guess at a spelling.
 export type OdfRunConstructWriteKind =
-  "field" | "bookmarkPoint" | "bookmarkRange" | "note";
+  "field" | "bookmarkPoint" | "bookmarkRange" | "note" | "comment";
 
 export function odfRunConstructWriteKind(
   extent: RunConstructExtent,
@@ -988,12 +988,13 @@ export function odfRunConstructWriteKind(
   if (
     descriptor.kind === "anchor" &&
     (descriptor.anchorType === "footnote" ||
-      descriptor.anchorType === "endnote") &&
+      descriptor.anchorType === "endnote" ||
+      descriptor.anchorType === "comment") &&
     descriptor.definition !== undefined &&
     definitions?.[descriptor.definition] !== undefined
   ) {
-    // A note anchor writes only when the definitions table holds its body: the citation run alone is half a note, and emitting a text:note with an empty body would read back as a note that silently lost its content.
-    return "note";
+    // A note or comment anchor writes only when the definitions table holds its body: a citation run alone is half a note, and an empty-bodied text:note or office:annotation would read back as one that silently lost its content.
+    return descriptor.anchorType === "comment" ? "comment" : "note";
   }
   return undefined;
 }

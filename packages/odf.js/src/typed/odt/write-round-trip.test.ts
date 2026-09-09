@@ -1257,6 +1257,42 @@ describe("fidelity constructs written (#969)", () => {
     };
     expect(() => writeOdt(tree)).toThrow(/cyclic note definition/);
   });
+
+  it("round-trips a comment anchor with author, date, and body through writeOdt", () => {
+    const document = documentOf([
+      {
+        kind: "paragraph",
+        runs: [{ text: "remarked" }],
+        constructs: [
+          {
+            descriptor: {
+              kind: "anchor",
+              anchorType: "comment",
+              name: "annotation1",
+              definition: "comment:annotation1",
+            },
+            startRun: 0,
+            endRun: 1,
+          },
+        ],
+      },
+    ]);
+    const tree = assembleTree(document);
+    tree.definitions = {
+      "comment:annotation1": {
+        kind: "comment",
+        author: "Ada Lovelace",
+        dateIso: "2026-09-09T00:00:00Z",
+        body: [{ kind: "paragraph", runs: [{ text: "check this" }] }],
+      },
+    };
+    const rewritten = readOdtContent(writeOdt(tree));
+    expect(rewritten.definitions?.["comment:annotation1"]).toMatchObject({
+      kind: "comment",
+      author: "Ada Lovelace",
+      dateIso: "2026-09-09T00:00:00Z",
+    });
+  });
 });
 
 function roundTrippedBlocks(document: WordprocessingDocument): ContentBlock[] {
