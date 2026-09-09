@@ -8,6 +8,7 @@ import { decodePackage, encodePackage, readOdfMetadata } from "odf.js";
 import type { Box } from "document-schema.js";
 import { patchOdfMetadataOnPackage } from "../../metadata/core-patch";
 import { resolveMetadataTimestamps } from "../../model/metadata";
+import { encodeXmlText } from "../../xml/entities";
 import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
 import { buildVectorElement } from "../odg/vector";
@@ -141,7 +142,7 @@ class OdtBodyImpl implements OdtBody {
     this.officeText.children.push({
       type: "element",
       tag: "text:bookmark-start",
-      attributes: [{ name: "text:name", value: name }],
+      attributes: [{ name: "text:name", value: encodeXmlText(name) }],
       children: [],
     });
   }
@@ -150,7 +151,7 @@ class OdtBodyImpl implements OdtBody {
     this.officeText.children.push({
       type: "element",
       tag: "text:bookmark-end",
-      attributes: [{ name: "text:name", value: name }],
+      attributes: [{ name: "text:name", value: encodeXmlText(name) }],
       children: [],
     });
   }

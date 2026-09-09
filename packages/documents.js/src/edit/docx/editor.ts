@@ -11,6 +11,7 @@ import { resolveMetadataTimestamps } from "../../model/metadata";
 import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
 import { el } from "../../xml/fragment";
+import { encodeXmlText } from "../../xml/entities";
 import type { ImageMediaContext } from "./paragraph";
 import { buildParagraph, DocxParagraph } from "./paragraph";
 import type { ParagraphInit } from "./paragraph";
@@ -120,7 +121,10 @@ class DocxBodyImpl implements DocxBody {
     this.body.children.splice(
       bodyInsertionPoint(this.body),
       0,
-      el("w:bookmarkStart", { "w:id": String(id), "w:name": name }),
+      el("w:bookmarkStart", {
+        "w:id": String(id),
+        "w:name": encodeXmlText(name),
+      }),
     );
   }
 
