@@ -1133,6 +1133,82 @@ describe("fidelity constructs written (#969)", () => {
       ),
     ).toThrow(/no paragraph to carry its halves/);
   });
+
+  it("round-trips a footnote anchor with its definitions-table body through writeOdt", () => {
+    // The tree-level law for notes: writeOdt (the entry point that can see the definitions table) writes the inline text:note, and reading the package back recovers the same citation run, anchor extent, and definitions entry.
+    const document = documentOf([
+      {
+        kind: "paragraph",
+        runs: [{ text: "1" }],
+        constructs: [
+          {
+            descriptor: {
+              kind: "anchor",
+              anchorType: "footnote",
+              name: "note1",
+              definition: "note:note1",
+            },
+            startRun: 0,
+            endRun: 1,
+          },
+        ],
+      },
+    ]);
+    const tree = assembleTree(document);
+    tree.definitions = {
+      "note:note1": {
+        kind: "footnote",
+        citation: "1",
+        body: [{ kind: "paragraph", runs: [{ text: "the note body" }] }],
+      },
+    };
+    const rewritten = readOdtContent(writeOdt(tree));
+    expect(rewritten.sections[0]!.blocks[0]).toMatchObject({
+      kind: "paragraph",
+      runs: [{ text: "1" }],
+      constructs: [
+        {
+          descriptor: {
+            kind: "anchor",
+            anchorType: "footnote",
+            name: "note1",
+            definition: "note:note1",
+          },
+          startRun: 0,
+          endRun: 1,
+        },
+      ],
+    });
+    expect(rewritten.definitions?.["note:note1"]).toMatchObject({
+      kind: "footnote",
+      citation: "1",
+    });
+  });
+
+  it("refuses a note anchor when no definitions table is in reach, by name", () => {
+    expect(() =>
+      writeOdtContent(
+        documentOf([
+          {
+            kind: "paragraph",
+            runs: [{ text: "1" }],
+            constructs: [
+              {
+                descriptor: {
+                  kind: "anchor",
+                  anchorType: "footnote",
+                  name: "note1",
+                  definition: "note:note1",
+                },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+      ),
+    ).toThrow(/does not spell back yet/);
+  });
 });
 
 function roundTrippedBlocks(document: WordprocessingDocument): ContentBlock[] {
