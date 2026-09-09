@@ -1,3 +1,18 @@
+## [2.10.0](https://github.com/ExaDev/documents.js/compare/web%402.9.0...web%402.10.0) (2026-09-09)
+
+### Features
+
+* **web:** add the .odb browsing tool ([7a8c576](https://github.com/ExaDev/documents.js/commit/7a8c576634f093a3626e0246855cd90fd088c217))
+
+### Tests
+
+* **web:** keep .odb out of the planned-tools loop after the rebase ([e6df99d](https://github.com/ExaDev/documents.js/commit/e6df99d46884d3f2570e0ba4a45871c492c97988)), references [post-#1150](https://github.com/post-/issues/1150)
+
+
+### Dependencies
+
+- Updated documents.js to 7.11.3
+
 ## [2.9.0](https://github.com/ExaDev/documents.js/compare/web%402.8.31...web%402.9.0) (2026-09-09)
 
 ### Features

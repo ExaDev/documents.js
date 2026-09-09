@@ -1,3 +1,14 @@
+## [7.11.3](https://github.com/ExaDev/documents.js/compare/documents.js%407.11.2...documents.js%407.11.3) (2026-09-09)
+
+### Bug Fixes
+
+* **documents.js:** bound the HSQLDB compressed-script inflate ([9dfea05](https://github.com/ExaDev/documents.js/commit/9dfea054e4ef559310d97e5f0669f826ccda0622))
+
+
+### Dependencies
+
+- Updated ooxml.js to 8.9.0
+
 ## [7.11.2](https://github.com/ExaDev/documents.js/compare/documents.js%407.11.1...documents.js%407.11.2) (2026-09-09)
 
 

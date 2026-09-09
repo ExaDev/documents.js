@@ -1,3 +1,15 @@
+## [8.9.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.8.0...ooxml.js%408.9.0) (2026-09-09)
+
+### Features
+
+* **ooxml.js:** write a real drawing layer for xlsx charts and pictures ([70c2ea8](https://github.com/ExaDev/documents.js/commit/70c2ea83eb9a3e889c100cc73dea6950c2eabacc))
+* **ooxml.js:** write a workbook's definitions table for xlsx ([c6a4f1c](https://github.com/ExaDev/documents.js/commit/c6a4f1cc5d4226d719928500708c4787c8328a3b))
+
+### Bug Fixes
+
+* **ooxml.js:** accept only internal A1 ranges as xlsx defined-name refersTo ([2198c7a](https://github.com/ExaDev/documents.js/commit/2198c7a2d1557e8a1cd352e80bb9516fe2955657))
+* **ooxml.js:** drop a duplicated test opener in the chart round-trip suite ([9fb8e2e](https://github.com/ExaDev/documents.js/commit/9fb8e2ef4b6d6fb3986051cf22103227d5c2fcf9))
+
 ## [8.8.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.7.0...ooxml.js%408.8.0) (2026-09-08)
 
 ### Features
