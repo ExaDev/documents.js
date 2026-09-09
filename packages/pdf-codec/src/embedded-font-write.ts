@@ -142,11 +142,11 @@ function buildFontFileStream(
   );
 }
 
-// Builds the five PDF objects one embedded text face needs. `subset` is that face's own sfnt-subset.ts output (its glyph IDs drive /W, its bytes are the /FontFile2 program, and both feed the subset tag); `usedGlyphs` is the glyph-ID -> Unicode mapping the ToUnicode CMap is built from -- a subset of `subset.glyphIds`, since a glyph pulled in only as a composite's component represents no character of its own.
+// Builds the five PDF objects one embedded text face needs. `subset` is that face's own sfnt-subset.ts output (its glyph IDs drive /W, its bytes are the /FontFile2 program, and both feed the subset tag); `usedGlyphs` is the glyph-ID -> Unicode mapping the ToUnicode CMap is built from -- a subset of `subset.glyphIds`, since a glyph pulled in only as a composite's component represents no character of its own. Each value is a Unicode text run rather than a single code point: one code point for a glyph a character resolved to directly, the whole character run a ligature glyph consumed (see embedded-font.ts's collectEmbeddedGlyphs).
 export function buildEmbeddedFontObjects(
   face: EmbeddedFace,
   subset: SfntSubsetResult,
-  usedGlyphs: ReadonlyMap<number, number>,
+  usedGlyphs: ReadonlyMap<number, readonly number[]>,
   refs: EmbeddedFontObjectRefs,
   compress: boolean,
 ): EmbeddedFontObjects {

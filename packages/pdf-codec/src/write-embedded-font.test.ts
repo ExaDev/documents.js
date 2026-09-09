@@ -381,7 +381,8 @@ describe("createFontMeasurer: measurement against a real embedded face", () => {
   });
 
   it("feeds line wrapping the embedded advances, changing where a real line actually breaks", () => {
-    const text = "Hamburgefonstiv Hamburgefonstiv";
+    // The classic width-probe string "Hamburgefonstiv" cannot be used here any more: Carlito's own 'liga' feature shapes its 'ti' pair, so the embedded measurement now includes ligature tightening, which would invert this test's premise (embedded wider than the standard-14 substitute) through shaping rather than through the advances this test exists to isolate. "Hamburgefonstlv" breaks that pair while keeping the string wide enough that Carlito's own advances still measure wider than the Helvetica-plus-0.92 substitute this test compares against.
+    const text = "Hamburgefonstlv Hamburgefonstlv";
     const runs = [{ text, font: CALIBRI, sizePt: 12, color: BLACK }];
     const embeddedMeasurer = createFontMeasurer(createFontRegistry());
     const standardMeasurer = createStandardFontMeasurer();
@@ -406,10 +407,10 @@ describe("createFontMeasurer: measurement against a real embedded face", () => {
     expect(standardLines).toHaveLength(1);
     expect(embeddedLines).toHaveLength(2);
     expect(embeddedLines[0]?.fragments.map((f) => f.text).join("")).toBe(
-      "Hamburgefonstiv",
+      "Hamburgefonstlv",
     );
     expect(embeddedLines[0]?.widthPt).toBeCloseTo(
-      (encodeForShowEmbedded("Hamburgefonstiv", carlitoRegularFace())
+      (encodeForShowEmbedded("Hamburgefonstlv", carlitoRegularFace())
         .width1000 /
         1000) *
         12,
@@ -662,5 +663,52 @@ describe("writePdf: backward compatibility with no registry supplied", () => {
     expect(text).toContain("/BaseFont /Times-Bold");
     // Calibri still measures and draws through the standard-14 width correction, exactly as before.
     expect(text).toContain("92 Tz");
+  });
+});
+
+describe("writePdf: GSUB ligature shaping through the vendored faces", () => {
+  it("draws a ligature glyph where the face's own GSUB declares one, not its component glyphs", () => {
+    const face = carlitoRegularFace();
+    // 'office' shapes to four glyphs (o, ffi-ligature, c, e) through the face's own 'liga' feature, so the shown codes carry four 2-byte CIDs, not six.
+    expect(encodeForShowEmbedded("office", face).codes.length).toBe(8);
+  });
+
+  it("round-trips ligature text through the written PDF's own ToUnicode mapping", () => {
+    // 'office fluff' exercises all three ligature lengths this face carries: ffi inside 'office', and fl plus ff inside 'fluff'.
+    const bytes = writePdf(textDoc("office fluff", CALIBRI), {
+      compress: false,
+      fonts: createFontRegistry(),
+    });
+    const text = decode(bytes);
+    // The ffi ligature glyph (76) maps to its whole three-character run -- the bfchar destination a copy/paste recovers -- proving the ToUnicode CMap carries multi-character sequences and the subset retained the ligature glyph no single code point's cmap entry reaches.
+    expect(text).toContain("<004c> <006600660069>");
+    // And the read side puts those sequences back together as the original text.
+    const reread = readPdf(bytes);
+    const item = reread.pages[0]?.items[0];
+    expect(item?.kind).toBe("text");
+    expect(item?.kind === "text" ? item.text : "").toBe("office fluff");
+  });
+});
+
+describe("the vendored-substitute step's Calibri Light report", () => {
+  it("reports the family substitution a caller can act on, weight mismatch included in the family change", () => {
+    const reports: {
+      readonly requestedFamily: string;
+      readonly reason: string;
+      readonly resolvedFamily: string;
+    }[] = [];
+    const registry = createFontRegistry({
+      onSubstitution: (report) => reports.push(report),
+    });
+    const resolved = registry.resolve(CALIBRI_LIGHT);
+    // No genuine Light face exists to vendor (Carlito ships one weight per style axis), so the honest outcome is the documented approximation -- ordinary-weight Carlito -- REPORTED rather than silent. This pins that the report fires, so it cannot quietly regress into a silent substitution.
+    expect(resolved.kind).toBe("embedded");
+    expect(reports).toContainEqual({
+      requestedFamily: "Calibri Light",
+      requestedBold: false,
+      requestedItalic: false,
+      reason: "vendored-substitute",
+      resolvedFamily: "carlito",
+    });
   });
 });

@@ -82,11 +82,11 @@ function buildFontFileStream(font: MathFont, compress: boolean): PdfObject {
 // The subset of `usedGlyphs` that has a Unicode code point to map back to. A stretchy construction's own variant and assembly pieces are unencoded in this font (see math-content-write.ts's collectUsedGlyphs) -- they still need their /W width above, but there is genuinely no character for a ToUnicode entry to name, so they are dropped from the CMap rather than mapped to some stand-in that would extract as the wrong text. The /ActualText span around each such construction carries the real text instead.
 function toUnicodeEntries(
   usedGlyphs: ReadonlyMap<number, number | undefined>,
-): ReadonlyMap<number, number> {
-  const entries = new Map<number, number>();
+): ReadonlyMap<number, readonly number[]> {
+  const entries = new Map<number, readonly number[]>();
   for (const [glyphId, codePoint] of usedGlyphs) {
     if (codePoint !== undefined) {
-      entries.set(glyphId, codePoint);
+      entries.set(glyphId, [codePoint]);
     }
   }
   return entries;
