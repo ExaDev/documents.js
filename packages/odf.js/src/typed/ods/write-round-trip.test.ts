@@ -13,6 +13,11 @@ import type {
 import { PAGE_SIZE_A4, assembleTree } from "document-schema.js";
 import type { Package } from "../../model/package";
 import { decodePackage, encodePackage } from "../../codec";
+import {
+  childrenWithTag,
+  findChildElement,
+  rootElement,
+} from "../../xml/query";
 import { readManifest } from "../../manifest";
 import { parsePackage } from "../../package-io/read";
 import { readOds, readOdsContent } from "./read";
@@ -501,21 +506,183 @@ describe("writeOdsContent round trip", () => {
     );
   });
 
-  it("refuses a sheet carrying a data-validation rule by name", () => {
+  it("round-trips a whole-number data-validation rule with a comparison, messages, and a no-blank restriction", () => {
+    const sheet = sheetOf(
+      "Sheet1",
+      [
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "number", value: 5 },
+          displayText: "5",
+        },
+      ],
+      {
+        dataValidations: [
+          {
+            ranges: [{ startRow: 0, startColumn: 0, endRow: 1, endColumn: 2 }],
+            type: "whole",
+            operator: "greaterThanOrEqual",
+            formula1: "1",
+            allowBlank: false,
+            showInputMessage: true,
+            promptTitle: "Whole numbers only",
+            prompt: "Enter a whole number\nno decimals",
+            showErrorMessage: true,
+            errorStyle: "warning",
+            errorTitle: "Not whole",
+            error: "That was not a whole number",
+          },
+        ],
+      },
+    );
+    expectRoundTrip(documentOf([sheet]));
+  });
+
+  it("round-trips list, text-length-between, custom, and bare-type validation rules together", () => {
     const sheet = sheetOf("Sheet1", [], {
       dataValidations: [
         {
           ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
-          type: "whole",
+          type: "list",
+          formula1: '"red";"green";"blue"',
+        },
+        {
+          ranges: [{ startRow: 2, startColumn: 0, endRow: 2, endColumn: 0 }],
+          type: "textLength",
+          operator: "notBetween",
+          formula1: "0",
+          formula2: "5",
+        },
+        {
+          ranges: [{ startRow: 4, startColumn: 0, endRow: 4, endColumn: 0 }],
+          type: "custom",
+          formula1: "ISODD(A5)",
+        },
+        {
+          ranges: [{ startRow: 6, startColumn: 0, endRow: 6, endColumn: 0 }],
+          type: "date",
         },
       ],
     });
-    expect(() => writeOdsContent(documentOf([sheet]))).toThrow(
-      /data-validation/,
-    );
+    expectRoundTrip(documentOf([sheet]));
   });
 
-  it("refuses a sheet carrying a conditional-formatting rule by name", () => {
+  it("merges two identical validation rules into one definition and re-orders rules by first reference", () => {
+    const sheet = sheetOf("Sheet1", [], {
+      dataValidations: [
+        {
+          ranges: [{ startRow: 2, startColumn: 0, endRow: 2, endColumn: 0 }],
+          type: "whole",
+          operator: "lessThan",
+          formula1: "10",
+        },
+        {
+          ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+          type: "decimal",
+          operator: "equal",
+          formula1: "3.5",
+        },
+        {
+          // Same promoted content as the first rule: one shared definition, ranges unioned.
+          ranges: [{ startRow: 4, startColumn: 0, endRow: 4, endColumn: 0 }],
+          type: "whole",
+          operator: "lessThan",
+          formula1: "10",
+        },
+      ],
+    });
+    expectRoundTrip(documentOf([sheet]));
+  });
+
+  it("round-trips conditional-format rules of every writable type sharing one range list", () => {
+    const ranges = [{ startRow: 0, startColumn: 0, endRow: 3, endColumn: 1 }];
+    const sheet = sheetOf("Sheet1", [], {
+      conditionalFormats: [
+        {
+          type: "cellIs",
+          ranges,
+          operator: "between",
+          formula1: "1",
+          formula2: "10",
+          style: { textColor: { r: 0.5019607843137255, g: 0.0, b: 0.0 } },
+        },
+        {
+          type: "uniqueValues",
+          ranges,
+          style: { background: { r: 1.0, g: 1.0, b: 0.8784313725490196 } },
+        },
+        {
+          type: "top10",
+          ranges,
+          rank: 5,
+          percent: true,
+        },
+        {
+          type: "aboveAverage",
+          ranges,
+          aboveAverage: false,
+          equalAverage: true,
+        },
+        {
+          type: "timePeriod",
+          ranges,
+          timePeriod: "last7Days",
+        },
+        {
+          type: "colorScale",
+          ranges,
+          stops: [
+            {
+              value: { type: "min" },
+              color: {
+                r: 0.9725490196078431,
+                g: 0.42745098039215684,
+                b: 0.42745098039215684,
+              },
+            },
+            {
+              value: { type: "percent", value: "50" },
+              color: { r: 1.0, g: 0.9215686274509803, b: 0.5176470588235295 },
+            },
+            {
+              value: { type: "max" },
+              color: {
+                r: 0.42745098039215684,
+                g: 0.7176470588235294,
+                b: 0.5607843137254902,
+              },
+            },
+          ],
+        },
+        {
+          type: "dataBar",
+          ranges,
+          min: { type: "min" },
+          max: { type: "max" },
+          color: {
+            r: 0.38823529411764707,
+            g: 0.7450980392156863,
+            b: 0.4823529411764706,
+          },
+          showValue: false,
+        },
+        {
+          type: "iconSet",
+          ranges,
+          iconSetType: "3TrafficLights1",
+          thresholds: [
+            { type: "percent", value: "0" },
+            { type: "percent", value: "33" },
+            { type: "percent", value: "67" },
+          ],
+        },
+      ],
+    });
+    expectRoundTrip(documentOf([sheet]));
+  });
+
+  it("refuses a containsBlanks conditional-format rule by name", () => {
     const sheet = sheetOf("Sheet1", [], {
       conditionalFormats: [
         {
@@ -525,8 +692,107 @@ describe("writeOdsContent round trip", () => {
       ],
     });
     expect(() => writeOdsContent(documentOf([sheet]))).toThrow(
-      /conditional-formatting/,
+      /containsBlanks.*no spelling/,
     );
+  });
+
+  it("round-trips a conditional-format rule whose range reaches far past the content grid without materialising it", () => {
+    // The hostile shape the security review of this PR named: a compact calcext:target-range-address controls nothing but its own attribute, so a rule spanning a huge rectangle must not drive one row element per covered row. This rule's range reaches ~100k rows x 256 columns on a sheet whose content grid is empty; if the writer ever lets a conditional-format range extend the materialised grid, this test takes seconds and allocates millions of nodes before it fails.
+    const sheet = sheetOf("Sheet1", [], {
+      conditionalFormats: [
+        {
+          type: "uniqueValues",
+          ranges: [
+            { startRow: 0, startColumn: 0, endRow: 99_999, endColumn: 255 },
+          ],
+        },
+      ],
+    });
+    expectRoundTrip(documentOf([sheet]));
+    const pkg = writeOdsContent(documentOf([sheet]));
+    const part = pkg.parts["content.xml"];
+    if (part?.kind !== "xml") {
+      throw new Error("expected an xml content.xml part");
+    }
+    const root = rootElement(part.nodes);
+    if (root === undefined) {
+      throw new Error("expected a content.xml root element");
+    }
+    const body = findChildElement(root.children, "office:body");
+    const spreadsheet = findChildElement(
+      body?.children ?? [],
+      "office:spreadsheet",
+    );
+    if (spreadsheet === undefined) {
+      throw new Error("expected an office:spreadsheet element");
+    }
+    const table = childrenWithTag(spreadsheet, "table:table")[0];
+    if (table === undefined) {
+      throw new Error("expected a table:table element");
+    }
+    expect(childrenWithTag(table, "table:table-row")).toHaveLength(0);
+    expect(childrenWithTag(table, "calcext:conditional-formats")).toHaveLength(
+      1,
+    );
+  });
+
+  it("refuses a conditional-format rule carrying a priority by name", () => {
+    const sheet = sheetOf("Sheet1", [], {
+      conditionalFormats: [
+        {
+          type: "uniqueValues",
+          ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+          priority: 1,
+        },
+      ],
+    });
+    expect(() => writeOdsContent(documentOf([sheet]))).toThrow(/priority/);
+  });
+
+  it("refuses an aboveAverage rule carrying a standard-deviation count by name", () => {
+    const sheet = sheetOf("Sheet1", [], {
+      conditionalFormats: [
+        {
+          type: "aboveAverage",
+          ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+          stdDev: 2,
+        },
+      ],
+    });
+    expect(() => writeOdsContent(documentOf([sheet]))).toThrow(
+      /standard-deviation/,
+    );
+  });
+
+  it("refuses a reversed icon set by name", () => {
+    const sheet = sheetOf("Sheet1", [], {
+      conditionalFormats: [
+        {
+          type: "iconSet",
+          ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+          iconSetType: "3Arrows",
+          thresholds: [{ type: "percent", value: "0" }],
+          reverse: true,
+        },
+      ],
+    });
+    expect(() => writeOdsContent(documentOf([sheet]))).toThrow(/reversed/);
+  });
+
+  it("refuses a colour scale carrying a num threshold by name", () => {
+    const sheet = sheetOf("Sheet1", [], {
+      conditionalFormats: [
+        {
+          type: "colorScale",
+          ranges: [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }],
+          stops: [
+            { value: { type: "num", value: "0" }, color: { r: 0, g: 0, b: 0 } },
+            { value: { type: "max" }, color: { r: 255, g: 255, b: 255 } },
+          ],
+        },
+      ],
+    });
+    expect(() => writeOdsContent(documentOf([sheet]))).toThrow(/'num'/);
   });
 
   it("refuses a wrong-kind ContentDocument", () => {

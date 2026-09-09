@@ -1,3 +1,38 @@
+## [1.3.63](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.3.62...document-compute.js%401.3.63) (2026-09-09)
+
+
+### Dependencies
+
+- Updated documents.js to 7.11.2
+
+## [1.3.62](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.3.61...document-compute.js%401.3.62) (2026-09-09)
+
+
+### Dependencies
+
+- Updated documents.js to 7.11.1
+
+## [1.3.61](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.3.60...document-compute.js%401.3.61) (2026-09-09)
+
+
+### Dependencies
+
+- Updated documents.js to 7.11.0
+
+## [1.3.60](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.3.59...document-compute.js%401.3.60) (2026-09-08)
+
+
+### Dependencies
+
+- Updated documents.js to 7.10.4
+
+## [1.3.59](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.3.58...document-compute.js%401.3.59) (2026-09-08)
+
+
+### Dependencies
+
+- Updated documents.js to 7.10.3
+
 ## [1.3.58](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.3.57...document-compute.js%401.3.58) (2026-09-08)
 
 

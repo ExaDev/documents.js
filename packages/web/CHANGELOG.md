@@ -1,3 +1,48 @@
+## [2.9.0](https://github.com/ExaDev/documents.js/compare/web%402.8.31...web%402.9.0) (2026-09-09)
+
+### Features
+
+* **web:** add the Package / JSON tool ([ef4702d](https://github.com/ExaDev/documents.js/commit/ef4702def27c0ad4c90b9511d9796c838dabb1f2))
+
+### Tests
+
+* **web:** assert the Package / JSON sidebar entry navigates ([a4eb7a2](https://github.com/ExaDev/documents.js/commit/a4eb7a2de7d1da9854b7530329eb3cfa09b33a1a))
+
+## [2.8.31](https://github.com/ExaDev/documents.js/compare/web%402.8.30...web%402.8.31) (2026-09-09)
+
+
+### Dependencies
+
+- Updated documents.js to 7.11.2
+
+## [2.8.30](https://github.com/ExaDev/documents.js/compare/web%402.8.29...web%402.8.30) (2026-09-09)
+
+
+### Dependencies
+
+- Updated documents.js to 7.11.1
+
+## [2.8.29](https://github.com/ExaDev/documents.js/compare/web%402.8.28...web%402.8.29) (2026-09-09)
+
+
+### Dependencies
+
+- Updated documents.js to 7.11.0
+
+## [2.8.28](https://github.com/ExaDev/documents.js/compare/web%402.8.27...web%402.8.28) (2026-09-08)
+
+
+### Dependencies
+
+- Updated documents.js to 7.10.4
+
+## [2.8.27](https://github.com/ExaDev/documents.js/compare/web%402.8.26...web%402.8.27) (2026-09-08)
+
+
+### Dependencies
+
+- Updated documents.js to 7.10.3
+
 ## [2.8.26](https://github.com/ExaDev/documents.js/compare/web%402.8.25...web%402.8.26) (2026-09-08)
 
 

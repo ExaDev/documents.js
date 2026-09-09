@@ -1,3 +1,48 @@
+## [4.8.34](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.33...document-mcp%404.8.34) (2026-09-09)
+
+
+### Dependencies
+
+- Updated odf.js to 7.13.0
+- Updated documents.js to 7.11.2
+- Updated document-compute.js to 1.3.63
+
+## [4.8.33](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.32...document-mcp%404.8.33) (2026-09-09)
+
+
+### Dependencies
+
+- Updated odf.js to 7.12.0
+- Updated documents.js to 7.11.1
+- Updated document-compute.js to 1.3.62
+
+## [4.8.32](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.31...document-mcp%404.8.32) (2026-09-09)
+
+
+### Dependencies
+
+- Updated documents.js to 7.11.0
+- Updated document-compute.js to 1.3.61
+
+## [4.8.31](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.30...document-mcp%404.8.31) (2026-09-08)
+
+
+### Dependencies
+
+- Updated odf.js to 7.11.0
+- Updated documents.js to 7.10.4
+- Updated document-compute.js to 1.3.60
+
+## [4.8.30](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.29...document-mcp%404.8.30) (2026-09-08)
+
+
+### Dependencies
+
+- Updated odf.js to 7.10.0
+- Updated document-outline.js to 3.6.4
+- Updated documents.js to 7.10.3
+- Updated document-compute.js to 1.3.59
+
 ## [4.8.29](https://github.com/ExaDev/documents.js/compare/document-mcp%404.8.28...document-mcp%404.8.29) (2026-09-08)
 
 

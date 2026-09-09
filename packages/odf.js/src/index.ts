@@ -321,10 +321,26 @@ export {
 } from "./typed/formula/read";
 export type { OdfFormulaDocument } from "./typed/formula/read";
 
+// The formula WRITER, the inverse of the reader ladder above: writeOdfFormula takes the DocumentTree readOdfFormula returns, writeOdfFormulaContent the flat ContentDocument readOdfFormulaContent returns, writeOdfFormulaMathMl the raw MathML document readOdfFormulaMathMl returns -- the identical three-level ladder every other format's writer in this package mirrors.
+export {
+  writeOdfFormula,
+  writeOdfFormulaContent,
+  writeOdfFormulaMathMl,
+} from "./typed/formula/write";
+export type { OdfFormulaWriteOptions } from "./typed/formula/write";
+
 export { readOdm } from "./typed/odm/read";
+
+// The master-document WRITER, the inverse of readOdm: one top-level text:section per chapter, each carrying its external-file reference exactly as the reader's own real-LibreOffice verification transcribed it.
+export { writeOdm } from "./typed/odm/write";
+export type { OdmWriteOptions } from "./typed/odm/write";
 export type { OdmDocument, OdmSection } from "./typed/odm/read";
 
 export { readOdbInventory, resolveOdbComponent } from "./typed/odb/read";
+
+// The database front-end WRITER, the inverse of readOdbInventory: the db: connection declaration, forms/reports component registry, queries with their SQL commands, and table-name listings -- never the embedded engine's own opaque storage.
+export { writeOdb } from "./typed/odb/write";
+export type { OdbWriteOptions } from "./typed/odb/write";
 export type {
   OdbInventory,
   OdbConnectionInfo,

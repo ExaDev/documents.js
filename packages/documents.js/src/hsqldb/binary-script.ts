@@ -1,4 +1,4 @@
-import { unzlibSync } from "fflate";
+import { inflate } from "byte-codec";
 import type { ContentCellValue } from "document-schema.js";
 import type { HsqldbDecodeOptions } from "./rowformat";
 import {
@@ -308,9 +308,9 @@ export function parseHsqldbBinaryScript(
   };
 }
 
-// org.hsqldb.scriptio.ScriptWriterZipped wraps ScriptWriterBinary's identical output in a java.util.zip.DeflaterOutputStream over a plain `new Deflater(-1)` -- i.e. zlib framing (RFC 1950), not raw DEFLATE and not gzip -- and ScriptReaderZipped reads it back through a plain InflaterInputStream. fflate's unzlibSync is the exact counterpart, and is already this package's own dependency for every other DEFLATE stream it touches.
+// org.hsqldb.scriptio.ScriptWriterZipped wraps ScriptWriterBinary's identical output in a java.util.zip.DeflaterOutputStream over a plain `new Deflater(-1)` -- i.e. zlib framing (RFC 1950), not raw DEFLATE and not gzip -- and ScriptReaderZipped reads it back through a plain InflaterInputStream. byte-codec's inflate is the exact zlib counterpart AND the family's bounded one: it caps the decompressed output at MAX_INFLATE_OUTPUT_BYTES, the same single-stream grant every PDF FlateDecode and PNG IDAT stream already operates under. A bare fflate unzlibSync here had no budget at all -- a small valid-shape .odb could expand a compressed script a thousandfold into the hundreds of megabytes inside whatever worker or process opened it (ExaDev/documents.js#1151's review).
 export function inflateHsqldbCompressedScript(
   bytes: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {
-  return unzlibSync(bytes);
+  return inflate(bytes);
 }

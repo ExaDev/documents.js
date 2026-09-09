@@ -1,3 +1,23 @@
+## [4.1.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.0.13...pdf-codec%404.1.0) (2026-09-08)
+
+### Features
+
+* **pdf-codec:** add a portable CSPRNG helper for encryption salts and IVs ([f46aae7](https://github.com/ExaDev/documents.js/commit/f46aae71eb2d0ce3e08e5a3d09d0474893fe5d76))
+* **pdf-codec:** implement standard security handler encryption for writePdf ([d924ccb](https://github.com/ExaDev/documents.js/commit/d924ccbf240603f636d2bcb659940ae07e889523))
+* **pdf-codec:** wire an encryption option into writePdf ([707ac20](https://github.com/ExaDev/documents.js/commit/707ac2022f570ebec1cb68c895708aa0db4e93fd))
+
+### Code Refactoring
+
+* **pdf-codec:** export the standard security handler's shared primitives ([4ffd976](https://github.com/ExaDev/documents.js/commit/4ffd9760de12f600bcffd7b506ba82429def36db))
+
+### Documentation
+
+* **pdf-codec:** document writePdf's encryption option ([fe96807](https://github.com/ExaDev/documents.js/commit/fe968076ece2765e5c14bee56ce7d4d2ae386318))
+
+### Tests
+
+* **pdf-codec:** give the hardened-KDF write tests a 60s timeout ([94fe722](https://github.com/ExaDev/documents.js/commit/94fe722fbdcc3038499d4287f9060da39703e390))
+
 ## [4.0.13](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.0.12...pdf-codec%404.0.13) (2026-09-08)
 
 

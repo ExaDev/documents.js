@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import { el } from "../../xml/fragment";
-import { readNumberingDefinitions } from "./numbering";
+import { buildNumberingElement, readNumberingDefinitions } from "./numbering";
 
 function lvlEl(
   ilvl: string,
@@ -134,5 +134,35 @@ describe("readNumberingDefinitions", () => {
     ]);
     const definitions = readNumberingDefinitions(packageWithNumbering([num]));
     expect(definitions["7"]).toBeUndefined();
+  });
+});
+
+describe("buildNumberingElement", () => {
+  it("returns undefined for an empty definitions record, rather than an empty w:numbering element", () => {
+    expect(buildNumberingElement({})).toBeUndefined();
+  });
+
+  it("round-trips a multi-level, multi-numId definitions record through readNumberingDefinitions", () => {
+    const definitions = {
+      "1": {
+        levels: {
+          "0": { format: "bullet", text: "•", startAt: 1 },
+          "1": { format: "decimal", text: "%2.", startAt: 1, restart: 1 },
+        },
+      },
+      "5": {
+        levels: { "0": { format: "lowerRoman", text: "%1)", startAt: 3 } },
+      },
+    };
+    const element = buildNumberingElement(definitions);
+    expect(element).toBeDefined();
+    const written = packageWithNumbering(
+      element === undefined
+        ? []
+        : element.children.filter(
+            (child): child is XmlElement => child.type === "element",
+          ),
+    );
+    expect(readNumberingDefinitions(written)).toEqual(definitions);
   });
 });

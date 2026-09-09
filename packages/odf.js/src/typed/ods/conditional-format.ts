@@ -9,7 +9,7 @@ import type {
 import type { XmlElement } from "../../model/node";
 import type { Package } from "../../model/package";
 import { attrValue, childrenWithTag } from "../../xml/query";
-import { parseCellReference } from "../shared/a1";
+import { cellReference, parseCellReference } from "../shared/a1";
 import { resolveStyle, resolveStyleElementChain } from "../shared/cascade";
 import { parseOdfColor } from "../shared/color";
 import { readCellStyleDecoration } from "../shared/table";
@@ -618,4 +618,125 @@ export function readConditionalFormats(
     }
   }
   return { formats, residueElements };
+}
+
+// --- the write side: the inverse of everything above ----------------------------------------------------------------
+//
+// Each synthesiser below inverts its reading twin over the identical LibreOffice-transcribed grammar, so a rule this package itself promoted round-trips through the writer back to the same rule. calcext:value operands and formula text stay raw in both directions, the same "structure yes, formula content no" boundary every rule schema draws.
+
+// The inverse of CFVO_TYPE_BY_CALCEXT_TYPE: the calcext entry @type for a schema cfvo kind. 'num' is deliberately absent -- the read side maps no calcext type onto it, so a writer receiving one has nothing faithful to emit and its caller refuses the rule by name rather than guessing a stand-in.
+const CALCEXT_TYPE_BY_CFVO_TYPE: ReadonlyMap<string, string> = new Map([
+  ["min", "minimum"],
+  ["max", "maximum"],
+  ["percentile", "percentile"],
+  ["percent", "percent"],
+  ["formula", "formula"],
+]);
+
+export function calextTypeForCfvoType(type: string): string | undefined {
+  return CALCEXT_TYPE_BY_CFVO_TYPE.get(type);
+}
+
+const COMPARISON_TEXT_BY_OPERATOR: ReadonlyMap<SheetRuleOperator, string> =
+  new Map([
+    ["equal", "="],
+    ["notEqual", "!="],
+    ["lessThan", "<"],
+    ["lessThanOrEqual", "<="],
+    ["greaterThan", ">"],
+    ["greaterThanOrEqual", ">="],
+  ]);
+
+/** The calcext:target-range-address value for a rule's ranges: every range as its own sheet-prefixed A1:A1 pair, space-joined, the shape readTargetRangeList above parses and every real LibreOffice file carries. The sheet prefix is the one element the read side genuinely discards (parseA1WithOptionalSheetPrefix strips it), so the sheet's own name is supplied by the caller rather than carried in the ranges themselves. */
+export function formatTargetRangeList(
+  ranges: readonly ContentSheetRange[],
+  sheetName: string,
+): string {
+  return ranges
+    .map(
+      (range) =>
+        `${sheetName}.${cellReference(range.startColumn, range.startRow)}:${sheetName}.${cellReference(range.endColumn, range.endRow)}`,
+    )
+    .join(" ");
+}
+
+/** The calcext:condition @value for one closed-form rule, the exact inverse of parseConditionValue above for every type that grammar can state. Returns undefined for the two schema members that grammar has no spelling for at all -- containsBlanks/notContainsBlanks -- whose caller refuses the rule by name rather than emitting a rule that would read back as something else. */
+export function synthesiseConditionValue(
+  format: ContentSheetConditionalFormat,
+): string | undefined {
+  switch (format.type) {
+    case "cellIs": {
+      if (
+        (format.operator === "between" || format.operator === "notBetween") &&
+        format.formula2 !== undefined
+      ) {
+        const keyword =
+          format.operator === "between" ? "between" : "not-between";
+        return `${keyword}(${format.formula1},${format.formula2})`;
+      }
+      const operatorText = COMPARISON_TEXT_BY_OPERATOR.get(format.operator);
+      return operatorText === undefined
+        ? undefined
+        : `${operatorText}${format.formula1}`;
+    }
+    case "uniqueValues":
+      return "unique";
+    case "duplicateValues":
+      return "duplicate";
+    case "containsErrors":
+      return "is-error";
+    case "notContainsErrors":
+      return "is-no-error";
+    case "top10": {
+      const keyword = format.bottom
+        ? format.percent
+          ? "bottom-percent"
+          : "bottom-elements"
+        : format.percent
+          ? "top-percent"
+          : "top-elements";
+      return `${keyword}(${String(format.rank)})`;
+    }
+    case "aboveAverage": {
+      const direction = format.aboveAverage === false ? "below" : "above";
+      const qualifier = format.equalAverage ? "-equal-" : "-";
+      return `${direction}${qualifier}average`;
+    }
+    case "beginsWith":
+      return `begins-with(${format.text})`;
+    case "endsWith":
+      return `ends-with(${format.text})`;
+    case "containsText":
+      return `contains-text(${format.text})`;
+    case "notContainsText":
+      return `not-contains-text(${format.text})`;
+    case "containsBlanks":
+    case "notContainsBlanks":
+      return undefined;
+    case "colorScale":
+    case "dataBar":
+    case "iconSet":
+    case "timePeriod":
+      // Not calcext:condition rules at all -- each is its own child element, built by the writer's own element builders.
+      return undefined;
+  }
+}
+
+/** The calcext:date value for a timePeriod rule: the inverse of TIME_PERIOD_BY_CALCEXT_DATE, as an explicit closed map rather than string munging -- the two spellings differ only case/hyphen-wise, but a regex that has to know "last7Days" gains a hyphen on both sides of the 7 while "thisWeek" gains one only at the W is exactly the kind of half-right cleverness an explicit table cannot be. */
+const CALCEXT_DATE_BY_TIME_PERIOD: ReadonlyMap<string, string> = new Map(
+  [...TIME_PERIOD_BY_CALCEXT_DATE].map(([calextDate, timePeriod]) => [
+    timePeriod,
+    calextDate,
+  ]),
+);
+
+export function calextDateForTimePeriod(timePeriod: string): string {
+  const calextDate = CALCEXT_DATE_BY_TIME_PERIOD.get(timePeriod);
+  if (calextDate === undefined) {
+    // The schema's enum is closed and fully covered by the table above, so this is unreachable for a schema-valid rule -- stated as a throw rather than a passthrough so a future enum member fails loudly here instead of silently emitting a calcext value no reader recognises.
+    throw new Error(
+      `calextDateForTimePeriod: no calcext:date spelling for '${timePeriod}'`,
+    );
+  }
+  return calextDate;
 }

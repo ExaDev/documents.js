@@ -11,6 +11,7 @@ import { resolveMetadataTimestamps } from "../../model/metadata";
 import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
 import { el } from "../../xml/fragment";
+import { encodeXmlText } from "../../xml/entities";
 import type { ImageMediaContext } from "./paragraph";
 import { buildParagraph, DocxParagraph } from "./paragraph";
 import type { ParagraphInit } from "./paragraph";
@@ -26,6 +27,9 @@ export interface DocxBody {
   appendParagraph(init?: ParagraphInit): DocxParagraph;
   appendTable(init: TableInit): DocxTable;
   appendPageBreak(): void;
+  // A bookmark's two halves as body-level siblings bracketing whatever is appended between the two calls -- the one construct shape that is expressible append-only, since WordprocessingML allows w:bookmarkStart/w:bookmarkEnd directly inside w:body around whole blocks. The id is the caller's to keep unique document-wide and to pair across the two halves; the name travels on the start half alone, exactly as a reader pairs them back.
+  appendBookmarkStart(id: number, name: string): void;
+  appendBookmarkEnd(id: number): void;
 }
 
 function findDocumentRoot(pkg: Package): XmlElement {
@@ -111,6 +115,25 @@ class DocxBodyImpl implements DocxBody {
     const run = el("w:r", {}, [el("w:br", { "w:type": "page" })]);
     const paragraph = el("w:p", {}, [run]);
     this.body.children.splice(bodyInsertionPoint(this.body), 0, paragraph);
+  }
+
+  appendBookmarkStart(id: number, name: string): void {
+    this.body.children.splice(
+      bodyInsertionPoint(this.body),
+      0,
+      el("w:bookmarkStart", {
+        "w:id": String(id),
+        "w:name": encodeXmlText(name),
+      }),
+    );
+  }
+
+  appendBookmarkEnd(id: number): void {
+    this.body.children.splice(
+      bodyInsertionPoint(this.body),
+      0,
+      el("w:bookmarkEnd", { "w:id": String(id) }),
+    );
   }
 }
 

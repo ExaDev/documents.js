@@ -1,3 +1,43 @@
+## [7.11.2](https://github.com/ExaDev/documents.js/compare/documents.js%407.11.1...documents.js%407.11.2) (2026-09-09)
+
+
+### Dependencies
+
+- Updated odf.js to 7.13.0
+
+## [7.11.1](https://github.com/ExaDev/documents.js/compare/documents.js%407.11.0...documents.js%407.11.1) (2026-09-09)
+
+
+### Dependencies
+
+- Updated odf.js to 7.12.0
+
+## [7.11.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.10.4...documents.js%407.11.0) (2026-09-09)
+
+### Features
+
+* **documents.js:** write bookmark construct markers in the docx and odt builders ([0bfe2e8](https://github.com/ExaDev/documents.js/commit/0bfe2e8bfb9dbb2807341710b8ff6169690e624e))
+
+### Bug Fixes
+
+* **documents.js:** escape bookmark names written into both builders ([31cc593](https://github.com/ExaDev/documents.js/commit/31cc5937aaecf6542b187013a96ca5a4e6a4feae))
+
+## [7.10.4](https://github.com/ExaDev/documents.js/compare/documents.js%407.10.3...documents.js%407.10.4) (2026-09-08)
+
+
+### Dependencies
+
+- Updated odf.js to 7.11.0
+
+## [7.10.3](https://github.com/ExaDev/documents.js/compare/documents.js%407.10.2...documents.js%407.10.3) (2026-09-08)
+
+
+### Dependencies
+
+- Updated odf.js to 7.10.0
+- Updated pdf-codec to 4.1.0
+- Updated ooxml.js to 8.8.0
+
 ## [7.10.2](https://github.com/ExaDev/documents.js/compare/documents.js%407.10.1...documents.js%407.10.2) (2026-09-08)
 
 

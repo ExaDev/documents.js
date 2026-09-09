@@ -6,6 +6,7 @@ import {
   attr,
   bytesToBase64,
   childrenWithTag,
+  decodeEntities,
   decodePackage,
   encodePackage,
   rootElement,
@@ -389,5 +390,123 @@ describe("buildDocxPackage", () => {
       "3",
       "4",
     ]);
+  });
+  it("writes a bookmark construct marker pair as body-level w:bookmarkStart/w:bookmarkEnd around the blocks it spans", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "anchor",
+              anchorType: "bookmark",
+              name: "TargetA",
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "inside the bookmark" }] },
+          { kind: "constructEnd" },
+          { kind: "paragraph", runs: [{ text: "outside" }] },
+        ],
+      },
+    ]);
+    const pkg = buildDocxPackage(content);
+    const documentRoot = rootElement(pkg.parts["word/document.xml"]);
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    const starts = descendants(documentRoot, "w:bookmarkStart");
+    const ends = descendants(documentRoot, "w:bookmarkEnd");
+    expect(starts).toHaveLength(1);
+    expect(ends).toHaveLength(1);
+    const nameOf = (element: XmlElement) =>
+      element.attributes.find((attribute) => attribute.name === "w:name")
+        ?.value;
+    const idOf = (element: XmlElement) =>
+      element.attributes.find((attribute) => attribute.name === "w:id")?.value;
+    expect(nameOf(starts[0]!)).toBe("TargetA");
+    expect(idOf(starts[0]!)).toBe(idOf(ends[0]!));
+    // The pair brackets the paragraph: in the body's child order, start precedes the paragraph's w:p and end follows it.
+    const body = documentRoot.children.find(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "w:body",
+    );
+    if (body === undefined) {
+      throw new Error("expected a w:body element");
+    }
+    const tags = body.children
+      .filter((child): child is XmlElement => child.type === "element")
+      .map((child) => child.tag);
+    expect(tags.indexOf("w:bookmarkStart")).toBeLessThan(tags.indexOf("w:p"));
+    expect(tags.indexOf("w:bookmarkEnd")).toBeGreaterThan(tags.indexOf("w:p"));
+  });
+
+  it("drops a non-bookmark construct marker without disturbing an enclosing bookmark's pairing", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "anchor",
+              anchorType: "bookmark",
+              name: "Outer",
+            },
+          },
+          {
+            kind: "constructStart",
+            descriptor: { kind: "division", name: "dropped" },
+          },
+          { kind: "paragraph", runs: [{ text: "inner" }] },
+          { kind: "constructEnd" },
+          { kind: "constructEnd" },
+        ],
+      },
+    ]);
+    const pkg = buildDocxPackage(content);
+    const documentRoot = rootElement(pkg.parts["word/document.xml"]);
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    expect(descendants(documentRoot, "w:bookmarkStart")).toHaveLength(1);
+    expect(descendants(documentRoot, "w:bookmarkEnd")).toHaveLength(1);
+  });
+  it("XML-escapes a bookmark name carrying markup, so it cannot inject elements or attributes into document.xml", () => {
+    const hostile = 'x"/><w:p><w:fldSimple w:instr="WEBSERVICE">';
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "anchor",
+              anchorType: "bookmark",
+              name: hostile,
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "body" }] },
+          { kind: "constructEnd" },
+        ],
+      },
+    ]);
+    const pkg = buildDocxPackage(content);
+    const documentRoot = rootElement(pkg.parts["word/document.xml"]);
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    // The model stores the pre-encoded attribute (this package's processEntities:false convention -- el() never encodes), so the name arrives as data with its markup neutralised, and exactly one bookmarkStart exists: the name injected no extra element.
+    const starts = descendants(documentRoot, "w:bookmarkStart");
+    expect(starts).toHaveLength(1);
+    const stored = starts[0]!.attributes.find(
+      (a) => a.name === "w:name",
+    )?.value;
+    expect(stored).toContain("&lt;w:fldSimple");
+    expect(stored).not.toContain("<w:fldSimple");
+    expect(decodeEntities(stored ?? "")).toBe(hostile);
   });
 });

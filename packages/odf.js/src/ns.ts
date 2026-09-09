@@ -41,6 +41,9 @@ export const ODF_NAMESPACES = Object.freeze({
   db: "urn:oasis:names:tc:opendocument:xmlns:database:1.0",
   // TRAP: this is NOT an OASIS-minted "urn:oasis:names:tc:opendocument:xmlns:report:1.0"-shaped URI like every db:/chart:/form: entry above -- rpt: (OpenOffice.org Report Builder, the Pentaho-derived report-definition vocabulary LibreOffice still bundles as its embedded report designer) predates its own OASIS standardisation and keeps its original openoffice.org-hosted namespace unchanged. Confirmed directly from the real Java class-file constant pool strings inside LibreOffice's own bundled `reportbuilder.jar` (`/Applications/LibreOffice.app/Contents/Resources/java/reportbuilder.jar`), not pattern-matched or guessed from the prefix name.
   rpt: "http://openoffice.org/2005/report",
+  // LibreOffice's own experimental calc vendor extension (calcext:conditional-formats and friends) -- not an OASIS namespace at all, but the documentfoundation.org URN the real producer writes. Confirmed directly against this package's own real LibreOffice-produced fixture (typed/ods/fixtures/conditional-format.ods content.xml), the same file conditional-format.ts's own grammar transcription was verified against; the read side has matched this prefix as an opaque string since ExaDev/documents.js#1075, and the ods writer now emits it.
+  calcext:
+    "urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0",
 }) satisfies Readonly<Record<string, string>>;
 
 export type OdfNamespacePrefix = keyof typeof ODF_NAMESPACES;
