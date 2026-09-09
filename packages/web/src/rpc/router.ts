@@ -33,7 +33,13 @@ import {
   readXlsxContent,
   setDocumentMetadata,
 } from "documents.js";
-import { buildDocumentBytes } from "documents.js";
+import {
+  buildDocumentBytes,
+  odbTablesToSpreadsheetDocument,
+  parsePackage,
+  readOdbInventory,
+  readOdbTables,
+} from "documents.js";
 import type {
   ContentBlock,
   ContentDocument,
@@ -436,6 +442,56 @@ export const router = {
           input.format,
         ),
       })),
+  },
+
+  odb: {
+    // The .odb browsing tool's one read: odf.js's front-end inventory (connection, table/query/form/report names) alongside the embedded engine's actual table data as a spreadsheet ContentDocument -- readOdbTables dispatches across every storage tier documents.js supports (HSQLDB text script, HSQLDB cached rows, Firebird gbak, HSQLDB binary/compressed scripts), so a caller never needs to know which engine the file used.
+    read: os
+      .input(z.object({ bytes: BytesSchema }))
+      .output(
+        z.object({
+          inventory: z.object({
+            connection: z
+              .object({
+                type: z.enum(["embedded", "external"]),
+                driverClass: z.string().optional(),
+                url: z.string().optional(),
+              })
+              .optional(),
+            tables: z.array(z.string()),
+            queries: z.array(
+              z.object({
+                name: z.string(),
+                command: z.string(),
+                escapeProcessing: z.boolean().optional(),
+              }),
+            ),
+            forms: z.array(
+              z.object({
+                name: z.string(),
+                href: z.string(),
+                asTemplate: z.boolean().optional(),
+              }),
+            ),
+            reports: z.array(
+              z.object({
+                name: z.string(),
+                href: z.string(),
+                asTemplate: z.boolean().optional(),
+              }),
+            ),
+          }),
+          content: ContentDocumentSchema,
+        }),
+      )
+      .handler(({ input }) => {
+        // odf.js's own decodePackage, re-exported: an .odb IS an ODF package, the identical parse step documents.js's own odbToXlsx uses.
+        const pkg = parsePackage(input.bytes);
+        return {
+          inventory: readOdbInventory(pkg),
+          content: odbTablesToSpreadsheetDocument(readOdbTables(pkg)),
+        };
+      }),
   },
 
   metadata: {
