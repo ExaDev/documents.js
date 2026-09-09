@@ -1051,6 +1051,88 @@ describe("fidelity constructs written (#969)", () => {
       ),
     ).toThrow(/no fact naming which of the seven ODF index wrappers/);
   });
+  it("round-trips a block-scope bookmark range spanning two paragraphs", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "bookmark", name: "Cross" },
+        },
+        { kind: "paragraph", runs: [{ text: "first paragraph" }] },
+        { kind: "paragraph", runs: [{ text: "second paragraph" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("round-trips a block-scope bookmark range spanning a table between its paragraphs", () => {
+    expectRoundTrip(
+      documentOf([
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "bookmark", name: "Wide" },
+        },
+        { kind: "paragraph", runs: [{ text: "before the table" }] },
+        {
+          kind: "table",
+          columnWidthsPt: [100],
+          rows: [
+            {
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "cell" }] }] },
+              ],
+            },
+          ],
+        },
+        { kind: "paragraph", runs: [{ text: "after the table" }] },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("round-trips a block-scope bookmark range nested inside a division", () => {
+    expectRoundTrip(
+      documentOf([
+        { kind: "constructStart", descriptor: { kind: "division", name: "D" } },
+        {
+          kind: "constructStart",
+          descriptor: { kind: "anchor", anchorType: "bookmark", name: "Inner" },
+        },
+        { kind: "paragraph", runs: [{ text: "inner content" }] },
+        { kind: "constructEnd" },
+        { kind: "constructEnd" },
+      ]),
+    );
+  });
+
+  it("refuses a block-scope bookmark range whose extent contains no paragraph, by name", () => {
+    expect(() =>
+      writeOdtContent(
+        documentOf([
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "anchor",
+              anchorType: "bookmark",
+              name: "Empty",
+            },
+          },
+          {
+            kind: "table",
+            columnWidthsPt: [100],
+            rows: [
+              {
+                cells: [
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "only" }] }] },
+                ],
+              },
+            ],
+          },
+          { kind: "constructEnd" },
+        ]),
+      ),
+    ).toThrow(/no paragraph to carry its halves/);
+  });
 });
 
 function roundTrippedBlocks(document: WordprocessingDocument): ContentBlock[] {
