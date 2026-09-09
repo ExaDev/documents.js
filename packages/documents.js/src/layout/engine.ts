@@ -598,7 +598,7 @@ function layoutFormulaFlow(
     yPt: flippedFrame.yPt,
     box,
   });
-  // The block's frame records where the formula was placed even though its glyphs render through the formulas side channel rather than as a LayoutItem -- a consumer rebuilding a layout from frames (src/convert/from-package.ts) still knows where the block sat, and can still not re-render its math (the same honest limit that side channel has always had).
+  // The block's frame records where the formula was placed even though its glyphs render through the formulas side channel rather than as a LayoutItem. A consumer rebuilding a layout from frames (src/convert/from-package.ts) re-typesets the block's own recorded MathML at exactly this frame through the same layoutFormula pipeline, so the position record and the content together are enough to re-render the math.
   stampFrame(block, pages.length, flippedFrame);
   state.cursorYDown += box.heightPt;
 }
