@@ -106,7 +106,7 @@ interface BuiltDocument {
   readonly pdfBytes: Uint8Array<ArrayBuffer>;
   readonly face: EmbeddedFace;
   readonly subset: SfntSubsetResult;
-  readonly usedGlyphs: ReadonlyMap<number, number>;
+  readonly usedGlyphs: ReadonlyMap<number, readonly number[]>;
   readonly baseFont: string;
 }
 

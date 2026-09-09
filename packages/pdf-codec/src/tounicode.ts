@@ -18,11 +18,20 @@ function codePointToUtf16BEHex(codePoint: number): string {
   return hex;
 }
 
-// Builds the ToUnicode CMap stream for `codeToCodePoint`, a character code -> Unicode code point mapping. Entries are emitted sorted by code, so identical input always produces byte-identical output -- the same determinism guarantee write.ts states for its own object allocation order.
+// One bfchar destination: the UTF-16BE spelling of a Unicode TEXT string, which the bfchar syntax permits to be any length -- one code point for a glyph a character resolved to directly, the whole character run a ligature glyph consumed (ISO 32000-1 9.10.3's own worked example writes a two-character destination). Same concatenation the surrogate-pair case above performs, over however many code points the sequence holds.
+function sequenceToUtf16BEHex(codePoints: readonly number[]): string {
+  let hex = "";
+  for (const codePoint of codePoints) {
+    hex += codePointToUtf16BEHex(codePoint);
+  }
+  return hex;
+}
+
+// Builds the ToUnicode CMap stream for `codeToSequence`, a character code -> Unicode text mapping (one or more code points per code). Entries are emitted sorted by code, so identical input always produces byte-identical output -- the same determinism guarantee write.ts states for its own object allocation order.
 export function buildToUnicodeCMap(
-  codeToCodePoint: ReadonlyMap<number, number>,
+  codeToSequence: ReadonlyMap<number, readonly number[]>,
 ): PdfObject {
-  const entries = [...codeToCodePoint].sort((a, b) => a[0] - b[0]);
+  const entries = [...codeToSequence].sort((a, b) => a[0] - b[0]);
   const lines: string[] = [
     "/CIDInit /ProcSet findresource begin",
     "12 dict begin",
@@ -41,9 +50,9 @@ export function buildToUnicodeCMap(
   ) {
     const block = entries.slice(start, start + MAX_BFCHAR_ENTRIES_PER_BLOCK);
     lines.push(`${block.length} beginbfchar`);
-    for (const [code, codePoint] of block) {
+    for (const [code, sequence] of block) {
       lines.push(
-        `<${code.toString(16).padStart(4, "0")}> <${codePointToUtf16BEHex(codePoint)}>`,
+        `<${code.toString(16).padStart(4, "0")}> <${sequenceToUtf16BEHex(sequence)}>`,
       );
     }
     lines.push("endbfchar");

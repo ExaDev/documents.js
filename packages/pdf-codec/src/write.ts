@@ -813,10 +813,13 @@ export function writePdf(
   }
 
   for (const [face, alloc] of embeddedAllocs) {
-    // Ascending code points so the same document always subsets against the same input order, matching the sorted-for-determinism reasoning every other allocation here follows.
+    // The shaped glyph map is computed before the subset because its keys are the subset's own extra input: a 'GSUB' ligature glyph is reachable through no single code point's 'cmap' entry, so handing only the text's code points to the subsetter would drop exactly the ligature outlines the content stream is about to draw.
+    const usedGlyphs = collectEmbeddedGlyphs(alloc.texts, face);
+    // Ascending on both axes so the same document always subsets against the same input order, matching the sorted-for-determinism reasoning every other allocation here follows.
     const subset = subsetSfnt(
       face.font,
       [...alloc.codePoints].sort((a, b) => a - b),
+      [...usedGlyphs.keys()].sort((a, b) => a - b),
     );
     if (subset === undefined) {
       // Loud rather than a silent fall-back to a standard-14 substitute: the caller's own registry chose this face, and quietly drawing the document in a different font than it asked for -- with metrics already laid out against this one -- would be a worse outcome than a failure naming exactly which face could not be embedded. subsetSfnt returns undefined only for a font it cannot rebuild correctly (a CFF-outline face with no 'glyf' at all, or a missing/truncated table it must reconstruct); see its own module comment.
@@ -827,7 +830,7 @@ export function writePdf(
     const built = buildEmbeddedFontObjects(
       face,
       subset,
-      collectEmbeddedGlyphs(alloc.texts, face),
+      usedGlyphs,
       {
         cidFontRef: pdfRef(alloc.cidFontNum, 0),
         descriptorRef: pdfRef(alloc.descriptorNum, 0),

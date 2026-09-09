@@ -9,6 +9,8 @@ import {
 } from "./font-tables";
 import { parseGlyf } from "./glyf";
 import { buildGposKernLookup } from "./gpos-table";
+import type { GsubShaper } from "./gsub-table";
+import { buildGsubShaper } from "./gsub-table";
 import type { HmtxTable } from "./hmtx-table";
 import { parseHmtx } from "./hmtx-table";
 import type { SfntFont } from "./sfnt";
@@ -71,6 +73,8 @@ export interface EmbeddedFace {
   glyphSpaceWidth(glyphId: number): number;
   // The advance adjustment, in glyph space, this face's own 'GPOS' pair kerning applies to `leftGlyphId` when `rightGlyphId` immediately follows it -- negative to tighten, which is what nearly every real pair asks for. 0 covers three genuinely different facts the layout above has no use for distinguishing: the face declares no reachable kerning at all, no subtable describes this pair, or a subtable describes it and asks for no adjustment. gpos-table.ts keeps the last two apart for a caller that needs them; nothing here does, since all three draw and measure identically.
   kernGlyphSpace(leftGlyphId: number, rightGlyphId: number): number;
+  // The face's own 'GSUB' default ligature shaping ('liga'/'rlig' -- see gsub-table.ts for why those two and not the contextual or opt-in features), or `undefined` for a face with nothing this package can apply. Applied inside encodeForShowEmbedded and collectEmbeddedGlyphs, never by a caller directly, so measurement, drawing, subsetting, and ToUnicode all describe the one substituted sequence.
+  readonly gsubShaper: GsubShaper | undefined;
 }
 
 // One EmbeddedFace per font, parsed at most once. Keyed on the byte array's own identity rather than on a name: a caller handing the same vendored asset's bytes back gets the same parse, and a font that is genuinely a different object is genuinely re-read, with no registry to invalidate and no way for two different fonts sharing a family name to collide.
@@ -159,11 +163,13 @@ function readEmbeddedFace(font: SfntFont): EmbeddedFace | undefined {
   const capHeight = resolveCapHeight(font, cmap, os2?.sCapHeight, hhea.ascent);
   // The face's own pair kerning, read once here rather than per string: gpos-table.ts walks the whole 'GPOS' table up front and reduces it to per-subtable closures precisely so a query costs a bisection, and this cache is what makes "once" mean once per face rather than once per run of text. A face with no reachable kerning is given a lookup that adjusts nothing, so encodeForShowEmbedded below stays one code path instead of two.
   const kern = buildGposKernLookup(font);
+  const gsubShaper = buildGsubShaper(font);
 
   return {
     font,
     postScriptName: name.postScriptName,
     numGlyphs: maxp.numGlyphs,
+    gsubShaper,
     metrics: {
       unitsPerEm,
       ascentGlyphSpace: scale(hhea.ascent),
@@ -261,55 +267,95 @@ export interface EmbeddedShow {
 
 // The single code path both measurement and content-stream emission must go through for text drawn in an embedded face -- exactly winansi.ts's own encodeForShow rationale, for exactly the same reason: encoding and measuring a string in two separate steps risks the two disagreeing about which characters resolved to which glyph, which silently desyncs a line's computed wrap point from what is actually drawn on the page. Substituted characters advance by .notdef's own real width, so the measurement stays true to the glyphs that will be shown rather than to the ones that were asked for.
 //
-// Pair kerning is applied here, inside that same one path, for that same one reason: a width that included kerning while the content stream drew unkerned glyphs (or the reverse) would be the identical silent desync in a new place. `width1000` and `kerns` are computed in one pass over one glyph sequence, so a caller cannot measure by a route the drawing path does not take. Kerning is looked up between the glyphs that will actually be SHOWN, .notdef included -- the same "measure what will be drawn, not what was asked for" rule the substitution handling above follows.
+// Pair kerning AND 'GSUB' ligature substitution are applied here, inside that same one path, for that same one reason: a width computed over one glyph sequence while the content stream drew another (a ligature glyph advancing differently than the two characters it replaced, or kerning applied to a pair a ligature merged away) would be the identical silent desync in a new place. Kerning is looked up between the glyphs that will actually be SHOWN -- the substituted sequence, .notdef included -- the same "measure what will be drawn, not what was asked for" rule the substitution handling above follows.
 export function encodeForShowEmbedded(
   text: string,
   face: EmbeddedFace,
 ): EmbeddedShow {
-  const glyphIds: number[] = [];
+  const resolvedGlyphIds: number[] = [];
   const substitutions: EmbeddedFaceSubstitution[] = [];
-  const kerns: EmbeddedKern[] = [];
-  let width1000 = 0;
   for (const character of text) {
     const glyphId = face.glyphId(character.codePointAt(0)!);
     if (glyphId === undefined) {
       substitutions.push({ from: character });
     }
-    const shown = glyphId ?? NOTDEF_GLYPH_ID;
-    const previous = glyphIds[glyphIds.length - 1];
-    if (previous !== undefined) {
-      const adjustment1000 = face.kernGlyphSpace(previous, shown);
+    resolvedGlyphIds.push(glyphId ?? NOTDEF_GLYPH_ID);
+  }
+  const shownGlyphIds =
+    face.gsubShaper === undefined
+      ? resolvedGlyphIds
+      : face.gsubShaper(resolvedGlyphIds).glyphIds;
+
+  const kerns: EmbeddedKern[] = [];
+  let width1000 = 0;
+  for (const [index, shown] of shownGlyphIds.entries()) {
+    if (index > 0) {
+      const adjustment1000 = face.kernGlyphSpace(
+        shownGlyphIds[index - 1]!,
+        shown,
+      );
       if (adjustment1000 !== 0) {
         kerns.push({
-          codeOffset: glyphIds.length * CID_BYTE_LENGTH,
+          codeOffset: index * CID_BYTE_LENGTH,
           adjustment1000,
         });
         width1000 += adjustment1000;
       }
     }
-    glyphIds.push(shown);
     width1000 += face.glyphSpaceWidth(shown);
   }
-  const codes = new Uint8Array(glyphIds.length * CID_BYTE_LENGTH);
-  glyphIds.forEach((glyphId, index) => {
+  const codes = new Uint8Array(shownGlyphIds.length * CID_BYTE_LENGTH);
+  shownGlyphIds.forEach((glyphId, index) => {
     codes[index * CID_BYTE_LENGTH] = (glyphId >> 8) & 0xff;
     codes[index * CID_BYTE_LENGTH + 1] = glyphId & 0xff;
   });
   return { codes, width1000, substitutions, kerns };
 }
 
-// Every code point across `texts` that `face` has a glyph for, keyed by that glyph ID -- the CID -> Unicode pairs a ToUnicode CMap needs, collected across every run a document draws in this one face. Mirrors math-content-write.ts's own collectUsedGlyphs, and shares its assumption: a face's 'cmap' is an injective Unicode-to-glyph mapping in practice, so the first code point seen for a glyph is the one that glyph represents. Characters the face cannot map contribute nothing -- .notdef stands for no Unicode text at all, and claiming otherwise in a ToUnicode CMap would make a copy/paste recover a character the page never showed.
+// Every glyph across `texts` that `face` will actually DRAW, keyed by that glyph ID and carrying the Unicode text each drawn glyph represents -- one code point for a glyph a character resolved to directly, the whole character run a ligature glyph consumed. Collected across every run a document draws in this one face, through the identical resolve-and-shape path encodeForShowEmbedded takes, so the subset (which these keys feed) and the ToUnicode CMap (which these pairs feed) both describe the glyphs that are shown rather than the ones the raw 'cmap' would have named -- a ligature glyph is reachable through no single character's 'cmap' entry at all. Mirrors math-content-write.ts's own collectUsedGlyphs in sharing its injectivity assumption: the first text seen for a glyph is the one that glyph represents. Characters the face cannot map contribute nothing -- .notdef stands for no Unicode text at all, and claiming otherwise in a ToUnicode CMap would make a copy/paste recover a character the page never showed.
 export function collectEmbeddedGlyphs(
   texts: Iterable<string>,
   face: EmbeddedFace,
-): ReadonlyMap<number, number> {
-  const used = new Map<number, number>();
+): ReadonlyMap<number, readonly number[]> {
+  const used = new Map<number, readonly number[]>();
   for (const text of texts) {
+    const resolvedGlyphIds: number[] = [];
+    const codePoints: (number | undefined)[] = [];
     for (const character of text) {
       const codePoint = character.codePointAt(0)!;
       const glyphId = face.glyphId(codePoint);
-      if (glyphId !== undefined && !used.has(glyphId)) {
-        used.set(glyphId, codePoint);
+      if (glyphId === undefined) {
+        resolvedGlyphIds.push(NOTDEF_GLYPH_ID);
+        codePoints.push(undefined);
+      } else {
+        resolvedGlyphIds.push(glyphId);
+        codePoints.push(codePoint);
+      }
+    }
+    const shaping =
+      face.gsubShaper === undefined
+        ? {
+            glyphIds: resolvedGlyphIds,
+            spans: resolvedGlyphIds.map(() => 1),
+          }
+        : face.gsubShaper(resolvedGlyphIds);
+    let cursor = 0;
+    for (const [index, glyphId] of shaping.glyphIds.entries()) {
+      const span = shaping.spans[index]!;
+      const sequence: number[] = [];
+      for (let s = 0; s < span; s++) {
+        const codePoint = codePoints[cursor + s];
+        if (codePoint !== undefined) {
+          sequence.push(codePoint);
+        }
+      }
+      cursor += span;
+      if (glyphId !== NOTDEF_GLYPH_ID && sequence.length > 0) {
+        const existing = used.get(glyphId);
+        // First text wins, the collectUsedGlyphs rule -- but a shorter sequence never overwrites a longer one and vice versa; the first-seen entry is kept unconditionally, exactly as its single-code-point predecessor was.
+        if (existing === undefined) {
+          used.set(glyphId, sequence);
+        }
       }
     }
   }

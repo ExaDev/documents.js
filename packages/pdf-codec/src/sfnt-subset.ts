@@ -161,12 +161,13 @@ function buildPostStub(font: SfntFont): Uint8Array<ArrayBuffer> {
   return post;
 }
 
-// The transitive closure a subset needs: the glyphs the code points map to, GID 0, and -- following each composite's own component records, which themselves may be composite -- every glyph any of those is assembled from.
+// The transitive closure a subset needs: the glyphs the code points map to, any glyph IDs handed over directly (a ligature glyph 'GSUB' substitution produced, which no single code point's 'cmap' entry reaches), GID 0, and -- following each composite's own component records, which themselves may be composite -- every glyph any of those is assembled from.
 function collectGlyphIds(
   glyf: GlyfTable,
   cmap: CmapLookup,
   numGlyphs: number,
   codePoints: Iterable<number>,
+  extraGlyphIds: Iterable<number>,
 ): { used: Set<number>; unmapped: number[] } | undefined {
   const used = new Set<number>([0]);
   const unmapped = new Set<number>();
@@ -179,6 +180,15 @@ function collectGlyphIds(
     }
     if (glyphId >= numGlyphs) {
       return undefined; // a 'cmap' entry pointing past 'maxp's own glyph count: the font is internally inconsistent, and any subset built from it would be missing exactly the glyph the caller asked for
+    }
+    if (!used.has(glyphId)) {
+      used.add(glyphId);
+      pending.push(glyphId);
+    }
+  }
+  for (const glyphId of extraGlyphIds) {
+    if (glyphId >= numGlyphs) {
+      return undefined; // the same internally-inconsistent-font refusal the 'cmap' path makes, for a substituted glyph the layout tables named past 'maxp's own count
     }
     if (!used.has(glyphId)) {
       used.add(glyphId);
@@ -217,6 +227,7 @@ function collectGlyphIds(
 export function subsetSfnt(
   font: SfntFont,
   codePoints: Iterable<number>,
+  extraGlyphIds: Iterable<number> = [],
 ): SfntSubsetResult | undefined {
   const head = parseHead(font);
   const maxp = parseMaxp(font);
@@ -254,7 +265,13 @@ export function subsetSfnt(
   if (glyf === undefined || cmap === undefined) {
     return undefined; // no 'glyf'/'loca' at all (a CFF-flavoured font, which needs Type2 charstring subsetting rather than this), or no character map to resolve the caller's code points through
   }
-  const collected = collectGlyphIds(glyf, cmap, maxp.numGlyphs, codePoints);
+  const collected = collectGlyphIds(
+    glyf,
+    cmap,
+    maxp.numGlyphs,
+    codePoints,
+    extraGlyphIds,
+  );
   if (collected === undefined) {
     return undefined;
   }
