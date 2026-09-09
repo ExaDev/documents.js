@@ -329,6 +329,12 @@ export {
 } from "./typed/formula/write";
 export type { OdfFormulaWriteOptions } from "./typed/formula/write";
 
+// The embedded-sub-document WRITER (typed/draw/embedded-write.ts): the write-side counterpart of readOdfInventory's sibling embedded-object reading -- one sub-document serialised under its own "Object N/" directory, with the draw:object element its embedding frame references.
+export {
+  writeEmbeddedObject,
+  writeEmbeddedObjectPackage,
+} from "./typed/draw/embedded-write";
+
 export { readOdm } from "./typed/odm/read";
 
 // The master-document WRITER, the inverse of readOdm: one top-level text:section per chapter, each carrying its external-file reference exactly as the reader's own real-LibreOffice verification transcribed it.

@@ -35,6 +35,23 @@ function contentRoot(pkg: Package): XmlElement {
   return root;
 }
 
+function collectDrawObjectHrefs(shapes: XmlElement): (string | undefined)[] {
+  const hrefs: (string | undefined)[] = [];
+  for (const frame of shapes.children) {
+    if (frame.type !== "element" || frame.tag !== "draw:frame") {
+      continue;
+    }
+    for (const child of frame.children) {
+      if (child.type === "element" && child.tag === "draw:object") {
+        hrefs.push(
+          child.attributes.find((a) => a.name === "xlink:href")?.value,
+        );
+      }
+    }
+  }
+  return hrefs;
+}
+
 function findTableShapes(pkg: Package): XmlElement | undefined {
   return elementsWithTag([contentRoot(pkg)], "table:shapes")[0];
 }
@@ -234,16 +251,33 @@ describe("OdsSheet.addEmbeddedObject", () => {
     ).toBe("application/vnd.oasis.opendocument.formula");
   });
 
-  it("writes nothing at all for every other objectKind -- a documented, bounded gap mirroring buildOdtPackage's identical narrowing for a drawing embeddedObject block", () => {
+  it("writes a full nested sub-package for a non-formula, non-chart objectKind", () => {
+    // The gap this test used to pin is closed: every non-chart kind now serialises through odf.js's writeEmbeddedObject, so the assertion flips from "nothing at all" to "a genuine Object N/ sub-package plus a referencing draw:object frame".
     const editor = createOds();
-    const sheet = editor.sheets()[0]!;
-    const partCountBefore = Object.keys(editor.toPackage().parts).length;
-    sheet.addEmbeddedObject({
-      objectKind: "drawing",
-      document: { kind: "drawing", metadata: {}, pages: [] },
-      frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
-    });
-    expect(findTableShapes(editor.toPackage())).toBeUndefined();
-    expect(Object.keys(editor.toPackage().parts)).toHaveLength(partCountBefore);
+    editor.sheets()[0]!.addEmbeddedObject(
+      formulaObject({
+        objectKind: "wordprocessing",
+        document: {
+          kind: "wordprocessing",
+          metadata: {},
+          sections: [
+            {
+              pageSize: { widthPt: 612, heightPt: 792 },
+              margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+              blocks: [{ kind: "paragraph", runs: [{ text: "inner" }] }],
+            },
+          ],
+        },
+      }),
+    );
+    const pkg = editor.toPackage();
+    const shapes = findTableShapes(pkg);
+    expect(shapes).toBeDefined();
+    const hrefs = collectDrawObjectHrefs(shapes!);
+    expect(hrefs).toHaveLength(1);
+    const directory = hrefs[0]!.replace("./", "").replace(/\/$/, "");
+    expect(
+      Object.keys(pkg.parts).some((p) => p.startsWith(`${directory}/`)),
+    ).toBe(true);
   });
 });

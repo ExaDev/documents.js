@@ -93,9 +93,22 @@ export class OdsSheet {
     insertSheetImage(this.pkg, this.live(), image);
   }
 
-  // Adds an embedded object (currently only a real formula sub-object; every other objectKind is a documented, bounded gap -- see floating.ts's own insertSheetEmbeddedObject comment) at object.frame's own already-absolute position.
+  // Adds an embedded object at object.frame's own already-absolute position: a formula as a real formula sub-object, every other non-chart kind through odf.js's full nested sub-package writer (see floating.ts's own insertSheetEmbeddedObject comment).
   addEmbeddedObject(object: ContentEmbeddedObject): void {
-    insertSheetEmbeddedObject(this.pkg, this.live(), object);
+    insertSheetEmbeddedObject(
+      this.pkg,
+      this.live(),
+      object,
+      () => `Object ${this.nextEmbeddedObjectName()}`,
+    );
+  }
+
+  private nextEmbeddedObjectNameCounter = 1;
+
+  private nextEmbeddedObjectName(): string {
+    const name = String(this.nextEmbeddedObjectNameCounter);
+    this.nextEmbeddedObjectNameCounter += 1;
+    return name;
   }
 
   // Resolves (individuating/gap-filling as needed) the cell at 0-based (row, column) and wraps it as an OdsCell -- rejecting a position covered by another cell's own merged range outright (see OdsCell's own class doc: a table:covered-table-cell is never wrapped), rather than silently handing back something whose value/formula/displayText setters would corrupt the merge.
