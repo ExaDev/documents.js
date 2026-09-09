@@ -5,6 +5,10 @@ import {
   type LayoutMetadata,
   type PageSize,
 } from "document-schema.js";
+import {
+  mergeMetadata,
+  type MetadataOverrides,
+} from "../../metadata/core-patch";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import { readPptContent } from "../../ppt/read";
 import { writePptContent } from "../../ppt/write";
@@ -36,8 +40,9 @@ export class PptEditor {
     return this.document.metadata;
   }
 
-  set metadata(value: LayoutMetadata) {
-    this.document.metadata = value;
+  // The patch-style MetadataOverrides setter every other editor's own metadata setter takes (docx/pptx/odt/odp/ods/odg/pdf -- see src/metadata/core-patch.ts): only the fields the caller names change, so an override never clears a field it did not mention.
+  set metadata(value: MetadataOverrides) {
+    this.document.metadata = mergeMetadata(this.document.metadata, value);
   }
 
   slides(): PptSlide[] {

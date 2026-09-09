@@ -1,6 +1,7 @@
 import {
   PAGE_SIZE_LETTER,
   type ContentDocument,
+  type LayoutMetadata,
   type ContentParagraph as ContentParagraphNode,
   type ContentSection,
   type ContentTable as ContentTableNode,
@@ -9,6 +10,10 @@ import {
 } from "document-schema.js";
 import { readDocContent, writeDocContent } from "doc-codec";
 import type { WriteDocContentOptions } from "doc-codec";
+import {
+  mergeMetadata,
+  type MetadataOverrides,
+} from "../../metadata/core-patch";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import type { ClockPort } from "../../ports/clock";
 import { systemClock } from "../../ports/clock";
@@ -132,6 +137,44 @@ export class DocSection {
   }
 }
 
+// The first section's own block-flow handle, mirroring MarkdownBody's shape exactly (paragraphs/appendParagraph/tables/appendTable) so every caller written against docx's or odt's or markdown's `.body` works unchanged -- the docx/odt/markdown family's one shared editor surface. Multiple sections remain reachable through sections()/appendSection(); body always views the FIRST one.
+export interface DocBody {
+  paragraphs(): DocParagraph[];
+  appendParagraph(init?: ParagraphInit): DocParagraph;
+  tables(): DocTable[];
+  appendTable(init: TableInit): DocTable;
+}
+
+class DocBodyImpl implements DocBody {
+  constructor(private readonly section: ContentSection) {}
+
+  paragraphs(): DocParagraph[] {
+    return this.section.blocks
+      .filter(
+        (block): block is ContentParagraphNode => block.kind === "paragraph",
+      )
+      .map((block) => new DocParagraph(this.section.blocks, block));
+  }
+
+  appendParagraph(init?: ParagraphInit): DocParagraph {
+    const paragraph = buildParagraph(init);
+    this.section.blocks.push(paragraph);
+    return new DocParagraph(this.section.blocks, paragraph);
+  }
+
+  tables(): DocTable[] {
+    return this.section.blocks
+      .filter((block): block is ContentTableNode => block.kind === "table")
+      .map((block) => new DocTable(this.section.blocks, block));
+  }
+
+  appendTable(init: TableInit): DocTable {
+    const table = buildTable(init);
+    this.section.blocks.push(table);
+    return new DocTable(this.section.blocks, table);
+  }
+}
+
 export interface CreateDocOptions {
   readonly clock?: ClockPort;
   readonly pageSize?: PageSize;
@@ -142,6 +185,7 @@ export interface CreateDocOptions {
 //
 // Saving is toBytes(): writeDocContent(this.document, options) -- the whole document, every section, not just the parts some accessor reached. The read-side extras readDocContent attaches beyond ContentDocument's own shape (numbering definitions, footnotes, endnotes, comments, header/footer stories -- see doc-codec's DocContent) are preserved on the in-memory object this editor holds but are not themselves editable here and do not survive a save: writeDocContent reads only the shared ContentDocument shape, the identical read-and-drop relationship readDocxContent's own extras have in the docx editor.
 export class DocEditor {
+  readonly body: DocBody;
   private readonly document: WordprocessingDocument;
 
   constructor(document: ContentDocument) {
@@ -150,10 +194,21 @@ export class DocEditor {
         `DocEditor requires a wordprocessing ContentDocument, got "${document.kind}"`,
       );
     }
-    if (document.sections.length === 0) {
+    const first = document.sections[0];
+    if (first === undefined) {
       throw new Error("a doc document must carry at least one section");
     }
     this.document = document;
+    this.body = new DocBodyImpl(first);
+  }
+
+  get metadata(): LayoutMetadata {
+    return this.document.metadata;
+  }
+
+  // The patch-style MetadataOverrides setter every other editor's own metadata setter takes (docx/pptx/odt/odp/ods/odg/pdf -- see src/metadata/core-patch.ts): only the fields the caller names change, and the named fields round-trip through writeDocContent's own SummaryInformation stream.
+  set metadata(value: MetadataOverrides) {
+    this.document.metadata = mergeMetadata(this.document.metadata, value);
   }
 
   sections(): DocSection[] {
@@ -162,30 +217,21 @@ export class DocEditor {
     );
   }
 
-  // The constructor guarantees at least one section; re-stating that fact here as a check (rather than an assertion) is what lets the forwards below read this.document.sections[0] at all under noUncheckedIndexedAccess.
-  private firstSection(): DocSection {
-    const first = this.document.sections[0];
-    if (first === undefined) {
-      throw new Error("a doc document must carry at least one section");
-    }
-    return new DocSection(this.document.sections, first);
-  }
-
-  // The first section's own paragraph/table accessors, forwarded for editor-shape parity with MarkdownEditor.paragraphs()/tables() -- the natural surface for the common single-section document.
+  // The first section's own paragraph/table accessors, forwarded through body for editor-shape parity with MarkdownEditor.paragraphs()/tables() -- the natural surface for the common single-section document.
   paragraphs(): DocParagraph[] {
-    return this.firstSection().paragraphs();
+    return this.body.paragraphs();
   }
 
   appendParagraph(init?: ParagraphInit): DocParagraph {
-    return this.firstSection().appendParagraph(init);
+    return this.body.appendParagraph(init);
   }
 
   tables(): DocTable[] {
-    return this.firstSection().tables();
+    return this.body.tables();
   }
 
   appendTable(init: TableInit): DocTable {
-    return this.firstSection().appendTable(init);
+    return this.body.appendTable(init);
   }
 
   appendSection(init: SectionInit = {}): DocSection {
