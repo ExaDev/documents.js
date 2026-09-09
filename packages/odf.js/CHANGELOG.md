@@ -1,3 +1,13 @@
+## [7.15.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.14.0...odf.js%407.15.0) (2026-09-09)
+
+### Features
+
+* **odf.js:** write footnote and endnote anchors from their definitions bodies ([3b0ed8b](https://github.com/ExaDev/documents.js/commit/3b0ed8becf0b9cda59d63a3bbaa51a94fc02fee1))
+
+### Bug Fixes
+
+* **odf.js:** refuse cyclic note definitions before recursive writes ([a1f0c35](https://github.com/ExaDev/documents.js/commit/a1f0c3574b499b9ecd193c0ec1826ab326dc3aa6))
+
 ## [7.14.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.13.0...odf.js%407.14.0) (2026-09-09)
 
 ### Features
