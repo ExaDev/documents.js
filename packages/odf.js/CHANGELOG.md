@@ -1,3 +1,9 @@
+## [7.16.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.15.0...odf.js%407.16.0) (2026-09-09)
+
+### Features
+
+* **odf.js:** write comment anchors from their definitions bodies ([aea864b](https://github.com/ExaDev/documents.js/commit/aea864bd218a4162cd95bc0ae1f842a342557f88))
+
 ## [7.15.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.14.0...odf.js%407.15.0) (2026-09-09)
 
 ### Features
