@@ -3,6 +3,8 @@ import type {
   ContentDrawPage,
   DocumentTree,
   PageSize,
+  DefinitionEntry,
+  ProvenanceDescriptor,
 } from "document-schema.js";
 import { flattenTree } from "document-schema.js";
 import type { Package } from "../../model/package";
@@ -43,6 +45,8 @@ const CONTENT_PART = "content.xml";
 const STYLES_PART = "styles.xml";
 
 export interface OdgWriteOptions {
+  // The definitions table shape-text construct anchors resolve against; writeOdg passes the tree's own table automatically. A bare writeOdgContent caller with construct-bearing shape text still refuses those anchors by name.
+  readonly definitions?: Readonly<Record<string, DefinitionEntry>>;
   // The ODF version stamped on each part's office:version and on the manifest. Defaults to the current standard.
   readonly version?: string;
   // Stamps the package as a document template (ODF_MEDIA_TYPES.otg) rather than a regular document (ODF_MEDIA_TYPES.odg) -- the "mimetype" part and the manifest root entry syncManifest derives from it, both of which createOdfPackage/syncManifest already key off whatever media type is passed in. Nothing else about the writer's own output changes: ODF makes no other structural distinction between a document and its template. Defaults to false.
@@ -69,9 +73,11 @@ function sortByPaintOrder<T extends { readonly paintOrder: number }>(
 function canonicalPage(
   page: ContentDrawPage,
   listState: ListPlanState,
+  definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
+  changeIds: ReadonlyMap<ProvenanceDescriptor, string> | undefined,
 ): ContentDrawPage {
   const shapes = page.shapes.map((shape, index) =>
-    canonicalDrawShape(shape, index, listState),
+    canonicalDrawShape(shape, index, listState, definitions, changeIds),
   );
   const vectors = page.vectors.map((vector, index) =>
     canonicalDrawVector(vector, page.shapes.length + index),
@@ -96,7 +102,9 @@ export function normaliseOdgContent(
   return {
     kind: "drawing",
     metadata: canonicalMetadata(document.metadata),
-    pages: document.pages.map((page) => canonicalPage(page, listState)),
+    pages: document.pages.map((page) =>
+      canonicalPage(page, listState, undefined, undefined),
+    ),
   };
 }
 
@@ -151,10 +159,12 @@ export function writeOdgContent(
     "office:master-styles",
   );
 
+  const changeIds = new Map<ProvenanceDescriptor, string>();
   const shapeState = createDrawShapeWriteState(
     pkg,
     registry,
     contentAutomaticStyles,
+    { definitions: options.definitions, changeIds },
   );
   // One counter across the WHOLE drawing, matching readOdpContent's own document-wide threading of the same state: two lists on different pages must mint different identities exactly as two lists in different sections of one odt body do.
   const listState: ListPlanState = { next: 1 };
@@ -196,7 +206,10 @@ export function writeOdg(
   document: DocumentTree,
   options: OdgWriteOptions = {},
 ): Package {
-  const pkg = writeOdgContent(flattenTree(document), options);
+  const pkg = writeOdgContent(flattenTree(document), {
+    ...options,
+    definitions: document.definitions ?? options.definitions,
+  });
   writeOdfPackageResidue(pkg, "odg", document.source);
   syncManifest(pkg, { version: options.version ?? DEFAULT_ODF_VERSION });
   return pkg;
