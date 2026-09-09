@@ -1,3 +1,9 @@
+## [7.20.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.19.0...odf.js%407.20.0) (2026-09-09)
+
+### Features
+
+* **odf.js:** write block-scope comment ranges ([627e9ce](https://github.com/ExaDev/documents.js/commit/627e9ceb466cc7ee7dc263e51f7c8111dfe4f400)), references [#969](https://github.com/ExaDev/documents.js/issues/969) [#972](https://github.com/ExaDev/documents.js/issues/972)
+
 ## [7.19.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.18.0...odf.js%407.19.0) (2026-09-09)
 
 ### Features
