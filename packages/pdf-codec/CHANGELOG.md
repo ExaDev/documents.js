@@ -1,3 +1,9 @@
+## [4.3.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.2.0...pdf-codec%404.3.0) (2026-09-09)
+
+### Features
+
+* **pdf-codec:** apply GSUB default ligatures when shaping embedded text ([573eb45](https://github.com/ExaDev/documents.js/commit/573eb45a4758b72c444b236645d13a6a950d37e7)), closes [ExaDev/documents.js#960](https://github.com/ExaDev/documents.js/issues/960)
+
 ## [4.2.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.1.0...pdf-codec%404.2.0) (2026-09-09)
 
 ### Features
