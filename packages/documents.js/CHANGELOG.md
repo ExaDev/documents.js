@@ -1,3 +1,9 @@
+## [7.15.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.14.0...documents.js%407.15.0) (2026-09-09)
+
+### Features
+
+* **documents.js:** align the new editors' body and metadata surfaces ([78e612c](https://github.com/ExaDev/documents.js/commit/78e612c53e8bfc0ec85dbda1e6c6174d6bee6c9c))
+
 ## [7.14.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.13.0...documents.js%407.14.0) (2026-09-09)
 
 ### Features
