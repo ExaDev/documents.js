@@ -2,9 +2,15 @@ import type {
   ContentFormula,
   ContentVector,
   LayoutMetadata,
+  ContentEmbeddedObject,
 } from "document-schema.js";
 import type { Package, XmlElement } from "odf.js";
-import { decodePackage, encodePackage, readOdfMetadata } from "odf.js";
+import {
+  decodePackage,
+  encodePackage,
+  readOdfMetadata,
+  writeEmbeddedObject,
+} from "odf.js";
 import type { Box } from "document-schema.js";
 import { patchOdfMetadataOnPackage } from "../../metadata/core-patch";
 import { resolveMetadataTimestamps } from "../../model/metadata";
@@ -101,6 +107,23 @@ class OdtBodyImpl implements OdtBody {
     const paragraphElement = buildParagraph(this.pkg);
     paragraphElement.children.push(
       insertFormulaFrameMedia(this.pkg, frame, formula),
+    );
+    this.officeText.children.push(paragraphElement);
+    return new OdtParagraph(
+      this.officeText.children,
+      paragraphElement,
+      this.pkg,
+    );
+  }
+
+  // Appends a paragraph whose only content is a real embedded sub-document of any non-chart, non-formula kind -- a draw:frame/draw:object referencing a genuine nested "Object N/" package built by odf.js's own writeEmbeddedObject (ExaDev/documents.js#972): wordprocessing, presentation, spreadsheet, or drawing. The name counter is this editor's own, mirroring odf.js's own per-writer numbering, so two objects never share a directory. A formula keeps its dedicated appendFormula (a formula sub-package is structurally its own case, not the generic one), and the chart kind stays a documented gap (#719's quarantined-residue decision).
+  appendEmbeddedObject(
+    object: ContentEmbeddedObject,
+    directory: string,
+  ): OdtParagraph {
+    const paragraphElement = buildParagraph(this.pkg);
+    paragraphElement.children.push(
+      writeEmbeddedObject(object, directory, this.pkg),
     );
     this.officeText.children.push(paragraphElement);
     return new OdtParagraph(
