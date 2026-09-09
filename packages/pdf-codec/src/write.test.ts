@@ -669,3 +669,289 @@ describe("writePdf: the outline (#967)", () => {
     expect(text).not.toContain("/Outlines");
   });
 });
+
+describe("writePdf: optional-content layers (#967)", () => {
+  it("round-trips the layer table and each item's owning layer", async () => {
+    const textItem = {
+      kind: "text",
+      text: "base",
+      xPt: 10,
+      yPt: 80,
+      font: HELVETICA,
+      sizePt: 12,
+      color: BLACK,
+      layer: "Background",
+    } as const;
+    const rectItem = {
+      kind: "rect",
+      xPt: 0,
+      yPt: 0,
+      widthPt: 5,
+      heightPt: 5,
+      fill: BLACK,
+      layer: "Annotations",
+    } as const;
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [{ widthPt: 200, heightPt: 100, items: [textItem, rectItem] }],
+      images: {},
+      layers: [
+        { name: "Background", visible: true },
+        { name: "Annotations", visible: false },
+      ],
+    };
+    const { readPdf } = await import("./read");
+    const reread = readPdf(writePdf(doc));
+    expect(reread.layers).toEqual([
+      { name: "Background", visible: true },
+      { name: "Annotations", visible: false },
+    ]);
+    const rereadItems = reread.pages[0]!.items;
+    const text = rereadItems.find(
+      (item): item is Extract<LayoutItem, { kind: "text" }> =>
+        item.kind === "text" && item.text === "base",
+    );
+    expect(text?.layer).toBe("Background");
+    const rect = rereadItems.find(
+      (item): item is Extract<LayoutItem, { kind: "rect" }> =>
+        item.kind === "rect",
+    );
+    expect(rect?.layer).toBe("Annotations");
+  });
+
+  it("writes no /OCProperties at all for a document with no layers", () => {
+    const bytes = writePdf({
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+    });
+    const text = new TextDecoder("latin1").decode(bytes);
+    expect(text).not.toContain("/OCProperties");
+  });
+});
+
+describe("writePdf: AcroForm fields (#967)", () => {
+  it("round-trips terminal fields, widgets, choices, and groups", async () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [{ widthPt: 200, heightPt: 100, items: [] }],
+      images: {},
+      form: [
+        {
+          name: "email",
+          fieldType: "text",
+          value: "a@b.c",
+          alias: "Email address",
+          widgets: [
+            { pageIndex: 0, xPt: 10, yPt: 60, widthPt: 80, heightPt: 12 },
+          ],
+          children: [],
+        },
+        {
+          name: "subscribe",
+          fieldType: "checkbox",
+          checked: true,
+          widgets: [
+            { pageIndex: 0, xPt: 10, yPt: 40, widthPt: 10, heightPt: 10 },
+          ],
+          children: [],
+        },
+        {
+          name: "contact",
+          fieldType: "group",
+          widgets: [],
+          children: [
+            {
+              name: "contact.reason",
+              fieldType: "combobox",
+              value: "billing",
+              options: ["billing", "support"],
+              widgets: [
+                { pageIndex: 0, xPt: 10, yPt: 20, widthPt: 60, heightPt: 12 },
+                { pageIndex: 0, xPt: 10, yPt: 5, widthPt: 60, heightPt: 12 },
+              ],
+              children: [],
+            },
+          ],
+        },
+      ],
+    };
+    const { readPdf } = await import("./read");
+    const reread = readPdf(writePdf(doc));
+    expect(reread.form).toEqual([
+      {
+        name: "email",
+        fieldType: "text",
+        value: "a@b.c",
+        alias: "Email address",
+        widgets: [
+          { pageIndex: 0, xPt: 10, yPt: 60, widthPt: 80, heightPt: 12 },
+        ],
+        children: [],
+      },
+      {
+        name: "subscribe",
+        fieldType: "checkbox",
+        checked: true,
+        value: "Yes",
+        widgets: [
+          { pageIndex: 0, xPt: 10, yPt: 40, widthPt: 10, heightPt: 10 },
+        ],
+        children: [],
+      },
+      {
+        name: "contact",
+        fieldType: "group",
+        widgets: [],
+        children: [
+          {
+            name: "contact.reason",
+            fieldType: "combobox",
+            value: "billing",
+            options: ["billing", "support"],
+            widgets: [
+              { pageIndex: 0, xPt: 10, yPt: 20, widthPt: 60, heightPt: 12 },
+              { pageIndex: 0, xPt: 10, yPt: 5, widthPt: 60, heightPt: 12 },
+            ],
+            children: [],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("writes no /AcroForm for a document with no fields", () => {
+    const bytes = writePdf({
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+    });
+    const text = new TextDecoder("latin1").decode(bytes);
+    expect(text).not.toContain("/AcroForm");
+  });
+});
+
+describe("writePdf: the tagged structure tree (#967)", () => {
+  it("round-trips the element tree and each item's owning element", async () => {
+    const heading = {
+      kind: "text",
+      text: "Title",
+      xPt: 10,
+      yPt: 80,
+      font: HELVETICA,
+      sizePt: 14,
+      color: BLACK,
+      structure: "e-h1",
+    } as const;
+    const body = {
+      kind: "text",
+      text: "Body",
+      xPt: 10,
+      yPt: 60,
+      font: HELVETICA,
+      sizePt: 10,
+      color: BLACK,
+      structure: "e-p",
+    } as const;
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [{ widthPt: 200, heightPt: 100, items: [heading, body] }],
+      images: {},
+      structure: [
+        {
+          id: "e-root",
+          type: "Document",
+          children: [
+            { id: "e-h1", type: "H1", title: "The heading", children: [] },
+            { id: "e-p", type: "P", alt: "a paragraph", children: [] },
+          ],
+        },
+      ],
+    };
+    const { readPdf } = await import("./read");
+    const reread = readPdf(writePdf(doc));
+    const tree = reread.structure!;
+    // Element ids are reader-minted in document order, so identity is positional: the first H1 under the root owns the heading item.
+    expect(tree).toEqual([
+      {
+        id: tree[0]!.id,
+        type: "Document",
+        children: [
+          expect.objectContaining({ type: "H1", title: "The heading" }),
+          expect.objectContaining({ type: "P", alt: "a paragraph" }),
+        ],
+      },
+    ]);
+    const h1Id = tree[0]!.children[0]!.id;
+    const pId = tree[0]!.children[1]!.id;
+    const rereadItems = reread.pages[0]!.items;
+    const rereadHeading = rereadItems.find(
+      (item): item is Extract<LayoutItem, { kind: "text" }> =>
+        item.kind === "text" && item.text === "Title",
+    );
+    const rereadBody = rereadItems.find(
+      (item): item is Extract<LayoutItem, { kind: "text" }> =>
+        item.kind === "text" && item.text === "Body",
+    );
+    expect(rereadHeading?.structure).toBe(h1Id);
+    expect(rereadBody?.structure).toBe(pId);
+  });
+
+  it("writes no /StructTreeRoot for a document with no structure", () => {
+    const bytes = writePdf({
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+    });
+    const text = new TextDecoder("latin1").decode(bytes);
+    expect(text).not.toContain("/StructTreeRoot");
+  });
+});
+
+describe("writePdf: package-level residue (#967)", () => {
+  it("restores restorable rows and the XMP packet verbatim", async () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+      source: {
+        "page-mode": { format: "pdf", xml: "/UseOutlines" },
+        "viewer-preferences": { format: "pdf", xml: "<< /HideToolbar true >>" },
+        xmp: {
+          format: "pdf",
+          xml: '<?xpacket begin="" id="W1234"?> <x:xmpmeta/> <?xpacket end="w"?>',
+        },
+      },
+    };
+    const { readPdf } = await import("./read");
+    const reread = readPdf(writePdf(doc));
+    expect(reread.source?.["page-mode"]?.xml).toBe("/UseOutlines");
+    expect(reread.source?.["viewer-preferences"]?.xml).toContain(
+      "/HideToolbar true",
+    );
+    expect(reread.source?.xmp?.xml).toBe(doc.source?.xmp?.xml);
+  });
+
+  it("does not restore a row whose serialisation references source-file objects", async () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+      source: {
+        "open-action": { format: "pdf", xml: "[ 12 0 R /Fit]" },
+      },
+    };
+    const { readPdf } = await import("./read");
+    const reread = readPdf(writePdf(doc));
+    // A dangling "12 0 R" has no target in the new file; the row restores as nothing rather than corrupting the Catalog.
+    expect(reread.source?.["open-action"]).toBeUndefined();
+  });
+});

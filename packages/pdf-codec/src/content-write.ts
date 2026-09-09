@@ -64,10 +64,16 @@ export interface ContentWriteContext {
   readonly measurer: TextMeasurer;
   resolveFont(font: LayoutFont): ResolvedFontResource;
   resolveImage(imageId: string): ResolvedImageResource;
+  // #967: the indirect-object number of an optional-content group by layer name (write.ts allocates one OCG per doc.layers row). An item carrying a layer the document's own layers table does not name draws unmarked rather than failing -- the model tolerates the dangling name, so the writer does too.
+  readonly layerObjectNumberOf?: (name: string) => number | undefined;
+  // #967: the next page-scoped marked-content identifier, sequential in emission order. Absent when nothing consumes MCIDs (no structure tree): items still draw, and any /OC layer marking works without one.
+  readonly nextMcid?: () => number;
 }
 
 export interface ContentStreamResult {
   readonly bytes: Uint8Array<ArrayBuffer>;
+  // #967: every item marked with an MCID, in emission order -- the (MCID -> owning element id) pairs the caller needs to build the structure parent tree. Items marked for a layer only (no structure) appear nowhere here: a layer mark carries no MCID.
+  readonly markedStructure: readonly MarkedStructureItem[];
   // Every WinAnsi substitution made while emitting text in a STANDARD-14 face, in item order -- content-write.ts has no Diagnostic schema of its own to turn these into, so it hands back the raw substitutions and leaves that translation to whichever layer owns diagnostics.
   readonly substitutions: readonly WinAnsiSubstitution[];
   // Every character shown as .notdef because the EMBEDDED face it was drawn in has no glyph for it, in item order. Kept separate from `substitutions` rather than folded into it because nothing visible was chosen as a replacement here -- a WinAnsiSubstitution's own `to` field would have to be invented, and claiming a '?' was drawn when a notdef box was drawn is a worse report than none. Reported rather than dropped: only the caller can decide whether that means picking another face or accepting the box.
@@ -666,8 +672,30 @@ export function writeContentStream(
   const writer = new ByteWriter();
   const substitutions: WinAnsiSubstitution[] = [];
   const missingGlyphs: EmbeddedFaceSubstitution[] = [];
+  const markedStructure: MarkedStructureItem[] = [];
 
   for (const item of items) {
+    // #967: one BDC/EMC span around any item that carries a structure owner (an MCID through the parent tree) or a layer (an /OC group reference), the single marked-content spelling that serves both channels -- the reader's own BDC handler reads /MCID and /OC out of the same property dict. 'link' items are annotations, not painted content, so they are never marked here.
+    // 'layer' in item / 'structure' in item narrow the union to the painted item kinds (a 'link' carries neither).
+    const itemLayer = "layer" in item ? item.layer : undefined;
+    const itemStructure = "structure" in item ? item.structure : undefined;
+    const layerObjectNum =
+      itemLayer !== undefined
+        ? context.layerObjectNumberOf?.(itemLayer)
+        : undefined;
+    const marked = itemStructure !== undefined || layerObjectNum !== undefined;
+    if (marked) {
+      writer.writeAscii("/P <<");
+      if (itemStructure !== undefined && context.nextMcid !== undefined) {
+        const mcid = context.nextMcid();
+        markedStructure.push({ mcid, structureId: itemStructure });
+        writer.writeAscii(` /MCID ${mcid}`);
+      }
+      if (layerObjectNum !== undefined) {
+        writer.writeAscii(` /OC ${layerObjectNum} 0 R`);
+      }
+      writer.writeAscii(" >> BDC\n");
+    }
     if (item.kind === "text") {
       writeText(writer, item, context, substitutions, missingGlyphs);
     } else if (item.kind === "image") {
@@ -681,7 +709,21 @@ export function writeContentStream(
     } else if (item.kind === "path") {
       writePath(writer, item);
     }
+    if (marked) {
+      writer.writeAscii("EMC\n");
+    }
   }
 
-  return { bytes: writer.toBytes(), substitutions, missingGlyphs };
+  return {
+    bytes: writer.toBytes(),
+    substitutions,
+    missingGlyphs,
+    markedStructure,
+  };
+}
+
+// One MCID-bearing item: the identifier the caller files into the structure parent tree, and the model's own element id it names.
+export interface MarkedStructureItem {
+  readonly mcid: number;
+  readonly structureId: string;
 }
