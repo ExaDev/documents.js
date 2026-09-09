@@ -113,19 +113,19 @@ export async function exportToPdf(
     await writeFile(destinationPath, pdfBytes);
     return;
   }
-  // doc, xls, and ppt are the identical no-editor story one format family over: each has its own named to-Pdf function (docToPdf/xlsToPdf/pptToPdf, the same shape rtfToPdf has), re-converted here from the original bytes captured at open time with this call's own real fonts/diagnostics options.
+  // doc, xls, and ppt each carry a live-view editor now, so their export converts the editor's CURRENT bytes -- toBytes() re-serialises the edited ContentDocument -- rather than a fixed copy captured at open time, with this call's own real fonts/diagnostics options.
   if (openDocument.format === "doc") {
-    const pdfBytes = docToPdf(openDocument.bytes, pdfOptions);
+    const pdfBytes = docToPdf(openDocument.editor.toBytes(), pdfOptions);
     await writeFile(destinationPath, pdfBytes);
     return;
   }
   if (openDocument.format === "xls") {
-    const pdfBytes = xlsToPdf(openDocument.bytes, pdfOptions);
+    const pdfBytes = xlsToPdf(openDocument.editor.toBytes(), pdfOptions);
     await writeFile(destinationPath, pdfBytes);
     return;
   }
   if (openDocument.format === "ppt") {
-    const pdfBytes = pptToPdf(openDocument.bytes, pdfOptions);
+    const pdfBytes = pptToPdf(openDocument.editor.toBytes(), pdfOptions);
     await writeFile(destinationPath, pdfBytes);
     return;
   }

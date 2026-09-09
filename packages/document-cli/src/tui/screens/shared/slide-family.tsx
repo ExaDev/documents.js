@@ -4,6 +4,7 @@ import type {
   Box as GeometryBox,
   OdpEditor,
   PageSize,
+  PptEditor,
   PptxEditor,
 } from "documents.js";
 import { ListView } from "../../components/list-view.js";
@@ -14,6 +15,7 @@ import {
   selectionKeyFor,
   type OdpOpenDocument,
   type OpenDocument,
+  type PptOpenDocument,
   type PptxOpenDocument,
 } from "../../state/types.js";
 
@@ -30,13 +32,13 @@ export interface SlideFamilySlideSummary {
 }
 
 export interface SlideFamilyAdapter {
-  readonly formatLabel: "pptx" | "odp";
+  readonly formatLabel: "pptx" | "odp" | "ppt";
   readonly slides: () => readonly SlideFamilySlideSummary[];
 }
 
 function buildSlideFamilyAdapter(
-  formatLabel: "pptx" | "odp",
-  editor: PptxEditor | OdpEditor,
+  formatLabel: "pptx" | "odp" | "ppt",
+  editor: PptxEditor | OdpEditor | PptEditor,
 ): SlideFamilyAdapter {
   return {
     formatLabel,
@@ -63,15 +65,40 @@ export function buildOdpSlideFamilyAdapter(
   return buildSlideFamilyAdapter("odp", editor);
 }
 
+// ppt's slides carry the identical summary subset this family reads (shapes' text/frame, slide notes) through PptEditor's own slides()/shapes(), so the same adapter serves it; the rich shape/table/image editing screens behind slideDetail stay pptx/odp, with ppt's own narrower detail screen routed in app.tsx.
+export function buildPptSlideFamilyAdapter(
+  editor: PptEditor,
+): SlideFamilyAdapter {
+  return buildSlideFamilyAdapter("ppt", editor);
+}
+
 // The one narrowing every pptx/odp screen in this family needs: `state.openDocument` is a nine-member union, but a slide-family screen only ever exists on the stack while a pptx or odp document is open, since every screen in this family is only ever pushed by another screen in this family that already checked this. Throws rather than returning undefined because reaching this function with the wrong document open is a screen-router wiring bug, not a recoverable runtime state -- matching `currentScreen`'s own precedent in state/types.ts.
-export type PresentationOpenDocument = PptxOpenDocument | OdpOpenDocument;
+export type PresentationOpenDocument =
+  PptxOpenDocument | OdpOpenDocument | PptOpenDocument;
 
 export function assertPresentationDocument(
   doc: OpenDocument | undefined,
 ): PresentationOpenDocument {
+  if (
+    doc === undefined ||
+    (doc.format !== "pptx" && doc.format !== "odp" && doc.format !== "ppt")
+  ) {
+    throw new Error(
+      "Expected an open pptx, odp or ppt document here; the screen router in app.tsx should only reach a slide-family screen for one of those formats.",
+    );
+  }
+  return doc;
+}
+
+// The rich-surface narrowing every pptx/odp screen in this family needs (slide-detail, shape-editor, slide-table-detail): those screens edit tables, images, and vector geometry through PptxSlide/OdpSlide's full API, none of which a ppt slide carries. Notes-editor alone takes the wider PresentationOpenDocument above, since PptSlide carries the identical `.notes` surface its one action touches.
+export type RichPresentationOpenDocument = PptxOpenDocument | OdpOpenDocument;
+
+export function assertRichPresentationDocument(
+  doc: OpenDocument | undefined,
+): RichPresentationOpenDocument {
   if (doc === undefined || (doc.format !== "pptx" && doc.format !== "odp")) {
     throw new Error(
-      "Expected an open pptx or odp document here; the screen router in app.tsx should only reach a slide-family screen for one of those formats.",
+      "Expected an open pptx or odp document here; the screen router in app.tsx should only reach this rich slide-family screen for one of those formats -- a ppt document routes to its own narrower detail screen.",
     );
   }
   return doc;
@@ -180,8 +207,12 @@ export function SlideFamilySlideList(
   return (
     <Box flexDirection="column">
       <Text bold>
-        {props.adapter.formatLabel === "pptx" ? "PowerPoint" : "Impress"} slides
-        ({rows.length})
+        {props.adapter.formatLabel === "odp"
+          ? "Impress"
+          : props.adapter.formatLabel === "ppt"
+            ? "PowerPoint 97-2003"
+            : "PowerPoint"}{" "}
+        slides ({rows.length})
       </Text>
       <ListView
         items={rows}

@@ -3,6 +3,10 @@ import { useEffect, useState, type Dispatch, type ReactElement } from "react";
 import type {
   Alignment,
   Box as GeometryBox,
+  DocParagraph,
+  DocRun,
+  DocTable,
+  DocTableCell,
   DocxParagraph,
   DocxRun,
   DocxTable,
@@ -28,6 +32,7 @@ import { useAppDispatch, useAppState } from "../../state/context.js";
 import {
   anyOverlayOpen,
   selectionKeyFor,
+  type DocOpenDocument,
   type DocxOpenDocument,
   type MarkdownOpenDocument,
   type OdtOpenDocument,
@@ -46,18 +51,19 @@ import {
   truncatePreview,
 } from "./text.js";
 
-// docx, odt and markdown share one paragraph/run/table model closely enough (see documents.js's own README: "readDocxContent and readOdtContent both produce the identical wordprocessing-variant ContentDocument shape", and readMarkdownContent is the third format sharing that same pivot) that DocxParagraph/OdtParagraph/MarkdownParagraph and DocxRun/OdtRun/MarkdownRun are structurally interchangeable for every screen in this family -- the union types below let every helper and screen here take whichever the open document actually is without a branch, mirroring state/reducer.ts's own `WordprocessingOpenDocument` narrowing (not exported from there, so restated here for this screen family's own use). MarkdownRun/MarkdownParagraph are a genuinely narrower shape than DocxRun/DocxParagraph's own (no underline/colour/fontFamily/sizePt on a run, no alignment on a paragraph) -- see `supportsRunStyleExtras` below for how call sites that need those fields narrow the union down to docx/odt only.
+// docx, odt and markdown share one paragraph/run/table model closely enough (see documents.js's own README: "readDocxContent and readOdtContent both produce the identical wordprocessing-variant ContentDocument shape", and readMarkdownContent is the third format sharing that same pivot) that DocxParagraph/OdtParagraph/MarkdownParagraph and DocxRun/OdtRun/MarkdownRun are structurally interchangeable for every screen in this family -- the union types below let every helper and screen here take whichever the open document actually is without a branch, mirroring state/reducer.ts's own `WordprocessingOpenDocument` narrowing (not exported from there, so restated here for this screen family's own use). MarkdownRun/MarkdownParagraph are a genuinely narrower shape than DocxRun/DocxParagraph's own (no underline/colour/fontFamily/sizePt on a run, no alignment on a paragraph) -- see `supportsRunStyleExtras` below for how call sites that need those fields narrow the union down. doc joined this family when documents.js gained its DocEditor: DocParagraph/DocRun/DocTable hold direct references into the same wordprocessing ContentDocument pivot, and DocRun/DocParagraph carry the full docx/odt styling field set (underline, colour, fontFamily, sizePt, alignment) because doc-codec's writer genuinely round-trips all of them.
 export type ParagraphFamilyOpenDocument =
-  DocxOpenDocument | OdtOpenDocument | MarkdownOpenDocument;
+  DocxOpenDocument | OdtOpenDocument | MarkdownOpenDocument | DocOpenDocument;
 export type ParagraphFamilyLiveParagraph =
-  DocxParagraph | OdtParagraph | MarkdownParagraph;
-export type ParagraphFamilyLiveRun = DocxRun | OdtRun | MarkdownRun;
-export type ParagraphFamilyLiveTable = DocxTable | OdtTable | MarkdownTable;
+  DocxParagraph | OdtParagraph | MarkdownParagraph | DocParagraph;
+export type ParagraphFamilyLiveRun = DocxRun | OdtRun | MarkdownRun | DocRun;
+export type ParagraphFamilyLiveTable =
+  DocxTable | OdtTable | MarkdownTable | DocTable;
 export type ParagraphFamilyLiveTableCell =
-  DocxTableCell | OdtTableCell | MarkdownTableCell;
+  DocxTableCell | OdtTableCell | MarkdownTableCell | DocTableCell;
 
-// The docx/odt-only subset of ParagraphFamilyLiveRun that genuinely carries underline/colour/fontFamily/sizePt -- MarkdownRun has none of the four (it carries bold/italic/strike/hyperlink/code instead). `'underline' in run` is a real TypeScript `in`-narrowing check (not a cast): true for exactly the two run classes that declare that getter.
-export type ParagraphFamilyStyledRun = DocxRun | OdtRun;
+// The subset of ParagraphFamilyLiveRun that genuinely carries underline/colour/fontFamily/sizePt -- MarkdownRun has none of the four (it carries bold/italic/strike/hyperlink/code instead), while DocxRun/OdtRun/DocRun all do. `'underline' in run` is a real TypeScript `in`-narrowing check (not a cast): true for exactly the three run classes that declare that getter.
+export type ParagraphFamilyStyledRun = DocxRun | OdtRun | DocRun;
 
 export function supportsRunStyleExtras(
   run: ParagraphFamilyLiveRun,
@@ -73,7 +79,8 @@ export function paragraphFamilyDocument(
   }
   return openDocument.format === "docx" ||
     openDocument.format === "odt" ||
-    openDocument.format === "markdown"
+    openDocument.format === "markdown" ||
+    openDocument.format === "doc"
     ? openDocument
     : undefined;
 }
@@ -125,7 +132,7 @@ export interface ParagraphFamilyList {
 }
 
 export interface ParagraphFamilyAdapter {
-  readonly formatLabel: "docx" | "odt" | "markdown";
+  readonly formatLabel: "docx" | "odt" | "markdown" | "doc";
   paragraphs(): readonly ParagraphFamilyParagraph[];
   tables(): readonly ParagraphFamilyTable[];
   lists?: () => readonly ParagraphFamilyList[];
@@ -133,7 +140,7 @@ export interface ParagraphFamilyAdapter {
 }
 
 export interface ParagraphFamilyAdapterOptions {
-  readonly formatLabel: "docx" | "odt" | "markdown";
+  readonly formatLabel: "docx" | "odt" | "markdown" | "doc";
   readonly paragraphs: () => readonly ParagraphFamilyParagraph[];
   readonly tables: () => readonly ParagraphFamilyTable[];
   readonly lists?: () => readonly ParagraphFamilyList[];

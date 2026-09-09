@@ -32,8 +32,9 @@ export function LauncherScreen(): ReactElement {
     <Box flexDirection="column">
       <Text bold>document-cli</Text>
       <Text dimColor>
-        A terminal editor for docx, pptx, odt, odp, ods, odg, markdown, odb and
-        pdf -- xlsx, csv, svg and rtf open as read-only PDF previews.
+        A terminal editor for docx, pptx, odt, odp, ods, odg, doc, xls, ppt,
+        markdown, odb and pdf -- xlsx, csv, svg, rtf, wpd and epub open as
+        read-only PDF previews.
       </Text>
       <Text> </Text>
       <Text>

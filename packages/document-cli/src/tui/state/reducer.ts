@@ -2,6 +2,7 @@ import {
   bytesToBase64,
   decodeMarkdownText,
   encodeMarkdownText,
+  openDoc,
   openDocx,
   openMarkdown,
   openOdg,
@@ -9,7 +10,13 @@ import {
   openOds,
   openOdt,
   openPdf,
+  openXls,
+  openPpt,
   openPptx,
+  type DocParagraph,
+  type DocRun,
+  type DocTable,
+  type DocTableCell,
   type DocxParagraph,
   type DocxRun,
   type DocxTable,
@@ -20,6 +27,7 @@ import {
   type MarkdownTableCell,
   type OdpShape,
   type OdsSheet,
+  type XlsSheet,
   type OdtParagraph,
   type OdtRun,
   type OdtTable,
@@ -34,6 +42,7 @@ import {
   type PdfPathItem,
   type PdfRectItem,
   type PdfTextItem,
+  type PptShape,
   type PptxShape,
   type PptxTable,
   type MathMlNode,
@@ -44,6 +53,7 @@ import {
   isEditableDocument,
   rootScreenForFormat,
   type AppState,
+  type DocOpenDocument,
   type DocxOpenDocument,
   type EditableOpenDocument,
   type MarkdownOpenDocument,
@@ -52,9 +62,11 @@ import {
   type OdsOpenDocument,
   type OdtOpenDocument,
   type OpenDocument,
+  type XlsOpenDocument,
   type OverlayName,
   type OverlayState,
   type PdfOpenDocument,
+  type PptOpenDocument,
   type PptxOpenDocument,
   type StatusMessage,
   type WritableOpenDocument,
@@ -175,11 +187,11 @@ function documentWithPath(doc: OpenDocument, path: string): OpenDocument {
     case "wpd":
       return { format: "wpd", layout: doc.layout, bytes: doc.bytes, path };
     case "doc":
-      return { format: "doc", layout: doc.layout, bytes: doc.bytes, path };
+      return { format: "doc", editor: doc.editor, path };
     case "xls":
-      return { format: "xls", layout: doc.layout, bytes: doc.bytes, path };
+      return { format: "xls", editor: doc.editor, path };
     case "ppt":
-      return { format: "ppt", layout: doc.layout, bytes: doc.bytes, path };
+      return { format: "ppt", editor: doc.editor, path };
     case "epub":
       return { format: "epub", layout: doc.layout, bytes: doc.bytes, path };
   }
@@ -202,6 +214,12 @@ function reopenEditable(
       return { format: "ods", editor: openOds(bytes), path: doc.path };
     case "odg":
       return { format: "odg", editor: openOdg(bytes), path: doc.path };
+    case "doc":
+      return { format: "doc", editor: openDoc(bytes), path: doc.path };
+    case "xls":
+      return { format: "xls", editor: openXls(bytes), path: doc.path };
+    case "ppt":
+      return { format: "ppt", editor: openPpt(bytes), path: doc.path };
     case "pdf": {
       const editor = openPdf(bytes);
       return {
@@ -333,9 +351,12 @@ function wrongDocument(state: AppState, expected: string): AppState {
 
 // The genuinely format-agnostic paragraph/run/table actions (APPEND_PARAGRAPH, SET_RUN_TEXT, TOGGLE_RUN_BOLD/ITALIC, APPEND_RUN, APPEND_TABLE, SET_TABLE_CELL_TEXT, ADD_LIST_ITEM's own non-odt branch) resolve through this widened union -- documents.js's MarkdownParagraph/MarkdownRun/MarkdownTable share exactly the subset of DocxParagraph/DocxRun/DocxTable's own shape those actions touch (text/bold/italic, appendRun/appendParagraph/appendTable). `styledWordprocessingDocument` below is the narrower, pre-markdown version of this same idea, kept for the actions that touch a field only docx/odt runs/paragraphs actually have (underline, colour, font family/size, alignment).
 type WordprocessingOpenDocument =
-  DocxOpenDocument | OdtOpenDocument | MarkdownOpenDocument;
-type PresentationOpenDocument = PptxOpenDocument | OdpOpenDocument;
-type ShapeHostOpenDocument = PresentationOpenDocument | OdgOpenDocument;
+  DocxOpenDocument | OdtOpenDocument | MarkdownOpenDocument | DocOpenDocument;
+// The rich pptx/odp surface (slides carrying tables, images, the full shape editor API) versus the wider presentation union that also admits ppt, whose PptSlide carries the text-box/notes subset every presentation action shares.
+type RichPresentationOpenDocument = PptxOpenDocument | OdpOpenDocument;
+type PresentationOpenDocument = RichPresentationOpenDocument | PptOpenDocument;
+type SpreadsheetOpenDocument = OdsOpenDocument | XlsOpenDocument;
+type ShapeHostOpenDocument = RichPresentationOpenDocument | OdgOpenDocument;
 
 function wordprocessingDocument(
   state: AppState,
@@ -346,13 +367,27 @@ function wordprocessingDocument(
   }
   return doc.format === "docx" ||
     doc.format === "odt" ||
-    doc.format === "markdown"
+    doc.format === "markdown" ||
+    doc.format === "doc"
     ? doc
     : undefined;
 }
 
-// The narrow, docx/odt-only counterpart to wordprocessingDocument above -- for actions that need a real per-run/per-paragraph styling field (underline, colour, font family/size, alignment) MarkdownRun/MarkdownParagraph simply do not carry, rather than a markdown branch that would have nothing to do.
+// The narrow counterpart to wordprocessingDocument above -- for actions that need a real per-run/per-paragraph styling field (underline, colour, font family/size, alignment) MarkdownRun/MarkdownParagraph simply do not carry, rather than a markdown branch that would have nothing to do. doc carries the full set (doc-codec's writer round-trips every one of those fields), so it joins docx/odt here.
 function styledWordprocessingDocument(
+  state: AppState,
+): DocxOpenDocument | OdtOpenDocument | DocOpenDocument | undefined {
+  const doc = state.openDocument;
+  if (doc === undefined) {
+    return undefined;
+  }
+  return doc.format === "docx" || doc.format === "odt" || doc.format === "doc"
+    ? doc
+    : undefined;
+}
+
+// The docx/odt-only narrowing, for the one paragraph-level API doc genuinely lacks: insertImageAfter (see INSERT_PARAGRAPH_IMAGE's own comment).
+function docxOdtDocument(
   state: AppState,
 ): DocxOpenDocument | OdtOpenDocument | undefined {
   const doc = state.openDocument;
@@ -362,6 +397,16 @@ function styledWordprocessingDocument(
   return doc.format === "docx" || doc.format === "odt" ? doc : undefined;
 }
 
+function richPresentationDocument(
+  state: AppState,
+): RichPresentationOpenDocument | undefined {
+  const doc = state.openDocument;
+  if (doc === undefined) {
+    return undefined;
+  }
+  return doc.format === "pptx" || doc.format === "odp" ? doc : undefined;
+}
+
 function presentationDocument(
   state: AppState,
 ): PresentationOpenDocument | undefined {
@@ -369,7 +414,9 @@ function presentationDocument(
   if (doc === undefined) {
     return undefined;
   }
-  return doc.format === "pptx" || doc.format === "odp" ? doc : undefined;
+  return doc.format === "pptx" || doc.format === "odp" || doc.format === "ppt"
+    ? doc
+    : undefined;
 }
 
 function shapeHostDocument(state: AppState): ShapeHostOpenDocument | undefined {
@@ -382,7 +429,19 @@ function shapeHostDocument(state: AppState): ShapeHostOpenDocument | undefined {
     : undefined;
 }
 
-function spreadsheetDocument(state: AppState): OdsOpenDocument | undefined {
+// OdsSheet and XlsSheet share the exact accessor subset the spreadsheet actions below touch (sheets()/addSheet(name), cell(row, column).value, printSettings) -- the widened union lets one narrowing serve both, with the genuinely ods-only actions (a formula write, a floating image, mergeCells' rectangle API) narrowing further through withOdsSheet below.
+function spreadsheetDocument(
+  state: AppState,
+): SpreadsheetOpenDocument | undefined {
+  const doc = state.openDocument;
+  if (doc === undefined) {
+    return undefined;
+  }
+  return doc.format === "ods" || doc.format === "xls" ? doc : undefined;
+}
+
+// The ods-only narrowing for actions whose sheet surface xls genuinely lacks: XlsCell.formula is getter-only (xls-codec's writer has no formula write path), XlsSheet has no addImage and no mergeCells rectangle API (an xls merge is colSpan/rowSpan set directly on the anchor cell).
+function odsDocument(state: AppState): OdsOpenDocument | undefined {
   const doc = state.openDocument;
   if (doc === undefined) {
     return undefined;
@@ -503,23 +562,23 @@ function vectorHostDocument(
 function paragraphAt(
   doc: WordprocessingOpenDocument,
   blockIndex: number,
-): DocxParagraph | OdtParagraph | MarkdownParagraph | undefined {
+): DocxParagraph | OdtParagraph | MarkdownParagraph | DocParagraph | undefined {
   return doc.editor.paragraphs()[blockIndex];
 }
 
 function tableAt(
   doc: WordprocessingOpenDocument,
   tableIndex: number,
-): DocxTable | OdtTable | MarkdownTable | undefined {
+): DocxTable | OdtTable | MarkdownTable | DocTable | undefined {
   return doc.editor.tables()[tableIndex];
 }
 
 // The universal cell lookup every table kind supports, used in place of DocxTable/OdtTable's own `.cell(row, column)` shortcut -- MarkdownTable has no such shortcut (only `rows()`/`appendRow()`/`remove()`), so SET_TABLE_CELL_TEXT resolves a cell through the one traversal all three genuinely share.
 function tableCellAt(
-  table: DocxTable | OdtTable | MarkdownTable,
+  table: DocxTable | OdtTable | MarkdownTable | DocTable,
   row: number,
   column: number,
-): DocxTableCell | OdtTableCell | MarkdownTableCell | undefined {
+): DocxTableCell | OdtTableCell | MarkdownTableCell | DocTableCell | undefined {
   return table.rows()[row]?.cells()[column];
 }
 
@@ -535,6 +594,14 @@ function shapeAt(
 }
 
 function sheetAt(
+  doc: SpreadsheetOpenDocument,
+  sheetIndex: number,
+): OdsSheet | XlsSheet | undefined {
+  return doc.editor.sheets()[sheetIndex];
+}
+
+// The ods-only sheet lookup, for the actions whose OdsSheet surface xls genuinely lacks (see odsDocument's own doc comment).
+function odsSheetAt(
   doc: OdsOpenDocument,
   sheetIndex: number,
 ): OdsSheet | undefined {
@@ -545,7 +612,7 @@ function withRun(
   state: AppState,
   blockIndex: number,
   runIndex: number,
-  apply: (run: DocxRun | OdtRun | MarkdownRun) => void,
+  apply: (run: DocxRun | OdtRun | MarkdownRun | DocRun) => void,
 ): AppState {
   const doc = wordprocessingDocument(state);
   if (doc === undefined) {
@@ -577,11 +644,11 @@ function withStyledRun(
   state: AppState,
   blockIndex: number,
   runIndex: number,
-  apply: (run: DocxRun | OdtRun) => void,
+  apply: (run: DocxRun | OdtRun | DocRun) => void,
 ): AppState {
   const doc = styledWordprocessingDocument(state);
   if (doc === undefined) {
-    return wrongDocument(state, "a docx or odt document");
+    return wrongDocument(state, "a docx, odt or doc document");
   }
   const paragraph = doc.editor.paragraphs()[blockIndex];
   if (paragraph === undefined) {
@@ -627,16 +694,73 @@ function withShape(
   });
 }
 
+// The widened shape counterpart for the two shape fields every presentation shape carries (text, frame) -- PptShape included. Rotation and the other rich-shape actions stay on withShape above, since PptxShape/OdpShape alone carry them.
+function shapeWideAt(
+  doc: ShapeHostOpenDocument | PresentationOpenDocument,
+  containerIndex: number,
+  shapeIndex: number,
+): PptxShape | OdpShape | PptShape | undefined {
+  if (doc.format === "odg") {
+    return doc.editor.pages()[containerIndex]?.shapes()[shapeIndex];
+  }
+  return doc.editor.slides()[containerIndex]?.shapes()[shapeIndex];
+}
+
+function withWideShape(
+  state: AppState,
+  containerIndex: number,
+  shapeIndex: number,
+  apply: (shape: PptxShape | OdpShape | PptShape) => void,
+): AppState {
+  const drawing = drawingDocument(state);
+  const doc: ShapeHostOpenDocument | PresentationOpenDocument | undefined =
+    drawing ?? presentationDocument(state);
+  if (doc === undefined) {
+    return wrongDocument(state, "a pptx, odp, ppt or odg document");
+  }
+  const shape = shapeWideAt(doc, containerIndex, shapeIndex);
+  if (shape === undefined) {
+    return withStatus(
+      state,
+      "warning",
+      `There is no shape ${shapeIndex} on ${doc.format === "odg" ? "page" : "slide"} ${containerIndex}`,
+    );
+  }
+  return mutate(state, doc, () => {
+    apply(shape);
+  });
+}
+
 function withSheet(
   state: AppState,
   sheetIndex: number,
-  apply: (sheet: OdsSheet) => void,
+  apply: (sheet: OdsSheet | XlsSheet) => void,
 ): AppState {
   const doc = spreadsheetDocument(state);
   if (doc === undefined) {
-    return wrongDocument(state, "an ods document");
+    return wrongDocument(state, "an ods or xls document");
   }
   const sheet = sheetAt(doc, sheetIndex);
+  if (sheet === undefined) {
+    return withStatus(
+      state,
+      "warning",
+      `There is no sheet at index ${sheetIndex}`,
+    );
+  }
+  return mutate(state, doc, () => {
+    apply(sheet);
+  });
+}
+
+// The ods-only counterpart of withSheet, taking the already-narrowed document so the ods-only actions (SET_CELL_FORMULA, ADD_SHEET_IMAGE) share the same missing-sheet warning shape without re-narrowing.
+function withOdsSheet(
+  state: AppState,
+  doc: OdsOpenDocument,
+  sheetIndex: number,
+  apply: (sheet: OdsSheet) => void,
+): AppState {
+  const sheet = odsSheetAt(doc, sheetIndex);
   if (sheet === undefined) {
     return withStatus(
       state,
@@ -684,7 +808,7 @@ function setTextContainerText(
 }
 
 function setCellText(
-  cell: DocxTableCell | OdtTableCell | MarkdownTableCell,
+  cell: DocxTableCell | OdtTableCell | MarkdownTableCell | DocTableCell,
   text: string,
 ): void {
   setTextContainerText(cell, text);
@@ -1197,9 +1321,9 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
-    // Both DocxParagraph.insertImageAfter and OdtParagraph.insertImageAfter accept the identical ImageInit shape (documents.js's own edit/{docx,odt}/image.ts), so this resolves through the shared styledWordprocessingDocument narrowing exactly as APPEND_PARAGRAPH/APPEND_RUN's own wordprocessingDocument narrowing does -- deliberately excluding markdown, since MarkdownParagraph has no insertImageAfter at all.
+    // Both DocxParagraph.insertImageAfter and OdtParagraph.insertImageAfter accept the identical ImageInit shape (documents.js's own edit/{docx,odt}/image.ts), so this resolves through a docx/odt-only narrowing -- deliberately excluding markdown (MarkdownParagraph has no insertImageAfter at all) and doc (a ContentDocument paragraph has no image insertion point; doc-codec's writer reads images from the block flow itself, not a paragraph-level insert).
     case "INSERT_PARAGRAPH_IMAGE": {
-      const doc = styledWordprocessingDocument(state);
+      const doc = docxOdtDocument(state);
       if (doc === undefined) {
         return wrongDocument(state, "a docx or odt document");
       }
@@ -1275,7 +1399,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     }
 
     case "ADD_SLIDE_TABLE": {
-      const doc = presentationDocument(state);
+      const doc = richPresentationDocument(state);
       if (doc === undefined) {
         return wrongDocument(state, "a pptx or odp document");
       }
@@ -1296,7 +1420,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     }
 
     case "MERGE_SLIDE_TABLE_CELLS": {
-      const doc = presentationDocument(state);
+      const doc = richPresentationDocument(state);
       if (doc === undefined) {
         return wrongDocument(state, "a pptx or odp document");
       }
@@ -1342,12 +1466,10 @@ export function appReducer(state: AppState, action: Action): AppState {
     }
 
     case "ADD_TEXTBOX": {
-      const doc = shapeHostDocument(state);
-      if (doc === undefined) {
-        return wrongDocument(state, "a pptx, odp or odg document");
-      }
-      if (doc.format === "odg") {
-        const page = doc.editor.pages()[action.containerIndex];
+      // odg branches first through the drawing narrowing, then every presentation format takes the identical addTextBox({frame, text}) shape -- pptx/odp through their rich slides, ppt through PptSlide's own same-shaped text-box API.
+      const drawing = drawingDocument(state);
+      if (drawing !== undefined) {
+        const page = drawing.editor.pages()[action.containerIndex];
         if (page === undefined) {
           return withStatus(
             state,
@@ -1355,9 +1477,13 @@ export function appReducer(state: AppState, action: Action): AppState {
             `There is no page at index ${action.containerIndex}`,
           );
         }
-        return mutate(state, doc, () => {
+        return mutate(state, drawing, () => {
           page.addTextBox({ frame: action.frame, text: action.text });
         });
+      }
+      const doc = presentationDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, "a pptx, odp, ppt or odg document");
       }
       const slide = doc.editor.slides()[action.containerIndex];
       if (slide === undefined) {
@@ -1410,7 +1536,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     }
 
     case "SET_SHAPE_TEXT":
-      return withShape(
+      return withWideShape(
         state,
         action.containerIndex,
         action.shapeIndex,
@@ -1420,7 +1546,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       );
 
     case "SET_SHAPE_FRAME":
-      return withShape(
+      return withWideShape(
         state,
         action.containerIndex,
         action.shapeIndex,
@@ -1461,7 +1587,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case "ADD_SHEET": {
       const doc = spreadsheetDocument(state);
       if (doc === undefined) {
-        return wrongDocument(state, "an ods document");
+        return wrongDocument(state, "an ods or xls document");
       }
       return mutate(state, doc, () => {
         doc.editor.addSheet(action.name);
@@ -1474,14 +1600,33 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
 
     // A separate action/edit mode from SET_CELL_VALUE, not a variant of it -- see actions.ts's own doc comment: OdsCell.formula and .value are two independent attributes of the same real cell, both settable at once.
-    case "SET_CELL_FORMULA":
-      return withSheet(state, action.sheetIndex, (sheet) => {
+    case "SET_CELL_FORMULA": {
+      // ods-only: XlsCell.formula is getter-only (xls-codec's writer has no formula write path), so a formula edit against an xls sheet is refused by name rather than silently dropped at save time.
+      const doc = odsDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, "an ods document");
+      }
+      const sheet = odsSheetAt(doc, action.sheetIndex);
+      if (sheet === undefined) {
+        return withStatus(
+          state,
+          "warning",
+          `There is no sheet at index ${action.sheetIndex}`,
+        );
+      }
+      return mutate(state, doc, () => {
         sheet.cell(action.row, action.column).formula = action.formula;
       });
+    }
 
     // OdsSheet.addImage takes a real ContentSheetImage, which -- unlike ADD_IMAGE/INSERT_PARAGRAPH_IMAGE's own SlideImageInit/ImageInit -- carries its bytes as `base64: string`, not a raw Uint8Array (document-schema.js's ContentImageBlockSchema, shared with every other embedded-image/object shape); the conversion happens here, once, rather than pushing bytesToBase64 out to every dispatch site.
-    case "ADD_SHEET_IMAGE":
-      return withSheet(state, action.sheetIndex, (sheet) => {
+    case "ADD_SHEET_IMAGE": {
+      // ods-only: XlsSheet has no addImage (xls-codec's writer writes no floating images).
+      const ods = odsDocument(state);
+      if (ods === undefined) {
+        return wrongDocument(state, "an ods document");
+      }
+      return withOdsSheet(state, ods, action.sheetIndex, (sheet) => {
         sheet.addImage({
           kind: "image",
           format: action.format,
@@ -1495,13 +1640,15 @@ export function appReducer(state: AppState, action: Action): AppState {
           offsetYPt: action.offsetYPt,
         });
       });
+    }
 
     case "MERGE_CELLS": {
-      const doc = spreadsheetDocument(state);
+      // ods-only: an xls merge is colSpan/rowSpan set directly on the anchor cell (XlsCell's own setters), not a rectangle API.
+      const doc = odsDocument(state);
       if (doc === undefined) {
         return wrongDocument(state, "an ods document");
       }
-      const sheet = sheetAt(doc, action.sheetIndex);
+      const sheet = odsSheetAt(doc, action.sheetIndex);
       if (sheet === undefined) {
         return withStatus(
           state,

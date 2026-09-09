@@ -83,8 +83,8 @@ describe("NewDocumentPickerScreen", () => {
       </AppStateProvider>,
     );
 
-    // markdown is the last entry in CREATABLE_FORMATS -- six "down" presses reach it from the first row. Each press's own state update must actually commit before the next is sent (see test-support.ts's settle()), or a later press reads a stale selectedIndex closure.
-    for (let step = 0; step < 6; step += 1) {
+    // markdown is the last entry in CREATABLE_FORMATS -- nine "down" presses reach it from the first row. Each press's own state update must actually commit before the next is sent (see test-support.ts's settle()), or a later press reads a stale selectedIndex closure.
+    for (let step = 0; step < 9; step += 1) {
       stdin.write("j");
       await settle();
     }

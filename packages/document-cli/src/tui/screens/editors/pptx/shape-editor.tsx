@@ -11,7 +11,7 @@ import {
   type Screen,
 } from "../../../state/types.js";
 import {
-  assertPresentationDocument,
+  assertRichPresentationDocument,
   defaultShapeFrame,
 } from "../../shared/slide-family.js";
 import { RotationField } from "../odp/rotation-field.js";
@@ -164,7 +164,7 @@ export function ShapeEditorScreen(props: ShapeEditorScreenProps): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const overlayOpen = anyOverlayOpen(state);
-  const doc = assertPresentationDocument(state.openDocument);
+  const doc = assertRichPresentationDocument(state.openDocument);
   const { slideIndex, shapeIndex } = props.screen;
   const shape = doc.editor.slides()[slideIndex]?.shapes()[shapeIndex];
 
