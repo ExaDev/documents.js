@@ -1,3 +1,13 @@
+## [2.9.0](https://github.com/ExaDev/documents.js/compare/web%402.8.31...web%402.9.0) (2026-09-09)
+
+### Features
+
+* **web:** add the Package / JSON tool ([ef4702d](https://github.com/ExaDev/documents.js/commit/ef4702def27c0ad4c90b9511d9796c838dabb1f2))
+
+### Tests
+
+* **web:** assert the Package / JSON sidebar entry navigates ([a4eb7a2](https://github.com/ExaDev/documents.js/commit/a4eb7a2de7d1da9854b7530329eb3cfa09b33a1a))
+
 ## [2.8.31](https://github.com/ExaDev/documents.js/compare/web%402.8.30...web%402.8.31) (2026-09-09)
 
 
