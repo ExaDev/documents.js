@@ -1010,23 +1010,23 @@ describe("writeOdtContent: what it refuses rather than dropping", () => {
     ).toThrow(/run-level construct extent this writer does not spell back yet/);
   });
 
-  it("refuses an embedded object", () => {
+  it("refuses an embedded chart object -- the one kind with no write-side serialiser", () => {
     expect(() =>
       writeOdtContent(
         documentOf([
           {
             kind: "embeddedObject",
-            objectKind: "spreadsheet",
+            objectKind: "chart",
             frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
             document: {
-              kind: "spreadsheet",
+              kind: "drawing",
               metadata: {},
-              sheets: [],
+              pages: [],
             },
           },
         ]),
       ),
-    ).toThrow(/embedded object/);
+    ).toThrow(/no write-side serialiser/);
   });
 
   it("refuses a table cell carrying a block kind the table reader could not read back", () => {

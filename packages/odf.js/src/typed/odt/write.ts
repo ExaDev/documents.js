@@ -12,6 +12,7 @@ import type {
   DocumentTree,
   Margins,
   PageSize,
+  ContentEmbeddedObjectBlock,
 } from "document-schema.js";
 import { flattenTree } from "document-schema.js";
 import type { Package } from "../../model/package";
@@ -21,6 +22,7 @@ import type {
   RunConstructExtent,
 } from "document-schema.js";
 import type { XmlElement, XmlNode } from "../../model/node";
+import { writeEmbeddedObject } from "../draw/embedded-write";
 import { ODF_MEDIA_TYPES } from "../../media-type";
 import { syncManifest } from "../../manifest";
 import {
@@ -117,11 +119,16 @@ interface PlannedConstructStart {
 interface PlannedConstructEnd {
   readonly kind: "constructEnd";
 }
+interface PlannedEmbeddedObject {
+  readonly kind: "embeddedObject";
+  readonly object: ContentEmbeddedObjectBlock;
+}
 
 type PlannedBlock =
   | PlannedParagraph
   | PlannedTable
   | PlannedImage
+  | PlannedEmbeddedObject
   | PlannedConstructStart
   | PlannedConstructEnd;
 
@@ -191,6 +198,7 @@ function assertWritableBlock(
   | ContentParagraph
   | ContentTable
   | ContentImageBlock
+  | ContentEmbeddedObjectBlock
   | ContentPageBreak
   | ContentConstructStart
   | ContentConstructEnd {
@@ -210,7 +218,7 @@ function assertWritableBlock(
     return;
   }
   if (block.kind === "embeddedObject") {
-    throw unsupported("an embedded object", "a section's block flow");
+    return;
   }
   if (block.kind === "paragraph") {
     assertWritableParagraph(block, blockDefinitions, blockChangeIds);
@@ -309,14 +317,27 @@ function planSection(
       );
       continue;
     }
-    // An image: ODF anchors a draw:frame inside a paragraph, never beside one, so an image with no paragraph before it in this section opens an empty one to hang off. The anchor paragraph doubles as the page break's own host when one is pending.
+    if (block.kind === "embeddedObject") {
+      // An embedded object anchors exactly as an image does -- a draw:frame inside a paragraph, its own sub-package keyed under "Object N/" -- so it shares the image arm's anchor-paragraph and page-break handling verbatim.
+      flushPendingPageBreak();
+      if (!hasPlannedParagraph()) {
+        pushParagraph(emptyAnchorParagraph(false));
+      }
+      blocks.push({ kind: "embeddedObject", object: block });
+      continue;
+    }
+    // An image: ODF anchors a draw:frame inside a paragraph, never beside one, so an image with no paragraph before it in this section opens an empty one to hang off. The anchor paragraph doubles as the page break's own host when one is pending. The loop's final fallthrough arm.
     flushPendingPageBreak();
     if (!hasPlannedParagraph()) {
       pushParagraph(emptyAnchorParagraph(false));
     }
     blocks.push({ kind: "image", image: block });
   }
-
+  // An embedded object anchors exactly as an image does -- a draw:frame inside a paragraph, its own sub-package keyed under "Object N/" -- so it shares the image arm's anchor-paragraph and page-break handling verbatim. This is the loop's final fallthrough arm (everything else continued above), exactly as the image arm was before it.
+  flushPendingPageBreak();
+  if (!hasPlannedParagraph()) {
+    pushParagraph(emptyAnchorParagraph(false));
+  }
   flushPendingPageBreak();
   return { pageSize: section.pageSize, margins: section.margins, blocks };
 }
@@ -379,6 +400,26 @@ export function normaliseOdtContent(
             return block.table;
           case "image":
             return canonicalImage(block.image);
+          case "embeddedObject":
+            // The canonical form of an embedded object is its frame geometry and its sub-document's own canonical form -- but the sub-writers canonicalise internally on their next write, and readOdtContent re-reads whatever THIS writer emits, so the object passes through with only the reader-droppable fields (sourcePath, frames) stripped, exactly as writeEmbeddedObjectFrame receives it.
+            return {
+              kind: "embeddedObject",
+              objectKind: block.object.objectKind,
+              document: block.object.document,
+              frame: block.object.frame,
+              ...(block.object.anchorRow !== undefined
+                ? { anchorRow: block.object.anchorRow }
+                : {}),
+              ...(block.object.anchorColumn !== undefined
+                ? { anchorColumn: block.object.anchorColumn }
+                : {}),
+              ...(block.object.offsetXPt !== undefined
+                ? { offsetXPt: block.object.offsetXPt }
+                : {}),
+              ...(block.object.offsetYPt !== undefined
+                ? { offsetYPt: block.object.offsetYPt }
+                : {}),
+            };
           case "constructStart":
             // canonicalOdfConstructDescriptor (typed/shared/constructs.ts) restates the one fact a block-scope marker CAN carry that a round trip reshapes: an index wrapper's own bare *-source residue, re-serialised through the identical parse/build pass writeOdfIndexWrapper's own read-back takes. Everything else about the marker -- its extent's blocks -- is restated individually, in the same map, exactly as it would be at the document's top level.
             return {
@@ -413,6 +454,7 @@ interface OdtWriteState {
   readonly masterStyles: XmlElement;
   nextTable: number;
   nextImage: number;
+  nextObject: number;
   nextListStyle: number;
   nextSectionStyle: number;
   // One text:list-style per kind, minted on first use: a document with fifty bullet lists needs one bullet list-style, not fifty identical ones.
@@ -510,6 +552,25 @@ function writeImageFrame(
       "svg:height": formatOdfLength(image.heightPt),
     },
     children,
+  );
+}
+
+// An embedded object's own sub-package plus the draw:frame that references it: the sub-document serialises through writeEmbeddedObject into "Object N/", the frame mirrors writeImageFrame's own as-char shape (a size and no svg:x/svg:y -- the geometry readDrawFrame's flow-positioning path reads back), and the draw:object child replaces the draw:image. The reader resolves the identical shape through normaliseObjectHref's own "./" strip.
+function writeEmbeddedObjectFrame(
+  object: ContentEmbeddedObjectBlock,
+  state: OdtWriteState,
+): XmlElement {
+  const directory = `Object ${state.nextObject}`;
+  state.nextObject += 1;
+  const drawObject = writeEmbeddedObject(object, directory, state.pkg);
+  return el(
+    "draw:frame",
+    {
+      "text:anchor-type": "as-char",
+      "svg:width": formatOdfLength(object.frame.widthPt),
+      "svg:height": formatOdfLength(object.frame.heightPt),
+    },
+    [drawObject],
   );
 }
 
@@ -697,6 +758,17 @@ function writeSectionBlocks(
       currentOut().push(writeOdfTable(block.table, tableWriteContext(state)));
       continue;
     }
+    if (block.kind === "embeddedObject") {
+      if (anchorParagraph === undefined) {
+        throw new Error(
+          "writeOdt: internal error -- an embedded object block reached the writer with no anchor paragraph before it, which planSection is supposed to guarantee",
+        );
+      }
+      anchorParagraph.children.push(
+        writeEmbeddedObjectFrame(block.object, state),
+      );
+      continue;
+    }
     if (anchorParagraph === undefined) {
       throw new Error(
         "writeOdt: internal error -- an image block reached the writer with no anchor paragraph before it, which planSection is supposed to guarantee",
@@ -793,6 +865,7 @@ export function writeOdtContent(
     masterStyles: odfPartContainer(pkg, STYLES_PART, "office:master-styles"),
     nextTable: 1,
     nextImage: 1,
+    nextObject: 1,
     nextListStyle: 1,
     nextSectionStyle: 1,
     listStyleByKind: new Map(),
