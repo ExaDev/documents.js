@@ -8,6 +8,7 @@ const REAL_TOOLS: readonly { label: string; heading: string }[] = [
   { label: "Fonts", heading: "Embedded fonts" },
   { label: "Recent", heading: "Recent files" },
   { label: "Package / JSON", heading: "Package / JSON" },
+  { label: ".odb", heading: "Browse an .odb database" },
 ];
 
 // Sidebar.tsx's own PLANNED_ITEMS -- tracked as their own follow-up (ExaDev/documents.js#1096), deliberately still disabled nav stubs here.
