@@ -1131,7 +1131,7 @@ describe("fidelity constructs written (#969)", () => {
           { kind: "constructEnd" },
         ]),
       ),
-    ).toThrow(/no paragraph to carry its halves/);
+    ).toThrow(/no paragraph to carry its marker halves/);
   });
 
   it("round-trips a footnote anchor with its definitions-table body through writeOdt", () => {
@@ -1348,6 +1348,60 @@ describe("fidelity constructs written (#969)", () => {
         ]),
       ),
     ).toThrow(/does not spell back yet/);
+  });
+
+  it("round-trips a block-scope tracked-change range spanning two paragraphs", () => {
+    const descriptor = {
+      kind: "provenance",
+      change: "deletion",
+      author: "Edsger Dijkstra",
+    } as const;
+    const document = documentOf([
+      { kind: "constructStart", descriptor },
+      { kind: "paragraph", runs: [{ text: "first removed" }] },
+      { kind: "paragraph", runs: [{ text: "second removed" }] },
+      { kind: "constructEnd" },
+      { kind: "paragraph", runs: [{ text: "kept" }] },
+    ]);
+    const tree = assembleTree(document);
+    const rewritten = readOdtContent(writeOdt(tree));
+    const blocks = rewritten.sections[0]!.blocks;
+    expect(blocks[0]).toMatchObject({ kind: "constructStart" });
+    expect(blocks[1]).toMatchObject({
+      kind: "paragraph",
+      runs: [{ text: "first removed" }],
+    });
+    expect(blocks[3]).toMatchObject({ kind: "constructEnd" });
+    const lastInside = blocks[2];
+    expect(lastInside).toMatchObject({
+      kind: "paragraph",
+      runs: [{ text: "second removed" }],
+    });
+  });
+
+  it("refuses a block-scope change range whose extent contains no paragraph, by name", () => {
+    expect(() =>
+      writeOdtContent(
+        documentOf([
+          {
+            kind: "constructStart",
+            descriptor: { kind: "provenance", change: "insertion" },
+          },
+          {
+            kind: "table",
+            columnWidthsPt: [100],
+            rows: [
+              {
+                cells: [
+                  { blocks: [{ kind: "paragraph", runs: [{ text: "x" }] }] },
+                ],
+              },
+            ],
+          },
+          { kind: "constructEnd" },
+        ]),
+      ),
+    ).toThrow(/no paragraph to carry its marker halves/);
   });
 });
 
