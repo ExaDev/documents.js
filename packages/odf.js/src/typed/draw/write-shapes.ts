@@ -5,6 +5,8 @@ import type {
   ContentParagraph,
   ContentShape,
   ContentTable,
+  DefinitionEntry,
+  ProvenanceDescriptor,
 } from "document-schema.js";
 import type { XmlElement, XmlNode } from "../../model/node";
 import type { Package } from "../../model/package";
@@ -13,6 +15,7 @@ import { encodeXmlText } from "../../xml/entities";
 import { type StyleRegistry } from "../../styles/registry";
 import { formatOdfLength, formatOdfNumber } from "../shared/units";
 import { imageExtension } from "../shared/image";
+import { odfRunConstructWriteKind } from "../shared/constructs";
 import { writeOdfParagraph } from "../shared/paragraph";
 import { writeOdfTable, type OdfTableWriteContext } from "../shared/table";
 import {
@@ -56,6 +59,8 @@ export type ShapeContentPlan =
 export function planShapeContent(
   blocks: readonly ContentBlock[],
   listState: ListPlanState,
+  definitions?: Readonly<Record<string, DefinitionEntry>>,
+  changeIds?: ReadonlyMap<ProvenanceDescriptor, string>,
 ): ShapeContentPlan {
   closeListPlan(listState);
   if (blocks.length === 1) {
@@ -93,9 +98,15 @@ export function planShapeContent(
     }
     // block.kind === "paragraph" here, by elimination over ContentBlock's own discriminant.
     if (block.constructs !== undefined && block.constructs.length > 0) {
-      throw unsupportedShapeContent(
-        "a run-level construct extent (a field, bookmark, note, annotation, or tracked change)",
-      );
+      for (const extent of block.constructs) {
+        if (
+          odfRunConstructWriteKind(extent, definitions, changeIds) === undefined
+        ) {
+          throw unsupportedShapeContent(
+            "a run-level construct extent this writer does not spell back yet",
+          );
+        }
+      }
     }
     if (block.headingLevel !== undefined) {
       throw unsupportedShapeContent(
@@ -116,6 +127,9 @@ export function planShapeContent(
 export interface DrawShapeWriteState {
   readonly pkg: Package;
   readonly registry: StyleRegistry;
+  // The construct-writing context the odp/odg entry points thread: the definitions table note/comment anchors resolve against and the tracked-change id map, handed straight to writeOdfParagraph so a shape's own paragraphs write their constructs identically to odt body paragraphs. Absent means the caller has no tree context and paragraph constructs stay refused below.
+  readonly definitions?: Readonly<Record<string, DefinitionEntry>> | undefined;
+  readonly changeIds?: ReadonlyMap<ProvenanceDescriptor, string> | undefined;
   // The container a minted text:list-style (below) is appended to -- content.xml's own office:automatic-styles, the same container the caller's own StyleRegistry interns paragraph/text/graphic styles into, so every automatic style a shape writer mints lands in one place.
   readonly contentAutomaticStyles: XmlElement;
   nextImage: number;
@@ -128,11 +142,17 @@ export function createDrawShapeWriteState(
   pkg: Package,
   registry: StyleRegistry,
   contentAutomaticStyles: XmlElement,
+  constructContext?: {
+    definitions?: Readonly<Record<string, DefinitionEntry>>;
+    changeIds?: ReadonlyMap<ProvenanceDescriptor, string>;
+  },
 ): DrawShapeWriteState {
   return {
     pkg,
     registry,
     contentAutomaticStyles,
+    definitions: constructContext?.definitions,
+    changeIds: constructContext?.changeIds,
     nextImage: 1,
     nextTable: 1,
     nextListStyle: 1,
@@ -259,7 +279,10 @@ function writeShapeTextBox(
   };
 
   for (const paragraph of paragraphs) {
-    const element = writeOdfParagraph(paragraph, state.registry);
+    const element = writeOdfParagraph(paragraph, state.registry, {
+      definitions: state.definitions,
+      changeIds: state.changeIds,
+    });
     const membership = paragraph.list;
     // planShapeContent has already canonicalised every membership it kept to carry a real numId (never a bare {level}), so this guard is equivalent to `membership === undefined` at runtime -- phrased via optional chaining, matching typed/odt/write.ts's own writeSectionBlocks, so TypeScript narrows membership.numId to a plain string for the rest of this iteration rather than needing a non-null assertion below.
     if (membership?.numId === undefined) {
@@ -345,7 +368,12 @@ export function writeDrawFrame(
     shapeGraphicStyleName(shape, state),
   );
 
-  const content = planShapeContent(shape.blocks, listState);
+  const content = planShapeContent(
+    shape.blocks,
+    listState,
+    state.definitions,
+    state.changeIds,
+  );
   const children: XmlNode[] =
     content.kind === "table"
       ? [writeOdfTable(content.table, tableWriteContext(state))]
@@ -373,8 +401,15 @@ export function canonicalDrawShape(
   shape: ContentShape,
   documentIndex: number,
   listState: ListPlanState,
+  definitions?: Readonly<Record<string, DefinitionEntry>>,
+  changeIds?: ReadonlyMap<ProvenanceDescriptor, string>,
 ): ContentShape & { paintOrder: number } {
-  const content = planShapeContent(shape.blocks, listState);
+  const content = planShapeContent(
+    shape.blocks,
+    listState,
+    definitions,
+    changeIds,
+  );
   const blocks: ContentBlock[] =
     content.kind === "table"
       ? [canonicalTable(content.table, listState)]
