@@ -970,13 +970,16 @@ describe("writeOdtContent: metadata", () => {
 
 // Every refusal below is a construct that carries real meaning: writing the document without it would produce an .odt that silently lost content the caller handed in. The residue channel is the one deliberate exception, and it is stated in normaliseOdtContent rather than refused, because residue is opaque by construction.
 describe("writeOdtContent: what it refuses rather than dropping", () => {
-  it("refuses a construct boundary marker for a kind with no writer (a comment range spanning several blocks)", () => {
+  it("refuses a construct boundary marker for a kind with no writer (an office:forms control)", () => {
     expect(() =>
       writeOdtContent(
         documentOf([
           {
             kind: "constructStart",
-            descriptor: { kind: "anchor", anchorType: "comment", name: "c" },
+            descriptor: {
+              kind: "contentControl",
+              controlType: "plainText",
+            },
           },
           { kind: "paragraph", runs: [{ text: "x" }] },
           { kind: "constructEnd" },
