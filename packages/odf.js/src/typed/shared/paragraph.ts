@@ -860,6 +860,7 @@ function buildOdfParagraphItems(
   noteRanges: OdfParagraphConstructPlan["noteRanges"],
   registry: StyleRegistry,
   definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
+  definitionsOpenNoteKeys: Set<string> | undefined,
 ): OdfParagraphItem[] {
   // Fields and notes are both range-CONSUMING constructs -- each swallows the canonical runs its extent covers and emits one opaque element in their place -- so they walk one merged, start-sorted stream: two ranges can never overlap (a protected boundary always coincides with the start of a genuinely non-overlapping extent), and interleaving them in one cursor loop keeps the consumption arithmetic single-sourced.
   const consumed: (
@@ -911,6 +912,7 @@ function buildOdfParagraphItems(
           covered,
           registry,
           definitions,
+          definitionsOpenNoteKeys,
         ),
       });
     }
@@ -941,7 +943,15 @@ function writeOdfNoteElement(
   citationRuns: readonly ContentRun[],
   registry: StyleRegistry,
   definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
+  openNoteKeys: Set<string> | undefined,
 ): XmlElement {
+  const key = descriptor.definition ?? descriptor.name;
+  if (openNoteKeys?.has(key)) {
+    // A hostile or corrupt document can reuse a text:id inside its own note body: the reader assigns the outer entry AFTER parsing the body, so the inner anchor resolves to the same entry and the write would recurse until the stack is exhausted. Refusing by name beats either crashing or silently dropping the cycle.
+    throw new Error(
+      `writeOdt: a cyclic note definition -- note "${descriptor.name}" whose body refers back to the entry still being written`,
+    );
+  }
   const citation =
     typeof entry.citation === "string"
       ? entry.citation
@@ -949,14 +959,21 @@ function writeOdfNoteElement(
   const body: unknown = entry.body;
   const bodyChildren: XmlNode[] = [];
   if (Array.isArray(body)) {
-    for (const candidate of body) {
-      if (isNoteBodyParagraph(candidate)) {
-        bodyChildren.push(
-          writeOdfParagraph(candidate, registry, {
-            definitions,
-          }),
-        );
+    const openKeys = openNoteKeys ?? new Set<string>();
+    openKeys.add(key);
+    try {
+      for (const candidate of body) {
+        if (isNoteBodyParagraph(candidate)) {
+          bodyChildren.push(
+            writeOdfParagraph(candidate, registry, {
+              definitions,
+              openNoteKeys: openKeys,
+            }),
+          );
+        }
       }
+    } finally {
+      openKeys.delete(key);
     }
   }
   return el(
@@ -1092,6 +1109,7 @@ export function writeOdfParagraphChildren(
   paragraph: ContentParagraph,
   registry: StyleRegistry,
   definitions?: Readonly<Record<string, DefinitionEntry>>,
+  openNoteKeys?: Set<string>,
 ): XmlNode[] {
   const runs = paragraph.runs;
   const extents = paragraph.constructs ?? [];
@@ -1111,6 +1129,7 @@ export function writeOdfParagraphChildren(
     plan.noteRanges,
     registry,
     definitions,
+    openNoteKeys,
   );
 
   const protectedItemBoundaries = new Set<number>([0, items.length]);
@@ -1174,6 +1193,8 @@ export interface OdfParagraphWriteOptions {
   readonly trailingNodes?: readonly XmlNode[];
   // The definitions table note anchors resolve against: a footnote/endnote anchor writes its inline text:note (citation plus body) only when the entry its descriptor names is present here. Absent means the caller has no bodies to write (the flat writeOdtContent path) and note anchors were already refused upstream.
   readonly definitions?: Readonly<Record<string, DefinitionEntry>>;
+  // The note-definition keys on the write stack RIGHT NOW: a cyclic definition (a note body whose own anchor resolves back to an entry still being written) would recurse until the stack is exhausted, so the writer refuses one by name instead. Internal to the note write path -- never set by a caller.
+  readonly openNoteKeys?: Set<string>;
 }
 
 // Writes one ContentParagraph as the text:p (or, for a paragraph carrying a headingLevel, text:h) element readOdfParagraph reads back. Every formatting difference becomes an interned automatic style, since ODF has no other way to state one.
@@ -1206,7 +1227,12 @@ export function writeOdfParagraph(
     paragraph.headingLevel === undefined ? "text:p" : "text:h",
     attributes,
     [
-      ...writeOdfParagraphChildren(paragraph, registry, options.definitions),
+      ...writeOdfParagraphChildren(
+        paragraph,
+        registry,
+        options.definitions,
+        options.openNoteKeys,
+      ),
       ...(options.trailingNodes ?? []),
     ],
   );
