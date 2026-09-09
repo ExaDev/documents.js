@@ -333,15 +333,22 @@ describe("collectEmbeddedGlyphs", () => {
   it("maps each used glyph back to the character it represents, across every run in a document", () => {
     const { face } = load(carlitoRegularBytes());
     const used = collectEmbeddedGlyphs(["Hi", "oö"], face);
-    const expected: [number, number][] = [
-      [15, 0x48], // 'H'
-      [face.glyphId(0x69)!, 0x69], // 'i'
-      [111, 0x6f], // 'o'
-      [2142, 0xf6], // 'o' with a diaeresis, a composite glyph
+    const expected: [number, readonly number[]][] = [
+      [15, [0x48]], // 'H'
+      [face.glyphId(0x69)!, [0x69]], // 'i'
+      [111, [0x6f]], // 'o'
+      [2142, [0xf6]], // 'o' with a diaeresis, a composite glyph
     ];
     expect([...used].sort((a, b) => a[0] - b[0])).toEqual(
       expected.sort((a, b) => a[0] - b[0]),
     );
+  });
+
+  it("maps a ligature glyph to the whole character run it consumed", () => {
+    // 'office' shapes its 'ffi' to Carlito's own ligature glyph 76 through the face's GSUB, and that glyph's ToUnicode text is the three characters it replaced -- the mapping a copy/paste needs to recover 'office' from a page that draws four glyphs.
+    const { face } = load(carlitoRegularBytes());
+    const used = collectEmbeddedGlyphs(["office"], face);
+    expect(used.get(76)).toEqual([0x66, 0x66, 0x69]);
   });
 
   it("contributes nothing for a character the face cannot map", () => {
