@@ -1293,6 +1293,62 @@ describe("fidelity constructs written (#969)", () => {
       dateIso: "2026-09-09T00:00:00Z",
     });
   });
+
+  it("round-trips a tracked-change range with author and date through writeOdt", () => {
+    // The extent is interior (a later unchanged run follows it) deliberately: a change whose halves land at the paragraph's own leading/trailing edges is indistinguishable, on the way back in, from the block-scope pair the reader promotes whole-paragraph coverage into -- the identical point the bookmark machinery's run-versus-block split turns on -- so the interior shape is the one that round-trips through the run-level path this test pins.
+    const descriptor = {
+      kind: "provenance",
+      change: "insertion",
+      author: "Grace Hopper",
+      dateIso: "2026-09-09T01:00:00Z",
+    } as const;
+    const document = documentOf([
+      {
+        kind: "paragraph",
+        runs: [{ text: "inserted text" }, { text: " unchanged" }],
+        constructs: [{ descriptor, startRun: 0, endRun: 1 }],
+      },
+    ]);
+    const tree = assembleTree(document);
+    const rewritten = readOdtContent(writeOdt(tree));
+    const paragraph = rewritten.sections[0]!.blocks[0];
+    expect(paragraph).toMatchObject({
+      kind: "paragraph",
+      runs: [{ text: "inserted text" }, { text: " unchanged" }],
+      constructs: [
+        {
+          descriptor: {
+            kind: "provenance",
+            change: "insertion",
+            author: "Grace Hopper",
+            dateIso: "2026-09-09T01:00:00Z",
+          },
+          startRun: 0,
+          endRun: 1,
+        },
+      ],
+    });
+  });
+
+  it("refuses a moveFrom provenance extent by name -- no ODF spelling exists", () => {
+    expect(() =>
+      writeOdtContent(
+        documentOf([
+          {
+            kind: "paragraph",
+            runs: [{ text: "moved" }],
+            constructs: [
+              {
+                descriptor: { kind: "provenance", change: "moveFrom" },
+                startRun: 0,
+                endRun: 1,
+              },
+            ],
+          },
+        ]),
+      ),
+    ).toThrow(/does not spell back yet/);
+  });
 });
 
 function roundTrippedBlocks(document: WordprocessingDocument): ContentBlock[] {

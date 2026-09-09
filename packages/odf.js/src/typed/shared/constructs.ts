@@ -14,7 +14,7 @@ import type { XmlElement, XmlNode } from "../../model/node";
 import type { Package } from "../../model/package";
 import { buildXml } from "../../xml/build";
 import { parseXml } from "../../xml/parse";
-import { el } from "../../xml/fragment";
+import { el, txt } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import {
   attrValue,
@@ -968,13 +968,84 @@ export function writeOdfBookmarkEnd(name: string): XmlElement {
   return el("text:bookmark-end", { "text:name": encodeXmlText(name) });
 }
 
+// The inline tracked-change markers, and the region container they reference. A point change is the single text:change element; a range is the text:change-start/-end pair, exactly the half shapes the reader's marker walk pairs back.
+export function writeOdfChangePoint(id: string): XmlElement {
+  return el("text:change", { "text:change-id": encodeXmlText(id) });
+}
+
+export function writeOdfChangeStart(id: string): XmlElement {
+  return el("text:change-start", { "text:change-id": encodeXmlText(id) });
+}
+
+export function writeOdfChangeEnd(id: string): XmlElement {
+  return el("text:change-end", { "text:change-id": encodeXmlText(id) });
+}
+
+// The inverse of collectOdfProvenanceRegions: one text:tracked-changes container holding every region, each with its minted id (xml:id, the ODF 1.2 spelling), its change child (the tag the collector's own table maps back), and an office:change-info when the descriptor names an author or date. The descriptor's quarantined residue (the move-relation pairing) is never re-emitted, per every writer's own residue policy.
+const ODF_CHANGE_TAG_BY_PROVENANCE_CHANGE: ReadonlyMap<
+  "insertion" | "deletion" | "formatChange",
+  string
+> = new Map([
+  ["insertion", "text:insertion"],
+  ["deletion", "text:deletion"],
+  ["formatChange", "text:format-change"],
+]);
+
+export function writeOdfTrackedChanges(
+  regions: readonly {
+    id: string;
+    descriptor: ProvenanceDescriptor & {
+      change: "insertion" | "deletion" | "formatChange";
+    };
+  }[],
+): XmlElement {
+  return el(
+    "text:tracked-changes",
+    {},
+    regions.map(({ id, descriptor }) => {
+      const changeTag = ODF_CHANGE_TAG_BY_PROVENANCE_CHANGE.get(
+        descriptor.change,
+      );
+      if (changeTag === undefined) {
+        // moveFrom/moveTo never mint a region (the caller's collector refuses them first), so this is unreachable -- stated as a throw rather than a guess so a future change kind fails loudly here.
+        throw new Error(
+          `writeOdfTrackedChanges: change kind "${descriptor.change}" has no ODF region spelling`,
+        );
+      }
+      const changeInfoChildren: XmlNode[] = [];
+      if (descriptor.author !== undefined) {
+        changeInfoChildren.push(el("dc:creator", {}, [txt(descriptor.author)]));
+      }
+      if (descriptor.dateIso !== undefined) {
+        changeInfoChildren.push(el("dc:date", {}, [txt(descriptor.dateIso)]));
+      }
+      return el("text:changed-region", { "xml:id": encodeXmlText(id) }, [
+        el(
+          changeTag,
+          {},
+          changeInfoChildren.length > 0
+            ? [el("office:change-info", {}, changeInfoChildren)]
+            : [],
+        ),
+      ]);
+    }),
+  );
+}
+
 // Which run-level construct kind (if any) this package's odt writer knows how to spell back, and how: a field always writes from its own instruction; a bookmark anchor writes as a POINT (text:bookmark) when its extent covers no runs at all and a RANGE (text:bookmark-start/-end pair) otherwise -- the same point-vs-range split odfBookmarkAnchorDescriptor's own two call sites (a point mark, a paired range half) collapse into one indistinguishable descriptor shape for, disambiguated here the only way it still can be: by whether the extent itself is empty. Every other run-level construct (a footnote/endnote/comment anchor, a tracked-change provenance wrapper) has no writer yet -- see ExaDev/documents.js#969 -- and this returns undefined for those so a caller can refuse them by name rather than guess at a spelling.
 export type OdfRunConstructWriteKind =
-  "field" | "bookmarkPoint" | "bookmarkRange" | "note" | "comment";
+  | "field"
+  | "bookmarkPoint"
+  | "bookmarkRange"
+  | "note"
+  | "comment"
+  | "changePoint"
+  | "changeRange";
 
 export function odfRunConstructWriteKind(
   extent: RunConstructExtent,
   definitions?: Readonly<Record<string, DefinitionEntry>>,
+  changeIds?: ReadonlyMap<ProvenanceDescriptor, string>,
 ): OdfRunConstructWriteKind | undefined {
   const { descriptor } = extent;
   if (descriptor.kind === "field") {
@@ -995,6 +1066,15 @@ export function odfRunConstructWriteKind(
   ) {
     // A note or comment anchor writes only when the definitions table holds its body: a citation run alone is half a note, and an empty-bodied text:note or office:annotation would read back as one that silently lost its content.
     return descriptor.anchorType === "comment" ? "comment" : "note";
+  }
+  if (
+    descriptor.kind === "provenance" &&
+    descriptor.change !== "moveFrom" &&
+    descriptor.change !== "moveTo" &&
+    changeIds?.has(descriptor) === true
+  ) {
+    // A tracked-change extent writes its inline markers when the document-level pass has minted a text:changed-region id for its descriptor. moveFrom/moveTo have no ODF spelling at all (a move is a deletion plus an insertion), so those are never writable here and stay refused by name upstream.
+    return extent.startRun === extent.endRun ? "changePoint" : "changeRange";
   }
   return undefined;
 }
