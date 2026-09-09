@@ -815,7 +815,7 @@ function planOdfParagraphConstructs(
       const endList = endsAt.get(end) ?? [];
       endList.push({ side: "end", name });
       endsAt.set(end, endList);
-    } else if (kind === "note") {
+    } else if (kind === "note" || kind === "comment") {
       const descriptor = extent.descriptor as AnchorDescriptor;
       const entry = definitions?.[descriptor.definition!];
       if (entry !== undefined) {
@@ -975,6 +975,21 @@ function writeOdfNoteElement(
     } finally {
       openKeys.delete(key);
     }
+  }
+  if (descriptor.anchorType === "comment") {
+    // A comment anchor: office:annotation carries its body INLINE (text:p children beside the dc:creator/dc:date the reader lifts into the entry), and office:name keys its pairing half -- the reader's own annotation-half walk reads exactly this shape back.
+    const commentAttributes: Record<string, string> = {
+      "office:name": encodeXmlText(descriptor.name),
+    };
+    const commentChildren: XmlNode[] = [];
+    if (typeof entry.author === "string") {
+      commentChildren.push(el("dc:creator", {}, [txt(entry.author)]));
+    }
+    if (typeof entry.dateIso === "string") {
+      commentChildren.push(el("dc:date", {}, [txt(entry.dateIso)]));
+    }
+    commentChildren.push(...bodyChildren);
+    return el("office:annotation", commentAttributes, commentChildren);
   }
   return el(
     "text:note",
