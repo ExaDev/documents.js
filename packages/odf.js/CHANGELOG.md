@@ -1,3 +1,9 @@
+## [7.13.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.12.0...odf.js%407.13.0) (2026-09-09)
+
+### Features
+
+* **odf.js:** write .odb database front-end definitions ([276364c](https://github.com/ExaDev/documents.js/commit/276364cb5de2b7c5b3c75bae1ab6410888f26070))
+
 ## [7.12.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.11.0...odf.js%407.12.0) (2026-09-09)
 
 ### Features
