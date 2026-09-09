@@ -38,9 +38,18 @@ import {
   SlideDetailScreen,
   SlideTableDetailScreen,
 } from "./screens/editors/odp/index.js";
+import { DocBodyListScreen } from "./screens/editors/doc/index.js";
 import { OdsSheetListScreen } from "./screens/editors/ods/sheet-list.js";
 import { OdsPrintSettingsEditorScreen } from "./screens/editors/ods/print-settings-editor.js";
 import { OdsSpreadsheetGridScreen } from "./screens/editors/ods/spreadsheet-grid.js";
+import {
+  PptSlideDetailScreen,
+  PptSlideListScreen,
+} from "./screens/editors/ppt/index.js";
+import {
+  XlsSheetListScreen,
+  XlsSpreadsheetGridScreen,
+} from "./screens/editors/xls/index.js";
 import {
   ListEditorScreen,
   OdtBodyListScreen,
@@ -95,6 +104,9 @@ function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
       if (format === "odt") {
         return <OdtBodyListScreen />;
       }
+      if (format === "doc") {
+        return <DocBodyListScreen />;
+      }
       return format === "markdown" ? (
         <MarkdownBodyListScreen />
       ) : (
@@ -113,13 +125,20 @@ function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
     case "listEditor":
       return <ListEditorScreen />;
     case "slideList":
+      if (format === "ppt") {
+        return <PptSlideListScreen />;
+      }
       return format === "odp" ? (
         <OdpSlideListScreen />
       ) : (
         <PptxSlideListScreen />
       );
     case "slideDetail":
-      return <SlideDetailScreen screen={screen} />;
+      return format === "ppt" ? (
+        <PptSlideDetailScreen slideIndex={screen.slideIndex} />
+      ) : (
+        <SlideDetailScreen screen={screen} />
+      );
     case "shapeEditor":
       return <ShapeEditorScreen screen={screen} />;
     case "slideTableDetail":
@@ -127,9 +146,13 @@ function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
     case "notesEditor":
       return <NotesEditorScreen screen={screen} />;
     case "sheetList":
-      return <OdsSheetListScreen />;
+      return format === "xls" ? <XlsSheetListScreen /> : <OdsSheetListScreen />;
     case "spreadsheetGrid":
-      return <OdsSpreadsheetGridScreen />;
+      return format === "xls" ? (
+        <XlsSpreadsheetGridScreen sheetIndex={screen.sheetIndex} />
+      ) : (
+        <OdsSpreadsheetGridScreen />
+      );
     case "cellDetail":
       return (
         <Text>

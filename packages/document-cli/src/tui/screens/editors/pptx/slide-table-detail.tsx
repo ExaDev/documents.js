@@ -2,7 +2,7 @@ import { Box, Text, useInput } from "ink";
 import { useState, type ReactElement } from "react";
 import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen, type Screen } from "../../../state/types.js";
-import { assertPresentationDocument } from "../../shared/slide-family.js";
+import { assertRichPresentationDocument } from "../../shared/slide-family.js";
 import {
   resolveSlideTable,
   slideTableCellText,
@@ -26,7 +26,7 @@ export function SlideTableDetailScreen(
 ): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
-  const doc = assertPresentationDocument(state.openDocument);
+  const doc = assertRichPresentationDocument(state.openDocument);
   const { slideIndex, tableIndex } = props.screen;
 
   const [cursor, setCursor] = useState<Cursor>({ row: 0, column: 0 });

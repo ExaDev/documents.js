@@ -19,6 +19,12 @@ const CREATABLE_FORMATS: readonly CreatableFormat[] = [
   { format: "odp", description: "Presentation slide deck (OpenDocument)" },
   { format: "ods", description: "Spreadsheet workbook (OpenDocument)" },
   { format: "odg", description: "Vector drawing (OpenDocument)" },
+  { format: "doc", description: "Word-processing document (Word 97-2003)" },
+  { format: "xls", description: "Spreadsheet workbook (Excel 97-2003)" },
+  {
+    format: "ppt",
+    description: "Presentation slide deck (PowerPoint 97-2003)",
+  },
   { format: "markdown", description: "Markdown document" },
 ];
 
