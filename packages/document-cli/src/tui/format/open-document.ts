@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import {
   convertDocument,
+  createDoc,
   createDocx,
   createMarkdownEditor,
   createOdg,
@@ -8,13 +9,15 @@ import {
   createOds,
   createOdt,
   createPdf,
+  createPpt,
   createPptx,
+  createXls,
   csvToPdf,
   decodeMarkdownText,
   decodeOdbPackage,
-  docToPdf,
   encodeMarkdownText,
   epubToPdf,
+  openDoc,
   openDocx,
   openMarkdown,
   openOdg,
@@ -22,15 +25,15 @@ import {
   openOds,
   openOdt,
   openPdf,
+  openPpt,
   openPptx,
-  pptToPdf,
+  openXls,
   readOdbForms,
   readOdbReports,
   readOdbTables,
   readPdf,
   rtfToPdf,
   svgToPdf,
-  xlsToPdf,
   xlsxToPdf,
 } from "documents.js";
 import type {
@@ -124,13 +127,13 @@ export async function openDocumentAtPath(
         bytes,
         path,
       };
-    // doc, xls, and ppt each mirror rtf: no live-view editor, but a genuine own-named to-Pdf conversion (docToPdf/xlsToPdf/pptToPdf), opened read-only through the identical to-Pdf-then-readPdf shape.
+    // doc, xls, and ppt each carry a genuine live-view editor now (documents.js's DocEditor/XlsEditor/PptEditor -- see their own OpenDocument doc comments in state/types.ts), so each opens through its own opener exactly the way docx/odt do, with no to-Pdf preview at open time at all. An export still runs the real named conversion (docToPdf/xlsToPdf/pptToPdf in export-pdf.ts), from the editor's current bytes rather than a copy held at open time.
     case "doc":
-      return { format, layout: readPdf(docToPdf(bytes)), bytes, path };
+      return { format, editor: openDoc(bytes), path };
     case "xls":
-      return { format, layout: readPdf(xlsToPdf(bytes)), bytes, path };
+      return { format, editor: openXls(bytes), path };
     case "ppt":
-      return { format, layout: readPdf(pptToPdf(bytes)), bytes, path };
+      return { format, editor: openPpt(bytes), path };
     // epub mirrors rtf/doc/ppt: no live-view editor, but a genuine epubToPdf conversion, opened read-only through the identical to-Pdf-then-readPdf shape.
     case "epub":
       return { format, layout: readPdf(epubToPdf(bytes)), bytes, path };
@@ -162,6 +165,12 @@ export function createNewDocument(format: WritableFormat): OpenDocument {
       return { format, editor: createOds(), path: undefined };
     case "odg":
       return { format, editor: createOdg(), path: undefined };
+    case "doc":
+      return { format, editor: createDoc(), path: undefined };
+    case "xls":
+      return { format, editor: createXls(), path: undefined };
+    case "ppt":
+      return { format, editor: createPpt(), path: undefined };
     case "pdf": {
       const editor = createPdf();
       return {
@@ -185,9 +194,6 @@ export async function saveDocumentTo(
     openDocument.format === "svg" ||
     openDocument.format === "rtf" ||
     openDocument.format === "wpd" ||
-    openDocument.format === "doc" ||
-    openDocument.format === "xls" ||
-    openDocument.format === "ppt" ||
     openDocument.format === "epub"
   ) {
     throw new Error(

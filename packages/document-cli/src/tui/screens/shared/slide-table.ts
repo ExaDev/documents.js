@@ -6,11 +6,11 @@ import {
   type OdtTable,
   type PptxTable,
 } from "documents.js";
-import type { PresentationOpenDocument } from "./slide-family.js";
+import type { RichPresentationOpenDocument } from "./slide-family.js";
 
 // A slide table's own cell TEXT has no live-view getter at all on the pptx side (PptxTableCell exposes only colSpan/rowSpan/horizontalMerge/verticalMerge/setParagraphs -- see documents.js's own edit/pptx/table.ts doc comment: a merge is pure attribute-flipping on cells that already exist, never element removal/retagging), so display goes through the content pivot instead -- the same "a live accessor is display-unsafe, read through readXContent for display, mutate through the live editor for writes" convention screens/editors/ods/shared.ts's `resolveSheet` already established for OdsSheet.cell(). odp reuses OdtTable internally (see documents.js's own README: "OdpSlide.addTable ... reuses OdtTable/buildTable WHOLESALE for it"), which DOES carry a real `.text` getter per cell, but reading through the content pivot here anyway keeps this one function correct for both formats uniformly rather than special-casing odp.
 export function resolveSlideTable(
-  doc: PresentationOpenDocument,
+  doc: RichPresentationOpenDocument,
   slideIndex: number,
   tableIndex: number,
 ): ContentTable | undefined {
@@ -70,7 +70,7 @@ function summarizeGridTable(
 
 // The live-editor-side dimension summary a slide's own table list (slide-detail.tsx) renders -- deliberately NOT going through the content pivot the way resolveSlideTable above does, since row/column counts are cheap to read directly off the live PptxTable/OdpTableShape.table and doing so avoids a full readPptxContent/readOdpContent walk on every keystroke of an unrelated screen (shape text editing, notes editing, ...) that also re-renders this same slide-detail screen.
 export function summarizeSlideTables(
-  doc: PresentationOpenDocument,
+  doc: RichPresentationOpenDocument,
   slideIndex: number,
 ): readonly SlideTableSummary[] {
   if (doc.format === "odp") {

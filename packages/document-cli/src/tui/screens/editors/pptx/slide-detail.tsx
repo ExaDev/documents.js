@@ -19,7 +19,7 @@ import {
   type FieldSpec,
 } from "../../shared/field-wizard.js";
 import {
-  assertPresentationDocument,
+  assertRichPresentationDocument,
   defaultShapeFrame,
   describeSlideFamilyShape,
 } from "../../shared/slide-family.js";
@@ -213,7 +213,7 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const overlayOpen = anyOverlayOpen(state);
-  const doc = assertPresentationDocument(state.openDocument);
+  const doc = assertRichPresentationDocument(state.openDocument);
   const { slideIndex } = props.screen;
   const slide = doc.editor.slides()[slideIndex];
   const shapes = slide === undefined ? [] : slide.shapes();
