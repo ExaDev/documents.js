@@ -1,3 +1,9 @@
+## [7.13.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.12.3...documents.js%407.13.0) (2026-09-09)
+
+### Features
+
+* **documents.js:** add a live-view editor for xls workbooks ([c2883fe](https://github.com/ExaDev/documents.js/commit/c2883fe8defc440db109af55b7b9caf43839806b))
+
 ## [7.12.3](https://github.com/ExaDev/documents.js/compare/documents.js%407.12.2...documents.js%407.12.3) (2026-09-09)
 
 
