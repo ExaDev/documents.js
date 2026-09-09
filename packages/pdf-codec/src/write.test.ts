@@ -528,3 +528,61 @@ describe("writePdf: aborting", () => {
     ).toThrow();
   });
 });
+
+describe("writePdf: embedded-file attachments (#967)", () => {
+  it("round-trips attachments through the /Names /EmbeddedFiles tree and this package's own reader", async () => {
+    const payload = new TextEncoder().encode("attachment body");
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [
+        {
+          widthPt: 200,
+          heightPt: 100,
+          items: [
+            {
+              kind: "text",
+              text: "host page",
+              xPt: 10,
+              yPt: 50,
+              font: HELVETICA,
+              sizePt: 12,
+              color: BLACK,
+            },
+          ],
+        },
+      ],
+      images: {},
+      attachments: [
+        {
+          name: "notes.txt",
+          description: "sidecar notes",
+          mimeType: "text/plain",
+          base64: bytesToBase64(payload),
+        },
+      ],
+    };
+    const bytes = writePdf(doc);
+    const { readPdf } = await import("./read");
+    const reread = readPdf(bytes);
+    expect(reread.attachments).toEqual([
+      {
+        name: "notes.txt",
+        description: "sidecar notes",
+        mimeType: "text/plain",
+        base64: bytesToBase64(payload),
+      },
+    ]);
+  });
+
+  it("writes no /Names tree at all for a document with no attachments", () => {
+    const bytes = writePdf({
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [],
+      images: {},
+    });
+    const text = new TextDecoder("latin1").decode(bytes);
+    expect(text).not.to.contain("/EmbeddedFiles");
+  });
+});
