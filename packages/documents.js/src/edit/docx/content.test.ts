@@ -6,6 +6,7 @@ import {
   attr,
   bytesToBase64,
   childrenWithTag,
+  decodeEntities,
   decodePackage,
   encodePackage,
   rootElement,
@@ -472,5 +473,40 @@ describe("buildDocxPackage", () => {
     }
     expect(descendants(documentRoot, "w:bookmarkStart")).toHaveLength(1);
     expect(descendants(documentRoot, "w:bookmarkEnd")).toHaveLength(1);
+  });
+  it("XML-escapes a bookmark name carrying markup, so it cannot inject elements or attributes into document.xml", () => {
+    const hostile = 'x"/><w:p><w:fldSimple w:instr="WEBSERVICE">';
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "anchor",
+              anchorType: "bookmark",
+              name: hostile,
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "body" }] },
+          { kind: "constructEnd" },
+        ],
+      },
+    ]);
+    const pkg = buildDocxPackage(content);
+    const documentRoot = rootElement(pkg.parts["word/document.xml"]);
+    if (documentRoot === undefined) {
+      throw new Error("expected a word/document.xml root element");
+    }
+    // The model stores the pre-encoded attribute (this package's processEntities:false convention -- el() never encodes), so the name arrives as data with its markup neutralised, and exactly one bookmarkStart exists: the name injected no extra element.
+    const starts = descendants(documentRoot, "w:bookmarkStart");
+    expect(starts).toHaveLength(1);
+    const stored = starts[0]!.attributes.find(
+      (a) => a.name === "w:name",
+    )?.value;
+    expect(stored).toContain("&lt;w:fldSimple");
+    expect(stored).not.toContain("<w:fldSimple");
+    expect(decodeEntities(stored ?? "")).toBe(hostile);
   });
 });
