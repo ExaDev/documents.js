@@ -1,3 +1,13 @@
+## [7.16.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.15.2...documents.js%407.16.0) (2026-09-09)
+
+### Features
+
+* **documents.js:** re-derive wrap splits and re-typeset formulas when rebuilding a package to pdf ([58cb60b](https://github.com/ExaDev/documents.js/commit/58cb60ba4246a5d62fb7013f2bccdfdd765a1525))
+
+### Bug Fixes
+
+* **documents.js:** spend each atom measurement once when re-deriving wrap fragments ([872a4db](https://github.com/ExaDev/documents.js/commit/872a4dba556a15a2fb4f3f97e92e44c31624dc9f))
+
 ## [7.15.2](https://github.com/ExaDev/documents.js/compare/documents.js%407.15.1...documents.js%407.15.2) (2026-09-09)
 
 
