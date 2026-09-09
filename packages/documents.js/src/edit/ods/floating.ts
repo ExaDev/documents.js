@@ -1,4 +1,5 @@
 import type {
+  Box,
   ContentEmbeddedObject,
   ContentSheetImage,
 } from "document-schema.js";
@@ -8,6 +9,7 @@ import {
   findStyleElement,
   formatOdfLength,
   parseOdfLength,
+  writeEmbeddedObject,
 } from "odf.js";
 import { attr } from "ooxml.js";
 import { addFormulaObject } from "../../odf-package/formula";
@@ -193,23 +195,44 @@ export function insertSheetImage(
   ensureTableShapes(tableElement).children.push(frame);
 }
 
-// Adds a real embedded ODF formula sub-object to `tableElement`, at object.frame's own already-absolute position (unlike ContentSheetImage, ContentEmbeddedObject.frame is a Box -- see document-schema.js's own ContentEmbeddedObjectSchema -- so no anchor resolution is needed here). Reuses addFormulaObject (src/odf-package/formula.ts) exactly as src/edit/odt/formula.ts's insertFormulaFrameMedia does for an odt paragraph. Every OTHER objectKind (wordprocessing/presentation/spreadsheet/drawing) is a genuine, tracked, bounded gap, mirroring buildOdtPackage's own identical narrowing for a 'drawing' embeddedObject block (src/edit/odt/content.ts): embedding a full nested sub-package for one of those would mean writing that document's own package as an OLE sub-object, and no writer for that exists anywhere in this codebase yet -- silently degrading it to a text stand-in would be noise rather than information, so it is written as nothing at all, exactly like buildOdtPackage's own 'drawing' case.
+// Adds a real embedded ODF sub-object to `tableElement`, at object.frame's own already-absolute position (unlike ContentSheetImage, ContentEmbeddedObject.frame is a Box -- see document-schema.js's own ContentEmbeddedObjectSchema -- so no anchor resolution is needed here). A formula reuses addFormulaObject (src/odf-package/formula.ts) exactly as src/edit/odt/formula.ts's insertFormulaFrameMedia does for an odt paragraph; every other non-chart kind serialises through odf.js's own writeEmbeddedObject (typed/draw/embedded-write.ts, ExaDev/documents.js#972), which builds the nested "Object N/" package and returns the draw:object element keyed to it. The chart kind alone stays a documented gap: a chart sub-document is quarantined residue by the family's own #719 decision, and odf.js's writer refuses to fabricate one.
 export function insertSheetEmbeddedObject(
   pkg: Package,
   tableElement: XmlElement,
   object: ContentEmbeddedObject,
+  nextObjectName: () => string,
 ): void {
-  if (object.document.kind !== "formula") {
+  if (object.document.kind === "formula") {
+    const { href } = addFormulaObject(pkg, object.document.formula);
+    insertObjectFrame(
+      tableElement,
+      object.frame,
+      el("draw:object", { "xlink:href": href }),
+    );
     return;
   }
-  const { href } = addFormulaObject(pkg, object.document.formula);
-  const objectElement = el("draw:object", { "xlink:href": href });
-  const frame = buildAbsoluteFrame(
-    object.frame.xPt,
-    object.frame.yPt,
-    object.frame.widthPt,
-    object.frame.heightPt,
+  if (object.objectKind === "chart") {
+    return;
+  }
+  insertObjectFrame(
+    tableElement,
+    object.frame,
+    writeEmbeddedObject(object, nextObjectName(), pkg),
+  );
+}
+
+// The frame half shared by both paths, so the formula and the full-sub-package spellings can never drift apart in shape.
+function insertObjectFrame(
+  tableElement: XmlElement,
+  frame: Box,
+  objectElement: XmlElement,
+): void {
+  const frameElement = buildAbsoluteFrame(
+    frame.xPt,
+    frame.yPt,
+    frame.widthPt,
+    frame.heightPt,
     objectElement,
   );
-  ensureTableShapes(tableElement).children.push(frame);
+  ensureTableShapes(tableElement).children.push(frameElement);
 }
