@@ -1,3 +1,9 @@
+## [7.17.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.16.0...odf.js%407.17.0) (2026-09-09)
+
+### Features
+
+* **odf.js:** write tracked-change extents with their region container ([1bb8b8d](https://github.com/ExaDev/documents.js/commit/1bb8b8dd0d42c81e108b8b74d68e59fa80e9e79f))
+
 ## [7.16.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.15.0...odf.js%407.16.0) (2026-09-09)
 
 ### Features
