@@ -1,3 +1,10 @@
+## [4.2.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.1.0...pdf-codec%404.2.0) (2026-09-09)
+
+### Features
+
+* **pdf-codec:** write embedded-file attachments through a Names tree ([5bb4a4f](https://github.com/ExaDev/documents.js/commit/5bb4a4f90356c107109e2b5a385f2334eb584b8a))
+* **pdf-codec:** write the outline through an /Outlines tree ([8480758](https://github.com/ExaDev/documents.js/commit/8480758b7898308c413d8332918b6fb24b59caea))
+
 ## [4.1.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.0.13...pdf-codec%404.1.0) (2026-09-08)
 
 ### Features

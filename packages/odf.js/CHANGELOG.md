@@ -1,3 +1,9 @@
+## [7.22.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.21.0...odf.js%407.22.0) (2026-09-09)
+
+### Features
+
+* **odf.js:** write embedded sub-documents in the ods writer ([6e34bb8](https://github.com/ExaDev/documents.js/commit/6e34bb8d758e3675673be9cff8c9d9305813a3d9)), references [#1159](https://github.com/ExaDev/documents.js/issues/1159)
+
 ## [7.21.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.20.0...odf.js%407.21.0) (2026-09-09)
 
 ### Features
