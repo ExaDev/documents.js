@@ -17,6 +17,7 @@ export {
   WpdFormatError,
   WpdNotAWordPerfectFileError,
   WpdUnsupportedVersionError,
+  WpdWrongPasswordError,
 } from "./errors";
 
 // The container and stream layers, exported because a consumer inspecting a WordPerfect file -- a forensic tool, a migration audit, a reader for a construct this package does not yet lift into the shared schema -- needs the parsed prefix and the raw function stream, not only the document they fold into.

@@ -71,7 +71,7 @@ readWpdContent(bytes, {
 });
 ```
 
-Structural nonconformance is not a diagnostic — it throws. `WpdNotAWordPerfectFileError`, `WpdEncryptedDocumentError`, `WpdUnsupportedVersionError`, and the general `WpdFormatError` are all exported, and all extend the last.
+Structural nonconformance is not a diagnostic — it throws. `WpdNotAWordPerfectFileError`, `WpdEncryptedDocumentError`, `WpdWrongPasswordError`, `WpdUnsupportedVersionError`, and the general `WpdFormatError` are all exported, and all extend the last.
 
 ## What it provides
 
@@ -179,7 +179,7 @@ Everything below is recognised by the tokeniser and skipped by the fold, so a do
 - **Embedded OLE objects**, stored under the compound file's `PerfectOffice_OBJECTS` storage and named by an image box's Graphics Filename packet's own `0x70`/`0x71` (OLE Object Descriptor / OLE Object Data) children. `archive-codec`'s compound-file reader already reaches that storage, which is how `ooxml.js` recovers a ZIP-payload embedded object — but a WordPerfect OLE object's payload is a native OLE server's own stream rather than a nested document package (`ooxml.js`'s own equivalent case, a classic OLE1 `.bin` payload with no `Package` stream, stays opaque by the identical scope boundary), so recovering one generically is a project in its own right, not a wiring job.
 - **The counter groups** (0xD8, 0xD9, 0xDB, 0xDC): setting, numbering-method, increment and decrement carry no text and change no structure this reader models, so only the Display Number group's own paragraph-number pair is read.
 - **Every merge subfunction other than FIELD** (ASSIGN, CALL, IF, FOR, CASE, and the rest of WordPerfect's own merge scripting language) and **cross-references** (0xD5). A cross-reference's displayed text survives as ordinary text; its target binding does not. Reported through `wpd/merge-code-dropped` and `wpd/cross-reference-flattened`. Unlike FIELD, these can legitimately wrap whole paragraphs of body text as control flow, which the run-scoped field construct's own one-paragraph extent cannot express regardless — a schema gap for a scripting language's control flow, not a parsing gap.
-- **Encrypted documents**, which throw: the specification states that nothing beyond the file header is intelligible without the password, so there is no partial read to offer.
+- **WordPerfect 9-and-later "enhanced encryption"**, which throws: a different, unpublished cipher whose header word is not the standard mode's password checksum, so a `password` read option either verifies against that checksum and decrypts the standard ("original") mode or throws `WpdWrongPasswordError` naming both possible readings of the mismatch. The standard mode itself is decrypted for real (see `src/container/encryption.ts` for the cipher's two independent sources, and for the honest limit that no open-source reference implementation of the 6.x wiring exists to cross-check against a WordPerfect-produced encrypted file).
 
 ## Evidence
 
