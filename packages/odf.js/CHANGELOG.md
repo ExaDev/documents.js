@@ -1,3 +1,9 @@
+## [7.14.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.13.0...odf.js%407.14.0) (2026-09-09)
+
+### Features
+
+* **odf.js:** write block-scope bookmark ranges in the odt writer ([77c45fc](https://github.com/ExaDev/documents.js/commit/77c45fc88dc837872ea888397075bc9eb9dc97ee)), references [#972](https://github.com/ExaDev/documents.js/issues/972)
+
 ## [7.13.0](https://github.com/ExaDev/documents.js/compare/odf.js%407.12.0...odf.js%407.13.0) (2026-09-09)
 
 ### Features
