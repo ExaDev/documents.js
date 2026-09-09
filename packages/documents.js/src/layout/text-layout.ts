@@ -248,6 +248,95 @@ function buildEmptyLine(
   };
 }
 
+// The atom types wrapRunsToWidth's loop consumes, exported so a caller that needs only SOME of the lines (from-package's wrap re-derivation, which takes one line per recorded frame) can atomise once and consume incrementally instead of re-measuring the whole remaining suffix per line -- the difference between linear and quadratic work over a many-frame run. Opaque by design: everything a caller needs is line-1 semantics through firstWrappedLineOf below.
+export type WrapAtom = BoxAtom | GlueAtom | BreakAtom;
+
+// Atomises runs once for incremental line consumption through firstWrappedLineOf -- the identical atomisation wrapRunsToWidth performs internally, split out so the one-line consumer and the whole-text wrapper can never drift apart.
+export function atomizeForWrap(
+  runs: readonly SourcedRun[],
+  measurer: TextMeasurer,
+): WrapAtom[] {
+  return atomizeRuns(runs, measurer);
+}
+
+// Line 1 of wrapRunsToWidth's greedy algorithm over ALREADY-ATOMISED runs: returns the first line plus the atom array remaining after it (an emergency-split long word's tail spliced back in, exactly as the wrapper's own queue does). Width <= 0 takes the wrapper's own degenerate branch -- one unwrapped line of everything, nothing remaining -- so a caller looping this to exhaustion reproduces wrapRunsToWidth's output line for line.
+export function firstWrappedLineOf(
+  atoms: readonly WrapAtom[],
+  measurer: TextMeasurer,
+  maxWidthPt: number,
+  options: WrapOptions = {},
+): { line: SourcedWrappedLine; rest: WrapAtom[] } {
+  const breakLongWords = options.breakLongWords ?? true;
+  const queue: WrapAtom[] = [...atoms];
+  if (maxWidthPt <= 0) {
+    const all = queue.filter(
+      (a): a is BoxAtom | GlueAtom => a.kind !== "break",
+    );
+    return {
+      line:
+        all.length === 0
+          ? buildEmptyLine(dummyRunsOf(atoms), measurer)
+          : buildLine(all, measurer),
+      rest: [],
+    };
+  }
+  const current: WrapAtom[] = [];
+  let currentWidth = 0;
+  while (queue.length > 0) {
+    const atom = queue[0]!;
+    if (atom.kind === "break") {
+      queue.shift();
+      break;
+    }
+    if (currentWidth + atom.widthPt <= maxWidthPt) {
+      current.push(atom);
+      currentWidth += atom.widthPt;
+      queue.shift();
+      continue;
+    }
+    if (current.length > 0) {
+      break;
+    }
+    if (atom.kind === "box" && breakLongWords) {
+      const { fit, rest } = splitBoxToWidth(atom, measurer, maxWidthPt);
+      current.push(fit);
+      currentWidth += fit.widthPt;
+      if (rest !== undefined) {
+        queue[0] = rest;
+      } else {
+        queue.shift();
+      }
+      break;
+    }
+    current.push(atom);
+    currentWidth += atom.widthPt;
+    queue.shift();
+    break;
+  }
+  while (current.length > 0 && current[current.length - 1]?.kind === "glue") {
+    const removed = current.pop();
+    currentWidth -= removed?.widthPt ?? 0;
+  }
+  return {
+    line:
+      current.length === 0
+        ? buildEmptyLine(dummyRunsOf(atoms), measurer)
+        : buildLine(current, measurer),
+    rest: queue,
+  };
+}
+
+// buildEmptyLine needs the runs its caller had; for the incremental consumer the atoms themselves are the only witness of the runs, so the first box/glue atom's styled fragment stands in for the empty-line metrics the wrapper's own degenerate path would compute. An atom array with no box/glue atoms at all (only break atoms, or nothing) carries no styling to report -- width 0 with no ascent/descent is the honest answer there.
+function dummyRunsOf(atoms: readonly WrapAtom[]): readonly SourcedRun[] {
+  for (const atom of atoms) {
+    if (atom.kind === "box" && atom.fragments[0] !== undefined) {
+      const f = atom.fragments[0];
+      return [{ text: f.text, font: f.font, sizePt: f.sizePt, color: f.color }];
+    }
+  }
+  return [];
+}
+
 // Greedy first-fit line breaking over word-shaped atoms -- the same algorithm Word itself uses (an optimal-fit breaker like Knuth-Plass would produce different, not merely better, line breaks, which is the opposite of matching Word's own output). Never breaks inside a word, regardless of how many runs it spans; an over-long single word is emergency-split at the character level, always making at least one character of progress.
 export function wrapRunsToWidth(
   runs: readonly SourcedRun[],

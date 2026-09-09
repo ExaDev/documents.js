@@ -9,7 +9,7 @@ import {
 
 import { decodePackage as decodeOdfPackage } from "odf.js";
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from "ooxml.js";
-import { readPdf } from "pdf-codec";
+import { createFontMeasurer, createFontRegistry, readPdf } from "pdf-codec";
 import { describe, expect, it } from "vitest";
 import { openDocx } from "../edit/docx/editor";
 import { openOdg } from "../edit/odg/editor";
@@ -28,6 +28,7 @@ import { minimalOdpBytes } from "../test-support/odp";
 import { minimalOdsBytes } from "../test-support/ods";
 import { minimalOdtBytes } from "../test-support/odt";
 import { docxToPdf, markdownToPdf, odtToDocx } from "./convert";
+import { NOMINAL_TEXT_SIZE_PT } from "../layout/shared";
 import { buildDocumentBytes, layoutDocumentFromPackage } from "./from-package";
 import type { LayoutItem, LayoutRect, LayoutText } from "pdf-codec";
 
@@ -298,6 +299,51 @@ describe("layoutDocumentFromPackage: wrap re-derivation (#964)", () => {
       .replace(/\s+/g, " ")
       .trim();
     expect(joined).toBe(multiFrameRun.text.replace(/\s+/g, " ").trim());
+  });
+
+  it("re-derives a many-frame run in linear work, one fragment per frame", () => {
+    // The per-frame consumer atomises once and consumes incrementally rather than re-wrapping the whole remaining suffix per frame -- quadratic work over a many-frame run an untrusted from_package caller can shape. 200 one-word frames each carry their own word, and the run's whole text joins back.
+    const words = Array.from(
+      { length: 200 },
+      (_, i) => `w${String(i).padStart(3, "0")}`,
+    );
+    const text = words.join(" ");
+    // Frame widths derive from the same registry-backed measurer the walk itself measures through (the drift-free pairing from-package's own module comment states), each one hair wider than its word: one word fits a frame exactly, a second word never does -- deterministic one-word-per-frame regardless of which substitute face the registry resolves.
+    const measure = createFontMeasurer(createFontRegistry({}));
+    const wordFont = {
+      family: "Helvetica",
+      weight: "normal" as const,
+      style: "normal" as const,
+    };
+    const frames = words.map((word, i) => ({
+      pageIndex: 0,
+      xPt: 10 + i,
+      yPt: 700 - i,
+      widthPt:
+        measure.widthOfTextAtSize(word, wordFont, NOMINAL_TEXT_SIZE_PT) + 1,
+      heightPt: 12,
+    }));
+    const content: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [{ kind: "paragraph", runs: [{ text, frames }] }],
+        },
+      ],
+    };
+    const layout = layoutDocumentFromPackage(
+      assembleTree(content, [{ widthPt: 612, heightPt: 792 }]),
+    );
+    const texts = layout.pages
+      .flatMap((page) => page.items)
+      .filter((item): item is Extract<LayoutItem, { kind: "text" }> => {
+        return item.kind === "text";
+      });
+    expect(texts).toHaveLength(frames.length);
+    expect(texts.map((item) => item.text).join(" ")).toBe(text);
   });
 });
 

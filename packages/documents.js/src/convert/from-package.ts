@@ -37,7 +37,11 @@ import {
   registerImage,
   runFont,
 } from "../layout/shared";
-import { wrapRunsToWidth } from "../layout/text-layout";
+import {
+  atomizeForWrap,
+  firstWrappedLineOf,
+  type WrapAtom,
+} from "../layout/text-layout";
 import { layoutFormula } from "../mathml/layout";
 import { formulaOfBlock } from "../model/formula";
 import { DOCUMENT_FORMAT_CODECS } from "../codecs/registry";
@@ -185,32 +189,36 @@ function rederiveWrapFragments(
   frames: readonly LayoutFrame[],
   measurer: TextMeasurer,
 ): string[] {
+  // Atomise once, then consume one line per frame from the already-measured atoms: each frame takes only line 1 of a wrap at its own recorded width, so re-running the whole-text wrapper per frame measured the entire remaining suffix N times for N frames -- quadratic work an untrusted many-frame run could drive into seconds of event-loop blockage through the from_package MCP tool. The incremental consumer spends each atom's measurement once. The consistency guard runs against the same running remaining-string the whole-text approach used (sliced and trimStart-ed per consumed line), not against a concatenation of per-line texts: a wrap boundary's glue is consumed by the wrap itself and belongs to no fragment, so a prefix-concatenation guard would spuriously trip on every space at a wrap point.
+  let atoms = atomizeForWrap(
+    [{ text, font, sizePt, color: COLOR_BLACK }],
+    measurer,
+  );
   let remaining = text;
   const fragments: string[] = [];
   for (const frame of frames) {
-    if (remaining === "") {
+    if (remaining === "" || atoms.length === 0) {
       break;
     }
-    const lines = wrapRunsToWidth(
-      [{ text: remaining, font, sizePt, color: COLOR_BLACK }],
-      measurer,
-      frame.widthPt,
-    );
-    const first = lines[0];
-    if (first === undefined) {
-      // A zero-width frame admits no text at all -- nothing is consumed here, and the next frame gets the chance the layout pass gave it.
-      fragments.push("");
-      continue;
-    }
-    const consumed = first.fragments.map((f) => f.text).join("");
+    const { line, rest } = firstWrappedLineOf(atoms, measurer, frame.widthPt);
+    const consumed = line.fragments.map((f) => f.text).join("");
     if (!remaining.startsWith(consumed)) {
       return [text];
     }
-    remaining = remaining.slice(consumed.length);
+    remaining = remaining.slice(consumed.length).trimStart();
     fragments.push(consumed.trimEnd());
-    remaining = remaining.trimStart();
+    atoms = trimLeadingGlueAtoms(rest);
   }
   return fragments;
+}
+
+// A consumed line's trailing glue is trimmed by the consumer itself; the NEXT line must not begin with the glue that ended the previous one (the whole-text wrapper skips it when starting its next line), so the incremental caller trims leading glue between frames -- the join the wrapper performs implicitly by never queueing a line-leading glue onto a fresh line.
+function trimLeadingGlueAtoms(atoms: readonly WrapAtom[]): WrapAtom[] {
+  let start = 0;
+  while (start < atoms.length && atoms[start]?.kind === "glue") {
+    start++;
+  }
+  return atoms.slice(start);
 }
 
 // A paragraph's own frames record its list-marker placements (engine.ts stamps the paragraph node, not any run, for the marker it derives from list membership). The marker text itself came from the engine's own per-numId counters, which a package does not carry, so there is nothing honest to re-render at those positions -- the frames stay recorded on the node (traceability) and emit nothing here.
