@@ -337,6 +337,10 @@ export type { OdmWriteOptions } from "./typed/odm/write";
 export type { OdmDocument, OdmSection } from "./typed/odm/read";
 
 export { readOdbInventory, resolveOdbComponent } from "./typed/odb/read";
+
+// The database front-end WRITER, the inverse of readOdbInventory: the db: connection declaration, forms/reports component registry, queries with their SQL commands, and table-name listings -- never the embedded engine's own opaque storage.
+export { writeOdb } from "./typed/odb/write";
+export type { OdbWriteOptions } from "./typed/odb/write";
 export type {
   OdbInventory,
   OdbConnectionInfo,
