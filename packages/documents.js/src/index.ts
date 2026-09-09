@@ -327,6 +327,19 @@ export {
 export type { MarkdownListInit } from "./edit/markdown/list";
 export { MarkdownList } from "./edit/markdown/list";
 
+// The doc sibling of the editors above: a live-view editor over a mutable in-memory ContentDocument (doc-codec reads and writes the plain ContentDocument directly, with no XmlElement tree), so every DocSection/DocParagraph/DocRun/DocTable it produces holds a direct reference into that object -- the identical live-view contract MarkdownEditor applies over the same pivot shape. Unlike markdown's single section, [MS-DOC] round-trips multiple sections each with its own page geometry, so DocSection is a first-class handle here.
+export type {
+  CreateDocOptions,
+  SectionInit as DocSectionInit,
+} from "./edit/doc/editor";
+export { createDoc, DocEditor, DocSection, openDoc } from "./edit/doc/editor";
+export type { ParagraphInit as DocParagraphInit } from "./edit/doc/paragraph";
+export { DocParagraph } from "./edit/doc/paragraph";
+export type { RunInit as DocRunInit } from "./edit/doc/run";
+export { DocRun } from "./edit/doc/run";
+export type { TableInit as DocTableInit } from "./edit/doc/table";
+export { DocTable, DocTableCell, DocTableRow } from "./edit/doc/table";
+
 // The xls sibling of the editors above: a live-view editor over a mutable spreadsheet ContentDocument (xls-codec reads and writes the plain ContentDocument directly), with XlsSheet/XlsCell holding references into document.sheets and each sheet's own sparse cells array. XlsCell's value setter derives the schema-required displayText mechanically; a caller needing a locale-rendered display overrides displayText afterwards.
 export type { CreateXlsOptions } from "./edit/xls/editor";
 export { createXls, openXls, XlsEditor } from "./edit/xls/editor";
