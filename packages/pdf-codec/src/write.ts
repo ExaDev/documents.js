@@ -44,6 +44,7 @@ import {
   pdfNull,
   pdfNum,
   pdfRef,
+  pdfLiteralString,
   pdfStream,
 } from "./objects";
 import { subsetSfnt } from "./sfnt-subset";
@@ -581,10 +582,25 @@ export function writePdf(
   const encryptDictNum =
     options.encryption === undefined ? undefined : nextObjNum++;
 
+  // #967: the read side's embedded-file attachments (#721) write back as a /Names /EmbeddedFiles tree -- one /EmbeddedFile stream plus one /Filespec per attachment, the name-tree node listing them all, and a /Names entry on the Catalog. Allocation happens here, in document order, so the fixed-order determinism this writer is built around holds for attachments exactly as it does for fonts and images.
+  const attachmentAllocs = (doc.attachments ?? []).map(() => ({
+    fileNum: nextObjNum++,
+    specNum: nextObjNum++,
+  }));
+  const attachmentsNamesNum =
+    attachmentAllocs.length > 0 ? nextObjNum++ : undefined;
+
   const objects: AllocatedObject[] = [];
+  const catalogEntries: [string, PdfObject][] = [
+    ["Type", pdfName("Catalog")],
+    ["Pages", pdfRef(pagesNum, 0)],
+  ];
+  if (attachmentsNamesNum !== undefined) {
+    catalogEntries.push(["Names", pdfRef(attachmentsNamesNum, 0)]);
+  }
   objects.push({
     num: catalogNum,
-    value: pdfDict({ Type: pdfName("Catalog"), Pages: pdfRef(pagesNum, 0) }),
+    value: pdfDict(Object.fromEntries(catalogEntries)),
   });
   objects.push({
     num: pagesNum,
@@ -595,6 +611,55 @@ export function writePdf(
     }),
   });
   objects.push({ num: infoNum, value: buildInfoDict(doc) });
+
+  for (const [index, attachment] of (doc.attachments ?? []).entries()) {
+    const alloc = attachmentAllocs[index]!;
+    // The embedded file stream: /Subtype carries the MIME type when the read side recovered one, spelled as the MIME value itself (the spec's own example uses "application/pdf" this way; a bare "text/plain" is equally legal).
+    const fileEntries: [string, PdfObject][] = [
+      ["Type", pdfName("EmbeddedFile")],
+    ];
+    if (attachment.mimeType !== undefined) {
+      fileEntries.push(["Subtype", pdfName(attachment.mimeType)]);
+    }
+    objects.push({
+      num: alloc.fileNum,
+      value: pdfStream(
+        pdfDict(Object.fromEntries(fileEntries)),
+        base64ToBytes(attachment.base64),
+      ),
+    });
+    // The filespec names the stream it wraps: /F is the file's own name, /Desc the human description, /EF the embedded-file reference itself. /UF is deliberately absent: this writer produces no Unicode file names to mirror, and a redundant /UF identical to /F resolves nothing a bare /F would not.
+    const specEntries: [string, PdfObject][] = [
+      ["Type", pdfName("Filespec")],
+      ["F", pdfLiteralString(new TextEncoder().encode(attachment.name))],
+      ["EF", pdfDict({ F: pdfRef(alloc.fileNum, 0) })],
+    ];
+    if (attachment.description !== undefined) {
+      specEntries.push([
+        "Desc",
+        pdfLiteralString(new TextEncoder().encode(attachment.description)),
+      ]);
+    }
+    objects.push({
+      num: alloc.specNum,
+      value: pdfDict(Object.fromEntries(specEntries)),
+    });
+  }
+  if (attachmentsNamesNum !== undefined) {
+    // The name-tree node: a flat /Names array of (name, filespec ref) pairs, the tree's own single-node shape -- small attachment sets need no intermediate kids, and a writer that always produces one node keeps output deterministic.
+    const names: PdfObject[] = [];
+    for (const [index, attachment] of (doc.attachments ?? []).entries()) {
+      names.push(pdfLiteralString(new TextEncoder().encode(attachment.name)));
+      names.push(pdfRef(attachmentAllocs[index]!.specNum, 0));
+    }
+    objects.push({
+      num: attachmentsNamesNum,
+      value: pdfDict({
+        // The /Names dict the Catalog references holds ONE child, /EmbeddedFiles, whose own /Names array is the flat name tree -- the identical shape readAttachments walks (resolve catalog /Names, take its /EmbeddedFiles, walk that node's /Names) and the shape every real producer writes.
+        EmbeddedFiles: pdfDict({ Names: pdfArray(names) }),
+      }),
+    });
+  }
 
   for (const [standardName, alloc] of fontAllocs) {
     const { font, descriptor } = buildFontObjects(
