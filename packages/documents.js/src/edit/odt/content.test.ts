@@ -10,7 +10,7 @@ import {
   readDrawPageContent,
   rootElement,
 } from "odf.js";
-import { attr } from "ooxml.js";
+import { attr, decodeEntities } from "ooxml.js";
 import { encodePng } from "byte-codec";
 import { describe, expect, it } from "vitest";
 import { readOdtContent } from "../../odf/odt/read";
@@ -748,5 +748,39 @@ describe("buildOdtPackage", () => {
     const text = officeText(pkg);
     expect(childrenWithTag(text, "text:bookmark-start")).toHaveLength(1);
     expect(childrenWithTag(text, "text:bookmark-end")).toHaveLength(1);
+  });
+  it("XML-escapes a bookmark name carrying markup, so it cannot inject elements or attributes into content.xml", () => {
+    const hostile = 'x"/><text:p>injected</text:p>';
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "anchor",
+              anchorType: "bookmark",
+              name: hostile,
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "body" }] },
+          { kind: "constructEnd" },
+        ],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    const text = officeText(pkg);
+    const starts = childrenWithTag(text, "text:bookmark-start");
+    expect(starts).toHaveLength(1);
+    expect(childrenWithTag(text, "text:bookmark-end")).toHaveLength(1);
+    expect(
+      text.children.filter(
+        (child) => child.type === "element" && child.tag === "text:p",
+      ),
+    ).toHaveLength(1);
+    const stored = attr(starts[0]!, "text:name");
+    expect(stored).toContain("&lt;text:p");
+    expect(decodeEntities(stored ?? "")).toBe(hostile);
   });
 });
