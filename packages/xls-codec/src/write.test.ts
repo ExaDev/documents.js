@@ -304,6 +304,37 @@ describe("writeXlsContent", () => {
     expect(readBack?.numberFormatCode).toBe("[$USD-409]#,##0.00");
   });
 
+  it("round-trips a currency cell's own ISO code through the bracket format that alone can carry it", () => {
+    const bytes = writeXlsContent(
+      document([
+        sheet("Sheet1", [
+          cell(0, 0, { kind: "currency", value: 7.99, currency: "USD" }),
+          // A lowercase code is still an ISO-code shape; the bracket states it in ISO 4217's own uppercase spelling, which is what reads back.
+          cell(0, 1, { kind: "currency", value: 4.5, currency: "gbp" }),
+          // A display symbol is not an ISO-code shape and cannot go inside the bracket, so the cell falls back to the plain currency format -- the kind preserved, the code honestly lost.
+          cell(0, 2, { kind: "currency", value: 3, currency: "£" }),
+        ]),
+      ]),
+    );
+    const content = readXlsContent(bytes);
+    expect(findCell(content, 0, 0, 0)?.value).toEqual({
+      kind: "currency",
+      value: 7.99,
+      currency: "USD",
+    });
+    expect(findCell(content, 0, 0, 0)?.numberFormatCode).toBe("[$USD]#,##0.00");
+    expect(findCell(content, 0, 0, 1)?.value).toEqual({
+      kind: "currency",
+      value: 4.5,
+      currency: "GBP",
+    });
+    expect(findCell(content, 0, 0, 2)?.value).toEqual({
+      kind: "currency",
+      value: 3,
+    });
+    expect(findCell(content, 0, 0, 2)?.value).not.toHaveProperty("currency");
+  });
+
   it("round-trips an explicit custom number format code, minting its own Format record", () => {
     const bytes = writeXlsContent(
       document([
