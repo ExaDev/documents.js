@@ -34,6 +34,8 @@ export const WpdDiagnosticCodes = {
   NoteSpansParagraphs: "wpd/note-spans-paragraphs",
   // The document declares a watermark, or a second header/footer function claims a slot a first already filled (WordPerfect's own A/B two-slot-per-kind mechanism, a shape the shared one-flow-per-slot vocabulary does not carry). A plain header or footer with a resolvable body is NOT dropped -- it lands in ContentSection.headers/footers.
   HeaderFooterDropped: "wpd/header-footer-dropped",
+  // The document embeds a native OLE object -- an OLE server's own stream rather than a nested document package, the identical boundary ooxml.js draws for a classic OLE1 payload. Its bytes ARE recovered (from the compound wrapper's PerfectOffice_OBJECTS storage for an OLE 2 object, or the descriptor packet's own trailing bytes for an OLE 1 one), but the flat ContentDocument has no field for opaque binary bytes, so readWpd is the read that carries them (an attachments-table entry, the same split note bodies take); readWpdContent reports the object here.
+  OleObjectDropped: "wpd/ole-object-dropped",
   // The document contains a cross-reference. Its displayed text survives as ordinary text; the reference's own target binding does not.
   CrossReferenceFlattened: "wpd/cross-reference-flattened",
   // The document contains merge codes -- a form-letter template's field placeholders. They contribute no text and are passed over.
