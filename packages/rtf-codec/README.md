@@ -4,7 +4,7 @@
 
 > A hand-written, dependency-minimal Rich Text Format codec: reads RTF into the shared [document-schema.js](../document-schema.js/README.md) content pivot, and writes deterministic, 7-bit-ASCII RTF back out. Built against Microsoft's own [RTF Specification, version 1.9.1](#the-specification) and [Zod 4](https://zod.dev), with no third-party RTF library.
 
-**Status: under active development.** The read and write paths described below are implemented and tested, but this package is new and has not yet been exercised against a real-world corpus. [Scope](#scope) states exactly what is handled and what is not; nothing in this README describes work that is planned rather than done.
+**Status: under active development.** The read and write paths described below are implemented and tested, including against a real-producer corpus: `pnpm test:corpus` runs the gitignored `test/corpus/` suite against LibreOffice-produced RTF (flat-ODT sources spanning runs, colour, headings, lists, tables, and alignment, converted through Writer's own RTF filter by `scripts/generate-corpus.mjs`) -- the corpus validated the reader cleanly across all eight fixtures with no defects found. [Scope](#scope) states exactly what is handled and what is not; nothing in this README describes work that is planned rather than done.
 
 Every construct that remains unhandled is either a gap in `document-schema.js` rather than in this codec (superscript/subscript and text direction have no field to land in), or something RTF itself does not specify at all beyond its own form-field vocabulary (a docx-style rich-text SDT has no RTF spelling of any kind) — see [Deliberately not handled](#deliberately-not-handled), which says which of the two each row is.
 

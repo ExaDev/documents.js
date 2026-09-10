@@ -67,7 +67,9 @@
     "test:smoke": "turbo run _test:smoke",
     "_test:smoke": "vitest run --project smoke",
     "prepare": "husky",
-    "release": "semantic-release"
+    "release": "semantic-release",
+    "test:corpus": "turbo run _test:corpus",
+    "_test:corpus": "vitest run --project corpus"
   },
   "keywords": [
     "rtf",
