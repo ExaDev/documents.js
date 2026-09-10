@@ -1,24 +1,34 @@
 import type { Box, ContentShape } from "document-schema.js";
 
-// Orders a slide's shapes the way a person looking at it would take them, by recursive XY-cut, rather
-// than in the order p:spTree happens to list them.
+// Records where each shape falls in the order a person reading the slide would take them, as a
+// `readingOrder` rank ON each shape -- the shapes array itself is returned untouched, in document order.
 //
 // p:spTree order is z-order -- roughly creation order -- and bears no relation to layout: a title box
 // drawn last sits last in the file, and a two-column slide interleaves its columns arbitrarily. That is
-// survivable for a consumer rendering the shapes, since each carries its own frame and is positioned
-// independently. It stops being survivable the moment a consumer reads a slide as prose: concatenating
-// ContentSlide.shapes in array order then puts a column of bullets ahead of the heading that owns them,
-// which the same deck exported to PDF does not do (a PDF renderer has already resolved layout to reading
-// order). The geometry needed to fix it is already on every shape.
+// fine for a consumer rendering the shapes, since each carries its own frame. It stops being fine for one
+// reading a slide as prose, which in spTree order puts a column of bullets ahead of the heading that owns
+// them -- something the same deck exported to PDF does not do, because a PDF renderer has already
+// resolved layout to reading order.
+//
+// A rank rather than a reordered array, and that is the whole design: `sourcePath` is assigned as
+// slides[N].shapes[N] and has to keep naming the position it names, so sorting the array in place would
+// either desynchronise every path or redefine sourcePath away from the document order its own comment
+// promises. Expressed exactly as `paintOrder` already is -- a plain number on the shape, non-integer by
+// choice so a value can be inserted between two existing ones later -- so a consumer that wants reading
+// order sorts by it, and one that does not is unaffected.
 //
 // Every shape reaching here has a real frame: resolveShapeFrame resolves a placeholder's inherited
 // a:xfrm through the layout/master cascade, and a shape whose geometry cannot be resolved at all is
-// dropped rather than emitted at a default position. So there is no "geometry missing" case to guard --
-// which is not true of every implementation of this, and is worth knowing when comparing.
-export function orderShapesForReading(
+// dropped rather than emitted at a default position. So there is no "geometry missing" case to guard.
+export function assignReadingOrder(
   shapes: readonly ContentShape[],
 ): ContentShape[] {
-  return cut([...shapes]);
+  const ranked = new Map<ContentShape, number>();
+  cut([...shapes]).forEach((shape, rank) => ranked.set(shape, rank));
+  return shapes.map((shape) => ({
+    ...shape,
+    readingOrder: ranked.get(shape) ?? 0,
+  }));
 }
 
 type Axis = "vertical" | "horizontal";
