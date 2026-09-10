@@ -57,14 +57,16 @@
     "_typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
     "_typecheck:attw": "attw --pack",
     "test": "turbo run _test",
-    "_test": "vitest run",
-    "_test:coverage": "vitest run --coverage",
+    "_test": "vitest run --project unit",
+    "_test:coverage": "vitest run --project unit --coverage",
     "test:mutation": "turbo run _test:mutation",
     "_test:mutation": "stryker run stryker.config.mjs",
-    "test:watch": "vitest",
+    "test:watch": "vitest --project unit",
     "test:workers": "turbo run _test:workers",
     "_test:workers": "vitest run --config vitest.workers.config.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:corpus": "turbo run _test:corpus",
+    "_test:corpus": "vitest run --project corpus"
   },
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
