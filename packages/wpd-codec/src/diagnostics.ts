@@ -28,9 +28,11 @@ export const WpdDiagnosticCodes = {
   OutlineNumberRegenerated: "wpd/outline-number-regenerated",
   // The document contains a box: a figure, text box, equation, or graphic. Its contents are not read; see the README's Remaining scope.
   BoxDropped: "wpd/box-dropped",
-  // The document contains a footnote or endnote. Its reference site is where this fires; the note's own text lives in a prefix packet the flat content model has nowhere to put.
+  // The document contains a footnote or endnote whose body the flat ContentDocument has no home for. Its reference anchor IS emitted (a footnote/endnote anchor construct around the reference site); the body is lifted into the tree form's definitions table by readWpd, so this fires only on the flat readWpdContent.
   NoteDropped: "wpd/note-dropped",
-  // The document declares a header, footer, or watermark. The flat content model has no page-furniture position for one.
+  // A note's On/Off reference pair straddled a paragraph boundary, which the run-scoped anchor cannot express.
+  NoteSpansParagraphs: "wpd/note-spans-paragraphs",
+  // The document declares a watermark, or a second header/footer function claims a slot a first already filled (WordPerfect's own A/B two-slot-per-kind mechanism, a shape the shared one-flow-per-slot vocabulary does not carry). A plain header or footer with a resolvable body is NOT dropped -- it lands in ContentSection.headers/footers.
   HeaderFooterDropped: "wpd/header-footer-dropped",
   // The document contains a cross-reference. Its displayed text survives as ordinary text; the reference's own target binding does not.
   CrossReferenceFlattened: "wpd/cross-reference-flattened",

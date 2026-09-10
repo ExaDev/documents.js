@@ -770,3 +770,176 @@ describe("boxes", () => {
     ).toHaveLength(1);
   });
 });
+
+describe("page furniture and notes (D6/D7, #1128)", () => {
+  function generalWpTextPacket(documentArea: readonly number[]) {
+    const header = [
+      1,
+      0,
+      6,
+      0,
+      documentArea.length & 0xff,
+      (documentArea.length >>> 8) & 0xff,
+    ];
+    return {
+      packetType: 0x08,
+      bytes: new Uint8Array([...header, ...documentArea]),
+    };
+  }
+
+  function headerFunction(subgroup: number, occurrence: number): number[] {
+    return variableFunction({
+      group: 0xd6,
+      subgroup,
+      prefixIds: [1],
+      nonDeletable: [occurrence, 0],
+    });
+  }
+
+  it("lifts a header occurring on odd pages into the section's default header slot", () => {
+    const document = readDocumentArea(
+      [...text("body"), ...headerFunction(0x00, 0x01)],
+      [generalWpTextPacket(text("Confidential draft"))],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const section = document.sections[0];
+    if (section === undefined) throw new Error("expected a section");
+    expect(
+      section.headers?.default?.map((b) =>
+        b.kind === "paragraph" ? b.runs.map((run) => run.text).join("") : "",
+      ),
+    ).toEqual(["Confidential draft"]);
+    expect(section.headers?.even).toBeUndefined();
+    expect(section.footers).toBeUndefined();
+  });
+
+  it("lifts an even-only footer into the even slot", () => {
+    const document = readDocumentArea(
+      [...text("body"), ...headerFunction(0x02, 0x02)],
+      [generalWpTextPacket(text("Page footer"))],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const section = document.sections[0];
+    if (section === undefined) throw new Error("expected a section");
+    expect(
+      section.footers?.even?.map((b) =>
+        b.kind === "paragraph" ? b.runs.map((run) => run.text).join("") : "",
+      ),
+    ).toEqual(["Page footer"]);
+    expect(section.footers?.default).toBeUndefined();
+  });
+
+  it("reports a watermark, which the furniture vocabulary has no slot for", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [
+          ...text("body"),
+          ...variableFunction({
+            group: 0xd6,
+            subgroup: 0x04,
+            prefixIds: [1],
+            nonDeletable: [0x03, 0],
+          }),
+        ],
+        [generalWpTextPacket(text("DRAFT"))],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    expect(
+      diagnostics.filter((d) => d.code === "wpd/header-footer-dropped"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps the first header when a second claims the same slot", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [
+          ...text("body"),
+          ...headerFunction(0x00, 0x01),
+          ...headerFunction(0x01, 0x01),
+        ],
+        [generalWpTextPacket(text("First header"))],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const section = document.sections[0];
+    if (section === undefined) throw new Error("expected a section");
+    expect(
+      section.headers?.default?.map((b) =>
+        b.kind === "paragraph" ? b.runs.map((run) => run.text).join("") : "",
+      ),
+    ).toEqual(["First header"]);
+    expect(
+      diagnostics.some((d) => d.code === "wpd/header-footer-dropped"),
+    ).toBe(true);
+  });
+
+  it("anchors a footnote reference in the flat form and carries its body in the tree's definitions table", () => {
+    const noteBody = generalWpTextPacket(text("The fine print"));
+    const documentArea = [
+      ...text("See this"),
+      ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [1] }),
+      ...text("1"),
+      ...variableFunction({ group: 0xd7, subgroup: 0x01 }),
+      ...text(" point"),
+    ];
+    const diagnostics: WpdDiagnostic[] = [];
+    const flat = readWpdContent(buildWpdFile(documentArea, [noteBody]), {
+      sink: (d) => diagnostics.push(d),
+    });
+    if (flat.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const paragraph = flat.sections[0]?.blocks.find(
+      (b): b is Extract<typeof b, { kind: "paragraph" }> =>
+        b.kind === "paragraph",
+    );
+    expect(paragraph?.constructs?.[0]?.descriptor.kind).toBe("anchor");
+    const anchor = paragraph?.constructs?.[0]?.descriptor;
+    if (anchor?.kind === "anchor") {
+      expect(anchor.anchorType).toBe("footnote");
+      expect(anchor.name).toBe("1");
+      expect(anchor.definition).toBe("note-1");
+    } else {
+      throw new Error("expected an anchor descriptor");
+    }
+    // The flat form reports the body it cannot carry.
+    expect(
+      diagnostics.filter((d) => d.code === "wpd/note-dropped"),
+    ).toHaveLength(1);
+
+    const tree = readWpd(buildWpdFile(documentArea, [noteBody]));
+    // The definitions table is deliberately tenant-loose (document-schema.js's own design), so the whole entry is asserted in one toEqual rather than through typed field access.
+    expect(tree.definitions?.["note-1"]).toEqual({
+      kind: "footnote",
+      marker: "1",
+      blocks: [
+        {
+          kind: "paragraph",
+          runs: [{ text: "The fine print" }],
+        },
+      ],
+    });
+  });
+
+  it("carries an endnote pair as the endnote tenant", () => {
+    const tree = readWpd(
+      buildWpdFile(
+        [
+          ...text("Note"),
+          ...variableFunction({ group: 0xd7, subgroup: 0x02, prefixIds: [1] }),
+          ...text("2"),
+          ...variableFunction({ group: 0xd7, subgroup: 0x03 }),
+        ],
+        [generalWpTextPacket(text("The endnote body"))],
+      ),
+    );
+    const definition = tree.definitions?.["note-1"];
+    expect(definition?.kind).toBe("endnote");
+  });
+});
