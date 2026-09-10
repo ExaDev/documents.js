@@ -8,6 +8,7 @@ import type {
   ContentCellBorders,
   ContentCellFill,
   ContentCellValue,
+  ContentDefinedName,
   ContentDocument,
   ContentFont,
   ContentSheet,
@@ -47,6 +48,7 @@ import { readWorkbookStreams } from "./container";
 import { readBlipStore, type BlipImage } from "./drawing/blips";
 import { concatBytes } from "./drawing/bytes";
 import { readSheetComments, type SheetCellComment } from "./workbook/comments";
+import { readDefinedNames } from "./workbook/defined-names";
 import { readSheetDrawing } from "./workbook/drawing";
 import { classifyNumberFormat } from "excel-number-format";
 import {
@@ -225,24 +227,62 @@ export function readXlsContent(
       ? {}
       : summaryInformationToLayoutMetadata(readSummaryInformation(metadata));
   // Indexed before filtering, not after: a print name's own itab is a position in the FULL BoundSheet8 collection, so a workbook whose first sheet is a chart would mis-key every print name if the index came from the filtered list.
-  const sheets = globals.sheets
+  const worksheetEntries = globals.sheets
     .map((entry, sheetIndex) => ({ entry, sheetIndex }))
-    .filter(({ entry }) => entry.sheetType === SHEET_TYPE_WORKSHEET)
-    .map(({ entry, sheetIndex }) =>
-      readSheet(
-        entry,
-        sheetIndex,
-        substreams,
-        globals,
-        blipStore,
-        documentMetadata,
-      ),
-    );
+    .filter(({ entry }) => entry.sheetType === SHEET_TYPE_WORKSHEET);
+  const sheets = worksheetEntries.map(({ entry, sheetIndex }) =>
+    readSheet(
+      entry,
+      sheetIndex,
+      substreams,
+      globals,
+      blipStore,
+      documentMetadata,
+    ),
+  );
   return {
     kind: "spreadsheet",
     metadata: documentMetadata,
     sheets,
+    ...mapDefinedNames(globalsSubstream.records, globals, worksheetEntries),
   };
+}
+
+/**
+ * The document's own `names` array, from the workbook's Lbl records -- absent when the workbook declares no name this reader resolves, matching the schema's optional field.
+ *
+ * A name's Lbl-scoped sheetIndex is a position in the FULL BoundSheet8 collection, while ContentDefinedNameSchema's scopeSheetIndex names a position in the document's own (worksheet-only) sheets array, so each one is translated through the same filter the sheets themselves went through. A name scoped to a sheet that did not survive the filter -- a chart or macro sheet -- has no scope the schema can express, and is dropped whole rather than re-scoped to a neighbouring index or silently promoted to workbook-global: a wrong scope changes which sheet the name belongs to, not just how it is displayed.
+ */
+function mapDefinedNames(
+  globalsRecords: Substream["records"],
+  globals: WorkbookGlobals,
+  worksheetEntries: readonly {
+    readonly entry: SheetEntry;
+    readonly sheetIndex: number;
+  }[],
+): { names?: ContentDefinedName[] } {
+  const documentIndexOfSheet = new Map(
+    worksheetEntries.map(({ sheetIndex }, documentIndex) => [
+      sheetIndex,
+      documentIndex,
+    ]),
+  );
+  const names: ContentDefinedName[] = [];
+  for (const raw of readDefinedNames(globalsRecords, {
+    sheets: globals.sheets,
+    sheetRanges: globals.sheetRanges,
+  })) {
+    if (raw.sheetIndex === undefined) {
+      names.push({ name: raw.name, refersTo: raw.refersTo });
+      continue;
+    }
+    const scopeSheetIndex = documentIndexOfSheet.get(raw.sheetIndex);
+    if (scopeSheetIndex === undefined) {
+      continue;
+    }
+    names.push({ name: raw.name, refersTo: raw.refersTo, scopeSheetIndex });
+  }
+  return names.length > 0 ? { names } : {};
 }
 
 /** Every MsoDrawingGroup record's own data, in stream order, concatenated into one Escher byte stream -- the workbook-wide counterpart of a worksheet's own MsoDrawing concatenation (drawing/shapes.ts's own readSheetShapes), carrying the Blip Store rather than any one sheet's shape tree. */
