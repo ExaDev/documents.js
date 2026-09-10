@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { XmlElement } from "../../model/node";
-import { readDiagramResidue } from "./diagram";
+import { el, txt } from "../../xml/fragment";
+import { readDiagramResidue, readDiagramText } from "./diagram";
 
 function part(tag: string): XmlElement {
   return { type: "element", tag, attributes: [], children: [] };
@@ -29,5 +30,38 @@ describe("readDiagramResidue", () => {
 
   it("returns undefined, uncached, when every part is absent", () => {
     expect(readDiagramResidue(undefined, undefined, undefined)).toBeUndefined();
+  });
+});
+
+// A two-node data model: a doc root, two content nodes, and the parOf connections making it a tree.
+function dataModelRoot(): XmlElement {
+  const point = (id: string, text: string, type?: string) =>
+    el("dgm:pt", type === undefined ? { modelId: id } : { modelId: id, type }, [
+      el("dgm:t", {}, [
+        el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt(text)])])]),
+      ]),
+    ]);
+  const cxn = (srcId: string, destId: string, srcOrd: string) =>
+    el("dgm:cxn", { srcId, destId, type: "parOf", srcOrd });
+  return el("dgm:dataModel", {}, [
+    el("dgm:ptLst", {}, [
+      point("root", "", "doc"),
+      point("a", "Ad hoc"),
+      point("b", "Repeatable"),
+    ]),
+    el("dgm:cxnLst", {}, [cxn("root", "a", "0"), cxn("root", "b", "1")]),
+  ]);
+}
+
+describe("readDiagramText", () => {
+  it('marks every node paragraph as origin "diagram"', () => {
+    // SmartArt node text reaches the model as ordinary paragraphs, so nothing otherwise distinguishes a
+    // process flow's step labels from body prose -- and they are not the same thing: the relationships
+    // between the nodes (the arrows, the hierarchy) are not recovered, which a consumer reading them as
+    // prose needs to know.
+    const paragraphs = readDiagramText(dataModelRoot());
+
+    expect(paragraphs.length).toBeGreaterThan(0);
+    expect(paragraphs.every((p) => p.origin === "diagram")).toBe(true);
   });
 });
