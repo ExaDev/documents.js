@@ -13,6 +13,7 @@ import {
   text,
   variableFunction,
 } from "./test-support/build-wpd";
+import { writeCompoundFile } from "archive-codec";
 import { compoundFileWithStream } from "./test-support/compound-file";
 import { PERFECT_OFFICE_MAIN_STREAM } from "./container/container";
 
@@ -941,5 +942,231 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
     );
     const definition = tree.definitions?.["note-1"];
     expect(definition?.kind).toBe("endnote");
+  });
+});
+
+describe("native OLE objects (#1191)", () => {
+  const BOX_GROUP = 0xdf;
+  const PAGE_ANCHORED_BOX = 0x02;
+  const BOX_CONTENT_TYPE_IMAGE = 3;
+
+  function putUint16(bytes: number[], offset: number, value: number): void {
+    bytes[offset] = value & 0xff;
+    bytes[offset + 1] = (value >>> 8) & 0xff;
+  }
+
+  function contentBlock(contentType: number): number[] {
+    const flags: number[] = [0, 0];
+    putUint16(flags, 0, 0x4000); // bit 14: content type override
+    return [...flags, contentType];
+  }
+
+  function positionBlock(widthWpu: number, heightWpu: number): number[] {
+    const flags: number[] = [0, 0];
+    putUint16(flags, 0, 0x0c00); // bits 11 (width) and 10 (height)
+    const width = [0, 0, 0];
+    putUint16(width, 1, widthWpu);
+    const height = [0, 0, 0];
+    putUint16(height, 1, heightWpu);
+    return [...flags, ...width, ...height];
+  }
+
+  function boxNonDeletable(
+    overrideFlags: number,
+    blocks: ReadonlyMap<number, readonly number[]>,
+  ): number[] {
+    const bytes = new Array<number>(18).fill(0);
+    putUint16(bytes, 18, overrideFlags);
+    for (let bit = 15; bit >= 5; bit -= 1) {
+      const data = blocks.get(bit);
+      if (data === undefined) {
+        continue;
+      }
+      putUint16(bytes, bytes.length, data.length);
+      bytes.push(...data);
+    }
+    return bytes;
+  }
+
+  function imageBoxFunction(): number[] {
+    return variableFunction({
+      group: BOX_GROUP,
+      subgroup: PAGE_ANCHORED_BOX,
+      prefixIds: [1, 2],
+      nonDeletable: boxNonDeletable(
+        0x6000, // bit 14 (position) and bit 13 (content)
+        new Map([
+          [14, positionBlock(1440, 720)],
+          [13, contentBlock(BOX_CONTENT_TYPE_IMAGE)],
+        ]),
+      ),
+    });
+  }
+
+  // The descriptor packet, assembled from WPFF PrefixPkt83-255's own field table: the 44-byte marker, the fixed head, then the payload wordstring.
+  function oleDescriptorPacket(
+    marker: string,
+    objectNumber: number,
+    payload: readonly number[],
+  ) {
+    // The marker field is 44 bytes and the string with its null is 43, so one pad byte follows.
+    const markerBytes = [
+      ...Array.from(marker, (character) => character.charCodeAt(0)),
+      0,
+      0,
+    ];
+    const fixedHead = [
+      3,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      objectNumber & 0xff,
+      (objectNumber >>> 8) & 0xff,
+      (objectNumber >>> 16) & 0xff,
+      (objectNumber >>> 24) & 0xff,
+    ];
+    return {
+      packetType: 0x70,
+      bytes: new Uint8Array([...markerBytes, ...fixedHead, ...payload]),
+    };
+  }
+
+  // A Graphics Filename packet (type 0x40) whose index flags state children and whose data names one child: prefix ID 3, the descriptor packet that follows it in the packet list.
+  function graphicsFilenamePacket() {
+    return {
+      packetType: 0x40,
+      flags: 0x01,
+      bytes: new Uint8Array([1, 0, 3, 0, 0, 0, 0, 0]),
+    };
+  }
+
+  it("carries an OLE 2 object's native stream bytes as a tree-form attachment", () => {
+    const nativeBytes = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 9, 9]);
+    const bare = buildWpdFile(
+      [...imageBoxFunction()],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        graphicsFilenamePacket(),
+        oleDescriptorPacket(
+          "WPWin7.0/OLE 2.0 Prefix Information Marker",
+          0,
+          // The null-terminated WP word string naming the objects-storage stream, one ASCII character set 0 word per character.
+          [
+            ...Array.from("OLE10", (character) =>
+              character.charCodeAt(0),
+            ).flatMap((code) => [code & 0xff, 0]),
+            0,
+            0,
+          ],
+        ),
+      ],
+    );
+    const compound = writeCompoundFile([
+      { path: PERFECT_OFFICE_MAIN_STREAM, bytes: bare },
+      {
+        path: "PerfectOffice_OBJECTS/OLE10",
+        bytes: nativeBytes,
+      },
+    ]);
+
+    // The flat read recovers the bytes but has no field for them, and says so through the OLE-specific code rather than the generic box-content-unresolved one.
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(compound, { sink: (d) => diagnostics.push(d) });
+    expect(
+      diagnostics.filter((d) => d.code === WpdDiagnosticCodes.OleObjectDropped),
+    ).toHaveLength(1);
+    expect(
+      diagnostics.filter(
+        (d) => d.code === WpdDiagnosticCodes.BoxContentUnresolved,
+      ),
+    ).toHaveLength(0);
+
+    // The tree read carries them, as the attachments-table entry the PDF embedded-file precedent established.
+    const tree = readWpd(compound);
+    expect(tree.attachments?.OLE10).toEqual({
+      kind: "attachment",
+      name: "OLE10",
+      base64: bytesToBase64(nativeBytes),
+    });
+  });
+
+  it("carries an OLE 1 object's inline descriptor bytes as a tree-form attachment in a bare file", () => {
+    const ole1Data = [0x01, 0x02, 0x03];
+    const bare = buildWpdFile(
+      [...imageBoxFunction()],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        graphicsFilenamePacket(),
+        oleDescriptorPacket(
+          "WPWin6.0/OLE 1.0 Prefix Information Marker",
+          2,
+          ole1Data,
+        ),
+      ],
+    );
+
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(bare, { sink: (d) => diagnostics.push(d) });
+    expect(
+      diagnostics.filter((d) => d.code === WpdDiagnosticCodes.OleObjectDropped),
+    ).toHaveLength(1);
+
+    const tree = readWpd(bare);
+    expect(tree.attachments?.["ole1-2"]).toEqual({
+      kind: "attachment",
+      name: "ole1-2",
+      base64: bytesToBase64(new Uint8Array(ole1Data)),
+    });
+  });
+
+  it("collapses two boxes naming the same OLE object into one attachment entry", () => {
+    const bare = buildWpdFile(
+      [...imageBoxFunction(), ...imageBoxFunction()],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        graphicsFilenamePacket(),
+        oleDescriptorPacket(
+          "WPWin6.0/OLE 1.0 Prefix Information Marker",
+          0,
+          [0xaa, 0xbb],
+        ),
+      ],
+    );
+    const tree = readWpd(bare);
+    expect(Object.keys(tree.attachments ?? {})).toEqual(["ole1-0"]);
+  });
+
+  it("still reports a graphics packet with no OLE descriptor child as unresolved", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile(
+        [...imageBoxFunction()],
+        [
+          { packetType: 0x41, bytes: new Uint8Array(0) },
+          { packetType: 0x40, bytes: new Uint8Array([0]) }, // no children: just a filename
+        ],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    expect(
+      diagnostics.filter(
+        (d) => d.code === WpdDiagnosticCodes.BoxContentUnresolved,
+      ),
+    ).toHaveLength(1);
+    expect(
+      diagnostics.filter((d) => d.code === WpdDiagnosticCodes.OleObjectDropped),
+    ).toHaveLength(0);
   });
 });

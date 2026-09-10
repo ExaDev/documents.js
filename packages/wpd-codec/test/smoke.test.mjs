@@ -72,6 +72,7 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
     { path: '../dist/stream/characters.js', exports: ['decodeWpCharacter'] },
     { path: '../dist/stream/eol.js', exports: ['eolMappingForSubfunction'] },
     { path: '../dist/stream/attributes.js', exports: ['decodeAttributeByte', 'WpdAttribute'] },
+    { path: '../dist/stream/ole.js', exports: ['readOleObject'] },
   ];
 
   for (const module of DEEP_MODULES) {

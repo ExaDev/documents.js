@@ -26,7 +26,7 @@ function putUint32(bytes: Uint8Array, offset: number, value: number): void {
 export function buildWpdFile(
   documentArea: readonly number[],
   packets: readonly WpdPacketSpec[] = [],
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   // The index area holds one record per packet plus the index header.
   const indexAreaSize = (packets.length + 1) * WPD_INDEX_RECORD_SIZE;
   const packetDataStart = PREFIX_HEADER_SIZE + indexAreaSize;

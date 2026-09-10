@@ -111,6 +111,11 @@ import {
 } from "./stream/box";
 import { readTableFormula } from "./stream/formula";
 import { scanImagePayload } from "./stream/image";
+import {
+  PACKET_TYPE_GRAPHICS_FILENAME,
+  readOleObject,
+  type WpdOleObject,
+} from "./stream/ole";
 import { tabEffectFor, TAB_GROUP } from "./stream/tab";
 import { tokeniseDocumentArea, type WpdToken } from "./stream/tokenise";
 
@@ -251,6 +256,8 @@ interface ReaderState {
     | undefined;
   // Every note whose body a D7 On/Off pair named, in document order, bodies folded from each function's own General WP Text packet. The flat ContentDocument has no home for a note body (its real home is the tree's definitions table), so readWpdContent reports these and readWpd carries them.
   readonly notes: WpdNoteDefinition[];
+  // Every native OLE object an image box's Graphics Filename packet named, in document order, bytes recovered through stream/ole.ts. The flat ContentDocument has no field for opaque binary bytes (its real home is the tree's attachments table), so readWpdContent reports these and readWpd carries them -- the identical flat/tree split the note bodies above take.
+  readonly oleObjects: WpdOleObject[];
 }
 
 // One lifted note, shaped exactly as the definitions-table note tenant the tree form carries ({ kind, marker, blocks } -- the tenant vocabulary markdown-codec's own footnote definitions established): the reference marker is the text the D7 On/Off pair encloses, the body the packet its prefix ID names.
@@ -1204,7 +1211,7 @@ function applyBoxGroup(
     return;
   }
 
-  // IMAGE content: the content prefix names a packet whose container spelling this reader has no specification for, so the lift is magic-driven -- scan the packet's raw bytes for a whole, structurally delimited PNG or JPEG payload (stream/image.ts) and carry exactly that span as a ContentImageBlock, never a guess at a container header. The box's own frame supplies the rendered size, and its absolute-from-page-edge position (the one case stream/box.ts can resolve) becomes the image's floatPosition -- the same anchored-position field a docx floating image carries.
+  // IMAGE content: the content prefix names a packet whose container spelling this reader has no specification for, so the lift is magic-driven -- scan the packet's raw bytes for a whole, structurally delimited PNG or JPEG payload (stream/image.ts) and carry exactly that span as a ContentImageBlock, never a guess at a container header. The box's own frame supplies the rendered size, and its absolute-from-page-edge position (the one case stream/box.ts can resolve) becomes the image's floatPosition -- the same anchored-position field a docx floating image carries. A packet that carries no raster is next tested for the two child-packet spellings a Graphics Filename packet (type 0x40) can name: a native OLE object (stream/ole.ts) and a WPG vector graphic (stream/wpg.ts).
   if (boxContent.contentType === BOX_CONTENT_TYPE_IMAGE) {
     const imagePacket = packetByPrefixId(
       container.packets,
@@ -1215,6 +1222,19 @@ function applyBoxGroup(
         ? undefined
         : scanImagePayload(imagePacket.bytes);
     if (payload === undefined) {
+      const ole =
+        imagePacket?.packetType === PACKET_TYPE_GRAPHICS_FILENAME
+          ? readOleObject(
+              container.packets,
+              imagePacket,
+              container.oleObjectStreams,
+            )
+          : undefined;
+      if (ole !== undefined) {
+        // The bytes are recovered but the flat ContentDocument has nowhere to put them -- the same split a note body takes. The frame is deliberately not required here: an attachment entry names bytes, it places nothing.
+        state.oleObjects.push(ole);
+        return;
+      }
       reportOnce(
         state,
         sink,
@@ -1476,6 +1496,7 @@ interface FoldResult {
   readonly headers: ContentPageFurniture;
   readonly footers: ContentPageFurniture;
   readonly notes: readonly WpdNoteDefinition[];
+  readonly oleObjects: readonly WpdOleObject[];
 }
 
 // One token's own effect on the reader state, shared by the main document-area walk and any sub-stream folded through the identical function-code vocabulary -- currently a style packet's own "beginning style text" block (applyStylePacketBegin above), which carries the same font/attribute/colour-change functions the main stream does and means them identically.
@@ -1551,6 +1572,7 @@ function foldTokens(
     furnitureFilled: new Set(),
     openNote: undefined,
     notes: [],
+    oleObjects: [],
   };
 
   for (const token of tokens) {
@@ -1573,6 +1595,7 @@ function foldTokens(
     headers: state.headers,
     footers: state.footers,
     notes: state.notes,
+    oleObjects: state.oleObjects,
   };
 }
 
@@ -1597,7 +1620,7 @@ export function readWpdContent(
     container.documentAreaOffset,
     container.documentAreaEnd,
   );
-  const { blocks, page, headers, footers, notes } = foldTokens(
+  const { blocks, page, headers, footers, notes, oleObjects } = foldTokens(
     tokens,
     container,
     sink,
@@ -1607,6 +1630,13 @@ export function readWpdContent(
     sink({
       code: WpdDiagnosticCodes.NoteDropped,
       message: `This document contains a ${note.anchorType} whose body the flat ContentDocument has no home for; its reference anchor survives and readWpd lifts the body into the tree form's definitions table.`,
+    });
+  }
+  // A native OLE object's bytes have the same flat/tree split: the flat ContentDocument has no field for opaque binary bytes, and readWpd carries each as an attachments-table entry.
+  for (const oleObject of oleObjects) {
+    sink({
+      code: WpdDiagnosticCodes.OleObjectDropped,
+      message: `This document embeds a native OLE object ('${oleObject.name}') whose bytes the flat ContentDocument has no home for; readWpd lifts them into the tree form's attachments table.`,
     });
   }
   return {
@@ -1632,12 +1662,12 @@ export function readWpdContent(
   };
 }
 
-// The same read, one level up: the tree-form DocumentTree every other codec in the family also offers, assembled from the flat document by document-schema.js's own transform -- plus the one fact only the tree can hold: every note body the flat form cannot carry rides as a definitions-table entry ({ kind: 'footnote' | 'endnote', marker, blocks } -- the tenant vocabulary markdown-codec's own footnote definitions established), keyed by the definition id each anchor descriptor in the flat content already names (note-1, note-2, ... in document order). The identical splice markdown-codec's own tree reader performs for its link table.
+// The same read, one level up: the tree-form DocumentTree every other codec in the family also offers, assembled from the flat document by document-schema.js's own transform -- plus the two facts only the tree can hold: every note body the flat form cannot carry rides as a definitions-table entry ({ kind: 'footnote' | 'endnote', marker, blocks } -- the tenant vocabulary markdown-codec's own footnote definitions established), keyed by the definition id each anchor descriptor in the flat content already names (note-1, note-2, ... in document order), and every native OLE object's bytes ride as an attachments-table entry (see the splice below). The identical splice markdown-codec's own tree reader performs for its link table.
 export function readWpd(
   bytes: Uint8Array,
   options: ReadWpdOptions = {},
 ): DocumentTree {
-  // The flat read's per-note NoteDropped diagnostics would be lies at this level -- the tree DOES carry the bodies -- so the internal read runs with a silent sink and the bodies are collected straight from the fold, exactly the shape readWpdContent discards.
+  // The flat read's per-note NoteDropped and per-object OleObjectDropped diagnostics would be lies at this level -- the tree DOES carry the bodies and the bytes -- so the internal read runs with a silent sink and both are collected straight from the fold, exactly the shapes readWpdContent reports instead.
   const container = openWpdDocument(bytes, { password: options.password });
   const tokens = tokeniseDocumentArea(
     container.bytes,
@@ -1645,7 +1675,11 @@ export function readWpd(
     container.documentAreaEnd,
   );
   const sink = options.sink ?? NOOP_WPD_DIAGNOSTIC_SINK;
-  const { notes, ...flatRest } = foldTokens(tokens, container, sink);
+  const { notes, oleObjects, ...flatRest } = foldTokens(
+    tokens,
+    container,
+    sink,
+  );
   const document: ContentDocument = {
     kind: "wordprocessing",
     metadata: readMetadata(container),
@@ -1672,17 +1706,33 @@ export function readWpd(
     ],
   };
   const assembled = assembleTree(document);
-  if (notes.length === 0) {
-    return assembled;
-  }
+  // The native OLE objects take the tree's other home the flat form cannot reach: an attachments-table entry per object, the identical tenant vocabulary documents.js stamps PDF embedded files with ({ kind: 'attachment', name, base64 }) -- an OLE server's own stream is a package attachment in exactly that sense, bytes the package carries beside its content. Keyed by the object's own name (the OLE 2 stream's name in the wrapper's objects storage, or the OLE 1 fallback stream/ole.ts derives), so two boxes naming the same object collapse to one entry rather than duplicating bytes.
+  const attachments = Object.fromEntries(
+    oleObjects.map((oleObject) => [
+      oleObject.name,
+      {
+        kind: "attachment",
+        name: oleObject.name,
+        base64: bytesToBase64(oleObject.bytes),
+      },
+    ]),
+  );
   const definitions = Object.fromEntries(
     notes.map((note, index) => [
       `note-${index + 1}`,
       { kind: note.anchorType, marker: note.marker, blocks: note.blocks },
     ]),
   );
+  if (Object.keys(attachments).length === 0 && notes.length === 0) {
+    return assembled;
+  }
   return {
     ...assembled,
-    definitions: { ...assembled.definitions, ...definitions },
+    ...(Object.keys(attachments).length > 0
+      ? { attachments: { ...assembled.attachments, ...attachments } }
+      : {}),
+    ...(notes.length > 0
+      ? { definitions: { ...assembled.definitions, ...definitions } }
+      : {}),
   };
 }
