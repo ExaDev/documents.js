@@ -48,6 +48,7 @@ import {
   textContent,
 } from "../util";
 import { base64ToBytes } from "../../util/base64";
+import { assignReadingOrder } from "./reading-order";
 import type { DefaultRunProperties, SlideInheritanceContext } from "./inherit";
 import {
   readPlaceholderKey,
@@ -1017,7 +1018,11 @@ function readSlide(
       shapes,
     );
   }
-  return { size, shapes, notes: readNotes(pkg, slidePath) };
+  return {
+    size,
+    shapes: assignReadingOrder(shapes),
+    notes: readNotes(pkg, slidePath),
+  };
 }
 
 // Resolves a generic OOXML Package into PptxDocument: slide order via p:sldIdLst (never slide filename order), the placeholder -> layout -> master -> theme inheritance cascade, DrawingML geometry, and embedded images sniffed from their media parts. It is a one-way read, not a round-trip path, and a PptxDocument cannot be written back to a package.

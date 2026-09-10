@@ -753,6 +753,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       fontScale: { type: "number", exclusiveMinimum: 0 },
       lineSpacingReduction: { type: "number", minimum: 0 },
       paintOrder: { type: "number" },
+      readingOrder: { type: "number" },
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
