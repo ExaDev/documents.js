@@ -330,6 +330,8 @@ export interface ContentTableCell {
   sourcePath?: string;
   source?: SourceResidue; // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames?: LayoutFrame[]; // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
+  origin?: ContentOrigin; // the annotation channel, stated on this hand-written interface because the recursive family's interfaces do not derive from their zod schemas (ContentTableSchema's spread alone would leave this side silently without the field -- the drift its own comment warns about)
+  interpretation?: ContentInterpretation;
 }
 
 export interface ContentTableRow {
@@ -346,6 +348,8 @@ export interface ContentTable {
   sourcePath?: string; // deterministic, document-order-derived path assigned by the format reader
   source?: SourceResidue; // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames?: LayoutFrame[]; // this table's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
+  origin?: ContentOrigin; // the annotation channel, on the hand-written interface for the same reason as ContentTableCell's own copy above
+  interpretation?: ContentInterpretation;
 }
 
 // ContentEmbeddedObject is mutually recursive with ContentDocument (an embedded object carries a whole ContentDocument, which can itself contain another embedded object -- e.g. a formula embedded inside a drawing embedded inside a spreadsheet) -- hand-written, mirroring ContentTable/ContentBlock's own recursive-guard-plus-z.custom pattern immediately below, since z.lazy() collapses to `unknown` for recursive children in this pinned Zod version. Every objectKind except 'chart' names an embedded whole sub-document of the identically-named ContentDocument kind, 'formula' included now that ContentDocument has a real 'formula' variant of its own (below) -- so an embedded equation carries genuine MathML rather than, as before, a wordprocessing document standing in for one. 'chart' is the deliberate exception (ExaDev/documents.js#719): a chart is not a document kind and may never gain a lossless ContentDocument variant, so it names a chart graphic frame's cached series/category model and its document holds whatever data projection the producing codec could express -- ooxml.js carries an xlsx or pptx chart part's cached table as a small spreadsheet ContentDocument (one sheet whose cells are that table, the honest document-granularity spelling of tabular data), while odf.js reads the chart's own local data cache onto a frame-sized drawing page -- with the chart's own serialised specifics riding the object's residue channel. That is the objectKind/document pairing being a convention rather than a constraint, doing real work: 'chart' says what the frame held (so a consumer can tell a chart from an embedded workbook), document.kind says how the payload is shaped, and neither lies about the other. A 'formula' object is expected to be short enough that a layout engine can reasonably lay it out and render it; the others are expected to round-trip through this model losslessly without ever being laid out or rendered. This package holds schemas only, so no rendering/layout logic lives here regardless of objectKind.
@@ -367,6 +371,8 @@ export interface ContentEmbeddedObject {
   offsetXPt?: number; // offset from the anchor cell's own top-left corner
   offsetYPt?: number;
   source?: SourceResidue; // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
+  origin?: ContentOrigin; // the annotation channel, on the hand-written interface for the same reason as ContentTableCell's own copy above
+  interpretation?: ContentInterpretation;
 }
 
 // The block-level anchoring point for an embedded object inside a wordprocessing section's or a presentation/drawing shape's own block flow -- reuses ContentEmbeddedObject's fields directly (frame included) rather than nesting a separate `embeddedObject: ContentEmbeddedObject` field, since ContentEmbeddedObject already carries its own frame and duplicating it would just be two copies of the same position.
