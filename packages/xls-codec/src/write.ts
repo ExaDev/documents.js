@@ -224,6 +224,14 @@ function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
       record(cell.borders?.top?.color);
       record(cell.borders?.bottom?.color);
     }
+    // A conditional-format rule's own style colours are palette references too (the DXFN the CF writer emits), so the same workbook-wide scan registers them -- only the 'cellIs' rules this writer actually states, mirroring the sheet writer's own refusal of every other variant before any colour is consulted.
+    for (const rule of sheet.conditionalFormats ?? []) {
+      if (rule.type !== "cellIs") {
+        continue;
+      }
+      record(rule.style?.textColor);
+      record(rule.style?.background);
+    }
   }
 
   const missing = (hex: string): never => {
@@ -566,6 +574,7 @@ function buildWorkbookStream(
   const sheetContext: SheetWriteContext = {
     xfIndexForCell: cellXfPlan.xfIndexForCell,
     sstIndexFor: (text) => sstPlan.indexOf(text),
+    icvOf: palettePlan.icvOf,
   };
 
   const sheetStreams = content.sheets.map((sheet) =>
