@@ -429,6 +429,17 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["horizontal", "vertical"],
     additionalProperties: false,
   },
+  // The source's own compressed bytes for a no-encoder image filter (JBIG2, JPEG 2000) -- see src/content.ts's ContentImageOriginalSchema.
+  ContentImageOriginal: {
+    type: "object",
+    properties: {
+      filter: { type: "string", enum: ["jbig2", "jpeg2000"] },
+      base64: { type: "string" },
+      jbig2GlobalsBase64: { type: "string" },
+    },
+    required: ["filter", "base64"],
+    additionalProperties: false,
+  },
   ContentImageBlock: {
     type: "object",
     properties: {
@@ -438,6 +449,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       widthPt: { type: "number", exclusiveMinimum: 0 },
       heightPt: { type: "number", exclusiveMinimum: 0 },
       altText: { type: "string" },
+      original: { $ref: "#/$defs/ContentImageOriginal" },
       floatPosition: { $ref: "#/$defs/ContentFloatPosition" },
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
@@ -765,6 +777,20 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["kind", "runs", "list"],
     additionalProperties: false,
   },
+  // A standalone font descriptor -- the canonical run font vocabulary (src/content.ts's ContentFontSchema, single-sourced with ContentRun's own inline fields and StyleRunProperties via RUN_FONT_PROPERTY_SHAPE).
+  ContentFont: {
+    type: "object",
+    properties: {
+      bold: { type: "boolean" },
+      italic: { type: "boolean" },
+      underline: { type: "boolean" },
+      strike: { type: "boolean" },
+      fontFamily: { type: "string" },
+      sizePt: { type: "number", exclusiveMinimum: 0 },
+      color: { $ref: "#/$defs/Color" },
+    },
+    additionalProperties: false,
+  },
   ContentSheetCell: {
     type: "object",
     properties: {
@@ -774,6 +800,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       formula: { type: "string" },
       displayText: { type: "string" },
       numberFormatCode: { type: "string" },
+      font: { $ref: "#/$defs/ContentFont" },
       runs: { type: "array", items: { $ref: "#/$defs/ContentRun" } },
       colSpan: {
         type: "integer",
@@ -1348,6 +1375,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       widthPt: { type: "number", exclusiveMinimum: 0 },
       heightPt: { type: "number", exclusiveMinimum: 0 },
       altText: { type: "string" },
+      original: { $ref: "#/$defs/ContentImageOriginal" },
       floatPosition: { $ref: "#/$defs/ContentFloatPosition" },
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
