@@ -85,6 +85,25 @@ describe("writeXhtmlBody", () => {
     expect(roundTrip(blocks)).toEqual(blocks);
   });
 
+  it("writes and re-reads subscript/superscript runs", () => {
+    const blocks: ContentBlock[] = [
+      {
+        kind: "paragraph",
+        runs: [
+          { text: "x" },
+          { text: "2", verticalAlign: "superscript" },
+          { text: " and H" },
+          { text: "2", verticalAlign: "subscript" },
+          { text: "O" },
+        ],
+      },
+    ];
+    const xml = write(blocks);
+    expect(xml).toContain("<sup>2</sup>");
+    expect(xml).toContain("<sub>2</sub>");
+    expect(roundTrip(blocks)).toEqual(blocks);
+  });
+
   it("writes and re-reads a hyperlink", () => {
     const blocks: ContentBlock[] = [
       {

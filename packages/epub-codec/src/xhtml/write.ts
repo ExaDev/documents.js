@@ -498,7 +498,7 @@ function writePreRunsToNodes(
   );
 }
 
-// One run's own text, split on embedded newlines into <br/>-separated segments (the inverse of src/xhtml/inline.ts's own <br> -> "\n" run), wrapped in the formatting elements its own fields name -- innermost the text/br sequence, then <code> (fontFamily===MONOSPACE_FONT_FAMILY), <strong>, <em>, <u>, <s>, and finally <a href> for an external/internal hyperlink. This fixed wrapping order does not attempt to reproduce a source document's own original tag nesting (<strong><em> vs <em><strong> both read identically), only its semantic formatting -- exactly the "restorable, not byte-identical" tier this family's every codec already documents for markup order.
+// One run's own text, split on embedded newlines into <br/>-separated segments (the inverse of src/xhtml/inline.ts's own <br> -> "\n" run), wrapped in the formatting elements its own fields name -- innermost the text/br sequence, then <code> (fontFamily===MONOSPACE_FONT_FAMILY), <sub>/<sup> (verticalAlign), <strong>, <em>, <u>, <s>, and finally <a href> for an external/internal hyperlink. This fixed wrapping order does not attempt to reproduce a source document's own original tag nesting (<strong><em> vs <em><strong> both read identically), only its semantic formatting -- exactly the "restorable, not byte-identical" tier this family's every codec already documents for markup order.
 function writeRunNodes(run: ContentRun): XmlNode[] {
   const segments = run.text.split("\n");
   let nodes: XmlNode[] = [];
@@ -515,6 +515,11 @@ function writeRunNodes(run: ContentRun): XmlNode[] {
   }
   if (run.fontFamily === MONOSPACE_FONT_FAMILY) {
     nodes = [element("code", {}, nodes)];
+  }
+  if (run.verticalAlign === "superscript") {
+    nodes = [element("sup", {}, nodes)];
+  } else if (run.verticalAlign === "subscript") {
+    nodes = [element("sub", {}, nodes)];
   }
   if (run.bold === true) {
     nodes = [element("strong", {}, nodes)];

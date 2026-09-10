@@ -109,15 +109,26 @@ describe("paragraphs and inline styling", () => {
     expect(blocks).toEqual([{ kind: "paragraph", runs: [{ text: "a b c" }] }]);
   });
 
-  it("degrades sub/sup to plain text with a diagnostic", () => {
+  it("maps <sub>/<sup> onto ContentRun.verticalAlign, composing with nested emphasis like the other inline styles", () => {
     const sink = vi.fn();
-    const blocks = read(body("<p>x<sup>2</sup></p>"), sink);
-    expect(blocks).toEqual([
-      { kind: "paragraph", runs: [{ text: "x" }, { text: "2" }] },
-    ]);
-    expect(sink).toHaveBeenCalledWith(
-      expect.objectContaining({ code: "epub/element-unmapped" }),
+    const blocks = read(
+      body("<p>x<sup>2</sup> and <strong>H<sub>2</sub>O</strong></p>"),
+      sink,
     );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        runs: [
+          { text: "x" },
+          { text: "2", verticalAlign: "superscript" },
+          { text: " and " },
+          { text: "H", bold: true },
+          { text: "2", bold: true, verticalAlign: "subscript" },
+          { text: "O", bold: true },
+        ],
+      },
+    ]);
+    expect(sink).not.toHaveBeenCalled();
   });
 
   it("maps <br> to a run holding a literal newline", () => {
