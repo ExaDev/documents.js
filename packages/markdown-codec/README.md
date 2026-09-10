@@ -277,7 +277,7 @@ This package also published under an alternate name from the pre-monorepo pipeli
 
 - [mrkdwn.js](https://www.npmjs.com/package/mrkdwn.js)
 
-**Frozen since the monorepo migration** — see the [root README's release note](../../README.md#releases): the alias republish step was dropped along with GitHub Packages mirroring and SBOM/provenance signing, and nothing today keeps this name in sync with `markdown-codec`'s own releases. Tracked in [ExaDev/documents.js#728](https://github.com/ExaDev/documents.js/issues/728).
+**Republished automatically** — the alias's trusted publisher is registered against this repository and workflow (2026-09-10), so every release from the [backfill run](https://github.com/ExaDev/documents.js/actions/runs/34449796133) onward publishes under this name too; the registration evidence is on [ExaDev/documents.js#728](https://github.com/ExaDev/documents.js/issues/728).
 
 ## License
 
