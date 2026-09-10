@@ -138,6 +138,19 @@ describe("document shape", () => {
       author: "A. Writer",
     });
   });
+
+  it("reads \\rtldoc/\\ltrdoc onto metadata.direction, alongside rather than inside the {\\info ...} group", () => {
+    // The document-level pair is a bare document property, not an \info field, and a document stating both spells its real direction last.
+    const { document } = readRtfContent(
+      bytes("{\\rtf1\\ansi\\rtldoc{\\info{\\title RTL Report}}\\pard x\\par}"),
+    );
+    expect(document.metadata.direction).toBe("rtl");
+    expect(document.metadata.title).toBe("RTL Report");
+    const ltrDoc = readRtfContent(
+      bytes("{\\rtf1\\ansi\\rtldoc\\ltrdoc\\pard x\\par}"),
+    );
+    expect(ltrDoc.document.metadata.direction).toBe("ltr");
+  });
 });
 
 describe("character formatting", () => {
@@ -259,6 +272,30 @@ describe("character formatting", () => {
       undefined,
     ]);
   });
+
+  it("reads \\rtlch and \\ltrch onto ContentRun.direction, with the last-stated of the pair winning", () => {
+    // The middle two groups spell the pair the way a real producer does, the run's real direction last (\rtlch\ltrch for an LTR run, \ltrch\rtlch for an RTL one), and each closing brace restores the enclosing state -- so the text between groups is unstated again.
+    const runs =
+      paragraphsOf(
+        `${HEADER}\\pard plain {\\rtlch rtl}{\\rtlch\\ltrch ltr} and {\\ltrch\\rtlch rtl again}{\\ltrch ltr}\\par`,
+      )[0]?.runs ?? [];
+    expect(runs.map((run) => run.text)).toEqual([
+      "plain ",
+      "rtl",
+      "ltr",
+      " and ",
+      "rtl again",
+      "ltr",
+    ]);
+    expect(runs.map((run) => run.direction)).toEqual([
+      undefined,
+      "rtl",
+      "ltr",
+      undefined,
+      "rtl",
+      "ltr",
+    ]);
+  });
 });
 
 describe("text, escapes, and Unicode", () => {
@@ -367,6 +404,19 @@ describe("paragraph formatting", () => {
     );
     expect(paragraphs[0]?.alignment).toBe("right");
     expect(paragraphs[1]?.alignment).toBeUndefined();
+  });
+
+  it("reads \\rtlpar and \\ltrpar onto ContentParagraph.direction, carrying the state across \\par and clearing it at \\pard", () => {
+    // Paragraph properties persist from one paragraph to the next until \pard or a group close resets them, the same rule alignment already follows above.
+    const paragraphs = paragraphsOf(
+      `${HEADER}\\pard\\rtlpar first\\par second\\par\\ltrpar third\\par\\pard fourth\\par}`,
+    );
+    expect(paragraphs.map((paragraph) => paragraph.direction)).toEqual([
+      "rtl",
+      "rtl",
+      "ltr",
+      undefined,
+    ]);
   });
 
   it("reads \\pagebb as pageBreakBefore and \\page as its own pageBreak block", () => {
@@ -502,6 +552,25 @@ describe("tables", () => {
   it("accumulates several rows into one table", () => {
     const table = firstTable(`${HEADER}${ROW}${ROW}\\pard After.\\par}`);
     expect(table.rows).toHaveLength(2);
+  });
+
+  it("reads the \\rtlrow/\\ltrrow <rowwrite> member onto ContentTableRow.direction", () => {
+    // Each row's own \trowd opens a fresh row definition, so a direction stated inside one row's definition reaches that row alone -- the second row's plain \trowd leaves it at the unstated default.
+    const table = firstTable(
+      HEADER +
+        "\\trowd\\trleft0\\rtlrow\\cellx4320\\cellx8640" +
+        "\\pard\\intbl A\\cell\\pard\\intbl B\\cell\\row" +
+        "\\trowd\\trleft0\\ltrrow\\cellx4320\\cellx8640" +
+        "\\pard\\intbl C\\cell\\pard\\intbl D\\cell\\row" +
+        "\\trowd\\trleft0\\cellx4320\\cellx8640" +
+        "\\pard\\intbl E\\cell\\pard\\intbl F\\cell\\row" +
+        "\\pard After.\\par",
+    );
+    expect(table.rows.map((row) => row.direction)).toEqual([
+      "rtl",
+      "ltr",
+      undefined,
+    ]);
   });
 
   it("closes the table when an ordinary paragraph follows it", () => {
