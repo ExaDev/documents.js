@@ -18,25 +18,24 @@ export const WATERMARK_B = 0x05;
 const OCCURS_ON_ODD = 1 << 0;
 const OCCURS_ON_EVEN = 1 << 1;
 
-// What one D6 function claims: which furniture kind it is, and which of the shared vocabulary's three slots (default/even/first, WordprocessingML's own headerReference/@w:type values) its occurrence bits narrow onto. Odd-only is the default slot (the ordinary single-header document states exactly that); even-only is the even slot; both parities is the default slot too, since a flow occurring on every page IS the default. A function claiming neither parity is suppressed in its own file and claims nothing here. undefined answers watermark -- the one kind the vocabulary has no slot for (a watermark is neither header nor footer and owns no parity).
+// What one D6 function claims: which furniture kind it is, and which of the shared vocabulary's slots its occurrence bits narrow onto. Odd-only is the default slot (the ordinary single-header document states exactly that); even-only is the even slot; both parities is the default slot too, since a flow occurring on every page IS the default. A watermark claims through the identical narrowing -- it is page furniture with a parity, just not a header or a footer -- and lands in ContentSection.watermarks rather than the headers/footers pair. A function claiming neither parity is suppressed in its own file and claims nothing here.
 export interface WpdFurnitureClaim {
-  readonly kind: "header" | "footer";
+  readonly kind: "header" | "footer" | "watermark";
   readonly slot: "default" | "even";
 }
 
 export function readFurnitureClaim(
   subgroup: number,
   nonDeletable: Uint8Array,
-): WpdFurnitureClaim | "watermark" | "none" {
-  if (subgroup === WATERMARK_A || subgroup === WATERMARK_B) {
-    return "watermark";
-  }
+): WpdFurnitureClaim | "none" {
   const kind =
     subgroup === HEADER_A || subgroup === HEADER_B
       ? ("header" as const)
       : subgroup === FOOTER_A || subgroup === FOOTER_B
         ? ("footer" as const)
-        : undefined;
+        : subgroup === WATERMARK_A || subgroup === WATERMARK_B
+          ? ("watermark" as const)
+          : undefined;
   if (kind === undefined) {
     return "none";
   }

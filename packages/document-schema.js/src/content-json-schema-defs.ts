@@ -672,6 +672,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       },
       headers: { $ref: "#/$defs/ContentPageFurniture" },
       footers: { $ref: "#/$defs/ContentPageFurniture" },
+      watermarks: { $ref: "#/$defs/ContentPageFurniture" },
       source: { $ref: "#/$defs/SourceResidue" },
       origin: { $ref: "#/$defs/ContentOrigin" },
       interpretation: { $ref: "#/$defs/ContentInterpretation" },
