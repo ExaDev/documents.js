@@ -1,3 +1,11 @@
+## [4.2.1](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.2.0...rtf-codec%404.2.1) (2026-09-10)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.6.1
+- Updated archive-codec to 1.10.3
+
 ## [4.2.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.1.5...rtf-codec%404.2.0) (2026-09-10)
 
 ### Features

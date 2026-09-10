@@ -1,3 +1,9 @@
+## [7.6.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.6.0...document-schema.js%407.6.1) (2026-09-10)
+
+### Documentation
+
+* state the npm aliases as registered and republishing ([8bb4de8](https://github.com/ExaDev/documents.js/commit/8bb4de80a954b7dc728776a761cf63a344eb6f71))
+
 ## [7.6.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.5.1...document-schema.js%407.6.0) (2026-09-10)
 
 ### Features

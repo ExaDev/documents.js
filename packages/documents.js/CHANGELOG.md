@@ -1,3 +1,26 @@
+## [7.17.5](https://github.com/ExaDev/documents.js/compare/documents.js%407.17.4...documents.js%407.17.5) (2026-09-10)
+
+### Documentation
+
+* state the npm aliases as registered and republishing ([8bb4de8](https://github.com/ExaDev/documents.js/commit/8bb4de80a954b7dc728776a761cf63a344eb6f71))
+
+
+### Dependencies
+
+- Updated byte-codec to 1.4.2
+- Updated document-schema.js to 7.6.1
+- Updated archive-codec to 1.10.3
+- Updated epub-codec to 1.3.5
+- Updated markdown-codec to 6.6.2
+- Updated odf.js to 7.23.2
+- Updated pdf-codec to 4.5.2
+- Updated doc-codec to 2.8.1
+- Updated ooxml.js to 8.10.1
+- Updated ppt-codec to 1.4.6
+- Updated rtf-codec to 4.2.1
+- Updated wpd-codec to 3.4.1
+- Updated xls-codec to 4.12.2
+
 ## [7.17.4](https://github.com/ExaDev/documents.js/compare/documents.js%407.17.3...documents.js%407.17.4) (2026-09-10)
 
 ### Bug Fixes

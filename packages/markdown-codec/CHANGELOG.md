@@ -1,3 +1,14 @@
+## [6.6.2](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.6.1...markdown-codec%406.6.2) (2026-09-10)
+
+### Documentation
+
+* state the npm aliases as registered and republishing ([8bb4de8](https://github.com/ExaDev/documents.js/commit/8bb4de80a954b7dc728776a761cf63a344eb6f71))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.6.1
+
 ## [6.6.1](https://github.com/ExaDev/documents.js/compare/markdown-codec%406.6.0...markdown-codec%406.6.1) (2026-09-10)
 
 

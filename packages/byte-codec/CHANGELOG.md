@@ -1,3 +1,9 @@
+## [1.4.2](https://github.com/ExaDev/documents.js/compare/byte-codec%401.4.1...byte-codec%401.4.2) (2026-09-10)
+
+### Documentation
+
+* state the npm aliases as registered and republishing ([8bb4de8](https://github.com/ExaDev/documents.js/commit/8bb4de80a954b7dc728776a761cf63a344eb6f71))
+
 ## [1.4.1](https://github.com/ExaDev/documents.js/compare/byte-codec%401.4.0...byte-codec%401.4.1) (2026-09-08)
 
 ### Bug Fixes
