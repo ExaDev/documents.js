@@ -1,3 +1,14 @@
+## [7.18.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.17.5...documents.js%407.18.0) (2026-09-10)
+
+### Features
+
+* **documents.js:** write tracked-change and index-wrapper regions in the builders ([02d914f](https://github.com/ExaDev/documents.js/commit/02d914f58b69567b0dd02ce0207e6545b1d893d8))
+
+
+### Dependencies
+
+- Updated odf.js to 7.24.0
+
 ## [7.17.5](https://github.com/ExaDev/documents.js/compare/documents.js%407.17.4...documents.js%407.17.5) (2026-09-10)
 
 ### Documentation
