@@ -1,4 +1,9 @@
-import type { ContentDocument, ContentParagraph } from "document-schema.js";
+import type {
+  ContentBlock,
+  ContentDocument,
+  ContentParagraph,
+} from "document-schema.js";
+import { bytesToBase64 } from "./bytes/base64";
 import { describe, expect, it } from "vitest";
 import { WpdDiagnosticCodes, type WpdDiagnostic } from "./diagnostics";
 import { readWpd, readWpdContent } from "./read";
@@ -648,6 +653,103 @@ describe("boxes", () => {
           diagnostic.code === WpdDiagnosticCodes.BoxContentUnresolved,
       ),
     ).toHaveLength(1);
+  });
+
+  // A minimal well-formed 1x1 white PNG: signature, IHDR, IDAT, IEND -- hand-built here as bytes so the fixture needs no encoder dependency, and structurally complete so stream/image.ts's chunk walk bounds it exactly.
+  function tinyPng(): Uint8Array {
+    const chunk = (type: string, data: readonly number[]): number[] => [
+      0,
+      0,
+      0,
+      data.length,
+      ...Array.from(type, (c) => c.charCodeAt(0)),
+      ...data,
+      0,
+      0,
+      0,
+      0, // crc not verified by the scanner
+    ];
+    return new Uint8Array([
+      0x89,
+      0x50,
+      0x4e,
+      0x47,
+      0x0d,
+      0x0a,
+      0x1a,
+      0x0a,
+      ...chunk("IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]),
+      ...chunk("IDAT", [0x78, 0x01]),
+      ...chunk("IEND", []),
+    ]);
+  }
+
+  it("lifts an image box carrying a PNG payload as a real image block", () => {
+    const png = tinyPng();
+    const document = readDocumentArea(
+      [...boxFunction(BOX_CONTENT_TYPE_IMAGE, [1, 2])],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        // An "Image: WP"-shaped packet: a small unknown header ahead of the payload, so the test proves the magic scan rather than assuming the payload sits at offset 0.
+        {
+          packetType: 0x42,
+          bytes: new Uint8Array([9, 9, 9, 9, ...png, 7, 7]),
+        },
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const block = document.sections[0]?.blocks.find(
+      (b): b is Extract<ContentBlock, { kind: "image" }> => b.kind === "image",
+    );
+    if (block === undefined) throw new Error("expected an image block");
+    expect(block.format).toBe("png");
+    expect(block.base64).toBe(bytesToBase64(png));
+    expect(block.widthPt).toBeCloseTo(86.4);
+    expect(block.heightPt).toBeCloseTo(43.2);
+    expect(block.floatPosition).toBeUndefined();
+  });
+
+  it("carries an image box's absolute page position as the image's floatPosition", () => {
+    const png = tinyPng();
+    // Position override with all four members: horizontal and vertical absolute-from-page-edge offsets (type 0 flags) plus width and height.
+    const flags: number[] = [0, 0];
+    putUint16(flags, 0, 0x3c00); // bits 13 (h), 12 (v), 11 (width), 10 (height)
+    const horizontal = [0x00, 0x10, 0x01, 0, 0]; // type 0 = absolute from page edge, offset 0x0110 WPU = 10.56pt
+    const vertical = [0x00, 0x20, 0x02]; // type 0, offset 0x0220 WPU = 21.12pt
+    const width = [0, 0, 0];
+    putUint16(width, 1, 1440);
+    const height = [0, 0, 0];
+    putUint16(height, 1, 720);
+    const positionedBox = variableFunction({
+      group: BOX_GROUP,
+      subgroup: PAGE_ANCHORED_BOX,
+      prefixIds: [1, 2],
+      nonDeletable: boxNonDeletable(
+        0x6000,
+        new Map([
+          [14, [...flags, ...horizontal, ...vertical, ...width, ...height]],
+          [13, contentBlock(BOX_CONTENT_TYPE_IMAGE)],
+        ]),
+      ),
+    });
+    const document = readDocumentArea(
+      [...positionedBox],
+      [
+        { packetType: 0x41, bytes: new Uint8Array(0) },
+        { packetType: 0x42, bytes: png },
+      ],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const block = document.sections[0]?.blocks.find(
+      (b): b is Extract<ContentBlock, { kind: "image" }> => b.kind === "image",
+    );
+    if (block === undefined) throw new Error("expected an image block");
+    expect(block.floatPosition).toEqual({
+      horizontal: { relativeTo: "page", offsetPt: 0x0110 * 0.06 },
+      vertical: { relativeTo: "page", offsetPt: 0x0220 * 0.06 },
+    });
   });
 
   it("reports a box with no content override through the diagnostic sink", () => {

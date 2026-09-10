@@ -14,6 +14,7 @@ import type {
   RunConstructExtent,
 } from "document-schema.js";
 import { assembleTree } from "document-schema.js";
+import { bytesToBase64 } from "./bytes/base64";
 import { uint16At } from "./bytes/view";
 import {
   openWpdDocument,
@@ -101,11 +102,13 @@ import {
 } from "./stream/table";
 import {
   BOX_CONTENT_TYPE_EQUATION,
+  BOX_CONTENT_TYPE_IMAGE,
   BOX_CONTENT_TYPE_LINKED_TEXT,
   BOX_CONTENT_TYPE_TEXT,
   readBoxContent,
 } from "./stream/box";
 import { readTableFormula } from "./stream/formula";
+import { scanImagePayload } from "./stream/image";
 import { tabEffectFor, TAB_GROUP } from "./stream/tab";
 import { tokeniseDocumentArea, type WpdToken } from "./stream/tokenise";
 
@@ -1004,6 +1007,59 @@ function applyBoxGroup(
       WpdDiagnosticCodes.BoxDropped,
       "This document contains a box -- a figure, text box, equation, or graphic -- whose function-level override names no content this reader can resolve.",
     );
+    return;
+  }
+
+  // IMAGE content: the content prefix names a packet whose container spelling this reader has no specification for, so the lift is magic-driven -- scan the packet's raw bytes for a whole, structurally delimited PNG or JPEG payload (stream/image.ts) and carry exactly that span as a ContentImageBlock, never a guess at a container header. The box's own frame supplies the rendered size, and its absolute-from-page-edge position (the one case stream/box.ts can resolve) becomes the image's floatPosition -- the same anchored-position field a docx floating image carries.
+  if (boxContent.contentType === BOX_CONTENT_TYPE_IMAGE) {
+    const imagePacket = packetByPrefixId(
+      container.packets,
+      boxContent.contentPrefixId,
+    );
+    const payload =
+      imagePacket === undefined
+        ? undefined
+        : scanImagePayload(imagePacket.bytes);
+    if (payload === undefined) {
+      reportOnce(
+        state,
+        sink,
+        WpdDiagnosticCodes.BoxContentUnresolved,
+        "This document contains an image box whose content packet carries no decodable PNG or JPEG payload -- a WPG graphic or other image spelling this reader does not decode.",
+      );
+      return;
+    }
+    if (boxContent.frame === undefined) {
+      reportOnce(
+        state,
+        sink,
+        WpdDiagnosticCodes.BoxFrameUnresolved,
+        "This document contains a box whose content this reader could read, but whose function-level override states no width and height this reader can trust, so its content was not lifted.",
+      );
+      return;
+    }
+    flushParagraphIfContent(state, sink);
+    targetBlocks(state).push({
+      kind: "image",
+      format: payload.format,
+      base64: bytesToBase64(payload.bytes),
+      widthPt: boxContent.frame.widthPt,
+      heightPt: boxContent.frame.heightPt,
+      ...(boxContent.frame.positionResolved
+        ? {
+            floatPosition: {
+              horizontal: {
+                relativeTo: "page",
+                offsetPt: boxContent.frame.xPt,
+              },
+              vertical: {
+                relativeTo: "page",
+                offsetPt: boxContent.frame.yPt,
+              },
+            },
+          }
+        : {}),
+    });
     return;
   }
 
