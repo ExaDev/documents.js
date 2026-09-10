@@ -2197,3 +2197,74 @@ describe("writeDocContent tables", () => {
     });
   });
 });
+
+describe("writeDocContent: hyperlinks (#1187)", () => {
+  it("round-trips a hyperlink run as a HYPERLINK field whose result carries the uri", () => {
+    const bytes = writeDocContent({
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [
+                { text: "see " },
+                { text: "the site", hyperlink: "https://example.com/x" },
+                { text: " for more" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const reread = readDocContent(bytes);
+    if (reread.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    expect(reread.sections[0]?.blocks[0]).toMatchObject({
+      kind: "paragraph",
+      runs: [
+        { text: "see " },
+        { text: "the site", hyperlink: "https://example.com/x" },
+        { text: " for more" },
+      ],
+    });
+  });
+
+  it("joins consecutive same-uri runs into one field and splits at a differing uri", () => {
+    const bytes = writeDocContent({
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [
+                { text: "one", hyperlink: "https://a.example/" },
+                { text: "two", hyperlink: "https://a.example/" },
+                { text: "three", hyperlink: "https://b.example/" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const reread = readDocContent(bytes);
+    if (reread.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    expect(reread.sections[0]?.blocks[0]).toMatchObject({
+      kind: "paragraph",
+      runs: [
+        { text: "onetwo", hyperlink: "https://a.example/" },
+        { text: "three", hyperlink: "https://b.example/" },
+      ],
+    });
+  });
+});
