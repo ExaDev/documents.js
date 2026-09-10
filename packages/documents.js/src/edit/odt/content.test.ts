@@ -1,5 +1,5 @@
 import type { ContentDocument, ContentVector } from "document-schema.js";
-import type { Package, XmlElement } from "odf.js";
+import type { Package } from "odf.js";
 import {
   bytesToBase64,
   childrenWithTag,
@@ -11,6 +11,7 @@ import {
   rootElement,
 } from "odf.js";
 import { attr, decodeEntities } from "ooxml.js";
+import type { XmlElement, XmlNode } from "odf.js";
 import { encodePng } from "byte-codec";
 import { describe, expect, it } from "vitest";
 import { readOdtContent } from "../../odf/odt/read";
@@ -71,6 +72,117 @@ function readFlowVectors(pkg: Package): ContentVector[] {
 }
 
 describe("buildOdtPackage", () => {
+  it("round-trips a division construct pair through a real text:section region", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "division",
+              name: "ChapterOne",
+              protected: true,
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "inside the division" }] },
+          { kind: "constructEnd" },
+          { kind: "paragraph", runs: [{ text: "outside" }] },
+        ],
+      },
+    ]);
+    const rereadDoc = readOdtContent(buildOdtPackage(content));
+    if (rereadDoc.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+
+    const kinds = rereadDoc.sections[0]!.blocks.map((block) => block.kind);
+    expect(kinds).toEqual([
+      "constructStart",
+      "paragraph",
+      "constructEnd",
+      "paragraph",
+    ]);
+    const marker = rereadDoc.sections[0]!.blocks[0];
+    if (marker?.kind !== "constructStart") {
+      throw new Error("expected the first block to be the construct marker");
+    }
+    expect(marker.descriptor).toEqual({
+      kind: "division",
+      name: "ChapterOne",
+      protected: true,
+    });
+    // The bracketed paragraph is genuinely INSIDE the section element, the outside paragraph a sibling of it in office:text.
+    const pkg = buildOdtPackage(content);
+    const contentXml = pkg.parts["content.xml"];
+    if (contentXml?.kind !== "xml") {
+      throw new Error("expected a content.xml part");
+    }
+    const sections: XmlElement[] = [];
+    const walk = (nodes: readonly XmlNode[]): void => {
+      for (const node of nodes) {
+        if (node.type === "element") {
+          if (node.tag === "text:section") {
+            sections.push(node);
+          }
+          walk(node.children);
+        }
+      }
+    };
+    walk(contentXml.nodes);
+    expect(sections).toHaveLength(1);
+    // Recursive text collection: the section's paragraphs are elements whose runs hold the text nodes.
+    const textOf = (nodes: readonly XmlNode[]): string =>
+      nodes
+        .map((node) =>
+          node.type === "text"
+            ? node.value
+            : node.type === "element"
+              ? textOf(node.children)
+              : "",
+        )
+        .join("");
+    const sectionText = textOf(sections[0]!.children);
+    expect(sectionText).toContain("inside the division");
+    expect(sectionText).not.toContain("outside");
+  });
+
+  it("round-trips a linked division's text:section-source", () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "division",
+              name: "LinkedChapter",
+              linked: { href: "../chapter1.odt", sectionName: "Inner" },
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "chapter body" }] },
+          { kind: "constructEnd" },
+        ],
+      },
+    ]);
+    const rereadDoc = readOdtContent(buildOdtPackage(content));
+    if (rereadDoc.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+
+    const marker = rereadDoc.sections[0]!.blocks[0];
+    if (marker?.kind !== "constructStart") {
+      throw new Error("expected the first block to be the construct marker");
+    }
+    expect(marker.descriptor).toEqual({
+      kind: "division",
+      name: "LinkedChapter",
+      linked: { href: "../chapter1.odt", sectionName: "Inner" },
+    });
+  });
+
   it("throws for a presentation ContentDocument", () => {
     expect(() =>
       buildOdtPackage({ kind: "presentation", metadata: {}, slides: [] }),

@@ -1,5 +1,5 @@
 import type { LayoutMetadata } from "document-schema.js";
-import type { Package, XmlElement } from "ooxml.js";
+import type { Package, XmlElement, XmlNode } from "ooxml.js";
 import {
   decodePackage,
   encodePackage,
@@ -17,6 +17,7 @@ import { buildParagraph, DocxParagraph } from "./paragraph";
 import type { ParagraphInit } from "./paragraph";
 import { createEmptyDocxPackage } from "./scaffold";
 import { buildTable, DocxTable } from "./table";
+import type { ContentControlDescriptor } from "document-schema.js";
 import type { TableInit } from "./table";
 
 const DOCUMENT_PART_PATH = "word/document.xml";
@@ -30,6 +31,9 @@ export interface DocxBody {
   // A bookmark's two halves as body-level siblings bracketing whatever is appended between the two calls -- the one construct shape that is expressible append-only, since WordprocessingML allows w:bookmarkStart/w:bookmarkEnd directly inside w:body around whole blocks. The id is the caller's to keep unique document-wide and to pair across the two halves; the name travels on the start half alone, exactly as a reader pairs them back.
   appendBookmarkStart(id: number, name: string): void;
   appendBookmarkEnd(id: number): void;
+  // A content-control (SDT) region: every append between openContentControlRegion and closeRegion lands inside the control's own w:sdtContent rather than as a body sibling -- the block-flow spelling of an SDT, which Word itself writes as w:sdt > w:sdtPr + w:sdtContent around the content it governs. The descriptor drives w:sdtPr (w:id minted per document, w:tag/w:alias/w:lock, and the one type element each controlType maps to -- the exact inverse of ooxml.js's own reader, so a written control reads back as the same descriptor). Regions nest to arbitrary depth; the one field with no spelling here is columnCount-style geometry an SDT does not carry.
+  openContentControlRegion(descriptor: ContentControlDescriptor): void;
+  closeRegion(): void;
 }
 
 function findDocumentRoot(pkg: Package): XmlElement {
@@ -68,21 +72,31 @@ function bodyElementIndicesByTag(body: XmlElement, tag: string): number[] {
 }
 
 class DocxBodyImpl implements DocxBody {
+  // The w:sdtContent elements of every content-control region currently open, innermost last. Appends target the innermost open region's own children (plain push -- a w:sdtContent has no w:sectPr to insert before) and fall back to the body's own insertion point when empty.
+  private readonly openRegions: XmlElement[] = [];
+  private nextSdtId = 1;
+
   constructor(
     private readonly body: XmlElement,
     private readonly imageContext: ImageMediaContext,
     private readonly pkg: Package,
   ) {}
 
+  private appendToBody(element: XmlElement): void {
+    const region = this.openRegions.at(-1);
+    if (region !== undefined) {
+      region.children.push(element);
+      return;
+    }
+    this.body.children.splice(bodyInsertionPoint(this.body), 0, element);
+  }
+
   appendParagraph(init?: ParagraphInit): DocxParagraph {
     const paragraphElement = buildParagraph(init);
-    this.body.children.splice(
-      bodyInsertionPoint(this.body),
-      0,
-      paragraphElement,
-    );
+    this.appendToBody(paragraphElement);
+    const container = this.openRegions.at(-1)?.children ?? this.body.children;
     return new DocxParagraph(
-      this.body.children,
+      container,
       paragraphElement,
       this.imageContext,
       this.pkg,
@@ -107,20 +121,19 @@ class DocxBodyImpl implements DocxBody {
 
   appendTable(init: TableInit): DocxTable {
     const tableElement = buildTable(init);
-    this.body.children.splice(bodyInsertionPoint(this.body), 0, tableElement);
-    return new DocxTable(this.body.children, tableElement);
+    this.appendToBody(tableElement);
+    const container = this.openRegions.at(-1)?.children ?? this.body.children;
+    return new DocxTable(container, tableElement);
   }
 
   appendPageBreak(): void {
     const run = el("w:r", {}, [el("w:br", { "w:type": "page" })]);
     const paragraph = el("w:p", {}, [run]);
-    this.body.children.splice(bodyInsertionPoint(this.body), 0, paragraph);
+    this.appendToBody(paragraph);
   }
 
   appendBookmarkStart(id: number, name: string): void {
-    this.body.children.splice(
-      bodyInsertionPoint(this.body),
-      0,
+    this.appendToBody(
       el("w:bookmarkStart", {
         "w:id": String(id),
         "w:name": encodeXmlText(name),
@@ -129,11 +142,102 @@ class DocxBodyImpl implements DocxBody {
   }
 
   appendBookmarkEnd(id: number): void {
-    this.body.children.splice(
-      bodyInsertionPoint(this.body),
-      0,
-      el("w:bookmarkEnd", { "w:id": String(id) }),
-    );
+    this.appendToBody(el("w:bookmarkEnd", { "w:id": String(id) }));
+  }
+
+  openContentControlRegion(descriptor: ContentControlDescriptor): void {
+    const id = this.nextSdtId;
+    this.nextSdtId += 1;
+    const sdtPr: XmlNode[] = [el("w:id", { "w:val": String(id) })];
+    if (descriptor.alias !== undefined) {
+      sdtPr.push(el("w:alias", { "w:val": encodeXmlText(descriptor.alias) }));
+    }
+    if (descriptor.tag !== undefined) {
+      sdtPr.push(el("w:tag", { "w:val": encodeXmlText(descriptor.tag) }));
+    }
+    if (descriptor.lock !== undefined) {
+      // The inverse of ooxml.js's LOCK_BY_VALUE: the schema's three lock members map onto the three w:lock values Word defines.
+      sdtPr.push(
+        el("w:lock", {
+          "w:val":
+            descriptor.lock === "content"
+              ? "contentLocked"
+              : descriptor.lock === "container"
+                ? "sdtLocked"
+                : "sdtContentLocked",
+        }),
+      );
+    }
+    // The type element is the inverse of ooxml.js's CONTROL_TYPE_BY_TAG. The w: spellings stay inside the one namespace this package's scaffold declares; the checkbox state element is w:checked (the reader accepts it beside Word's own w14:checked, and this scaffold declares no w14 namespace to spell it in).
+    switch (descriptor.controlType) {
+      case "plainText":
+        sdtPr.push(el("w:text", {}));
+        break;
+      case "comboBox":
+      case "dropDown":
+        sdtPr.push(
+          el(
+            descriptor.controlType === "comboBox"
+              ? "w:comboBox"
+              : "w:dropDownList",
+            {},
+            (descriptor.options ?? []).map((option) =>
+              el("w:listItem", {
+                "w:displayText": encodeXmlText(option),
+                "w:value": encodeXmlText(option),
+              }),
+            ),
+          ),
+        );
+        break;
+      case "date":
+        sdtPr.push(
+          el(
+            "w:date",
+            descriptor.value === undefined
+              ? {}
+              : { "w:fullDate": encodeXmlText(descriptor.value) },
+          ),
+        );
+        break;
+      case "checkbox":
+        sdtPr.push(
+          el("w:checkbox", {}, [
+            el("w:checked", {
+              "w:val": descriptor.checked === true ? "true" : "false",
+            }),
+          ]),
+        );
+        break;
+      case "picture":
+        sdtPr.push(el("w:picture", {}));
+        break;
+      case "group":
+        sdtPr.push(el("w:group", {}));
+        break;
+      case "repeatingSection":
+        sdtPr.push(el("w:repeatingSection", {}));
+        break;
+      case "index":
+        // docx's TOC-as-SDT: the one gallery value ooxml.js's reader maps to controlType "index" rather than degrading to richText with the docPartObj quarantined.
+        sdtPr.push(
+          el("w:docPartObj", {}, [
+            el("w:docPartGallery", {
+              "w:val": "Table of Contents",
+            }),
+          ]),
+        );
+        break;
+      case "richText":
+        break;
+    }
+    const sdtContent = el("w:sdtContent", {}, []);
+    this.appendToBody(el("w:sdt", {}, [el("w:sdtPr", {}, sdtPr), sdtContent]));
+    this.openRegions.push(sdtContent);
+  }
+
+  closeRegion(): void {
+    this.openRegions.pop();
   }
 }
 
