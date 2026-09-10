@@ -791,6 +791,7 @@ export const ContentShapeSchema = z.object({
   fontScale: z.number().positive().optional(),
   lineSpacingReduction: z.number().nonnegative().optional(),
   paintOrder: z.number().optional(),
+  readingOrder: z.number().optional(), // where this shape falls in the order a person reading the slide would take it, recovered from the shapes' geometry rather than from p:spTree order (which is z-order and bears no relation to layout). Expressed as a rank ON the shape, exactly as paintOrder is, rather than by ordering the shapes array: sourcePath is assigned as slides[N].shapes[N] and must keep naming the position it names, so the array stays in document order and a consumer reading a slide as prose sorts by this instead. Same plain z.number() as paintOrder and for the same reason -- a fractional value can be inserted between two existing ones later. Absent when the reader could not resolve an order
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this shape's own rendered position(s), once a layout pass has fused one in -- see FusedNode above

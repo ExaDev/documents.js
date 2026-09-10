@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentShape } from "document-schema.js";
-import { orderShapesForReading } from "./reading-order";
+import { assignReadingOrder } from "./reading-order";
 
 // A shape carrying only what the ordering looks at: its frame, and a name to assert the order by.
 function shape(
@@ -21,10 +21,14 @@ function shape(
   };
 }
 
+// The names in reading order -- read back off the `readingOrder` ranks, since the array itself is
+// deliberately returned in document order.
 const order = (shapes: ContentShape[]): (string | undefined)[] =>
-  orderShapesForReading(shapes).map((s) => s.name);
+  [...assignReadingOrder(shapes)]
+    .sort((a, b) => (a.readingOrder ?? 0) - (b.readingOrder ?? 0))
+    .map((s) => s.name);
 
-describe("orderShapesForReading", () => {
+describe("assignReadingOrder", () => {
   it("reads a two-column slide column by column, keeping each heading with its own list", () => {
     // The layout that motivates cutting on an axis rather than always sorting top-to-bottom: sorting by
     // y alone interleaves the columns and separates every heading from the bullets it introduces.
@@ -91,5 +95,19 @@ describe("orderShapesForReading", () => {
   it("leaves a single shape, or none, alone", () => {
     expect(order([])).toEqual([]);
     expect(order([shape("only", 10, 10, 10, 10)])).toEqual(["only"]);
+  });
+
+  it("returns the array in document order, ranking rather than reordering", () => {
+    // The point of the whole design: sourcePath is assigned as slides[N].shapes[N], so the array must
+    // keep naming the positions it names. Only the ranks describe the reading order.
+    const shapes = [
+      shape("right", 400, 60, 300, 200),
+      shape("left", 40, 60, 300, 200),
+    ];
+
+    const result = assignReadingOrder(shapes);
+
+    expect(result.map((s) => s.name)).toEqual(["right", "left"]);
+    expect(result.map((s) => s.readingOrder)).toEqual([1, 0]);
   });
 });

@@ -329,12 +329,6 @@ export type {
 // --- pptx: a PresentationML reader resolving the placeholder -> layout -> master -> theme inheritance cascade and DrawingML geometry into slides of positioned, styled shapes. The flat half of readPptx above; read-only either way, since this package has no PresentationML writer. ---
 export { readPptxContent, PptxDocumentSchema } from "./typed/pptx/read";
 export type { PptxDocument } from "./typed/pptx/read";
-// Opt-in reading-order projection over a slide's shapes. Deliberately not applied by readPptxContent
-// itself: ContentShape.sourcePath is assigned during the shape-tree walk as slides[N].shapes[N], so
-// reordering the array in place would either desynchronise those paths from the positions they name or
-// redefine them away from document order. Exported so a consumer reading a slide as prose can sort,
-// while one correlating by sourcePath keeps the order it has.
-export { orderShapesForReading } from "./typed/pptx/reading-order";
 
 // The lossy, cell-values-only xlsx reading view (sheet names, cell references, resolved values, formulas, merged ranges, defined names -- no formats, styles, geometry, or charts), with no write side and no ContentDocument shape. It held the name readXlsx until that name went to the package-native reader above; readXlsxWorkbook says what it returns, exactly as readXlsxContent beside it does.
 export {
