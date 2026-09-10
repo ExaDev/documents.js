@@ -18,7 +18,11 @@ function packed(rows: string[]): Uint8Array {
 }
 
 function reread(bitmap: Uint8Array, columns: number, rowsCount: number) {
-  return decodeCcittFax(encodeCcittFax(bitmap, { columns, rows: rowsCount }), {
+  const encoded = encodeCcittFax(bitmap, { columns, rows: rowsCount });
+  if (encoded === undefined) {
+    throw new Error("an unbudgeted encode can never abort");
+  }
+  return decodeCcittFax(encoded, {
     k: -1,
     columns,
     rows: rowsCount,
@@ -48,7 +52,8 @@ describe("encodeCcittFax: exact bit strings", () => {
       columns: 8,
       rows: 2,
     });
-    expect(Array.from(encoded)).toEqual([0b11000000]);
+    expect(encoded).toBeDefined();
+    expect(Array.from(encoded!)).toEqual([0b11000000]);
   });
 
   it("codes a first black row horizontally with a zero-length leading white run", () => {
@@ -57,9 +62,10 @@ describe("encodeCcittFax: exact bit strings", () => {
       columns: 8,
       rows: 1,
     });
-    expect(Array.from(encoded)).toEqual([0x26, 0xa2, 0x80]);
+    expect(encoded).toBeDefined();
+    expect(Array.from(encoded!)).toEqual([0x26, 0xa2, 0x80]);
     expect(
-      decodeCcittFax(encoded, { k: -1, columns: 8, rows: 1 }).bytes[0],
+      decodeCcittFax(encoded!, { k: -1, columns: 8, rows: 1 }).bytes[0],
     ).toBe(0b00000000);
   });
 });
@@ -117,5 +123,15 @@ describe("encodeCcittFax: round trips through this package's own decoder", () =>
     expect(realPixelBytes(decoded.bytes, columns, rowsCount)).toEqual(
       realPixelBytes(bitmap, columns, rowsCount),
     );
+  });
+
+  it("aborts as soon as the stream exceeds the budget, answering undefined", () => {
+    // A checkerboard is G4's worst case (every run one pixel, coded horizontally); with a budget of 0 the encoder must stop on its first mode emission rather than emitting the whole losing stream.
+    const rows = Array.from({ length: 64 }, (_, y) =>
+      y % 2 === 0 ? "10101010" : "01010101",
+    );
+    expect(
+      encodeCcittFax(packed(rows), { columns: 8, rows: 64, maxBytes: 0 }),
+    ).toBeUndefined();
   });
 });
