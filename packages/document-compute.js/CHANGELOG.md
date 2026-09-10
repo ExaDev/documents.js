@@ -1,3 +1,14 @@
+## [1.4.0](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.3.85...document-compute.js%401.4.0) (2026-09-10)
+
+### Features
+
+* **document-compute.js:** add the generated at-scale worked-example corpus ([fbe34cf](https://github.com/ExaDev/documents.js/commit/fbe34cf217479663a1f561993bb0a75ef329f51f))
+
+
+### Dependencies
+
+- Updated documents.js to 7.17.4
+
 ## [1.3.85](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.3.84...document-compute.js%401.3.85) (2026-09-10)
 
 

@@ -1,3 +1,9 @@
+## [4.2.0](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.1.5...rtf-codec%404.2.0) (2026-09-10)
+
+### Features
+
+* **rtf-codec:** add a LibreOffice-produced real-rtf corpus layer ([c4fa340](https://github.com/ExaDev/documents.js/commit/c4fa3405b83b9b159c711d97d5a2fe968fb700c8))
+
 ## [4.1.5](https://github.com/ExaDev/documents.js/compare/rtf-codec%404.1.4...rtf-codec%404.1.5) (2026-09-10)
 
 

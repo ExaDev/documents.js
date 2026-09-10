@@ -1,3 +1,9 @@
+## [2.8.0](https://github.com/ExaDev/documents.js/compare/doc-codec%402.7.2...doc-codec%402.8.0) (2026-09-10)
+
+### Features
+
+* **doc-codec:** add a LibreOffice-produced real-doc corpus layer ([89dd56e](https://github.com/ExaDev/documents.js/commit/89dd56e05f60207be1b325f90b35e5f0016ea7a5))
+
 ## [2.7.2](https://github.com/ExaDev/documents.js/compare/doc-codec%402.7.1...doc-codec%402.7.2) (2026-09-10)
 
 
