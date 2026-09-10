@@ -319,6 +319,9 @@ function buildRuns(
   // A stack rather than a depth counter, because fields nest and the enclosing field's own state has to survive the inner one. A nested field appears inside the OUTER field's instruction as often as inside its result, so on reaching the inner field's end, whether text resumes depends on which side of its own separator the outer field had reached -- a counter cannot express that, and would resume in instruction mode (dropping real text) whenever an inner field closed inside an outer field's result.
   const enclosingInstruction: boolean[] = [];
   let inInstruction = false;
+  // Per-field instruction text and the runs[] index each field's own result starts at, so a completed HYPERLINK field can tag exactly its own result runs with the instruction's URI -- the inverse of the writer's own field spelling (table/write.ts's plainRuns). One entry per open field, pushed at its begin and popped at its end, mirroring enclosingInstruction's own nesting.
+  const instructionTexts: string[] = [];
+  const resultStarts: number[] = [];
 
   const flush = (): void => {
     if (currentText !== "") {
@@ -332,19 +335,52 @@ function buildRuns(
     if (code === FIELD_BEGIN) {
       flush();
       enclosingInstruction.push(inInstruction);
+      instructionTexts.push("");
       inInstruction = true;
       continue;
     }
     if (code === FIELD_SEPARATOR) {
       inInstruction = false;
+      resultStarts.push(runs.length);
       continue;
     }
     if (code === FIELD_END) {
+      // Flush the pending result text FIRST: the field's own characters carry distinct formatting (their fSpec grpprl), but the result text and whatever follows can share one formatting stretch -- without this flush they would land in one run, and the hyperlink tagging below would have no boundary to stop at (the field's result would bleed into the following plain text, or vice versa the pending result would never become a run at all before the tagging pass).
+      flush();
       // An unmatched end -- one the text carries with no begin before it -- pops nothing and leaves the state alone rather than flipping it, so malformed field nesting cannot swallow the rest of the paragraph.
       inInstruction = enclosingInstruction.pop() ?? inInstruction;
+      const instruction = instructionTexts.pop();
+      const resultStart = resultStarts.pop();
+      if (instruction !== undefined && resultStart !== undefined) {
+        // [MS-DOC] 2.8.25 + real-producer bytes (LibreOffice 26.2's Word 97 export): a hyperlink field's instruction is ` HYPERLINK "<uri>" ` -- spaces around, double-quoted URI. Tolerant of surrounding whitespace variation; anything else is a field this reader does not model, and its result runs pass through untagged exactly as before.
+        const match = /^\s*HYPERLINK\s+"([^"]*)"\s*$/.exec(instruction);
+        if (match !== null) {
+          const uri = match[1];
+          if (uri !== undefined) {
+            for (let i = resultStart; i < runs.length; i += 1) {
+              const run = runs[i];
+              if (run !== undefined) {
+                runs[i] = { ...run, hyperlink: uri };
+              }
+            }
+          }
+        }
+      }
       continue;
     }
-    if (inInstruction || isAnchorOnly(code)) continue;
+    if (inInstruction) {
+      // Instruction text is not displayed, but it IS the field's payload -- accumulate it for the HYPERLINK lift above rather than discarding it on the floor.
+      const top = instructionTexts.length - 1;
+      const ch = text[index];
+      if (top >= 0 && ch !== undefined) {
+        const slot = instructionTexts[top];
+        if (slot !== undefined) {
+          instructionTexts[top] = slot + ch;
+        }
+      }
+      continue;
+    }
+    if (isAnchorOnly(code)) continue;
 
     const fc = fcs[index];
     if (fc === undefined) {

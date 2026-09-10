@@ -12,6 +12,9 @@ import { DocFormatError, DocUnsupportedError } from "../errors";
 import { buildInlinePicture } from "../pictures-write";
 import { fitsAloneOnPapxPage } from "../prop/fkp-write";
 import {
+  FIELD_BEGIN,
+  FIELD_END,
+  FIELD_SEPARATOR,
   INLINE_PICTURE,
   CELL_MARK,
   PARAGRAPH_MARK,
@@ -37,6 +40,9 @@ const SPRM_P_F_TTP = 0x2417;
 
 const TWIPS_PER_POINT = 20;
 
+// sprmCFSpec (0x0855, ispmd 0x55 / sgc 2 / spra 0) with its 1-byte toggle operand set: the mark that tells a consumer a run's characters are special rather than glyphs -- applied to the field characters (0x13/0x14/0x15) this module injects, exactly as [MS-DOC] 2.6.1's own sprmCFSpec entry enumerates them. Byte layout is the sprm's little-endian opcode followed by the operand, the same pushSprm layout chp-write.ts uses internally.
+const FSPEC_GRPPRL: readonly number[] = [0x55, 0x08, 0x01];
+
 /** One run to write, alongside grpprl bytes appended after encodeCharacterGrpprl's own output for it -- the run-level analogue of WriteParagraph.extraGrpprl below. Every ordinary run carries none (its whole grpprl comes from its own ContentRun fields); imageParagraph's own picture-anchor run is the one exception, since sprmCPicLocation is not a ContentRun field encodeCharacterGrpprl could ever derive on its own. */
 export interface WriteRun {
   readonly run: ContentRun;
@@ -44,7 +50,44 @@ export interface WriteRun {
 }
 
 function plainRuns(runs: readonly ContentRun[]): WriteRun[] {
-  return runs.map((run) => ({ run, extraGrpprl: [] }));
+  const output: WriteRun[] = [];
+  // The URI of the field whose result runs are accumulating in `field`, undefined while no field is open -- consecutive runs sharing one hyperlink join a single field, a run whose hyperlink differs closes the open one and opens its own, and a run carrying none can never sit inside another's result.
+  let openUri: string | undefined;
+  let field: WriteRun[] = [];
+  // A run carrying a hyperlink is the result half of a HYPERLINK field: [MS-DOC] 2.8.25's field characters (0x13/0x14/0x15) around the instruction ` HYPERLINK "<uri>" ` and the visible result, the exact spelling a real producer writes (confirmed against LibreOffice 26.2's own Word 97 export: 0x13, the instruction text, 0x14, the result runs, 0x15).
+  const closeField = (): void => {
+    if (openUri === undefined) return;
+    output.push(
+      {
+        run: { text: String.fromCharCode(FIELD_BEGIN) },
+        extraGrpprl: FSPEC_GRPPRL,
+      },
+      { run: { text: ` HYPERLINK "${openUri}" ` }, extraGrpprl: [] },
+      {
+        run: { text: String.fromCharCode(FIELD_SEPARATOR) },
+        extraGrpprl: FSPEC_GRPPRL,
+      },
+      ...field,
+      {
+        run: { text: String.fromCharCode(FIELD_END) },
+        extraGrpprl: FSPEC_GRPPRL,
+      },
+    );
+  };
+  for (const run of runs) {
+    if (run.hyperlink !== openUri) {
+      closeField();
+      openUri = run.hyperlink;
+      field = [];
+    }
+    if (run.hyperlink === undefined) {
+      output.push({ run, extraGrpprl: [] });
+      continue;
+    }
+    field.push({ run, extraGrpprl: [] });
+  }
+  closeField();
+  return output;
 }
 
 export interface WriteParagraph {
