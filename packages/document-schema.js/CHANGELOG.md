@@ -1,3 +1,9 @@
+## [7.8.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.7.0...document-schema.js%407.8.0) (2026-09-10)
+
+### Features
+
+* **document-schema.js:** add the origin and interpretation annotation channel ([cf38f31](https://github.com/ExaDev/documents.js/commit/cf38f311b77ee91f804d48b69940936943dc1f3c))
+
 ## [7.7.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.6.1...document-schema.js%407.7.0) (2026-09-10)
 
 ### Features
