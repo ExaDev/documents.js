@@ -50,6 +50,7 @@ import {
   type CellXfPlanEntry,
   type WorkbookGlobalsPlan,
 } from "./workbook/globals-writer";
+import { definedNameEntriesFor } from "./workbook/defined-names";
 import {
   printNameEntriesFor,
   type PrintNamePlanEntry,
@@ -647,6 +648,7 @@ function buildWorkbookStream(
     sharedStringTotalCount: sstPlan.totalCount,
     paletteColors: palettePlan.paletteColors,
     printNames: buildPrintNamePlan(content.sheets),
+    definedNames: definedNameEntriesFor(content.names ?? [], content.sheets),
   };
   const globals = buildWorkbookGlobals(globalsPlan);
 
