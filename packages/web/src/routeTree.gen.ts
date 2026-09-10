@@ -11,10 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConvertRouteImport } from './routes/convert'
+import { Route as EditorsRouteImport } from './routes/editors'
 import { Route as FontsRouteImport } from './routes/fonts'
 import { Route as InspectRouteImport } from './routes/inspect'
 import { Route as MetadataRouteImport } from './routes/metadata'
 import { Route as OdbRouteImport } from './routes/odb'
+import { Route as OdmRouteImport } from './routes/odm'
 import { Route as PackageRouteImport } from './routes/package'
 import { Route as RecentRouteImport } from './routes/recent'
 import { Route as ConvertIndexRouteImport } from './routes/convert.index'
@@ -28,6 +30,11 @@ const IndexRoute = IndexRouteImport.update({
 const ConvertRoute = ConvertRouteImport.update({
   id: '/convert',
   path: '/convert',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EditorsRoute = EditorsRouteImport.update({
+  id: '/editors',
+  path: '/editors',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FontsRoute = FontsRouteImport.update({
@@ -48,6 +55,11 @@ const MetadataRoute = MetadataRouteImport.update({
 const OdbRoute = OdbRouteImport.update({
   id: '/odb',
   path: '/odb',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OdmRoute = OdmRouteImport.update({
+  id: '/odm',
+  path: '/odm',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PackageRoute = PackageRouteImport.update({
@@ -74,10 +86,12 @@ const ConvertSourceTargetRoute = ConvertSourceTargetRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/convert': typeof ConvertRouteWithChildren
+  '/editors': typeof EditorsRoute
   '/fonts': typeof FontsRoute
   '/inspect': typeof InspectRoute
   '/metadata': typeof MetadataRoute
   '/odb': typeof OdbRoute
+  '/odm': typeof OdmRoute
   '/package': typeof PackageRoute
   '/recent': typeof RecentRoute
   '/convert/': typeof ConvertIndexRoute
@@ -85,10 +99,12 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/editors': typeof EditorsRoute
   '/fonts': typeof FontsRoute
   '/inspect': typeof InspectRoute
   '/metadata': typeof MetadataRoute
   '/odb': typeof OdbRoute
+  '/odm': typeof OdmRoute
   '/package': typeof PackageRoute
   '/recent': typeof RecentRoute
   '/convert': typeof ConvertIndexRoute
@@ -98,10 +114,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/convert': typeof ConvertRouteWithChildren
+  '/editors': typeof EditorsRoute
   '/fonts': typeof FontsRoute
   '/inspect': typeof InspectRoute
   '/metadata': typeof MetadataRoute
   '/odb': typeof OdbRoute
+  '/odm': typeof OdmRoute
   '/package': typeof PackageRoute
   '/recent': typeof RecentRoute
   '/convert/': typeof ConvertIndexRoute
@@ -112,10 +130,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/convert'
+    | '/editors'
     | '/fonts'
     | '/inspect'
     | '/metadata'
     | '/odb'
+    | '/odm'
     | '/package'
     | '/recent'
     | '/convert/'
@@ -123,10 +143,12 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/editors'
     | '/fonts'
     | '/inspect'
     | '/metadata'
     | '/odb'
+    | '/odm'
     | '/package'
     | '/recent'
     | '/convert'
@@ -135,10 +157,12 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/convert'
+    | '/editors'
     | '/fonts'
     | '/inspect'
     | '/metadata'
     | '/odb'
+    | '/odm'
     | '/package'
     | '/recent'
     | '/convert/'
@@ -148,10 +172,12 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConvertRoute: typeof ConvertRouteWithChildren
+  EditorsRoute: typeof EditorsRoute
   FontsRoute: typeof FontsRoute
   InspectRoute: typeof InspectRoute
   MetadataRoute: typeof MetadataRoute
   OdbRoute: typeof OdbRoute
+  OdmRoute: typeof OdmRoute
   PackageRoute: typeof PackageRoute
   RecentRoute: typeof RecentRoute
 }
@@ -170,6 +196,13 @@ declare module '@tanstack/react-router' {
       path: '/convert'
       fullPath: '/convert'
       preLoaderRoute: typeof ConvertRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/editors': {
+      id: '/editors'
+      path: '/editors'
+      fullPath: '/editors'
+      preLoaderRoute: typeof EditorsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fonts': {
@@ -198,6 +231,13 @@ declare module '@tanstack/react-router' {
       path: '/odb'
       fullPath: '/odb'
       preLoaderRoute: typeof OdbRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/odm': {
+      id: '/odm'
+      path: '/odm'
+      fullPath: '/odm'
+      preLoaderRoute: typeof OdmRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/package': {
@@ -247,10 +287,12 @@ const ConvertRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConvertRoute: ConvertRouteWithChildren,
+  EditorsRoute: EditorsRoute,
   FontsRoute: FontsRoute,
   InspectRoute: InspectRoute,
   MetadataRoute: MetadataRoute,
   OdbRoute: OdbRoute,
+  OdmRoute: OdmRoute,
   PackageRoute: PackageRoute,
   RecentRoute: RecentRoute,
 }

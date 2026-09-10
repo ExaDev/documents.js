@@ -7,7 +7,15 @@ import {
 import { assembleTree } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 
-import { normalizeContentForSource } from "./router";
+import { createDocx, encodeMarkdownText, openDocx } from "documents.js";
+import {
+  appendParagraphOf,
+  normalizeContentForSource,
+  openEditorSession,
+  paragraphsOf,
+  paragraphTexts,
+  setParagraphTextAt,
+} from "./router";
 
 function wordprocessingWith(paragraph: ContentParagraph): ContentDocument {
   return {
@@ -148,5 +156,61 @@ describe("the Package / JSON tool's dump-to-restore pipeline", () => {
       DocumentTreeSchema.parse(JSON.parse(dumped)),
     );
     expect(restored).toEqual(stamped);
+  });
+});
+
+describe("the Editors tool's session surface", () => {
+  it("edits, adds, and removes paragraphs on a live markdown session and saves real markdown bytes", () => {
+    const session = openEditorSession(
+      "markdown",
+      new TextEncoder().encode("first paragraph\n\nsecond paragraph\n"),
+    );
+    expect(paragraphTexts(session)).toEqual([
+      "first paragraph",
+      "second paragraph",
+    ]);
+
+    // The set-text primitive: first run takes the whole new text, remaining runs leave. A multi-run paragraph ("**bo" + "ld**") collapses to its edited text without losing its position.
+    setParagraphTextAt(session, 0, "edited first");
+    expect(paragraphTexts(session)).toEqual([
+      "edited first",
+      "second paragraph",
+    ]);
+
+    appendParagraphOf(session, "third");
+    expect(paragraphTexts(session)).toEqual([
+      "edited first",
+      "second paragraph",
+      "third",
+    ]);
+
+    paragraphsOf(session)[1]!.remove();
+    expect(paragraphTexts(session)).toEqual(["edited first", "third"]);
+
+    if (session.format !== "markdown") {
+      throw new Error("expected a markdown session");
+    }
+    const saved = new TextDecoder().decode(
+      encodeMarkdownText(session.editor.toMarkdownText()),
+    );
+    expect(saved).toContain("edited first");
+    expect(saved).not.toContain("second paragraph");
+    expect(saved).toContain("third");
+  });
+
+  it("opens a docx session and drives the same surface", () => {
+    // A minimal real docx: the same createDocx path the editors package itself tests with, giving the session a genuine w:document tree to mutate.
+    const editor = createDocx();
+    editor.body.appendParagraph().appendRun({ text: "hello docx" });
+    const session = openEditorSession("docx", editor.toBytes());
+    expect(paragraphTexts(session)).toEqual(["hello docx"]);
+    setParagraphTextAt(session, 0, "hello edited");
+    expect(paragraphTexts(session)).toEqual(["hello edited"]);
+    if (session.format !== "docx") {
+      throw new Error("expected a docx session");
+    }
+    const savedBytes = session.editor.toBytes();
+    const reopened = openDocx(savedBytes);
+    expect(reopened.paragraphs()[0]!.text).toBe("hello edited");
   });
 });
