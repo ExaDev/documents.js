@@ -580,7 +580,7 @@ describe("writeDocContent inline pictures", () => {
       {
         kind: "image",
         format: "png",
-        base64: base64Of([1, 2, 3]),
+        base64: base64Of([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]),
         widthPt: 10,
         heightPt: 10,
       },
@@ -600,14 +600,14 @@ describe("writeDocContent inline pictures", () => {
       {
         kind: "image",
         format: "png",
-        base64: base64Of([1, 1, 1]),
+        base64: base64Of([0x89, 0x50, 0x4e, 0x47, 1, 1, 1]),
         widthPt: 10,
         heightPt: 10,
       },
       {
         kind: "image",
         format: "png",
-        base64: base64Of([2, 2, 2, 2]),
+        base64: base64Of([0x89, 0x50, 0x4e, 0x47, 2, 2, 2, 2]),
         widthPt: 20,
         heightPt: 20,
       },
@@ -621,10 +621,10 @@ describe("writeDocContent inline pictures", () => {
     }
     expect(
       Array.from(atob(first.base64), (char) => char.charCodeAt(0)),
-    ).toEqual([1, 1, 1]);
+    ).toEqual([0x89, 0x50, 0x4e, 0x47, 1, 1, 1]);
     expect(
       Array.from(atob(second.base64), (char) => char.charCodeAt(0)),
-    ).toEqual([2, 2, 2, 2]);
+    ).toEqual([0x89, 0x50, 0x4e, 0x47, 2, 2, 2, 2]);
   });
 
   it("refuses an image format it cannot write, such as svg", () => {
