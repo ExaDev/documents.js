@@ -1,4 +1,5 @@
 import type {
+  Color,
   ContentCellValue,
   ContentSheet,
   ContentSheetCell,
@@ -57,6 +58,8 @@ import {
 } from "../serial";
 import { pointsToColumnWidth, pointsToInches, pointsToTwips } from "../units";
 import { cellCarriesFormatting, writesCellRecord } from "../written-cells";
+import { writeSheetConditionalFormats } from "./conditional-format-write";
+import { writeSheetDataValidations } from "./data-validation-write";
 import { writeSheetComments } from "./comment-writer";
 import { GENERAL_CELL_XF_INDEX } from "./globals-writer";
 
@@ -82,6 +85,8 @@ const ROW_FLAG_UNSYNCED_BIT = 6;
 const COLINFO_FLAG_HIDDEN = 0x0001;
 
 export interface SheetWriteContext {
+  /** The icv a colour resolves to through the workbook's own palette plan (write.ts's buildPalettePlan) -- the same colour-table resolution a cell decoration's own fill already draws, offered to the conditional-format writer whose DXFN style colours are palette references too. Every colour this is called with must already have been registered during that plan's own workbook-wide scan. */
+  icvOf: (color: Color) => number;
   /** The XF index ([MS-XLS] 2.5.168 IXFCell) a cell's own (number format, alignment, decoration) combination resolves to -- GENERAL_CELL_XF_INDEX for a cell with General formatting, general/bottom alignment, and no background/borders, one of the workbook's other cell XFs otherwise. write.ts's own cell-format interning pass is what assigns and deduplicates these. */
   xfIndexForCell(cell: ContentSheetCell): number;
   /** The shared string table index for a string cell's own text; every string a sheet writes must already be registered in the workbook-wide table before this is called. */
@@ -697,6 +702,10 @@ export function buildWorksheetSubstream(
   if (commentedCells.length > 0) {
     pieces.push(...writeSheetComments(commentedCells));
   }
+
+  // The DataValidationTable and conditional-format groups follow the cell table and its notes, the position a real producer's own worksheet substream carries them in ([MS-XLS] 2.1.7.20's own production order; confirmed directly against a LibreOffice-written .xls whose Dval/Dv pair sits after the last cell record and before EOF).
+  pieces.push(...writeSheetDataValidations(sheet));
+  pieces.push(...writeSheetConditionalFormats(sheet, ctx.icvOf));
 
   pieces.push(writeRecord(RECORD_EOF, new Uint8Array(0)));
 
