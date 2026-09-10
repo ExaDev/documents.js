@@ -1,6 +1,7 @@
 import { decodePng, encodePng } from "byte-codec";
 import { base64ToBytes, bytesToBase64 } from "./util/base64";
 import { describe, expect, it } from "vitest";
+import { openPdfDocument } from "./document";
 import type {
   LayoutDocument,
   LayoutImageAsset,
@@ -8,6 +9,8 @@ import type {
   LayoutPage,
 } from "./layout";
 import { LAYOUT_FORMAT_VERSION } from "./layout";
+import type { PdfDict } from "./objects";
+import { asArray, asName, asNumber, dictGet } from "./objects";
 import { writePdf } from "./write";
 
 const HELVETICA = {
@@ -928,6 +931,87 @@ describe("writePdf: AcroForm fields (#967)", () => {
     });
     const text = new TextDecoder("latin1").decode(bytes);
     expect(text).not.toContain("/AcroForm");
+  });
+
+  it("lists every widget annotation in its page's /Annots as the field tree's own objects", () => {
+    // A single-widget field merges into its field dict, so its page /Annots entry is that very object; a multi-widget field's widgets are separate kid objects, each listed in /Annots AND in the field's /Kids — the same annotation object in both places, the spelling real Acrobat files carry (ISO 32000-1 12.5.1: a page's /Annots holds indirect references to its annotations, and 12.7.4 hangs the widgets under the field). A viewer rendering only page-level /Annots sees every field widget without walking the AcroForm tree.
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [
+        { widthPt: 200, heightPt: 100, items: [] },
+        { widthPt: 200, heightPt: 100, items: [] },
+      ],
+      images: {},
+      form: [
+        {
+          name: "email",
+          fieldType: "text",
+          widgets: [
+            { pageIndex: 0, xPt: 10, yPt: 60, widthPt: 80, heightPt: 12 },
+          ],
+          children: [],
+        },
+        {
+          name: "reason",
+          fieldType: "listbox",
+          widgets: [
+            { pageIndex: 0, xPt: 10, yPt: 40, widthPt: 60, heightPt: 10 },
+            { pageIndex: 0, xPt: 10, yPt: 20, widthPt: 60, heightPt: 10 },
+          ],
+          children: [],
+        },
+        {
+          name: "sign",
+          fieldType: "checkbox",
+          widgets: [
+            { pageIndex: 1, xPt: 10, yPt: 60, widthPt: 10, heightPt: 10 },
+          ],
+          children: [],
+        },
+      ],
+    };
+    const document = openPdfDocument(writePdf(doc), () => {});
+    const pages = document.pages();
+    const annotNums = (page: PdfDict): number[] =>
+      (asArray(dictGet(page, "Annots")) ?? []).map((entry) =>
+        entry.kind === "ref" ? entry.num : -1,
+      );
+    // Page 0 carries the merged email dict plus the reason field's two widget kids, in field order; page 1 carries the merged sign dict.
+    expect(annotNums(pages[0]!)).toHaveLength(3);
+    expect(annotNums(pages[1]!)).toHaveLength(1);
+
+    // Every /Annots entry resolves to a widget: the merged dicts carry /Subtype /Widget alongside their field keys, the kid objects are plain widget annotations.
+    for (const entry of asArray(dictGet(pages[0]!, "Annots")) ?? []) {
+      expect(asName(dictGet(document.resolveDict(entry)!, "Subtype"))).toBe(
+        "Widget",
+      );
+    }
+
+    // The multi-widget field's /Kids and the page /Annots name the SAME two objects, not copies. /AcroForm /Fields lists the document's fields in model order, so the reason field is the second one.
+    const acroForm = document.resolveDict(
+      dictGet(document.catalog, "AcroForm"),
+    )!;
+    const reasonField = document.resolveDict(
+      asArray(dictGet(acroForm, "Fields"))![1],
+    )!;
+    const kidsOfReason = (asArray(dictGet(reasonField, "Kids")) ?? [])
+      .map((entry) => (entry.kind === "ref" ? entry.num : -1))
+      .sort((a, b) => a - b);
+    expect(kidsOfReason).toEqual(
+      annotNums(pages[0]!)
+        .slice(1)
+        .sort((a, b) => a - b),
+    );
+
+    // The rect a viewer reads off the page's first annotation is the model's email widget: same object, same placement.
+    const emailAnnot = document.resolveDict(
+      asArray(dictGet(pages[0]!, "Annots"))![0],
+    )!;
+    expect(
+      asArray(dictGet(emailAnnot, "Rect"))?.map((n) => asNumber(n)),
+    ).toEqual([10, 60, 90, 72]);
+    expect(asName(dictGet(emailAnnot, "FT"))).toBe("Tx");
   });
 });
 
