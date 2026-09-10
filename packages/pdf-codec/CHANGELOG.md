@@ -1,3 +1,13 @@
+## [4.5.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.4.0...pdf-codec%404.5.0) (2026-09-10)
+
+### Features
+
+* **pdf-codec:** re-encode bilevel images as CCITT Group 4 on write ([a713d56](https://github.com/ExaDev/documents.js/commit/a713d56f7f7b546293e21f6a4e11ca6b0c585fe4))
+
+### Bug Fixes
+
+* **pdf-codec:** bound the g4 candidate against the flate size it competes with ([bc1a862](https://github.com/ExaDev/documents.js/commit/bc1a862955ba41c45a58d1b847b90a122bd07961))
+
 ## [4.4.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%404.3.0...pdf-codec%404.4.0) (2026-09-09)
 
 ### Features
