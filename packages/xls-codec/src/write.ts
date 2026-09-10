@@ -19,7 +19,10 @@ import {
   unrecognizedFillKind,
 } from "document-schema.js";
 
-import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
+import {
+  BUILTIN_NUMBER_FORMATS,
+  isIsoCurrencyCodeShape,
+} from "excel-number-format";
 
 import { BiffWriteError } from "./biff/write-errors";
 import {
@@ -114,8 +117,18 @@ function defaultFormatIdForKind(
   }
 }
 
-/** The number-format code a cell resolves through -- its own explicit numberFormatCode, or the built-in code for its value kind's own default identifier. This is called identically during the workbook-wide format scan and later per cell, so the two can never resolve a cell to different codes. */
+/**
+ * The number-format code a cell resolves through -- its own explicit numberFormatCode, a `[$USD]#,##0.00`-shaped code for a currency cell that names an ISO 4217 code of its own (see below), or the built-in code for its value kind's own default identifier. This is called identically during the workbook-wide format scan and later per cell, so the two can never resolve a cell to different codes.
+ *
+ * The ISO-code bracket is the one carrier a currency code survives the round trip through: the format string IS where BIFF8 states a cell's currency, and the classifier this package's own reader reads it back through recovers the code from exactly that bracket -- writing the symbol instead would render identically and lose the code permanently, since no faithful symbol-to-code mapping exists on the way back ('$' alone is USD, CAD, AUD and a dozen others). That is the identical encoding ooxml.js's own typed/xlsx/number-format.ts currencyNumberFormat already states for the same schema field, so an amount round-trips through either legacy format under the same spelling. A currency string that is not an ISO-code shape (a display symbol like "£") cannot go inside that bracket without producing a malformed format code, so it falls back to the plain built-in currency format -- the value kind preserved, the code honestly lost, since inventing a code for a symbol would state a currency the cell never named.
+ */
 function formatCodeForCell(cell: ContentSheetCell): string {
+  if (cell.numberFormatCode === undefined && cell.value.kind === "currency") {
+    const currency = cell.value.currency;
+    if (currency !== undefined && isIsoCurrencyCodeShape(currency)) {
+      return `[$${currency.toUpperCase()}]#,##0.00`;
+    }
+  }
   return (
     cell.numberFormatCode ??
     builtinCode(defaultFormatIdForKind(cell.value.kind))
