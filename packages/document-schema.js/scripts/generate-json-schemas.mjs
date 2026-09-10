@@ -34,6 +34,7 @@ import {
   SlideGroupSchema,
   StyleEntrySchema,
   SymbolTableSchema,
+  TreeEmbeddedFontSchema,
 } from '../dist/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -82,6 +83,14 @@ function override(ctx) {
       delete ctx.jsonSchema[key];
     }
     ctx.jsonSchema.$ref = `#/$defs/${defName}`;
+    return;
+  }
+  if (ctx.zodSchema === TreeEmbeddedFontSchema) {
+    // The same SymbolTable treatment for the package arms' fonts field: one named reference per arm instead of five inlined copies of the embedded-font entry.
+    for (const key of Object.keys(ctx.jsonSchema)) {
+      delete ctx.jsonSchema[key];
+    }
+    ctx.jsonSchema.$ref = '#/$defs/TreeEmbeddedFont';
     return;
   }
   if (ctx.zodSchema === ContentBlockSchema) {

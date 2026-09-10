@@ -23,10 +23,21 @@ import { SourceResidueSchema } from "./source";
 
 // The five arms duplicate their kind literals rather than factoring through a base schema, because z.discriminatedUnion() needs each member as a plain z.object carrying its own literal `kind` field in place (the same reason ContentDocumentSchema's own arms spread contentDocumentSharedFields); the children type is the one thing that differs per arm, and the union says exactly which root group each kind takes -- a wordprocessing package of section groups, a presentation of slide groups, a spreadsheet of sheet groups, a drawing of drawPage groups, and a formula package whose single child is the ContentFormula leaf itself (a formula has no container structure to group).
 // The three package-level tables the pdf inventory proposed (ExaDev/pdf-codec#66, landed by ExaDev/document-schema.js#24) are additive optional root fields typed as the SAME generic definitions table the `definitions` field already uses -- kind-tagged loose entries, no new entry shape minted anywhere. Separate root fields rather than three more tenants of `definitions` for the reason `styles` is its own field despite being the facility's first tenant: each table is its own key namespace, so a layer and a destination may share a name without colliding, and a consumer reaches the table it wants without filtering. The `kind` discriminator still earns its keep inside each of them, because each table holds more than one tenant: a layers table carries optional-content group definitions alongside their configuration and radio-button-group entries, and a destinations table carries named destinations alongside the outline/navigation entries the same PDF names-tree walk produces -- ExaDev/document-schema.js#24 names that table "navigation/destinations" for exactly that reason. Per-tenant entry fields stay the tenant's own, never this package's, exactly as src/definitions.ts states.
+// One face a source package embedded in the document itself (docx's obfuscated .odttf parts, pptx's .fntdata, ODF's Fonts/ directory), as the tree-side spelling of src/font-port.ts's ProvidedFont triple: the family/bold/italic identity a font registry matches against, plus the raw sfnt bytes base64-encoded (the tree is a JSON artefact; ProvidedFont itself carries Uint8Array and stays the in-memory shape a registry consumes). An array rather than a keyed record because the registry slot it feeds is an array whose order is the caller's own precedence, and the same family legitimately appears with several face triples -- a keyed table would have to invent compound keys the registry then has to parse back apart.
+export const TreeEmbeddedFontSchema = z.object({
+  family: z.string(),
+  bold: z.boolean(),
+  italic: z.boolean(),
+  base64: z.string(),
+});
+export type TreeEmbeddedFont = z.infer<typeof TreeEmbeddedFontSchema>;
+
 const packageEnvelopeFields = {
   metadata: LayoutMetadataSchema,
   ...contentDocumentSharedFields,
   pages: z.array(PageSizeSchema).optional(),
+  // The source package's own embedded font faces, tree-only like the other package-level tables: a flat ContentDocument carries content, and bytes are a package fact no content node owns (the identical reasoning the package-level `source` residue table states). Populated by whichever construction site read a package that embedded fonts; consumed by a rebuild that feeds the faces back into a font registry so the rebuild renders through the document's own faces rather than vendored substitutes -- the one layer of the original package a tree could not previously carry. factorStyles re-carries it untouched beside `definitions` and `source`.
+  fonts: z.array(TreeEmbeddedFontSchema).optional(),
   styles: StylesTableSchema.optional(),
   definitions: DefinitionsTableSchema.optional(),
   layers: DefinitionsTableSchema.optional(), // optional-content / layer definitions: PDF `/OCProperties` groups and their configuration, ODF Draw's layer model. Definitions only -- which content belongs to which layer is a membership fact the producing codec carries on its own item model (pdf-codec owns that model since 4.0.0), and no inventory asks for a layer ref on a content-tree node.

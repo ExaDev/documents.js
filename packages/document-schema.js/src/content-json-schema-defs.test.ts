@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { TreeEmbeddedFontSchema } from "./package";
 import { ColorSchema } from "./color";
 import {
   ContentBlockSchema,
@@ -152,6 +153,7 @@ const REGISTERED_SCHEMAS = {
   ContentImageOriginal: ContentImageOriginalSchema,
   ContentOrigin: ContentOriginSchema,
   ContentInterpretation: ContentInterpretationSchema,
+  TreeEmbeddedFont: TreeEmbeddedFontSchema,
   ContentPageBreak: ContentPageBreakSchema,
   PageSize: PageSizeSchema,
   Margins: MarginsSchema,
