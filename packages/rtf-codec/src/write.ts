@@ -587,6 +587,12 @@ class RtfWriter {
   writeHeader(document: WordprocessingDocument): void {
     this.raw(`{\\rtf1\\ansi\\ansicpg${String(OUTPUT_CODEPAGE)}\\deff0\\uc1`);
     this.writeDocumentGeometry(document);
+    // The document-level bidirectional pair, among the document properties that "can occur before and between the header tables" alongside the geometry above. \ltrdoc is the spec's own default ("This document will have English-style pagination (the default)"), so it is written only for a stated `direction: "ltr"`, never as a restated default.
+    if (document.metadata.direction === "rtl") {
+      this.raw("\\rtldoc");
+    } else if (document.metadata.direction === "ltr") {
+      this.raw("\\ltrdoc");
+    }
     this.writeFontTable();
     this.writeColorTable();
     this.writeStyleSheet();
@@ -917,6 +923,9 @@ class RtfWriter {
     if (alignment !== undefined) {
       out += alignment;
     }
+    // The paragraph-level bidirectional pair, stated only when the field states one: \ltrpar is the spec's own default ("Text in this paragraph will display with left-to-right precedence (the default)"), and this writer omits defaults rather than restate them as control words -- the identical choice SECTION_BREAK_CONTROL_WORDS makes for \sbkpage -- while still writing \ltrpar for an explicit `direction: "ltr"`, since that is a stated fact the field records rather than a default being restated.
+    if (paragraph.direction === "rtl") out += "\\rtlpar";
+    else if (paragraph.direction === "ltr") out += "\\ltrpar";
     const list = paragraph.list;
     if (list !== undefined) {
       const numId = list.numId;
@@ -1026,6 +1035,9 @@ class RtfWriter {
     // The bare on-spellings, not \upN/\dnN: "\super Superscripts text and shrinks point size according to font information" is a rendering instruction exactly matching what ContentRun.verticalAlign's two members state, while "\upN Move up N half-points" asserts a specific half-point offset this content model never carried and would have to invent a number for. The corpus producer confirms the split: LibreOffice's own filter writes \super/\sub for the standard positions and reaches for \upN/\dnN (beside its own {\*\updnpropN} group) only for a custom percentage the field has no room to state.
     if (run.verticalAlign === "superscript") out += "\\super";
     else if (run.verticalAlign === "subscript") out += "\\sub";
+    // The run-level bidirectional pair, written as the one word the field states rather than the pair a full complex-script producer emits (\rtlch \afN & <aprops>* \ltrch): the pair's first half is the property-association grammar's own machinery for carrying a SEPARATE complex-script font/size alongside the Latin one, and this content model has no such second property set to state, so the single trailing word each production ends with is the exact spelling of what ContentRun.direction carries.
+    if (run.direction === "rtl") out += "\\rtlch";
+    else if (run.direction === "ltr") out += "\\ltrch";
     const colorIndex = colorIndexOf(run.color, this.tables.colors);
     if (colorIndex !== undefined) {
       out += `\\cf${String(colorIndex)}`;
@@ -1064,7 +1076,14 @@ class RtfWriter {
           marks.push({ cell, empty: offset > 0 });
         }
       }
-      const rowDefinition = `\\trowd\\trgaph108\\trleft0${definitions.join("")}`;
+      // The row's own <rowwrite> member inside its <tbldef>, where the spec's production places it -- after \trowd's own leading members and before the <celldef>+ run each \cellxN closes. \ltrrow is the default the spec states ("Cells in this table row will have left-to-right precedence (the default)"), so it is written only for a stated `direction: "ltr"`, never as a restated default.
+      const rowWrite =
+        row.direction === "rtl"
+          ? "\\rtlrow"
+          : row.direction === "ltr"
+            ? "\\ltrrow"
+            : "";
+      const rowDefinition = `\\trowd\\trgaph108\\trleft0${rowWrite}${definitions.join("")}`;
       // Word 2002 onward writes the row properties both before and after the row, which the spec explicitly calls out as the shape a reader should not assume otherwise; emitting both makes the output readable by either kind of reader.
       this.line(rowDefinition);
       for (const mark of marks) {

@@ -33,6 +33,7 @@ import {
   type Margins,
   type PageSize,
   type RunConstructExtent,
+  type TextDirection,
 } from "document-schema.js";
 import {
   applyCellDefinitionControlWord,
@@ -289,12 +290,16 @@ interface CharacterState {
   colorIndex: number | undefined;
   // Vertical text position, from the two on-spellings and two offset-spellings RTF states it at (\super/\sub and \upN/\dnN -- RTF 1.9.1, "Font (Character) Formatting Properties"), narrowed onto ContentRun.verticalAlign's two members. Absent means baseline, the same absence the schema field itself carries.
   verticalAlign: "superscript" | "subscript" | undefined;
+  // The run-level scope of the four RTF states text direction at: "\rtlch Character data following this control word is treated as a right-to-left run" / "\ltrch ... treated as a left-to-right run (the default)" (RTF 1.9.1, "Font (Character) Formatting Properties"). Like every other member here it is a character property scoped to the group, and the LAST-stated of the pair wins for the text that follows -- which is exactly how a real producer pairs them, since RTF's own <ltrrun> and <rtlrun> productions spell an LTR run as "\rtlch \afN & <aprops>* \ltrch <ptext>" and an RTL one with the two swapped, the run's real direction always last, and LibreOffice's own filter writes the pair in exactly that order (\ltrch\rtlch before right-to-left text; \rtlch\af6...\ltrch inside an LTR paragraph's own property blob). Absent means unstated, the schema field's own absence.
+  direction: TextDirection | undefined;
   // The <chrev> production, which is a character property like every field above it and so is scoped to the group the same way.
   revision: RevisionState;
 }
 
 interface ParagraphState {
   alignment: Alignment | undefined;
+  // The paragraph-level scope of the four RTF states text direction at: "\rtlpar Text in this paragraph will display with right-to-left precedence" / "\ltrpar ... left-to-right precedence (the default)" (RTF 1.9.1, "Paragraph Formatting Properties"). Absent means unstated, matching ContentParagraph.direction's own absence -- a producer that spells the default side explicitly (LibreOffice writes \ltrpar on every paragraph) is stating a fact this field records rather than noise to filter.
+  direction: TextDirection | undefined;
   indentLeftTwips: number;
   indentFirstLineTwips: number;
   spaceBeforeTwips: number;
@@ -453,6 +458,7 @@ function defaultCharacterState(): CharacterState {
     sizeHalfPoints: DEFAULT_FONT_SIZE_HALF_POINTS,
     colorIndex: undefined,
     verticalAlign: undefined,
+    direction: undefined,
     revision: NO_REVISION,
   };
 }
@@ -460,6 +466,7 @@ function defaultCharacterState(): CharacterState {
 function defaultParagraphState(): ParagraphState {
   return {
     alignment: undefined,
+    direction: undefined,
     indentLeftTwips: 0,
     indentFirstLineTwips: 0,
     spaceBeforeTwips: 0,
@@ -514,6 +521,7 @@ function runKey(
       : `${String(color.r)},${String(color.g)},${String(color.b)}`,
     hyperlink ?? "",
     char.verticalAlign ?? "",
+    char.direction ?? "",
     // A revision boundary is a run boundary: two stretches of text differing only in who inserted them are two runs, because the extent that names the insertion has to start and end somewhere.
     JSON.stringify(char.revision),
   ].join("|");
@@ -659,6 +667,8 @@ function insertConstructMarkers(
 interface RawTableRow {
   readonly cells: ContentTableCell[];
   readonly definitions: readonly PendingCell[];
+  // The row-level scope of the four RTF states text direction at: "\rtlrow Cells in this table row will have right-to-left precedence" / "\ltrrow ... left-to-right precedence (the default)" (RTF 1.9.1, "Table Row Formatting"), a <rowwrite> member of the row's own <tbldef>.
+  readonly direction: TextDirection | undefined;
 }
 
 // How many grid columns the cell at `index` occupies: one, plus each immediately following cell flagged \clmrg. "\clmgf The first cell in a range of table cells to be merged" / "\clmrg Contents of the table cell are merged with those of the preceding cell", so the count is the length of the continuation run rather than a stored number.
@@ -693,6 +703,7 @@ interface BuilderAccumulatorState {
   pendingCellDefinitions: PendingCell[];
   pendingCell: PendingCell;
   rowLeftTwips: number;
+  rowDirection: TextDirection | undefined;
   paragraphSerial: number;
   openBookmarks: Map<string, OpenBookmark>;
   sectionBlockExtents: BlockConstructExtent[];
@@ -718,6 +729,7 @@ function freshAccumulatorState(): BuilderAccumulatorState {
     pendingCellDefinitions: [],
     pendingCell: newPendingCell(),
     rowLeftTwips: 0,
+    rowDirection: undefined,
     paragraphSerial: 0,
     openBookmarks: new Map(),
     sectionBlockExtents: [],
@@ -746,6 +758,8 @@ class ContentBuilder {
   private pendingCellDefinitions: PendingCell[] = [];
   private pendingCell: PendingCell = newPendingCell();
   private rowLeftTwips = 0;
+  // The <rowwrite> member (\ltrrow | \rtlrow) of the row definition currently accumulating -- reset by startRowDefinition with the rest of the pending row state, so a \rtlrow anywhere between a \trowd and its \cellxN run (where the spec's own <tbldef> production places it) reaches the row it belongs to.
+  private rowDirection: TextDirection | undefined;
   // Bookmark bookkeeping. A bookmark's two halves are matched by name and may bracket a sub-sequence of one paragraph's runs or a run of whole paragraphs, and document-schema.js gives those two scopes two different encodings -- a RunConstructExtent on the paragraph, or a constructStart/constructEnd marker pair in the block list. Which one applies is not knowable when the start is seen, only when its end arrives, so a start is held open here and resolved then.
   private paragraphSerial = 0;
   private openBookmarks = new Map<string, OpenBookmark>();
@@ -991,6 +1005,7 @@ class ContentBuilder {
     return {
       ...withHeading,
       ...(para.alignment === undefined ? {} : { alignment: para.alignment }),
+      ...(para.direction === undefined ? {} : { direction: para.direction }),
       ...(para.indentLeftTwips === 0
         ? {}
         : { indentLeftPt: twipsToPoints(para.indentLeftTwips) }),
@@ -1047,10 +1062,15 @@ class ContentBuilder {
     this.pendingCellDefinitions = [];
     this.pendingCell = newPendingCell();
     this.rowLeftTwips = 0;
+    this.rowDirection = undefined;
   }
 
   setRowLeft(twips: number): void {
     this.rowLeftTwips = twips;
+  }
+
+  setRowDirection(direction: TextDirection): void {
+    this.rowDirection = direction;
   }
 
   // Every control word of the <celldef> currently accumulating. Returns whether it was one, so the caller falls through for everything else.
@@ -1094,6 +1114,7 @@ class ContentBuilder {
     this.tableRows.push({
       cells: this.rowCells,
       definitions: this.pendingCellDefinitions,
+      direction: this.rowDirection,
     });
     if (this.tableColumnRights.length === 0) {
       this.tableColumnRights = [...this.pendingCellRights];
@@ -1138,6 +1159,8 @@ class ContentBuilder {
       return indices;
     });
     return rows.map((row, rowIndex) => ({
+      // The row's own <rowwrite> member (\ltrrow | \rtlrow), absent meaning the default the spec states for \ltrrow.
+      ...(row.direction === undefined ? {} : { direction: row.direction }),
       // A horizontally merged continuation has no cell of its own in the content model -- the anchor's colSpan already accounts for the columns it swallows, exactly as one w:tc with a gridSpan does. A vertical continuation is the opposite case and keeps its slot, since its row genuinely has a cell there.
       cells: row.cells
         .map((cell, cellIndex) => ({ cell, cellIndex }))
@@ -1265,6 +1288,7 @@ class ContentBuilder {
       pendingCellDefinitions: this.pendingCellDefinitions,
       pendingCell: this.pendingCell,
       rowLeftTwips: this.rowLeftTwips,
+      rowDirection: this.rowDirection,
       paragraphSerial: this.paragraphSerial,
       openBookmarks: this.openBookmarks,
       sectionBlockExtents: this.sectionBlockExtents,
@@ -1290,6 +1314,7 @@ class ContentBuilder {
     this.pendingCellDefinitions = saved.pendingCellDefinitions;
     this.pendingCell = saved.pendingCell;
     this.rowLeftTwips = saved.rowLeftTwips;
+    this.rowDirection = saved.rowDirection;
     this.paragraphSerial = saved.paragraphSerial;
     this.openBookmarks = saved.openBookmarks;
     this.sectionBlockExtents = saved.sectionBlockExtents;
@@ -1429,6 +1454,7 @@ function buildRunFields(
     ...(char.verticalAlign === undefined
       ? {}
       : { verticalAlign: char.verticalAlign }),
+    ...(char.direction === undefined ? {} : { direction: char.direction }),
   };
 }
 
@@ -2226,6 +2252,13 @@ function applyCharacterControlWord(
     case "nosupersub":
       state.char.verticalAlign = undefined;
       return true;
+    // The run-level bidirectional pair (RTF 1.9.1, "Font (Character) Formatting Properties"): "\rtlch Character data following this control word is treated as a right-to-left run" / "\ltrch ... treated as a left-to-right run (the default)". Bare on-words with no off-spelling of their own -- the state they leave is simply whichever of the two was stated last, so a later word replaces an earlier one rather than toggling against it, and a group's close or \plain restores the enclosing state like every other character property here.
+    case "rtlch":
+      state.char.direction = "rtl";
+      return true;
+    case "ltrch":
+      state.char.direction = "ltr";
+      return true;
     // The <chrev> production. Each writes the revision half of the character state, which rides the group stack with the rest of it.
     case "revised":
       state.char.revision = {
@@ -2301,6 +2334,13 @@ function applyParagraphControlWord(
       return true;
     case "s":
       state.para.styleIndex = param;
+      return true;
+    // The paragraph-level bidirectional pair (RTF 1.9.1, "Bidirectional Controls" under "Paragraph Formatting Properties"): "\rtlpar Text in this paragraph will display with right-to-left precedence" / "\ltrpar ... left-to-right precedence (the default)". Bare on-words like \rtlch/\ltrch above -- last stated wins, \pard restores the default.
+    case "rtlpar":
+      state.para.direction = "rtl";
+      return true;
+    case "ltrpar":
+      state.para.direction = "ltr";
       return true;
     case "outlinelevel":
       // "\outlinelevelN ... a value from 0 to 8 ... In the default case, no outline level is specified (same as body text)." A value above 8 is a producer's own spelling of body text, so it clears the level rather than becoming a tenth heading depth.
@@ -2414,6 +2454,13 @@ function applyStructureControlWord(
       return true;
     case "trleft":
       builder.setRowLeft(param ?? 0);
+      return true;
+    // The row-level bidirectional pair, a <rowwrite> member of the <tbldef> this row's own definition builds (RTF 1.9.1, "Table Row Formatting"): "\rtlrow Cells in this table row will have right-to-left precedence" / "\ltrrow ... left-to-right precedence (the default)". Bare on-words; last stated wins, and \trowd's own startRowDefinition resets the pending row's direction with the rest of its state.
+    case "rtlrow":
+      builder.setRowDirection("rtl");
+      return true;
+    case "ltrrow":
+      builder.setRowDirection("ltr");
       return true;
     case "cellx":
       if (param !== undefined) builder.addCellBoundary(param);

@@ -223,6 +223,42 @@ describe("body constructs", () => {
     expect(out).toContain("{\\sub 2}");
   });
 
+  it("writes run direction as \\rtlch/\\ltrch and paragraph direction as \\rtlpar/\\ltrpar", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "paragraph",
+          direction: "rtl",
+          runs: [
+            { text: "a", direction: "rtl", sizePt: 12 },
+            { text: "b", direction: "ltr", sizePt: 12 },
+          ],
+        },
+        { kind: "paragraph", direction: "ltr", runs: [{ text: "c" }] },
+        { kind: "paragraph", runs: [{ text: "d" }] },
+      ]),
+    );
+    expect(out).toContain("\\rtlpar");
+    expect(out).toContain("{\\rtlch a}");
+    expect(out).toContain("{\\ltrch b}");
+    expect(out).toContain("\\ltrpar");
+  });
+
+  it("writes metadata.direction as the \\rtldoc/\\ltrdoc document property beside the geometry", () => {
+    const rtl = write(
+      wordprocessing([{ kind: "paragraph", runs: [{ text: "x" }] }], {
+        direction: "rtl",
+      }),
+    );
+    expect(rtl).toContain("\\rtldoc");
+    // \ltrdoc is the spec's own default, written only because the field explicitly states it -- never restated for an absent direction.
+    const unstated = write(
+      wordprocessing([{ kind: "paragraph", runs: [{ text: "x" }] }]),
+    );
+    expect(unstated).not.toContain("\\rtldoc");
+    expect(unstated).not.toContain("\\ltrdoc");
+  });
+
   it("writes a hyperlink run as the HYPERLINK field production", () => {
     const out = write(
       wordprocessing([
@@ -1718,6 +1754,50 @@ describe("body constructs", () => {
     expectBalancedBraces(out);
   });
 
+  it("writes a row's direction as the \\rtlrow/\\ltrrow <rowwrite> member inside its own \\trowd", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [
+            {
+              direction: "rtl",
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }] },
+              ],
+            },
+            {
+              direction: "ltr",
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "B" }] }] },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\trowd\\trgaph108\\trleft0\\rtlrow");
+    expect(out).toContain("\\trowd\\trgaph108\\trleft0\\ltrrow");
+    // An unstated row direction writes no <rowwrite> member at all rather than restating the \ltrrow default.
+    const plain = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [
+            {
+              cells: [
+                { blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }] },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(plain).toContain("\\trowd\\trgaph108\\trleft0\\cellx");
+  });
+
   // writeCellBlocks writes a cell's own content as \intbl <pict>/<obj>/paragraph groups -- image and embeddedObject blocks borrow the identical \pard\plain\intbl shell a paragraph gets (see the "round trip" describe block below for both), since read.ts's own reader already proves that shape round-trips. A table or pageBreak block placed directly in a cell has no such shell to borrow -- a nested table needs its own \itapN row grammar this writer does not build, and a mid-row \page would \pard-reset the row's own \intbl state -- so those two kinds are still dropped rather than embedded, reported through CONSTRUCT_UNREPRESENTED rather than filtered out with no diagnostic at all.
   it("reports rather than silently dropping a page break placed directly in a table cell", () => {
     const codes: string[] = [];
@@ -1837,6 +1917,59 @@ describe("round trip through this package's own reader", () => {
           : []
         : [],
     );
+  });
+
+  it("preserves direction at all four scopes RTF states it", () => {
+    // sizePt stated explicitly on the runs because the written form always states font size, so the read-back carries it.
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: { direction: "rtl" },
+      sections: [
+        {
+          ...LETTER_SECTION,
+          blocks: [
+            {
+              kind: "paragraph",
+              direction: "rtl",
+              runs: [
+                { text: "a", direction: "rtl", sizePt: 12 },
+                { text: "b", direction: "ltr", sizePt: 12 },
+              ],
+            },
+            {
+              kind: "table",
+              columnWidthsPt: [72],
+              rows: [
+                {
+                  direction: "rtl",
+                  cells: [
+                    {
+                      blocks: [
+                        {
+                          kind: "paragraph",
+                          runs: [{ text: "A", sizePt: 12 }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const back = roundTrip(document);
+    if (back.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing document");
+    }
+    expect(back.metadata.direction).toBe("rtl");
+    const blocks = back.sections[0]?.blocks ?? [];
+    const paragraph = blocks[0]?.kind === "paragraph" ? blocks[0] : undefined;
+    expect(paragraph?.direction).toBe("rtl");
+    expect(paragraph?.runs.map((run) => run.direction)).toEqual(["rtl", "ltr"]);
+    const table = blocks[1]?.kind === "table" ? blocks[1] : undefined;
+    expect(table?.rows[0]?.direction).toBe("rtl");
   });
 
   it("preserves paragraph text and character formatting", () => {
