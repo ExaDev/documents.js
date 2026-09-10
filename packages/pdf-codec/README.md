@@ -359,7 +359,7 @@ This package also published under the following alternate npm names from the pre
 - [pdf-codec.js](https://www.npmjs.com/package/pdf-codec.js)
 - [pdf-parser.js](https://www.npmjs.com/package/pdf-parser.js)
 
-**Frozen since the monorepo migration** — see the [root README's release note](../../README.md#releases): the alias republish step was dropped along with GitHub Packages mirroring and SBOM/provenance signing, and nothing today keeps either name in sync with `pdf-codec`'s own releases. Tracked in [ExaDev/documents.js#729](https://github.com/ExaDev/documents.js/issues/729).
+**Republished automatically** — the alias's trusted publisher is registered against this repository and workflow (2026-09-10), so every release from the [backfill run](https://github.com/ExaDev/documents.js/actions/runs/34449796133) onward publishes under this name too; the registration evidence is on [ExaDev/documents.js#729](https://github.com/ExaDev/documents.js/issues/729).
 
 ## License
 
