@@ -4,7 +4,10 @@ import { concatBytes } from "../bytes/writer";
 //
 // The code tables below are transcribed from T.4 Tables 2/3 (terminating and make-up codes for white and black runs), T.4 Table 4 (the extended make-up codes shared by both colours), and T.4 4.2.1.3.1/T.6 2.2.1 (the two-dimensional mode codes). They are written out as literal bit strings rather than pre-packed integers so each entry can be checked against the specification by eye.
 
-const WHITE_TERMINATING_AND_MAKEUP: readonly (readonly [string, number])[] = [
+export const WHITE_TERMINATING_AND_MAKEUP: readonly (readonly [
+  string,
+  number,
+])[] = [
   // Terminating codes, run lengths 0-63 (T.4 Table 2).
   ["00110101", 0],
   ["000111", 1],
@@ -100,7 +103,10 @@ const WHITE_TERMINATING_AND_MAKEUP: readonly (readonly [string, number])[] = [
   ["010011011", 1728],
 ];
 
-const BLACK_TERMINATING_AND_MAKEUP: readonly (readonly [string, number])[] = [
+export const BLACK_TERMINATING_AND_MAKEUP: readonly (readonly [
+  string,
+  number,
+])[] = [
   // Terminating codes, run lengths 0-63 (T.4 Table 2).
   ["0000110111", 0],
   ["010", 1],
@@ -197,7 +203,7 @@ const BLACK_TERMINATING_AND_MAKEUP: readonly (readonly [string, number])[] = [
 ];
 
 // Extended make-up codes, run lengths 1792-2560, identical for white and black runs (T.4 Table 4).
-const EXTENDED_MAKEUP: readonly (readonly [string, number])[] = [
+export const EXTENDED_MAKEUP: readonly (readonly [string, number])[] = [
   ["00000001000", 1792],
   ["00000001100", 1856],
   ["00000001101", 1920],
