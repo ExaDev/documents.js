@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { canonicalise } from "./canonicalise";
 import type { ConstructDescriptor } from "./construct";
 import {
+  type ContentOrigin,
   ContentDocumentSchema,
   type ContentBlock,
   type ContentDocument,
@@ -108,6 +109,7 @@ interface ParagraphOptions {
   }[];
   readonly bold?: boolean;
   readonly sizePt?: number;
+  readonly origin?: ContentOrigin;
 }
 
 function paragraph(text: string, options: ParagraphOptions = {}): ContentBlock {
@@ -148,6 +150,7 @@ function paragraph(text: string, options: ParagraphOptions = {}): ContentBlock {
     ...(options.frames !== undefined
       ? { frames: options.frames.map((frame) => ({ ...frame })) }
       : {}),
+    ...(options.origin !== undefined ? { origin: options.origin } : {}),
   };
 }
 
@@ -275,10 +278,32 @@ function corpus(): readonly CorpusEntry[] {
             widthPt: 100,
             heightPt: 60,
             altText: "a picture",
+            // The annotation channel and the lifted-inline-image anchor pair, pinned at a block leaf: both ride the flat/tree boundary untouched (decompose embeds node objects), so the laws hold over them exactly as over every channel field beside them.
+            origin: "image",
+            interpretation: {
+              transcript: {
+                text: "revenue rose in EMEA and fell in APAC",
+                confidence: "high",
+                mechanism: "model",
+              },
+              description: "A grouped bar chart of regional revenue.",
+              by: { model: "some-vision-model", at: "2026-09-10T12:00:00Z" },
+            },
           },
+          {
+            kind: "image",
+            format: "png",
+            base64: PNG_BASE64,
+            widthPt: 12,
+            heightPt: 12,
+            // An image a reader lifted out of the following paragraph's run stream, carrying where it sat.
+            anchorRunIndex: 0,
+            anchorOffset: 8,
+          },
+          { kind: "paragraph", runs: [{ text: "approved " }] },
           { kind: "pageBreak" },
           { ...embeddedDrawing, kind: "embeddedObject" },
-          paragraph("after the leaves"),
+          paragraph("after the leaves", { origin: "body" }),
         ],
       ]),
     },
