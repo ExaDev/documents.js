@@ -73,7 +73,7 @@ export interface EmbeddedFace {
   glyphSpaceWidth(glyphId: number): number;
   // The advance adjustment, in glyph space, this face's own 'GPOS' pair kerning applies to `leftGlyphId` when `rightGlyphId` immediately follows it -- negative to tighten, which is what nearly every real pair asks for. 0 covers three genuinely different facts the layout above has no use for distinguishing: the face declares no reachable kerning at all, no subtable describes this pair, or a subtable describes it and asks for no adjustment. gpos-table.ts keeps the last two apart for a caller that needs them; nothing here does, since all three draw and measure identically.
   kernGlyphSpace(leftGlyphId: number, rightGlyphId: number): number;
-  // The face's own 'GSUB' default ligature shaping ('liga'/'rlig' -- see gsub-table.ts for why those two and not the contextual or opt-in features), or `undefined` for a face with nothing this package can apply. Applied inside encodeForShowEmbedded and collectEmbeddedGlyphs, never by a caller directly, so measurement, drawing, subsetting, and ToUnicode all describe the one substituted sequence.
+  // The face's own 'GSUB' shaping over the default-on feature set ('liga'/'rlig'/'calt'/'clig' — see gsub-table.ts for why exactly those four and not the opt-in features), or `undefined` for a face with nothing this package can apply. Applied inside encodeForShowEmbedded and collectEmbeddedGlyphs, never by a caller directly, so measurement, drawing, subsetting, and ToUnicode all describe the one substituted sequence.
   readonly gsubShaper: GsubShaper | undefined;
 }
 
@@ -350,9 +350,9 @@ export function collectEmbeddedGlyphs(
         }
       }
       cursor += span;
-      if (glyphId !== NOTDEF_GLYPH_ID && sequence.length > 0) {
+      if (glyphId !== NOTDEF_GLYPH_ID) {
         const existing = used.get(glyphId);
-        // First text wins, the collectUsedGlyphs rule -- but a shorter sequence never overwrites a longer one and vice versa; the first-seen entry is kept unconditionally, exactly as its single-code-point predecessor was.
+        // First text wins, the collectUsedGlyphs rule -- but a shorter sequence never overwrites a longer one and vice versa; the first-seen entry is kept unconditionally, exactly as its single-code-point predecessor was. A glyph whose span is 0 (a mark an ignore-flag ligature skipped over, drawn after the ligature glyph that skipped it) is still registered, with an empty text run: the subset must carry every glyph the document draws, while buildToUnicodeCMap leaves a textless glyph unmapped because its characters belong to the ligature glyph's own entry.
         if (existing === undefined) {
           used.set(glyphId, sequence);
         }
