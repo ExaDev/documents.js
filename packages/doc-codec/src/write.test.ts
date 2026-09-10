@@ -371,8 +371,11 @@ describe("writeDocContent", () => {
     expect(() => writeDocContent(spreadsheet)).toThrow(DocUnsupportedError);
   });
 
-  it("refuses a block kind it does not yet write, such as a page break", () => {
-    const input = document([{ kind: "pageBreak" }]);
+  it("refuses a block kind it does not yet write, such as a construct-end marker", () => {
+    // A pageBreak used to be this test's refused kind and now writes (see the page-break describe below), so the generic non-paragraph-block refusal is exercised through a construct-boundary marker, which stays refused until ExaDev/documents.js#1122 lands.
+    const input = document([
+      { kind: "constructEnd", descriptor: { kind: "division" } },
+    ]);
     expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
   });
 
@@ -393,6 +396,119 @@ describe("writeDocContent", () => {
       { kind: "constructStart", descriptor: { kind: "division" } },
     ]);
     expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
+  });
+});
+
+// A manual page break is the end-of-section character (0x000C) placed where no section ends, per [MS-DOC]'s own PlcfSed.aCP text ("An end-of-section character (0x0C) which occurs at a CP and which is not the last character in a section specifies a manual page break"), and the writer's spelling retargets the preceding paragraph's own terminator to 0x000C -- so the ordinary case round-trips exactly, while a break with no ordinary paragraph before it to carry it mints the empty 0x000C-terminated paragraph the format requires (see appendPageBreak's own comment for why that empty paragraph is the format's own limit, not a loss).
+describe("writeDocContent page breaks", () => {
+  it("round-trips a page break between two paragraphs as [paragraph, pageBreak, paragraph]", () => {
+    const result = roundTrip(
+      document([
+        paragraph([{ text: "alpha" }]),
+        { kind: "pageBreak" },
+        paragraph([{ text: "beta" }]),
+      ]),
+    );
+    expect(blocksOf(result)).toEqual([
+      { kind: "paragraph", runs: [{ text: "alpha" }] },
+      { kind: "pageBreak" },
+      { kind: "paragraph", runs: [{ text: "beta" }] },
+    ]);
+  });
+
+  it("round-trips a page break carrying paragraph formatting on the paragraph it terminates, and a second break after it", () => {
+    const result = roundTrip(
+      document([
+        paragraph([{ text: "kept" }], { alignment: "center" }),
+        { kind: "pageBreak" },
+        { kind: "pageBreak" },
+        paragraph([{ text: "after two breaks" }]),
+      ]),
+    );
+    // The first break retargets "kept"'s own terminator; the second has no ordinary paragraph mark behind it any more, so it mints its own empty 0x000C-terminated paragraph -- visible in the round trip as the empty paragraph between the two breaks, exactly as appendPageBreak's comment states.
+    expect(blocksOf(result)).toEqual([
+      { kind: "paragraph", runs: [{ text: "kept" }], alignment: "center" },
+      { kind: "pageBreak" },
+      { kind: "paragraph", runs: [] },
+      { kind: "pageBreak" },
+      { kind: "paragraph", runs: [{ text: "after two breaks" }] },
+    ]);
+  });
+
+  it("writes a leading page break as its own empty break paragraph, which reads back with that empty paragraph stated", () => {
+    const result = roundTrip(
+      document([{ kind: "pageBreak" }, paragraph([{ text: "beta" }])]),
+    );
+    expect(blocksOf(result)).toEqual([
+      { kind: "paragraph", runs: [] },
+      { kind: "pageBreak" },
+      { kind: "paragraph", runs: [{ text: "beta" }] },
+    ]);
+  });
+
+  it("writes a page break after a table as its own empty break paragraph, never retargeting the table's row mark", () => {
+    const result = roundTrip(
+      document([
+        {
+          kind: "table",
+          rows: [
+            {
+              cells: [
+                { blocks: [paragraph([{ text: "cell" }])] },
+                { blocks: [paragraph([{ text: "mate" }])] },
+              ],
+            },
+          ],
+          columnWidthsPt: [100, 100],
+        },
+        { kind: "pageBreak" },
+        paragraph([{ text: "after the table" }]),
+      ]),
+    );
+    // A row-ending mark is a cell mark (0x0007) and MUST stay one, so the break cannot retarget it: the empty break paragraph follows the table's own trailing closing paragraph instead.
+    const blocks = blocksOf(result);
+    expect(blocks[0]?.kind).toBe("table");
+    expect(blocks.slice(1)).toEqual([
+      { kind: "paragraph", runs: [] },
+      { kind: "pageBreak" },
+      { kind: "paragraph", runs: [{ text: "after the table" }] },
+    ]);
+  });
+
+  it("writes a page break as a non-final section's last block without disturbing the end-of-section character after it", () => {
+    const input: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            paragraph([{ text: "ending on a break" }]),
+            { kind: "pageBreak" },
+          ],
+        },
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 },
+          blocks: [paragraph([{ text: "section two" }])],
+        },
+      ],
+    };
+    const result = roundTrip(input);
+    if (result.kind !== "wordprocessing") {
+      throw new Error("a .doc always reads back as a wordprocessing document");
+    }
+    expect(result.sections).toHaveLength(2);
+    // The break's 0x000C lands immediately before the section's own end-of-section character, and closeSection's existing trailing-paragraph guarantee supplies the ordinary paragraph mark the section boundary needs -- so the break itself survives, with the paragraph it forced stated in the round trip.
+    expect(result.sections[0]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "ending on a break" }] },
+      { kind: "pageBreak" },
+      { kind: "paragraph", runs: [] },
+    ]);
+    expect(result.sections[1]?.blocks).toEqual([
+      { kind: "paragraph", runs: [{ text: "section two" }] },
+    ]);
   });
 });
 
