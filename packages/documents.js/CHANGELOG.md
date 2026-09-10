@@ -1,3 +1,9 @@
+## [7.17.0](https://github.com/ExaDev/documents.js/compare/documents.js%407.16.2...documents.js%407.17.0) (2026-09-10)
+
+### Features
+
+* **documents.js:** write sdt and division construct regions in the conversion builders ([dad6e58](https://github.com/ExaDev/documents.js/commit/dad6e5828a39151c84b9fe5aa425c8010d4c6093))
+
 ## [7.16.2](https://github.com/ExaDev/documents.js/compare/documents.js%407.16.1...documents.js%407.16.2) (2026-09-10)
 
 
