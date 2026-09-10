@@ -135,7 +135,7 @@ jobs:
 
   test-e2e:
     name: E2E test (web)
-    # Not yet a required check, matching mutation.yml's own precedent: the suite is new (ExaDev/documents.js#932) and hasn't run unattended in CI before, so it needs a run of real-world flakiness data before gating merges on it.
+    # Promoted to a required check (ExaDev/documents.js#1194): the suite has run unattended on every pull request and main push since it landed (ExaDev/documents.js#932), and its only observed red run tracked a regression on that pull request's own branch and cleared when the branch was fixed -- a genuine catch, not flakiness, which is exactly the run history gating merges on it requires. Requiredness itself lives in the repository ruleset ("main required checks"), not in this file; this job always runs on both triggers, so requiring it can never strand a pull request waiting for a check that does not report.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -704,9 +704,18 @@ jobs:
 
   deploy-site:
     name: Build and deploy the web UI to Pages
-    # After release, so the deploy is built from the release commit the orchestrator just pushed (it bumps packages/web/package.json and tags it). For a commit that releases nothing, no new tag is created and this builds the current tip of main.
+    # After release, so the deploy is built from the release commit the orchestrator just pushed (it bumps packages/web/package.json and tags it). For a commit that releases nothing, no new tag is created and this builds the current tip of main. test-e2e is in the gate so a main-branch e2e failure blocks deploying the site the suite drives a real browser through, matching the required role e2e already plays on pull requests via the ruleset.
     needs:
-      [commitlint, lint, typecheck, test, test-workers, test-smoke, release]
+      [
+        commitlint,
+        lint,
+        typecheck,
+        test,
+        test-workers,
+        test-smoke,
+        test-e2e,
+        release,
+      ]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
