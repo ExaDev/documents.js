@@ -72,6 +72,133 @@ function readFlowVectors(pkg: Package): ContentVector[] {
 }
 
 describe("buildOdtPackage", () => {
+  it("round-trips an index contentControl pair through a real text:table-of-content region", () => {
+    // The descriptor's *-source residue is what names the wrapper (odfIndexWrapperTag's own rule): a TOC descriptor carries the serialised source element, exactly as the odt reader quarantines it.
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: {
+              kind: "contentControl",
+              controlType: "index",
+              tag: "Table of Contents",
+              source: {
+                format: "odt",
+                xml: '<text:table-of-content-source xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"/>',
+              },
+            },
+          },
+          { kind: "paragraph", runs: [{ text: "cached entry" }] },
+          { kind: "constructEnd" },
+          { kind: "paragraph", runs: [{ text: "outside" }] },
+        ],
+      },
+    ]);
+    const rereadDoc = readOdtContent(buildOdtPackage(content));
+    if (rereadDoc.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const marker = rereadDoc.sections[0]!.blocks[0];
+    if (marker?.kind !== "constructStart") {
+      throw new Error("expected the first block to be the construct marker");
+    }
+    // The reread descriptor's own *-source residue is the BARE element this writer emits (the residue policy every odf writer follows), so compare everything except the residue's inner spelling: kind/controlType/tag recover exactly.
+    expect(marker.descriptor).toMatchObject({
+      kind: "contentControl",
+      controlType: "index",
+      tag: "Table of Contents",
+    });
+    if (marker.descriptor.kind !== "contentControl") {
+      throw new Error("expected a contentControl descriptor");
+    }
+    expect(marker.descriptor.source?.format).toBe("odt");
+
+    // The wrapper is a real text:table-of-content whose index-body holds the cached entry, with the bare *-source child the ODF schema requires.
+    const pkg = buildOdtPackage(content);
+    const contentXml = pkg.parts["content.xml"];
+    if (contentXml?.kind !== "xml") {
+      throw new Error("expected a content.xml part");
+    }
+    const wrappers: XmlElement[] = [];
+    const walk = (nodes: readonly XmlNode[]): void => {
+      for (const node of nodes) {
+        if (node.type === "element") {
+          if (node.tag === "text:table-of-content") {
+            wrappers.push(node);
+          }
+          walk(node.children);
+        }
+      }
+    };
+    walk(contentXml.nodes);
+    expect(wrappers).toHaveLength(1);
+    const wrapper = wrappers[0]!;
+    expect(
+      wrapper.children.some(
+        (child) =>
+          child.type === "element" &&
+          child.tag === "text:table-of-content-source",
+      ),
+    ).toBe(true);
+    const body = wrapper.children.find(
+      (child): child is XmlElement =>
+        child.type === "element" && child.tag === "text:index-body",
+    );
+    if (body === undefined) {
+      throw new Error("expected the wrapper to carry a text:index-body");
+    }
+    const textOf = (nodes: readonly XmlNode[]): string =>
+      nodes
+        .map((node) =>
+          node.type === "text"
+            ? node.value
+            : node.type === "element"
+              ? textOf(node.children)
+              : "",
+        )
+        .join("");
+    expect(textOf(body.children)).toContain("cached entry");
+    expect(textOf(body.children)).not.toContain("outside");
+  });
+
+  it("drops a residue-less index contentControl pair by name rather than guessing a wrapper", () => {
+    // No *-source residue means no fact naming which of the seven wrappers to write -- the pair restores nothing, and the bracketed content still writes.
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: "constructStart",
+            descriptor: { kind: "contentControl", controlType: "index" },
+          },
+          { kind: "paragraph", runs: [{ text: "still written" }] },
+          { kind: "constructEnd" },
+        ],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    const contentXml = pkg.parts["content.xml"];
+    if (contentXml?.kind !== "xml") {
+      throw new Error("expected a content.xml part");
+    }
+    const wrapperTags = [
+      "text:table-of-content",
+      "text:alphabetical-index",
+      "text:bibliography",
+    ];
+    const walk = (nodes: readonly XmlNode[]): boolean =>
+      nodes.some(
+        (node) =>
+          (node.type === "element" && wrapperTags.includes(node.tag)) ||
+          (node.type === "element" && walk(node.children)),
+      );
+    expect(walk(contentXml.nodes)).toBe(false);
+  });
+
   it("round-trips a division construct pair through a real text:section region", () => {
     const content = wordDoc([
       {

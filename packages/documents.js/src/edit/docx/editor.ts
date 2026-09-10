@@ -17,7 +17,10 @@ import { buildParagraph, DocxParagraph } from "./paragraph";
 import type { ParagraphInit } from "./paragraph";
 import { createEmptyDocxPackage } from "./scaffold";
 import { buildTable, DocxTable } from "./table";
-import type { ContentControlDescriptor } from "document-schema.js";
+import type {
+  ContentControlDescriptor,
+  ProvenanceDescriptor,
+} from "document-schema.js";
 import type { TableInit } from "./table";
 
 const DOCUMENT_PART_PATH = "word/document.xml";
@@ -33,6 +36,8 @@ export interface DocxBody {
   appendBookmarkEnd(id: number): void;
   // A content-control (SDT) region: every append between openContentControlRegion and closeRegion lands inside the control's own w:sdtContent rather than as a body sibling -- the block-flow spelling of an SDT, which Word itself writes as w:sdt > w:sdtPr + w:sdtContent around the content it governs. The descriptor drives w:sdtPr (w:id minted per document, w:tag/w:alias/w:lock, and the one type element each controlType maps to -- the exact inverse of ooxml.js's own reader, so a written control reads back as the same descriptor). Regions nest to arbitrary depth; the one field with no spelling here is columnCount-style geometry an SDT does not carry.
   openContentControlRegion(descriptor: ContentControlDescriptor): void;
+  // Opens a tracked-change region (w:ins/w:del/w:moveFrom/w:moveTo wrapping the blocks appended until the matching closeRegion). Answers false for a change kind with no block-level element (formatChange), which the caller treats as a refusal.
+  openProvenanceRegion(descriptor: ProvenanceDescriptor): boolean;
   closeRegion(): void;
 }
 
@@ -72,9 +77,13 @@ function bodyElementIndicesByTag(body: XmlElement, tag: string): number[] {
 }
 
 class DocxBodyImpl implements DocxBody {
-  // The w:sdtContent elements of every content-control region currently open, innermost last. Appends target the innermost open region's own children (plain push -- a w:sdtContent has no w:sectPr to insert before) and fall back to the body's own insertion point when empty.
-  private readonly openRegions: XmlElement[] = [];
+  // Every open region's append target, innermost last: a content control's own w:sdtContent, or a tracked change's own w:ins/w:del/w:moveFrom/w:moveTo element (whose children are the wrapped blocks directly -- those elements have no separate content container). `deletion` names a region whose runs must spell their text w:delText rather than w:t when it closes, Word's own spelling for text inside a tracked deletion or move-from (ooxml.js's reader reads both identically, so the round trip holds either way; this is the real-consumer-correct spelling). Appends target the innermost open region's own children (plain push -- neither container has a w:sectPr to insert before) and fall back to the body's own insertion point when empty.
+  private readonly openRegions: {
+    container: XmlElement;
+    deletion: boolean;
+  }[] = [];
   private nextSdtId = 1;
+  private nextProvenanceId = 1;
 
   constructor(
     private readonly body: XmlElement,
@@ -85,7 +94,7 @@ class DocxBodyImpl implements DocxBody {
   private appendToBody(element: XmlElement): void {
     const region = this.openRegions.at(-1);
     if (region !== undefined) {
-      region.children.push(element);
+      region.container.children.push(element);
       return;
     }
     this.body.children.splice(bodyInsertionPoint(this.body), 0, element);
@@ -94,7 +103,8 @@ class DocxBodyImpl implements DocxBody {
   appendParagraph(init?: ParagraphInit): DocxParagraph {
     const paragraphElement = buildParagraph(init);
     this.appendToBody(paragraphElement);
-    const container = this.openRegions.at(-1)?.children ?? this.body.children;
+    const container =
+      this.openRegions.at(-1)?.container.children ?? this.body.children;
     return new DocxParagraph(
       container,
       paragraphElement,
@@ -122,7 +132,8 @@ class DocxBodyImpl implements DocxBody {
   appendTable(init: TableInit): DocxTable {
     const tableElement = buildTable(init);
     this.appendToBody(tableElement);
-    const container = this.openRegions.at(-1)?.children ?? this.body.children;
+    const container =
+      this.openRegions.at(-1)?.container.children ?? this.body.children;
     return new DocxTable(container, tableElement);
   }
 
@@ -233,11 +244,73 @@ class DocxBodyImpl implements DocxBody {
     }
     const sdtContent = el("w:sdtContent", {}, []);
     this.appendToBody(el("w:sdt", {}, [el("w:sdtPr", {}, sdtPr), sdtContent]));
-    this.openRegions.push(sdtContent);
+    this.openRegions.push({ container: sdtContent, deletion: false });
+  }
+
+  openProvenanceRegion(descriptor: ProvenanceDescriptor): boolean {
+    // The block-flow spelling of a tracked change: the w:ins/w:del/w:moveFrom/w:moveTo element wrapping the extent's own blocks, the exact inverse ooxml.js's own reader recovers (readProvenanceDescriptor reads w:author/w:date back; collectFlowNodes recurses into the element and records its construct extent). formatChange has no block-level element at all -- its Word spellings (w:rPrChange/w:pPrChange) are property-layer children of runs and paragraph properties, so a block region for one would have nothing to write through; the caller treats false as a refusal.
+    const tag =
+      descriptor.change === "insertion"
+        ? "w:ins"
+        : descriptor.change === "deletion"
+          ? "w:del"
+          : descriptor.change === "moveFrom"
+            ? "w:moveFrom"
+            : descriptor.change === "moveTo"
+              ? "w:moveTo"
+              : undefined;
+    if (tag === undefined) {
+      return false;
+    }
+    const attributes: { name: string; value: string }[] = [
+      { name: "w:id", value: String(this.nextProvenanceId) },
+    ];
+    this.nextProvenanceId += 1;
+    if (descriptor.author !== undefined) {
+      attributes.push({
+        name: "w:author",
+        value: encodeXmlText(descriptor.author),
+      });
+    }
+    if (descriptor.dateIso !== undefined) {
+      attributes.push({
+        name: "w:date",
+        value: encodeXmlText(descriptor.dateIso),
+      });
+    }
+    const region: XmlElement = {
+      type: "element",
+      tag,
+      attributes,
+      children: [],
+    };
+    this.appendToBody(region);
+    this.openRegions.push({
+      container: region,
+      deletion:
+        descriptor.change === "deletion" || descriptor.change === "moveFrom",
+    });
+    return true;
   }
 
   closeRegion(): void {
-    this.openRegions.pop();
+    const entry = this.openRegions.pop();
+    if (entry?.deletion === true) {
+      spellDeletedText(entry.container);
+    }
+  }
+}
+
+// Rewrites every w:t under a closed deletion region's subtree to w:delText, the spelling Word itself gives text inside a tracked deletion or move-from -- ooxml.js's own reader reads the two identically (readRunText accepts both), so this is real-consumer correctness rather than a round-trip requirement. Recursive over the whole region: a deletion's interior is deleted content throughout (a nested construct inside a deletion rides the same deletion), which is also exactly how the reader's carryDeletions walk treats it.
+function spellDeletedText(element: XmlElement): void {
+  for (const child of element.children) {
+    if (child.type !== "element") {
+      continue;
+    }
+    if (child.tag === "w:t") {
+      child.tag = "w:delText";
+    }
+    spellDeletedText(child);
   }
 }
 
