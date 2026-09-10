@@ -1203,6 +1203,9 @@ class ContentBuilder {
             ...(rowSpan > 1 ? { rowSpan } : {}),
             ...(background === undefined ? {} : { background }),
             ...(borders === undefined ? {} : { borders }),
+            ...(definition?.verticalAlign === undefined
+              ? {}
+              : { verticalAlign: definition.verticalAlign }),
           };
         }),
     }));

@@ -130,6 +130,8 @@ export interface PendingCell {
   // The horizontal twins of the pair above.
   horizontalMergeFirst: boolean;
   horizontalMergeContinuation: boolean;
+  // The <cellalign> member: which of \clvertalc ("Text is centered vertically in cell") / \clvertalb ("Text is bottom-aligned in cell") the definition states. \clvertalt ("Text is top-aligned in cell (the default)") deliberately leaves this undefined rather than storing a "top" -- ContentTableCell.verticalAlign's own absence already means the format's default (top), so the default's explicit spelling carries no information the field's absence doesn't, exactly the way the reader treats \sbkpage against ContentSection.breakType.
+  verticalAlign: "center" | "bottom" | undefined;
 }
 
 export function newPendingCell(): PendingCell {
@@ -143,6 +145,7 @@ export function newPendingCell(): PendingCell {
     verticalMergeContinuation: false,
     horizontalMergeFirst: false,
     horizontalMergeContinuation: false,
+    verticalAlign: undefined,
   };
 }
 
@@ -185,6 +188,16 @@ export function applyCellDefinitionControlWord(
     case "clshdng":
       // "N is defined in hundredths of a percent, from 0 to 10000" -- divided down to the same 0-100 scale nearestPercentType and resolveCellFill both work in.
       cell.shadingPercent = param === undefined ? undefined : param / 100;
+      return true;
+    // The <cellalign> member of the <celldef> (RTF 1.9.1, "Table Definitions"): "\clvertalc Text is centered vertically in cell" / "\clvertalb Text is bottom-aligned in cell". \clvertalt ("Text is top-aligned in cell (the default)") is handled by leaving the field undefined -- see PendingCell.verticalAlign's own comment for why the default's explicit spelling collapses into the absence that already means it.
+    case "clvertalc":
+      cell.verticalAlign = "center";
+      return true;
+    case "clvertalb":
+      cell.verticalAlign = "bottom";
+      return true;
+    case "clvertalt":
+      cell.verticalAlign = undefined;
       return true;
     default:
       break;

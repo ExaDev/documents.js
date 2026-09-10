@@ -1798,6 +1798,54 @@ describe("body constructs", () => {
     expect(plain).toContain("\\trowd\\trgaph108\\trleft0\\cellx");
   });
 
+  it("writes cell verticalAlign as the \\clvertalc/\\clvertalb <cellalign> member, never restating the \\clvertalt default", () => {
+    const out = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72, 72],
+          rows: [
+            {
+              cells: [
+                {
+                  verticalAlign: "center",
+                  blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
+                },
+                {
+                  verticalAlign: "bottom",
+                  blocks: [{ kind: "paragraph", runs: [{ text: "B" }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(out).toContain("\\clvertalc\\cellx");
+    expect(out).toContain("\\clvertalb\\cellx");
+    // 'top' and absent both mean the spec's own default, so neither restates \clvertalt.
+    expect(out).not.toContain("\\clvertalt");
+    const topStated = write(
+      wordprocessing([
+        {
+          kind: "table",
+          columnWidthsPt: [72],
+          rows: [
+            {
+              cells: [
+                {
+                  verticalAlign: "top",
+                  blocks: [{ kind: "paragraph", runs: [{ text: "A" }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(topStated).not.toContain("\\clvertalt");
+  });
+
   // writeCellBlocks writes a cell's own content as \intbl <pict>/<obj>/paragraph groups -- image and embeddedObject blocks borrow the identical \pard\plain\intbl shell a paragraph gets (see the "round trip" describe block below for both), since read.ts's own reader already proves that shape round-trips. A table or pageBreak block placed directly in a cell has no such shell to borrow -- a nested table needs its own \itapN row grammar this writer does not build, and a mid-row \page would \pard-reset the row's own \intbl state -- so those two kinds are still dropped rather than embedded, reported through CONSTRUCT_UNREPRESENTED rather than filtered out with no diagnostic at all.
   it("reports rather than silently dropping a page break placed directly in a table cell", () => {
     const codes: string[] = [];
@@ -1970,6 +2018,66 @@ describe("round trip through this package's own reader", () => {
     expect(paragraph?.runs.map((run) => run.direction)).toEqual(["rtl", "ltr"]);
     const table = blocks[1]?.kind === "table" ? blocks[1] : undefined;
     expect(table?.rows[0]?.direction).toBe("rtl");
+  });
+
+  it("preserves cell verticalAlign, with an explicit 'top' collapsing into the absence that already means it", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          ...LETTER_SECTION,
+          blocks: [
+            {
+              kind: "table",
+              columnWidthsPt: [72, 72, 72],
+              rows: [
+                {
+                  cells: [
+                    {
+                      verticalAlign: "center",
+                      blocks: [
+                        {
+                          kind: "paragraph",
+                          runs: [{ text: "A", sizePt: 12 }],
+                        },
+                      ],
+                    },
+                    {
+                      verticalAlign: "bottom",
+                      blocks: [
+                        {
+                          kind: "paragraph",
+                          runs: [{ text: "B", sizePt: 12 }],
+                        },
+                      ],
+                    },
+                    {
+                      verticalAlign: "top",
+                      blocks: [
+                        {
+                          kind: "paragraph",
+                          runs: [{ text: "C", sizePt: 12 }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const back = roundTrip(document);
+    const blocks =
+      back.kind === "wordprocessing" ? back.sections[0]?.blocks : undefined;
+    const table = blocks?.[0]?.kind === "table" ? blocks[0] : undefined;
+    expect(table?.rows[0]?.cells.map((cell) => cell.verticalAlign)).toEqual([
+      "center",
+      "bottom",
+      undefined,
+    ]);
   });
 
   it("preserves paragraph text and character formatting", () => {
