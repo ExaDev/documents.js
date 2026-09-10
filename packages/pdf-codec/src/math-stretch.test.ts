@@ -164,7 +164,7 @@ describe("MathVariants parsing against the real STIX Two Math font", () => {
     ]);
   });
 
-  // Enumerating the whole 0x1FFFF codepoint range is cheap uninstrumented (well under 200ms), but `pnpm test:coverage`'s v8 coverage instrumentation adds per-call overhead to every one of the ~131,000 glyphId() calls below, which is enough to clear vitest's 5000ms default on a slower CI runner -- an explicit timeout, not a change to what this test checks. A CI runner busy with a large `--affected` set has been observed taking this test itself over 30s (ExaDev/documents.js#1002), so the budget below leaves real headroom above the observed worst case rather than matching it.
+  // Enumerating the whole 0x1FFFF codepoint range is cheap uninstrumented (well under 200ms), but instrumentation multiplies the per-call cost of every one of the ~131,000 glyphId() calls below: `pnpm test:coverage`'s v8 coverage has been observed taking this test over 30s on a busy CI runner (ExaDev/documents.js#1002), and Stryker's mutant instrumentation is an order of magnitude heavier still, measuring ~28s for this test on a fast local machine and exceeding 90s on a GitHub mutation runner (ExaDev/documents.js#1194). An explicit timeout, not a change to what this test checks: the budget below leaves headroom above the worst instrumented case (a fully-instrumented mutation dry run on a loaded runner) rather than matching it.
   it("names glyphs that no Unicode code point reaches, which is why drawing a construction needs glyph IDs rather than text", () => {
     const font = loadMathFont();
     const encoded = new Set<number>();
@@ -198,7 +198,7 @@ describe("MathVariants parsing against the real STIX Two Math font", () => {
       .assembly!.parts) {
       expect(encoded.has(part.glyphId)).toBe(false);
     }
-  }, 90_000);
+  }, 300_000);
 
   it("reads the radical sign's own vertical construction", () => {
     const construction = verticalConstruction(RADICAL);

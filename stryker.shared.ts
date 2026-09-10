@@ -18,6 +18,8 @@ export interface PackageStrykerOptions {
   tsconfigFile?: string;
   // Path to the vitest config Stryker's vitest-runner should load. Left undefined for a package with no multi-project split (Vitest's own zero-config discovery already finds exactly the right test files, matching what its plain `vitest run` _test script does); set to "vitest.mutation.config.ts" (generated alongside this file) for a package whose real vitest.config.ts (or vite.config.ts) splits unit/smoke/workers into named projects, since Stryker's vitest-runner has no --project-equivalent selector and would otherwise also try to run the smoke suite (which imports from a dist/ Stryker's sandboxed copy never builds).
   vitestConfigFile?: string;
+  // Whole-dry-run budget in minutes, passed straight through to Stryker's own option of the same name (default 5). Only a package whose INSTRUMENTED unit suite can legitimately approach the default needs this: instrumentation multiplies per-call cost far beyond what the plain or v8-coverage-instrumented suite costs, so a package with one pathologically call-heavy test (pdf-codec's whole-Unicode-range font enumeration is the measured case: ~28s instrumented on a fast local machine, several multiples of that on a GitHub runner) can burn most of the default budget on a single test. Passed by a package only once measured, never speculatively -- the default 5 minutes fits every package whose dry run has actually completed within it.
+  dryRunTimeoutMinutes?: number;
 }
 
 /**
@@ -32,6 +34,7 @@ export function packageStrykerConfig(
     mutate = ["src/**/*.ts", "!src/**/*.test.ts", "!src/**/*.test.tsx"],
     tsconfigFile = "tsconfig.json",
     vitestConfigFile,
+    dryRunTimeoutMinutes,
   } = options;
 
   return {
@@ -63,5 +66,6 @@ export function packageStrykerConfig(
     cleanTempDir: true,
     concurrency: 4,
     timeoutMS: 30000,
+    ...(dryRunTimeoutMinutes === undefined ? {} : { dryRunTimeoutMinutes }),
   };
 }
