@@ -492,6 +492,31 @@ describe("readDocContent", () => {
     ]);
   });
 
+  // The spelling a real producer writes for note stories: no separate guard paragraph, the story ending at its own final content mark (confirmed against a LibreOffice-authored .doc -- without this fix, that producer's single-paragraph footnotes read as "" and its multi-paragraph ones lost their last paragraph). The guard spelling every test above uses is the other legal shape and must keep reading identically.
+  it("reads a note story with no separate guard paragraph -- the real-producer spelling -- without dropping its last paragraph", () => {
+    const document = readDocContent(
+      buildDoc({
+        paragraphs: [{ runs: [{ text: "main" }] }],
+        bareNoteStories: true,
+        footnotes: [
+          [{ runs: [{ text: "single-paragraph note" }] }],
+          [
+            { runs: [{ text: "first paragraph" }] },
+            { runs: [{ text: "second paragraph" }] },
+          ],
+        ],
+        endnotes: [[{ runs: [{ text: "an endnote" }] }]],
+        comments: [[{ runs: [{ text: "a comment" }] }]],
+      }),
+    );
+    expect(document.footnotes).toEqual([
+      { id: "1", text: "single-paragraph note" },
+      { id: "2", text: "first paragraph\nsecond paragraph" },
+    ]);
+    expect(document.endnotes).toEqual([{ id: "1", text: "an endnote" }]);
+    expect(document.comments).toEqual([{ id: "1", text: "a comment" }]);
+  });
+
   it("reads an empty footnote story as empty text without absorbing the next story's content", () => {
     const document = readDocContent(
       buildDoc({
