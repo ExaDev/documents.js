@@ -2190,6 +2190,18 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["id", "bases"],
     additionalProperties: false,
   },
+  // One embedded font face of the package arms' fonts field (src/package.ts's TreeEmbeddedFontSchema, the tree-side spelling of src/font-port.ts's ProvidedFont). Transcribed here for the identical five-copies reason SymbolTable below states.
+  TreeEmbeddedFont: {
+    type: "object",
+    properties: {
+      family: { type: "string" },
+      bold: { type: "boolean" },
+      italic: { type: "boolean" },
+      base64: { type: "string" },
+    },
+    required: ["family", "bold", "italic", "base64"],
+    additionalProperties: false,
+  },
   // SymbolTableSchema is a real z.object with no custom node anywhere under it, so z.toJSONSchema() could convert it inline -- it is transcribed here (and the generator $refs to it) so each ContentDocument arm's symbolTable field stays one named reference instead of five duplicated copies of this whole subtree.
   SymbolTable: {
     type: "object",

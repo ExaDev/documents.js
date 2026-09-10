@@ -312,6 +312,29 @@ describe("factorStyles minting", () => {
     expect(DocumentTreeSchema.safeParse(refactored).success).toBe(true);
   });
 
+  it("carries a package's embedded font faces through re-factoring untouched", () => {
+    const doc = wordprocessingDoc([
+      paragraph([run("one")], { indentLeftPt: 20 }),
+      paragraph([run("two")], { indentLeftPt: 20 }),
+    ]);
+    const minted = assembleTree(doc);
+    // fonts is package-root caller data the flat ContentDocument cannot spell (bytes are a package fact no content node owns), so re-factoring must hand it back verbatim -- dropping it would silently lose the source's own faces on every factorStyles round trip and a later rebuild would regress to vendored substitutes without anything failing.
+    const withFonts: DocumentTree = {
+      ...minted,
+      fonts: [
+        { family: "Body Face", bold: false, italic: false, base64: "AAECAw==" },
+        { family: "Body Face", bold: true, italic: false, base64: "AAECBA==" },
+      ],
+    };
+    const refactored = factorStyles(withFonts);
+    expect(refactored.fonts).toEqual([
+      { family: "Body Face", bold: false, italic: false, base64: "AAECAw==" },
+      { family: "Body Face", bold: true, italic: false, base64: "AAECBA==" },
+    ]);
+    expect(refactored.styles?.s1).toEqual({ paragraph: { indentLeftPt: 20 } });
+    expect(DocumentTreeSchema.safeParse(refactored).success).toBe(true);
+  });
+
   it("carries a package's source residue table through re-factoring untouched, and never factors residue into a styles entry", () => {
     const doc = wordprocessingDoc([
       paragraph([run("one")], {
