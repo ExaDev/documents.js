@@ -2,6 +2,8 @@ import type {
   ContentCellValue,
   ContentSheet,
   ContentSheetCell,
+  ContentSheetConditionalFormat,
+  ContentSheetDataValidation,
   ContentSheetPrintSettings,
 } from "document-schema.js";
 import {
@@ -1439,5 +1441,149 @@ describe("cell comments", () => {
       text: "note two",
       author: "Someone",
     });
+  });
+});
+
+describe("writeXlsContent: data validations written (#971)", () => {
+  it("round-trips a whole-number comparison rule with every optional field", () => {
+    const rule = {
+      ranges: [{ startRow: 0, endRow: 4, startColumn: 0, endColumn: 0 }],
+      type: "whole" as const,
+      operator: "greaterThan" as const,
+      formula1: "5",
+      allowBlank: true,
+      showInputMessage: true,
+      promptTitle: "Enter",
+      prompt: "A number over 5",
+      showErrorMessage: true,
+      errorStyle: "warning" as const,
+      errorTitle: "Wrong",
+      error: "Must exceed 5",
+    };
+    const reread = readXlsContent(
+      writeXlsContent(document([sheet("S", [], { dataValidations: [rule] })])),
+    );
+    expect(reread.sheets[0]?.dataValidations).toEqual([rule]);
+  });
+
+  it("round-trips a between rule's two formulas, a list rule's quoted literal, and a custom rule's expression", () => {
+    const rules: ContentSheetDataValidation[] = [
+      {
+        ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 2 }],
+        type: "decimal",
+        operator: "between",
+        formula1: "1",
+        formula2: "10",
+      },
+      {
+        ranges: [{ startRow: 1, endRow: 1, startColumn: 1, endColumn: 1 }],
+        type: "list",
+        formula1: '"a,b,c"',
+      },
+      {
+        ranges: [{ startRow: 2, endRow: 2, startColumn: 0, endColumn: 0 }],
+        type: "custom",
+        formula1: "A1>5",
+      },
+    ];
+    const reread = readXlsContent(
+      writeXlsContent(document([sheet("S", [], { dataValidations: rules })])),
+    );
+    expect(reread.sheets[0]?.dataValidations).toEqual(rules);
+  });
+
+  it("refuses an operator-less comparison type and a two-operand operator without its second formula", () => {
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("S", [], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+                ],
+                type: "whole",
+                formula1: "5",
+              } as unknown as ContentSheetDataValidation,
+            ],
+          }),
+        ]),
+      ),
+    ).toThrow(/no operator/);
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("S", [], {
+            dataValidations: [
+              {
+                ranges: [
+                  { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+                ],
+                type: "decimal",
+                operator: "between",
+                formula1: "1",
+              } as unknown as ContentSheetDataValidation,
+            ],
+          }),
+        ]),
+      ),
+    ).toThrow(/no second formula/);
+  });
+});
+
+describe("writeXlsContent: conditional formats written (#971)", () => {
+  it("round-trips a cellIs rule with its style colours", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "cellIs",
+      ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
+      operator: "greaterThan",
+      formula1: "5",
+      style: {
+        textColor: { r: 1, g: 0, b: 0 },
+        background: { r: 1, g: 1, b: 0.8 },
+      },
+    };
+    const reread = readXlsContent(
+      writeXlsContent(
+        document([sheet("S", [], { conditionalFormats: [rule] })]),
+      ),
+    );
+    expect(reread.sheets[0]?.conditionalFormats).toEqual([rule]);
+  });
+
+  it("round-trips a style-less notBetween rule's two formulas", () => {
+    const rule: ContentSheetConditionalFormat = {
+      type: "cellIs",
+      ranges: [{ startRow: 0, endRow: 1, startColumn: 0, endColumn: 1 }],
+      operator: "notBetween",
+      formula1: "2",
+      formula2: "8",
+    };
+    const reread = readXlsContent(
+      writeXlsContent(
+        document([sheet("S", [], { conditionalFormats: [rule] })]),
+      ),
+    );
+    expect(reread.sheets[0]?.conditionalFormats).toEqual([rule]);
+  });
+
+  it("refuses a rule variant with no base CF spelling rather than dropping it", () => {
+    expect(() =>
+      writeXlsContent(
+        document([
+          sheet("S", [], {
+            conditionalFormats: [
+              {
+                type: "colorScale",
+                ranges: [
+                  { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+                ],
+                stops: [],
+              },
+            ],
+          }),
+        ]),
+      ),
+    ).toThrow(/no base BIFF8 CF spelling/);
   });
 });
