@@ -1,3 +1,16 @@
+## [7.17.4](https://github.com/ExaDev/documents.js/compare/documents.js%407.17.3...documents.js%407.17.4) (2026-09-10)
+
+### Bug Fixes
+
+* **documents.js:** let a minus after a relation or operator sign the following operand ([b69cd2f](https://github.com/ExaDev/documents.js/commit/b69cd2f0ddd136defdedee69c0952daa46043782))
+
+
+### Dependencies
+
+- Updated doc-codec to 2.8.0
+- Updated ooxml.js to 8.10.0
+- Updated rtf-codec to 4.2.0
+
 ## [7.17.3](https://github.com/ExaDev/documents.js/compare/documents.js%407.17.2...documents.js%407.17.3) (2026-09-10)
 
 

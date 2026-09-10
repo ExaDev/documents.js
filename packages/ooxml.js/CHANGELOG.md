@@ -1,3 +1,13 @@
+## [8.10.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.9.1...ooxml.js%408.10.0) (2026-09-10)
+
+### Features
+
+* **ooxml.js:** verify xlsx drawing anchors against a real-producer corpus ([3e024df](https://github.com/ExaDev/documents.js/commit/3e024df1204af12bc3678d4f10c631cc367dcc72))
+
+### Miscellaneous Chores
+
+* **ooxml.js:** drop a duplicated points-per-centimetre constant from the corpus generator ([420aca3](https://github.com/ExaDev/documents.js/commit/420aca38880e61e1f93f18193da6f6a93bdd0977))
+
 ## [8.9.1](https://github.com/ExaDev/documents.js/compare/ooxml.js%408.9.0...ooxml.js%408.9.1) (2026-09-10)
 
 
