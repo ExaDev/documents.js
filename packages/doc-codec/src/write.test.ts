@@ -372,10 +372,8 @@ describe("writeDocContent", () => {
   });
 
   it("refuses a block kind it does not yet write, such as a construct-end marker", () => {
-    // A pageBreak used to be this test's refused kind and now writes (see the page-break describe below), so the generic non-paragraph-block refusal is exercised through a construct-boundary marker, which stays refused until ExaDev/documents.js#1122 lands.
-    const input = document([
-      { kind: "constructEnd", descriptor: { kind: "division" } },
-    ]);
+    // A pageBreak used to be this test's refused kind and now writes (see the page-break describe below), so the generic non-paragraph-block refusal is exercised through a construct-boundary marker, which stays refused until ExaDev/documents.js#1122 lands. A close marker carries only its kind -- no descriptor, which is the open half's payload.
+    const input = document([{ kind: "constructEnd" }]);
     expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
   });
 
