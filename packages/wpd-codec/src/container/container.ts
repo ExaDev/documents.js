@@ -20,7 +20,7 @@ import { readPrefixPackets, type WpdPrefixPacket } from "./prefix";
 // "The name of the WordPerfect Stream is PerfectOffice_MAIN." A root-level stream, so archive-codec reports its path with no storage prefix.
 export const PERFECT_OFFICE_MAIN_STREAM = "PerfectOffice_MAIN";
 
-// The storage holding OLE embedded objects, named here because the README's Remaining scope refers to it; nothing reads it yet.
+// The storage holding a compound wrapper's OLE embedded objects, whose streams unwrapContainer collects into WpdDocumentContainer.oleObjectStreams -- the bytes a WP7 "OLE 2.0" object's descriptor packet names (stream/ole.ts).
 export const PERFECT_OFFICE_OBJECTS_STORAGE = "PerfectOffice_OBJECTS";
 
 export interface WpdDocumentContainer {
@@ -33,6 +33,8 @@ export interface WpdDocumentContainer {
   readonly documentAreaEnd: number;
   // True when the bytes arrived inside an OLE compound file. Recorded because it is the one fact about the container a caller can act on -- an OLE-wrapped file may carry embedded objects a bare one cannot.
   readonly compound: boolean;
+  // The streams a compound wrapper stores under its PerfectOffice_OBJECTS storage, keyed by the stream name within that storage -- the bytes a WP7 "OLE 2.0" object's descriptor packet names (stream/ole.ts). Empty for a bare WP 6.x file, which has no storage to hold objects in, and for a compound file carrying none: an OLE 1.0 object's bytes ride its own descriptor packet instead (the pre-WP7 spelling the identical wrapper-less files used).
+  readonly oleObjectStreams: ReadonlyMap<string, Uint8Array<ArrayBuffer>>;
 }
 
 // document-schema.js's ContentCodec port types a read as taking a plain Uint8Array, whose backing buffer may be a SharedArrayBuffer, while archive-codec's compound-file reader requires an ArrayBuffer-backed view. A type predicate resolves the two soundly rather than asserting past the difference: the overwhelmingly common case narrows with no copy at all, and a genuinely shared-memory view is copied into its own ArrayBuffer, which is the only honest way to produce a value of a type it does not already have.
@@ -55,12 +57,18 @@ function toArrayBufferBacked(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
 function unwrapContainer(bytes: Uint8Array<ArrayBuffer>): {
   bytes: Uint8Array<ArrayBuffer>;
   compound: boolean;
+  oleObjectStreams: ReadonlyMap<string, Uint8Array<ArrayBuffer>>;
 } {
   if (hasWordPerfectFileId(bytes)) {
-    return { bytes, compound: false };
+    return {
+      bytes,
+      compound: false,
+      oleObjectStreams: new Map<string, Uint8Array<ArrayBuffer>>(),
+    };
   }
   if (isCompoundFile(bytes)) {
-    const main = readCompoundFile(bytes).find(
+    const streams = readCompoundFile(bytes);
+    const main = streams.find(
       (stream) => stream.path === PERFECT_OFFICE_MAIN_STREAM,
     );
     if (main === undefined) {
@@ -68,7 +76,17 @@ function unwrapContainer(bytes: Uint8Array<ArrayBuffer>): {
         `This OLE compound file carries no ${PERFECT_OFFICE_MAIN_STREAM} stream, so it holds no WordPerfect document.`,
       );
     }
-    return { bytes: main.bytes, compound: true };
+    const objectsPrefix = `${PERFECT_OFFICE_OBJECTS_STORAGE}/`;
+    const oleObjectStreams = new Map<string, Uint8Array<ArrayBuffer>>();
+    for (const stream of streams) {
+      if (stream.path.startsWith(objectsPrefix)) {
+        oleObjectStreams.set(
+          stream.path.slice(objectsPrefix.length),
+          stream.bytes,
+        );
+      }
+    }
+    return { bytes: main.bytes, compound: true, oleObjectStreams };
   }
   throw new WpdNotAWordPerfectFileError(
     "These bytes are neither a WordPerfect file (which opens with the file ID FF 57 50 43) nor an OLE compound file that could contain one.",
@@ -91,9 +109,11 @@ export function openWpdDocument(
   input: Uint8Array,
   options: ReadWpdHeaderOptions = {},
 ): WpdDocumentContainer {
-  const { bytes: wrapped, compound } = unwrapContainer(
-    toArrayBufferBacked(input),
-  );
+  const {
+    bytes: wrapped,
+    compound,
+    oleObjectStreams,
+  } = unwrapContainer(toArrayBufferBacked(input));
   const header = readFileHeader(wrapped, options);
   // An empty-string password means no password (the identical normalisation readFileHeader applies), so both gates below see one consistent value.
   const suppliedPassword =
@@ -111,5 +131,6 @@ export function openWpdDocument(
     documentAreaOffset: header.documentAreaOffset,
     documentAreaEnd: documentAreaEnd(bytes, header),
     compound,
+    oleObjectStreams,
   };
 }
