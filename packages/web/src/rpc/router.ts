@@ -35,7 +35,15 @@ import {
 } from "documents.js";
 import {
   buildDocumentBytes,
+  decodeMarkdownText,
+  encodeMarkdownText,
   odbTablesToSpreadsheetDocument,
+  odmToPdf,
+  OdmUnresolvedSectionError,
+  openDoc,
+  openDocx,
+  openMarkdown,
+  openOdt,
   parsePackage,
   readOdbInventory,
   readOdbTables,
@@ -44,8 +52,12 @@ import type {
   ContentBlock,
   ContentDocument,
   ContentParagraph,
+  DocEditor,
+  DocxEditor,
   DocumentFormat,
   LayoutImageAsset,
+  MarkdownEditor,
+  OdtEditor,
 } from "documents.js";
 import {
   CODE_BLOCK_STYLE_ID,
@@ -361,6 +373,116 @@ function sanitizeImageAsset(asset: LayoutImageAsset) {
   };
 }
 
+// One live editor session held in this module (the worker side of the oRPC boundary). The union is what the four paragraph-family editors genuinely share: docx/odt reach paragraphs through their body, markdown/doc through the editor itself -- one adapter function each way, no per-format branching inside the mutations.
+type EditorSession =
+  | { format: "docx"; editor: DocxEditor }
+  | { format: "odt"; editor: OdtEditor }
+  | { format: "doc"; editor: DocEditor }
+  | { format: "markdown"; editor: MarkdownEditor };
+
+const editorSessions = new Map<number, EditorSession>();
+let nextEditorSessionId = 1;
+
+const EditorSnapshotSchema = z.object({
+  id: z.number().int().positive(),
+  paragraphs: z.array(z.string()),
+});
+
+export function openEditorSession(
+  format: EditorSession["format"],
+  bytes: Uint8Array<ArrayBuffer>,
+): EditorSession {
+  switch (format) {
+    case "docx":
+      return { format, editor: openDocx(bytes) };
+    case "odt":
+      return { format, editor: openOdt(bytes) };
+    case "doc":
+      return { format, editor: openDoc(bytes) };
+    case "markdown":
+      return { format, editor: openMarkdown(decodeMarkdownText(bytes)) };
+  }
+}
+
+// The structural slice of the paragraph-family handles the mutations drive. Each editor's own paragraph/run classes carry private state, which makes them mutually unassignable AS CLASS TYPES -- but assignability to this interface only checks its own members, and every one of the four exposes exactly these: run text get/set (DocxRun/OdtRun/MarkdownRun/DocRun all carry both), run remove, paragraph appendRun, paragraph remove, and the text getter.
+interface EditorRunHandle {
+  text: string;
+  remove(): void;
+}
+
+interface EditorParagraphHandle {
+  readonly text: string;
+  runs(): EditorRunHandle[];
+  appendRun(init?: { text?: string }): EditorRunHandle;
+  remove(): void;
+}
+
+// The two access directions of the paragraph-family surface. Every editor class forwards paragraphs() itself; appendParagraph lives on the body for the three package-backed formats (docx/odt/markdown) and on the editor for doc -- each case narrows the session union to ONE class, since calling through a union of distinct classes requires their signatures to unify and the paragraph types deliberately do not.
+export function paragraphsOf(session: EditorSession): EditorParagraphHandle[] {
+  switch (session.format) {
+    case "docx":
+      return session.editor.paragraphs();
+    case "odt":
+      return session.editor.paragraphs();
+    case "doc":
+      return session.editor.paragraphs();
+    case "markdown":
+      return session.editor.paragraphs();
+  }
+}
+
+export function appendParagraphOf(session: EditorSession, text: string): void {
+  switch (session.format) {
+    case "docx":
+      session.editor.body.appendParagraph({ text });
+      return;
+    case "odt":
+      session.editor.body.appendParagraph({ text });
+      return;
+    case "markdown":
+      session.editor.body.appendParagraph({ text });
+      return;
+    case "doc":
+      session.editor.appendParagraph({ text });
+      return;
+  }
+}
+
+export function paragraphTexts(session: EditorSession): string[] {
+  return paragraphsOf(session).map((paragraph) => paragraph.text);
+}
+
+// The position-preserving text replacement the setParagraphText procedure drives: the first run takes the whole new text and the remaining runs leave the paragraph (run.remove() is the same live-view primitive every editor exposes). A paragraph with no runs at all gets one -- an empty w:p/text:p is legal in both XML formats.
+export function setParagraphTextAt(
+  session: EditorSession,
+  index: number,
+  text: string,
+): void {
+  const paragraph = paragraphsOf(session)[index];
+  if (paragraph === undefined) {
+    throw new Error(`no paragraph at index ${index}`);
+  }
+  const runs = paragraph.runs();
+  if (runs.length === 0) {
+    paragraph.appendRun({ text });
+    return;
+  }
+  runs[0]!.text = text;
+  for (const run of runs.slice(1)) {
+    run.remove();
+  }
+}
+
+function requireEditorSession(id: number): EditorSession {
+  const session = editorSessions.get(id);
+  if (session === undefined) {
+    throw new Error(
+      "no editor session with that id -- it may belong to a previous page load (sessions live in the worker for the app's lifetime but are not persisted)",
+    );
+  }
+  return session;
+}
+
 export const router = {
   formats: {
     list: os
@@ -583,6 +705,120 @@ export const router = {
             images,
           },
         };
+      }),
+  },
+
+  // The .odm rendering tool's one procedure. A master document's chapters are external .odt references by design (odf.js's reader never inlines them -- see odmToPdf's own module comment), so rendering in the browser means the user supplies the chapter files alongside the master. The hrefs a .odm names are relative paths ("../chapter1.odt"); the UI matches them against the picked files' basenames, and this procedure just resolves against whatever it was handed. OdmUnresolvedSectionError is a typed outcome rather than a thrown one: the error names EVERY unresolved href, which is exactly the list the UI needs to show the user ("add these files"), so it crosses the boundary as data.
+  odm: {
+    render: os
+      .input(
+        z.object({
+          master: BytesSchema,
+          chapters: z.array(z.object({ href: z.string(), bytes: BytesSchema })),
+        }),
+      )
+      .output(
+        z.union([
+          z.object({ ok: z.literal(true), pdf: BytesSchema }),
+          z.object({
+            ok: z.literal(false),
+            unresolved: z.array(z.string()),
+          }),
+        ]),
+      )
+      .handler(({ input }) => {
+        const byHref = new Map(
+          input.chapters.map((chapter) => [chapter.href, chapter.bytes]),
+        );
+        try {
+          const pdf = odmToPdf(input.master, {
+            resolveSubDocument: (href) => byHref.get(href),
+          });
+          return { ok: true as const, pdf };
+        } catch (error) {
+          if (error instanceof OdmUnresolvedSectionError) {
+            return { ok: false as const, unresolved: [...error.hrefs] };
+          }
+          throw error;
+        }
+      }),
+  },
+
+  // The Editors tool. documents.js's live-view editors are stateful worker-side objects (every mutation edits the document in place -- the live-view contract), so the editing surface is a session: `open` holds the editor in this module's map and answers a paragraph snapshot, each mutation drives the live handles and answers a fresh snapshot (accessors re-read on every call, the same contract document-cli's TUI render loop follows), and `save` re-serialises the whole document through the format's own writer. The v1 surface is deliberately the operations every paragraph-family editor exposes identically -- list, edit text in place, append, remove, save -- so one UI drives docx, odt, doc, and markdown through the same five procedures with no per-format branch beyond opening.
+  editor: {
+    open: os
+      .input(
+        z.object({
+          format: z.enum(["docx", "odt", "doc", "markdown"]),
+          bytes: BytesSchema,
+        }),
+      )
+      .output(EditorSnapshotSchema)
+      .handler(({ input }) => {
+        const session = openEditorSession(input.format, input.bytes);
+        const id = nextEditorSessionId++;
+        editorSessions.set(id, session);
+        return { id, paragraphs: paragraphTexts(session) };
+      }),
+
+    setParagraphText: os
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          index: z.number().int().nonnegative(),
+          text: z.string(),
+        }),
+      )
+      .output(EditorSnapshotSchema)
+      .handler(({ input }) => {
+        const session = requireEditorSession(input.id);
+        setParagraphTextAt(session, input.index, input.text);
+        return { id: input.id, paragraphs: paragraphTexts(session) };
+      }),
+
+    addParagraph: os
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          text: z.string(),
+        }),
+      )
+      .output(EditorSnapshotSchema)
+      .handler(({ input }) => {
+        const session = requireEditorSession(input.id);
+        appendParagraphOf(session, input.text);
+        return { id: input.id, paragraphs: paragraphTexts(session) };
+      }),
+
+    removeParagraph: os
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          index: z.number().int().nonnegative(),
+        }),
+      )
+      .output(EditorSnapshotSchema)
+      .handler(({ input }) => {
+        const session = requireEditorSession(input.id);
+        const paragraph = paragraphsOf(session)[input.index];
+        if (paragraph === undefined) {
+          throw new Error(`no paragraph at index ${input.index}`);
+        }
+        paragraph.remove();
+        return { id: input.id, paragraphs: paragraphTexts(session) };
+      }),
+
+    save: os
+      .input(z.object({ id: z.number().int().positive() }))
+      .output(z.object({ bytes: BytesSchema }))
+      .handler(({ input }) => {
+        const session = requireEditorSession(input.id);
+        // markdown's editor has no toBytes (its format is text, not a package) -- the byte boundary is encodeMarkdownText, the same stage every other markdown-consuming path here uses.
+        const bytes =
+          session.format === "markdown"
+            ? encodeMarkdownText(session.editor.toMarkdownText())
+            : session.editor.toBytes();
+        return { bytes };
       }),
   },
 };

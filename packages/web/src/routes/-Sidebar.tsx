@@ -15,23 +15,19 @@ import {
 } from "@tabler/icons-react";
 
 import { relativeTime } from "../shared/relativeTime";
-import { disabledNavItem, navLink, versionAnchor } from "./-Sidebar.css";
+import { navLink, versionAnchor } from "./-Sidebar.css";
 
 // Not a route -- the '-' prefix keeps TanStack Router's file-based generator from treating this as one.
 const NAV_ITEMS = [
   { to: "/convert", label: "Convert", icon: IconArrowsExchange },
+  { to: "/editors", label: "Editors", icon: IconEdit },
   { to: "/metadata", label: "Metadata", icon: IconTags },
   { to: "/inspect", label: "Inspect", icon: IconFileSearch },
   { to: "/fonts", label: "Fonts", icon: IconTypography },
   { to: "/recent", label: "Recent", icon: IconHistory },
   { to: "/package", label: "Package / JSON", icon: IconJson },
   { to: "/odb", label: ".odb", icon: IconDatabase },
-] as const;
-
-// Tools already tracked as follow-up work -- headroom in the nav without inventing empty route files ahead of time.
-const PLANNED_ITEMS = [
-  { label: "Editors", icon: IconEdit },
-  { label: ".odm", icon: IconBooks },
+  { to: "/odm", label: ".odm", icon: IconBooks },
 ] as const;
 
 // Build-time git state (see vite.config.ts's `define` block) rather than a dry-run prediction: whenever this build's HEAD is an exact semantic-release tag, CI's own job graph guarantees that tag already exists on disk (the deploy job checks out `ref: main` fresh, strictly after the release job pushed) -- there is nothing to predict, only real state to read.
@@ -63,17 +59,6 @@ export function Sidebar() {
               />
             )}
           </Link>
-        ))}
-        {PLANNED_ITEMS.map((item) => (
-          <Tooltip key={item.label} label="Coming soon" position="right">
-            <NavLink
-              component="div"
-              label={item.label}
-              leftSection={<item.icon size={18} />}
-              disabled
-              className={disabledNavItem}
-            />
-          </Tooltip>
         ))}
       </Stack>
       <Tooltip label={tooltipLabel} position="right">
