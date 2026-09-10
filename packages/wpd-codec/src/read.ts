@@ -5,6 +5,7 @@ import type {
   ContentCellFill,
   ContentDocument,
   ContentEmbeddedObjectBlock,
+  ContentPageFurniture,
   ContentParagraph,
   ContentRun,
   ContentTableCell,
@@ -16,6 +17,7 @@ import type {
 import { assembleTree } from "document-schema.js";
 import { bytesToBase64 } from "./bytes/base64";
 import { uint16At } from "./bytes/view";
+import { readFurnitureClaim } from "./stream/furniture";
 import {
   openWpdDocument,
   type WpdDocumentContainer,
@@ -239,6 +241,23 @@ interface ReaderState {
   pendingConstructs: RunConstructExtent[];
   // The run index (into `runs`) a FIELD On merge code opened, or undefined when no FIELD scope is currently open. Reset to undefined -- abandoning the in-progress field, rather than reused across paragraphs -- whenever a paragraph flushes with one still open: `runs` is spliced empty by flushParagraph, so an index into the paragraph that just closed means nothing in the one that follows.
   openMergeFieldStartRun: number | undefined;
+  // The page furniture a D6 function has filled so far, per kind, keyed by the shared vocabulary's slots. A second function claiming a slot a first already filled is reported rather than overwritten -- WordPerfect's own A/B two-slot-per-kind mechanism is a shape the one-flow-per-slot vocabulary does not carry.
+  readonly headers: ContentPageFurniture;
+  readonly footers: ContentPageFurniture;
+  readonly furnitureFilled: Set<string>;
+  // The note reference a D7 On function opened, or undefined when none is currently open. Abandoned at a paragraph boundary exactly like a merge FIELD, for the identical run-index reason.
+  openNote:
+    | { anchorType: "footnote" | "endnote"; startRun: number; prefixId: number }
+    | undefined;
+  // Every note whose body a D7 On/Off pair named, in document order, bodies folded from each function's own General WP Text packet. The flat ContentDocument has no home for a note body (its real home is the tree's definitions table), so readWpdContent reports these and readWpd carries them.
+  readonly notes: WpdNoteDefinition[];
+}
+
+// One lifted note, shaped exactly as the definitions-table note tenant the tree form carries ({ kind, marker, blocks } -- the tenant vocabulary markdown-codec's own footnote definitions established): the reference marker is the text the D7 On/Off pair encloses, the body the packet its prefix ID names.
+export interface WpdNoteDefinition {
+  readonly anchorType: "footnote" | "endnote";
+  readonly marker: string;
+  readonly blocks: readonly ContentBlock[];
 }
 
 // The direct-formatting state a style packet's own "beginning style text" block can change, snapshotted before applying that block so the style's own scope closer can restore exactly what it overrode -- the same fields a Font Face Change, Font Size Change, character-colour function, or Attribute On/Off can change directly in the main stream, because a style's begin block is folded through the identical applyToken dispatch those use.
@@ -312,6 +331,16 @@ function targetBlocks(state: ReaderState): ContentBlock[] {
 // Closes the current paragraph. Called for every hard return, so a document with two consecutive hard returns genuinely produces an empty paragraph between them -- that blank line is content the author typed, not an artefact.
 function flushParagraph(state: ReaderState, sink: WpdDiagnosticSink): void {
   flushRun(state);
+  // A note's D7 On/Off pair encloses a reference site -- a run-scoped extent, the identical constraint a merge FIELD has: an On with no Off before this paragraph closed means `runs` is about to be emptied and the start index means nothing in the next paragraph. Abandoned rather than carried, with the diagnostic saying so.
+  if (state.openNote !== undefined) {
+    state.openNote = undefined;
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.NoteSpansParagraphs,
+      "A footnote or endnote's own On/Off pair straddled a paragraph boundary, which the run-scoped note anchor cannot express; its reference text became ordinary paragraph text with no note anchor.",
+    );
+  }
   if (state.openMergeFieldStartRun !== undefined) {
     // A FIELD On with no matching FIELD Off before this paragraph closed: `runs` is about to be spliced empty, so the run index this field opened at means nothing in the paragraph that follows. Abandoned rather than carried forward -- the run-level extent mechanism cannot express a construct spanning two paragraphs, so no construct is emitted for this occurrence, and the diagnostic says so rather than the field silently vanishing with no trace.
     state.openMergeFieldStartRun = undefined;
@@ -946,6 +975,171 @@ function applyCharacterGroup(
 }
 
 // FIELD On opens a run-scoped extent at the run boundary it sits at; FIELD Off closes it and tags the runs in between as a FieldDescriptor construct, `instruction` being exactly the field-code text that flowed through as ordinary characters between the two -- so a merge field's own displayed spelling is both kept as real run content (a template genuinely shows its own field codes, not a merged result) and tagged as a placeholder rather than typed prose. Every other merge subfunction still reports through the diagnostic sink, unchanged.
+// Lifts a D6 header/footer function's body into the section's page furniture: the claim (which kind, which slot) comes from stream/furniture.ts's own subgroup + occurrence-byte reading, the body from the General WP Text packet the function's first prefix ID names -- folded through the identical tokeniser and fold the main document area uses, exactly as a box's own text content is. A watermark, a function whose claim narrows onto nothing, an unresolvable packet, or a second function claiming a slot a first already filled stays reported rather than guessed at.
+function applyHeaderFooterGroup(
+  state: ReaderState,
+  token: Extract<WpdToken, { kind: "variableFunction" }>,
+  container: WpdDocumentContainer,
+  sink: WpdDiagnosticSink,
+): void {
+  const claim = readFurnitureClaim(token.subgroup, token.nonDeletable);
+  if (claim === "none") {
+    return;
+  }
+  if (claim === "watermark") {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.HeaderFooterDropped,
+      "This document declares a watermark, which is neither a header nor a footer and owns no parity -- the shared page-furniture vocabulary has no slot for one.",
+    );
+    return;
+  }
+  const slotKey = `${claim.kind}:${claim.slot}`;
+  if (state.furnitureFilled.has(slotKey)) {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.HeaderFooterDropped,
+      `This document declares a second ${claim.kind} for the ${claim.slot} slot -- WordPerfect's own A/B two-slot-per-kind mechanism, which the shared one-flow-per-slot page-furniture vocabulary does not carry; the first ${claim.kind} to claim the slot is the one lifted.`,
+    );
+    return;
+  }
+  const blocks = furnitureBodyBlocks(state, token, container, sink);
+  if (blocks === undefined) {
+    return;
+  }
+  state.furnitureFilled.add(slotKey);
+  const furniture = claim.kind === "header" ? state.headers : state.footers;
+  furniture[claim.slot] = blocks;
+}
+
+// A D6 function's own body: the General WP Text packet its first prefix ID names, folded to blocks through the identical machinery the main stream uses. Reports and answers undefined when the packet cannot be resolved or read -- the honest-or-nothing contract every other body resolution here holds.
+function furnitureBodyBlocks(
+  state: ReaderState,
+  token: Extract<WpdToken, { kind: "variableFunction" }>,
+  container: WpdDocumentContainer,
+  sink: WpdDiagnosticSink,
+): ContentBlock[] | undefined {
+  const prefixId = token.prefixIds[0];
+  const packet =
+    prefixId === undefined
+      ? undefined
+      : packetByPrefixId(container.packets, prefixId);
+  if (packet?.packetType !== PACKET_TYPE_GENERAL_WP_TEXT) {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.HeaderFooterDropped,
+      "This document declares a header or footer whose body packet this reader could not resolve; it was not lifted.",
+    );
+    return undefined;
+  }
+  const textBlocks = readGeneralWpTextBlocks(packet.bytes);
+  if (textBlocks === undefined) {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.HeaderFooterDropped,
+      "This document declares a header or footer whose body packet this reader could not read; it was not lifted.",
+    );
+    return undefined;
+  }
+  const nested = tokeniseDocumentArea(textBlocks, 0, textBlocks.length);
+  return foldTokens(nested, container, sink).blocks;
+}
+
+// The note subfunctions, per WPFF "D7 Footnote/Endnote Functions": even-numbered codes are the On functions (0 Footnote On, 2 Endnote On, each naming its body packet through its first prefix ID), odd-numbered the Off (1 Footnote Off, 3 Endnote Off). Each On's body is encased between its own On and Off.
+// https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_D7-FootnoteEndNote.htm
+const FOOTNOTE_ON = 0x00;
+const FOOTNOTE_OFF = 0x01;
+const ENDNOTE_ON = 0x02;
+const ENDNOTE_OFF = 0x03;
+
+// Lifts a D7 note pair as the shared model's note-anchor construct plus a definitions-ready body: the On opens a run-scoped anchor extent at the reference site (the encased text is the reference marker -- typically the note's own rendered number), the Off closes it and resolves the body from the packet the On's first prefix ID named. The anchor descriptor's definition key is the position it will hold in the tree form's definitions table (note-1, note-2, ... in document order), which readWpd splices in; the flat readWpdContent emits the anchor and reports the body, whose real home is exactly that table.
+function applyNoteGroup(
+  state: ReaderState,
+  token: Extract<WpdToken, { kind: "variableFunction" }>,
+  container: WpdDocumentContainer,
+  sink: WpdDiagnosticSink,
+): void {
+  if (token.subgroup === FOOTNOTE_ON || token.subgroup === ENDNOTE_ON) {
+    flushRun(state);
+    const prefixId = token.prefixIds[0];
+    if (prefixId === undefined) {
+      reportOnce(
+        state,
+        sink,
+        WpdDiagnosticCodes.NoteDropped,
+        "This document contains a footnote or endnote whose body packet this reader could not resolve; only its reference text survived.",
+      );
+      return;
+    }
+    state.openNote = {
+      anchorType: token.subgroup === FOOTNOTE_ON ? "footnote" : "endnote",
+      startRun: state.runs.length,
+      prefixId,
+    };
+    return;
+  }
+  const closing =
+    token.subgroup === FOOTNOTE_OFF
+      ? "footnote"
+      : token.subgroup === ENDNOTE_OFF
+        ? "endnote"
+        : undefined;
+  if (closing === undefined) {
+    return;
+  }
+  const open = state.openNote;
+  state.openNote = undefined;
+  if (open?.anchorType !== closing) {
+    // An Off with no matching On -- a stream whose note pairs do not pair, or an On this reader already abandoned at a paragraph boundary (flushParagraph). Nothing to anchor.
+    return;
+  }
+  flushRun(state);
+  const endRun = state.runs.length;
+  const marker =
+    state.runs
+      .slice(open.startRun, endRun)
+      .map((run) => run.text)
+      .join("") || String(state.notes.length + 1);
+  const definition = `note-${state.notes.length + 1}`;
+  state.pendingConstructs.push({
+    descriptor: {
+      kind: "anchor",
+      anchorType: open.anchorType,
+      name: marker,
+      definition,
+    },
+    startRun: open.startRun,
+    endRun,
+  });
+  const packet = packetByPrefixId(container.packets, open.prefixId);
+  const textBlocks =
+    packet?.packetType === PACKET_TYPE_GENERAL_WP_TEXT
+      ? readGeneralWpTextBlocks(packet.bytes)
+      : undefined;
+  const nested =
+    textBlocks === undefined
+      ? undefined
+      : tokeniseDocumentArea(textBlocks, 0, textBlocks.length);
+  const blocks =
+    nested === undefined
+      ? undefined
+      : foldTokens(nested, container, sink).blocks;
+  if (blocks === undefined) {
+    reportOnce(
+      state,
+      sink,
+      WpdDiagnosticCodes.NoteDropped,
+      "This document contains a footnote or endnote whose body packet this reader could not read; its reference anchor survives and its body does not.",
+    );
+    return;
+  }
+  state.notes.push({ anchorType: open.anchorType, marker, blocks });
+}
+
 function applyMergeGroup(
   state: ReaderState,
   token: Extract<WpdToken, { kind: "variableFunction" }>,
@@ -1211,20 +1405,10 @@ function applyVariableFunction(
       );
       return;
     case HEADER_FOOTER_GROUP:
-      reportOnce(
-        state,
-        sink,
-        WpdDiagnosticCodes.HeaderFooterDropped,
-        "This document declares a header, footer, or watermark, which the flat content model has no page-furniture position for.",
-      );
+      applyHeaderFooterGroup(state, token, container, sink);
       return;
     case FOOTNOTE_ENDNOTE_GROUP:
-      reportOnce(
-        state,
-        sink,
-        WpdDiagnosticCodes.NoteDropped,
-        "This document contains a footnote or endnote; its text lives in a prefix packet the flat content model has nowhere to put.",
-      );
+      applyNoteGroup(state, token, container, sink);
       return;
     case MERGE_GROUP:
       applyMergeGroup(state, token, sink);
@@ -1289,6 +1473,9 @@ function applyFixedFunction(
 interface FoldResult {
   readonly blocks: ContentBlock[];
   readonly page: PageState;
+  readonly headers: ContentPageFurniture;
+  readonly footers: ContentPageFurniture;
+  readonly notes: readonly WpdNoteDefinition[];
 }
 
 // One token's own effect on the reader state, shared by the main document-area walk and any sub-stream folded through the identical function-code vocabulary -- currently a style packet's own "beginning style text" block (applyStylePacketBegin above), which carries the same font/attribute/colour-change functions the main stream does and means them identically.
@@ -1359,6 +1546,11 @@ function foldTokens(
     reported: new Set<string>(),
     pendingConstructs: [],
     openMergeFieldStartRun: undefined,
+    headers: {},
+    footers: {},
+    furnitureFilled: new Set(),
+    openNote: undefined,
+    notes: [],
   };
 
   for (const token of tokens) {
@@ -1375,7 +1567,13 @@ function foldTokens(
     closeRow(state.table);
     closeTable(state);
   }
-  return { blocks: state.blocks, page: state.page };
+  return {
+    blocks: state.blocks,
+    page: state.page,
+    headers: state.headers,
+    footers: state.footers,
+    notes: state.notes,
+  };
 }
 
 // The document's own metadata, from the Extended Document Summary prefix packet. A document that carries no summary packet gets an empty envelope -- the honest answer, rather than fields invented from the file's structure.
@@ -1399,7 +1597,18 @@ export function readWpdContent(
     container.documentAreaOffset,
     container.documentAreaEnd,
   );
-  const { blocks, page } = foldTokens(tokens, container, sink);
+  const { blocks, page, headers, footers, notes } = foldTokens(
+    tokens,
+    container,
+    sink,
+  );
+  // The note bodies' real home is the tree form's definitions table, which the flat form cannot reach -- readWpd carries them. Each still-borne body says so here rather than passing in silence; the anchor itself is in the blocks.
+  for (const note of notes) {
+    sink({
+      code: WpdDiagnosticCodes.NoteDropped,
+      message: `This document contains a ${note.anchorType} whose body the flat ContentDocument has no home for; its reference anchor survives and readWpd lifts the body into the tree form's definitions table.`,
+    });
+  }
   return {
     kind: "wordprocessing",
     metadata: readMetadata(container),
@@ -1415,16 +1624,65 @@ export function readWpdContent(
           bottomPt: page.bottomPt ?? DEFAULT_MARGIN_PT,
           leftPt: page.leftPt ?? DEFAULT_MARGIN_PT,
         },
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        ...(Object.keys(footers).length > 0 ? { footers } : {}),
         blocks,
       },
     ],
   };
 }
 
-// The same read, one level up: the tree-form DocumentTree every other codec in the family also offers, assembled from the flat document by document-schema.js's own transform.
+// The same read, one level up: the tree-form DocumentTree every other codec in the family also offers, assembled from the flat document by document-schema.js's own transform -- plus the one fact only the tree can hold: every note body the flat form cannot carry rides as a definitions-table entry ({ kind: 'footnote' | 'endnote', marker, blocks } -- the tenant vocabulary markdown-codec's own footnote definitions established), keyed by the definition id each anchor descriptor in the flat content already names (note-1, note-2, ... in document order). The identical splice markdown-codec's own tree reader performs for its link table.
 export function readWpd(
   bytes: Uint8Array,
   options: ReadWpdOptions = {},
 ): DocumentTree {
-  return assembleTree(readWpdContent(bytes, options));
+  // The flat read's per-note NoteDropped diagnostics would be lies at this level -- the tree DOES carry the bodies -- so the internal read runs with a silent sink and the bodies are collected straight from the fold, exactly the shape readWpdContent discards.
+  const container = openWpdDocument(bytes, { password: options.password });
+  const tokens = tokeniseDocumentArea(
+    container.bytes,
+    container.documentAreaOffset,
+    container.documentAreaEnd,
+  );
+  const sink = options.sink ?? NOOP_WPD_DIAGNOSTIC_SINK;
+  const { notes, ...flatRest } = foldTokens(tokens, container, sink);
+  const document: ContentDocument = {
+    kind: "wordprocessing",
+    metadata: readMetadata(container),
+    sections: [
+      {
+        pageSize: {
+          widthPt: flatRest.page.widthPt ?? DEFAULT_PAGE_WIDTH_PT,
+          heightPt: flatRest.page.heightPt ?? DEFAULT_PAGE_HEIGHT_PT,
+        },
+        margins: {
+          topPt: flatRest.page.topPt ?? DEFAULT_MARGIN_PT,
+          rightPt: flatRest.page.rightPt ?? DEFAULT_MARGIN_PT,
+          bottomPt: flatRest.page.bottomPt ?? DEFAULT_MARGIN_PT,
+          leftPt: flatRest.page.leftPt ?? DEFAULT_MARGIN_PT,
+        },
+        ...(Object.keys(flatRest.headers).length > 0
+          ? { headers: flatRest.headers }
+          : {}),
+        ...(Object.keys(flatRest.footers).length > 0
+          ? { footers: flatRest.footers }
+          : {}),
+        blocks: flatRest.blocks,
+      },
+    ],
+  };
+  const assembled = assembleTree(document);
+  if (notes.length === 0) {
+    return assembled;
+  }
+  const definitions = Object.fromEntries(
+    notes.map((note, index) => [
+      `note-${index + 1}`,
+      { kind: note.anchorType, marker: note.marker, blocks: note.blocks },
+    ]),
+  );
+  return {
+    ...assembled,
+    definitions: { ...assembled.definitions, ...definitions },
+  };
 }
