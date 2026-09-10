@@ -33,10 +33,11 @@ import {
 } from "./text/paragraphs";
 import { readTextRange } from "./text/characters";
 import { parseClx } from "./text/piece-table";
+import { SECTION_MARK } from "./text/special";
 
 // The top-level read: a .doc's bytes to a ContentDocument. Every step below is one of [MS-DOC]'s own algorithms, in the order the specification chains them -- the compound-file container gives the WordDocument and Table streams, the FIB gives the offsets, the piece table turns character positions into bytes, and the two bin tables turn byte offsets into formatting. text/paragraphs.ts's readParagraphs itself only ever produces flat ParagraphEntry values (one per paragraph/cell/row mark, whatever its own table depth) for whichever document-stream range it is handed; table/read.ts's assembleBlocks is what folds a contiguous run of table-depth paragraphs into a real ContentTable, so this module carries no table-specific logic of its own.
 //
-// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: an inline picture (U+0001, sprmCPicLocation) resolves to a real ContentImageBlock when its own OfficeArtBlip is JPEG or PNG (pictures.ts) -- a floating/anchored drawn object (U+0008, PlcfSpa) and every other blip format (WMF/EMF/PICT metafiles, a raw DIB, TIFF) are genuinely different, unimplemented structures, and text boxes are absent for the identical reason (they ride the same OfficeArt drawing layer a floating object does). No table/numbering style formatting either. RC4-encrypted documents are read given a password (encryption.ts), but XOR obfuscation and RC4 CryptoAPI stay refused. Each of those absences is a genuine layer of the format, and each is absent rather than approximated. A paragraph or character style's own formatting IS resolved, up its full istdBase inheritance chain (style/stsh.ts's resolveStyleFormatting, ExaDev/documents.js#1005). Tables are read at every depth a document states, a table nested inside a table cell included (table/read.ts). Every section PlcfSed states resolves to its own real ContentSection, each with its own page size and margins. Footnotes, endnotes, and comments are read as plain text (notes.ts); headers and footers are read as real block flow, per section and per even/odd/first slot (headers-footers.ts) -- see DocContent's own comment below for how all four ride outside ContentDocument's shared shape, the same way numbering definitions already do. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like.
+// What this does NOT do is as important as what it does, and is stated in full in the README's scope section rather than only here: an inline picture (U+0001, sprmCPicLocation) resolves to a real ContentImageBlock when its own OfficeArtBlip is JPEG or PNG (pictures.ts) -- a floating/anchored drawn object (U+0008, PlcfSpa) and every other blip format (WMF/EMF/PICT metafiles, a raw DIB, TIFF) are genuinely different, unimplemented structures, and text boxes are absent for the identical reason (they ride the same OfficeArt drawing layer a floating object does). No table/numbering style formatting either. RC4-encrypted documents are read given a password (encryption.ts), but XOR obfuscation and RC4 CryptoAPI stay refused. Each of those absences is a genuine layer of the format, and each is absent rather than approximated. A paragraph or character style's own formatting IS resolved, up its full istdBase inheritance chain (style/stsh.ts's resolveStyleFormatting, ExaDev/documents.js#1005). Tables are read at every depth a document states, a table nested inside a table cell included (table/read.ts). Every section PlcfSed states resolves to its own real ContentSection, each with its own page size and margins, and a 0x000C where no section ends reads as a real pageBreak block (markManualPageBreaks below, per [MS-DOC]'s own PlcfSed.aCP manual-page-break rule). Footnotes, endnotes, and comments are read as plain text (notes.ts); headers and footers are read as real block flow, per section and per even/odd/first slot (headers-footers.ts) -- see DocContent's own comment below for how all four ride outside ContentDocument's shared shape, the same way numbering definitions already do. Numbering definitions (list/numbering.ts's readNumberingDefinitions) resolve what a paragraph's own listId/listLevel membership looks like.
 
 /** Word's own default for a new document (US Letter, one-inch margins) -- what a field this reader resolves from PlcfSed/Sepx (prop/sep.ts's readAllSectionProperties) falls back to when the file states nothing for it, exactly as it would fall back to Word's own implementation-dependent default for that one unstated sprm. */
 const DEFAULT_PAGE_SIZE: PageSize = { widthPt: 612, heightPt: 792 };
@@ -183,7 +184,10 @@ export function readDocContent(
   const entries = readParagraphs(range.text, range.fcs, context);
   const numbering = readNumberingDefinitions(table, fib);
   const sectionProperties = readAllSectionProperties(wordDocument, table, fib);
-  const entriesBySection = splitIntoSections(entries, sectionProperties);
+  const entriesBySection = splitIntoSections(
+    markManualPageBreaks(entries, sectionProperties),
+    sectionProperties,
+  );
   const { footnotes, endnotes, comments } = readNoteBodies(
     wordDocument,
     table,
@@ -226,6 +230,27 @@ export function readDocContent(
     comments,
     headerFooterStories,
   };
+}
+
+/** The single block a manual page break reads as -- no fields of its own, exactly the shape every other codec in this family emits for one. */
+const PAGE_BREAK_BLOCK = { kind: "pageBreak" } as const;
+
+// A paragraph entry terminated by the end-of-section character (0x000C) is one of two genuinely different constructs, and only PlcfSed's own boundaries distinguish them: [MS-DOC]'s PlcfSed.aCP text states both halves outright -- "There MUST also be an end-of-section character (0x0C) as the final character in the text range of all but the last section. An end-of-section character (0x0C) which occurs at a CP and which is not the last character in a section specifies a manual page break." An entry whose own end CP is the start CP of a following section is that section boundary (splitIntoSections consumes it below, and it contributes no block of its own); any other 0x000C-terminated entry is a manual page break, and gets a real `{ kind: "pageBreak" }` block appended after its own paragraph's blocks -- mirroring how ooxml.js's own docx reader splits a paragraph around a `w:br w:type="page"` and how this package's own buildParagraphBlocks splits one around an inline picture anchor, the same block-level construct document-schema.js models for both. Appending to the terminated paragraph's own entry (rather than emitting a standalone block between entries) keeps the break attached to the paragraph it ends, which is exactly where [MS-DOC] puts it: 0x000C is itself a paragraph terminator ([MS-DOC] 2.4.2's own "The character at the end character position of a paragraph MUST be a paragraph mark, an end-of-section character, a cell mark, or a TTP mark"), so "text before the break, then the break" is one entry's blocks and the text after the break is the next entry's.
+function markManualPageBreaks(
+  entries: readonly ParagraphEntry[],
+  sections: readonly { readonly startCp: number }[],
+): readonly ParagraphEntry[] {
+  const sectionEndCps = new Set<number>();
+  for (let index = 1; index < sections.length; index += 1) {
+    const startCp = sections[index]?.startCp;
+    if (startCp !== undefined) sectionEndCps.add(startCp);
+  }
+  return entries.map((entry) => {
+    if (entry.terminator !== SECTION_MARK || sectionEndCps.has(entry.endCp)) {
+      return entry;
+    }
+    return { ...entry, blocks: [...entry.blocks, PAGE_BREAK_BLOCK] };
+  });
 }
 
 // Groups the main document's flat paragraph entries by which section (PlcfSed.aCp boundary) they fall in, per [MS-DOC] 2.8.26: section i covers entries up to and including the one whose own terminator sits at (or crosses) the next section's startCp -- exactly the entry carrying the end-of-section character (0x000C) itself, since that character IS the boundary [MS-DOC] states. `sections` always has at least one entry (readAllSectionProperties' own fallback for a file with no PlcfSed at all), so every entry lands somewhere; entries past the last real boundary all join the final section, matching "the last CP does not begin a new section."

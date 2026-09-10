@@ -11,7 +11,12 @@ import { type DataStreamBuilder } from "../data-stream";
 import { DocFormatError, DocUnsupportedError } from "../errors";
 import { buildInlinePicture } from "../pictures-write";
 import { fitsAloneOnPapxPage } from "../prop/fkp-write";
-import { INLINE_PICTURE, CELL_MARK, PARAGRAPH_MARK } from "../text/special";
+import {
+  INLINE_PICTURE,
+  CELL_MARK,
+  PARAGRAPH_MARK,
+  SECTION_MARK,
+} from "../text/special";
 import {
   encodeTableRowGrpprl,
   MAX_TABLE_ROW_CELLS,
@@ -423,7 +428,22 @@ function imageParagraph(
   };
 }
 
-// Flattens a section's whole block list into the paragraph sequence writeDocContent's own text-layout pass consumes: an ordinary paragraph passes through as one WriteParagraph, a table expands into its own real cell/row-mark stream, and an inline picture becomes its own one-run paragraph carrying the picture anchor (see imageParagraph above). `onWarning`, when given, is reported a message for a non-fatal write-time degradation -- today, only flattenTable's own per-row lost-boundary-budget fallback (see its own note) -- naming the degraded table by its own position in `blocks` (`blockIndex`), since a document with more than one table would otherwise report every warning as an indistinguishable "table row N", with no way for a caller to tell which table it came from.
+// A manual page break is the end-of-section character (0x000C) put where no section ends: [MS-DOC]'s own PlcfSed.aCP text -- "An end-of-section character (0x0C) which occurs at a CP and which is not the last character in a section specifies a manual page break" -- and read.ts's markManualPageBreaks decodes exactly that shape back into a pageBreak block. The writer's inverse is the mirror image of that read: a pageBreak block retargets the terminator of the paragraph before it from an ordinary paragraph mark to 0x000C, so "alpha, pageBreak, beta" lays out as "alpha" + 0x000C + "beta" + 0x000D -- the byte sequence a re-read turns straight back into [paragraph alpha, pageBreak, paragraph beta] with no stray empty paragraph, because 0x000C is itself a paragraph terminator ([MS-DOC] 2.4.2) and the break rides on one that is already there. A page break with no ordinary paragraph before it to carry it (the first block of a section, directly after a table whose row mark is a cell mark rather than a paragraph mark, or directly after another page break) cannot retarget anything, so it becomes its own empty 0x000C-terminated paragraph instead -- the one spelling the format has for a break with no preceding text, and the same shape a real producer's own leading page break has. That empty paragraph is genuinely visible in the round trip (a re-read yields [paragraph "", pageBreak, ...] where the input had [pageBreak, ...]), which is a faithful statement of the format's own limit rather than a loss: a page break in [MS-DOC] always terminates SOME paragraph, so a modelled break with nothing before it necessarily mints one.
+function appendPageBreak(output: WriteParagraph[]): void {
+  const previous = output[output.length - 1];
+  if (previous?.terminator === PARAGRAPH_MARK) {
+    output[output.length - 1] = { ...previous, terminator: SECTION_MARK };
+    return;
+  }
+  output.push({
+    runs: [],
+    properties: {},
+    extraGrpprl: [],
+    terminator: SECTION_MARK,
+  });
+}
+
+// Flattens a section's whole block list into the paragraph sequence writeDocContent's own text-layout pass consumes: an ordinary paragraph passes through as one WriteParagraph, a table expands into its own real cell/row-mark stream, an inline picture becomes its own one-run paragraph carrying the picture anchor (see imageParagraph above), and a page break retargets the preceding paragraph's terminator to the manual-page-break spelling of 0x000C (see appendPageBreak above). `onWarning`, when given, is reported a message for a non-fatal write-time degradation -- today, only flattenTable's own per-row lost-boundary-budget fallback (see its own note) -- naming the degraded table by its own position in `blocks` (`blockIndex`), since a document with more than one table would otherwise report every warning as an indistinguishable "table row N", with no way for a caller to tell which table it came from.
 export function flattenSectionBlocks(
   blocks: readonly ContentBlock[],
   dataStream: DataStreamBuilder,
@@ -446,6 +466,10 @@ export function flattenSectionBlocks(
     }
     if (block.kind === "image") {
       output.push(imageParagraph(block, dataStream));
+      return;
+    }
+    if (block.kind === "pageBreak") {
+      appendPageBreak(output);
       return;
     }
     throw new DocUnsupportedError(

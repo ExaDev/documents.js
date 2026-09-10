@@ -24,6 +24,8 @@ export interface DocParagraphSpec {
   readonly grpprl?: readonly number[];
   /** The character that terminates the paragraph; the paragraph mark unless a cell or section mark is wanted. */
   readonly mark?: number;
+  /** Marks a `mark: SECTION_MARK` paragraph as a manual page break rather than a section boundary -- the identical character, distinguished only by PlcfSed's own CPs, exactly as [MS-DOC]'s PlcfSed.aCP text states ("An end-of-section character (0x0C) which occurs at a CP and which is not the last character in a section specifies a manual page break"): the 0x0C is written into the text but opens no section, so the spec's `sections` array needs no entry for it. Main-document paragraphs only; ignored elsewhere. */
+  readonly pageBreak?: boolean;
 }
 
 export interface DocStyleSpec {
@@ -47,7 +49,7 @@ export interface DocSpec {
   readonly styles?: readonly DocStyleSpec[];
   /** The one section's own Sepx grpprl -- absent produces no PlcfSed at all, exercising the reader's own fallback to its page-geometry defaults exactly as a real file with no section properties would. Ignored when `sections` is given. */
   readonly sectionGrpprl?: readonly number[];
-  /** Multiple sections' own Sepx grpprls, one per section in document order -- overrides `sectionGrpprl`. Section boundaries are derived from where `paragraphs` themselves place a SECTION_MARK terminator (`mark: SECTION_MARK`): this array must carry exactly one more entry than the number of SECTION_MARK-terminated paragraphs, matching [MS-DOC] 2.8.26's own "an end-of-section character MUST be the final character in the text range of all but the last section". */
+  /** Multiple sections' own Sepx grpprls, one per section in document order -- overrides `sectionGrpprl`. Section boundaries are derived from where `paragraphs` themselves place a SECTION_MARK terminator (`mark: SECTION_MARK`): this array must carry exactly one more entry than the number of SECTION_MARK-terminated paragraphs NOT marked `pageBreak`, matching [MS-DOC] 2.8.26's own "an end-of-section character MUST be the final character in the text range of all but the last section" -- a `pageBreak`-marked 0x000C opens no section, per PlcfSed.aCP's own manual-page-break rule. */
   readonly sections?: readonly (readonly number[])[];
   /** The footnote document's own stories, one per footnote reference in document order -- an empty story (`[]`) is a genuinely empty one, per [MS-DOC]'s own "the beginning CP has the same value as the next CP"; a non-empty one gets its own trailing guard paragraph mark appended automatically ("not considered part of the story contents", the Headers page's own words, restated for PlcffndTxt by that structure's own page). Absent produces no footnote document at all (ccpFtn 0, no PlcffndTxt). */
   readonly footnotes?: readonly (readonly DocParagraphSpec[])[];
@@ -257,10 +259,19 @@ export function buildDoc(spec: DocSpec): Uint8Array<ArrayBuffer> {
     [papxPage],
   );
   const stsh = buildStsh(spec.styles ?? []);
-  // A section's own start CP is derived from the paragraph stream itself, not stated separately: every SECTION_MARK-terminated paragraph the spec places closes one section and opens the next, mirroring how a real .doc's own end-of-section character marks the boundary PlcfSed.aCp then restates as a CP. Scanned only over the main document's own range: SECTION_MARK is a main-document-only construct, and a subdocument's own text could otherwise coincidentally contain the identical byte value with no section meaning at all.
+  // A section's own start CP is derived from the paragraph stream itself, not stated separately: every SECTION_MARK-terminated paragraph the spec places closes one section and opens the next, mirroring how a real .doc's own end-of-section character marks the boundary PlcfSed.aCp then restates as a CP -- EXCEPT a paragraph the spec marks `pageBreak`, whose 0x000C is a manual page break instead (no PlcfSed boundary lands after it), the distinction [MS-DOC]'s own PlcfSed.aCP text draws between the two spellings of the identical character. Scanned only over the main document's own range: SECTION_MARK is a main-document-only construct, and a subdocument's own text could otherwise coincidentally contain the identical byte value with no section meaning at all.
   const sectionStartCps = [0];
+  const pageBreakCps = new Set<number>();
+  for (const { spec: paragraph, end } of paragraphs) {
+    if (paragraph.pageBreak === true && end <= ccpText) {
+      pageBreakCps.add(end);
+    }
+  }
   for (let index = 0; index < ccpText; index += 1) {
-    if (text.charCodeAt(index) === SECTION_MARK) {
+    if (
+      text.charCodeAt(index) === SECTION_MARK &&
+      !pageBreakCps.has(index + 1)
+    ) {
       sectionStartCps.push(index + 1);
     }
   }
