@@ -67,7 +67,9 @@
     "test:workers": "turbo run _test:workers",
     "_test:workers": "vitest run --config vitest.workers.config.ts",
     "prepare": "husky",
-    "release": "semantic-release"
+    "release": "semantic-release",
+    "test:corpus": "turbo run _test:corpus",
+    "_test:corpus": "vitest run --project corpus"
   },
   "keywords": [
     "ooxml",
