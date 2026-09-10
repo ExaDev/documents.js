@@ -832,9 +832,9 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
     expect(section.footers?.default).toBeUndefined();
   });
 
-  it("reports a watermark, which the furniture vocabulary has no slot for", () => {
+  it("lifts a watermark occurring on both parities into the section's default watermark slot", () => {
     const diagnostics: WpdDiagnostic[] = [];
-    readWpdContent(
+    const document = readWpdContent(
       buildWpdFile(
         [
           ...text("body"),
@@ -849,9 +849,87 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
       ),
       { sink: (d) => diagnostics.push(d) },
     );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const section = document.sections[0];
+    if (section === undefined) throw new Error("expected a section");
+    expect(
+      section.watermarks?.default?.map((b) =>
+        b.kind === "paragraph" ? b.runs.map((run) => run.text).join("") : "",
+      ),
+    ).toEqual(["DRAFT"]);
+    expect(section.watermarks?.even).toBeUndefined();
+    // A watermark is lifted page furniture now, not a dropped header-or-footer: the code no longer fires for it.
     expect(
       diagnostics.filter((d) => d.code === "wpd/header-footer-dropped"),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
+  });
+
+  it("lifts an even-only watermark into the even slot", () => {
+    const document = readDocumentArea(
+      [...text("body"), ...headerFunction(0x05, 0x02)],
+      [generalWpTextPacket(text("EVEN DRAFT"))],
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const section = document.sections[0];
+    if (section === undefined) throw new Error("expected a section");
+    expect(
+      section.watermarks?.even?.map((b) =>
+        b.kind === "paragraph" ? b.runs.map((run) => run.text).join("") : "",
+      ),
+    ).toEqual(["EVEN DRAFT"]);
+    expect(section.watermarks?.default).toBeUndefined();
+  });
+
+  it("keeps the first watermark when a second claims the same slot", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [
+          ...text("body"),
+          ...headerFunction(0x04, 0x01),
+          ...headerFunction(0x05, 0x01),
+        ],
+        [generalWpTextPacket(text("First watermark"))],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    const section = document.sections[0];
+    if (section === undefined) throw new Error("expected a section");
+    expect(
+      section.watermarks?.default?.map((b) =>
+        b.kind === "paragraph" ? b.runs.map((run) => run.text).join("") : "",
+      ),
+    ).toEqual(["First watermark"]);
+    expect(
+      diagnostics.some((d) => d.code === "wpd/header-footer-dropped"),
+    ).toBe(true);
+  });
+
+  it("reports a watermark whose occurrence bits claim neither parity, lifting nothing", () => {
+    const diagnostics: WpdDiagnostic[] = [];
+    const document = readWpdContent(
+      buildWpdFile(
+        [
+          ...text("body"),
+          ...variableFunction({
+            group: 0xd6,
+            subgroup: 0x04,
+            prefixIds: [1],
+            nonDeletable: [0x00, 0],
+          }),
+        ],
+        [generalWpTextPacket(text("DRAFT"))],
+      ),
+      { sink: (d) => diagnostics.push(d) },
+    );
+    if (document.kind !== "wordprocessing")
+      throw new Error("expected wordprocessing");
+    expect(document.sections[0]?.watermarks).toBeUndefined();
+    expect(diagnostics).toHaveLength(0);
   });
 
   it("keeps the first header when a second claims the same slot", () => {
