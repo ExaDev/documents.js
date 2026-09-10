@@ -29,16 +29,22 @@ import { buildPlcfSed, buildSepx, encodeSectionGrpprl } from "./prop/sep-write";
 import { buildFontTable } from "./style/fonts";
 import { buildStshForStyles } from "./style/stsh";
 import {
+  buildStorySubdocuments,
+  paragraphCharacters,
+} from "./subdocument-write";
+import {
   flattenSectionBlocks,
   type WriteParagraph,
   type WriteWarning,
 } from "./table/write";
 import { buildTextClx } from "./text/piece-table-write";
 import { PARAGRAPH_MARK, SECTION_MARK } from "./text/special";
+import type { Comment, Footnote } from "./notes";
+import type { HeaderFooterStory } from "./headers-footers";
 
 // The top-level write: a wordprocessing ContentDocument to real [MS-DOC] bytes, wrapped in a real [MS-CFB] compound file. Every step below inverts one of read.ts's own -- the text stream is laid out and the paragraph/character formatting encoded into grpprls first (write.ts, prop/chp-write.ts, prop/pap-write.ts, table/write.ts), then packed into the piece table, the two property bin tables and their formatted disk pages, an empty-but-conformant style sheet, and (when a run names one) a font table (text/piece-table-write.ts, prop/fkp-write.ts, style/stsh.ts, style/fonts.ts) -- the identical structures readDocContent (read.ts) consumes, so a document this writer produces is verified by reading it back through this package's own reader rather than by inspecting its bytes in isolation. A ContentTable block is expanded by table/write.ts's flattenSectionBlocks into the same flat paragraph sequence every other block already is, each with its own terminator (a cell/row mark's own cell-mark character rather than the ordinary paragraph mark) and extra grpprl bytes (sprmPFInTable, and on a row's own mark, sprmPFTtp plus its whole TAP) -- so table paragraphs flow through the identical Chpx/Papx paging logic below as every other paragraph, not a separate table-only path.
 //
-// What this writer does NOT do is stated in full in the README's own scope section, not only here: no footnotes/headers/endnotes, no embedded-object blocks, no construct-boundary markers, and no hyperlinks or fields. Each is a genuine layer of the format this writer does not implement; none is silently approximated. A pageBreak block IS written -- as the manual-page-break spelling of the end-of-section character (table/write.ts's appendPageBreak, the inverse of read.ts's markManualPageBreaks). Tables are written, but only at depth 1 (see table/write.ts) and without cell shading/borders or any other TAP layer document-schema.js's own ContentTable/ContentTableCell has no field for. Every paragraph's own styleId/headingLevel mints a real STSH entry (ExaDev/documents.js#1059) -- but with no formatting of its own: every property this writer emits is already, unconditionally, a direct exception, so a style's own identity round-trips while its formatting stays entirely direct-exception-based. Every section writes its own real page size and margins (multiple sections included, ExaDev/documents.js#971), and an inline picture writes its own real PNG/JPEG bytes into a genuine Data stream (ExaDev/documents.js#971) -- see [Writing](#writing) in the README for both.
+// What this writer does NOT do is stated in full in the README's own scope section, not only here: no embedded-object blocks, no construct-boundary markers, and no hyperlinks or fields. Each is a genuine layer of the format this writer does not implement; none is silently approximated. A pageBreak block IS written -- as the manual-page-break spelling of the end-of-section character (table/write.ts's appendPageBreak, the inverse of read.ts's markManualPageBreaks) -- and so are the story subdocuments a WritableDocContent carries (footnote, header, comment, endnote; subdocument-write.ts). Tables are written, but only at depth 1 (see table/write.ts) and without cell shading/borders or any other TAP layer document-schema.js's own ContentTable/ContentTableCell has no field for. Every paragraph's own styleId/headingLevel mints a real STSH entry (ExaDev/documents.js#1059) -- but with no formatting of its own: every property this writer emits is already, unconditionally, a direct exception, so a style's own identity round-trips while its formatting stays entirely direct-exception-based. Every section writes its own real page size and margins (multiple sections included, ExaDev/documents.js#971), and an inline picture writes its own real PNG/JPEG bytes into a genuine Data stream (ExaDev/documents.js#971) -- see [Writing](#writing) in the README for both.
 
 /** Where the text is written in the WordDocument stream: past the FIB (which needs under 900 bytes for the fields this writer populates), on a page boundary though not required to be. */
 const TEXT_FC = 0x400;
@@ -61,8 +67,16 @@ export interface WriteDocContentOptions {
   readonly onWarning?: WriteWarning;
 }
 
+/** writeDocContent's own input: a `ContentDocument` widened by the same story fields `readDocContent`'s own `DocContent` output carries (read.ts) -- footnotes, endnotes, comments, and header/footer stories -- each OPTIONAL, exactly the shape ooxml.js's own `DocxContent` input already established for the identical constructs, so a plain `ContentDocument` (none of the four stated) still writes exactly as it always did, while a genuine `DocContent` assigns straight across. A type-alias intersection rather than an interface for the identical reason DocContent is one: ContentDocument is a union of document kinds, and only the intersection spreads its members statically. The stories are written back as genuine subdocuments (subdocument-write.ts); a document that states none writes no subdocument at all, with every story ccp and fc/lcb pair left zero. */
+export type WritableDocContent = ContentDocument & {
+  readonly footnotes?: readonly Footnote[];
+  readonly endnotes?: readonly Footnote[];
+  readonly comments?: readonly Comment[];
+  readonly headerFooterStories?: readonly HeaderFooterStory[];
+};
+
 export function writeDocContent(
-  document: ContentDocument,
+  document: WritableDocContent,
   options: WriteDocContentOptions = {},
 ): Uint8Array<ArrayBuffer> {
   if (document.kind !== "wordprocessing") {
@@ -98,7 +112,24 @@ export function writeDocContent(
       runningIndex += paragraphs.length;
     }
   }
-  const writeParagraphs: WriteParagraph[] = sectionParagraphLists.flat();
+  const mainParagraphs: WriteParagraph[] = sectionParagraphLists.flat();
+  // The story subdocuments (footnote, header, comment, endnote -- [MS-DOC] 2.4.1's own concatenation order, the same order notes.ts counts ccp boundaries in) append their paragraphs after the main document's own, so everything downstream (style minting, grpprl encoding, text layout, the Chpx/Papx paging) treats a story paragraph exactly like a main-document one. ccpText is the MAIN document's own character count alone -- every subdocument ccp the FIB states is counted from where the previous one ended, which is what keeps PlcfSed's own main-document CPs and the FIB's own ccpText in agreement while the piece table itself covers the whole concatenated stream. Header stories flatten through the identical flattenSectionBlocks the main document uses, sharing the same Data stream, so a header's own inline picture lands in the one "Data" stream the container carries.
+  const stories = buildStorySubdocuments(
+    document,
+    dataStream,
+    options.onWarning,
+  );
+  const ccpText = mainParagraphs.reduce(
+    (count, paragraph) => count + paragraphCharacters(paragraph),
+    0,
+  );
+  const writeParagraphs: WriteParagraph[] = [
+    ...mainParagraphs,
+    ...(stories.footnote?.paragraphs ?? []),
+    ...(stories.header?.paragraphs ?? []),
+    ...(stories.comment?.paragraphs ?? []),
+    ...(stories.endnote?.paragraphs ?? []),
+  ];
 
   // 1a. Mint a real istd for every distinct paragraph style: a headingLevel of 1-9 maps directly to that istd (headingLevelFromIstd's own read-side rule, so a re-read derives the identical headingLevel back regardless of what styleId names it), and every other named styleId gets its own istd starting at 10. This mints style IDENTITY only -- name, kind, istd -- with no formatting of its own: every property this writer emits is already, unconditionally, a direct exception (see buildStshForStyles's own comment and the README's scope note, ExaDev/documents.js#1059). A paragraph with neither styleId nor an in-range headingLevel gets istd 0, left an empty hole rather than a real "Normal" entry -- minting one there unconditionally would round-trip an absent styleId into a real "Normal" string on the next read, which is not what the source document stated. A paragraph whose own styleId literally IS "Normal" is treated like any other named style and mints its own real entry (not necessarily at istd 0), so that distinction survives. A headingLevel outside 1-9 (the schema's own field is unbounded, "ODF alone permits ten levels") has no istd slot to round-trip through at all -- a genuine format-boundary limit, so such a paragraph falls back to its styleId (or istd 0) exactly as if it carried no headingLevel.
   const FIRST_NON_HEADING_ISTD = 10;
@@ -321,7 +352,7 @@ export function writeDocContent(
   const stsh = buildStshForStyles(styleNames);
   const fontTable =
     fontNames.length > 0 ? buildFontTable(fontNames) : undefined;
-  const plcfSed = buildPlcfSed(sectionStartCps, text.length, fcSepxList);
+  const plcfSed = buildPlcfSed(sectionStartCps, ccpText, fcSepxList);
 
   let cursor = 0;
   const place = (bytes: Uint8Array): number => {
@@ -339,6 +370,14 @@ export function writeDocContent(
     numberingTables !== undefined ? place(numberingTables.plfLst) : 0;
   const fcPlfLfo =
     numberingTables !== undefined ? place(numberingTables.plfLfo) : 0;
+  const fcPlcffndTxt =
+    stories.footnote !== undefined ? place(stories.footnote.plex) : 0;
+  const fcPlcfHdd =
+    stories.header !== undefined ? place(stories.header.plex) : 0;
+  const fcPlcfandTxt =
+    stories.comment !== undefined ? place(stories.comment.plex) : 0;
+  const fcPlcfendTxt =
+    stories.endnote !== undefined ? place(stories.endnote.plex) : 0;
   const table = new Uint8Array(cursor);
   table.set(clx, fcClx);
   table.set(chpxBinTable, fcPlcfBteChpx);
@@ -350,9 +389,21 @@ export function writeDocContent(
     table.set(numberingTables.plfLst, fcPlfLst);
     table.set(numberingTables.plfLfo, fcPlfLfo);
   }
+  if (stories.footnote !== undefined) {
+    table.set(stories.footnote.plex, fcPlcffndTxt);
+  }
+  if (stories.header !== undefined) {
+    table.set(stories.header.plex, fcPlcfHdd);
+  }
+  if (stories.comment !== undefined) {
+    table.set(stories.comment.plex, fcPlcfandTxt);
+  }
+  if (stories.endnote !== undefined) {
+    table.set(stories.endnote.plex, fcPlcfendTxt);
+  }
 
   const fib = buildFib({
-    ccpText: text.length,
+    ccpText,
     cbMac: wordDocument.length,
     fcClx,
     lcbClx: clx.length,
@@ -370,6 +421,18 @@ export function writeDocContent(
     lcbPlfLst: numberingTables?.lcbPlfLst ?? 0,
     fcPlfLfo,
     lcbPlfLfo: numberingTables?.plfLfo.length ?? 0,
+    ccpFtn: stories.footnote?.ccp ?? 0,
+    fcPlcffndTxt,
+    lcbPlcffndTxt: stories.footnote?.plex.length ?? 0,
+    ccpHdd: stories.header?.ccp ?? 0,
+    fcPlcfHdd,
+    lcbPlcfHdd: stories.header?.plex.length ?? 0,
+    ccpAtn: stories.comment?.ccp ?? 0,
+    fcPlcfandTxt,
+    lcbPlcfandTxt: stories.comment?.plex.length ?? 0,
+    ccpEdn: stories.endnote?.ccp ?? 0,
+    fcPlcfendTxt,
+    lcbPlcfendTxt: stories.endnote?.plex.length ?? 0,
   });
   wordDocument.set(fib, 0);
 

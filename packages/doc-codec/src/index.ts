@@ -27,6 +27,7 @@ export * from "./style/fonts";
 export * from "./list/numbering";
 export * from "./text/paragraphs";
 export * from "./subdocument";
+export * from "./subdocument-write";
 export * from "./notes";
 export * from "./headers-footers";
 export * from "./read";

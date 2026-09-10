@@ -1,6 +1,6 @@
 // The inverse of fib.ts's parseFib: builds a real File Information Block for nFib 0x00C1 (Word 97), the oldest and simplest FIB generation [MS-DOC] 2.5.1 defines and the one this package's own test-support/fib.ts already targets. cbRgFcLcb is fixed at the 0x005D that nFib 0x00C1 mandates ([MS-DOC]'s own Fib page table), and cswNew is fixed at 0 (also mandated for 0x00C1, so fibRgCswNew is simply absent) -- neither is a parameter, because choosing a newer nFib would change both without this writer gaining anything from it: every structure this package writes (the piece table, the two bin tables, the style sheet, the font table) is unchanged across nFib generations.
 //
-// Only the fields this writer's own reader needs to get back to the streams it wrote are populated: the four subdocument-boundary fields this package's reader itself reads (cbMac, ccpText) plus the fc/lcb pairs locating the Clx, the two property bin tables, the style sheet, and (when used) the font table. Every other fc/lcb pair -- SttbfAssoc, Dop, the printer-driver structures, and the ~140 others [MS-DOC] defines -- is left zero, which is exactly the "undefined, MUST be ignored" contract most of them carry (see FibRgFcLcb97's own field table). A small number of those unpopulated fields carry a genuine "MUST NOT be zero" clause of their own (SttbfAssoc's lcb among them) that this writer does not satisfy: the resulting bytes are conformant for every structure this package's own reader consults, not a certification that Microsoft Word or another third-party reader would accept the file's every field. See the README's own scope note.
+// Only the fields this writer's own reader needs to get back to the streams it wrote are populated: the subdocument-boundary fields this package's reader itself reads (cbMac, ccpText, and the footnote/header/comment/endnote ccps when the document carries those stories) plus the fc/lcb pairs locating the Clx, the two property bin tables, the style sheet, (when used) the font table and numbering tables, and (when the document carries them) the four story plexes. Every other fc/lcb pair -- SttbfAssoc, Dop, the printer-driver structures, and the ~140 others [MS-DOC] defines -- is left zero, which is exactly the "undefined, MUST be ignored" contract most of them carry (see FibRgFcLcb97's own field table). A small number of those unpopulated fields carry a genuine "MUST NOT be zero" clause of their own (SttbfAssoc's lcb among them) that this writer does not satisfy: the resulting bytes are conformant for every structure this package's own reader consults, not a certification that Microsoft Word or another third-party reader would accept the file's every field. See the README's own scope note.
 
 import { readUint16LE } from "../bytes";
 import { DocFormatError } from "../errors";
@@ -47,6 +47,22 @@ export interface FibWriteSpec {
   readonly lcbPlfLst: number;
   readonly fcPlfLfo: number;
   readonly lcbPlfLfo: number;
+  /** The footnote subdocument's own character count, and its PlcffndTxt -- 0/0 when the document carries no footnotes (see subdocument-write.ts). */
+  readonly ccpFtn: number;
+  readonly fcPlcffndTxt: number;
+  readonly lcbPlcffndTxt: number;
+  /** The header subdocument's own character count, and its Plcfhdd -- 0/0 when the document carries no header/footer stories. */
+  readonly ccpHdd: number;
+  readonly fcPlcfHdd: number;
+  readonly lcbPlcfHdd: number;
+  /** The comment subdocument's own character count, and its PlcfandTxt -- 0/0 when the document carries no comments. */
+  readonly ccpAtn: number;
+  readonly fcPlcfandTxt: number;
+  readonly lcbPlcfandTxt: number;
+  /** The endnote subdocument's own character count, and its PlcfendTxt -- 0/0 when the document carries no endnotes. */
+  readonly ccpEdn: number;
+  readonly fcPlcfendTxt: number;
+  readonly lcbPlcfendTxt: number;
 }
 
 export function buildFib(spec: FibWriteSpec): Uint8Array<ArrayBuffer> {
@@ -69,7 +85,11 @@ export function buildFib(spec: FibWriteSpec): Uint8Array<ArrayBuffer> {
   };
   lw(LW_OFFSET.cbMac, spec.cbMac);
   lw(LW_OFFSET.ccpText, spec.ccpText);
-  // Every other FibRgLw97 field (ccpFtn, ccpHdd, ccpAtn, ccpEdn, ccpTxbx, ccpHdrTxbx) stays 0: this writer produces only a Main Document, so every other subdocument this package's own reader is aware of is genuinely empty rather than merely unpopulated.
+  lw(LW_OFFSET.ccpFtn, spec.ccpFtn);
+  lw(LW_OFFSET.ccpHdd, spec.ccpHdd);
+  lw(LW_OFFSET.ccpAtn, spec.ccpAtn);
+  lw(LW_OFFSET.ccpEdn, spec.ccpEdn);
+  // Every other FibRgLw97 field (ccpTxbx, ccpHdrTxbx) stays 0: this writer produces no textbox subdocument, so the one subdocument kind this package's own reader is aware of but this writer never emits is genuinely empty rather than merely unpopulated.
 
   view.setUint16(FIB_CB_RG_FC_LCB_OFFSET, CB_RG_FC_LCB_WORD_97, true);
   const pair = (index: number, fc: number, lcb: number): void => {
@@ -93,6 +113,10 @@ export function buildFib(spec: FibWriteSpec): Uint8Array<ArrayBuffer> {
   pair(FC_LCB_VALUE_INDEX.fcPlcfSed, spec.fcPlcfSed, spec.lcbPlcfSed);
   pair(FC_LCB_VALUE_INDEX.fcPlfLst, spec.fcPlfLst, spec.lcbPlfLst);
   pair(FC_LCB_VALUE_INDEX.fcPlfLfo, spec.fcPlfLfo, spec.lcbPlfLfo);
+  pair(FC_LCB_VALUE_INDEX.fcPlcffndTxt, spec.fcPlcffndTxt, spec.lcbPlcffndTxt);
+  pair(FC_LCB_VALUE_INDEX.fcPlcfHdd, spec.fcPlcfHdd, spec.lcbPlcfHdd);
+  pair(FC_LCB_VALUE_INDEX.fcPlcfandTxt, spec.fcPlcfandTxt, spec.lcbPlcfandTxt);
+  pair(FC_LCB_VALUE_INDEX.fcPlcfendTxt, spec.fcPlcfendTxt, spec.lcbPlcfendTxt);
   // cswNew (the 2 bytes at FIB_FC_LCB_BLOB_OFFSET + blobBytes) stays 0, which [MS-DOC] mandates for nFib 0x00C1 and which correctly leaves fibRgCswNew absent.
 
   if (readUint16LE(bytes, 0) !== FIB_W_IDENT) {
